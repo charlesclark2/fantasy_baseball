@@ -46,7 +46,7 @@ diffable and cannot silently drift from the repo.
 | # | claim as written upstream | ground truth |
 |---|---|---|
 | 1 | "the **6** P2 stories" (PROD-STATE-1g brief) | the catalogue carries **10** P2 stories — P2.0, P2.1, P2.2, P2.3, P2.4, P2.5, P2.6, P2.7, P2.8, P2.9 — reorganised into **3 explicit tracks** by a 2026-08-03 PM pushback resolution (field 9) |
-| 2 | "the full **180**-feature matrix" (P1.4 memo prose + the brief) | the P1.3 artifact records **200 columns = 174 `home_*`/`away_*` feature columns + 6 `label_*` + ~20 id/CV-axis columns**. "180" is loose prose; the model-eligible count is **174** |
+| 2 | the matrix width — "**180**-feature" (P1.4 memo prose) vs "**174** feature columns" (P1.3 artifact) | **both are right about different counts, and 180 is the one that matters.** Enumerated from the mart SQL + `feature_columns()`: the matrix is **200 output columns**; the **model-eligible `full` contract is exactly 180** (200 − 14 in-matrix id/CV-axis columns − 6 `label_*`); the artifact's **174 counts `home_*`/`away_*`-PREFIXED columns**, six of which are identity (4 string names/conferences — ineligible — plus the 2 numeric team ids). ⚠️ Incidental finding: **`home_team_id`/`away_team_id` are BIGINT and NOT in `_ID_COLS`, so the two numeric team ids WERE feature-eligible in the `full` contract** — despite the code comment saying team identity is excluded (it excludes the string NAMES only). Zero shipped impact (the `full` contract lost deflation and the served `strength_only` contract selects by prefix), but a P2 re-run of the full matrix should add them to `_ID_COLS` |
 | 3 | P1.2 winner accuracy "**71.7%**" (`ncaaf_roadmap.md` §Phase-1B.3) | the P1.2 memo + `ncaaf_team_strength_summary.json` record **0.723** over 8,303 walk-forward games. The roadmap's 71.7% is a stale earlier-build figure. *(Same class, same doc: the roadmap's P1A "**3,804** rookie projections" is superseded by the 2026-07-29 refit's **3,829** — both are documentation lag against a later artifact, never deployment drift)* |
 | 4 | P0.6c "roadmap: still to do / P0.6b STILL UNBUILT" (`ncaaf_roadmap.md` Phase-3 bullet + §P0.7) | **P0.6c is DONE and LIVE in prod since 2026-08-01** — T-1 + close snapshots backfilled 2020–2025, `NCAAF_ODDS_CAPTURE_T1=1` on the box, `sports_ncaaf_odds_capture_schedule` **RUNNING**. The roadmap text is stale; the story catalogue is current |
 | 5 | the shipped model is "the reference `ridge/strength_only/gaussian`" (a natural reading of `REFERENCE_STANDS`) | ⭐ **the SHIPPED form is `strength_posterior`, not `gaussian`** — see field (2)/(5). The decide stage's reference is the gaussian; the form was swapped at `finalize` on a pre-registered early-season floor |
@@ -153,7 +153,7 @@ span 0.0192 → 0.0226 ≈ 17%) and **neither PBO nor DSR cleared**:
 | `gain_vs_reference` | `0.0` | — | — |
 
 Per the MLB **E2.1-r** reading: *a high PBO over a genuinely TIED field is the NULL, not overfitting* — "which
-tied learner wins" is noise. ⇒ **the full 174-column matrix does NOT robustly beat the strength prior, so the
+tied learner wins" is noise. ⇒ **the full 180-column matrix does NOT robustly beat the strength prior, so the
 strength-prior-only choice is PROVEN, not a shortcut.** That is the single most decision-relevant fact in this
 document for any future audit (field 10, entry T-1).
 
@@ -255,11 +255,148 @@ the `strength_only` contract off `feature_ncaaf_pregame_matrix`. Enumerated from
 Grain: `(season, team_id, as_of_week)` **1:1**, as-of the game's own kickoff week. Booleans are features
 (0/1/NaN); NULL is kept NULL and never imputed to 0.
 
-### 3b. The training frame that EXISTS but is NOT served
+### 3b. The training frame that EXISTS but is NOT served — full data dictionary
 
-`feature_ncaaf_pregame_matrix` — **9,086 FBS-vs-FBS games (2014–2025) × 200 columns**, of which **174 are
-`home_*`/`away_*` feature columns** across **14 families**, plus **6 `label_*` post-kickoff targets** (never a
-feature) and ~20 id/CV-axis columns. Per-matchup grain, `home_*`/`away_*` side by side.
+`feature_ncaaf_pregame_matrix` — **9,086 FBS-vs-FBS games (2014–2025) × 200 output columns**. Per-matchup
+grain, `home_*`/`away_*` side by side. The complete accounting (enumerated from the mart SQL — nothing below
+is inferred from prose):
+
+| bucket | n | contents |
+|---|---:|---|
+| id / CV-axis (in `_ID_COLS`, **never features**) | 14 | `sport`, `game_id`, `season`, `week` ⚠️ reporting-only, `season_order_week` ⭐ the as-of axis, `season_type`, `is_postseason`, `game_date`, `start_date`, `game_venue_timezone`, `home_team`, `away_team`, `home_conference`, `away_conference` |
+| `label_*` post-kickoff targets (**never features**) | 6 | `label_is_completed`, `label_home_points`, `label_away_points`, `label_total_points`, `label_home_margin`, `label_home_win` |
+| **model-eligible (`full` contract)** | **180** | 82 per side (below) × 2 + 16 game-level (below) — incl. the 2 numeric team ids (banner correction #2) |
+
+The assemble stage appends `game_year` (CV axis, in `_ID_COLS`) and the 6 CLV close columns
+(`close_home_spread`, `close_total`, `close_home_ml_american`, `close_home_ml_prob`, `close_snapshot_ts`,
+`has_close`) — all excluded from every contract (`_CLOSE_COLS` + `assert_market_blind`).
+
+#### Game-level eligible columns (16)
+
+| column | meaning |
+|---|---|
+| `home_team_id` / `away_team_id` | CFBD numeric team ids — ⚠️ eligible by accident (banner correction #2); an arbitrary integer key, not a designed feature |
+| `is_conference_game` | both teams in the same conference AND the game counts for conference standings |
+| `is_neutral_site` | neutral-site flag (also gates travel/altitude to NULL) |
+| `is_same_conference` | `home_conference = away_conference` (overlaps `is_conference_game` but ignores scheduling designation) |
+| `rest_days_diff` | `home_rest_days − away_rest_days` |
+| `game_venue_elevation_m` | venue elevation (metres) |
+| `game_venue_is_dome` / `game_venue_is_grass` | venue construction / surface booleans |
+| `away_altitude_change_m` | game-venue elevation − the away team's OWN home-venue elevation (a body-adjustment signal); NULL on neutral sites |
+| `away_travel_km` | great-circle km from the away team's home venue to the game venue; home travels ~0; NULL on neutral sites or missing geo |
+| `strength_margin_diff` | `home_strength_margin − away_strength_margin` — ⭐ in the SERVED contract (§3a) |
+| `adj_net_ppa_diff` | home − away opponent-adjusted net PPA (the efficiency headline differential) |
+| `team_talent_diff` | home − away 247 talent composite |
+| `home_rest_days` / `away_rest_days` | days since each team's previous game |
+
+#### Per-side eligible columns (82 × `home_`/`away_` = 164)
+
+Every column below exists in both `home_*` and `away_*` variants. **Sign convention on all `off_`/`def_`
+efficiency:** offense higher = better for the team; defense = what the team ALLOWS, so lower `def_ppa` /
+`def_success_rate` / `def_explosiveness` is better (⚠️ distinct from the P1.2 `strength_defense` sign trap,
+where higher = more points PREVENTED).
+
+**Strength (P1.2) — 12, the SERVED family:** described column-by-column in §3a
+(`_strength_margin`, `_sd`, `_offense`, `_defense`, `_conf_component`, `_cov_component`, `_team_component`,
+`_cov_roster_flux`, `_cov_coaching`, `_cov_talent`, `_hyper_prior_seasons`, `_has_sufficient_sample`).
+
+**Record / scoring base — 6** (as-of, current season to date):
+
+| column | meaning |
+|---|---|
+| `_games_played` | games played so far this season (0 at week 1) |
+| `_has_sufficient_sample` | boolean: enough games for the rolling metrics to be meaningful |
+| `_win_pct` | season-to-date win % |
+| `_points_for_per_game` / `_points_against_per_game` | season-to-date scoring for/against per game |
+| `_margin_per_game` | season-to-date average margin |
+
+**Efficiency, raw (P1.1) — 10** (per-play PPA = CFBD's EPA analog; "success" = CFBD's down-and-distance
+success definition):
+
+| column | meaning |
+|---|---|
+| `_off_ppa` / `_def_ppa` | mean predicted-points-added per offensive play / allowed per defensive play |
+| `_off_success_rate` / `_def_success_rate` | share of successful plays run / allowed |
+| `_off_explosiveness` / `_def_explosiveness` | mean PPA on successful plays (big-play tilt), run / allowed |
+| `_off_clean_ppa` / `_def_clean_ppa` | the same PPA **restricted to scrimmage plays outside garbage time** (`is_scrimmage_play and not is_garbage_time`) — the score-effects-robust read |
+| `_off_clean_success_rate` / `_def_clean_success_rate` | success rate under the same garbage-time exclusion |
+
+**Line / trench (unit proxies) — 4:**
+
+| column | meaning |
+|---|---|
+| `_off_line_yards` / `_def_line_yards` | line yards per rush credited to the OL / allowed by the DL (the standard rushing decomposition) |
+| `_off_stuff_rate` / `_def_stuff_rate` | share of rushes stopped at/behind the line, suffered / inflicted |
+
+**Pace / style — 3:** `_off_plays_per_game` · `_possession_seconds_per_game` · `_seconds_per_play`
+(tempo — lower = faster).
+
+**Box-score rates — 6:** `_total_yards_per_game` · `_rushing_yards_per_game` · `_passing_yards_per_game` ·
+`_turnovers_per_game` · `_third_down_rate` (conversion %) · `_completion_rate`. (The two scoring per-game
+columns sit under record/scoring above.)
+
+**Drive quality — 5** (from `fact_ncaaf_drive`):
+
+| column | meaning |
+|---|---|
+| `_points_per_drive` | points per offensive drive |
+| `_scoring_opportunity_rate` | share of drives reaching the opponent's 40 (`end_yards_to_goal ≤ 40`) |
+| `_three_and_out_rate` | share of drives that go three-and-out |
+| `_explosive_drive_rate` | share of drives gaining ≥ 40 yards |
+| `_avg_start_yards_to_goal` | average starting field position (higher = worse field position) |
+
+**Efficiency, opponent-adjusted (P1.1 2-pass) — 9:**
+
+| column | meaning |
+|---|---|
+| `_adj_off_ppa` / `_adj_def_ppa` / `_adj_net_ppa` | PPA after the 2-pass schedule adjustment (net = off − def) |
+| `_adj_off_success_rate` / `_adj_def_success_rate` | schedule-adjusted success rates |
+| `_adj_points_for_per_game` / `_adj_points_against_per_game` | schedule-adjusted scoring rates |
+| `_sos_opponent_net_ppa` | strength of schedule = mean opponent net PPA faced |
+| `_has_reliable_adjustment` | boolean: enough games for the adjustment to be stable |
+
+**Roster continuity / portal / talent (P0.4, pre-season broadcast) — 10:**
+
+| column | meaning |
+|---|---|
+| `_returning_ppa_pct` | share of last season's production (PPA) returning (CFBD `/player/returning`) |
+| `_returning_usage` | share of last season's usage returning |
+| `_roster_continuity_pct` | returning players ÷ current roster size |
+| `_roster_retention_pct` | returning players ÷ LAST season's roster size (churn read from the other side) |
+| `_portal_net_count` | portal ins − outs |
+| `_portal_in_blue_chip` / `_portal_out_blue_chip` | 4★/5★ portal arrivals / departures |
+| `_team_talent` | 247 team talent composite |
+| `_team_talent_yoy_delta` | year-over-year change in that composite |
+| `_portal_data_covered` | ⚠️ era flag: pre-2021 portal data does not exist — 0 there is UNKNOWN, not "no churn" |
+
+**Freshman prior (P1.2b, pre-season broadcast) — 5:** `_n_incoming_freshmen` ·
+`_freshman_proj_production` (Σ projected first-season production over the incoming class, standardized z) ·
+`_freshman_top_proj_production` (the class's best single projection) · `_freshman_avg_rating` (mean composite
+recruiting rating) · `_freshman_blue_chip_count` (4★/5★ count).
+
+**Coaching, HC-only (P0.5, pre-season broadcast) — 7:**
+
+| column | meaning |
+|---|---|
+| `_hc_tenure_years` | head coach's years at this school |
+| `_hc_first_year_at_school` / `_hc_change_from_prev` | new-at-school / changed-since-last-season flags |
+| `_hc_prior_sp_overall` / `_hc_prior_sp_offense` / `_hc_prior_sp_defense` | the coach's PRIOR career SP+ track record (overall/off/def) — quality + scheme profile, not just a change flag |
+| `_hc_is_first_time` | first-time head coach anywhere (censoring flag for the prior-SP+ columns) |
+
+**QB continuity — 5** (derived from `fact_ncaaf_player_game`, strictly prior starts only — the derivable
+half; ⚠️ NOT an availability/injury signal, none exists for CFB):
+
+| column | meaning |
+|---|---|
+| `_qb_starts_prior` | the current-era starter's career starts before this game |
+| `_qb_distinct_starters_prior` | distinct QB starters used this season (instability) |
+| `_qb_starter_changed_recent` | starter changed in the recent window |
+| `_qb_trailing_ypa` / `_qb_trailing_qbr` | the starter's trailing yards-per-attempt / QBR over strictly prior starts |
+
+*(Count check: 12 + 6 + 10 + 4 + 3 + 6 + 5 + 9 + 10 + 5 + 7 + 5 = 82 per side ✓; ×2 + 16 game-level = 180
+eligible ✓; + 14 id + 6 labels = 200 ✓.)*
+
+The families map to source marts as follows:
 
 | family | representative columns | source mart | join grain | as-of |
 |---|---|---|---|---|
@@ -283,7 +420,7 @@ labelled (strength NULL for 2014; portal a real 0 only from 2021; efficiency/pac
 ### 3c. ⭐ Were feature ADDITIONS explored? — **YES, exhaustively, and they LOST**
 
 This is the opposite posture from MLB K-props (whose pre-registered set is the only set ever tested). NCAAF ran
-**four pre-registered contracts** — `full` (all 174) · `strength_only` (25) · `clustered` (|ρ|≥0.95 redundancy
+**four pre-registered contracts** — `full` (all 180 model-eligible) · `strength_only` (25) · `clustered` (|ρ|≥0.95 redundancy
 prune) · `top_k` (in-fold gain top-60) — crossed with 5 learners × 4 forms + Optuna, **125 configs, every one
 counted toward deflation**. The full matrix did not survive. ⇒ **the NCAAF feature space is EXHAUSTED at this
 level of search, not untried.** A future audit recommending "add more features" is re-running a dead end; the
@@ -690,7 +827,7 @@ re-recommend a dead end. Null states follow `cv_power.classify_null` where a §0
 
 | # | candidate | when | result | null state | source |
 |---|---|---|---|---|---|
-| T-1 | ⭐ **The full 174-column pregame matrix (`full` contract) under 5 learners × 4 forms + Optuna — "does more data beat the strength prior?"** | 2026-07-23 | ❌ **LOST.** Tuned xgb/lgbm/catboost edged the reference on raw score (0.0192 vs 0.0242) but **PBO 0.648 / best DSR 0.0075** — did not survive deflation over a **tied** field (top-15 span 17%). ⇒ **the strength-prior-only choice is PROVEN, not assumed** | **trustworthy tied-field NULL** (`REFERENCE_STANDS`; the E2.1-r reading — high PBO over a tied field IS the null) | `ncaaf_p1_4_game_model.md` · `ncaaf_p1_4_game_bakeoff.{md,json}` |
+| T-1 | ⭐ **The full 180-column pregame matrix (`full` contract) under 5 learners × 4 forms + Optuna — "does more data beat the strength prior?"** | 2026-07-23 | ❌ **LOST.** Tuned xgb/lgbm/catboost edged the reference on raw score (0.0192 vs 0.0242) but **PBO 0.648 / best DSR 0.0075** — did not survive deflation over a **tied** field (top-15 span 17%). ⇒ **the strength-prior-only choice is PROVEN, not assumed** | **trustworthy tied-field NULL** (`REFERENCE_STANDS`; the E2.1-r reading — high PBO over a tied field IS the null) | `ncaaf_p1_4_game_model.md` · `ncaaf_p1_4_game_bakeoff.{md,json}` |
 | T-2 | `lgbm` (Optuna, 40 trials) | 2026-07-23 | ❌ lost — best 0.02040, inside the tie band | part of T-1 | bakeoff JSON |
 | T-3 | `xgb` (Optuna, 40 trials) | 2026-07-23 | ❌ lost — best raw score 0.01920 (rank 1) but **no promotion**; `winner: null`, `gain_vs_reference: 0.0` | part of T-1 | bakeoff JSON |
 | T-4 | `catboost` (Optuna, 21 trials) | 2026-07-23 | ❌ lost — best 0.02050 | part of T-1 | bakeoff JSON |
@@ -761,6 +898,7 @@ re-recommend a dead end. Null states follow `cv_power.classify_null` where a §0
 | T-39 | **A season default pinned to 2020–2024** was stale-by-a-season the day it merged | cured by a clock-derived `last_completed_season()` / `current_season()`; never pin a season |
 | T-40 | **P0.7's "P1.2 re-run = no code change" premise was WRONG** — P1.2 built its universe from results-only `fact_ncaaf_team_game` (0 rows for 2026) so it could not emit | fixed backward-compatibly via `run_strength(schedule_teams=…)`; 2015–2025 output **byte-identical**, guarded |
 | T-41 | ⭐ **Model-quality gates here are BEHAVIOURAL, not green-checkmark** — 3 of the 4 P1.2 bugs were SILENT and **CI could not have caught any** (it mocks all IO). The leakage gate was **verified to actually FAIL on a tampered row**, so its green means something | the standing standard for this vertical |
+| T-46 | **`home_team_id`/`away_team_id` (BIGINT) were feature-eligible in the `full` contract** — `_ID_COLS` excludes the string team/conference NAMES but not the numeric ids, despite the code comment claiming team identity is excluded (found by this audit's column enumeration, 2026-08-04) | ⚠️ open hygiene item, zero shipped impact — the `full` contract lost deflation and `strength_only` selects by `_STRENGTH_PREFIXES`; add both ids to `_ID_COLS` before any P2 re-run of the full matrix |
 
 ### 10h. The NFL feeder (P1A — in the tree, consumed by NFL)
 
@@ -793,5 +931,5 @@ re-recommend a dead end. Null states follow `cv_power.classify_null` where a §0
 | **Version authority** | **FIVE authorities, none of them the registry** — 4 committed artifact JSONs (`ncaaf_game_distribution_v1` · `ncaaf_team_strength_v1` · `ncaaf_freshman_projection_v1` · `ncaaf_college_nfl_translation_v1`) + the `ablation_results/ncaaf_*` memos. ⭐ **P1.5's futures board has NO version string at all.** |
 | **Ratified-but-held?** | None. Nothing awaits publication — the gap is a *product*, not a *decision*. |
 | **`best_alpha = 0`** | ✅ Confirmed and **measured**: ATS 0.4961 ≈ placebo 0.4968, O/U 0.5229, both < the 0.5238 breakeven. Market-blindness is enforced mechanically (`assert_market_blind` on every contract before any fit). |
-| **Headline findings** | (1) ⭐ **The full 174-column matrix FAILED deflation (PBO 0.648 / DSR 0.0075) ⇒ strength-prior-only is PROVEN** — a feature-expansion recommendation is a re-run of a dead end. (2) ⭐ **The SHIPPED form is `strength_posterior`, not the decided reference's `gaussian`** — swapped at finalize on a pre-registered early-season floor, and it scores *worse* on the aggregate metric (0.0269 vs 0.0242). (3) ⭐ **μ refreshes but σ does not** — P1.4's calibration is frozen at 2026-07-23 with no cadence, drift monitor, or refit trigger, while P1.2 strength re-fits; a calibration-drift monitor is a prerequisite before any P3 surface publishes these numbers. (4) **P0.6c is LIVE in prod** (odds capture RUNNING since 2026-08-01) — the roadmap text saying otherwise is stale. (5) The total PIT is **mildly non-flat (0.0218)** — the clearest model-level target (P2.5). |
-| **Corrections to the brief** | 7, tabulated at the top: "6 P2 stories" → **10 in 3 tracks**; "180-feature matrix" → **174**; winner accuracy 71.7% → **72.3%**; P0.6b/P0.6c status stale; the shipped form is not the reference form; `ncaaf_pm_pushback_response.md` is **not in this repo**; **no BH-FDR was computed** for P1.4. |
+| **Headline findings** | (1) ⭐ **The full 180-column matrix FAILED deflation (PBO 0.648 / DSR 0.0075) ⇒ strength-prior-only is PROVEN** — a feature-expansion recommendation is a re-run of a dead end. (2) ⭐ **The SHIPPED form is `strength_posterior`, not the decided reference's `gaussian`** — swapped at finalize on a pre-registered early-season floor, and it scores *worse* on the aggregate metric (0.0269 vs 0.0242). (3) ⭐ **μ refreshes but σ does not** — P1.4's calibration is frozen at 2026-07-23 with no cadence, drift monitor, or refit trigger, while P1.2 strength re-fits; a calibration-drift monitor is a prerequisite before any P3 surface publishes these numbers. (4) **P0.6c is LIVE in prod** (odds capture RUNNING since 2026-08-01) — the roadmap text saying otherwise is stale. (5) The total PIT is **mildly non-flat (0.0218)** — the clearest model-level target (P2.5). |
+| **Corrections to the brief** | 7, tabulated at the top: "6 P2 stories" → **10 in 3 tracks**; matrix width disambiguated — **180 model-eligible / 174 prefixed / 200 total** (and the 2 numeric team ids were eligible by accident); winner accuracy 71.7% → **72.3%**; P0.6b/P0.6c status stale; the shipped form is not the reference form; `ncaaf_pm_pushback_response.md` is **not in this repo**; **no BH-FDR was computed** for P1.4. |
