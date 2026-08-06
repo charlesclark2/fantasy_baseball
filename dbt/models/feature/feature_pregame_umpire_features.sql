@@ -137,7 +137,20 @@ select * from final
 
 {% else %}
 
-{{ config(materialized='table') }}
+-- E11.24 TARGET 6 (2026-08-05) — table → VIEW. Pure ext-table COPY. This model + its
+-- stg_statsapi_umpire_game_log precursor were the single largest remaining COMPUTE_WH waker
+-- (111 provisioning waits / 8 days, ~14/day) purely because a byte-identical external table was
+-- re-CTAS'd on every intraday tick: the umpire lakehouse_ext tables are refreshed ONLY by the
+-- nightly `refresh_w1_external_tables.py --w11b`, so across a slate the copy was provably
+-- identical to its source. `create or replace view` is metadata-only and never resumes the
+-- warehouse. ⭐ This SUPERSEDES the E11.24-6a conditional-skip gate (E11_24_UMPIRE_REBUILD_GATE),
+-- which is removed in the same change: 6a could at best skip SOME rebuilds, whereas the view
+-- removes the wake for ALL of them, for every caller at once, with no flag/marker/S3 state.
+-- No Snowflake consumer needs it materialized: the dbt ref() from feature_pregame_game_features_raw
+-- is in that model's DuckDB branch (its Snowflake branch reads its OWN ext table), the app's
+-- picks.py _UMPIRE_QUERY runs through lakehouse_query (DuckDB/S3, not Snowflake), and
+-- generate_run_env_signals.py key-joins it once/day inside an already-awake window.
+{{ config(materialized='view') }}
 
 select * from baseball_data.lakehouse_ext.feature_pregame_umpire_features
 

@@ -867,7 +867,21 @@ select * from final
 
 {% else %}
 
-{{ config(materialized='table') }}
+-- E11.24 TARGET 6 (2026-08-05) — table → VIEW. This branch is a pure ext-table COPY, and it
+-- was re-CTAS'd on EVERY intraday lineup tick (lineup_dbt_feature_rebuild, ~9 fires/slate) plus
+-- once in dbt_umpire_feature_rebuild. A full CTAS RESUMES COMPUTE_WH; `create or replace view`
+-- is metadata-only and never does. Content-neutral BY CONSTRUCTION: the CTAS's own source is
+-- this same external table, so a view returns byte-identical rows at read time (if anything
+-- fresher — it cannot lag a refresh the way a copy taken before one does, which also removes an
+-- INC-25-class "rebuild must run after the ext refresh" ordering constraint).
+-- SAFE because NOTHING on the Snowflake target needs this materialized: every dbt ref() to this
+-- model lives in the DuckDB branch of its consumers (feature_pregame_game_features_raw reads its
+-- OWN ext table on Snowflake, not this one), and the only raw-SQL Snowflake reader is
+-- data_loader._TODAY_LINEUP_QUERY, which filters `WHERE game_date = <date>` and is itself dead
+-- under W7B_LAKEHOUSE_S3/W7B_INTRADAY_S3 (predict runs --s3). This is the ESTABLISHED convention
+-- for this shape — stg_statsapi_games / stg_statsapi_probable_pitchers / mart_odds_outcomes /
+-- mart_game_odds_bridge are already ext-copy VIEWS on this target; these four were the outliers.
+{{ config(materialized='view') }}
 
 select * from baseball_data.lakehouse_ext.feature_pregame_lineup_features
 
