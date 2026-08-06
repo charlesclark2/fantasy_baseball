@@ -131,10 +131,20 @@ def resolve_prop_players(
         )
 
     work = props.copy().reset_index(drop=True)
-    work["_row_id"] = range(len(work))
+
+    # ⭐ RESOLVE DISTINCT IDENTITIES, NOT ROWS. A prop feed repeats the same player across every
+    # market, book and side, but identity depends ONLY on (season, event teams, name) — so
+    # resolving per-row does the same work tens of times over. Measured on the real 2023–24 lake
+    # payload: 601,933 outcome rows collapse to 28,158 distinct identity tuples (21×), and the
+    # per-row version did not finish in 10 minutes because the fuzzy rung is O(rows × candidates).
+    # Dedupe → resolve → broadcast back is exact, not an approximation: two rows with the same key
+    # are the same identity question, so they must get the same answer.
+    key = [c for c in ("season", "home_team", "away_team", "player_name") if c in work.columns]
+    ident = work[key].drop_duplicates().reset_index(drop=True) if key else work
+    ident["_row_id"] = range(len(ident))
 
     # A prop whose event teams are unusable gets NO name rung at all (the §12A hard rule).
-    pairs = _explode_to_event_teams(work)
+    pairs = _explode_to_event_teams(ident)
     resolvable = set(pairs["_row_id"].tolist()) if not pairs.empty else set()
     if not resolvable:
         out = resolve(work, spec=PROPS_SPEC_UNCONSTRAINED, crosswalk=crosswalk, reviewed=reviewed)
@@ -144,8 +154,8 @@ def resolve_prop_players(
         )
         return _finalize(out, work, thresholds, n_in)
 
-    # Candidate frame: each prop paired with each of its event's teams, resolved independently.
-    cand = pairs.merge(work, on="_row_id", how="left")
+    # Candidate frame: each distinct identity paired with each of its event's teams.
+    cand = pairs.merge(ident, on="_row_id", how="left")
     # The identity universe must carry the SAME block column the props side blocks on, or
     # `resolve` refuses the name tiers (a partial block is not a constraint). `_event_team` is the
     # target's own team, normalized — the join is "is this player on one of the two teams playing".
@@ -191,7 +201,20 @@ def resolve_prop_players(
             )
         best = agg[agg["n_ids"] == 1].drop(columns=["n_ids"])
 
-    out = work.merge(best, on="_row_id", how="left")
+    # Broadcast the per-identity answer back onto EVERY prop row that asked the same question.
+    # The merge is on the identity KEY (not `_row_id`, which now indexes identities, not rows), and
+    # the row count is asserted below — a many-to-one broadcast that fanned out would silently
+    # multiply a CLV denominator.
+    n_before = len(work)
+    resolved_ident = ident.merge(best, on="_row_id", how="left").drop(columns=["_row_id"])
+    out = work.merge(resolved_ident, on=key, how="left") if key else work.assign(**{
+        c: best[c] for c in ("canonical_player_id", "match_method", "match_confidence", "match_score")
+    })
+    if len(out) != n_before:
+        raise AssertionError(
+            f"prop identity broadcast changed the row count ({n_before} → {len(out)}); the "
+            "identity key must be unique per distinct question (v3 §12A silent_drop_count = 0)"
+        )
     out["match_method"] = out["match_method"].fillna("manual_review")
     out["match_confidence"] = pd.to_numeric(out["match_confidence"], errors="coerce").fillna(0.0)
     out["canonical_player_id"] = out["canonical_player_id"].astype("string")

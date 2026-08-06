@@ -144,6 +144,52 @@ event fails to resolve without one. A **partial** block is refused identically �
 (season, week, team) whose frames supply only `season` would fuzzy-match against the whole league,
 i.e. reach the forbidden global match by accident rather than by choice.
 
+## 6a. ⭐ The props leg, run against the REAL payload (2023–24, added 2026-08-06)
+
+Leg 2 was unit-tested but had never touched real data. Running it over the live
+`odds_nfl_props_historical` (570 events → **601,933 outcome rows**) found three things no fixture
+could — the "second real payload" rule, again earning its keep.
+
+**(a) It did not finish.** The per-row path ran >10 minutes without completing: the fuzzy rung is
+O(rows × candidates). But identity depends only on `(season, event teams, name)`, and 601,933 rows
+carry just **28,158 distinct identity tuples** (21×) — a prop feed repeats the same player across
+every market, book and side. `resolve_prop_players` now resolves distinct identities and broadcasts
+back (exact, not an approximation — the same key is the same question), with a row-count assertion
+so a fan-out can't slip through. **>10 min → 19.5 s.**
+
+**(b) Every exact match was mislabelled as a fuzzy one — and it failed the build closed.** A source
+may carry its team constraint in the BLOCK rather than in its own columns; props are exactly that.
+Tiers 3/4a joined on `_team` regardless, comparing the source's placeholder `""` against the
+target's real team, so those rungs could never fire and **586,850 EXACT-name matches fell through to
+the fuzzy rung**, were scored into the low-confidence band, and drove `low_confidence_rate` to
+**1.0**. Every unit fixture happened to supply a team column, so none of them could expose it. Fixed
+(join only on attributes the source actually supplies) + regression test, RED-proven.
+
+**(c) The result, and it fails closed — correctly.**
+
+| monitor | value |
+|---|---|
+| rows in / out | 601,933 / 601,933 (**silent_drop 0**) |
+| by method | 584,756 exact (tier 4a) · 2,094 fuzzy · 15,083 unresolved |
+| `unmatched_rate` | **0.0251** — exceeds the 0.02 bar ⇒ **fail_closed** |
+| `low_confidence_rate` | 0.0036 (was 1.0 before the (b) fix) |
+| `high_value_unmatched_count` | 1,008 (target-book rows) |
+
+The 15,083 unresolved decompose cleanly:
+
+| | rows | what it is |
+|---|---|---|
+| duplicate-name abstention | **8,875 (59%)** | **CORRECT** — two Josh Allens, two Lamar Jacksons, two Michael Thomases, two DJ Turners. The season-scope rule refusing to guess. |
+| name on no roster that season | 5,815 (39%) | non-player outcomes (`"No Touchdown"`), vendor disambiguation strings (`"Michael (Saints) Thomas"`), and nickname variants (`"Chig Okonkwo"` vs `"Chigoziem Okonkwo"`, `"Gabriel Davis"` vs `"Gabe Davis"`) |
+| on a roster, not on the event teams | 393 (2.6%) | mid-season moves / practice-squad churn |
+
+⛔ **The threshold was NOT retuned to make this pass.** 0.02 was pre-registered from the SNAP leg's
+baseline (0.68–1.24%); props genuinely sit above it, and relaxing a bar because it caught something
+is the E2.1-r inversion. **The props leg therefore needs its own pre-registered threshold, derived
+from the characterisation above rather than reverse-engineered from this run** — a deliberate
+follow-up, not a silent edit here. Note that 59% of the residual is the ladder working as designed,
+so the right props bar is almost certainly not 2%.
+
 ## 7. Honest limits
 
 - **The served board does not change — MEASURED, not reasoned (§9).** `run_season_projection`

@@ -342,15 +342,30 @@ def resolve(
     else:
         name_eligible = pd.Series(True, index=out.index)
 
-    # Tier 3 — exact name + team + position GROUP.
-    m3 = _unique_map(t, block + ["_nn", "_team", "_pos"], "canonical_player_id")
-    j3 = left.merge(m3, on=block + ["_nn", "_team", "_pos"], how="left")
-    j3.index = out.index
-    _fill(name_eligible, j3["canonical_player_id"], METHOD_EXACT_NAME_TEAM_POS)
+    # ⭐ ONLY JOIN ON THE ATTRIBUTES THE SOURCE ACTUALLY SUPPLIES. A source may carry its team /
+    # position in the BLOCK rather than in its own columns — props are exactly that: an Odds-API
+    # outcome names no team, so the constraint arrives as `_event_team` in the block. Including
+    # `_team`/`_pos` in the join key regardless meant comparing the source's placeholder "" against
+    # the target's real value, so tiers 3 and 4a could NEVER match and every exact-name prop fell
+    # through to the fuzzy rung — labelled `constrained_fuzzy` at low confidence, which drove
+    # `low_confidence_rate` to 1.0 and failed the build closed on 586,850 EXACT matches.
+    # (Found by running the real 2023–24 props payload; the unit fixtures all supplied a team
+    # column, so none of them could expose it.)
+    has_team = spec.team_column is not None
+    has_pos = spec.position_column is not None
+    if has_pos:
+        key3 = block + ["_nn"] + (["_team"] if has_team else []) + ["_pos"]
+        m3 = _unique_map(t, key3, "canonical_player_id")
+        j3 = left.merge(m3, on=key3, how="left")
+        j3.index = out.index
+        _fill(name_eligible, j3["canonical_player_id"], METHOD_EXACT_NAME_TEAM_POS)
 
     # Tier 4a — exact name + team, position RELAXED (the vendors disagree on grain, not identity).
-    m4 = _unique_map(t, block + ["_nn", "_team"], "canonical_player_id")
-    j4 = left.merge(m4, on=block + ["_nn", "_team"], how="left")
+    # With no position column this is the STRONGEST honest label for an exact-name match: the team
+    # constraint held (via the block or the column), the position was never checked.
+    key4 = block + ["_nn"] + (["_team"] if has_team else [])
+    m4 = _unique_map(t, key4, "canonical_player_id")
+    j4 = left.merge(m4, on=key4, how="left")
     j4.index = out.index
     _fill(name_eligible, j4["canonical_player_id"], METHOD_NAME_TEAM_RELAXED)
 

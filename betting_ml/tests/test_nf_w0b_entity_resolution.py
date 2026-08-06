@@ -41,6 +41,7 @@ from quant_sports_intel_models.football.nfl.entity import (
 from quant_sports_intel_models.football.nfl.entity.resolver import (
     METHOD_EXACT_NAME_TEAM_POS,
     METHOD_FUZZY_CONSTRAINED,
+    METHOD_NAME_TEAM_RELAXED,
     METHOD_REVIEWED,
     METHOD_UNRESOLVED,
     METHOD_VENDOR_ID,
@@ -155,6 +156,35 @@ class TestMatchOrderLadder:
         assert methods["Zack Zombie"] == METHOD_EXACT_NAME_TEAM_POS  # tier 3 (G vs OL → both OL)
         assert methods["Mike Wooods"] == METHOD_FUZZY_CONSTRAINED    # tier 4b (a typo, ≥ 0.95)
         assert methods["Ghost Player"] == METHOD_UNRESOLVED          # tier 5
+
+    def test_a_source_whose_team_lives_in_the_BLOCK_still_gets_an_exact_rung(self):
+        """⭐ REGRESSION — found only by running the real props payload, because every unit fixture
+        happened to supply a `team_column`.
+
+        A source may carry its team constraint in the BLOCK rather than in its own columns (props
+        are exactly that: an Odds-API outcome names no team, so the constraint arrives as
+        `_event_team`). Joining tiers 3/4a on `_team` regardless compared the source's placeholder
+        `""` against the target's real team, so those rungs could NEVER match and every EXACT-name
+        prop fell through to the fuzzy rung — mislabelled `constrained_fuzzy`, scored into the
+        low-confidence band, driving `low_confidence_rate` to 1.0 and failing the build closed on
+        586,850 exact matches.
+
+        Here the source declares no team/position column and blocks on `("season", "team")`; an
+        exact name must resolve at tier 4a, NOT tier 4b.
+        """
+        spec = ResolutionSpec(
+            source_name="block-carried-team", name_column="player", block_columns=("season", "team")
+        )
+        targets = _targets([("g1", "Exact Match", "CLE", "WR", 2024, 15)])
+        snaps = _snaps([(None, "Exact Match", "WR", "CLE", 2024, 15, 30, 0.5, 0, 0.0)])
+        got = resolve(snaps, spec=spec, targets=targets, target_name_column="player_name")
+        assert got.loc[0, "canonical_player_id"] == "g1"
+        assert got.loc[0, "match_method"] == METHOD_NAME_TEAM_RELAXED, (
+            "an exact name match must not be reported as a fuzzy one"
+        )
+        assert got.loc[0, "match_confidence"] > 0.89, (
+            "…and must not be scored into the low-confidence band"
+        )
 
     def test_a_fuzzy_match_is_always_inside_the_low_confidence_band(self):
         """⭐ Otherwise `low_confidence_rate` is a monitor that CANNOT FIRE.
