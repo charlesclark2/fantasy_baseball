@@ -22,6 +22,14 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 class UserProfile(BaseModel):
     initial_deposit: float | None = Field(None, description="Starting bankroll in USD for growth-% calculation")
+    # E9.58b — ADDITIVE (NF-C0): new keys only, nothing removed or renamed, so a frontend
+    # deployed before this backend keeps working unchanged.
+    # ⚠️ These MUST be declared here or Pydantic silently DROPS them on serialize and the
+    # store looks empty to the client while DynamoDB has the record (the E9.41 defect).
+    # `None` means "this account has no acceptance record" — the client blocks on exactly
+    # that, so the two fields are load-bearing rather than informational.
+    tos_accepted_at: str | None = Field(None, description="ISO8601 of first ToS acceptance; None = never accepted")
+    tos_version: str | None = Field(None, description="Version string of the ToS the user accepted")
 
 
 class UserProfileUpdate(BaseModel):

@@ -192,12 +192,20 @@ def record_tos_acceptance(user_id: str, tos_version: str) -> None:
 
 
 def get_user_profile(user_id: str) -> dict:
-    """Return the user's mutable profile fields (initial_deposit etc.)."""
+    """Return the user's mutable profile fields (initial_deposit etc.).
+
+    E9.58b: also returns the ToS acceptance record. Since E9.58 opened public self-serve
+    signup, this is the evidence that a given account agreed to the Terms — so the client
+    needs to be able to READ it, not just write it, in order to notice an account that has
+    none and re-prompt. `tos_accepted_at` is None for an account with no record.
+    """
     resp = _users_table().get_item(Key={"user_id": user_id})
     item = resp.get("Item", {})
     raw_deposit = item.get("initial_deposit")
     return {
         "initial_deposit": float(raw_deposit) if raw_deposit is not None else None,
+        "tos_accepted_at": item.get("tos_accepted_at"),
+        "tos_version": item.get("tos_version"),
     }
 
 

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
 import { getMfaStatus, getSessionAuthMethod, subscriberMfaRequired } from "@/lib/cognito"
+import { TermsGate } from "@/components/terms-gate"
 
 // E9.58 — carry the page the visitor was actually trying to reach through the sign-in wall.
 // Every one of these bounces used to be a bare `/login`, so a stranger who followed a link to a
@@ -49,7 +50,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }, [loading, accessToken, groups, router])
 
   if (loading || accessToken === null) return null
-  return <>{children}</>
+  // E9.58b — every authed surface goes through here, so this is the one place that guarantees
+  // no signed-in account uses the product without an acceptance record on file. It renders its
+  // children and overlays only when the backend positively reports none (see TermsGate).
+  return <TermsGate>{children}</TermsGate>
 }
 
 // Fantasy surface gate (E9.45). A signed-in caller without fantasy entitlement
