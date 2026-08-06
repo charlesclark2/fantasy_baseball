@@ -28,9 +28,12 @@ Naming convention: `credence-{environment}-{service}-{descriptor}`
 | App Client ID | `1qh95e78bd7g6ipqcvdcpf7ou6` |
 | App Client Secret | None (browser-based flow) |
 | Region | `us-east-1` |
-| Self-signup | Disabled (beta: admin-created accounts only) |
+| Self-signup — native (email/password) | **Disabled, permanently.** No email auto-verification, so `SignUp` creates an account that can never confirm itself or reset its password (E9.57, verified live). Do not open it without first configuring verification. |
+| Self-signup — federated (Google) | **LIVE and public since E9.58** (2026-08-05). This is the ONLY self-serve signup path; `/signup`, `/login` and `/subscribe` all use it. |
 | User Groups | `beta_tester`, `subscriber`, `admin` |
-| Hosted UI domain | `credencesports.auth.us-east-1.amazoncognito.com` |
+| Hosted UI domain | `us-east-1gg9zmbwqt.auth.us-east-1.amazoncognito.com` |
+| Hosted UI custom domain | None (`CustomDomain: null`) |
+| Allowed callback URLs | `https://www.credencesports.com/callback` **and** `https://credencesports.com/callback` (both verified allowlisted 2026-08-06 — a bogus `redirect_uri` correctly returns `redirect_mismatch`) |
 
 JWT issuer URL: `https://cognito-idp.us-east-1.amazonaws.com/us-east-1_gG9zMbwQt`
 

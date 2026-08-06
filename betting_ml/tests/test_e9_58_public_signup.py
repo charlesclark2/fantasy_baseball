@@ -280,6 +280,90 @@ def test_nothing_navigates_to_a_raw_next_parameter():
                 pytest.fail(f"{src.relative_to(_FRONTEND)} navigates to an unsanitised `next`")
 
 
+# ── the Hosted-UI host: one answer, in every place that names it ─────────────────────────────────
+#
+# 2026-08-06, in production, on the only signup path there is: "Continue with Google" sent every
+# visitor to `credencesports.auth.us-east-1.amazoncognito.com` and the browser showed a raw DNS
+# error. The host does not exist. Nor did `credence-prod.auth…` or `auth.credencesports.com`.
+#
+# The repo named this host in THREE places — `infrastructure/aws_resources.md`, the comment in
+# `frontend/lib/cognito.ts`, and `frontend/.env.local.example` — carrying TWO different values,
+# and NEITHER was right. The real prefix is the user pool id lowercased with the underscore
+# removed (`us-east-1_gG9zMbwQt` → `us-east-1gg9zmbwqt`), which nobody would guess, so each
+# author wrote a plausible brand-shaped name instead. One of them reached Vercel.
+#
+# ⚠️ These files are DOCUMENTATION, so this test reads them RAW — the comment IS the artifact
+# under test, and stripping comments (as every other guard here does) would check nothing.
+# The env var itself lives in Vercel and cannot be asserted from CI; what CI *can* guarantee is
+# that the repo never again offers a reader a choice of two answers.
+
+_POOL_ID = "us-east-1_gG9zMbwQt"
+_HOST_RE = re.compile(r"[a-z0-9][a-z0-9.-]*\.amazoncognito\.com")
+_HOST_DOCS = (
+    Path("infrastructure/aws_resources.md"),
+    _FRONTEND / "lib/cognito.ts",
+    _FRONTEND / ".env.local.example",
+)
+
+
+def _documented_hosts() -> dict[Path, set[str]]:
+    out = {}
+    for p in _HOST_DOCS:
+        if not p.exists():
+            continue
+        hosts = {h for h in _HOST_RE.findall(p.read_text()) if ".auth." in h}
+        if hosts:
+            out[p] = hosts
+    return out
+
+
+def test_every_place_that_names_the_hosted_ui_host_names_the_same_one():
+    found = _documented_hosts()
+    assert found, "no file names the Hosted-UI host any more — this guard has gone blind"
+    distinct = set().union(*found.values())
+    assert len(distinct) == 1, (
+        "the repo carries more than one Cognito Hosted-UI host, so a reader picks the wrong one "
+        "and production loses its signup path:\n  "
+        + "\n  ".join(f"{p}: {sorted(h)}" for p, h in found.items())
+    )
+
+
+def test_the_documented_host_matches_the_documented_pool_id():
+    """The prefix is derivable, so a made-up brand name is mechanically detectable.
+
+    If an operator ever attaches a CUSTOM domain or a different prefix, this test SHOULD fail —
+    that is the moment the three files above need updating, and the failure message says so.
+    """
+    distinct = set().union(*_documented_hosts().values())
+    host = distinct.pop()
+    expected = f"{_POOL_ID.replace('_', '').lower()}.auth.us-east-1.amazoncognito.com"
+    assert host == expected, (
+        f"documented Hosted-UI host {host!r} does not match the pool id {_POOL_ID!r} "
+        f"(expected {expected!r}). If the domain genuinely changed, re-derive it with "
+        "`aws cognito-idp describe-user-pool` and update all three files together — do NOT "
+        "relax this test to match a value you have not verified against AWS."
+    )
+
+
+def test_no_invented_hosted_ui_host_survives_anywhere():
+    """The three hosts that were actually in the repo, none of which resolve. Named explicitly so
+    a copy-paste of any of them into a new file goes RED rather than merely disagreeing."""
+    dead = ("credencesports.auth.us-east-1.amazoncognito.com",
+            "credence-prod.auth.us-east-1.amazoncognito.com",
+            "auth.credencesports.com")
+    offenders = []
+    for root in (Path("infrastructure"), _FRONTEND / "lib", _FRONTEND / "app", _FRONTEND / "components"):
+        for p in root.rglob("*"):
+            if not p.is_file() or "node_modules" in p.parts or p.suffix not in {".md", ".ts", ".tsx", ".example"}:
+                continue
+            text = p.read_text(errors="ignore")
+            for d in dead:
+                # the test file's own docstring is allowed to name them; nothing else is
+                if d in text:
+                    offenders.append(f"{p} → {d}")
+    assert not offenders, "a non-resolving Hosted-UI host is back:\n  " + "\n  ".join(offenders)
+
+
 # ── terms acceptance is recorded on the path that now creates every public account ────────────────
 
 
