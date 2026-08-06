@@ -93,18 +93,20 @@ export function Nav({
     <nav className="sticky top-0 z-50 border-b border-[#262626] bg-[#0a0a0a]/90 backdrop-blur-md">
       {/* Top bar */}
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-        <Link href="/">
+        {/* `shrink-0` so the wordmark can never be squeezed into the links beside it, and a
+            smaller mark below `sm` — at h-12 the logo alone took a third of a 390px bar. */}
+        <Link href="/" className="shrink-0">
           <Image
             src="/brand/logo-full.svg"
             alt="Credence Sports"
             width={240}
             height={48}
-            className="h-12 w-auto"
+            className="h-9 w-auto sm:h-12"
             priority
           />
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* About + Blog — desktop only */}
           <Link
             href="/about"
@@ -125,13 +127,19 @@ export function Nav({
               visitor, the exact opposite of the point of marking it public. Render it here
               instead — visible on mobile AND desktop, independent of `showSubNav` — ONLY when
               signed out; a signed-in visitor (entitled or not) already sees it in its normal
-              dropdown slot, so this would be a duplicate link once authenticated. */}
+              dropdown slot, so this would be a duplicate link once authenticated.
+
+              ⚠️ E9.58: `hidden sm:block`. These used to render at EVERY width, which was fine
+              while a logged-out phone showed nothing else — but with a Sign Up button in the bar
+              (and the logo at h-12) three surface links overflowed: the wordmark overlapped
+              "Rankings" and "Track Record" wrapped onto two lines. They are now in the mobile
+              menu below, alongside About and Blog, so nothing became less reachable — more did. */}
           {!showSubNav &&
             publicNavItems().map((item) => (
               <Link
                 key={item.key}
                 href={item.href}
-                className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
+                className="hidden text-xs text-gray-400 hover:text-gray-200 transition-colors sm:block"
               >
                 {item.label}
               </Link>
@@ -201,20 +209,18 @@ export function Nav({
             </div>
           )}
 
-          {/* Hamburger — mobile only, shown when signed in */}
-          {showSubNav && (
-            <button
-              className="flex items-center justify-center rounded p-1.5 text-gray-400 hover:text-white hover:bg-[#141414] transition-colors sm:hidden"
-              onClick={() => setMobileOpen(!mobileOpen)}
-              aria-label="Toggle menu"
-            >
-              {mobileOpen ? (
-                <X className="h-5 w-5" />
-              ) : (
-                <Menu className="h-5 w-5" />
-              )}
-            </button>
-          )}
+          {/* Hamburger — mobile only, now for EVERYONE.
+              It used to be `showSubNav &&`, i.e. signed-in only, which left a logged-out visitor
+              on a phone with no menu at all: About and Blog are `hidden sm:block`, so they were
+              simply unreachable, and the public surfaces had to be crammed into the bar itself. */}
+          <button
+            className="flex shrink-0 items-center justify-center rounded p-1.5 text-gray-400 hover:text-white hover:bg-[#141414] transition-colors sm:hidden"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label="Toggle menu"
+            aria-expanded={mobileOpen}
+          >
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
       </div>
 
@@ -326,6 +332,58 @@ export function Nav({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Mobile slide-down menu — SIGNED OUT.
+          The signed-in menu below is built from SPORTS/`visibleSurfaces`, which is entitlement-
+          shaped and wrong for a stranger. This one carries exactly what a logged-out visitor can
+          actually reach: the public surfaces, the two marketing pages that were `hidden sm:block`
+          and therefore invisible on a phone, and Sign In (Sign Up stays in the bar as the CTA). */}
+      {!showSubNav && mobileOpen && (
+        <div className="border-t border-[#262626] bg-[#0a0a0a] px-4 py-3 sm:hidden">
+          <div className="flex flex-col gap-0.5">
+            {publicNavItems().map((item) => (
+              <Link
+                key={item.key}
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                className="block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium text-gray-300 hover:bg-[#141414] hover:text-white transition-colors"
+              >
+                {item.label}
+              </Link>
+            ))}
+
+            <div className="my-2 border-t border-[#262626]" />
+
+            {/* Written as plain JSX rather than a mapped array on purpose: E9.56c's route guard
+                only sees literal `href="/…"` attributes, so a data-driven list would take these
+                links OUT of the one check that catches a dead button. */}
+            <Link
+              href="/about"
+              onClick={() => setMobileOpen(false)}
+              className="block rounded-md px-3 py-2.5 text-sm font-medium text-gray-400 hover:bg-[#141414] hover:text-white transition-colors"
+            >
+              About
+            </Link>
+            <Link
+              href="/blog"
+              onClick={() => setMobileOpen(false)}
+              className="block rounded-md px-3 py-2.5 text-sm font-medium text-gray-400 hover:bg-[#141414] hover:text-white transition-colors"
+            >
+              Blog
+            </Link>
+
+            <div className="my-2 border-t border-[#262626]" />
+
+            <Link
+              href="/login"
+              onClick={() => setMobileOpen(false)}
+              className="block rounded-md px-3 py-2.5 text-sm font-medium text-gray-400 hover:bg-[#141414] hover:text-white transition-colors"
+            >
+              Sign In
+            </Link>
+          </div>
         </div>
       )}
 
