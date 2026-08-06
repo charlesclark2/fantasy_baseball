@@ -136,6 +136,39 @@ def test_the_signup_cta_is_reachable_on_a_phone():
     )
 
 
+def test_a_logged_out_visitor_has_a_mobile_menu_at_all():
+    """The hamburger was `showSubNav &&` — signed-in only.
+
+    Combined with About/Blog being `hidden sm:block`, a logged-out visitor on a phone could not
+    reach them at all, and the public surfaces had to be crammed into the bar itself beside the
+    new Sign Up button — which overflowed (the wordmark overlapped "Rankings", "Track Record"
+    wrapped onto two lines). The menu has to exist for the signed-out case, and it needs its OWN
+    panel: the signed-in one is built from entitlement-shaped `visibleSurfaces`.
+    """
+    nav = _code(_FRONTEND / "components/nav.tsx")
+    assert "{showSubNav && (\n            <button" not in nav, "the hamburger is signed-in-only again"
+    assert "{!showSubNav && mobileOpen && (" in nav, "no signed-out mobile menu panel"
+    signed_out_panel = nav.split("{!showSubNav && mobileOpen && (")[1].split("{showSubNav && mobileOpen")[0]
+    for expected in ('href="/about"', 'href="/blog"', 'href="/login"', "publicNavItems()"):
+        assert expected in signed_out_panel, f"the signed-out mobile menu is missing {expected}"
+
+
+def test_the_inline_public_links_do_not_crowd_the_bar_on_a_phone():
+    """The reported symptom, pinned directly.
+
+    `publicNavItems()` is ALSO rendered inline in the top bar for signed-out visitors (NF3.2, so a
+    public surface is reachable pre-login). With Sign Up now permanently in the bar, rendering
+    three surface links inline at phone width overflows it — which is what the operator saw. The
+    inline copy must be `sm`-and-up; the mobile copy lives in the menu, which the test above pins.
+    """
+    nav = _code(_FRONTEND / "components/nav.tsx")
+    inline = nav.split("publicNavItems().map(")[1].split("))}")[0]
+    assert "hidden" in inline and "sm:block" in inline, (
+        "the inline public links render at phone width again — with the Sign Up button beside "
+        "them the bar overflows (wordmark overlaps the first link, labels wrap mid-phrase)"
+    )
+
+
 def test_the_guard_can_actually_fail():
     """Anti-vacuity (NF1.7 (a)): prove the assertions above are capable of rejecting something.
 
