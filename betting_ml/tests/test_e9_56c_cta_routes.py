@@ -172,17 +172,26 @@ def test_backend_cta_target_agrees_with_the_frontend_allowlist():
 
 
 def test_login_offers_a_working_no_account_path():
+    """E9.58 superseded the MECHANISM, not the invariant.
+
+    E9.56c asserted `REQUEST_ACCESS_MAILTO`, because the only way to obtain an account was to
+    email the operator. Signup is self-serve now, so the assertion moved to the real route — but
+    the thing being guarded is unchanged: the page a person without an account is most likely to
+    land on must offer them a way to get one.
+    """
     login = _code(_APP / "login/page.tsx")
     assert "/request-access" not in login, "that route does not exist"
-    assert "REQUEST_ACCESS_MAILTO" in login
+    assert "signupHref" in login, "no way to obtain an account from the sign-in page"
+    assert "REQUEST_ACCESS_MAILTO" not in login, "the mailto dead-end is back on /login"
 
 
 def test_subscribe_signed_out_is_not_a_dead_end():
     """A logged-out visitor must be able to see what they'd buy AND get an account from here."""
     page = _code(_APP / "subscribe/page.tsx")
-    assert "REQUEST_ACCESS_MAILTO" in page, "no way to obtain an account"
     signed_out = page.split("signedIn &&")[0]
+    assert "startGoogleSignIn" in signed_out, "no way to obtain an account"
     assert "PerkList" in signed_out, "perks were rendered only inside the signed-in branch"
+    assert "REQUEST_ACCESS_MAILTO" not in page, "the mailto dead-end is back on /subscribe"
 
 
 def test_the_paid_product_mentions_fantasy():

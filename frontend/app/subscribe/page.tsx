@@ -9,7 +9,9 @@ import { Nav } from "@/components/nav"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAuth } from "@/lib/auth-context"
-import { REQUEST_ACCESS_MAILTO } from "@/lib/access"
+import { signupHref } from "@/lib/access"
+import { startGoogleSignIn, isHostedUiConfigured } from "@/lib/cognito"
+import { GoogleIcon } from "@/components/google-icon"
 import {
   getSubscriptionPricing,
   getSubscriptionStatus,
@@ -66,6 +68,20 @@ export default function SubscribePage() {
     queryFn: () => getSubscriptionPricing(accessToken),
     enabled: signedIn,
   })
+
+  // E9.58 — signup, in place, on the page every padlock points at. Returning to `/subscribe`
+  // (rather than the callback's default /dashboard) is the whole point: this visitor arrived
+  // holding a buying intent, and dropping them on a dashboard discards it.
+  const googleEnabled = isHostedUiConfigured()
+
+  function handleGoogleSignUp() {
+    setError(null)
+    setBusy(true)
+    startGoogleSignIn("/subscribe").catch(() => {
+      setError("Could not start Google sign-up. Please try again.")
+      setBusy(false)
+    })
+  }
 
   async function handleSubscribe() {
     setError(null)
@@ -127,26 +143,49 @@ export default function SubscribePage() {
             <PerkList />
 
             <div className="mt-8 space-y-3">
-              <Button
-                asChild
-                className="w-full bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
-              >
-                <a href={REQUEST_ACCESS_MAILTO}>Request access</a>
-              </Button>
+              {googleEnabled ? (
+                <Button
+                  onClick={handleGoogleSignUp}
+                  disabled={busy}
+                  className="w-full bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
+                >
+                  {busy ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <GoogleIcon className="mr-2 h-4 w-4" />
+                  )}
+                  Continue with Google
+                </Button>
+              ) : (
+                <Button
+                  asChild
+                  className="w-full bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
+                >
+                  <Link href={signupHref("/subscribe")}>Create an account</Link>
+                </Button>
+              )}
               <Button
                 asChild
                 variant="outline"
                 className="w-full border-[#262626] text-gray-200 hover:bg-[#141414]"
               >
-                <Link href="/login">I already have an account</Link>
+                <Link href="/login?next=%2Fsubscribe">I already have an account</Link>
               </Button>
             </div>
 
-            {/* Says plainly why there is no "create account" button, so a visitor reads a
-                deliberate process rather than a broken one. */}
+            {/* E9.58 — this used to explain that there was no "create account" button
+                ("Credence is invite-only while we finish building"). There is one now, and the
+                honest-holding-pattern copy would read as a contradiction beside it. */}
             <p className="mt-4 text-center text-xs text-gray-500">
-              Credence is invite-only while we finish building. Request access and we&apos;ll get
-              you set up.
+              Free to create an account. By continuing you agree to our{" "}
+              <Link href="/terms" className="underline underline-offset-4 hover:text-gray-300">
+                Terms
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" className="underline underline-offset-4 hover:text-gray-300">
+                Privacy Policy
+              </Link>
+              .
             </p>
 
             <p className="mt-5 border-t border-[#262626] pt-5 text-center text-xs text-gray-500">

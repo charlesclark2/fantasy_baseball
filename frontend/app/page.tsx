@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { ProbabilityBar } from "@/components/probability-bar"
 import { Nav } from "@/components/nav"
+import { SIGNUP_HREF } from "@/lib/access"
 import { LandingFaqSection } from "@/components/landing-faq"
 import { FeaturedPickExplanation, type PickDriver } from "@/components/pick-explanation-home"
 import {
@@ -99,7 +100,8 @@ function HeroSection() {
             asChild
             className="w-full bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669] sm:w-auto"
           >
-            <a href="mailto:charlie@credencesports.com?subject=Beta%20Access%20Request">Request Access</a>
+            {/* E9.58 — was a `mailto:` "Request Access"; signup is self-serve now. */}
+            <Link href={SIGNUP_HREF}>Get Started Free</Link>
           </Button>
           <Button
             variant="outline"
@@ -474,9 +476,10 @@ function FooterCta() {
         <h2 className="text-balance text-3xl font-bold text-white md:text-4xl">
           Ready to see every pick?
         </h2>
+        {/* E9.58 — the copy said "private beta, send an email". Both are now false: signup is
+            open and self-serve, and the previous CTA was a mailto. */}
         <p className="mt-4 text-sm text-gray-400">
-          Credence Sports is currently in private beta. Send an email to request access
-          and we&apos;ll be in touch.
+          Create a free account in seconds — then subscribe whenever you&apos;re ready.
         </p>
         <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
           <Button
@@ -484,7 +487,7 @@ function FooterCta() {
             asChild
             className="bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
           >
-            <a href="mailto:charlie@credencesports.com?subject=Beta%20Access%20Request">Request Access</a>
+            <Link href={SIGNUP_HREF}>Get Started Free</Link>
           </Button>
           <Button
             variant="ghost"

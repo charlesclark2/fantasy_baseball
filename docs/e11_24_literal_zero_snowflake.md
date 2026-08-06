@@ -1884,3 +1884,157 @@ PY
 
 * `docs/e11_24_literal_zero_snowflake.md` — this section. No code changed; this is a
   verification record.
+
+---
+
+# TARGET 6 — THE EXT-TABLE-COPY → VIEW FLIP (2026-08-05, code-complete, UNDEPLOYED)
+
+Branch `target-6`. `best_alpha=0` — no bet rides on any of this.
+
+## The lever, in one sentence
+
+Four models in the intraday tick selector are, on the Snowflake target, literally
+`select * from baseball_data.lakehouse_ext.<model>` — a COPY of an external table — and they were
+`materialized='table'`, so **every intraday lineup tick ran a full CTAS over each of them**. A CTAS
+RESUMES `COMPUTE_WH`; `create or replace view` is metadata-only and never does. Flipping the four
+to `materialized='view'` removes those provisioning waits **for every caller at once**.
+
+```
+stg_statsapi_umpire_game_log        57 waits / 8d  ┐ the "umpire chain" band
+feature_pregame_umpire_features     54 waits / 8d  ┘ = 111 / 662 (16.8%), the largest single band
+feature_pregame_starter_features    ┐ the "6 lineup/starter CTAS" band
+feature_pregame_lineup_features     ┘ = 66 waits / 8d
+```
+
+Fired by `lineup_dbt_feature_rebuild` (~9 fires/slate, sensor-driven) and once by
+`dbt_umpire_feature_rebuild`.
+
+## Why this is safe — the four load-bearing facts
+
+**1. Content-neutral BY CONSTRUCTION.** The CTAS's own source is this same external table, so a
+view returns byte-identical rows at read time. It cannot be *staler* than the copy; if anything it
+is fresher, because a copy taken before an ext-table `REFRESH` lags until the next CTAS. That also
+**removes an INC-25-class ordering constraint** — there is no longer a "the rebuild must run after
+the ext refresh" edge to get wrong.
+
+**2. No Snowflake consumer needs them materialized.** Verified two ways, per INC-27 (grep the repo,
+not the DAG):
+
+* *dbt graph:* every `ref()` to these four sits **inside the DuckDB branch** of its consumer.
+  `feature_pregame_game_features_raw` refs lineup/starter/umpire at lines 78–140, but its
+  `{% else %}` starts at line 2277 — on Snowflake it reads its **own** ext table and never touches
+  them. Same for `feature_pregame_bullpen_state_features` (refs at 70–83, `{% else %}` at 189).
+  ⇒ **on the Snowflake target, nothing in dbt reads these four at all.**
+* *raw SQL:* `betting_ml/utils/data_loader.py` `_TODAY_LINEUP_QUERY` / `_TODAY_STARTER_QUERY` filter
+  `WHERE game_date = '<date>'` **and are dead in serving today** (both run only when `_S3_MODE` is
+  False; `predict_today --s3` sets it True, and `W7B_LAKEHOUSE_S3` / `W7B_INTRADAY_S3` are both in
+  the §10a enforced set). `app/backend/routers/picks.py::_UMPIRE_QUERY` runs through
+  `lakehouse_query` = **DuckDB/S3, not Snowflake**. `generate_run_env_signals.py` key-joins
+  starter+umpire — the one live recurring Snowflake reader, once/day, per-date, inside the
+  already-awake daily-build window. The rest (`ablate_*`, `train_run_env*`) are offline research.
+
+**3. The pattern is already PROVEN in production on this exact shape.** `stg_statsapi_games`,
+`stg_statsapi_probable_pitchers`, `stg_statsapi_lineups`, `mart_odds_outcomes`,
+`mart_game_odds_bridge`, `mart_closing_line_value` and ~14 more are **already** ext-copy VIEWs on
+the Snowflake branch — several with `unique` / `severity: error` tests. These four were the
+outliers, not the pioneers. This is why no bespoke mitigation was added: a special case here would
+be less safe than matching the convention.
+
+**4. Not type-contract-relevant.** None of the four is in `dbt/type_contracts/` (the INC-19
+registry covers `feature_pregame_game_features_raw` and the four EB models — all **incrementals**,
+which is exactly why they are NOT flippable and are untouched here).
+
+## The 8 tick models, and why only 4 moved
+
+| model | SF materialization | flipped? |
+|---|---|---|
+| `stg_statsapi_umpire_game_log` | `table` → **`view`** | ✅ |
+| `feature_pregame_umpire_features` | `table` → **`view`** | ✅ |
+| `feature_pregame_starter_features` | `table` → **`view`** | ✅ |
+| `feature_pregame_lineup_features` | `table` → **`view`** | ✅ |
+| `eb_starter_posteriors` | `incremental` (merge, 7d) | ⛔ not a copy-in-place |
+| `eb_batter_posteriors_raw` | `incremental` (merge, 7d) | ⛔ |
+| `feature_pregame_game_features_raw` | `incremental` (delete+insert, 7d) | ⛔ INC-19 type-pinned |
+| `feature_pregame_game_features` | `incremental` (delete+insert, 7d) | ⛔ |
+
+The four incrementals MERGE a bounded window rather than replacing the object, so they are not
+free to re-run and cannot become views. **They are the residual target-6 wake and the reason this
+lever is a large cut, not a total one** — say so when reading the soak: a band that falls but does
+not vanish is the PREDICTED outcome, not a half-working flip.
+
+## ⚠️ TWO PREDICTED SIDE EFFECTS — name them before the soak, or they read as regressions
+
+**(a) The four models JOIN the run-day daily-build selection, tests included.** The state-aware
+daily build rewrites its args to
+`build --select "source_status:fresher+ config.materialized:view"` (`pipeline/ops/_dbt_exec.py`
+L165 and `services/dbt_runner/server.py` L259 — INC-13 unions views so they are always rebuilt).
+Today these four are **not** selected on run days: their Snowflake branch has no `source()`, so
+`source_status:fresher+` never reaches them. As views they will be — bringing **~50 dbt tests**
+with them (`unique_combination_of_columns`, `not_null` × ~45, `accepted_values`).
+
+* **Cost sign:** those tests scan an ext-table-backed view instead of a table, ~once/day, **inside
+  the already-awake daily-build window** ⇒ expect a small **active-minutes** rise, **not** new
+  resumes. Judge this lever on **resumes**; read active-minutes as the control.
+* **Risk:** the run-day path is un-wrapped (`daily_ingestion_ops.py` L1427, no try/except) and
+  `dbt_daily_build` is HALT-tier, so an `error`-severity test failure there fails the daily job —
+  the INC-6 shape. This exposure is **pre-existing and already accepted** for every view listed in
+  fact 3 above (`stg_statsapi_probable_pitchers` carries explicit `severity: error`), so this is a
+  marginal increase, not a new class. **Fallback if it bites:** exclude the four by tag from the
+  view union in BOTH selector sites (they are still created by `dbt_umpire_feature_rebuild`'s
+  explicit `dbt run` daily, so INC-13's "unbuilt view" concern does not apply to them).
+* 🐞 **Incidental finding, not fixed here:** that rewrite **drops `--exclude tag:w1_lakehouse`** —
+  `effective_args` replaces `args` wholesale, keeping only `target_args`. So the run-day build does
+  not honour the exclusion `_dbt_daily_build_args()` computes. Recorded, not chased.
+
+**(b) The first post-deploy run DROPs each table and CREATEs a view.** dbt drops an existing
+relation whose type differs from the target materialization. It is sub-second metadata, but there
+is a window where the object does not exist — **which is precisely why the `dev`→`main` promotion
+must land in a QUIET post-slate window** (INC-36), not mid-slate.
+
+## ⛔ 6a IS REMOVED, NOT REPAIRED
+
+`E11_24_UMPIRE_REBUILD_GATE` + `betting_ml/monitoring/umpire_rebuild_gate.py` are **deleted**.
+
+Rationale, and it is not merely "6a was broken": **a conditional SKIP of a free operation saves
+nothing.** Even a perfectly-working 6a could only ever skip the ~1-in-3 ticks whose watermark was
+unchanged; the view removes the wake from **all** of them, for **every** caller, with no flag, no
+S3 marker, no four-owner flag ceremony and no soak. That 6a was *also* verified INERT on the
+2026-08-04 armed slate (0 skips of 3 real opportunities — its marker object had never existed, so
+every tick took the fail-OPEN path) makes the removal free of any lost, banked saving. 6a was
+**correct-but-inert, never incorrect** (fail-open ⇒ the block always rebuilt ⇒ no serving debt).
+
+⇒ **FU-4 (the marker/IAM fix) is CLOSED as WONTFIX.** It existed only to capture 6a's ~10% before
+this flip; the flip subsumes it.
+
+## Explicitly NOT done in this session, and why
+
+The story's remaining target-6 items are **deliberately deferred**, not forgotten — the
+one-serving-flip-per-soak rule is the whole reason this session exists:
+
+* **The per-slate umpire idempotency gate** — **SUPERSEDED**. Its entire purpose was to stop the
+  umpire CTAS re-firing; the view flip deletes that CTAS. There is nothing left to gate. (The
+  *ingest*-side half already shipped as FU-3, −27% write-instants, verified 2026-08-04.)
+* **Porting `scd2_writer.scd2_upsert` to the Delta/DuckDB write path** — a real, still-valid lever
+  (one shared fn behind 5 generators: run_env, offense/bullpen, defense_quality, env_state,
+  matchup). It is a **serving-path WRITE change into a non-idempotent ordered chain**, so bundling
+  it here would put two serving flips in one soak and make the census un-attributable. Next session.
+* **The `lineup_monitor` audit INSERT** (64 waits/8d, 100% wake-efficiency) — needs the INC-27
+  repo-grep proving it has NO serving reader before it can be touched. Next session.
+
+## Verification plan (the runtime gate — CI mocks all IO, so CI-green is necessary-not-sufficient)
+
+Deploy = the `dev`→`main` promotion (auto-SSM), in a QUIET window. Then, per FU-1's binding rules,
+evidence comes from the **Postgres event log**, dated against `.State.StartedAt` — never an
+`exec`-based `printenv`. Full commands are in the session handoff. Read the census **PER-DAY**,
+never off a window aggregate straddling the flip date (executions HOLDING while waits → 0 is the
+working shape; both collapsing is a dead job or an outage day).
+
+## Files
+
+* `dbt/models/staging/statsapi/stg_statsapi_umpire_game_log.sql`,
+  `dbt/models/feature/feature_pregame_{umpire,starter,lineup}_features.sql` — the flip.
+* `pipeline/ops/sensor_ops.py` — 6a gate branch removed; selector restored to unconditional.
+* `betting_ml/monitoring/umpire_rebuild_gate.py`, `betting_ml/tests/test_umpire_rebuild_gate.py` — deleted.
+* `services/dagster/aws/env.required`, `.env.example`, `BOX_OPERATIONS.md` §10 — flag deregistered;
+  §10 self-contradiction reconciled + three table-hygiene rules added.
+* `betting_ml/tests/test_e11_24_target6_ext_copy_views.py` — new, 12 tests, all RED-proven.

@@ -70,7 +70,13 @@ where rn = 1
 
 {% else %}
 
-{{ config(materialized='table') }}
+-- E11.24 TARGET 6 (2026-08-05) — table → VIEW. Pure ext-table COPY, re-CTAS'd on every intraday
+-- tick alongside feature_pregame_umpire_features (57 of the umpire band's 111 provisioning waits
+-- / 8 days). A CTAS RESUMES COMPUTE_WH; `create or replace view` is metadata-only and never does.
+-- Content-neutral by construction. The only dbt reader (feature_pregame_umpire_features) refs it
+-- from its DuckDB branch; on Snowflake that model reads its own ext table.
+-- See the full rationale on feature_pregame_umpire_features.
+{{ config(materialized='view') }}
 
 select * from baseball_data.lakehouse_ext.stg_statsapi_umpire_game_log
 

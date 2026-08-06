@@ -983,7 +983,15 @@ select * from final
 
 {% else %}
 
-{{ config(materialized='table') }}
+-- E11.24 TARGET 6 (2026-08-05) — table → VIEW. Pure ext-table COPY, re-CTAS'd on every intraday
+-- lineup tick + the daily umpire rebuild; a CTAS RESUMES COMPUTE_WH, `create or replace view`
+-- never does. Content-neutral by construction (the CTAS read this same external table).
+-- No Snowflake consumer needs it materialized: every dbt ref() to this model is in a DuckDB
+-- branch, and the raw-SQL Snowflake readers are date/key-filtered
+-- (data_loader._TODAY_STARTER_QUERY `WHERE game_date = <date>`, dead under --s3;
+-- generate_run_env_signals.py, once/day inside an already-awake daily-build window).
+-- See the full rationale on feature_pregame_lineup_features.
+{{ config(materialized='view') }}
 
 select * from baseball_data.lakehouse_ext.feature_pregame_starter_features
 

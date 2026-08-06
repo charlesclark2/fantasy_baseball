@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { Nav } from "@/components/nav"
+import { SIGNUP_HREF } from "@/lib/access"
 
 export const metadata = {
   title: "About Us — Credence Sports",
@@ -96,12 +97,13 @@ export default function AboutPage() {
             >
               How a pick works →
             </Link>
-            <a
-              href="mailto:charlie@credencesports.com?subject=Beta%20Access%20Request"
+            {/* E9.58 — was a `mailto:`; signup is self-serve now. */}
+            <Link
+              href={SIGNUP_HREF}
               className="inline-flex items-center rounded-md bg-[#10b981] px-4 py-2 text-sm font-semibold text-[#0a0a0a] hover:bg-[#059669] transition-colors"
             >
-              Request access
-            </a>
+              Create an account
+            </Link>
           </div>
         </div>
 
