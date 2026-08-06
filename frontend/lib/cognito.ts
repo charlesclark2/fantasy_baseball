@@ -68,8 +68,14 @@ export function forceRefreshTokens(): Promise<{ accessToken: string; idToken: st
 
 const CLIENT_ID = process.env.NEXT_PUBLIC_COGNITO_APP_CLIENT_ID!
 
-// Cognito domain host (e.g. "auth.credencesports.com" or
-// "credence-prod.auth.us-east-1.amazoncognito.com"). Stored without a scheme.
+// Cognito Hosted-UI domain host, without a scheme. The live value is
+// "us-east-1gg9zmbwqt.auth.us-east-1.amazoncognito.com" — the USER POOL ID lowercased with
+// the underscore removed, because the pool has no custom domain.
+// ⚠️ This comment used to offer two plausible, brand-shaped hosts as examples. Both were
+// inventions, neither resolved, and one of them reached Vercel and took the only signup path
+// in production down with a browser DNS error (2026-08-06). Never write a guessed host here —
+// `aws cognito-idp describe-user-pool --user-pool-id <pool>` is the only source of truth, and
+// a guard pins this value to the two other files that name it.
 function hostedUiDomain(): string {
   const raw = process.env.NEXT_PUBLIC_COGNITO_HOSTED_UI_DOMAIN ?? ""
   return raw.replace(/^https?:\/\//, "").replace(/\/+$/, "")
