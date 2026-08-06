@@ -31,6 +31,13 @@ LIMIT 10;
 SELECT * FROM baseball_data.config.pipeline_run_log ORDER BY run_ts DESC LIMIT 10;
 ```
 
+> ⚠️ **E11.24 (2026-08-06) — the LINEUP MONITOR no longer writes here.** `pipeline_run_log`
+> still holds the legacy Snowflake task-DAG procedures' rows, but `scripts/lineup_monitor.py`
+> (`task_name = 'lineup_monitor'`) now writes its audit record to **DynamoDB** instead: the
+> INSERT was the statement paying COMPUTE_WH's provisioning wait on every triggering tick.
+> Its runbook query is under *Lineup Monitor Architecture* below. Do NOT read the absence of
+> recent `lineup_monitor` rows here as the monitor being down.
+
 If a task shows `FAILED`, fix the underlying issue and re-execute the root task. Each downstream procedure checks its predecessor's return value and writes `status = 'SKIPPED'` rather than cascading a failure — re-running after a fix will pick up where the DAG left off.
 
 The manual sequence below remains the canonical path for development, debugging, and one-off backfills.
@@ -213,13 +220,43 @@ ORDER BY triggered_at DESC
 LIMIT 20;
 ```
 
-**Check pipeline audit log for lineup monitor entries:**
+**Check pipeline audit log for lineup monitor entries** — **E11.24 (2026-08-06): this moved
+to DynamoDB.** The old query below read `baseball_data.config.pipeline_run_log`, and that
+INSERT was the last Snowflake statement on the ~10-min tick — the one paying the warehouse
+provisioning wait (72 waits/10d in the 14-23 UTC band). The audit is write-only, so the sink
+moved to the same `credence-prod-serving-cache` table (`pk="ops"`) that already holds the
+monitor's state and retry-counter items. Same columns (`task_name` / `run_ts` / `status` /
+`rows_affected` / `error_message`) — a rename, not a re-interpretation.
+
+Run on the **LAPTOP** (or the box; both resolve credentials the same way). Replace the date:
+
+```bash
+aws dynamodb query \
+  --table-name credence-prod-serving-cache \
+  --region us-east-1 \
+  --key-condition-expression 'pk = :p AND begins_with(sk, :s)' \
+  --expression-attribute-values '{":p":{"S":"ops"},":s":{"S":"lineup_audit#2026-08-06#"}}' \
+  --output json
+```
+
+⚠️ `--region us-east-1` — the serving-cache table lives in us-east-1. Do **not** carry over
+`AWS_DEFAULT_REGION=us-east-2`; that override is for the S3 lakehouse bucket only.
+
+One item per tick, `sk = lineup_audit#{run_date}#{run_ts}` (append-only, so every fire is
+accounted for — including quiet ticks, which the pre-E11.24 Snowflake path had to skip to
+avoid the wake). `rows_affected` = games triggered on that tick.
+
+<details><summary>Retired Snowflake query (still valid for the legacy task-DAG proc rows)</summary>
+
 ```sql
 SELECT * FROM baseball_data.config.pipeline_run_log
 WHERE task_name = 'lineup_monitor_proc'
 ORDER BY run_ts DESC
 LIMIT 20;
 ```
+Note this filters `lineup_monitor_proc` — the superseded Snowflake *task* — not
+`lineup_monitor`, which is `scripts/lineup_monitor.py` and now lands in DynamoDB.
+</details>
 
 ---
 

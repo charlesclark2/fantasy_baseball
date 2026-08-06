@@ -75,6 +75,23 @@ BAND_CASE = """
 #     (`tmp_starter_ip_signals_incoming`), so the old literal pattern missed per-row INSERTs
 #     that were waking the warehouse OVERNIGHT.
 # These shift Table 4/4b family totals vs earlier runs — deliberately, they are corrections.
+#
+# 2026-08-06 — READING 'lineup_monitor audit INSERT' AFTER E11.24. The audit sink moved to
+# DynamoDB, so post-flip this family should read 0 executions / 0 waits.
+# MEASURED PRE-MERGE BASELINE (--days 12, run 2026-08-06 14:41 UTC): ALL 86 waits sit in the
+# 14-23 band — ZERO in 00-07, ZERO in 08-13. So although the legacy Snowflake task-DAG procs
+# (scripts/ddl/snowflake_task_dag.sql) also INSERT into pipeline_run_log, they contribute NO
+# waits in this window, and the family is effectively 100% this monitor. ⇒ the expected
+# post-flip reading is a clean zero, and a NON-zero is worth a look rather than being waved
+# off as proc residue.
+# ⚠️ AND THE STANDING WARNING BINDS UNUSUALLY HARD HERE: silence is the INTENDED outcome, so
+# in this instrument "the lever landed" and "the monitor died" are indistinguishable BY
+# CONSTRUCTION — there is no executions-hold/waits-fall signature to read, because executions
+# go to zero too. Confirm the monitor is ALIVE from the DynamoDB audit log instead (the
+# runbook query in scripts/daily_run.md), never from this family's silence.
+#
+# ⛔ Do NOT add explanatory comments INSIDE the FAMILY_CASE string below — it is SQL sent to
+# Snowflake, where `#` is not a comment (this was caught in review 2026-08-06). Comment here.
 FAMILY_CASE = """
       case
         when q ilike '%ci_betting%'                          then 'CI on the prod WH'
