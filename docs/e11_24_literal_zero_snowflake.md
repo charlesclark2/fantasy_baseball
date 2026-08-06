@@ -2190,8 +2190,40 @@ WHERE start_time >= dateadd(day,-30,current_timestamp())
 ORDER BY start_time DESC LIMIT 50;
 ```
 
-Expect **0 rows** (or only hand-run runbook queries). Any *recurring, scheduled-looking* reader
-here is the one thing that would change the plan.
+**RESULT (operator-run 2026-08-06): 3 rows in 30 days — all ad-hoc, none automated. INC-27 CLOSED.**
+
+| TS (UTC) | User | WH | Query |
+|---|---|---|---|
+| 07-27 12:55 | `DBT_RW` | `COMPUTE_WH` | `select task_name, convert_timezone('UTC',run_ts), status … where run_ts >= dateadd('hour',-10,current_timestamp()) order by run_ts desc limit 40` |
+| 07-16 18:11 | `DBT_RW` | `COMPUTE_WH` | `select task_name, max(run_ts) as last_run, count(*) … dateadd('hour',-30,current_timestamp) group by 1 order by 2 desc` |
+| 07-16 18:04 | `DBT_RW` | `COMPUTE_WH` | `select run_ts, status, rows_affected … where task_name='lineup_monitor' and run_ts >= '2026-07-16 12:00:00' order by run_ts` |
+
+⭐ **The SHAPE is the evidence, not the count.** Four independent tells, any one of which rules out
+an automated reader:
+
+1. **A hardcoded same-day literal** — `run_ts >= '2026-07-16 12:00:00'`, run at 18:04 on 2026-07-16.
+   No scheduled job hardcodes today's date. This one is decisive on its own.
+2. **Three different query shapes** — different column lists, different windows (`-10h`, `-30h`, a
+   literal). A scheduled reader emits *byte-identical* text every fire; that is exactly the
+   property the wake census relies on to classify by query shape.
+3. **Clustered, not cadenced** — 2 distinct days out of 30, two of them **7 minutes apart**. An
+   automated reader produces a regular cadence; this is a human/session sitting down twice.
+4. **Exploratory idioms** — `limit 40`, `group by task_name order by last_run desc` ("what has run
+   lately?"). Diagnostic sweeps, not a production read.
+
+The dates corroborate: **2026-07-16 is the E11.20-COST measurement day** (the audit that overturned
+the "reads are the burn" premise) and **2026-07-27 falls in the E11.24 census window** — i.e. these
+are prior cost-audit sessions running the runbook query in this very file, which is the behaviour
+that produced this story. Nothing serving, nothing scheduled, nothing in an app.
+
+**Views:** the corrected account-wide query returned **0 rows**. No view reads the table.
+
+⚠️ **What these three rows DO establish is a live documentation risk**, and it is the reason the
+`daily_run.md` note is written as loudly as it is: this query is the **natural first reach during a
+cost or freshness audit**, it has been reached for twice in the last month, and after this merge it
+returns an **empty result** — which a session could easily misread as "the pipeline is down". The
+runbook now says plainly that an empty `pipeline_run_log` is the expected healthy state and names
+both reasons (the DAG suspended 2026-04-30; the monitor's audit moved to DynamoDB).
 
 **Views** (the original query named a non-existent `table_type` column; this is the corrected form,
 and it covers every database rather than just `baseball_data`):

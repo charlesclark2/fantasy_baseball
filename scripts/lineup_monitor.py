@@ -162,6 +162,16 @@ _STATE_SK_PREFIX = "lineup_monitor#"
 # the change strictly safer (a table nothing writes is a table nothing can be reading usefully)
 # but removes the graceful-degradation fallback — so the repo-grep + the operator's
 # Snowflake-side reader check are the whole of the evidence, not a belt beside braces.
+# ✅ THAT CHECK IS NOW DONE AND INC-27 IS CLOSED (operator, 2026-08-06). Views reading the table:
+# 0. Queries with `from ...pipeline_run_log` in 30 days: 3, all DBT_RW/COMPUTE_WH ad-hoc — one
+# carries a HARDCODED same-day literal (`run_ts >= '2026-07-16 12:00:00'`, run 18:04 that day),
+# all three have DIFFERENT shapes, and they cluster on 2 days (two 7 min apart). A scheduled
+# reader emits byte-identical text on a regular cadence; none of that holds. The dates land on
+# the E11.20-COST audit (7/16) and the E11.24 census window (7/27) — i.e. prior cost-audit
+# sessions running daily_run.md's own runbook query. ⇒ no serving, scheduled, or automated reader.
+# ⚠️ BUT THOSE 3 ROWS PROVE A DOC RISK: this table is the natural first reach in a cost/freshness
+# audit and was reached for twice last month — and it now returns EMPTY. daily_run.md says loudly
+# that an empty pipeline_run_log is the expected healthy state, NOT an outage. Keep that note.
 # ⚠️ NOT to be conflated with the DynamoDB note at the top of this block — that one is about
 # the STATE table (lineup_monitor_state), a different table with a different migration.
 _AUDIT_SK_PREFIX = "lineup_audit#"

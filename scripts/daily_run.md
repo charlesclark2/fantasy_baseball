@@ -31,12 +31,25 @@ LIMIT 10;
 SELECT * FROM baseball_data.config.pipeline_run_log ORDER BY run_ts DESC LIMIT 10;
 ```
 
-> ⚠️ **E11.24 (2026-08-06) — the LINEUP MONITOR no longer writes here.** `pipeline_run_log`
-> still holds the legacy Snowflake task-DAG procedures' rows, but `scripts/lineup_monitor.py`
-> (`task_name = 'lineup_monitor'`) now writes its audit record to **DynamoDB** instead: the
-> INSERT was the statement paying COMPUTE_WH's provisioning wait on every triggering tick.
-> Its runbook query is under *Lineup Monitor Architecture* below. Do NOT read the absence of
-> recent `lineup_monitor` rows here as the monitor being down.
+> 🪦 **E11.24 (2026-08-06) — THIS TABLE IS NOW DEAD. The query above will return an EMPTY
+> RESULT, and that is the expected, healthy state.** Read this before concluding anything.
+>
+> Two independent things ended, and neither is a fault:
+> 1. **The Snowflake task DAG stopped on 2026-04-30.** It is a single chain rooted at
+>    `TASK_SAVANT_INGESTION`, which is `USER_SUSPENDED`. The four downstream tasks
+>    (`TASK_STATSAPI_SCHEDULE` → `TASK_ODDSAPI_EVENTS` → `TASK_ODDSAPI_ODDS` →
+>    `TASK_GITHUB_ACTIONS_TRIGGER`) still *display* `started`, but they carry **no schedule of
+>    their own** — they are purely predecessor-driven, so they cannot fire while the root is
+>    suspended. `TASK_LINEUP_MONITOR` is suspended too. Those procs have written nothing since.
+>    Orchestration moved to **Dagster** long ago; check runs in dagit, not here.
+> 2. **`scripts/lineup_monitor.py` (`task_name = 'lineup_monitor'`) moved its audit to
+>    DynamoDB** — that INSERT was the statement paying COMPUTE_WH's provisioning wait on every
+>    triggering tick. Its runbook query is under *Lineup Monitor Architecture* below.
+>
+> ⇒ **An empty `pipeline_run_log` is NOT evidence that the pipeline is down.** It has no writer
+> at all. Do not read its silence as an outage — that inference is the trap this note exists to
+> prevent, and it is a live risk precisely because this query is the natural first reach during
+> a cost or freshness audit.
 
 If a task shows `FAILED`, fix the underlying issue and re-execute the root task. Each downstream procedure checks its predecessor's return value and writes `status = 'SKIPPED'` rather than cascading a failure — re-running after a fix will pick up where the DAG left off.
 
@@ -246,7 +259,7 @@ One item per tick, `sk = lineup_audit#{run_date}#{run_ts}` (append-only, so ever
 accounted for — including quiet ticks, which the pre-E11.24 Snowflake path had to skip to
 avoid the wake). `rows_affected` = games triggered on that tick.
 
-<details><summary>Retired Snowflake query (still valid for the legacy task-DAG proc rows)</summary>
+<details><summary>Retired Snowflake query (historical rows only — nothing writes this table any more)</summary>
 
 ```sql
 SELECT * FROM baseball_data.config.pipeline_run_log
