@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { completeGoogleSignIn, consumePostSignInRedirect } from "@/lib/cognito"
 import { useAuth } from "@/lib/auth-context"
 import { apiFetch } from "@/lib/api"
+import { acceptTermsWithRetry } from "@/lib/terms"
 
 function CallbackInner() {
   const router = useRouter()
@@ -46,9 +47,14 @@ function CallbackInner() {
         apiFetch("/auth/verify-email", { method: "POST" }, accessToken).catch(() => {})
         // E9.58 — record ToS acceptance for the Google path. Google is now the ONLY self-serve
         // signup route, so without this a public account could be created having accepted nothing;
-        // the password path already did it at the set-password step. Same existing endpoint,
-        // fire-and-forget, and `if_not_exists` server-side so a repeat sign-in is a no-op.
-        apiFetch("/auth/accept-terms", { method: "POST" }, accessToken).catch(() => {})
+        // the password path already did it at the set-password step. `if_not_exists` server-side,
+        // so a repeat sign-in never overwrites the original timestamp.
+        //
+        // E9.58b — retried, and no longer merely hoped for. This is the FIRST attempt, not the
+        // guarantee: if both tries fail the user is not stopped here (they have a valid session
+        // and stopping them would turn a Dynamo blip into a broken signup), they are stopped by
+        // `TermsGate` on the next authed render, which cannot be dismissed until the write lands.
+        acceptTermsWithRetry(accessToken).catch(() => {})
         // E9.58 — return the visitor to whatever they were trying to reach (e.g. /subscribe),
         // not unconditionally to /dashboard, which silently dropped their buying intent.
         router.replace(consumePostSignInRedirect() ?? "/dashboard")

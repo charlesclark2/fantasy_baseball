@@ -374,8 +374,13 @@ def test_the_google_path_records_terms_acceptance():
     E9.58 the federated path recorded nothing, which was tolerable while every federated user had
     been invited by hand and is not once anyone can self-register.
     """
+    # E9.58b moved the call behind `acceptTermsWithRetry` (retry + a blocking gate if it still
+    # fails), so this follows the call rather than pinning the literal path at this one site.
     callback = _code(_APP / "callback/page.tsx")
-    assert '"/auth/accept-terms"' in callback
+    assert "acceptTermsWithRetry(" in callback, "the signup path no longer records acceptance"
+    assert '"/auth/accept-terms"' in _code(_FRONTEND / "lib/terms.ts"), (
+        "the helper the callback delegates to no longer calls the endpoint"
+    )
 
 
 @pytest.mark.parametrize("rel", ["app/signup/page.tsx", "app/subscribe/page.tsx"])

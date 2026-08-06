@@ -99,14 +99,25 @@ _TOS_VERSION = "2026-06-14"
 def accept_terms(user_id: str = Depends(get_user_id)) -> None:
     """Record ToS acceptance for the calling user.
 
-    Called fire-and-forget from the frontend on completion of the first-login
-    new-password flow. Writes tos_accepted_at (if_not_exists) and tos_version
-    to credence-prod-dynamo-users. Safe to call multiple times.
+    Writes tos_accepted_at (if_not_exists, so the ORIGINAL timestamp is never overwritten)
+    and tos_version to credence-prod-dynamo-users. Idempotent — safe to call repeatedly.
+
+    🚨 E9.58b — THIS MUST NOT SWALLOW ITS FAILURE, and used to.
+    It was written as a fire-and-forget call on the first-login set-password path, where a
+    lost write was a small blemish on an account a human had personally created. E9.58 made
+    Google self-serve signup public, so this is now the ONLY record that a given account
+    agreed to anything — it is evidence, not telemetry. A caught-and-logged exception here
+    returned 204 to the client, which reported success, so an account could be created and
+    used with no acceptance on file and nothing anywhere would say so.
+    The caller is expected to retry and, failing that, to block the user until it lands.
     """
     try:
         record_tos_acceptance(user_id, _TOS_VERSION)
-    except Exception:
-        logger.warning("accept_terms: failed to record acceptance for %s", user_id)
+    except Exception as exc:
+        logger.exception("accept_terms: failed to record acceptance for %s", user_id)
+        raise HTTPException(
+            status_code=503, detail="Could not record your acceptance. Please try again."
+        ) from exc
 
 
 # ── Server-side subscriber-MFA enforcement (E9.8) ────────────────────────────
