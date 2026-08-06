@@ -677,3 +677,210 @@ class TestConsumersCannotReintroduceTheSilentZero:
         assert not re.search(r"join\s*\(\s*select\s+distinct\s+season,\s*pfr_id", src, re.I), (
             "the per-season INNER-join bridge is back — it drops unresolved snap rows silently"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-W0b FOLLOW-ON — PM decisions Q1–Q4 (props leg ALERT-tier, denominator filter, aliasing)
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+from quant_sports_intel_models.football.nfl.entity import (  # noqa: E402
+    DEFAULT_THRESHOLDS,
+    PROPS_THRESHOLDS,
+    duplicate_name_floor,
+    is_non_player_outcome,
+)
+from quant_sports_intel_models.football.nfl.entity.names import (  # noqa: E402
+    normalize_for_matching,
+    strip_disambiguation,
+)
+from quant_sports_intel_models.football.nfl.entity.snap_bridge import SNAP_SPEC  # noqa: E402
+
+
+class TestNonPlayerOutcomesLeaveTheDenominatorNotTheFrame:
+    """PM Q1. A team-defense or market leg is not a failed identity — it is not a player. Counting
+    non-questions as failures makes the monitor drift with market MIX rather than with damage."""
+
+    @pytest.mark.parametrize(
+        "name", ["Miami Dolphins D/ST", "Buffalo Defense", "Kansas City Defense",
+                 "No Touchdown", "Philadelphia Eagles Defense"],
+    )
+    def test_it_recognises_a_non_player_outcome(self, name):
+        assert bool(is_non_player_outcome(pd.Series([name])).iloc[0]) is True
+
+    @pytest.mark.parametrize(
+        "name", ["Gabriel Davis", "Chigoziem Okonkwo", "Michael Woods II", "Josh Allen",
+                 "Matthew Slater", "Christian Kirk"],
+    )
+    def test_it_does_NOT_eat_a_real_player(self, name):
+        """The two-sided half. A shape heuristic ("looks like a team") would eventually swallow a
+        real player — and a wrongly-excluded player is an identity failure hidden from the very
+        monitor built to see it, which is strictly worse than counting a team as unmatched."""
+        assert bool(is_non_player_outcome(pd.Series([name])).iloc[0]) is False
+
+    def test_excluded_rows_stay_in_the_frame_and_only_leave_the_denominator(self):
+        targets = _targets([("gQB", "Joe Passer", "CLE", "QB", 2024, 1)])
+        props = _props([
+            ("Joe Passer", 2024, "CLE", "PIT", "player_pass_yds", "bovada"),
+            ("Cleveland Browns D/ST", 2024, "CLE", "PIT", "player_anytime_td", "bovada"),
+            ("No Touchdown", 2024, "CLE", "PIT", "player_anytime_td", "bovada"),
+        ])
+        out, rep = resolve_prop_players(props, targets=targets)
+        assert len(out) == 3, "a non-player row must NOT be dropped (silent_drop_count = 0)"
+        assert rep.silent_drop_count == 0
+        assert rep.n_excluded_non_identity == 2
+        # denominator is the ONE identity question, which resolved ⇒ 0.0, not 2/3
+        assert rep.unmatched_rate == 0.0
+        assert int(out["is_non_player_outcome"].sum()) == 2
+
+    def test_a_duplicate_name_abstention_STAYS_in_the_numerator(self):
+        """⭐ The other half of Q1, and the one that keeps the filter honest: the filter removes
+        NON-QUESTIONS, never unanswered ones. A duplicate-name abstention IS an unestablished
+        identity that a consumer must not use, so it must keep counting against us."""
+        targets = _targets([
+            ("gA", "Josh Allen", "CLE", "QB", 2024, 1),
+            ("gB", "Josh Allen", "PIT", "LB", 2024, 1),
+        ])
+        props = _props([("Josh Allen", 2024, "CLE", "PIT", "player_pass_yds", "bovada")])
+        out, rep = resolve_prop_players(props, targets=targets)
+        assert rep.n_excluded_non_identity == 0, "an ambiguous PLAYER is still a player"
+        assert rep.unmatched_rate == 1.0
+
+
+class TestNameAliasingIsOptInPerSource:
+    """PM Q1(b). Aliasing changes which rows a rung resolves, so it is enabled for props ONLY —
+    the snap leg is validated against the live lake and must not move."""
+
+    def test_the_snap_leg_does_NOT_alias(self):
+        assert SNAP_SPEC.name_aliasing is False, (
+            "enabling aliasing on the snap leg would move already-verified numbers"
+        )
+
+    def test_a_diminutive_resolves_only_when_aliasing_is_on(self):
+        """The same fixture, twice: 'Gabe Davis' vs roster 'Gabriel Davis' (1,073 real rows).
+        Jaro-Winkler on these is below the 0.95 bar, so only aliasing can bridge it."""
+        targets = _targets([("g1", "Gabriel Davis", "CLE", "WR", 2024, 15)])
+        snaps = _snaps([(None, "Gabe Davis", "WR", "CLE", 2024, 15, 30, 0.5, 0, 0.0)])
+        base = ResolutionSpec(
+            source_name="s", name_column="player", team_column="team",
+            position_column="position", block_columns=("season", "week", "team"),
+        )
+        off = resolve(snaps, spec=base, targets=targets, target_name_column="player_name")
+        on = resolve(snaps, spec=ResolutionSpec(**{**base.__dict__, "name_aliasing": True}),
+                     targets=targets, target_name_column="player_name")
+        assert pd.isna(off.loc[0, "canonical_player_id"]), "aliasing OFF must not resolve it"
+        assert on.loc[0, "canonical_player_id"] == "g1", "aliasing ON must resolve it"
+
+    def test_aliasing_is_symmetric_so_a_formal_name_still_matches_itself(self):
+        """'Eli Manning' is legally Eli. The map sends eli→elijah on BOTH sides, so he still
+        matches — an ASYMMETRIC normalization would break exactly the names it means to help."""
+        assert normalize_for_matching("Eli Manning", aliasing=True) == normalize_for_matching(
+            "Eli Manning", aliasing=True
+        )
+        assert normalize_for_matching("Gabe Davis", aliasing=True) == normalize_for_matching(
+            "Gabriel Davis", aliasing=True
+        )
+
+    def test_aliasing_only_touches_the_GIVEN_name_not_the_surname(self):
+        """A diminutive is a given name. Folding surnames would merge unrelated players."""
+        assert normalize_for_matching("Robert Woods", aliasing=True) != normalize_for_matching(
+            "Robert Rob", aliasing=True
+        )
+
+    def test_the_disambiguation_strip_is_unconditional(self):
+        """A parenthetical is a vendor ANNOTATION, never part of a name — so it is stripped for
+        every source, aliasing or not. Left in, `normalize_name` turns it into name TOKENS
+        ('michael saints thomas') and the player can never match."""
+        # the strip leaves the surrounding whitespace for `normalize_name` to collapse
+        assert strip_disambiguation("Michael (Saints) Thomas").split() == ["Michael", "Thomas"]
+        assert normalize_for_matching("Michael (Saints) Thomas") == "michael thomas"
+        assert normalize_for_matching("Lamar Jackson (BAL)") == "lamar jackson"
+
+
+class TestTheTierSplit:
+    """PM Q4. The monitors are computed IDENTICALLY; the tier decides only what a breach DOES."""
+
+    def _breaching(self):
+        return _clean_resolved(n_matched=90, n_unmatched=10)
+
+    def test_halt_tier_fails_closed(self):
+        rep = evaluate(self._breaching(), source_name="snap", n_input_rows=100,
+                       thresholds=ResolutionThresholds(max_unmatched_rate=0.05, tier="halt"))
+        assert rep.tier == "halt" and rep.fail_closed is True and rep.alert is True
+
+    def test_alert_tier_proceeds_on_the_SAME_breach(self):
+        rep = evaluate(self._breaching(), source_name="props", n_input_rows=100,
+                       thresholds=ResolutionThresholds(max_unmatched_rate=0.05, tier="alert"))
+        assert rep.tier == "alert"
+        assert rep.fail_closed is False, "props are on no serving path — a breach must not HALT"
+        assert rep.alert is True, "…but it must still PAGE"
+        assert rep.reasons, "…and carry the same reasons, so 'we chose not to stop' stays visible"
+
+    def test_an_alert_tier_breach_is_never_scored_healthy(self):
+        """The failure mode this guards: 'fail_closed is False' being read as 'nothing wrong'."""
+        rep = evaluate(self._breaching(), source_name="props", n_input_rows=100,
+                       thresholds=ResolutionThresholds(max_unmatched_rate=0.05, tier="alert"))
+        assert (rep.fail_closed, rep.alert) != (False, False)
+
+    def test_the_snap_leg_stays_halt_and_props_are_alert(self):
+        assert DEFAULT_THRESHOLDS.tier == "halt", "the snap leg is serving-critical for NF-W1"
+        assert PROPS_THRESHOLDS.tier == "alert"
+
+    def test_an_unknown_tier_is_refused(self):
+        with pytest.raises(ValueError, match="tier must be"):
+            ResolutionThresholds(tier="warn")
+
+
+class TestADeferredThresholdIsNotAPass:
+    """PM Q2/Q3. The props bar is DEFERRED to the consuming vertical. An unset bar must read as
+    'not yet decided', never as 'within limits' (NF1.7 (a))."""
+
+    def test_a_None_bar_is_recorded_as_deferred_not_satisfied(self):
+        rep = evaluate(_clean_resolved(n_matched=50, n_unmatched=50), source_name="props",
+                       n_input_rows=100, thresholds=PROPS_THRESHOLDS)
+        assert rep.unmatched_rate == 0.5, "the RATE is still measured and reported"
+        assert "max_unmatched_rate" in rep.deferred_thresholds
+        assert rep.fail_closed is False and rep.alert is False
+        assert rep.to_dict()["deferred_thresholds"], (
+            "a deferred bar must be visible in the serialized report, or it reads as passed"
+        )
+
+    def test_the_high_value_count_is_reported_even_with_no_gate(self):
+        df = _clean_resolved(n_matched=99, n_unmatched=1)
+        hv = pd.Series([False] * 99 + [True], index=df.index)
+        rep = evaluate(df, source_name="props", n_input_rows=100, high_value_mask=hv,
+                       thresholds=PROPS_THRESHOLDS)
+        assert rep.high_value_unmatched_count == 1
+        assert "max_high_value_unmatched" in rep.deferred_thresholds
+
+
+class TestTheIrreducibleFloor:
+    """PM Q2. The floor is a DESIGN quantity computable before any threshold is chosen — which is
+    what makes it a legitimate thing to pre-register against."""
+
+    def test_it_counts_only_rows_whose_name_genuinely_collides(self):
+        targets = _targets([
+            ("gA", "Josh Allen", "CLE", "QB", 2024, 1),
+            ("gB", "Josh Allen", "PIT", "LB", 2024, 1),
+            ("gC", "Joe Passer", "CLE", "QB", 2024, 1),
+        ])
+        props = _props([
+            ("Josh Allen", 2024, "CLE", "PIT", "player_pass_yds", "bovada"),
+            ("Joe Passer", 2024, "CLE", "PIT", "player_pass_yds", "bovada"),
+        ])
+        floor = duplicate_name_floor(props, targets)
+        assert floor["n_colliding_rows"] == 1 and floor["n_rows"] == 2
+        assert floor["floor_rate"] == pytest.approx(0.5)
+        assert "Josh Allen" in floor["colliding_names"]
+
+    def test_non_player_outcomes_are_outside_the_floor_denominator(self):
+        """The floor must be computed on the same population the rate is — else the two numbers
+        are not comparable and 'the rate is above the floor' means nothing."""
+        targets = _targets([("gC", "Joe Passer", "CLE", "QB", 2024, 1)])
+        props = _props([
+            ("Joe Passer", 2024, "CLE", "PIT", "player_pass_yds", "bovada"),
+            ("Cleveland Browns D/ST", 2024, "CLE", "PIT", "player_anytime_td", "bovada"),
+        ])
+        assert duplicate_name_floor(props, targets)["n_rows"] == 1
+
+    def test_an_empty_payload_is_unevaluable_not_zero(self):
+        floor = duplicate_name_floor(pd.DataFrame(), pd.DataFrame())
+        assert floor["floor_rate"] is None, "0.0 would read as 'no irreducible collisions'"

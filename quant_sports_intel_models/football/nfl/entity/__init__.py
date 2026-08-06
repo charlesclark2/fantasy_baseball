@@ -88,7 +88,13 @@ from .resolver import (
     ResolutionSpec,
     resolve,
 )
-from .props_identity import PROPS_SPEC, resolve_prop_players
+from .props_identity import (
+    PROPS_SPEC,
+    PROPS_THRESHOLDS,
+    duplicate_name_floor,
+    is_non_player_outcome,
+    resolve_prop_players,
+)
 from .snap_bridge import (
     SNAP_SPEC,
     SNAP_VALUE_COLUMNS,
@@ -110,6 +116,7 @@ __all__ = [
     "METHOD_VENDOR_ID",
     "POSITION_GROUPS",
     "PROPS_SPEC",
+    "PROPS_THRESHOLDS",
     "SNAP_SPEC",
     "SNAP_VALUE_COLUMNS",
     "EntityResolutionFailClosed",
@@ -130,6 +137,8 @@ __all__ = [
     "position_group",
     "qa_records",
     "resolve",
+    "duplicate_name_floor",
+    "is_non_player_outcome",
     "resolve_prop_players",
     "resolve_snap_counts",
     "skill_starter_mask",
