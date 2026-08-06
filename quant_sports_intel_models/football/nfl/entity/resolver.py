@@ -53,7 +53,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from .names import jaro_winkler, normalize_name, normalize_team, position_group
+from .names import jaro_winkler, normalize_for_matching, normalize_team, position_group
 
 log = logging.getLogger("nfl.entity.resolver")
 
@@ -134,6 +134,11 @@ class ResolutionSpec:
     # than the block ON PURPOSE: a block-local uniqueness test certifies the very collision it
     # cannot see. Defaults to the season.
     ambiguity_scope_columns: tuple[str, ...] = ("season",)
+    # Fold given-name diminutives (Gabe↔Gabriel, Chig↔Chigoziem) into the matching key. OPT-IN PER
+    # SOURCE, never global: enabling it changes which rows a rung resolves, and the snap leg is
+    # already validated against the live lake and must not move. Vendor annotation stripping
+    # ("Michael (Saints) Thomas") is unconditional — a parenthetical is never part of a name.
+    name_aliasing: bool = False
     fuzzy_threshold: float = DEFAULT_FUZZY_THRESHOLD
     # Rows whose feature would materially move a projection — the §12A
     # `high_value_unmatched_count` population. A callable over the source frame → bool Series.
@@ -155,8 +160,13 @@ RESULT_COLUMNS = (
 )
 
 
-def _norm_series(s: pd.Series) -> pd.Series:
-    return s.astype("string").fillna("").map(normalize_name)
+def _norm_series(s: pd.Series, *, aliasing: bool = False) -> pd.Series:
+    """The matching key. BOTH sides of every rung go through this one function with the SAME
+    `aliasing` setting — an asymmetric normalization would silently make two identical names
+    disagree, which is the failure the alias map exists to remove."""
+    return s.astype("string").fillna("").map(
+        lambda v: normalize_for_matching(v, aliasing=aliasing)
+    )
 
 
 def _prepare_targets(
@@ -164,7 +174,7 @@ def _prepare_targets(
     target_team_column: str | None, target_position_column: str | None,
 ) -> pd.DataFrame:
     t = targets.copy()
-    t["_nn"] = _norm_series(t[target_name_column])
+    t["_nn"] = _norm_series(t[target_name_column], aliasing=spec.name_aliasing)
     t["_team"] = (
         t[target_team_column].map(normalize_team) if target_team_column else ""
     )
@@ -274,7 +284,7 @@ def resolve(
         t = t.rename(columns={target_id_column: "canonical_player_id"})
     t = t[t["canonical_player_id"].notna()]
 
-    s_nn = _norm_series(out[spec.name_column])
+    s_nn = _norm_series(out[spec.name_column], aliasing=spec.name_aliasing)
     s_team = out[spec.team_column].map(normalize_team) if spec.team_column else pd.Series("", index=out.index)
     s_pos = out[spec.position_column].map(position_group) if spec.position_column else pd.Series("", index=out.index)
 

@@ -190,6 +190,75 @@ from the characterisation above rather than reverse-engineered from this run** �
 follow-up, not a silent edit here. Note that 59% of the residual is the ladder working as designed,
 so the right props bar is almost certainly not 2%.
 
+## 6b. ⭐ PROPS FOLLOW-ON — PM decisions Q1–Q4 implemented (2026-08-06)
+
+§6a ended with the props leg failing closed at 2.51% against a bar pre-registered off the SNAP
+leg, and the threshold deliberately NOT retuned. The PM decided all four questions; this section
+records what shipped and what it measured.
+
+**Q4 — the tier is now PER-LEG.** The snap leg is serving-critical for NF-W1 and stays `halt`.
+The props leg is on no serving path, so it runs `alert`: identical monitors, it PAGES, records the
+residual in QA, and **proceeds**. ⛔ The monitors are computed the same way for both tiers — the
+tier decides only what a breach *does* — and an alert-tier breach still sets `alert=True` and
+carries the same `reasons`, so "we chose not to stop" stays distinguishable from "nothing was
+wrong". (Guard: `test_an_alert_tier_breach_is_never_scored_healthy`.)
+
+**Q1 — the denominator, and the difference between filtering and fixing.** Two distinct actions,
+and conflating them would have been the easy mistake:
+
+| | rows | action |
+|---|---|---|
+| team defenses (`"Miami Dolphins D/ST"`, `"Buffalo Defense"`) | 2,493 | **FILTER** from the denominator — a defensive TD is scored by a TEAM; no player crosswalk can resolve it |
+| market legs (`"No Touchdown"`) | 495 | **FILTER** — not a player |
+| vendor parentheticals (`"Michael (Saints) Thomas"`) | 333 | **FIX** — strip the annotation |
+| nickname variants (`"Gabe"`/`"Gabriel Davis"`, `"Chig"`/`"Chigoziem Okonkwo"`) | 2,494 | **FIX** — given-name aliasing |
+| duplicate names (two Josh Allens) | 8,875 | **KEEP IN THE NUMERATOR** — genuinely unestablished |
+
+Filtered rows are **marked, never dropped** (`is_non_player_outcome`), so `silent_drop_count`
+stays 0. The filter is deliberately a token match, never a shape heuristic: a heuristic that
+guessed "this looks like a team" would eventually eat a real player, and a wrongly-excluded player
+is an identity failure hidden from the monitor built to see it. Both directions are guarded.
+
+**Aliasing is OPT-IN PER SOURCE**, enabled for props and nothing else — the snap leg is validated
+and must not move. Verified: the snap leg's monitors are **identical to the merged baseline**
+(0.0124 / 0.0088 / 0.0101 / 0.0068, silent_drop 0, high_value_unmatched 0). The alias map covers
+standard diminutives only; idiosyncratic aliases ("Sauce" Gardner, "Chosen" Anderson — a legal
+name change) are NOT rules and belong in the reviewed crosswalk.
+
+**Result on the real payload:**
+
+| monitor | §6a | now |
+|---|---|---|
+| `unmatched_rate` | 0.0251 | **0.0171** |
+| `low_confidence_rate` | 0.0036 | 0.00069 |
+| `high_value_unmatched_count` | 1,008 | 657 |
+| `n_excluded_non_identity` | — | 2,988 |
+| `silent_drop_count` | 0 | **0** |
+| verdict | fail_closed | `tier=alert`, proceeds |
+
+**Q2 — the irreducible floor, computed instead of a bar fitted.** `duplicate_name_floor` measures
+the share of identity rows whose name maps to >1 canonical player that season — rows the ladder
+abstains on **by design**, no matter how good it gets. Measured: **0.0159** (9,508 of 598,945
+rows, 26 names). Set beside the observed 0.0171, the *reducible* residual is only **0.12
+percentage points** — the ladder is within a rounding error of the mathematical floor. Any future
+props `max_unmatched_rate` must be pre-registered ABOVE this floor; a bar below it would be
+unsatisfiable by construction (the E7.14 "no effect of any size could pass" shape).
+
+**Q3 — high-value reported, gate deferred.** 657 target-book rows unmatched. No bar is set, and
+`deferred_thresholds` names every unset bar in the serialized report so a deferral can never be
+read as a pass (NF1.7 (a)). It also logs on every run, because a deferred threshold is not the
+same as being within one.
+
+⭐ **A FINDING THAT SHOULD SHAPE THE DEFERRED BAR: the floor is not fully irreducible.** 624 of the
+residual rows (3 names) carry the book's OWN disambiguator — `"Michael (Saints) Thomas"`,
+`"Lamar Jackson (BAL)"`, `"Michael Thomas (NO)"`. The parenthetical exists *precisely because* the
+book knows the name is ambiguous, and stripping it (as decided) moves the row from "unresolvable
+name" to "ambiguous name" — the abstention is now for the right reason, but the signal was in
+hand and was discarded. Parsing `(Saints)`/`(BAL)` into a team constraint would resolve them and
+would LOWER the floor itself. That is beyond this follow-on's decided scope (the decision was
+"strip"), so it is reported rather than built — but a bar pre-registered at today's floor would
+be locking in a number that a small, known change can improve.
+
 ## 7. Honest limits
 
 - **The served board does not change — MEASURED, not reasoned (§9).** `run_season_projection`

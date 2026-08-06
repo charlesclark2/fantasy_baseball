@@ -232,7 +232,10 @@ def test_the_oauth_round_trip_preserves_where_the_visitor_was_going():
 def test_subscribe_returns_the_new_account_to_subscribe():
     """The one destination that must be right, since /subscribe is where every padlock points."""
     code = _code(_APP / "subscribe/page.tsx")
-    assert 'startGoogleSignIn("/subscribe")' in code
+    # Matches the DESTINATION argument only, not the whole signature — E9.58d added a second
+    # (analytics context) argument, and a guard that pins an exact call site goes red on every
+    # unrelated addition to it. What matters here is where the user is sent back to.
+    assert 'startGoogleSignIn("/subscribe"' in code
 
 
 def test_the_sign_in_wall_carries_the_destination_through():

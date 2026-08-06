@@ -57,7 +57,7 @@ function SignupInner() {
     )
     // Full-page redirect out to Cognito → Google; control returns to /callback, so there is no
     // success path here to clear isRedirecting on.
-    startGoogleSignIn(next).catch((err) => {
+    startGoogleSignIn(next, { intent: "signup", surface: "signup" }).catch((err) => {
       setError(err?.message ?? "Could not start Google sign-up. Please try again.")
       setIsRedirecting(false)
     })

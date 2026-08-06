@@ -62,7 +62,7 @@ function LoginInner() {
     )
     // Full-page redirect to the Cognito Hosted UI → Google. Control returns to
     // /callback, so no need to clear isLoading here.
-    startGoogleSignIn(next).catch((err) => {
+    startGoogleSignIn(next, { intent: "signin", surface: "login" }).catch((err) => {
       setError(err?.message ?? "Could not start Google sign-in. Please try again.")
       setIsLoading(false)
     })
