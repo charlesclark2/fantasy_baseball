@@ -1,0 +1,96 @@
+{
+  "generated_at": "2026-08-05T23:09:00+00:00",
+  "seasons": [
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "n_crosswalk_rows": 74800,
+  "n_reviewed_rows": 0,
+  "any_fail_closed": false,
+  "max_silent_drop_count": 0,
+  "per_season": [
+    {
+      "source_name": "nflverse.snap_counts",
+      "n_input_rows": 26381,
+      "n_output_rows": 26381,
+      "n_matched": 26053,
+      "unmatched_rate": 0.012433,
+      "low_confidence_rate": 0.000499,
+      "high_value_unmatched_count": 0,
+      "silent_drop_count": 0,
+      "evaluated": true,
+      "fail_closed": false,
+      "reasons": [],
+      "by_method": {
+        "stable_vendor_id": 20372,
+        "exact_name_team_position": 5668,
+        "manual_review": 328,
+        "constrained_fuzzy": 13
+      },
+      "season": 2022
+    },
+    {
+      "source_name": "nflverse.snap_counts",
+      "n_input_rows": 26540,
+      "n_output_rows": 26540,
+      "n_matched": 26306,
+      "unmatched_rate": 0.008817,
+      "low_confidence_rate": 0.000532,
+      "high_value_unmatched_count": 0,
+      "silent_drop_count": 0,
+      "evaluated": true,
+      "fail_closed": false,
+      "reasons": [],
+      "by_method": {
+        "stable_vendor_id": 21083,
+        "exact_name_team_position": 5207,
+        "manual_review": 234,
+        "constrained_fuzzy": 14,
+        "constrained_name_team": 2
+      },
+      "season": 2023
+    },
+    {
+      "source_name": "nflverse.snap_counts",
+      "n_input_rows": 26615,
+      "n_output_rows": 26615,
+      "n_matched": 26345,
+      "unmatched_rate": 0.010145,
+      "low_confidence_rate": 0.000228,
+      "high_value_unmatched_count": 0,
+      "silent_drop_count": 0,
+      "evaluated": true,
+      "fail_closed": false,
+      "reasons": [],
+      "by_method": {
+        "stable_vendor_id": 21402,
+        "exact_name_team_position": 4937,
+        "manual_review": 270,
+        "constrained_fuzzy": 6
+      },
+      "season": 2024
+    },
+    {
+      "source_name": "nflverse.snap_counts",
+      "n_input_rows": 26612,
+      "n_output_rows": 26612,
+      "n_matched": 26432,
+      "unmatched_rate": 0.006764,
+      "low_confidence_rate": 0.0,
+      "high_value_unmatched_count": 0,
+      "silent_drop_count": 0,
+      "evaluated": true,
+      "fail_closed": false,
+      "reasons": [],
+      "by_method": {
+        "stable_vendor_id": 21572,
+        "exact_name_team_position": 4859,
+        "manual_review": 180,
+        "constrained_name_team": 1
+      },
+      "season": 2025
+    }
+  ]
+}

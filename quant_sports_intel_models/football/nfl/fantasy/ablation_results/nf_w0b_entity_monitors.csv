@@ -1,0 +1,5 @@
+source_name,n_input_rows,n_output_rows,n_matched,unmatched_rate,low_confidence_rate,high_value_unmatched_count,silent_drop_count,evaluated,fail_closed,reasons,by_method,season
+nflverse.snap_counts,26381,26381,26053,0.012433,0.000499,0,0,True,False,[],"{'stable_vendor_id': 20372, 'exact_name_team_position': 5668, 'manual_review': 328, 'constrained_fuzzy': 13}",2022
+nflverse.snap_counts,26540,26540,26306,0.008817,0.000532,0,0,True,False,[],"{'stable_vendor_id': 21083, 'exact_name_team_position': 5207, 'manual_review': 234, 'constrained_fuzzy': 14, 'constrained_name_team': 2}",2023
+nflverse.snap_counts,26615,26615,26345,0.010145,0.000228,0,0,True,False,[],"{'stable_vendor_id': 21402, 'exact_name_team_position': 4937, 'manual_review': 270, 'constrained_fuzzy': 6}",2024
+nflverse.snap_counts,26612,26612,26432,0.006764,0.0,0,0,True,False,[],"{'stable_vendor_id': 21572, 'exact_name_team_position': 4859, 'manual_review': 180, 'constrained_name_team': 1}",2025

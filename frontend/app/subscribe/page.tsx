@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { Check, Loader2 } from "lucide-react"
+import posthog from "posthog-js"
 import { Nav } from "@/components/nav"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -77,6 +78,15 @@ export default function SubscribePage() {
   function handleGoogleSignUp() {
     setError(null)
     setBusy(true)
+    // E9.58c — this capture was MISSING entirely, and this is the surface every padlock in the
+    // product points at, so the highest-volume signup path emitted no analytics at all.
+    // `send_instantly` because what follows is a full-page redirect out to Cognito: a batched
+    // event is still sitting in the queue when the document is torn down, and is simply lost.
+    posthog.capture(
+      "user_signup_started",
+      { method: "google", surface: "subscribe", next: "/subscribe" },
+      { send_instantly: true },
+    )
     startGoogleSignIn("/subscribe").catch(() => {
       setError("Could not start Google sign-up. Please try again.")
       setBusy(false)

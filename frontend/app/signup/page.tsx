@@ -48,7 +48,13 @@ function SignupInner() {
   function handleGoogleSignUp() {
     setError(null)
     setIsRedirecting(true)
-    posthog.capture("user_signup_started", { method: "google", next: next ?? null })
+    // `send_instantly` — a full-page redirect to Cognito follows, and a batched event still in
+    // the queue when the document is torn down is lost. (E9.58c)
+    posthog.capture(
+      "user_signup_started",
+      { method: "google", surface: "signup", next: next ?? null },
+      { send_instantly: true },
+    )
     // Full-page redirect out to Cognito → Google; control returns to /callback, so there is no
     // success path here to clear isRedirecting on.
     startGoogleSignIn(next).catch((err) => {
