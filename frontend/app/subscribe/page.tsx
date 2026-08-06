@@ -87,7 +87,7 @@ export default function SubscribePage() {
       { method: "google", surface: "subscribe", next: "/subscribe" },
       { send_instantly: true },
     )
-    startGoogleSignIn("/subscribe").catch(() => {
+    startGoogleSignIn("/subscribe", { intent: "signup", surface: "subscribe" }).catch(() => {
       setError("Could not start Google sign-up. Please try again.")
       setBusy(false)
     })
