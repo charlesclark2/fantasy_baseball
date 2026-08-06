@@ -108,6 +108,21 @@ const OAUTH_STATE_KEY = "cognito_oauth_state"
 // silently lost the thing they were trying to buy.
 const POST_SIGNIN_REDIRECT_KEY = "cognito_post_signin_redirect"
 
+// E9.58d — what the user was TRYING to do, carried across the same round-trip as the redirect.
+//
+// Without this the funnel has a start and no finish: `user_signup_started` fires on the CTA, and
+// what comes back is `user_signed_in`, which is byte-identical for a brand-new signup and a
+// returning user. So the one number worth having off this funnel — how many people who clicked
+// Sign Up actually made it back with a session — was not computable.
+//
+// The surface is the only thing that knows the difference (a "Sign Up" button vs a "Sign In"
+// button), and the surface is on the far side of a cross-origin redirect from the callback,
+// which is why this has to be stashed rather than inferred.
+const SIGNIN_CONTEXT_KEY = "cognito_signin_context"
+
+export type SignInIntent = "signup" | "signin"
+export type SignInContext = { intent: SignInIntent; surface: string }
+
 // Only a same-origin ABSOLUTE PATH is ever accepted. This value is read from a query string
 // (`/signup?next=…`), i.e. it is attacker-controlled: anything that could leave the origin is an
 // open redirect on the auth callback, which is the worst place in the app to have one.
@@ -149,7 +164,12 @@ async function pkceChallenge(verifier: string): Promise<string> {
 // localStorage so it survives the cross-origin redirect round-trip), then redirect
 // the browser to the Cognito Hosted-UI authorize endpoint forced to the Google IdP.
 // `next` is where to send the user once the callback completes (default /dashboard).
-export async function startGoogleSignIn(next?: string | null): Promise<void> {
+// `context` records whether this was a signup or a sign-in, and from which page, so the
+// callback can close the funnel it opened (E9.58d).
+export async function startGoogleSignIn(
+  next?: string | null,
+  context?: SignInContext,
+): Promise<void> {
   const verifier = randomToken(64)
   const state = randomToken(16)
   const challenge = await pkceChallenge(verifier)
@@ -160,6 +180,11 @@ export async function startGoogleSignIn(next?: string | null): Promise<void> {
   const dest = sanitizeInternalPath(next)
   if (dest) window.localStorage.setItem(POST_SIGNIN_REDIRECT_KEY, dest)
   else window.localStorage.removeItem(POST_SIGNIN_REDIRECT_KEY)
+
+  // Always write or clear, never leave a previous attempt's context to be picked up by the next
+  // sign-in — a stale "signup" would report a conversion that did not happen.
+  if (context) window.localStorage.setItem(SIGNIN_CONTEXT_KEY, JSON.stringify(context))
+  else window.localStorage.removeItem(SIGNIN_CONTEXT_KEY)
 
   const params = new URLSearchParams({
     identity_provider: "Google",
@@ -181,6 +206,24 @@ export function consumePostSignInRedirect(): string | null {
   const raw = window.localStorage.getItem(POST_SIGNIN_REDIRECT_KEY)
   window.localStorage.removeItem(POST_SIGNIN_REDIRECT_KEY)
   return sanitizeInternalPath(raw)
+}
+
+// Read-and-clear the sign-in context. Single-use for the same reason the redirect is: a stale
+// entry from an ABANDONED attempt must not attach itself to an unrelated later sign-in and
+// report a conversion that never happened. Returns null when absent or unparseable — the
+// callback then reports the intent as unknown rather than guessing "signup", so a bug here can
+// only ever UNDER-count conversions, never inflate them.
+export function consumeSignInContext(): SignInContext | null {
+  const raw = window.localStorage.getItem(SIGNIN_CONTEXT_KEY)
+  window.localStorage.removeItem(SIGNIN_CONTEXT_KEY)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as SignInContext
+    if (parsed?.intent !== "signup" && parsed?.intent !== "signin") return null
+    return { intent: parsed.intent, surface: String(parsed.surface ?? "unknown") }
+  } catch {
+    return null
+  }
 }
 
 type OAuthTokens = {
