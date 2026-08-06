@@ -103,12 +103,25 @@ models:
       - name: player_id
         data_tests: [not_null]
   - name: sat_snap_counts_weekly
-    description: Offense/ST snap-usage satellite on the fct spine (keyed pfr id). Sport-tagged.
+    description: >
+      Offense/ST snap-usage satellite on the fct spine. NF-W0b: reads the already-resolved snap
+      columns off fct_player_week (which owns the cross-season pfr→gsis bridge) so there is ONE
+      bridge in the project, and a join miss can never re-appear as a fabricated 0.0 snap share.
+      snap_source_tier distinguishes an observed 0.0 from an unknown. Sport-tagged.
     columns:
       - name: sport
         data_tests: [not_null]
       - name: player_id
         data_tests: [not_null]
+      - name: snap_source_tier
+        description: >
+          observed = a real snap row (a 0.0 here is REAL) · no_snap_row = inactive / feed lag /
+          unresolved identity (values NULL) · bye = no game. NEVER coalesce these to 0 (v3 §12A).
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['observed', 'no_snap_row', 'bye']
 
   # ---- derived analytics marts ----
   - name: mart_opportunity_player_week

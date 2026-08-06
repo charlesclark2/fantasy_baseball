@@ -1,0 +1,24 @@
+# NF-W0b — TIER 2 of the entity-resolution ladder: hand-reviewed identity overrides.
+#
+# WHAT GOES HERE. An identity the automatic rungs cannot reach or got wrong. The canonical case is
+# a NICKNAME: the constrained-fuzzy rung is pinned at 0.95 because the blind-vendor-id control
+# measures wrong merges at every looser threshold (see resolver.py), and a nickname such as
+# "Michael Woods II" vs "Mike Woods" scores 0.8913 — below the bar by design. Rather than loosen a
+# threshold globally (34 wrong merges at 0.88, measured) a reviewer adds ONE row here.
+#
+# HOW IT IS USED. Tier 2 outranks every automatic name rung, so a human decision recorded here is
+# never re-litigated by a later run's fuzzy score. It is keyed on a VENDOR ID, not a name, so it
+# stays correct when the vendor changes its spelling.
+#
+# WORKFLOW. `run_entity_resolution.py --report` writes the review queue to
+# `ablation_results/nf_w0b_entity_qa_queue.csv`, ordered worst-first. Resolve a row by hand, add it
+# here, re-run. Only the three columns below are required; the rest of the §12A contract is filled
+# with the reviewed defaults (match_method=reviewed_crosswalk, confidence 0.99).
+#
+# WHY THIS FILE IS EMPTY TODAY, AND THAT IS THE RESULT. Keying the vendor map on the id alone
+# rather than on (season, id) resolves the entire high-value cohort at tier 1 —
+# `high_value_unmatched_count` is 0 for every season 2022–2025, Woods included. The 1,012 rows
+# still in the queue are OL/LS/DL, whose snap share no fantasy projection reads. So there is
+# nothing yet that a human must adjudicate; the file exists because the rung must exist BEFORE the
+# first genuinely-ambiguous starter appears, not after.
+canonical_player_id,source_name,source_player_id
