@@ -1,0 +1,35 @@
+{
+  "report": {
+    "source_name": "oddsapi.player_props",
+    "tier": "alert",
+    "n_input_rows": 601933,
+    "n_output_rows": 601933,
+    "n_excluded_non_identity": 2988,
+    "n_matched": 588675,
+    "unmatched_rate": 0.017147,
+    "low_confidence_rate": 0.00069,
+    "high_value_unmatched_count": 657,
+    "silent_drop_count": 0,
+    "evaluated": true,
+    "fail_closed": false,
+    "alert": false,
+    "reasons": [],
+    "deferred_thresholds": [
+      "max_unmatched_rate",
+      "max_low_confidence_rate",
+      "max_high_value_unmatched"
+    ],
+    "by_method": {
+      "constrained_name_team": 588269,
+      "manual_review": 13258,
+      "constrained_fuzzy": 406
+    }
+  },
+  "floor": {
+    "floor_rate": 0.015875,
+    "n_rows": 598945,
+    "n_colliding_rows": 9508,
+    "n_colliding_names": 26,
+    "note": "Irreducible: these rows name a player whose season-normalized name maps to >1 canonical player, so the ladder abstains BY DESIGN. Any props max_unmatched_rate must be pre-registered ABOVE this floor."
+  }
+}

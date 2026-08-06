@@ -27,6 +27,8 @@ Winkler reference values so "our JW" cannot quietly drift into something else.
 """
 from __future__ import annotations
 
+import re
+
 # The football-vertical shared name spec (suffixes/accents/punctuation). One definition, two
 # sports — see the module docstring for why this is an import and not a copy.
 from quant_sports_intel_models.football.ncaaf.feeder.name_norm import (
@@ -35,14 +37,111 @@ from quant_sports_intel_models.football.ncaaf.feeder.name_norm import (
 )
 
 __all__ = [
+    "GIVEN_NAME_ALIASES",
     "POSITION_GROUPS",
     "TEAM_ALIASES",
     "jaro_winkler",
+    "normalize_for_matching",
     "normalize_last",
     "normalize_name",
     "normalize_team",
     "position_group",
+    "strip_disambiguation",
 ]
+
+# ── Vendor name-annotation cleaning (NF-W0b follow-on, PM decision Q1) ───────────────────────────
+# A books feed disambiguates same-named players INLINE, in the display string: measured on the live
+# 2023–24 Odds-API payload — "Michael (Saints) Thomas", "Lamar Jackson (BAL)", "Zach Ertz (Ari)",
+# "Case Keenum (Hou)". The parenthetical is an ANNOTATION, never part of the name, so it is stripped
+# before normalization; left in, `normalize_name` turns it into name TOKENS ("michael saints thomas")
+# and the player can never match. 333 rows in the measured payload.
+_PAREN_RE = re.compile(r"\s*\([^)]*\)")
+
+
+def strip_disambiguation(s: str | None) -> str:
+    """Drop parenthetical annotations from a vendor display name."""
+    if not s:
+        return ""
+    return _PAREN_RE.sub(" ", str(s)).strip()
+
+
+# GIVEN-NAME diminutives, applied to the FIRST token only (a nickname is a given name, not a
+# surname). Seeded from the MEASURED residual of the live props payload, not from a general
+# nickname corpus — every entry below is a real unresolved cohort with its row count.
+#
+# ⭐ WHY THIS IS SAFE, AND WHY THE DIRECTION DOES NOT MATTER: the map is applied SYMMETRICALLY to
+# both the source and the target, so it cannot create a false pairing that survives — it can only
+# make two strings agree. "Eli Manning" (legally Eli) maps to "elijah manning" on BOTH sides and
+# still matches itself. And if aliasing ever DOES collapse two genuinely different players onto one
+# name, the resolver's season-scope ambiguity rule makes both ABSTAIN rather than pick — so the
+# worst case is a visible, queued miss, never a silent wrong merge.
+#
+# ⛔ IDIOSYNCRATIC aliases do NOT belong here — "Sauce" Gardner (Ahmad), "Chosen" Anderson (a legal
+# name change from Robby) are not derivable by any rule. Those are exactly what tier 2's reviewed
+# crosswalk is for. A rule-based map that tried to cover them would be a list of special cases
+# masquerading as a rule.
+GIVEN_NAME_ALIASES: dict[str, str] = {
+    "gabe": "gabriel",      # Gabe/Gabriel Davis — 1,073 rows, the single largest cohort
+    "chig": "chigoziem",    # Chig/Chigoziem Okonkwo — 851 rows across both spellings
+    "mike": "michael",      # Mike/Michael Woods II (148), Mike/Michael Danna (23)
+    "eli": "elijah",        # Eli/Elijah Mitchell — 22 rows
+    "pat": "patrick",       # Pat/Patrick Surtain II — 16 rows
+    "matt": "matthew",
+    "matty": "matthew",
+    "chris": "christopher",
+    "joe": "joseph",
+    "jody": "joseph",
+    "dan": "daniel",
+    "danny": "daniel",
+    "tony": "anthony",
+    "nick": "nicholas",
+    "will": "william",
+    "bill": "william",
+    "billy": "william",
+    "rob": "robert",
+    "robby": "robert",
+    "bobby": "robert",
+    "bob": "robert",
+    "jim": "james",
+    "jimmy": "james",
+    "tom": "thomas",
+    "tommy": "thomas",
+    "ben": "benjamin",
+    "sam": "samuel",
+    "greg": "gregory",
+    "jeff": "jeffrey",
+    "steve": "steven",
+    "stephen": "steven",
+    "ted": "theodore",
+    "andy": "andrew",
+    "drew": "andrew",
+    "alex": "alexander",
+    "zach": "zachary",
+    "zack": "zachary",
+    "josh": "joshua",
+    "jake": "jacob",
+    "dave": "david",
+    "ken": "kenneth",
+    "ron": "ronald",
+    "tim": "timothy",
+    "cam": "cameron",
+    "brad": "bradley",
+}
+
+
+def normalize_for_matching(s: str | None, *, aliasing: bool = False) -> str:
+    """The matching key: `normalize_name` after stripping vendor annotations, optionally with
+    given-name aliasing folded in.
+
+    `aliasing` is OPT-IN PER SOURCE (`ResolutionSpec.name_aliasing`) rather than global, because
+    turning it on changes which rows a rung resolves — and the snap leg is already validated and
+    must not move (NF-W0b PM decision: "do NOT touch the snap leg").
+    """
+    base = normalize_name(strip_disambiguation(s))
+    if not aliasing or not base:
+        return base
+    head, _, rest = base.partition(" ")
+    return f"{GIVEN_NAME_ALIASES.get(head, head)} {rest}".strip() if rest else GIVEN_NAME_ALIASES.get(head, head)
 
 # Vendor position label → position GROUP. Keyed to the COARSER vocabulary (`weekly_rosters`), so a
 # group is always a label some vendor actually emits. Any label not listed maps to itself upper-cased,

@@ -34,19 +34,24 @@ it silently — trading a wrong match for a silent drop, which §12A forbids mor
 from __future__ import annotations
 
 import logging
+import re
 
 import pandas as pd
 
 from .monitors import DEFAULT_THRESHOLDS, MonitorReport, ResolutionThresholds, evaluate
-from .names import normalize_team
+from .names import normalize_for_matching, normalize_team
 from .resolver import ResolutionSpec, resolve
 
 log = logging.getLogger("nfl.entity.props")
 
 __all__ = [
+    "NON_PLAYER_OUTCOME_RE",
     "PROPS_SPEC",
     "PROPS_SPEC_UNCONSTRAINED",
+    "PROPS_THRESHOLDS",
     "MARKET_POSITION_HINT",
+    "duplicate_name_floor",
+    "is_non_player_outcome",
     "resolve_prop_players",
 ]
 
@@ -58,7 +63,55 @@ PROPS_SPEC = ResolutionSpec(
     team_column=None,                 # a prop names no team; the EVENT supplies the constraint
     position_column=None,
     block_columns=("season", "_event_team"),
+    # Books write the same player several ways ("Gabe"/"Gabriel Davis", "Chig"/"Chigoziem
+    # Okonkwo") — 2,827 measured unresolved rows that ARE real players. Aliasing is enabled HERE
+    # and nowhere else; the snap leg is validated and must not move (PM Q1).
+    name_aliasing=True,
 )
+
+# ⭐ THE PROPS LEG'S PRE-REGISTERED THRESHOLDS (PM decisions Q2/Q3/Q4).
+#
+# tier='alert'  — props are on no serving path, so a breach pages and PROCEEDS (Q4).
+# max_unmatched_rate=None — DEFERRED, and that is NOT "no limit" and NOT "healthy". The 0.02 bar
+#   was pre-registered off the SNAP leg's baseline (0.68–1.24%); props genuinely sit above it, and
+#   refitting a bar because it caught something is the E2.1-r inversion. The real bar is a PRODUCT
+#   quantity — what share of prop lines the CLV vertical can afford to lose — FLOORED by the
+#   irreducible duplicate-name-abstention rate `duplicate_name_floor` computes from the payload.
+#   It is set when that vertical is built; `deferred_thresholds` keeps it visibly unset until then.
+# max_high_value_unmatched=None — report + alert, no hard gate (Q3); its threshold is likewise set
+#   with the vertical as a trend/spike rather than a fitted absolute.
+PROPS_THRESHOLDS = ResolutionThresholds(
+    tier="alert",
+    max_unmatched_rate=None,
+    max_low_confidence_rate=None,
+    max_high_value_unmatched=None,
+    require_evaluated=True,
+)
+
+# ⛔ NON-PLAYER MARKET OUTCOMES — not identity failures, because they are not players (PM Q1).
+# Measured on the live 2023–24 payload, 2,988 of the 5,815 "no roster" rows are these:
+#   • TEAM DEFENSES  — 2,493 rows / 131 name variants: "Miami Dolphins D/ST", "Buffalo Defense",
+#     "Kansas City Defense". A defensive/special-teams TD is a real market outcome scored by a
+#     TEAM, and no player crosswalk can or should resolve it.
+#   • MARKET LEGS    — 495 rows: "No Touchdown" (the No side of anytime-TD).
+# These leave the monitor DENOMINATOR but NOT the frame — the rows survive, flagged
+# `is_non_player_outcome`, so nothing is silently dropped (§12A silent_drop_count = 0).
+# ⚠️ Deliberately CONSERVATIVE: it matches an explicit defense/market token, never a shape
+# heuristic. A heuristic that guessed "this looks like a team" would eventually eat a real player,
+# and a wrongly-excluded player is an identity failure hidden from the very monitor built to see it.
+NON_PLAYER_OUTCOME_RE = re.compile(
+    r"(?:\bd/?st\b|\bdefense\b|\bdefence\b|\bspecial\s+teams\b|\bno\s+touchdown\b|\bno\s+scorer\b"
+    r"|\bany\s+other\b|\bfield\s+goal\b)",  # non-capturing: a capture group makes pandas warn
+    re.I,
+)
+
+
+def is_non_player_outcome(names: pd.Series) -> pd.Series:
+    """True where an outcome's description names a TEAM or a market leg rather than a player."""
+    if names is None or len(names) == 0:
+        return pd.Series(dtype=bool)
+    s = names.astype("string").fillna("")
+    return s.str.contains(NON_PLAYER_OUTCOME_RE, regex=True).fillna(False).astype(bool)
 
 # The same source with NO constraint — the shape a prop takes when its event cannot be resolved.
 # Kept as a named constant so the "name-only is refused" behaviour is directly testable and cannot
@@ -109,7 +162,7 @@ def resolve_prop_players(
     props: pd.DataFrame,
     *,
     targets: pd.DataFrame,
-    thresholds: ResolutionThresholds = DEFAULT_THRESHOLDS,
+    thresholds: ResolutionThresholds = PROPS_THRESHOLDS,
     crosswalk: pd.DataFrame | None = None,
     reviewed: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, MonitorReport]:
@@ -228,14 +281,73 @@ def _finalize(
     out = out.drop(columns=[c for c in ("_row_id", "_event_team") if c in out.columns])
     if "match_score" not in out.columns:
         out["match_score"] = float("nan")
+    # Mark, never drop: a non-player leg stays in the frame and leaves only the DENOMINATOR.
+    non_player = (
+        is_non_player_outcome(out["player_name"]) if "player_name" in out.columns
+        else pd.Series(False, index=out.index)
+    )
+    out["is_non_player_outcome"] = non_player.reindex(out.index).fillna(False).astype(bool)
     report = evaluate(
         out,
         source_name=PROPS_SPEC.source_name,
         n_input_rows=n_in,
         thresholds=thresholds,
         high_value_mask=_target_book_mask(out),
+        identity_mask=~out["is_non_player_outcome"],
     )
     return out, report
+
+
+def duplicate_name_floor(
+    props: pd.DataFrame, targets: pd.DataFrame, *, name_column: str = "player_name"
+) -> dict:
+    """⭐ THE IRREDUCIBLE ABSTENTION FLOOR (PM decision Q2) — a DESIGN quantity, not a fitted one.
+
+    Some share of prop rows can NEVER resolve, no matter how good the ladder gets: their name maps
+    to more than one canonical player in that season (two Josh Allens, two Lamar Jacksons), and the
+    season-scope ambiguity rule correctly refuses to guess. That share is a property of the NFL's
+    name collisions and the book's naming, computable from the payload BEFORE any threshold is
+    chosen — which is exactly what makes it a legitimate floor to pre-register against, rather than
+    a number reverse-engineered from a run we wanted to pass.
+
+    Any future `max_unmatched_rate` for props must sit ABOVE this floor; a bar below it would be
+    unsatisfiable by construction (the E7.14 "BH unattainable at 5 folds" shape — a gate no effect
+    of any size could pass).
+
+    Returns the floor plus the collision inventory behind it, so the derivation travels with it.
+    """
+    if props is None or props.empty or targets is None or targets.empty:
+        return {"floor_rate": None, "n_rows": 0, "n_colliding_rows": 0, "n_colliding_names": 0,
+                "colliding_names": [], "note": "unevaluable — empty payload or identity universe"}
+
+    t = targets.copy()
+    t["_nn"] = t["player_name"].astype("string").fillna("").map(
+        lambda v: normalize_for_matching(v, aliasing=PROPS_SPEC.name_aliasing)
+    )
+    collisions = t.groupby(["season", "_nn"])["canonical_player_id"].nunique()
+    colliding = {k for k, v in collisions.items() if v > 1}
+
+    p = props.copy()
+    p["_nn"] = p[name_column].astype("string").fillna("").map(
+        lambda v: normalize_for_matching(v, aliasing=PROPS_SPEC.name_aliasing)
+    )
+    identity_rows = p[~is_non_player_outcome(p[name_column])]
+    hit = [(s, n) in colliding for s, n in zip(identity_rows["season"], identity_rows["_nn"])]
+    n_rows = int(len(identity_rows))
+    n_hit = int(sum(hit))
+    names = sorted(identity_rows.loc[hit, name_column].dropna().unique().tolist())
+    return {
+        "floor_rate": round(n_hit / n_rows, 6) if n_rows else None,
+        "n_rows": n_rows,
+        "n_colliding_rows": n_hit,
+        "n_colliding_names": len(names),
+        "colliding_names": names[:40],
+        "note": (
+            "Irreducible: these rows name a player whose season-normalized name maps to >1 "
+            "canonical player, so the ladder abstains BY DESIGN. Any props max_unmatched_rate "
+            "must be pre-registered ABOVE this floor."
+        ),
+    }
 
 
 def _target_book_mask(props: pd.DataFrame) -> pd.Series | None:

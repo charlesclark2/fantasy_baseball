@@ -71,10 +71,23 @@ class ResolutionThresholds:
     ship a degraded starter; leaving it None still FLAGS every such row and records it in QA.
     """
 
-    max_unmatched_rate: float = 0.02
-    max_low_confidence_rate: float = 0.05
+    max_unmatched_rate: float | None = 0.02
+    max_low_confidence_rate: float | None = 0.05
     max_high_value_unmatched: int | None = None
     require_evaluated: bool = True
+    # ⭐ PER-LEG TIER (NF-W0b follow-on, PM decision Q4). E11.7's contract: HALT is for the
+    # serving-critical path ONLY. The SNAP leg is serving-critical for NF-W1 and stays `halt` —
+    # a corrupt snap share is a feature a model trains on. The PROPS leg is not on any serving
+    # path (no user surface reads it; NF-W1 excludes markets as features), so it runs `alert`:
+    # it computes the identical four monitors, PAGES, records the residual in QA, and PROCEEDS.
+    # A CLV backfill that refuses to run is worse than one that runs with a characterised,
+    # flagged residual — and every unresolved row is already `source_degraded` and queued.
+    # ⛔ This is a per-leg SPLIT, not a blanket relaxation: `alert` must be chosen explicitly.
+    tier: str = "halt"
+
+    def __post_init__(self) -> None:
+        if self.tier not in ("halt", "alert"):
+            raise ValueError(f"tier must be 'halt' or 'alert', got {self.tier!r}")
 
 
 DEFAULT_THRESHOLDS = ResolutionThresholds()
@@ -97,12 +110,24 @@ class MonitorReport:
     fail_closed: bool
     reasons: list[str] = field(default_factory=list)
     by_method: dict[str, int] = field(default_factory=dict)
+    # ── tier + alerting (PM Q3/Q4) ──────────────────────────────────────────────────────────
+    tier: str = "halt"
+    alert: bool = False
+    # Rows excluded from the monitor DENOMINATOR because they are not identity questions at all
+    # (a team-defense or "No Touchdown" market leg is not a player). Reported, never silently
+    # dropped — the rows stay in the output frame.
+    n_excluded_non_identity: int = 0
+    # Thresholds that are DEFERRED rather than met. Named explicitly so an unset bar reads as
+    # "not yet decided", never as "passed" (NF1.7 (a)).
+    deferred_thresholds: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
             "source_name": self.source_name,
+            "tier": self.tier,
             "n_input_rows": self.n_input_rows,
             "n_output_rows": self.n_output_rows,
+            "n_excluded_non_identity": self.n_excluded_non_identity,
             "n_matched": self.n_matched,
             "unmatched_rate": self.unmatched_rate,
             "low_confidence_rate": self.low_confidence_rate,
@@ -110,7 +135,9 @@ class MonitorReport:
             "silent_drop_count": self.silent_drop_count,
             "evaluated": self.evaluated,
             "fail_closed": self.fail_closed,
+            "alert": self.alert,
             "reasons": list(self.reasons),
+            "deferred_thresholds": list(self.deferred_thresholds),
             "by_method": dict(self.by_method),
         }
 
@@ -123,28 +150,44 @@ def evaluate(
     thresholds: ResolutionThresholds = DEFAULT_THRESHOLDS,
     high_value_mask: pd.Series | None = None,
     low_confidence_at_or_below: float = LOW_CONFIDENCE_AT_OR_BELOW,
+    identity_mask: pd.Series | None = None,
 ) -> MonitorReport:
-    """Compute the four monitors over a `resolve()` output and decide the fail-closed verdict.
+    """Compute the four monitors over a `resolve()` output and decide the verdict.
 
     `n_input_rows` is passed in rather than inferred, because `silent_drop_count` is precisely the
     gap between what the caller HANDED the resolver and what came back — a number the output frame
     alone cannot know.
+
+    `identity_mask` marks the rows that are genuine IDENTITY QUESTIONS. Rows outside it (a
+    team-defense or "No Touchdown" market leg — not a player) leave the monitor DENOMINATOR but
+    NOT the frame: a monitor that counts non-questions as failures drifts with market MIX rather
+    than with damage (PM decision Q1). ⛔ It is a denominator filter, never a way to hide a real
+    miss — a duplicate-name abstention IS an unestablished identity and stays in the numerator.
     """
     n_out = int(len(resolved))
     silent_drop = max(0, int(n_input_rows) - n_out)
 
-    matched = (
+    matched_all = (
         resolved["canonical_player_id"].notna()
         if "canonical_player_id" in resolved.columns
         else pd.Series(False, index=resolved.index)
     )
+    if identity_mask is not None and n_out:
+        is_identity = identity_mask.reindex(resolved.index).astype("boolean").fillna(False).astype(bool)
+    else:
+        is_identity = pd.Series(True, index=resolved.index)
+    n_excluded = int((~is_identity).sum())
+
+    scored = resolved[is_identity]
+    matched = matched_all[is_identity]
+    n_scored = int(len(scored))
     n_matched = int(matched.sum())
-    evaluated = n_out > 0
+    evaluated = n_scored > 0
 
     if evaluated:
-        unmatched_rate = float((n_out - n_matched) / n_out)
+        unmatched_rate = float((n_scored - n_matched) / n_scored)
         if n_matched > 0:
-            conf = pd.to_numeric(resolved.loc[matched, "match_confidence"], errors="coerce")
+            conf = pd.to_numeric(scored.loc[matched, "match_confidence"], errors="coerce")
             low_conf_rate = float((conf <= low_confidence_at_or_below).sum() / n_matched)
         else:
             # Every row unmatched: there is no matched population to rate, and reporting 0.0
@@ -156,7 +199,7 @@ def evaluate(
 
     if high_value_mask is not None and n_out:
         hv = high_value_mask.reindex(resolved.index).astype("boolean").fillna(False).astype(bool)
-        high_value_unmatched = int((hv & ~matched).sum())
+        high_value_unmatched = int((hv & is_identity & ~matched_all).sum())
     else:
         high_value_unmatched = 0
 
@@ -165,6 +208,7 @@ def evaluate(
         by_method = {str(k): int(v) for k, v in resolved["match_method"].value_counts().items()}
 
     reasons: list[str] = []
+    deferred: list[str] = []
     # (1) silent drops — unconditional, never threshold-governed.
     if silent_drop > 0:
         reasons.append(
@@ -173,15 +217,23 @@ def evaluate(
     # (2) an unevaluable run is not a passing run.
     if thresholds.require_evaluated and not evaluated:
         reasons.append("unevaluable: the source frame is empty, so no monitor was computed")
-    # (3)-(5) the pre-registered rate/count bars.
-    if unmatched_rate is not None and unmatched_rate > thresholds.max_unmatched_rate:
+    # (3)-(5) the pre-registered rate/count bars. ⚠️ A `None` bar is DEFERRED, not satisfied — it is
+    # recorded in `deferred_thresholds` so a report can never read "passed" on a bar nobody set
+    # (NF1.7 (a): an unevaluable check is not a pass).
+    if thresholds.max_unmatched_rate is None:
+        deferred.append("max_unmatched_rate")
+    elif unmatched_rate is not None and unmatched_rate > thresholds.max_unmatched_rate:
         reasons.append(
             f"unmatched_rate={unmatched_rate:.4f} exceeds {thresholds.max_unmatched_rate:.4f}"
         )
-    if low_conf_rate is not None and low_conf_rate > thresholds.max_low_confidence_rate:
+    if thresholds.max_low_confidence_rate is None:
+        deferred.append("max_low_confidence_rate")
+    elif low_conf_rate is not None and low_conf_rate > thresholds.max_low_confidence_rate:
         reasons.append(
             f"low_confidence_rate={low_conf_rate:.4f} exceeds {thresholds.max_low_confidence_rate:.4f}"
         )
+    if thresholds.max_high_value_unmatched is None:
+        deferred.append("max_high_value_unmatched")
     if (
         thresholds.max_high_value_unmatched is not None
         and high_value_unmatched > thresholds.max_high_value_unmatched
@@ -191,23 +243,48 @@ def evaluate(
             f"{thresholds.max_high_value_unmatched}"
         )
 
+    # ⭐ THE TIER SPLIT (PM Q4). The monitors are computed IDENTICALLY for both tiers — the tier
+    # decides only what a breach DOES. `halt` (snap: serving-critical for NF-W1) fails the build
+    # closed; `alert` (props: on no serving path) pages and PROCEEDS with the residual flagged and
+    # queued. ⛔ An alert-tier breach is never silent and never scored healthy: `alert` is True and
+    # the same `reasons` are carried, so "we chose not to stop" stays distinguishable from
+    # "nothing was wrong".
+    breached = bool(reasons)
+    is_alert_tier = thresholds.tier == "alert"
     report = MonitorReport(
         source_name=source_name,
+        tier=thresholds.tier,
         n_input_rows=int(n_input_rows),
         n_output_rows=n_out,
+        n_excluded_non_identity=n_excluded,
         n_matched=n_matched,
         unmatched_rate=None if unmatched_rate is None else round(unmatched_rate, 6),
         low_confidence_rate=None if low_conf_rate is None else round(low_conf_rate, 6),
         high_value_unmatched_count=high_value_unmatched,
         silent_drop_count=silent_drop,
         evaluated=evaluated,
-        fail_closed=bool(reasons),
+        fail_closed=breached and not is_alert_tier,
+        alert=breached,
         reasons=reasons,
+        deferred_thresholds=deferred,
         by_method=by_method,
     )
     if report.fail_closed:
         log.warning(
             "ALERT [nfl/entity] source=%s FAIL-CLOSED: %s", source_name, "; ".join(reasons)
+        )
+    elif report.alert:
+        log.warning(
+            "ALERT [nfl/entity] source=%s ALERT-tier breach — PROCEEDING with the residual flagged "
+            "+ queued in QA: %s", source_name, "; ".join(reasons),
+        )
+    # The high-value count is the CLV-relevant set, so it is surfaced even when no bar gates it —
+    # otherwise a deferred threshold reads as an absent problem (PM Q3: report + alert, no gate).
+    if high_value_unmatched and thresholds.max_high_value_unmatched is None:
+        log.warning(
+            "ALERT [nfl/entity] source=%s high_value_unmatched_count=%d (target-book rows) — "
+            "REPORTED; its bar is DEFERRED to the consuming vertical, which is not the same as "
+            "being within one.", source_name, high_value_unmatched,
         )
     return report
 
