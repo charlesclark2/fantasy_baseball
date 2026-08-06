@@ -54,7 +54,12 @@ function LoginInner() {
   function handleGoogleSignIn() {
     setError(null)
     setIsLoading(true)
-    posthog.capture("user_signin_started", { method: "google" })
+    // `send_instantly` — same redirect-teardown loss as the signup surfaces (E9.58c).
+    posthog.capture(
+      "user_signin_started",
+      { method: "google", surface: "login" },
+      { send_instantly: true },
+    )
     // Full-page redirect to the Cognito Hosted UI → Google. Control returns to
     // /callback, so no need to clear isLoading here.
     startGoogleSignIn(next).catch((err) => {
