@@ -79,11 +79,18 @@ BAND_CASE = """
 # 2026-08-06 — READING 'lineup_monitor audit INSERT' AFTER E11.24. The audit sink moved to
 # DynamoDB, so post-flip this family should read 0 executions / 0 waits.
 # MEASURED PRE-MERGE BASELINE (--days 12, run 2026-08-06 14:41 UTC): ALL 86 waits sit in the
-# 14-23 band — ZERO in 00-07, ZERO in 08-13. So although the legacy Snowflake task-DAG procs
-# (scripts/ddl/snowflake_task_dag.sql) also INSERT into pipeline_run_log, they contribute NO
-# waits in this window, and the family is effectively 100% this monitor. ⇒ the expected
-# post-flip reading is a clean zero, and a NON-zero is worth a look rather than being waved
-# off as proc residue.
+# 14-23 band — ZERO in 00-07, ZERO in 08-13. And a live SHOW TASKS IN ACCOUNT (2026-08-06)
+# showed the legacy Snowflake task DAG is a single chain rooted at TASK_SAVANT_INGESTION,
+# USER_SUSPENDED since 2026-04-30 (its four downstream tasks read 'started' but are
+# predecessor-driven with no schedule, so they cannot fire) ⇒ those procs are NOT writing
+# pipeline_run_log either. The family is 100% the lineup monitor. ⇒ the expected post-flip
+# reading is a HARD zero, and ANY non-zero is a finding, not proc residue.
+#
+# ⚠️ SELF-MATCH: this script's own FAMILY_CASE contains the literal '%pipeline_run_log%', so
+# every census run is itself a query whose TEXT matches that pattern. A grep of query_history
+# for 'pipeline_run_log' therefore returns THIS INSTRUMENT (and report_sf_cost_flips_after.py)
+# as apparent readers. To find a genuine reader, match `from ...pipeline_run_log`, never a bare
+# mention of the string.
 # ⚠️ AND THE STANDING WARNING BINDS UNUSUALLY HARD HERE: silence is the INTENDED outcome, so
 # in this instrument "the lever landed" and "the monitor died" are indistinguishable BY
 # CONSTRUCTION — there is no executions-hold/waits-fall signature to read, because executions

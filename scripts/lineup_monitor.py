@@ -151,9 +151,17 @@ _STATE_SK_PREFIX = "lineup_monitor#"
 # script. The only `SELECT ... FROM pipeline_run_log` sites are two HUMAN runbook queries in
 # scripts/daily_run.md (updated by this change) and a historical phase-5 acceptance COUNT(*)
 # in plan_specs/. NOTHING in app/backend, no dbt model, no sensor/op, no serving reader.
-# ⚠️ The table itself STAYS (the legacy Snowflake task-DAG procs in scripts/ddl/ are separate
-# writers), so even an unknown external reader degrades gracefully: it simply stops seeing
-# rows with task_name='lineup_monitor'.
+# ⚠️ CORRECTED 2026-08-06 by a live `SHOW TASKS IN ACCOUNT`: an earlier draft of this comment
+# claimed the legacy Snowflake task-DAG procs (scripts/ddl/snowflake_task_dag.sql) are still
+# separate writers, so the table would keep filling and any unknown reader would degrade
+# gracefully. THAT IS FALSE. The DAG is a single chain rooted at TASK_SAVANT_INGESTION, which
+# has been USER_SUSPENDED since 2026-04-30; the four downstream tasks read `started` but are
+# PREDECESSOR-driven with no schedule of their own, so they cannot fire while the root is
+# suspended. TASK_LINEUP_MONITOR is likewise suspended (same date). ⇒ this script is the SOLE
+# remaining writer, and after this change `pipeline_run_log` has NO writer at all. That makes
+# the change strictly safer (a table nothing writes is a table nothing can be reading usefully)
+# but removes the graceful-degradation fallback — so the repo-grep + the operator's
+# Snowflake-side reader check are the whole of the evidence, not a belt beside braces.
 # ⚠️ NOT to be conflated with the DynamoDB note at the top of this block — that one is about
 # the STATE table (lineup_monitor_state), a different table with a different migration.
 _AUDIT_SK_PREFIX = "lineup_audit#"

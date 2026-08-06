@@ -2130,13 +2130,77 @@ guaranteed resume on a path that needs none is gone.
   *comment* describing the historical wake, not a read.
 * The DynamoDB migration note at the top of `lineup_monitor.py` is about the **state** table
   (`lineup_monitor_state`) — a different table, a different migration. Not conflated.
-* The table **stays** (the legacy task-DAG procs are separate writers), so even an unknown
-  external reader degrades gracefully: it stops seeing rows with `task_name='lineup_monitor'`.
+### ⚠️ CORRECTION (2026-08-06, operator-run `SHOW TASKS IN ACCOUNT`)
 
-⏭️ **The one check a repo grep structurally cannot make** is a Snowflake-side reader that lives
-outside the repo (a view, a task, an external dashboard query). The Snowflake MCP was not
-authorized in the build session, so this is an **operator verification step** — the exact SQL is in
-the handoff. Note it is a *belt-and-braces* check, not a blocker: the table is not dropped.
+The first draft of this section claimed *"the table stays — the legacy task-DAG procs are separate
+writers — so even an unknown external reader degrades gracefully."* **That is false, and the live
+task inventory says so:**
+
+| Task | Schedule | Predecessors | State |
+|---|---|---|---|
+| `TASK_SAVANT_INGESTION` | `CRON 0 8 * * *` | — (**ROOT**) | **suspended** (`USER_SUSPENDED`, 2026-04-30) |
+| `TASK_STATSAPI_SCHEDULE` | — | `TASK_SAVANT_INGESTION` | started |
+| `TASK_ODDSAPI_EVENTS` | — | `TASK_STATSAPI_SCHEDULE` | started |
+| `TASK_ODDSAPI_ODDS` | — | `TASK_ODDSAPI_EVENTS` | started |
+| `TASK_GITHUB_ACTIONS_TRIGGER` | — | `TASK_ODDSAPI_ODDS` | started |
+| `TASK_LINEUP_MONITOR` | `CRON 0 * * * *` | — | **suspended** (`USER_SUSPENDED`, 2026-04-30) |
+
+The four `started` tasks carry **no schedule of their own** — they are purely predecessor-driven,
+and their root has been suspended since 2026-04-30. **A child task cannot fire while its root is
+suspended**, so the whole DAG is dead and none of those procs have written `pipeline_run_log` in
+over three months. `scripts/lineup_monitor.py` is the **sole remaining writer**.
+
+Two consequences, in opposite directions:
+
+* **Safer.** A table with one writer has a far smaller plausible-reader surface than one with six,
+  and post-change `pipeline_run_log` has **no writer at all**.
+* **No fallback.** The graceful-degradation argument is void — the repo grep plus the operator's
+  Snowflake-side reader check are now *the whole of the evidence*, not a belt beside braces.
+
+⭐ It also **sharpens the post-flip prediction**: the census family should read a **hard zero**, and
+any non-zero is a finding rather than proc residue.
+
+*(Out of scope but worth logging: `pipeline_run_log` becomes a fully dead table after this merge —
+a cleanup candidate for a later story, which would need its own INC-27 pass before a DROP.)*
+
+### Operator reader check — results and the self-match trap
+
+⏭️ **The one check a repo grep structurally cannot make** is a Snowflake-side reader outside the
+repo (a view, a task, an external dashboard). Run 2026-08-06:
+
+* **Tasks:** the inventory above. No task *reads* the table — every definition is a bare
+  `CALL proc_*()`, and the procs write it.
+* **`query_history` (30d):** one identity only — `DBT_RW / ACCOUNTADMIN`, **43 queries**.
+
+⚠️ **Those 43 are almost certainly an instrument self-match, not readers.** The probe filtered on
+`query_text ILIKE '%pipeline_run_log%' AND ILIKE '%select%'` — and **this very census script**
+(plus `report_sf_cost_flips_after.py`) embeds the literal `'%pipeline_run_log%'` inside its
+`FAMILY_CASE` classifier, which is a `SELECT`. `DBT_RW/ACCOUNTADMIN` is exactly the identity those
+scripts connect as (`.env`), including the baseline run recorded above. A grep for a table NAME
+finds the tools that *classify* the table as readily as the tools that *read* it.
+
+**The decisive query matches the FROM clause, not the mention:**
+
+```sql
+SELECT to_char(start_time,'YYYY-MM-DD HH24:MI') AS ts, user_name, warehouse_name,
+       left(regexp_replace(query_text,'\\s+',' '), 200) AS q
+FROM snowflake.account_usage.query_history
+WHERE start_time >= dateadd(day,-30,current_timestamp())
+  AND regexp_replace(query_text,'\\s+',' ') ILIKE '%from baseball_data.config.pipeline_run_log%'
+ORDER BY start_time DESC LIMIT 50;
+```
+
+Expect **0 rows** (or only hand-run runbook queries). Any *recurring, scheduled-looking* reader
+here is the one thing that would change the plan.
+
+**Views** (the original query named a non-existent `table_type` column; this is the corrected form,
+and it covers every database rather than just `baseball_data`):
+
+```sql
+SELECT table_catalog, table_schema, table_name
+FROM snowflake.account_usage.views
+WHERE deleted IS NULL AND view_definition ILIKE '%pipeline_run_log%';
+```
 
 ## Guards — `betting_ml/tests/test_lineup_monitor_s3_mode.py`
 
