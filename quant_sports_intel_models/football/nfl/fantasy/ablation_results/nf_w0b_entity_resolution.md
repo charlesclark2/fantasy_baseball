@@ -146,14 +146,12 @@ i.e. reach the forbidden global match by accident rather than by choice.
 
 ## 7. Honest limits
 
-- **The served board does not change, and that is not a let-down — it is the correct scope.**
-  `run_season_projection` already aggregates snap share as `avg(offense_pct) filter (where … > 0)`,
-  so fabricated zeros were excluded there anyway (consistent with NF-W0c finding the served board's
-  numeric path clean). The corruption was in the **NF-W1 training frame** and in any future reader of
-  raw `offense_pct` — which is precisely why this story gates NF-W1 rather than the live board.
-- **The dbt fix is UNVERIFIED against the real lake.** `sports_dbt` parse + compile are green and the
-  new singular test renders, but no `dbt build` was run (>2 min ⇒ operator, and the NFL schedules ship
-  `default_status=STOPPED`). The Python path IS live-verified end to end.
+- **The served board does not change — MEASURED, not reasoned (§9).** `run_season_projection`
+  aggregates snap share as `avg(offense_pct) filter (where … > 0)`, so fabricated zeros were
+  excluded there anyway. Re-computing that exact aggregation both ways over 2020–2025 gives
+  **0 changed player-seasons of 20,518, max |Δ| = 0.0** (consistent with NF-W0c finding the served
+  numeric path clean). The corruption was in the **NF-W1 training frame** and in any future reader
+  of raw `offense_pct` — precisely why this story gates NF-W1 rather than the live board.
 - **The two-sided prop collapse is unreachable** under the current ambiguity scope and is labelled as
   such in the source rather than left looking tested — RED-proving it is what established this.
 - **`low_confidence_rate` nearly didn't work, and the fix is worth carrying forward.** The natural
@@ -189,3 +187,30 @@ from that pass, both fixed:
 fail-closed test could pass because the gate rejects everything. Each fail-closed test satisfies
 every *other* clause and violates exactly one, so removing that clause is the only way to make it
 pass (the NF-D17 and-composed-guard rule).
+
+## 9. dbt build verification (run on the branch, 2026-08-06)
+
+`dbt build --select +fct_player_week +sat_snap_counts_weekly` → **40/40 PASS in 22s**, incl.
+`assert_nfl_snap_bridge_has_no_silent_zero`. Then the three downstream marts
+(`+mart_player_season +mart_opportunity_player_week +mart_efficiency_player_week`) → **60/60 PASS**.
+
+⚠️ **A green test is not evidence until the data is checked** — the biconditional could pass
+vacuously on a table where every row sits in one tier. It does not:
+
+| check | result |
+|---|---|
+| tier distribution (all three present) | `observed` 81,542 · `no_snap_row` 830,078 · `bye` 197,617 |
+| ⭐ **Michael Woods II, CLE 2024 wk 13–17** | **0.77 / 0.88 / 1.00 / 0.68 / 0.86** — was 0.00 |
+| genuine observed zeros retained | **8,725** (a real 0.0 survives) |
+| biconditional, both directions, 1.1M rows | `value_on_non_observed` 0 · `null_on_observed` 0 |
+
+**The semantic change is concentrated where snap data never existed.** 830k rows move from a
+fabricated `0.0` to NULL, but `snap_counts` only starts in 2012, so the bulk is pre-2012
+player-weeks where NULL is unambiguously the truthful value. The modern skill-position population
+affected is tiny — **2025: 14 rows, 2024: 26, 2023: 64** — and `mart_player_season`'s snap averages
+now correctly exclude those unknowns instead of averaging a fake zero in.
+
+⚠️ **Correction to the original handoff:** the command shipped in the PR selected only the two
+changed models, which fails on a fresh DuckDB (`Catalog Error: team_week_calendar does not exist`)
+because the upstream chain is not built. The correct selector is `+fct_player_week
++sat_snap_counts_weekly` (10 models).
