@@ -124,8 +124,14 @@ export function PlayerSearch() {
                     </span>
                   </div>
                   <div className="hidden text-right sm:block">
+                    {/* ⚠️ THE ONE PROJECTED-POINTS SURFACE WITH NO TAPPABLE DEFINITION, and that is
+                        deliberate rather than an oversight: this chip lives INSIDE the result's
+                        `<Link>`, and `InfoTip` renders a real `<button>` — nesting one in an anchor
+                        is invalid HTML and would make a tap on the definition navigate instead of
+                        open. So the label alone carries the meaning here, and the full definition
+                        is one tap away on the player page this row links to. */}
                     <span className="block text-[10px] uppercase tracking-wide text-gray-600">
-                      Proj (PPR)
+                      Expected (PPR)
                     </span>
                     <span className="block text-sm font-semibold tabular-nums text-white">
                       {num(p.fpPpr)}

@@ -23,6 +23,7 @@ import {
 } from "@/lib/fantasy-queries"
 import { assignTiers, type Player } from "@/lib/draft-optimizer"
 import { rowsAreLocked, trimLockedTail } from "@/lib/fantasy"
+import { EXPECTED_POINTS_LABEL, PROJECTED_GAMES_LABEL } from "@/lib/fantasy-claim-copy"
 import {
   ADP_DELTA_LABEL,
   ALL_ROWS,
@@ -198,8 +199,11 @@ export function RankingsBoard() {
   const exportCsv = () => {
     downloadCsv(
       `credence-rankings-${configName}-${size}team-${pos.toLowerCase()}.csv`,
-      ["rank", "tier", "player", "pos", "team", "bye", "games", "proj_pts", "pts_p10", "pts_p90",
-       "vor", "pos_rank", "adp", "vs_adp", "rookie", "range_basis"],
+      // A downloaded board leaves the page and its tooltips behind, so the COLUMN NAME is the only
+      // label a spreadsheet reader ever gets — `proj_pts`/`games` there would reintroduce exactly
+      // the "why is this number low?" misread the on-page labelling just closed.
+      ["rank", "tier", "player", "pos", "team", "bye", "expected_games", "expected_pts",
+       "pts_p10", "pts_p90", "vor", "pos_rank", "adp", "vs_adp", "rookie", "range_basis"],
       rows.map((p) => {
         const rank = rankOf(p, pos)
         return [
@@ -321,8 +325,15 @@ export function RankingsBoard() {
                       <th className="px-3 py-2 font-medium">Pos</th>
                       <th className="px-3 py-2 font-medium">Team</th>
                       <th className="px-3 py-2 text-right font-medium">Bye</th>
-                      <th className="px-3 py-2 text-right font-medium">G</th>
-                      <th className="px-3 py-2 text-right font-medium">Proj pts</th>
+                      {/* Named + defined rather than left as a bare "G": this is the availability
+                          factor the points column beside it is scaled by, and it is what makes an
+                          expected total legible. */}
+                      <th className="px-3 py-2 text-right font-medium">
+                        <InfoTip label={PROJECTED_GAMES_LABEL}>{GLOSSARY.projectedGames}</InfoTip>
+                      </th>
+                      <th className="px-3 py-2 text-right font-medium">
+                        <InfoTip label={EXPECTED_POINTS_LABEL}>{GLOSSARY.expectedPoints}</InfoTip>
+                      </th>
                       <th className="px-3 py-2 font-medium">80% range</th>
                       <th className="px-3 py-2 text-right font-medium">
                         <InfoTip label="VOR">{GLOSSARY.vor}</InfoTip>

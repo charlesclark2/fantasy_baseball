@@ -455,7 +455,12 @@ export function DraftOptimizer() {
                 You filled all {maxPicks} roster spots. Review your team on the right —{" "}
                 <span className="text-white">{starterSummary.startersFilled}/{starterSummary.starterSlots}</span>{" "}
                 starters set,{" "}
-                <span className="text-white">~{starterSummary.projPoints}</span> projected starter points.
+                {/* Prose, not a column — so it takes the WORD rather than a popover. "expected"
+                    is the load-bearing half: this total already prices in the chance each starter
+                    misses games, so it reads low against a sum of "if everyone plays every week"
+                    projections. */}
+                <span className="text-white">~{starterSummary.projPoints}</span> expected starter
+                points across the season.
               </div>
             </div>
             <div className="flex gap-2">

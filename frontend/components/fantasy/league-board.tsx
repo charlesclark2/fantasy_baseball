@@ -17,6 +17,7 @@ import {
   useResolvedBoard,
   useSavedLeagues,
 } from "@/lib/fantasy-queries"
+import { EXPECTED_POINTS_LABEL } from "@/lib/fantasy-claim-copy"
 import type { Player } from "@/lib/draft-optimizer"
 import {
   ADP_DELTA_LABEL,
@@ -244,7 +245,13 @@ export function LeagueBoard() {
                       <th className="px-3 py-2 font-medium">Pos</th>
                       <th className="px-3 py-2 font-medium">Team</th>
                       <th className="px-3 py-2 text-right font-medium">Bye</th>
-                      <th className="px-3 py-2 text-right font-medium">Proj pts</th>
+                      {/* This board has no games column of its own (VOR is the story here), so the
+                          definition is the only place a reader learns the points figure already
+                          prices in missed games — which is exactly why it must be tappable rather
+                          than hover-only. */}
+                      <th className="px-3 py-2 text-right font-medium">
+                        <InfoTip label={EXPECTED_POINTS_LABEL}>{GLOSSARY.expectedPoints}</InfoTip>
+                      </th>
                       <th className="px-3 py-2 text-right font-medium">
                         <InfoTip label="Replacement">{GLOSSARY.replacement}</InfoTip>
                       </th>

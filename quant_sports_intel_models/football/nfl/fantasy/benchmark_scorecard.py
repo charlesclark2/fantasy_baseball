@@ -448,7 +448,27 @@ def build_scorecard(con, seasons, schema, *, project_fn, load_realized_fn, manua
 
 _TRACK_RECORD_COLS = ("season", "player_id", "player_name", "position", "our_points", "our_rank",
                       "adp", "adp_rank", "actual_points", "actual_rank", "is_fade", "fade_result",
-                      "adp_source")
+                      "adp_source",
+                      # The EXPECTED-GAMES figure `our_points` was scaled by. Carried purely for
+                      # DISPLAY (nothing here ranks, filters or scores on it) — the served point
+                      # total is availability-weighted, so a reader comparing it against a finished
+                      # season needs to see how much of the discount is "we expected him to miss
+                      # time". Nullable by design: see `_projected_games` below.
+                      "proj_games")
+
+
+def _projected_games(proj: pd.DataFrame) -> pd.Series:
+    """The projection frame's `proj_games`, or an all-null column when it carries none.
+
+    ⚠️ NULLABLE ON PURPOSE, and the null is the honest render. Every NF1.5 artifact 2019-2026 does
+    carry `proj_games` (verified against the parquet, coverage 1.000) — but this function is on the
+    read path for MVP-1 boards and for any future/older projection source too, and a display column
+    is not worth a `KeyError` that takes the whole public export down. A consumer renders the null
+    as an em-dash; what it must never do is substitute a guess, because a fabricated games figure
+    would make the points column look explained when it is not."""
+    if "proj_games" in proj.columns:
+        return pd.to_numeric(proj["proj_games"], errors="coerce")
+    return pd.Series(pd.NA, index=proj.index, dtype="Float64")
 
 
 def _fade_result(our_rank, adp_rank, actual_rank):
@@ -483,7 +503,7 @@ def player_track_record_frame(con, season, schema, *, project_fn, load_realized_
     is deliberately NOT a parallel re-derivation of `_adp_system`'s merge.
 
     Returns columns: season, player_id, player_name, position, our_points, our_rank, adp, adp_rank,
-    actual_points, actual_rank, is_fade, fade_result, adp_source — one row per player with BOTH a
+    actual_points, actual_rank, is_fade, fade_result, adp_source, proj_games — one row per player with BOTH a
     shipped projection AND that season's ADP AND >=6 realized games (the same "aligned universe"
     `build_scorecard` scores). `fade_result` (see `_fade_result`) is only ever non-null when
     `is_fade` is True — it grades the fade, so a non-fade row has nothing to grade.
@@ -504,9 +524,15 @@ def player_track_record_frame(con, season, schema, *, project_fn, load_realized_
     proj["player_id"] = proj["player_id"].astype(str)
     real = load_realized_fn(con, season, schema)
     real["player_id"] = real["player_id"].astype(str)
+    proj = proj.assign(proj_games=_projected_games(proj))
     base = proj.merge(real, on="player_id", how="inner", suffixes=("", "_r"))
+    # ⚠️ `g` here is the REALIZED game count (`load_realized_season`'s only games column) — the
+    # projection frame's own games column is `proj_games`, so the two never collide and this filter
+    # keeps meaning ">=6 games actually played". Verified against the artifact: no NF1.5 projection
+    # carries a bare `g`. If one ever does, `suffixes` would silently hand this filter the PROJECTED
+    # count and quietly change which players the whole scorecard scores.
     base = base[base["g"] >= 6].copy()
-    base = base[["player_id", "player_name", "position", "proj_fp_ppr", "real_fp_ppr"]]
+    base = base[["player_id", "player_name", "position", "proj_fp_ppr", "real_fp_ppr", "proj_games"]]
 
     # Mirrors `_adp_system`'s exact filter/transform (notna -> str id -> score=-adp -> dropna score) so
     # this frame's ADP side is byte-identical to the aggregate's, while also keeping the raw `adp`

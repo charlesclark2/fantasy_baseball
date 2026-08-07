@@ -37,7 +37,7 @@
       "url": "https://api.credencesports.com/fantasy/nfl/track-record/2025",
       "bytes": 77873,
       "sha256_16": "7ebe1be6c77f2099",
-      "note": "Public past-season track record. REAL, UNLOCKED model output — the honest 'a real payload renders real numbers' fixture."
+      "note": "Public past-season track record. REAL, UNLOCKED model output — the honest 'a real payload renders real numbers' fixture. ⚠️ AUGMENTED, not hand-edited: `projGames` (the expected-games figure `ourPoints` is scaled by) does not exist in prod until the operator's post-merge `--publish`, so it was joined in per player from the served NF1.5 2025 projection artifact by `e2e/fixtures/build-track-record-proj-games.py` — the same source and the same rounding the export uses. Every other byte is the verbatim capture; the sha above is the PRE-augmentation capture. Re-capture after the publish, then delete that script."
     },
     {
       "file": "subscription-public-pricing.json",
