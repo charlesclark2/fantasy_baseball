@@ -283,6 +283,59 @@ def select_ready_games(candidates, first_pitch, now):
     return ready, held
 
 
+def unscored_pregame_games(
+    first_pitch,
+    candidates,
+    games_with_post_lineup,
+    now,
+    *,
+    sla_minutes: float = _SLA_FALLBACK_MINUTES,
+):
+    """PURE detector (unit-tested; no IO) for the class the readiness gate CANNOT see.
+
+    INC-41 (2026-08-06). ``select_ready_games`` — and therefore the SLA safety valve inside it —
+    only ever sees games that already cleared the candidate query's
+    ``HAVING COUNT(DISTINCT home_away) = 2``. A game with only ONE side's lineup posted (or with
+    NO lineup row at all) is filtered out in SQL *before* the gate, so it:
+
+      * never becomes a candidate,
+      * never reaches the SLA valve (the Epic A1 backstop does NOT cover it),
+      * and produces NO ``held`` entry — the monitor logs ``Candidate games today: N`` and the
+        game simply is not in N.
+
+    That makes "this game will never be scored" byte-identical to "there is nothing to do" —
+    the INC-38 (d) / NF1.7 (a) invisible-failure class. On 2026-08-06 games 824080 and 824885
+    (home side only) and 825053 (no lineup row) sat in exactly this hole and went un-scored past
+    first pitch with no alert anywhere.
+
+    Returns ``[(game_pk, minutes_to_first_pitch|None, reason)]`` — pre-game slate games that are
+    past the SLA deadline, carry NO post_lineup row, and are NOT candidates. Empty is the healthy
+    state. Detection only: this NEVER changes what gets scored (that policy change is a separate,
+    operator-gated decision).
+    """
+    out: list[tuple] = []
+    if not first_pitch:
+        # Fail-open: the pregame lookup was unavailable, so we cannot say anything about the
+        # slate. An unevaluable check is never scored healthy, but it is also not an alert —
+        # main() logs the lookup failure separately.
+        return out
+    for pk, fp in first_pitch.items():
+        if pk in candidates:
+            continue  # the gate can see it; a held/SLA-fallback line already covers it.
+        if pk in games_with_post_lineup:
+            continue  # already scored.
+        mins = None if fp is None else (fp - now).total_seconds() / 60.0
+        if mins is None or mins > sla_minutes:
+            continue  # still outside the SLA window — being un-scored is expected here.
+        out.append((
+            pk,
+            mins,
+            f"no post_lineup and NOT a readiness-gate candidate (fewer than both sides posted "
+            f"in lineups_wide), first pitch in {mins:.0f} min",
+        ))
+    return out
+
+
 def get_connection() -> snowflake.connector.SnowflakeConnection:
     # INC-22 straggler cure (2026-07-05): the box authenticates via the INLINE key
     # (SNOWFLAKE_PRIVATE_KEY), NOT a key FILE, and has NO SNOWFLAKE_PASSWORD — the old
@@ -524,6 +577,27 @@ def main() -> None:
         else:
             games_with_post_lineup = _games_with_post_lineup_sf(cur, today)
         log.info("Games with existing post_lineup prediction: %d", len(games_with_post_lineup))
+
+        # INC-41 (2026-08-06) — SURFACE the class the readiness gate structurally cannot see.
+        # A game with only ONE side posted (or no lineup row at all) is dropped by the candidate
+        # query's HAVING COUNT(DISTINCT home_away) = 2 BEFORE select_ready_games runs, so the SLA
+        # safety valve never applies to it and it emits NO held line. Un-scored past first pitch
+        # is then indistinguishable from "nothing to do". Detection only — this does NOT change
+        # what gets scored; extending the valve to one-sided games is an open PM/operator call
+        # (it would stamp lineup_confirmed=TRUE on a game whose lineup is not, in fact, confirmed).
+        _unscored = unscored_pregame_games(
+            first_pitch, candidates, games_with_post_lineup, datetime.now(timezone.utc),
+        )
+        # Always emit the metric — an absent line must not read as healthy (NF1.7 (a)).
+        log.info("[METRIC] lineup_unscored_past_sla=%d", len(_unscored))
+        for pk, mins, reason in _unscored:
+            log.warning(
+                "[ALERT] game_pk=%d will NOT be scored: %s. The readiness gate cannot see this "
+                "game (it never becomes a candidate), so the Epic A1 SLA valve does not cover it "
+                "and no post_lineup row will ever be written for this slate. Investigate the "
+                "schedule capture→flatten chain for stg_statsapi_lineups_wide; re-score manually "
+                "if the slate still matters.", pk, reason,
+            )
 
         new_game_pks: list[int] = []
         pitcher_change_pks: list[int] = []
