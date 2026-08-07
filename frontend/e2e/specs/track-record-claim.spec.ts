@@ -32,14 +32,38 @@ async function renderedText(page: Page): Promise<string> {
   return (await page.locator("body").innerText()).replace(/\s+/g, " ")
 }
 
+/**
+ * Navigate to the Track Record and wait until the CLAIM has actually rendered.
+ *
+ * ⚠️ WHY THIS IS A HELPER AND NOT A BARE `goto`. `renderedText` is a SNAPSHOT of `body.innerText`,
+ * and the manifest arrives over an async fetch — so a whole-page text scan taken straight after
+ * `goto` can capture the LOADING state, in which every disclosure is legitimately absent. That is
+ * a race in the TEST, and it reports as a product defect ("required disclosure missing from the
+ * page") which is the most expensive possible way to be wrong.
+ *
+ * It shipped exactly that way and CI caught it: "all six required disclosures render" passed on
+ * this laptop every time — including 12 consecutive runs at `--workers=2` — and failed on both
+ * attempts on a slower 2-worker runner. Measured afterwards with the manifest delayed 1200ms: the
+ * bare-`goto` sequence reproduces the failure and this one does not.
+ *
+ * ⭐ IT DOES NOT WEAKEN ANY ASSERTION. A page that never renders the claim still FAILS here, on
+ * the visibility wait, with a clearer message than a substring miss against the loading state —
+ * and `nf-tr1: disclosure-dropped` in `e2e/red-proof.mjs` proves the disclosures test still goes
+ * red when a disclosure is genuinely absent rather than merely late.
+ */
+async function gotoTrackRecord(page: Page) {
+  await page.goto("/fantasy/track-record")
+  await expect(page.getByText("The honest read")).toBeVisible()
+  await expect(page.locator("table tbody tr").first()).toBeVisible()
+}
+
 test.describe("public Track Record — NF-TR1 claim governance", () => {
   test("calibration leads; the benchmark comparison comes after it", async ({ page }) => {
     const errors = collectPageErrors(page)
     const mock = await mockApi(page)
 
-    await page.goto("/fantasy/track-record")
+    await gotoTrackRecord(page)
     await expect(page.getByText("What you get")).toBeVisible()
-    await expect(page.getByText("The honest read")).toBeVisible()
 
     const calibrationTop = await topOf(page.getByText("What you get"))
     const claimTop = await topOf(page.getByText("The honest read"))
@@ -55,8 +79,7 @@ test.describe("public Track Record — NF-TR1 claim governance", () => {
 
   test("the rendered page makes no forbidden market or edge claim", async ({ page }) => {
     const mock = await mockApi(page)
-    await page.goto("/fantasy/track-record")
-    await expect(page.locator("table tbody tr").first()).toBeVisible()
+    await gotoTrackRecord(page)
 
     // Open the fine print too: a denied phrase hiding inside a collapsed <details> still ships.
     await page.getByText("How we measured this").click()
@@ -72,7 +95,7 @@ test.describe("public Track Record — NF-TR1 claim governance", () => {
     // ⭐ The failure mode NF-TR1 exists to prevent is a plainer lead that sounds punchier because
     // the hedges came off. Each is asserted separately so a red run names which one was dropped.
     const mock = await mockApi(page)
-    await page.goto("/fantasy/track-record")
+    await gotoTrackRecord(page)
 
     const lead = await page.locator("h2", { hasText: "The honest read" }).locator("..").innerText()
     expect(lead.toLowerCase(), "the lead no longer says the gap is small").toContain("gap is small")
@@ -100,7 +123,7 @@ test.describe("public Track Record — NF-TR1 claim governance", () => {
   }) => {
     // The disclosure that costs us something is the one most likely to end up behind an expander.
     const mock = await mockApi(page)
-    await page.goto("/fantasy/track-record")
+    await gotoTrackRecord(page)
 
     const table = page.locator("table").filter({ hasText: "Gap vs. draft-day consensus" })
     await expect(table).toBeVisible()
@@ -124,7 +147,7 @@ test.describe("public Track Record — NF-TR1 claim governance", () => {
     // The precise layer was RELOCATED below a plain lead, never deleted — this is the assertion
     // that keeps "relocated" from quietly becoming "dropped".
     const mock = await mockApi(page)
-    await page.goto("/fantasy/track-record")
+    await gotoTrackRecord(page)
     await page.getByText("How we measured this").click()
 
     const text = await renderedText(page)
@@ -141,7 +164,7 @@ test.describe("public Track Record — NF-TR1 claim governance", () => {
 
   test("all six required disclosures render", async ({ page }) => {
     const mock = await mockApi(page)
-    await page.goto("/fantasy/track-record")
+    await gotoTrackRecord(page)
     const text = (await renderedText(page)).toLowerCase()
 
     for (const [name, marker] of [
@@ -174,6 +197,10 @@ test.describe("public Track Record — NF-TR1 claim governance", () => {
       },
     })
 
+    // ⛔ NOT `gotoTrackRecord` — this render deliberately has NO claim block, so that helper's
+    // "The honest read" wait would time out. The waits below are its equivalent for this branch:
+    // the static hook, and the season rows that prove the page really rendered rather than merely
+    // being early. Do not "tidy" this into the helper.
     await page.goto("/fantasy/track-record")
     await expect(page.getByText("What you get")).toBeVisible()
     await expect(page.locator("table tbody tr").first()).toBeVisible()

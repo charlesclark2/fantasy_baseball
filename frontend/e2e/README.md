@@ -50,6 +50,30 @@ hermetic gate.
 `signup-funnel.spec.ts` is the only spec that also runs on a phone viewport, because one of the
 defects it is written from was mobile-only and a desktop-only suite is structurally blind to it.
 
+### ⚠️ A whole-page text scan needs an explicit wait, and the laptop will not tell you
+
+`(await page.locator("body").innerText())` is a SNAPSHOT. Take it straight after `goto` and it can
+capture the loading state, in which the content you are asserting on is legitimately absent — so
+the test reports a **product defect** ("required disclosure missing from the page") when what
+actually happened is that the fetch had not landed. That is the most expensive way for a test to be
+wrong, and NF-TR1 shipped it: the spec passed here every time, including **12 consecutive runs at
+`--workers=2`**, and failed both attempts on the slower 2-worker CI runner.
+
+Two rules, both cheap:
+
+1. **Wait on the content the fetch produces before scanning** — `track-record-claim.spec.ts`'s
+   `gotoTrackRecord` is the pattern. A page that never renders it still fails, on the visibility
+   wait, with a better message.
+2. **A wait added to silence a red test is how a test stops being able to fail.** Pair it with a
+   red-proof case that removes the content for real (`disclosure-dropped`), so "slow" and "absent"
+   stay distinguishable.
+
+To reproduce a slow runner locally — which is the only instrument that actually finds this — copy
+the spec, wrap `mockApi` so it registers a delaying `page.route(…, r => sleep then r.fallback())`
+**after** the mock (routes are LIFO, so a later handler runs first), and run at `--workers=2`.
+Measured: the pre-fix sequence fails at a 1200 ms manifest delay; the whole spec passes at 900 ms
+on every call.
+
 ## Fixtures
 
 `fixtures/api/` holds **verbatim captures of the live production API**, refreshed by

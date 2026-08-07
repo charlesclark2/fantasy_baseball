@@ -242,6 +242,23 @@ const CASES = [
     grep: "keeps its hedges",
   },
   {
+    id: "disclosure-dropped",
+    shipped: "NF-TR1 — pre-emptive: a required disclosure stops being published",
+    // ⚠️ THIS CASE EXISTS BECAUSE OF A NEAR-MISS IN THE OPPOSITE DIRECTION. "all six required
+    // disclosures render" first shipped with a bare `goto` and a whole-page text scan, so on a
+    // slow runner it read the LOADING state and reported a missing disclosure that was merely
+    // late. The fix was to wait for the claim to render (`gotoTrackRecord`) — and a wait added to
+    // silence a red test is exactly how a test stops being able to fail. So: prove it still goes
+    // red when a disclosure is genuinely ABSENT rather than slow.
+    detail: "Removes the running-back wash — the disclosure that costs us something.",
+    file: "e2e/fixtures/api/fantasy-nfl-track-record-manifest.json",
+    from:
+      '      "At running back it is a wash. Our order there was no better than the draft-day' +
+      ' consensus, and we do not claim it was.",\n',
+    to: "",
+    grep: "all six required disclosures",
+  },
+  {
     id: "google-entry-missing",
     shipped: "E9.58 — a signup entry point with no working Google button",
     detail: "The DNS-dead-host outage presented to the user as exactly this: no way through.",
