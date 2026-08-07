@@ -125,7 +125,11 @@ select
     json_extract_string(outcome, '$.point')::double         as outcome_point
 
 from outcomes_flattened
-where try_cast(json_extract_string(outcome, '$.price') as bigint) is not null
+-- INC-41 — same contract as stg_oddsapi_odds: exclude a row whose price is not a usable American
+-- odd, rather than carrying a NULL price. This model already excluded a missing price; the bound
+-- just widens that to "missing OR not a real price" (a vendor INT32_MIN sentinel, a 0, a |value|
+-- below 100). Keeps outcome_price_decimal non-null for every retained row.
+where abs(try_cast(json_extract_string(outcome, '$.price') as bigint)) between 100 and 1000000
 
 {% else %}
 
