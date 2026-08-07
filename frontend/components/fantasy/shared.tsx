@@ -207,9 +207,17 @@ export function UpgradeBanner({
   // What CAN argue for it is already public and already measured: the NF3.2 track record (six
   // seasons of our projection vs that season's preseason ADP vs the realized outcome). Rendering
   // its headline VERBATIM keeps this honest — the claim is computed by
-  // `export_track_record_json.build_headline` from the scorecard's own numbers, so it cannot drift
+  // `export_track_record_json.build_claim` from the scorecard's own numbers, so it cannot drift
   // into marketing copy, and it respects the NF-D3 claim-scope rule at the top of this file (this
   // is a projection product; it never asserts a win rate or an edge).
+  //
+  // ⭐ NF-TR1 — THIS SURFACE NEEDED NO EDIT, AND THAT IS WHY THE FIELD KEPT ITS NAME. `headline` is
+  // now the plain-English CONSUMER LEAD, which opens on what the product gives you (calibrated
+  // points, a range, your league's scoring) and reaches the benchmark comparison second, already
+  // hedged. So this banner became calibration-led — the acceptance criterion — the moment the
+  // artifact republished, with zero client change and no frontend/artifact deploy-order hazard.
+  // Had NF-TR1 introduced a new field instead, this banner would have gone on quoting the old
+  // un-hedged sentence until someone remembered it existed (the NF-C0 skew class).
   //
   // Degrades cleanly: the manifest is a public endpoint, but if it is slow or fails we simply show
   // the ask without the evidence rather than blocking the CTA.

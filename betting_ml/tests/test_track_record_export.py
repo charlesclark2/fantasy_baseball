@@ -5,8 +5,10 @@ Pure/offline: tiny synthetic frames, no DuckDB/S3/network. Covers:
     NF-D3 scorecard's aggregate "adp" numbers (rank directions, the g>=6 filter, and — the important
     one — that its `is_fade` flag is EXACTLY the same set `_disagreement_frame` would compute on the
     identical merged input, never a parallel re-derivation).
-  * `export_track_record_json.build_headline` — the honest-claim denylist (reused verbatim from
-    `test_nf1_5b_served_board.py`) plus the "no ADP aggregate -> refuse" guard.
+  * `export_track_record_json.build_headline` / `build_claim` — the honest-claim denylist (reused
+    verbatim from `test_nf1_5b_served_board.py`) plus the "no ADP aggregate -> refuse" guard.
+    NF-TR1's two-layer copy rules (which hedge lives where, what the plain lead may never say) are
+    a separate suite: `betting_ml/tests/test_nf_tr1_claim_copy.py`.
   * `export_track_record_json._parse_seasons` — the structural guard that the public export can never
     be asked to emit the current LOCKED season.
   * `export_track_record_json.season_records` — the JSON record shape.
@@ -232,6 +234,7 @@ def _fake_scorecard(adp_seasons=(2019, 2020, 2021, 2022, 2023, 2024), extra_seas
     agg.update(overrides)
     per_season = [{"season": y, "systems": {"adp": {}}} for y in adp_seasons]
     per_season += [{"season": y, "systems": {"ecr": {}}} for y in extra_seasons]
+    agg.setdefault("delta_rho_by_pos", {"QB": 0.031, "RB": -0.0, "WR": 0.037, "TE": 0.021})
     return {
         "aggregate": {"adp": agg},
         "seasons_scored": sorted(list(adp_seasons) + list(extra_seasons)),
@@ -239,13 +242,38 @@ def _fake_scorecard(adp_seasons=(2019, 2020, 2021, 2022, 2023, 2024), extra_seas
     }
 
 
+def _fake_uncertainty(n_seasons=6, delta=0.022, lo=-0.006, hi=0.051):
+    """NF-TR1: `build_claim` reads the interval + player count from the NF-D17 artifact, so every
+    headline test now needs one. Defaults mirror the committed P0_shipped × `adp` row."""
+    return {"results": [{
+        "population": "P0_shipped", "source": "adp", "n_seasons": n_seasons,
+        "n_mean": 162.0, "n_min": 140, "n_max": 172, "delta_rho_mean": delta,
+        "bootstrap": {"evaluated": True, "draws": 1000, "level": 0.9, "lo": lo, "hi": hi,
+                      "median": 0.021, "excludes_zero": not (lo <= 0.0 <= hi)},
+    }]}
+
+
 def test_build_headline_avoids_overclaims_and_uses_scorecard_numbers():
-    headline = ex.build_headline(_fake_scorecard())
+    headline = ex.build_headline(_fake_scorecard(), _fake_uncertainty())
     lowered = headline.lower()
     for banned in ex._CLAIM_DENYLIST:
         assert banned not in lowered, f"headline drifted into a banned overclaim: {banned!r}"
-    assert "0.517" in headline and "0.494" in headline
     assert "2019" in headline and "2024" in headline
+    # NF-TR1 moved the RHO FIGURES out of the consumer lead and into the precise layer — a casual
+    # reader cannot use "0.517", and the operator's readability constraint is what this asserts.
+    # The numbers are not lost; `test_the_precise_layer_carries_the_scorecards_own_numbers` below
+    # holds them where they now live.
+    assert "0.517" not in headline and "0.494" not in headline
+
+
+def test_the_precise_layer_carries_the_scorecards_own_numbers():
+    """The figures moved LAYER, not out of the artifact. Simplifying the prose is safe; losing the
+    numbers would be the readability constraint used as cover for dropping the evidence."""
+    precise = ex.build_claim(_fake_scorecard(), _fake_uncertainty())["precise"]
+    assert "0.517" in precise and "0.494" in precise
+    assert "2019" in precise and "2024" in precise
+    for banned in ex._CLAIM_DENYLIST:
+        assert banned not in precise.lower()
 
 
 def test_build_headline_span_reflects_adp_seasons_not_every_scored_season():
@@ -253,14 +281,15 @@ def test_build_headline_span_reflects_adp_seasons_not_every_scored_season():
     espn cover it) but FFC has no ADP archive for it, so `agg['n_seasons']` stays 6. The headline must
     say "...2024", never "...2025" — otherwise it reads "6 past seasons (2019-2025)", a visible
     internal contradiction on a page whose whole point is honest numbers."""
-    headline = ex.build_headline(_fake_scorecard(extra_seasons=(2025,)))
+    headline = ex.build_headline(_fake_scorecard(extra_seasons=(2025,)), _fake_uncertainty())
     assert "2024" in headline
     assert "2025" not in headline
 
 
 def test_build_headline_raises_without_adp_aggregate():
     with pytest.raises(ValueError):
-        ex.build_headline({"aggregate": {}, "seasons_scored": [], "per_season": []})
+        ex.build_headline({"aggregate": {}, "seasons_scored": [], "per_season": []},
+                          _fake_uncertainty())
 
 
 # ── export_track_record_json._parse_seasons — the locked-season structural guard ────────────────
@@ -370,40 +399,36 @@ def test_no_published_name_is_ever_all_caps():
 
 
 def test_headline_carries_no_statistics_jargon():
-    """The whole point of the rewrite: this is read by casual fans, not by us."""
-    headline = ex.build_headline(_fake_scorecard())
+    """The whole point of the rewrite: this is read by casual fans, not by us.
+
+    NF-TR1 TIGHTENED this rather than relaxing it. "correlation" and "pooled" were already banned;
+    "confidence interval" and "rank correlation" now join them, because the operator's readability
+    constraint names those two phrases specifically as the register that shrinks the audience. They
+    are not deleted from the product — `test_the_precise_layer_*` requires them one layer down."""
+    headline = ex.build_headline(_fake_scorecard(), _fake_uncertainty())
     lowered = headline.lower()
-    for jargon in ("correlation", "Δρ", "rho", "within-position ordering", "pooled"):
+    for jargon in ("correlation", "Δρ", "rho", "within-position ordering", "pooled",
+                   "confidence interval", "bootstrap", "spearman"):
         assert jargon.lower() not in lowered, f"headline still says {jargon!r}"
-    assert "perfect ranking" in lowered and "random" in lowered, "the scale must be explained"
-
-
-def test_headline_still_quotes_the_scorecards_own_numbers():
-    """Simplifying the PROSE is safe; substituting a friendlier NUMBER would not be."""
-    headline = ex.build_headline(_fake_scorecard())
-    assert "0.517" in headline and "0.494" in headline
-    assert "2019" in headline and "2024" in headline
-    for banned in ex._CLAIM_DENYLIST:
-        assert banned not in headline.lower()
 
 
 def test_headline_direction_follows_the_measured_sign():
     """The plain-English rewrite reads as a CLAIM, so a negative delta must change the sentence.
 
     The old wording ("is X, against ADP's Y") asserted no direction and so stayed true either way;
-    "we finished ahead" does not. A future season where ADP wins must not print a false claim.
+    "turned out closer" does not. A future season where ADP wins must not print a false claim.
     """
     sc = _fake_scorecard()
     agg = sc["aggregate"]["adp"]
     agg.update(us_rho_pooled=0.470, system_rho_pooled=0.510, delta_rho_pooled=-0.040)
-    behind = ex.build_headline(sc).lower()
-    assert "ahead" not in behind
+    behind = ex.build_headline(sc, _fake_uncertainty(delta=-0.040)).lower()
+    assert "closer to how those years actually finished than the draft-day consensus" not in behind
     assert "held up better than ours" in behind
 
 
 def test_headline_margin_adjective_is_derived_not_asserted():
-    """"narrow" is true at +0.022; it must stop being applied on its own if the gap ever grows."""
+    """"a little" is true at +0.022; it must stop being applied on its own if the gap ever grows."""
     sc = _fake_scorecard()
-    assert "narrow margin" in ex.build_headline(sc)
+    assert "a little closer" in ex.build_headline(sc, _fake_uncertainty())
     sc["aggregate"]["adp"]["delta_rho_pooled"] = 0.20
-    assert "wide margin" in ex.build_headline(sc)
+    assert "much closer" in ex.build_headline(sc, _fake_uncertainty(delta=0.20))

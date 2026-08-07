@@ -24,8 +24,17 @@ import {
 // E9.56c — the NFL line was missing entirely. Every locked 2026 projection and ranking now sends
 // free visitors here, so the single largest inbound cohort was landing on a list of five MLB
 // betting features with no mention of the fantasy product they had just been paywalled out of.
+//
+// NF-TR1 — CALIBRATION LEADS HERE TOO. The first line used to be a feature list ("projections,
+// rankings & draft tools"), which says what you can click rather than what you are buying. The
+// product's actual claim is a calibrated point with an honest range in YOUR league's scoring, and
+// that has to be the first thing on the page a padlock sends you to — the benchmark comparison
+// stays where it belongs, on the track-record page linked at the bottom, with its interval beside
+// it. ⛔ Do not add a performance figure to this list: a number here has no measurement next to it
+// and cannot be reconciled against the scorecard (the E9.56b/NF-D3 rule).
 const PERKS = [
-  "Full 2026 NFL fantasy projections, rankings & draft tools",
+  "Full-season NFL fantasy projections with an 80% range, scored for your league's rules",
+  "Draft board, rankings & draft-day tools built on those projections",
   "Daily model picks across every MLB slate",
   "Full EV tracker + line-movement history",
   "Pitcher strikeout projections & prop edges",

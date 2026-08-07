@@ -44,6 +44,7 @@ hermetic gate.
 | `specs/entitled-surfaces.spec.ts` | An unlocked payload renders real numbers, zero lock chips, and no upgrade ask | the other half of the same split — a page that renders chips unconditionally passes the file above and is broken for every subscriber |
 | `specs/route-integrity.spec.ts` | **Every internal `href` in the rendered DOM resolves** | E9.56c — `/pricing` killed the entire buy path |
 | `specs/signup-funnel.spec.ts` | Every signup entry point offers a working Google button; the nav carries a signup affordance on desktop **and mobile**; the click leaves for the configured Cognito host with correct PKCE params | E9.58 — the DNS-dead Hosted-UI host, and the logged-out mobile nav with no signup affordance (`hidden sm:flex`) |
+| `specs/track-record-claim.spec.ts` | **The public Track Record leads with calibration, not with the ADP comparison**; the plain lead keeps all four of its hedges; the position table (where the running-back wash lives) renders without expanding anything; the fine print still names the benchmark, metric, sample and interval; **no forbidden claim language anywhere in the rendered document**; and a pre-NF-TR1 artifact degrades without promoting the old un-hedged sentence into the lead | NF-TR1 — pre-emptive. The claim is small (its own 90% interval includes zero, NF-D17) and the failure mode is a plainer rewrite that sounds punchier because a hedge came off. The Python suite screens what the *export* generates; only this file can see the *rendered* page, which also carries every static component string no export-side denylist has ever looked at |
 | `specs/pricing.spec.ts` | A logged-out visitor sees the price; **the rendered price and currency FOLLOW the server**; a failed pricing read costs the price and not the funnel; the page's own CTA resolves; the payload carries no internal conversion count | E9.59 — until it, `/subscribe` could not show a price at all (the only pricing read required auth). The headline case is pre-emptive: a hardcoded price is invisible to every other gate |
 
 `signup-funnel.spec.ts` is the only spec that also runs on a phone viewport, because one of the
@@ -68,6 +69,15 @@ It is a **real capture since 2026-08-07** and the synthetic file is deleted. Two
   that test is what turns "the API grew a field" into a red build instead of a suite passing
   against a shape that no longer occurs.
 - ⚠️ It records the Stripe **TEST-mode** price. Re-capture at the E9.8-P2 live flip.
+
+`fantasy-nfl-track-record-manifest.json` is a real capture **except for its `claim` block and its
+`headline`**, which NF-TR1 added and which do not exist in production until the operator re-runs
+the exporter with `--publish`. Same one-day shape the pricing fixture had. Nothing is authored:
+`fixtures/build-track-record-claim.py` calls the SHIPPING `export_track_record_json.build_claim`
+over the committed NF-D3 scorecard and NF-D17 population artifacts, and
+`betting_ml/tests/test_nf_tr1_claim_copy.py::test_the_e2e_fixture_claim_is_the_shipping_builders_own_output`
+asserts the fixture equals that output — so it cannot drift from the code it is testing. ⚠️ **Delete
+that script and re-capture once the publish has landed.**
 
 One fixture is still generated rather than captured —
 `fantasy-nfl-projections-2026-entitled.synthetic.json`. There is no public unlocked form of the
