@@ -200,6 +200,18 @@ def season_records(df: pd.DataFrame) -> list[dict]:
             "playerName": display_name(r["player_name"]),
             "position": str(r["position"]),
             "ourPoints": _fnum(r["our_points"]),
+            # The EXPECTED-GAMES figure `ourPoints` is scaled by. ⭐ It is what makes the points
+            # column legible: our published total prices in the chance a player misses time, so it
+            # sits below an "if he plays every week" projection AND below a healthy player's
+            # finished season — and a reader with no games figure beside it reads that as a broken
+            # model rather than as the disclosure it is.
+            #
+            # ⚠️ ADDITIVE, and it has to be: `fantasy_public.py`'s season route ships the records
+            # through with no `response_model`, but the FRONTEND deploys on merge while this
+            # payload only gains the key when the operator re-runs the export with `--publish`
+            # (NF-C0's skew, artifact-side). So the consumer treats a missing/null `projGames` as a
+            # normal render, never as an error — and MUST NOT infer one from `ourPoints`.
+            "projGames": _fnum(r.get("proj_games"), 1),
             "ourRank": int(r["our_rank"]),
             "adp": _fnum(r["adp"], 1),
             "adpRank": _inum(r["adp_rank"]),

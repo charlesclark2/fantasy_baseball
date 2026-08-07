@@ -13,6 +13,7 @@ import Link from "next/link"
 import { Search } from "lucide-react"
 import { useFantasyProjections, FANTASY_SEASON } from "@/lib/fantasy-queries"
 import { trimLockedTail } from "@/lib/fantasy"
+import { EXPECTED_POINTS_LABEL, PROJECTED_GAMES_LABEL } from "@/lib/fantasy-claim-copy"
 import {
   ALL_ROWS,
   ConfidenceBadge,
@@ -211,13 +212,23 @@ export function ProjectionsTable() {
                   <th className="px-3 py-2 font-medium">Pos</th>
                   <th className="px-3 py-2 font-medium">Team</th>
                   <th className="px-3 py-2 text-right font-medium">Bye</th>
-                  <th className="px-3 py-2 text-right font-medium">G</th>
+                  {/* The bare "G" told a reader nothing about why the points column sits where it
+                      does. Same figure, named and defined: it is the availability factor the
+                      points column is scaled by. */}
+                  <th className="px-3 py-2 text-right font-medium">
+                    <InfoTip label={PROJECTED_GAMES_LABEL}>{GLOSSARY.projectedGames}</InfoTip>
+                  </th>
                   {statCols.map((c) => (
                     <th key={String(c.key)} className="px-3 py-2 text-right font-medium">
                       {c.label}
                     </th>
                   ))}
-                  <th className="px-3 py-2 text-right font-medium">Proj</th>
+                  {/* "Proj" was silent about the single most misread property of this number: it
+                      is an EXPECTED total with missed-game risk already priced in, so it reads low
+                      against an "if he plays every week" projection from anywhere else. */}
+                  <th className="px-3 py-2 text-right font-medium">
+                    <InfoTip label={EXPECTED_POINTS_LABEL}>{GLOSSARY.expectedPoints}</InfoTip>
+                  </th>
                   {/* The interval is carried on the PPR total only, so it is labelled that way
                       rather than silently implying it tracks the selected reference scoring. */}
                   <th className="px-3 py-2 font-medium">80% range (PPR)</th>

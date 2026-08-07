@@ -52,6 +52,35 @@ Winners are stored as DATA (`ablation_results/nf1_5_feature_combination_bakeoff.
 
 **Why it won:** the whole NF1→NF1.5 arc (field 10) proved the **market-blind ceiling** three+ ways, then NF1.3/NF1.5 showed the market-aware blend is the **first board to beat ADP** on the product metric. NF1.5 stage-1's refined blends beat the NF1.3 incumbent at all four positions on held-out `top_tier_rho`; **none cleared the betting deflation gate (PBO/DSR)** — the recorded `refined_gates` are all `false`, and it ships on the **product metric + calibration + PM ruling**, the vertical's declared gate, under the standing "tracks the market + adds our signal, never an independent edge" posture. NF1.5b's serving re-grade (2026-08-01): served refined board vs ADP pooled Δρ **+0.022** vs the previous MVP-1 board's **−0.059**.
 
+### ⚠️ MEASURED LEVEL BIAS — the served point LEVELS sit systematically BELOW realized (NF-TR1 finding, 2026-08-07)
+
+The public track-record page surfaced a systematic **downward LEVEL SHIFT** of the served point projections vs realized outcomes — a property of the **LEVEL model (MVP-1)**, NOT the ordering (NF1.5) and NOT the intervals in isolation. ⭐ **It is a LEVEL shift, not a fat-tails / top-end miss:** the MEDIAN tracks the MEAN (a tail miss leaves the median near zero and drags only the mean; here the whole distribution is shifted down).
+
+Measured, pooled **1,165 player-seasons 2019–2025** (unconditional per-position means — same players both sides, ⛔ NOT conditioned on the outcome):
+
+| | mean bias | median bias | our/actual |
+|---|---|---|---|
+| Pooled | −37.7 | −34.5 | — |
+| QB | −19.8 | −18.7 | 0.923 |
+| RB | −49.1 | −44.0 | **0.693** |
+| WR | −37.5 | −34.6 | 0.778 |
+| TE | −26.8 | −24.9 | 0.816 |
+
+Every position is negative, every season is negative (2019 −44.8 → 2025 −26.5, **improving** over time); **RB worst, QB nearly calibrated.**
+
+**Shape / cause (two counts, one intentional, one a real miscalibration):** the bias ordering (RB>WR>TE>QB) matches the live board's projected-games ordering EXACTLY (RB 13.9 / WR 14.4 / TE 14.8 / QB 15.1 of 17), so the **expected-games (availability) discount carries MOST of it** — the served number is deliberately an **EXPECTED** (availability-weighted) point total, structurally lower than the "if-healthy" numbers most competitors publish. But availability does **not fully close it**: RB's games ratio 0.818 vs the measured 0.693 leaves **~15% unexplained at the worst position**. That residual is almost certainly the **NF-D11/NF-D15 effect** — MAE is minimized at the conditional median, so it *pays for pessimism* on a right-skewed target (fantasy points are right-skewed), and NF-D15 directly measured pooled bias moving FURTHER from zero while MAE improved. So the level is conservative on TWO counts (availability = intentional/honest; median-optimal pessimism = a genuine miscalibration).
+
+**What it affects — and doesn't:**
+- ⛔ Does **NOT** touch the NF-TR1 ranking claim: Δρ is rank-based and **invariant to any monotone level transformation** — the +0.022 stands.
+- ✅ Ranking / draft ORDER is fine (why the product still works — you draft in the right order).
+- 🔴 **Any ABSOLUTE-points use is affected**: track-record page credibility (a reader sees Bijan 236 proj vs 371 actual and reads "broken"), trade valuation, start/sit margins, projected league totals — the absolute number is **not comparable to another site's "if-healthy" number**.
+
+**Two durable methodology cautions:**
+1. ⛔ **Do NOT cite the outcome-BUCKETED decile table** (−123 on the top realized decile, +45 on the bottom) as evidence of bias/compression — that pattern appears even for a **perfectly-calibrated** projection because sorting on the REALIZED outcome selects for positive noise; it cannot distinguish bias from correct shrinkage. The **unconditional per-position means above** are the honest statistic.
+2. The games figures are from the **live 2026 board** while the bias is from the **frozen backtest** — suggestive, not proof of the availability decomposition; the same gap must be **confirmed on the live board** (2026 has no realized outcomes yet) before scoping any recalibration.
+
+**Remediation (carded, 2026-08-07):** near-term = **LABELING** (label "OUR PTS" as expected points incl. missed-game risk + show projected games — turns the shock into an honesty feature; NOT a model change). Real fix = a **per-position level recalibration** (NF-D16 found a per-position constant recalibration independently beat the incumbent, p=0.0052, but it is HELD — ⚠️ a level shift is rank-neutral WITHIN position but REORDERS players ACROSS positions on the shared board, so it needs the whole-board PLACEMENT gate; a §0.5 selection story, post-launch, CRPS not MAE since the inversion is the cause).
+
 ### Interval machinery (all in `season_projection.py`, all §0.5-selected except K/DST)
 
 | Population | Shipped form | Key constants | Selected on |

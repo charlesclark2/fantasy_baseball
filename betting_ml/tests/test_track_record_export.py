@@ -310,12 +310,12 @@ def test_season_records_shape():
         "season": 2024, "player_id": "P1", "player_name": "A", "position": "RB",
         "our_points": 200.4, "our_rank": 1, "adp": 5.2, "adp_rank": 2,
         "actual_points": 190.1, "actual_rank": 1, "is_fade": True, "fade_result": "hit",
-        "adp_source": "ffc",
+        "adp_source": "ffc", "proj_games": 13.87,
     }])
     recs = ex.season_records(df)
     assert recs == [{
         "season": 2024, "playerId": "P1", "playerName": "A", "position": "RB",
-        "ourPoints": 200.4, "ourRank": 1, "adp": 5.2, "adpRank": 2,
+        "ourPoints": 200.4, "projGames": 13.9, "ourRank": 1, "adp": 5.2, "adpRank": 2,
         "actualPoints": 190.1, "actualRank": 1, "isFade": True, "fadeResult": "hit",
         "adpSource": "ffc",
     }]
@@ -336,6 +336,89 @@ def test_season_records_null_adp_rank_when_no_source_has_the_season():
     assert recs[0]["adpRank"] is None
     assert recs[0]["fadeResult"] is None
     assert recs[0]["adpSource"] is None
+
+
+# ── the EXPECTED-POINTS disclosure: `proj_games` on the wire ─────────────────────────────────────
+# `our_points` is an availability-weighted EXPECTED season total, so it sits below both an "if he
+# plays every week" projection and a healthy player's finished season. Unlabelled that reads as a
+# broken model. The label is frontend copy; the number that makes it CHECKABLE — how many games we
+# actually expected — has to survive the export, and these are the clauses that hold it there.
+def _track_record(monkeypatch, proj, real, adp):
+    """`player_track_record_frame` over three in-memory frames — the same closure-over-fixtures
+    shape the clauses above use, factored out only because the three below share it verbatim."""
+    monkeypatch.setattr(bs.A, "load_adp_for_season", lambda con, season, schema=None: adp.copy())
+    return bs.player_track_record_frame(
+        None, 2099, "sch",
+        project_fn=lambda con, season, schema: proj.copy(),
+        load_realized_fn=lambda con, season, schema: real.copy(),
+    )
+
+
+def test_the_frame_carries_the_expected_games_the_points_were_scaled_by(monkeypatch):
+    """The end-to-end path: a projection frame's `proj_games` reaches the track-record frame.
+
+    ⭐ Asserted per PLAYER, not as "the column exists". A column that survived the merge with every
+    row's value silently reindexed onto the wrong player would satisfy a presence check and publish
+    a games figure belonging to somebody else — which is worse than publishing none, because it
+    looks like an explanation. The fixture gives every player a DISTINCT value so a reindex cannot
+    coincidentally land on the right number."""
+    proj, real, adp = _big_frames()
+    proj["proj_games"] = np.linspace(6.0, 16.5, len(proj))
+    expected = dict(zip(proj["player_id"], proj["proj_games"]))
+
+    out = _track_record(monkeypatch, proj, real, adp)
+
+    assert "proj_games" in out.columns
+    assert len(out) > 0
+    for pid, games in zip(out["player_id"], out["proj_games"]):
+        assert games == pytest.approx(expected[pid]), f"{pid} carries another player's games figure"
+
+
+def test_a_projection_with_no_games_column_publishes_null_rather_than_a_fabricated_figure(monkeypatch):
+    """⛔ The failure this forbids is a GUESS. A projection source carrying no `proj_games` (MVP-1,
+    an older artifact) must publish `null` — never a full-season default, never one derived from
+    `our_points`. A fabricated games figure would make the points discount look accounted for on
+    exactly the rows where it cannot be, and no consumer could tell the two apart.
+
+    It must also not RAISE: this is a display column, and taking the whole public export down over
+    one would be a far worse trade than an em-dash."""
+    proj, real, adp = _big_frames()
+    assert "proj_games" not in proj.columns
+
+    out = _track_record(monkeypatch, proj, real, adp)
+
+    assert "proj_games" in out.columns
+    assert len(out) > 0
+    assert out["proj_games"].isna().all()
+    assert all(r["projGames"] is None for r in ex.season_records(out))
+
+
+def test_the_six_game_filter_still_counts_REALIZED_games_once_projected_games_is_carried(monkeypatch):
+    """⚠️ THE REGRESSION THIS STORY COULD MOST EASILY HAVE CAUSED, and it would have been silent.
+
+    `player_track_record_frame` merges proj+real with `suffixes=("", "_r")` and then filters
+    `base["g"] >= 6`, where `g` is the REALIZED count. Carrying a second games column through that
+    merge is exactly the change that could hand the filter the PROJECTED count instead — which
+    would quietly change WHICH PLAYERS the public track record scores, and every number on the page
+    with it.
+
+    So: a player we projected for almost nothing who played every week must be IN, and one we
+    projected for a full season who played twice must be OUT. Either substitution flips one of
+    those, and the two directions are asserted separately so a red run names which way it broke."""
+    proj, real, adp = _big_frames(n_per_pos=14)
+    proj["proj_games"] = 16.0
+    proj.loc[proj.index[0], "proj_games"] = 1.0   # projected for nothing…
+    real.loc[real.index[0], "g"] = 17             # …and played every week  -> IN
+    real.loc[real.index[1], "g"] = 2              # projected 16, played 2  -> OUT
+
+    kept = set(_track_record(monkeypatch, proj, real, adp)["player_id"])
+
+    assert proj["player_id"].iloc[0] in kept, (
+        "the >=6 filter dropped a player who played 17 games — it is reading PROJECTED games"
+    )
+    assert proj["player_id"].iloc[1] not in kept, (
+        "the >=6 filter kept a player who played 2 games — it is reading PROJECTED games"
+    )
 
 
 def test_adp_source_for_season_reads_the_uniform_per_row_value():

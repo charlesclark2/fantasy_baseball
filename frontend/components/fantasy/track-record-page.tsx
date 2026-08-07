@@ -56,8 +56,11 @@ import type {
 } from "@/lib/fantasy-track-record"
 import {
   PRODUCT_HOOK,
+  EXPECTED_POINTS_LABEL,
+  EXPECTED_POINTS_NOTE,
   LEGACY_CLAIM_NOTE,
   METHOD_DISCLOSURE_LABEL,
+  PROJECTED_GAMES_LABEL,
 } from "@/lib/fantasy-claim-copy"
 import {
   EmptyBlock,
@@ -139,6 +142,31 @@ function LegacyClaim({ headline }: { headline: string }) {
       <p className="mt-3 text-[13px] leading-relaxed text-gray-400">{headline}</p>
       <p className="mt-3 text-[12px] leading-relaxed text-gray-500">{LEGACY_CLAIM_NOTE}</p>
     </details>
+  )
+}
+
+/** The expected-points framing, rendered between the claim and the table.
+ *
+ *  ⭐ WHY IT IS HERE AND NOT IN THE FINE PRINT. The shock this block answers happens at the TABLE:
+ *  a reader sees a player we projected at a couple of hundred points finish far above it and
+ *  concludes the model is broken. The explanation is only worth anything if it arrives BEFORE that
+ *  row does, so this sits above the season table and outside any expander — the same reasoning
+ *  `Disclosures` uses ("a disclosure a reader has to open is a disclosure most readers never see").
+ *
+ *  ⭐ AND IT IS FRAMED AS A FEATURE, NOT AN APOLOGY. Pricing missed games into the number is a
+ *  choice we would defend; the copy says why we prefer it and does not ask to be forgiven for it.
+ *  ⛔ It also does not claim availability accounts for the whole difference — see
+ *  `EXPECTED_POINTS_NOTE`'s own comment, and the guard that holds that clause. */
+function ExpectedPointsNote() {
+  return (
+    <div className="mb-4 rounded-lg border border-[#262626] bg-[#0f0f0f] p-4">
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+        {EXPECTED_POINTS_NOTE.title}
+      </h3>
+      <p className="max-w-3xl text-[13px] leading-relaxed text-gray-400">
+        {EXPECTED_POINTS_NOTE.detail}
+      </p>
+    </div>
   )
 }
 
@@ -512,7 +540,20 @@ function TrackRecordTable({ rows }: { rows: TrackRecordRow[] }) {
               <th className="sticky left-0 z-10 bg-[#0f0f0f] px-3 py-2">Player</th>
               <th className="px-3 py-2">Pos</th>
               <th className="px-3 py-2 text-right">Our rank (pos)</th>
-              <th className="px-3 py-2 text-right">Our pts</th>
+              {/* ⭐ THE LABEL IS THE FIX. This column is an EXPECTED season total — the chance the
+                  player missed games is already priced into it — so it sits below the "Actual pts"
+                  two columns over for a reader who assumed the two were like for like. Headed
+                  "Our pts" it read as a broken model; headed as expected points, with the games we
+                  projected right beside it and a tappable definition on the header, it reads as
+                  the disclosure it always was. `InfoTip` is a Radix POPOVER, so the definition
+                  opens on TAP — a hover-only tooltip would leave every phone reader with the
+                  original shock and no explanation. */}
+              <th className="px-3 py-2 text-right">
+                <InfoTip label={EXPECTED_POINTS_LABEL}>{GLOSSARY.expectedPoints}</InfoTip>
+              </th>
+              <th className="px-3 py-2 text-right">
+                <InfoTip label={PROJECTED_GAMES_LABEL}>{GLOSSARY.projectedGames}</InfoTip>
+              </th>
               <th className="px-3 py-2 text-right">ADP rank (pos)</th>
               <th className="px-3 py-2 text-right">ADP</th>
               <th className="px-3 py-2 text-right">Actual rank (pos)</th>
@@ -538,6 +579,12 @@ function TrackRecordTable({ rows }: { rows: TrackRecordRow[] }) {
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-300">{posRank(r.position, r.ourRank)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-400">{num(r.ourPoints)}</td>
+                {/* ⛔ `num()` on the raw value and NOTHING ELSE — no `?? 17`, no "assume a full
+                    season" default. `num` already renders an absent value as an em-dash, which is
+                    the honest render for an artifact published before this story: an invented
+                    games figure would make the points discount look accounted for on exactly the
+                    rows where we cannot account for it. */}
+                <td className="px-3 py-2 text-right tabular-nums text-gray-400">{num(r.projGames)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-300">{posRank(r.position, r.adpRank)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-400">{num(r.adp)}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-300">{posRank(r.position, r.actualRank)}</td>
@@ -657,6 +704,13 @@ export function FantasyTrackRecordPage() {
                 </p>
               )}
               <RankScatter rows={filteredRows} />
+              {/* ⭐ IMMEDIATELY ABOVE THE TABLE, deliberately. This is the only block on the page
+                  that explains the points column, and it is worth nothing to a reader who has
+                  already scrolled past it to the row that confused them. It also sits INSIDE the
+                  season block rather than beside the claim, so it renders on the pre-NF-TR1
+                  deploy-skew branch too — the label is not part of the claim and must not depend
+                  on one. */}
+              <ExpectedPointsNote />
               <TrackRecordTable rows={filteredRows} />
             </>
           )}

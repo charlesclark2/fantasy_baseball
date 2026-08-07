@@ -114,7 +114,17 @@ export interface TrackRecordRow {
   playerId: string
   playerName: string
   position: string
+  /** ⚠️ AN EXPECTED SEASON TOTAL, NOT AN "IF HE PLAYS EVERY WEEK" ONE. `projGames` below is the
+   *  availability factor already multiplied through it, which is why this number sits below a
+   *  healthy player's finished `actualPoints`. Label it (`EXPECTED_POINTS_LABEL`) wherever it is
+   *  rendered — unlabelled it reads as a broken model rather than as the disclosure it is. */
   ourPoints: number | null
+  /** Expected games played, out of seventeen — the factor `ourPoints` was scaled by.
+   *
+   *  ⚠️ OPTIONAL, because the artifact gains it only at the next `--publish` while the frontend
+   *  deploys on merge (NF-C0's skew, artifact-side). Render a missing value as an em-dash; ⛔ never
+   *  derive one from `ourPoints`, which would make the discount look explained when it is not. */
+  projGames?: number | null
   ourRank: number
   /** Null when NEITHER ADP source has this season at all — see `TrackRecordManifest.adpSourceBySeason`. */
   adp: number | null

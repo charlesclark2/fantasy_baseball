@@ -163,16 +163,25 @@ const CASES = [
     // denylist-clean, so no word-list can catch it; only an assertion naming the hedge can.
     detail: "Drops the could-be-luck clause while the measured interval still includes zero.",
     file: "e2e/fixtures/api/fantasy-nfl-track-record-manifest.json",
-    // ⚠️ ANCHORED ON THE FOLLOWING KEY, and the first attempt without that was a false GREEN worth
-    // recording: `headline` and `claim.lead` hold the IDENTICAL string (by design — `headline` is
-    // the lead, so every surface quoting it inherits the plain wording), `headline` comes first in
-    // the file, and `String.replace` with a string patches only the FIRST match. So the break
-    // edited the field nothing renders and the page kept its hedge. Trailing `"precise"` is what
-    // makes this anchor unique to the block the page actually reads.
+    // ⚠️ ANCHORED THROUGH TO THE FOLLOWING KEY, and the first attempt without that was a false
+    // GREEN worth recording: `headline` and `claim.lead` hold the IDENTICAL string (by design —
+    // `headline` is the lead, so every surface quoting it inherits the plain wording), `headline`
+    // comes first in the file, and `String.replace` with a string patches only the FIRST match. So
+    // the break edited the field nothing renders and the page kept its hedge. Trailing `"precise"`
+    // is what makes this anchor unique to the block the page actually reads.
+    //
+    // ⚠️ The anchor therefore has to span the CLOSING sentence too, which NF-TR1's own final
+    // reframe appended after this hedge — that is what silently STALED this case (it reported
+    // "anchor not found", i.e. an unproven clause, rather than failing loudly). Spanning it also
+    // keeps the break ISOLATED: the close survives, so `test…no_generated_block_ends_on_a_caveat`
+    // stays satisfied and only the hedge assertion can flip.
     from:
-      " It is small enough that it could just be luck \\u2014 we are not promising it repeats.\",\n" +
-      '    "precise"',
-    to: '",\n    "precise"',
+      " It is small enough that it could just be luck \\u2014 we are not promising it repeats." +
+      " The season-by-season and position-by-position detail is below, along with the players we" +
+      ' ranked furthest from where the crowd was drafting them.",\n    "precise"',
+    to:
+      " The season-by-season and position-by-position detail is below, along with the players we" +
+      ' ranked furthest from where the crowd was drafting them.",\n    "precise"',
     grep: "keeps its hedges",
   },
   {
@@ -257,6 +266,62 @@ const CASES = [
       ' consensus, and we do not claim it was.",\n',
     to: "",
     grep: "all six required disclosures",
+  },
+  {
+    id: "expected-points-label-reverted",
+    shipped: "the defect this story fixed — a projected-points column headed as a bare projection",
+    // The original state of the public track record: an availability-weighted EXPECTED total
+    // sitting unlabelled beside a real finished season, so the only reading available to a visitor
+    // was "the model is broken".
+    detail: "Puts the retired 'Our pts' heading back on the season table.",
+    file: "components/fantasy/track-record-page.tsx",
+    from: "                <InfoTip label={EXPECTED_POINTS_LABEL}>{GLOSSARY.expectedPoints}</InfoTip>",
+    to: "                Our pts",
+    grep: "headed as expected points",
+  },
+  {
+    id: "projected-games-invented",
+    shipped: "pre-emptive: a fabricated games figure on a payload that carries none",
+    // ⚠️ THE FAILURE MODE WITH THE WORST SHAPE, and the reason the deploy-skew test exists. The
+    // frontend deploys on merge; `projGames` only lands at the operator's post-merge `--publish`.
+    // A `?? 17`-style fallback would fill the gap with a confident, wrong number — making the
+    // points discount look accounted for on precisely the rows where we have nothing to account
+    // for it with, and reading as data rather than as a defect.
+    detail: "Falls back to a full season when the payload carries no projGames.",
+    file: "components/fantasy/track-record-page.tsx",
+    from: "{num(r.projGames)}",
+    to: "{num(r.projGames ?? 17)}",
+    grep: "no invented games figure",
+  },
+  {
+    id: "availability-overclaim",
+    shipped: "pre-emptive: the label absorbing a residual miscalibration",
+    // ⭐⭐ THE ONE THAT WOULD MAKE THIS STORY HARMFUL RATHER THAN MERELY INCOMPLETE. Availability
+    // carries most of the measured level shift and NOT all of it; the remainder is a real
+    // miscalibration with its own model story. Dropping the hedge turns an honest disclosure into
+    // a cover — a visible anomaly made invisible — which is strictly worse than the unlabelled
+    // number this story started from.
+    detail: "Deletes the 'not the only reason' sentence from the page's framing copy.",
+    file: "lib/fantasy-claim-copy.ts",
+    from:
+      " It is not the only reason a projection lands under a finished season, and we do not" +
+      " present it as one.",
+    to: "",
+    grep: "WITHOUT claiming it explains everything",
+  },
+  {
+    id: "definition-hover-only",
+    shipped: "pre-emptive: the definition becoming unreachable on a phone",
+    // Radix's Tooltip closes on pointerdown BY DESIGN, so a tap can never open one — a phone
+    // reader would meet the identical unexplained number this story exists to explain. ⭐ Note
+    // this case is only meaningful because the spec runs on the `mobile` (touch, hover-less)
+    // project: on desktop Chromium the popover opens from hover before the click lands, and a
+    // hover-only tooltip would pass.
+    detail: "Downgrades the column definition to a hover-only title attribute.",
+    file: "components/fantasy/track-record-page.tsx",
+    from: "                <InfoTip label={EXPECTED_POINTS_LABEL}>{GLOSSARY.expectedPoints}</InfoTip>",
+    to: "                <span title={GLOSSARY.expectedPoints}>{EXPECTED_POINTS_LABEL}</span>",
+    grep: "opens on TAP",
   },
   {
     id: "google-entry-missing",
