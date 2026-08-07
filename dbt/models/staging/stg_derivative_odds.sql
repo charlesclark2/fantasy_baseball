@@ -106,18 +106,26 @@ select
 
     json_extract_string(outcome, '$.name')                  as outcome_name,
     json_extract_string(outcome, '$.description')           as outcome_description,
-    json_extract_string(outcome, '$.price')::integer        as outcome_price_american,
+    -- INC-41 (2026-08-06) — bigint parse + plausibility bound. Identical defect and cure to
+    -- stg_oddsapi_odds (see the long note there): a vendor INT32_MIN price sentinel made a bare
+    -- `abs(...::integer)` raise OutOfRangeException and abort the whole W3pre build. This model
+    -- is in the SAME W3PRE_STG_MODELS list, so it is the same time bomb on a different feed —
+    -- fixed here even though the 08-06 blast came through mlb_odds_raw.
     case
-        when json_extract_string(outcome, '$.price')::integer >= 100
-            then (json_extract_string(outcome, '$.price')::integer / 100.0) + 1.0
-        when json_extract_string(outcome, '$.price')::integer = 0
+        when abs(try_cast(json_extract_string(outcome, '$.price') as bigint)) between 100 and 1000000
+            then try_cast(json_extract_string(outcome, '$.price') as bigint)::integer
+    end                                                     as outcome_price_american,
+    case
+        when abs(try_cast(json_extract_string(outcome, '$.price') as bigint)) not between 100 and 1000000
             then null
-        else (100.0 / abs(json_extract_string(outcome, '$.price')::integer)) + 1.0
+        when try_cast(json_extract_string(outcome, '$.price') as bigint) >= 100
+            then (try_cast(json_extract_string(outcome, '$.price') as bigint) / 100.0) + 1.0
+        else (100.0 / abs(try_cast(json_extract_string(outcome, '$.price') as bigint))) + 1.0
     end::double                                             as outcome_price_decimal,
     json_extract_string(outcome, '$.point')::double         as outcome_point
 
 from outcomes_flattened
-where json_extract_string(outcome, '$.price')::integer is not null
+where try_cast(json_extract_string(outcome, '$.price') as bigint) is not null
 
 {% else %}
 

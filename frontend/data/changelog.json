@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "fixed",
+        "text": "A game's projected total no longer appears to contradict itself. On the EV Tracker a game showed a projected total of 8.5 while its own detail page showed 7.4, which reads like one of them is wrong. Neither was. Those are two different models: the headline projection is our champion total-runs model, the one the over/under pick is priced against, while the \u201cPredictive distribution\u201d panel is built by a separate per-side run model that estimates each team's runs and adds them together. They usually land about a run apart, so the gap you saw was the normal disagreement between them \u2014 it only looked like a defect because both numbers were labelled \u201cProj.\u201d The panel's figure is now called \u201cDistribution mean\u201d and says outright that it comes from a different model, so an unequal pair reads as two honest estimates rather than a bug. Neither number is a bet recommendation."
+      },
+      {
+        "tag": "fixed",
         "text": "When you agree to our terms, we now make sure that agreement is actually recorded. It's worth explaining this one plainly, because nothing looked broken. Accepting the terms wrote a line to our records, and if that write failed — a momentary database hiccup, say — both halves of the system shrugged it off: the server reported success anyway, and the site never checked. That was a reasonable trade when every account was one we'd created by hand, and it stopped being reasonable the moment anyone could sign themselves up, because that record is the only evidence of what you agreed to and when. Three changes: a failed write is now an error rather than a silent shrug, the site retries, and if there's still no record on file you'll be asked to accept the terms the next time you open the site — with links to read them first — and you won't be able to skip past it. That last part also covers a handful of older accounts created before we asked at all. If you've already accepted, you'll never see any of this."
       },
       {
