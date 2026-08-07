@@ -15,6 +15,11 @@ name: Frontend E2E
 # run before merging). If protection is ever enabled, convert this to the `changes`-job + `if:`
 # pattern `ci.yml` already uses BEFORE adding it as required.
 
+# E9.63b — `push: dev` REMOVED. A frontend change was running this suite four times on identical
+# content (PR → `dev`, push → `dev`, PR `dev` → `main`, push → `main`); the push-to-`dev` run fires
+# seconds after its own PR run and carries no new information. What remains is one run per gate:
+# the story PR, the release PR, and one on `main` — which is the only one that describes what
+# Vercel actually deployed, so it stays.
 on:
   pull_request:
     branches: [main, dev]
@@ -22,11 +27,16 @@ on:
       - "frontend/**"
       - ".github/workflows/frontend_e2e.yml"
   push:
-    branches: [main, dev]
+    branches: [main]
     paths:
       - "frontend/**"
       - ".github/workflows/frontend_e2e.yml"
   workflow_dispatch:
+
+# Supersede a PR run when its branch moves on. PR-only: the `main` run records what shipped.
+concurrency:
+  group: frontend-e2e-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 defaults:
   run:
