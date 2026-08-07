@@ -341,10 +341,18 @@ const CASES = [
     // MLB pick card, with nothing telling a visitor arriving for fantasy they were in the right
     // place. Invisible to every other gate — a single-product page types, builds and renders
     // perfectly. Only a rendered check that BOTH doors exist can see it.
-    detail: "Drops the fantasy vertical, leaving a betting-only home page.",
-    file: "lib/home-copy.ts",
-    from: '    key: "fantasy",',
-    to: '    key: "fantasy-disabled",',
+    //
+    // ⚠️ THE FIRST BREAK WAS INERT AND THE SUITE CORRECTLY STAYED GREEN — worth recording, because
+    // it is the shape this whole harness exists to catch. Renaming the vertical's `key` changed
+    // nothing a visitor could see: both cards still rendered. Rendering only the FIRST vertical is
+    // a break that actually removes the door. It then exposed a REAL defect in the spec — the
+    // fantasy door was located by link text, which the `DISAGREEMENT_HOOK` block further down the
+    // page also matches, so it stood in for the deleted card. Both were fixed; a break that cannot
+    // change behaviour proves nothing about the test.
+    detail: "Renders only the first vertical, leaving a betting-only home page.",
+    file: "app/page.tsx",
+    from: "          {VERTICALS.map((v) => (",
+    to: "          {VERTICALS.slice(0, 1).map((v) => (",
     grep: "both doors go somewhere",
   },
   {

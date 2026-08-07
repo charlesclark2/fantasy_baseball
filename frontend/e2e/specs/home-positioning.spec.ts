@@ -92,11 +92,21 @@ test("both verticals get a first-class door, and both doors go somewhere", async
 
   // ⭐ THE LOAD-BEARING HALF. A page can NAME both products and still offer a door to only one —
   // which is the pre-E9.46 state almost exactly. Require a working entry point per vertical.
-  const fantasyDoor = page.getByRole("link", { name: /free rankings/i }).first()
+  //
+  // ⚠️ SCOPED TO THE VERTICAL CARDS BY `data-vertical`, and that is a correction rather than a
+  // style choice. The first cut located each door by its LINK TEXT, and the red-proof case that
+  // deletes the fantasy vertical stayed GREEN — because `DISAGREEMENT_HOOK`'s block further down
+  // the page links to the same route with a near-identical label, so it silently stood in for the
+  // hero card. A locator that another element can satisfy is not testing the element it names.
+  const fantasyCard = page.locator('[data-vertical="fantasy"]')
+  await expect(fantasyCard, "the fantasy vertical has no card in the hero").toBeVisible()
+  const fantasyDoor = fantasyCard.getByRole("link", { name: /free rankings/i })
   await expect(fantasyDoor, "no entry point into the fantasy product").toBeVisible()
   expect(await fantasyDoor.getAttribute("href")).toBe("/fantasy/rankings")
 
-  const bettingDoor = page.getByRole("link", { name: /model-vs-market read/i }).first()
+  const bettingCard = page.locator('[data-vertical="betting"]')
+  await expect(bettingCard, "the betting vertical has no card in the hero").toBeVisible()
+  const bettingDoor = bettingCard.getByRole("link", { name: /model-vs-market read/i })
   await expect(bettingDoor, "no entry point into the betting product").toBeVisible()
 
   // ⚠️ The betting CTA and the section it targets are two string literals in two files
@@ -119,8 +129,9 @@ test("neither door is buried — both render above the fold of the page's own he
   await mockApi(page)
   await gotoHome(page)
 
-  const bettingTop = await topOf(page.getByRole("link", { name: /model-vs-market read/i }))
-  const fantasyTop = await topOf(page.getByRole("link", { name: /free rankings/i }))
+  // Same scoping rule as above — the cards themselves, not a link label another block can supply.
+  const bettingTop = await topOf(page.locator('[data-vertical="betting"]'))
+  const fantasyTop = await topOf(page.locator('[data-vertical="fantasy"]'))
   const liveBlockTop = await topOf(page.locator("#today"))
 
   expect(

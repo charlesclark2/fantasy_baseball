@@ -90,8 +90,14 @@ function HeroSection() {
             that read as one product. */}
         <div className="mt-12 grid gap-4 md:grid-cols-2">
           {VERTICALS.map((v) => (
+            // `data-vertical` is a TEST HANDLE and is load-bearing, not decoration. The fantasy
+            // CTA label also appears further down the page (the `DISAGREEMENT_HOOK` block links to
+            // the same route), so a spec that located the door by its link text alone would go on
+            // passing with this entire card deleted — measured: the red-proof case that removes
+            // the fantasy vertical stayed GREEN until the spec was scoped to these attributes.
             <div
               key={v.key}
+              data-vertical={v.key}
               className="flex flex-col rounded-xl border border-[#262626] bg-[#141414]/80 p-6 backdrop-blur-sm transition-colors hover:border-[#10b981]/40 md:p-7"
             >
               <div className="flex items-center gap-2">
