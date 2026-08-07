@@ -1,0 +1,952 @@
+{
+  "generated_at": "2026-08-07T03:54:58+00:00",
+  "story": "NF-W1",
+  "smoke": true,
+  "evaluation_label_version": "v1.nflverse.stats_player_week",
+  "scoring_system_id": "ppr",
+  "selection_metric": "crps_q39",
+  "n_rows": 84553,
+  "n_folds": 2,
+  "fold_labels": [
+    "2025H1",
+    "2025H2"
+  ],
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 84553,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "preregistration": {
+    "real_arms": [
+      "lgbm_quantile",
+      "lgbm_hurdle",
+      "enet_residual",
+      "knn_quantile"
+    ],
+    "foils": [
+      "foil_flat",
+      "foil_matchup"
+    ],
+    "anchors": [
+      "nihilist_zero",
+      "pos_marginal",
+      "oracle_marginal",
+      "permuted_within",
+      "zero_width",
+      "max_width"
+    ],
+    "non_shippable": [
+      "foil_flat",
+      "foil_matchup",
+      "nihilist_zero",
+      "pos_marginal",
+      "oracle_marginal",
+      "permuted_within",
+      "zero_width",
+      "max_width"
+    ],
+    "test_blocks": [
+      [
+        2022,
+        1
+      ],
+      [
+        2022,
+        2
+      ],
+      [
+        2023,
+        1
+      ],
+      [
+        2023,
+        2
+      ],
+      [
+        2024,
+        1
+      ],
+      [
+        2024,
+        2
+      ],
+      [
+        2025,
+        1
+      ],
+      [
+        2025,
+        2
+      ]
+    ],
+    "purge_weeks": 2,
+    "pbo_max": 0.2,
+    "dsr_min": 0.95,
+    "fdr_q": 0.1,
+    "coverage_floor": 0.8,
+    "eb_kappa": 4.0,
+    "dvp_clip": [
+      0.75,
+      1.25
+    ],
+    "features": [
+      "game_context__is_home",
+      "game_context__div_game",
+      "game_context__week_index",
+      "game_context__days_since_last_game",
+      "prior_week_box__ppr_l1",
+      "prior_week_box__ppr_l4_mean",
+      "prior_week_box__ppr_ewm",
+      "prior_week_box__ppr_s2d_mean",
+      "prior_week_box__targets_l4",
+      "prior_week_box__carries_l4",
+      "prior_week_box__attempts_l4",
+      "prior_week_box__receptions_l4",
+      "prior_week_box__rec_yards_l4",
+      "prior_week_box__rush_yards_l4",
+      "prior_week_box__pass_yards_l4",
+      "prior_week_box__played_share_l4",
+      "prior_week_box__games_s2d",
+      "prior_week_box__ppr_sum_s2d",
+      "snap_share__l1",
+      "snap_share__l4_mean",
+      "snap_share__observed_l4",
+      "team_environment__pass_att_l4",
+      "team_environment__rush_att_l4",
+      "team_environment__ppr_l4",
+      "opponent_matchup__dvp_ppr_index_l8",
+      "opponent_matchup__def_ppr_allowed_l8",
+      "prior_season_priors__ppg_prior",
+      "prior_season_priors__games_prior",
+      "prior_season_priors__rookie_flag"
+    ],
+    "unused_allowed_families": [
+      "participation_proxies",
+      "pfr_advanced",
+      "ngs_qualifying",
+      "injury_report"
+    ],
+    "era_forbidden_tokens": [
+      "pressure",
+      "coverage",
+      "route",
+      "ngs_air_yards"
+    ]
+  },
+  "positions": {
+    "QB": {
+      "winner": "lgbm_hurdle",
+      "best_foil": "foil_flat",
+      "mean_crps": {
+        "foil_flat": 3.7977,
+        "foil_matchup": 3.8084,
+        "lgbm_quantile": 2.7349,
+        "lgbm_hurdle": 2.6912,
+        "enet_residual": 3.4438,
+        "knn_quantile": 2.7852,
+        "nihilist_zero": 6.5468,
+        "pos_marginal": 4.7415,
+        "oracle_marginal": 4.7324,
+        "permuted_within": 4.7687,
+        "zero_width": 5.2071,
+        "max_width": 5.2502
+      },
+      "mean_mae_report_only": {
+        "lgbm_hurdle": 3.5911,
+        "foil_flat": 4.7531,
+        "nihilist_zero": 6.5468
+      },
+      "deltas_by_fold": [
+        1.0719,
+        1.1411
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        26.068,
+        22.63,
+        10.606,
+        160.261
+      ],
+      "observed_sr": 22.63,
+      "var_trials_sr": 4978.47962,
+      "anchors": {
+        "nihilist_loses": true,
+        "pos_marginal_loses": true,
+        "permuted_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "oracle_marginal_beaten_by_winner": true
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8047,
+        "n_rows": 1372,
+        "binomial_se": 0.0108,
+        "blocking_shortfall": false
+      }
+    },
+    "RB": {
+      "winner": "lgbm_hurdle",
+      "best_foil": "foil_flat",
+      "mean_crps": {
+        "foil_flat": 2.9768,
+        "foil_matchup": 3.0357,
+        "lgbm_quantile": 2.459,
+        "lgbm_hurdle": 2.4417,
+        "enet_residual": 2.8518,
+        "knn_quantile": 2.553,
+        "nihilist_zero": 5.6416,
+        "pos_marginal": 3.8821,
+        "oracle_marginal": 3.8805,
+        "permuted_within": 3.9293,
+        "zero_width": 4.0984,
+        "max_width": 4.5142
+      },
+      "mean_mae_report_only": {
+        "lgbm_hurdle": 3.2707,
+        "foil_flat": 3.7268,
+        "nihilist_zero": 5.6416
+      },
+      "deltas_by_fold": [
+        0.5093,
+        0.5608
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        27.821,
+        14.67,
+        14.568,
+        8.657
+      ],
+      "observed_sr": 14.67,
+      "var_trials_sr": 65.57785,
+      "anchors": {
+        "nihilist_loses": true,
+        "pos_marginal_loses": true,
+        "permuted_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "oracle_marginal_beaten_by_winner": true
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8577,
+        "n_rows": 2144,
+        "binomial_se": 0.0086,
+        "blocking_shortfall": false
+      }
+    },
+    "WR": {
+      "winner": "lgbm_quantile",
+      "best_foil": "foil_flat",
+      "mean_crps": {
+        "foil_flat": 3.0364,
+        "foil_matchup": 3.0702,
+        "lgbm_quantile": 2.565,
+        "lgbm_hurdle": 2.5717,
+        "enet_residual": 2.928,
+        "knn_quantile": 2.6113,
+        "nihilist_zero": 5.196,
+        "pos_marginal": 3.5539,
+        "oracle_marginal": 3.535,
+        "permuted_within": 3.5692,
+        "zero_width": 4.3357,
+        "max_width": 4.7187
+      },
+      "mean_mae_report_only": {
+        "lgbm_quantile": 3.4793,
+        "foil_flat": 3.8565,
+        "nihilist_zero": 5.196
+      },
+      "deltas_by_fold": [
+        0.4966,
+        0.4462
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        13.234,
+        8.566,
+        2.327,
+        28.903
+      ],
+      "observed_sr": 13.234,
+      "var_trials_sr": 128.75658,
+      "anchors": {
+        "nihilist_loses": true,
+        "pos_marginal_loses": true,
+        "permuted_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "oracle_marginal_beaten_by_winner": true
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8279,
+        "n_rows": 3231,
+        "binomial_se": 0.007,
+        "blocking_shortfall": false
+      }
+    },
+    "TE": {
+      "winner": "lgbm_hurdle",
+      "best_foil": "foil_flat",
+      "mean_crps": {
+        "foil_flat": 2.2655,
+        "foil_matchup": 2.2924,
+        "lgbm_quantile": 1.878,
+        "lgbm_hurdle": 1.8676,
+        "enet_residual": 2.2024,
+        "knn_quantile": 1.9333,
+        "nihilist_zero": 3.7087,
+        "pos_marginal": 2.6858,
+        "oracle_marginal": 2.683,
+        "permuted_within": 2.6909,
+        "zero_width": 3.0544,
+        "max_width": 3.3282
+      },
+      "mean_mae_report_only": {
+        "lgbm_hurdle": 2.5105,
+        "foil_flat": 2.8177,
+        "nihilist_zero": 3.7087
+      },
+      "deltas_by_fold": [
+        0.3963,
+        0.3995
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        80.846,
+        175.834,
+        4.159,
+        8.874
+      ],
+      "observed_sr": 175.834,
+      "var_trials_sr": 6454.45937,
+      "anchors": {
+        "nihilist_loses": true,
+        "pos_marginal_loses": true,
+        "permuted_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "oracle_marginal_beaten_by_winner": true
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8779,
+        "n_rows": 1941,
+        "binomial_se": 0.0091,
+        "blocking_shortfall": false
+      }
+    }
+  },
+  "gates": {
+    "QB": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_beaten": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "RB": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_beaten": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "WR": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_beaten": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "TE": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_beaten": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    }
+  },
+  "fdr": {
+    "QB": false,
+    "RB": false,
+    "WR": false,
+    "TE": false
+  },
+  "null_states": {
+    "QB": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w1_weekly_crps_QB`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "RB": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w1_weekly_crps_RB`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "WR": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w1_weekly_crps_WR`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "TE": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w1_weekly_crps_TE`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    }
+  },
+  "component_head_sample": [
+    {
+      "gsis_id": "00-0023459",
+      "season": 2025,
+      "week": 10,
+      "position": "QB",
+      "proj_attempts": 35.729312491155085,
+      "proj_passing_yards": 244.41459627735222,
+      "proj_carries": 1.4966573887332453,
+      "proj_rushing_yards": 3.4536120311239986,
+      "proj_targets": 0.04841727114491175,
+      "proj_receptions": 0.0,
+      "proj_receiving_yards": 0.0
+    },
+    {
+      "gsis_id": "00-0024243",
+      "season": 2025,
+      "week": 10,
+      "position": "TE",
+      "proj_attempts": 0.0,
+      "proj_passing_yards": 0.0,
+      "proj_carries": 0.0,
+      "proj_rushing_yards": 0.0,
+      "proj_targets": 0.21903741906947657,
+      "proj_receptions": 0.1776447448545322,
+      "proj_receiving_yards": 1.7465303453603016
+    },
+    {
+      "gsis_id": "00-0026300",
+      "season": 2025,
+      "week": 10,
+      "position": "QB",
+      "proj_attempts": 0.8670604367317684,
+      "proj_passing_yards": 6.42285613832702,
+      "proj_carries": 0.19039831792815848,
+      "proj_rushing_yards": 0.5526322863322064,
+      "proj_targets": 0.0,
+      "proj_receptions": 0.0,
+      "proj_receiving_yards": 0.0
+    },
+    {
+      "gsis_id": "00-0026498",
+      "season": 2025,
+      "week": 10,
+      "position": "QB",
+      "proj_attempts": 32.74416600204958,
+      "proj_passing_yards": 269.8486009507889,
+      "proj_carries": 2.2302542863983326,
+      "proj_rushing_yards": 7.379379843099081,
+      "proj_targets": 0.05472076570933456,
+      "proj_receptions": 0.022532356903996263,
+      "proj_receiving_yards": 0.0
+    },
+    {
+      "gsis_id": "00-0027973",
+      "season": 2025,
+      "week": 10,
+      "position": "QB",
+      "proj_attempts": 1.9529815349142978,
+      "proj_passing_yards": 7.294459520095145,
+      "proj_carries": 0.14583550408883986,
+      "proj_rushing_yards": 0.0,
+      "proj_targets": 0.0,
+      "proj_receptions": 0.0,
+      "proj_receiving_yards": 0.020473084485060064
+    },
+    {
+      "gsis_id": "00-0028118",
+      "season": 2025,
+      "week": 10,
+      "position": "QB",
+      "proj_attempts": 4.344897828262755,
+      "proj_passing_yards": 26.07805487707368,
+      "proj_carries": 0.8019773924461957,
+      "proj_rushing_yards": 3.2677248200549163,
+      "proj_targets": 0.007815792437630727,
+      "proj_receptions": 0.04861799200334229,
+      "proj_receiving_yards": 0.6893711790413669
+    },
+    {
+      "gsis_id": "00-0028986",
+      "season": 2025,
+      "week": 10,
+      "position": "QB",
+      "proj_attempts": 1.070947513762584,
+      "proj_passing_yards": 6.521482906857394,
+      "proj_carries": 0.2055907811276435,
+      "proj_rushing_yards": 0.7805377562310062,
+      "proj_targets": 0.0,
+      "proj_receptions": 0.0,
+      "proj_receiving_yards": 0.009093251848697456
+    },
+    {
+      "gsis_id": "00-0029263",
+      "season": 2025,
+      "week": 10,
+      "position": "QB",
+      "proj_attempts": 1.929482184508209,
+      "proj_passing_yards": 15.795110093127569,
+      "proj_carries": 0.46838838067317207,
+      "proj_rushing_yards": 1.489293917659157,
+      "proj_targets": 0.24630164414450476,
+      "proj_receptions": 0.012520010700400689,
+      "proj_receiving_yards": 0.7770026449420946
+    }
+  ],
+  "ros_demo_sample": [
+    {
+      "gsis_id": "00-0034857",
+      "position": "QB",
+      "ros_mean": 174.83900204060026,
+      "n_weeks": 9,
+      "ros_q10": 133.79339390502065,
+      "ros_q90": 215.88461017617988
+    },
+    {
+      "gsis_id": "00-0038542",
+      "position": "RB",
+      "ros_mean": 163.2464705181025,
+      "n_weeks": 9,
+      "ros_q10": 120.5320005128071,
+      "ros_q90": 205.96094052339794
+    },
+    {
+      "gsis_id": "00-0039139",
+      "position": "RB",
+      "ros_mean": 160.337299083209,
+      "n_weeks": 9,
+      "ros_q10": 116.99594972653166,
+      "ros_q90": 203.67864843988633
+    },
+    {
+      "gsis_id": "00-0036389",
+      "position": "QB",
+      "ros_mean": 157.4193433108886,
+      "n_weeks": 9,
+      "ros_q10": 116.29318824421972,
+      "ros_q90": 198.54549837755746
+    },
+    {
+      "gsis_id": "00-0039918",
+      "position": "QB",
+      "ros_mean": 150.93667967100055,
+      "n_weeks": 9,
+      "ros_q10": 113.65299192357415,
+      "ros_q90": 188.22036741842695
+    },
+    {
+      "gsis_id": "00-0033106",
+      "position": "QB",
+      "ros_mean": 144.76191362258197,
+      "n_weeks": 9,
+      "ros_q10": 110.59733853374371,
+      "ros_q90": 178.92648871142023
+    },
+    {
+      "gsis_id": "00-0026498",
+      "position": "QB",
+      "ros_mean": 143.71863938298407,
+      "n_weeks": 9,
+      "ros_q10": 108.98378153577701,
+      "ros_q90": 178.45349723019112
+    },
+    {
+      "gsis_id": "00-0038543",
+      "position": "WR",
+      "ros_mean": 141.67539622818532,
+      "n_weeks": 9,
+      "ros_q10": 101.3401913883612,
+      "ros_q90": 182.01060106800944
+    }
+  ],
+  "fold_results": [
+    {
+      "label": "2025H1",
+      "scores": {
+        "foil_flat": {
+          "pooled": 2.995829738001109,
+          "mae_pooled": 3.800038597320938,
+          "QB": 3.8332578987656682,
+          "mae_QB": 4.8530244628861094,
+          "RB": 2.943012638398442,
+          "mae_RB": 3.7172847712538264,
+          "WR": 3.090255068915409,
+          "mae_WR": 3.9708580739462542,
+          "TE": 2.314926121504117,
+          "mae_TE": 2.875072251150036
+        },
+        "foil_matchup": {
+          "pooled": 3.0408121343298795,
+          "mae_pooled": 3.855716460859209,
+          "QB": 3.8797089258325745,
+          "mae_QB": 4.908812236391744,
+          "RB": 3.0080830993059267,
+          "mae_RB": 3.7925032364560662,
+          "WR": 3.120355603989338,
+          "mae_WR": 4.008960326548266,
+          "TE": 2.361591684448989,
+          "mae_TE": 2.9384657352278603
+        },
+        "lgbm_quantile": {
+          "pooled": 2.4387911692035233,
+          "mae_pooled": 3.262254225003346,
+          "QB": 2.7993551862115975,
+          "mae_QB": 3.715729789921075,
+          "RB": 2.4383834549718215,
+          "mae_RB": 3.23039287095372,
+          "WR": 2.593703964508825,
+          "mae_WR": 3.5081233838254353,
+          "TE": 1.930757887066278,
+          "mae_TE": 2.572762690216769
+        },
+        "lgbm_hurdle": {
+          "pooled": 2.4265960256246157,
+          "mae_pooled": 3.242321893156759,
+          "QB": 2.7613205093323594,
+          "mae_QB": 3.6579328842116703,
+          "RB": 2.433752038423495,
+          "mae_RB": 3.2222645220159065,
+          "WR": 2.587256274228976,
+          "mae_WR": 3.489450316346244,
+          "TE": 1.9186227811476781,
+          "mae_TE": 2.5640572143181037
+        },
+        "enet_residual": {
+          "pooled": 2.8505688327467356,
+          "mae_pooled": 3.58002790522958,
+          "QB": 3.5029978045322587,
+          "mae_QB": 4.3002002847539,
+          "RB": 2.82408822114387,
+          "mae_RB": 3.53083653632506,
+          "WR": 2.9490199135418047,
+          "mae_WR": 3.747883987133832,
+          "TE": 2.2625095992631867,
+          "mae_TE": 2.8542775235855222
+        },
+        "knn_quantile": {
+          "pooled": 2.5103271049091735,
+          "mae_pooled": 3.3807358402971213,
+          "QB": 2.8163613493064314,
+          "mae_QB": 3.8045752608047687,
+          "RB": 2.5538834099908256,
+          "mae_RB": 3.4328436911487756,
+          "WR": 2.654818753884401,
+          "mae_WR": 3.5848725916718456,
+          "TE": 2.0091958034718904,
+          "mae_TE": 2.6890269151138715
+        },
+        "nihilist_zero": {
+          "pooled": 5.330324976787373,
+          "mae_pooled": 5.330324976787373,
+          "QB": 6.952727272727274,
+          "mae_QB": 6.952727272727272,
+          "RB": 5.549868173258004,
+          "mae_RB": 5.5498681732580035,
+          "WR": 5.4426973275326285,
+          "mae_WR": 5.442697327532629,
+          "TE": 3.7748447204968945,
+          "mae_TE": 3.7748447204968945
+        },
+        "pos_marginal": {
+          "pooled": 3.703065238792467,
+          "mae_pooled": 5.138774373259053,
+          "QB": 4.962893438801636,
+          "mae_QB": 6.952727272727272,
+          "RB": 3.8509928050606015,
+          "mae_RB": 5.286967984934087,
+          "WR": 3.6543545919586933,
+          "mae_WR": 5.116159105034184,
+          "TE": 2.7464727265488134,
+          "mae_TE": 3.7535196687370607
+        },
+        "oracle_marginal": {
+          "pooled": 3.698555107670881,
+          "mae_pooled": 5.138611884865367,
+          "QB": 4.954364649012191,
+          "mae_QB": 6.952727272727272,
+          "RB": 3.8500504732242016,
+          "mae_RB": 5.286967984934087,
+          "WR": 3.6487337731669616,
+          "mae_WR": 5.11572405220634,
+          "TE": 2.7426816571110058,
+          "mae_TE": 3.7535196687370607
+        },
+        "permuted_within": {
+          "pooled": 3.728933364707874,
+          "mae_pooled": 5.094469037550373,
+          "QB": 5.019261546560702,
+          "mae_QB": 6.92658311423188,
+          "RB": 3.908100237883485,
+          "mae_RB": 5.268322471527043,
+          "WR": 3.6595085224091655,
+          "mae_WR": 5.030037598027785,
+          "TE": 2.7513134288102314,
+          "mae_TE": 3.7380397351231767
+        },
+        "zero_width": {
+          "pooled": 4.21948045583788,
+          "mae_pooled": 4.21948045583788,
+          "QB": 5.296045280679637,
+          "mae_QB": 5.296045280679637,
+          "RB": 4.190580135323615,
+          "mae_RB": 4.190580135323615,
+          "WR": 4.432354764789511,
+          "mae_WR": 4.432354764789511,
+          "TE": 3.1488825053349356,
+          "mae_TE": 3.1488825053349356
+        },
+        "max_width": {
+          "pooled": 4.439858840767571,
+          "mae_pooled": 5.074970604793249,
+          "QB": 5.282006338229197,
+          "mae_QB": 5.81067239071927,
+          "RB": 4.418537272441003,
+          "mae_RB": 4.887621025881756,
+          "WR": 4.749126031452503,
+          "mae_WR": 5.519506580869011,
+          "TE": 3.3632042082147873,
+          "mae_TE": 4.029474713428599
+        }
+      },
+      "n_train": 74849,
+      "n_test": 4308
+    },
+    {
+      "label": "2025H2",
+      "scores": {
+        "foil_flat": {
+          "pooled": 2.9435928697232945,
+          "mae_pooled": 3.6679301221898224,
+          "QB": 3.762092336772724,
+          "mae_QB": 4.653078374690547,
+          "RB": 3.0105097252992685,
+          "mae_RB": 3.73627709051896,
+          "WR": 2.982474352763892,
+          "mae_WR": 3.7421908685401606,
+          "TE": 2.2161693521574435,
+          "mae_TE": 2.760246762891996
+        },
+        "foil_matchup": {
+          "pooled": 2.968127890596658,
+          "mae_pooled": 3.6954839583342234,
+          "QB": 3.7370982548208493,
+          "mae_QB": 4.622176724744442,
+          "RB": 3.063297915264604,
+          "mae_RB": 3.794153779768293,
+          "WR": 3.0201129959918758,
+          "mae_WR": 3.786912217778175,
+          "TE": 2.2231617029423836,
+          "mae_TE": 2.767618304115435
+        },
+        "lgbm_quantile": {
+          "pooled": 2.385476497201589,
+          "mae_pooled": 3.2138017132998136,
+          "QB": 2.67053567113826,
+          "mae_QB": 3.554116376330312,
+          "RB": 2.4795596316026782,
+          "mae_RB": 3.3350641142752,
+          "WR": 2.5362928005800445,
+          "mae_WR": 3.4504212084923633,
+          "TE": 1.8252216495795996,
+          "mae_TE": 2.440916259102828
+        },
+        "lgbm_hurdle": {
+          "pooled": 2.3756283334161234,
+          "mae_pooled": 3.2205550444527584,
+          "QB": 2.621007297515122,
+          "mae_QB": 3.5242419656649555,
+          "RB": 2.449668630649712,
+          "mae_RB": 3.319209784108528,
+          "WR": 2.556187084403569,
+          "mae_WR": 3.4825236460403857,
+          "TE": 1.8166657185014805,
+          "mae_TE": 2.456922191270783
+        },
+        "enet_residual": {
+          "pooled": 2.806439962362822,
+          "mae_pooled": 3.52040660990524,
+          "QB": 3.3846499581827247,
+          "mae_QB": 4.124908069447072,
+          "RB": 2.8794511288075904,
+          "mae_RB": 3.6067728380938204,
+          "WR": 2.907076632478982,
+          "mae_WR": 3.6897296682341314,
+          "TE": 2.1422799950895866,
+          "mae_TE": 2.7082570892402877
+        },
+        "knn_quantile": {
+          "pooled": 2.4356552559711977,
+          "mae_pooled": 3.285125570776256,
+          "QB": 2.75412992428399,
+          "mae_QB": 3.674251069900143,
+          "RB": 2.552158118275748,
+          "mae_RB": 3.4158317929759705,
+          "WR": 2.5678351299440387,
+          "mae_WR": 3.4963748458692976,
+          "TE": 1.857498748191979,
+          "mae_TE": 2.5088717948717956
+        },
+        "nihilist_zero": {
+          "pooled": 5.042835616438356,
+          "mae_pooled": 5.0428356164383565,
+          "QB": 6.140941512125534,
+          "mae_QB": 6.140941512125534,
+          "RB": 5.733271719038817,
+          "mae_RB": 5.733271719038816,
+          "WR": 4.9493958076448825,
+          "mae_WR": 4.9493958076448825,
+          "TE": 3.6425641025641027,
+          "mae_TE": 3.6425641025641027
+        },
+        "pos_marginal": {
+          "pooled": 3.5534086845802597,
+          "mae_pooled": 4.876922374429224,
+          "QB": 4.520184201141227,
+          "mae_QB": 6.140941512125534,
+          "RB": 3.913267927389924,
+          "mae_RB": 5.429205175600739,
+          "WR": 3.4535113345347623,
+          "mae_WR": 4.749519112207151,
+          "TE": 2.625158596318212,
+          "mae_TE": 3.5671794871794873
+        },
+        "oracle_marginal": {
+          "pooled": 3.538867505268704,
+          "mae_pooled": 4.864479452054795,
+          "QB": 4.510422857456382,
+          "mae_QB": 6.140941512125534,
+          "RB": 3.910919480781079,
+          "mae_RB": 5.426432532347506,
+          "WR": 3.4211848738499477,
+          "mae_WR": 4.722392108508015,
+          "TE": 2.623237442472058,
+          "mae_TE": 3.5594871794871796
+        },
+        "permuted_within": {
+          "pooled": 3.572847304917189,
+          "mae_pooled": 4.823310069020306,
+          "QB": 4.518061283047781,
+          "mae_QB": 6.199159775163792,
+          "RB": 3.9505151686998388,
+          "mae_RB": 5.31598604420685,
+          "WR": 3.4788303774091345,
+          "mae_WR": 4.671567448813419,
+          "TE": 2.6305537963384134,
+          "mae_TE": 3.5398028698584043
+        },
+        "zero_width": {
+          "pooled": 4.037489274321218,
+          "mae_pooled": 4.037489274321218,
+          "QB": 5.118069434111164,
+          "mae_QB": 5.118069434111164,
+          "RB": 4.006220556107543,
+          "mae_RB": 4.006220556107543,
+          "WR": 4.239019868504584,
+          "mae_WR": 4.239019868504584,
+          "TE": 2.9600158767099605,
+          "mae_TE": 2.9600158767099605
+        },
+        "max_width": {
+          "pooled": 4.4432091841709935,
+          "mae_pooled": 5.17047664594885,
+          "QB": 5.218314146998128,
+          "mae_QB": 5.71078436473902,
+          "RB": 4.609925188437176,
+          "mae_RB": 5.449718075558826,
+          "WR": 4.688236087831962,
+          "mae_WR": 5.458528801623612,
+          "TE": 3.293292329508511,
+          "mae_TE": 3.9929222518828342
+        }
+      },
+      "n_train": 79307,
+      "n_test": 4380
+    }
+  ],
+  "verdict": {
+    "QB": "UNDEFINED",
+    "RB": "UNDEFINED",
+    "WR": "UNDEFINED",
+    "TE": "UNDEFINED"
+  },
+  "headline": "QB:UNDEFINED \u00b7 RB:UNDEFINED \u00b7 WR:UNDEFINED \u00b7 TE:UNDEFINED"
+}
