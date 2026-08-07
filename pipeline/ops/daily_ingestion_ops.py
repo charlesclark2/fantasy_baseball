@@ -2,12 +2,13 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from datetime import date, timedelta
 
 from dagster import HookContext, In, MetadataValue, Nothing, Out, failure_hook, op
 
 from betting_ml.utils.game_day import current_game_date, current_game_date_iso  # INC-22 — canonical US baseball-day
-from pipeline.ops._dbt_exec import _run_dbt
+from pipeline.ops._dbt_exec import _run_dbt, capture_dbt_results, load_dbt_results
 
 SCRIPTS_DIR = "/app/scripts"
 APP_DIR = "/app"
@@ -1424,7 +1425,24 @@ def dbt_daily_build(context):
     args = _dbt_daily_build_args()
     if args[0] != "build":
         # run days: source_status-aware incremental rebuild, no test gate.
-        _run_dbt(context, args, use_state=True)
+        #
+        # INC-41: these days DO execute tests even though this branch says "no test gate" — the
+        # dbt-runner rewrites a use_state invocation to `build --select source_status:fresher+
+        # config.materialized:view`, and `build` runs each selected model's tests. So the results
+        # are captured here too; the selection is narrower than the full suite, not absent.
+        run_ref: dict = {}
+        started_at = time.time()
+        try:
+            _run_dbt(context, args, use_state=True, run_ref=run_ref)
+        finally:
+            # capture_dbt_results never raises, so on this HALT-tier branch it can neither convert
+            # a dbt failure into a different one nor mask it. Note the asymmetry with build days:
+            # this branch has NO try/except, so an error-severity test failure exit-1s the whole
+            # op — which already pages CRITICAL through run_failure_alert_sensor, and skips the
+            # pager along with everything else downstream. The capture is still taken here so the
+            # artifact exists if that ever changes; the pager's real job is on BUILD days, where
+            # the failure is deliberately swallowed and nothing else would ever report it.
+            capture_dbt_results(context, run_ref, started_at)
         return
     # build days (Sunday --full-refresh + every-3rd midweek): split models from tests
     # so a peripheral data-quality failure never blocks predictions. INC-6 (2026-06-21):
@@ -1437,12 +1455,24 @@ def dbt_daily_build(context):
     if "--target" in args:
         idx = args.index("--target")
         target_args = args[idx : idx + 2]
+    # INC-41 — the step is still WARN-tier and still never fails this op (do NOT regress INC-6).
+    # What changes is only that its RESULTS are now carried forward: `check_dbt_test_results_op`
+    # reads them downstream and pages if a `severity: error` (serving-critical) contract is red.
+    # Before this, a red contract was caught here, logged, and surfaced days later in CI to
+    # whoever opened the next PR — the detection existed, the notification did not (INC-41).
+    test_ref: dict = {}
+    test_started_at = time.time()
     try:
-        _run_dbt(context, ["test"] + target_args, use_state=False)
+        _run_dbt(context, ["test"] + target_args, use_state=False, run_ref=test_ref)
     except Exception as exc:
         context.log.warning(
             f"[dbt test] non-blocking suite had failures — predictions are NOT blocked:\n{exc}"
         )
+    finally:
+        # MUST be in `finally`: dbt exits non-zero precisely WHEN an error-severity test fails
+        # (measured — a warn-severity failure exits 0), so the failure path is the one that
+        # matters most. Capturing only on success would page on nothing but the clean runs.
+        capture_dbt_results(context, test_ref, test_started_at)
 
 
 # ── Epic O.2 — Sub-model signal generation ───────────────────────────────────
@@ -2470,6 +2500,96 @@ def check_artifact_freshness_op(context):
     the off-cycle `artifact_freshness_job`, which runs the same check on the writer's own cadence
     between daily runs. See `_run_artifact_freshness_check` for the full rationale."""
     _run_artifact_freshness_check(context)
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def check_dbt_test_results_op(context):
+    """INC-41 — page when a SERVING-CRITICAL dbt test goes red.
+
+    WHY THIS EXISTS. The daily dbt test step is WARN-tier and non-blocking, and that is correct:
+    INC-6 (2026-06-21) had one bad StatsAPI bio row exit-1 the Sunday build and block every
+    prediction, so `dbt_daily_build` splits the model `run` (HALT) from the `test` suite
+    (WARN-continue). The price of that split is that a `not_null` failure on a serving-critical
+    contract surfaces DAYS later in CI, to whoever opens the next PR. In INC-41 the test WORKED —
+    it went red on the nulled odds price — and nobody was told. The detector existed; the page
+    did not. That is E11.30 one layer over: here the detector is not even an op, it is a dbt test
+    whose non-zero exit is deliberately swallowed.
+
+    ⛔ IT DOES NOT RE-RUN THE TESTS. It reads the `target/run_results.json` the daily suite
+    already produced. Re-running would double the suite AND resume COMPUTE_WH — a new waker, on a
+    warehouse where ~80% of the credit burn is wake/idle (E11.20-COST) and the E11.24 soak is
+    live. This op touches no warehouse: it is an HTTP GET against the in-cluster dbt-runner (or a
+    file read on the local fallback) plus a manifest read from the image. SF-free by construction.
+
+    ⛔ AND IT NEVER GATES PREDICTIONS. ALERT-tier (E11.7): page loud, continue, always. There is
+    no strict escalation. It fans out from `dbt_daily_build` and nothing depends on it, so it
+    cannot fail the job or withhold a slate — regressing INC-6 to fix INC-41 would be a bad trade.
+
+    THE KEY IS THE CONFIGURED SEVERITY, NOT THE STATUS. The repo already marks serving-critical
+    contracts `severity: error` and peripheral checks `severity: warn`, so "which failure matters"
+    needs no new registry. Status alone is NOT a safe proxy: measured against dbt-fusion, a test
+    that cannot EXECUTE reports `status: "error"` whatever its severity, so a status-keyed pager
+    would page CRITICAL every time a peripheral test broke — the alert fatigue that gets a monitor
+    muted. Severity comes from the manifest; see betting_ml.monitoring.dbt_test_results.
+
+    All policy lives in that module (import-safe, unit-testable without the dbt manifest, per
+    E11.23); this op only loads the captured artifact and pages on its verdict.
+    """
+    from betting_ml.monitoring.dbt_test_results import (
+        STATE_NOT_RUN,
+        classify,
+        dedup_key,
+        load_severity_map,
+        page_decision,
+    )
+
+    payload = load_dbt_results(context)
+    if payload is None:
+        # No artifact for THIS Dagster run. `dbt_daily_build` always writes one (capture never
+        # raises), so this means the write itself failed — unverified, never healthy (NF1.7 (a)).
+        payload = {"available": False, "tested": True,
+                   "reason": "no dbt result artifact was written for this run"}
+
+    # The manifest is baked into the image at build time (`dbtf parse` in the Dockerfile) and the
+    # dbt-runner ships the SAME commit's dbt project, so the severities here and the results there
+    # describe one project state by construction. A missing manifest is not fatal: severity then
+    # falls back to what the status can prove, and anything unresolvable is reported at WARN
+    # rather than silently promoted to a page.
+    severity_map = load_severity_map(os.path.join(DBT_DIR, "target", "manifest.json"))
+    if not severity_map:
+        context.log.warning(
+            "[dbt test results] no dbt manifest severities could be loaded — failing tests that "
+            "cannot be classified will be reported at WARN rather than as serving-critical"
+        )
+
+    verdict = classify(payload, severity_map)
+    context.add_output_metadata({
+        "dbt_tests_state": MetadataValue.text(verdict.state),
+        "dbt_tests_selected": MetadataValue.int(verdict.tests_total),
+        "dbt_tests_error_severity_failing": MetadataValue.int(len(verdict.error_severity)),
+        "dbt_tests_warn_severity_failing": MetadataValue.int(len(verdict.warn_severity)),
+    })
+
+    severity, message = page_decision(verdict)
+    if severity is None:
+        # Clean, or warn-severity-only failures: the digest goes to the step log, never the inbox.
+        # That silence is the point of the severity split, not an oversight.
+        context.log.info("[dbt test results] " + message)
+        if verdict.state == STATE_NOT_RUN:
+            context.log.info(
+                "[dbt test results] no tests ran in this invocation — this is a routine cadence "
+                "(the daily job only runs the full suite on build days), NOT an unverified run."
+            )
+        return
+
+    context.log.warning("[ALERT] " + message)
+    from pipeline.utils.alerting import send_alert
+    subject = (
+        "Serving-critical dbt test is RED (severity: error)"
+        if verdict.error_severity
+        else "dbt test results are UNVERIFIED for this run"
+    )
+    send_alert(subject, message, severity=severity, dedup_key=dedup_key(verdict))
 
 
 @op(out=Out(Nothing))
