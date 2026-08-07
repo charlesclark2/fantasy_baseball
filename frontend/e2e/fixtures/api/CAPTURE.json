@@ -1,6 +1,6 @@
 {
   "captured_from": "https://api.credencesports.com",
-  "captured_at": "2026-08-07T03:18:53.693Z",
+  "captured_at": "2026-08-07T05:49:23.200Z",
   "how": "node e2e/fixtures/capture-fixtures.mjs",
   "anonymous": true,
   "files": [
@@ -38,6 +38,13 @@
       "bytes": 77873,
       "sha256_16": "7ebe1be6c77f2099",
       "note": "Public past-season track record. REAL, UNLOCKED model output — the honest 'a real payload renders real numbers' fixture."
+    },
+    {
+      "file": "subscription-public-pricing.json",
+      "url": "https://api.credencesports.com/subscription/public-pricing",
+      "bytes": 206,
+      "sha256_16": "813bdbb756e99e1f",
+      "note": "Public price (E9.59). Read server-side from the Stripe Price object Checkout charges against — so this capture is the number a logged-out visitor actually sees. ⚠️ Stripe TEST mode until E9.8-P2; the amount will change at the live flip and this fixture should be re-captured then."
     }
   ]
 }

@@ -59,21 +59,18 @@ browser receives.
 all live in the gap between what we *assume* the payload looks like and what the server actually
 sends, so a hand-written fixture encodes the assumption under test.
 
-Two fixtures are not captures, and each says so in its own `__provenance__` / header.
+`subscription-public-pricing.json` (E9.59) was synthetic for one day — the route did not exist in
+production until the operator added its API-Gateway `NONE` route, so there was nothing to capture.
+It is a **real capture since 2026-08-07** and the synthetic file is deleted. Two notes on it:
 
-`subscription-public-pricing.synthetic.json` (E9.59) is synthetic because
-`GET /subscription/public-pricing` **does not exist in production yet** — it ships with E9.59 and
-needs an operator API-Gateway route before it will answer anonymously, so there is nothing to
-capture. The rule it would otherwise break ("a hand-written fixture encodes the assumption under
-test") is closed from the other side instead: `betting_ml/tests/test_e9_59_public_pricing.py`
-asserts the fixture's key set equals `PublicPricing.model_fields` **exactly**, so a backend shape
-change fails the Python gate rather than drifting quietly away from this file. Its amount is
-`1234` ($12.34) rather than the real $10/$20 on purpose — a realistic value would let a page that
-hardcodes its price still render something plausible. **Replace it with a real capture once the
-route is live** (add it to `capture-fixtures.mjs`; it is deliberately not listed there yet, because
-a target that 404s makes `npm run e2e:capture` exit non-zero for no useful reason).
+- It is pinned to the backend model — `betting_ml/tests/test_e9_59_public_pricing.py` asserts its
+  key set **equals** `PublicPricing.model_fields`. A capture is a snapshot and goes stale silently;
+  that test is what turns "the API grew a field" into a red build instead of a suite passing
+  against a shape that no longer occurs.
+- ⚠️ It records the Stripe **TEST-mode** price. Re-capture at the E9.8-P2 live flip.
 
-The other is `fantasy-nfl-projections-2026-entitled.synthetic.json`. There is no public unlocked form of the
+One fixture is still generated rather than captured —
+`fantasy-nfl-projections-2026-entitled.synthetic.json`. There is no public unlocked form of the
 current season to capture (every past season's `projections.json` 404s), and the entitled payload
 *is* the paid product, which does not belong in the repo. `build-entitled-fixture.mjs` derives it
 from the real locked capture, filling exactly the fields the server's own computed `lockedFields`

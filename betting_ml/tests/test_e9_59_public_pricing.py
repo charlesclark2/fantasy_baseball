@@ -414,34 +414,36 @@ def test_no_display_price_constant_survives_in_the_router():
 # ── The E2E fixture's shape is pinned to the model, not hand-maintained ──────
 
 
+_FIXTURE = (
+    Path(__file__).resolve().parents[2]
+    / "frontend/e2e/fixtures/api/subscription-public-pricing.json"
+)
+
+
 def test_the_e2e_fixture_matches_the_response_model_exactly():
-    """⭐ `frontend/e2e/README.md` forbids hand-written fixtures, because one encodes the
-    assumption under test. E9.59's public-pricing fixture has to be synthetic (the route is
-    not live in prod, so it cannot be captured) — so the rule is enforced from this side
-    instead: the fixture's key set must EQUAL `PublicPricing`'s fields. A backend that adds,
-    removes or renames a field fails here, which is what stops the fixture from quietly
-    describing a payload the server no longer sends.
+    """⭐ The E2E fixture is a VERBATIM CAPTURE of this endpoint in production (E9.59b — it was
+    synthetic only while the route was un-deployed). A capture is a snapshot, though, and it
+    goes stale silently: nothing else in the repo notices when the API grows a field and a
+    fixture recorded months earlier keeps describing the old payload, which is how an E2E
+    suite ends up green against a shape that no longer occurs.
 
-    Note `==`, not `<=`: a MISSING key matters as much as an extra one. A fixture short a
-    field lets the E2E suite pass against a payload the real page would render incomplete."""
-    fixture_path = (
-        Path(__file__).resolve().parents[2]
-        / "frontend/e2e/fixtures/api/subscription-public-pricing.synthetic.json"
-    )
-    fixture = json.loads(fixture_path.read_text())
-    keys = {k for k in fixture if not k.startswith("__")}
-    assert keys == set(billing.PublicPricing.model_fields), (
-        "the E2E public-pricing fixture has drifted from PublicPricing — update "
-        f"{fixture_path.name} (or capture it for real, now that the route is live)"
+    So this pins the capture to the model. Note `==`, not `<=`: a MISSING key matters as much
+    as an extra one — a fixture short a field lets the E2E suite pass against a payload the
+    real page would render incomplete."""
+    fixture = json.loads(_FIXTURE.read_text())
+    assert set(fixture) == set(billing.PublicPricing.model_fields), (
+        "the E2E public-pricing capture has drifted from PublicPricing — re-capture it with "
+        "`npm run e2e:capture` (frontend/)"
     )
 
 
-def test_the_e2e_fixture_amount_is_not_a_real_price():
-    """The fixture's $12.34 is load-bearing: a page that hardcodes $10 or $20 would still
-    render a plausible number against a realistic fixture, and the E2E `transform` test that
-    exists to catch exactly that would pass."""
-    fixture_path = (
-        Path(__file__).resolve().parents[2]
-        / "frontend/e2e/fixtures/api/subscription-public-pricing.synthetic.json"
-    )
-    assert json.loads(fixture_path.read_text())["unit_amount"] not in (1000, 2000)
+def test_the_e2e_fixture_is_a_well_formed_price():
+    """Cheap shape check on the captured VALUES, not just the keys. A capture taken against a
+    misconfigured Stripe (a tiered Price, a blank product) would otherwise be pinned in as
+    the reference payload and quietly become what the suite considers correct."""
+    fixture = json.loads(_FIXTURE.read_text())
+    assert isinstance(fixture["unit_amount"], int) and fixture["unit_amount"] > 0
+    assert fixture["currency"] and fixture["interval"]
+    assert fixture["product_name"]
+    assert fixture["tier"] in {"founding", "standard"}
+    assert fixture["founding_slots_remaining"] >= 0
