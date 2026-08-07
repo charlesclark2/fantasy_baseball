@@ -19,7 +19,8 @@
 // interval includes zero (NF-D17: [-0.006, +0.051]) the first thing a visitor read. Now:
 //
 //    1. `CalibrationLead`   — what the product IS. Static copy, NO measured figure, from
-//                             `lib/fantasy-claim-copy.ts` so E9.46's hero reuses it verbatim.
+//                             `lib/fantasy-claim-copy.ts` — the SAME `PRODUCT_HOOK` the marketing surfaces
+//                             pitch, so the two renders cannot drift into two promises.
 //    2. `ClaimLead`         — the plain-English record, `claim.lead`, rendered verbatim.
 //    3. `PositionTable`     — every position's own gap, VISIBLE rather than buried, so the
 //                             running-back wash is legible without expanding anything.
@@ -54,7 +55,7 @@ import type {
   TrackRecordRow,
 } from "@/lib/fantasy-track-record"
 import {
-  CALIBRATION_HOOK,
+  PRODUCT_HOOK,
   LEGACY_CLAIM_NOTE,
   METHOD_DISCLOSURE_LABEL,
 } from "@/lib/fantasy-claim-copy"
@@ -88,7 +89,7 @@ function CalibrationLead() {
         What you get
       </h2>
       <dl className="grid gap-4 sm:grid-cols-2">
-        {CALIBRATION_HOOK.map((item) => (
+        {PRODUCT_HOOK.map((item) => (
           <div key={item.title}>
             <dt className="text-sm font-semibold text-gray-100">{item.title}</dt>
             <dd className="mt-1 text-[13px] leading-relaxed text-gray-400">{item.detail}</dd>
@@ -577,9 +578,13 @@ export function FantasyTrackRecordPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
+      {/* NF-TR1: the blurb used to open on "model rank vs. that season's ADP", i.e. it made the
+          benchmark comparison the first thing above the calibration block and quietly broke the
+          page's own ordering rule at the very top. It now says what the page IS — the graded
+          record, wins and losses both — and leaves the comparison to the claim block below it. */}
       <SurfaceHeader
         title="Track Record"
-        blurb="Our past-season fantasy projections, graded against what actually happened — model rank vs. that season's ADP vs. the realized finish. The full picture, wins and losses both."
+        blurb="How our past-season fantasy projections actually did, graded player by player against what happened. Every season we have, wins and losses both — and you can read it without an account."
       />
 
       {manifestLoading && <LoadingBlock label="Loading the track record…" />}

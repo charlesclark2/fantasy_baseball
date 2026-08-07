@@ -37,6 +37,13 @@ _SCORECARD_JSON = _REPORTS / "nf_d3_benchmark_scorecard_nf1_5.json"
 _UNCERTAINTY_JSON = _REPORTS / "nf_d17_track_record_population.json"
 _CLAIM_COPY_TS = _REPO / "frontend/lib/fantasy-claim-copy.ts"
 _BROWSER_DENYLIST_TS = _REPO / "frontend/e2e/support/claim-denylist.ts"
+_UPGRADE_BANNER_TSX = _REPO / "frontend/components/fantasy/shared.tsx"
+_SUBSCRIBE_TSX = _REPO / "frontend/app/subscribe/page.tsx"
+
+#: The MARKETING surfaces — the ones that must LINK to the track record and never quote its number.
+#: Named as a registry rather than checked one-off so adding a surface to the product is a
+#: deliberate act: a new marketing page that forgets to appear here is the hole this guards.
+_MARKETING_SURFACES = (_UPGRADE_BANNER_TSX, _SUBSCRIBE_TSX)
 _TRACK_RECORD_TSX = _REPO / "frontend/components/fantasy/track-record-page.tsx"
 _E2E_MANIFEST = _REPO / "frontend/e2e/fixtures/api/fantasy-nfl-track-record-manifest.json"
 
@@ -235,6 +242,147 @@ def test_the_page_never_promotes_a_legacy_headline_into_the_lead():
             f"and must render as fine print (LegacyClaim), never as the lead"
         )
     assert "<LegacyClaim " in src, "the no-claim branch must still render the legacy string somewhere"
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# AC 3 — the marketing surfaces LINK to the track record; they never quote its number
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#: The claim block's fields. A marketing surface rendering ANY of them has quoted the measurement.
+_STAT_EXPRESSIONS = (
+    "receipts.headline", "manifest.headline", ".claim.lead", ".claim.precise",
+    "claim?.lead", "claim?.precise", "deltaRho", "usRho", "benchmarkRho", "ciLow", "ciHigh",
+)
+
+
+def test_the_marketing_surfaces_do_not_quote_the_track_record_stat():
+    """⭐ THE REFRAME, AS A MECHANICAL RULE. The track record is a TRUST LINK, not the sell.
+
+    The measurement is a +0.022 gap whose own 90% interval includes zero, so stated truthfully on a
+    conversion surface it must arrive wrapped in four hedges and close on "it could just be luck".
+    That persuades nobody AND informs nobody — the caveats only mean something beside the position
+    table and the interval that explain them. So a marketing surface links; it does not quote.
+
+    ⚠️ Source-inspection, so comments are stripped first (INC-38): every one of these files
+    DISCUSSES the fields at length in prose, and a raw substring search would be satisfied by the
+    very comment explaining why the field must not be rendered."""
+    for path in _MARKETING_SURFACES:
+        src = _strip_ts_comments(path.read_text())
+        hits = [e for e in _STAT_EXPRESSIONS if e in src]
+        assert not hits, (
+            f"{path.name} renders the track-record measurement {hits} — a marketing surface links "
+            f"to the record, it does not quote it"
+        )
+
+
+#: What an actual anchor to the record looks like in JSX. ⚠️ Deliberately the BINDING, not the
+#: identifier: `"TRACK_RECORD_TRUST_LINK" in src` is satisfied by an import that nothing renders,
+#: which is the vacuous form this clause shipped in first.
+_TRUST_LINK_BINDINGS = ('href={TRACK_RECORD_TRUST_LINK.href}', 'href="/fantasy/track-record"')
+
+
+def test_the_marketing_surfaces_link_to_the_track_record():
+    """The other half, and the half that makes the rule above safe rather than merely quieter.
+
+    Deleting the quotation without leaving a route to the evidence would be the dishonest way to
+    pass the previous clause: the skeptical visitor must still be one click from the whole
+    measurement.
+
+    ⚠️ SCOPE — this proves a link is BOUND, not that it RESOLVES. A constant repointed at "#" is
+    invisible to any source scan (the E9.56c dead-`/pricing` class), so the destination is proved
+    by navigation instead: `track-record-claim.spec.ts`'s "the trust link reaches a Track Record
+    page that actually renders" clicks it and asserts the page comes up. Neither check implies the
+    other and both are required."""
+    for path in _MARKETING_SURFACES:
+        src = _strip_ts_comments(path.read_text())
+        assert any(b in src for b in _TRUST_LINK_BINDINGS), (
+            f"{path.name} neither quotes the track record nor links to it — the evidence is now "
+            f"unreachable from this surface"
+        )
+
+
+def test_the_marketing_surfaces_lead_with_league_personalisation_and_decision_support():
+    """AC 3's positive half: what they lead with INSTEAD.
+
+    The wedge is a board computed for the reader's OWN scoring (not converted from a generic one),
+    and the paid half is decision support — "free tells you what Credence thinks; paid helps you
+    decide". Asserted on the FIRST item, because a wedge buried at position four is not a wedge."""
+    literals = _ts_string_literals(_CLAIM_COPY_TS.read_text())
+    first_hook = next(s for s in literals if "league" in s.lower())
+    assert "your league" in first_hook.lower(), first_hook
+
+    banner = _strip_ts_comments(_UPGRADE_BANNER_TSX.read_text())
+    assert "DECISION_SUPPORT_LINE" in banner, (
+        "the upgrade banner does not render the decision-support line — with the stat quotation "
+        "gone it would be an ask with nothing behind it"
+    )
+
+    perks = _strip_ts_comments(_SUBSCRIBE_TSX.read_text()).split("PERKS = [", 1)[1].split("]", 1)[0]
+    first_perk = re.findall(r'"((?:[^"\\]|\\.)*)"', perks)[0]
+    assert "your league" in first_perk.lower(), (
+        f"/subscribe's first perk is not the league-personalisation wedge: {first_perk!r}"
+    )
+
+
+def test_the_consensus_reference_on_marketing_surfaces_is_a_hook_not_a_boast():
+    """⭐ ADP AS CONTENT. "Where we differ from the crowd and why" is a reason to click and is true
+    whichever side of the gap we are on. "We beat consensus" is a claim — and a small one whose
+    interval includes zero. The denylist catches the crude forms; this catches the comparative
+    VERDICT words that would turn the hook back into a boast without tripping any banned phrase."""
+    literals = _ts_string_literals(_CLAIM_COPY_TS.read_text())
+    hook = next(s for s in literals if "furthest from" in s)
+    for verdict in ("better", "beat", "outperform", "ahead of", "smarter", "sharper", "right more"):
+        assert verdict not in hook.lower(), (
+            f"the consensus hook asserts a verdict ({verdict!r}) instead of pointing at content: {hook!r}"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# AC 5 — no user-facing block ENDS on a caveat
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#: Phrases that mark a sentence as a hedge rather than as information.
+_CAVEAT_MARKERS = ("could just be luck", "not a guarantee", "not promising", "no better than",
+                   "not a promise", "we do not lead", "is a wash")
+
+
+def _final_sentence(text: str) -> str:
+    return [s for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s][-1]
+
+
+def test_no_generated_block_ends_on_a_caveat():
+    """⛔ AC 5. Every hedge stays — this is about the LAST thing a reader is left holding.
+
+    A block that stops on its own disclaimer reads as an apology, and the Track Record page's job
+    is to earn trust with the evidence attached, not to trail off. Note what this does NOT permit:
+    it cannot be satisfied by deleting a caveat, because the hedge clauses above each have their
+    own test. The only way to pass both is to keep the hedge AND close on something informative."""
+    claim = ex.build_claim(_scorecard(), _uncertainty())
+    for label in ("lead", "precise", "method", "architecture"):
+        last = _final_sentence(claim[label]).lower()
+        hits = [m for m in _CAVEAT_MARKERS if m in last]
+        assert not hits, f"the {label} block ends on a caveat {hits}: {last!r}"
+
+
+def test_the_lead_closes_by_pointing_at_the_evidence():
+    """The positive form of the rule above — a block can also stop being a caveat by being cut.
+
+    So name the close: the lead must end by sending the reader to the detail that makes the hedges
+    meaningful (the per-season/per-position split and the disagreement view), which is also the
+    honest use of a draft-market comparison."""
+    claim = ex.build_claim(_scorecard(), _uncertainty())
+    last = _final_sentence(claim["lead"]).lower()
+    assert "detail is below" in last, last
+    assert "furthest from where the crowd" in last, last
+
+
+def test_the_lead_still_carries_every_hedge_before_it_closes():
+    """⭐ THE PAIRING THAT MAKES AC 5 SAFE. "Do not end on a caveat" has a trivially wrong reading —
+    delete the caveats — and it is the reading that would quietly restore the overclaim this whole
+    story exists to remove. Asserted together, in one place, so the trade is visible: all four
+    hedges present, none of them last."""
+    lead = ex.build_claim(_scorecard(), _uncertainty())["lead"].lower()
+    for hedge in ("the gap is small", "year to year", "basically even", "could just be luck"):
+        assert hedge in lead, f"the lead dropped the hedge {hedge!r} while satisfying AC 5"
+    assert not _final_sentence(lead).startswith("it is small enough")
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

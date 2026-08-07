@@ -520,7 +520,18 @@ def _build_lead(*, span: str, n_seasons: int, gap: float, could_be_luck: bool,
         hedge += " It is small enough that it could just be luck — we are not promising it repeats."
     else:
         hedge += " It is a record of what already happened, not a promise about next season."
-    return " ".join([hook, record, hedge])
+    # ⛔ THE BLOCK MUST NOT END ON THE CAVEAT (NF-TR1 AC 5). The hedges are non-negotiable and every
+    # one of them is above this line — but a paragraph that STOPS on "it could just be luck" leaves
+    # a reader with a disclaimer as the last thing they read, and this page's job is to earn trust,
+    # not to apologise. So it closes by pointing at the evidence that makes the caveats meaningful:
+    # the per-season and per-position detail, and the disagreement view that is the genuinely
+    # interesting use of a draft-market comparison. That is a CLOSE, not a walk-back — it adds no
+    # claim and softens none of the four hedges above it.
+    close = (
+        "The season-by-season and position-by-position detail is below, along with the players we "
+        "ranked furthest from where the crowd was drafting them."
+    )
+    return " ".join([hook, record, hedge, close])
 
 
 def _build_precise(*, span: str, n_seasons: int, us: float, them: float, gap: float,

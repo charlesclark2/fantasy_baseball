@@ -17,6 +17,11 @@ import type { LeagueConfigMeta, Manifest } from "@/lib/draft-optimizer"
 import { marketLeaningPositions } from "@/lib/fantasy"
 import type { ProjectedPlayer } from "@/lib/fantasy"
 import { useTrackRecordManifest } from "@/lib/fantasy-track-record"
+import {
+  DECISION_SUPPORT_LINE,
+  DISAGREEMENT_HOOK,
+  TRACK_RECORD_TRUST_LINK,
+} from "@/lib/fantasy-claim-copy"
 
 export const POS_COLORS: Record<string, string> = {
   QB: "text-rose-400 bg-rose-500/10 border-rose-500/30",
@@ -197,30 +202,38 @@ export function UpgradeBanner({
   season?: number | null
   upgrade?: { reason?: string; message?: string; ctaHref?: string } | null
 }) {
-  // E9.56b — LEAD WITH THE RECEIPTS, not with the ask.
+  // E9.56b — LEAD WITH SOMETHING, not with the ask.
   //
   // The locked view is, by necessity, the MARKET's board with our numbers removed: E9.56's
   // anti-scrape rule re-orders locked rows onto ADP precisely so the array index cannot reconstruct
   // our ranking. So the page a free visitor lands on cannot argue for itself — on its own it reads
   // as an ADP clone with padlocks, which is a weak thing to ask money for.
   //
-  // What CAN argue for it is already public and already measured: the NF3.2 track record (six
-  // seasons of our projection vs that season's preseason ADP vs the realized outcome). Rendering
-  // its headline VERBATIM keeps this honest — the claim is computed by
-  // `export_track_record_json.build_claim` from the scorecard's own numbers, so it cannot drift
-  // into marketing copy, and it respects the NF-D3 claim-scope rule at the top of this file (this
-  // is a projection product; it never asserts a win rate or an edge).
+  // ⭐⭐ NF-TR1 REVERSED WHAT IT LEADS WITH (operator 2026-08-07, GROWTH-100). E9.56b answered that
+  // by rendering the track-record headline verbatim, i.e. by making a MEASURED STATISTIC the
+  // pitch. That is the wrong instrument on this surface, for a reason that has nothing to do with
+  // honesty and everything to do with what a banner can carry: the measurement is a +0.022 gap
+  // whose own 90% interval INCLUDES ZERO (NF-D17), so stated truthfully it must arrive wrapped in
+  // four hedges and CLOSE on "it could just be luck". A conversion surface that ends on its own
+  // disclaimer persuades nobody — and it informs nobody either, because the caveats only mean
+  // something beside the table, the position split and the interval that explain them.
   //
-  // ⭐ NF-TR1 — THIS SURFACE NEEDED NO EDIT, AND THAT IS WHY THE FIELD KEPT ITS NAME. `headline` is
-  // now the plain-English CONSUMER LEAD, which opens on what the product gives you (calibrated
-  // points, a range, your league's scoring) and reaches the benchmark comparison second, already
-  // hedged. So this banner became calibration-led — the acceptance criterion — the moment the
-  // artifact republished, with zero client change and no frontend/artifact deploy-order hazard.
-  // Had NF-TR1 introduced a new field instead, this banner would have gone on quoting the old
-  // un-hedged sentence until someone remembered it existed (the NF-C0 skew class).
+  // So the division of labour is now explicit, and it is the whole point:
+  //   · THIS BANNER sells the PRODUCT — a board built for the reader's own league scoring, and the
+  //     decision support that is the paid half. Consensus appears only as CONTENT (`DISAGREEMENT_
+  //     HOOK`: where we differ from the crowd and why), never as a boast.
+  //   · THE TRACK RECORD PAGE carries every hedge, where a reader who opted in meets them with the
+  //     evidence attached and they build trust instead of repelling.
+  //   · The connection between them is a LINK, not a quotation.
   //
-  // Degrades cleanly: the manifest is a public endpoint, but if it is slow or fails we simply show
-  // the ask without the evidence rather than blocking the CTA.
+  // ⛔ DO NOT RENDER `receipts.headline`, `claim.lead` OR `claim.precise` HERE. That is not style —
+  // `test_nf_tr1_claim_copy.py::test_the_marketing_banner_does_not_quote_the_track_record_stat`
+  // fails the build on it, and the Playwright suite checks the rendered DOM as well.
+  //
+  // The manifest is still read, for ONE thing: how many seasons the record covers. That is a
+  // description of the LINK's destination ("across 6 past seasons"), not a performance figure —
+  // it says how much there is to read, not how well we did. Degrades cleanly: if the public
+  // endpoint is slow or fails, the link loses its season count and nothing else.
   const { data: receipts } = useTrackRecordManifest()
   const seasonCount = receipts?.seasons?.length ?? 0
 
@@ -234,19 +247,15 @@ export function UpgradeBanner({
           </svg>
           <p className="text-sm text-amber-200/90">
             {upgrade?.message ?? `Subscribe to unlock the ${season ?? ""} projections.`}{" "}
-            <span className="text-amber-200/60">
-              {seasonCount > 0
-                ? `Every past season stays free — including how these projections actually did across ${seasonCount} of them.`
-                : "Past seasons stay free, including how these projections have actually done."}
-            </span>
+            <span className="text-amber-200/60">{DECISION_SUPPORT_LINE}</span>
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <a
-            href="/fantasy/track-record"
+            href={TRACK_RECORD_TRUST_LINK.href}
             className="rounded-md border border-amber-500/40 px-3 py-1.5 text-sm font-medium text-amber-200 transition-colors hover:bg-amber-500/10"
           >
-            See the track record
+            {TRACK_RECORD_TRUST_LINK.label}
           </a>
           <a
             href={resolveUpgradeHref(upgrade?.ctaHref)}
@@ -257,13 +266,26 @@ export function UpgradeBanner({
         </div>
       </div>
 
-      {/* E9.56c — this is option (a)'s whole point ("lead with the track record"), so it cannot be
-          the smallest, dimmest text in its own box. Nudged up from 12px/70% opacity. */}
-      {receipts?.headline && (
-        <p className="mt-2.5 border-t border-amber-500/20 pt-2.5 text-[13px] leading-relaxed text-amber-200/85">
-          {receipts.headline}
-        </p>
-      )}
+      {/* The second line is a REASON TO CLICK, not a summary of the finding — the moment a
+          marketing surface summarises the measurement it has quoted the stat, hedges and all.
+          `DISAGREEMENT_HOOK` is true whichever side of the gap we are on, which is exactly what
+          makes it usable here and a superiority claim not.
+
+          It closes on the invitation, never on a caveat (AC 5). The season count is the size of
+          what there is to read; if the public manifest has not resolved, the sentence simply
+          stands without it. */}
+      <p className="mt-2.5 border-t border-amber-500/20 pt-2.5 text-[13px] leading-relaxed text-amber-200/85">
+        {DISAGREEMENT_HOOK}{" "}
+        <a
+          href={TRACK_RECORD_TRUST_LINK.href}
+          className="font-medium text-amber-200 underline underline-offset-4 hover:text-amber-100"
+        >
+          {seasonCount > 0
+            ? `Free, across ${seasonCount} past seasons`
+            : "Free, across every past season"}
+        </a>
+        .
+      </p>
     </div>
   )
 }

@@ -33,6 +33,9 @@ REPO = Path(__file__).resolve().parents[2]
 EXPORT = REPO / "quant_sports_intel_models/football/nfl/fantasy/export_track_record_json.py"
 PAGE = REPO / "frontend/components/fantasy/track-record-page.tsx"
 FIXTURE = REPO / "frontend/e2e/fixtures/api/fantasy-nfl-track-record-manifest.json"
+BANNER = REPO / "frontend/components/fantasy/shared.tsx"
+SUBSCRIBE = REPO / "frontend/app/subscribe/page.tsx"
+COPY = REPO / "frontend/lib/fantasy-claim-copy.ts"
 SUITE = "betting_ml/tests/test_nf_tr1_claim_copy.py"
 
 CASES = [
@@ -62,8 +65,8 @@ CASES = [
      "test_the_approved_sentence_is_withdrawn_when_the_shape_changes"),
 
     ("put the benchmark comparison ahead of the calibration hook", EXPORT,
-     'return " ".join([hook, record, hedge])',
-     'return " ".join([record, hedge, hook])',
+     'return " ".join([hook, record, hedge, close])',
+     'return " ".join([record, hedge, hook, close])',
      "test_calibration_leads_the_consumer_lead"),
 
     ("drop the governance term 'market-beating' from the export denylist", EXPORT,
@@ -100,6 +103,43 @@ CASES = [
      "              <PositionTable rows={manifest.claim.byPosition} />\n",
      "",
      "test_the_position_table_reaches_the_rendered_page"),
+
+    # ── the GROWTH-100 reframe: the track record is a trust LINK, not the pitch ────────────────
+    ("recite the measurement on the marketing banner", BANNER,
+     "        {DISAGREEMENT_HOOK}{\" \"}",
+     "        {receipts?.claim?.lead}{\" \"}",
+     "test_the_marketing_surfaces_do_not_quote_the_track_record_stat"),
+
+    # ⚠️ Broken on /subscribe, not on the banner, and the reason matters: the banner carries TWO
+    # bindings (the CTA and the hook line), so removing one is not a defect and the guard correctly
+    # stayed green when this case first tried it. /subscribe has exactly one — removing it really
+    # does strand the evidence on that surface.
+    ("strand the evidence — remove /subscribe's only link to the record", SUBSCRIBE,
+     'href="/fantasy/track-record"',
+     'href="/fantasy/projections"',
+     "test_the_marketing_surfaces_link_to_the_track_record"),
+
+    ("bury the league-personalisation wedge below a generic feature line", SUBSCRIBE,
+     '  "NFL fantasy rankings built for YOUR league — your scoring, your roster, your format",\n'
+     '  "Full-season projections with an 80% range, so you can see how sure we are",',
+     '  "Full-season projections with an 80% range, so you can see how sure we are",\n'
+     '  "NFL fantasy rankings, your scoring, your roster, your format",',
+     "test_the_marketing_surfaces_lead_with_league_personalisation_and_decision_support"),
+
+    ("turn the consensus hook back into a boast", COPY,
+     "  \"See the players we rank furthest from where the crowd is drafting them",
+     "  \"See the players we rank better than the crowd, furthest from where they are drafting them",
+     "test_the_consensus_reference_on_marketing_surfaces_is_a_hook_not_a_boast"),
+
+    ("let the plain lead stop on its own disclaimer", EXPORT,
+     '    return " ".join([hook, record, hedge, close])',
+     '    return " ".join([hook, record, hedge])',
+     "test_no_generated_block_ends_on_a_caveat"),
+
+    ("close the lead by deleting the caveats instead of adding a close", EXPORT,
+     '        hedge += " It is small enough that it could just be luck — we are not promising it repeats."',
+     '        hedge += ""',
+     "test_the_lead_still_carries_every_hedge_before_it_closes"),
 ]
 
 
@@ -112,7 +152,7 @@ def run(test_name):
 
 
 def main():
-    backups = {p: p.read_text() for p in {EXPORT, PAGE, FIXTURE}}
+    backups = {p: p.read_text() for p in {EXPORT, PAGE, FIXTURE, BANNER, SUBSCRIBE, COPY}}
     failures = []
     try:
         # sanity: everything green before we break anything

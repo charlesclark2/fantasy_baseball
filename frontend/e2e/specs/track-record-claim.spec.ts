@@ -82,6 +82,16 @@ test.describe("public Track Record — NF-TR1 claim governance", () => {
     expect(lead.toLowerCase(), "the lead dropped the could-be-luck hedge while the measured " +
       "interval still includes zero").toContain("could just be luck")
 
+    // ⛔ …and it must not STOP there. Every hedge above stays; what changes is what the reader is
+    // left holding. A block that ends on its own disclaimer reads as an apology, and this page's
+    // job is to earn trust with the evidence attached. Asserted BESIDE the hedges, in the same
+    // test, so the trade is visible: the trivially-wrong way to pass this line is to delete a
+    // caveat, and the four assertions above forbid exactly that.
+    expect(
+      lead.trim().toLowerCase(),
+      "the plain lead ends on a caveat instead of pointing at the evidence below it",
+    ).toMatch(/detail is below[^.]*crowd was drafting them\.$/)
+
     expectApiFullyMocked(mock)
   })
 
@@ -177,5 +187,84 @@ test.describe("public Track Record — NF-TR1 claim governance", () => {
 
     expectApiFullyMocked(mock)
     expectNoPageErrors(errors)
+  })
+})
+
+/**
+ * ⭐ THE OTHER HALF OF THE REFRAME — the MARKETING surface.
+ *
+ * The Track Record page is the destination a skeptical visitor opts into, and every hedge lives
+ * there. The locked board is where a visitor ARRIVES, and it must sell the product: a board built
+ * for their league, plus the decision support that is the paid half. It links to the record; it
+ * does not recite it.
+ *
+ * ⚠️ Both halves need their own test and neither implies the other. A page can quote the stat
+ * while still linking (the pre-NF-TR1 state), and a page can drop the quotation while ALSO losing
+ * the link — which passes any "no forbidden claim" scan and leaves the evidence unreachable.
+ */
+test.describe("locked board — the track record is a trust LINK, not the pitch", () => {
+  const STAT_FRAGMENTS = [
+    "modestly outperformed",
+    "could just be luck",
+    "rank correlation",
+    "0.517",
+    "0.494",
+    "+0.022",
+  ]
+
+  test("the upgrade banner sells the product and does not recite the measurement", async ({
+    page,
+  }) => {
+    const errors = collectPageErrors(page)
+    const mock = await mockApi(page)
+
+    await page.goto("/fantasy/projections")
+    await expect(page.locator("table tbody tr").first()).toBeVisible()
+
+    const text = await renderedText(page)
+    for (const fragment of STAT_FRAGMENTS) {
+      expect(
+        text,
+        `the locked board recites the track-record measurement (${fragment}) — that belongs on ` +
+          "the page that can show its working, not on a conversion surface",
+      ).not.toContain(fragment)
+    }
+
+    // What it says instead: the wedge, and the paid half stated as decision support.
+    expect(text.toLowerCase(), "the banner does not state the free/paid division of labour")
+      .toContain("helps you decide")
+    expect(text.toLowerCase(), "the consensus reference is not framed as content")
+      .toContain("furthest from where the crowd")
+
+    expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
+  test("the trust link reaches a Track Record page that actually renders", async ({ page }) => {
+    // A link is only trust-building if it lands somewhere real — and this is the exact shape of
+    // E9.56c's dead `/pricing` CTA, one surface over.
+    const mock = await mockApi(page)
+    await page.goto("/fantasy/projections")
+
+    const link = page.getByRole("link", { name: "See the track record" }).first()
+    await expect(link).toBeVisible()
+    await link.click()
+
+    await expect(page).toHaveURL(/\/fantasy\/track-record$/)
+    await expect(page.getByText("What you get")).toBeVisible()
+    await expect(page.locator("table tbody tr").first()).toBeVisible()
+
+    expectApiFullyMocked(mock)
+  })
+
+  test("the locked board makes no forbidden market or edge claim", async ({ page }) => {
+    const mock = await mockApi(page)
+    await page.goto("/fantasy/projections")
+    await expect(page.locator("table tbody tr").first()).toBeVisible()
+
+    const hits = forbiddenPhrasesIn(await renderedText(page))
+    expect(hits, `the locked board renders forbidden claim language: ${hits.join(", ")}`).toEqual([])
+
+    expectApiFullyMocked(mock)
   })
 })

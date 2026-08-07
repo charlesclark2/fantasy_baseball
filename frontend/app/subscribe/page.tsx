@@ -25,16 +25,21 @@ import {
 // free visitors here, so the single largest inbound cohort was landing on a list of five MLB
 // betting features with no mention of the fantasy product they had just been paywalled out of.
 //
-// NF-TR1 — CALIBRATION LEADS HERE TOO. The first line used to be a feature list ("projections,
-// rankings & draft tools"), which says what you can click rather than what you are buying. The
-// product's actual claim is a calibrated point with an honest range in YOUR league's scoring, and
-// that has to be the first thing on the page a padlock sends you to — the benchmark comparison
-// stays where it belongs, on the track-record page linked at the bottom, with its interval beside
-// it. ⛔ Do not add a performance figure to this list: a number here has no measurement next to it
-// and cannot be reconciled against the scorecard (the E9.56b/NF-D3 rule).
+// NF-TR1 — THE WEDGE LEADS HERE (GROWTH-100). The first line used to be a feature list
+// ("projections, rankings & draft tools"), which says what you can click rather than what you are
+// buying. The acquisition wedge is league PERSONALISATION — a board computed for the reader's own
+// scoring rather than converted from a generic one — followed by the honest range and then by
+// DECISION SUPPORT, which is what the paid half actually adds ("free tells you what Credence
+// thinks; paid helps you decide").
+//
+// ⛔ NO PERFORMANCE FIGURE AND NO CONSENSUS CLAIM IN THIS LIST. A number here has no measurement
+// beside it and cannot be reconciled against the scorecard (the E9.56b/NF-D3 rule), and the
+// track-record finding is a small gap whose interval includes zero — it belongs on the page that
+// can show its working, which is linked at the bottom as a TRUST link rather than quoted here.
 const PERKS = [
-  "Full-season NFL fantasy projections with an 80% range, scored for your league's rules",
-  "Draft board, rankings & draft-day tools built on those projections",
+  "NFL fantasy rankings built for YOUR league — your scoring, your roster, your format",
+  "Full-season projections with an 80% range, so you can see how sure we are",
+  "Draft board, trade and waiver calls, and start/sit — the decisions, not just the numbers",
   "Daily model picks across every MLB slate",
   "Full EV tracker + line-movement history",
   "Pitcher strikeout projections & prop edges",
