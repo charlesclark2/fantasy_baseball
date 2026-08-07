@@ -204,6 +204,42 @@ test.describe("public Track Record — the points column is labelled as EXPECTED
     expectApiFullyMocked(mock)
   })
 
+  test("the fade badge still renders on ONE line now the table has grown a column", async ({
+    page,
+  }) => {
+    // ⚠️ A REGRESSION THIS STORY CAUSED, reported from the merged build. Adding the projected-games
+    // column squeezed the last column, and the browser broke "fade · push" at the "·" — drawing
+    // the chip's border around two lines whose second one is the GRADE, i.e. the half that carries
+    // the meaning. Nothing failed; it just looked broken.
+    //
+    // ⭐ ASSERTED AS GEOMETRY, NOT AS A CLASS NAME. `toHaveClass("whitespace-nowrap")` would be a
+    // restatement of the fix — it stays green for any OTHER way the badge starts wrapping (a
+    // longer grade word, a narrower column, a font change) and green if the class is present but
+    // overridden. The observable property is "it occupies one line", so that is what is measured:
+    // one line of 10px text in this chip is ~21px, two are ~36px, and 28 sits clear of both.
+    const errors = collectPageErrors(page)
+    const mock = await mockApi(page)
+    await gotoTrackRecord(page)
+
+    const badges = seasonTable(page).locator("tbody tr span", { hasText: /^fade · / })
+    const count = await badges.count()
+    expect(count, "no graded fade badge on the page — this assertion would be vacuous")
+      .toBeGreaterThan(0)
+
+    for (let i = 0; i < count; i++) {
+      const box = await badges.nth(i).boundingBox()
+      expect(box, "a fade badge is not laid out").not.toBeNull()
+      expect(
+        box!.height,
+        `a fade badge wrapped onto two lines (${box!.height}px) — its grade is on a second line ` +
+          "inside the chip border",
+      ).toBeLessThan(28)
+    }
+
+    expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
   test("an artifact published before this story still renders, with no invented games figure", async ({
     page,
   }) => {
