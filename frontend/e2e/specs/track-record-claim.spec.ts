@@ -96,6 +96,13 @@ test.describe("public Track Record — NF-TR1 claim governance", () => {
     await expect(table).toBeVisible()
     const rbRow = table.locator("tbody tr", { hasText: "RB" })
     await expect(rbRow).toContainText("too close to call")
+    // ⚠️ And it must carry NO direction sign. The measured value is `-0.0`, and `-0.0 >= 0` is
+    // true in JavaScript — so the natural formatter renders a wash as "+0.000", putting a plus in
+    // front of the one row this story requires be legible as a wash.
+    expect(
+      (await rbRow.innerText()).replace(/RB/g, ""),
+      "the level position renders a direction sign it has not earned",
+    ).not.toMatch(/[+−-]\s*0/)
 
     await expectNoNaN(page)
     expectApiFullyMocked(mock)

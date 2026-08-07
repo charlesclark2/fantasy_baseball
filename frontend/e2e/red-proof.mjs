@@ -140,6 +140,66 @@ const CASES = [
     grep: "absent, not fatal",
   },
   {
+    id: "claim-leads-the-page",
+    shipped: "NF-TR1 — pre-emptive: the page leading with the ADP comparison",
+    // ⚠️ NOT a previously-shipped defect. It is the PRE-NF-TR1 state of the page, and the reason
+    // the story is LAUNCH-GATING: leading with a +0.022 gap whose own 90% interval includes zero
+    // (NF-D17) makes a result that might be nothing into the product's headline promise. Nothing
+    // else can see it — `tsc` types a reordered JSX tree fine, the copy itself is unchanged and
+    // still passes every denylist, and any "the claim is visible" assertion passes either way.
+    // Only a geometric read of the rendered page can tell "shows the hook" from "leads with it".
+    detail: "Removing the calibration block puts the benchmark comparison first, as it was before.",
+    file: "components/fantasy/track-record-page.tsx",
+    from: "      <CalibrationLead />\n",
+    to: "",
+    grep: "calibration leads",
+  },
+  {
+    id: "unhedged-plain-lead",
+    shipped: "NF-TR1 — pre-emptive: the punchier lead with the hedge removed",
+    // The specific failure the operator's readability constraint creates. Rewriting an analyst
+    // sentence for a casual reader is the right call AND is exactly the edit during which
+    // "it could just be luck" gets dropped for sounding weak. The remaining copy is still
+    // denylist-clean, so no word-list can catch it; only an assertion naming the hedge can.
+    detail: "Drops the could-be-luck clause while the measured interval still includes zero.",
+    file: "e2e/fixtures/api/fantasy-nfl-track-record-manifest.json",
+    // ⚠️ ANCHORED ON THE FOLLOWING KEY, and the first attempt without that was a false GREEN worth
+    // recording: `headline` and `claim.lead` hold the IDENTICAL string (by design — `headline` is
+    // the lead, so every surface quoting it inherits the plain wording), `headline` comes first in
+    // the file, and `String.replace` with a string patches only the FIRST match. So the break
+    // edited the field nothing renders and the page kept its hedge. Trailing `"precise"` is what
+    // makes this anchor unique to the block the page actually reads.
+    from:
+      " It is small enough that it could just be luck \\u2014 we are not promising it repeats.\",\n" +
+      '    "precise"',
+    to: '",\n    "precise"',
+    grep: "keeps its hedges",
+  },
+  {
+    id: "legacy-headline-promoted-to-lead",
+    shipped: "NF-TR1 — pre-emptive: the deploy-skew fallback that looks defensive",
+    // `frontend/` auto-deploys on merge; the artifact only grows its `claim` block at the
+    // operator's post-merge `--publish`. A `claim?.lead ?? headline` fallback is the natural
+    // defensive edit and would put the OLD un-hedged sentence back in the lead for the whole
+    // window — with every test that uses the NEW fixture still green, because that fixture HAS a
+    // claim block. Only the spec that strips it can see this.
+    detail: "The pre-NF-TR1 `headline` renders as the lead instead of as fine print.",
+    file: "components/fantasy/track-record-page.tsx",
+    // ⚠️ THE BREAK MUST LIFT `ClaimLead` OUT OF THE `manifest.claim ?` BRANCH, and the first
+    // attempt that only added the `?? headline` fallback in place was INERT — a false GREEN.
+    // Inside the true branch `claim` is non-null by construction, so the fallback can never fire,
+    // and on the no-claim render the component is not mounted at all. The defect only exists when
+    // the lead is hoisted ABOVE the guard, which is exactly the shape this file shipped in its
+    // first draft. A break that cannot change behaviour proves nothing about the test.
+    from:
+      "          {manifest.claim ? (\n            <>\n" +
+      "              <ClaimLead lead={manifest.claim.lead} />",
+    to:
+      "          <ClaimLead lead={manifest.claim?.lead ?? manifest.headline} />\n" +
+      "          {manifest.claim ? (\n            <>",
+    grep: "still leads with calibration",
+  },
+  {
     id: "google-entry-missing",
     shipped: "E9.58 — a signup entry point with no working Google button",
     detail: "The DNS-dead-host outage presented to the user as exactly this: no way through.",

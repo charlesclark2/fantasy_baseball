@@ -159,6 +159,17 @@ function verdictWord(verdict: string): string {
     : "too close to call"
 }
 
+/** A measured gap, signed — EXCEPT on a position the export called level.
+ *
+ *  ⚠️ `-0.0 >= 0` is `true` in JS, so the obvious ternary prints running back's measured `-0.0` as
+ *  "+0.000": a plus sign on a wash, in the one row the story requires be legible as a wash. A gap
+ *  the export refuses to give a direction to must not be rendered with one. */
+function gapText(deltaRho: number, verdict: string): string {
+  const magnitude = Math.abs(deltaRho).toFixed(3)
+  if (verdict === "even") return magnitude
+  return `${deltaRho > 0 ? "+" : "−"}${magnitude}`
+}
+
 /** NF-TR1 §3 — the position-level split, VISIBLE.
  *
  *  ⭐ This is the disclosure that costs us something, so it is the one most likely to end up behind
@@ -192,8 +203,7 @@ function PositionTable({ rows }: { rows: TrackRecordPositionRow[] }) {
                   <PosBadge pos={r.position} />
                 </td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-300">
-                  {r.deltaRho >= 0 ? "+" : "−"}
-                  {Math.abs(r.deltaRho).toFixed(3)}
+                  {gapText(r.deltaRho, r.verdict)}
                 </td>
                 <td className={`px-3 py-2 ${VERDICT_STYLE[r.verdict] ?? "text-gray-400"}`}>
                   {verdictWord(r.verdict)}
@@ -237,8 +247,7 @@ function OtherBenchmarksTable({ rows }: { rows: TrackRecordOtherBenchmark[] }) {
                 <td className="px-3 py-2 text-gray-300">{r.label}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-400">{r.nSeasons}</td>
                 <td className="px-3 py-2 text-right tabular-nums text-gray-300">
-                  {r.deltaRho >= 0 ? "+" : "−"}
-                  {Math.abs(r.deltaRho).toFixed(3)}
+                  {gapText(r.deltaRho, r.verdict)}
                 </td>
                 <td className={`px-3 py-2 ${VERDICT_STYLE[r.verdict] ?? "text-gray-400"}`}>
                   {verdictWord(r.verdict)}
