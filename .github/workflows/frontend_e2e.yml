@@ -1,0 +1,100 @@
+name: Frontend E2E
+
+# E9.63 — the FIRST frontend CI job in this repo.
+#
+# Until now the frontend had NO automated behavioural gate at all: `tsc` (types), `eslint`, and
+# Vercel's `next build` (compile). The entire E9.56b→e cluster and all six E9.58 defects shipped
+# past those, because none of them renders a page — a redirect, an empty state, a `NaN` column and
+# a dead route are all perfectly type-safe and compile cleanly. This job renders the pages.
+#
+# PATH-GATED on `frontend/`, mirroring the Vercel `ignoreCommand` in `frontend/vercel.json`. That
+# is safe here in a way it is NOT for the Python jobs in `ci.yml`: those are (documented as)
+# required checks, and a workflow filtered out at the `on: paths:` level never posts its check, so
+# a required one stays pending forever. This workflow is NOT a required check — `main` has no
+# branch protection at all (operator decision 2026-07-29: the gate is the operator reading a red
+# run before merging). If protection is ever enabled, convert this to the `changes`-job + `if:`
+# pattern `ci.yml` already uses BEFORE adding it as required.
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend_e2e.yml"
+  push:
+    branches: [main, dev]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend_e2e.yml"
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: frontend
+
+jobs:
+  e2e:
+    name: Frontend E2E (smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      # Cache the browser binaries (~90 MB) rather than re-downloading them every run. Keyed on the
+      # resolved Playwright version so a version bump can never be served a stale browser — the
+      # class of bug where the test runner and the browser it drives silently disagree.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      # A cache hit still needs the OS-level shared libraries the browser links against; those live
+      # outside ~/.cache and are not part of the cached tree.
+      - name: Install browser system dependencies
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # A production build, served by `next start` — NOT `next dev`. The E9.56c `/pricing` 404 was a
+      # routing fact, and dev-server routing is not the routing that ships. Env comes from
+      # `e2e/e2e.env` (every value fake on purpose; see that file).
+      - name: Build (E2E environment)
+        run: npm run e2e:build
+
+      # `playwright.config.ts` starts and stops `next start` itself.
+      - name: Run E2E smoke suite
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 14
+
+      # Traces + failure screenshots. Only written on failure (see `use.trace`/`use.screenshot`), so
+      # this is empty on a green run — hence `if-no-files-found: ignore`.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-failures
+          path: frontend/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
