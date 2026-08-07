@@ -8,36 +8,10 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 
-const LANDING_FAQ = [
-  {
-    q: "What is Bayesian sports analytics?",
-    a: "Bayesian analytics treats predictions as probability distributions rather than single point estimates. Instead of outputting just \"62% home win,\" a Bayesian model also quantifies how confident it is in that estimate — and updates that confidence as new information arrives. At Credence, this means predictions tighten as the season progresses and more data accumulates, and uncertainty is carried through the model visibly rather than hidden behind a single number.",
-  },
-  {
-    q: "What does Credence Sports actually do?",
-    a: "Credence is a baseball analytics tool, not a picks service. We build statistical models that estimate the true probability of game outcomes, then compare those estimates against the betting market to identify where the odds may be mispriced. You see the analysis — you decide what to do with it.",
-  },
-  {
-    q: "Is this automated betting?",
-    a: "No. Automated bet placement is not possible in the US market. Every wager is your own manual decision. Credence provides analysis and signals; nothing is ever placed on your behalf.",
-  },
-  {
-    q: "What does Expected Value (EV) mean?",
-    a: "EV measures whether a bet is priced in your favor over time. Positive EV means our model estimates the true probability of winning is higher than what the sportsbook's odds imply. It doesn't guarantee a win on any single bet — it means the math favors you across many similar bets.",
-  },
-  {
-    q: "What's the difference between Model % and Market %?",
-    a: "Model % is the probability our model assigns to an outcome. Market % is the implied probability from the current odds after removing the sportsbook's margin. When Model % is meaningfully higher than Market %, that's where a pick comes from.",
-  },
-  {
-    q: "Which sportsbooks does Credence target?",
-    a: "Our models are calibrated and compared against Bovada lines. If you use a different sportsbook, the displayed odds will differ and the calculated EV may not apply directly.",
-  },
-  {
-    q: "What sport(s) does Credence cover?",
-    a: "MLB baseball only, for the 2026 season. We're focused on doing one sport well before expanding.",
-  },
-]
+// E9.46 — the questions themselves live in `lib/home-copy.ts`, with every other claim-bearing
+// string on this page, so `betting_ml/tests/test_e9_46_home_copy.py` screens them. Inline here
+// they were unscreened AND had gone stale ("MLB baseball only") after the NFL launch.
+import { LANDING_FAQ } from "@/lib/home-copy"
 
 export function LandingFaqSection() {
   return (

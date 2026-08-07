@@ -144,13 +144,34 @@ def test_a_logged_out_visitor_has_a_mobile_menu_at_all():
     new Sign Up button — which overflowed (the wordmark overlapped "Rankings", "Track Record"
     wrapped onto two lines). The menu has to exist for the signed-out case, and it needs its OWN
     panel: the signed-in one is built from entitlement-shaped `visibleSurfaces`.
+
+    ⚠️ AMENDED BY E9.46 (operator decision 3, 2026-08-07): `href="/blog"` was on this required list
+    and is deliberately no longer in the nav on either viewport — the blog is demoted out of the
+    primary navigation so it stops competing with the two products for it.
+
+    ⭐ THE PROTECTION THIS CLAUSE ACTUALLY PROVIDES IS UNCHANGED, and separating the two is the
+    point of amending rather than deleting. E9.58's defect was REACHABILITY on a phone, not the
+    blog specifically: About and Blog were `hidden sm:block` while the hamburger was signed-in-only,
+    so a logged-out phone visitor could reach NEITHER. The blog's reachability is now carried by
+    `SiteFooter`, which `app/layout.tsx` renders on every page at every width, and that is asserted
+    below rather than assumed — dropping an item from the nav is only a demotion if something else
+    still reaches it, and otherwise it is a deletion wearing a demotion's name.
     """
     nav = _code(_FRONTEND / "components/nav.tsx")
     assert "{showSubNav && (\n            <button" not in nav, "the hamburger is signed-in-only again"
     assert "{!showSubNav && mobileOpen && (" in nav, "no signed-out mobile menu panel"
     signed_out_panel = nav.split("{!showSubNav && mobileOpen && (")[1].split("{showSubNav && mobileOpen")[0]
-    for expected in ('href="/about"', 'href="/blog"', 'href="/login"', "publicNavItems()"):
+    for expected in ('href="/about"', 'href="/login"', "publicNavItems()"):
         assert expected in signed_out_panel, f"the signed-out mobile menu is missing {expected}"
+
+    # The compensating half of the E9.46 demotion. The footer is viewport-independent (no `sm:`
+    # gate), so a logged-out phone visitor still has a route to the blog — which is the property
+    # E9.58 was defending, stated in terms of the property rather than of the one link.
+    footer = _code(_FRONTEND / "components/site-footer.tsx")
+    assert '"/blog"' in footer, (
+        "the blog left the nav (E9.46) and is not in the footer either — that is a deletion, not "
+        "the demotion the decision called for"
+    )
 
 
 def test_the_inline_public_links_do_not_crowd_the_bar_on_a_phone():

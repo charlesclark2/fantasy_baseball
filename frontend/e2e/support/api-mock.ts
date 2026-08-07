@@ -33,6 +33,10 @@ export const FIXTURES = {
   boardLocked: () => fixture("fantasy-nfl-board-full_ppr-12-2026-locked.json"),
   trackRecordManifest: () => fixture("fantasy-nfl-track-record-manifest.json"),
   trackRecordSeason: () => fixture("fantasy-nfl-track-record-2025.json"),
+  // E9.46 — the home page's live model-vs-market element. A verbatim public capture; ⚠️ its
+  // CONTENT changes every day (it is whichever game currently has the widest gap), so
+  // `home-positioning.spec.ts` asserts against the payload's OWN values and never a literal.
+  featuredPick: () => fixture("picks-featured.json"),
 }
 
 /** What the fantasy surfaces get back: the locked (anonymous) payload or the entitled one. */
@@ -43,6 +47,18 @@ export type MockOptions = {
   /** Last-chance mutation of a payload before it is served — used to reproduce a server state we
    *  cannot capture (e.g. the deploy-skew `upgrade.ctaHref: "/pricing"` of E9.56c). */
   transform?: (pathname: string, body: any) => any
+  /**
+   * API paths to answer with a 5xx instead of a fixture — the READ ITSELF failing, which
+   * `transform` structurally cannot express (it rewrites a body that was successfully served).
+   *
+   * ⭐ E9.46 needs it because "the model published nothing today" and "this page could not reach
+   * the model" are DIFFERENT FACTS that the home page states differently, and a harness that can
+   * only produce the first can only ever test half of that. Registered here rather than as a
+   * spec-local `page.route` override so the call still lands in `requested` — an override would
+   * make the request invisible to `expectApiFullyMocked`, i.e. a failure path that looks to the
+   * harness like a page that never asked for anything.
+   */
+  fail?: string[]
 }
 
 export type ApiMock = {
@@ -62,6 +78,7 @@ function payloadFor(pathname: string, entitlement: Entitlement): unknown | undef
   if (pathname === "/fantasy/nfl/board") return FIXTURES.boardLocked()
   if (pathname === "/fantasy/nfl/track-record/manifest") return FIXTURES.trackRecordManifest()
   if (/^\/fantasy\/nfl\/track-record\/\d{4}$/.test(pathname)) return FIXTURES.trackRecordSeason()
+  if (pathname === "/picks/featured") return FIXTURES.featuredPick()
   return undefined
 }
 
@@ -81,6 +98,15 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
     // strings that appear in `app/backend/routers/fantasy.py`.
     const apiPath = url.pathname.slice(url.pathname.indexOf(API_PREFIX) + API_PREFIX.length)
     mock.requested.push(apiPath + url.search)
+
+    if (options.fail?.includes(apiPath)) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "e2e: deliberate read failure" }),
+      })
+      return
+    }
 
     let body = payloadFor(apiPath, entitlement)
     if (body === undefined) {

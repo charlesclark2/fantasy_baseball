@@ -40,6 +40,14 @@
       "note": "Public past-season track record. REAL, UNLOCKED model output — the honest 'a real payload renders real numbers' fixture. ⚠️ AUGMENTED, not hand-edited: `projGames` (the expected-games figure `ourPoints` is scaled by) does not exist in prod until the operator's post-merge `--publish`, so it was joined in per player from the served NF1.5 2025 projection artifact by `e2e/fixtures/build-track-record-proj-games.py` — the same source and the same rounding the export uses. Every other byte is the verbatim capture; the sha above is the PRE-augmentation capture. Re-capture after the publish, then delete that script."
     },
     {
+      "file": "picks-featured.json",
+      "url": "https://api.credencesports.com/picks/featured",
+      "bytes": 4234,
+      "sha256_16": "fbd2e9c43cc2430f",
+      "note": "E9.46 — the home page live model-vs-market element. PUBLIC. CHANGES DAILY: it is the current slate widest gap, so a re-capture always differs; the specs read the payload own values, never hardcoded numbers.",
+      "captured_at": "2026-08-07T20:47:06.768Z"
+    },
+    {
       "file": "subscription-public-pricing.json",
       "url": "https://api.credencesports.com/subscription/public-pricing",
       "bytes": 206,
