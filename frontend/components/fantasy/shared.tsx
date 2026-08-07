@@ -359,8 +359,18 @@ export function FadeBadge({
         ? "border-rose-500/40 bg-rose-500/10 text-rose-400"
         : "border-amber-500/40 bg-amber-500/10 text-amber-500"
   const label = fadeResult === "hit" ? "fade · hit" : fadeResult === "miss" ? "fade · miss" : "fade · push"
+  // ⚠️ `whitespace-nowrap` is load-bearing, not cosmetic. This is a two-word label inside a bordered
+  // chip in the LAST column of a table that grew a column (the projected-games column), and a
+  // browser will happily break it at the "·" — which draws the border around a two-line chip whose
+  // second line is the grade, i.e. exactly the part that carries the meaning. The table already
+  // sits in an `overflow-x-auto`, so refusing the break costs a little horizontal scroll on a
+  // narrow viewport rather than a mangled badge, which is the right trade for a chip this small.
   return (
-    <span className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${style}`}>{label}</span>
+    <span
+      className={`inline-block whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] font-semibold ${style}`}
+    >
+      {label}
+    </span>
   )
 }
 
