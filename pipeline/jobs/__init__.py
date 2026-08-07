@@ -37,6 +37,8 @@ from pipeline.jobs.sports_nfl_pit_capture_job import (
     sports_nfl_pit_weather_job,
 )
 from pipeline.jobs.milb_ingest_job import milb_ingest_job  # E7.1 — isolated daily MiLB ingest
+# INC-41 — off-cycle serving-artifact freshness SLA check (SF-free; pages, never HALTs)
+from pipeline.jobs.artifact_freshness_job import artifact_freshness_job
 
 all_jobs = [
     snowflake_check_job,
@@ -65,4 +67,5 @@ all_jobs = [
     sports_nfl_pit_metadata_job,
     sports_nfl_pit_market_job,
     milb_ingest_job,
+    artifact_freshness_job,
 ]

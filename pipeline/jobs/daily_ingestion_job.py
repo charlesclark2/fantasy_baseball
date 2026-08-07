@@ -12,6 +12,7 @@ from pipeline.ops.daily_ingestion_ops import (
     check_injury_status_health_op,
     check_intraday_fallback_op,
     check_served_prediction_integrity_op,
+    check_artifact_freshness_op,
     check_w11_tail_coverage_op,
     check_prediction_coverage,
     compute_elo,
@@ -306,6 +307,19 @@ def daily_ingestion_job():
     # transparency panel can never withhold a slate's predictions. ALERT-tier, always: it pages
     # via send_alert and has no strict escalation.
     check_w11_tail_coverage_op(start=s19)
+    # INC-41 — per-artifact freshness SLAs on serving-critical parquet. Asserts that each
+    # registered artifact has ADVANCED (a CONTENT timestamp inside the parquet, never the S3
+    # mtime, which PR #638's atomic copy refreshes even when the data is unchanged), with lag
+    # counted only across each writer's declared active hours so the deliberate 10.5h overnight
+    # capture gap is not a breach. Closes the hole INC-41 exposed: on 2026-08-06 the lineups
+    # parquet froze for 6.5h while the FEED stayed healthy, so every source-watching check read
+    # green, the lineup monitor reported "No newly confirmed lineups" ~40 times and the op
+    # returned SUCCESS. Fans out from predict — DOWNSTREAM of the W7b/W8a builds it guards, per
+    # INC-40 (a monitor upstream of its own producer manufactures a false stale-alarm). The daily
+    # run cannot catch an INTRADAY freeze, which is INC-41's exact shape — the off-cycle
+    # artifact_freshness_job runs the same check on the writer's cadence between daily runs.
+    # ALERT-tier, always: pages via send_alert, never HALTs.
+    check_artifact_freshness_op(start=s19)
     # E5.1b — daily player-prop odds catch-up (mlb/props/ S3). WARN-tier; hangs off predict so
     # its ~few-minute paid Odds API pull never delays the serving-critical predict path. Gated
     # PROPS_DAILY_INGEST (default OFF) → a no-op loud-skip until the operator flips it. Historical
