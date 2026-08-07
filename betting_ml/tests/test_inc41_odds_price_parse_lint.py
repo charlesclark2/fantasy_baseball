@@ -146,3 +146,38 @@ def test_the_old_expression_really_did_raise_on_the_incident_value():
     with pytest.raises(Exception) as exc:
         con.execute(f"select {old} from (select '-2147483648' as p)").fetchone()
     assert "abs" in str(exc.value).lower() or "range" in str(exc.value).lower()
+
+
+# ── the not_null contract must be upheld by a FILTER, not by hope ───────────────────
+# My post-repair verification counted out-of-band prices and inf decimals, reported clean, and
+# never counted NULLs against the `not_null` test on outcome_price_american — so a live
+# data-quality gate was already violated while I was calling the data healthy. The dbt Build job
+# caught it. This pins the structural property that check missed.
+_BOUND_IN_WHERE = re.compile(
+    r"where\s+abs\(\s*try_cast\(\s*json_extract_string\([^)]*'\$\.price'\s*\)\s*as\s+bigint\s*\)\s*\)"
+    r"\s*between\s+100\s+and\s+1000000",
+    re.IGNORECASE,
+)
+
+_NOT_NULL_PRICE_MODELS = ("stg_oddsapi_odds", "stg_derivative_odds")
+
+
+@pytest.mark.parametrize("model", _NOT_NULL_PRICE_MODELS)
+def test_an_unusable_price_excludes_the_row_rather_than_nulling_it(model):
+    """`outcome_price_american` carries a not_null test, so the model must FILTER, not NULL.
+
+    Nulling in place is the tempting fix and it silently breaks the gate — 1 NULL row out of
+    6.1M was enough to fail dbt Build, which is exactly the gate doing its job. The documented
+    contract (mart_odds_outcomes column docs) is that a row without a usable price is excluded at
+    the staging layer.
+
+    RED-proves: delete the WHERE bound from either model and this fails.
+    """
+    path = next(DBT_MODELS.rglob(f"{model}.sql"), None)
+    assert path is not None, f"{model}.sql not found"
+    code = _strip_sql_comments(path.read_text())
+    assert _BOUND_IN_WHERE.search(code), (
+        f"{model} must EXCLUDE a row whose price is not a usable American odd (a WHERE bound), "
+        "not carry it with a NULL price — outcome_price_american has a not_null test at this "
+        "layer AND in mart_odds_outcomes, which selects it straight through."
+    )
