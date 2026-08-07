@@ -140,6 +140,125 @@ const CASES = [
     grep: "absent, not fatal",
   },
   {
+    id: "claim-leads-the-page",
+    shipped: "NF-TR1 — pre-emptive: the page leading with the ADP comparison",
+    // ⚠️ NOT a previously-shipped defect. It is the PRE-NF-TR1 state of the page, and the reason
+    // the story is LAUNCH-GATING: leading with a +0.022 gap whose own 90% interval includes zero
+    // (NF-D17) makes a result that might be nothing into the product's headline promise. Nothing
+    // else can see it — `tsc` types a reordered JSX tree fine, the copy itself is unchanged and
+    // still passes every denylist, and any "the claim is visible" assertion passes either way.
+    // Only a geometric read of the rendered page can tell "shows the hook" from "leads with it".
+    detail: "Removing the calibration block puts the benchmark comparison first, as it was before.",
+    file: "components/fantasy/track-record-page.tsx",
+    from: "      <CalibrationLead />\n",
+    to: "",
+    grep: "calibration leads",
+  },
+  {
+    id: "unhedged-plain-lead",
+    shipped: "NF-TR1 — pre-emptive: the punchier lead with the hedge removed",
+    // The specific failure the operator's readability constraint creates. Rewriting an analyst
+    // sentence for a casual reader is the right call AND is exactly the edit during which
+    // "it could just be luck" gets dropped for sounding weak. The remaining copy is still
+    // denylist-clean, so no word-list can catch it; only an assertion naming the hedge can.
+    detail: "Drops the could-be-luck clause while the measured interval still includes zero.",
+    file: "e2e/fixtures/api/fantasy-nfl-track-record-manifest.json",
+    // ⚠️ ANCHORED ON THE FOLLOWING KEY, and the first attempt without that was a false GREEN worth
+    // recording: `headline` and `claim.lead` hold the IDENTICAL string (by design — `headline` is
+    // the lead, so every surface quoting it inherits the plain wording), `headline` comes first in
+    // the file, and `String.replace` with a string patches only the FIRST match. So the break
+    // edited the field nothing renders and the page kept its hedge. Trailing `"precise"` is what
+    // makes this anchor unique to the block the page actually reads.
+    from:
+      " It is small enough that it could just be luck \\u2014 we are not promising it repeats.\",\n" +
+      '    "precise"',
+    to: '",\n    "precise"',
+    grep: "keeps its hedges",
+  },
+  {
+    id: "legacy-headline-promoted-to-lead",
+    shipped: "NF-TR1 — pre-emptive: the deploy-skew fallback that looks defensive",
+    // `frontend/` auto-deploys on merge; the artifact only grows its `claim` block at the
+    // operator's post-merge `--publish`. A `claim?.lead ?? headline` fallback is the natural
+    // defensive edit and would put the OLD un-hedged sentence back in the lead for the whole
+    // window — with every test that uses the NEW fixture still green, because that fixture HAS a
+    // claim block. Only the spec that strips it can see this.
+    detail: "The pre-NF-TR1 `headline` renders as the lead instead of as fine print.",
+    file: "components/fantasy/track-record-page.tsx",
+    // ⚠️ THE BREAK MUST LIFT `ClaimLead` OUT OF THE `manifest.claim ?` BRANCH, and the first
+    // attempt that only added the `?? headline` fallback in place was INERT — a false GREEN.
+    // Inside the true branch `claim` is non-null by construction, so the fallback can never fire,
+    // and on the no-claim render the component is not mounted at all. The defect only exists when
+    // the lead is hoisted ABOVE the guard, which is exactly the shape this file shipped in its
+    // first draft. A break that cannot change behaviour proves nothing about the test.
+    from:
+      "          {manifest.claim ? (\n            <>\n" +
+      "              <ClaimLead lead={manifest.claim.lead} />",
+    to:
+      "          <ClaimLead lead={manifest.claim?.lead ?? manifest.headline} />\n" +
+      "          {manifest.claim ? (\n            <>",
+    grep: "still leads with calibration",
+  },
+  {
+    id: "banner-recites-the-measurement",
+    shipped: "NF-TR1 — the pre-reframe state: the locked board recited the track-record statistic",
+    // ⚠️ THIS ONE ACTUALLY SHIPPED (E9.56c, "lead with the receipts"), which is why it is worth a
+    // case rather than a comment. It is not dishonest — the sentence is generated from the
+    // scorecard and passes every denylist — it is the WRONG INSTRUMENT for a conversion surface:
+    // a +0.022 gap whose interval includes zero must arrive with four hedges and close on "it
+    // could just be luck", and the caveats are unreadable without the table beside them.
+    // Invisible to every other gate: it types, it builds, and it is denylist-clean.
+    detail: "Puts the generated claim back in the upgrade banner, in place of the content hook.",
+    file: "components/fantasy/shared.tsx",
+    from: '        {DISAGREEMENT_HOOK}{" "}',
+    to: '        {receipts?.claim?.precise}{" "}',
+    grep: "does not recite the measurement",
+  },
+  {
+    id: "trust-link-goes-nowhere",
+    shipped: "NF-TR1 — pre-emptive: the E9.56c dead-CTA class, on the evidence link",
+    // Dropping the quotation is only safe because the evidence stays one click away. A trust link
+    // pointing at a route that does not render strands it — and a SOURCE scan cannot see this at
+    // all, because the binding `href={TRACK_RECORD_TRUST_LINK.href}` is still right there in the
+    // JSX. Only navigation can tell a bound link from a working one.
+    detail: "Repoints the trust link at a route that is not the track record.",
+    file: "lib/fantasy-claim-copy.ts",
+    from: '  href: "/fantasy/track-record",',
+    to: '  href: "/fantasy/track-record-does-not-exist",',
+    grep: "trust link reaches",
+  },
+  {
+    id: "lead-ends-on-its-own-disclaimer",
+    shipped: "NF-TR1 — pre-emptive: the plain lead trailing off on a caveat",
+    // AC 5. The hedges are non-negotiable and all four stay; what this case protects is the LAST
+    // thing a reader is left holding. Broken at the artifact, because that is how it would really
+    // happen — the copy is generated, so the observable defect arrives as a republished manifest.
+    detail: "Removes the closing pointer so the lead stops on 'it could just be luck'.",
+    file: "e2e/fixtures/api/fantasy-nfl-track-record-manifest.json",
+    from:
+      " The season-by-season and position-by-position detail is below, along with the players we" +
+      ' ranked furthest from where the crowd was drafting them.",\n    "precise"',
+    to: '",\n    "precise"',
+    grep: "keeps its hedges",
+  },
+  {
+    id: "disclosure-dropped",
+    shipped: "NF-TR1 — pre-emptive: a required disclosure stops being published",
+    // ⚠️ THIS CASE EXISTS BECAUSE OF A NEAR-MISS IN THE OPPOSITE DIRECTION. "all six required
+    // disclosures render" first shipped with a bare `goto` and a whole-page text scan, so on a
+    // slow runner it read the LOADING state and reported a missing disclosure that was merely
+    // late. The fix was to wait for the claim to render (`gotoTrackRecord`) — and a wait added to
+    // silence a red test is exactly how a test stops being able to fail. So: prove it still goes
+    // red when a disclosure is genuinely ABSENT rather than slow.
+    detail: "Removes the running-back wash — the disclosure that costs us something.",
+    file: "e2e/fixtures/api/fantasy-nfl-track-record-manifest.json",
+    from:
+      '      "At running back it is a wash. Our order there was no better than the draft-day' +
+      ' consensus, and we do not claim it was.",\n',
+    to: "",
+    grep: "all six required disclosures",
+  },
+  {
     id: "google-entry-missing",
     shipped: "E9.58 — a signup entry point with no working Google button",
     detail: "The DNS-dead-host outage presented to the user as exactly this: no way through.",

@@ -13,6 +13,75 @@ import { apiFetch } from "@/lib/api"
 
 export type AdpSource = "ffc" | "mfl"
 
+/** NF-TR1 — one position's measured gap against the captured ADP benchmark.
+ *
+ *  `verdict` is DERIVED at export time, never re-derived here: a component that decided "ahead" vs
+ *  "even" from `deltaRho` would be a second, drifting copy of the threshold, and the whole point of
+ *  the disclosure is that "running back is a wash" is a reading of the data rather than an
+ *  assertion about it. Render the word the export computed. */
+export interface TrackRecordPositionRow {
+  position: string
+  deltaRho: number
+  verdict: "ahead" | "behind" | "even"
+}
+
+/** A context benchmark (ECR / ESPN / Sleeper) — reported SEPARATELY from the headline ADP claim and
+ *  required by NF-TR1 to be visible. We currently trail all three, and that is the point of showing
+ *  them: a page that reported only the comparison that flatters us would be selecting its evidence. */
+export interface TrackRecordOtherBenchmark {
+  key: string
+  label: string
+  deltaRho: number
+  usRho: number
+  benchmarkRho: number
+  nSeasons: number
+  verdict: "ahead" | "behind" | "even"
+}
+
+/** NF-TR1's TWO-LAYER claim, built by `export_track_record_json.build_claim` from the NF-D3
+ *  scorecard + the NF-D17 population artifact.
+ *
+ *  ⛔ RENDER THESE STRINGS VERBATIM. Every one is screened against the export's `_CLAIM_DENYLIST`
+ *  at build time and again by `betting_ml/tests/test_nf_tr1_claim_copy.py`; a component that
+ *  rewrites, truncates mid-sentence, or conditionally drops one of them re-opens exactly the hole
+ *  the screening closes — the hedges are load-bearing, not decoration (NF-D17 measured the shipped
+ *  gap's own 90% interval as [-0.006, +0.051], which includes zero).
+ *
+ *  ⚠️ OPTIONAL ON THE MANIFEST, ON PURPOSE. An artifact published before NF-TR1 carries no `claim`,
+ *  and the frontend ships ahead of the export (see `LEGACY_CLAIM_NOTE`). Treat its absence as a
+ *  degraded render, never as a reason to promote the legacy `headline` into the lead. */
+export interface TrackRecordClaim {
+  /** Plain, everyday English. Calibration first, the benchmark comparison second and hedged. */
+  lead: string
+  /** The operator-approved analyst sentence, plus the numbers backing it. */
+  precise: string
+  benchmark: string
+  benchmarkShort: string
+  metric: string
+  /** Display span, e.g. "2019–2024". */
+  seasons: string
+  nSeasons: number
+  playersPerSeason: number
+  playersPerSeasonMin: number
+  playersPerSeasonMax: number
+  usRho: number
+  benchmarkRho: number
+  deltaRho: number
+  ciLow: number
+  ciHigh: number
+  /** Percent, e.g. 90. */
+  ciLevel: number
+  ciIncludesZero: boolean
+  byPosition: TrackRecordPositionRow[]
+  otherBenchmarks: TrackRecordOtherBenchmark[]
+  /** The six required disclosures, already in plain words. Render all of them. */
+  disclosures: string[]
+  /** The frozen-board method, explained. */
+  method: string
+  /** The served two-stack architecture (calibrated level + market-consensus ordering). */
+  architecture: string
+}
+
 export interface TrackRecordManifest {
   seasons: number[]
   /** Which ADP source backs each season, keyed by season as a STRING (JSON object keys) — "ffc"
@@ -27,8 +96,15 @@ export interface TrackRecordManifest {
   /** The honest headline, built ENTIRELY from the NF-D3 scorecard's own numbers at export time —
    *  render this verbatim rather than writing new claim copy in a component. Scoped to FFC's own
    *  archive span (the scorecard's "adp" aggregate) even in a season where the per-player rows below
-   *  fall back to MFL — the headline's claim and the fallback are deliberately independent. */
+   *  fall back to MFL — the headline's claim and the fallback are deliberately independent.
+   *
+   *  ⭐ NF-TR1: this IS `claim.lead` — the plain-English consumer lead. The field kept its name so
+   *  the surfaces already quoting it (the locked-surface upgrade banner, the player page) inherited
+   *  the plainer, better-hedged wording with no client change. The analyst sentence it used to carry
+   *  moved to `claim.precise`; it was relocated, not deleted. */
   headline: string
+  /** NF-TR1's two-layer claim. OPTIONAL: absent on any artifact published before NF-TR1. */
+  claim?: TrackRecordClaim
   lockedSeason: number
   scorecardGeneratedAt: string
 }
