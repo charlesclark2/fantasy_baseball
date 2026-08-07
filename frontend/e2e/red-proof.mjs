@@ -163,16 +163,25 @@ const CASES = [
     // denylist-clean, so no word-list can catch it; only an assertion naming the hedge can.
     detail: "Drops the could-be-luck clause while the measured interval still includes zero.",
     file: "e2e/fixtures/api/fantasy-nfl-track-record-manifest.json",
-    // ⚠️ ANCHORED ON THE FOLLOWING KEY, and the first attempt without that was a false GREEN worth
-    // recording: `headline` and `claim.lead` hold the IDENTICAL string (by design — `headline` is
-    // the lead, so every surface quoting it inherits the plain wording), `headline` comes first in
-    // the file, and `String.replace` with a string patches only the FIRST match. So the break
-    // edited the field nothing renders and the page kept its hedge. Trailing `"precise"` is what
-    // makes this anchor unique to the block the page actually reads.
+    // ⚠️ ANCHORED THROUGH TO THE FOLLOWING KEY, and the first attempt without that was a false
+    // GREEN worth recording: `headline` and `claim.lead` hold the IDENTICAL string (by design —
+    // `headline` is the lead, so every surface quoting it inherits the plain wording), `headline`
+    // comes first in the file, and `String.replace` with a string patches only the FIRST match. So
+    // the break edited the field nothing renders and the page kept its hedge. Trailing `"precise"`
+    // is what makes this anchor unique to the block the page actually reads.
+    //
+    // ⚠️ The anchor therefore has to span the CLOSING sentence too, which NF-TR1's own final
+    // reframe appended after this hedge — that is what silently STALED this case (it reported
+    // "anchor not found", i.e. an unproven clause, rather than failing loudly). Spanning it also
+    // keeps the break ISOLATED: the close survives, so `test…no_generated_block_ends_on_a_caveat`
+    // stays satisfied and only the hedge assertion can flip.
     from:
-      " It is small enough that it could just be luck \\u2014 we are not promising it repeats.\",\n" +
-      '    "precise"',
-    to: '",\n    "precise"',
+      " It is small enough that it could just be luck \\u2014 we are not promising it repeats." +
+      " The season-by-season and position-by-position detail is below, along with the players we" +
+      ' ranked furthest from where the crowd was drafting them.",\n    "precise"',
+    to:
+      " The season-by-season and position-by-position detail is below, along with the players we" +
+      ' ranked furthest from where the crowd was drafting them.",\n    "precise"',
     grep: "keeps its hedges",
   },
   {
