@@ -20,19 +20,13 @@ function fixture<T = any>(name: string): T {
   return JSON.parse(readFileSync(join(FIXTURE_DIR, name), "utf8"))
 }
 
-/**
- * E9.59 — the public pricing payload, minus its provenance annotation, so what the page
- * receives is exactly the API's own shape. The `__`-prefixed key documents why this one
- * fixture is synthetic (the route is not live in prod yet, so it cannot be captured); it
- * is not part of the contract and must never reach the page.
- */
-function publicPricingFixture() {
-  const raw = fixture<Record<string, unknown>>("subscription-public-pricing.synthetic.json")
-  return Object.fromEntries(Object.entries(raw).filter(([k]) => !k.startsWith("__")))
-}
-
 export const FIXTURES = {
-  publicPricing: publicPricingFixture,
+  // E9.59. Was synthetic while the route was un-deployed; a REAL capture since 2026-08-07,
+  // once the API-Gateway `NONE` route went live. ⚠️ Its amount is now the true $10, so the
+  // "a price renders" spec no longer discriminates a hardcoded price — the `transform` spec
+  // (which changes the SERVER's amount and demands the DOM follow) is what carries that, and
+  // it is immune to whatever this fixture holds.
+  publicPricing: () => fixture("subscription-public-pricing.json"),
   projectionsLocked: () => fixture("fantasy-nfl-projections-2026-locked.json"),
   projectionsEntitled: () => fixture("fantasy-nfl-projections-2026-entitled.synthetic.json"),
   manifestLocked: () => fixture("fantasy-nfl-manifest-2026-locked.json"),

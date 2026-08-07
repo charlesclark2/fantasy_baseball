@@ -61,17 +61,11 @@ const TARGETS = [
     path: `/fantasy/nfl/track-record/${TRACK_RECORD_SEASON}`,
     note: "Public past-season track record. REAL, UNLOCKED model output — the honest 'a real payload renders real numbers' fixture.",
   },
-  // ⏭️ E9.59 — `/subscription/public-pricing` belongs here, and is deliberately NOT listed
-  // yet. The route ships with E9.59 but only answers anonymously once the operator adds the
-  // API-Gateway `--authorization-type NONE` route, and a target that 404s makes this script
-  // exit non-zero every run for no useful reason. ADD IT once the route is live:
-  //
-  //   { file: "subscription-public-pricing.json",
-  //     path: "/subscription/public-pricing",
-  //     note: "Public price, read from the Stripe Price Checkout charges against." },
-  //
-  // …then repoint `FIXTURES.publicPricing` in `support/api-mock.ts` at the capture and delete
-  // `subscription-public-pricing.synthetic.json`.
+  {
+    file: "subscription-public-pricing.json",
+    path: "/subscription/public-pricing",
+    note: "Public price (E9.59). Read server-side from the Stripe Price object Checkout charges against — so this capture is the number a logged-out visitor actually sees. ⚠️ Stripe TEST mode until E9.8-P2; the amount will change at the live flip and this fixture should be re-captured then.",
+  },
 ]
 
 const sha = (s) => createHash("sha256").update(s).digest("hex").slice(0, 16)

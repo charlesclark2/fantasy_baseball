@@ -1,0 +1,9 @@
+{
+  "unit_amount": 1000,
+  "currency": "usd",
+  "interval": "month",
+  "interval_count": 1,
+  "product_name": "Credence Sports Founding Membership",
+  "tier": "founding",
+  "founding_slots_remaining": 96
+}

@@ -42,8 +42,15 @@ const PRICING = FIXTURES.publicPricing() as {
   tier: string
 }
 
-/** The fixture's $12.34 — deliberately not the real $10/$20, so a hardcoded price fails. */
-const FIXTURE_PRICE = "$12.34"
+/**
+ * The captured price. ⚠️ This is now the REAL $10, so this constant no longer discriminates a
+ * hardcoded price the way the earlier synthetic $12.34 did — a component that formats a literal
+ * "$10" satisfies the first spec below. That is fine, and deliberate: the fixture is a verbatim
+ * capture (the repo's rule, since a hand-written one encodes the assumption under test), and the
+ * anti-hardcoding job belongs to the `transform` spec, which rewrites the SERVER's amount and is
+ * immune to whatever this file holds. Read the first spec as "the price renders at all".
+ */
+const FIXTURE_PRICE = `$${PRICING.unit_amount / 100}`
 
 test("a logged-out visitor sees the price on /subscribe", async ({ page }) => {
   const errors = collectPageErrors(page)
