@@ -8,11 +8,19 @@ player, built by `benchmark_scorecard.player_track_record_frame` (the per-player
 NF-D3's aggregate "adp" scorecard numbers — never a parallel re-derivation of that join).
 
 ⚖️ HONEST-CLAIM DISCIPLINE (non-negotiable — see CLAUDE.md / `test_nf1_5b_served_board.py`'s denylist,
-reused here): the manifest's headline is built ONLY from the freshly-regenerated NF-D3 scorecard's own
-numbers (`--scorecard-json`, produced by `run_benchmark_scorecard.py --projection-source nf1_5`) — never
-hand-authored. It never claims "every position", "beats the market", or any superlative the scorecard
-itself doesn't support; `build_headline` asserts this at build time (`_CLAIM_DENYLIST`), not just in a
-test.
+reused here): the manifest's claim is built ONLY from the freshly-regenerated NF-D3 scorecard's own
+numbers (`--scorecard-json`, produced by `run_benchmark_scorecard.py --projection-source nf1_5`) and the
+NF-D17 population artifact (`--uncertainty-json`) — never hand-authored. It never claims "every
+position", "beats the market", or any superlative the artifacts themselves don't support; `build_claim`
+asserts this at build time (`_CLAIM_DENYLIST`), not just in a test.
+
+🗣️ NF-TR1 — TWO-LAYER COPY. The claim ships as a plain-English CONSUMER LEAD (`claim.lead`, also the
+manifest's `headline` so every existing consumer inherits it) with the analyst-register sentence, the
+named benchmark, the metric, the player count, the seasons and the visible interval preserved beneath
+it in `claim.precise` + `claim.disclosures`. The audience is the average fantasy player: jargon in the
+lead shrinks the population who will use the product, so the exact sentence was RELOCATED, never
+deleted. ⛔ The plain lead may never be the stronger of the two — it carries the same hedges in shorter
+words, and `betting_ml/tests/test_nf_tr1_claim_copy.py` holds each one with its own RED-proven clause.
 
 🔒 ENTITLEMENT: this is the PUBLIC half of NF3.2's season-scoped split (past seasons public, the current
 season locked behind subscription — enforced in `app/backend/routers/fantasy_public.py`, which reads
@@ -77,9 +85,36 @@ LOCKED_SEASON = 2026
 
 # Copied verbatim from `test_nf1_5b_served_board.py`'s denylist — a headline built from the scorecard's
 # own numbers must never drift into one of these overclaims either.
+#
+# NF-TR1 EXTENDED IT, and the extension is the point of the story rather than housekeeping. Two
+# additions, each closing a hole the original set could not see:
+#
+#   * The GOVERNANCE terms. `betting_ml/governance/gates._DEFAULT_CLAIM_DENYLIST` screens the copy a
+#     MODEL PROMOTION publishes; this one screens the copy the TRACK RECORD publishes. They were
+#     written apart and each carried terms the other lacked ("beats the market" / "market-beating" /
+#     "profitable" here; "all four" / "more accurate" there), so the same sentence could pass one
+#     surface and fail the other. This tuple is now a SUPERSET of the gates' set and
+#     `test_nf_tr1_claim_copy.py` asserts that mechanically — ⛔ a term may be added to the gates'
+#     list, never removed from this one.
+#
+#   * The PLAIN-ENGLISH forms. NF-TR1 writes a consumer lead in everyday words, and the whole
+#     hazard the story exists to prevent is that plainer prose sounds punchier by dropping the
+#     hedge. The analyst-register denylist could not see "win your league" or "beats ADP" because
+#     no analyst-register sentence would have said them. A denylist screening plain copy needs the
+#     plain overclaims in it.
+#
+# ⚠️ These are SUBSTRING matches over lowercased text, so keep entries short and un-punctuated —
+# "beats adp" catches "beats ADP by a mile", but "beats adp." would not.
 _CLAIM_DENYLIST = (
+    # the original NF3.2 set
     "we beat", "beat the market", "beat consensus", "every position", "all four",
     "our edge", "guaranteed", "more accurate",
+    # the governance-gate set (betting_ml/governance/gates._DEFAULT_CLAIM_DENYLIST)
+    "beats the market", "outperforms the market", "market-beating", "profitable",
+    "edge over the market",
+    # the plain-English overclaims NF-TR1's consumer lead could reach for
+    "beats adp", "beat adp", "beats ecr", "beat ecr", "win your league", "wins your league",
+    "sure thing", "can't miss", "risk-free", "always right", "never wrong",
 )
 
 # ── E9.56c: display casing ───────────────────────────────────────────────────────────────────────
@@ -193,85 +228,420 @@ def adp_source_for_season(df: pd.DataFrame) -> str | None:
     return str(non_null.iloc[0]) if len(non_null) else None
 
 
-def build_headline(scorecard: dict) -> str:
-    """The manifest's honest headline — built ONLY from the scorecard JSON's own "adp" aggregate
-    numbers, never hand-authored. Raises if the scorecard has no ADP aggregate (nothing honest to say
-    yet) or if the templated text somehow trips the overclaim denylist (defense in depth against a
-    future edit to this function, not just a test)."""
+# ── NF-TR1: the two-layer claim ──────────────────────────────────────────────────────────────────
+# The audience is the AVERAGE fantasy player, and analyst register in the LEAD shrinks the population
+# who will use the product. So the claim ships as TWO layers, both honest and both denylist-screened:
+#
+#   lead    — plain everyday English, CALIBRATION FIRST (what the product gives you), the benchmark
+#             comparison second and hedged in words a casual reader parses.
+#   precise — the operator-approved sentence verbatim, plus the named benchmark, the metric, the
+#             player count, the seasons and the visible interval.
+#
+# ⛔ THE PLAIN LEAD MAY NEVER BE THE STRONGER OF THE TWO. It carries the same four hedges as the
+# precise layer (small · varies by position and season · a position where it is level · could be
+# luck), just in shorter words. Dropping one to sound punchier is the exact failure NF-TR1 exists to
+# prevent, and `test_nf_tr1_claim_copy.py` holds each hedge with its own RED-proven clause.
+#
+# ⭐ EVERY FIGURE IS READ, NEVER TYPED. `us`/`them`/`gap`/the per-position splits come from the NF-D3
+# scorecard; the interval and the player count come from the NF-D17 population artifact. The two are
+# RECONCILED before either is quoted (`_reconcile`) — an interval computed on a different population
+# is not this claim's interval, and pairing them would be the most plausible-looking way to publish a
+# wrong CI.
+
+#: A per-position gap this small is not distinguishable from level at ANY reading, so the copy calls
+#: it even rather than claiming a direction. Scale: the measured across-season SD is ~0.040 over 6
+#: seasons ⇒ a season-level standard error near 0.016, so this band sits an order of magnitude below
+#: the noise. It is a DISPLAY threshold — it decides which word is printed, never which number is.
+_LEVEL_BAND = 0.005
+
+#: How each context benchmark is named for a reader who has never heard of it. These are carried so
+#: the page cannot be accused of reporting only the comparison that flatters us — every one of them
+#: currently orders BETTER than we do, and the copy says so.
+_CONTEXT_BENCHMARKS = {
+    "ecr": "FantasyPros expert consensus (ECR)",
+    "espn": "ESPN's rankings",
+    "sleeper": "Sleeper's rankings",
+}
+
+
+def _pos_word(pos: str) -> str:
+    return {"QB": "quarterback", "RB": "running back", "WR": "wide receiver",
+            "TE": "tight end", "K": "kicker", "DST": "defense"}.get(pos, pos)
+
+
+def _verdict(delta: float) -> str:
+    """"ahead" / "behind" / "even" for a measured gap — the ONLY place a direction word is chosen."""
+    if delta > _LEVEL_BAND:
+        return "ahead"
+    if delta < -_LEVEL_BAND:
+        return "behind"
+    return "even"
+
+
+def _join(words: list[str]) -> str:
+    if not words:
+        return ""
+    if len(words) == 1:
+        return words[0]
+    return ", ".join(words[:-1]) + " and " + words[-1]
+
+
+def _screen(label: str, text: str) -> str:
+    """Raise if `text` trips the overclaim denylist. Applied to EVERY string the claim publishes.
+
+    Defense in depth against a future edit to the templates below, not just a test — the test can
+    only screen the shapes it thinks to construct, whereas this runs over whatever the live artifacts
+    actually produce at export time."""
+    lowered = text.lower()
+    for banned in _CLAIM_DENYLIST:
+        if banned in lowered:
+            raise ValueError(
+                f"generated claim copy ({label}) contains a banned overclaim phrase {banned!r}: {text!r}"
+            )
+    return text
+
+
+def _adp_aggregate(scorecard: dict) -> dict:
     agg = (scorecard.get("aggregate") or {}).get("adp")
     if not agg:
         raise ValueError(
             "scorecard JSON has no 'aggregate.adp' — cannot build an honest headline without it. Run "
             "run_benchmark_scorecard.py --projection-source nf1_5 first."
         )
-    # `seasons_scored` is EVERY scored season across ALL systems (ecr/espn/sleeper included) — NOT the
-    # ADP-specific set `agg['n_seasons']` counts. FFC has no archive for some seasons (2025 confirmed
-    # live), so using `seasons_scored` here would print a self-contradicting headline like "6 past
-    # seasons (2019-2025)". Derive the span from the seasons that actually carry an 'adp' system.
-    adp_seasons = sorted(
-        row["season"] for row in (scorecard.get("per_season") or []) if "adp" in (row.get("systems") or {})
-    )
-    span = f"{adp_seasons[0]}–{adp_seasons[-1]}" if adp_seasons else "the scored seasons"
+    return agg
 
-    # E9.56c — REWRITTEN FOR A CASUAL FAN. The previous text opened "our within-position ordering
-    # correlation vs realized outcomes is 0.517, against ADP's 0.494 (Δρ +0.022)", which is precise
-    # and unreadable: it assumes the reader knows what a rank correlation is, what ρ is, and what
-    # counts as a good value for one. This is the first thing a logged-out visitor sees, it is quoted
-    # on the locked Rankings/Projections banner, and it is the stated reason those pages are indexed
-    # for search — so a reader who cannot parse it is the whole audience.
-    #
-    # ⚠️ WHAT DID NOT CHANGE, and must not: every number is still read from the scorecard's own
-    # aggregate, nothing is hand-authored, and the denylist still runs over the result. Simplifying
-    # the PROSE is safe; substituting a friendlier NUMBER would not be.
-    #
-    # ⭐ THE COMPARISON IS SIGN-AWARE. The old wording ("is X, against ADP's Y") stayed technically
-    # true if we ever trailed, because it asserted no direction — but the plain-English rewrite reads
-    # as a claim, so a negative delta MUST change the sentence rather than quietly contradict it.
-    # The size adjective is likewise derived from the measured gap, never asserted: at +0.022 today
-    # "narrow" is the honest word, and it stops being applied on its own if the gap ever grows.
-    us, them = agg["us_rho_pooled"], agg["system_rho_pooled"]
-    gap = agg["delta_rho_pooled"]
-    scale = (
-        "on a scale where 1.000 would be a perfect ranking and 0.000 would be a random one"
+
+def _adp_span(scorecard: dict) -> tuple[list[int], str]:
+    """The seasons that actually carry an `adp` system, and their span as display text.
+
+    `seasons_scored` is EVERY scored season across ALL systems (ecr/espn/sleeper included) — NOT the
+    ADP-specific set `agg['n_seasons']` counts. FFC has no archive for some seasons (2025 confirmed
+    live), so using `seasons_scored` here would print a self-contradicting span like
+    "6 past seasons (2019-2025)"."""
+    seasons = sorted(
+        row["season"] for row in (scorecard.get("per_season") or [])
+        if "adp" in (row.get("systems") or {})
+    )
+    return seasons, (f"{seasons[0]}–{seasons[-1]}" if seasons else "the scored seasons")
+
+
+def shipped_uncertainty(uncertainty: dict) -> dict:
+    """The NF-D17 reading the PUBLIC claim is about — P0_shipped × `adp`, with its bootstrap.
+
+    ⚠️ NF-D17 scored 57 population × source cells and several of them read far higher than the
+    shipped one (MFL over its own deeper population is +0.173). Selecting a cell by its value is the
+    inversion that memo exists to prevent, so the population and source are PINNED here as literals
+    and a missing cell RAISES rather than falling back to whatever else is in the file."""
+    for row in uncertainty.get("results") or []:
+        if row.get("population") == "P0_shipped" and row.get("source") == "adp":
+            boot = row.get("bootstrap") or {}
+            if not boot.get("evaluated"):
+                raise ValueError(
+                    "the NF-D17 P0_shipped×adp row carries no EVALUATED bootstrap — the claim's "
+                    "interval is a required disclosure, and an interval that was never computed "
+                    "cannot be published as one."
+                )
+            return row
+    raise ValueError(
+        "uncertainty JSON has no P0_shipped × 'adp' result — that is the population the public claim "
+        "is about. Re-run run_nf_d17_population_sensitivity.py; do NOT substitute another cell."
+    )
+
+
+def _reconcile(agg: dict, unc: dict, adp_seasons: list[int]) -> None:
+    """The interval must belong to the number it is published beside.
+
+    The scorecard and the NF-D17 artifact are regenerated by DIFFERENT scripts on different days.
+    Quoting one's Δρ next to the other's interval would look completely normal and be wrong, and no
+    downstream reader could detect it — so the agreement is asserted here, at the only point where
+    both are in hand."""
+    got, want = float(unc["delta_rho_mean"]), float(agg["delta_rho_pooled"])
+    if abs(got - want) > 0.001:
+        raise ValueError(
+            f"the NF-D17 interval describes a Δρ of {got:+.3f} but the scorecard reports "
+            f"{want:+.3f} — these are different readings and their numbers must not be mixed. "
+            f"Regenerate both from the same board."
+        )
+    if int(unc["n_seasons"]) != len(adp_seasons):
+        raise ValueError(
+            f"the NF-D17 interval covers {unc['n_seasons']} season(s) but the scorecard's ADP span "
+            f"is {len(adp_seasons)} ({adp_seasons}) — the interval is for a different span."
+        )
+
+
+def build_claim(scorecard: dict, uncertainty: dict) -> dict:
+    """The manifest's two-layer honest claim. Every number is read from the two artifacts.
+
+    Raises rather than degrading if either artifact is missing what the claim must disclose: an
+    unpublishable claim is a loud failure, never a quietly weaker one (NF1.7 (a) — a disclosure that
+    could not be evaluated is not a disclosure that passed)."""
+    agg = _adp_aggregate(scorecard)
+    adp_seasons, span = _adp_span(scorecard)
+    unc = shipped_uncertainty(uncertainty)
+    _reconcile(agg, unc, adp_seasons)
+
+    us, them, gap = agg["us_rho_pooled"], agg["system_rho_pooled"], agg["delta_rho_pooled"]
+    boot = unc["bootstrap"]
+    ci_lo, ci_hi = float(boot["lo"]), float(boot["hi"])
+    ci_level = int(round(float(boot["level"]) * 100))
+    could_be_luck = ci_lo <= 0.0 <= ci_hi
+    n_mean = int(round(float(unc["n_mean"])))
+
+    by_pos = [
+        {"position": pos, "deltaRho": round(float(d), 3), "verdict": _verdict(float(d))}
+        for pos, d in sorted((agg.get("delta_rho_by_pos") or {}).items())
+    ]
+    level_positions = [_pos_word(p["position"]) for p in by_pos if p["verdict"] == "even"]
+    behind_positions = [_pos_word(p["position"]) for p in by_pos if p["verdict"] == "behind"]
+
+    others = []
+    for key, label in _CONTEXT_BENCHMARKS.items():
+        o = (scorecard.get("aggregate") or {}).get(key)
+        if not o:
+            continue
+        others.append({
+            "key": key, "label": label,
+            "deltaRho": round(float(o["delta_rho_pooled"]), 3),
+            "usRho": round(float(o["us_rho_pooled"]), 3),
+            "benchmarkRho": round(float(o["system_rho_pooled"]), 3),
+            "nSeasons": int(o["n_seasons"]),
+            "verdict": _verdict(float(o["delta_rho_pooled"])),
+        })
+
+    lead = _screen("lead", _build_lead(
+        span=span, n_seasons=agg["n_seasons"], gap=gap, could_be_luck=could_be_luck,
+        level_positions=level_positions,
+    ))
+    precise = _screen("precise", _build_precise(
+        span=span, n_seasons=agg["n_seasons"], us=us, them=them, gap=gap,
+        n_mean=n_mean, n_min=int(unc["n_min"]), n_max=int(unc["n_max"]),
+        ci_lo=ci_lo, ci_hi=ci_hi, ci_level=ci_level, could_be_luck=could_be_luck,
+    ))
+    disclosures = [
+        _screen(f"disclosure[{i}]", d)
+        for i, d in enumerate(_build_disclosures(
+            level_positions=level_positions, behind_positions=behind_positions, others=others,
+            ci_lo=ci_lo, ci_hi=ci_hi, ci_level=ci_level, could_be_luck=could_be_luck,
+        ))
+    ]
+
+    return {
+        "lead": lead,
+        "precise": precise,
+        "benchmark": "the captured preseason ADP benchmark (Fantasy Football Calculator's "
+                     "real-draft consensus, archived for each season before it started)",
+        "benchmarkShort": "captured ADP",
+        "metric": "pooled within-position rank correlation against the realized PPR finish",
+        "seasons": span,
+        "nSeasons": int(agg["n_seasons"]),
+        "playersPerSeason": n_mean,
+        "playersPerSeasonMin": int(unc["n_min"]),
+        "playersPerSeasonMax": int(unc["n_max"]),
+        "usRho": round(float(us), 3),
+        "benchmarkRho": round(float(them), 3),
+        "deltaRho": round(float(gap), 3),
+        "ciLow": ci_lo,
+        "ciHigh": ci_hi,
+        "ciLevel": ci_level,
+        "ciIncludesZero": could_be_luck,
+        "byPosition": by_pos,
+        "otherBenchmarks": others,
+        "disclosures": disclosures,
+        "method": _screen("method", _METHOD_NOTE),
+        "architecture": _screen("architecture", _ARCHITECTURE_NOTE),
+    }
+
+
+#: The frozen-board method, in plain words. TRUE OF THE CODE, not aspirational: `run_nf1_5
+#: .build_season_projection` trains on `[b for b in range(base_from, base_season) if b + 1 <
+#: projection_season]` — strictly the seasons already complete before the projected one — and
+#: `benchmark_scorecard.player_track_record_frame` grades that board against the ADP archived for
+#: that same season.
+_METHOD_NOTE = (
+    "How the past seasons are graded: for each season we use the board as it would have stood "
+    "before that season kicked off, built only from seasons that had already finished, and compare "
+    "it with the draft-day consensus that was actually archived for that season. Nothing is "
+    "re-ranked after the fact, and no season's own results are used to build its own board."
+)
+
+#: What the served board actually IS, so the copy cannot claim a mechanism it does not have. Mirrors
+#: `export_draft_board_json.MARKET_LEAN_NOTE` — the same two-stack fact, said for a casual reader.
+#: ⚠️ Both halves matter: the ORDER is not independent of the crowd, and the POINTS are not the
+#: thing the ordering model changed. Dropping either half turns an honest re-ORDERING claim into an
+#: implied re-pricing one.
+_ARCHITECTURE_NOTE = (
+    "How the board is built: two models stacked. The projected points and the range around them "
+    "come from a model that never looks at the draft market. A second model then decides the ORDER "
+    "players are ranked in, and at most positions that ordering blends the market's own consensus "
+    "with our model — so our order is not an independent read on the market, and a gap between our "
+    "ranking and the market's is a smaller, less independent signal than it looks. What the second "
+    "model changes is which player gets which projected point total; it never changes the totals "
+    "themselves."
+)
+
+
+def _build_lead(*, span: str, n_seasons: int, gap: float, could_be_luck: bool,
+                level_positions: list[str]) -> str:
+    """The CONSUMER lead: what the product gives you FIRST, the benchmark comparison second.
+
+    ⭐ SIGN-AWARE AND INTERVAL-AWARE BY CONSTRUCTION. Plain prose reads as a claim in a way the old
+    analyst phrasing did not ("is 0.517, against ADP's 0.494" asserted no direction and stayed true
+    either way; "did a little better" does not). So a negative gap must produce a DIFFERENT sentence
+    rather than a quietly false one, and the "could just be luck" hedge is printed only while the
+    measured interval actually includes zero — a hedge that survives its own evidence is decoration,
+    and one that is dropped by hand is the failure this story exists to prevent."""
+    hook = (
+        "Credence projects a full season of fantasy points for every player, scored the way YOUR "
+        "league scores — with a range around each number so you can see how confident we are, and "
+        "the inputs behind it laid out rather than hidden."
     )
     if gap > 0:
-        size = "narrow" if gap < 0.05 else "clear" if gap < 0.15 else "wide"
-        verdict = (
-            f"our order came out at {us:.3f} and the market's preseason ADP at {them:.3f} — {scale}. "
-            f"So we finished ahead, by a {size} margin."
+        size = "a little" if gap < 0.05 else "clearly" if gap < 0.15 else "much"
+        record = (
+            f"As for the track record: across the {n_seasons} seasons from {span}, our preseason "
+            f"order within each position turned out {size} closer to how those years actually "
+            f"finished than the draft-day consensus did."
         )
     elif gap < 0:
-        verdict = (
-            f"our order came out at {us:.3f} and the market's preseason ADP at {them:.3f} — {scale}. "
-            f"So the market's order held up better than ours over this stretch."
+        record = (
+            f"As for the track record: across the {n_seasons} seasons from {span}, the draft-day "
+            f"consensus order held up better than ours did."
         )
     else:
-        verdict = (
-            f"our order and the market's preseason ADP both came out at {us:.3f} — {scale}. "
-            f"So the two were level over this stretch."
+        record = (
+            f"As for the track record: across the {n_seasons} seasons from {span}, our preseason "
+            f"order and the draft-day consensus finished level."
         )
-
-    parts = [
-        f"Before each of the last {agg['n_seasons']} seasons ({span}) we ranked every player against "
-        f"the others at his position. Judged on how those seasons actually finished, "
-        f"{verdict}"
-    ]
-    if agg.get("disagreement_us") is not None and agg.get("disagreement_system") is not None:
-        parts.append(
-            f"The difference is largest on the players we disagreed with the market about most: "
-            f"there our order came out at {agg['disagreement_us']:.3f} against ADP's "
-            f"{agg['disagreement_system']:.3f}."
-        )
-    parts.append(
-        "These are averages across several seasons, not a promise about any single season or "
-        "position — the year-by-year and position-by-position detail is below."
+    caveats = ["the gap is small", "it swings a lot from year to year and from position to position"]
+    if level_positions:
+        caveats.append(f"and at {_join(level_positions)} it is basically even")
+    hedge = f"But {', '.join(caveats[:-1])}, {caveats[-1]}." if len(caveats) > 1 else f"But {caveats[0]}."
+    if could_be_luck:
+        hedge += " It is small enough that it could just be luck — we are not promising it repeats."
+    else:
+        hedge += " It is a record of what already happened, not a promise about next season."
+    # ⛔ THE BLOCK MUST NOT END ON THE CAVEAT (NF-TR1 AC 5). The hedges are non-negotiable and every
+    # one of them is above this line — but a paragraph that STOPS on "it could just be luck" leaves
+    # a reader with a disclaimer as the last thing they read, and this page's job is to earn trust,
+    # not to apologise. So it closes by pointing at the evidence that makes the caveats meaningful:
+    # the per-season and per-position detail, and the disagreement view that is the genuinely
+    # interesting use of a draft-market comparison. That is a CLOSE, not a walk-back — it adds no
+    # claim and softens none of the four hedges above it.
+    close = (
+        "The season-by-season and position-by-position detail is below, along with the players we "
+        "ranked furthest from where the crowd was drafting them."
     )
-    headline = " ".join(parts)
-    lowered = headline.lower()
-    for banned in _CLAIM_DENYLIST:
-        if banned in lowered:
-            raise ValueError(f"generated headline contains a banned overclaim phrase {banned!r}: {headline!r}")
-    return headline
+    return " ".join([hook, record, hedge, close])
+
+
+def _build_precise(*, span: str, n_seasons: int, us: float, them: float, gap: float,
+                   n_mean: int, n_min: int, n_max: int, ci_lo: float, ci_hi: float,
+                   ci_level: int, could_be_luck: bool) -> str:
+    """The PRECISE layer — the operator-approved sentence, then the numbers that back it.
+
+    ⚠️ The approved wording ("modestly outperformed … and the confidence interval includes zero")
+    is only TRUE while the measurement has that shape. It is emitted verbatim when it does and
+    replaced when it does not, so this function can never print an approved-but-false sentence."""
+    if gap > 0 and could_be_luck:
+        approved = (
+            "Credence's served-style board modestly outperformed the captured ADP benchmark on "
+            "pooled within-position rank correlation from {span}. Results vary by position and "
+            "season, and the confidence interval includes zero."
+        ).format(span=span)
+    elif gap > 0:
+        approved = (
+            f"Credence's served-style board outperformed the captured ADP benchmark on pooled "
+            f"within-position rank correlation from {span}. Results vary by position and season."
+        )
+    elif gap < 0:
+        approved = (
+            f"Credence's served-style board did NOT lead the captured ADP benchmark on pooled "
+            f"within-position rank correlation from {span}. Results vary by position and season."
+        )
+    else:
+        approved = (
+            f"Credence's served-style board was level with the captured ADP benchmark on pooled "
+            f"within-position rank correlation from {span}. Results vary by position and season."
+        )
+    measured = (
+        f"Measured: pooled within-position Spearman rank correlation against the realized PPR "
+        f"finish, {us:.3f} for our board against {them:.3f} for the benchmark (a gap of "
+        f"{gap:+.3f}), over {n_seasons} seasons ({span}) and about {n_mean} ranked players per "
+        f"season (range {n_min}–{n_max}). The {ci_level}% paired player-level bootstrap interval "
+        f"around that gap runs from {ci_lo:+.3f} to {ci_hi:+.3f}"
+    )
+    measured += (", which includes zero." if could_be_luck else ".")
+    return approved + " " + measured
+
+
+def _build_disclosures(*, level_positions: list[str], behind_positions: list[str],
+                       others: list[dict], ci_lo: float, ci_hi: float, ci_level: int,
+                       could_be_luck: bool) -> list[str]:
+    """The six required disclosures, in plain words, every one derived from the measurement.
+
+    ⚠️ DERIVED, NOT ASSERTED. NF-TR1 requires "RB is a wash" — but writing that as a literal string
+    would make it a claim about the data rather than a reading of it, and it would survive unchanged
+    the day the data stopped saying it. The positions named below come from `delta_rho_by_pos`, so
+    if a future re-export moves running back off level the sentence moves with it."""
+    out: list[str] = []
+    if level_positions:
+        out.append(
+            f"At {_join(level_positions)} it is a wash. Our order there was no better than the "
+            f"draft-day consensus, and we do not claim it was."
+        )
+    else:
+        out.append(
+            "No position measured level this run; the position-by-position table below is the full "
+            "split, including any position where we trail."
+        )
+    if others:
+        note = (
+            f"We are also measured against {_join([o['label'] for o in others])}. Those are "
+            f"reported separately in the table below, and they are NOT part of the claim above."
+        )
+        # ⚠️ Named individually, never rolled up into "all of them". A future run where only SOME
+        # trail must print only those — a blanket sentence would be false the first time one flipped,
+        # and false in the direction that flatters us.
+        trailing = [o["label"] for o in others if o["verdict"] == "behind"]
+        if len(trailing) == len(others):
+            note += " We do not lead any of them — every one orders better than we do."
+        elif trailing:
+            note += f" We do not lead {_join(trailing)} — those order better than we do."
+        out.append(note)
+    else:
+        out.append(
+            "The comparisons against expert consensus, ESPN and Sleeper are reported separately "
+            "and are not part of this claim."
+        )
+    out.append(
+        "Our draft order is not independent of the crowd: at most positions the ranking blends the "
+        "market's own consensus with our model, so a gap between our order and the market's is a "
+        "smaller and less independent signal than it looks."
+    )
+    out.append(
+        "This is a record of what already happened over a handful of past seasons. It is not a "
+        "guarantee, and nothing here says what any single player or any single season will do."
+    )
+    out.append(
+        f"The uncertainty is shown, not hidden: the {ci_level}% range around the measured gap runs "
+        f"from {ci_lo:+.3f} to {ci_hi:+.3f}"
+        + (", which includes zero — meaning a gap of exactly nothing is still consistent with what "
+           "we measured." if could_be_luck else ".")
+    )
+    out.append(_METHOD_NOTE)
+    return out
+
+
+def build_headline(scorecard: dict, uncertainty: dict) -> str:
+    """The manifest's `headline` — now the CONSUMER LEAD (NF-TR1), not the analyst sentence.
+
+    ⭐ THE FIELD KEPT ITS NAME ON PURPOSE. `headline` is quoted verbatim by the locked-surface
+    upgrade banner and the player page, neither of which this branch changes, and by whatever future
+    surface reuses it (E9.46's home hero). Renaming it would have left every one of those quoting a
+    field that no longer exists; repointing it means they ALL inherit the plainer, better-hedged
+    lead the moment the artifact is republished, with no client change and no deploy-order hazard.
+    The analyst sentence is not lost — it moved to `claim.precise`."""
+    return build_claim(scorecard, uncertainty)["lead"]
 
 
 def _parse_seasons(spec: str) -> list[int]:
@@ -300,6 +670,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
                     default=_REPORT_DIR / "nf_d3_benchmark_scorecard_nf1_5.json",
                     help="the FRESH NF-D3 scorecard (nf1_5 projection source) — the single source "
                          "of truth for the manifest's honest headline numbers.")
+    ap.add_argument("--uncertainty-json", type=Path,
+                    default=_REPORT_DIR / "nf_d17_track_record_population.json",
+                    help="the NF-D17 population-sensitivity artifact — the source of truth for the "
+                         "claim's PLAYER COUNT and its bootstrap INTERVAL. Required: the interval "
+                         "is a disclosure NF-TR1 mandates, and an export that could not read one "
+                         "must fail loudly rather than publish a claim with the uncertainty "
+                         "quietly missing.")
     ap.add_argument("--out", type=Path, default=None, help="override the local staging output dir")
     ap.add_argument("--s3-bucket", default=os.getenv("CACHE_BUCKET"),
                     help="S3 bucket to upload to (default $CACHE_BUCKET). Uploaded under "
@@ -322,8 +699,17 @@ def main(argv: list[str] | None = None) -> int:
             f"  uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_benchmark_scorecard "
             f"--from {seasons[0]} --to {seasons[-1]} --projection-source nf1_5"
         )
+    if not args.uncertainty_json.is_file():
+        raise SystemExit(
+            f"no NF-D17 uncertainty JSON at {args.uncertainty_json} — the claim's interval and "
+            f"player count are REQUIRED disclosures (NF-TR1), so the export refuses rather than "
+            f"publishing a claim with the uncertainty silently absent. Run:\n"
+            f"  uv run python -m quant_sports_intel_models.football.nfl.fantasy."
+            f"run_nf_d17_population_sensitivity"
+        )
     scorecard = json.loads(args.scorecard_json.read_text())
-    headline = build_headline(scorecard)
+    uncertainty = json.loads(args.uncertainty_json.read_text())
+    claim = build_claim(scorecard, uncertainty)
 
     if not Path(args.duckdb).exists():
         raise SystemExit(f"DuckDB not found at {args.duckdb} — build the NFL marts first")
@@ -369,7 +755,12 @@ def main(argv: list[str] | None = None) -> int:
         # honestly rather than presenting it as an unlabeled "ADP" identical to every other season.
         "adpSourceBySeason": adp_source_by_season,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "headline": headline,
+        # NF-TR1: `headline` IS the consumer lead. Kept under its original key so the surfaces that
+        # already quote it verbatim (the locked-surface upgrade banner, the player page, and E9.46's
+        # home hero when it lands) inherit the plainer, better-hedged wording with no client change —
+        # ADDITIVE, per the NF-C0 deploy-skew rule. The analyst sentence lives on in `claim.precise`.
+        "headline": claim["lead"],
+        "claim": claim,
         "lockedSeason": LOCKED_SEASON,
         "scorecardGeneratedAt": datetime.fromtimestamp(
             args.scorecard_json.stat().st_mtime, tz=timezone.utc

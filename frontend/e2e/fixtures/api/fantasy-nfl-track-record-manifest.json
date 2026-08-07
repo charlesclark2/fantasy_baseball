@@ -18,7 +18,87 @@
     "2025": "mfl"
   },
   "generated_at": "2026-08-05T04:51:42.995594+00:00",
-  "headline": "Before each of the last 6 seasons (2019–2024) we ranked every player against the others at his position. Judged on how those seasons actually finished, our order came out at 0.517 and the market's preseason ADP at 0.494 — on a scale where 1.000 would be a perfect ranking and 0.000 would be a random one. So we finished ahead, by a narrow margin. The difference is largest on the players we disagreed with the market about most: there our order came out at 0.498 against ADP's 0.416. These are averages across several seasons, not a promise about any single season or position — the year-by-year and position-by-position detail is below.",
+  "headline": "Credence projects a full season of fantasy points for every player, scored the way YOUR league scores \u2014 with a range around each number so you can see how confident we are, and the inputs behind it laid out rather than hidden. As for the track record: across the 6 seasons from 2019\u20132024, our preseason order within each position turned out a little closer to how those years actually finished than the draft-day consensus did. But the gap is small, it swings a lot from year to year and from position to position, and at running back it is basically even. It is small enough that it could just be luck \u2014 we are not promising it repeats. The season-by-season and position-by-position detail is below, along with the players we ranked furthest from where the crowd was drafting them.",
   "lockedSeason": 2026,
-  "scorecardGeneratedAt": "2026-08-02T06:11:45.299170+00:00"
+  "scorecardGeneratedAt": "2026-08-02T06:11:45.299170+00:00",
+  "claim": {
+    "lead": "Credence projects a full season of fantasy points for every player, scored the way YOUR league scores \u2014 with a range around each number so you can see how confident we are, and the inputs behind it laid out rather than hidden. As for the track record: across the 6 seasons from 2019\u20132024, our preseason order within each position turned out a little closer to how those years actually finished than the draft-day consensus did. But the gap is small, it swings a lot from year to year and from position to position, and at running back it is basically even. It is small enough that it could just be luck \u2014 we are not promising it repeats. The season-by-season and position-by-position detail is below, along with the players we ranked furthest from where the crowd was drafting them.",
+    "precise": "Credence's served-style board modestly outperformed the captured ADP benchmark on pooled within-position rank correlation from 2019\u20132024. Results vary by position and season, and the confidence interval includes zero. Measured: pooled within-position Spearman rank correlation against the realized PPR finish, 0.517 for our board against 0.494 for the benchmark (a gap of +0.022), over 6 seasons (2019\u20132024) and about 162 ranked players per season (range 140\u2013172). The 90% paired player-level bootstrap interval around that gap runs from -0.006 to +0.051, which includes zero.",
+    "benchmark": "the captured preseason ADP benchmark (Fantasy Football Calculator's real-draft consensus, archived for each season before it started)",
+    "benchmarkShort": "captured ADP",
+    "metric": "pooled within-position rank correlation against the realized PPR finish",
+    "seasons": "2019\u20132024",
+    "nSeasons": 6,
+    "playersPerSeason": 162,
+    "playersPerSeasonMin": 140,
+    "playersPerSeasonMax": 172,
+    "usRho": 0.517,
+    "benchmarkRho": 0.494,
+    "deltaRho": 0.022,
+    "ciLow": -0.006,
+    "ciHigh": 0.051,
+    "ciLevel": 90,
+    "ciIncludesZero": true,
+    "byPosition": [
+      {
+        "position": "QB",
+        "deltaRho": 0.031,
+        "verdict": "ahead"
+      },
+      {
+        "position": "RB",
+        "deltaRho": -0.0,
+        "verdict": "even"
+      },
+      {
+        "position": "TE",
+        "deltaRho": 0.021,
+        "verdict": "ahead"
+      },
+      {
+        "position": "WR",
+        "deltaRho": 0.037,
+        "verdict": "ahead"
+      }
+    ],
+    "otherBenchmarks": [
+      {
+        "key": "ecr",
+        "label": "FantasyPros expert consensus (ECR)",
+        "deltaRho": -0.012,
+        "usRho": 0.728,
+        "benchmarkRho": 0.74,
+        "nSeasons": 7,
+        "verdict": "behind"
+      },
+      {
+        "key": "espn",
+        "label": "ESPN's rankings",
+        "deltaRho": -0.038,
+        "usRho": 0.75,
+        "benchmarkRho": 0.788,
+        "nSeasons": 3,
+        "verdict": "behind"
+      },
+      {
+        "key": "sleeper",
+        "label": "Sleeper's rankings",
+        "deltaRho": -0.11,
+        "usRho": 0.731,
+        "benchmarkRho": 0.841,
+        "nSeasons": 7,
+        "verdict": "behind"
+      }
+    ],
+    "disclosures": [
+      "At running back it is a wash. Our order there was no better than the draft-day consensus, and we do not claim it was.",
+      "We are also measured against FantasyPros expert consensus (ECR), ESPN's rankings and Sleeper's rankings. Those are reported separately in the table below, and they are NOT part of the claim above. We do not lead any of them \u2014 every one orders better than we do.",
+      "Our draft order is not independent of the crowd: at most positions the ranking blends the market's own consensus with our model, so a gap between our order and the market's is a smaller and less independent signal than it looks.",
+      "This is a record of what already happened over a handful of past seasons. It is not a guarantee, and nothing here says what any single player or any single season will do.",
+      "The uncertainty is shown, not hidden: the 90% range around the measured gap runs from -0.006 to +0.051, which includes zero \u2014 meaning a gap of exactly nothing is still consistent with what we measured.",
+      "How the past seasons are graded: for each season we use the board as it would have stood before that season kicked off, built only from seasons that had already finished, and compare it with the draft-day consensus that was actually archived for that season. Nothing is re-ranked after the fact, and no season's own results are used to build its own board."
+    ],
+    "method": "How the past seasons are graded: for each season we use the board as it would have stood before that season kicked off, built only from seasons that had already finished, and compare it with the draft-day consensus that was actually archived for that season. Nothing is re-ranked after the fact, and no season's own results are used to build its own board.",
+    "architecture": "How the board is built: two models stacked. The projected points and the range around them come from a model that never looks at the draft market. A second model then decides the ORDER players are ranked in, and at most positions that ordering blends the market's own consensus with our model \u2014 so our order is not an independent read on the market, and a gap between our ranking and the market's is a smaller, less independent signal than it looks. What the second model changes is which player gets which projected point total; it never changes the totals themselves."
+  }
 }
