@@ -129,6 +129,17 @@ select
     json_extract_string(outcome, '$.point')::double         as outcome_point
 
 from outcomes_flattened
+-- INC-41 — A ROW WITHOUT A USABLE PRICE IS EXCLUDED, NOT CARRIED WITH A NULL PRICE.
+-- This is the model's existing contract, stated in mart_odds_outcomes' own column docs ("Rows
+-- where the upstream API sent explicit JSON null for price are excluded at the staging layer"),
+-- and it is what makes the `not_null` tests on outcome_price_american meaningful at BOTH layers.
+-- Nulling the price in place instead would have silently downgraded two live data-quality gates
+-- to accommodate one bad vendor row — the wrong direction. Filtering here is also strictly more
+-- useful: a book that posts an unusable price for one snapshot but a good one in another still
+-- contributes its good snapshot, because this runs BEFORE the dedup qualify below.
+-- (The bounded CASE expressions above are now defence-in-depth — the bigint parse is what makes
+-- them overflow-proof no matter how the planner orders projection vs filter.)
+where abs(try_cast(json_extract_string(outcome, '$.price') as bigint)) between 100 and 1000000
 qualify row_number() over (
     partition by load_id, event_id, bookmaker_key, market_key, json_extract_string(outcome, '$.name')
     order by ingestion_ts
