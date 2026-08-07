@@ -110,6 +110,36 @@ const CASES = [
     grep: "signup affordance",
   },
   {
+    id: "hardcoded-price",
+    shipped: "E9.59 — the defect the whole story exists to make impossible",
+    // ⚠️ NOT a previously-shipped defect, and the only case here that is not. It is the
+    // failure mode the decision was made to prevent: a price rendered from a constant is
+    // indistinguishable from a correct one until the operator edits Stripe and the site
+    // keeps charging one number while showing another. Every other instrument in the repo
+    // is blind to it — `tsc` sees a valid string, `next build` renders nothing, and a spec
+    // that merely asserts "a price is visible" passes. The transform test is the only thing
+    // that can tell "shows A price" from "shows THE price", so it gets proved like one.
+    detail:
+      "Renders a constant instead of the server's `unit_amount`; passes any 'a price is shown' assertion.",
+    file: "app/subscribe/page.tsx",
+    from: "{fmtAmount(publicPricing.data.unit_amount, publicPricing.data.currency)}",
+    to: '{"$10"}',
+    grep: "FOLLOWS the server",
+  },
+  {
+    id: "price-outage-breaks-the-funnel",
+    shipped: "E9.59 — the deploy-skew window this story ships into",
+    // The API-Gateway NONE route is an operator step landing AFTER the Lambda deploy, so a
+    // logged-out pricing fetch 401s in between. Rendering the whole logged-out card only
+    // when the price arrives is the natural way to write it and takes the sign-up path down
+    // with the price — a display outage becoming a funnel outage.
+    detail: "Gating the signup card on the price means a 401 from the pricing read hides the CTA.",
+    file: "app/subscribe/page.tsx",
+    from: "        {!loading && !signedIn && (",
+    to: "        {!loading && !signedIn && publicPricing.data && (",
+    grep: "absent, not fatal",
+  },
+  {
     id: "google-entry-missing",
     shipped: "E9.58 — a signup entry point with no working Google button",
     detail: "The DNS-dead-host outage presented to the user as exactly this: no way through.",
@@ -120,11 +150,38 @@ const CASES = [
   },
 ]
 
-const selected = process.argv[2]
-  ? CASES.filter((c) => c.id.includes(process.argv[2]))
-  : CASES
+// argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
+const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
+const selected = filter ? CASES.filter((c) => c.id.includes(filter)) : CASES
 if (!selected.length) {
-  console.error(`no case matching "${process.argv[2]}". ids: ${CASES.map((c) => c.id).join(", ")}`)
+  console.error(`no case matching "${filter}". ids: ${CASES.map((c) => c.id).join(", ")}`)
+  process.exit(2)
+}
+
+/**
+ * ⚠️⚠️ COMMIT FIRST. `restoreAll` below is a `git checkout --`, i.e. it restores every case
+ * file from HEAD — so any UNCOMMITTED edit to one of them is destroyed, silently, on exit.
+ * That is not hypothetical: it ate a session's in-progress `app/subscribe/page.tsx` while
+ * red-proving E9.59's own new case (2026-08-07). The per-case `writeFileSync(path, original)`
+ * restore is correct; the exit trap is the belt-and-braces path for a crash, and it can only
+ * reach for HEAD.
+ *
+ * So refuse to start on a dirty case file rather than eating it. `--force` is available for
+ * the deliberate "I know, my work is stashed" case.
+ */
+function assertCaseFilesAreCommitted() {
+  if (process.argv.includes("--force")) return
+  const dirty = execFileSync("git", ["status", "--porcelain", "--", ...new Set(CASES.map((c) => c.file))], {
+    cwd: FRONTEND,
+    encoding: "utf8",
+  }).trim()
+  if (!dirty) return
+  console.error(
+    "⛔ red-proof rewrites these files and restores them from HEAD on exit, which would DESTROY " +
+      "your uncommitted work in:\n" +
+      dirty +
+      "\n\nCommit (or stash) first, then re-run. `--force` overrides.",
+  )
   process.exit(2)
 }
 
@@ -137,6 +194,7 @@ function restoreAll() {
     }
   }
 }
+assertCaseFilesAreCommitted()
 process.on("exit", restoreAll)
 process.on("SIGINT", () => process.exit(130))
 

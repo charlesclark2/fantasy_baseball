@@ -815,6 +815,46 @@ def increment_founding_slots() -> int:
     return int(resp["Attributes"]["slots_used"])
 
 
+_PRICE_SNAPSHOT_PK_PREFIX = "__stripe_meta__#price#"
+
+
+def read_price_snapshot(price_id: str) -> dict | None:
+    """The last-known-good Stripe Price snapshot for `price_id`, or None.
+
+    E9.59 — the DURABLE half of the pricing cache. An in-memory cache alone is per
+    warm Lambda container, so a cold start during a Stripe outage would have nothing
+    to fall back on and the public pricing page would blank. This row is written by
+    the last container that DID reach Stripe, so the only state with no fallback is
+    "this Price has never once been read since it was configured".
+
+    Values come back as `Decimal`; the caller coerces. Never raises — a fallback read
+    that itself fails must not be worse than having no fallback."""
+    try:
+        item = _users_table().get_item(Key={"user_id": f"{_PRICE_SNAPSHOT_PK_PREFIX}{price_id}"}).get("Item")
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not read the last-known-good price snapshot (price=%s)", price_id)
+        return None
+    if not item:
+        return None
+    return {k: v for k, v in item.items() if k != "user_id"}
+
+
+def write_price_snapshot(price_id: str, snapshot: dict) -> None:
+    """Persist a freshly-read Stripe Price as the last-known-good. Never raises —
+    failing to CACHE a price must never fail the request that successfully read it."""
+    try:
+        _users_table().put_item(
+            Item={
+                "user_id": f"{_PRICE_SNAPSHOT_PK_PREFIX}{price_id}",
+                **{k: (Decimal(str(v)) if isinstance(v, (int, float)) and not isinstance(v, bool) else v)
+                   for k, v in snapshot.items()},
+                "updated_at": _now_iso(),
+            }
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not persist the price snapshot (price=%s)", price_id)
+
+
 def link_stripe_customer(user_id: str, customer_id: str) -> None:
     """Record the Stripe customer id on the user's row + a reverse-lookup row.
 

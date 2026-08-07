@@ -44,6 +44,7 @@ hermetic gate.
 | `specs/entitled-surfaces.spec.ts` | An unlocked payload renders real numbers, zero lock chips, and no upgrade ask | the other half of the same split — a page that renders chips unconditionally passes the file above and is broken for every subscriber |
 | `specs/route-integrity.spec.ts` | **Every internal `href` in the rendered DOM resolves** | E9.56c — `/pricing` killed the entire buy path |
 | `specs/signup-funnel.spec.ts` | Every signup entry point offers a working Google button; the nav carries a signup affordance on desktop **and mobile**; the click leaves for the configured Cognito host with correct PKCE params | E9.58 — the DNS-dead Hosted-UI host, and the logged-out mobile nav with no signup affordance (`hidden sm:flex`) |
+| `specs/pricing.spec.ts` | A logged-out visitor sees the price; **the rendered price and currency FOLLOW the server**; a failed pricing read costs the price and not the funnel; the page's own CTA resolves; the payload carries no internal conversion count | E9.59 — until it, `/subscribe` could not show a price at all (the only pricing read required auth). The headline case is pre-emptive: a hardcoded price is invisible to every other gate |
 
 `signup-funnel.spec.ts` is the only spec that also runs on a phone viewport, because one of the
 defects it is written from was mobile-only and a desktop-only suite is structurally blind to it.
@@ -58,7 +59,17 @@ browser receives.
 all live in the gap between what we *assume* the payload looks like and what the server actually
 sends, so a hand-written fixture encodes the assumption under test.
 
-One fixture is generated rather than captured —
+`subscription-public-pricing.json` (E9.59) was synthetic for one day — the route did not exist in
+production until the operator added its API-Gateway `NONE` route, so there was nothing to capture.
+It is a **real capture since 2026-08-07** and the synthetic file is deleted. Two notes on it:
+
+- It is pinned to the backend model — `betting_ml/tests/test_e9_59_public_pricing.py` asserts its
+  key set **equals** `PublicPricing.model_fields`. A capture is a snapshot and goes stale silently;
+  that test is what turns "the API grew a field" into a red build instead of a suite passing
+  against a shape that no longer occurs.
+- ⚠️ It records the Stripe **TEST-mode** price. Re-capture at the E9.8-P2 live flip.
+
+One fixture is still generated rather than captured —
 `fantasy-nfl-projections-2026-entitled.synthetic.json`. There is no public unlocked form of the
 current season to capture (every past season's `projections.json` 404s), and the entitled payload
 *is* the paid product, which does not belong in the repo. `build-entitled-fixture.mjs` derives it

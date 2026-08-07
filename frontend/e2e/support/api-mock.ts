@@ -21,6 +21,12 @@ function fixture<T = any>(name: string): T {
 }
 
 export const FIXTURES = {
+  // E9.59. Was synthetic while the route was un-deployed; a REAL capture since 2026-08-07,
+  // once the API-Gateway `NONE` route went live. ⚠️ Its amount is now the true $10, so the
+  // "a price renders" spec no longer discriminates a hardcoded price — the `transform` spec
+  // (which changes the SERVER's amount and demands the DOM follow) is what carries that, and
+  // it is immune to whatever this fixture holds.
+  publicPricing: () => fixture("subscription-public-pricing.json"),
   projectionsLocked: () => fixture("fantasy-nfl-projections-2026-locked.json"),
   projectionsEntitled: () => fixture("fantasy-nfl-projections-2026-entitled.synthetic.json"),
   manifestLocked: () => fixture("fantasy-nfl-manifest-2026-locked.json"),
@@ -51,6 +57,7 @@ function payloadFor(pathname: string, entitlement: Entitlement): unknown | undef
   if (pathname === "/fantasy/nfl/projections") {
     return entitlement === "entitled" ? FIXTURES.projectionsEntitled() : FIXTURES.projectionsLocked()
   }
+  if (pathname === "/subscription/public-pricing") return FIXTURES.publicPricing()
   if (pathname === "/fantasy/nfl/manifest") return FIXTURES.manifestLocked()
   if (pathname === "/fantasy/nfl/board") return FIXTURES.boardLocked()
   if (pathname === "/fantasy/nfl/track-record/manifest") return FIXTURES.trackRecordManifest()

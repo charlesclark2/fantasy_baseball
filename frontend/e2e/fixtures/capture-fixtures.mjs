@@ -61,6 +61,11 @@ const TARGETS = [
     path: `/fantasy/nfl/track-record/${TRACK_RECORD_SEASON}`,
     note: "Public past-season track record. REAL, UNLOCKED model output — the honest 'a real payload renders real numbers' fixture.",
   },
+  {
+    file: "subscription-public-pricing.json",
+    path: "/subscription/public-pricing",
+    note: "Public price (E9.59). Read server-side from the Stripe Price object Checkout charges against — so this capture is the number a logged-out visitor actually sees. ⚠️ Stripe TEST mode until E9.8-P2; the amount will change at the live flip and this fixture should be re-captured then.",
+  },
 ]
 
 const sha = (s) => createHash("sha256").update(s).digest("hex").slice(0, 16)
