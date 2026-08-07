@@ -1,0 +1,19 @@
+{
+  "nodes": {
+    "test.credence_fixture.not_null_served_prices_price.b8efbaef87": {
+      "config": {
+        "severity": "ERROR"
+      }
+    },
+    "test.credence_fixture.peripheral_broken": {
+      "config": {
+        "severity": "WARN"
+      }
+    },
+    "test.credence_fixture.unique_served_prices_price.388f61f5a3": {
+      "config": {
+        "severity": "WARN"
+      }
+    }
+  }
+}

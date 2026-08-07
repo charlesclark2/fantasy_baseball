@@ -13,6 +13,7 @@ from pipeline.ops.daily_ingestion_ops import (
     check_intraday_fallback_op,
     check_served_prediction_integrity_op,
     check_artifact_freshness_op,
+    check_dbt_test_results_op,
     check_w11_tail_coverage_op,
     check_prediction_coverage,
     compute_elo,
@@ -162,6 +163,15 @@ def daily_ingestion_job():
     # dbt_daily_build and is never depended on, so a settle failure can't block
     # predictions or the API cache.
     settle_user_bets_op(start=s16)
+    # INC-41 — page when a SERVING-CRITICAL dbt test goes red. Fans in DIRECTLY off
+    # dbt_daily_build (s16) because that op is where the suite runs and where its
+    # target/run_results.json is captured; anything later would only add distance between the
+    # measurement and the read. It reads that captured artifact — it never re-runs the tests
+    # (that would double the suite and resume COMPUTE_WH, a new waker during the live E11.24
+    # soak). Nothing depends on it, exactly like settle_user_bets_op above, so it is structurally
+    # incapable of blocking predictions: the test step stays WARN-tier / non-blocking and INC-6
+    # is not regressed. ALERT-tier, always — it pages via send_alert and never HALTs.
+    check_dbt_test_results_op(start=s16)
     # Epic O.2 — sub-model signal generation for the recently-completed game
     # window. Fan out from dbt_daily_build (mart_game_results + feature marts are
     # fresh), fan in to the PIVOT rebuild, then a (non-blocking) freshness check.

@@ -20,6 +20,7 @@ and concurrent dbtf processes would compete for the same warehouse slots anyway.
 Callers that arrive during an active run receive HTTP 409; they should back off and
 retry (the Dagster op already polls for up to 45 minutes).
 """
+import json
 import os
 import subprocess
 import threading
@@ -60,6 +61,21 @@ _STATE_FILES: tuple[str, ...] = ("manifest.json", "sources.json")
 # Dagster polls until completion within the same process lifetime.
 _runs: dict[str, dict[str, Any]] = {}
 _lock = threading.Lock()
+
+# INC-41 — captured target/run_results.json, keyed by run_id, served by GET /run_results/{run_id}.
+#
+# WHY A SEPARATE REGISTRY, AND WHY CAPTURED AT RUN TIME:
+#   (1) NOT in `_runs`: /status/{run_id} is polled every 15s for the life of a run, and the
+#       entry is returned verbatim. Folding a few hundred KB of test results into it would put
+#       the whole artifact on the wire on every poll for no reason.
+#   (2) CAPTURED immediately after the dbtf process exits, never read on request. dbtf overwrites
+#       target/run_results.json on its NEXT invocation, so a read-at-request-time endpoint would
+#       hand back whichever run happened to finish last — the stale-on-disk-artifact class this
+#       repo keeps getting burned by (the board exporter's legacy CSV; the query-range cache).
+#       Capturing into a run_id-keyed slot makes serving another run's results structurally
+#       impossible rather than merely unlikely.
+_run_results: dict[str, dict[str, Any]] = {}
+_RUN_RESULTS_KEEP = 20  # bound the memory; only the run in flight is ever fetched
 
 app = FastAPI(title="dbt-runner", version="1.0.0")
 
@@ -213,6 +229,55 @@ def get_status(run_id: str, authorization: str | None = Header(None)) -> dict[st
     return entry
 
 
+@app.get("/run_results/{run_id}")
+def get_run_results(run_id: str, authorization: str | None = Header(None)) -> dict[str, Any]:
+    """INC-41 — serve the target/run_results.json captured for THIS run.
+
+    The dbt-runner is a separate container from dagster-codeloc with no shared volume, so the
+    Dagster op that pages on a red serving-critical dbt test cannot read the artifact off disk;
+    this is how it gets it. Read-only, no dbt execution, no warehouse wake.
+
+    404 distinguishes the two misses the caller must not conflate: an unknown run_id, versus a
+    known run whose dbtf invocation wrote no artifact. Neither is reported as "tests passed" —
+    the caller treats an unreadable result as UNVERIFIED, never as healthy (NF1.7 (a)).
+    """
+    _check_auth(authorization)
+    captured = _run_results.get(run_id)
+    if captured is None:
+        if run_id not in _runs:
+            raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Run {run_id!r} produced no target/run_results.json",
+        )
+    return captured
+
+
+def _capture_run_results(run_id: str) -> None:
+    """Snapshot target/run_results.json into the run_id-keyed registry. Never raises.
+
+    Called once, immediately after the dbtf process exits and before any later invocation can
+    overwrite the file on disk. A capture failure must never affect the dbt run's own outcome —
+    this is observability only (`best_alpha=0`), so every error path is swallowed into an absent
+    entry, which the caller reads as UNVERIFIED rather than as a pass.
+    """
+    try:
+        path = Path(_DBT_PROJECT_DIR) / "target" / "run_results.json"
+        if not path.exists():
+            return
+        with path.open() as fh:
+            payload = json.load(fh)
+        if not isinstance(payload, dict):
+            return
+        _run_results[run_id] = payload
+        # Bound memory: keep only the most recent N. dict preserves insertion order, and only the
+        # run currently in flight is ever fetched, so evicting the oldest is safe.
+        while len(_run_results) > _RUN_RESULTS_KEEP:
+            _run_results.pop(next(iter(_run_results)))
+    except Exception as exc:  # noqa: BLE001 — capture is best-effort; never fail a dbt run for it
+        print(f"[dbt-runner] WARNING: could not capture run_results.json ({exc})", flush=True)
+
+
 def _execute(run_id: str, args: list[str], extra_env: dict[str, str], use_state: bool = False) -> None:
     # INC-32: any unexpected exception in the body (state download, boto3, subprocess spawn) must
     # still transition the run to a TERMINAL status — otherwise the entry stays "running" and holds
@@ -265,6 +330,10 @@ def _execute_impl(run_id: str, args: list[str], extra_env: dict[str, str], use_s
         "--project-dir", _DBT_PROJECT_DIR, "--profiles-dir", _DBT_PROJECT_DIR
     ]
     result = _run_cmd(cmd, env)
+    # INC-41: snapshot the test results BEFORE anything else can overwrite target/run_results.json.
+    # Must happen on the FAILURE path too — an error-severity test failure is exactly what exits
+    # non-zero here, and it is the whole reason the pager exists.
+    _capture_run_results(run_id)
 
     stderr_extra = ""
     if use_state and result.returncode == 0:
