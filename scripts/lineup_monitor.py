@@ -99,6 +99,9 @@ def over_retrigger_cap(attempts: int) -> bool:
 # killing). When a lineup DOES confirm we fire lineup_monitor_job, which runs dbt/predict on
 # Snowflake anyway — one wake there is legitimate and unavoidable, so the audit-log write is
 # kept but made CONDITIONAL on an actual trigger instead of firing every quiet tick.
+# ⚠️ SUPERSEDED BY E11.24 (see the next block): the census measured that surviving conditional
+# INSERT still paying the provisioning wait, so the audit sink moved to DynamoDB entirely and
+# the tick is now UNCONDITIONALLY Snowflake-free. Kept here as the reasoning that was tested.
 #
 # Under LINEUP_MONITOR_S3=1:
 #   reads  → DuckDB over the S3 lakehouse (stg_statsapi_lineups_wide, probable_pitchers,
@@ -116,6 +119,62 @@ def over_retrigger_cap(attempts: int) -> bool:
 _S3_MODE = os.environ.get("LINEUP_MONITOR_S3", "0") == "1"
 _STATE_TABLE = os.environ.get("SERVING_CACHE_TABLE", "credence-prod-serving-cache")
 _STATE_SK_PREFIX = "lineup_monitor#"
+
+# ── E11.24 — THE AUDIT WRITE MOVES OFF COMPUTE_WH (2026-08-06) ──────────────────────────
+# Phase-2a (above) left exactly ONE Snowflake touch on the tick: the pipeline_run_log audit
+# INSERT, kept on a TRIGGERING tick on the reasoning that "the lineup_monitor_job it fires runs
+# dbt/predict on Snowflake anyway, so the session is already being paid for."
+#
+# ⭐ THE WAKE CENSUS OVERTURNED THAT REASONING, and the mechanism is ordering: the audit INSERT
+# is the FIRST Snowflake statement of the whole trigger sequence — it runs inside the tick,
+# BEFORE the sensor issues the RunRequest and well before lineup_monitor_job's dbt step. So it
+# is the statement that PAYS THE PROVISIONING WAIT (72 waits/10d in the 14-23 band at ~100%
+# wake efficiency: essentially every occurrence queued on provisioning ⇒ it IS the waker), and
+# the job's dbt work that follows lands on an already-warm warehouse. "The session is already
+# being paid for" had the causality backwards — this statement is what buys it.
+# ⚠️ HONEST RESIDUAL (the standing roadmap caveat, NOT refuted by the above): removing the
+# first waker can SHIFT the resume onto the dbt step rather than delete it, if the warehouse
+# would have suspended before the job ran. That is a question only the POST-flip census can
+# settle, per FAMILY and per BAND — hence the pre-merge baseline. What is certain is that a
+# guaranteed resume on a path that needs none is gone.
+#
+# SINK = DynamoDB, the SAME `pk="ops"` table that already holds the lineup_monitor_state
+# replacement (`lineup_monitor#`) and the branch-2 retry counter (`lineup_retry#`) — i.e. the
+# direction lineup_monitor_state is headed anyway, with no new bucket, no new IAM grant (the
+# instance-profile role already has DynamoDB RW on this table) and no new credential path.
+#   ⛔ boto3 gets NO explicit keys — `boto3.resource("dynamodb")` resolves the EC2 instance
+#      role via the default chain (passing an unset os.environ key would DISABLE that chain;
+#      see the AKID landmine in CLAUDE.md).
+#
+# 🔎 INC-27 CONSUMER GREP (re-confirmed 2026-08-06 over the whole repo, string-literals and
+# all — not the dbt DAG): `baseball_data.config.pipeline_run_log` is WRITE-ONLY from this
+# script. The only `SELECT ... FROM pipeline_run_log` sites are two HUMAN runbook queries in
+# scripts/daily_run.md (updated by this change) and a historical phase-5 acceptance COUNT(*)
+# in plan_specs/. NOTHING in app/backend, no dbt model, no sensor/op, no serving reader.
+# ⚠️ CORRECTED 2026-08-06 by a live `SHOW TASKS IN ACCOUNT`: an earlier draft of this comment
+# claimed the legacy Snowflake task-DAG procs (scripts/ddl/snowflake_task_dag.sql) are still
+# separate writers, so the table would keep filling and any unknown reader would degrade
+# gracefully. THAT IS FALSE. The DAG is a single chain rooted at TASK_SAVANT_INGESTION, which
+# has been USER_SUSPENDED since 2026-04-30; the four downstream tasks read `started` but are
+# PREDECESSOR-driven with no schedule of their own, so they cannot fire while the root is
+# suspended. TASK_LINEUP_MONITOR is likewise suspended (same date). ⇒ this script is the SOLE
+# remaining writer, and after this change `pipeline_run_log` has NO writer at all. That makes
+# the change strictly safer (a table nothing writes is a table nothing can be reading usefully)
+# but removes the graceful-degradation fallback — so the repo-grep + the operator's
+# Snowflake-side reader check are the whole of the evidence, not a belt beside braces.
+# ✅ THAT CHECK IS NOW DONE AND INC-27 IS CLOSED (operator, 2026-08-06). Views reading the table:
+# 0. Queries with `from ...pipeline_run_log` in 30 days: 3, all DBT_RW/COMPUTE_WH ad-hoc — one
+# carries a HARDCODED same-day literal (`run_ts >= '2026-07-16 12:00:00'`, run 18:04 that day),
+# all three have DIFFERENT shapes, and they cluster on 2 days (two 7 min apart). A scheduled
+# reader emits byte-identical text on a regular cadence; none of that holds. The dates land on
+# the E11.20-COST audit (7/16) and the E11.24 census window (7/27) — i.e. prior cost-audit
+# sessions running daily_run.md's own runbook query. ⇒ no serving, scheduled, or automated reader.
+# ⚠️ BUT THOSE 3 ROWS PROVE A DOC RISK: this table is the natural first reach in a cost/freshness
+# audit and was reached for twice last month — and it now returns EMPTY. daily_run.md says loudly
+# that an empty pipeline_run_log is the expected healthy state, NOT an outage. Keep that note.
+# ⚠️ NOT to be conflated with the DynamoDB note at the top of this block — that one is about
+# the STATE table (lineup_monitor_state), a different table with a different migration.
+_AUDIT_SK_PREFIX = "lineup_audit#"
 
 
 def _duck_lakehouse(tables: list[str]):
@@ -224,6 +283,68 @@ def _record_trigger_dynamo(today_iso: str, game_pk: int, home, away) -> None:
     })
 
 
+def build_audit_item(today_iso: str, run_ts_iso: str, status: str, rows_affected: int,
+                     error_message: str | None = None) -> dict:
+    """PURE (unit-tested) — the DynamoDB item for one lineup_monitor audit record.
+
+    Column-for-column the old `pipeline_run_log` row (task_name / run_ts / status /
+    rows_affected / error_message) so the runbook read is a rename, not a re-interpretation.
+
+    The sort key carries the run_date AND the run timestamp because this log is APPEND-only:
+    unlike the state items (one per game, last-write-wins on a fixed key) every tick must
+    survive as its own record, so two ticks in the same second are the only collision and the
+    ISO timestamp makes that vanishingly unlikely — and a collision would overwrite an
+    identical-second record, never a different tick's.
+
+    ⚠️ `_AUDIT_SK_PREFIX` MUST NOT be a string prefix of `_STATE_SK_PREFIX` or vice versa:
+    `_already_triggered_dynamo` reads state with `begins_with(_STATE_SK_PREFIX + date + '#')`,
+    so a colliding prefix would feed audit rows into the STATE query and the monitor would
+    treat log lines as already-triggered games. Guarded by an explicit test.
+    """
+    item = {
+        "pk": "ops",
+        "sk": f"{_AUDIT_SK_PREFIX}{today_iso}#{run_ts_iso}",
+        "task_name": TASK,
+        "run_ts": run_ts_iso,
+        "status": status,
+        "rows_affected": int(rows_affected),
+        "run_date": today_iso,
+        # Mirrors the serving-cache item convention (is_permanent / cache_date) so this row is
+        # date-scoped like every other ops row in the table.
+        "is_permanent": False,
+        "cache_date": today_iso,
+    }
+    if error_message:
+        item["error_message"] = str(error_message)[:400]
+    return item
+
+
+def _record_audit_dynamo(today_iso: str, status: str, rows_affected: int,
+                         error_message: str | None = None) -> None:
+    """E11.24 — write the tick's audit record to DynamoDB instead of COMPUTE_WH.
+
+    FAIL-OPEN, and deliberately so: this is a WRITE-ONLY diagnostic with no serving reader
+    (WARN tier under the E11.7 contract — `context.log.warning`-equivalent, never a HALT).
+    An audit-sink outage must not break lineup detection, and it must ESPECIALLY not fall back
+    to Snowflake — a fallback would re-arm the exact waker this change removes on precisely the
+    flaky days when it fires most.
+    """
+    try:
+        _state_table().put_item(Item=build_audit_item(
+            today_iso,
+            datetime.now(timezone.utc).isoformat(),
+            status,
+            rows_affected,
+            error_message,
+        ))
+    except Exception as e:  # noqa: BLE001 — never break the monitor on the audit log
+        log.warning(
+            "[ALERT] lineup_monitor audit write failed (status=%s rows=%s): %s. "
+            "Detection is UNAFFECTED; the tick simply left no audit record.",
+            status, rows_affected, e,
+        )
+
+
 def _bump_retrigger_count(today_iso: str, game_pk: int) -> int:
     """Atomically increment and RETURN this game's branch-2 (missing-post_lineup) re-trigger
     attempt count for today (DynamoDB ADD). Path-independent — used in BOTH the SF and S3
@@ -281,6 +402,59 @@ def select_ready_games(candidates, first_pitch, now):
             when = "unknown" if mins is None else f"{mins:.0f} min"
             held.append((pk, filled, f"held: {filled}/9 slots, first pitch in {when}"))
     return ready, held
+
+
+def unscored_pregame_games(
+    first_pitch,
+    candidates,
+    games_with_post_lineup,
+    now,
+    *,
+    sla_minutes: float = _SLA_FALLBACK_MINUTES,
+):
+    """PURE detector (unit-tested; no IO) for the class the readiness gate CANNOT see.
+
+    INC-41 (2026-08-06). ``select_ready_games`` — and therefore the SLA safety valve inside it —
+    only ever sees games that already cleared the candidate query's
+    ``HAVING COUNT(DISTINCT home_away) = 2``. A game with only ONE side's lineup posted (or with
+    NO lineup row at all) is filtered out in SQL *before* the gate, so it:
+
+      * never becomes a candidate,
+      * never reaches the SLA valve (the Epic A1 backstop does NOT cover it),
+      * and produces NO ``held`` entry — the monitor logs ``Candidate games today: N`` and the
+        game simply is not in N.
+
+    That makes "this game will never be scored" byte-identical to "there is nothing to do" —
+    the INC-38 (d) / NF1.7 (a) invisible-failure class. On 2026-08-06 games 824080 and 824885
+    (home side only) and 825053 (no lineup row) sat in exactly this hole and went un-scored past
+    first pitch with no alert anywhere.
+
+    Returns ``[(game_pk, minutes_to_first_pitch|None, reason)]`` — pre-game slate games that are
+    past the SLA deadline, carry NO post_lineup row, and are NOT candidates. Empty is the healthy
+    state. Detection only: this NEVER changes what gets scored (that policy change is a separate,
+    operator-gated decision).
+    """
+    out: list[tuple] = []
+    if not first_pitch:
+        # Fail-open: the pregame lookup was unavailable, so we cannot say anything about the
+        # slate. An unevaluable check is never scored healthy, but it is also not an alert —
+        # main() logs the lookup failure separately.
+        return out
+    for pk, fp in first_pitch.items():
+        if pk in candidates:
+            continue  # the gate can see it; a held/SLA-fallback line already covers it.
+        if pk in games_with_post_lineup:
+            continue  # already scored.
+        mins = None if fp is None else (fp - now).total_seconds() / 60.0
+        if mins is None or mins > sla_minutes:
+            continue  # still outside the SLA window — being un-scored is expected here.
+        out.append((
+            pk,
+            mins,
+            f"no post_lineup and NOT a readiness-gate candidate (fewer than both sides posted "
+            f"in lineups_wide), first pitch in {mins:.0f} min",
+        ))
+    return out
 
 
 def get_connection() -> snowflake.connector.SnowflakeConnection:
@@ -439,17 +613,15 @@ def main() -> None:
     today = datetime.now(ZoneInfo("America/New_York")).date().isoformat()
     # PHASE-2a: under LINEUP_MONITOR_S3 the whole detection path is Snowflake-free, so we do
     # not open a session at all — opening one is itself the warehouse wake we are killing.
-    # The connection is created LAZILY, only if a trigger fires (audit log) or on failure.
+    #
+    # ⭐ E11.24 STRENGTHENS THIS FROM "LAZY" TO "NEVER". Phase-2a still opened a session lazily
+    # for the audit/error paths (`_sf_cursor`, now deleted); with the audit sink on DynamoDB
+    # there is no remaining reason for a tick to reach Snowflake at ALL. So in S3 mode
+    # `get_connection()` is unreachable, and the invariant a guard can assert is the strong,
+    # unconditional one — a tick NEVER wakes COMPUTE_WH — rather than the conditional
+    # "only on a triggering tick" one, which is exactly the loophole the census billed us for.
     conn = None if _S3_MODE else get_connection()
     cur = None if conn is None else conn.cursor()
-
-    def _sf_cursor():
-        """Lazily open the Snowflake session (trigger/audit/error paths only, in S3 mode)."""
-        nonlocal conn, cur
-        if cur is None:
-            conn = get_connection()
-            cur = conn.cursor()
-        return cur
 
     try:
         # Step 1 — candidate games (both batting lineups posted) with current probable pitchers
@@ -524,6 +696,27 @@ def main() -> None:
         else:
             games_with_post_lineup = _games_with_post_lineup_sf(cur, today)
         log.info("Games with existing post_lineup prediction: %d", len(games_with_post_lineup))
+
+        # INC-41 (2026-08-06) — SURFACE the class the readiness gate structurally cannot see.
+        # A game with only ONE side posted (or no lineup row at all) is dropped by the candidate
+        # query's HAVING COUNT(DISTINCT home_away) = 2 BEFORE select_ready_games runs, so the SLA
+        # safety valve never applies to it and it emits NO held line. Un-scored past first pitch
+        # is then indistinguishable from "nothing to do". Detection only — this does NOT change
+        # what gets scored; extending the valve to one-sided games is an open PM/operator call
+        # (it would stamp lineup_confirmed=TRUE on a game whose lineup is not, in fact, confirmed).
+        _unscored = unscored_pregame_games(
+            first_pitch, candidates, games_with_post_lineup, datetime.now(timezone.utc),
+        )
+        # Always emit the metric — an absent line must not read as healthy (NF1.7 (a)).
+        log.info("[METRIC] lineup_unscored_past_sla=%d", len(_unscored))
+        for pk, mins, reason in _unscored:
+            log.warning(
+                "[ALERT] game_pk=%d will NOT be scored: %s. The readiness gate cannot see this "
+                "game (it never becomes a candidate), so the Epic A1 SLA valve does not cover it "
+                "and no post_lineup row will ever be written for this slate. Investigate the "
+                "schedule capture→flatten chain for stg_statsapi_lineups_wide; re-score manually "
+                "if the slate still matters.", pk, reason,
+            )
 
         new_game_pks: list[int] = []
         pitcher_change_pks: list[int] = []
@@ -622,21 +815,19 @@ def main() -> None:
                 [today, pk],
             )
 
-        # Audit log. PHASE-2a: in S3 mode a QUIET tick (nothing triggered) must not open a
-        # Snowflake session at all — that unconditional INSERT was the 24/7 wake. On a tick
-        # that DID trigger we still log it: the lineup_monitor_job it fires runs dbt/predict
-        # on Snowflake anyway, so the session is already being paid for.
-        if _S3_MODE and not all_trigger_pks:
-            log.info("[phase-2a] Quiet tick — Snowflake untouched (audit log skipped).")
-        else:
-            _sf_cursor().execute(
-                """
-                INSERT INTO baseball_data.config.pipeline_run_log
-                    (task_name, run_ts, status, rows_affected)
-                VALUES (%s, CURRENT_TIMESTAMP(), 'SUCCESS', %s)
-                """,
-                [TASK, len(all_trigger_pks)],
-            )
+        # Audit log — E11.24: DynamoDB, never COMPUTE_WH. Phase-2a already made this
+        # CONDITIONAL (a quiet tick skipped it); the census showed the surviving TRIGGERING-tick
+        # INSERT was still the statement paying the provisioning wait, so the sink moved instead.
+        # It is now unconditional again — a Dynamo put costs no warehouse resume, so there is no
+        # longer any reason to lose the quiet-tick record, and the log regains "every fire is
+        # accounted for" (the property the phase-2a skip had to trade away).
+        _record_audit_dynamo(today, "SUCCESS", len(all_trigger_pks))
+
+        # The Snowflake path (flag OFF = the rollback lever) still needs its state writes
+        # committed. That commit used to ride along with the audit INSERT above; with the audit
+        # gone from Snowflake it must be explicit, or a rollback would silently stop recording
+        # triggers in lineup_monitor_state. No wake cost — that session is already open.
+        if conn is not None:
             conn.commit()
 
         # Step 4 — write GHA outputs
@@ -646,19 +837,12 @@ def main() -> None:
 
     except Exception as e:
         log.error("lineup_monitor failed: %s", e)
-        try:
-            # A failure is worth a Snowflake session even in S3 mode (rare + diagnostic).
-            _sf_cursor().execute(
-                """
-                INSERT INTO baseball_data.config.pipeline_run_log
-                    (task_name, run_ts, status, rows_affected, error_message)
-                VALUES (%s, CURRENT_TIMESTAMP(), 'FAILED', 0, %s)
-                """,
-                [TASK, str(e)[:400]],
-            )
-            conn.commit()
-        except Exception:
-            pass
+        # E11.24: the FAILURE record goes to DynamoDB too. Previously this opened a Snowflake
+        # session ("a failure is worth a wake"), which is the wrong dependency in both
+        # directions: a diagnostic write should never need the warehouse, and a Snowflake
+        # outage is itself a plausible cause of the failure being recorded — the old path
+        # would lose exactly the records that matter most. _record_audit_dynamo is fail-open.
+        _record_audit_dynamo(today, "FAILED", 0, str(e))
         raise
     finally:
         # In S3 mode the session may never have been opened (the point of the exercise).

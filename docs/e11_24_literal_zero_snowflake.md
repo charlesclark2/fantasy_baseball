@@ -2038,3 +2038,230 @@ working shape; both collapsing is a dead job or an outage day).
 * `services/dagster/aws/env.required`, `.env.example`, `BOX_OPERATIONS.md` §10 — flag deregistered;
   §10 self-contradiction reconciled + three table-hygiene rules added.
 * `betting_ml/tests/test_e11_24_target6_ext_copy_views.py` — new, 12 tests, all RED-proven.
+
+---
+
+# E11.24 — the `lineup_monitor` audit-INSERT lever (2026-08-06)
+
+**Status: CODE-READY, NOT DEPLOYED.** Deliberately scoped that way — the `dev`→`main` deploy is
+an OPERATOR step for the 8/7 quiet window, **after** the target-6 T+1 soak read confirms target 6
+is clean. INC-36: never stack a second serving-adjacent deploy mid-soak. The census cuts per
+FAMILY, so this lever measures independently of target 6 and building it now cannot corrupt the
+target-6 reading.
+
+## The waker
+
+`scripts/lineup_monitor.py` wrote its audit record with an `INSERT INTO
+baseball_data.config.pipeline_run_log` on every triggering tick (`:634` and `:653` pre-change —
+the SUCCESS and FAILED paths). E11.20 phase-2a had already made the SUCCESS insert *conditional*
+(a quiet tick skips it), on the reasoning that **"the `lineup_monitor_job` it fires runs
+dbt/predict on Snowflake anyway, so the session is already being paid for."**
+
+That reasoning had the causality backwards, and the census says so:
+
+## Pre-merge baseline — `report_e11_24_wake_census.py --days 12`, run 2026-08-06 14:41 UTC
+
+Family `lineup_monitor audit INSERT`, per UTC day, `executions/waits`:
+
+| 07-25 | 07-26 | 07-27 | 07-28 | 07-29 | 07-30 | 07-31 | 08-01 | 08-02 | 08-03 | 08-04 | 08-05 | 08-06\* |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 7/6 | 8/7 | 8/6 | 7/7 | 9/8 | 7/7 | 9/5 | 10/10 | 7/6 | 4/4 | 9/9 | 10/10 | 1/1 |
+
+\*08-06 partial (`query_history` lag 13 min; the 14-23 band had barely opened).
+
+* **Trailing 10 full days (07-27 → 08-05): 80 executions, 72 provisioning waits.** This reproduces
+  the PM's cited "72 waits/10d" **exactly**.
+* **Wake efficiency ≈ 90%** — essentially every audit INSERT queued on provisioning, i.e. the
+  warehouse was *suspended* when it fired. The INSERT is not riding a warm warehouse; it is
+  **buying the resume**.
+* **Executions HOLD and waits HOLD** across the whole window ⇒ by the instrument's own reading
+  rule this is *"STILL FIRING — a real waker"*, not pre-flip residue and not a dead caller.
+* **All 86 waits are in the 14-23 band** — zero in 00-07, zero in 08-13. The legacy Snowflake
+  task-DAG procs also write `pipeline_run_log` but contribute **no waits in this window**, so the
+  family is effectively 100% this monitor.
+
+## Does removing it just SHIFT the resume to the dbt step?
+
+That is the standing roadmap caveat, and it deserves a real answer rather than a dismissal. The
+baseline gives **suggestive evidence against it, not proof**:
+
+The `6 lineup/starter CTAS` family — the dbt work `lineup_monitor_job` fires moments *after* the
+audit INSERT — **pays its own provisioning waits on the same days** (71 waits in the 14-23 band;
+6–10 on most days). If the audit INSERT's resume were covering the dbt step, that step would show
+≈0 waits. It doesn't ⇒ the warehouse re-suspends in between and these are **two separate resumes**,
+so deleting the first should delete a resume rather than relocate it.
+
+⚠️ Hedged deliberately: that CTAS family also contains daily-job runs, and the 14-23 band holds
+other work. **Only the post-flip per-day census settles it.** What is certain either way: a
+guaranteed resume on a path that needs none is gone.
+
+## The change
+
+* **Sink → DynamoDB**, the same `credence-prod-serving-cache` table (`pk="ops"`) that already holds
+  the monitor's state (`lineup_monitor#`) and branch-2 retry counter (`lineup_retry#`) — the
+  direction `lineup_monitor_state` is headed anyway. No new bucket, **no new IAM grant** (the
+  instance-profile role already has DynamoDB RW here), no new credential path. Item key
+  `sk = lineup_audit#{run_date}#{run_ts}`, append-only, same columns as the old row.
+* **Both** the SUCCESS and the FAILED paths move. The old failure path opened a Snowflake session
+  ("a failure is worth a wake") — the wrong dependency in both directions: a diagnostic write
+  should not need the warehouse, and a Snowflake outage is a plausible *cause* of the failure being
+  recorded, so that path lost exactly the records that matter most.
+* **The audit is unconditional again.** A Dynamo put costs no resume, so there is no longer a
+  reason to drop the quiet-tick record — the log regains "every fire is accounted for", the
+  property phase-2a had to trade away.
+* **`_sf_cursor` deleted.** The invariant hardens from *lazy* ("a session only on a triggering
+  tick") to **never** — in S3 mode `get_connection()` is now unreachable. The conditional version
+  was precisely the loophole the census billed us for.
+* **Explicit `conn.commit()` on the Snowflake path.** That commit used to ride along with the audit
+  INSERT; without it the flag-OFF **rollback** path would silently stop recording triggers in
+  `lineup_monitor_state`. A rollback lever that is itself broken is worse than no lever.
+
+## INC-27 consumer grep — CONFIRMED (repo, not the DAG)
+
+`baseball_data.config.pipeline_run_log` is **write-only** from this script. Every
+`SELECT … FROM pipeline_run_log` in the repo is either a **human runbook query**
+(`scripts/daily_run.md` ×2 — both updated by this change) or a **historical phase-5 acceptance
+`COUNT(*)`** (`plan_specs/phase_5/…yaml`, `project_context.md`). Searched string literals across
+`.py/.sql/.md/.yml/.yaml/.sh/.json/.ts/.tsx`, not just the dbt manifest:
+
+* **No serving reader** — nothing in `app/backend/`.
+* **No dbt model** — no hits under `dbt/`.
+* **No sensor/op reader** — the single hit in `pipeline/` (`lineup_monitor_sensor.py:45`) is a
+  *comment* describing the historical wake, not a read.
+* The DynamoDB migration note at the top of `lineup_monitor.py` is about the **state** table
+  (`lineup_monitor_state`) — a different table, a different migration. Not conflated.
+### ⚠️ CORRECTION (2026-08-06, operator-run `SHOW TASKS IN ACCOUNT`)
+
+The first draft of this section claimed *"the table stays — the legacy task-DAG procs are separate
+writers — so even an unknown external reader degrades gracefully."* **That is false, and the live
+task inventory says so:**
+
+| Task | Schedule | Predecessors | State |
+|---|---|---|---|
+| `TASK_SAVANT_INGESTION` | `CRON 0 8 * * *` | — (**ROOT**) | **suspended** (`USER_SUSPENDED`, 2026-04-30) |
+| `TASK_STATSAPI_SCHEDULE` | — | `TASK_SAVANT_INGESTION` | started |
+| `TASK_ODDSAPI_EVENTS` | — | `TASK_STATSAPI_SCHEDULE` | started |
+| `TASK_ODDSAPI_ODDS` | — | `TASK_ODDSAPI_EVENTS` | started |
+| `TASK_GITHUB_ACTIONS_TRIGGER` | — | `TASK_ODDSAPI_ODDS` | started |
+| `TASK_LINEUP_MONITOR` | `CRON 0 * * * *` | — | **suspended** (`USER_SUSPENDED`, 2026-04-30) |
+
+The four `started` tasks carry **no schedule of their own** — they are purely predecessor-driven,
+and their root has been suspended since 2026-04-30. **A child task cannot fire while its root is
+suspended**, so the whole DAG is dead and none of those procs have written `pipeline_run_log` in
+over three months. `scripts/lineup_monitor.py` is the **sole remaining writer**.
+
+Two consequences, in opposite directions:
+
+* **Safer.** A table with one writer has a far smaller plausible-reader surface than one with six,
+  and post-change `pipeline_run_log` has **no writer at all**.
+* **No fallback.** The graceful-degradation argument is void — the repo grep plus the operator's
+  Snowflake-side reader check are now *the whole of the evidence*, not a belt beside braces.
+
+⭐ It also **sharpens the post-flip prediction**: the census family should read a **hard zero**, and
+any non-zero is a finding rather than proc residue.
+
+*(Out of scope but worth logging: `pipeline_run_log` becomes a fully dead table after this merge —
+a cleanup candidate for a later story, which would need its own INC-27 pass before a DROP.)*
+
+### Operator reader check — results and the self-match trap
+
+⏭️ **The one check a repo grep structurally cannot make** is a Snowflake-side reader outside the
+repo (a view, a task, an external dashboard). Run 2026-08-06:
+
+* **Tasks:** the inventory above. No task *reads* the table — every definition is a bare
+  `CALL proc_*()`, and the procs write it.
+* **`query_history` (30d):** one identity only — `DBT_RW / ACCOUNTADMIN`, **43 queries**.
+
+⚠️ **Those 43 are almost certainly an instrument self-match, not readers.** The probe filtered on
+`query_text ILIKE '%pipeline_run_log%' AND ILIKE '%select%'` — and **this very census script**
+(plus `report_sf_cost_flips_after.py`) embeds the literal `'%pipeline_run_log%'` inside its
+`FAMILY_CASE` classifier, which is a `SELECT`. `DBT_RW/ACCOUNTADMIN` is exactly the identity those
+scripts connect as (`.env`), including the baseline run recorded above. A grep for a table NAME
+finds the tools that *classify* the table as readily as the tools that *read* it.
+
+**The decisive query matches the FROM clause, not the mention:**
+
+```sql
+SELECT to_char(start_time,'YYYY-MM-DD HH24:MI') AS ts, user_name, warehouse_name,
+       left(regexp_replace(query_text,'\\s+',' '), 200) AS q
+FROM snowflake.account_usage.query_history
+WHERE start_time >= dateadd(day,-30,current_timestamp())
+  AND regexp_replace(query_text,'\\s+',' ') ILIKE '%from baseball_data.config.pipeline_run_log%'
+ORDER BY start_time DESC LIMIT 50;
+```
+
+**RESULT (operator-run 2026-08-06): 3 rows in 30 days — all ad-hoc, none automated. INC-27 CLOSED.**
+
+| TS (UTC) | User | WH | Query |
+|---|---|---|---|
+| 07-27 12:55 | `DBT_RW` | `COMPUTE_WH` | `select task_name, convert_timezone('UTC',run_ts), status … where run_ts >= dateadd('hour',-10,current_timestamp()) order by run_ts desc limit 40` |
+| 07-16 18:11 | `DBT_RW` | `COMPUTE_WH` | `select task_name, max(run_ts) as last_run, count(*) … dateadd('hour',-30,current_timestamp) group by 1 order by 2 desc` |
+| 07-16 18:04 | `DBT_RW` | `COMPUTE_WH` | `select run_ts, status, rows_affected … where task_name='lineup_monitor' and run_ts >= '2026-07-16 12:00:00' order by run_ts` |
+
+⭐ **The SHAPE is the evidence, not the count.** Four independent tells, any one of which rules out
+an automated reader:
+
+1. **A hardcoded same-day literal** — `run_ts >= '2026-07-16 12:00:00'`, run at 18:04 on 2026-07-16.
+   No scheduled job hardcodes today's date. This one is decisive on its own.
+2. **Three different query shapes** — different column lists, different windows (`-10h`, `-30h`, a
+   literal). A scheduled reader emits *byte-identical* text every fire; that is exactly the
+   property the wake census relies on to classify by query shape.
+3. **Clustered, not cadenced** — 2 distinct days out of 30, two of them **7 minutes apart**. An
+   automated reader produces a regular cadence; this is a human/session sitting down twice.
+4. **Exploratory idioms** — `limit 40`, `group by task_name order by last_run desc` ("what has run
+   lately?"). Diagnostic sweeps, not a production read.
+
+The dates corroborate: **2026-07-16 is the E11.20-COST measurement day** (the audit that overturned
+the "reads are the burn" premise) and **2026-07-27 falls in the E11.24 census window** — i.e. these
+are prior cost-audit sessions running the runbook query in this very file, which is the behaviour
+that produced this story. Nothing serving, nothing scheduled, nothing in an app.
+
+**Views:** the corrected account-wide query returned **0 rows**. No view reads the table.
+
+⚠️ **What these three rows DO establish is a live documentation risk**, and it is the reason the
+`daily_run.md` note is written as loudly as it is: this query is the **natural first reach during a
+cost or freshness audit**, it has been reached for twice in the last month, and after this merge it
+returns an **empty result** — which a session could easily misread as "the pipeline is down". The
+runbook now says plainly that an empty `pipeline_run_log` is the expected healthy state and names
+both reasons (the DAG suspended 2026-04-30; the monitor's audit moved to DynamoDB).
+
+**Views** (the original query named a non-existent `table_type` column; this is the corrected form,
+and it covers every database rather than just `baseball_data`):
+
+```sql
+SELECT table_catalog, table_schema, table_name
+FROM snowflake.account_usage.views
+WHERE deleted IS NULL AND view_definition ILIKE '%pipeline_run_log%';
+```
+
+## Guards — `betting_ml/tests/test_lineup_monitor_s3_mode.py`
+
+Behavioural where it can be (the script imports cleanly in the fast gate — boto3/duckdb are
+imported inside functions — so the audit path runs for real against a fake Table), source-inspection
+only where the property being guarded is structural.
+
+**All 8 new/changed guards RED-proven** against deliberately-broken source: restoring the SF audit
+INSERT · re-adding a lazy `_sf_cursor` · colliding the audit sk prefix with the state prefix ·
+making the sk fixed-per-day · making the audit write raise instead of fail open · dropping the
+SF-path commit · passing explicit AWS keys to boto3 · dropping `rows_affected`. Each break turned
+exactly the intended guard red.
+
+Two worth calling out:
+
+* **`test_audit_sk_prefix_cannot_collide_with_the_state_query`** is a **correctness** guard, not a
+  cost one. `_already_triggered_dynamo` reads state with `begins_with(_STATE_SK_PREFIX + date)` on
+  the *same* `pk`. A colliding audit prefix would return every audit row as an already-triggered
+  **game** — the monitor would then skip real games. Silent and slate-wide if wrong.
+* **`_main_code()` strips comment lines before counting call sites.** INC-38's prose-cannot-satisfy
+  lesson, and it fired for real during this build: the explanatory comment *"so `get_connection()`
+  is unreachable"* made the call-site count read 2. A source-inspection assertion that reads
+  comments measures the documentation, and it breaks both ways — a comment can equally make a
+  deleted call site look present.
+
+## Files
+
+* `scripts/lineup_monitor.py` — `build_audit_item` (pure) + `_record_audit_dynamo` (fail-open);
+  both SF audit INSERTs removed; `_sf_cursor` deleted; explicit SF-path commit.
+* `betting_ml/tests/test_lineup_monitor_s3_mode.py` — 8 new/strengthened guards, all RED-proven.
+* `scripts/daily_run.md`, `project_context.md` — the two human runbook queries repointed.
+* `scripts/report_e11_24_wake_census.py` — comment only: how to read this family post-flip.

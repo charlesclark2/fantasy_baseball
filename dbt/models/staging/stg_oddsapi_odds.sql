@@ -97,11 +97,34 @@ select
     market_last_update,
 
     json_extract_string(outcome, '$.name')                  as outcome_name,
-    json_extract_string(outcome, '$.price')::integer        as outcome_price_american,
+
+    -- INC-41 (2026-08-06) — PARSE AS BIGINT, THEN BOUND. This was `::integer` with a bare
+    -- `abs(...)`. On 2026-08-06T20:22:46Z MyBookie.ag posted an h2h price of -2147483648
+    -- (INT32_MIN — a vendor "no price"/locked-market sentinel). INT32_MIN has no positive INT32
+    -- form, so `abs()` raised `OutOfRangeException: Overflow on abs(-2147483648)` and killed the
+    -- ENTIRE `run_w1_lakehouse.py --w3pre-only` build. Because --w3pre runs FIRST in the intraday
+    -- chain, --w7b-only never executed, the lineups parquet froze, and the lineup monitor was
+    -- blind for 6.5h (3 games got no post_lineup). One malformed vendor price, whole evening.
+    --
+    -- TWO defenses, both needed:
+    --   1. bigint parse — INT32_MIN is representable, so abs() can never overflow again.
+    --   2. a plausibility BOUND — American odds satisfy |price| >= 100 by construction, so a
+    --      sentinel is nulled rather than silently becoming a ~1.0000000005 decimal price
+    --      implying ~100% probability (which would poison de-vigging / CLV / best-price picks —
+    --      the E9.52 "garbage that looks like data is worse than NULL" lesson). The upper bound
+    --      is deliberately loose: a real -100000 was posted on this same event by another book.
+    --      Casting back to ::integer keeps the STORED type unchanged (INC-19 type-drift guard);
+    --      anything inside the bound always fits INT32.
     case
-        when json_extract_string(outcome, '$.price')::integer >= 100
-            then (json_extract_string(outcome, '$.price')::integer / 100.0) + 1.0
-        else (100.0 / abs(json_extract_string(outcome, '$.price')::integer)) + 1.0
+        when abs(try_cast(json_extract_string(outcome, '$.price') as bigint)) between 100 and 1000000
+            then try_cast(json_extract_string(outcome, '$.price') as bigint)::integer
+    end                                                     as outcome_price_american,
+    case
+        when abs(try_cast(json_extract_string(outcome, '$.price') as bigint)) not between 100 and 1000000
+            then null
+        when try_cast(json_extract_string(outcome, '$.price') as bigint) >= 100
+            then (try_cast(json_extract_string(outcome, '$.price') as bigint) / 100.0) + 1.0
+        else (100.0 / abs(try_cast(json_extract_string(outcome, '$.price') as bigint))) + 1.0
     end::double                                             as outcome_price_decimal,
     json_extract_string(outcome, '$.point')::double         as outcome_point
 

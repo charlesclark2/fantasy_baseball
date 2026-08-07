@@ -12,6 +12,8 @@ is a half-funnel. If only one ships, ship E9.58.
 
 ## E9.58 — Self-serve signup
 
+> ✅ **DONE + MERGED 2026-08-06** (6 PRs: #623 core / #626 mobile-nav / #628 Hosted-UI host / #630 ToS-capture [backend, `deploy.sh`] / #633 + #635 analytics). Verified live in PostHog (full funnel ×2 + control). Google-OAuth wiring only; email/password stayed closed. See the E9.58 DONE block in `story_prompts.md` for the 6 CI-invisible defects, durable rules, and the surfaced launch gates (Stripe test-mode, Google consent publish status). E9.59 now unblocked.
+
 ### The problem
 
 **There is no way for a member of the public to create an account.** Every "get an account"

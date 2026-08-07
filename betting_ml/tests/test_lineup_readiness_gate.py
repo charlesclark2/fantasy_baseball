@@ -17,6 +17,7 @@ from scripts.lineup_monitor import (
     is_real_pitcher_change,
     over_retrigger_cap,
     select_ready_games,
+    unscored_pregame_games,
 )
 
 NOW = datetime(2026, 7, 19, 18, 0, tzinfo=timezone.utc)
@@ -138,3 +139,74 @@ def test_null_stored_waits_rather_than_churns():
     # Pre-migration / not-yet-populated stored starters → wait (no re-trigger).
     assert is_real_pitcher_change((None, 200), (100, 999)) is False
     assert is_real_pitcher_change((None, None), (100, 200)) is False
+
+
+# ── INC-41 (2026-08-06) — unscored_pregame_games ────────────────────────────────────
+# The readiness gate (and therefore the SLA valve inside it) only ever sees games that already
+# cleared the candidate query's `HAVING COUNT(DISTINCT home_away) = 2`. A game with only ONE
+# side posted — or no lineup row at all — is dropped in SQL BEFORE the gate, so it never reaches
+# the valve and emits NO held line: "will never be scored" reads exactly like "nothing to do".
+# On 2026-08-06 games 824080/824885 (home side only) and 825053 (no row) sat in that hole and
+# went un-scored past first pitch with no alert. These tests pin the detector that surfaces it.
+#
+# Each test isolates ONE clause: every fixture SATISFIES the other clauses, so only the clause
+# under test can flip the result (NF-D17 — a fixture that trips several clauses proves none).
+
+INSIDE = NOW + timedelta(minutes=10)  # inside the SLA window (< _SLA_FALLBACK_MINUTES)
+
+
+def test_one_sided_lineup_past_sla_is_reported():
+    # THE INCIDENT SHAPE: pre-game, inside the SLA window, no post_lineup row, and NOT a
+    # candidate (only one side posted, so the SQL HAVING dropped it). Must be reported.
+    out = unscored_pregame_games({824885: INSIDE}, {}, set(), NOW)
+    assert [pk for pk, _, _ in out] == [824885]
+    assert "NOT a readiness-gate candidate" in out[0][2]
+
+
+def test_candidate_clause_a_game_the_gate_can_see_is_not_reported():
+    # Isolates the `pk in candidates` clause: past SLA ✓, no post_lineup row ✓ — only candidacy
+    # differs. A candidate is the gate's job (it gets a held / SLA-fallback line), not ours.
+    out = unscored_pregame_games({824885: INSIDE}, {824885: _cand(1, 2, 0)}, set(), NOW)
+    assert out == []
+
+
+def test_post_lineup_clause_an_already_scored_game_is_not_reported():
+    # Isolates the `pk in games_with_post_lineup` clause: past SLA ✓, not a candidate ✓.
+    out = unscored_pregame_games({824885: INSIDE}, {}, {824885}, NOW)
+    assert out == []
+
+
+def test_sla_clause_a_game_still_far_from_first_pitch_is_not_reported():
+    # Isolates the SLA-window clause: not a candidate ✓, no post_lineup row ✓ — only the time to
+    # first pitch differs. Being un-scored 3h out is the NORMAL state (lineups have not posted);
+    # alerting there would page on every slate, every morning.
+    out = unscored_pregame_games({824885: FAR}, {}, set(), NOW)
+    assert out == []
+
+
+def test_unknown_first_pitch_is_not_reported_as_a_breach():
+    # A null first pitch cannot establish that the SLA deadline passed. Not scored healthy by
+    # implication either — main() logs the pregame-lookup failure separately (NF1.7 (a)).
+    out = unscored_pregame_games({824885: None}, {}, set(), NOW)
+    assert out == []
+
+
+def test_empty_pregame_map_fails_open():
+    # The pregame lookup was unavailable → we cannot judge the slate, so we say nothing here
+    # rather than alerting on every game (the monitor must never go dark on a read failure).
+    assert unscored_pregame_games({}, {}, set(), NOW) == []
+
+
+def test_a_game_with_no_lineup_row_at_all_is_reported():
+    # 825053's shape: absent from lineups_wide entirely, so no SQL change to that table could
+    # ever surface it — it can only be seen from the SLATE side. Pinning this keeps a future
+    # "just relax the HAVING" fix from being mistaken for a complete cure.
+    out = unscored_pregame_games({825053: INSIDE}, {}, set(), NOW)
+    assert [pk for pk, _, _ in out] == [825053]
+
+
+def test_healthy_slate_reports_nothing():
+    # All three exclusion paths at once — the everyday green state.
+    first_pitch = {1: INSIDE, 2: INSIDE, 3: FAR}
+    out = unscored_pregame_games(first_pitch, {1: _cand(1, 2, 9)}, {2}, NOW)
+    assert out == []

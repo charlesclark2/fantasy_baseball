@@ -177,13 +177,16 @@ function DensityChart({
             isAnimationActive={false}
             dot={false}
           />
-          {/* Model's projected mean — where we think it lands. */}
+          {/* This distribution's own mean. Deliberately NOT labelled "Proj" — that word is the
+              headline projected total (daily_model_predictions.pred_total_runs, a DIFFERENT
+              model), and using it here put two unequal numbers under the same word on one page
+              (INC-41, 2026-08-06: EV tracker 8.5 vs this panel 7.4 for game 824664). */}
           {meanLine != null && (
             <ReferenceLine
               x={meanLine}
               stroke={ACCENT}
               strokeWidth={1.5}
-              label={{ value: `Proj ${meanLine.toFixed(1)}`, position: "top", fill: ACCENT, fontSize: 10 }}
+              label={{ value: `Dist. mean ${meanLine.toFixed(1)}`, position: "top", fill: ACCENT, fontSize: 10 }}
             />
           )}
           {/* Market line / even. */}
@@ -280,9 +283,9 @@ export function TotalsDistributionPanel({
       {/* headline stats */}
       <div className="grid grid-cols-3 gap-2">
         <StatTile
-          label="Proj. total"
+          label="Distribution mean"
           value={`${fmtRuns(total.mu)}`}
-          hint="The model's expected combined runs for the game (mean of the predictive distribution)."
+          hint="The mean of THIS distribution — the per-side run model (E2.3/E2.7) convolved into a game total. It is a different model from the headline projected total shown with the pick above, so the two numbers can legitimately differ by a run or so; neither is a bet recommendation."
         />
         <StatTile
           label="80% range"

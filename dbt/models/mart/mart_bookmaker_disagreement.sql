@@ -72,7 +72,16 @@ hist_outcomes as (
     select
         event_id, commence_ts, home_team, away_team, bookmaker_key, last_update, market_key,
         json_extract_string(o, '$.name')                            as outcome_name,
-        json_extract_string(o, '$.price')::integer                  as outcome_price,
+        -- INC-41 (2026-08-06) — parse a raw-JSON odds price as BIGINT, then bound. A bare
+        -- `::integer` raises ConversionException on any price outside INT32, and an INT32_MIN
+        -- sentinel (-2147483648, which MyBookie.ag really did post) makes a downstream abs()
+        -- overflow. This model reads the FROZEN 2021-25 historical source so it did not fire on
+        -- 08-06, but it is the identical pattern on the identical field — hardened so it cannot.
+        -- |price| >= 100 holds for American odds by construction, so the bound only nulls junk.
+        case
+            when abs(try_cast(json_extract_string(o, '$.price') as bigint)) between 100 and 1000000
+                then try_cast(json_extract_string(o, '$.price') as bigint)::integer
+        end                                                         as outcome_price,
         json_extract_string(o, '$.point')::double                   as outcome_point
     from hist_flat
 ),
