@@ -40,6 +40,16 @@ CRITICAL_SCHEDULES = frozenset({
     # confirmed lineup → doubled dbt-runner contention). The sensor is now the SOLE driver
     # (un-wedgeable + tick-staleness heartbeat), and these schedules boot STOPPED as a manual
     # fallback — so a STOPPED one is EXPECTED and must NOT page.
+    #
+    # INC-41 (2026-08-06): the off-cycle serving-artifact freshness checks. These are the ONLY
+    # thing that catches an INTRADAY freeze of a serving-critical parquet between daily runs —
+    # the shape INC-41 actually took (lineups froze at 20:08Z, hours after the daily job had
+    # finished green, and nothing noticed for 6.5h). Unlike the capture schedules excluded above
+    # they have no double-ingest hazard to gate on — they only read S3 and page — so a STOPPED one
+    # is never expected and always means the blind spot is reopened. A monitor whose own liveness
+    # nobody watches reproduces the outage it exists to prevent (the autoheal lesson).
+    "artifact_freshness_daytime",
+    "artifact_freshness_overnight",
 })
 # Intraday / cutover env flags that must be permanently "1" on the box. An unset one = a
 # silently-gated-off refresh (3 of the 5 incidents). Scoped to the flags we are confident should

@@ -2388,3 +2388,95 @@ def ingest_player_props_op(context):
             "WARNING: ingest_player_props_op failed (non-fatal — the /props page K-prop lines may "
             f"lag by a day; predictions and serving are unaffected): {exc}"
         )
+
+
+# ── INC-41: per-artifact freshness SLAs on serving-critical parquet ─────────────────────────
+def _run_artifact_freshness_check(context) -> None:
+    """Shared body for the two freshness ops (daily fan-out + off-cycle standalone).
+
+    WHY THIS EXISTS (INC-41, 2026-08-06). `stg_statsapi_lineups_wide` FROZE for 6.5 hours and
+    nothing watched it. The FEED was healthy throughout, so every existing check — each of which
+    watches a SOURCE (is the capture running? is the raw mirror advancing? did the op raise?) —
+    was correctly green while the lineup monitor read the frozen parquet ~40 times, reported "No
+    newly confirmed lineups" every 30 minutes, and the op returned SUCCESS. Three games went
+    unscored past first pitch. A frozen DERIVED artifact is structurally invisible to a freshness
+    check on its source (the INC-37 / E9.48 / Byparr class).
+
+    PR #638 fixed the two proximate causes and made a FAILING intraday leg page. This closes the
+    general hole that remains: a build that is SKIPPED, gated off, never scheduled, or whose
+    sensor stopped ticking still freezes the artifact in total silence, because nothing asserts
+    the artifact ADVANCED. All policy — the registry, the SLAs, the active-hour windows and the
+    verdicts — lives in `betting_ml.monitoring.artifact_freshness` (import-safe, unit-testable
+    without the dbt manifest, per E11.23); this op only runs the reader and pages on its verdict.
+
+    Tier: ALERT-loud-but-continue, ALWAYS (E11.7). No strict escalation exists and it NEVER
+    HALTs: this is observability only (`best_alpha=0`) and a monitor must never withhold a slate.
+    It genuinely PAGES via send_alert rather than logging — the E11.30 finding ("an ALERT-tier op
+    that only logs is 'detected, nobody notified'") is the precise failure INC-41 was made of.
+
+    A finite subprocess timeout is mandatory (INC-32): an un-timed-out DuckDB/S3 read on a
+    daemon/serialized path can wedge a worker thread.
+    """
+    from datetime import datetime, timezone
+
+    from betting_ml.monitoring.artifact_freshness import classify, parse_verdicts
+
+    try:
+        stdout = _run_script(context, "check_artifact_freshness.py", timeout=600)
+    except Exception as e:  # noqa: BLE001 — ALERT tier: a transient S3/DuckDB read issue must
+        # never take down the job. Empty stdout reads as UNVERIFIED downstream (never as
+        # healthy), so the failure still surfaces as a WARN page rather than silence.
+        context.log.warning(
+            f"[ALERT] check_artifact_freshness could not run (non-blocking; serving-artifact "
+            f"freshness is UNVERIFIED for this run, not verified-healthy): {e}"
+        )
+        stdout = ""
+
+    verdicts = parse_verdicts(stdout)
+    for name, (verdict, lag, sla) in verdicts.items():
+        lag_txt = "NA" if lag is None else f"{lag:.0f}"
+        context.add_output_metadata(
+            {f"freshness_{name}": MetadataValue.text(f"{verdict} lag={lag_txt}m sla={sla}m")})
+
+    severity, msg = classify(stdout, datetime.now(timezone.utc))
+    if severity is None:
+        context.log.info(msg)
+        return
+    context.log.warning("[ALERT] " + msg)
+    from pipeline.utils.alerting import send_alert
+    # The dedup key carries WHICH artifacts are affected, not just "freshness". Rate-limiting is
+    # keyed on this with a 1-hour TTL, and the off-cycle job ticks every 30 min — so a single
+    # constant key would let a CONTINUING breach on artifact A silently swallow the first page for
+    # a NEW breach on artifact B for up to an hour, which is the "smoke test ate the real alert's
+    # slot" hazard (INC-39) arriving by a different road. Keyed this way, a CONTINUING breach stays
+    # rate-limited while any change in the affected SET pages immediately.
+    affected = sorted(n for n, (v, _, _) in verdicts.items() if v in ("STALE", "UNEVALUABLE"))
+    key = "artifact_freshness:" + (",".join(affected) or "unverified")
+    send_alert("Serving artifact is STALE (freshness SLA breach)", msg,
+               severity=severity, dedup_key=key)
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def check_artifact_freshness_op(context):
+    """INC-41 — per-artifact freshness SLA guard, daily-job placement.
+
+    Fans out from predict, which is far DOWNSTREAM of every build it guards (the W7b serving
+    tier writes the lineup/probable-pitcher staging parquet; W8a writes the lineup feature
+    block). That ordering is load-bearing: INC-40 showed a monitor sitting UPSTREAM of its own
+    producer manufactures a recurring false stale-alarm on the newest slate, and its tell is that
+    the flagged artifact reads healthy by the time a human looks. Do NOT hoist this earlier.
+
+    The daily run alone cannot catch an INTRADAY freeze, which is INC-41's exact shape — hence
+    the off-cycle `artifact_freshness_job`, which runs the same check on the writer's own cadence
+    between daily runs. See `_run_artifact_freshness_check` for the full rationale."""
+    _run_artifact_freshness_check(context)
+
+
+@op(out=Out(Nothing))
+def artifact_freshness_standalone_op(context):
+    """INC-41 — the same freshness check with no upstream dependency, for the off-cycle job.
+
+    A separate op (rather than an optional input) because the daily-job wiring must keep its
+    explicit `start=` edge to pin the INC-40 ordering, while the off-cycle job has nothing to
+    depend on. Both delegate to one implementation so the two paths cannot drift."""
+    _run_artifact_freshness_check(context)

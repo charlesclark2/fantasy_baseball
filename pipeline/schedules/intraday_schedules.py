@@ -1,5 +1,6 @@
 from dagster import DefaultScheduleStatus, ScheduleDefinition
 
+from pipeline.jobs.artifact_freshness_job import artifact_freshness_job
 from pipeline.jobs.intraday_jobs import (
     intraday_public_betting_job,
     intraday_schedule_job,
@@ -121,8 +122,36 @@ intraday_public_betting_overnight = ScheduleDefinition(
     name="intraday_public_betting_overnight",
 )
 
+# ── INC-41: off-cycle serving-artifact freshness SLA ──────────────────────────
+# THE CHECK CADENCE MIRRORS THE WRITE CADENCE (the W12/W9 rule). These fire on exactly the same
+# crons as intraday_schedule_capture_{daytime,overnight} above, which is the writer whose freeze
+# caused INC-41 — so a breach is detected within one tick of crossing its SLA, instead of at the
+# next daily run (or never). Outside that band no lag accrues (the registry counts lag only across
+# each writer's active hours), so there is nothing to check in the 04:00-13:59 UTC gap and no
+# schedule for it.
+#
+# default_status=RUNNING (E11.23): a monitor that boots STOPPED and silently never fires
+# reproduces the exact blind spot it exists to close — and unlike the capture schedules beside it,
+# this one has NO double-ingest hazard to gate on (it only reads S3 and pages). Snowflake-FREE, so
+# ticking every 30 min cannot wake COMPUTE_WH while the E11.24 cost soak is live.
+artifact_freshness_daytime = ScheduleDefinition(
+    job=artifact_freshness_job,
+    cron_schedule="*/30 14-23 * * *",
+    name="artifact_freshness_daytime",
+    default_status=DefaultScheduleStatus.RUNNING,
+)
+
+artifact_freshness_overnight = ScheduleDefinition(
+    job=artifact_freshness_job,
+    cron_schedule="0,30 0-3 * * *",
+    name="artifact_freshness_overnight",
+    default_status=DefaultScheduleStatus.RUNNING,
+)
+
 all_intraday_schedules = [
     odds_clv_rebuild_schedule,
+    artifact_freshness_daytime,
+    artifact_freshness_overnight,
     intraday_schedule_capture_daytime,
     intraday_schedule_capture_overnight,
     intraday_public_betting_daytime,
