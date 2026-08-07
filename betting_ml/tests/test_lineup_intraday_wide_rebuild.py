@@ -30,10 +30,17 @@ def test_intraday_schedule_rebuilds_lineups_wide_after_games_and_before_refresh(
     body = _slice(src, "def _schedule_lakehouse_intraday", "\ndef _w6_lakehouse_intraday")
     # The wide-lineup rebuild must be present…
     assert '"--w7b-only"' in body, "intraday schedule capture must rebuild stg_statsapi_lineups_wide (--w7b-only)"
-    # …and ordered: games flatten (--w3pre-only) → lineups (--w7b-only) → ext refresh. Match the
-    # QUOTED _run_script call args so the docstring's prose copies don't skew the offsets.
-    i_w3 = body.index('["--w3pre-only"]')
-    i_w7 = body.index('["--w7b-only"]')
+    # …and ordered: games flatten (--w3pre-only) → lineups (--w7b-only) → ext refresh.
+    #
+    # INC-41 (2026-08-06): the two rebuilds moved from consecutive bare `_run_script(...)` calls
+    # under ONE try block into a per-leg loop, so that a failure in the odds/game flatten can no
+    # longer skip the lineups rebuild entirely (it did exactly that for 6.5h). The ORDERING
+    # invariant this test exists for is UNCHANGED and still load-bearing — the loop's tuple is
+    # ordered — so we anchor on the flag literals rather than the old call syntax. Deliberately
+    # matched WITHOUT the surrounding `["..."]` so this keeps passing whether the flags are
+    # written as literal call args or as loop items.
+    i_w3 = body.index('"--w3pre-only"')
+    i_w7 = body.index('"--w7b-only"')
     i_refresh = body.index('"refresh_w1_external_tables.py")')
     assert i_w3 < i_w7 < i_refresh, "order must be --w3pre-only → --w7b-only → refresh"
 

@@ -176,12 +176,24 @@ def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
             "(set SCHEDULE_LAKEHOUSE_INTRADAY=1 to enable) — skipping."
         )
         return
+    # INC-41 (2026-08-06) — THE TWO REBUILDS ARE INDEPENDENT AND MUST FAIL INDEPENDENTLY.
+    # They used to share one try block, so when --w3pre-only raised (a vendor INT32_MIN odds price
+    # overflowing abs() in stg_oddsapi_odds) the very next line NEVER RAN: --w7b-only was not
+    # attempted at all, the lineups parquet froze at 20:08Z, and the lineup monitor reported "No
+    # newly confirmed lineups" for 6.5h while three games went unscored past first pitch. An
+    # ODDS-flatten failure has no business stopping the LINEUPS rebuild — they read different raw
+    # feeds and serve different consumers. Each leg now gets its own try/except so one poisoned
+    # vendor price can cost at most its own table.
+    _legs_failed: list[tuple[str, str]] = []
+    for _flag, _what in (("--w3pre-only", "game-state + odds flatten"),
+                         ("--w7b-only", "lineups_wide / probable_pitchers")):
+        try:
+            _run_script(context, "run_w1_lakehouse.py", [_flag])
+        except Exception as exc:  # noqa: BLE001 — ALERT-loud-but-continue, per leg
+            _legs_failed.append((_flag, str(exc)[:300]))
+            context.log.warning(f"⚠️ {_flag} ({_what}) FAILED — continuing to the next leg: {exc}")
+
     try:
-        # E11.20 phase-2a (2026-07-24): the monthly_schedule export bridge is RETIRED here — the
-        # S3-native writer (W11_RAW_WRITE_MODE=s3) in intraday_schedule_capture already wrote today's
-        # raw. See the docstring. The --w3pre rebuild below reads that fresh S3 monthly_schedule raw.
-        _run_script(context, "run_w1_lakehouse.py", ["--w3pre-only"])
-        _run_script(context, "run_w1_lakehouse.py", ["--w7b-only"])
         # E11.20 phase-2a step 3: the trailing SF ext-table REFRESH is retired under TICK_SF_FREE.
         # It refreshes a broad set, but the tick only REBUILT games/lineups (--w3pre/--w7b above) —
         # every other group is a data no-op re-listing (rebuilt by the DAILY run, not the tick). So
@@ -196,11 +208,38 @@ def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
         else:
             _run_script(context, "refresh_w1_external_tables.py")
     except Exception as exc:  # ALERT-loud-but-continue — never crash the schedule capture op
+        _legs_failed.append(("refresh_w1_external_tables", str(exc)[:300]))
+        context.log.warning(f"⚠️ external-table refresh FAILED: {exc}")
+
+    # INC-41 — ALERT-TIER MUST ACTUALLY PAGE (the E11.30 finding, still live in this op).
+    # This warning text has predicted the outage verbatim since it was written — "the lineup
+    # monitor may miss today's confirmed lineups" — and on 2026-08-06 it printed every 30 minutes
+    # for 6.5 hours into a step log nobody was watching, while the job reported SUCCESS. A tier
+    # label enforced only by a comment is not enforced at all. Page on it.
+    if _legs_failed:
+        _detail = "; ".join(f"{leg}: {err}" for leg, err in _legs_failed)
         context.log.warning(
-            f"⚠️ Intraday schedule lakehouse refresh FAILED — served game-state/lineups may be "
+            f"⚠️ Intraday schedule lakehouse refresh FAILED — served game-state/lineups are now "
             f"STALE (games may show as pre-game 'Preview', or the lineup monitor may miss today's "
-            f"confirmed lineups): {exc}"
+            f"confirmed lineups): {_detail}"
         )
+        try:
+            from pipeline.utils.alerting import send_alert
+            send_alert(
+                subject="Intraday lakehouse refresh FAILED — lineups/game-state going stale",
+                message=(
+                    "run_w1_lakehouse intraday leg(s) failed, so the S3 parquet the lineup monitor "
+                    "and --s3 serving read is FROZEN at its last good build.\n\n"
+                    "Consequence if unfixed: the lineup monitor sees no newly confirmed lineups, so "
+                    "post_lineup predictions silently stop for the rest of the slate (INC-41, "
+                    "2026-08-06: 3 games unscored past first pitch, 6.5h, no page).\n\n"
+                    f"Failing leg(s): {_detail}"
+                ),
+                severity="CRITICAL",
+                dedup_key="intraday_lakehouse_refresh_failed",
+            )
+        except Exception as alert_exc:  # noqa: BLE001 — paging must never crash the capture op
+            context.log.warning(f"send_alert failed for intraday lakehouse refresh: {alert_exc}")
 
 
 def _w6_lakehouse_intraday(context: OpExecutionContext, scope: str) -> None:

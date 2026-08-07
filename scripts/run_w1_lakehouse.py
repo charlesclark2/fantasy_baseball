@@ -601,6 +601,66 @@ def _string_timestamp_wrap(conn, mart_sql: str) -> str:
     return f"SELECT * REPLACE ({repl}) FROM (\n{mart_sql}\n) _d"
 
 
+# INC-41 (2026-08-06) — STAGE-THEN-PROMOTE, so a failed COPY cannot corrupt a SERVED parquet.
+#
+# `_build_marts` used to `COPY (...) TO '<LAKEHOUSE>/<model>/data.parquet'` — i.e. DIRECTLY to the
+# live production key. DuckDB streams rows into the object and writes the parquet FOOTER last, so a
+# mid-stream error leaves a truncated file at the served location. Measured on 2026-08-06: a vendor
+# INT32_MIN price made `abs()` overflow partway through stg_oddsapi_odds, and the served parquet
+# became unreadable — `Invalid Input Error: No magic bytes found at end of file` — for ~7 hours.
+# EVERY reader of that table then hard-fails.
+#
+# That is strictly worse than the failure it replaces: a build error should leave the PREVIOUS good
+# parquet in place (stale but valid), never a corrupt one. Staging makes the served key change only
+# on success.
+#
+# ⚠️ The staging key MUST live OUTSIDE `lakehouse/<model>/` — the Snowflake external tables glob
+# `lakehouse/<model>/**/*.parquet`, so a temp file under that prefix would be UNIONED into the table
+# and DOUBLE the rows (the documented glob-dup landmine). Hence a sibling `lakehouse_staging/`
+# prefix, which no model's glob can reach.
+LAKEHOUSE_STAGING = f"{BUCKET}/baseball/lakehouse_staging"
+
+
+def _copy_to_s3_atomically(conn, body: str, loc: str, model: str) -> None:
+    """COPY into a staging key, then promote to `loc` only after the write fully succeeded.
+
+    On failure the staging object is removed (best-effort) and `loc` is left UNTOUCHED, so the
+    last-good parquet keeps serving. S3 has no rename, so the promote is a server-side
+    copy_object + delete — atomic from a reader's perspective (a GET sees either the old object
+    or the new one, never a partial).
+    """
+    from scripts.utils.lakehouse_raw_writer import make_s3_client  # instance-role-safe (AKID rule)
+
+    staging = f"{LAKEHOUSE_STAGING}/{model}/data.parquet"
+    try:
+        conn.execute(f"COPY (\n{body}\n) TO '{staging}' (FORMAT PARQUET)")
+    except Exception:
+        _delete_s3_uri(make_s3_client(), staging, quiet=True)
+        raise  # the caller's handler owns the error; we only guarantee loc was not touched
+
+    s3 = make_s3_client()
+    src_bucket, src_key = _split_s3_uri(staging)
+    dst_bucket, dst_key = _split_s3_uri(loc)
+    s3.copy_object(Bucket=dst_bucket, Key=dst_key,
+                   CopySource={"Bucket": src_bucket, "Key": src_key})
+    _delete_s3_uri(s3, staging, quiet=True)
+
+
+def _split_s3_uri(uri: str) -> tuple[str, str]:
+    without = uri.replace("s3://", "", 1)
+    bucket, _, key = without.partition("/")
+    return bucket, key
+
+
+def _delete_s3_uri(s3, uri: str, *, quiet: bool = False) -> None:
+    try:
+        bucket, key = _split_s3_uri(uri)
+        s3.delete_object(Bucket=bucket, Key=key)
+    except Exception as exc:  # noqa: BLE001 — cleanup must never mask the real error
+        if not quiet:
+            print(f"  (note: could not remove staging object {uri}: {exc})", flush=True)
+
+
 def _build_marts(conn, models: list[str], dry_run: bool) -> None:
     """Extract each model's duckdb-branch SQL and COPY it to S3 parquet."""
     for model in models:
@@ -626,7 +686,9 @@ def _build_marts(conn, models: list[str], dry_run: bool) -> None:
             print(f"  ▶ building {model} …", flush=True)
             _t0 = time.monotonic()
             try:
-                conn.execute(f"COPY (\n{body}\n) TO '{loc}' (FORMAT PARQUET)")
+                # INC-41: stage-then-promote — a failed COPY must never leave a truncated parquet
+                # at the SERVED key (see _copy_to_s3_atomically).
+                _copy_to_s3_atomically(conn, body, loc, model)
             except UnicodeDecodeError as e:
                 # INC-37 (2026-08-01) — A DuckDB ERROR WHOSE MESSAGE IS NOT VALID UTF-8
                 # DESTROYS ITS OWN DIAGNOSTIC. The Python client decodes the C++ exception
