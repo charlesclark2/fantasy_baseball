@@ -1,10 +1,30 @@
 name: CI
 
+# ⭐ E9.63b (2026-08-07) — `dev` ADDED to the pull_request trigger. Until now this workflow ran ONLY
+# on PRs into `main`, and since every story branch PRs into `dev`, that meant a BACKEND PR GOT NO
+# PYTHON TESTS AT ALL. Measured: PR #641 merged a full NF-W1 model bake-off into `dev` with nothing
+# but a skipped Vercel build against it. The `dev` → `main` release PR was the only place backend
+# code was ever tested, i.e. the first CI signal arrived after the code was already in `dev` and
+# bundled with everyone else's.
+#
+# This does NOT make frontend PRs heavier: the `changes` job below already resolves a
+# frontend/docs-only diff to `backend == false`, and every test job is gated on it. Verified on the
+# live repo — PR #640 (frontend-only → `dev`) ran the E2E suite and Vercel and nothing else.
+#
+# `push` stays `main`-only on purpose. A push to `dev` happens seconds after its PR run, on the
+# identical tree, and would just double every merge.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, dev]
   push:
     branches: [main]
+
+# Widening the trigger means more runs in flight, so supersede rather than stack: a second push to
+# a PR branch cancels the run for the commit it replaced. Deliberately PR-ONLY — a `main` run is the
+# record of what was actually merged and must never be cancelled by a later one.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # E9.7 — path gate. The three jobs below are REQUIRED status checks (branch protection),
@@ -25,6 +45,32 @@ jobs:
       - uses: dorny/paths-filter@v3
         id: filter
         with:
+          # 🚨 E9.63b (2026-08-07) — `predicate-quantifier: every` IS LOad-BEARING AND WAS MISSING.
+          # Without it this filter returned `true` for EVERY POSSIBLE DIFF since E9.7, including a
+          # pure `frontend/**` one, so the "frontend changes skip the Python suites" behaviour this
+          # job exists for has never once happened.
+          #
+          # The mechanism: dorny/paths-filter compiles each list entry into its OWN picomatch
+          # matcher and defaults to `predicate-quantifier: some` — a file selects the filter if ANY
+          # single pattern matches it. `'**'` matches every path, so `some` is satisfied before the
+          # `!` lines are ever consulted; they subtract nothing. `every` is what makes them
+          # subtractive: a file must match `'**'` AND `'!frontend/**'` AND `'!**/*.md'` AND
+          # `'!docs/**'`.
+          #
+          # MEASURED against picomatch 4 with the action's own MatchOptions (`{dot: true}`):
+          #                              some (was)   every (now)
+          #   frontend/package.json         true         false
+          #   docs/readme.md                true         false
+          #   README.md                     true         false
+          #   betting_ml/x.py               true         true
+          #   pipeline/ops/y.py             true         true
+          #
+          # It hid because this workflow only ever triggered on `dev` → `main` release PRs, whose
+          # accumulated diff always contains backend files — so the filter was never once asked a
+          # question whose right answer was `false`. Confirmed on the live repo: zero skipped jobs
+          # across the last 30 runs. Adding `dev` to the trigger above is what would have turned an
+          # invisible defect into every frontend PR running six pytest shards.
+          predicate-quantifier: 'every'
           # `backend` is true when any changed file is NOT purely frontend/docs.
           # `**` includes everything, then the `!` lines subtract the paths that
           # can never affect the Python test suites (the Next.js app + markdown/docs).
@@ -34,6 +80,18 @@ jobs:
               - '!frontend/**'
               - '!**/*.md'
               - '!docs/**'
+
+      # Say what was decided. A gate whose verdict appears nowhere in the log is one nobody can
+      # sanity-check from a run page — which is a large part of why the `some`/`every` defect above
+      # went unnoticed for as long as it did.
+      - name: Report the verdict
+        run: |
+          echo "backend=${{ steps.filter.outputs.backend }}"
+          if [ "${{ steps.filter.outputs.backend }}" = "true" ]; then
+            echo "→ Python suites WILL run (the diff touches something outside frontend/docs)"
+          else
+            echo "→ Python suites will SKIP (frontend/docs-only diff)"
+          fi
 
   # E11.13 — fast gate: every test EXCEPT the `slow` Monte-Carlo calibration guards.
   #
