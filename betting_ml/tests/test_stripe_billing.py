@@ -151,14 +151,51 @@ def test_founding_price_at_boundary(monkeypatch, store):
 
 
 def test_pricing_endpoint_reports_tier(monkeypatch, store):
+    """The TIER half of the authenticated pricing read.
+
+    ⚠️ E9.59 CHANGED WHAT THIS CAN ASSERT, and the change is the point. This test used to
+    read `unit_amount == 2000` / `== 1000`, which passed because the amount came from the
+    `STANDARD_PRICE_CENTS` / `FOUNDING_PRICE_CENTS` env constants — a SECOND source of truth
+    for the number a customer sees, with nothing tying it to the Stripe Price they are
+    actually charged. The amount now comes from the Stripe Price itself, so asserting a
+    literal here would only be re-checking this test's own stub.
+
+    So this keeps the tier/availability half (still decided by our founding counter) and the
+    amount is covered where it belongs — `test_e9_59_public_pricing.py`, which asserts the
+    displayed Price id IS the one checkout charges, rather than that two numbers agree."""
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_x")
+    monkeypatch.setenv("STRIPE_PRICE_FOUNDING", "price_founding")
+    monkeypatch.setenv("STRIPE_PRICE_STANDARD", "price_standard")
+
+    from app.backend.services import stripe_pricing
+
+    amounts = {"price_founding": 1000, "price_standard": 2000}
+    stripe_pricing._memory.clear()
+    monkeypatch.setattr(
+        stripe_pricing,
+        "resolve",
+        lambda price_id: stripe_pricing.PriceSnapshot(
+            price_id=price_id,
+            unit_amount=amounts[price_id],
+            currency="usd",
+            interval="month",
+            interval_count=1,
+            product_name="Credence Sports Membership",
+        ),
+    )
+
     store.slots = 100
     out = billing.subscription_pricing(_="sub-x")
     assert out.tier == "standard"
     assert out.founding_available is False
-    assert out.unit_amount == 2000
+    # Not "is 2000" for its own sake — that it followed the STANDARD Price, i.e. the tier
+    # decision and the displayed amount are the same decision.
+    assert out.unit_amount == amounts["price_standard"]
+
     store.slots = 3
     out2 = billing.subscription_pricing(_="sub-x")
-    assert out2.tier == "founding" and out2.founding_available is True and out2.unit_amount == 1000
+    assert out2.tier == "founding" and out2.founding_available is True
+    assert out2.unit_amount == amounts["price_founding"]
 
 
 # ── Webhook: promote + idempotent counting ───────────────────────────────────
