@@ -15,6 +15,8 @@ Endpoints
         invoice.payment_failed         → drop `subscriber`, add `churned`
   GET  /subscription/status — auth. The caller's tier / access, from Cognito.
   GET  /subscription/pricing — auth. The Price a NEW checkout would use right now.
+  GET  /subscription/public-pricing — PUBLIC (E9.59). The same price, minimised, for the
+      logged-out pricing page. On `public_router`, which carries no auth dependency.
 
 Two-phase rollout: everything runs in Stripe TEST mode until the operator flips
 the live keys + live webhook secret and gives the go (Phase 2). No changelog entry
@@ -22,6 +24,10 @@ until that flip. See story_prompts.md → E9.8.
 
 ⚠️ The /stripe/webhook route MUST be exposed WITHOUT the API Gateway Cognito JWT
 authorizer (Stripe presents no Cognito token) — signature verification is its auth.
+The same is true of /subscription/public-pricing, for the ordinary NF3.2 reason: the
+authorizer sits per-route in front of the Lambda, so a router with no `Depends()` still
+401s until an explicit `--authorization-type NONE` route exists. See
+infrastructure/aws_resources.md.
 """
 
 from __future__ import annotations
@@ -35,18 +41,22 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from app.backend.dependencies import get_user_id
-from app.backend.services import cognito, dynamo
+from app.backend.services import cognito, dynamo, stripe_pricing
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["subscription"])
 
+# E9.59 — the ONE public route in this module, kept on its own router object rather than
+# as an exemption flag inside the gated one (the fantasy_import / fantasy_public pattern).
+public_router = APIRouter(tags=["subscription-public"])
+
 # ── Config (all operator-provisioned; secrets never live in the repo) ────────
 _FOUNDING_CAP = int(os.getenv("FOUNDING_MEMBER_CAP", "100"))
-# Display amounts (cents) for the /subscribe page — cosmetic; the Stripe Price ids
-# are the billing source of truth. Defaults match the decided v1 pricing.
-_FOUNDING_CENTS = int(os.getenv("FOUNDING_PRICE_CENTS", "1000"))   # $10/mo
-_STANDARD_CENTS = int(os.getenv("STANDARD_PRICE_CENTS", "2000"))   # $20/mo
 _APP_BASE_URL = os.getenv("APP_BASE_URL", "https://credencesports.com").rstrip("/")
+# ⛔ There is deliberately NO `FOUNDING_PRICE_CENTS` display constant any more (E9.59).
+# It was a SECOND source of truth for the number a customer sees, maintained by hand and
+# with nothing tying it to the Stripe Price they are actually charged. Both pricing reads
+# below now go through `stripe_pricing.resolve()` on the SAME Price id checkout uses.
 
 # Groups that already have full access → must never be sent to checkout.
 _ACCESS_GROUPS = {cognito.GROUP_BETA, cognito.GROUP_SUBSCRIBER, "admin"}
@@ -63,17 +73,44 @@ def _configure_stripe() -> None:
     stripe.api_key = _secret_key()
 
 
-def _price_for_new_checkout() -> tuple[str, str]:
-    """(price_id, tier) for a new checkout, decided from the authoritative founding
-    counter. Under the cap → founding ($10, grandfathered); at/over → standard ($20).
-    The #100 boundary race is accepted (no lock)."""
+def _pricing_decision() -> tuple[str, str, int]:
+    """(price_id, tier, founding_slots_used) — the ONE place the offered Price is chosen.
+
+    Decided from the authoritative founding counter: under the cap → the founding Price
+    (grandfathered for life); at/over → the standard Price. The #100 boundary race is
+    accepted (no lock).
+
+    ⭐ E9.59: checkout AND both pricing reads call this, so the Price the page DISPLAYS is
+    by construction the Price checkout CHARGES. A separate display path is precisely how
+    the two drift. The `STRIPE_PRICE_*` env vars are also the TEST→LIVE seam (E9.8-P2):
+    Stripe Price ids differ by mode, and pointing this one function at the live ids moves
+    display and charge together."""
     founding = os.getenv("STRIPE_PRICE_FOUNDING")
     standard = os.getenv("STRIPE_PRICE_STANDARD")
     if not founding or not standard:
         raise HTTPException(status_code=503, detail="Billing prices are not configured")
-    if dynamo.founding_slots_used() < _FOUNDING_CAP:
-        return founding, "founding"
-    return standard, "standard"
+    used = dynamo.founding_slots_used()
+    if used < _FOUNDING_CAP:
+        return founding, "founding", used
+    return standard, "standard", used
+
+
+def _price_for_new_checkout() -> tuple[str, str]:
+    """(price_id, tier) for a new checkout."""
+    price_id, tier, _used = _pricing_decision()
+    return price_id, tier
+
+
+def _displayed_price(price_id: str) -> stripe_pricing.PriceSnapshot:
+    """The Stripe Price to show, or a 503. See `services/stripe_pricing.py` for the cache
+    + last-known-good chain — reaching the 503 means Stripe is unreachable AND this Price
+    has never once been read successfully, which is the only state where showing nothing
+    beats showing something."""
+    _configure_stripe()
+    snapshot = stripe_pricing.resolve(price_id)
+    if snapshot is None:
+        raise HTTPException(status_code=503, detail="Pricing is temporarily unavailable")
+    return snapshot
 
 
 # ── Response models ──────────────────────────────────────────────────────────
@@ -108,12 +145,36 @@ class SubscriptionStatus(BaseModel):
 
 
 class SubscriptionPricing(BaseModel):
+    """The AUTHENTICATED pricing read. Shape unchanged (E9.41/NF-C0 — a deployed client
+    reads these keys); only the SOURCE of `unit_amount`/`currency` moved to Stripe."""
+
     tier: str             # founding | standard
-    unit_amount: int      # cents
-    currency: str
+    unit_amount: int      # cents, from the Stripe Price
+    currency: str         # from the Stripe Price
     founding_slots_used: int
     founding_cap: int
     founding_available: bool
+
+
+class PublicPricing(BaseModel):
+    """The PUBLIC pricing read — what a logged-out stranger is shown.
+
+    Deliberately MINIMISED. It carries the Stripe Price fields a page must render, plus
+    ONE number of ours, and nothing else.
+
+    ⛔ `founding_slots_used` and `founding_cap` are BOTH absent, and that is not an
+    oversight: shipping the cap alongside `remaining` would make `used` a subtraction
+    away, i.e. it would leak the internal conversion count through the back door. The
+    marketing claim a page can make from `founding_slots_remaining` alone ("N founding
+    seats left at this price") is the one worth making anyway."""
+
+    unit_amount: int          # cents, from the Stripe Price
+    currency: str             # from the Stripe Price
+    interval: str             # from the Stripe Price ("month")
+    interval_count: int       # from the Stripe Price
+    product_name: str         # from the Stripe Product
+    tier: str                 # founding | standard — which offer is live right now
+    founding_slots_remaining: int  # OURS (a Credence count), never a Stripe capped price
 
 
 def _active_subscription_period(customer_id: str) -> tuple[bool, int | None]:
@@ -277,16 +338,54 @@ def subscription_status(user_id: str = Depends(get_user_id)) -> SubscriptionStat
 
 @router.get("/subscription/pricing", response_model=SubscriptionPricing)
 def subscription_pricing(_: str = Depends(get_user_id)) -> SubscriptionPricing:
-    """The price a NEW checkout would use right now (founding vs standard)."""
-    used = dynamo.founding_slots_used()
-    available = used < _FOUNDING_CAP
+    """The price a NEW checkout would use right now (founding vs standard).
+
+    E9.59 — the amount now comes from the Stripe Price rather than an env constant. That
+    matters here and not only on the public read: `/subscribe` renders BOTH branches, so
+    leaving this one on a hardcoded constant would have made one page show two different
+    prices to a logged-out and a signed-in visitor."""
+    price_id, tier, used = _pricing_decision()
+    snapshot = _displayed_price(price_id)
     return SubscriptionPricing(
-        tier="founding" if available else "standard",
-        unit_amount=_FOUNDING_CENTS if available else _STANDARD_CENTS,
-        currency="usd",
+        tier=tier,
+        unit_amount=snapshot.unit_amount,
+        currency=snapshot.currency,
         founding_slots_used=used,
         founding_cap=_FOUNDING_CAP,
-        founding_available=available,
+        founding_available=tier == "founding",
+    )
+
+
+# ── Public pricing (E9.59 — NO auth; see the API-Gateway note in the module docstring) ──
+
+
+@public_router.get("/subscription/public-pricing", response_model=PublicPricing)
+def public_pricing() -> PublicPricing:
+    """The price a logged-out stranger is shown, read from Stripe.
+
+    Takes NO credentials and returns nothing caller-specific — which is what makes it safe
+    on an `--authorization-type NONE` route. ⚠️ Such a route gets no upstream token
+    validation, so any Bearer token on it is attacker-controlled (measured, 2026-08-04); a
+    public read must therefore never branch on one, and this one has no `Depends()` and
+    reads no header at all.
+
+    "Price from Stripe, slots from us": the amount/currency/interval/product come from the
+    Stripe Price object that Checkout charges against; `founding_slots_remaining` is OUR
+    durable conversion counter. The founding tier is deliberately NOT modelled as a Stripe
+    metered/capped price — the cap is a Credence marketing promise, and expressing it in
+    Stripe would put a business rule in a place we cannot count or grandfather from."""
+    price_id, tier, used = _pricing_decision()
+    snapshot = _displayed_price(price_id)
+    return PublicPricing(
+        unit_amount=snapshot.unit_amount,
+        currency=snapshot.currency,
+        interval=snapshot.interval,
+        interval_count=snapshot.interval_count,
+        product_name=snapshot.product_name,
+        tier=tier,
+        # Clamped: the #100 boundary race is accepted, so `used` can exceed the cap and a
+        # negative "seats left" would be a nonsense the page would render verbatim.
+        founding_slots_remaining=max(0, _FOUNDING_CAP - used),
     )
 
 
@@ -363,6 +462,15 @@ async def stripe_webhook(request: Request) -> dict:
                 logger.warning(
                     "subscription.created could not resolve a Cognito sub (event=%s)", event_id
                 )
+
+        elif event_type in ("price.updated", "price.created", "product.updated"):
+            # E9.59 — an operator edited the price in the Stripe dashboard. Dropping the
+            # in-memory cache makes the change visible on the NEXT pageview instead of up
+            # to one TTL later. Optional: these event types only arrive if they are
+            # subscribed on the endpoint in the Stripe dashboard, and the TTL bounds
+            # staleness either way, so this is a nicety and never load-bearing.
+            stripe_pricing.invalidate()
+            logger.info("Pricing cache invalidated by %s (event=%s)", event_type, event_id)
 
         elif event_type in ("customer.subscription.deleted", "invoice.payment_failed"):
             sub = _resolve_sub(obj)

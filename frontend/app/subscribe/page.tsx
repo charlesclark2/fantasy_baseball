@@ -14,6 +14,7 @@ import { signupHref } from "@/lib/access"
 import { startGoogleSignIn, isHostedUiConfigured } from "@/lib/cognito"
 import { GoogleIcon } from "@/components/google-icon"
 import {
+  getPublicPricing,
   getSubscriptionPricing,
   getSubscriptionStatus,
   openBillingPortal,
@@ -45,9 +46,32 @@ function PerkList() {
   )
 }
 
-function fmtUsd(cents: number): string {
-  const dollars = cents / 100
-  return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`
+/**
+ * Format a Stripe minor-unit amount in the currency the Price object declared.
+ *
+ * ⛔ The currency is NOT assumed. E9.59's whole premise is that the number on screen is
+ * whatever the Stripe Price says, so hardcoding `$` here would re-introduce a smaller
+ * version of the drift the story removed — and would silently mislabel the amount the
+ * moment the Price is ever anything but USD.
+ */
+function fmtAmount(cents: number, currency: string): string {
+  const amount = cents / 100
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: currency.toUpperCase(),
+      minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(amount)
+  } catch {
+    // An unknown currency code throws rather than degrading; show the amount anyway.
+    return `${currency.toUpperCase()} ${amount.toFixed(2)}`
+  }
+}
+
+/** "/ month", or "/ 3 months" for a multi-interval Price. */
+function fmtInterval(interval: string, count: number): string {
+  return count === 1 ? `/ ${interval}` : `/ ${count} ${interval}s`
 }
 
 export default function SubscribePage() {
@@ -68,6 +92,20 @@ export default function SubscribePage() {
     queryKey: ["subscription-pricing"],
     queryFn: () => getSubscriptionPricing(accessToken),
     enabled: signedIn,
+  })
+
+  // E9.59 — the price for a logged-out stranger, read from Stripe server-side.
+  //
+  // `retry: false` because the two ways this fails are both permanent-for-this-pageview: a
+  // 401 while the API-Gateway route is still authorized (the deploy-skew window), or a 503
+  // when Stripe is unreachable AND the price has never been cached. Retrying neither fixes
+  // them nor tells the visitor anything — the page degrades to perks + CTA instead.
+  const publicPricing = useQuery({
+    queryKey: ["public-pricing"],
+    queryFn: getPublicPricing,
+    enabled: !loading && !signedIn,
+    retry: false,
+    staleTime: 5 * 60 * 1000,
   })
 
   // E9.58 — signup, in place, on the page every padlock points at. Returning to `/subscribe`
@@ -144,11 +182,47 @@ export default function SubscribePage() {
             mailto below) appeared nowhere. It also showed them nothing about what they would be
             buying — the perks list was rendered only INSIDE the signed-in checkout branch, i.e.
             only to people who had already committed enough to have an account.
-            ⚠️ The price genuinely cannot be shown here yet: `/subscription/pricing` requires auth,
-            so a logged-out fetch 401s. Making it public is a backend + API-Gateway-route change
-            (see the E9.56c handoff) — deliberately not smuggled into a frontend fix. */}
+            ✅ E9.59 CLOSED THE LAST GAP — the price. It used to be un-showable here (the only
+            pricing read required auth, so a logged-out fetch 401'd), which meant the page every
+            padlock points at asked a stranger to create an account before telling them what it
+            costs. `/subscription/public-pricing` is public and reads the number from the Stripe
+            Price that Checkout charges against.
+            ⚠️ The price block below is CONDITIONAL on purpose. It must be possible for the price
+            to be absent — the API Gateway route is an operator step that lands after the deploy,
+            and Stripe can blip — without taking the sign-up path down with it. */}
         {!loading && !signedIn && (
           <div className="mt-10 rounded-xl border border-[#262626] bg-[#0f0f0f] p-8">
+            {publicPricing.data && (
+              <div className="mb-8 border-b border-[#262626] pb-8">
+                {publicPricing.data.tier === "founding" && (
+                  <div className="mb-4 inline-block rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-400">
+                    Founding member rate — locked in for life
+                  </div>
+                )}
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-bold">
+                    {fmtAmount(publicPricing.data.unit_amount, publicPricing.data.currency)}
+                  </span>
+                  <span className="text-gray-400">
+                    {fmtInterval(publicPricing.data.interval, publicPricing.data.interval_count)}
+                  </span>
+                </div>
+                {/* The scarcity line is honest or absent: it renders only while founding seats
+                    genuinely remain, and the count is our own durable conversion counter. */}
+                {publicPricing.data.tier === "founding" &&
+                  publicPricing.data.founding_slots_remaining > 0 && (
+                    <p className="mt-2 text-sm text-amber-400/80">
+                      Only {publicPricing.data.founding_slots_remaining} founding{" "}
+                      {publicPricing.data.founding_slots_remaining === 1 ? "seat" : "seats"} left at
+                      this rate.
+                    </p>
+                  )}
+                <p className="mt-2 text-sm text-gray-500">
+                  Cancel anytime · secure checkout by Stripe
+                </p>
+              </div>
+            )}
+
             <h2 className="text-lg font-semibold">What a membership includes</h2>
             <PerkList />
 
@@ -254,7 +328,7 @@ export default function SubscribePage() {
             )}
             <div className="flex items-baseline gap-2">
               <span className="text-4xl font-bold">
-                {pricing.data ? fmtUsd(pricing.data.unit_amount) : "—"}
+                {pricing.data ? fmtAmount(pricing.data.unit_amount, pricing.data.currency) : "—"}
               </span>
               <span className="text-gray-400">/ month</span>
             </div>
@@ -266,9 +340,14 @@ export default function SubscribePage() {
 
             <PerkList />
 
+            {/* E9.59 — NOT gated on `pricing.data`. The amount now comes from Stripe, so a
+                Stripe blip can leave it absent; a dead Subscribe button would turn a display
+                outage into a buying outage. The server prices the Checkout Session itself
+                (`_pricing_decision`), and Stripe's own page states the price before any card
+                is entered, so proceeding without the number rendered here is safe. */}
             <Button
               onClick={handleSubscribe}
-              disabled={busy || !pricing.data}
+              disabled={busy}
               className="mt-8 w-full bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
             >
               {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

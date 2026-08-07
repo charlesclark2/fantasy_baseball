@@ -97,6 +97,12 @@ app.include_router(players.router, dependencies=_paid)
 app.include_router(parlay.router, dependencies=_paid)
 app.include_router(users.router)
 app.include_router(stripe.router)
+# E9.59 — the public pricing read, on its own router object so the exemption is structural
+# rather than a flag inside the gated one (mirrors fantasy_import.public_router). It carries
+# EXACTLY ONE route and no auth dependency; the API Gateway per-route authorizer must also be
+# set to NONE for it (see infrastructure/aws_resources.md — a router with no Depends() is not
+# sufficient on its own, per NF3.2).
+app.include_router(stripe.public_router)
 # Fantasy data endpoints carry their OWN entitlement gate (require_fantasy_access,
 # subscriber/admin/fantasy_comp → else 403). `_paid` adds the subscriber-MFA guard
 # for consistency with the other paid content (a no-op unless ENFORCE_SUBSCRIBER_MFA=1).
