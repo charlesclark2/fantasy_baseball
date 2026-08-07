@@ -2336,6 +2336,56 @@ branch → dev; the git add list). Then resume the cheap-waker branch.
 ⏭️ ON RESOLUTION: record the confirmed root cause + cure as a new CLAUDE.md 🧨 landmine entry (or extend INC-31/F2 if it's that class), and note the guard added.
 ```
 ```
+🧨 **INC-41 — ONE MALFORMED VENDOR PRICE FROZE A SERVING ARTIFACT FOR 6.5h; SEPARATELY, TWO MODELS SHARED ONE LABEL (2026-08-06 slate, RESOLVED PRs #638/#643, best_alpha=0).** Reported as "3 games missing post_lineup (824885/824080/825053) + 824664 total_runs 8.5-vs-7.4"; the two are INDEPENDENT defects (target 6 RULED OUT by evidence — INC-40 anchoring; all 8 that-day re-scores ran post-deploy off the flipped views).
+  • **A — the chain (each link verified):** MyBookie posted an h2h price `-2147483648` (INT32_MIN "locked market" sentinel) → `stg_oddsapi_odds` did `abs(price::integer)` and INT32_MIN has NO positive INT32 → DuckDB `OutOfRangeException` aborted `run_w1_lakehouse.py --w3pre-only` → ⭐ `--w3pre-only` + `--w7b-only` SHARED ONE TRY BLOCK, so the lineups rebuild never ran → `stg_statsapi_lineups_wide` parquet FROZE at 20:08Z for 6.5h/~40 ticks → the lineup monitor read the frozen table + reported "no newly confirmed lineups" → 3 games got no post_lineup row. The op's ALERT-continue `except` reported SUCCESS every 30 min throughout. ⭐ the games were NOT blank — healthy `morning` rows (824080=9.75/824885=8.81/825053=8.79); only the post-lineup refinement was missing; Final now → re-score moot.
+  • **A — a structural finding underneath:** the candidate query's `HAVING COUNT(DISTINCT home_away)=2` runs BEFORE `select_ready_games`, and the INC-32 40-min SLA valve lives INSIDE `select_ready_games` → a game with only ONE side's lineup never becomes a candidate, never reaches the valve, emits no `held` line ⇒ "will never be scored" is byte-identical to "nothing to do". ✅ DECISION (operator 2026-08-07): the SLA valve stays CLOSED — do NOT extend it to one-sided lineups (extending would stamp `lineup_confirmed=TRUE` on an unconfirmed lineup; a one-sided game is correctly unscorable). Fixed detection-only.
+  • **B — two models, one label:** EV Tracker "Proj." = `daily_model_predictions.pred_total_runs` (champion NGBoost); game-detail "Proj. total" = `mu_home+mu_away` from `totals_perside_mu_v1` (E2.7 per-side NegBin). `distribution_is_plausible` exists to stop showing two contradictory totals but its bound is `PLAUSIBLE_CHAMPION_MAX_DIVERGENCE=4.0` while the models typically agree within ~1.09 ⇒ the normal disagreement is permanently unsuppressable. FIX = NAMING not threshold (tightening would blank the panel on a large fraction of games = suppressing an honest 2nd estimate to hide a labelling bug): game-detail now reads "Distribution mean" + names the different model. ⚠️ the PM PRE-WORK PREMISE WAS WRONG (both-surfaces-read-`pred_total_runs`) — 7.4 was never a `pred_total_runs` value; that disconfirmation redirected the investigation (PM pre-work is a lead to CHECK, not a finding to build on).
+  • **FIXES:** #638 = bigint parse + plausibility bound + DECOUPLED the 2 intraday legs (+ real `send_alert`) + ATOMIC S3 write (staging key → server-side copy, so a crashed COPY can't leave a truncated parquet) + `unscored_pregame_games` detector + the relabel; #643 = EXCLUDE the unusable row (not null — a nulled price hit `outcome_price_american`'s `not_null` test at 2 layers, went red in dbt Build, blocked the merge; ⭐ verify the property the REPO DECLARES, not the one you're thinking of) + the missing `--w3pre` refresh flag + 2 RED-proven guards.
+  • ⭐ **THE STRUCTURAL LESSON (why this is 4 failures, not "a bad price"):** (1) no INPUT-DOMAIN CONTRACT on an untrusted vendor numeric cast to a narrow type (American odds satisfy `|price|>=100` by construction — knowable in advance, written nowhere; the `|price| BETWEEN 100 AND 1000000` bound was copy-pasted in 3 models, which is how the 4th got missed); (2) one model's failure took down an UNRELATED leg (shared try block); (3) a serving-critical artifact FROZE 6.5h and nothing watched it — the FEED was healthy so every check was blind (the INC-37/E9.48/Byparr class: a frozen DERIVED artifact is invisible when the SOURCE is fresh — THE actual harm); (4) the gate that caught it (dbt `not_null`) is WARN-tier and pages nobody (E11.30, one layer over). ⇒ 5 follow-ups carded; the 2 cheapest (per-artifact freshness SLAs + a serving-critical dbt-test pager) each would have caught it INDEPENDENTLY. ⚠️ also a KNOWN GAP #643 shipped: excluded rows now vanish SILENTLY (a reject counter is owed — one silent failure traded for a quieter one).
+──────────────────────────────────────────────────────────────────────────────
+📌 **PASTE-READY — INC-41 FOLLOW-UP #1 (PRE-LAUNCH PRIORITY): PER-ARTIFACT FRESHNESS SLAs ON SERVING-CRITICAL PARQUET. 🧭 OPUS. Paste into a session:**
+```
+You are building per-artifact freshness SLAs on serving-critical parquet — the #1 INC-41 follow-up and the
+single fix that would have cut INC-41's 6.5-hour blind spot to ONE tick. best_alpha=0 (observability only).
+
+WHY (INC-41, 2026-08-06): stg_statsapi_lineups_wide FROZE for 6.5h and nothing watched it — the FEED was
+healthy the whole time, so every existing check was blind. This is the INC-37 / E9.48 / Byparr class: a
+frozen DERIVED artifact is invisible to a freshness check on its SOURCE. The lineup monitor read a 6.5h-stale
+parquet and reported "no newly confirmed lineups" ~40 times while the op returned SUCCESS every 30 min.
+
+DO:
+  1. A GENERIC, DECLARATIVE freshness SLA: for each registered serving-critical parquet, compare a CONTENT
+     timestamp IN THE DATA (max(ingestion_ts) / a build/as-of column — NOT the S3 LastModified) against now,
+     and page via send_alert when the lag exceeds a DECLARED per-artifact cadence.
+     ⚠️ ⛔ NEVER use `aws s3 ls` LastModified (E11.20 phase-2a: it prints SHELL-LOCAL time, and #638 just made
+        the S3 writes ATOMIC via server-side copy → a re-copied file keeps a fresh mtime even when the DATA is
+        stale). Read the parquet CONTENT.
+     ⚠️ the timestamp column may be a string-wrapped VARCHAR in the lakehouse (INC-23) — cast at the use-site.
+  2. REGISTER stg_statsapi_lineups_wide FIRST (the INC-41 victim) with its real cadence (it rebuilds each
+     lineup tick during game hours) — declare an OFF-HOURS-AWARE SLA so it doesn't false-page overnight (the
+     W12/W9 "the check cadence must match the write cadence" lesson). Then add the other serving-critical
+     intraday parquet (the feature-store blocks predict_today reads).
+  3. TIER = ALERT (page + continue, per E11.7): a breach must PAGE via send_alert, NOT just log.warning
+     (E11.30 — an ALERT-tier op that only logs is the exact failure this card exists to fix). An
+     unevaluable/absent artifact is WARN, NEVER scored healthy (NF1.7 (a)).
+  4. SF-FREE (DuckDB/S3) so the check itself can't wake COMPUTE_WH (the E11.24 soak is live). boto3: ⛔ no
+     os.environ keys — instance-role (make_s3_client() / DuckDB credential_chain).
+  5. Fan it into the daily job DOWNSTREAM of the writes it guards (INC-40: a monitor upstream of its own
+     producer manufactures a false stale-alarm on the newest slate) AND a scheduled OFF-CYCLE check, so an
+     intraday freeze (INC-41's exact shape) is caught BETWEEN daily runs, not only at the next daily.
+
+GATE/AC: a registry of serving-critical parquet + declared cadences; a freshness check that reads the CONTENT
+timestamp and pages via send_alert on breach — RED-PROVEN (point it at a deliberately-frozen fixture → it
+pages; a fresh fixture → silent; an absent artifact → WARN not healthy); stg_statsapi_lineups_wide covered
+first. ⚠️ RUNTIME-GATE: CI mocks IO, so this only proves out on a REAL box run (an operator step) — a
+mocked-SNS unit test proves the DECISION logic; a live smoke (point it at a stale key, confirm the page
+lands, labelled send_alert(smoke=True) per INC-39) proves the page path. 🌿 WORKTREE off dev: git worktree
+add ../inc41-freshness-sla -b inc41-freshness-sla dev (⛔ never dev/main, ⛔ never git add -A; git fetch &&
+git checkout -b … origin/dev if the operator pre-made it; cp .env in). PR→dev; the deploy (dev→main auto-SSM)
+is an OPERATOR step in a quiet window (⛔ not mid-slate, INC-36 — and coordinate: the E11.24 target-6 soak is
+live).
+```
+──────────────────────────────────────────────────────────────────────────────
 ▶ Story prompt — E11.24 ⭐⭐ LITERAL-ZERO SNOWFLAKE — the decommission FINALE: eliminate every remaining SF wake source → DROP/permanently-suspend the warehouse (the August-bill lever)   [Infra/Cost · 🧭 OPUS · ⏰ AUGUST billing cycle · the "V2" the E11.20 scope note deferred · runtime-gate discipline · STAGED, cheapest-wins-first]   (NEW 2026-07-29, operator — "literal-zero SF; August must not repeat July's $200+")
 🎯 WHY: E11.20's wake-reduction (177→44 resumes/day, −75%) did NOT convert to credits (<15%) — because SF cost is ~80% WAKE/IDLE burn (not query compute), and the remaining 44 daily wakes are spread across the day enough that the X-Small warehouse never SLEEPS in long stretches, so idle burn barely dropped. July is still $200+ at a 44% MoM cut. ⭐ **GOAL: LITERAL-ZERO SF — repoint EVERY remaining SF read/write to S3/DuckDB/Bedrock so the warehouse can be DROPPED or permanently SUSPENDED → August metering ~$0.** Killing wakes ≠ reducing wakes: every waker must go for the warehouse to stay asleep.
 ⏰ TIMING: August bills in EARLY SEPTEMBER → act in the FIRST DAYS of August to capture the whole month. ⚠️ operator's choice = the MOST aggressive scope (2026-07-29) — biggest lift, longest tail; STAGE it cheapest-wins-first so the $ impact FRONT-LOADS even if the final warehouse-drop tails past month-end.
