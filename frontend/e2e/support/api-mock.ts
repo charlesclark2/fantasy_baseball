@@ -20,7 +20,19 @@ function fixture<T = any>(name: string): T {
   return JSON.parse(readFileSync(join(FIXTURE_DIR, name), "utf8"))
 }
 
+/**
+ * E9.59 — the public pricing payload, minus its provenance annotation, so what the page
+ * receives is exactly the API's own shape. The `__`-prefixed key documents why this one
+ * fixture is synthetic (the route is not live in prod yet, so it cannot be captured); it
+ * is not part of the contract and must never reach the page.
+ */
+function publicPricingFixture() {
+  const raw = fixture<Record<string, unknown>>("subscription-public-pricing.synthetic.json")
+  return Object.fromEntries(Object.entries(raw).filter(([k]) => !k.startsWith("__")))
+}
+
 export const FIXTURES = {
+  publicPricing: publicPricingFixture,
   projectionsLocked: () => fixture("fantasy-nfl-projections-2026-locked.json"),
   projectionsEntitled: () => fixture("fantasy-nfl-projections-2026-entitled.synthetic.json"),
   manifestLocked: () => fixture("fantasy-nfl-manifest-2026-locked.json"),
@@ -51,6 +63,7 @@ function payloadFor(pathname: string, entitlement: Entitlement): unknown | undef
   if (pathname === "/fantasy/nfl/projections") {
     return entitlement === "entitled" ? FIXTURES.projectionsEntitled() : FIXTURES.projectionsLocked()
   }
+  if (pathname === "/subscription/public-pricing") return FIXTURES.publicPricing()
   if (pathname === "/fantasy/nfl/manifest") return FIXTURES.manifestLocked()
   if (pathname === "/fantasy/nfl/board") return FIXTURES.boardLocked()
   if (pathname === "/fantasy/nfl/track-record/manifest") return FIXTURES.trackRecordManifest()

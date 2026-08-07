@@ -44,6 +44,7 @@ hermetic gate.
 | `specs/entitled-surfaces.spec.ts` | An unlocked payload renders real numbers, zero lock chips, and no upgrade ask | the other half of the same split — a page that renders chips unconditionally passes the file above and is broken for every subscriber |
 | `specs/route-integrity.spec.ts` | **Every internal `href` in the rendered DOM resolves** | E9.56c — `/pricing` killed the entire buy path |
 | `specs/signup-funnel.spec.ts` | Every signup entry point offers a working Google button; the nav carries a signup affordance on desktop **and mobile**; the click leaves for the configured Cognito host with correct PKCE params | E9.58 — the DNS-dead Hosted-UI host, and the logged-out mobile nav with no signup affordance (`hidden sm:flex`) |
+| `specs/pricing.spec.ts` | A logged-out visitor sees the price; **the rendered price and currency FOLLOW the server**; a failed pricing read costs the price and not the funnel; the page's own CTA resolves; the payload carries no internal conversion count | E9.59 — until it, `/subscribe` could not show a price at all (the only pricing read required auth). The headline case is pre-emptive: a hardcoded price is invisible to every other gate |
 
 `signup-funnel.spec.ts` is the only spec that also runs on a phone viewport, because one of the
 defects it is written from was mobile-only and a desktop-only suite is structurally blind to it.
@@ -58,8 +59,21 @@ browser receives.
 all live in the gap between what we *assume* the payload looks like and what the server actually
 sends, so a hand-written fixture encodes the assumption under test.
 
-One fixture is generated rather than captured —
-`fantasy-nfl-projections-2026-entitled.synthetic.json`. There is no public unlocked form of the
+Two fixtures are not captures, and each says so in its own `__provenance__` / header.
+
+`subscription-public-pricing.synthetic.json` (E9.59) is synthetic because
+`GET /subscription/public-pricing` **does not exist in production yet** — it ships with E9.59 and
+needs an operator API-Gateway route before it will answer anonymously, so there is nothing to
+capture. The rule it would otherwise break ("a hand-written fixture encodes the assumption under
+test") is closed from the other side instead: `betting_ml/tests/test_e9_59_public_pricing.py`
+asserts the fixture's key set equals `PublicPricing.model_fields` **exactly**, so a backend shape
+change fails the Python gate rather than drifting quietly away from this file. Its amount is
+`1234` ($12.34) rather than the real $10/$20 on purpose — a realistic value would let a page that
+hardcodes its price still render something plausible. **Replace it with a real capture once the
+route is live** (add it to `capture-fixtures.mjs`; it is deliberately not listed there yet, because
+a target that 404s makes `npm run e2e:capture` exit non-zero for no useful reason).
+
+The other is `fantasy-nfl-projections-2026-entitled.synthetic.json`. There is no public unlocked form of the
 current season to capture (every past season's `projections.json` 404s), and the entitled payload
 *is* the paid product, which does not belong in the repo. `build-entitled-fixture.mjs` derives it
 from the real locked capture, filling exactly the fields the server's own computed `lockedFields`
