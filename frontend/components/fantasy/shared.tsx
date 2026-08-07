@@ -20,6 +20,8 @@ import { useTrackRecordManifest } from "@/lib/fantasy-track-record"
 import {
   DECISION_SUPPORT_LINE,
   DISAGREEMENT_HOOK,
+  EXPECTED_POINTS_DEFINITION,
+  PROJECTED_GAMES_DEFINITION,
   TRACK_RECORD_TRUST_LINK,
 } from "@/lib/fantasy-claim-copy"
 
@@ -486,6 +488,13 @@ export function InfoTip({ label, children }: { label: React.ReactNode; children:
 
 /** Definitions shared by the boards — one wording, so a term never means two things across surfaces. */
 export const GLOSSARY = {
+  // ⭐ RE-EXPORTED, NOT RE-TYPED. These two are claim-bearing — they describe what our published
+  // number IS — so their canonical text lives in `lib/fantasy-claim-copy.ts`, where the
+  // `_CLAIM_DENYLIST` screen and the no-measured-figure rule (`test_nf_tr1_claim_copy.py`) already
+  // run over every string literal. Pasting the prose here instead would put the single most
+  // load-bearing disclosure on the boards outside every copy governance check there is.
+  expectedPoints: EXPECTED_POINTS_DEFINITION,
+  projectedGames: PROJECTED_GAMES_DEFINITION,
   vor: "Value over replacement. A player's projected points minus the points of the best player at his position who does NOT start anywhere in your league. It is what makes positions comparable: an elite quarterback scores more raw points than an elite running back, but if every team can start a good quarterback anyway, those points buy you less.",
   replacement:
     "The points of the first player at this position who does not crack a starting lineup anywhere in the league — the level you could get for free off waivers. It moves with your format: more teams, or a superflex spot, pushes it deeper.",

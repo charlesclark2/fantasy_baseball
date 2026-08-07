@@ -39,6 +39,7 @@ import { useAllTrackRecordSeasons, useTrackRecordManifest } from "@/lib/fantasy-
 import { positionTierMap, type Player } from "@/lib/draft-optimizer"
 import { initials, nflTeamLogoUrl } from "@/lib/nfl-teams"
 import type { ProjectedPlayer } from "@/lib/fantasy"
+import { EXPECTED_POINTS_LABEL, PROJECTED_GAMES_LABEL } from "@/lib/fantasy-claim-copy"
 import { PlayerHistoryPanel } from "@/components/fantasy/player-history-panel"
 import {
   ADP_DELTA_LABEL,
@@ -390,8 +391,16 @@ function EntitledPlayerView({ playerId }: { playerId: string }) {
 
           {/* Fantasy points, side by side */}
           <section className="mb-6">
+            {/* ⭐ THE HEADING IS THE LABEL. Four big point totals sit under it, and this is the
+                surface where a reader most often compares our number against one they read
+                somewhere else — so the fact that every one of these already prices in the chance
+                he misses games has to be attached to the heading itself, not left to a footnote.
+                The projected-games figure that scales them all is one section down, on the season
+                projection heading. */}
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
-              Fantasy points
+              <InfoTip label={`Fantasy points · ${EXPECTED_POINTS_LABEL.toLowerCase()}`}>
+                {GLOSSARY.expectedPoints}
+              </InfoTip>
             </h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Tile
@@ -548,9 +557,21 @@ function EntitledPlayerView({ playerId }: { playerId: string }) {
           {/* Raw season stat line */}
           {statCols.length > 0 && (
             <section className="mb-6">
+              {/* The games figure was already here — as a bare " · 15 games" that read like a
+                  rounded trivia fact rather than as the availability factor every point total on
+                  this page is scaled by. Named, defined, and no longer rounded to a whole number:
+                  it is an expectation across everything that could happen to him, and `15` hid
+                  that in a way `14.6` cannot. */}
               <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500">
                 2026 season projection
-                {proj.g != null ? ` · ${num(proj.g, 0)} games` : ""}
+                {proj.g != null ? (
+                  <>
+                    {" · "}
+                    <InfoTip label={`${num(proj.g)} ${PROJECTED_GAMES_LABEL.toLowerCase()}`}>
+                      {GLOSSARY.projectedGames}
+                    </InfoTip>
+                  </>
+                ) : null}
               </h2>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
                 {statCols.map((c) => (

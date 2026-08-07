@@ -31,13 +31,18 @@ const SURFACES = [
     heading: "Season Projections",
     // A column that is unambiguously model output — the one a locked row can never legitimately
     // fill in. Asserted per-ROW, not counted page-wide: see `expectLockChipInEveryRow`.
-    modelColumn: "Proj",
+    //
+    // ⚠️ The header text is matched EXACTLY (`expectLockChipInEveryRow` compares the whole cell),
+    // so this string tracks the rendered label: it became "Expected pts" when the points column
+    // was labelled as an availability-weighted expected total. A stale value here fails loudly
+    // ("no X column — headers: …") rather than silently skipping, which is the right direction.
+    modelColumn: "Expected pts",
   },
   {
     name: "Rankings",
     path: "/fantasy/rankings",
     heading: "Rankings",
-    modelColumn: "Proj pts",
+    modelColumn: "Expected pts",
   },
 ] as const
 

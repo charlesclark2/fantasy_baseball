@@ -17,7 +17,17 @@
 import Link from "next/link"
 import { useMyTeams } from "@/lib/fantasy-queries"
 import type { MyTeamEntry } from "@/lib/fantasy-queries"
-import { EmptyBlock, LoadingBlock, PosBadge, RangeCell, SurfaceHeader, num } from "@/components/fantasy/shared"
+import {
+  EmptyBlock,
+  GLOSSARY,
+  InfoTip,
+  LoadingBlock,
+  PosBadge,
+  RangeCell,
+  SurfaceHeader,
+  num,
+} from "@/components/fantasy/shared"
+import { EXPECTED_POINTS_LABEL } from "@/lib/fantasy-claim-copy"
 import type { RosterMatch } from "@/lib/league-scoring"
 
 export function MyTeams() {
@@ -142,7 +152,9 @@ function RosterTable({ label, rows }: { label: string; rows: RosterMatch[] }) {
               <th className="py-1 pr-2 font-medium">Player</th>
               <th className="py-1 pr-2 font-medium">Pos</th>
               <th className="py-1 pr-2 font-medium">Team</th>
-              <th className="py-1 pr-2 text-right font-medium">Proj. pts (ROS)</th>
+              <th className="py-1 pr-2 text-right font-medium">
+                <InfoTip label={`${EXPECTED_POINTS_LABEL} (ROS)`}>{GLOSSARY.expectedPoints}</InfoTip>
+              </th>
               <th className="py-1 pr-2 text-right font-medium">80% range</th>
             </tr>
           </thead>

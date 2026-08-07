@@ -47,7 +47,17 @@ export default defineConfig({
     // E9.58's second defect was mobile-only — the logged-out nav had no signup affordance on a
     // small screen because the whole block was `hidden sm:flex`. A desktop-only suite cannot see
     // that, so the funnel specs run on a phone viewport too.
-    { name: "mobile", use: { ...devices["Pixel 7"] }, testMatch: /signup-funnel\.spec\.ts/ },
+    // ⭐ `expected-points-label` joins it for a DIFFERENT reason, and the distinction matters: its
+    // tap test is VACUOUS on desktop. `InfoTip` opens on `pointerenter` when `pointerType ===
+    // "mouse"`, so Chromium's `click()` opens the definition via HOVER before the click is even
+    // dispatched — a Radix Tooltip, which can never be opened by a touch, would pass identically.
+    // Only a touch-capable, hover-less viewport tells the two apart, and the phone reader is
+    // exactly who the definition is for.
+    {
+      name: "mobile",
+      use: { ...devices["Pixel 7"] },
+      testMatch: /(signup-funnel|expected-points-label)\.spec\.ts/,
+    },
   ],
 
   // `E2E_BASE_URL` means "something else is already serving" (a Vercel preview, a hand-started

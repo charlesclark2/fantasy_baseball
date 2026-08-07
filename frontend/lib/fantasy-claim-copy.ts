@@ -49,9 +49,9 @@ export const PRODUCT_HOOK: readonly { title: string; detail: string }[] = [
       "Half-PPR, full-PPR, superflex, custom bonuses — every projection and ranking is recomputed for your settings, not converted from someone else's.",
   },
   {
-    title: "Honest projected points",
+    title: "Points that price in missed games",
     detail:
-      "A full-season point projection for every player — built to be right on average, not to look bold.",
+      "A full-season point projection that already accounts for the chance a player misses time — built to be right on average, not to look bold.",
   },
   {
     title: "A range, so you know how sure we are",
@@ -108,6 +108,59 @@ export const METHOD_DISCLOSURE_LABEL = "How we measured this"
  *  methodology layer with this note, and the product hook above still leads. */
 export const LEGACY_CLAIM_NOTE =
   "This is the previous wording of our track-record summary. The fuller breakdown — the benchmark, the sample size and the uncertainty range — publishes with the next export."
+
+// ══ EXPECTED POINTS — the label that turns a shock into a disclosure ═══════════════════════════
+//
+// THE PROBLEM IT SOLVES (NF-TR1 surfaced it on the public track record): our published point total
+// is an EXPECTED season total — the chance a player misses games is multiplied through it — so it
+// sits structurally BELOW the "if he plays every week" numbers most sites publish, and below what a
+// player who stayed healthy actually finished on. Unlabelled, that reads as a broken model. It is
+// not: it is the honest number, and the fix is to SAY SO next to it.
+//
+// ⭐ THE FRAMING RULE, and it is the whole point of putting these strings here rather than inline:
+// this is a DISCLOSURE, not an apology. The copy states what the number is and why we prefer it,
+// and never asks to be forgiven for it. A surface that softens this into "sorry our numbers look
+// low" gives away the trust the disclosure is supposed to earn.
+//
+// ⛔⛔ AND IT MAY NEVER CLAIM AVAILABILITY EXPLAINS THE WHOLE GAP. It does not. Availability carries
+// most of the measured level shift, but a residual remains at the worst position, and that residual
+// is a real miscalibration with its own carded model story — NOT something a label may absorb. Any
+// wording implying "the games column accounts for the difference" would be using an honest
+// mechanism to bury a dishonest amount. `EXPECTED_POINTS_NOTE` says so in as many words, and
+// `betting_ml/tests/test_expected_points_label_copy.py` holds that clause with its own fixture.
+//
+// ⛔ NO MEASURED FIGURE, same rule as the rest of this file: no per-position ratio, no games
+// average, no bias number. The projected-games VALUE is read per-player from the served artifact
+// and rendered beside the points — that is the honest way to show the size of the discount, and it
+// cannot drift the way a typed figure would.
+
+/** The column label wherever a projected-points number is shown. One constant so the boards, the
+ *  track record and the player page cannot end up calling the same number three things. */
+export const EXPECTED_POINTS_LABEL = "Expected pts"
+
+/** The tappable definition behind that label. Rendered through `InfoTip` (a Radix Popover, so it
+ *  opens on TAP — the E9.63/NF3 touch lesson: a hover-only tooltip is unreachable on a phone, and
+ *  this definition is the whole remedy). */
+export const EXPECTED_POINTS_DEFINITION =
+  "What we expect this player to score across the whole season, with the chance he misses games already priced in. Most published projections are “if he plays every week” numbers; ours multiplies through by the games we actually expect him to play, so ours is deliberately lower — and lower by more at the positions that lose the most time to injury. Read it next to the projected games and the 80% range: the range is where the stays-healthy, everything-breaks-right seasons live."
+
+/** The projected-games column — what makes the lower points number legible. */
+export const PROJECTED_GAMES_LABEL = "Proj. games"
+
+export const PROJECTED_GAMES_DEFINITION =
+  "How many of the season's games we expect this player to be available for, out of a full slate of seventeen. It is an average across everything that could happen to him, not a prediction that he misses exactly that many weeks — which is why it is rarely a whole number. This is the figure the points column is scaled by, so it is the quickest way to see how much of a player's projection is an availability discount."
+
+/** The page-level framing on the track record, where a reader meets our points column beside a
+ *  finished season's real total and needs to know why one runs under the other.
+ *
+ *  ⛔ The last sentence is load-bearing and is NOT decoration: availability is the largest part of
+ *  the gap and it is not all of it, and a page that let the reader infer otherwise would be worse
+ *  than one that never explained anything. Do not trim it for length. */
+export const EXPECTED_POINTS_NOTE = {
+  title: "Why our points column runs below the finished season",
+  detail:
+    "The points we publish are an expected season total: the chance a player misses games is already priced into the number. That puts ours below the “if he plays every week” projections most sites show, and below what a player who stayed healthy actually finished on — by design, not by accident. The projected-games column shows how much of that discount is availability for each player. It is not the only reason a projection lands under a finished season, and we do not present it as one.",
+} as const
 
 /** The standing statement of what the served board actually is, for a surface that renders without
  *  the artifact. Mirrors `build_claim`'s `architecture` note; when the artifact IS available,
