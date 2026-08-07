@@ -379,6 +379,11 @@ def main():
                          "(serving-critical — after run_w1_lakehouse.py --w6-odds-current).")
     ap.add_argument("--w6-clv", action="store_true",
                     help="Once/day: refresh the CLV/line-movement marts (after odds_clv rebuild).")
+    ap.add_argument("--w3pre", action="store_true",
+                    help="E11.1-W3pre: refresh only the odds/staging flatten tier (after "
+                         "run_w1_lakehouse.py --w3pre-only). REQUIRED tier — W3pre is cut over, so "
+                         "these tables exist and stg_oddsapi_odds feeds mart_odds_outcomes on the "
+                         "serving path; a failed refresh means stale served prices.")
     ap.add_argument("--w9", action="store_true",
                     help="E11.1-W9: refresh only the 5 sub-model signal-store external tables "
                          "(after export_w9_signals_to_s3.py). Best-effort — these don't exist "
@@ -478,6 +483,19 @@ def main():
         print("Refreshing W11tx transactions stg external table (--w11tx):")
         _refresh(W11TX_TABLES, required=set())
         print("W11tx transactions external-table refresh complete (best-effort).")
+        return
+
+    # INC-41 (2026-08-06): the targeted W3pre refresh, pairing with run_w1_lakehouse.py
+    # --w3pre-only. Every other build tier had a matching refresh flag; W3pre did not, so the only
+    # way to refresh it was the full no-flag daily path — which is why an operator repairing a
+    # W3pre-only build had no correct narrow command to run. REQUIRED (not best-effort) because
+    # W3pre is cut over: the dbt else branches ARE `select * from lakehouse_ext.stg_*`, and
+    # stg_oddsapi_odds feeds mart_odds_outcomes, which predict_today/write_serving_store read at
+    # request time. A silently-skipped refresh here serves stale prices (the --w6-odds reasoning).
+    if args.w3pre:
+        print("Refreshing W3pre odds/staging flatten external tables (--w3pre):")
+        _refresh(W3PRE_TABLES, required=set(W3PRE_TABLES))
+        print("W3pre external-table refresh complete.")
         return
 
     # E11.1-W9: the signal-store mirror op refreshes its own external tables right after writing

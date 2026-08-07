@@ -146,3 +146,70 @@ def test_the_old_expression_really_did_raise_on_the_incident_value():
     with pytest.raises(Exception) as exc:
         con.execute(f"select {old} from (select '-2147483648' as p)").fetchone()
     assert "abs" in str(exc.value).lower() or "range" in str(exc.value).lower()
+
+
+# ── the not_null contract must be upheld by a FILTER, not by hope ───────────────────
+# My post-repair verification counted out-of-band prices and inf decimals, reported clean, and
+# never counted NULLs against the `not_null` test on outcome_price_american — so a live
+# data-quality gate was already violated while I was calling the data healthy. The dbt Build job
+# caught it. This pins the structural property that check missed.
+_BOUND_IN_WHERE = re.compile(
+    r"where\s+abs\(\s*try_cast\(\s*json_extract_string\([^)]*'\$\.price'\s*\)\s*as\s+bigint\s*\)\s*\)"
+    r"\s*between\s+100\s+and\s+1000000",
+    re.IGNORECASE,
+)
+
+_NOT_NULL_PRICE_MODELS = ("stg_oddsapi_odds", "stg_derivative_odds")
+
+
+def test_a_w3pre_only_build_has_a_matching_targeted_ext_table_refresh():
+    """`run_w1_lakehouse.py --w3pre-only` must have a paired `refresh_w1_external_tables --w3pre`.
+
+    Found while writing the INC-41 repair steps: every other build tier (w6-odds, w8a, w8b, w11b/c/d,
+    w11tx, w9, sub-model-signals) had a targeted refresh flag; W3pre had none, so the ONLY way to
+    refresh it was the full no-flag daily path. That matters specifically for W3pre because it is
+    CUT OVER — the dbt else branches are `select * from lakehouse_ext.stg_*` and stg_oddsapi_odds
+    feeds mart_odds_outcomes, read at request time by predict_today / write_serving_store. So an
+    operator who rebuilds just this tier (exactly the INC-41 repair) has no narrow correct command,
+    and the tempting fallback — rebuild the parquet and skip the refresh — leaves Snowflake serving
+    the OLD file with no error at all (AUTO_REFRESH=FALSE).
+
+    Kept deliberately narrow: most build tiers legitimately refresh only via the daily path, so a
+    blanket "every --X-only needs a --X" lint would be noise reverse-engineered to this one answer.
+
+    RED-proves: delete the `--w3pre` argument or its branch and this fails.
+    """
+    src = (Path(__file__).resolve().parents[2]
+           / "scripts" / "refresh_w1_external_tables.py").read_text()
+    assert 'add_argument("--w3pre"' in src, "refresh_w1_external_tables.py must expose --w3pre"
+    # The branch must actually refresh the W3pre tier, and as REQUIRED — a best-effort skip here
+    # is indistinguishable from success while serving stale prices.
+    assert re.search(
+        r"if\s+args\.w3pre\s*:.*?_refresh\(\s*W3PRE_TABLES\s*,\s*required\s*=\s*set\(\s*W3PRE_TABLES\s*\)\s*\)",
+        src,
+        re.DOTALL,
+    ), "--w3pre must _refresh(W3PRE_TABLES, required=set(W3PRE_TABLES))"
+    # …and the tier must still contain the model whose staleness caused the incident.
+    w3pre_const = src[src.index("W3PRE_TABLES = ["):]
+    assert "stg_oddsapi_odds" in w3pre_const[: w3pre_const.index("]")]
+
+
+@pytest.mark.parametrize("model", _NOT_NULL_PRICE_MODELS)
+def test_an_unusable_price_excludes_the_row_rather_than_nulling_it(model):
+    """`outcome_price_american` carries a not_null test, so the model must FILTER, not NULL.
+
+    Nulling in place is the tempting fix and it silently breaks the gate — 1 NULL row out of
+    6.1M was enough to fail dbt Build, which is exactly the gate doing its job. The documented
+    contract (mart_odds_outcomes column docs) is that a row without a usable price is excluded at
+    the staging layer.
+
+    RED-proves: delete the WHERE bound from either model and this fails.
+    """
+    path = next(DBT_MODELS.rglob(f"{model}.sql"), None)
+    assert path is not None, f"{model}.sql not found"
+    code = _strip_sql_comments(path.read_text())
+    assert _BOUND_IN_WHERE.search(code), (
+        f"{model} must EXCLUDE a row whose price is not a usable American odd (a WHERE bound), "
+        "not carry it with a NULL price — outcome_price_american has a not_null test at this "
+        "layer AND in mart_odds_outcomes, which selects it straight through."
+    )
