@@ -1,0 +1,24 @@
+{
+  "seasons": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "adpSourceBySeason": {
+    "2019": "ffc",
+    "2020": "ffc",
+    "2021": "ffc",
+    "2022": "ffc",
+    "2023": "ffc",
+    "2024": "ffc",
+    "2025": "mfl"
+  },
+  "generated_at": "2026-08-05T04:51:42.995594+00:00",
+  "headline": "Before each of the last 6 seasons (2019–2024) we ranked every player against the others at his position. Judged on how those seasons actually finished, our order came out at 0.517 and the market's preseason ADP at 0.494 — on a scale where 1.000 would be a perfect ranking and 0.000 would be a random one. So we finished ahead, by a narrow margin. The difference is largest on the players we disagreed with the market about most: there our order came out at 0.498 against ADP's 0.416. These are averages across several seasons, not a promise about any single season or position — the year-by-year and position-by-position detail is below.",
+  "lockedSeason": 2026,
+  "scorecardGeneratedAt": "2026-08-02T06:11:45.299170+00:00"
+}
