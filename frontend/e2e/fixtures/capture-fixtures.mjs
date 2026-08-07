@@ -1,0 +1,119 @@
+#!/usr/bin/env node
+/**
+ * E9.63 — capture the E2E API fixtures from the LIVE production API.
+ *
+ * ⛔ DO NOT HAND-WRITE A FIXTURE IN `api/`. That is the whole discipline this file exists to
+ * enforce, and it is E9.56b's lesson stated as a rule: the bugs this suite guards (a locked board
+ * rendering BLANK, `NaN` in a column, a CTA pointing at a route that does not exist) all live in
+ * the gap between what we ASSUME the payload looks like and what the server actually sends. A
+ * hand-written fixture encodes the assumption under test, so the suite would pass on exactly the
+ * payload shape that never occurs in production.
+ *
+ * Every endpoint captured here is PUBLIC — no token, no entitlement. That is not a convenience;
+ * it is the point. These are the bytes an anonymous visitor's browser receives, captured verbatim.
+ *
+ *   node e2e/fixtures/capture-fixtures.mjs            # refresh from prod
+ *   node e2e/fixtures/capture-fixtures.mjs --check    # CI-safe: report drift, write nothing
+ *
+ * `--check` is deliberately NOT wired into the CI gate. A fixture is a SNAPSHOT of a payload the
+ * operator re-exports on their own cadence; failing the build because the board was regenerated
+ * would be a false red. Run it by hand when a payload shape changes.
+ */
+
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs"
+import { createHash } from "node:crypto"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
+
+const HERE = dirname(fileURLToPath(import.meta.url))
+const OUT_DIR = join(HERE, "api")
+
+const API = process.env.E2E_CAPTURE_API_URL ?? "https://api.credencesports.com"
+
+/** The season the frontend's `FANTASY_SEASON` points at — the LOCKED (paid) one. */
+const LOCKED_SEASON = 2026
+/** The newest season the public track record covers — real, unlocked model output. */
+const TRACK_RECORD_SEASON = 2025
+
+const TARGETS = [
+  {
+    file: "fantasy-nfl-projections-2026-locked.json",
+    path: `/fantasy/nfl/projections?season=${LOCKED_SEASON}`,
+    note: "Locked (anonymous) season projections. `locked: true`, every model value stripped, rows re-ordered onto market ADP.",
+  },
+  {
+    file: "fantasy-nfl-manifest-2026-locked.json",
+    path: `/fantasy/nfl/manifest?season=${LOCKED_SEASON}`,
+    note: "Locked manifest — the board frame (configs + sizes) the CTA is rendered on.",
+  },
+  {
+    file: "fantasy-nfl-board-full_ppr-12-2026-locked.json",
+    path: `/fantasy/nfl/board?config=full_ppr&size=12&season=${LOCKED_SEASON}`,
+    note: "Locked draft board. A bare ARRAY (never an envelope — see lock_board_payload). This is the payload that rendered BLANK in E9.56b.",
+  },
+  {
+    file: "fantasy-nfl-track-record-manifest.json",
+    path: "/fantasy/nfl/track-record/manifest",
+    note: "Public track record manifest. Real numbers, no entitlement — the receipts surface.",
+  },
+  {
+    file: `fantasy-nfl-track-record-${TRACK_RECORD_SEASON}.json`,
+    path: `/fantasy/nfl/track-record/${TRACK_RECORD_SEASON}`,
+    note: "Public past-season track record. REAL, UNLOCKED model output — the honest 'a real payload renders real numbers' fixture.",
+  },
+]
+
+const sha = (s) => createHash("sha256").update(s).digest("hex").slice(0, 16)
+
+const checkOnly = process.argv.includes("--check")
+mkdirSync(OUT_DIR, { recursive: true })
+
+let drift = 0
+const provenance = []
+
+for (const t of TARGETS) {
+  const url = `${API}${t.path}`
+  const res = await fetch(url)
+  if (!res.ok) {
+    console.error(`FAIL  ${res.status} ${url}`)
+    process.exitCode = 1
+    continue
+  }
+  // Re-serialize rather than storing the raw bytes: a stable 2-space form keeps the diff of a
+  // re-capture readable instead of a single 267 KB line.
+  const body = JSON.stringify(await res.json(), null, 2) + "\n"
+  const out = join(OUT_DIR, t.file)
+  const prev = existsSync(out) ? readFileSync(out, "utf8") : null
+
+  if (checkOnly) {
+    const same = prev === body
+    if (!same) drift++
+    console.log(`${same ? "same" : "DRIFT"}  ${t.file}  (${body.length} bytes)`)
+  } else {
+    writeFileSync(out, body)
+    console.log(`wrote ${t.file}  ${body.length} bytes  sha256:${sha(body)}`)
+  }
+  provenance.push({ file: t.file, url, bytes: body.length, sha256_16: sha(body), note: t.note })
+}
+
+if (!checkOnly) {
+  writeFileSync(
+    join(OUT_DIR, "CAPTURE.json"),
+    JSON.stringify(
+      {
+        captured_from: API,
+        captured_at: new Date().toISOString(),
+        how: "node e2e/fixtures/capture-fixtures.mjs",
+        anonymous: true,
+        files: provenance,
+      },
+      null,
+      2,
+    ) + "\n",
+  )
+  console.log("wrote CAPTURE.json")
+}
+
+if (checkOnly && drift) {
+  console.log(`\n${drift} fixture(s) differ from prod. Re-run without --check to refresh.`)
+}

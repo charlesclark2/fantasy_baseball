@@ -7,7 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "verify:login": "node scripts/verify-login.mjs"
+    "verify:login": "node scripts/verify-login.mjs",
+    "e2e:build": "set -a && . ./e2e/e2e.env && set +a && next build",
+    "e2e:capture": "node e2e/fixtures/capture-fixtures.mjs && node e2e/fixtures/build-entitled-fixture.mjs",
+    "test:e2e": "npm run e2e:build && playwright test",
+    "test:e2e:run": "playwright test",
+    "test:e2e:live": "E2E_LIVE=1 playwright test --grep @live",
+    "e2e:red-proof": "node e2e/red-proof.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -76,6 +82,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.2.0",
     "@types/node": "^22",
     "@types/qrcode": "^1.5.6",
