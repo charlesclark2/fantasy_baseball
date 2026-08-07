@@ -200,6 +200,48 @@ const CASES = [
     grep: "still leads with calibration",
   },
   {
+    id: "banner-recites-the-measurement",
+    shipped: "NF-TR1 — the pre-reframe state: the locked board recited the track-record statistic",
+    // ⚠️ THIS ONE ACTUALLY SHIPPED (E9.56c, "lead with the receipts"), which is why it is worth a
+    // case rather than a comment. It is not dishonest — the sentence is generated from the
+    // scorecard and passes every denylist — it is the WRONG INSTRUMENT for a conversion surface:
+    // a +0.022 gap whose interval includes zero must arrive with four hedges and close on "it
+    // could just be luck", and the caveats are unreadable without the table beside them.
+    // Invisible to every other gate: it types, it builds, and it is denylist-clean.
+    detail: "Puts the generated claim back in the upgrade banner, in place of the content hook.",
+    file: "components/fantasy/shared.tsx",
+    from: '        {DISAGREEMENT_HOOK}{" "}',
+    to: '        {receipts?.claim?.precise}{" "}',
+    grep: "does not recite the measurement",
+  },
+  {
+    id: "trust-link-goes-nowhere",
+    shipped: "NF-TR1 — pre-emptive: the E9.56c dead-CTA class, on the evidence link",
+    // Dropping the quotation is only safe because the evidence stays one click away. A trust link
+    // pointing at a route that does not render strands it — and a SOURCE scan cannot see this at
+    // all, because the binding `href={TRACK_RECORD_TRUST_LINK.href}` is still right there in the
+    // JSX. Only navigation can tell a bound link from a working one.
+    detail: "Repoints the trust link at a route that is not the track record.",
+    file: "lib/fantasy-claim-copy.ts",
+    from: '  href: "/fantasy/track-record",',
+    to: '  href: "/fantasy/track-record-does-not-exist",',
+    grep: "trust link reaches",
+  },
+  {
+    id: "lead-ends-on-its-own-disclaimer",
+    shipped: "NF-TR1 — pre-emptive: the plain lead trailing off on a caveat",
+    // AC 5. The hedges are non-negotiable and all four stay; what this case protects is the LAST
+    // thing a reader is left holding. Broken at the artifact, because that is how it would really
+    // happen — the copy is generated, so the observable defect arrives as a republished manifest.
+    detail: "Removes the closing pointer so the lead stops on 'it could just be luck'.",
+    file: "e2e/fixtures/api/fantasy-nfl-track-record-manifest.json",
+    from:
+      " The season-by-season and position-by-position detail is below, along with the players we" +
+      ' ranked furthest from where the crowd was drafting them.",\n    "precise"',
+    to: '",\n    "precise"',
+    grep: "keeps its hedges",
+  },
+  {
     id: "google-entry-missing",
     shipped: "E9.58 — a signup entry point with no working Google button",
     detail: "The DNS-dead-host outage presented to the user as exactly this: no way through.",
