@@ -513,6 +513,18 @@ Approved language:
 - Position-level table is available.
 - Copy matches served architecture.
 
+## Consumer Readability (operator 2026-08-07 — Charlie)
+
+⭐ **NON-NEGOTIABLE PRODUCT CONSTRAINT: the audience is the AVERAGE fantasy player — keep it LOW-TECH.** Analyst jargon ("pooled within-position rank correlation", "confidence interval includes zero") in the *headline* limits who will use the product. This REFINES the "use the exact wording verbatim" instruction above — the exact sentence is never DELETED, only RELOCATED below a plain lead.
+
+⇒ **TWO-LAYER COPY, both honest:**
+
+1. **CONSUMER LEAD (what a casual user reads first) — plain, everyday English.** Lead with the value ("honest projected points with a range, tuned to your league's scoring"), and state the track record in plain terms WITHOUT overclaiming. Example register (illustrative, not final — the session writes it, the operator approves): *"Over 2019–2024 our board did a little better than where the crowd was drafting — but the edge is small and not a sure thing, and at some spots (like running back) it's basically even."*
+
+2. **PRECISE LAYER (preserved — a "How we measured this" expandable / methodology / fine print).** The EXACT approved sentence + the named benchmark, metric, player count, seasons, and the visible CI live HERE for rigor and claims-integrity.
+
+⛔ **GUARDRAILS UNCHANGED — plain ≠ overclaimed:** the consumer lead must NOT STRENGTHEN the claim. It must still carry the hedge in everyday words (small edge · not guaranteed · varies by position/season · RB a wash), and it must PASS `_CLAIM_DENYLIST`. Translating "the confidence interval includes zero" into "it could just be luck — we're not promising it" is REQUIRED, not optional; dropping the hedge to sound punchier is the exact failure this story exists to prevent. The denylist test (AC #1) applies to the PLAIN-ENGLISH lead too, not only the precise layer.
+
 ## Trello Card
 
 **Title:** `4 · NF-TR1 — Make calibration the lead and narrow the ADP claim`
