@@ -1,0 +1,148 @@
+"""INC-41 (2026-08-06) — a raw-JSON odds price must be parsed as BIGINT and bounded.
+
+WHAT HAPPENED. At 20:22:46Z MyBookie.ag posted an h2h moneyline price of ``-2147483648`` —
+INT32_MIN, a vendor "no price / locked market" sentinel. ``stg_oddsapi_odds`` parsed it with
+``::integer`` and took ``abs()`` of it. INT32_MIN has no positive INT32 representation, so DuckDB
+raised ``OutOfRangeException: Overflow on abs(-2147483648)`` and aborted the whole
+``run_w1_lakehouse.py --w3pre-only`` build.
+
+WHY THAT COST A SLATE. ``--w3pre-only`` is the FIRST leg of the intraday chain in
+``intraday_ops._schedule_lakehouse_intraday``; when it raised, ``--w7b-only`` never ran, so the
+``stg_statsapi_lineups(_wide)`` parquet froze at 20:08Z. The lineup monitor reads that parquet
+(via the SF ext view), so it reported "No newly confirmed lineups" for 6.5 hours and three games
+never got a post_lineup prediction. The op's ``except`` is ALERT-continue, so the job reported
+SUCCESS on every 30-minute tick. **One malformed vendor price, one whole evening.**
+
+THE INVARIANT PINNED HERE. No dbt model may parse a raw-JSON odds price with a bare
+``::integer``. Three distinct failure modes ride on that cast, all measured against the real
+values from the 08-06 blob:
+
+  * ``-2147483648`` → ``abs()`` **raises** (the outage)
+  * ``9999999999``  → the ``::integer`` cast itself **raises** ConversionException
+  * ``0``           → ``100.0/abs(0)`` yields literal **inf** as a decimal price
+                      (``stg_oddsapi_odds`` had no zero-guard at all)
+
+The cure is ``try_cast(... as bigint)`` plus a plausibility bound — American odds satisfy
+|price| >= 100 by construction, so junk becomes NULL instead of a ~1.0000000005 decimal implying
+~100% probability, which would poison de-vigging / CLV / best-price selection (the E9.52 lesson:
+garbage that looks like data is worse than NULL).
+
+Source-inspection only — no IO, so it belongs in the fast gate.
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+DBT_MODELS = Path(__file__).resolve().parents[2] / "dbt" / "models"
+
+# A raw-JSON price extraction cast straight to INT32, in any quoting style.
+_BARE_INT_PRICE = re.compile(
+    r"""json_extract_string\(\s*\w+\s*,\s*['"]\$\.price['"]\s*\)\s*::\s*integer""",
+    re.IGNORECASE,
+)
+
+
+def _sql_files() -> list[Path]:
+    files = sorted(DBT_MODELS.rglob("*.sql"))
+    assert files, f"no dbt models found under {DBT_MODELS}"
+    return files
+
+
+def _strip_sql_comments(sql: str) -> str:
+    """Blank out ``--`` line comments and ``/* */`` blocks.
+
+    Load-bearing: every fixed model now DOCUMENTS this defect, and those comments necessarily
+    quote the banned ``...'$.price')::integer`` form. Without stripping, the lint would fire on
+    the very code that satisfies it (the INC-38 prose-vs-argv lesson).
+    """
+    sql = re.sub(r"/\*.*?\*/", " ", sql, flags=re.DOTALL)
+    return "\n".join(line.split("--", 1)[0] for line in sql.splitlines())
+
+
+def test_no_model_parses_a_raw_json_odds_price_as_int32():
+    """RED-proves: restore any `json_extract_string(o, '$.price')::integer` and this fails."""
+    offenders: list[str] = []
+    for path in _sql_files():
+        code = _strip_sql_comments(path.read_text())
+        for m in _BARE_INT_PRICE.finditer(code):
+            line = code[: m.start()].count("\n") + 1
+            offenders.append(f"{path.relative_to(DBT_MODELS)}:{line}")
+    assert not offenders, (
+        "raw-JSON odds price parsed as INT32 (INC-41). A vendor INT32_MIN sentinel makes abs() "
+        "overflow and aborts the whole W3pre build; an out-of-INT32 price raises on the cast "
+        "itself. Use try_cast(... as bigint) plus an |price| BETWEEN 100 AND 1000000 bound, then "
+        f"cast back to ::integer to keep the stored type. Offenders: {offenders}"
+    )
+
+
+def test_the_comment_stripper_cannot_hide_a_real_offender():
+    """Prose must not be able to SATISFY the lint (over-eager stripper) or BREAK it (under-eager).
+
+    Without this, the lint above could be passing only because the stripper blanks real code.
+    """
+    real = "select json_extract_string(o, '$.price')::integer as p\n"
+    commented = "-- json_extract_string(o, '$.price')::integer is banned\nselect 1\n"
+    assert _BARE_INT_PRICE.search(_strip_sql_comments(real)), "stripper ate REAL code → false pass"
+    assert not _BARE_INT_PRICE.search(_strip_sql_comments(commented)), "comment read as code → false fail"
+
+
+@pytest.mark.parametrize(
+    "price,expect_american,expect_decimal",
+    [
+        ("-2147483648", None, None),   # the outage value — INT32_MIN vendor sentinel
+        ("9999999999", None, None),    # beyond INT32: the bare cast used to raise
+        ("0", None, None),             # used to yield inf (stg_oddsapi_odds had no zero-guard)
+        ("-99", None, None),           # impossible American odds (|price| >= 100)
+        ("-110", -110, 1.9090909090909092),
+        ("100", 100, 2.0),
+        ("-6000", -6000, 1.0166666666666666),   # real value from the same 08-06 blob
+        ("3600", 3600, 37.0),                    # real value from the same 08-06 blob
+        ("-100000", -100000, 1.001),             # real, extreme-but-legitimate — must SURVIVE
+    ],
+)
+def test_the_bounded_bigint_expression_behaves(price, expect_american, expect_decimal):
+    """Execute the SHIPPED expression in DuckDB against the real 08-06 values.
+
+    A source-inspection lint proves nobody wrote the bad form; it cannot prove the replacement is
+    correct. This runs the actual SQL. The legitimate extremes (-6000 / 3600 / -100000, all real
+    prices from the incident blob) must come through UNCHANGED — a bound that also discards good
+    data would be a silent downgrade, not a fix.
+    """
+    duckdb = pytest.importorskip("duckdb")
+    american = (
+        "case when abs(try_cast(p as bigint)) between 100 and 1000000 "
+        "then try_cast(p as bigint)::integer end"
+    )
+    decimal = (
+        "case when abs(try_cast(p as bigint)) not between 100 and 1000000 then null "
+        "when try_cast(p as bigint) >= 100 then (try_cast(p as bigint) / 100.0) + 1.0 "
+        "else (100.0 / abs(try_cast(p as bigint))) + 1.0 end::double"
+    )
+    con = duckdb.connect()
+    got_a, got_d = con.execute(
+        f"select {american}, {decimal} from (select '{price}' as p)"
+    ).fetchone()
+    assert got_a == expect_american
+    if expect_decimal is None:
+        assert got_d is None
+    else:
+        assert got_d == pytest.approx(expect_decimal)
+
+
+def test_the_old_expression_really_did_raise_on_the_incident_value():
+    """Anchor the regression: prove the PRE-FIX form fails on the exact production value.
+
+    Without this the suite could drift to a cure for a defect that never existed as described.
+    """
+    duckdb = pytest.importorskip("duckdb")
+    con = duckdb.connect()
+    old = (
+        "case when p::integer >= 100 then (p::integer / 100.0) + 1.0 "
+        "else (100.0 / abs(p::integer)) + 1.0 end"
+    )
+    with pytest.raises(Exception) as exc:
+        con.execute(f"select {old} from (select '-2147483648' as p)").fetchone()
+    assert "abs" in str(exc.value).lower() or "range" in str(exc.value).lower()
