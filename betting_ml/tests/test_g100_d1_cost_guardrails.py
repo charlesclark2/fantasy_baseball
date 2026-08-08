@@ -315,6 +315,39 @@ def test_the_promised_floor_stays_up_in_degrade_mode(path):
     assert cg.is_allowed_in_degrade(path) is True
 
 
+def test_the_billing_and_funnel_paths_stay_up_in_degrade_mode():
+    """⭐ REGRESSION GUARD FOR A REAL SHIPPED BUG (found 2026-08-08, before the switch was ever used).
+
+    The allowlist carried `"/stripe/public"` and `"/subscribe"`, and NEITHER MATCHED ANY ROUTE: the
+    real path is `/subscription/public-pricing` (the prefix had been written from the router's mount
+    name, `stripe.public_router`, rather than from the route decorator) and `/subscribe` is a
+    FRONT-END page, not an API path. The comment beside them claimed the upgrade funnel was
+    protected while degrade mode would in fact have 503'd the pricing page.
+
+    That is the allowlist's characteristic failure mode and the reason this test reads the app's
+    REAL route table instead of a hand-written list: a wrong entry does not raise, it silently
+    DENIES, and a hand-written fixture would simply repeat the author's wrong assumption about the
+    path (the "a test that reads back the key the code wrote" family). Resolving the paths from
+    `app.routes` means a future rename breaks this test instead of quietly re-closing the funnel.
+
+    RED-PROVEN by restoring `"/stripe/public"` / `"/subscribe"`: all four paths fail.
+    """
+    from app.backend.main import app
+
+    real_paths = {r.path for r in app.routes if getattr(r, "path", None)}
+
+    # Each must EXIST (so a rename fails loudly here) and be reachable in degrade mode.
+    must_stay_up = {
+        "/subscription/public-pricing": "the logged-out upgrade funnel — the whole point of degrading rather than dying",
+        "/subscription/status": "app/subscribe/success POLLS it; blocking strands someone who JUST PAID",
+        "/stripe/create-checkout-session": "taking money during a cost event is not optional",
+        "/stripe/webhook": "a dropped webhook is a real payment whose subscription never activates",
+    }
+    for path, why in must_stay_up.items():
+        assert path in real_paths, f"{path} no longer exists — the allowlist entry is now dead ({why})"
+        assert cg.is_allowed_in_degrade(path), f"degrade mode would block {path}: {why}"
+
+
 def test_an_unknown_new_endpoint_is_contained_by_default():
     """⭐ THE ALLOWLIST PROOF — the load-bearing direction (E9.56 rule 1, same reasoning).
 
