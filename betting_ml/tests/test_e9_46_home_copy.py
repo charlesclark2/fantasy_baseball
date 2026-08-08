@@ -529,3 +529,78 @@ def test_a_carried_over_card_says_which_day_it_is_for():
     assert "pick_date" in pick, (
         "the date chip is gone, so \"the date shown above\" in the note refers to nothing"
     )
+
+
+def test_the_frame_does_not_promise_strict_alternation():
+    """⭐ THE COPY IS BOUNDED BY WHAT THE SQL GUARANTEES, and here the SQL guarantees less than the
+    obvious sentence would claim.
+
+    `market_pref` is a SORT KEY, not a filter: on a day when the market whose turn it is has no
+    qualifying game, the other market's best read is featured instead of the card going empty.
+    That is the right behaviour — a labelled read beats no read — but it means "we alternate
+    between the moneyline and the total" is a promise a visitor could catch us breaking, on a page
+    whose entire argument is that we do not overstate. So the frame hedges, and it names both
+    markets so nobody has to infer the alternation from watching for a week.
+
+    ⚠️ The hedge is what makes the FALLBACK safe to keep. If this guard is ever "fixed" by
+    tightening the copy, the fallback has to become a filter in the same change — and then some
+    days show nothing."""
+    src = _strip_ts_comments(_HOME_COPY_TS.read_text())
+    m = re.search(r"\n  frame:\s*\n?\s*\"(.*?)\",\n", src, re.S)
+    assert m, "MLB_PROOF.frame is gone"
+    frame = m.group(1).lower()
+
+    assert "moneyline" in frame and "total" in frame, (
+        f"the frame does not name both markets, so the alternation is invisible: {frame!r}"
+    )
+    assert "usually alternating" in frame, (
+        "the frame states the alternation without the hedge the SQL requires — `market_pref` is a "
+        f"sort key with a fallback, not a guarantee: {frame!r}"
+    )
+
+
+def test_the_card_names_the_market_it_is_making():
+    """The card alternates between two markets that quote DIFFERENT quantities — a win probability
+    and an over probability — so the copy for both must exist, each with its own one-line
+    explanation of what the number on screen actually measures."""
+    src = _strip_ts_comments(_HOME_COPY_TS.read_text())
+    m = re.search(r"\n  markets: \{(.*?)\n  \},", src, re.S)
+    assert m, "MLB_PROOF.markets is gone — the card cannot name its market"
+    markets = m.group(1)
+    for key, label in (("h2h", "Moneyline"), ("totals", "Total runs")):
+        assert f"{key}: {{" in markets, f"no copy for the {key} market"
+        assert label in markets, f"the {key} market has no human label"
+    assert markets.count("hint:") == 2, "a market ships without its one-line explanation"
+
+
+def test_the_card_renders_the_market_label():
+    """⚠️ SPLIT FROM THE COPY CHECK ABOVE, AND FROM THE TOTAL-LINE CHECK BELOW, because the first
+    version asserted all three together against `"COPY.markets" in src` — and stayed GREEN when the
+    rendered label was replaced with a literal, since `COPY.markets` was still referenced two lines
+    up. A clause is only tested when the fixture satisfies every OTHER clause (NF-D17 §7), which
+    for a source scan means each clause needs its own precise expression.
+
+    Copy that exists but is never rendered is the "wired but never invoked" class (NF-C0e (b))."""
+    pick = _strip_ts_comments(_PICK_COMPONENT_TSX.read_text())
+    assert "COPY.markets" in pick, "the component does not read the market copy"
+    # ⚠️ NEWLINE-ANCHORED, and that is not fussiness. A bare `"{market.label}" in pick` stayed GREEN
+    # when the rendered badge was replaced with a literal, because the trigger's
+    # `aria-label={`What ${market.label} means`}` CONTAINS that substring — an accessibility label
+    # standing in for the visible one. The same collision class as the fantasy-door locator.
+    assert "\n                {market.label}\n" in pick, (
+        "the market label is never rendered as the card's own text"
+    )
+    assert "data-market" in pick, "the rendered market is not exposed for the E2E check"
+
+
+def test_a_totals_lean_carries_the_line_it_is_about():
+    """"Our model leans Over" is not a statement — over what? On roughly half the days this card is
+    a total, and the side without the number is meaningless.
+
+    The exact interpolation is asserted rather than a mention of `total_line`, for the reason in
+    `test_the_card_renders_the_market_label`: the field is read in three places, so a looser check
+    passes while the rendered string has lost the number."""
+    pick = _strip_ts_comments(_PICK_COMPONENT_TSX.read_text())
+    assert "${side} ${data.total_line}" in pick, (
+        "an over/under lean renders without the line it is about"
+    )

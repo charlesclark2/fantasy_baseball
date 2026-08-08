@@ -1213,8 +1213,29 @@ QUALIFY ROW_NUMBER() OVER (
 #   ELIGIBILITY  `layer4_h2h_conviction_flag = TRUE` — `|calibrated_win_prob − P(run_diff > 0)|
 #                ≤ 0.02` (predict_today.py): our two INDEPENDENT estimators agreeing with each
 #                other, computed without reference to the odds.
-#   ORDERING     the LARGEST model-vs-market gap among those (was: the earliest start time, which
-#                selected on nothing but the clock).
+#   MARKET       the moneyline and the total ALTERNATE by date (`market_pref`), so the card is not
+#                permanently one of the two — see below.
+#   ORDERING     within the day's market, the LARGEST model-vs-market gap (was: the earliest start
+#                time across both markets, which selected on nothing but the clock).
+#
+# ⭐ WHY ALTERNATION IS A SORT KEY AND NOT A FILTER (operator, 2026-08-08). Ordering on the raw gap
+# alone does NOT pick the most interesting disagreement — it picks the market whose probabilities
+# move more. Measured over 2026-07-01→08-07 (34 slates): totals won 31 of 34, because the totals
+# model's eligible gaps are structurally ~3× wider than the moneyline's (median 0.116 vs 0.036).
+# That is a difference in the SCALE of the two markets, not in how much we disagree, and it made
+# the card a totals card. `market_pref` puts the day's market first and the gap second.
+#
+# ⛔ It is a PREFERENCE, not a restriction, and that is deliberate: on a day when the preferred
+# market has no eligible game, `market_pref ASC` lets the other market's best gap through rather
+# than featuring nothing. So alternation is the normal rhythm, not a guarantee — which is exactly
+# why the card LABELS the market it is showing instead of relying on the visitor to infer it from
+# the day. Copy must not promise strict alternation.
+#
+# ⚠️ The parity is computed from the ROW'S OWN `game_date`, never from the `%(today)s` parameter.
+# Three of the six constants below resolve YESTERDAY's pick, and keying off the parameter would
+# require each of them to remember a `-1` — get that wrong in one place and the recap names a
+# different market than the card it is recapping. Off the row it is correct by construction.
+# (`DAYOFYEAR(...) % 2` evaluates identically on Snowflake and DuckDB; verified on both.)
 #
 # ⭐ WHY THE FLAG HAS TO STAY THE FILTER once the gap became the sort key. A max-of-the-day is a
 # maximum order statistic: absent any eligibility rule, "biggest disagreement" reliably selects the
@@ -1240,8 +1261,15 @@ QUALIFY ROW_NUMBER() OVER (
 # `lakehouse_query` swallows that BinderException into `[]`. That is exactly how the stale fallback
 # was dead in production — see the note on _FEATURED_STALE_FALLBACK_QUERY.
 _FEATURED_ORDER_BY = (
-    "ORDER BY edge DESC NULLS LAST, game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"
+    "ORDER BY market_pref ASC, edge DESC NULLS LAST, "
+    "game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"
 )
+
+#: The alternation key, as a pair of SQL fragments — one per market branch, and they are each
+#: other's complement. Written once here because six queries carry both, and a copy that drifted
+#: would make one constant prefer the market the others were suppressing.
+_MARKET_PREF_H2H = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 0 ELSE 1 END AS market_pref"
+_MARKET_PREF_TOTALS = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 1 ELSE 0 END AS market_pref"
 
 _FEATURED_TODAY_SERVING_SQL = f"""
 WITH ranked AS (
@@ -1270,6 +1298,8 @@ h2h AS (
         ABS(b.calibrated_win_prob - b.h2h_market_implied_prob)        AS edge,
         b.win_prob_ci_low, b.win_prob_ci_high,
         b.game_datetime, b.game_date, b.prediction_type,
+        CAST(NULL AS DOUBLE)                                          AS total_line,
+        {_MARKET_PREF_H2H},
         b.layer4_h2h_decision                                         AS pick_side
     FROM base b
     WHERE b.layer4_h2h_conviction_flag = TRUE
@@ -1284,6 +1314,8 @@ totals AS (
         ABS(b.totals_model_prob - b.over_prob_consensus)              AS edge,
         b.win_prob_ci_low, b.win_prob_ci_high,
         b.game_datetime, b.game_date, b.prediction_type,
+        b.total_line_consensus                                        AS total_line,
+        {_MARKET_PREF_TOTALS},
         b.layer4_totals_decision                                      AS pick_side
     FROM base b
     WHERE b.layer4_h2h_conviction_flag = TRUE
@@ -1291,11 +1323,11 @@ totals AS (
 )
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date,
-       prediction_type, pick_side
+       prediction_type, total_line, market_pref, pick_side
 FROM h2h UNION ALL
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date,
-       prediction_type, pick_side
+       prediction_type, total_line, market_pref, pick_side
 FROM totals
 {_FEATURED_ORDER_BY}
 LIMIT 1
@@ -1329,6 +1361,7 @@ h2h AS (
         b.layer4_h2h_decision     AS pick_side,
         b.game_datetime,
         ABS(b.calibrated_win_prob - b.h2h_market_implied_prob)        AS edge,
+        {_MARKET_PREF_H2H},
         clv.actual_outcome
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
@@ -1343,6 +1376,7 @@ totals AS (
         b.layer4_totals_decision      AS pick_side,
         b.game_datetime,
         ABS(b.totals_model_prob - b.over_prob_consensus)              AS edge,
+        {_MARKET_PREF_TOTALS},
         clv.actual_outcome
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
@@ -1350,9 +1384,9 @@ totals AS (
     WHERE b.layer4_h2h_conviction_flag = TRUE
       AND b.layer4_totals_decision IN ('over', 'under')
 )
-SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime, edge
+SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime, edge, market_pref
 FROM h2h UNION ALL
-SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime, edge
+SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime, edge, market_pref
 FROM totals
 {_FEATURED_ORDER_BY}
 LIMIT 1
@@ -2864,6 +2898,8 @@ def main() -> int:
                         "home_team": _home or None,
                         "away_team": _away or None,
                         "pick_side": fr.get("PICK_SIDE"),
+                        # The line the over/under lean is about — see FeaturedPickResponse.
+                        "total_line": fr.get("TOTAL_LINE"),
                         "model_narrative": _pick_narrative,
                         "top_drivers_h2h": _top_drivers_h2h,
                         "top_drivers_totals": _top_drivers_totals,

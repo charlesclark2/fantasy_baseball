@@ -83,6 +83,7 @@ export type FeaturedPick = {
   home_team?: string | null
   away_team?: string | null
   pick_side?: string | null
+  total_line?: number | null
   yesterday?: {
     matchup: string
     market_type: string
@@ -200,12 +201,23 @@ export function PickOfTheDay() {
   const ciLow = flip && data.ci_high != null ? 1 - data.ci_high : data.ci_low
   const ciHigh = flip && data.ci_low != null ? 1 - data.ci_low : data.ci_high
 
-  const leanLabel =
-    data.market_type === "h2h"
-      ? (data.pick_side === "away" ? data.away_team : data.home_team) ?? null
-      : data.pick_side
-        ? data.pick_side.charAt(0).toUpperCase() + data.pick_side.slice(1)
-        : null
+  // ⭐ THE LEAN HAS TO NAME THE MARKET'S OWN UNIT, because the card alternates between two markets
+  // that quote different things. For a moneyline that is a team. For a total it is a SIDE AND A
+  // NUMBER: "Our model leans Over" is not a statement — over what? — and the previous version said
+  // exactly that. `total_line` may be absent (an older Lambda, or a row with no consensus line), so
+  // the side alone remains a valid render rather than a crash or a dangling "Over".
+  const isTotals = data.market_type === "totals"
+  const side = data.pick_side
+    ? data.pick_side.charAt(0).toUpperCase() + data.pick_side.slice(1)
+    : null
+  const leanLabel = !isTotals
+    ? (data.pick_side === "away" ? data.away_team : data.home_team) ?? null
+    : side
+      ? data.total_line != null
+        ? `${side} ${data.total_line}`
+        : side
+      : null
+  const market = isTotals ? COPY.markets.totals : COPY.markets.h2h
 
   const pct = (v: number | null | undefined) => (v == null ? null : `${(v * 100).toFixed(1)}%`)
 
@@ -213,9 +225,23 @@ export function PickOfTheDay() {
     <Shell>
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-xs font-medium uppercase tracking-widest text-gray-500">
-            {data.market_type === "h2h" ? "Moneyline" : "Total runs"}
-          </span>
+          {/* ⛔ NOT AN EYEBROW ANY MORE. This used to be small grey uppercase text — fine when the
+              card was always the same market, actively misleading once it alternates, because a
+              returning visitor reads the big percentage against whatever they saw last time. A
+              moneyline probability and an over probability are different quantities. So the market
+              is a first-class badge with its own popover, and it is the first thing on the card. */}
+          <Popover>
+            <PopoverTrigger aria-label={`What ${market.label} means`}>
+              <Badge
+                data-market={data.market_type ?? "unknown"}
+                className="cursor-help border border-[#3f3f46] bg-[#1c1c1c] text-xs font-bold uppercase tracking-widest text-gray-200"
+              >
+                {market.label}
+                <Info className="ml-1 h-3 w-3" />
+              </Badge>
+            </PopoverTrigger>
+            <PopoverContent className="max-w-xs text-xs leading-relaxed">{market.hint}</PopoverContent>
+          </Popover>
           {data.pick_date && (
             <span className="text-xs text-gray-500">
               {new Date(data.pick_date + "T12:00:00").toLocaleDateString("en-US", {

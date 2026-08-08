@@ -76,8 +76,11 @@ _ML_SCHEMA = (
 # featured pick" resolves a different game than the one that was actually featured.
 # Pinned by test_e9_46_featured_selection.py.
 _FEATURED_ORDER_BY = (
-    "ORDER BY edge DESC NULLS LAST, game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"
+    "ORDER BY market_pref ASC, edge DESC NULLS LAST, "
+    "game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"
 )
+_MARKET_PREF_H2H = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 0 ELSE 1 END AS market_pref"
+_MARKET_PREF_TOTALS = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 1 ELSE 0 END AS market_pref"
 
 _FEATURED_TODAY_QUERY = f"""
 WITH ranked AS (
@@ -112,6 +115,8 @@ h2h AS (
         b.game_datetime,
         b.game_date,
         b.prediction_type,
+        CAST(NULL AS DOUBLE)                                          AS total_line,
+        {_MARKET_PREF_H2H},
         b.layer4_h2h_decision                                         AS pick_side
     FROM base b
     WHERE b.layer4_h2h_conviction_flag = TRUE
@@ -131,6 +136,8 @@ totals AS (
         b.game_datetime,
         b.game_date,
         b.prediction_type,
+        b.total_line_consensus                                         AS total_line,
+        {_MARKET_PREF_TOTALS},
         b.layer4_totals_decision                                       AS pick_side
     FROM base b
     WHERE b.layer4_h2h_conviction_flag = TRUE
@@ -138,12 +145,12 @@ totals AS (
 )
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
-       pick_side
+       total_line, market_pref, pick_side
 FROM h2h
 UNION ALL
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
-       pick_side
+       total_line, market_pref, pick_side
 FROM totals
 {_FEATURED_ORDER_BY}
 LIMIT 1
@@ -200,6 +207,8 @@ h2h AS (
         b.game_datetime,
         b.game_date,
         b.prediction_type,
+        CAST(NULL AS DOUBLE)                                          AS total_line,
+        {_MARKET_PREF_H2H},
         clv.actual_outcome,
         b.layer4_h2h_decision                                         AS pick_side
     FROM base b
@@ -222,6 +231,8 @@ totals AS (
         b.game_datetime,
         b.game_date,
         b.prediction_type,
+        b.total_line_consensus                                         AS total_line,
+        {_MARKET_PREF_TOTALS},
         clv.actual_outcome,
         b.layer4_totals_decision                                       AS pick_side
     FROM base b
@@ -232,12 +243,12 @@ totals AS (
 )
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
-       actual_outcome, pick_side
+       total_line, market_pref, actual_outcome, pick_side
 FROM h2h
 UNION ALL
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
-       actual_outcome, pick_side
+       total_line, market_pref, actual_outcome, pick_side
 FROM totals
 {_FEATURED_ORDER_BY}
 LIMIT 1
@@ -272,8 +283,9 @@ WITH ranked AS (
 base AS (SELECT * FROM ranked WHERE _rn = 1),
 h2h AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,
-           b.game_datetime,
+           b.game_datetime, b.game_date,
            ABS(b.calibrated_win_prob - b.h2h_market_implied_prob)     AS edge,
+           {_MARKET_PREF_H2H},
            clv.actual_outcome
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
@@ -283,8 +295,9 @@ h2h AS (
 ),
 totals AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'totals' AS market_type,
-           b.game_datetime,
+           b.game_datetime, b.game_date,
            ABS(b.totals_model_prob - b.over_prob_consensus)           AS edge,
+           {_MARKET_PREF_TOTALS},
            clv.actual_outcome
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
@@ -292,9 +305,9 @@ totals AS (
     WHERE b.layer4_h2h_conviction_flag = TRUE
       AND b.layer4_totals_decision IN ('over', 'under')
 )
-SELECT game_pk, home_team, away_team, market_type, game_datetime, edge, actual_outcome FROM h2h
+SELECT game_pk, home_team, away_team, market_type, game_datetime, edge, market_pref, actual_outcome FROM h2h
 UNION ALL
-SELECT game_pk, home_team, away_team, market_type, game_datetime, edge, actual_outcome FROM totals
+SELECT game_pk, home_team, away_team, market_type, game_datetime, edge, market_pref, actual_outcome FROM totals
 {_FEATURED_ORDER_BY}
 LIMIT 1
 """
@@ -319,7 +332,7 @@ _ET = ZoneInfo("America/New_York")
 _FEATURED_YESTERDAY_HEAL_QUERY = f"""
 WITH ranked AS (
     SELECT
-        game_pk, home_team, away_team, game_datetime,
+        game_pk, home_team, away_team, game_datetime, game_date,
         layer4_h2h_decision, layer4_totals_decision, layer4_h2h_conviction_flag,
         total_line_consensus,
         -- Needed only to reproduce _FEATURED_ORDER_BY's `edge` key, so this query resolves the
@@ -342,6 +355,7 @@ h2h AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,
            b.layer4_h2h_decision AS pick_side, b.game_datetime,
            ABS(b.calibrated_win_prob - b.h2h_market_implied_prob) AS edge,
+           {_MARKET_PREF_H2H},
            r.home_team_won, r.home_final_score, r.away_final_score,
            CAST(NULL AS DOUBLE) AS total_line
     FROM base b
@@ -353,6 +367,7 @@ totals AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'totals' AS market_type,
            b.layer4_totals_decision AS pick_side, b.game_datetime,
            ABS(b.totals_model_prob - b.over_prob_consensus) AS edge,
+           {_MARKET_PREF_TOTALS},
            CAST(NULL AS BOOLEAN) AS home_team_won, r.home_final_score, r.away_final_score,
            b.total_line_consensus AS total_line
     FROM base b
@@ -360,10 +375,10 @@ totals AS (
     WHERE b.layer4_h2h_conviction_flag = TRUE
       AND b.layer4_totals_decision IN ('over', 'under')
 )
-SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime, edge,
+SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime, edge, market_pref,
        home_team_won, home_final_score, away_final_score, total_line
 FROM h2h UNION ALL
-SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime, edge,
+SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime, edge, market_pref,
        home_team_won, home_final_score, away_final_score, total_line
 FROM totals
 {_FEATURED_ORDER_BY}
@@ -493,6 +508,7 @@ def _build_featured_result(
         home_team=home or None,
         away_team=away or None,
         pick_side=r.get("PICK_SIDE"),
+        total_line=r.get("TOTAL_LINE"),
         model_narrative=narrative,
         top_drivers=top_drivers,
         served_tier=served_tier,

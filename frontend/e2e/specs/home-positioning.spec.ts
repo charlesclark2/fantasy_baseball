@@ -55,6 +55,7 @@ const PICK = FIXTURES.featuredPick() as {
   edge: number
   model_prob: number
   market_prob: number
+  market_type: string
   pick_date: string
   yesterday: { matchup: string; outcome: string } | null
 }
@@ -235,6 +236,59 @@ test("a slate with nothing published says so, and the positioning survives it", 
   await expect(page.getByRole("link", { name: /model-vs-market read/i }).first()).toBeVisible()
 
   expectApiFullyMocked(mock)
+  expectNoPageErrors(errors)
+})
+
+test("the card names which market it is making, as a badge and not an eyebrow", async ({ page }) => {
+  // ⭐ THE CARD ALTERNATES between the moneyline and the total (operator, 2026-08-08), and the two
+  // quote different quantities — a win probability and an over probability. A returning visitor
+  // reading the big percentage against whatever they saw yesterday is reading the wrong number, so
+  // the market has to be unmissable and explained, not a small grey eyebrow.
+  const errors = collectPageErrors(page)
+  const mock = await mockApi(page)
+  await gotoHome(page)
+
+  const block = page.locator("#today")
+  const badge = block.locator("[data-market]")
+  await expect(badge).toHaveCount(1)
+  await expect(badge).toHaveAttribute("data-market", PICK.market_type)
+  await expect(badge).toBeVisible()
+  await expect(badge).toContainText(/moneyline/i)
+
+  // It renders ABOVE the numbers it qualifies — a label under the figure is read second.
+  expect(await topOf(badge)).toBeLessThan(await topOf(block.getByText(PICK.matchup)))
+
+  await badge.getByRole("button").or(badge).first().click()
+  await expect(page.getByText(/who wins the game/i)).toBeVisible()
+
+  expectApiFullyMocked(mock)
+  expectNoPageErrors(errors)
+})
+
+test("a TOTALS read shows the line, so the lean is a statement", async ({ page }) => {
+  // ⛔ "Our model leans Over" is not a statement — over what? The captured payload is a moneyline
+  // read, so the totals branch is unreachable without rewriting it; that is what `transform` is
+  // for. This is the branch a visitor sees on roughly half the days.
+  const errors = collectPageErrors(page)
+  const mock = await mockApi(page, {
+    transform: (path, body) =>
+      path === "/picks/featured"
+        ? { ...body, market_type: "totals", pick_side: "over", total_line: 8.5 }
+        : body,
+  })
+  await gotoHome(page)
+
+  const block = page.locator("#today")
+  await expect(block.locator("[data-market]")).toHaveAttribute("data-market", "totals")
+  await expect(block.locator("[data-market]")).toContainText(/total runs/i)
+  await expect(block.getByText(/leans Over 8\.5/i)).toBeVisible()
+  await expect(
+    block.getByText(/^Our model leans Over$/i),
+    "the side renders without the line it is about",
+  ).toHaveCount(0)
+
+  expectApiFullyMocked(mock)
+  await expectNoNaN(page)
   expectNoPageErrors(errors)
 })
 

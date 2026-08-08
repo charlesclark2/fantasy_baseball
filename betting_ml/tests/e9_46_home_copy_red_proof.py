@@ -52,7 +52,7 @@ _START_TIME_RULE = "ORDER BY game_datetime ASC NULLS LAST, game_pk ASC"
 
 # Unique anchor for the ROUTER's today query specifically — `{_FEATURED_ORDER_BY}` appears four
 # times in picks.py, so a bare anchor would patch whichever came first regardless of intent.
-_ROUTER_TODAY_TAIL = """       pick_side
+_ROUTER_TODAY_TAIL = """       total_line, market_pref, pick_side
 FROM totals
 {_FEATURED_ORDER_BY}
 LIMIT 1
@@ -61,7 +61,7 @@ LIMIT 1
 # ⭐⭐ THE CARRY-OVER QUERY"""
 
 # …and for the stale-fallback query, which is the one that was dead in production.
-_ROUTER_STALE_TAIL = """       actual_outcome, pick_side
+_ROUTER_STALE_TAIL = """       total_line, market_pref, actual_outcome, pick_side
 FROM totals
 {_FEATURED_ORDER_BY}"""
 
@@ -86,8 +86,8 @@ CASES = [
 
     # ── the pick of the day is a demonstration, not a tout ────────────────────────────────────
     ("drop the not-a-recommendation disclaimer", COPY,
-     '    "A demonstration, not a recommendation. Each day',
-     '    "Each day',
+     '    "A demonstration, not a recommendation. We look at',
+     '    "We look at',
      "test_the_pick_is_framed_as_a_demonstration", SUITE),
 
     ("call the gap an edge again", COPY,
@@ -264,8 +264,8 @@ CASES = [
     # a recap while all six agree. Move the WRITER's copy alone and require it to be caught — the
     # router-side breaks above cannot detect a writer-side drift.
     ("let the serving writer drift away from the router", WSS,
-     "       prediction_type, pick_side\nFROM totals\n{_FEATURED_ORDER_BY}",
-     "       prediction_type, pick_side\nFROM totals\n" + _START_TIME_RULE,
+     "       prediction_type, total_line, market_pref, pick_side\nFROM totals\n{_FEATURED_ORDER_BY}",
+     "       prediction_type, total_line, market_pref, pick_side\nFROM totals\n" + _START_TIME_RULE,
      "test_every_featured_query_shares_the_rule", SEL_SUITE),
 
     # ⛔ ELIGIBILITY IS WHAT KEEPS THE SORT HONEST — without it, "the widest gap on the board" is a
@@ -295,6 +295,59 @@ CASES = [
      "for the date shown above, not today's slate",
      "and it is current",
      "test_a_carried_over_card_says_which_day_it_is_for", SUITE),
+
+    # ══ E9.46 REVISION 3 — THE MARKET ALTERNATES (operator, 2026-08-08) ════════════════════════
+    #
+    # ⭐ THE SUBTLEST BREAK IN THE WHOLE HARNESS, and the reason its guard exists. Making both
+    # branches prefer the SAME market on the same parity pins the card to one market forever — and
+    # every other assertion still passes, because the ORDER BY is intact, the query binds, and the
+    # gap still decides within the market. Only a direct comparison of the two fragments sees it.
+    ("make both market branches prefer the same market", PICKS,
+     '_MARKET_PREF_TOTALS = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 1 ELSE 0 END AS market_pref"',
+     '_MARKET_PREF_TOTALS = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 0 ELSE 1 END AS market_pref"',
+     "test_the_two_market_branches_are_exact_complements", SEL_SUITE),
+
+    # …and the same break, aimed at the BEHAVIOUR rather than the fragments — the card stops
+    # alternating. Two guards, two mechanisms, neither implying the other.
+    ("pin the card to one market — the flip stops happening", PICKS,
+     '_MARKET_PREF_TOTALS = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 1 ELSE 0 END AS market_pref"',
+     '_MARKET_PREF_TOTALS = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 0 ELSE 1 END AS market_pref"',
+     "test_the_market_flips_with_the_date", SEL_SUITE),
+
+    # ⚠️ Keying the parity off the PARAMETER instead of the row. This binds and runs fine; it goes
+    # wrong only on the three constants that resolve YESTERDAY, where it would silently recap the
+    # wrong market. A behavioural test on today's card cannot see it — hence a structural guard.
+    ("key the alternation off the query parameter instead of the row", PICKS,
+     '_MARKET_PREF_H2H = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 0 ELSE 1 END AS market_pref"',
+     '_MARKET_PREF_H2H = "CASE WHEN DAYOFYEAR(%(today)s::DATE) % 2 = 0 THEN 0 ELSE 1 END AS market_pref"',
+     "test_the_alternation_keys_off_the_rows_own_date", SEL_SUITE),
+
+    ("drop the market from the sort so the widest gap wins outright", PICKS,
+     '    "ORDER BY market_pref ASC, edge DESC NULLS LAST, "\n    "game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"',
+     '    "ORDER BY edge DESC NULLS LAST, "\n    "game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"',
+     "test_the_days_market_beats_a_much_wider_gap_in_the_other", SEL_SUITE),
+
+    # ⛔ The fallback: turning the preference into a FILTER makes the card go empty on a day when
+    # its market has nothing, which is strictly worse than showing the other market with a label.
+    ("turn the market preference into a hard filter", PICKS,
+     "    WHERE b.layer4_h2h_conviction_flag = TRUE\n      AND b.layer4_totals_decision IN ('over', 'under')",
+     "    WHERE b.layer4_h2h_conviction_flag = TRUE\n      AND DAYOFYEAR(b.game_date) % 2 = 1\n      AND b.layer4_totals_decision IN ('over', 'under')",
+     "test_the_other_market_is_featured_when_the_days_market_has_nothing", SEL_SUITE),
+
+    ("promise strict alternation the SQL does not guarantee", COPY,
+     "on the moneyline or on the total, usually alternating between them so you see both",
+     "alternating strictly between the moneyline and the total, one each day",
+     "test_the_frame_does_not_promise_strict_alternation", SUITE),
+
+    ("stop naming which market the card is making", CARD_MLB,
+     "                {market.label}",
+     "                {\"Today's read\"}",
+     "test_the_card_renders_the_market_label", SUITE),
+
+    ("render an over/under lean without the line it is about", CARD_MLB,
+     "        ? `${side} ${data.total_line}`",
+     "        ? `${side}`",
+     "test_a_totals_lean_carries_the_line_it_is_about", SUITE),
 ]
 
 

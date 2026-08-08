@@ -179,8 +179,13 @@ export const FANTASY_PROOF = {
  *  that is not wanted, the fix is in the ORDER BY (rank within market type), not here. */
 export const MLB_PROOF = {
   eyebrow: "Today's featured model-vs-market read",
+  /** ⚠️ "usually alternating", NOT "alternating". `market_pref` is a SORT KEY, not a filter — on a
+   *  day when the market whose turn it is has no qualifying game, the other one is featured rather
+   *  than showing nothing. Promising strict alternation would be a claim the SQL does not make and
+   *  a visitor could catch us on. It is also why the card labels the market outright instead of
+   *  letting the reader infer it from the day. Pinned by `test_e9_46_featured_selection.py`. */
   frame:
-    "A demonstration, not a recommendation. Each day we take the games where our two independent models land in close agreement with each other, and feature the one where our number sits furthest from the market's. You get our probability, the market's, the distance between them, and the range around our estimate.",
+    "A demonstration, not a recommendation. We look at the games where our two independent models land in close agreement with each other, and feature the one where our number sits furthest from the market's — on the moneyline or on the total, usually alternating between them so you see both. Whichever it is, it says so. You get our probability, the market's, the distance between them, and the range around our estimate.",
   empty:
     "Nothing to show yet. The morning run publishes after roughly 9am ET and re-scores once lineups are confirmed, and until it does we leave the previous read up. Some days no game qualifies at all, which is a real answer rather than a gap in the page.",
   unavailable:
@@ -200,6 +205,14 @@ export const MLB_PROOF = {
     market: "Market consensus",
     gap: "Gap",
     range: "80% range",
+  },
+  /** ⭐ THE MARKET, NAMED IN FULL. The card alternates between two markets that quote completely
+   *  different things — a win probability and a runs total — so "48.9%" means something different
+   *  depending on which one you are looking at. These render as a badge on the card rather than as
+   *  a small eyebrow, and `marketHint` is the one-line answer to "what am I looking at". */
+  markets: {
+    h2h: { label: "Moneyline", hint: "Who wins the game. Our number is the chance the side we lean on wins outright." },
+    totals: { label: "Total runs", hint: "How many runs both teams combine for. Our number is the chance the game goes over the posted line." },
   },
   /** ⭐⭐ THE SECOND SENTENCE IS THE PRICE OF SORTING ON THIS NUMBER, and it is not optional.
    *  Featuring the day's LARGEST gap is a maximum order statistic: across a slate, the extreme
