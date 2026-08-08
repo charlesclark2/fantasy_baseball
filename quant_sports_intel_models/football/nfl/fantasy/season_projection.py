@@ -29,6 +29,7 @@ TWO PLAYER POPULATIONS, one schema:
 """
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -2017,6 +2018,100 @@ _VET_BAND_SD_GAIN = 0.0
 # nothing here can leak the outcome being predicted.
 _VET_BAND_FEATURES = ("log_pred", "log_sd", "games", "base_games", "snap", "returner")
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF1.9-R — the DRAFTABLE-TIER re-selection of the veteran band (⛔ CODE-READY, NOT SERVED)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# WHY THIS EXISTS (NF-RECAL1 Finding 3, 2026-08-08): NF-RECAL1's C3 gate measured "the served
+# veteran band covers ~0.50 of its nominal 0.80 on the DRAFTABLE TIER" — the top-156-per-season
+# slice users actually draft from — and commissioned this re-selection. The zero-atom mechanism is
+# real (31% of universe outcomes sit at exactly 0 vs ~7.5% of the tier, so the tier is where a band
+# has to genuinely work on both tails). ⭐ BUT THE MEASURED PREMISE DID NOT SURVIVE ITS OWN §0
+# CHECK: the ~0.50 belongs to the PRE-NF1.9 NORMAL band (the panel's `served_p10`/`served_p90`
+# columns, which C3 read as "the incumbent band"), not to the served knn band — see the outcome
+# note below. `run_nf1_9r_veteran_tier_band.py` is the §0.5 gate; the population there is THE TIER
+# (fixed by the incumbent's own point projection — NF-RECAL1's `TIER_ANCHOR` rule), with the
+# universe reading reported as a sibling and never selected on.
+#
+# ⛔ THE FLIP IS AN OPERATOR STEP, NOT A DEFAULT. `_VET_TIER_RECAL = False` keeps the served board
+# byte-identical to NF1.9's: a band change moves the interval centre/width on the most-viewed rows,
+# so serving it requires the post-merge flip + re-export + `run_interval_revalidation` re-run.
+_VET_TIER_RECAL = False
+# The overlay candidate forms (the pre-registered NF1.9-R field; every one counts toward deflation):
+#   • `knn_tier`      — pooled position-normalised neighbourhood quantiles fitted on TIER rows only
+#                       (NF-RECAL1's "fit on the tier the metric is computed on" rule).
+#   • `knn_pos_tier`  — the same, per position (no position-invariance assumption).
+#   • `qreg_tier` / `qreg_sqrt_tier` — THE DIRECT-LEARNED FOIL: linear pinball quantile regression on
+#                       the NF1.9 features, fitted on tier rows (on the tier the zero atom no longer
+#                       dominates, so a linear conditional quantile is a genuine contender).
+#   • `cqr_tier`      — MONDRIAN conformal calibration of the SERVED NF1.9 band on tier rows —
+#                       group-conditional on POSITION (`tier_cqr_mode="pos"`), on PROJECTION
+#                       MAGNITUDE within the tier (`"mag"`), with the POOLED foil (`"pool"`) that
+#                       makes the conditioning attributable (NF1.8's lesson). On the universe this
+#                       layer was a mathematical no-op (~29% of conformity scores exactly 0); on the
+#                       tier the atom is 7.5% and the layer can act — measured, not assumed.
+#   • `scale_tier` / `cov_tier` — the two honest NULLS: the served band's width rescaled around the
+#                       point by one multiplier fitted on tier rows on the interval SCORE
+#                       (`scale_tier`) vs to a COVERAGE TARGET (`cov_tier`, the E2.1-r inversion
+#                       made visible — reported, never a candidate to ship).
+_VET_TIER_FORMS = ("knn_tier", "knn_pos_tier", "qreg_tier", "qreg_sqrt_tier", "cqr_tier",
+                   "scale_tier", "cov_tier")
+_VET_TIER_CQR_MODES = ("pos", "mag", "pool")
+_VET_TIER_MIN_TRAIN = 200        # tier training rows before any overlay fits at all
+_VET_TIER_MIN_POS_TRAIN = 100    # per-position tier rows before `knn_pos_tier` speaks to a position
+_VET_TIER_MIN_SCALE_ROWS = 30    # tier rows before a position gets its own normalising level
+_VET_TIER_CQR_K = 4              # cross-conformal folds over the tier rows
+_VET_TIER_CQR_MIN_CALIB = 50     # below this a conformal GROUP falls back to the pooled quantile
+_VET_TIER_MAG_BUCKETS = 2        # `"mag"` conditioning: projection-magnitude halves within the tier
+# ⬇ THE NF1.9-R OUTCOME (`run_nf1_9r_veteran_tier_band.py`; the record lives in
+#   `ablation_results/nf1_9r_veteran_tier_band.json`, and `test_nf1_9r_tier_band.py` pins these
+#   constants to it so the code cannot quietly disagree with the record).
+#
+#   **RECORDED NULL, WITH THE PREMISE CORRECTED (2026-08-08):** the motivating "the served band
+#   covers ~0.50 on the tier" reproduces TO THE DIGIT (0.5046) against the **pre-NF1.9 NORMAL
+#   band** — the panel's `served_p10`/`served_p90` columns, which NF-RECAL1's C3 read as its
+#   "incumbent band". The band actually on the wire (`knn_norm k300`) covers **0.845** on the
+#   2019–2025 tier / **0.833** full-window, meeting every gated tier floor (QB 0.856 / RB 0.824 /
+#   WR 0.855; TE 0.739 at n=251 is CARRIED, not gated — NF-D22's job). The 21-arm re-selection
+#   field TIES the incumbent (best lead 0.17% tier IS80; PBO(eligible) 0.42, DSR 0.02, pooled
+#   p 0.31; `scale_tier` fitted its own multiplier to ~1.0 — the served width is already
+#   score-optimal on the tier). Per NF1.8/E2.1-r a high PBO over a tied field is the NULL: the
+#   served band's tier adequacy is now PROVEN AND DISCLOSED rather than unmeasured. ⇒ NO overlay
+#   is selected; the machinery above remains as the instrument for the standing tier re-validation
+#   and any future re-selection trigger (e.g. NF-D22 giving TE a registered floor — the Mondrian
+#   `cqr_tier[pos]` arm lifted TE 0.739 → 0.819 at equal score and is the arm to re-score first).
+_VET_TIER_FORM = ""
+_VET_TIER_K = 0
+_VET_TIER_CQR_MODE = "pos"
+_VET_TIER_CQR_SCALE = "add"
+
+
+def veteran_tier_size() -> int:
+    """The draftable-tier size, DERIVED from the shipped league preset (NF-RECAL1 §0) — never typed.
+
+    Delegates to `level_recalibration.draftable_tier_size` (lazy import — that module is heavy and
+    this is the only touchpoint), so the tier has ONE owner and cannot drift between the level story
+    and the band story. A tier that could be tuned is a tier that would be tuned."""
+    from quant_sports_intel_models.football.nfl.fantasy import level_recalibration as LR
+
+    return int(LR.draftable_tier_size())
+
+
+def _tier_row_mask(point: np.ndarray, season: np.ndarray | None, tier_n: int) -> np.ndarray:
+    """⭐ THE DRAFTABLE TIER, FIXED BY THE POINT PROJECTION BEING PRICED (`LR.TIER_ANCHOR` inherited):
+    the top `tier_n` rows PER SEASON by the incumbent's own point. ⛔ Never the realized outcome —
+    NF-RECAL1's §0 measured what a realized anchor manufactures (−12.85 → −64.8 on the same rows)."""
+    pt = np.asarray(point, dtype=float)
+    keep = np.zeros(len(pt), dtype=bool)
+    if tier_n <= 0:
+        return keep
+    seasons = (np.zeros(len(pt)) if season is None
+               else pd.to_numeric(pd.Series(season), errors="coerce").fillna(0).to_numpy())
+    for s in np.unique(seasons):
+        idx = np.where(seasons == s)[0]
+        top = idx[np.argsort(-pt[idx], kind="stable")[:min(int(tier_n), len(idx))]]
+        keep[top] = True
+    return keep
+
 
 def veteran_band_inputs(position, point, season_sd, proj_games=None, base_games=None,
                         snap_share=None, seasons_missed=None) -> pd.DataFrame:
@@ -2131,12 +2226,38 @@ class VeteranBandModel:
     cqr_pooled_groups: tuple = ()
     cqr_n_calib: dict = field(default_factory=dict)
     param_unc_ref: tuple = (0.0, 1.0)                  # in-fold (mean, sd) of 1/√base_games
+    # ── NF1.9-R: the DRAFTABLE-TIER overlay (`tier_n == 0` ⇒ no overlay — the NF1.9 band verbatim).
+    #    The overlay re-prices ONLY the top `tier_n` rows (by the point being priced) of any frame it
+    #    bands; every other row keeps the base band above. A row the overlay cannot speak to keeps
+    #    the base band too, and the caller can see which via `band_many(..., tier_info=...)`.
+    tier_n: int = 0
+    tier_form: str = ""
+    tier_k: int = 0
+    tier_cqr_mode: str = "pos"
+    tier_cqr_scale: str = "add"
+    tier_scale: dict = field(default_factory=dict)     # position -> tier normalising level (knn_tier)
+    tier_pool_pred: np.ndarray | None = None
+    tier_pool_real: np.ndarray | None = None
+    tier_pos_pred: dict = field(default_factory=dict)
+    tier_pos_real: dict = field(default_factory=dict)
+    tier_qreg_lo: dict = field(default_factory=dict)
+    tier_qreg_hi: dict = field(default_factory=dict)
+    tier_conformal: dict = field(default_factory=dict)  # scale -> {group|_CQR_POOL_KEY: adjustment}
+    tier_cqr_pooled_groups: tuple = ()
+    tier_mag_cut: float = float("nan")                  # `"mag"` bucket boundary (in-fold median)
+    tier_mult: float = float("nan")                     # scale_tier / cov_tier multiplier
 
     # ── prediction ──────────────────────────────────────────────────────────────────────────
-    def band_many(self, frame: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    def band_many(self, frame: pd.DataFrame,
+                  tier_info: dict | None = None) -> tuple[np.ndarray, np.ndarray]:
         """Per-player (lo, hi) over a `veteran_band_inputs` frame. NaN for a row the fit cannot speak
         to (an unseen position, a form whose parameters were never fitted) — the caller then falls
         back to the served normal band, so a thin fit DEGRADES rather than fabricating an interval.
+
+        `tier_info`, when a dict is passed, is filled with the NF1.9-R overlay diagnostics
+        (`in_tier`, `overlay_applied`) — the harness needs them to report an overlay whose fit
+        DECLINED a row (that row keeps the base band, i.e. partly the incumbent this story
+        re-prices, and hiding that would flatter the arm — the NF1.9 fallback-mask lesson).
 
         Two invariants on every form: the band is NON-NEGATIVE (a fantasy season cannot be negative)
         and it BRACKETS the point projection (a displayed interval that excludes its own point
@@ -2224,7 +2345,92 @@ class VeteranBandModel:
 
         lo = np.clip(np.minimum(lo, pred), 0.0, None)
         hi = np.maximum(hi, pred)
+
+        # ── NF1.9-R: the DRAFTABLE-TIER overlay, LAST — it re-prices the top `tier_n` rows of THIS
+        #    frame (tier membership resolved from the point being priced, never from an outcome) and
+        #    leaves every other row on the base band above. Applied AFTER the base clip/bracket so
+        #    the band the overlay adjusts is byte-identical to the one its conformity scores were
+        #    calibrated against (`_fit_vet_tier_into` calibrates against `band_many` output), then
+        #    re-clipped so the shared coherence contract holds for the overlay's own output too.
+        if self.tier_n > 0 and self.tier_form:
+            in_tier = _tier_row_mask(pred, None, self.tier_n)
+            t_lo, t_hi = self._tier_overlay(frame, lo, hi, in_tier)
+            use = in_tier & np.isfinite(t_lo) & np.isfinite(t_hi) & (t_hi >= t_lo)
+            lo = np.where(use, np.clip(np.minimum(t_lo, pred), 0.0, None), lo)
+            hi = np.where(use, np.maximum(t_hi, pred), hi)
+            if tier_info is not None:
+                tier_info["in_tier"] = in_tier
+                tier_info["overlay_applied"] = use
         return lo, hi
+
+    # ── NF1.9-R: the tier overlay's band, NaN where it cannot speak ──────────────────────────
+    def _tier_overlay(self, frame: pd.DataFrame, base_lo: np.ndarray, base_hi: np.ndarray,
+                      in_tier: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        pos = np.asarray(frame["position"].to_numpy(), dtype=object)
+        pred = frame["point"].to_numpy(dtype=float)
+        n = len(pred)
+        lo = np.full(n, np.nan)
+        hi = np.full(n, np.nan)
+        idx = np.where(in_tier)[0]
+        if len(idx) == 0:
+            return lo, hi
+        if self.tier_form == "knn_tier":
+            if self.tier_pool_pred is not None and len(self.tier_pool_pred) >= _VET_TIER_MIN_TRAIN:
+                for p in np.unique(pos[idx]):
+                    s = float(self.tier_scale.get(p, 0.0))
+                    if s <= 0:
+                        continue
+                    sel = idx[pos[idx] == p]
+                    l, h = _knn_interval(self.tier_pool_pred, self.tier_pool_real, pred[sel] / s,
+                                         self.tier_k, self.lo_q, self.hi_q)
+                    lo[sel], hi[sel] = l * s, h * s
+        elif self.tier_form == "knn_pos_tier":
+            for p in np.unique(pos[idx]):
+                tx, ty = self.tier_pos_pred.get(p), self.tier_pos_real.get(p)
+                if tx is None or len(tx) < _VET_TIER_MIN_POS_TRAIN:
+                    continue
+                sel = idx[pos[idx] == p]
+                lo[sel], hi[sel] = _knn_interval(tx, ty, pred[sel], self.tier_k,
+                                                 self.lo_q, self.hi_q)
+        elif self.tier_form in ("qreg_tier", "qreg_sqrt_tier"):
+            if self.tier_qreg_lo and self.tier_qreg_hi:
+                x = self._design(frame.iloc[idx])
+                l = _apply_linear(self.tier_qreg_lo, x)
+                h = _apply_linear(self.tier_qreg_hi, x)
+                if self.tier_form == "qreg_sqrt_tier":
+                    l = np.clip(l, 0.0, None) ** 2
+                    h = np.clip(h, 0.0, None) ** 2
+                lo[idx], hi[idx] = l, h
+        elif self.tier_form == "cqr_tier":
+            table = self.tier_conformal.get(self.tier_cqr_scale)
+            if table:
+                qp = float(table.get(_CQR_POOL_KEY, 0.0))
+                grp = self._tier_cqr_groups(pos[idx], pred[idx])
+                adj = np.array([float(table.get(g, qp)) for g in grp], dtype=float)
+                if self.tier_cqr_scale == "width":
+                    w = np.maximum(base_hi[idx] - base_lo[idx], _CQR_MIN_WIDTH)
+                    lo[idx], hi[idx] = base_lo[idx] - adj * w, base_hi[idx] + adj * w
+                else:
+                    lo[idx], hi[idx] = base_lo[idx] - adj, base_hi[idx] + adj
+        elif self.tier_form in ("scale_tier", "cov_tier"):
+            if np.isfinite(self.tier_mult):
+                m = float(self.tier_mult)
+                lo[idx] = pred[idx] - m * (pred[idx] - base_lo[idx])
+                hi[idx] = pred[idx] + m * (base_hi[idx] - pred[idx])
+        return lo, hi
+
+    def _tier_cqr_groups(self, pos: np.ndarray, pred: np.ndarray) -> np.ndarray:
+        """The conformal GROUP of each tier row: position (Mondrian), projection-magnitude half
+        (`"mag"` — the boundary is the IN-FOLD tier median, a fitted quantity, never re-derived from
+        the frame being banded), or one pooled group (the pre-registered foil)."""
+        if self.tier_cqr_mode == "pos":
+            return np.asarray(pos, dtype=object)
+        if self.tier_cqr_mode == "mag":
+            cut = self.tier_mag_cut
+            if not np.isfinite(cut):
+                return np.array([_CQR_POOL_KEY] * len(pred), dtype=object)
+            return np.where(np.asarray(pred, dtype=float) >= cut, "mag_hi", "mag_lo").astype(object)
+        return np.array([_CQR_POOL_KEY] * len(pred), dtype=object)
 
     # ── the design matrix (shared by fit + predict, so they cannot drift) ────────────────────
     def _design(self, frame: pd.DataFrame, with_positions: bool = True) -> pd.DataFrame:
@@ -2359,6 +2565,131 @@ def _fit_vet_conformal_into(m: VeteranBandModel, frame: pd.DataFrame, y: np.ndar
     m.cqr_pooled_groups = tuple(sorted(thin))
 
 
+def _fit_vet_tier_into(m: VeteranBandModel, frame: pd.DataFrame, y: np.ndarray,
+                       seasons: np.ndarray | None) -> None:
+    """NF1.9-R — fit the DRAFTABLE-TIER overlay in place, on TIER training rows only.
+
+    The tier is the top `m.tier_n` rows PER TRAINING SEASON by the point projection (the incumbent's
+    own anchor — never the realized outcome; `_tier_row_mask` is the single owner of that rule). Every
+    overlay form degrades to the BASE band (not the normal approximation) where it cannot speak, and
+    the caller sees which rows via `band_many(..., tier_info=...)` — an overlay that quietly reverts
+    tier rows to the band this story re-prices would flatter itself (the NF1.9 fallback lesson).
+
+    `cqr_tier` is CROSS-conformal (the `_fit_vet_conformal_into` shape): the BASE band is re-fitted on
+    the panel minus each held tier fold, so every conformity score is out-of-fold, and BOTH scalings
+    are computed in one pass. A group thinner than `_VET_TIER_CQR_MIN_CALIB` falls back to the pooled
+    quantile and is RECORDED (`tier_cqr_pooled_groups`) — a silently-pooled group would be a
+    per-group claim the fit never made (NF1.7 lesson 1)."""
+    if m.tier_form not in _VET_TIER_FORMS or m.tier_n <= 0:
+        return
+    pred_all = frame["point"].to_numpy(dtype=float)
+    in_tier = _tier_row_mask(pred_all, seasons, m.tier_n)
+    if int(in_tier.sum()) < _VET_TIER_MIN_TRAIN:
+        return
+    tf = frame.loc[in_tier].reset_index(drop=True)
+    ty = y[in_tier]
+    pos = np.asarray(tf["position"].to_numpy(), dtype=object)
+    pred = tf["point"].to_numpy(dtype=float)
+
+    if m.tier_form == "knn_tier":
+        for p in np.unique(pos):
+            sel = pos == p
+            if int(sel.sum()) < _VET_TIER_MIN_SCALE_ROWS:
+                continue
+            lvl = float(np.mean(ty[sel]))
+            m.tier_scale[p] = lvl if lvl > 1e-6 else float(np.mean(pred[sel]) or 1.0)
+        keep = np.array([p in m.tier_scale for p in pos])
+        if keep.any():
+            s = np.array([m.tier_scale.get(p, 1.0) for p in pos])[keep]
+            m.tier_pool_pred = pred[keep] / s
+            m.tier_pool_real = ty[keep] / s
+    elif m.tier_form == "knn_pos_tier":
+        for p in np.unique(pos):
+            sel = pos == p
+            if int(sel.sum()) < _VET_TIER_MIN_POS_TRAIN:
+                continue
+            m.tier_pos_pred[p] = pred[sel]
+            m.tier_pos_real[p] = ty[sel]
+    elif m.tier_form in ("qreg_tier", "qreg_sqrt_tier"):
+        try:
+            import sklearn.linear_model  # noqa: F401
+        except ImportError:                                # pragma: no cover - sklearn is a dep
+            return
+        target = np.sqrt(np.clip(ty, 0.0, None)) if m.tier_form == "qreg_sqrt_tier" else ty
+        x = m._design(tf)
+        m.tier_qreg_lo.update(_pinball_fit(x, target, m.lo_q, m.qreg_alpha or 0.01))
+        m.tier_qreg_hi.update(_pinball_fit(x, target, m.hi_q, m.qreg_alpha or 0.01))
+    elif m.tier_form == "cqr_tier":
+        m.tier_mag_cut = float(np.median(pred))
+        alpha = 1.0 - (m.hi_q - m.lo_q)
+        order = np.lexsort((pred, pos))
+        fold = np.empty(len(ty), dtype=int)
+        fold[order] = np.arange(len(ty)) % max(2, int(_VET_TIER_CQR_K))
+        tier_positions = np.where(in_tier)[0]              # positions of tier rows in `frame`
+        scores: dict[str, list[tuple[str, float]]] = {"add": [], "width": []}
+        for f in range(max(2, int(_VET_TIER_CQR_K))):
+            cal = fold == f
+            excl = np.zeros(len(frame), dtype=bool)
+            excl[tier_positions[cal]] = True
+            sub_panel = frame.loc[~excl].assign(real_fp_ppr=y[~excl])
+            sub = fit_veteran_band_model(
+                sub_panel, form=m.form, k=m.k, sd_gain=m.sd_gain, qreg_alpha=m.qreg_alpha,
+                qreg_per_pos=m.qreg_per_pos, cqr_mode=m.cqr_mode, cqr_scale=m.cqr_scale,
+                band_q=(m.lo_q, m.hi_q))
+            if sub is None:
+                continue
+            held = tf.loc[cal]
+            b_lo, b_hi = sub.band_many(held)
+            good = np.isfinite(b_lo) & np.isfinite(b_hi)
+            if not good.any():
+                continue
+            yc = ty[cal][good]
+            e = np.maximum(b_lo[good] - yc, yc - b_hi[good])
+            w = np.maximum(b_hi[good] - b_lo[good], _CQR_MIN_WIDTH)
+            grp = m._tier_cqr_groups(pos[cal][good], pred[cal][good]).tolist()
+            scores["add"].extend(zip(grp, e.tolist()))
+            scores["width"].extend(zip(grp, (e / w).tolist()))
+        if not scores["add"]:
+            return
+        thin: set = set()
+        for sc, rows in scores.items():
+            by_group: dict[str, list[float]] = {}
+            for g, e in rows:
+                by_group.setdefault(g, []).append(e)
+            table = {_CQR_POOL_KEY: _conformity_quantile([e for _, e in rows], alpha)}
+            for g, vals in by_group.items():
+                if g == _CQR_POOL_KEY:
+                    continue
+                if len(vals) >= _VET_TIER_CQR_MIN_CALIB:
+                    table[g] = _conformity_quantile(vals, alpha)
+                else:
+                    thin.add(g)
+            m.tier_conformal[sc] = table
+        m.tier_cqr_pooled_groups = tuple(sorted(thin))
+    elif m.tier_form in ("scale_tier", "cov_tier"):
+        # the two NULLS: one multiplier on the base band's (asymmetric) half-widths around the point,
+        # fitted on the tier rows — on the interval SCORE (`scale_tier`) or to a COVERAGE TARGET
+        # (`cov_tier`, the E2.1-r inversion made visible). ⚠️ In-fold on the training tier (the
+        # `_fit_sd_multiplier` convention for nulls) — declared, and why they are nulls, not shippers.
+        b_lo, b_hi = dataclasses.replace(m, tier_n=0, tier_form="").band_many(tf)
+        good = np.isfinite(b_lo) & np.isfinite(b_hi)
+        if int(good.sum()) < _VET_TIER_MIN_TRAIN:
+            return
+        yb, pb = ty[good], pred[good]
+        alpha = 1.0 - (m.hi_q - m.lo_q)
+        best, best_v = 1.0, np.inf
+        for mult in _VET_SD_SCALE_GRID:
+            lo = np.clip(pb - mult * (pb - b_lo[good]), 0.0, None)
+            hi = pb + mult * (b_hi[good] - pb)
+            if m.tier_form == "cov_tier":
+                v = abs(float(np.mean((yb >= lo) & (yb <= hi))) - (m.hi_q - m.lo_q))
+            else:
+                v = float(np.mean(_interval_score(lo, hi, yb, alpha)))
+            if v < best_v:
+                best, best_v = float(mult), v
+        m.tier_mult = best
+
+
 def _fit_sd_multiplier(y: np.ndarray, pred: np.ndarray, sd: np.ndarray, mode: str,
                        lo_q: float, hi_q: float) -> float:
     """The per-position dispersion multiplier for the two variance-rescaling NULLS.
@@ -2396,6 +2727,11 @@ def fit_veteran_band_model(
     cqr_k: int = _VET_BAND_CQR_K,
     band_q: tuple[float, float] = _VET_BAND_Q,
     real_col: str = "real_fp_ppr",
+    tier_form: str = "",
+    tier_k: int = 0,
+    tier_n: int = 0,
+    tier_cqr_mode: str = _VET_TIER_CQR_MODE,
+    tier_cqr_scale: str = _VET_TIER_CQR_SCALE,
 ) -> VeteranBandModel | None:
     """NF1.9 §0.5 — fit ONE pre-registered per-player veteran band form on a historical walk-forward
     panel.
@@ -2413,6 +2749,11 @@ def fit_veteran_band_model(
         return None
     if cqr_mode not in _VET_BAND_CQR_MODES or cqr_scale not in _VET_BAND_CQR_SCALES:
         raise ValueError(f"unknown conformal setting: cqr_mode={cqr_mode!r} cqr_scale={cqr_scale!r}")
+    if tier_form and (tier_form not in _VET_TIER_FORMS or tier_cqr_mode not in _VET_TIER_CQR_MODES
+                      or tier_cqr_scale not in _VET_BAND_CQR_SCALES or int(tier_n) <= 0):
+        raise ValueError(
+            f"unknown NF1.9-R tier setting: tier_form={tier_form!r} tier_n={tier_n!r} "
+            f"tier_cqr_mode={tier_cqr_mode!r} tier_cqr_scale={tier_cqr_scale!r}")
     lo_q, hi_q = band_q
     frame = veteran_band_inputs(
         panel["position"], panel["point"] if "point" in panel else panel["proj_fp_ppr"],
@@ -2470,6 +2811,17 @@ def fit_veteran_band_model(
             return None                                    # sklearn absent, or every group thin
         if cqr_mode:
             _fit_vet_conformal_into(m, frame, y)
+
+    # ── NF1.9-R: the draftable-tier overlay, fitted on TIER training rows only (⛔ inert unless the
+    #    caller passes a tier form — the served default is `_VET_TIER_RECAL = False`).
+    if tier_form:
+        m.tier_form, m.tier_k, m.tier_n = str(tier_form), int(tier_k), int(tier_n)
+        m.tier_cqr_mode, m.tier_cqr_scale = str(tier_cqr_mode), str(tier_cqr_scale)
+        seasons = None
+        if "target_season" in panel:
+            seasons = pd.to_numeric(pd.Series(panel["target_season"]).reset_index(drop=True),
+                                    errors="coerce").to_numpy(dtype=float)[ok]
+        _fit_vet_tier_into(m, frame, y, seasons)
     return m
 
 

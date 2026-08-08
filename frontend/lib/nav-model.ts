@@ -132,19 +132,24 @@ export const SPORTS: SportNav[] = [
               // ⭐ Order is PRODUCT order, not build order. Rankings leads because it is the actual
               // product — the projection re-scored for YOUR league's format and roster. Projections
               // is the format-independent raw line underneath it: useful, but a supporting view.
-              // E9.56b — `public: true` on Rankings + Projections ONLY. These are the two surfaces
-              // the server now serves in a LOCKED form (every model value removed, `locked: true`
-              // in its place, rows re-ordered onto market ADP), so a free visitor gets a real page
-              // with a subscribe CTA on every withheld number instead of the "Unlock Fantasy" stub.
-              // League Board deliberately does NOT get it: it renders a SAVED league's config,
-              // which is per-user data behind `require_fantasy_access` and has no locked form.
+              // ⭐ FREEMIUM BUILD — `public: true` marks the FREE GENERIC BOARD: Rankings,
+              // Projections and Player Search. Their data is now identical for every caller
+              // (`Capability.GENERIC_BOARD`), so a logged-out visitor gets the real page rather
+              // than the "Unlock Fantasy" stub. E9.56b put the first two here when the server was
+              // serving them LOCKED; the freemium build removed the lock and added Search, which is
+              // the only route to a player page that does not start on a board.
+              //
+              // ⛔ League Board, Draft Optimizer, Import, League Settings and My Teams deliberately
+              // stay OFF this list — they are PERSONALIZATION / DECISION SUPPORT, their endpoints
+              // 403 a free caller, and marking one public renders a permanently broken page. The
+              // membership is pinned both ways by `test_freemium_tier.py`.
               { label: "Rankings", href: "/fantasy/rankings", key: "fantasy-rankings", public: true },
               { label: "League Board", href: "/fantasy/league-board", key: "fantasy-league-board" },
               { label: "Projections", href: "/fantasy/projections", key: "fantasy-projections", public: true },
               // NF3.1 — direct lookup: search a name, land on his player page. A separate nav item
               // (not folded into Projections' own search box) because it is the entry point every
               // OTHER surface's Player cell links out to, so it needs to be reachable on its own.
-              { label: "Player Search", href: "/fantasy/players", key: "fantasy-players" },
+              { label: "Player Search", href: "/fantasy/players", key: "fantasy-players", public: true },
               { label: "Draft Optimizer", href: "/fantasy/draft", key: "fantasy-draft" },
               // NF-C0 — platform import: pull the real league in from Sleeper/Yahoo. Sits ABOVE
               // the manual editor because it is the path most users should take; the editor stays

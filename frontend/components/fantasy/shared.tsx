@@ -21,6 +21,11 @@ import {
   DECISION_SUPPORT_LINE,
   DISAGREEMENT_HOOK,
   EXPECTED_POINTS_DEFINITION,
+  FREE_TIER_SUMMARY,
+  FULL_SEASON_RATE_DEFINITION,
+  MEMBERSHIP_CTA_LABEL,
+  PAID_TIER_HEADING,
+  PAID_TIER_SUMMARY,
   PROJECTED_GAMES_DEFINITION,
   TRACK_RECORD_TRUST_LINK,
 } from "@/lib/fantasy-claim-copy"
@@ -292,6 +297,79 @@ export function UpgradeBanner({
   )
 }
 
+/**
+ * ⭐ THE FREEMIUM BOUNDARY — the explicit free/paid line, rendered BESIDE a fully-visible free board.
+ *
+ * THE PRODUCT ARGUMENT THIS EXISTS TO MAKE (GROWTH-100 §1). The paid aha is "what changed because
+ * it is MY league" — and a visitor cannot want that until they have seen the generic board AND
+ * understood that it is generic. Left implicit, a complete-looking free board reads as the whole
+ * product and there is nothing to buy; stated, the same board becomes the argument for the upgrade.
+ * So this block is the conversion surface, and the board above it is the proof.
+ *
+ * ⚠️ IT IS NOT AN `UpgradeBanner`, AND THE DIFFERENCE IS THE WHOLE STORY. `UpgradeBanner` sits above
+ * a board whose numbers are WITHHELD and says "subscribe to unlock" — it is a lock, and its
+ * defaults, its `upgrade` envelope and its amber lock iconography all say so. Nothing is withheld on
+ * this page any more. Rendering the lock here would tell a visitor the complete board in front of
+ * them is partial, which is both false and a weaker pitch than the truth.
+ *
+ * ⛔ NEVER RENDER THIS FOR AN ENTITLED CALLER. A subscriber already has both halves; an upsell for
+ * something they pay for reads as a bug in our billing. Callers pass `entitled` rather than reading
+ * auth here, so this component stays pure and the guard test can drive it directly.
+ *
+ * ⛔ NO PERFORMANCE PROMISE, and no quotation of the track-record statistic — the marketing/trust
+ * split NF-TR1 encodes. The copy is a division of LABOUR ("we do more of the work"), never an
+ * outcome claim, and the record is a LINK. Every string comes from `fantasy-claim-copy.ts` so the
+ * denylist screening covers it; `test_freemium_tier.py` fails the build on a literal written here.
+ */
+export function FreemiumBoundary({ entitled }: { entitled: boolean }) {
+  if (entitled) return null
+  return (
+    <section
+      data-testid="freemium-boundary"
+      aria-labelledby="freemium-boundary-heading"
+      className="mt-8 rounded-lg border border-[#262626] bg-[#0f0f0f] p-5"
+    >
+      <h2 id="freemium-boundary-heading" className="text-sm font-semibold text-gray-200">
+        {FREE_TIER_SUMMARY.title}
+      </h2>
+      <p className="mt-1.5 max-w-3xl text-[13px] leading-relaxed text-gray-400">
+        {FREE_TIER_SUMMARY.detail}
+      </p>
+
+      <div className="mt-5 border-t border-[#1f1f1f] pt-4">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#10b981]">
+          {PAID_TIER_HEADING}
+        </p>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          {PAID_TIER_SUMMARY.map((item) => (
+            <div key={item.title}>
+              <p className="text-[13px] font-semibold text-gray-200">{item.title}</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-gray-400">{item.detail}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center gap-2.5">
+          <a
+            href={SUBSCRIBE_HREF}
+            className="rounded-md bg-[#10b981] px-3.5 py-2 text-sm font-semibold text-black transition-colors hover:bg-[#34d399]"
+          >
+            {MEMBERSHIP_CTA_LABEL}
+          </a>
+          {/* The trust LINK, never the statistic (NF-TR1). A skeptical reader is one click from the
+              whole measurement, hedges and all, on the page built to carry them. */}
+          <a
+            href={TRACK_RECORD_TRUST_LINK.href}
+            className="rounded-md border border-[#262626] px-3.5 py-2 text-sm font-medium text-gray-300 transition-colors hover:border-[#3a3a3a] hover:text-gray-100"
+          >
+            {TRACK_RECORD_TRUST_LINK.label}
+          </a>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 export function PosBadge({ pos }: { pos: string }) {
   return (
     <span
@@ -505,6 +583,7 @@ export const GLOSSARY = {
   // load-bearing disclosure on the boards outside every copy governance check there is.
   expectedPoints: EXPECTED_POINTS_DEFINITION,
   projectedGames: PROJECTED_GAMES_DEFINITION,
+  fullSeasonRate: FULL_SEASON_RATE_DEFINITION,
   vor: "Value over replacement. A player's projected points minus the points of the best player at his position who does NOT start anywhere in your league. It is what makes positions comparable: an elite quarterback scores more raw points than an elite running back, but if every team can start a good quarterback anyway, those points buy you less.",
   replacement:
     "The points of the first player at this position who does not crack a starting lineup anywhere in the league — the level you could get for free off waivers. It moves with your format: more teams, or a superflex spot, pushes it deeper.",

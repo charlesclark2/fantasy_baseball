@@ -45,3 +45,49 @@ const FANTASY_BETA_GROUPS = ["admin", "fantasy_comp"] as const
 export function canAccessFantasyBeta(groups: string[]): boolean {
   return FANTASY_BETA_GROUPS.some((g) => groups.includes(g))
 }
+
+// ══ THE FREEMIUM BOUNDARY (2026-08-08, GROWTH-100) ═══════════════════════════════════════════════
+//
+// ⭐ MIRROR OF `app/backend/services/entitlement.py::Capability`. The server is the gate; this is
+// what the UI branches on so a surface can say WHICH half it is in rather than re-deriving it from
+// a group list. Both sides are pinned together by `test_freemium_tier.py` — a capability added on
+// one side and not the other fails the build, because a UI that thinks a surface is free while the
+// API 403s it renders a permanently broken page with no error anywhere.
+//
+// The split, in the terms the pricing page uses:
+//   FREE  — the GENERIC board. Rankings + projections for the shipped presets, the 80% ranges,
+//           market ADP, player pages, methodology. Anonymous included.
+//   PAID  — PERSONALIZATION (your league's scoring/roster shape re-scoring the board, saved state)
+//           and DECISION SUPPORT (the draft optimizer, the weekly tools).
+//
+// ⚠️ THIS IS NOT WHAT E9.56 DID. That story locked the CURRENT SEASON everywhere and served a
+// per-point "subscribe to unlock" marker on the generic board. The freemium build retired that: the
+// generic board's numbers are the acquisition wedge, so withholding them withheld the thing that
+// earns the signup. The `locked` handling downstream (`LockChip`, `numOrLock`, `rowsAreLocked`) is
+// KEPT as defensive rendering — a row that arrives without `pts` must render a chip, never `NaN` —
+// but on the generic surfaces nothing sets it any more.
+
+export type FantasyCapability = "generic_board" | "personalization" | "decision_support"
+
+/** Free for everyone, including logged-out. One entry on purpose — widening it is a pricing
+ *  decision, not a refactor. */
+export const FREE_CAPABILITIES: readonly FantasyCapability[] = ["generic_board"] as const
+
+/** Stated explicitly rather than as "everything else", so a NEW capability belongs to neither set
+ *  until someone places it — and the guard test says so — instead of defaulting into one silently. */
+export const PAID_CAPABILITIES: readonly FantasyCapability[] = [
+  "personalization",
+  "decision_support",
+] as const
+
+/**
+ * Whether these Cognito groups may exercise `capability`.
+ *
+ * FAILS CLOSED on anything unplaced: an unrecognised capability is treated as PAID, matching the
+ * server's `allows()`. A refused paid surface is visible and reversible; a leaked one is not.
+ */
+export function canUse(capability: FantasyCapability, groups: string[]): boolean {
+  if ((FREE_CAPABILITIES as readonly string[]).includes(capability)) return true
+  if (!(PAID_CAPABILITIES as readonly string[]).includes(capability)) return false
+  return canAccess("fantasy", groups)
+}

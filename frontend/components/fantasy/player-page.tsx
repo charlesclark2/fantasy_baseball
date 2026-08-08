@@ -10,24 +10,26 @@
 // — ADP is a neutral reference, and the 80% range is drawn so the uncertainty is never hidden behind
 // a single number.
 //
-// 🔓 NF3.2 — SEASON-SCOPED ENTITLEMENT. This route is now reachable with no fantasy entitlement at
-// all (the route file dropped `FantasyGuard`). `FantasyPlayerPage` below is a thin DISPATCHER — it
-// calls no data hooks of its own beyond `useAuth`, and mounts one of two genuinely separate child
-// components based on entitlement, which is what keeps this rules-of-hooks-safe (each child owns its
-// own hook call sequence rather than the same component conditionally skipping hooks):
-//   • `EntitledPlayerView` — the ENTIRE pre-NF3.2 page, byte-for-byte unchanged, for anyone who
-//     already has fantasy access. Nothing about the paying experience changes.
-//   • `PublicPlayerView` — identity + past-season track record ONLY, sourced from the PUBLIC
-//     `lib/fantasy-track-record.ts` endpoints. It never calls `useFantasyProjections`/
-//     `useFantasyBoard` at all (not "calls them and hides the result" — genuinely never invoked), so
-//     there is no path by which the current/locked season's projection reaches an unentitled client.
+// 🔓 FREEMIUM BUILD (2026-08-08) — THE PLAYER PAGE IS PART OF THE FREE GENERIC BOARD. Everyone,
+// logged out included, gets the full page: the projection, its 80% range, our rank in the selected
+// preset format, the stat line and the drivers.
+//
+// 🗄️ WHAT THIS REPLACED. NF3.2 made the ROUTE public but split the CONTENT by entitlement — a
+// non-entitled visitor got identity + past seasons only, because the current-season projection was
+// the paid product. That split is retired with the rest of the season lock (see
+// `lib/entitlements.ts`). What survives is a split on a different question — whether this player
+// HAS a current projection — which is why `TrackRecordOnlyView` still exists and now serves
+// entitled and anonymous callers alike. See `FantasyPlayerPage`'s own docstring.
+//
+// The two views remain SEPARATE COMPONENTS rather than one component with conditional hooks: each
+// owns its own hook sequence, so whichever renders is rules-of-hooks-safe.
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { ChevronLeft, Lock } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { canAccess } from "@/lib/entitlements"
+import { canUse } from "@/lib/entitlements"
 import {
   useFantasyManifest,
   useFantasyProjections,
@@ -38,8 +40,13 @@ import {
 import { useAllTrackRecordSeasons, useTrackRecordManifest } from "@/lib/fantasy-track-record"
 import { positionTierMap, type Player } from "@/lib/draft-optimizer"
 import { initials, nflTeamLogoUrl } from "@/lib/nfl-teams"
+import { fullSeasonRate } from "@/lib/fantasy"
 import type { ProjectedPlayer } from "@/lib/fantasy"
-import { EXPECTED_POINTS_LABEL, PROJECTED_GAMES_LABEL } from "@/lib/fantasy-claim-copy"
+import {
+  EXPECTED_POINTS_LABEL,
+  FULL_SEASON_RATE_LABEL,
+  PROJECTED_GAMES_LABEL,
+} from "@/lib/fantasy-claim-copy"
 import { PlayerHistoryPanel } from "@/components/fantasy/player-history-panel"
 import {
   ADP_DELTA_LABEL,
@@ -50,6 +57,7 @@ import {
   FadeBadge,
   FadeLegend,
   FormatSelector,
+  FreemiumBoundary,
   GLOSSARY,
   InfoTip,
   IntervalBar,
@@ -151,17 +159,38 @@ function Tile({
   )
 }
 
-/** Entry point — see the module docstring for why this is a plain dispatcher with no hooks of its
- *  own besides `useAuth`/`useParams`. */
+/** Entry point.
+ *
+ *  ⭐ FREEMIUM BUILD (2026-08-08) — THE DISPATCH KEY CHANGED FROM *WHO IS ASKING* TO *WHAT WE HAVE*.
+ *  It used to branch on entitlement: a non-entitled visitor got `TrackRecordOnlyView` (identity +
+ *  past seasons) because the current-season projection was paid. The player page is now part of the
+ *  free generic board, so everyone gets `PlayerView` — the full page, unchanged from what a
+ *  subscriber has always seen.
+ *
+ *  What remains genuinely two-sided is whether this player HAS a current projection at all. A
+ *  retired player linked from the Track Record is in the graded past-season data and absent from
+ *  the 2026 export, so `PlayerView` falls through to `TrackRecordOnlyView` for him. That branch
+ *  lives inside `PlayerView` (which is the only thing that can know) rather than here, and it also
+ *  fixes a latent defect: under the old dispatch an ENTITLED user clicking a retired player got
+ *  "player not found" instead of his record, because entitlement was never the right question.
+ *
+ *  Kept as a dispatcher with no hooks of its own besides `useAuth`/`useParams` so each child owns
+ *  its own hook sequence — rules-of-hooks-safe regardless of which branch renders.
+ */
 export function FantasyPlayerPage() {
   const { playerId } = useParams<{ playerId: string }>()
-  const { groups, loading: authLoading } = useAuth()
+  const { loading: authLoading } = useAuth()
+  // Still waits on auth, for one reason: `useSavedLeagues` inside `PlayerView` keys off the group
+  // list, and mounting before it resolves would fetch the preset board and then re-fetch a saved
+  // league's a tick later for an entitled user.
   if (authLoading) return <LoadingBlock label="Loading player…" />
-  if (!canAccess("fantasy", groups)) return <PublicPlayerView playerId={playerId} />
-  return <EntitledPlayerView playerId={playerId} />
+  return <PlayerView playerId={playerId} />
 }
 
-function EntitledPlayerView({ playerId }: { playerId: string }) {
+function PlayerView({ playerId }: { playerId: string }) {
+  // Decides only whether the upsell renders — never what is on the page. See `RankingsBoard`.
+  const { groups } = useAuth()
+  const entitled = canUse("personalization", groups)
   const [logoFailed, setLogoFailed] = useState(false)
   const [photoFailed, setPhotoFailed] = useState(false)
   // Client-side nav between players (Player Search, board links) reuses this component rather than
@@ -284,12 +313,22 @@ function EntitledPlayerView({ playerId }: { playerId: string }) {
 
       {projLoading && <LoadingBlock label="Loading player…" />}
 
-      {!projLoading && (projError || !proj) && (
+      {/* ⚠️ A FETCH FAILURE AND AN ABSENT PLAYER ARE DIFFERENT ANSWERS AND GET DIFFERENT RENDERS.
+          These used to share one "Player not found" block, which told a reader the player does not
+          exist when in fact our own read had failed. `projError` is ours to own; `!proj` is a real
+          statement about the export. */}
+      {!projLoading && projError && (
         <EmptyBlock
-          title="Player not found"
-          detail="This player isn't in the current season projections — the export may not include him, or the link is out of date."
+          title="We couldn't load this player"
+          detail="The projections didn't load just now. Refreshing usually fixes it."
         />
       )}
+
+      {/* ⭐ ABSENT FROM THE CURRENT EXPORT — which is the NORMAL state for a retired player reached
+          from the Track Record, not an error. Falling through to his graded past seasons is strictly
+          more than the old dead end, and it is the branch the freemium build made reachable for
+          everyone rather than only for the logged-out. */}
+      {!projLoading && !projError && !proj && <TrackRecordOnlyView playerId={playerId} />}
 
       {proj && (
         <>
@@ -413,11 +452,19 @@ function EntitledPlayerView({ playerId }: { playerId: string }) {
                 value={num(proj.fpHalf)}
                 sub={combineSub(pctHalf != null && `${ordinal(pctHalf)} pct. among ${proj.pos}s`)}
               />
+              {/* The full-season rate rides as a SUB-LINE on the two totals a drafter actually
+                  reads, rather than as a fifth tile: it is the same number re-expressed, so it
+                  belongs attached to its total, and a tile of its own would present it as an
+                  independent projection. `fullSeasonRate` returns null when there is no expected-
+                  games figure to divide by, and `combineSub` drops a false entry — so the line is
+                  simply absent rather than showing an em-dash of its own. */}
               <Tile
                 label="Full PPR (reference)"
                 value={num(proj.fpPpr)}
                 sub={combineSub(
                   pctPpr != null && `${ordinal(pctPpr)} pct. among ${proj.pos}s`,
+                  fullSeasonRate(proj.fpPpr, proj.g) != null &&
+                    `${FULL_SEASON_RATE_LABEL}: ${num(fullSeasonRate(proj.fpPpr, proj.g))}`,
                   proj.fpP10 != null && proj.fpP90 != null && `80%: ${int(proj.fpP10)}–${int(proj.fpP90)}`,
                 )}
               />
@@ -429,6 +476,8 @@ function EntitledPlayerView({ playerId }: { playerId: string }) {
                     ? "Not ranked in this format"
                     : combineSub(
                         pctLeague != null && `${ordinal(pctLeague)} pct. among ${proj.pos}s`,
+                        fullSeasonRate(boardRow?.pts, proj.g) != null &&
+                          `${FULL_SEASON_RATE_LABEL}: ${num(fullSeasonRate(boardRow?.pts, proj.g))}`,
                         boardRow?.ptsP10 != null &&
                           boardRow?.ptsP90 != null &&
                           `80%: ${int(boardRow.ptsP10)}–${int(boardRow.ptsP90)}`,
@@ -600,6 +649,11 @@ function EntitledPlayerView({ playerId }: { playerId: string }) {
               note={projPayload?.market_lean_note}
             />
           </UncertaintyNote>
+
+          {/* The boundary, below the complete page. This surface makes the paid half unusually
+              concrete: the "your league" tile above already shows a PRESET, so "what changes when
+              it is really your league" is the question the reader is holding when they reach it. */}
+          <FreemiumBoundary entitled={entitled} />
         </>
       )}
     </div>
@@ -611,7 +665,15 @@ function EntitledPlayerView({ playerId }: { playerId: string }) {
  *  endpoints — never `useFantasyProjections`/`useResolvedBoard` (those stay unused in this
  *  component's whole body, not merely unrendered). The current/locked season renders as a static
  *  upsell card, never a fetched-then-hidden number. */
-function PublicPlayerView({ playerId }: { playerId: string }) {
+/** Identity + graded past seasons, for a player the CURRENT export does not carry (a retired
+ *  player reached from the Track Record).
+ *
+ *  🗄️ RENAMED from `PublicPlayerView` by the freemium build, and the rename is the finding: it was
+ *  never really about the public — it was about which DATA exists. It used to be what every
+ *  non-entitled visitor saw for EVERY player, because the current-season projection was paid; now
+ *  the projection is free, so this renders only when there genuinely is no projection to show, for
+ *  entitled and anonymous callers alike. */
+function TrackRecordOnlyView({ playerId }: { playerId: string }) {
   const { data: manifest, isLoading: manifestLoading } = useTrackRecordManifest()
   const seasons = manifest?.seasons ?? []
   const { rows, isLoading: rowsLoading } = useAllTrackRecordSeasons(seasons)
