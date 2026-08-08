@@ -109,16 +109,18 @@ where raw.game_date::date >= dateadd('day', -{{ var('pregame_incremental_lookbac
 
 {% else %}
 
-{{ config(
-    materialized='incremental',
-    unique_key='game_pk',
-    incremental_strategy='delete+insert',
-    on_schema_change='sync_all_columns'
-) }}
+-- E11.24 TARGET-6 SUCCESSOR (2026-08-08) — incremental → VIEW, in lockstep with the _raw model
+-- it wraps (see the full rationale there). On Snowflake this branch is a pure COPY of its own
+-- external table — the _seasonnorm derivation runs in the DuckDB branch — so a `delete+insert`
+-- incremental here is a temp CTAS + DELETE + INSERT per intraday tick that RESUMES COMPUTE_WH,
+-- where `create or replace view` is metadata-only.
+--
+-- CONTENT-NEUTRAL, MEASURED 2026-08-08 on MONITOR_WH: 26,969 = 26,969 rows with zero game_dates
+-- differing in count, and 790 = 790 columns with zero data_type mismatches. The two models MUST
+-- move together — leaving the wrapper an incremental over a view-ified _raw would keep the exact
+-- write this flip removes, on the one of the pair every serving reader actually names.
+{{ config(materialized='view') }}
 
 select * from baseball_data.lakehouse_ext.feature_pregame_game_features
-{% if is_incremental() %}
-where game_date::date >= dateadd('day', -{{ var('pregame_incremental_lookback_days', 7) }}, current_date)
-{% endif %}
 
 {% endif %}
