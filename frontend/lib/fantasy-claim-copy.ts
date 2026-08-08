@@ -235,10 +235,11 @@ export const PAID_TIER_SUMMARY: readonly { title: string; detail: string }[] = [
   },
 ]
 
-/** The one-line version, for a compact surface (a banner, a nav upsell) that has no room for the
- *  two blocks above. Reuses `DECISION_SUPPORT_LINE`'s framing on purpose — one promise, not two. */
-export const FREEMIUM_BOUNDARY_LINE =
-  "The generic board is free. A membership re-scores it for your league and helps you decide."
+// ⚠️ A one-line `FREEMIUM_BOUNDARY_LINE` was written here for "a compact surface that has no room
+// for the two blocks above" and then DELETED, because nothing renders it. An exported copy constant
+// with no caller reads as shipped wording — the NF-C0e "wired ≠ invoked" shape, one domain over —
+// and the next surface to want a one-liner should reach for `DECISION_SUPPORT_LINE`, which is the
+// same promise and is actually rendered. Add a second one only when something calls it.
 
 /** The heading over the paid half, and the CTA label under it.
  *
