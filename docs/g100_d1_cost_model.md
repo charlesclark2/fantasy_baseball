@@ -198,6 +198,13 @@ Exact commands: see the **G100-D1 spend alarms** section added to
 - 🔴 **The `AWS/Billing` `EstimatedCharges` metric is only published in `us-east-1`.** A billing
   alarm created in any other region watches a metric that does not exist and never fires — a guard
   that cannot fail.
+- 🔴 **`--treat-missing-data` must be `missing`, not `notBreaching`** — measured the hard way on
+  2026-08-08. With `notBreaching` the alarm reported **`OK`** while `EstimatedCharges` did not exist
+  at all (billing alerts had never been enabled): the flag converts "I can see nothing" into
+  "everything is fine", so the one alarm meant to catch a runaway bill displayed success while
+  watching nothing. **Verify a billing alarm with `aws cloudwatch list-metrics --namespace
+  AWS/Billing`, never by reading its state** — the state is exactly what the misconfiguration
+  falsifies.
 - 🔴 **SNS for this alarm is `us-east-1`.** Do **not** pass `AWS_DEFAULT_REGION=us-east-2`; that is
   the S3 *lakehouse bucket* only. Reuse the existing `credence-prod-alerts` topic so these land in
   the same inbox as every other page.

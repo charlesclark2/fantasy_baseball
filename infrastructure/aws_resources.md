@@ -1191,8 +1191,16 @@ Verify:
 > **Applied:** AWS Budget `credence-prod-monthly-250` · Cost Anomaly Detection (re-pointed to
 > `ctcb57@gmail.com`, threshold `ABSOLUTE ≥ $25 AND PERCENTAGE ≥ 40%`) · Vercel spend notification ·
 > API Gateway stage + per-route throttling (§ above).
-> **Outstanding:** the CloudWatch billing alarm sat `INSUFFICIENT_DATA` at creation — see §2 for why
-> that state is ambiguous and what to re-check.
+> **Outstanding — the CloudWatch billing alarm, and it is worse than "not ready yet."** Measured
+> 2026-08-08: `aws cloudwatch list-metrics --namespace AWS/Billing` returns **EMPTY** (billing alerts
+> were never enabled), and the alarm nonetheless reported **`StateValue: OK`** because the creation
+> command in §2 originally passed `--treat-missing-data notBreaching`. So the one alarm meant to
+> catch a runaway bill was reporting green while watching a metric that did not exist. Two actions,
+> and the first is independent of the second: (a) re-put the alarm with `--treat-missing-data
+> missing` so an absent metric reads `INSUFFICIENT_DATA` instead of `OK`; (b) tick **Billing
+> preferences → Receive CloudWatch billing alerts** so the metric starts existing. Coverage is not
+> zero meanwhile — the $250 Budget and the $25 anomaly detector are live and do not depend on this
+> metric.
 
 > Cost model and the reasoning behind the $250 threshold: **`docs/g100_d1_cost_model.md`**.
 > Regenerate its numbers with `uv run python scripts/estimate_launch_cost.py`.
@@ -1286,15 +1294,36 @@ aws cloudwatch put-metric-alarm \
   --evaluation-periods 1 \
   --threshold 250 \
   --comparison-operator GreaterThanThreshold \
-  --treat-missing-data notBreaching \
+  --treat-missing-data missing \
   --alarm-actions "$TOPIC_ARN"
 
-# Verify — StateValue should be OK (or INSUFFICIENT_DATA for up to ~24h after enabling
-# billing alerts). ⚠️ If it is STILL InsufficientData after a day, the billing-preferences
-# tick above was not applied and the alarm is watching nothing.
+# 🔴🔴 `--treat-missing-data missing` IS LOAD-BEARING AND WAS WRONG IN THE FIRST CUT OF THIS DOC.
+#
+# It originally said `notBreaching`, and the result (measured 2026-08-08) was an alarm sitting at
+# **StateValue: OK** while `AWS/Billing EstimatedCharges` DID NOT EXIST — because billing alerts had
+# never been enabled. `notBreaching` converts "I can see nothing" into "everything is fine", so the
+# alarm reported green while watching a metric that was not there. A guard that cannot fail,
+# displaying success: strictly worse than no alarm, because it reads as covered.
+#
+# Its own StateReason gave it away and is worth recognising verbatim:
+#   "no datapoints were received for 1 period and 1 missing datapoint was treated as [NonBreaching]"
+#
+# With `missing`, an absent metric shows as INSUFFICIENT_DATA — visibly not-OK, which is the honest
+# state and the repo's standing rule that an UNEVALUABLE check is never scored healthy (NF1.7 (a)).
+# ⛔ Do not use `breaching` either: that pages immediately and forever until the metric appears.
+
+# ⭐ VERIFY THE METRIC EXISTS — DO NOT VERIFY BY READING THE ALARM STATE. `INSUFFICIENT_DATA` means
+#    both "not populated yet" and "will never exist", and (as above) a mis-set treat-missing-data
+#    can render the second case as OK. `list-metrics` answers it definitively and immediately:
+aws cloudwatch list-metrics --region us-east-1 \
+  --namespace AWS/Billing --metric-name EstimatedCharges --output table
+#   EMPTY  ⇒ billing alerts are NOT enabled. The alarm can never fire. Go tick the preference.
+#   A row ⇒ enabled; the alarm reaches OK on its own (metric can take ~24h to first appear).
+
 aws cloudwatch describe-alarms --region us-east-1 \
   --alarm-names credence-prod-billing-over-250 \
-  --query 'MetricAlarms[].{Name:AlarmName,State:StateValue,Threshold:Threshold}' --output table
+  --query 'MetricAlarms[].{Name:AlarmName,State:StateValue,Missing:TreatMissingData,Threshold:Threshold}' \
+  --output table
 ```
 
 ### 3. Cost Anomaly Detection — free, and the FAST signal  ▸ LAPTOP
