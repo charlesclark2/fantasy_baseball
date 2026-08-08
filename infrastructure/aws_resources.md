@@ -1371,6 +1371,25 @@ Rate-limit tuning knobs on the same function (all optional; defaults in
 `app/backend/services/cost_guardrails.py`): `COST_RL_PUBLIC_BURST` (30),
 `COST_RL_PUBLIC_PER_SECOND` (0.5), `COST_RL_AUTH_BURST` (60), `COST_RL_AUTH_PER_SECOND` (2.0).
 
+⚠️⚠️ **THE CDN COLLAPSES EVERY ANONYMOUS VISITOR ONTO A HANDFUL OF VERCEL EGRESS IPs, AND THE
+PER-IP LIMITER SEES THOSE, NOT THE VISITORS.** Once the front-end half deploys (`dev` → `main`), an
+anonymous cache MISS reaches us as browser → Vercel CDN → Vercel function → API Lambda, so the
+Lambda's `sourceIp` is Vercel's, and **all CDN-origin traffic shares ONE bucket**. This is a direct
+consequence of the CDN design and it is the one interaction that could make the two guardrails fight
+each other: throttle the CDN and the board goes stale or blank for *everyone*, which is exactly the
+outage the degrade switch exists to avoid.
+
+The arithmetic says it is comfortable, and — the part that matters — **it does not get worse as
+traffic grows**: cache misses are bounded by `(TTL windows × cache keys × POPs)`, ≈0.1 req/s
+sustained against the 0.5/s allowance, and that ceiling is independent of visitor count. The
+residual risk is a burst, not a trend: a simultaneous multi-POP expiry can spend the burst-30.
+
+**Watch for it right after the front-end deploys:** errors from `/api/public/*` (the route surfaces
+an upstream 429 as a 502) or `ThrottleCount` rising with no matching visitor spike. **The fix is one
+env var and no code deploy** — set `COST_RL_PUBLIC_PER_SECOND=2.0` via the §5 procedure. Do NOT
+"fix" it by having the CDN route forward the visitor's IP: that value is caller-controlled and
+trusting it re-opens the spoofing bypass the limiter's IP-precedence order exists to close.
+
 ⚠️ These are **not** in `env.required` on purpose — every one has a safe in-code default, and adding
 a required key means the next deploy FAILS until the box `.env` is hand-edited (the recurring
 one-logical-thing-many-owners trap). `COST_DEGRADE_MODE` unset simply means "off".
