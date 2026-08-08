@@ -1238,9 +1238,45 @@ echo "MonitorArn: $MONITOR_ARN"
 #   aws ce create-anomaly-monitor --region us-east-1 \
 #     --anomaly-monitor '{"MonitorName":"credence-prod-services","MonitorType":"DIMENSIONAL","MonitorDimension":"SERVICE"}'
 
-# 2. Check whether it already has a subscription, so this does not add a duplicate email.
+# 2. Check the existing SUBSCRIPTION before creating one.
+#
+# 🔴 MEASURED 2026-08-08: this account already has `Default-Services-Subscription` (DAILY) —
+#    AWS auto-creates it when it auto-enables Cost Anomaly Detection. ⇒ the action here is almost
+#    certainly UPDATE, not CREATE. Two subscriptions on one monitor means two emails per anomaly,
+#    which is how a monitor gets muted.
+#
+# ⚠️ AND THE SUMMARY VIEW HIDES THE ONLY TWO FIELDS THAT MATTER. `{Name, Frequency}` looks healthy
+#    for a subscription that notifies NOBODY: an auto-created default often has an EMPTY
+#    `Subscribers` list and surfaces only in the console. That is a detector that runs and pages
+#    no one — the E11.30 shape exactly (the detection existed for days; the page never fired).
+#    A percentage-based default `ThresholdExpression` is the second trap: on a small bill a
+#    routine $2 → $6 Lambda blip is +200%, so it fires constantly and gets ignored.
+#    ⇒ ALWAYS inspect Subscribers + ThresholdExpression, never just Name/Frequency.
 aws ce get-anomaly-subscriptions --region us-east-1 \
-  --query 'AnomalySubscriptions[].{Name:SubscriptionName,Freq:Frequency}' --output table
+  --query 'AnomalySubscriptions[].{Name:SubscriptionName,Freq:Frequency,Arn:SubscriptionArn,Subs:Subscribers,Threshold:ThresholdExpression,Monitors:MonitorArnList}' \
+  --output json
+
+# 2b. If it exists but does not notify you (or uses a percentage threshold), UPDATE it:
+SUB_ARN=$(aws ce get-anomaly-subscriptions --region us-east-1 \
+  --query 'AnomalySubscriptions[?SubscriptionName==`Default-Services-Subscription`]|[0].SubscriptionArn' \
+  --output text)
+
+aws ce update-anomaly-subscription --region us-east-1 \
+  --subscription-arn "$SUB_ARN" \
+  --subscribers "[{\"Type\":\"EMAIL\",\"Address\":\"$EMAIL\",\"Status\":\"CONFIRMED\"}]" \
+  --threshold-expression '{
+    "Dimensions": {
+      "Key": "ANOMALY_TOTAL_IMPACT_ABSOLUTE",
+      "MatchOptions": ["GREATER_THAN_OR_EQUAL"],
+      "Values": ["25"]
+    }
+  }'
+
+# Why $25 ABSOLUTE and not a percentage: it is noise against the ~$120 baseline, but the $3,210
+# scrape scenario burns ~$107/day, so it clears the bar on day ONE. That is the entire reason to
+# run a daily detector alongside the monthly $250 budget — the budget confirms, this one warns.
+
+# 2c. ONLY if step 2 returned no subscription at all, create one: ─────────────────────────────
 
 aws ce create-anomaly-subscription --region us-east-1 \
   --anomaly-subscription "{
