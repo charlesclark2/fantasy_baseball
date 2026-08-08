@@ -1324,6 +1324,23 @@ aws cloudwatch describe-alarms --region us-east-1 \
   --alarm-names credence-prod-billing-over-250 \
   --query 'MetricAlarms[].{Name:AlarmName,State:StateValue,Missing:TreatMissingData,Threshold:Threshold}' \
   --output table
+
+# ⚠️ A STATE READ IMMEDIATELY AFTER AN UPDATE IS STALE — DO NOT TREAT IT AS THE NEW CONFIG'S VERDICT.
+# Per AWS: "When you update an existing alarm, its state is left unchanged, but the update
+# completely overwrites the previous configuration." So re-putting the alarm with the corrected
+# `--treat-missing-data missing` leaves the old `OK` sitting there, and with `--period 21600` the
+# next evaluation is up to SIX HOURS away. Measured 2026-08-08: `Missing: missing` alongside
+# `State: OK` — correct config, stale verdict, and indistinguishable at a glance from the very bug
+# that was just fixed. (Same shape as the mis-set flag above, one layer over: the state field is
+# again the thing you must not verify by.)
+#
+# Clear it rather than waiting. Safe: INSUFFICIENT_DATA fires `insufficient-data-actions`, and none
+# are configured. ⛔ NEVER do this with `--state-value ALARM` — that DOES fire the SNS action and
+# pages a real incident that is not happening.
+aws cloudwatch set-alarm-state --region us-east-1 \
+  --alarm-name credence-prod-billing-over-250 \
+  --state-value INSUFFICIENT_DATA \
+  --state-reason "clearing the stale OK carried over from the previous config"
 ```
 
 ### 3. Cost Anomaly Detection — free, and the FAST signal  ▸ LAPTOP
