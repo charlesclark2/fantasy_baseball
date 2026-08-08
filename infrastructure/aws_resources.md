@@ -1528,8 +1528,31 @@ curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest \
 # (c) The CDN read path really is cached. ⚠️ `www.`, not the apex — and only after dev → main.
 curl -si https://www.credencesports.com/api/public/featured | grep -iE 'HTTP/|cache-control|x-vercel-cache'
 curl -si https://www.credencesports.com/api/public/featured | grep -i 'x-vercel-cache'   # expect HIT
-#   expect: 200 · public, s-maxage=300, stale-while-revalidate=900 · MISS then HIT
 #   a 404 here means the front-end half has not deployed yet (see the warning above), not a bug
+#
+# ✅ VERIFIED 2026-08-08, and 🔴 THE RESULT LOOKS LIKE A FAILURE UNTIL YOU READ IT PROPERLY:
+#
+#     hit 1:  200  age: 322  cache-control: public   x-vercel-cache: STALE
+#     hit 2:  200  age: 0    cache-control: public   x-vercel-cache: HIT
+#     hit 3:  200  age: 2    cache-control: public   x-vercel-cache: HIT
+#
+# ⚠️ `cache-control: public` — WITHOUT the s-maxage / stale-while-revalidate we set. Do NOT read
+#    that as "the header was ignored." Vercel CONSUMES both directives for its own edge cache and
+#    STRIPS them from the client-facing response, which is exactly the behaviour we want: the CDN
+#    holds the copy, the browser does not hold a stale one.
+#
+# ⭐ THE PROOF THE TTL IS REALLY HONOURED IS `age` CROSSING `s-maxage`, NOT THE HEADER. Hit 1 was
+#    age 322 against s-maxage 300 ⇒ past freshness ⇒ served STALE while revalidating in the
+#    background (inside the 900s SWR window); hit 2 then returned age 0, the revalidated object.
+#    A cache that ignored the directives would have no notion of "stale" at 322 seconds, so this
+#    transition — and not a bare HIT — is what actually verifies the configuration.
+#
+# ⏳ AND THE CONSEQUENCE FOR ANYONE DEBUGGING AN UPSTREAM FIX: a change to the underlying payload
+#    can take up to s-maxage + SWR to appear (≈20 min for `/picks/featured`). Bypass with a unique
+#    query string — `?nocache=$RANDOM` — before concluding a fix did not land.
+#
+# Payload fidelity was checked the same way and is byte-identical to the direct API read, which is
+# the property that matters here: the route is a pass-through, not a transform.
 
 # (d) Then exercise §5 above: flip the degrade flag on, confirm the two curls, flip it back OFF.
 ```
