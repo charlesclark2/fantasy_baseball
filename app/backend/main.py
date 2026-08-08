@@ -141,6 +141,21 @@ app.include_router(fantasy_mlb_league.router, dependencies=_paid)
 # require_fantasy_access, no _paid). See fantasy_public.py's module docstring: the public/paid split
 # is enforced by what the export writer will ever emit, not by a runtime check on this router.
 app.include_router(fantasy_public.router)
+# E9.46 — the ONE public current-season fantasy player, for the homepage card. Mounted from its own
+# router object for the same reason as `stripe.public_router`: the exemption stays a visible,
+# single-route mount rather than a flag inside a gated router.
+#
+# ⚠️ THIS ONE IS DIFFERENT FROM EVERY OTHER PUBLIC MOUNT ABOVE and the difference is worth stating
+# here, where someone auditing the gate list will see it: the routers above are public because the
+# DATA behind them is public (a past season the exporter will never write a locked value into).
+# This one reads the LOCKED season's projections and serves real model output. What keeps it safe
+# is bounded scope, not the data layer — exactly one player, a fixed field allow-list, and no
+# caller-supplied parameters. The full argument is in `fantasy_public.py`'s module docstring; ⛔ do
+# not widen it (a player_id/position/limit parameter would turn one public player into the board).
+#
+# 🔒 OPERATOR: like every public route here, the API-Gateway per-route authorizer must ALSO be set
+# to NONE or this 401s before the Lambda is invoked (NF3.2). See infrastructure/aws_resources.md.
+app.include_router(fantasy_public.featured_router)
 
 
 @app.api_route("/health", methods=["GET", "HEAD"], tags=["health"])

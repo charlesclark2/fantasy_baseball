@@ -38,6 +38,7 @@ _HOME_COPY_TS = _REPO / "frontend/lib/home-copy.ts"
 _HOME_PAGE_TSX = _REPO / "frontend/app/page.tsx"
 _PICK_COMPONENT_TSX = _REPO / "frontend/components/home/pick-of-the-day.tsx"
 _NAV_TSX = _REPO / "frontend/components/nav.tsx"
+_FANTASY_CARD_TSX = _REPO / "frontend/components/home/featured-fantasy-player.tsx"
 _FOOTER_TSX = _REPO / "frontend/components/site-footer.tsx"
 _CLAIM_COPY_TS = _REPO / "frontend/lib/fantasy-claim-copy.ts"
 _NF_TR1_SUITE = _REPO / "betting_ml/tests/test_nf_tr1_claim_copy.py"
@@ -218,8 +219,16 @@ def test_an_empty_read_and_a_failed_read_are_different_messages(home_literals):
 def test_both_verticals_are_declared_with_a_cta_and_a_trust_link():
     """The positioning AC as a data assertion. A vertical missing either half is the pre-E9.46
     state for that product: named on the page with no way in, or a way in with no evidence."""
+    # ⚠️ BOUNDED TO THE ARRAY, not "everything after the identifier". The unbounded slice ran to
+    # end-of-file, so `FANTASY_PROOF.cta.href` — the SAME route, declared 60 lines later — satisfied
+    # the rankings assertion and the red-proof break that repointed the actual door stayed GREEN.
+    # A slice wide enough to contain a second copy of what it is looking for cannot fail.
     src = _strip_ts_comments(_HOME_COPY_TS.read_text())
-    verticals = src.split("VERTICALS", 1)[1]
+    verticals = src.split("export const VERTICALS", 1)[1].split("\n]", 1)[0]
+    assert verticals.count("cta:") == 2, (
+        f"expected exactly two vertical doors in the slice, found {verticals.count('cta:')} — the "
+        f"slice bounds are wrong and every assertion below is suspect"
+    )
     for key in ('"betting"', '"fantasy"'):
         assert key in verticals, f"the {key} vertical is not declared in VERTICALS"
     assert '"/fantasy/rankings"' in verticals, "the fantasy door does not point at the free rankings"
@@ -234,9 +243,22 @@ def test_a_gated_trust_link_declares_that_it_is_gated():
     """⭐ `/fantasy/track-record` is genuinely public; `/performance` is behind the auth guard.
     Sending a stranger from a TRUST link into a login wall unannounced is the one surprise a trust
     link cannot afford, so the asymmetry is carried in the data rather than left to the reader."""
+    # ⚠️ ANCHOR INSIDE `VERTICALS` FIRST, and this cost a debugging round worth writing down: the
+    # `VerticalDoor` TYPE declares `key: "betting" | "fantasy"`, so splitting the whole file on
+    # `key: "betting"` lands in the TYPE, not the data — and the slice then ran on to the end of the
+    # FANTASY entry, so the clause read `needsAccount: false` and reported the MLB link as
+    # un-flagged. Same family as NF-TR1's "anchor on `= [`, not on the identifier".
+    #
+    # Sliced FORWARD from each key to the end of its own object literal, because E9.46's revision
+    # put fantasy FIRST (the acquisition priority) — an order-dependent slice would read the wrong
+    # block and pass for the wrong reason.
     src = _strip_ts_comments(_HOME_COPY_TS.read_text())
-    betting = src.split('key: "betting"', 1)[1].split("},\n  {", 1)[0]
-    fantasy = src.split('key: "fantasy"', 1)[1]
+    verticals = src.split("export const VERTICALS", 1)[1]
+    betting = verticals.split('key: "betting"', 1)[1].split("\n  },", 1)[0]
+    fantasy = verticals.split('key: "fantasy"', 1)[1].split("\n  },", 1)[0]
+    assert "trust:" in betting and "trust:" in fantasy, (
+        "the per-vertical slices did not capture a trust block — this clause would be vacuous"
+    )
     assert "needsAccount: true" in betting, (
         "the MLB scorecard link no longer declares that it needs an account, but /performance is "
         "still behind AuthGuard"
@@ -253,10 +275,13 @@ def test_the_home_page_reuses_the_fantasy_canonical_copy_verbatim():
     assert "PRODUCT_HOOK[0].title" in src and "PRODUCT_HOOK[0].detail" in src, (
         "the fantasy door paraphrases the canonical product hook instead of reusing it"
     )
-    page = _strip_ts_comments(_HOME_PAGE_TSX.read_text())
-    assert "DISAGREEMENT_HOOK" in page, (
-        "the home page no longer renders the canonical consensus hook — the click-driver to the "
-        "rankings is the one place a boast would be most tempting"
+    # The hook now renders on the fantasy PROOF card rather than in `page.tsx` — that section IS
+    # the hook instantiated (the player we rank furthest from where the crowd drafts him, with the
+    # drivers behind it), so it is the right home for it. Asserted where it actually renders.
+    card = _strip_ts_comments(_FANTASY_CARD_TSX.read_text())
+    assert "{DISAGREEMENT_HOOK}" in card, (
+        "the fantasy proof no longer renders the canonical consensus hook verbatim — the one place "
+        "on this page a boast would be most tempting"
     )
 
 
@@ -287,10 +312,24 @@ def test_unshipped_roadmap_rows_are_marked_not_live():
     # is written down rather than implied.
     roadmap = src.split("SEASON_ROADMAP", 1)[1].split("= [", 1)[1].split("\n]", 1)[0]
     assert "sport:" in roadmap, "no roadmap rows extracted — this clause would be vacuous"
-    for sport, marker in (("NCAAF", "Aug 29"), ("Game model", "Sep 9")):
-        row = next((ln for ln in roadmap.split("\n") if marker in ln), None)
-        assert row, f"the {sport} teaser row is gone from the roadmap"
-        assert "live: false" in row, f"the {sport} row claims to be live: {row.strip()!r}"
+    for sport, marker in (("NCAAF", "NCAAF"), ("NFL betting intelligence", "Coming this season")):
+        rows = [ln for ln in roadmap.split("\n") if marker in ln]
+        assert rows, f"the {sport} teaser row is gone from the roadmap"
+        for row in rows:
+            if "Coming this season" in row:
+                assert "live: false" in row, f"a coming-soon row claims to be live: {row.strip()!r}"
+
+    # ⚠️ NO DATED PROMISES. "Around Aug 29" is a commitment a visitor can check and find false on
+    # the day; "coming this season" is one we control. Asserted as an absence so a date cannot
+    # creep back in unnoticed.
+    assert not re.search(r"\b(Aug|Sep|August|September)\s*\d", roadmap), (
+        f"a dated launch promise is back on the roadmap: {roadmap.strip()!r}"
+    )
+    # Both un-shipped rows are the SAME product as the live MLB one.
+    assert roadmap.count("Betting intelligence") >= 3, (
+        "the un-shipped rows no longer describe betting intelligence — 'Game analytics' and "
+        "'Game model' both misdescribe what is being built"
+    )
 
 
 def test_the_roadmap_note_refuses_to_promise_picks():
@@ -299,9 +338,14 @@ def test_the_roadmap_note_refuses_to_promise_picks():
     the program does not have."""
     src = _strip_ts_comments(_HOME_COPY_TS.read_text())
     note = src.split("ROADMAP_NOTE", 1)[1].split(";", 1)[0]
-    assert "does not mean picks we say will win" in note, (
-        f"the roadmap note no longer refuses to promise picks: {note!r}"
+    # ⚠️ THE WORDING IS CONSTRAINED BY THE DENYLIST, and that is worth recording before someone
+    # "improves" it back. The first draft read "not a promise of picks that win" — a NEGATION, and
+    # still a red build, because a substring scan cannot see the "not" (the same reason "sure thing"
+    # is unusable even inside a disclaimer). A rewrite must AVOID the denied phrasing, not disclaim it.
+    assert "analysis rather than an assurance of results" in note, (
+        f"the roadmap note no longer refuses to promise results: {note!r}"
     )
+    assert "durable advantage" in note, f"the roadmap note dropped the honest limit: {note!r}"
 
 
 def test_a_coming_soon_row_is_never_rendered_as_a_link():
@@ -358,3 +402,97 @@ def test_the_site_description_makes_no_edge_claim():
         assert "daily edge" not in literal.lower(), f"the site metadata still claims an edge: {literal!r}"
         hits = [t for t in ex._CLAIM_DENYLIST if t in literal.lower()]
         assert not hits, f"the site metadata makes a forbidden claim {hits}: {literal!r}"
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# E9.46 REVISION (2026-08-08) — the fantasy proof, the corrected MLB badge, and the record framing
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_the_fantasy_card_always_renders_the_market_lean_caveat():
+    """⛔ Measured on the live 2026 artifact: ZERO of the 111 players eligible for this card carry
+    `mktLean == "independent"`, because that value is precisely the thin-data rookie case with no
+    driver decomposition — and drivers are required to be featured. So at every position we can
+    feature, our ranking already blends market consensus, and the rank gap is a real disagreement
+    but never an independent one.
+
+    The caveat therefore qualifies the card's headline number and must render UNCONDITIONALLY and
+    INLINE. Behind a disclosure it is a caveat most readers never open."""
+    card = _strip_ts_comments(_FANTASY_CARD_TSX.read_text())
+    assert "{data.leanNote}" in card, "the fantasy card no longer renders the market-lean caveat"
+    assert "<details" not in card.lower(), (
+        "the market-lean caveat appears to have been moved behind a disclosure — it qualifies the "
+        "headline number and has to arrive with it"
+    )
+
+
+def test_the_mlb_badge_describes_what_was_measured():
+    """⭐ The served `conviction_label` is a HARDCODED CONSTANT — the literal "HIGH CONVICTION",
+    stamped on every featured pick in both the serving writer and the API fallback. It classifies
+    nothing, and a bettor reads it as confidence in the result.
+
+    What the row actually satisfies is `|calibrated_win_prob − P(run_diff > 0)| ≤ 0.02`: two
+    INDEPENDENT Credence estimators agreeing with each other, computed without reference to the
+    odds. So the badge must state that, and must not render the served string."""
+    src = _strip_ts_comments(_PICK_COMPONENT_TSX.read_text())
+    assert "{COPY.agreementBadge}" in src, "the MLB badge no longer renders the measured label"
+    assert "{data.conviction_label}" not in src, (
+        "the hardcoded 'HIGH CONVICTION' string is being rendered — it measures nothing and reads "
+        "as a promise about the result"
+    )
+    literals = _ts_string_literals(_HOME_COPY_TS.read_text())
+    badge = next(s for s in literals if "models agree" in s.lower())
+    for inverted in ("disagreement", "high conviction", "market gap"):
+        assert inverted not in badge.lower(), (
+            f"the badge says {inverted!r}, which is not what the flag measures — the flag is our "
+            f"two models AGREEING, and it never looks at the odds"
+        )
+
+
+def test_the_mlb_record_is_described_as_members_only():
+    """⚠️ VERIFIED 2026-08-08: `/picks/scorecard`, `/performance`, `/picks/today` and
+    `/picks/history` all return 401 to an anonymous request. The record is real and graded daily —
+    but it is not reachable without an account, so calling it public would send a cold visitor from
+    a trust link into a login wall."""
+    literals = _ts_string_literals(_HOME_COPY_TS.read_text())
+    joined = " ".join(literals).lower()
+    assert "members' scorecard" in joined, (
+        "the copy no longer says where the MLB record lives"
+    )
+    for overclaim in ("public daily record", "public track record", "publicly available record"):
+        assert overclaim not in joined, (
+            f"the MLB record is advertised as {overclaim!r}, but every record endpoint 401s for an "
+            f"anonymous caller"
+        )
+
+
+def test_the_record_sentence_states_both_halves():
+    """⭐ THE TWO HALVES PULL AGAINST EACH OTHER AND BOTH ARE REQUIRED.
+
+    Copy implying we do not measure ourselves would be as false as copy claiming an edge — the
+    daily model-vs-market record is computed every day, losses included. What it has not shown is a
+    durable advantage over the closing market. Dropping the first half throws away the most credible
+    thing the product has; dropping the second is the overclaim `best_alpha = 0` forbids."""
+    literals = _ts_string_literals(_HOME_COPY_TS.read_text())
+    record = next(s for s in literals if "graded against the market" in s)
+    assert "durable advantage" in record, (
+        f"the record sentence claims the grading without stating its limit: {record!r}"
+    )
+    assert "wins and losses" in record.lower(), (
+        f"the record sentence no longer says the losses are included: {record!r}"
+    )
+
+
+def test_the_retired_tagline_is_scoped_to_the_mlb_product():
+    """"Daily edge, quantified" was the company H1 until this release and is kept as the BETTING
+    product's tagline (operator, 2026-08-08). The regression is it drifting back up into
+    company-wide positioning, where it no longer describes a company that also ships fantasy."""
+    src = _strip_ts_comments(_HOME_COPY_TS.read_text())
+    hero = src.split("export const HERO", 1)[1].split("} as const", 1)[0]
+    assert "edge" not in hero.lower(), f"the retired tagline is back in the hero: {hero!r}"
+
+    layout = _strip_ts_comments((_REPO / "frontend/app/layout.tsx").read_text())
+    assert "daily edge" not in layout.lower(), "the retired tagline is back in the site metadata"
+
+    # And it must still exist for the MLB product, or this is a deletion rather than a scoping.
+    assert 'MLB_PRODUCT_TAGLINE = "Daily edge, quantified."' in src
+    pick = _strip_ts_comments(_PICK_COMPONENT_TSX.read_text())
+    assert "MLB_PRODUCT_TAGLINE" in pick, "the MLB product tagline is not rendered on the MLB block"

@@ -56,7 +56,13 @@ export default defineConfig({
     {
       name: "mobile",
       use: { ...devices["Pixel 7"] },
-      testMatch: /(signup-funnel|expected-points-label)\.spec\.ts/,
+    // ⭐ E9.46 joins for a THIRD reason. The home page is the highest-traffic surface in the
+    // product and its two live cards are the densest layouts on it — the fantasy card alone packs
+    // a four-column rank/ADP/games grid and a three-column format row. Those wrap, overflow or
+    // truncate on a phone in ways `tsc` and `next build` cannot see, and this is the page a cold
+    // visitor from a shared link lands on. `home-mobile.spec.ts` is scoped to what only a small
+    // viewport can tell you; the rest of the home suite stays desktop-only rather than doubling.
+      testMatch: /(signup-funnel|expected-points-label|home-mobile)\.spec\.ts/,
     },
   ],
 

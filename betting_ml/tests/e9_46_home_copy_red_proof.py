@@ -33,6 +33,8 @@ COPY = REPO / "frontend/lib/home-copy.ts"
 PAGE = REPO / "frontend/app/page.tsx"
 PICK = REPO / "frontend/components/home/pick-of-the-day.tsx"
 NAV = REPO / "frontend/components/nav.tsx"
+CARD = REPO / "frontend/components/home/featured-fantasy-player.tsx"
+CARD_MLB = REPO / "frontend/components/home/pick-of-the-day.tsx"
 FOOTER = REPO / "frontend/components/site-footer.tsx"
 LAYOUT = REPO / "frontend/app/layout.tsx"
 NF_TR1 = REPO / "betting_ml/tests/test_nf_tr1_claim_copy.py"
@@ -44,7 +46,7 @@ NF_TR1_SUITE = "betting_ml/tests/test_nf_tr1_claim_copy.py"
 CASES = [
     # ── the denylist actually applies to the betting-side copy ────────────────────────────────
     ("put an edge claim back in the hero", COPY,
-     'headline: "Sports models that admit what they don\'t know.",',
+     'headline: "The number is only half the answer.",',
      'headline: "Daily edge over the market, quantified.",',
      "test_the_home_copy_passes_the_denylist", SUITE),
 
@@ -54,15 +56,15 @@ CASES = [
     # never be dropped from the export's"), so "more accurate" trips the denylist clause above and
     # is invisible to the gate. Breaking a gate clause with a non-gate term proves nothing about
     # the gate; "profitable" is on both lists.
-    ("make the honesty statement a profit claim", COPY,
-     "export const HONESTY_STATEMENT =\n  \"Credence publishes the losses with the wins.",
-     "export const HONESTY_STATEMENT =\n  \"Credence is profitable over the long run. We publish the losses with the wins.",
+    ("make a principle a profit claim", COPY,
+     '    title: "We grade ourselves in public",',
+     '    title: "We are profitable in public",',
      "test_the_governance_gate_passes_the_home_copy", SUITE),
 
     # ── the pick of the day is a demonstration, not a tout ────────────────────────────────────
     ("drop the not-a-recommendation disclaimer", COPY,
-     "  frame:\n    \"This is a demonstration, not a recommendation.",
-     "  frame:\n    \"This is today's standout.",
+     '    "A demonstration, not a recommendation. Each day',
+     '    "Each day',
      "test_the_pick_is_framed_as_a_demonstration", SUITE),
 
     ("call the gap an edge again", COPY,
@@ -81,7 +83,7 @@ CASES = [
      "test_an_empty_read_and_a_failed_read_are_different_messages", SUITE),
 
     ("assert a verdict instead of a difference", COPY,
-     '    "The distance between our probability and the market\'s implied probability.',
+     '    "The distance between our probability and the market\'s de-vigged consensus probability.',
      '    "Where the market is mispriced relative to our probability.',
      "test_the_pick_block_never_claims_an_advantage", SUITE),
 
@@ -92,14 +94,45 @@ CASES = [
      "test_both_verticals_are_declared_with_a_cta_and_a_trust_link", SUITE),
 
     ("hide that the MLB scorecard needs an account", COPY,
-     'trust: { label: "How we have graded out", href: "/performance", needsAccount: true },',
-     'trust: { label: "How we have graded out", href: "/performance", needsAccount: false },',
+     'trust: { label: "How we grade out", href: "/performance", needsAccount: true },',
+     'trust: { label: "How we grade out", href: "/performance", needsAccount: false },',
      "test_a_gated_trust_link_declares_that_it_is_gated", SUITE),
 
     ("paraphrase the canonical fantasy hook instead of reusing it", COPY,
      "    headline: PRODUCT_HOOK[0].title,\n    detail: PRODUCT_HOOK[0].detail,",
      '    headline: "Rankings for your league",\n    detail: "Every projection recomputed for your settings.",',
      "test_the_home_page_reuses_the_fantasy_canonical_copy_verbatim", SUITE),
+
+    # E9.46 revision — the new clauses.
+    # ⚠️ BROKEN BY DELETING THE RENDER, not by gating it behind `false`. The first attempt did the
+    # latter and stayed GREEN — correctly: a SOURCE scan cannot see a render that is still present
+    # but unreachable. That variant is covered at the render level instead, by
+    # `home-positioning.spec.ts`'s "the rank gap never ships without its market-lean caveat", which
+    # reads the actual DOM. Neither check implies the other and both are required.
+    ("drop the market-lean caveat from the fantasy card", CARD,
+     "                {data.leanNote}",
+     "                {null}",
+     "test_the_fantasy_card_always_renders_the_market_lean_caveat", SUITE),
+
+    ("render the hardcoded conviction label instead of the measured one", CARD_MLB,
+     "                  {COPY.agreementBadge}",
+     "                  {data.conviction_label}",
+     "test_the_mlb_badge_describes_what_was_measured", SUITE),
+
+    ("let the MLB record be described as public", COPY,
+     "the full daily record is on the members' scorecard",
+     "the full daily record is public",
+     "test_the_mlb_record_is_described_as_members_only", SUITE),
+
+    ("drop the honest limit from the record sentence", COPY,
+     " What that record has not shown is a durable advantage over the closing market, and we would rather say so here than let the card imply otherwise.",
+     "",
+     "test_the_record_sentence_states_both_halves", SUITE),
+
+    ("lift the retired tagline back into the hero", COPY,
+     '  headline: "The number is only half the answer.",',
+     '  headline: "Daily edge, quantified.",',
+     "test_the_retired_tagline_is_scoped_to_the_mlb_product", SUITE),
 
     ("drop the home page from the marketing-surface registry", NF_TR1,
      "_MARKETING_SURFACES = (_UPGRADE_BANNER_TSX, _SUBSCRIBE_TSX, _HOME_PAGE_TSX)",
@@ -110,19 +143,26 @@ CASES = [
     # something rather than merely existing: strand the home page's only route to the evidence and
     # require NF-TR1's link clause — not E9.46's — to catch it.
     ("strand the evidence — remove the home page's link to the track record", PAGE,
-     "              href={TRACK_RECORD_TRUST_LINK.href}",
-     '              href="/fantasy/projections"',
+     "          href={TRACK_RECORD_TRUST_LINK.href}",
+     '          href="/fantasy/projections"',
      "test_the_marketing_surfaces_link_to_the_track_record", NF_TR1_SUITE),
 
     # ── the roadmap is honest ─────────────────────────────────────────────────────────────────
     ("claim NCAAF is already live", COPY,
-     '{ sport: "NCAAF", what: "Game analytics", when: "Around Aug 29", live: false },',
-     '{ sport: "NCAAF", what: "Game analytics", when: "Around Aug 29", live: true },',
+     '{ sport: "NCAAF", what: "Betting intelligence", when: "Coming this season", live: false },',
+     '{ sport: "NCAAF", what: "Betting intelligence", when: "Coming this season", live: true },',
      "test_unshipped_roadmap_rows_are_marked_not_live", SUITE),
 
-    ("let the roadmap promise winning picks", COPY,
-     "It does not mean picks we say will win",
-     "It means picks, and they are coming",
+    # ⭐ THE OPERATOR'S OWN CORRECTION, pinned: a dated launch promise is a commitment a visitor can
+    # check and find false on the day, which "coming this season" is not.
+    ("put a dated launch promise back on the roadmap", COPY,
+     '{ sport: "NCAAF", what: "Betting intelligence", when: "Coming this season", live: false },',
+     '{ sport: "NCAAF", what: "Betting intelligence", when: "Around Aug 29", live: false },',
+     "test_unshipped_roadmap_rows_are_marked_not_live", SUITE),
+
+    ("let the roadmap promise results", COPY,
+     "They are analysis rather than an assurance of results",
+     "They are the picks you have been waiting for",
      "test_the_roadmap_note_refuses_to_promise_picks", SUITE),
 
     ("turn a coming-soon teaser into a link", PAGE,

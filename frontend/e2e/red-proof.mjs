@@ -407,6 +407,57 @@ const CASES = [
     to: '    gap: "Edge",',
     grep: "as a bet to place",
   },
+
+  // ══ E9.46 revision (2026-08-08) — fantasy-first, and the three factual corrections ══════════
+  {
+    id: "home-fantasy-proof-missing",
+    shipped: "E9.46 revision — pre-emptive: the fantasy product with no concrete demonstration",
+    // Fantasy is the acquisition priority, and before this revision it had a text-only treatment
+    // while MLB got the one real card. A page that DESCRIBES personalisation instead of showing it
+    // is the defect; nothing in tsc or next build can see the difference.
+    detail: "Removes the fantasy player card, leaving the fantasy pitch as prose only.",
+    file: "app/page.tsx",
+    from: "        <FeaturedFantasyPlayer />\n",
+    to: "",
+    grep: "renders a real player",
+  },
+  {
+    id: "home-mlb-proof-first",
+    shipped: "E9.46 revision — pre-emptive: the MLB card back above the fantasy card",
+    // The ordering is a product decision (fantasy is the acquisition priority), and it is invisible
+    // to every gate except a geometric read of the rendered page.
+    detail: "Swaps the two product proofs so MLB leads again.",
+    file: "app/page.tsx",
+    from: "        <FeaturedFantasyPlayer />\n        {/* The MLB proof renders",
+    to: "        {/* The MLB proof renders",
+    grep: "FANTASY proof comes before",
+  },
+  {
+    id: "home-conviction-label-restored",
+    shipped: "E9.46 revision — the hardcoded 'HIGH CONVICTION' badge, which was live until this release",
+    // ⚠️ THIS ONE ACTUALLY SHIPPED. `conviction_label` is a HARDCODED CONSTANT stamped on every
+    // featured pick, so the badge classified nothing — and a bettor reads "high conviction" as
+    // confidence that the team wins, which is the exact claim best_alpha=0 forbids. It is
+    // denylist-clean, it types, it builds, and only an assertion naming it can catch it.
+    detail: "Renders the served conviction_label instead of the measured model-agreement label.",
+    file: "components/home/pick-of-the-day.tsx",
+    from: "                  {COPY.agreementBadge}",
+    to: "                  {data.conviction_label}",
+    grep: "never says HIGH CONVICTION",
+  },
+  {
+    id: "home-fantasy-lean-caveat-dropped",
+    shipped: "E9.46 revision — pre-emptive: the rank gap presented as an independent read",
+    // Measured on the live artifact: ZERO of the 111 eligible players have mktLean 'independent',
+    // so our ranking always blends market consensus at the positions we can feature. Showing the
+    // gap without the caveat overstates what it means — and the copy stays denylist-clean either
+    // way, so only an assertion naming the caveat can see it.
+    detail: "Stops rendering the market-lean caveat beside the rank gap.",
+    file: "components/home/featured-fantasy-player.tsx",
+    from: "                {data.leanNote}",
+    to: "                {null}",
+    grep: "market-lean caveat",
+  },
   {
     id: "home-blog-back-in-primary-nav",
     shipped: "E9.46 — the pre-story nav, where the blog sat beside the products",
