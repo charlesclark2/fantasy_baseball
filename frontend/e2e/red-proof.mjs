@@ -514,6 +514,19 @@ const CASES = [
     grep: "still bounces a logged-out visitor",
   },
   {
+    id: "player-page-content-re-split",
+    shipped: "NF3.2's state: a public player ROUTE whose CONTENT was still split by entitlement",
+    // ⚠️ THE FAILURE MODE THAT LOOKS LEAST LIKE ONE. The route stays public, the page renders, the
+    // header and bio are right, nothing errors and no test that asserts "the player page loads"
+    // notices — a visitor simply never sees the projection they came for. `route-integrity` passes,
+    // `tsc` passes, and the API is serving the full payload the whole time.
+    detail: "Sends every visitor back to the track-record-only view, as NF3.2 did.",
+    file: "components/fantasy/player-page.tsx",
+    from: "  return <PlayerView playerId={playerId} />",
+    to: "  return <TrackRecordOnlyView playerId={playerId} />",
+    grep: "player page renders the real projection",
+  },
+  {
     id: "boundary-not-stated",
     shipped: "pre-emptive: a complete free board with nothing to buy",
     // Not a rendering fault — the page looks perfect. It is a POSITIONING fault: a complete-looking

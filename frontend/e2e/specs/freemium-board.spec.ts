@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import { collectPageErrors, mockApi } from "../support/api-mock"
+import { FIXTURES, collectPageErrors, mockApi } from "../support/api-mock"
 import { forbiddenPhrasesIn } from "../support/claim-denylist"
 import {
   LOCK_CHIP,
@@ -92,6 +92,51 @@ test.describe("the free generic board", () => {
       expectNoPageErrors(errors)
     })
   }
+
+  test("a player page renders the real projection for a logged-out visitor", async ({ page }) => {
+    // ⭐ THE SURFACE WITH THE LARGEST BEHAVIOUR CHANGE IN THIS STORY, and the one a source guard
+    // can say least about. NF3.2 made the ROUTE public but split the CONTENT by entitlement: a
+    // non-entitled visitor got identity + past seasons only. That dispatch is gone — everyone now
+    // gets the full page — and "everyone gets the full page" is a claim only a render can settle.
+    //
+    // It also exercises the new fall-through: the branch key changed from WHO IS ASKING to WHAT WE
+    // HAVE, so a hooks-order mistake in the rewrite would surface here as a React error rather
+    // than as a type error.
+    const errors = collectPageErrors(page)
+    const mock = await mockApi(page)
+
+    // The first row of the served board — read from the fixture rather than hardcoded, so a
+    // re-publish cannot silently point this at a player who is no longer in the export.
+    const { id, name } = FIXTURES.projectionsEntitled().players[0]
+    await page.goto(`/fantasy/player/${id}`)
+
+    await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible()
+    expect(page.url(), "a logged-out visitor was redirected off a player page").toContain(id)
+    expect(
+      await page.locator(LOCK_CHIP).count(),
+      "a padlock rendered on a free player page",
+    ).toBe(0)
+
+    // The projection itself, not merely the identity header — identity alone is exactly what the
+    // retired public view showed, so a page rendering only that would look right and be the bug.
+    //
+    // ⚠️ CASE-INSENSITIVE, deliberately: this page styles the section heading with `uppercase`, so
+    // `innerText` returns "FANTASY POINTS · EXPECTED PTS" and an exact-case match fails on a page
+    // that is working. A first cut asserted the literal and reported a defect that did not exist.
+    const text = await page.locator("body").innerText()
+    expect(text.toLowerCase(), "the player page shows no expected-points figure")
+      .toContain("expected pts")
+
+    // The rate WITH ITS VALUE, not just its label — a label over a missing number is the shape a
+    // wiring bug takes here (the tile's `sub` line is dropped entirely when the value is null), and
+    // it would leave the page looking finished.
+    expect(text, "the full-season rate is missing from the player page")
+      .toMatch(/Full-season rate: \d[\d,]*(\.\d+)?/)
+
+    await expectNoNaN(page)
+    expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
 
   test("Player Search is reachable logged out, so a player page has a door", async ({ page }) => {
     // It is the only route to a player page that does not start on a board. Gating it while the
