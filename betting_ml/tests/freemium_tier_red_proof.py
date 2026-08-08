@@ -40,6 +40,7 @@ LEAGUE_BOARD_PAGE = REPO / "frontend/app/fantasy/league-board/page.tsx"
 
 SUITE = "betting_ml/tests/test_freemium_tier.py"
 E9_56_SUITE = "betting_ml/tests/test_e9_56_entitlement.py"
+E9_45_SUITE = "betting_ml/tests/test_fantasy_entitlement.py"
 
 # (label, file, patches, _unused, test_that_must_go_red, suite)
 #   `patches` is a LIST of (find, replace) pairs applied in order. A list rather than one pair
@@ -74,6 +75,18 @@ CASES = [
        "    return {**entitlement.open_projections_payload(data), 'vip': _e.fantasy}")],
      None,
      "test_the_generic_board_is_byte_identical_for_every_caller", SUITE),
+
+    # The SAME break, seen from the signature clause one suite over. A `Request` parameter
+    # reappearing is the first step of re-gating the free board, and it type-checks, builds and
+    # passes every other test in that module — the handler simply regains the ability to tell
+    # callers apart. Both clauses are wanted: this one fails on the CAPABILITY, the one above fails
+    # on the OBSERVED payload, and a break could plausibly produce either without the other.
+    ("re-give the projections handler a Request", ROUTER,
+     [("def nfl_projections(season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):",
+       "def nfl_projections(request: 'Request', "
+       "season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):")],
+     None,
+     "test_the_generic_board_handlers_take_no_caller", E9_45_SUITE),
 
     # ── the no-regression half: what must STAY paid ───────────────────────────────────────────
     # ⚠️ THE FIRST ATTEMPT DROPPED THE ROUTER-LEVEL `dependencies=` AND THE CLAUSE STAYED GREEN —

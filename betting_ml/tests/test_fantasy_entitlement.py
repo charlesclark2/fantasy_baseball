@@ -172,42 +172,51 @@ def board_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
-# E9.56 — these three handlers became ENTITLEMENT-AWARE and now take the `Request` (they serve a
-# locked payload rather than 403-ing a non-entitled caller), so each call passes an ENTITLED request:
-# what these tests have always asserted is that a caller who IS entitled gets the real blob, and that
-# is exactly the assertion to preserve. The locked branch, the redaction and the forged-token path
-# are covered in `test_e9_56_entitlement.py`.
-_ENTITLED = lambda: _request(ctx_groups=["subscriber"])  # noqa: E731
+# ⭐ THESE THREE HANDLERS TAKE NO CALLER AT ALL SINCE THE FREEMIUM BUILD, and the missing parameter
+# is the point rather than an accident. They are `Capability.GENERIC_BOARD` — free for everyone —
+# so a handler that cannot see who is asking cannot branch on them, which is the strongest available
+# statement that these payloads are entitlement-independent.
+#
+# 🗄️ HISTORY, because the signature has now moved twice and each move was a real change:
+#   · pre-E9.56 they took no Request and 403'd a non-entitled caller at the ROUTER.
+#   · E9.56 gave them a Request so they could serve a LOCKED payload instead of a 403.
+#   · the freemium build removed it again — nothing is locked, so nothing needs the caller.
+#
+# What these tests have always asserted is the READ ITSELF: the right blob, the right container
+# type, and 404/422 where they belong. That is preserved verbatim. The free/paid split is asserted
+# in `test_freemium_tier.py`; `test_e9_56_entitlement.py` keeps the retired redaction's unit tests.
 
 
 def test_manifest_endpoint_serves_local(board_dir):
-    out = fantasy.nfl_manifest(_ENTITLED(), season=2026)
+    out = fantasy.nfl_manifest(season=2026)
     assert out["season"] == 2026
-    assert out["locked"] is False  # E9.56: additive envelope, entitled caller
+    # The additive envelope survives the flip and now says `false` for everyone — dropping the key
+    # would be the NF-C0 break, since the deployed client branches on it.
+    assert out["locked"] is False
 
 
 def test_board_endpoint_serves_local(board_dir):
-    out = fantasy.nfl_board(_ENTITLED(), config="full_ppr", size=12, season=2026)
-    # Unchanged for an entitled caller — still the raw list, byte-for-byte (NF-C0: the container
-    # type and contents must not move for anyone who could already read it).
+    out = fantasy.nfl_board(config="full_ppr", size=12, season=2026)
+    # Still the raw list, byte-for-byte (NF-C0: the container type and contents must not move for
+    # anyone who could already read it).
     assert out == [{"id": "1", "pos": "RB"}]
 
 
 def test_board_endpoint_404_on_missing(board_dir):
     with pytest.raises(HTTPException) as exc:
-        fantasy.nfl_board(_ENTITLED(), config="superflex", size=10, season=2026)
+        fantasy.nfl_board(config="superflex", size=10, season=2026)
     assert exc.value.status_code == 404
 
 
 def test_board_endpoint_rejects_path_traversal(board_dir):
     with pytest.raises(HTTPException) as exc:
-        fantasy.nfl_board(_ENTITLED(), config="../../etc/passwd", size=12, season=2026)
+        fantasy.nfl_board(config="../../etc/passwd", size=12, season=2026)
     assert exc.value.status_code == 422
 
 
 def test_projections_endpoint_serves_local(board_dir):
     # NF3 — the browse Projections surface reads this blob.
-    out = fantasy.nfl_projections(_ENTITLED(), season=2026)
+    out = fantasy.nfl_projections(season=2026)
     assert out["season"] == 2026
     assert out["players"] == [{"id": "1", "pos": "RB"}]
 
@@ -215,23 +224,27 @@ def test_projections_endpoint_serves_local(board_dir):
 def test_projections_endpoint_404_on_missing(board_dir):
     # The blob is exported separately from the boards, so a season with boards but no projections
     # must 404 (the UI shows an honest empty state) rather than 500.
-    #
-    # ⚠️ E9.56: 2025 is a FREE season, so this also pins that a missing PAST-season blob 404s rather
-    # than falling into the locked branch — "not published" and "paid" must stay distinguishable.
     with pytest.raises(HTTPException) as exc:
-        fantasy.nfl_projections(_ENTITLED(), season=2025)
+        fantasy.nfl_projections(season=2025)
     assert exc.value.status_code == 404
 
 
-def test_a_non_entitled_caller_is_not_403d_but_locked(board_dir):
-    """E9.56 — the behaviour change, pinned here beside the endpoints it changed.
+def test_the_generic_board_handlers_take_no_caller(board_dir):
+    """🗄️ REPLACES `test_a_non_entitled_caller_is_not_403d_but_locked`, which asserted the E9.56
+    behaviour this story retired (a non-entitled caller got a 200 with the values removed).
 
-    These three reads used to 403 a non-entitled caller. They now return 200 with the values
-    removed, because the operator's rule is that a locked 2026 point renders a "subscribe to
-    unlock" CTA rather than being blank or absent."""
-    out = fantasy.nfl_projections(_request(ctx_groups=["beta_tester"]), season=2026)
-    assert out["locked"] is True
-    assert all("fpPpr" not in p for p in out["players"])
+    ⭐ Kept as a clause rather than deleted, because the *signature* is load-bearing and nothing else
+    in this file would notice it changing. A `Request` parameter reappearing here is the first step
+    of re-gating the free board, and it would type-check, build and pass every other test in this
+    module — the handlers would simply start being able to tell callers apart again."""
+    import inspect
+
+    for handler in (fantasy.nfl_manifest, fantasy.nfl_projections, fantasy.nfl_board):
+        params = inspect.signature(handler).parameters
+        assert "request" not in params, (
+            f"{handler.__name__} takes a Request again — a generic-board handler that can see its "
+            f"caller can branch on them; see test_freemium_tier.py"
+        )
 
 
 def test_router_declares_the_fantasy_gate():
