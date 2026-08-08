@@ -9,7 +9,7 @@
   "ci_low": 0.4505,
   "ci_high": 0.5277,
   "conviction_label": "HIGH CONVICTION",
-  "ai_summary": "Model assigns 48.9% win probability — a +3.2pp edge over the Bovada closing line.",
+  "ai_summary": "Model assigns 48.9% win probability \u2014 a +3.2pp edge over the Bovada closing line.",
   "yesterday": {
     "matchup": "DET @ SEA",
     "market_type": "totals",
@@ -22,6 +22,7 @@
   "home_team": "WSH",
   "away_team": "CIN",
   "pick_side": "away",
+  "total_line": null,
   "model_narrative": "In the Cincinnati Reds at Washington Nationals game, the model assigns Washington Nationals a win probability of 48.9% and Cincinnati Reds a win probability of 51.1%. This means the model expects Cincinnati Reds to win slightly more often than Washington Nationals. The model-vs-market divergence, or \"edge,\" shows a 3.2% difference in favor of Cincinnati Reds compared to market probabilities, indicating that the model sees a slight advantage for the Reds over what the market does. This edge is a measure of disagreement between the model and the market but does not guarantee profit. The top factors driving this moneyline prediction include the expected wOBA allowed by each team's bullpen and the home team's elo rating, with lower expected wOBA and higher elo generally decreasing the prediction of a win for the respective team. Additionally, CLV confidence suggests that there is a 58.2% probability that the closing line will move toward the model's pick, which is a transparency measure rather than a signal for a winning bet.\n\nFor the total runs prediction, the model sets the total line at 8.925 runs, with a model probability of 54.1% for the over (total runs exceeding 8.925) and the market at 50.8%. This results in a model-vs-market divergence of +3.3%, meaning the model favors a slightly higher total than the market. The key drivers for this prediction include the home team's bullpen's expected season-normalized wOBA, the home starter's recent whiff rate, and the home starter's slider effectiveness, all of which increase the prediction of over total runs. Additionally, the number of away team losses decreases the prediction of over total runs. This edge reflects the model's perspective on the game's scoring potential but does not imply a winning bet.",
   "top_drivers": null,
   "top_drivers_h2h": [

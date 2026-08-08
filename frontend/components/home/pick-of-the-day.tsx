@@ -7,18 +7,31 @@ import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ProbabilityBar } from "@/components/probability-bar"
 import { cdnFetch } from "@/lib/api"
-import { PICK_OF_THE_DAY as COPY } from "@/lib/home-copy"
+import { MLB_PRODUCT_TAGLINE, MLB_PROOF as COPY } from "@/lib/home-copy"
 
 /**
  * E9.46 — the live model-vs-market element on the home page.
  *
  * ══ WHAT THIS BLOCK IS, AND THE ONE THING IT IS NOT ═══════════════════════════════════════════
  *
- * It is a DEMONSTRATION of the product: today's widest disagreement between our model and the
- * market, with the uncertainty around our estimate and yesterday's graded result beside it. It is
- * not a recommendation, and the difference is not a matter of tone — `best_alpha = 0`, the betting
- * program has six recorded no-edge results, so a home page that told a stranger to place this bet
- * would be making the one claim this company has repeatedly measured and failed to find.
+ * It is a DEMONSTRATION of the product: one game's model-vs-market read, with the uncertainty
+ * around our estimate and yesterday's graded result beside it. It is not a recommendation, and the
+ * difference is not a matter of tone — `best_alpha = 0`, the betting program has six recorded
+ * no-edge results, so a home page that told a stranger to place this bet would be making the one
+ * claim this company has repeatedly measured and failed to find.
+ *
+ * ⚠️⚠️ WHICH GAME, EXACTLY. `_FEATURED_TODAY_SERVING_SQL` filters to
+ * `layer4_h2h_conviction_flag = TRUE` — `|calibrated_win_prob − P(run_diff > 0)| ≤ 0.02`
+ * (`predict_today.py`), two independent Credence estimators agreeing with each other, computed
+ * without reference to the odds at all — and then orders by the LARGEST `|our probability − market
+ * consensus|` (`_FEATURED_ORDER_BY`).
+ *
+ * ⏪ It used to order `game_datetime ASC`, the earliest-starting qualifying game, which selected on
+ * nothing but the clock; the first cut of this file described it as the widest gap anyway and was
+ * simply wrong. The operator changed the QUERY (2026-08-08) rather than the copy. Both are now
+ * true, and they are pinned to each other by `test_e9_46_featured_selection.py` — so "widest" is a
+ * supportable word here ONLY while that ORDER BY stands. It is still not a superlative about
+ * QUALITY: biggest gap ≠ best read, and `MLB_PROOF.gapHint` says so on the card itself.
  *
  * `COPY.frame` carries that in words and renders ABOVE the numbers, because a visitor reads the
  * big figure first.
@@ -70,6 +83,7 @@ export type FeaturedPick = {
   home_team?: string | null
   away_team?: string | null
   pick_side?: string | null
+  total_line?: number | null
   yesterday?: {
     matchup: string
     market_type: string
@@ -82,9 +96,18 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <section id="today" className="scroll-mt-20 border-t border-[#262626] py-16 md:py-24">
       <div className="mx-auto max-w-3xl px-4">
-        <p className="text-xs font-semibold uppercase tracking-widest text-[#10b981]">
-          {COPY.eyebrow}
-        </p>
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#10b981]">
+            {COPY.eyebrow}
+          </p>
+          {/* ⚠️ The MLB product's own tagline, kept from the pre-E9.46 hero where it was the
+              COMPANY headline (operator, 2026-08-08). It lives here and only here: scoped to the
+              betting product, and adjacent to `COPY.recordNote` below, which states plainly that no
+              durable advantage over the closing market has been shown. That adjacency is what keeps
+              the word "edge" honest — it names the model-vs-market difference this card quantifies,
+              not a demonstrated advantage. `test_e9_46_home_copy.py` pins the scoping. */}
+          <span className="text-xs italic text-gray-600">{MLB_PRODUCT_TAGLINE}</span>
+        </div>
         {/* ⛔ The frame renders BEFORE the card in every state, including the empty and failed
             ones. It is what makes this a transparency feature rather than a tout, and a state
             that dropped it would be the tout. */}
@@ -106,9 +129,9 @@ function Card({ children, muted = false }: { children: React.ReactNode; muted?: 
   )
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone: string }) {
+function Stat({ label, value, tone, stat }: { label: string; value: string; tone: string; stat: string }) {
   return (
-    <div className="rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
+    <div data-stat={stat} className="rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
       <div className="text-[10px] uppercase tracking-wider text-gray-500">{label}</div>
       <div className={`font-mono text-sm font-semibold ${tone}`}>{value}</div>
     </div>
@@ -178,12 +201,23 @@ export function PickOfTheDay() {
   const ciLow = flip && data.ci_high != null ? 1 - data.ci_high : data.ci_low
   const ciHigh = flip && data.ci_low != null ? 1 - data.ci_low : data.ci_high
 
-  const leanLabel =
-    data.market_type === "h2h"
-      ? (data.pick_side === "away" ? data.away_team : data.home_team) ?? null
-      : data.pick_side
-        ? data.pick_side.charAt(0).toUpperCase() + data.pick_side.slice(1)
-        : null
+  // ⭐ THE LEAN HAS TO NAME THE MARKET'S OWN UNIT, because the card alternates between two markets
+  // that quote different things. For a moneyline that is a team. For a total it is a SIDE AND A
+  // NUMBER: "Our model leans Over" is not a statement — over what? — and the previous version said
+  // exactly that. `total_line` may be absent (an older Lambda, or a row with no consensus line), so
+  // the side alone remains a valid render rather than a crash or a dangling "Over".
+  const isTotals = data.market_type === "totals"
+  const side = data.pick_side
+    ? data.pick_side.charAt(0).toUpperCase() + data.pick_side.slice(1)
+    : null
+  const leanLabel = !isTotals
+    ? (data.pick_side === "away" ? data.away_team : data.home_team) ?? null
+    : side
+      ? data.total_line != null
+        ? `${side} ${data.total_line}`
+        : side
+      : null
+  const market = isTotals ? COPY.markets.totals : COPY.markets.h2h
 
   const pct = (v: number | null | undefined) => (v == null ? null : `${(v * 100).toFixed(1)}%`)
 
@@ -191,9 +225,23 @@ export function PickOfTheDay() {
     <Shell>
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-xs font-medium uppercase tracking-widest text-gray-500">
-            {data.market_type === "h2h" ? "Moneyline" : "Total runs"}
-          </span>
+          {/* ⛔ NOT AN EYEBROW ANY MORE. This used to be small grey uppercase text — fine when the
+              card was always the same market, actively misleading once it alternates, because a
+              returning visitor reads the big percentage against whatever they saw last time. A
+              moneyline probability and an over probability are different quantities. So the market
+              is a first-class badge with its own popover, and it is the first thing on the card. */}
+          <Popover>
+            <PopoverTrigger aria-label={`What ${market.label} means`}>
+              <Badge
+                data-market={data.market_type ?? "unknown"}
+                className="cursor-help border border-[#3f3f46] bg-[#1c1c1c] text-xs font-bold uppercase tracking-widest text-gray-200"
+              >
+                {market.label}
+                <Info className="ml-1 h-3 w-3" />
+              </Badge>
+            </PopoverTrigger>
+            <PopoverContent className="max-w-xs text-xs leading-relaxed">{market.hint}</PopoverContent>
+          </Popover>
           {data.pick_date && (
             <span className="text-xs text-gray-500">
               {new Date(data.pick_date + "T12:00:00").toLocaleDateString("en-US", {
@@ -223,10 +271,34 @@ export function PickOfTheDay() {
         {data.game_time_et && <p className="mt-1 text-sm text-gray-500">{data.game_time_et}</p>}
 
         <div className="mt-5 flex flex-wrap gap-2">
+          {/* ⚠️⚠️ THE SERVED `conviction_label` IS DELIBERATELY NOT RENDERED, and this is the
+              single most important correction in this component.
+
+              It is a HARDCODED CONSTANT — the literal string "HIGH CONVICTION", stamped on every
+              featured pick in both `write_serving_store.py` and the API's own fallback. It
+              classifies nothing. Worse, a bettor reads "high conviction" as "we are confident this
+              team wins", which is the exact claim `best_alpha = 0` forbids.
+
+              What the row actually satisfies is `layer4_h2h_conviction_flag`, defined in
+              `predict_today.py` as `|calibrated_win_prob − P(run_diff > 0)| ≤ 0.02` — two
+              INDEPENDENT Credence estimators agreeing with each other, computed without reference
+              to the odds. So the badge states that, and the popover keeps it from being read as a
+              promise about the result. ("High model disagreement" inverts the flag's meaning
+              outright. "Large model–market gap" is now true of the SELECTION — that is the sort
+              key — but it is not what this BADGE marks, and conflating the eligibility rule with
+              the ordering rule is how the first cut got the description wrong.) */}
           {!data.is_stale && data.conviction_label && (
-            <Badge className="border border-[#10b981]/30 bg-[#10b981]/15 text-xs font-bold uppercase tracking-widest text-[#10b981]">
-              {data.conviction_label}
-            </Badge>
+            <Popover>
+              <PopoverTrigger aria-label="What our models agreeing means">
+                <Badge className="cursor-help border border-[#10b981]/30 bg-[#10b981]/15 text-xs font-bold uppercase tracking-widest text-[#10b981]">
+                  {COPY.agreementBadge}
+                  <Info className="ml-1 h-3 w-3" />
+                </Badge>
+              </PopoverTrigger>
+              <PopoverContent className="max-w-xs text-xs leading-relaxed">
+                {COPY.agreementHint}
+              </PopoverContent>
+            </Popover>
           )}
           {data.is_preliminary && (
             <Badge className="border border-amber-500/25 bg-amber-500/15 text-xs font-semibold text-amber-400">
@@ -237,13 +309,13 @@ export function PickOfTheDay() {
 
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {modelProb != null && (
-            <Stat label={COPY.labels.model} value={pct(modelProb)!} tone="text-white" />
+            <Stat stat="model" label={COPY.labels.model} value={pct(modelProb)!} tone="text-white" />
           )}
           {marketProb != null && (
-            <Stat label={COPY.labels.market} value={pct(marketProb)!} tone="text-gray-400" />
+            <Stat stat="market" label={COPY.labels.market} value={pct(marketProb)!} tone="text-gray-400" />
           )}
           {data.edge != null && (
-            <div className="rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
+            <div data-stat="gap" className="rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
               <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-gray-500">
                 {COPY.labels.gap}
                 {/* A Popover, not a hover tooltip: the E9.63/NF3 lesson is that a hover-only
@@ -265,6 +337,7 @@ export function PickOfTheDay() {
           )}
           {ciLow != null && ciHigh != null && (
             <Stat
+              stat="range"
               label={COPY.labels.range}
               value={`${pct(ciLow)}–${pct(ciHigh)}`}
               tone="text-gray-400"
@@ -313,6 +386,12 @@ export function PickOfTheDay() {
           </div>
         )}
       </Card>
+
+      {/* ⭐ THE RECORD SENTENCE. Two jobs at once: it must not claim an edge, and it must not
+          pretend we fail to measure one. The daily model-vs-market record is real and is a genuine
+          part of the product; what it has not shown is a durable advantage over the closing
+          market. Dropping either half would be a different kind of dishonest. */}
+      <p className="mt-5 text-sm leading-relaxed text-gray-500">{COPY.recordNote}</p>
 
       <p className="mt-4 text-center text-sm">
         <Link

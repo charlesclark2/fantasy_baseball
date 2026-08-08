@@ -34,9 +34,21 @@ export const FIXTURES = {
   trackRecordManifest: () => fixture("fantasy-nfl-track-record-manifest.json"),
   trackRecordSeason: () => fixture("fantasy-nfl-track-record-2025.json"),
   // E9.46 — the home page's live model-vs-market element. A verbatim public capture; ⚠️ its
-  // CONTENT changes every day (it is whichever game currently has the widest gap), so
-  // `home-positioning.spec.ts` asserts against the payload's OWN values and never a literal.
+  // CONTENT changes every day, so `home-positioning.spec.ts` asserts against the payload's OWN
+  // values and never a literal.
+  //
+  // ⚠️ CORRECTED 2026-08-08: this comment used to say "whichever game currently has the widest
+  // gap". It is not. `_FEATURED_TODAY_SERVING_SQL` filters on `layer4_h2h_conviction_flag` (two
+  // independent Credence estimators agreeing within 0.02, computed without reference to odds) and
+  // then orders `game_datetime ASC … LIMIT 1` — so it is the EARLIEST-STARTING qualifying game,
+  // and nothing in the selection looks at the size of the gap at all.
   featuredPick: () => fixture("picks-featured.json"),
+  // E9.46 — the ONE public current-season fantasy player. ⚠️ NOT a capture: the route is not
+  // deployed yet (it 401s until deploy.sh + the API-Gateway NONE change), so this is generated
+  // output of the SHIPPING selector run over the real served board — see
+  // `e2e/fixtures/build-featured-player.py`. Its content changes whenever the board is
+  // re-published, so the specs assert against the payload's OWN values, never a hardcoded name.
+  featuredFantasyPlayer: () => fixture("fantasy-nfl-featured-player.json"),
 }
 
 /** What the fantasy surfaces get back: the locked (anonymous) payload or the entitled one. */
@@ -79,6 +91,7 @@ function payloadFor(pathname: string, entitlement: Entitlement): unknown | undef
   if (pathname === "/fantasy/nfl/track-record/manifest") return FIXTURES.trackRecordManifest()
   if (/^\/fantasy\/nfl\/track-record\/\d{4}$/.test(pathname)) return FIXTURES.trackRecordSeason()
   if (pathname === "/picks/featured") return FIXTURES.featuredPick()
+  if (pathname === "/fantasy/nfl/featured-player") return FIXTURES.featuredFantasyPlayer()
   return undefined
 }
 
@@ -115,6 +128,7 @@ function cdnPathToApiPath(pathname: string): string | undefined {
   if (!pathname.startsWith(CDN_PREFIX + "/")) return undefined
   const rest = pathname.slice(CDN_PREFIX.length + 1)
   if (rest === "featured") return "/picks/featured"
+  if (rest === "featured-player") return "/fantasy/nfl/featured-player"
   if (rest === "manifest") return "/fantasy/nfl/manifest"
   if (rest === "projections") return "/fantasy/nfl/projections"
   if (rest === "board") return "/fantasy/nfl/board"

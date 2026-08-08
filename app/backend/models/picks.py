@@ -189,6 +189,13 @@ class FeaturedPickResponse(BaseModel):
     home_team: str | None = None
     away_team: str | None = None
     pick_side: str | None = None  # 'home'|'away' for h2h; 'over'|'under' for totals
+    # ⭐ E9.46 — the total the 'over'/'under' lean is ABOUT. "Our model leans Over" is not a
+    # statement without it, and the home page now alternates between the two markets, so a visitor
+    # cannot infer the market from habit. NULL for an h2h read, where it would be meaningless.
+    # ⚠️ ADDITIVE by necessity (NF-C0): the deployed frontend must keep rendering if this is absent,
+    # and an older Lambda that does not send it must not break the new one. Both directions hold —
+    # the field is optional here and the component treats a missing line as "show the side alone".
+    total_line: float | None = None
     # Story 30.15 — model explanation
     model_narrative: str | None = None
     top_drivers: list[PickDriver] | None = None

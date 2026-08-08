@@ -33,18 +33,43 @@ COPY = REPO / "frontend/lib/home-copy.ts"
 PAGE = REPO / "frontend/app/page.tsx"
 PICK = REPO / "frontend/components/home/pick-of-the-day.tsx"
 NAV = REPO / "frontend/components/nav.tsx"
+CARD = REPO / "frontend/components/home/featured-fantasy-player.tsx"
+CARD_MLB = REPO / "frontend/components/home/pick-of-the-day.tsx"
 FOOTER = REPO / "frontend/components/site-footer.tsx"
 LAYOUT = REPO / "frontend/app/layout.tsx"
 NF_TR1 = REPO / "betting_ml/tests/test_nf_tr1_claim_copy.py"
 
+PICKS = REPO / "app/backend/routers/picks.py"
+WSS = REPO / "scripts/write_serving_store.py"
+
 SUITE = "betting_ml/tests/test_e9_46_home_copy.py"
 NF_TR1_SUITE = "betting_ml/tests/test_nf_tr1_claim_copy.py"
+SEL_SUITE = "betting_ml/tests/test_e9_46_featured_selection.py"
+
+# The two ORDER BY clauses the featured-selection cases swap between: the shared constant the code
+# uses now, and the pre-2026-08-08 rule that sorted on the clock.
+_START_TIME_RULE = "ORDER BY game_datetime ASC NULLS LAST, game_pk ASC"
+
+# Unique anchor for the ROUTER's today query specifically — `{_FEATURED_ORDER_BY}` appears four
+# times in picks.py, so a bare anchor would patch whichever came first regardless of intent.
+_ROUTER_TODAY_TAIL = """       total_line, market_pref, pick_side
+FROM totals
+{_FEATURED_ORDER_BY}
+LIMIT 1
+\"\"\"
+
+# ⭐⭐ THE CARRY-OVER QUERY"""
+
+# …and for the stale-fallback query, which is the one that was dead in production.
+_ROUTER_STALE_TAIL = """       total_line, market_pref, actual_outcome, pick_side
+FROM totals
+{_FEATURED_ORDER_BY}"""
 
 #: (label, file, old, new, test-name-substring, suite)
 CASES = [
     # ── the denylist actually applies to the betting-side copy ────────────────────────────────
     ("put an edge claim back in the hero", COPY,
-     'headline: "Sports models that admit what they don\'t know.",',
+     'headline: "The number is only half the answer.",',
      'headline: "Daily edge over the market, quantified.",',
      "test_the_home_copy_passes_the_denylist", SUITE),
 
@@ -54,15 +79,15 @@ CASES = [
     # never be dropped from the export's"), so "more accurate" trips the denylist clause above and
     # is invisible to the gate. Breaking a gate clause with a non-gate term proves nothing about
     # the gate; "profitable" is on both lists.
-    ("make the honesty statement a profit claim", COPY,
-     "export const HONESTY_STATEMENT =\n  \"Credence publishes the losses with the wins.",
-     "export const HONESTY_STATEMENT =\n  \"Credence is profitable over the long run. We publish the losses with the wins.",
+    ("make a principle a profit claim", COPY,
+     '    title: "We grade ourselves in public",',
+     '    title: "We are profitable in public",',
      "test_the_governance_gate_passes_the_home_copy", SUITE),
 
     # ── the pick of the day is a demonstration, not a tout ────────────────────────────────────
     ("drop the not-a-recommendation disclaimer", COPY,
-     "  frame:\n    \"This is a demonstration, not a recommendation.",
-     "  frame:\n    \"This is today's standout.",
+     '    "A demonstration, not a recommendation. We look at',
+     '    "We look at',
      "test_the_pick_is_framed_as_a_demonstration", SUITE),
 
     ("call the gap an edge again", COPY,
@@ -81,7 +106,7 @@ CASES = [
      "test_an_empty_read_and_a_failed_read_are_different_messages", SUITE),
 
     ("assert a verdict instead of a difference", COPY,
-     '    "The distance between our probability and the market\'s implied probability.',
+     '    "The distance between our probability and the market\'s de-vigged consensus probability.',
      '    "Where the market is mispriced relative to our probability.',
      "test_the_pick_block_never_claims_an_advantage", SUITE),
 
@@ -92,14 +117,45 @@ CASES = [
      "test_both_verticals_are_declared_with_a_cta_and_a_trust_link", SUITE),
 
     ("hide that the MLB scorecard needs an account", COPY,
-     'trust: { label: "How we have graded out", href: "/performance", needsAccount: true },',
-     'trust: { label: "How we have graded out", href: "/performance", needsAccount: false },',
+     'trust: { label: "How we grade out", href: "/performance", needsAccount: true },',
+     'trust: { label: "How we grade out", href: "/performance", needsAccount: false },',
      "test_a_gated_trust_link_declares_that_it_is_gated", SUITE),
 
     ("paraphrase the canonical fantasy hook instead of reusing it", COPY,
      "    headline: PRODUCT_HOOK[0].title,\n    detail: PRODUCT_HOOK[0].detail,",
      '    headline: "Rankings for your league",\n    detail: "Every projection recomputed for your settings.",',
      "test_the_home_page_reuses_the_fantasy_canonical_copy_verbatim", SUITE),
+
+    # E9.46 revision — the new clauses.
+    # ⚠️ BROKEN BY DELETING THE RENDER, not by gating it behind `false`. The first attempt did the
+    # latter and stayed GREEN — correctly: a SOURCE scan cannot see a render that is still present
+    # but unreachable. That variant is covered at the render level instead, by
+    # `home-positioning.spec.ts`'s "the rank gap never ships without its market-lean caveat", which
+    # reads the actual DOM. Neither check implies the other and both are required.
+    ("drop the market-lean caveat from the fantasy card", CARD,
+     "                {data.leanNote}",
+     "                {null}",
+     "test_the_fantasy_card_always_renders_the_market_lean_caveat", SUITE),
+
+    ("render the hardcoded conviction label instead of the measured one", CARD_MLB,
+     "                  {COPY.agreementBadge}",
+     "                  {data.conviction_label}",
+     "test_the_mlb_badge_describes_what_was_measured", SUITE),
+
+    ("let the MLB record be described as public", COPY,
+     "the full daily record is on the members' scorecard",
+     "the full daily record is public",
+     "test_the_mlb_record_is_described_as_members_only", SUITE),
+
+    ("drop the honest limit from the record sentence", COPY,
+     " What that record has not shown is a durable advantage over the closing market, and we would rather say so here than let the card imply otherwise.",
+     "",
+     "test_the_record_sentence_states_both_halves", SUITE),
+
+    ("lift the retired tagline back into the hero", COPY,
+     '  headline: "The number is only half the answer.",',
+     '  headline: "Daily edge, quantified.",',
+     "test_the_retired_tagline_is_scoped_to_the_mlb_product", SUITE),
 
     ("drop the home page from the marketing-surface registry", NF_TR1,
      "_MARKETING_SURFACES = (_UPGRADE_BANNER_TSX, _SUBSCRIBE_TSX, _HOME_PAGE_TSX)",
@@ -110,19 +166,26 @@ CASES = [
     # something rather than merely existing: strand the home page's only route to the evidence and
     # require NF-TR1's link clause — not E9.46's — to catch it.
     ("strand the evidence — remove the home page's link to the track record", PAGE,
-     "              href={TRACK_RECORD_TRUST_LINK.href}",
-     '              href="/fantasy/projections"',
+     "          href={TRACK_RECORD_TRUST_LINK.href}",
+     '          href="/fantasy/projections"',
      "test_the_marketing_surfaces_link_to_the_track_record", NF_TR1_SUITE),
 
     # ── the roadmap is honest ─────────────────────────────────────────────────────────────────
     ("claim NCAAF is already live", COPY,
-     '{ sport: "NCAAF", what: "Game analytics", when: "Around Aug 29", live: false },',
-     '{ sport: "NCAAF", what: "Game analytics", when: "Around Aug 29", live: true },',
+     '{ sport: "NCAAF", what: "Betting intelligence", when: "Coming this season", live: false },',
+     '{ sport: "NCAAF", what: "Betting intelligence", when: "Coming this season", live: true },',
      "test_unshipped_roadmap_rows_are_marked_not_live", SUITE),
 
-    ("let the roadmap promise winning picks", COPY,
-     "It does not mean picks we say will win",
-     "It means picks, and they are coming",
+    # ⭐ THE OPERATOR'S OWN CORRECTION, pinned: a dated launch promise is a commitment a visitor can
+    # check and find false on the day, which "coming this season" is not.
+    ("put a dated launch promise back on the roadmap", COPY,
+     '{ sport: "NCAAF", what: "Betting intelligence", when: "Coming this season", live: false },',
+     '{ sport: "NCAAF", what: "Betting intelligence", when: "Around Aug 29", live: false },',
+     "test_unshipped_roadmap_rows_are_marked_not_live", SUITE),
+
+    ("let the roadmap promise results", COPY,
+     "They are analysis rather than an assurance of results",
+     "They are the picks you have been waiting for",
      "test_the_roadmap_note_refuses_to_promise_picks", SUITE),
 
     ("turn a coming-soon teaser into a link", PAGE,
@@ -159,6 +222,132 @@ CASES = [
      "        <p className=\"mt-6 text-xs leading-relaxed text-gray-600\">{FOOTER_CTA.disclaimer}</p>",
      "        <p className=\"mt-6 text-xs leading-relaxed text-gray-600\">{\"Everything here is analysis published for information only, it is not financial advice, and you alone are responsible for any wager you choose to place anywhere.\"}</p>",
      "test_the_page_and_component_carry_no_unscreened_prose", SUITE),
+
+    # ══ E9.46 REVISION 2 — THE FEATURED-PICK SELECTION RULE (operator, 2026-08-08) ═════════════
+    #
+    # ⭐ The pair below is the whole argument for `TestTheQueriesActuallyRun`, and they are the
+    # same break aimed at two different guards. Restoring `ABS(edge)` re-introduces the exact
+    # production defect: valid Snowflake, reads correctly, and DuckDB cannot bind it — so
+    # `lakehouse_query` swallows a BinderException into `[]` and the home page silently shows the
+    # empty state. A TEXT guard catches the token; only the EXECUTION guard catches the class, and
+    # the class is what shipped. Neither implies the other.
+    ("wrap the gap in ABS again — the ORDER BY token", PICKS,
+     _ROUTER_STALE_TAIL,
+     _ROUTER_STALE_TAIL.replace(
+         "{_FEATURED_ORDER_BY}",
+         "ORDER BY ABS(edge) DESC NULLS LAST, game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"),
+     "test_the_gap_is_never_wrapped_in_a_function_in_an_order_by", SEL_SUITE),
+
+    ("wrap the gap in ABS again — the query stops binding", PICKS,
+     _ROUTER_STALE_TAIL,
+     _ROUTER_STALE_TAIL.replace(
+         "{_FEATURED_ORDER_BY}",
+         "ORDER BY ABS(edge) DESC NULLS LAST, game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"),
+     "TestTheQueriesActuallyRun::test_the_query_binds_and_returns_a_row_on_duckdb", SEL_SUITE),
+
+    # ⚠️ ISOLATED FROM THE PAIR ABOVE ON PURPOSE (NF-D17 §7). This break BINDS fine — every key is
+    # a selected column — so it can only be caught by the cherry-pick guard. A break that tripped
+    # both clauses at once would prove neither.
+    ("carry forward yesterday's WINNER instead of yesterday's pick", PICKS,
+     _ROUTER_STALE_TAIL,
+     _ROUTER_STALE_TAIL.replace(
+         "{_FEATURED_ORDER_BY}",
+         "ORDER BY actual_outcome DESC NULLS LAST, edge DESC NULLS LAST, game_datetime ASC NULLS LAST"),
+     "test_no_featured_query_selects_on_the_outcome", SEL_SUITE),
+
+    ("go back to featuring the earliest game of the day", PICKS,
+     _ROUTER_TODAY_TAIL,
+     _ROUTER_TODAY_TAIL.replace("{_FEATURED_ORDER_BY}", _START_TIME_RULE),
+     "test_the_widest_gap_beats_an_earlier_start", SEL_SUITE),
+
+    # ⭐ THE DRIFT CASE. The rule is duplicated across six constants in two files; the recap is only
+    # a recap while all six agree. Move the WRITER's copy alone and require it to be caught — the
+    # router-side breaks above cannot detect a writer-side drift.
+    ("let the serving writer drift away from the router", WSS,
+     "       prediction_type, total_line, market_pref, pick_side\nFROM totals\n{_FEATURED_ORDER_BY}",
+     "       prediction_type, total_line, market_pref, pick_side\nFROM totals\n" + _START_TIME_RULE,
+     "test_every_featured_query_shares_the_rule", SEL_SUITE),
+
+    # ⛔ ELIGIBILITY IS WHAT KEEPS THE SORT HONEST — without it, "the widest gap on the board" is a
+    # maximum order statistic that selects our own worst row.
+    ("sort on the gap with no agreement filter at all", PICKS,
+     "    WHERE b.layer4_h2h_conviction_flag = TRUE\n      AND b.layer4_h2h_decision IN ('home', 'away')",
+     "    WHERE b.layer4_h2h_decision IN ('home', 'away')",
+     "test_a_game_our_models_disagree_on_is_never_featured_however_wide_the_gap", SEL_SUITE),
+
+    ("draw the recap from qualified_bet instead of the featured set", PICKS,
+     "      AND prediction_type IN ('post_lineup', 'morning')\n),\nbase AS (SELECT * FROM ranked WHERE _rn = 1),\nh2h AS (\n    SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,\n           b.game_datetime,",
+     "      AND qualified_bet = TRUE\n),\nbase AS (SELECT * FROM ranked WHERE _rn = 1),\nh2h AS (\n    SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,\n           b.game_datetime,",
+     "test_the_recap_uses_the_same_eligible_population_as_the_writer", SEL_SUITE),
+
+    # ── the copy is only true while the ORDER BY holds ────────────────────────────────────────
+    ("leave the retired start-time description in the copy", COPY,
+     "and feature the one where our number sits furthest from the market's",
+     "of those, the first to start",
+     "test_the_retired_start_time_rule_is_gone_from_the_copy", SEL_SUITE),
+
+    ("drop the maximum-order-statistic caveat from the gap explanation", COPY,
+     " — and because we feature the largest one on the board, it is also the read most likely to be ours getting something wrong rather than the market's.",
+     ".",
+     "test_the_gap_caveat_survives_the_sort_key", SEL_SUITE),
+
+    ("stop telling a visitor the carried-over card is not today's slate", COPY,
+     "for the date shown above, not today's slate",
+     "and it is current",
+     "test_a_carried_over_card_says_which_day_it_is_for", SUITE),
+
+    # ══ E9.46 REVISION 3 — THE MARKET ALTERNATES (operator, 2026-08-08) ════════════════════════
+    #
+    # ⭐ THE SUBTLEST BREAK IN THE WHOLE HARNESS, and the reason its guard exists. Making both
+    # branches prefer the SAME market on the same parity pins the card to one market forever — and
+    # every other assertion still passes, because the ORDER BY is intact, the query binds, and the
+    # gap still decides within the market. Only a direct comparison of the two fragments sees it.
+    ("make both market branches prefer the same market", PICKS,
+     '_MARKET_PREF_TOTALS = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 1 ELSE 0 END AS market_pref"',
+     '_MARKET_PREF_TOTALS = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 0 ELSE 1 END AS market_pref"',
+     "test_the_two_market_branches_are_exact_complements", SEL_SUITE),
+
+    # …and the same break, aimed at the BEHAVIOUR rather than the fragments — the card stops
+    # alternating. Two guards, two mechanisms, neither implying the other.
+    ("pin the card to one market — the flip stops happening", PICKS,
+     '_MARKET_PREF_TOTALS = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 1 ELSE 0 END AS market_pref"',
+     '_MARKET_PREF_TOTALS = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 0 ELSE 1 END AS market_pref"',
+     "test_the_market_flips_with_the_date", SEL_SUITE),
+
+    # ⚠️ Keying the parity off the PARAMETER instead of the row. This binds and runs fine; it goes
+    # wrong only on the three constants that resolve YESTERDAY, where it would silently recap the
+    # wrong market. A behavioural test on today's card cannot see it — hence a structural guard.
+    ("key the alternation off the query parameter instead of the row", PICKS,
+     '_MARKET_PREF_H2H = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 0 ELSE 1 END AS market_pref"',
+     '_MARKET_PREF_H2H = "CASE WHEN DAYOFYEAR(%(today)s::DATE) % 2 = 0 THEN 0 ELSE 1 END AS market_pref"',
+     "test_the_alternation_keys_off_the_rows_own_date", SEL_SUITE),
+
+    ("drop the market from the sort so the widest gap wins outright", PICKS,
+     '    "ORDER BY market_pref ASC, edge DESC NULLS LAST, "\n    "game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"',
+     '    "ORDER BY edge DESC NULLS LAST, "\n    "game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"',
+     "test_the_days_market_beats_a_much_wider_gap_in_the_other", SEL_SUITE),
+
+    # ⛔ The fallback: turning the preference into a FILTER makes the card go empty on a day when
+    # its market has nothing, which is strictly worse than showing the other market with a label.
+    ("turn the market preference into a hard filter", PICKS,
+     "    WHERE b.layer4_h2h_conviction_flag = TRUE\n      AND b.layer4_totals_decision IN ('over', 'under')",
+     "    WHERE b.layer4_h2h_conviction_flag = TRUE\n      AND DAYOFYEAR(b.game_date) % 2 = 1\n      AND b.layer4_totals_decision IN ('over', 'under')",
+     "test_the_other_market_is_featured_when_the_days_market_has_nothing", SEL_SUITE),
+
+    ("promise strict alternation the SQL does not guarantee", COPY,
+     "on the moneyline or on the total, usually alternating between them so you see both",
+     "alternating strictly between the moneyline and the total, one each day",
+     "test_the_frame_does_not_promise_strict_alternation", SUITE),
+
+    ("stop naming which market the card is making", CARD_MLB,
+     "                {market.label}",
+     "                {\"Today's read\"}",
+     "test_the_card_renders_the_market_label", SUITE),
+
+    ("render an over/under lean without the line it is about", CARD_MLB,
+     "        ? `${side} ${data.total_line}`",
+     "        ? `${side}`",
+     "test_a_totals_lean_carries_the_line_it_is_about", SUITE),
 ]
 
 
