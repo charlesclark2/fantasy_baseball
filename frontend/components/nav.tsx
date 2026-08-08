@@ -107,18 +107,19 @@ export function Nav({
         </Link>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* About + Blog — desktop only */}
+          {/* About — desktop only.
+              ⛔ BLOG IS DELIBERATELY NOT HERE (E9.46, operator decision 3, 2026-08-07). It is a
+              real content surface and the GROWTH-100 engine keeps publishing to it; it simply no
+              longer competes with the two products for primary-nav attention. It stays reachable
+              from the site footer, which `app/layout.tsx` renders on EVERY page, and from the
+              home page's own secondary link row — so this is a demotion, not a removal.
+              `home-positioning.spec.ts` pins both halves: absent from the nav, present in the
+              footer. */}
           <Link
             href="/about"
             className="hidden text-xs text-gray-500 hover:text-gray-300 transition-colors sm:block"
           >
             About
-          </Link>
-          <Link
-            href="/blog"
-            className="hidden text-xs text-gray-500 hover:text-gray-300 transition-colors sm:block"
-          >
-            Blog
           </Link>
 
           {/* NF3.2 fix: `item.public` (e.g. Track Record) only matters once a visitor is INSIDE a
@@ -359,19 +360,14 @@ export function Nav({
             {/* Written as plain JSX rather than a mapped array on purpose: E9.56c's route guard
                 only sees literal `href="/…"` attributes, so a data-driven list would take these
                 links OUT of the one check that catches a dead button. */}
+            {/* Blog is demoted out of the nav on this viewport too (E9.46) — see the desktop
+                comment above. The footer carries it on every page. */}
             <Link
               href="/about"
               onClick={() => setMobileOpen(false)}
               className="block rounded-md px-3 py-2.5 text-sm font-medium text-gray-400 hover:bg-[#141414] hover:text-white transition-colors"
             >
               About
-            </Link>
-            <Link
-              href="/blog"
-              onClick={() => setMobileOpen(false)}
-              className="block rounded-md px-3 py-2.5 text-sm font-medium text-gray-400 hover:bg-[#141414] hover:text-white transition-colors"
-            >
-              Blog
             </Link>
 
             <div className="my-2 border-t border-[#262626]" />
