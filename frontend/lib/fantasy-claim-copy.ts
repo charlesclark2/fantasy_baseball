@@ -213,16 +213,33 @@ export const FULL_SEASON_RATE_UNAVAILABLE =
 // ⛔ NO PERFORMANCE PROMISE. Not "win your league", not "beat your leaguemates", not "beat ADP".
 // The paid half does more of the WORK; it does not claim a better outcome. `best_alpha = 0`.
 
-/** The free half, said plainly so the generic board is understood as complete rather than partial. */
+/** The free half, said plainly so the free surfaces are understood as complete rather than as a
+ *  sample.
+ *
+ *  ⚠️ IT MUST NOT NAME A FORMAT, and that is a correctness constraint rather than a style one. This
+ *  block renders on Projections (format-INDEPENDENT — one projection, no scoring applied) as well as
+ *  on the scored surfaces, so a sentence about full-PPR at twelve teams would be false on one of the
+ *  two pages that shows it. The format scope belongs to the controls it constrains:
+ *  `FORMAT_LOCK_EXPLANATION` under the pickers, and `PAID_TIER_SUMMARY[0]` in the paid half below.
+ *
+ *  ⚠️ AND IT WENT STALE ONCE ALREADY. Until 2026-08-08 it read "scored for the common league
+ *  presets" — true while all 14 preset boards were free, false the moment the tier narrowed, and
+ *  invisible either way because nothing renders differently when copy stops being accurate. */
 export const FREE_TIER_SUMMARY = {
-  title: "This board is free, and it is the whole board",
+  title: "This is free, and every number on it is real",
   detail:
-    "Every player we project, every ranking, every 80% range and the market ADP beside it — no account, no trial, nothing held back. It is scored for the common league presets, which is what makes it the same board for everyone.",
+    "Every player we project, every ranking, every 80% range and the market ADP beside it — no account, no trial, and no number quietly withheld. It is the same board for everyone, which is exactly what makes it free.",
 } as const
 
-/** The paid half, in the two categories the entitlement actually splits on. Each `title` names the
- *  capability in the user's words; `detail` says what it does, never how well it does it. */
+/** The paid half, in the two categories the entitlement actually splits on, plus the format lever.
+ *  Each `title` names the capability in the user's words; `detail` says what it does, never how well
+ *  it does it. */
 export const PAID_TIER_SUMMARY: readonly { title: string; detail: string }[] = [
+  {
+    title: "Every scoring format, at your league's size",
+    detail:
+      "Half-PPR, standard, superflex, three-receiver, and ten- or twelve-team — each one re-scored, not relabelled. League size moves the replacement level, so it moves the ranking.",
+  },
   {
     title: "Your league, not a preset",
     detail:
@@ -234,6 +251,31 @@ export const PAID_TIER_SUMMARY: readonly { title: string; detail: string }[] = [
       "The draft optimizer, and the in-season calls — waivers, trades, start/sit — worked in your league's scoring rather than left as an exercise.",
   },
 ]
+
+// ══ THE FORMAT LOCK — what a visitor reads on a preset they cannot open ═════════════════════════
+//
+// Rendered on the format/size controls themselves, so the boundary is legible AT the control rather
+// than only in a block underneath it. Two rules this copy is written to:
+//   • It says the format is a MEMBERSHIP feature, not that the numbers behind it are better. The
+//     free board is the same model; a different preset is a different SCORING of it.
+//   • It never implies the visitor is missing an edge. `best_alpha = 0`.
+
+/** Suffix on a locked option's label in the format/size pickers. Terse by necessity — it sits
+ *  inside a dropdown row — with `FORMAT_LOCK_EXPLANATION` carrying the actual sentence. */
+export const FORMAT_LOCK_SUFFIX = "Members"
+
+/** The sentence under the pickers when the caller can only open the free preset. */
+export const FORMAT_LOCK_EXPLANATION =
+  "Full-PPR at twelve teams is free for everyone. The other scoring formats and league sizes are re-scored for members — a different format is a different set of numbers, not a different label on these."
+
+/** Heading when a board REFUSED rather than came back empty — a stale stored selection, or the
+ *  window where the frontend has shipped and the API has not (NF-C0). */
+export const FORMAT_LOCK_TITLE = "That format is part of a membership"
+
+/** ...and the entitled version of the same refusal, which is a genuine fault and must not be
+ *  dressed up as one. */
+export const BOARD_LOAD_ERROR_DETAIL =
+  "We couldn't load this board just now. Refresh, or pick another format while we look into it."
 
 // ⚠️ A one-line `FREEMIUM_BOUNDARY_LINE` was written here for "a compact surface that has no room
 // for the two blocks above" and then DELETED, because nothing renders it. An exported copy constant

@@ -27,6 +27,7 @@ import type { LeagueConfig } from "@/lib/league-config"
 import { buildBoard, matchRosterToBoard } from "@/lib/league-scoring"
 import type { BuiltBoard, RosterMatch } from "@/lib/league-scoring"
 import type { Manifest, Player } from "@/lib/draft-optimizer"
+import { freeSelection } from "@/lib/draft-optimizer"
 import {
   PROSPECT_SEASON,
   getProspectBoard,
@@ -301,6 +302,7 @@ export function useResolvedBoard(configName: string | null, size: number | null)
       isCustom: true as const,
       league: selectedLeague,
       coverage: customBoard?.coverage ?? null,
+      error: null,
     }
   }
   return {
@@ -309,12 +311,22 @@ export function useResolvedBoard(configName: string | null, size: number | null)
     isCustom: false as const,
     league: null,
     coverage: null,
+    // ⚠️ SURFACED DELIBERATELY (freemium build). A paid preset now answers 403, and without this the
+    // failure arrived as an empty array and rendered "No players match — try clearing the search
+    // box": a refusal disguised as a search result, which is the worst of both readings. A caller
+    // that can reach a paid board must be able to tell "refused" from "nothing here".
+    error: presetQuery.error ?? null,
   }
 }
 
 // ── league-format selection ──────────────────────────────────────────────────────────────────
 // Preferred defaults when a user has not chosen yet. Half-PPR at 12 teams is the most common
 // home-league shape; both fall back to whatever the manifest actually shipped.
+//
+// ⚠️ THESE ARE THE *ENTITLED* DEFAULTS. Since the free tier narrowed to one preset (2026-08-08) an
+// unentitled visitor is defaulted onto the manifest's own `freeBoard` instead — landing them on
+// half-PPR would open the surface on a board the API answers 403 for, i.e. an empty page on first
+// visit. See `entitledDefaults` below.
 const DEFAULT_CONFIG = "half_ppr"
 const DEFAULT_SIZE = 12
 const FORMAT_STORAGE_KEY = "nfl-fantasy-format"
@@ -328,6 +340,14 @@ export function useFormatSelection(
    *  leagues that still EXIST. A deleted league must fall back to a real preset rather than leave
    *  the surface pointing at nothing. */
   savedLeagues?: SavedLeague[],
+  /** Freemium build — whether this caller may read the PAID presets. Defaults to `true` so every
+   *  existing call site keeps its exact behaviour; the browse surfaces pass the real value.
+   *
+   *  ⚠️ Only ever RESTRICTS. When false, a stored paid selection is replaced by the free board and
+   *  the default lands there — because the alternative is a first visit that renders nothing and
+   *  reads as a broken page rather than as a paywall. The server is still the authority; this is
+   *  about not steering someone into a 403. */
+  entitled: boolean = true,
 ) {
   const [configName, setConfigName] = useState<string | null>(null)
   const [size, setSize] = useState<number | null>(null)
@@ -342,6 +362,20 @@ export function useFormatSelection(
     }
     const names = manifest.configs.map((c) => c.name)
     const customIds = new Set((savedLeagues ?? []).map((l) => CUSTOM_PREFIX + l.league_id))
+    const free = freeSelection(manifest)
+
+    // Unentitled: the free board is the only one the API will answer, so it is both the default and
+    // the only admissible stored value. A saved CUSTOM league is personalization and equally out of
+    // reach, so it does not win here either. `free` null (a pre-deploy manifest that doesn't say)
+    // falls through to the entitled path — the old behaviour, which is right for a backend that has
+    // not narrowed yet.
+    if (!entitled && free) {
+      const storedIsFree = stored.configName === free.config && stored.size === free.size
+      setConfigName(storedIsFree ? free.config : names.includes(free.config) ? free.config : names[0] ?? null)
+      setSize(storedIsFree ? free.size : manifest.sizes.includes(free.size) ? free.size : manifest.sizes[0] ?? null)
+      return
+    }
+
     // A stored CUSTOM selection wins when that league still exists — a user who has entered their
     // own league should land back on it, not on a generic preset.
     if (stored.configName && customIds.has(stored.configName)) {
@@ -353,7 +387,7 @@ export function useFormatSelection(
     setConfigName(pick ?? names[0] ?? null)
     const sizePick = [stored.size, DEFAULT_SIZE].find((n) => n && manifest.sizes.includes(n))
     setSize(sizePick ?? manifest.sizes[0] ?? null)
-  }, [manifest, configName, savedLeagues])
+  }, [manifest, configName, savedLeagues, entitled])
 
   const persist = (next: { configName?: string; size?: number }) => {
     if (next.configName !== undefined) setConfigName(next.configName)

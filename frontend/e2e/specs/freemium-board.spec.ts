@@ -301,6 +301,152 @@ test.describe("the claims on the free board", () => {
   }
 })
 
+test.describe("one preset is free, the rest are the membership", () => {
+  // Operator decision 2026-08-08: `full_ppr`/12 is free and the other 13 exported boards are paid.
+  // `test_freemium_tier.py` proves the API refuses them and that the picker's source disables them;
+  // only a browser can see whether a visitor LANDS somewhere readable and whether a refusal is
+  // legible when it happens.
+
+  test("a logged-out visitor lands on the free preset, with real numbers", async ({ page }) => {
+    // ⚠️ THE FAILURE THIS CATCHES IS A FIRST IMPRESSION. Defaulting to the entitled default
+    // (`half_ppr`) fires a request the API refuses, so the very first thing a visitor sees is a
+    // refusal they did nothing to earn — a paywall that reads as a broken page.
+    const errors = collectPageErrors(page)
+    const mock = await mockApi(page)
+    await page.goto("/fantasy/rankings")
+    await expect(page.locator("table tbody tr").first()).toBeVisible()
+
+    const boardCalls = mock.requested.filter((r) => r.startsWith("/fantasy/nfl/board"))
+    expect(boardCalls.length, "the board was never fetched").toBeGreaterThan(0)
+    for (const call of boardCalls) {
+      expect(call, "a logged-out visitor was steered onto a paid preset").toContain(
+        "config=full_ppr",
+      )
+      expect(call, "a logged-out visitor was steered onto a paid league size").toContain("size=12")
+    }
+    expect(await numericCellCount(page), "the free preset rendered no numbers").toBeGreaterThan(20)
+    await expectNoPageErrors(errors)
+  })
+
+  test("the paid presets are shown, marked, and not selectable", async ({ page }) => {
+    // ⭐ SHOWN *AND* DISABLED — both halves matter, and they fail in opposite directions. Removing
+    // them entirely would satisfy "cannot select a paid preset" perfectly while making the free
+    // board look like the only board we publish. Leaving them enabled steers a visitor into a 403.
+    await mockApi(page)
+    await page.goto("/fantasy/rankings")
+    await expect(page.locator("table tbody tr").first()).toBeVisible()
+
+    await page.getByLabel("Scoring format").click()
+    const options = page.getByRole("option")
+    await expect(options.first()).toBeVisible()
+
+    const free = options.filter({ hasText: /^Full-PPR$/ })
+    await expect(free, "the free preset is not offered under its own plain label").toHaveCount(1)
+    await expect(free).toBeEnabled()
+
+    // Every OTHER exported preset is still listed — the picker is a menu of what exists, not of
+    // what this visitor may open.
+    const half = options.filter({ hasText: /Half-PPR/ }).first()
+    await expect(half, "a paid preset was removed from the picker instead of disabled").toBeVisible()
+    await expect(half).toBeDisabled()
+    await expect(half, "a locked preset is not marked as one").toContainText(/members/i)
+  })
+
+  test("the paid league SIZE is locked too", async ({ page }) => {
+    // The one an implementation forgets: `full_ppr` at 10 teams is a DIFFERENT board (league size
+    // moves the replacement level) and the API refuses it. A format-only lock would leave the size
+    // control offering a combination that cannot load.
+    await mockApi(page)
+    await page.goto("/fantasy/rankings")
+    await expect(page.locator("table tbody tr").first()).toBeVisible()
+
+    await page.getByLabel("League size").click()
+    const options = page.getByRole("option")
+    await expect(options.first()).toBeVisible()
+    await expect(options.filter({ hasText: /^12 teams$/ })).toBeEnabled()
+    const ten = options.filter({ hasText: /10 teams/ }).first()
+    await expect(ten, "the paid league size is selectable").toBeDisabled()
+  })
+
+  test("the lock is explained where the controls are", async ({ page }) => {
+    await mockApi(page)
+    await page.goto("/fantasy/rankings")
+    await expect(page.locator("table tbody tr").first()).toBeVisible()
+
+    const note = page.getByTestId("format-lock-note")
+    await expect(note, "the locked controls are never explained").toBeVisible()
+    const text = await note.innerText()
+    expect(forbiddenPhrasesIn(text), "denied claim language in the format-lock copy").toEqual([])
+    // It sells a different SCORING, never better numbers.
+    expect(text.toLowerCase()).toContain("format")
+  })
+
+  // ⚠️ THE SUBSCRIBER SIDE IS NOT TESTED IN THIS FILE, DELIBERATELY. "A build that disabled the
+  // picker for everyone" would pass every assertion above, so the other side genuinely has to be
+  // held somewhere — but this suite has no auth-seeding facility, and inventing one here would
+  // contradict this file's own rule (see the module docstring: anonymous means anonymous, and a
+  // seeded token silently converts every assertion into a statement about a logged-in user).
+  // It is held instead where it can be held honestly:
+  //   · `test_freemium_tier.py::test_a_subscriber_gets_a_paid_preset` — a real gateway-validated
+  //     subscriber gets 200 on both shapes of paid board, through the real ASGI app.
+  //   · `test_the_picker_disables_every_paid_preset_for_an_unentitled_caller` — the lock is
+  //     `lockFormats = !entitled`, i.e. conditional rather than unconditional, red-proven.
+
+  test("a stored paid selection does not strand a lapsed member", async ({ page }) => {
+    // The selection persists in localStorage across a membership ending. Reopening on the preset
+    // they used to have would greet them with a refusal on a page they had been reading fine.
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        "nfl-fantasy-format",
+        JSON.stringify({ configName: "half_ppr", size: 10 }),
+      )
+    })
+    const mock = await mockApi(page)
+    await page.goto("/fantasy/rankings")
+    await expect(page.locator("table tbody tr").first()).toBeVisible()
+
+    for (const call of mock.requested.filter((r) => r.startsWith("/fantasy/nfl/board"))) {
+      expect(call, "a stored paid selection survived into a request").toContain("config=full_ppr")
+      expect(call, "a stored paid league size survived into a request").toContain("size=12")
+    }
+  })
+
+  test("a refused board reads as a paywall, not as an empty search", async ({ page }) => {
+    // ⭐ THE DEPLOY-SKEW PATH, simulated the only way it can be: an API that HAS narrowed serving a
+    // manifest whose free-board markings are absent, so the client cannot steer around the paywall
+    // and actually meets the 403. Before this branch existed that arrived as zero rows and rendered
+    // "No players match — try clearing the search box" — a paywall described as a typo, on exactly
+    // the visit where a wrong message costs most.
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        "nfl-fantasy-format",
+        JSON.stringify({ configName: "half_ppr", size: 12 }),
+      )
+    })
+    await mockApi(page, {
+      transform: (apiPath, body) => {
+        if (apiPath !== "/fantasy/nfl/manifest") return body
+        const m = { ...(body as Record<string, unknown>) }
+        delete m.freeBoard
+        m.configs = (m.configs as Record<string, unknown>[]).map((c) => {
+          const { free: _dropped, ...rest } = c
+          return rest
+        })
+        return m
+      },
+    })
+    await page.goto("/fantasy/rankings")
+
+    const body = page.locator("body")
+    await expect(body, "a refusal was described as a failed search").not.toContainText(
+      "Try clearing the search box",
+    )
+    await expect(body, "a refused board says nothing about why").toContainText(
+      /membership/i,
+    )
+  })
+})
+
 test.describe("the paid half is still gated", () => {
   // ⭐ WITHOUT THIS BLOCK THE FILE IS SATISFIED BY MAKING EVERYTHING FREE. Every assertion above is
   // "the free thing is visible"; a change that un-gated the whole product would pass all of them.

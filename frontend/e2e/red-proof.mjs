@@ -566,6 +566,83 @@ const CASES = [
     to: "        {\"Our 2025 rankings modestly outperformed ADP (+0.022 rank correlation).\"}",
     grep: "does not quote its number",
   },
+
+  // ══ ONE PRESET IS FREE (2026-08-08) ════════════════════════════════════════════════════════
+  {
+    id: "unentitled-defaulted-onto-a-paid-preset",
+    shipped: "pre-emptive: a first visit that opens on a board the API refuses",
+    // ⭐ A FIRST IMPRESSION, and nothing server-side can see it. The API behaves perfectly — it
+    // refuses a paid preset, which is its job — and every Python assertion stays green. What breaks
+    // is that the CLIENT asked for the wrong one, so the visitor's opening screen is a refusal they
+    // did nothing to earn. `tsc` cannot see it (both branches type-check) and it is invisible to
+    // anyone testing while logged in as a subscriber, i.e. to us.
+    detail: "Restores the entitled default (half-PPR) for everyone, including the logged out.",
+    file: "lib/fantasy-queries.ts",
+    from: "    if (!entitled && free) {",
+    to: "    if (false && free) {",
+    grep: "lands on the free preset",
+  },
+  {
+    id: "paid-presets-left-selectable",
+    shipped: "pre-emptive: a picker that offers boards the API will not serve",
+    // The dropdown is the one place the boundary has to be legible BEFORE a click. Leaving the paid
+    // options enabled turns every one of them into a dead end discovered only after selecting it —
+    // and a dead end is indistinguishable from a bug to the person who hit it.
+    detail: "Stops disabling the paid options in the format picker.",
+    file: "components/fantasy/shared.tsx",
+    from: "                  disabled: locked,\n                }\n              }),",
+    to: "                  disabled: false,\n                }\n              }),",
+    grep: "not selectable",
+  },
+  {
+    id: "paid-presets-hidden-instead-of-locked",
+    shipped: "pre-emptive: the tempting fix that removes the upsell along with the problem",
+    // ⚠️ THIS SATISFIES THE CASE ABOVE COMPLETELY — a removed option cannot be selected. It also
+    // makes the free board look like the only board we publish, which is untrue and is the reverse
+    // of what an upgrade prompt is for. The two cases have to coexist or one of them can be
+    // "fixed" into the other.
+    detail: "Filters the paid presets out of the picker rather than disabling them.",
+    file: "components/fantasy/shared.tsx",
+    from: "              options: manifest.configs.map((c) => {",
+    to: "              options: manifest.configs.filter((c) => isFreeConfig(c)).map((c) => {",
+    grep: "not selectable",
+  },
+  {
+    id: "paid-league-size-left-selectable",
+    shipped: "pre-emptive: locking the FORMAT and forgetting the SIZE",
+    // `full_ppr` at ten teams is a different board — league size sets the replacement level — and
+    // the API refuses it. A format-only lock leaves the two controls able to compose a request that
+    // cannot load, which is the same dead end as above reached by a different route.
+    detail: "Stops locking the paid league size.",
+    file: "components/fantasy/shared.tsx",
+    from: "              const locked = lockFormats && n !== free!.size",
+    to: "              const locked = false && n !== free!.size",
+    grep: "league SIZE is locked",
+  },
+  {
+    id: "refusal-reads-as-an-empty-search",
+    shipped: "pre-emptive: a paywall described as a typo",
+    // The 403 arrives as zero rows, and the pre-existing empty branch says "No players match — try
+    // clearing the search box". Every gate that asks whether the page WORKS is satisfied: it
+    // renders, nothing errors, the copy is grammatical. It is simply an answer to a question the
+    // visitor did not ask, on the one visit where being wrong costs most.
+    detail: "Removes the refused-board branch so a 403 falls through to the empty-search state.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: "          {!boardLoading && boardError && (",
+    to: "          {false && boardError && (",
+    grep: "not as an empty search",
+  },
+  {
+    id: "stored-paid-selection-survives-a-lapse",
+    shipped: "pre-emptive: a lapsed member greeted by a refusal on the page they were reading",
+    // The format selection outlives the membership in localStorage. Re-checking it against the free
+    // board is one line, and skipping it strands exactly the person most likely to come back.
+    detail: "Trusts any stored selection, including one written while subscribed.",
+    file: "lib/fantasy-queries.ts",
+    from: "      const storedIsFree = stored.configName === free.config && stored.size === free.size",
+    to: "      const storedIsFree = true",
+    grep: "does not strand a lapsed member",
+  },
 ]
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
