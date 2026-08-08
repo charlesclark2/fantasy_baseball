@@ -365,8 +365,8 @@ const CASES = [
     // naming the disclaimer can.
     detail: "Removes the demonstration-not-recommendation frame from the live block.",
     file: "lib/home-copy.ts",
-    from: '    "This is a demonstration, not a recommendation. Of today',
-    to: '    "Of today',
+    from: '    "A demonstration, not a recommendation. Each day',
+    to: '    "Each day',
     grep: "framed as a demonstration",
   },
   {
