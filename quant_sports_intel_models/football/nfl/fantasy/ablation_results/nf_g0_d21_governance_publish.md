@@ -2,6 +2,15 @@
 
 _generated 2026-08-05T01:45:46.930989+00:00_ · `best_alpha = 0`
 
+> ✅ **RE-CONFIRMED BY NF-C3-REREAD (2026-08-08, `ablation_results/nf_c3_reread.md`) — this refusal
+> STANDS on a correctly-measured gate.** After NF1.9-R exposed the veteran panel's `served_p10/p90`
+> trap, this gate was re-read: its band is the ROOKIE band refit through the rookie model path
+> (`shipped_rookie_cfg()` — never a `served_*` panel column; the recorded λ-sweep reproduces
+> row-for-row), and under the corrected C3 structure (`coverage_λ ≥ min(0.80, coverage_λ=0)`, with
+> λ=0 RB = 0.8041 ≥ 0.80) the clause reduces to the bare floor already applied here — λ=0.5 RB is
+> still 0.7905, 2 covered rows short. CONSTRAINT_REFUSED, unchanged; NF-D21 stays CLOSED; the
+> remedy remains NF-D22 / PM judgment — never more data, never a moved floor.
+
 ## Verdict: PUBLISH BLOCKED BY THE INTERVAL-FLOOR GATE
 
 Phase A is complete and proven. Phase B was BUILT, STAMPED and ROUTED through the pipeline, and **the pipeline refused it** — the `interval_floors` gate fails because the rookie RB 80% coverage floor falls 2 covered rows short at λ = 0.5 (n = 148). Nothing is published; `SERVING_ENABLED` stays `False`, so the served board is the incumbent, byte-for-byte, and users see exactly the projection they had. λ was NOT moved and the floor was NOT moved — both are prohibited (see §4). ⭐ The first real artifact through the governance pipeline being REFUSED by a gate is a stronger validation of Phase A than a clean pass would have been.
