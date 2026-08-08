@@ -264,9 +264,14 @@ CASES = [
      None,
      "test_an_unentitled_visitor_is_defaulted_onto_a_board_they_can_read", SUITE),
 
-    ("let a stored paid selection survive a lapsed membership", QUERIES,
-     [("      const storedIsFree = stored.configName === free.config && stored.size === free.size",
-       "      const storedIsFree = true")],
+    # ⚠️ THE BREAK HAD TO CHANGE WITH THE CLAUSE, and the reason is worth keeping: the first version
+    # patched a `storedIsFree` ternary whose two arms were IDENTICAL, so the break was a genuine
+    # no-op and reported GREEN — VACUOUS. That was a defect in the SOURCE, not in the harness: dead
+    # code cannot be broken. The branch now ignores `stored` outright, and the honest regression is
+    # putting it back.
+    ("honour a stored paid selection for an unentitled caller", QUERIES,
+     [("      setConfigName(names.includes(free.config) ? free.config : names[0] ?? null)",
+       "      setConfigName(stored.configName ?? free.config)")],
      None,
      "test_an_unentitled_visitor_is_defaulted_onto_a_board_they_can_read", SUITE),
 

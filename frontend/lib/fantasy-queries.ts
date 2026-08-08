@@ -370,9 +370,17 @@ export function useFormatSelection(
     // falls through to the entitled path — the old behaviour, which is right for a backend that has
     // not narrowed yet.
     if (!entitled && free) {
-      const storedIsFree = stored.configName === free.config && stored.size === free.size
-      setConfigName(storedIsFree ? free.config : names.includes(free.config) ? free.config : names[0] ?? null)
-      setSize(storedIsFree ? free.size : manifest.sizes.includes(free.size) ? free.size : manifest.sizes[0] ?? null)
+      // ⛔ `stored` IS NOT READ IN THIS BRANCH, and the omission is the whole behaviour. There is
+      // exactly one preset this caller can open, so "validate the stored value against it" and
+      // "ignore the stored value" are the same operation — and the first spelling invites a
+      // ternary whose arms are identical, which is precisely what the first cut of this shipped
+      // (both arms set `free.config`, so the check did nothing and its red-proof case could not
+      // fail). Ignoring it outright is honest and has no dead branch to rot.
+      //
+      // The value stays in localStorage untouched, so a member who lapses and re-subscribes lands
+      // back on the format they were using.
+      setConfigName(names.includes(free.config) ? free.config : names[0] ?? null)
+      setSize(manifest.sizes.includes(free.size) ? free.size : manifest.sizes[0] ?? null)
       return
     }
 

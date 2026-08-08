@@ -637,10 +637,10 @@ const CASES = [
     shipped: "pre-emptive: a lapsed member greeted by a refusal on the page they were reading",
     // The format selection outlives the membership in localStorage. Re-checking it against the free
     // board is one line, and skipping it strands exactly the person most likely to come back.
-    detail: "Trusts any stored selection, including one written while subscribed.",
+    detail: "Honours the stored selection for an unentitled caller.",
     file: "lib/fantasy-queries.ts",
-    from: "      const storedIsFree = stored.configName === free.config && stored.size === free.size",
-    to: "      const storedIsFree = true",
+    from: "      setConfigName(names.includes(free.config) ? free.config : names[0] ?? null)",
+    to: "      setConfigName(stored.configName ?? free.config)",
     grep: "does not strand a lapsed member",
   },
 ]

@@ -441,8 +441,13 @@ test.describe("one preset is free, the rest are the membership", () => {
     await expect(body, "a refusal was described as a failed search").not.toContainText(
       "Try clearing the search box",
     )
+    // ⚠️ THE EXACT HEADING, NOT `/membership/i`. The looser locator was the first spelling and the
+    // red proof caught it GREEN: deleting the refusal branch renders NOTHING there, and the
+    // freemium boundary further down the page contains the word "membership" — so a different
+    // element satisfied the assertion and the missing message went unnoticed. A locator something
+    // else can satisfy is not a locator.
     await expect(body, "a refused board says nothing about why").toContainText(
-      /membership/i,
+      "That format is part of a membership",
     )
   })
 })

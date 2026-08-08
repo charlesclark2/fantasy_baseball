@@ -707,16 +707,22 @@ def test_an_unentitled_visitor_is_defaulted_onto_a_board_they_can_read():
     assert re.search(r"if\s*\(!entitled\s*&&\s*free\)", body), (
         "the unentitled branch is gone — an unentitled visitor can be defaulted onto a paid preset"
     )
-    # And a stored selection must be RE-CHECKED against the free board, or a localStorage value
-    # written while subscribed survives a lapse and reopens on a preset that now 403s.
+    # ⛔ AND THE BRANCH MUST NOT READ `stored` AT ALL. There is one preset this caller can open, so
+    # a stored paid selection — written while subscribed and surviving the lapse in localStorage —
+    # has to be ignored outright rather than consulted.
     #
-    # ⚠️ ASSERTS THE COMPARISON, NOT THE IDENTIFIER. `assert "storedIsFree" in body` was the first
-    # spelling and the red-proof caught it VACUOUS: replacing the whole expression with `= true`
-    # leaves the name in place, so the guard passed on source that trusted any stored value. Same
-    # shape as the import-vs-render lesson one file over — a name is the last thing an edit removes.
-    assert re.search(r"stored\.configName\s*===\s*free\.config", body) and re.search(
-        r"stored\.size\s*===\s*free\.size", body
-    ), "a stored paid selection is not re-checked against the free board"
+    # ⚠️ TWO EARLIER SPELLINGS OF THIS CLAUSE WERE VACUOUS AND THE RED PROOF CAUGHT BOTH. First
+    # `assert "storedIsFree" in body`, which a break replacing the whole expression with `= true`
+    # satisfied because the NAME survived (the import-vs-render shape). Then asserting the
+    # comparison itself — which was still vacuous, for a better reason: the ternary it guarded had
+    # IDENTICAL ARMS, so the check genuinely did nothing and no break of it could fail. Asserting an
+    # absence is what finally holds, and it is also what let the dead branch be deleted.
+    branch = body[body.index("if (!entitled && free)"):]
+    branch = branch[: branch.index("return")]
+    assert "stored" not in branch, (
+        "the unentitled branch consults the stored selection — a paid preset written while "
+        "subscribed will survive a lapse and reopen on a board the API now refuses"
+    )
 
 
 def test_a_refused_board_does_not_render_as_an_empty_search():
