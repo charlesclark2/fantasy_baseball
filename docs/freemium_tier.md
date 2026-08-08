@@ -13,7 +13,7 @@ The split is drawn by **capability**, not by season.
 
 | Capability | Tier | What it is |
 |---|---|---|
-| `GENERIC_BOARD` | **FREE**, anonymous included | Overall + position rankings for the shipped league presets, the format-independent projections, the 80% ranges, market ADP, the player pages, Player Search, the methodology |
+| `GENERIC_BOARD` | **FREE**, anonymous included | Overall + position rankings scored for **one** league preset (full-PPR, 12 teams), the format-independent projections, the 80% ranges, market ADP, the player pages, Player Search, the methodology |
 | `PERSONALIZATION` | PAID | A board re-scored for the caller's **own** saved league — their scoring, roster shape and size; VOR against that roster; saved state |
 | `DECISION_SUPPORT` | PAID | The draft optimizer, and the weekly tools as they land |
 
@@ -31,13 +31,41 @@ makes a forgotten capability silently paid; the reverse spelling makes it silent
 default is acceptable, so a new capability belongs to neither set until someone places it — and
 `test_every_capability_is_placed_on_exactly_one_side` says so.
 
-### A preset is not personalization
+### One preset is free, thirteen are the membership
 
-`/fantasy/nfl/board?config=full_ppr_3wr&size=12` is **free**. It selects one of the boards the
-exporter published for everyone, so every caller asking for it gets the same bytes. A board scored
-for *your* league is a different thing entirely — computed from a stored per-user config, behind
-`require_fantasy_access` on `/fantasy/leagues` and `/fantasy/nfl/my-teams`. That distinction is the
-whole free/paid line on this surface.
+`Capability.GENERIC_BOARD` says a caller may read the generic board. **Which one** is a second
+question, answered by two constants:
+
+```python
+FREE_BOARD_CONFIG = "full_ppr"
+FREE_BOARD_SIZE = 12
+```
+
+`/fantasy/nfl/board?config=full_ppr&size=12` is free for everyone. The exporter publishes 7 scoring
+presets × 2 league sizes; the other 13 boards answer **403** to an unentitled caller.
+
+**Why that preset, and it is a data fact before it is a pricing one.** The ADP column we show beside
+our number is an FFC **12-team PPR** sample (`nfl/fantasy/benchmarks/adp_benchmark`). At any other
+preset our points and the market's ADP describe *different leagues*, so the one comparison the free
+board exists to support is only honest here. Moving the free selection means moving that sample too.
+
+**Both coordinates matter.** League size sets the replacement level, so `full_ppr`/10 is a different
+set of numbers rather than a relabelling — a gate written against the scoring format alone would
+leave the size control offering a combination the API refuses. That is the failure an implementation
+naturally produces, so it has its own clause and its own red-proof case on both sides.
+
+A **403, not a redacted 200.** E9.56's lock existed to draw a per-cell CTA on a board the visitor had
+asked for; here the client keeps them on the free board and states the boundary at the control, so a
+lock payload would be an elaborate description of a page nobody is looking at. It also keeps the
+answer unambiguous for the CDN.
+
+### A preset is still not personalization
+
+A board scored for *your* league is a different thing again — computed from a stored per-user
+config, behind `require_fantasy_access` on `/fantasy/leagues` and `/fantasy/nfl/my-teams`. Selecting
+`half_ppr` from a menu is a **preset**; VOR against your actual starting requirements is
+**personalization**. The paid tier now contains both, and they are sold as separate lines because
+they are separate things: one is "the format you actually play", the other is "your league".
 
 ### The G100-C1 seam
 
@@ -57,8 +85,9 @@ the default of 0 is pinned so raising it is a reviewed edit rather than a drift.
 
 ## 2. ⭐ The invariant three other systems rest on
 
-**The three generic endpoints are entitlement-independent.** Anonymous, free and paying callers get
-byte-identical responses from `/fantasy/nfl/{manifest,projections,board}`.
+**Every FREE response is entitlement-independent.** Anonymous, free and paying callers get
+byte-identical responses from `/fantasy/nfl/manifest`, `/fantasy/nfl/projections`, and the free board
+URL `/fantasy/nfl/board?config=full_ppr&size=12`.
 
 That is not a nicety. It is what makes all three of these correct at once:
 
@@ -69,16 +98,33 @@ That is not a nicety. It is what makes all three of these correct at once:
 3. **The frontend's `entitled`-keyed query cache can never strand a new subscriber** on a stale
    view.
 
-⛔ Re-introducing any per-caller variation on those three routes invalidates all three **at once**,
-and would need the CDN allowlist, the backend cache rules and the query keys revisited together.
-`test_the_generic_board_is_byte_identical_for_every_caller` asserts literal byte equality across an
-anonymous caller, a forged-token caller and a gateway-validated subscriber — equality rather than
+⛔ Re-introducing per-caller variation on a **free** URL invalidates all three **at once**, and
+would need the CDN allowlist, the backend cache rules and the query keys revisited together.
+`test_the_free_generic_board_is_byte_identical_for_every_caller` asserts literal byte equality across
+an anonymous caller, a forged-token caller and a gateway-validated subscriber — equality rather than
 "both payloads look right", because the failure this catches is an *extra field*, which every
 "the free board has the numbers" assertion passes straight over.
 
-The handlers take **no `Request` parameter at all**, which is the strongest available statement of
-the same thing: a handler that cannot see the caller cannot branch on them. (The red-proof harness
-had to apply a three-part patch to make one vary — that difficulty is the design working.)
+`nfl_manifest` and `nfl_projections` take **no `Request` parameter at all**, which is the strongest
+available statement of the same thing: a handler that cannot see the caller cannot branch on them.
+
+### ⚠️ The paid board URLs are the deliberate exception
+
+`nfl_board` **does** read its caller — one preset is free and thirteen are not — so a paid board URL
+answers 200 or 403 depending on who asks. Three consequences, each held by a clause:
+
+1. **The CDN cannot reach one.** The public route strips `Authorization` unconditionally, so any
+   board it fetched would be fetched anonymously; left proxyable, a subscriber's request for
+   `half_ppr` would write a **403 into a public CDN entry** and serve it to every subscriber for the
+   window. So its `config`/`size` patterns are pinned to the free selection — the edge cannot ask a
+   caller-dependent question rather than being trusted not to.
+2. **`cache_control_for` is path-keyed and cannot see `config`**, so one rule covers both. It is
+   safe for two *separate* pre-existing reasons — an authorized request is `private`, and a non-200
+   is `no-store` — and losing either is a breach rather than a caching regression, so both are
+   asserted directly.
+3. **The client is steered, not merely refused.** An unentitled visitor is defaulted onto the free
+   board and a stored paid selection is re-checked against it, so the 403 is a backstop rather than
+   something a normal visit meets.
 
 ---
 
@@ -134,6 +180,32 @@ Those two are chrome rather than claims and they live there anyway, because the 
 distinguish a heading from a promise — and an exception list for "just a heading" is how the first
 claim gets typed into a component.
 
+### The format lock is stated AT the control
+
+The boundary block explains the tier; the **pickers** are where a visitor meets it. Every preset is
+listed, the paid ones disabled and suffixed `· Members`, with `FORMAT_LOCK_EXPLANATION` underneath.
+
+**Listed-but-disabled is the deliberate choice**, and the alternative is tempting enough to have its
+own red-proof case: removing the paid presets satisfies "an unentitled caller cannot select one"
+completely, and makes the free board look like the only board we publish — untrue, and the reverse
+of what an upgrade prompt is for.
+
+**And a refusal must not read as a failed search.** A 403 arriving as zero rows previously rendered
+*"No players match — try clearing the search box"*: a paywall described as a typo, reachable through
+a stale stored selection or the NF-C0 skew window, i.e. exactly when a wrong message costs most.
+The board's error is surfaced now and has its own branch.
+
+### ⚠️ Copy that describes an entitlement goes stale silently
+
+`FREE_TIER_SUMMARY` read *"scored for the common league presets"* — accurate while all 14 boards were
+free, false the moment this landed, and **invisible either way**, because nothing renders differently
+when a sentence stops being true.
+
+It now names no format at all. That is a correctness constraint rather than a style preference: the
+block also renders on **Projections**, which is format-*independent*, so any sentence about full-PPR
+at twelve teams would be false on one of the two pages showing it. The format scope lives on the
+controls it constrains (`FORMAT_LOCK_EXPLANATION`) and in the paid summary, both asserted separately.
+
 ---
 
 ## 5. The full-season rate
@@ -178,8 +250,13 @@ Nothing here adds per-view compute to a free path. The three generic reads are s
 `GetObject`s of pre-built blobs, and G100-D1's CDN serves the anonymous path from the edge.
 
 The three registries a new public surface must join (CDN allowlist, degrade floor, public cache
-rules) are unchanged — no new public surface was added to any of them, because Player Search and the
-player pages read the *same three endpoints* that were already registered.
+rules) gained no new *surface* — Player Search and the player pages read the same three endpoints
+already registered. The CDN allowlist's `board` entry was **narrowed**, not widened: its `config`
+and `size` patterns now match only the free selection, so the edge can reach exactly one board.
+
+**The paid presets cost nothing extra either.** They are the same pre-built S3 blobs, served to
+entitled callers straight from the Lambda as they always were — one `GetObject`, no compute — and an
+unentitled request is refused before the read happens.
 
 **One follow-up, deliberately not taken here.** Now that the generic reads are entitlement-
 independent, routing signed-in callers through the CDN too would be *safe* and would remove one
@@ -194,21 +271,33 @@ split in `lib/fantasy.ts` is where it would land.
 
 | Layer | Instrument | Result |
 |---|---|---|
-| The capability map, the quota seam, the frontend mirror | `betting_ml/tests/test_freemium_tier.py` | 48 pass |
-| End to end through the real ASGI app (anonymous / forged token / gateway-validated subscriber) | same file, `test_*` above | byte-identical across all three |
-| Rendered browser behaviour | `frontend/e2e/specs/freemium-board.spec.ts` | 14 pass |
-| The whole frontend suite (no regression from the mock's default flip) | `npx playwright test` | 112 pass (113 with the added player-page clause) |
-| Every Python guard is falsifiable | `uv run python betting_ml/tests/freemium_tier_red_proof.py` | **25/25 RED** |
-| Every new e2e clause is falsifiable | `frontend/e2e/red-proof.mjs` (6 new cases) | **6/6 RED** |
+| The capability map, the free preset, the quota seam, the frontend mirror | `betting_ml/tests/test_freemium_tier.py` | 72 pass |
+| End to end through the real ASGI app (anonymous / forged token / signed-in non-subscriber / gateway-validated subscriber) | same file | free URLs byte-identical across all four; paid presets 403/200 |
+| Rendered browser behaviour | `frontend/e2e/specs/freemium-board.spec.ts` | 20 pass |
+| The whole frontend suite | `npx playwright test` | 119 pass |
+| Every Python guard is falsifiable | `uv run python betting_ml/tests/freemium_tier_red_proof.py` | **45/45 RED** |
+| Every new e2e clause is falsifiable | `frontend/e2e/red-proof.mjs` (12 freemium cases) | **12/12 RED** |
 
-The red-proof harness earned its keep immediately: **five clauses were vacuous on the first run.**
-Two were weak assertions — one checked that a copy constant was still *imported* rather than
-*rendered*, and one checked that the governed constants were *referenced* rather than that no inline
-prose existed beside them — and both were rewritten. Three were insufficient breaks, one of which
-was itself a finding: dropping the router-level `dependencies=[Depends(require_fantasy_access)]` left
-`/fantasy/nfl/my-teams` correctly refusing, because that route carries the dependency on the function
-as well. That is defence in depth working, and it is why the break now removes the entitlement at its
-source.
+The red-proof harness earned its keep twice. On the freemium build's first run **five clauses were
+vacuous**; on the format-split's first run, **three more**.
+
+Of the eight, four were weak assertions and all four had the same shape — *asserting a NAME rather
+than the thing the name refers to*. One checked a copy constant was still **imported** rather than
+**rendered**; one checked the governed constants were **referenced** rather than that no inline prose
+sat beside them; one checked an identifier `storedIsFree` **existed** rather than that it held the
+comparison it is named for (replacing the whole expression with `= true` left the name in place and
+the guard green). A name is the last thing an edit removes, which is exactly why grepping for one
+proves so little.
+
+The other four were insufficient **breaks**, and three of those were findings rather than gaps —
+each stayed green because a *different* layer was correctly still refusing: dropping the
+router-level `dependencies=[Depends(require_fantasy_access)]` left `/fantasy/nfl/my-teams` refusing
+(the route carries the dependency on the function too); forcing a token "verified" left the groups
+coming from a separate verified decode; reading groups via `dependencies._groups_from_request` hit
+E9.56's hardening, which falls back to a verified decode whenever the authorizer context is absent.
+Defence in depth working, three times. The fourth was an anchor collision: `allows_board` ends with
+the identical `return bool(ent and ent.fantasy)` as `allows` and is defined first, so a
+first-occurrence patch broke the wrong function.
 
 ### What is NOT proven here
 
