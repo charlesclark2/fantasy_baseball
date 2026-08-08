@@ -43,7 +43,13 @@ _SUBSCRIBE_TSX = _REPO / "frontend/app/subscribe/page.tsx"
 #: The MARKETING surfaces — the ones that must LINK to the track record and never quote its number.
 #: Named as a registry rather than checked one-off so adding a surface to the product is a
 #: deliberate act: a new marketing page that forgets to appear here is the hole this guards.
-_MARKETING_SURFACES = (_UPGRADE_BANNER_TSX, _SUBSCRIBE_TSX)
+#: E9.46 added the home page — now the largest marketing surface in the product, and the only one
+#: that pitches BOTH verticals at once. This registry's own docstring says a new marketing page
+#: that forgets to appear here is the hole it guards, so the home page joining it is the mechanism
+#: working as designed rather than a courtesy. `test_e9_46_home_copy.py` asserts the membership
+#: from the other side, so removing it here is a red build there.
+_HOME_PAGE_TSX = _REPO / "frontend/app/page.tsx"
+_MARKETING_SURFACES = (_UPGRADE_BANNER_TSX, _SUBSCRIBE_TSX, _HOME_PAGE_TSX)
 _TRACK_RECORD_TSX = _REPO / "frontend/components/fantasy/track-record-page.tsx"
 _E2E_MANIFEST = _REPO / "frontend/e2e/fixtures/api/fantasy-nfl-track-record-manifest.json"
 

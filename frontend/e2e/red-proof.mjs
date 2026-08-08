@@ -332,6 +332,153 @@ const CASES = [
     to: "  const googleEnabled = false",
     grep: "offers a working Google entry",
   },
+
+  // ══ E9.46 — the home page as a positioning surface ═════════════════════════════════════════
+  {
+    id: "home-single-vertical",
+    shipped: "E9.46 — the pre-story home page, which read as an MLB betting site",
+    // ⚠️ THIS ONE ACTUALLY SHIPPED and was live until this story: "Daily edge, quantified" over an
+    // MLB pick card, with nothing telling a visitor arriving for fantasy they were in the right
+    // place. Invisible to every other gate — a single-product page types, builds and renders
+    // perfectly. Only a rendered check that BOTH doors exist can see it.
+    //
+    // ⚠️ THE FIRST BREAK WAS INERT AND THE SUITE CORRECTLY STAYED GREEN — worth recording, because
+    // it is the shape this whole harness exists to catch. Renaming the vertical's `key` changed
+    // nothing a visitor could see: both cards still rendered. Rendering only the FIRST vertical is
+    // a break that actually removes the door. It then exposed a REAL defect in the spec — the
+    // fantasy door was located by link text, which the `DISAGREEMENT_HOOK` block further down the
+    // page also matches, so it stood in for the deleted card. Both were fixed; a break that cannot
+    // change behaviour proves nothing about the test.
+    detail: "Renders only the first vertical, leaving a betting-only home page.",
+    file: "app/page.tsx",
+    from: "          {VERTICALS.map((v) => (",
+    to: "          {VERTICALS.slice(0, 1).map((v) => (",
+    grep: "both doors go somewhere",
+  },
+  {
+    id: "home-pick-is-a-tout",
+    shipped: "E9.46 — pre-emptive: the featured pick presented as a recommendation",
+    // ⭐⭐ THE ONE THAT WOULD MAKE THIS PAGE HARMFUL RATHER THAN MERELY WEAK. `best_alpha = 0`:
+    // six recorded no-edge results. A featured pick without its framing is the company claiming,
+    // on its own front door, the exact advantage it has repeatedly measured and failed to find.
+    // The remaining copy stays denylist-clean, so no word list can catch this — only an assertion
+    // naming the disclaimer can.
+    detail: "Removes the demonstration-not-recommendation frame from the live block.",
+    file: "lib/home-copy.ts",
+    from: '    "A demonstration, not a recommendation. Each day',
+    to: '    "Each day',
+    grep: "framed as a demonstration",
+  },
+  {
+    id: "home-blank-on-empty-read",
+    shipped: "E9.26b — a swallowed empty read rendering as nothing at all",
+    // The silent-`[]` class, on the marketing page. `lakehouse_query` catching and returning an
+    // empty result left a whole panel blank for days with every status code green. Here the same
+    // shape is a live block that simply vanishes when the model published nothing — which is
+    // indistinguishable from a broken page, and is the AC this story states explicitly.
+    detail: "Renders nothing instead of the honest empty state when the slate is empty.",
+    file: "components/home/pick-of-the-day.tsx",
+    from: "  if (data.game_pk == null) {\n    return (\n      <Shell>",
+    to: "  if (data.game_pk == null) {\n    return null\n    return (\n      <Shell>",
+    grep: "nothing published says so",
+  },
+  {
+    id: "home-failed-read-reads-as-empty-slate",
+    shipped: "E9.46 — pre-emptive: a page failure reported as a model result",
+    // Two different facts. "The model published nothing today" is routine and honest; "this page
+    // could not reach the model" is our failure and says nothing about the slate. Collapsing them
+    // states a falsehood about the model on the one surface where its honesty is the product.
+    detail: "Shows the empty-slate message when the read itself failed.",
+    file: "components/home/pick-of-the-day.tsx",
+    from: '<p className="text-sm leading-relaxed text-gray-400">{COPY.unavailable}</p>',
+    to: '<p className="text-sm leading-relaxed text-gray-400">{COPY.empty}</p>',
+    grep: "reported as ours",
+  },
+  {
+    id: "home-gap-relabelled-as-edge",
+    shipped: "E9.46 — the served field's own name leaking onto a marketing page",
+    // ⚠️ THE MOST LIKELY REGRESSION IN THIS WHOLE STORY, because it looks like a consistency fix:
+    // the API field IS called `edge` and every signed-in surface renders it that way, so aligning
+    // the home page with them reads as tidying up. On a marketing page it is a claim to an
+    // advantage we do not have.
+    detail: "Renames the model-vs-market difference back to 'Edge'.",
+    file: "lib/home-copy.ts",
+    from: '    gap: "Gap",',
+    to: '    gap: "Edge",',
+    grep: "as a bet to place",
+  },
+
+  // ══ E9.46 revision (2026-08-08) — fantasy-first, and the three factual corrections ══════════
+  {
+    id: "home-fantasy-proof-missing",
+    shipped: "E9.46 revision — pre-emptive: the fantasy product with no concrete demonstration",
+    // Fantasy is the acquisition priority, and before this revision it had a text-only treatment
+    // while MLB got the one real card. A page that DESCRIBES personalisation instead of showing it
+    // is the defect; nothing in tsc or next build can see the difference.
+    detail: "Removes the fantasy player card, leaving the fantasy pitch as prose only.",
+    file: "app/page.tsx",
+    from: "        <FeaturedFantasyPlayer />\n",
+    to: "",
+    grep: "renders a real player",
+  },
+  {
+    id: "home-mlb-proof-first",
+    shipped: "E9.46 revision — pre-emptive: the MLB card back above the fantasy card",
+    // The ordering is a product decision (fantasy is the acquisition priority), and it is invisible
+    // to every gate except a geometric read of the rendered page.
+    detail: "Swaps the two product proofs so MLB leads again.",
+    file: "app/page.tsx",
+    from: "        <FeaturedFantasyPlayer />\n        {/* The MLB proof renders",
+    to: "        {/* The MLB proof renders",
+    grep: "FANTASY proof comes before",
+  },
+  {
+    id: "home-conviction-label-restored",
+    shipped: "E9.46 revision — the hardcoded 'HIGH CONVICTION' badge, which was live until this release",
+    // ⚠️ THIS ONE ACTUALLY SHIPPED. `conviction_label` is a HARDCODED CONSTANT stamped on every
+    // featured pick, so the badge classified nothing — and a bettor reads "high conviction" as
+    // confidence that the team wins, which is the exact claim best_alpha=0 forbids. It is
+    // denylist-clean, it types, it builds, and only an assertion naming it can catch it.
+    detail: "Renders the served conviction_label instead of the measured model-agreement label.",
+    file: "components/home/pick-of-the-day.tsx",
+    from: "                  {COPY.agreementBadge}",
+    to: "                  {data.conviction_label}",
+    grep: "never says HIGH CONVICTION",
+  },
+  {
+    id: "home-fantasy-lean-caveat-dropped",
+    shipped: "E9.46 revision — pre-emptive: the rank gap presented as an independent read",
+    // Measured on the live artifact: ZERO of the 111 eligible players have mktLean 'independent',
+    // so our ranking always blends market consensus at the positions we can feature. Showing the
+    // gap without the caveat overstates what it means — and the copy stays denylist-clean either
+    // way, so only an assertion naming the caveat can see it.
+    detail: "Stops rendering the market-lean caveat beside the rank gap.",
+    file: "components/home/featured-fantasy-player.tsx",
+    from: "                {data.leanNote}",
+    to: "                {null}",
+    grep: "market-lean caveat",
+  },
+  {
+    id: "home-blog-back-in-primary-nav",
+    shipped: "E9.46 — the pre-story nav, where the blog sat beside the products",
+    detail: "Restores the blog as a primary-nav link (operator decision 3 reverses this).",
+    file: "components/nav.tsx",
+    from: '            href="/about"\n            className="hidden text-xs text-gray-500 hover:text-gray-300 transition-colors sm:block"',
+    to: '            href="/blog"\n            className="hidden text-xs text-gray-500 hover:text-gray-300 transition-colors sm:block"',
+    grep: "out of the primary nav",
+  },
+  {
+    id: "home-coming-soon-is-a-link",
+    shipped: "E9.56c — the dead `/pricing` CTA, wearing a friendlier label",
+    // A "coming soon" anchor into a route that does not exist is the same defect that killed the
+    // buy path, and `route-integrity.spec.ts` only catches it once the target 404s — a link to a
+    // real-but-unfinished surface teased as live would sail past it.
+    detail: "Wraps an un-shipped roadmap row's date in a link.",
+    file: "app/page.tsx",
+    from: "              <span\n                className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${",
+    to: "              <Link href=\"/about\">soon</Link>\n              <span\n                className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${",
+    grep: "teasers, not links",
+  },
 ]
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.

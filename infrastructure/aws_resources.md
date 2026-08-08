@@ -219,9 +219,10 @@ Apply this authorizer to all routes except:
 - `GET /fantasy/nfl/track-record/manifest` (NF3.2 public receipts manifest — added 2026-08-02)
 - `GET /fantasy/nfl/track-record/{season}` (NF3.2 public receipts per-season data — added 2026-08-02)
 
-✅ **ROUTE INVENTORY — CONFIRMED 2026-08-05** (`aws apigatewayv2 get-routes`, run with the
+✅ **ROUTE INVENTORY — RE-CONFIRMED 2026-08-08** (`aws apigatewayv2 get-routes`, run with the
 `AdministratorAccess-769392325318` SSO profile; the everyday `baseball-access-user` profile is denied
-`apigateway:*`, which is why this went unverified for so long). The nine routes that exist:
+`apigateway:*`, which is why this went unverified for so long). **THIRTEEN** routes now exist — the
+2026 board flip and E9.59's pricing route have landed since the 2026-08-05 reading of nine:
 
 ```
 ANY  /{proxy+}                            ← the catch-all: everything not listed below
@@ -234,7 +235,16 @@ GET  /blog/posts/{id}
 POST /stripe/webhook
 GET  /fantasy/nfl/track-record/manifest
 GET  /fantasy/nfl/track-record/{season}
+GET  /fantasy/nfl/manifest                ← the E9.56 launch flip (2026 board, LOCKED payload)
+GET  /fantasy/nfl/projections             ← ditto
+GET  /fantasy/nfl/board                   ← ditto
+GET  /subscription/public-pricing         ← E9.59 public pricing read
 ```
+
+⚠️ **THIS LIST GOES STALE SILENTLY AND IS MAINTAINED BY HAND** — it drifted by four routes in three
+days. It is only ever true as of its stamp; re-run `get-routes` before relying on it, and never
+build a `--route-settings` map from this block without listing first (a settings entry for a route
+that does not exist governs nothing while reading exactly like a limit that is in place).
 
 ⇒ **the model is: the catch-all carries the authorizer, and an explicit route EXEMPTS a path from
 it.** Every explicit route above is a deliberate public surface. This CORRECTS the paragraph that
@@ -255,7 +265,7 @@ authorizer sits in front of the Lambda entirely and rejects an unauthenticated r
 Mangum/FastAPI ever sees it (see NF3.2: `fantasy_public.router` shipped correct at the app layer
 but still 401'd until this API Gateway route was added).
 
-### 🔒 E9.56 — the public-launch route flip (NOT YET APPLIED)
+### 🔒 E9.56 — the public-launch route flip — ✅ APPLIED (confirmed 2026-08-08)
 
 The freemium split (past seasons free, 2026 locked behind a per-point marker) is enforced
 **server-side** in `app/backend/services/entitlement.py`. Until these routes exist, the three 2026
@@ -310,7 +320,7 @@ means a JWKS outage presents as "my subscription stopped working." JWKS is cache
 (1h TTL, plus a refetch on an unknown `kid` so a key rotation self-heals), so the cost is one HTTPS
 fetch per cold start with a 3s timeout.
 
-### 🚦 E9.56 — API Gateway throttling (rate limiting / anti-bulk-scrape) — NOT YET APPLIED
+### 🚦 E9.56 — API Gateway throttling (rate limiting / anti-bulk-scrape) — ✅ APPLIED 2026-08-08
 
 ⚠️ **AWS WAF does not support API Gateway HTTP APIs** (it covers REST APIs, CloudFront, ALB, AppSync
 and others). This API is an HTTP API, so WAF is not an option here — **stage/route throttling is the
@@ -361,8 +371,42 @@ aws apigatewayv2 update-stage \
 # ── 4. Confirm it took, and that the app still works.
 aws apigatewayv2 get-stage --api-id $API --region $REGION --stage-name '$default' \
   --query '{default:DefaultRouteSettings,perRoute:RouteSettings}'
-uv run python scripts/check_api_entitlement.py     # expect 42 pass / 0 fail, unchanged
+uv run python scripts/check_api_entitlement.py     # expect **0 FAILED** (the pass COUNT grows
+                                                   # with every public route — 54 on 2026-08-08;
+                                                   # asserting a literal count just goes stale)
 ```
+
+✅ **MEASURED STATE, 2026-08-08** — applied and verified:
+
+```
+default : ThrottlingBurstLimit 100, ThrottlingRateLimit 50     DetailedMetricsEnabled: false
+perRoute: 20 burst / 5 rate on all SIX of —
+          GET /picks/featured · /fantasy/nfl/manifest · /fantasy/nfl/projections
+          /fantasy/nfl/board · /fantasy/nfl/track-record/manifest · /fantasy/nfl/track-record/{season}
+```
+
+Entitlement re-verified after the change: **54 passed, 0 FAILED.**
+
+🕳️ **THREE PUBLIC ROUTES DELIBERATELY HAVE NO PER-ROUTE CAP** and inherit the 100/50 default:
+`GET /subscription/public-pricing`, `GET /blog/posts`, `GET /blog/posts/{id}`. That is a judgement,
+not an oversight — each returns a small payload with no bulk-extraction value (one price; blog
+prose), so a tighter cap would buy nothing and add a way to break the marketing pages. Recorded here
+so the gap is a decision rather than something a future reader has to guess about.
+
+📊 **`DetailedMetricsEnabled: false`, SO `ThrottleCount` IS API-WIDE, NOT PER-ROUTE.** You will know
+*that* something throttled, never *which route* — which matters because the six capped routes sit at
+5/s while the default is 50/s, so the cause is almost never the default. Leaving it off is the right
+call on cost grounds (per-route metrics are billed CloudWatch custom metrics — roughly $10–20/month
+across thirteen routes, which is absurd against a ~$120 baseline and would make the cost guard a
+cost). ⇒ **if `ThrottleCount` fires, enable detailed metrics TEMPORARILY to localise it, then turn
+them back off.**
+
+⚖️ **A per-route cap is shared across ALL callers, including our own CDN.** Post-`main` the anonymous
+board reads arrive from Vercel's egress rather than from visitors, so the CDN and any direct
+subscriber traffic draw on the same 20/5. The numbers are comfortable — CDN origin load is ~0.02–0.07
+req/s (bounded by TTL windows × cache keys × POPs, and independent of visitor count) against 5/s —
+but it is the same shared-bucket shape as the per-IP note in §5 of the spend-guardrails section, one
+layer up.
 
 📉 **Watch for over-throttling for ~24h.** A throttled request returns **429**, and the landing page
 fetches `/picks/featured` server-side per render — so a limit set too low degrades the marketing page
@@ -1110,6 +1154,356 @@ Verify:
 - Temp-password login works at `https://www.credencesports.com/login`
 - After setting permanent password, dashboard loads
 - No spam folder
+
+---
+
+## 💸 Spend guardrails + billing alarms (G100-D1) — ✅ MOSTLY APPLIED 2026-08-08
+
+> **Applied:** AWS Budget `credence-prod-monthly-250` · Cost Anomaly Detection (re-pointed to
+> `ctcb57@gmail.com`, threshold `ABSOLUTE ≥ $25 AND PERCENTAGE ≥ 40%`) · Vercel spend notification ·
+> API Gateway stage + per-route throttling (§ above).
+> **Outstanding:** the CloudWatch billing alarm sat `INSUFFICIENT_DATA` at creation — see §2 for why
+> that state is ambiguous and what to re-check.
+
+> Cost model and the reasoning behind the $250 threshold: **`docs/g100_d1_cost_model.md`**.
+> Regenerate its numbers with `uv run python scripts/estimate_launch_cost.py`.
+>
+> **Why this exists:** organic traffic is cheap (~$21/month all-in at 100k monthly visitors), but a
+> single un-throttled scraper on the newly-public board costs **~$3,210/month, $2,772 of it egress**.
+>
+> **Measured pre-existing state (2026-08-08)** — corrects an earlier draft of this section that said
+> there was no monitoring at all. **No AWS Budget and no CloudWatch billing alarm**: that part
+> stands. But AWS had auto-enabled **Cost Anomaly Detection**, and its default subscription was live
+> the whole time — **paging a university address rather than the `ctcb57@gmail.com` inbox every
+> other alarm in this stack uses**, at a threshold needing roughly a full day of a $107/day scrape
+> to accumulate. So the honest description is not "no monitoring" but **"one detector, pointed at a
+> different inbox, firing about a day late"** — the harder failure to notice, because the console
+> renders it as configured and healthy. Details and the fix in §3.
+
+### Two gotchas that make a billing alarm silently useless
+
+- 🔴 **`AWS/Billing` `EstimatedCharges` is published ONLY in `us-east-1`.** An alarm created in any
+  other region watches a metric that does not exist, stays in `INSUFFICIENT_DATA` forever, and never
+  fires. This is the classic guard-that-cannot-fail; every command below pins `--region us-east-1`.
+- 🔴 **Billing metrics must be switched on first**, and they can take up to ~24 h to appear.
+  Billing console → **Billing preferences** → tick **"Receive CloudWatch billing alerts"**. Until
+  that is done the alarm below has nothing to watch.
+- ⚠️ **SNS here is `us-east-1`.** Do **not** export `AWS_DEFAULT_REGION=us-east-2` for these — that
+  is the S3 *lakehouse bucket* only, and passing it yields a misleading `InvalidParameter: TopicArn`.
+
+### 1. AWS Budget — $250/month, three notifications  ▸ LAPTOP
+
+```bash
+# `baseball-access-user` is unlikely to have budgets:* — use the admin SSO profile.
+export AWS_PROFILE=<your-admin-profile>
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+EMAIL=ctcb57@gmail.com
+
+cat > /tmp/g100-budget.json <<JSON
+{
+  "BudgetName": "credence-prod-monthly-250",
+  "BudgetLimit": { "Amount": "250", "Unit": "USD" },
+  "TimeUnit": "MONTHLY",
+  "BudgetType": "COST"
+}
+JSON
+
+# 80% actual = early warning · 100% actual = it happened · 100% FORECAST = it is going to happen.
+# The forecast notification is the one that catches a scrape on day 2 instead of day 20.
+cat > /tmp/g100-budget-notifications.json <<JSON
+[
+  { "Notification": { "NotificationType": "ACTUAL",     "ComparisonOperator": "GREATER_THAN",
+                      "Threshold": 80,  "ThresholdType": "PERCENTAGE" },
+    "Subscribers": [ { "SubscriptionType": "EMAIL", "Address": "$EMAIL" } ] },
+  { "Notification": { "NotificationType": "ACTUAL",     "ComparisonOperator": "GREATER_THAN",
+                      "Threshold": 100, "ThresholdType": "PERCENTAGE" },
+    "Subscribers": [ { "SubscriptionType": "EMAIL", "Address": "$EMAIL" } ] },
+  { "Notification": { "NotificationType": "FORECASTED", "ComparisonOperator": "GREATER_THAN",
+                      "Threshold": 100, "ThresholdType": "PERCENTAGE" },
+    "Subscribers": [ { "SubscriptionType": "EMAIL", "Address": "$EMAIL" } ] }
+]
+JSON
+
+aws budgets create-budget \
+  --account-id "$ACCOUNT_ID" \
+  --budget file:///tmp/g100-budget.json \
+  --notifications-with-subscribers file:///tmp/g100-budget-notifications.json \
+  --region us-east-1
+
+# Verify
+aws budgets describe-budgets --account-id "$ACCOUNT_ID" --region us-east-1 \
+  --query 'Budgets[].{Name:BudgetName,Limit:BudgetLimit.Amount}' --output table
+```
+
+### 2. CloudWatch billing alarm → the existing `credence-prod-alerts` topic  ▸ LAPTOP
+
+Reuses the same SNS topic as every other page (`pipeline/utils/alerting.py::send_alert`), so this
+lands in the inbox the operator already watches.
+
+```bash
+export AWS_PROFILE=<your-admin-profile>
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+TOPIC_ARN="arn:aws:sns:us-east-1:${ACCOUNT_ID}:credence-prod-alerts"
+
+aws cloudwatch put-metric-alarm \
+  --region us-east-1 \
+  --alarm-name "credence-prod-billing-over-250" \
+  --alarm-description "G100-D1: estimated monthly AWS charges exceeded \$250 — see docs/g100_d1_cost_model.md" \
+  --namespace "AWS/Billing" \
+  --metric-name "EstimatedCharges" \
+  --dimensions Name=Currency,Value=USD \
+  --statistic Maximum \
+  --period 21600 \
+  --evaluation-periods 1 \
+  --threshold 250 \
+  --comparison-operator GreaterThanThreshold \
+  --treat-missing-data notBreaching \
+  --alarm-actions "$TOPIC_ARN"
+
+# Verify — StateValue should be OK (or INSUFFICIENT_DATA for up to ~24h after enabling
+# billing alerts). ⚠️ If it is STILL InsufficientData after a day, the billing-preferences
+# tick above was not applied and the alarm is watching nothing.
+aws cloudwatch describe-alarms --region us-east-1 \
+  --alarm-names credence-prod-billing-over-250 \
+  --query 'MetricAlarms[].{Name:AlarmName,State:StateValue,Threshold:Threshold}' --output table
+```
+
+### 3. Cost Anomaly Detection — free, and the FAST signal  ▸ LAPTOP
+
+A monthly-total alarm at $250 over a ~$120 baseline trips ~1.2 days into a $107/day scrape. Anomaly
+detection compares against a learned daily baseline and is materially quicker; it costs nothing.
+
+🔴 **AWS ALLOWS EXACTLY ONE DIMENSIONAL (`SERVICE`) SPEND MONITOR PER ACCOUNT, AND THIS ACCOUNT
+ALREADY HAS ONE.** Measured 2026-08-08: `create-anomaly-monitor` returns
+`ValidationException: Limit exceeded on dimensional spend monitor creation`. That is not a
+misconfiguration and nothing needs deleting — **the monitor is the detector, the SUBSCRIPTION is the
+notification**, and it is only the subscription we are missing. ⇒ LIST FIRST, REUSE THE ARN.
+
+```bash
+export AWS_PROFILE=<your-admin-profile>          # `baseball-access-user` is denied ce:*
+EMAIL=ctcb57@gmail.com
+
+# 1. Find the existing dimensional monitor and take its ARN.
+aws ce get-anomaly-monitors --region us-east-1 \
+  --query 'AnomalyMonitors[].{Name:MonitorName,Type:MonitorType,Dim:MonitorDimension,Arn:MonitorArn}' \
+  --output table
+
+MONITOR_ARN=$(aws ce get-anomaly-monitors --region us-east-1 \
+  --query 'AnomalyMonitors[?MonitorType==`DIMENSIONAL`]|[0].MonitorArn' --output text)
+echo "MonitorArn: $MONITOR_ARN"
+# ⚠️ If this prints `None`, there genuinely is no dimensional monitor — only then create one:
+#   aws ce create-anomaly-monitor --region us-east-1 \
+#     --anomaly-monitor '{"MonitorName":"credence-prod-services","MonitorType":"DIMENSIONAL","MonitorDimension":"SERVICE"}'
+
+# 2. Check the existing SUBSCRIPTION before creating one.
+#
+# 🔴 MEASURED 2026-08-08: this account already has `Default-Services-Subscription` (DAILY) —
+#    AWS auto-creates it when it auto-enables Cost Anomaly Detection. ⇒ the action here is almost
+#    certainly UPDATE, not CREATE. Two subscriptions on one monitor means two emails per anomaly,
+#    which is how a monitor gets muted.
+#
+# ⚠️ AND THE SUMMARY VIEW HIDES THE ONLY TWO FIELDS THAT MATTER. `{Name, Frequency}` looks healthy
+#    for a subscription that notifies NOBODY: an auto-created default often has an EMPTY
+#    `Subscribers` list and surfaces only in the console. That is a detector that runs and pages
+#    no one — the E11.30 shape exactly (the detection existed for days; the page never fired).
+#    A percentage-based default `ThresholdExpression` is the second trap: on a small bill a
+#    routine $2 → $6 Lambda blip is +200%, so it fires constantly and gets ignored.
+#    ⇒ ALWAYS inspect Subscribers + ThresholdExpression, never just Name/Frequency.
+aws ce get-anomaly-subscriptions --region us-east-1 \
+  --query 'AnomalySubscriptions[].{Name:SubscriptionName,Freq:Frequency,Arn:SubscriptionArn,Subs:Subscribers,Threshold:ThresholdExpression,Monitors:MonitorArnList}' \
+  --output json
+
+# 2b. UPDATE it. ── THE MEASURED STATE, 2026-08-08 ──────────────────────────────────────────────
+#
+#   Subscribers : ccl1196@wgu.edu  (EMAIL, CONFIRMED)
+#   Threshold   : AND[ ANOMALY_TOTAL_IMPACT_ABSOLUTE >= 100.0,
+#                      ANOMALY_TOTAL_IMPACT_PERCENTAGE >= 40.0 ]
+#   Monitor     : …anomalymonitor/eaf80e43-28c0-4251-bee5-6ce3dc8192b8   ✅ correctly attached
+#
+# 🔴 FINDING 1 — IT PAGED A DIFFERENT INBOX FROM EVERY OTHER ALARM IN THIS STACK. The budget and
+#    the `credence-prod-alerts` SNS topic both go to ctcb57@gmail.com; this one went to a
+#    university address. Not merely inconsistent: a `.edu` address is the kind that gets
+#    deactivated, and when it does, delivery stops SILENTLY — the subscription still reads
+#    CONFIRMED. Split alert destinations are how one channel goes unwatched without anyone
+#    deciding that it should.
+#
+# ⚠️ FINDING 2 — THE THRESHOLD IS AN `And`, SO THE STRICTER LEG BINDS, AND HERE THAT IS THE
+#    ABSOLUTE ONE. Against this account's actual risk the percentage leg is free: the egress
+#    baseline is ~zero, so a scrape is thousands of percent and clears 40% instantly. The $100
+#    absolute leg is what sets the delay — at the ~$107/day scrape rate, roughly a FULL DAY must
+#    accumulate before it fires. Lowering it to $25 fires ~4x sooner.
+#
+# ⚖️ THE TRADEOFF, STATED: the percentage leg CANNOT separate a scrape from a legitimate spike
+#    (both are enormous against a ~zero egress baseline), so the absolute leg is the only real
+#    discriminator. At $25 a laptop-run lakehouse backfill — which writes to PROD S3 — may
+#    occasionally trip it. Those are deliberate, recognisable events and missing a scrape costs
+#    far more than recognising a backfill. If it proves noisy, raise to $50; do not remove the
+#    percentage leg, which is what keeps ordinary drift out.
+
+SUB_ARN=$(aws ce get-anomaly-subscriptions --region us-east-1 \
+  --query 'AnomalySubscriptions[?SubscriptionName==`Default-Services-Subscription`]|[0].SubscriptionArn' \
+  --output text)
+
+aws ce update-anomaly-subscription --region us-east-1 \
+  --subscription-arn "$SUB_ARN" \
+  --subscribers "[{\"Type\":\"EMAIL\",\"Address\":\"$EMAIL\",\"Status\":\"CONFIRMED\"}]" \
+  --threshold-expression '{
+    "And": [
+      {"Dimensions":{"Key":"ANOMALY_TOTAL_IMPACT_ABSOLUTE","MatchOptions":["GREATER_THAN_OR_EQUAL"],"Values":["25.0"]}},
+      {"Dimensions":{"Key":"ANOMALY_TOTAL_IMPACT_PERCENTAGE","MatchOptions":["GREATER_THAN_OR_EQUAL"],"Values":["40.0"]}}
+    ]
+  }'
+
+# `--subscribers` REPLACES the list — to keep the old address as well, pass both entries.
+# Verify (the only proof the update took):
+aws ce get-anomaly-subscriptions --region us-east-1 \
+  --query 'AnomalySubscriptions[].{Subs:Subscribers,Threshold:ThresholdExpression}' --output json
+
+# 2c. ONLY if step 2 returned no subscription at all, create one: ─────────────────────────────
+
+aws ce create-anomaly-subscription --region us-east-1 \
+  --anomaly-subscription "{
+    \"SubscriptionName\": \"credence-prod-anomaly-daily\",
+    \"MonitorArnList\": [\"$MONITOR_ARN\"],
+    \"Subscribers\": [{\"Type\":\"EMAIL\",\"Address\":\"$EMAIL\",\"Status\":\"CONFIRMED\"}],
+    \"Frequency\": \"DAILY\",
+    \"ThresholdExpression\": {
+      \"Dimensions\": {
+        \"Key\": \"ANOMALY_TOTAL_IMPACT_ABSOLUTE\",
+        \"MatchOptions\": [\"GREATER_THAN_OR_EQUAL\"],
+        \"Values\": [\"25\"]
+      }
+    }
+  }"
+```
+
+### 4. Vercel spend notification  ▸ VERCEL DASHBOARD (no CLI)
+
+Vercel has no API for this — it is dashboard-only.
+
+1. **vercel.com** → your team → **Settings** → **Billing** → **Spend Management**.
+2. Set **Spend Amount** to **`$60`**. Rationale: the model puts us at $20 (the seat) up to ~250k
+   monthly visitors and ~$41 at 500k, so $60 is comfortably above any organic outcome and still
+   catches a genuine surprise early.
+3. Enable the **email notification** at that amount.
+4. ⛔ **Do NOT enable "Pause Production Deployment" as the spend-management action.** It takes the
+   *site* down to save money — an outage triggered by a billing threshold, which is strictly worse
+   than the overage it prevents and precisely the failure this project's degrade switch exists to
+   avoid. Notification only; the operator decides what to do.
+5. Also worth setting: **Settings → Billing → Usage Alerts** for **Edge Requests**, the quota that
+   binds first (§4 of the cost model).
+
+### 5. The degrade kill switch (what to do when an alarm fires)  ▸ LAPTOP
+
+```bash
+# ON — serve only the cached/static floor; the expensive personalized endpoints answer 503.
+# ⚠️ update-function-configuration REPLACES the whole Variables map — read the current env first
+#    and re-send everything, or you will wipe every other setting on the function.
+aws lambda get-function-configuration --function-name credence-prod-lambda-api \
+  --region us-east-1 --query 'Environment.Variables' > /tmp/lambda-env.json
+
+python3 - <<'PY'
+import json
+env = json.load(open('/tmp/lambda-env.json'))
+env['COST_DEGRADE_MODE'] = '1'          # '0' or remove the key to turn it back OFF
+json.dump({'Variables': env}, open('/tmp/lambda-env-new.json','w'))
+PY
+
+aws lambda update-function-configuration --function-name credence-prod-lambda-api \
+  --region us-east-1 --environment file:///tmp/lambda-env-new.json
+
+# Verify it took effect (the flag is read per-request, so it applies as containers cycle):
+curl -si https://api.credencesports.com/performance/summary | head -1   # expect 503
+curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest | head -1  # expect 200
+```
+
+Rate-limit tuning knobs on the same function (all optional; defaults in
+`app/backend/services/cost_guardrails.py`): `COST_RL_PUBLIC_BURST` (30),
+`COST_RL_PUBLIC_PER_SECOND` (0.5), `COST_RL_AUTH_BURST` (60), `COST_RL_AUTH_PER_SECOND` (2.0).
+
+⚠️⚠️ **THE CDN COLLAPSES EVERY ANONYMOUS VISITOR ONTO A HANDFUL OF VERCEL EGRESS IPs, AND THE
+PER-IP LIMITER SEES THOSE, NOT THE VISITORS.** Once the front-end half deploys (`dev` → `main`), an
+anonymous cache MISS reaches us as browser → Vercel CDN → Vercel function → API Lambda, so the
+Lambda's `sourceIp` is Vercel's, and **all CDN-origin traffic shares ONE bucket**. This is a direct
+consequence of the CDN design and it is the one interaction that could make the two guardrails fight
+each other: throttle the CDN and the board goes stale or blank for *everyone*, which is exactly the
+outage the degrade switch exists to avoid.
+
+The arithmetic says it is comfortable, and — the part that matters — **it does not get worse as
+traffic grows**: cache misses are bounded by `(TTL windows × cache keys × POPs)`, ≈0.1 req/s
+sustained against the 0.5/s allowance, and that ceiling is independent of visitor count. The
+residual risk is a burst, not a trend: a simultaneous multi-POP expiry can spend the burst-30.
+
+**Watch for it right after the front-end deploys:** errors from `/api/public/*` (the route surfaces
+an upstream 429 as a 502) or `ThrottleCount` rising with no matching visitor spike. **The fix is one
+env var and no code deploy** — set `COST_RL_PUBLIC_PER_SECOND=2.0` via the §5 procedure. Do NOT
+"fix" it by having the CDN route forward the visitor's IP: that value is caller-controlled and
+trusting it re-opens the spoofing bypass the limiter's IP-precedence order exists to close.
+
+⚠️ These are **not** in `env.required` on purpose — every one has a safe in-code default, and adding
+a required key means the next deploy FAILS until the box `.env` is hand-edited (the recurring
+one-logical-thing-many-owners trap). `COST_DEGRADE_MODE` unset simply means "off".
+
+### 6. Live smoke — the part CI cannot prove  ▸ LAPTOP, AFTER `deploy.sh`
+
+CI mocks all IO, so neither the throttle nor the degrade flag is provable in the merge gate.
+
+✅ **RUN AGAINST PROD 2026-08-08, backend half PASSED** — results inline below.
+
+🔴 **THE FRONT-END HOST IS `www.credencesports.com`. THE APEX `credencesports.com` DOES NOT RESOLVE**
+(measured: curl exit 6, `000`). An earlier draft of this section used the apex and the CDN check
+appeared to fail for a reason that had nothing to do with the route. The API host
+(`api.credencesports.com`) is unaffected.
+
+⚠️ **THE TWO HALVES DEPLOY SEPARATELY AND THE CDN CHECK NEEDS THE FRONT-END HALF.** `deploy.sh`
+ships the API from whatever is checked out; the Next front end deploys to PRODUCTION only from
+`main`. A commit merged to `dev` therefore has a live backend and no `/api/public/*` route — that
+path 404s until `dev` → `main` lands. This is the safe direction (the deployed front end still calls
+the API directly, and the backend change is purely additive), but do not read the 404 as a defect.
+
+⚠️ **THE `dev` PREVIEW URL CANNOT BE CURLED.** Vercel Deployment Protection 302s every path to
+`vercel.com/sso-api`, so a shell check sees the SSO redirect's headers (`no-store`), never the
+route's. Either open the URL in a logged-in browser and read DevTools → Network, or mint a
+**Protection Bypass for Automation** secret (Project → Settings → Deployment Protection) and pass
+`-H "x-vercel-protection-bypass: <secret>"`.
+
+```bash
+# (a) The per-IP limit engages and returns an honest 429 with Retry-After.
+for i in $(seq 1 60); do
+  curl -s -o /dev/null -w "%{http_code} " https://api.credencesports.com/fantasy/nfl/track-record/manifest
+done; echo
+# Expect: 200s, then 429s. Confirm the headers on a throttled one:
+curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest \
+  -H 'Origin: https://credencesports.com' | grep -iE 'HTTP/|retry-after|access-control-allow-origin|cache-control'
+# ⭐ access-control-allow-origin MUST be present on the 429 — without it the browser sees an
+#    opaque network error instead of a throttle, and the frontend cannot tell them apart.
+#
+#   MEASURED 2026-08-08 (prod): 33 × 200, then 429s with occasional 200s interleaved.
+#     HTTP/2 429 · retry-after: 2 · cache-control: no-store
+#     access-control-allow-origin: https://www.credencesports.com     ← the ordering property, live
+#   ⭐ The interleaved 200s are the REFILL, not a leak: 0.5 tokens/s = one request per 2 s, which is
+#     exactly what `retry-after: 2` advertises. A run of unbroken 429s would mean the bucket was not
+#     refilling and legitimate callers would be locked out until the container cycled.
+
+# (b) Cache headers are entitlement-keyed.
+curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest | grep -i 'cache-control\|vary'
+#   expect: public, s-maxage=3600, stale-while-revalidate=86400   +   Vary: ... Authorization
+curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest \
+  -H 'Authorization: Bearer anything' | grep -i 'cache-control'
+#   expect: private, no-store    ← a token must NEVER produce a shared-cacheable response
+#
+#   MEASURED 2026-08-08 (prod), both PASS:
+#     anonymous → cache-control: public, s-maxage=3600, stale-while-revalidate=86400 · vary: Authorization
+#     +Bearer  → cache-control: private, no-store                                    · vary: Authorization
+
+# (c) The CDN read path really is cached. ⚠️ `www.`, not the apex — and only after dev → main.
+curl -si https://www.credencesports.com/api/public/featured | grep -iE 'HTTP/|cache-control|x-vercel-cache'
+curl -si https://www.credencesports.com/api/public/featured | grep -i 'x-vercel-cache'   # expect HIT
+#   expect: 200 · public, s-maxage=300, stale-while-revalidate=900 · MISS then HIT
+#   a 404 here means the front-end half has not deployed yet (see the warning above), not a bug
+
+# (d) Then exercise §5 above: flip the degrade flag on, confirm the two curls, flip it back OFF.
+```
 
 ---
 

@@ -42,6 +42,26 @@ async function errorMessage(res: Response): Promise<string> {
   return `API error ${res.status}`
 }
 
+/**
+ * G100-D1 — the ANONYMOUS read path: fetch a same-origin `/api/public/*` route handler instead of
+ * the API Lambda.
+ *
+ * Those handlers return the payload with `s-maxage`, so Vercel's CDN serves every view inside the
+ * window from the edge with NO function invocation and NO Lambda call. Use it for any read whose
+ * response carries no per-caller content — a token-bearing read must keep using `apiFetch`, because
+ * an entitlement-dependent payload must never reach a shared cache.
+ *
+ * Deliberately takes no token parameter: the absence of one is the point, and a signature that
+ * cannot accept a token cannot accidentally forward it.
+ */
+export async function cdnFetch(path: string): Promise<any> {
+  // Relative URL ⇒ same origin ⇒ our CDN. Deliberately NOT prefixed with `NEXT_PUBLIC_API_URL`.
+  const res = await fetch(path, { headers: { Accept: 'application/json' } })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  if (res.status === 204 || res.headers.get('content-length') === '0') return null
+  return res.json()
+}
+
 export async function apiFetch(
   path: string,
   options: RequestInit = {},
