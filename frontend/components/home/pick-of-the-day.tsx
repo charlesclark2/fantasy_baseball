@@ -219,6 +219,37 @@ export function PickOfTheDay() {
       : null
   const market = isTotals ? COPY.markets.totals : COPY.markets.h2h
 
+  // ⭐ THE RECAP'S LABEL DEPENDS ON WHICH DAY THE CARD IS FOR, and getting this wrong is why an
+  // earlier cut deleted the recap outright rather than fixing it.
+  //
+  // On a live card, the recap is the previous day's read and "Yesterday" is exactly right. On a
+  // CARRIED-OVER card the card itself is already a previous day, so "Yesterday" would point at the
+  // card's own date while naming the day before it — two different days on screen under labels
+  // that contradict each other. Naming the DATE removes the ambiguity completely and keeps the
+  // only self-grading a logged-out visitor can see.
+  //
+  // The date is derived, not served: the writer's recap query is always `DATEADD(day, -1, …)` of
+  // the blob's own date, so "the day before `pick_date`" is correct by construction. If
+  // `pick_date` is missing or unparseable we fall back to a neutral phrase rather than printing a
+  // date we cannot stand behind.
+  // ⚠️ MINUS ONE DAY. The recap is the day BEFORE the card, not the card's own date — the first
+  // cut of this rendered `pick_date` directly, which would have labelled Aug 6's result "August 7"
+  // and quietly re-created the very off-by-one-day confusion the label exists to remove. Midday
+  // local time is used as the anchor so a timezone offset can never roll the date over.
+  const recapDate = (() => {
+    if (!data.is_stale || !data.pick_date) return null
+    const d = new Date(data.pick_date + "T12:00:00")
+    if (Number.isNaN(d.getTime())) return null
+    d.setDate(d.getDate() - 1)
+    return d
+  })()
+  const recapLabel =
+    recapDate && !Number.isNaN(recapDate.getTime())
+      ? recapDate.toLocaleDateString("en-US", { month: "long", day: "numeric" })
+      : data.is_stale
+        ? COPY.previousReadLabel
+        : COPY.yesterdayLabel
+
   const pct = (v: number | null | undefined) => (v == null ? null : `${(v * 100).toFixed(1)}%`)
 
   return (
@@ -364,7 +395,7 @@ export function PickOfTheDay() {
         {data.yesterday && (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[#262626] pt-5">
             <span className="text-xs text-gray-500">
-              <span className="font-medium text-gray-400">{COPY.yesterdayLabel}:</span>{" "}
+              <span className="font-medium text-gray-400">{recapLabel}:</span>{" "}
               {data.yesterday.matchup}
             </span>
             {data.yesterday.status === "win" ? (

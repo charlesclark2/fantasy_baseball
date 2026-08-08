@@ -1191,8 +1191,14 @@ Verify:
 > **Applied:** AWS Budget `credence-prod-monthly-250` · Cost Anomaly Detection (re-pointed to
 > `ctcb57@gmail.com`, threshold `ABSOLUTE ≥ $25 AND PERCENTAGE ≥ 40%`) · Vercel spend notification ·
 > API Gateway stage + per-route throttling (§ above).
-> **Outstanding:** the CloudWatch billing alarm sat `INSUFFICIENT_DATA` at creation — see §2 for why
-> that state is ambiguous and what to re-check.
+> **CloudWatch billing alarm — ✅ NOW FULLY WIRED (2026-08-08), after three stacked defects.**
+> (1) billing alerts had never been enabled, so `EstimatedCharges` did not exist; (2) the creation
+> command here passed `--treat-missing-data notBreaching`, which made the alarm report **`OK`**
+> while watching that missing metric; (3) re-putting it with the corrected flag left a **stale**
+> `OK` behind, because CloudWatch leaves an updated alarm's state unchanged. Each one hid the next,
+> and all three presented as a healthy alarm. Now: `TreatMissingData: missing`, metric present, and
+> `get-metric-statistics` on the alarm's exact dimension returns real data. **Baseline measured at
+> ~$107/month, so the $250 threshold stands at 2.3x** — validated rather than assumed.
 
 > Cost model and the reasoning behind the $250 threshold: **`docs/g100_d1_cost_model.md`**.
 > Regenerate its numbers with `uv run python scripts/estimate_launch_cost.py`.
@@ -1286,15 +1292,74 @@ aws cloudwatch put-metric-alarm \
   --evaluation-periods 1 \
   --threshold 250 \
   --comparison-operator GreaterThanThreshold \
-  --treat-missing-data notBreaching \
+  --treat-missing-data missing \
   --alarm-actions "$TOPIC_ARN"
 
-# Verify — StateValue should be OK (or INSUFFICIENT_DATA for up to ~24h after enabling
-# billing alerts). ⚠️ If it is STILL InsufficientData after a day, the billing-preferences
-# tick above was not applied and the alarm is watching nothing.
+# 🔴🔴 `--treat-missing-data missing` IS LOAD-BEARING AND WAS WRONG IN THE FIRST CUT OF THIS DOC.
+#
+# It originally said `notBreaching`, and the result (measured 2026-08-08) was an alarm sitting at
+# **StateValue: OK** while `AWS/Billing EstimatedCharges` DID NOT EXIST — because billing alerts had
+# never been enabled. `notBreaching` converts "I can see nothing" into "everything is fine", so the
+# alarm reported green while watching a metric that was not there. A guard that cannot fail,
+# displaying success: strictly worse than no alarm, because it reads as covered.
+#
+# Its own StateReason gave it away and is worth recognising verbatim:
+#   "no datapoints were received for 1 period and 1 missing datapoint was treated as [NonBreaching]"
+#
+# With `missing`, an absent metric shows as INSUFFICIENT_DATA — visibly not-OK, which is the honest
+# state and the repo's standing rule that an UNEVALUABLE check is never scored healthy (NF1.7 (a)).
+# ⛔ Do not use `breaching` either: that pages immediately and forever until the metric appears.
+
+# ⭐ VERIFY THE METRIC EXISTS — DO NOT VERIFY BY READING THE ALARM STATE. `INSUFFICIENT_DATA` means
+#    both "not populated yet" and "will never exist", and (as above) a mis-set treat-missing-data
+#    can render the second case as OK. `list-metrics` answers it definitively and immediately:
+aws cloudwatch list-metrics --region us-east-1 \
+  --namespace AWS/Billing --metric-name EstimatedCharges --output table
+#   EMPTY  ⇒ billing alerts are NOT enabled. The alarm can never fire. Go tick the preference.
+#   A row ⇒ enabled; the alarm reaches OK on its own (metric can take ~24h to first appear).
+#
+# ⚠️ BUT A NON-EMPTY LIST IS STILL NOT PROOF — CLOUDWATCH DIMENSION MATCHING IS EXACT, NOT SUBSET.
+#    Once enabled, `AWS/Billing` publishes MANY variants: `{ServiceName, Currency}` per service,
+#    `{Currency, LinkedAccount}`, `{ServiceName, Currency, LinkedAccount}`, and the bare
+#    `{Currency}` total. They are DIFFERENT metrics. An alarm on `{Currency=USD}` sees ONLY the
+#    bare-total variant, so a list full of per-service rows can look like success while the alarm
+#    still watches nothing. ⇒ verify END-TO-END by asking exactly what the alarm asks:
+aws cloudwatch get-metric-statistics --region us-east-1 \
+  --namespace AWS/Billing --metric-name EstimatedCharges \
+  --dimensions Name=Currency,Value=USD \
+  --start-time $(date -u -v-2d +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period 21600 --statistics Maximum --output table
+#   ✅ MEASURED 2026-08-08: returns Maximum 24.72 @ 03:29Z ⇒ the alarm is fully wired.
+#   If it returns EMPTY, this account publishes only the LinkedAccount-qualified variant; re-put the
+#   alarm with `--dimensions Name=Currency,Value=USD Name=LinkedAccount,Value=<account-id>`.
+#
+# 💰 BONUS, AND USE IT: those datapoints are the real month-to-date bill, which is how the $250
+#    threshold got validated instead of assumed. $24.72 at 7.15 days into August ⇒ $3.46/day ⇒
+#    ~$107/month, i.e. the threshold sits at 2.3x baseline. Re-read this occasionally; if the
+#    baseline moves materially, rescale the budget + alarm to ~2x it.
+
 aws cloudwatch describe-alarms --region us-east-1 \
   --alarm-names credence-prod-billing-over-250 \
-  --query 'MetricAlarms[].{Name:AlarmName,State:StateValue,Threshold:Threshold}' --output table
+  --query 'MetricAlarms[].{Name:AlarmName,State:StateValue,Missing:TreatMissingData,Threshold:Threshold}' \
+  --output table
+
+# ⚠️ A STATE READ IMMEDIATELY AFTER AN UPDATE IS STALE — DO NOT TREAT IT AS THE NEW CONFIG'S VERDICT.
+# Per AWS: "When you update an existing alarm, its state is left unchanged, but the update
+# completely overwrites the previous configuration." So re-putting the alarm with the corrected
+# `--treat-missing-data missing` leaves the old `OK` sitting there, and with `--period 21600` the
+# next evaluation is up to SIX HOURS away. Measured 2026-08-08: `Missing: missing` alongside
+# `State: OK` — correct config, stale verdict, and indistinguishable at a glance from the very bug
+# that was just fixed. (Same shape as the mis-set flag above, one layer over: the state field is
+# again the thing you must not verify by.)
+#
+# Clear it rather than waiting. Safe: INSUFFICIENT_DATA fires `insufficient-data-actions`, and none
+# are configured. ⛔ NEVER do this with `--state-value ALARM` — that DOES fire the SNS action and
+# pages a real incident that is not happening.
+aws cloudwatch set-alarm-state --region us-east-1 \
+  --alarm-name credence-prod-billing-over-250 \
+  --state-value INSUFFICIENT_DATA \
+  --state-reason "clearing the stale OK carried over from the previous config"
 ```
 
 ### 3. Cost Anomaly Detection — free, and the FAST signal  ▸ LAPTOP
@@ -1441,10 +1506,60 @@ PY
 aws lambda update-function-configuration --function-name credence-prod-lambda-api \
   --region us-east-1 --environment file:///tmp/lambda-env-new.json
 
-# Verify it took effect (the flag is read per-request, so it applies as containers cycle):
-curl -si https://api.credencesports.com/performance/summary | head -1   # expect 503
+# ⚠️ WAIT FOR PROPAGATION BEFORE CURLING. `update-function-configuration` RETURNS IMMEDIATELY with
+#    `"LastUpdateStatus": "InProgress"`; a curl fired before it flips to `Successful` hits the OLD
+#    env and reports the pre-flip behaviour. Poll until Successful:
+aws lambda get-function-configuration --function-name credence-prod-lambda-api --region us-east-1 \
+  --query '{degrade:Environment.Variables.COST_DEGRADE_MODE,status:LastUpdateStatus}'
+
+# (a) THE FLOOR STAYS UP — anonymous, no token required:
 curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest | head -1  # expect 200
+curl -si https://api.credencesports.com/subscription/public-pricing | head -1        # expect 200
+
+# (b) THE DENIAL — ⛔ REQUIRES A REAL BEARER TOKEN. Sign in at www.credencesports.com, open
+#     devtools → Network, click any API call, copy the `authorization` request header value.
+TOKEN='eyJ...'
+curl -si -H "Authorization: Bearer $TOKEN" \
+  https://api.credencesports.com/performance/summary | head -1                       # expect 503
+
+# OFF — remove the key (absent == off; `degrade_mode_enabled` reads it per request).
+python3 - <<'PY'
+import json
+env = json.load(open('/tmp/lambda-env.json'))
+env.pop('COST_DEGRADE_MODE', None)
+json.dump({'Variables': env}, open('/tmp/lambda-env-off.json','w'))
+PY
+aws lambda update-function-configuration --function-name credence-prod-lambda-api \
+  --region us-east-1 --environment file:///tmp/lambda-env-off.json
 ```
+
+⛔⛔ **AN UNAUTHENTICATED CURL CANNOT DEMONSTRATE THE 503, AND ITS `401` READS EXACTLY LIKE SUCCESS —
+this block prescribed precisely that broken check until 2026-08-08.** The original line was a bare
+`curl .../performance/summary` expecting 503. That path has **no explicit API Gateway route**, so it
+falls to `ANY /{proxy+}`, which carries the Cognito JWT authorizer (NF3.2) — **the gateway rejects it
+with 401 before the Lambda is ever invoked, degrade mode on or off.** A `401` is a blocked-looking
+status on an endpoint you expected to be blocked, so the check passes the eye test while measuring
+nothing about the flag. It is the repo's vacuous-guard class (NF1.7 (a) / INC-38) in an operator
+runbook rather than in a test.
+
+⭐ **AND IT IS NOT INCIDENTAL — IT IS STRUCTURAL, BECAUSE THE TWO ALLOWLISTS COINCIDE BY DESIGN.**
+Cross-check the 13 `--authorization-type NONE` routes above against `_DEGRADE_ALLOWED_PREFIXES` in
+`app/backend/services/cost_guardrails.py`: **every single public route is degrade-allowlisted.** That
+is the correct product outcome — degrade mode is *defined* as "keep exactly the anonymous free floor
+up" — but it has a verification consequence that is easy to miss: **there is no anonymous request
+that degrade mode refuses**, so the switch's denial half is unobservable without a valid token, and
+any token-free smoke of it can only ever produce a false pass. Anonymous curls verify the *floor*
+(a); only an authenticated one verifies the *denial* (b). Both halves are needed — (a) alone cannot
+distinguish "degrade is working" from "degrade never turned on."
+
+🪤 **AND IT HAS ALREADY BEEN RELIED ON, THE SAME MORNING, BY A DIFFERENT SESSION.** The E9.46
+carry-over fix (`4b74506f`, 09:25Z 2026-08-08) ruled the kill switch out of a live prod diagnosis
+with: *"degrade mode is OFF (a non-floor public path returns 200)."* There is **no such thing as a
+non-floor public path** — the two allowlists coincide — so that observation is equally consistent
+with degrade being ON. The conclusion happened to be correct (the flag was not flipped until 09:32Z)
+but the inference was not, and it was one of four bullets eliminating causes on a P1. ⇒ **to
+establish the flag's state, READ THE FLAG** — `aws lambda get-function-configuration … --query
+'Environment.Variables.COST_DEGRADE_MODE'` — never infer it from a 200 on any anonymous route.
 
 Rate-limit tuning knobs on the same function (all optional; defaults in
 `app/backend/services/cost_guardrails.py`): `COST_RL_PUBLIC_BURST` (30),
@@ -1528,10 +1643,37 @@ curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest \
 # (c) The CDN read path really is cached. ⚠️ `www.`, not the apex — and only after dev → main.
 curl -si https://www.credencesports.com/api/public/featured | grep -iE 'HTTP/|cache-control|x-vercel-cache'
 curl -si https://www.credencesports.com/api/public/featured | grep -i 'x-vercel-cache'   # expect HIT
-#   expect: 200 · public, s-maxage=300, stale-while-revalidate=900 · MISS then HIT
 #   a 404 here means the front-end half has not deployed yet (see the warning above), not a bug
+#
+# ✅ VERIFIED 2026-08-08, and 🔴 THE RESULT LOOKS LIKE A FAILURE UNTIL YOU READ IT PROPERLY:
+#
+#     hit 1:  200  age: 322  cache-control: public   x-vercel-cache: STALE
+#     hit 2:  200  age: 0    cache-control: public   x-vercel-cache: HIT
+#     hit 3:  200  age: 2    cache-control: public   x-vercel-cache: HIT
+#
+# ⚠️ `cache-control: public` — WITHOUT the s-maxage / stale-while-revalidate we set. Do NOT read
+#    that as "the header was ignored." Vercel CONSUMES both directives for its own edge cache and
+#    STRIPS them from the client-facing response, which is exactly the behaviour we want: the CDN
+#    holds the copy, the browser does not hold a stale one.
+#
+# ⭐ THE PROOF THE TTL IS REALLY HONOURED IS `age` CROSSING `s-maxage`, NOT THE HEADER. Hit 1 was
+#    age 322 against s-maxage 300 ⇒ past freshness ⇒ served STALE while revalidating in the
+#    background (inside the 900s SWR window); hit 2 then returned age 0, the revalidated object.
+#    A cache that ignored the directives would have no notion of "stale" at 322 seconds, so this
+#    transition — and not a bare HIT — is what actually verifies the configuration.
+#
+# ⏳ AND THE CONSEQUENCE FOR ANYONE DEBUGGING AN UPSTREAM FIX: a change to the underlying payload
+#    can take up to s-maxage + SWR to appear (≈20 min for `/picks/featured`). Bypass with a unique
+#    query string — `?nocache=$RANDOM` — before concluding a fix did not land.
+#
+# Payload fidelity was checked the same way and is byte-identical to the direct API read, which is
+# the property that matters here: the route is a pass-through, not a transform.
 
-# (d) Then exercise §5 above: flip the degrade flag on, confirm the two curls, flip it back OFF.
+# (d) Then exercise §5 above: flip the degrade flag on, WAIT for LastUpdateStatus=Successful, then
+#     confirm BOTH halves — the anonymous floor still 200s AND an authenticated (real bearer token)
+#     call to /performance/summary 503s — then flip it back OFF and re-confirm the 200s.
+#     ⛔ A token-free curl of /performance/summary is NOT the denial half: it 401s at the gateway
+#        either way. See the warning under §5 — that false pass has already been shipped once.
 ```
 
 ---

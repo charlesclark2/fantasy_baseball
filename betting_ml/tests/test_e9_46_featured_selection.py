@@ -513,16 +513,33 @@ class TestTheCarryOverServesThePublishedBlob:
         assert out.matchup == "TB @ SEA"
         assert out.pick_date == "2026-08-07"
 
-    def test_a_carried_over_card_announces_itself_and_drops_the_stale_recap(self, monkeypatch):
-        """The three rewritten fields, each of which would otherwise be a false statement: an
-        unlabelled card claims yesterday's numbers are today's; the stored recap is the day BEFORE
-        the card, so keeping it puts two days on screen under labels that say otherwise; and
-        `is_preliminary` describes lineups for a slate that has since finished."""
+    def test_a_carried_over_card_announces_itself_but_keeps_its_recap(self, monkeypatch):
+        """Two fields are rewritten and one is deliberately KEPT.
+
+        `is_stale` is what makes the card announce itself — serving yesterday's numbers unlabelled
+        is the one genuinely dangerous state this block can be in. `is_preliminary` describes
+        whether lineups were confirmed for a slate that has since finished, so it is meaningless
+        here.
+
+        ⭐ THE RECAP STAYS, and an earlier cut of this test asserted the opposite. Dropping it
+        identified a real ambiguity — a recap labelled "Yesterday" beside a card that is ITSELF
+        yesterday names the wrong day — and then solved it by deleting the only self-grading on a
+        card that is purely retrospective. The label is the thing that was wrong, not the content;
+        the component names the DATE on a stale card.
+
+        ⚠️ It is also the ONLY result that can be shown here: grading the carried pick's own game
+        needs `mart_game_results` (statcast-derived, rebuilt by the daily job) or
+        `stg_statsapi_games` (schedule capture is frozen 04:00–14:00 UTC by design), and both
+        refresh at roughly the moment the carry-over ends."""
         self._wire(monkeypatch, {"2026-08-07": dict(self._BLOB)})
         out = picks.get_featured_pick()
         assert out.is_stale is True
-        assert out.yesterday is None
         assert out.is_preliminary is False
+        assert out.yesterday is not None, (
+            "the carried card lost its recap — the only self-grading a logged-out visitor sees"
+        )
+        assert out.yesterday.matchup == "DET @ SEA"
+        assert out.yesterday.outcome == "Won"
 
     def test_todays_own_read_is_preferred_over_the_carry_over(self, monkeypatch):
         """The carry-over must never shadow a published slate — it is a fallback, not a cache."""

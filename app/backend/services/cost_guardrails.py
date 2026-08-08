@@ -296,9 +296,37 @@ _DEGRADE_ALLOWED_PREFIXES: tuple[str, ...] = (
     # would blank the FIRST thing on the page a cost event most needs to keep converting.
     "/fantasy/nfl/featured-player",
     "/blog/posts",
-    # Pricing must stay readable or the upgrade funnel dies exactly when we most want revenue.
-    "/stripe/public",
-    "/subscribe",
+    # ⭐ THE WHOLE BILLING PATH STAYS UP. Blocking payment endpoints to save money is self-defeating:
+    # a cost event is precisely when revenue matters most. All of these are cheap (one Stripe API
+    # call or a DynamoDB read) and inherently low-volume — nobody scrapes a checkout session.
+    #
+    # 🩹 FIXED 2026-08-08. This entry previously read `"/stripe/public"` and `"/subscribe"`, and
+    # NEITHER MATCHED ANYTHING. The real path is `/subscription/public-pricing` (the prefix was
+    # written from the router's MOUNT NAME, `stripe.public_router`, instead of from the route
+    # decorator), and `/subscribe` is a FRONT-END page, not an API path at all. So the comment
+    # claimed the funnel was protected while degrade mode would have 503'd the pricing page — the
+    # precise opposite. It is the allowlist's characteristic failure: a wrong entry does not error,
+    # it silently denies, and the denial only shows up the one time you actually flip the switch.
+    # `test_the_billing_and_funnel_paths_stay_up_in_degrade_mode` now pins these against the app's
+    # REAL route table, so a rename cannot re-open it.
+    #
+    # `/subscription` covers `public-pricing` (the logged-out funnel), `pricing` and `status`.
+    # `status` is load-bearing in a way that is easy to miss: `app/subscribe/success` POLLS it after
+    # checkout to confirm access landed, so blocking it strands someone who has JUST PAID on a
+    # spinner. (It does NOT gate entitlement — the front end reads that from the Cognito groups in
+    # the token, `lib/entitlements.ts::canAccess` — so a subscriber never loses access to content
+    # here. The harm is confined to the post-payment confirmation, which is bad enough.)
+    #
+    # `/stripe` covers `webhook` (recording money — a dropped one is a real payment whose
+    # subscription never activates), `create-checkout-session` and `create-portal-session`.
+    #
+    # ⚠️ These two are deliberately BROADER prefixes than the allowlist discipline would normally
+    # permit, and that is a considered exception rather than an oversight: for billing, being too
+    # NARROW (cannot take money, customer stranded post-checkout) is far worse than being too broad,
+    # and the "someone adds an expensive endpoint later" risk the allowlist exists to catch does not
+    # apply to a payment path that is low-volume by nature.
+    "/subscription",
+    "/stripe",
 )
 
 # Human-readable reason, returned in the 503 body so the client can render an honest state rather

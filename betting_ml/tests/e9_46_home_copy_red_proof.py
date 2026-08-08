@@ -355,14 +355,23 @@ CASES = [
      "test_the_previous_days_published_read_is_served_without_touching_the_lakehouse", SEL_SUITE),
 
     ("serve a carried-over card without saying it is one", PICKS,
-     '        patched = {**blob, "is_stale": True, "yesterday": None, "is_preliminary": False}',
-     '        patched = {**blob, "yesterday": None, "is_preliminary": False}',
-     "test_a_carried_over_card_announces_itself_and_drops_the_stale_recap", SEL_SUITE),
-
-    ("keep the stored recap on a carried-over card, showing two days at once", PICKS,
-     '        patched = {**blob, "is_stale": True, "yesterday": None, "is_preliminary": False}',
      '        patched = {**blob, "is_stale": True, "is_preliminary": False}',
-     "test_a_carried_over_card_announces_itself_and_drops_the_stale_recap", SEL_SUITE),
+     '        patched = {**blob, "is_preliminary": False}',
+     "test_a_carried_over_card_announces_itself_but_keeps_its_recap", SEL_SUITE),
+
+    # ⭐ The regression this replaces an earlier case with: throwing the recap away was the FIRST
+    # cut's behaviour, and it cost the card its only published result.
+    ("throw away the recap on a carried-over card", PICKS,
+     '        patched = {**blob, "is_stale": True, "is_preliminary": False}',
+     '        patched = {**blob, "is_stale": True, "is_preliminary": False, "yesterday": None}',
+     "test_a_carried_over_card_announces_itself_but_keeps_its_recap", SEL_SUITE),
+
+    # ⚠️ The off-by-one I shipped in the first draft of the date label: rendering `pick_date`
+    # directly labels the day BEFORE's result with the CARD's date.
+    ("label the recap with the card's own date instead of the day before", CARD_MLB,
+     "    d.setDate(d.getDate() - 1)",
+     "    d.setDate(d.getDate())",
+     "test_the_carried_recap_is_labelled_with_the_day_it_is_for", SUITE),
 
     ("let the carry-over shadow a published slate", PICKS,
      "    _carried = _carry_over_recent_featured(today)\n    if _carried is not None:\n        return _carried\n\n    # G100-D1",
