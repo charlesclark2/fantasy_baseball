@@ -169,9 +169,14 @@ CASES = [
      '        {"This board is free, and it is the whole board"}',
      "test_the_boundary_copy_lives_in_the_governed_copy_module", SUITE),
 
+    # ⚠️ RE-ANCHORED. This case originally patched `FREEMIUM_BOUNDARY_LINE`, which was then deleted
+    # for having no caller — and the harness reported ANCHOR-MISSING rather than passing, which is
+    # the behaviour that makes a stale case visible instead of silently unproven (the shape that
+    # quietly staled `unhedged-plain-lead` in the e2e harness). Now anchored on copy the boundary
+    # actually RENDERS, so the case cannot go stale without the surface changing.
     ("turn the paid pitch into a performance promise", COPY,
-     '  "The generic board is free. A membership re-scores it for your league and helps you decide."',
-     '  "The generic board is free. A membership helps you win your league."',
+     '    title: "Your league, not a preset",',
+     '    title: "Win your league, not a preset",',
      "test_the_boundary_copy_makes_no_forbidden_claim", SUITE),
 
     # ⚠️ THE FIRST ATTEMPT ONLY CHANGED THE `title` AND THE CLAUSE STAYED GREEN — correctly, because
