@@ -604,3 +604,25 @@ def test_a_totals_lean_carries_the_line_it_is_about():
     assert "${side} ${data.total_line}" in pick, (
         "an over/under lean renders without the line it is about"
     )
+
+
+def test_the_carried_recap_is_labelled_with_the_day_it_is_for():
+    """⭐ THE OFF-BY-ONE GUARD, and it pins a bug that was in the first draft of this label.
+
+    On a live card the recap is the previous day's read and "Yesterday" is right. On a CARRIED-OVER
+    card the card is already a previous day, so "Yesterday" would point at the card's own date while
+    naming the day before it. The fix is to render the DATE — but the recap is the day BEFORE
+    `pick_date`, not `pick_date` itself, and the first cut rendered `pick_date` directly. That would
+    have labelled Aug 6's result "August 7" and re-created the exact confusion the label exists to
+    remove, while looking entirely plausible on screen.
+
+    So the subtraction is asserted, not merely the presence of a date."""
+    pick = _strip_ts_comments(_PICK_COMPONENT_TSX.read_text())
+    assert "recapLabel" in pick, "the recap label is no longer computed"
+    assert "d.setDate(d.getDate() - 1)" in pick, (
+        "the carried recap is labelled with the CARD's date rather than the day it actually "
+        "reports — an off-by-one that reads as correct"
+    )
+    # And the live-card path must still say "Yesterday", or this fix has quietly changed the
+    # normal state too.
+    assert "COPY.yesterdayLabel" in pick

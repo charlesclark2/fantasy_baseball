@@ -641,10 +641,25 @@ def _carry_over_recent_featured(today: str) -> FeaturedPickResponse | None:
     • `is_stale=True` is what makes the card announce itself. Serving yesterday's numbers unlabelled
       is the one genuinely dangerous state this block can be in — a visitor could read a probability
       for a game that has already been played.
-    • `yesterday=None`, because the card IS yesterday. The stored blob carries ITS own recap (the day
-      before), so keeping it would put two different days on screen under labels that say otherwise.
     • `is_preliminary=False` — it describes whether lineups were confirmed when the blob was written,
       which says nothing useful about a slate that has since finished.
+
+    ⭐ THE STORED RECAP IS KEPT, and an earlier cut of this was wrong to drop it. The reasoning for
+    dropping it — "the card IS yesterday, so a recap labelled *Yesterday* beside it names the wrong
+    day" — identified a real ambiguity and then solved it by deleting the content instead of fixing
+    the label. It is the only self-grading on a card that is purely retrospective, so throwing it
+    away is the worst available trade on a page whose argument is that we publish our results.
+
+    ⚠️ AND IT IS THE ONLY RESULT THAT *CAN* BE SHOWN HERE. The obvious alternative — grade the
+    carried pick's OWN game — is structurally unavailable for almost the whole window this path
+    covers. Measured 2026-08-08 09:45Z: the carried game read `In Progress` in
+    `stg_statsapi_games` (schedule capture has a deliberate 10.5h overnight gap, `*/30 14-23` +
+    `0,30 0-3` UTC, so the table is frozen until ~14:00Z) and `mart_game_results` held ZERO of the
+    previous day's games (it is statcast-derived and rebuilt by the daily job). Both sources
+    refresh at roughly the moment today's run publishes and the carry-over ends — so a
+    carried-pick outcome would read "Pending" for essentially the entire period it applies to.
+    The component labels the recap by DATE on a stale card, which removes the ambiguity without
+    removing the content.
 
     Best-effort by construction: a DynamoDB failure or a payload this build cannot parse returns
     None rather than raising, because a missing carry-over is a cosmetic gap and a 500 is an outage.
@@ -662,7 +677,7 @@ def _carry_over_recent_featured(today: str) -> FeaturedPickResponse | None:
             return None
         if not blob or blob.get("game_pk") is None:
             continue
-        patched = {**blob, "is_stale": True, "yesterday": None, "is_preliminary": False}
+        patched = {**blob, "is_stale": True, "is_preliminary": False}
         try:
             result = FeaturedPickResponse(**patched)
         except Exception:

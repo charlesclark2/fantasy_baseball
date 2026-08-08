@@ -302,10 +302,11 @@ test("a carried-over read announces itself as a previous day's, not today's", as
   const errors = collectPageErrors(page)
   const mock = await mockApi(page, {
     // `is_stale: true` is exactly what the API returns when today's run has not published and the
-    // carry-over query resolved the previous read. `yesterday` is dropped alongside it because the
-    // card IS yesterday — serving both would show the same day twice under two labels.
+    // carry-over resolved the previous read. The recap is KEPT — it is the only published result a
+    // logged-out visitor can see on a card that is purely retrospective — and the label switches
+    // from "Yesterday" to the recap's own DATE, which is what stops it naming the wrong day.
     transform: (path, body) =>
-      path === "/picks/featured" ? { ...body, is_stale: true, yesterday: null } : body,
+      path === "/picks/featured" ? { ...body, is_stale: true } : body,
   })
   await gotoHome(page)
 
@@ -318,6 +319,18 @@ test("a carried-over read announces itself as a previous day's, not today's", as
   const d = new Date(PICK.pick_date + "T12:00:00")
   const long = d.toLocaleDateString("en-US", { month: "long", day: "numeric" })
   await expect(block.getByText(long)).toBeVisible()
+
+  // ⭐ THE RECAP SURVIVES THE CARRY-OVER, labelled by the day it actually reports — which is the
+  // day BEFORE the card, not the card's own date. Asserting the label is present is not enough:
+  // rendering `pick_date` directly would look right and be off by one.
+  const dayBefore = new Date(d)
+  dayBefore.setDate(dayBefore.getDate() - 1)
+  const beforeLabel = dayBefore.toLocaleDateString("en-US", { month: "long", day: "numeric" })
+  await expect(block.getByText(new RegExp(beforeLabel))).toBeVisible()
+  await expect(
+    block.getByText(/Yesterday's featured read/i),
+    "a carried card still says \"Yesterday\", which points at its own date",
+  ).toHaveCount(0)
 
   // ⛔ AND THE CARD IS STILL THERE. A carry-over that blanked the numbers would satisfy any
   // "does it say it is stale" check while delivering the empty page this change exists to avoid.
