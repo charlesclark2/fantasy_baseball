@@ -219,9 +219,10 @@ Apply this authorizer to all routes except:
 - `GET /fantasy/nfl/track-record/manifest` (NF3.2 public receipts manifest — added 2026-08-02)
 - `GET /fantasy/nfl/track-record/{season}` (NF3.2 public receipts per-season data — added 2026-08-02)
 
-✅ **ROUTE INVENTORY — CONFIRMED 2026-08-05** (`aws apigatewayv2 get-routes`, run with the
+✅ **ROUTE INVENTORY — RE-CONFIRMED 2026-08-08** (`aws apigatewayv2 get-routes`, run with the
 `AdministratorAccess-769392325318` SSO profile; the everyday `baseball-access-user` profile is denied
-`apigateway:*`, which is why this went unverified for so long). The nine routes that exist:
+`apigateway:*`, which is why this went unverified for so long). **THIRTEEN** routes now exist — the
+2026 board flip and E9.59's pricing route have landed since the 2026-08-05 reading of nine:
 
 ```
 ANY  /{proxy+}                            ← the catch-all: everything not listed below
@@ -234,7 +235,16 @@ GET  /blog/posts/{id}
 POST /stripe/webhook
 GET  /fantasy/nfl/track-record/manifest
 GET  /fantasy/nfl/track-record/{season}
+GET  /fantasy/nfl/manifest                ← the E9.56 launch flip (2026 board, LOCKED payload)
+GET  /fantasy/nfl/projections             ← ditto
+GET  /fantasy/nfl/board                   ← ditto
+GET  /subscription/public-pricing         ← E9.59 public pricing read
 ```
+
+⚠️ **THIS LIST GOES STALE SILENTLY AND IS MAINTAINED BY HAND** — it drifted by four routes in three
+days. It is only ever true as of its stamp; re-run `get-routes` before relying on it, and never
+build a `--route-settings` map from this block without listing first (a settings entry for a route
+that does not exist governs nothing while reading exactly like a limit that is in place).
 
 ⇒ **the model is: the catch-all carries the authorizer, and an explicit route EXEMPTS a path from
 it.** Every explicit route above is a deliberate public surface. This CORRECTS the paragraph that
@@ -255,7 +265,7 @@ authorizer sits in front of the Lambda entirely and rejects an unauthenticated r
 Mangum/FastAPI ever sees it (see NF3.2: `fantasy_public.router` shipped correct at the app layer
 but still 401'd until this API Gateway route was added).
 
-### 🔒 E9.56 — the public-launch route flip (NOT YET APPLIED)
+### 🔒 E9.56 — the public-launch route flip — ✅ APPLIED (confirmed 2026-08-08)
 
 The freemium split (past seasons free, 2026 locked behind a per-point marker) is enforced
 **server-side** in `app/backend/services/entitlement.py`. Until these routes exist, the three 2026
@@ -310,7 +320,7 @@ means a JWKS outage presents as "my subscription stopped working." JWKS is cache
 (1h TTL, plus a refetch on an unknown `kid` so a key rotation self-heals), so the cost is one HTTPS
 fetch per cold start with a 3s timeout.
 
-### 🚦 E9.56 — API Gateway throttling (rate limiting / anti-bulk-scrape) — NOT YET APPLIED
+### 🚦 E9.56 — API Gateway throttling (rate limiting / anti-bulk-scrape) — ✅ APPLIED 2026-08-08
 
 ⚠️ **AWS WAF does not support API Gateway HTTP APIs** (it covers REST APIs, CloudFront, ALB, AppSync
 and others). This API is an HTTP API, so WAF is not an option here — **stage/route throttling is the
@@ -361,8 +371,42 @@ aws apigatewayv2 update-stage \
 # ── 4. Confirm it took, and that the app still works.
 aws apigatewayv2 get-stage --api-id $API --region $REGION --stage-name '$default' \
   --query '{default:DefaultRouteSettings,perRoute:RouteSettings}'
-uv run python scripts/check_api_entitlement.py     # expect 42 pass / 0 fail, unchanged
+uv run python scripts/check_api_entitlement.py     # expect **0 FAILED** (the pass COUNT grows
+                                                   # with every public route — 54 on 2026-08-08;
+                                                   # asserting a literal count just goes stale)
 ```
+
+✅ **MEASURED STATE, 2026-08-08** — applied and verified:
+
+```
+default : ThrottlingBurstLimit 100, ThrottlingRateLimit 50     DetailedMetricsEnabled: false
+perRoute: 20 burst / 5 rate on all SIX of —
+          GET /picks/featured · /fantasy/nfl/manifest · /fantasy/nfl/projections
+          /fantasy/nfl/board · /fantasy/nfl/track-record/manifest · /fantasy/nfl/track-record/{season}
+```
+
+Entitlement re-verified after the change: **54 passed, 0 FAILED.**
+
+🕳️ **THREE PUBLIC ROUTES DELIBERATELY HAVE NO PER-ROUTE CAP** and inherit the 100/50 default:
+`GET /subscription/public-pricing`, `GET /blog/posts`, `GET /blog/posts/{id}`. That is a judgement,
+not an oversight — each returns a small payload with no bulk-extraction value (one price; blog
+prose), so a tighter cap would buy nothing and add a way to break the marketing pages. Recorded here
+so the gap is a decision rather than something a future reader has to guess about.
+
+📊 **`DetailedMetricsEnabled: false`, SO `ThrottleCount` IS API-WIDE, NOT PER-ROUTE.** You will know
+*that* something throttled, never *which route* — which matters because the six capped routes sit at
+5/s while the default is 50/s, so the cause is almost never the default. Leaving it off is the right
+call on cost grounds (per-route metrics are billed CloudWatch custom metrics — roughly $10–20/month
+across thirteen routes, which is absurd against a ~$120 baseline and would make the cost guard a
+cost). ⇒ **if `ThrottleCount` fires, enable detailed metrics TEMPORARILY to localise it, then turn
+them back off.**
+
+⚖️ **A per-route cap is shared across ALL callers, including our own CDN.** Post-`main` the anonymous
+board reads arrive from Vercel's egress rather than from visitors, so the CDN and any direct
+subscriber traffic draw on the same 20/5. The numbers are comfortable — CDN origin load is ~0.02–0.07
+req/s (bounded by TTL windows × cache keys × POPs, and independent of visitor count) against 5/s —
+but it is the same shared-bucket shape as the per-IP note in §5 of the spend-guardrails section, one
+layer up.
 
 📉 **Watch for over-throttling for ~24h.** A throttled request returns **429**, and the landing page
 fetches `/picks/featured` server-side per render — so a limit set too low degrades the marketing page
@@ -1113,7 +1157,13 @@ Verify:
 
 ---
 
-## 💸 Spend guardrails + billing alarms (G100-D1) — ⏭️ NOT YET APPLIED
+## 💸 Spend guardrails + billing alarms (G100-D1) — ✅ MOSTLY APPLIED 2026-08-08
+
+> **Applied:** AWS Budget `credence-prod-monthly-250` · Cost Anomaly Detection (re-pointed to
+> `ctcb57@gmail.com`, threshold `ABSOLUTE ≥ $25 AND PERCENTAGE ≥ 40%`) · Vercel spend notification ·
+> API Gateway stage + per-route throttling (§ above).
+> **Outstanding:** the CloudWatch billing alarm sat `INSUFFICIENT_DATA` at creation — see §2 for why
+> that state is ambiguous and what to re-check.
 
 > Cost model and the reasoning behind the $250 threshold: **`docs/g100_d1_cost_model.md`**.
 > Regenerate its numbers with `uv run python scripts/estimate_launch_cost.py`.
