@@ -196,9 +196,10 @@ split in `lib/fantasy.ts` is where it would land.
 |---|---|---|
 | The capability map, the quota seam, the frontend mirror | `betting_ml/tests/test_freemium_tier.py` | 48 pass |
 | End to end through the real ASGI app (anonymous / forged token / gateway-validated subscriber) | same file, `test_*` above | byte-identical across all three |
-| Rendered browser behaviour | `frontend/e2e/specs/freemium-board.spec.ts` | 13 pass |
-| The whole frontend suite (no regression from the mock's default flip) | `npx playwright test` | 112 pass |
-| Every guard is falsifiable | `uv run python betting_ml/tests/freemium_tier_red_proof.py` | **24/24 RED** |
+| Rendered browser behaviour | `frontend/e2e/specs/freemium-board.spec.ts` | 14 pass |
+| The whole frontend suite (no regression from the mock's default flip) | `npx playwright test` | 112 pass (113 with the added player-page clause) |
+| Every Python guard is falsifiable | `uv run python betting_ml/tests/freemium_tier_red_proof.py` | **25/25 RED** |
+| Every new e2e clause is falsifiable | `frontend/e2e/red-proof.mjs` (6 new cases) | **6/6 RED** |
 
 The red-proof harness earned its keep immediately: **five clauses were vacuous on the first run.**
 Two were weak assertions — one checked that a copy constant was still *imported* rather than
