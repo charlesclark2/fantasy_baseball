@@ -30,6 +30,7 @@ if _SENTRY_DSN:
 
 from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, fantasy, fantasy_import, fantasy_mlb_league, fantasy_public, feedback, finances, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
 from app.backend.routers.auth import require_subscriber_mfa
+from app.backend.services import cost_guardrails
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,6 +44,16 @@ app = FastAPI(
     docs_url="/docs" if _TARGET_ENV != "prod" else None,
     redoc_url="/redoc" if _TARGET_ENV != "prod" else None,
 )
+
+# G100-D1 — cost guardrails (per-IP rate limit + the degrade kill switch + cache headers).
+#
+# ⚠️ REGISTERED BEFORE `CORSMiddleware` ON PURPOSE. Starlette makes the LAST-added middleware the
+# OUTERMOST one, so adding this first puts it INSIDE CORS. That ordering is load-bearing: a 429 or
+# 503 short-circuits here without calling the inner app, and it must still travel back out through
+# CORSMiddleware to pick up its headers. A throttled response with no CORS headers is not visible to
+# the browser as a 429 at all — JS gets an opaque network error and cannot distinguish "slow down"
+# from "the API is down". Moving this line below the CORS block silently breaks that.
+app.middleware("http")(cost_guardrails.cost_guardrail_middleware)
 
 app.add_middleware(
     CORSMiddleware,

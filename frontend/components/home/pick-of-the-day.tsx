@@ -6,7 +6,7 @@ import { CheckCircle2, Clock, Info, Lock, XCircle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { ProbabilityBar } from "@/components/probability-bar"
-import { apiFetch } from "@/lib/api"
+import { cdnFetch } from "@/lib/api"
 import { PICK_OF_THE_DAY as COPY } from "@/lib/home-copy"
 
 /**
@@ -42,7 +42,7 @@ import { PICK_OF_THE_DAY as COPY } from "@/lib/home-copy"
  *    an empty read is indistinguishable from a broken page (the E9.26b silent-`[]` class), and the
  *    hero above is static precisely so no read can ever leave the top of the page bare.
  *
- * 3. ⭐ CLIENT-SIDE, VIA `apiFetch`. The previous home page fetched this server-side, which had
+ * 3. ⭐ CLIENT-SIDE, VIA `cdnFetch`. The previous home page fetched this server-side, which had
  *    two costs: it made the whole marketing page dynamic on every request for one live figure, and
  *    it put the block permanently beyond Playwright's reach (`page.route` intercepts the BROWSER;
  *    it cannot see a server component's fetch). Moving it client-side lets the positioning page go
@@ -118,7 +118,11 @@ function Stat({ label, value, tone }: { label: string; value: string; tone: stri
 export function PickOfTheDay() {
   const { data, isLoading, isError } = useQuery<FeaturedPick>({
     queryKey: ["home", "featured-pick"],
-    queryFn: () => apiFetch("/picks/featured"),
+    // G100-D1 — through our own CDN, not the API Lambda. This call carries NO token (it never
+    // has), so every visitor gets the identical payload and it is cacheable once for everybody.
+    // The landing page is the most-hit anonymous surface we have, so before this it was one API
+    // Gateway request + one Lambda invocation per visit; now it is one per `s-maxage` window.
+    queryFn: () => cdnFetch("/api/public/featured"),
     // The serving write lands once in the morning and again after lineups confirm; a visitor who
     // leaves the tab open does not need it re-fetched every minute.
     staleTime: 5 * 60 * 1000,
