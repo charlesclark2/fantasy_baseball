@@ -241,10 +241,20 @@ GET  /fantasy/nfl/board                   ← ditto
 GET  /subscription/public-pricing         ← E9.59 public pricing read
 ```
 
+⛔ **`GET /fantasy/nfl/featured-player` (E9.46) is NOT in this list because it does not exist yet** —
+measured 401 on 2026-08-08 while every other public surface returned 200. The command to create it
+is below. Do not add it here until `get-routes` shows it.
+
 ⚠️ **THIS LIST GOES STALE SILENTLY AND IS MAINTAINED BY HAND** — it drifted by four routes in three
 days. It is only ever true as of its stamp; re-run `get-routes` before relying on it, and never
 build a `--route-settings` map from this block without listing first (a settings entry for a route
 that does not exist governs nothing while reading exactly like a limit that is in place).
+
+⭐ **AND YOU CAN CHECK IT WITHOUT `apigateway:*`, WHICH MATTERS BECAUSE THE EVERYDAY PROFILE IS
+DENIED IT** (`baseball-access-user`, the reason this went unverified for so long): curl each path
+and read the status — **401 means the authorizer rejected it before the Lambda ever ran**; any other
+status, including a 422 from FastAPI validation, means the route is exempt. That is a two-second
+check anyone can run, so a suspected-missing route never has to wait for an admin session.
 
 ⇒ **the model is: the catch-all carries the authorizer, and an explicit route EXEMPTS a path from
 it.** Every explicit route above is a deliberate public surface. This CORRECTS the paragraph that
@@ -264,6 +274,25 @@ future public route. A router with no `Depends()` in FastAPI is NOT sufficient b
 authorizer sits in front of the Lambda entirely and rejects an unauthenticated request before
 Mangum/FastAPI ever sees it (see NF3.2: `fantasy_public.router` shipped correct at the app layer
 but still 401'd until this API Gateway route was added).
+
+#### E9.46 — `GET /fantasy/nfl/featured-player` (the home page's fantasy card) — ⛔ NOT YET APPLIED
+
+The landing page's fantasy proof card. Public by design and public in the FastAPI layer
+(`fantasy_public.featured_router`, no `Depends`), which — as always — is **not sufficient**:
+
+```bash
+aws apigatewayv2 create-route \
+  --api-id 8dhmehjak7 --region us-east-1 \
+  --route-key "GET /fantasy/nfl/featured-player" \
+  --target "integrations/p093jnh" \
+  --authorization-type NONE
+```
+
+⭐ **The symptom is not an error page.** The card's read failing makes the component hide itself, so
+the home page renders with the whole fantasy section simply absent — which reads as "the feature did
+not ship" rather than "one route is missing". Confirmed live 2026-08-08: the Lambda was deployed and
+serving, and `curl https://api.credencesports.com/fantasy/nfl/featured-player` returned
+`401 {"message":"Unauthorized"}` while every other public surface returned 200.
 
 ### 🔒 E9.56 — the public-launch route flip — ✅ APPLIED (confirmed 2026-08-08)
 

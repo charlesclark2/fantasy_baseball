@@ -344,6 +344,41 @@ CASES = [
      "                {\"Today's read\"}",
      "test_the_card_renders_the_market_label", SUITE),
 
+    # ══ THE CARRY-OVER IS A POINT READ ════════════════════════════════════════════════════════
+    #
+    # ⭐ Send it back through the lakehouse — the path that CANNOT deliver it in production (a
+    # `SELECT p.*` over 94 columns, swallowed into `[]` inside the Lambda). The guard wires
+    # `lakehouse_query` to raise, so a carry-over that depends on it cannot pass.
+    ("make the carry-over depend on the lakehouse again", PICKS,
+     "    _carried = _carry_over_recent_featured(today)\n    if _carried is not None:\n        return _carried",
+     "    _carried = None\n    if _carried is not None:\n        return _carried",
+     "test_the_previous_days_published_read_is_served_without_touching_the_lakehouse", SEL_SUITE),
+
+    ("serve a carried-over card without saying it is one", PICKS,
+     '        patched = {**blob, "is_stale": True, "yesterday": None, "is_preliminary": False}',
+     '        patched = {**blob, "yesterday": None, "is_preliminary": False}',
+     "test_a_carried_over_card_announces_itself_and_drops_the_stale_recap", SEL_SUITE),
+
+    ("keep the stored recap on a carried-over card, showing two days at once", PICKS,
+     '        patched = {**blob, "is_stale": True, "yesterday": None, "is_preliminary": False}',
+     '        patched = {**blob, "is_stale": True, "is_preliminary": False}',
+     "test_a_carried_over_card_announces_itself_and_drops_the_stale_recap", SEL_SUITE),
+
+    ("let the carry-over shadow a published slate", PICKS,
+     "    _carried = _carry_over_recent_featured(today)\n    if _carried is not None:\n        return _carried\n\n    # G100-D1",
+     "    # moved above the today lookups\n\n    # G100-D1",
+     "test_todays_own_read_is_preferred_over_the_carry_over", SEL_SUITE),
+
+    ("carry a card forward from arbitrarily far back", PICKS,
+     "_CARRY_OVER_MAX_DAYS = 3",
+     "_CARRY_OVER_MAX_DAYS = 30",
+     "test_it_reaches_back_past_a_missing_day_but_not_indefinitely", SEL_SUITE),
+
+    ("carry forward a day on which nothing qualified", PICKS,
+     '        if not blob or blob.get("game_pk") is None:',
+     "        if not blob:",
+     "test_an_empty_shell_blob_is_not_carried_over", SEL_SUITE),
+
     ("render an over/under lean without the line it is about", CARD_MLB,
      "        ? `${side} ${data.total_line}`",
      "        ? `${side}`",

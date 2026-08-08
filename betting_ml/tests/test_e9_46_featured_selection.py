@@ -458,3 +458,119 @@ class TestTheCopyMatchesTheQuery:
         assert "most likely to be ours getting something wrong" in hint, (
             "the maximum-order-statistic caveat was dropped from the gap explanation"
         )
+
+
+# ══ THE CARRY-OVER IS A POINT READ, NOT A QUERY ════════════════════════════════════════════════
+
+
+class TestTheCarryOverServesThePublishedBlob:
+    """🩹 THE SECOND, INDEPENDENT REASON THE CARRY-OVER DID NOT WORK IN PRODUCTION.
+
+    Fixing the ORDER BY made `_FEATURED_STALE_FALLBACK_QUERY` bind — and it still could not deliver
+    a card, because it is a `SELECT p.*` over the 94-column `daily_model_predictions`, the read
+    E9.26b documents as reliably failing INSIDE the API Lambda while working perfectly outside it.
+    `lakehouse_query` swallows that into `[]` by design, so the two failures are indistinguishable
+    from "no game qualified" and from each other. Measured 2026-08-08 09:17Z against the deployed
+    Lambda: `/picks/featured` served `game_pk: null` while yesterday's blob sat complete in
+    DynamoDB and the same query returned the right row from a laptop.
+
+    ⇒ the home page now carries over the PUBLISHED blob via a DynamoDB point read. These tests pin
+    that it does not depend on the lakehouse at all — which is the property that makes it work.
+    """
+
+    @staticmethod
+    def _wire(monkeypatch, cache: dict, *, lakehouse_raises=True):
+        monkeypatch.setattr(picks.serving_cache, "get_cache",
+                            lambda ns, day: cache.get(day), raising=True)
+        monkeypatch.setattr(picks, "get_cache", lambda key: None, raising=True)
+        monkeypatch.setattr(picks.cost_guardrails, "degrade_mode_enabled", lambda: False, raising=True)
+
+        def _boom(*a, **kw):
+            if lakehouse_raises:
+                raise AssertionError("the carry-over reached for the lakehouse")
+            return []
+
+        monkeypatch.setattr(picks, "lakehouse_query", _boom, raising=True)
+        monkeypatch.setattr(picks, "current_game_date_iso", lambda: "2026-08-08", raising=True)
+
+    _BLOB = {
+        "game_pk": 823103, "matchup": "TB @ SEA", "market_type": "h2h", "pick_side": "away",
+        "edge": 3.04, "model_prob": 0.47, "market_prob": 0.44, "pick_date": "2026-08-07",
+        "home_team": "SEA", "away_team": "TB", "is_stale": False, "is_preliminary": True,
+        "yesterday": {"matchup": "DET @ SEA", "market_type": "totals",
+                      "outcome": "Won", "status": "win"},
+    }
+
+    def test_the_previous_days_published_read_is_served_without_touching_the_lakehouse(
+        self, monkeypatch
+    ):
+        """⭐ THE LOAD-BEARING ONE. `lakehouse_query` is wired to RAISE, so the card can only be
+        produced by the point read. A test that merely asserted the right payload would pass even
+        if the answer had come from the query that cannot run in prod."""
+        self._wire(monkeypatch, {"2026-08-07": dict(self._BLOB)})
+        out = picks.get_featured_pick()
+        assert out.game_pk == 823103
+        assert out.matchup == "TB @ SEA"
+        assert out.pick_date == "2026-08-07"
+
+    def test_a_carried_over_card_announces_itself_and_drops_the_stale_recap(self, monkeypatch):
+        """The three rewritten fields, each of which would otherwise be a false statement: an
+        unlabelled card claims yesterday's numbers are today's; the stored recap is the day BEFORE
+        the card, so keeping it puts two days on screen under labels that say otherwise; and
+        `is_preliminary` describes lineups for a slate that has since finished."""
+        self._wire(monkeypatch, {"2026-08-07": dict(self._BLOB)})
+        out = picks.get_featured_pick()
+        assert out.is_stale is True
+        assert out.yesterday is None
+        assert out.is_preliminary is False
+
+    def test_todays_own_read_is_preferred_over_the_carry_over(self, monkeypatch):
+        """The carry-over must never shadow a published slate — it is a fallback, not a cache."""
+        today = {**self._BLOB, "game_pk": 999, "pick_date": "2026-08-08"}
+        self._wire(monkeypatch, {"2026-08-08": today, "2026-08-07": dict(self._BLOB)})
+        out = picks.get_featured_pick()
+        assert out.game_pk == 999
+        assert out.is_stale is False
+
+    def test_it_reaches_back_past_a_missing_day_but_not_indefinitely(self, monkeypatch):
+        """A late or failed run should not blank the page; a week-old card should not be presented
+        as 'the most recent read' either. The bound is a product judgement, so it is pinned."""
+        self._wire(monkeypatch, {"2026-08-05": {**self._BLOB, "pick_date": "2026-08-05"}})
+        assert picks.get_featured_pick().pick_date == "2026-08-05"
+
+        # One day further back than the bound allows: fall through to the honest empty state.
+        self._wire(monkeypatch, {"2026-08-04": {**self._BLOB, "pick_date": "2026-08-04"}},
+                   lakehouse_raises=False)
+        assert picks.get_featured_pick().game_pk is None
+
+    def test_an_empty_shell_blob_is_not_carried_over(self, monkeypatch):
+        """A stored `game_pk: null` is the record of a day on which nothing qualified. Carrying it
+        forward would render the empty state while claiming to be a previous read."""
+        self._wire(monkeypatch, {"2026-08-07": {"game_pk": None}}, lakehouse_raises=False)
+        assert picks.get_featured_pick().game_pk is None
+
+    def test_the_carry_over_helper_never_raises_on_a_bad_read(self, monkeypatch):
+        """Defence in depth, tested at the level where it is real.
+
+        ⚠️ The first draft asserted this through the ENDPOINT, with a raising `get_cache` — and it
+        failed, correctly. `serving_cache.get_cache` already swallows every exception and returns
+        None, so a raising point read cannot happen in production, and the endpoint's own first
+        cache lookup is unguarded precisely because it does not need a guard. Asserting the
+        endpoint's behaviour under an impossible input would have been testing the monkeypatch.
+
+        What IS worth pinning is the helper's own contract: whatever it is handed, it answers with
+        a payload or with None, never by raising — because a missing carry-over is a cosmetic gap
+        on the landing page and a 500 is an outage."""
+        def _explode(ns, day):
+            raise RuntimeError("dynamo is unhappy")
+
+        monkeypatch.setattr(picks.serving_cache, "get_cache", _explode, raising=True)
+        assert picks._carry_over_recent_featured("2026-08-08") is None
+
+    def test_an_unparseable_blob_is_skipped_rather_than_served(self):
+        """A blob written by a build whose schema this one cannot read must not 500 the page."""
+        import unittest.mock as mock
+
+        with mock.patch.object(picks.serving_cache, "get_cache",
+                               return_value={"game_pk": 1, "edge": "not-a-number"}):
+            assert picks._carry_over_recent_featured("2026-08-08") is None
