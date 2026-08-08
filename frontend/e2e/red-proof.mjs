@@ -479,6 +479,93 @@ const CASES = [
     to: "              <Link href=\"/about\">soon</Link>\n              <span\n                className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${",
     grep: "teasers, not links",
   },
+
+  // ══ THE FREEMIUM BUILD — the free board, the boundary, the full-season rate ════════════════
+  {
+    id: "free-board-re-gated",
+    shipped: "the pre-freemium state: a logged-out visitor bounced off the rankings",
+    // ⭐ THE FUNNEL-KILLING FAILURE, and the one no Python assertion in the repo can see. The API
+    // is perfectly happy — it serves the full board to anyone — so every server-side test stays
+    // green; the visitor simply never arrives. A redirect leaves no error, no log and nothing in
+    // the payload. Only a browser that follows the navigation can tell "the board is free" from
+    // "the board is free and unreachable".
+    //
+    // ⚠️ BROKEN AT THE IMPORT, NOT AT THE JSX TAG. The harness applies ONE first-occurrence
+    // replacement, so swapping `<FantasyPublicGuard>` leaves `</FantasyPublicGuard>` behind and the
+    // build fails on unbalanced JSX — which reports as BUILD-CAUGHT and proves nothing about the
+    // spec. Aliasing the import produces the real defect (the page is gated) in one contiguous edit.
+    detail: "Puts the paid guard back on Rankings, so a stranger is redirected before it renders.",
+    file: "app/fantasy/rankings/page.tsx",
+    from: 'import { FantasyPublicGuard } from "@/components/auth-guard"',
+    to: 'import { FantasyGuard as FantasyPublicGuard } from "@/components/auth-guard"',
+    grep: "renders the full board for a logged-out visitor",
+  },
+  {
+    id: "paid-half-un-gated",
+    shipped: "pre-emptive: the whole product becoming free",
+    // ⚠️ THE CASE THAT PROVES THE SUITE IS NOT SELF-SATISFYING. Every other freemium assertion is
+    // "the free thing is visible" — a change that un-gated EVERYTHING would pass all of them and
+    // the suite would be green with the business given away. This is the only case whose failure
+    // means the opposite of the others'.
+    detail: "Makes the Draft Optimizer public, so a logged-out visitor reaches the paid half.",
+    file: "app/fantasy/draft/page.tsx",
+    from: 'import { FantasyGuard } from "@/components/auth-guard"',
+    to: 'import { FantasyPublicGuard as FantasyGuard } from "@/components/auth-guard"',
+    grep: "still bounces a logged-out visitor",
+  },
+  {
+    id: "player-page-content-re-split",
+    shipped: "NF3.2's state: a public player ROUTE whose CONTENT was still split by entitlement",
+    // ⚠️ THE FAILURE MODE THAT LOOKS LEAST LIKE ONE. The route stays public, the page renders, the
+    // header and bio are right, nothing errors and no test that asserts "the player page loads"
+    // notices — a visitor simply never sees the projection they came for. `route-integrity` passes,
+    // `tsc` passes, and the API is serving the full payload the whole time.
+    detail: "Sends every visitor back to the track-record-only view, as NF3.2 did.",
+    file: "components/fantasy/player-page.tsx",
+    from: "  return <PlayerView playerId={playerId} />",
+    to: "  return <TrackRecordOnlyView playerId={playerId} />",
+    grep: "player page renders the real projection",
+  },
+  {
+    id: "boundary-not-stated",
+    shipped: "pre-emptive: a complete free board with nothing to buy",
+    // Not a rendering fault — the page looks perfect. It is a POSITIONING fault: a complete-looking
+    // free board with no boundary stated reads as the whole product, so the paid aha ("what changed
+    // because it is MY league") never gets posed and nobody converts. Invisible to every gate that
+    // asks whether the page works, because it does.
+    detail: "Removes the free/paid boundary block from below the rankings board.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: "          <FreemiumBoundary entitled={entitled} />",
+    to: "",
+    grep: "states what a membership adds",
+  },
+  {
+    id: "full-season-rate-divides-by-zero",
+    shipped: "pre-emptive: `Infinity` rendered as a projection",
+    // ⭐ THE DEFECT THE FIXTURE'S THREE DEGENERATE ROWS EXIST TO CATCH. `pts * 17 / 0` is
+    // `Infinity`, which is a `number` in JS — so it survives every `!= null` guard a caller might
+    // write and prints "∞" in a points column. `tsc` cannot see it (the arithmetic is valid), and
+    // a fixture where every row has a healthy games figure cannot see it either — which is exactly
+    // the fixture anyone would write by hand.
+    detail: "Drops the zero-games guard, so a player projected to miss the season renders ∞.",
+    file: "lib/fantasy.ts",
+    from: "  if (games <= 0) return null",
+    to: "  if (games < 0) return null",
+    grep: "renders an em-dash",
+  },
+  {
+    id: "boundary-recites-the-measurement",
+    shipped: "NF-TR1's rule, on the surface that replaced the one it was written for",
+    // The banner NF-TR1 wrote this rule against renders only on a LOCKED payload, which no live
+    // caller now receives. So the rule's original guard would go on passing forever while the
+    // surface a visitor ACTUALLY meets quietly grew a quotation of the statistic. This is that
+    // rule re-proved on the live surface.
+    detail: "Puts the generated claim into the freemium boundary in place of the trust link.",
+    file: "components/fantasy/shared.tsx",
+    from: "        {FREE_TIER_SUMMARY.detail}",
+    to: "        {\"Our 2025 rankings modestly outperformed ADP (+0.022 rank correlation).\"}",
+    grep: "does not quote its number",
+  },
 ]
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.

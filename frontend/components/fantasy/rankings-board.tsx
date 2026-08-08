@@ -21,9 +21,15 @@ import {
   useResolvedBoard,
   useSavedLeagues,
 } from "@/lib/fantasy-queries"
+import { useAuth } from "@/lib/auth-context"
+import { canUse } from "@/lib/entitlements"
 import { assignTiers, type Player } from "@/lib/draft-optimizer"
-import { rowsAreLocked, trimLockedTail } from "@/lib/fantasy"
-import { EXPECTED_POINTS_LABEL, PROJECTED_GAMES_LABEL } from "@/lib/fantasy-claim-copy"
+import { fullSeasonRate, rowsAreLocked, trimLockedTail } from "@/lib/fantasy"
+import {
+  EXPECTED_POINTS_LABEL,
+  FULL_SEASON_RATE_LABEL,
+  PROJECTED_GAMES_LABEL,
+} from "@/lib/fantasy-claim-copy"
 import {
   ADP_DELTA_LABEL,
   ALL_ROWS,
@@ -31,6 +37,7 @@ import {
   adpPositionRanks,
   EmptyBlock,
   FormatSelector,
+  FreemiumBoundary,
   GLOSSARY,
   InfoTip,
   IntervalBar,
@@ -60,6 +67,11 @@ import {
 const rankOf = (p: Player, pos: string) => (pos === "Overall" ? p.ovrRank : p.posRank)
 
 export function RankingsBoard() {
+  // The freemium build: this board's DATA is free for everyone, so entitlement decides only whether
+  // the upsell renders — never what is in the table. Reading `personalization` (not "fantasy") says
+  // WHICH half of the boundary is missing, which is exactly what the block below is about.
+  const { groups } = useAuth()
+  const entitled = canUse("personalization", groups)
   const { data: manifest, isLoading: manifestLoading, error: manifestError } = useFantasyManifest()
   // NF-C0b: a saved hand-entered league ranks through the identical Player[] interface.
   const { data: savedLeagues } = useSavedLeagues()
@@ -202,12 +214,17 @@ export function RankingsBoard() {
       // A downloaded board leaves the page and its tooltips behind, so the COLUMN NAME is the only
       // label a spreadsheet reader ever gets — `proj_pts`/`games` there would reintroduce exactly
       // the "why is this number low?" misread the on-page labelling just closed.
+      // `full_season_rate` carries the same disclosure the on-page column pair does. A spreadsheet
+      // reader has neither tooltip, so the two columns have to arrive TOGETHER or the exported file
+      // reintroduces exactly the "why is this number low?" misread the labelling closed.
       ["rank", "tier", "player", "pos", "team", "bye", "expected_games", "expected_pts",
-       "pts_p10", "pts_p90", "vor", "pos_rank", "adp", "vs_adp", "rookie", "range_basis"],
+       "full_season_rate", "pts_p10", "pts_p90", "vor", "pos_rank", "adp", "vs_adp", "rookie",
+       "range_basis"],
       rows.map((p) => {
         const rank = rankOf(p, pos)
         return [
           rank, tierOf.get(p.id) ?? "", p.name, p.pos, teamLabel(p), p.bye ?? null, p.g, p.pts,
+          fullSeasonRate(p.pts, p.g),
           p.ptsP10 ?? null, p.ptsP90 ?? null, p.vor, p.posRank, p.adp ?? null,
           // same scale as the rendered column — see adpRefOf
           adpRefOf(p) != null ? Math.round((adpRefOf(p) as number) - rank) : null,
@@ -314,7 +331,9 @@ export function RankingsBoard() {
               </div>
 
               <div className="overflow-x-auto rounded-lg border border-[#262626]">
-                <table className="w-full min-w-[860px] text-left text-xs">
+                {/* min-width bumped for the added full-season-rate column — the wrapper scrolls
+                    horizontally, so the page body still never scrolls sideways on a phone. */}
+                <table className="w-full min-w-[940px] text-left text-xs">
                   <thead className="bg-[#0f0f0f] text-gray-500">
                     <tr>
                       <th className="px-3 py-2 font-medium">{pos === "Overall" ? "Rank" : `${pos} #`}</th>
@@ -333,6 +352,14 @@ export function RankingsBoard() {
                       </th>
                       <th className="px-3 py-2 text-right font-medium">
                         <InfoTip label={EXPECTED_POINTS_LABEL}>{GLOSSARY.expectedPoints}</InfoTip>
+                      </th>
+                      {/* The SECOND reading of the same number — expected points stretched back to
+                          a full 17 games. It sits immediately right of the expected total on
+                          purpose: the pair is the disclosure ("this is the availability-weighted
+                          number, and this is what it implies per full season"), and separating them
+                          would leave each one answering only half the drafter's question. */}
+                      <th className="px-3 py-2 text-right font-medium">
+                        <InfoTip label={FULL_SEASON_RATE_LABEL}>{GLOSSARY.fullSeasonRate}</InfoTip>
                       </th>
                       <th className="px-3 py-2 font-medium">80% range</th>
                       <th className="px-3 py-2 text-right font-medium">
@@ -406,6 +433,20 @@ export function RankingsBoard() {
                           <td className="px-3 py-2 text-right text-gray-500">{p.bye ?? "—"}</td>
                           <td className="px-3 py-2 text-right text-gray-400">{numOrLock(p.g, p.locked)}</td>
                           <td className="px-3 py-2 text-right font-semibold text-gray-100">{numOrLock(p.pts, p.locked)}</td>
+                          {/* ⚠️ `fullSeasonRate` returns null on a zero/absent games figure, and the
+                              em-dash is the rendering of that null — never a blank cell (reads as a
+                              rendering fault) and never `Infinity` (which is a `number`, so it would
+                              pass a caller's `!= null` guard and print "∞" beside a points column).
+                              Deliberately UNEMPHASISED next to the bold expected total: the
+                              availability-weighted number is the one our rankings are built on, and
+                              the type weight is what says so without a sentence. */}
+                          <td className="px-3 py-2 text-right text-gray-400">
+                            {p.locked ? (
+                              <LockChip title="Subscribe to unlock the full-season rate" />
+                            ) : (
+                              num(fullSeasonRate(p.pts, p.g))
+                            )}
+                          </td>
                           <td className="w-40 px-3 py-2">
                             {p.locked ? (
                               <LockChip title="Subscribe to unlock the projected range" />
@@ -534,6 +575,12 @@ export function RankingsBoard() {
               />
             </UncertaintyNote>
           </div>
+
+          {/* ⭐ THE FREEMIUM BOUNDARY, and its POSITION is the argument. It sits BELOW the complete
+              board, not above it: a visitor has to see that nothing is withheld before "this is the
+              generic one" means anything. Put at the top it would read as a paywall on a page that
+              has none. Renders nothing for an entitled caller. */}
+          <FreemiumBoundary entitled={entitled} />
         </>
       )}
     </div>

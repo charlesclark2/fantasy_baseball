@@ -294,7 +294,29 @@ not ship" rather than "one route is missing". Confirmed live 2026-08-08: the Lam
 serving, and `curl https://api.credencesports.com/fantasy/nfl/featured-player` returned
 `401 {"message":"Unauthorized"}` while every other public surface returned 200.
 
-### 🔒 E9.56 — the public-launch route flip — ✅ APPLIED (confirmed 2026-08-08)
+### 🔒 The generic-board public routes — ✅ APPLIED (re-confirmed anonymously 2026-08-08)
+
+⭐ **RE-VERIFIED FROM OUTSIDE, not read off this doc.** An anonymous `curl` of all three returns
+**200** (`manifest`, `projections`, `board`), which is discriminating here: the authorizer sits in
+front of the Lambda, so a route still carrying it answers 401 before FastAPI is reached. ⇒ the
+routes below already exist and **the freemium build needs NO gateway change** — `deploy.sh` alone
+takes the free board live.
+
+⚠️ **THE FREEMIUM BUILD CHANGED WHAT THESE ROUTES SERVE, not whether they are reachable.** The
+paragraph below describes the E9.56 state (2026 locked behind a per-point marker), which is
+**retired** — the generic board is now free for every caller and the redaction is off the live path
+(`docs/freemium_tier.md`). What still holds verbatim is the *reason the flip is dangerous without
+the enforcement deployed*, and the `jwt_verify` argument underneath it: on a `NONE` route the Bearer
+token is attacker-controlled, which is what makes the PAID capabilities safe to decide there.
+
+🕐 **A ROLLBACK HAS A CACHE TAIL.** These responses are CDN-cached `s-maxage=900,
+stale-while-revalidate=3600`, so the open board propagates within ~15 min of `deploy.sh` and — if
+the Lambda is rolled back — the edge may keep serving the open payload for up to ~75 min afterwards.
+Plan a withdrawal around that window rather than expecting it to be instant.
+
+<details>
+<summary>The original E9.56 flip instructions (retired — kept for the jwt_verify rationale)</summary>
+
 
 The freemium split (past seasons free, 2026 locked behind a per-point marker) is enforced
 **server-side** in `app/backend/services/entitlement.py`. Until these routes exist, the three 2026
@@ -348,6 +370,8 @@ erroring. That is the safe direction and it is visible (they get the CTA, not a 
 means a JWKS outage presents as "my subscription stopped working." JWKS is cached per warm container
 (1h TTL, plus a refetch on an unknown `kid` so a key rotation self-heals), so the cost is one HTTPS
 fetch per cold start with a 3s timeout.
+
+</details>
 
 ### 🚦 E9.56 — API Gateway throttling (rate limiting / anti-bulk-scrape) — ✅ APPLIED 2026-08-08
 
