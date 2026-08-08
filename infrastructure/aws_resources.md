@@ -1120,8 +1120,15 @@ Verify:
 >
 > **Why this exists:** organic traffic is cheap (~$21/month all-in at 100k monthly visitors), but a
 > single un-throttled scraper on the newly-public board costs **~$3,210/month, $2,772 of it egress**.
-> There is currently **no AWS Budget and no billing alarm on this account** — the first signal of a
-> runaway bill would be the invoice.
+>
+> **Measured pre-existing state (2026-08-08)** — corrects an earlier draft of this section that said
+> there was no monitoring at all. **No AWS Budget and no CloudWatch billing alarm**: that part
+> stands. But AWS had auto-enabled **Cost Anomaly Detection**, and its default subscription was live
+> the whole time — **paging a university address rather than the `ctcb57@gmail.com` inbox every
+> other alarm in this stack uses**, at a threshold needing roughly a full day of a $107/day scrape
+> to accumulate. So the honest description is not "no monitoring" but **"one detector, pointed at a
+> different inbox, firing about a day late"** — the harder failure to notice, because the console
+> renders it as configured and healthy. Details and the fix in §3.
 
 ### Two gotchas that make a billing alarm silently useless
 
@@ -1238,9 +1245,71 @@ echo "MonitorArn: $MONITOR_ARN"
 #   aws ce create-anomaly-monitor --region us-east-1 \
 #     --anomaly-monitor '{"MonitorName":"credence-prod-services","MonitorType":"DIMENSIONAL","MonitorDimension":"SERVICE"}'
 
-# 2. Check whether it already has a subscription, so this does not add a duplicate email.
+# 2. Check the existing SUBSCRIPTION before creating one.
+#
+# 🔴 MEASURED 2026-08-08: this account already has `Default-Services-Subscription` (DAILY) —
+#    AWS auto-creates it when it auto-enables Cost Anomaly Detection. ⇒ the action here is almost
+#    certainly UPDATE, not CREATE. Two subscriptions on one monitor means two emails per anomaly,
+#    which is how a monitor gets muted.
+#
+# ⚠️ AND THE SUMMARY VIEW HIDES THE ONLY TWO FIELDS THAT MATTER. `{Name, Frequency}` looks healthy
+#    for a subscription that notifies NOBODY: an auto-created default often has an EMPTY
+#    `Subscribers` list and surfaces only in the console. That is a detector that runs and pages
+#    no one — the E11.30 shape exactly (the detection existed for days; the page never fired).
+#    A percentage-based default `ThresholdExpression` is the second trap: on a small bill a
+#    routine $2 → $6 Lambda blip is +200%, so it fires constantly and gets ignored.
+#    ⇒ ALWAYS inspect Subscribers + ThresholdExpression, never just Name/Frequency.
 aws ce get-anomaly-subscriptions --region us-east-1 \
-  --query 'AnomalySubscriptions[].{Name:SubscriptionName,Freq:Frequency}' --output table
+  --query 'AnomalySubscriptions[].{Name:SubscriptionName,Freq:Frequency,Arn:SubscriptionArn,Subs:Subscribers,Threshold:ThresholdExpression,Monitors:MonitorArnList}' \
+  --output json
+
+# 2b. UPDATE it. ── THE MEASURED STATE, 2026-08-08 ──────────────────────────────────────────────
+#
+#   Subscribers : ccl1196@wgu.edu  (EMAIL, CONFIRMED)
+#   Threshold   : AND[ ANOMALY_TOTAL_IMPACT_ABSOLUTE >= 100.0,
+#                      ANOMALY_TOTAL_IMPACT_PERCENTAGE >= 40.0 ]
+#   Monitor     : …anomalymonitor/eaf80e43-28c0-4251-bee5-6ce3dc8192b8   ✅ correctly attached
+#
+# 🔴 FINDING 1 — IT PAGED A DIFFERENT INBOX FROM EVERY OTHER ALARM IN THIS STACK. The budget and
+#    the `credence-prod-alerts` SNS topic both go to ctcb57@gmail.com; this one went to a
+#    university address. Not merely inconsistent: a `.edu` address is the kind that gets
+#    deactivated, and when it does, delivery stops SILENTLY — the subscription still reads
+#    CONFIRMED. Split alert destinations are how one channel goes unwatched without anyone
+#    deciding that it should.
+#
+# ⚠️ FINDING 2 — THE THRESHOLD IS AN `And`, SO THE STRICTER LEG BINDS, AND HERE THAT IS THE
+#    ABSOLUTE ONE. Against this account's actual risk the percentage leg is free: the egress
+#    baseline is ~zero, so a scrape is thousands of percent and clears 40% instantly. The $100
+#    absolute leg is what sets the delay — at the ~$107/day scrape rate, roughly a FULL DAY must
+#    accumulate before it fires. Lowering it to $25 fires ~4x sooner.
+#
+# ⚖️ THE TRADEOFF, STATED: the percentage leg CANNOT separate a scrape from a legitimate spike
+#    (both are enormous against a ~zero egress baseline), so the absolute leg is the only real
+#    discriminator. At $25 a laptop-run lakehouse backfill — which writes to PROD S3 — may
+#    occasionally trip it. Those are deliberate, recognisable events and missing a scrape costs
+#    far more than recognising a backfill. If it proves noisy, raise to $50; do not remove the
+#    percentage leg, which is what keeps ordinary drift out.
+
+SUB_ARN=$(aws ce get-anomaly-subscriptions --region us-east-1 \
+  --query 'AnomalySubscriptions[?SubscriptionName==`Default-Services-Subscription`]|[0].SubscriptionArn' \
+  --output text)
+
+aws ce update-anomaly-subscription --region us-east-1 \
+  --subscription-arn "$SUB_ARN" \
+  --subscribers "[{\"Type\":\"EMAIL\",\"Address\":\"$EMAIL\",\"Status\":\"CONFIRMED\"}]" \
+  --threshold-expression '{
+    "And": [
+      {"Dimensions":{"Key":"ANOMALY_TOTAL_IMPACT_ABSOLUTE","MatchOptions":["GREATER_THAN_OR_EQUAL"],"Values":["25.0"]}},
+      {"Dimensions":{"Key":"ANOMALY_TOTAL_IMPACT_PERCENTAGE","MatchOptions":["GREATER_THAN_OR_EQUAL"],"Values":["40.0"]}}
+    ]
+  }'
+
+# `--subscribers` REPLACES the list — to keep the old address as well, pass both entries.
+# Verify (the only proof the update took):
+aws ce get-anomaly-subscriptions --region us-east-1 \
+  --query 'AnomalySubscriptions[].{Subs:Subscribers,Threshold:ThresholdExpression}' --output json
+
+# 2c. ONLY if step 2 returned no subscription at all, create one: ─────────────────────────────
 
 aws ce create-anomaly-subscription --region us-east-1 \
   --anomaly-subscription "{
@@ -1301,6 +1370,25 @@ curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest | head
 Rate-limit tuning knobs on the same function (all optional; defaults in
 `app/backend/services/cost_guardrails.py`): `COST_RL_PUBLIC_BURST` (30),
 `COST_RL_PUBLIC_PER_SECOND` (0.5), `COST_RL_AUTH_BURST` (60), `COST_RL_AUTH_PER_SECOND` (2.0).
+
+⚠️⚠️ **THE CDN COLLAPSES EVERY ANONYMOUS VISITOR ONTO A HANDFUL OF VERCEL EGRESS IPs, AND THE
+PER-IP LIMITER SEES THOSE, NOT THE VISITORS.** Once the front-end half deploys (`dev` → `main`), an
+anonymous cache MISS reaches us as browser → Vercel CDN → Vercel function → API Lambda, so the
+Lambda's `sourceIp` is Vercel's, and **all CDN-origin traffic shares ONE bucket**. This is a direct
+consequence of the CDN design and it is the one interaction that could make the two guardrails fight
+each other: throttle the CDN and the board goes stale or blank for *everyone*, which is exactly the
+outage the degrade switch exists to avoid.
+
+The arithmetic says it is comfortable, and — the part that matters — **it does not get worse as
+traffic grows**: cache misses are bounded by `(TTL windows × cache keys × POPs)`, ≈0.1 req/s
+sustained against the 0.5/s allowance, and that ceiling is independent of visitor count. The
+residual risk is a burst, not a trend: a simultaneous multi-POP expiry can spend the burst-30.
+
+**Watch for it right after the front-end deploys:** errors from `/api/public/*` (the route surfaces
+an upstream 429 as a 502) or `ThrottleCount` rising with no matching visitor spike. **The fix is one
+env var and no code deploy** — set `COST_RL_PUBLIC_PER_SECOND=2.0` via the §5 procedure. Do NOT
+"fix" it by having the CDN route forward the visitor's IP: that value is caller-controlled and
+trusting it re-opens the spoofing bypass the limiter's IP-precedence order exists to close.
 
 ⚠️ These are **not** in `env.required` on purpose — every one has a safe in-code default, and adding
 a required key means the next deploy FAILS until the box `.env` is hand-edited (the recurring
