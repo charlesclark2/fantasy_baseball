@@ -5,16 +5,19 @@
 // request and one Lambda invocation. Once the free board is un-gated to anonymous traffic that
 // scales linearly with visitors — and with bots, which do not stop at one view.
 //
-// The key observation: the LOCKED payload an anonymous caller receives is IDENTICAL for every
-// anonymous caller. It is a pure function of the published S3 blob, with no per-user content at
-// all. So it is cacheable exactly once for everybody. This handler fetches it and returns it with
-// `s-maxage`, which Vercel's CDN honours — the first request in each window costs one function
-// invocation and one Lambda call, and every subsequent view inside that window is served from the
-// edge with NO function invocation and NO Lambda at all.
+// The key observation: the payload an anonymous caller receives is IDENTICAL for every anonymous
+// caller. It is a pure function of the published S3 blob, with no per-user content at all. So it is
+// cacheable exactly once for everybody. This handler fetches it and returns it with `s-maxage`,
+// which Vercel's CDN honours — the first request in each window costs one function invocation and
+// one Lambda call, and every subsequent view inside that window is served from the edge with NO
+// function invocation and NO Lambda at all.
 //
-// Entitled callers do NOT come through here (see `lib/fantasy.ts` — the token-bearing path still
-// goes straight to the API). That split is the whole design: one cacheable payload for the many,
-// per-request Lambda for the few who pay.
+// ⭐ SINCE THE FREEMIUM BUILD (2026-08-08) THE BOARD READS ARE ENTITLEMENT-INDEPENDENT: the generic
+// board is free, so an anonymous caller and a subscriber get the same bytes. That STRENGTHENS
+// property 1 below rather than retiring it — the header must still never be forwarded, because the
+// property that makes this cache safe is that the upstream cannot tell who is asking, and the way
+// to keep that true is to never give it the means. Entitled callers still go straight to the API
+// (see `lib/fantasy.ts` for why that split is kept even though both arms now agree).
 //
 // ───────────────────────────────────────────────────────────────────────────────────────────────
 // THREE PROPERTIES THAT MAKE THIS SAFE
@@ -56,7 +59,8 @@ const ROUTES: Record<
   string,
   { upstream: string; params: Record<string, RegExp>; sMaxAge: number; swr: number }
 > = {
-  // The 2026 board surfaces. Anonymous ⇒ the server returns the LOCKED payload (E9.56).
+  // The generic board surfaces — free for every caller since the freemium build, and identical
+  // bytes for all of them, which is what makes them cacheable here at all.
   // These blobs change only when the operator re-runs an exporter, never intraday.
   manifest: {
     upstream: "/fantasy/nfl/manifest",

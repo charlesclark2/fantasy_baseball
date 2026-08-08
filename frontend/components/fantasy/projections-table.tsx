@@ -11,13 +11,20 @@
 import { useId, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Search } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
+import { canUse } from "@/lib/entitlements"
 import { useFantasyProjections, FANTASY_SEASON } from "@/lib/fantasy-queries"
-import { trimLockedTail } from "@/lib/fantasy"
-import { EXPECTED_POINTS_LABEL, PROJECTED_GAMES_LABEL } from "@/lib/fantasy-claim-copy"
+import { fullSeasonRate, trimLockedTail } from "@/lib/fantasy"
+import {
+  EXPECTED_POINTS_LABEL,
+  FULL_SEASON_RATE_LABEL,
+  PROJECTED_GAMES_LABEL,
+} from "@/lib/fantasy-claim-copy"
 import {
   ALL_ROWS,
   ConfidenceBadge,
   EmptyBlock,
+  FreemiumBoundary,
   GLOSSARY,
   InfoTip,
   IntervalBar,
@@ -52,6 +59,10 @@ const SCORING_LABEL: Record<Scoring, string> = {
 }
 
 export function ProjectionsTable() {
+  // Freemium build: the projections are free for everyone, so entitlement decides only whether the
+  // boundary block renders — never what is in the table. See `RankingsBoard` for the same pattern.
+  const { groups } = useAuth()
+  const entitled = canUse("personalization", groups)
   const { data, isLoading, error } = useFantasyProjections()
   const [pos, setPos] = useState("All")
   const [scoring, setScoring] = useState<Scoring>("fpPpr")
@@ -204,7 +215,8 @@ export function ProjectionsTable() {
           </div>
 
           <div className="overflow-x-auto rounded-lg border border-[#262626]">
-            <table className="w-full min-w-[900px] text-left text-xs">
+            {/* min-width bumped for the added full-season-rate column; the wrapper scrolls. */}
+            <table className="w-full min-w-[980px] text-left text-xs">
               <thead className="bg-[#0f0f0f] text-gray-500">
                 <tr>
                   <th className="px-3 py-2 font-medium">#</th>
@@ -228,6 +240,11 @@ export function ProjectionsTable() {
                       against an "if he plays every week" projection from anywhere else. */}
                   <th className="px-3 py-2 text-right font-medium">
                     <InfoTip label={EXPECTED_POINTS_LABEL}>{GLOSSARY.expectedPoints}</InfoTip>
+                  </th>
+                  {/* The same total re-expressed over a full 17 games — kept immediately beside the
+                      expected total, because the PAIR is the disclosure. See the rankings board. */}
+                  <th className="px-3 py-2 text-right font-medium">
+                    <InfoTip label={FULL_SEASON_RATE_LABEL}>{GLOSSARY.fullSeasonRate}</InfoTip>
                   </th>
                   {/* The interval is carried on the PPR total only, so it is labelled that way
                       rather than silently implying it tracks the selected reference scoring. */}
@@ -281,6 +298,16 @@ export function ProjectionsTable() {
                     ))}
                     <td className="px-3 py-2 text-right font-semibold text-gray-100">
                       {numOrLock(p[scoring], p.locked)}
+                    </td>
+                    {/* ⚠️ Scaled from the SELECTED reference scoring, so it tracks the picker rather
+                        than silently quoting PPR while the column beside it shows standard. Null
+                        (no/zero expected games) renders as an em-dash — never a blank, never ∞. */}
+                    <td className="px-3 py-2 text-right text-gray-400">
+                      {p.locked ? (
+                        <LockChip title="Subscribe to unlock the full-season rate" />
+                      ) : (
+                        num(fullSeasonRate(p[scoring], p.g))
+                      )}
                     </td>
                     {/* E9.56 — the interval is model output too. A locked row has no p10/p90, so
                         render the chip rather than an empty bar that reads as "no uncertainty". */}
@@ -383,6 +410,10 @@ export function ProjectionsTable() {
               <MarketLeanNote lean={data?.market_lean} note={data?.market_lean_note} />
             </UncertaintyNote>
           </div>
+
+          {/* Below the complete table, for the reason given on the rankings board: the boundary
+              only means something once the visitor has seen that nothing is withheld. */}
+          <FreemiumBoundary entitled={entitled} />
         </>
       )}
     </div>

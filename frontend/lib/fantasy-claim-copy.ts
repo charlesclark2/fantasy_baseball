@@ -162,6 +162,94 @@ export const EXPECTED_POINTS_NOTE = {
     "The points we publish are an expected season total: the chance a player misses games is already priced into the number. That puts ours below the “if he plays every week” projections most sites show, and below what a player who stayed healthy actually finished on — by design, not by accident. The projected-games column shows how much of that discount is availability for each player. It is not the only reason a projection lands under a finished season, and we do not present it as one.",
 } as const
 
+// ══ THE FULL-SEASON RATE — the second reading of the same number ═══════════════════════════════
+//
+// `EXPECTED_POINTS_LABEL` above is the availability-weighted season total: the chance a player
+// misses games is already multiplied through it. That is the honest number and it stays the
+// headline. But it answers only one of the two questions a drafter actually has, and the other one
+// — "what is he worth in the weeks he plays?" — is the one that makes two players comparable when
+// their injury risks differ.
+//
+// So this is `expected_pts × 17 ÷ expected_games`: the same projection, re-expressed as a
+// full-slate rate. NO NEW MODEL RUN, no re-fit — both inputs are already in the served payload, and
+// dividing one by the other is arithmetic on numbers the page already shows.
+//
+// ⛔⛔ DISPLAY ONLY, AND THIS IS A HARD BOUNDARY, NOT A STYLE NOTE. It must never feed VOR, the
+// board ordering, tiering, or the optimizer. Ranking on a full-slate rate would rank players as if
+// availability did not exist — it would systematically promote exactly the players our projection
+// discounts on purpose — and because it re-orders the board it would land on the whole-board
+// placement gate (NF-D18/NF-D20's `CONSTRAINT_REFUSED`), which is a model decision with its own
+// pre-registration, not a display change. `test_freemium_tier.py` asserts the helper is absent from
+// every scoring/ordering module.
+//
+// ⛔ AND IT IS NOT A CONSENSUS-CALIBRATED NUMBER. It is our own projection divided by our own
+// expected games — it is NOT reconciled against anyone else's published "if he plays every week"
+// figure, and it is still conservative at running back, where the residual miscalibration
+// `EXPECTED_POINTS_NOTE` refuses to bury has not gone anywhere. The copy below says both.
+
+/** The column/tile label for the full-slate reading. "Rate" rather than "if healthy" deliberately:
+ *  "if healthy" reads as a PREDICTION about a specific player staying healthy, which is precisely
+ *  what this number does not claim. */
+export const FULL_SEASON_RATE_LABEL = "Full-season rate"
+
+/** The tappable definition behind that label (rendered through `InfoTip`, so it opens on TAP — the
+ *  E9.63/NF3 touch lesson). */
+export const FULL_SEASON_RATE_DEFINITION =
+  "The same projection, stretched back out to a full seventeen games: expected points divided by expected games. It answers “what is he worth in the weeks he plays?”, which is the fairer way to compare two players whose injury risk differs. It is not a prediction that he plays all seventeen — the expected-points column beside it is the number that prices that in, and it is the one our rankings are built on. It is also our own arithmetic, not a figure reconciled against anyone else's published projections, and it stays conservative at running back."
+
+/** Shown where a full-season rate cannot be computed — no expected-games figure, or zero. An
+ *  em-dash with this behind it, never a blank and never a divide-by-zero. */
+export const FULL_SEASON_RATE_UNAVAILABLE =
+  "We don't publish an expected-games figure for this player, so there is nothing to divide by."
+
+// ══ THE FREE / PAID BOUNDARY — stated as a division of labour, never as a withheld feature ══════
+//
+// ⭐ THE PRODUCT POINT THIS COPY HAS TO CARRY (GROWTH-100 §1): the paid aha is "what changed
+// because it is MY league", and a visitor cannot want that until they have seen the generic board
+// and understood that it is generic. So this block only ever appears BESIDE a fully-visible free
+// board — it says what the free thing is, then what a membership adds. It is not a lock, there is
+// nothing behind it on this page, and it must never be written as though there were.
+//
+// ⛔ NO PERFORMANCE PROMISE. Not "win your league", not "beat your leaguemates", not "beat ADP".
+// The paid half does more of the WORK; it does not claim a better outcome. `best_alpha = 0`.
+
+/** The free half, said plainly so the generic board is understood as complete rather than partial. */
+export const FREE_TIER_SUMMARY = {
+  title: "This board is free, and it is the whole board",
+  detail:
+    "Every player we project, every ranking, every 80% range and the market ADP beside it — no account, no trial, nothing held back. It is scored for the common league presets, which is what makes it the same board for everyone.",
+} as const
+
+/** The paid half, in the two categories the entitlement actually splits on. Each `title` names the
+ *  capability in the user's words; `detail` says what it does, never how well it does it. */
+export const PAID_TIER_SUMMARY: readonly { title: string; detail: string }[] = [
+  {
+    title: "Your league, not a preset",
+    detail:
+      "Save your league's real scoring, roster shape and size, and the whole board re-scores against it — including value over replacement, which depends entirely on how many of each position your league actually starts.",
+  },
+  {
+    title: "The tools that turn a board into a pick",
+    detail:
+      "The draft optimizer, and the in-season calls — waivers, trades, start/sit — worked in your league's scoring rather than left as an exercise.",
+  },
+]
+
+/** The one-line version, for a compact surface (a banner, a nav upsell) that has no room for the
+ *  two blocks above. Reuses `DECISION_SUPPORT_LINE`'s framing on purpose — one promise, not two. */
+export const FREEMIUM_BOUNDARY_LINE =
+  "The generic board is free. A membership re-scores it for your league and helps you decide."
+
+/** The heading over the paid half, and the CTA label under it.
+ *
+ *  ⚠️ THESE ARE CHROME, NOT CLAIMS — and they live here anyway. `test_freemium_tier.py` asserts
+ *  that NO prose is written inline in `FreemiumBoundary`, without trying to distinguish a heading
+ *  from a promise. That distinction is exactly what a guard cannot make and what a well-meaning
+ *  copy edit erodes: an exception list for "just a heading" is how the first claim gets typed into
+ *  a component. One rule, no exceptions, and the screening covers everything the surface renders. */
+export const PAID_TIER_HEADING = "What a membership adds"
+export const MEMBERSHIP_CTA_LABEL = "See membership options"
+
 /** The standing statement of what the served board actually is, for a surface that renders without
  *  the artifact. Mirrors `build_claim`'s `architecture` note; when the artifact IS available,
  *  prefer `claim.architecture` so there is one string, not two. */
