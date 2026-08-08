@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 from zoneinfo import ZoneInfo
@@ -625,6 +625,54 @@ def _heal_pending_featured_yesterday(payload: dict, today: str) -> dict:
     return patched
 
 
+#: How far back the home page will reach for a read to carry over. The season plays daily, so one
+#: day is the normal case and two covers a late/failed run; a gap longer than this means something
+#: is genuinely wrong, and the honest empty state is a better answer than a card from last week.
+_CARRY_OVER_MAX_DAYS = 3
+
+
+def _carry_over_recent_featured(today: str) -> FeaturedPickResponse | None:
+    """The most recently PUBLISHED featured read, for the home page to keep up until today's run
+    lands. Returns None when there is nothing recent enough — the caller then falls through to its
+    existing paths and, ultimately, to the honest empty state.
+
+    ⚠️ THREE FIELDS ARE REWRITTEN, and each would otherwise be a false statement about a live page:
+
+    • `is_stale=True` is what makes the card announce itself. Serving yesterday's numbers unlabelled
+      is the one genuinely dangerous state this block can be in — a visitor could read a probability
+      for a game that has already been played.
+    • `yesterday=None`, because the card IS yesterday. The stored blob carries ITS own recap (the day
+      before), so keeping it would put two different days on screen under labels that say otherwise.
+    • `is_preliminary=False` — it describes whether lineups were confirmed when the blob was written,
+      which says nothing useful about a slate that has since finished.
+
+    Best-effort by construction: a DynamoDB failure or a payload this build cannot parse returns
+    None rather than raising, because a missing carry-over is a cosmetic gap and a 500 is an outage.
+    """
+    try:
+        anchor = date.fromisoformat(today)
+    except ValueError:
+        return None
+    for back in range(1, _CARRY_OVER_MAX_DAYS + 1):
+        day = (anchor - timedelta(days=back)).isoformat()
+        try:
+            blob = serving_cache.get_cache("picks/featured", day)
+        except Exception:
+            logger.warning("featured: carry-over read failed for %s", day, exc_info=True)
+            return None
+        if not blob or blob.get("game_pk") is None:
+            continue
+        patched = {**blob, "is_stale": True, "yesterday": None, "is_preliminary": False}
+        try:
+            result = FeaturedPickResponse(**patched)
+        except Exception:
+            logger.warning("featured: carry-over blob for %s is unparseable", day, exc_info=True)
+            return None
+        logger.info("featured: carrying over the read published for %s", day)
+        return result
+    return None
+
+
 @router.get("/featured", response_model=FeaturedPickResponse)
 def get_featured_pick() -> FeaturedPickResponse:
     today = current_game_date_iso()
@@ -643,6 +691,29 @@ def get_featured_pick() -> FeaturedPickResponse:
     cached = get_cache(f"picks/featured_{today}.json")
     if cached is not None and cached.get("game_pk") is not None and cached.get("model_narrative") is not None:
         return FeaturedPickResponse(**cached)
+
+    # ⭐⭐ CARRY OVER THE PREVIOUS DAY'S SERVED BLOB — a DynamoDB POINT READ, not a lakehouse query.
+    #
+    # This sits above the degrade check on purpose: it is the same class of read as the two cache
+    # lookups above it, and cheaper than the empty payload it replaces is expensive to explain.
+    #
+    # 🩹 IT REPLACES A CARRY-OVER THAT COULD NEVER HAVE WORKED IN PRODUCTION. The lakehouse
+    # `_FEATURED_STALE_FALLBACK_QUERY` below resolves exactly the same thing and was, twice over,
+    # unable to deliver it: its ORDER BY did not bind on DuckDB at all (fixed earlier in this
+    # story), and even fixed it is a `SELECT p.*` over the 94-column `daily_model_predictions` —
+    # the read E9.26b documents as reliably failing INSIDE the API Lambda while working perfectly
+    # outside it. `lakehouse_query` swallows both into `[]`, so the page showed "nothing published"
+    # on every morning before the run landed. Measured 2026-08-08 09:17Z against the deployed
+    # Lambda: `/picks/featured` served `game_pk: null` while yesterday's blob sat complete in
+    # DynamoDB and the same query returned the right row from a laptop.
+    #
+    # ⭐ AND IT IS THE BETTER ANSWER ANYWAY, not merely the reachable one. The blob IS what was
+    # featured yesterday — the writer published it — so carrying it forward cannot disagree with
+    # the recap or re-derive a different pick under a rule that has since changed. Re-running the
+    # selection over yesterday's rows is a reconstruction; this is the record.
+    _carried = _carry_over_recent_featured(today)
+    if _carried is not None:
+        return _carried
 
     # G100-D1 — DEGRADE MODE STOPS HERE, BEFORE THE LAKEHOUSE.
     #
