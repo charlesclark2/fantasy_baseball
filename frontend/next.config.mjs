@@ -12,7 +12,18 @@ const securityHeaders = [
       // Next.js requires unsafe-inline for its inline scripts/styles
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://a.espncdn.com https://img.mlbstatic.com",
+      // ⚠️ EVERY HOST WE RENDER AN IMAGE FROM MUST BE LISTED, AND THE LIST IS NOT DERIVABLE FROM
+      // THE SOURCE. Image URLs arrive in the DATA (nflverse's identity table supplies the NFL
+      // headshot host; the team-logo helper builds the ESPN one), so a host can appear in a
+      // published payload without ever appearing in this repo's code — and a missing entry fails
+      // SILENTLY in the browser with no server-side error anywhere.
+      //
+      // 🩹 `static.www.nfl.com` was missing until 2026-08-08 and the block was invisible for as
+      // long as it existed: `player-page.tsx` renders headshots with an `onError` → initials
+      // fallback, so a CSP refusal looked exactly like "this player has no photo". It only surfaced
+      // when the home page's fantasy card rendered one WITHOUT a fallback. Pinned against the
+      // published fixtures by `test_e9_46_image_hosts_are_allowlisted.py`.
+      "img-src 'self' data: blob: https://a.espncdn.com https://img.mlbstatic.com https://static.www.nfl.com",
       "font-src 'self'",
       // Cognito + our own API + PostHog + Sentry
       [

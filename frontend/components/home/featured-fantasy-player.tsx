@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { ArrowRight, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -81,6 +82,7 @@ function PositionRank({ label, pos, rank }: { label: string; pos: string; rank: 
 }
 
 export function FeaturedFantasyPlayer() {
+  const [photoFailed, setPhotoFailed] = useState(false)
   const { data, isLoading, isError } = useQuery<FeaturedFantasyPlayer>({
     queryKey: ["home", "featured-fantasy-player"],
     // G100-D1 — through our own CDN, not the API Lambda. This read carries NO token and every
@@ -153,7 +155,17 @@ export function FeaturedFantasyPlayer() {
         >
           {/* ── Identity ─────────────────────────────────────────────────────────────────── */}
           <div className="flex items-center gap-4 border-b border-[#262626] p-5 md:p-6">
-            {player.headshot && (
+            {/* ⚠️ THE FALLBACK IS NOT THE FIX, AND ON ITS OWN IT IS A LIABILITY.
+                A headshot can fail for two very different reasons: the player genuinely has no
+                photo (a recent addition nflverse has not caught up to), or the browser REFUSED the
+                load. Initials are right for the first and hide the second — which is exactly how
+                `static.www.nfl.com` stayed missing from the CSP `img-src` allowlist unnoticed:
+                `player-page.tsx` has this same fallback, so every blocked headshot in the product
+                presented as "no photo available" rather than as a defect.
+                ⇒ it ships PAIRED with `test_e9_46_image_hosts_are_allowlisted.py`, which asserts
+                every image host in the published fixtures is permitted. Do not keep one without
+                the other: alone, the fallback makes the next missing host invisible again. */}
+            {player.headshot && !photoFailed ? (
               // eslint-disable-next-line @next/next/no-img-element -- the NFL CDN returns a
               // transformed asset per URL; next/image would re-proxy it for no benefit and needs a
               // remotePattern entry. `player-page.tsx` renders the same source the same way.
@@ -164,8 +176,16 @@ export function FeaturedFantasyPlayer() {
                 width={64}
                 height={64}
                 loading="lazy"
+                onError={() => setPhotoFailed(true)}
                 className="h-16 w-16 shrink-0 rounded-full bg-[#0a0a0a] object-cover ring-1 ring-[#262626]"
               />
+            ) : (
+              <div
+                aria-hidden="true"
+                className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#0a0a0a] text-lg font-semibold text-gray-500 ring-1 ring-[#262626]"
+              >
+                {player.name.split(" ").slice(0, 2).map((part) => part[0]).join("")}
+              </div>
             )}
             <div className="min-w-0 flex-1">
               <h3 className="truncate text-2xl font-bold text-white md:text-3xl">{player.name}</h3>
