@@ -1191,16 +1191,14 @@ Verify:
 > **Applied:** AWS Budget `credence-prod-monthly-250` · Cost Anomaly Detection (re-pointed to
 > `ctcb57@gmail.com`, threshold `ABSOLUTE ≥ $25 AND PERCENTAGE ≥ 40%`) · Vercel spend notification ·
 > API Gateway stage + per-route throttling (§ above).
-> **Outstanding — the CloudWatch billing alarm, and it is worse than "not ready yet."** Measured
-> 2026-08-08: `aws cloudwatch list-metrics --namespace AWS/Billing` returns **EMPTY** (billing alerts
-> were never enabled), and the alarm nonetheless reported **`StateValue: OK`** because the creation
-> command in §2 originally passed `--treat-missing-data notBreaching`. So the one alarm meant to
-> catch a runaway bill was reporting green while watching a metric that did not exist. Two actions,
-> and the first is independent of the second: (a) re-put the alarm with `--treat-missing-data
-> missing` so an absent metric reads `INSUFFICIENT_DATA` instead of `OK`; (b) tick **Billing
-> preferences → Receive CloudWatch billing alerts** so the metric starts existing. Coverage is not
-> zero meanwhile — the $250 Budget and the $25 anomaly detector are live and do not depend on this
-> metric.
+> **CloudWatch billing alarm — ✅ NOW FULLY WIRED (2026-08-08), after three stacked defects.**
+> (1) billing alerts had never been enabled, so `EstimatedCharges` did not exist; (2) the creation
+> command here passed `--treat-missing-data notBreaching`, which made the alarm report **`OK`**
+> while watching that missing metric; (3) re-putting it with the corrected flag left a **stale**
+> `OK` behind, because CloudWatch leaves an updated alarm's state unchanged. Each one hid the next,
+> and all three presented as a healthy alarm. Now: `TreatMissingData: missing`, metric present, and
+> `get-metric-statistics` on the alarm's exact dimension returns real data. **Baseline measured at
+> ~$107/month, so the $250 threshold stands at 2.3x** — validated rather than assumed.
 
 > Cost model and the reasoning behind the $250 threshold: **`docs/g100_d1_cost_model.md`**.
 > Regenerate its numbers with `uv run python scripts/estimate_launch_cost.py`.
@@ -1319,6 +1317,27 @@ aws cloudwatch list-metrics --region us-east-1 \
   --namespace AWS/Billing --metric-name EstimatedCharges --output table
 #   EMPTY  ⇒ billing alerts are NOT enabled. The alarm can never fire. Go tick the preference.
 #   A row ⇒ enabled; the alarm reaches OK on its own (metric can take ~24h to first appear).
+#
+# ⚠️ BUT A NON-EMPTY LIST IS STILL NOT PROOF — CLOUDWATCH DIMENSION MATCHING IS EXACT, NOT SUBSET.
+#    Once enabled, `AWS/Billing` publishes MANY variants: `{ServiceName, Currency}` per service,
+#    `{Currency, LinkedAccount}`, `{ServiceName, Currency, LinkedAccount}`, and the bare
+#    `{Currency}` total. They are DIFFERENT metrics. An alarm on `{Currency=USD}` sees ONLY the
+#    bare-total variant, so a list full of per-service rows can look like success while the alarm
+#    still watches nothing. ⇒ verify END-TO-END by asking exactly what the alarm asks:
+aws cloudwatch get-metric-statistics --region us-east-1 \
+  --namespace AWS/Billing --metric-name EstimatedCharges \
+  --dimensions Name=Currency,Value=USD \
+  --start-time $(date -u -v-2d +%Y-%m-%dT%H:%M:%SZ) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%SZ) \
+  --period 21600 --statistics Maximum --output table
+#   ✅ MEASURED 2026-08-08: returns Maximum 24.72 @ 03:29Z ⇒ the alarm is fully wired.
+#   If it returns EMPTY, this account publishes only the LinkedAccount-qualified variant; re-put the
+#   alarm with `--dimensions Name=Currency,Value=USD Name=LinkedAccount,Value=<account-id>`.
+#
+# 💰 BONUS, AND USE IT: those datapoints are the real month-to-date bill, which is how the $250
+#    threshold got validated instead of assumed. $24.72 at 7.15 days into August ⇒ $3.46/day ⇒
+#    ~$107/month, i.e. the threshold sits at 2.3x baseline. Re-read this occasionally; if the
+#    baseline moves materially, rescale the budget + alarm to ~2x it.
 
 aws cloudwatch describe-alarms --region us-east-1 \
   --alarm-names credence-prod-billing-over-250 \

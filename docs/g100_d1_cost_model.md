@@ -177,15 +177,25 @@ surprise (`infrastructure/aws_resources.md`, "Billing mode" rows).
 
 **$250/month**, on both an AWS Budget and a CloudWatch billing alarm.
 
+✅ **VALIDATED AGAINST THE REAL BILL, 2026-08-08** — the baseline below is now MEASURED, not assumed.
+`EstimatedCharges{Currency=USD}` read **$24.72 MTD at 2026-08-08T03:29Z**, i.e. 7.15 days into
+August ⇒ **$3.46/day ⇒ ~$107/month**. That came in *below* the ~$120 this doc originally assumed, so
+**$250 stands unchanged** at 2.3× baseline (and the Budget's 80% warning at $200 is still 1.9×
+baseline, so it will not false-fire on a normal month). The instruction below to rescale applies
+only if a future reading moves materially.
+
 Why $250:
 
 - Current AWS baseline is dominated by the always-on EC2 box (`r6g.large` ≈ $74/mo + EBS) plus
-  small S3/Lambda/DynamoDB lines. The app tier adds **under $1** at 100k visitors (§3).
+  small S3/Lambda/DynamoDB lines — consistent with the measured $3.46/day. The app tier adds
+  **under $1** at 100k visitors (§3).
 - $250 therefore sits **comfortably above any organic outcome** — it would not fire at 1 M monthly
   visitors — and **well below the $3,210 abuse case**.
-- Time-to-fire matters more than the exact number. The $3,210 scenario burns ~$107/day, so a
-  $250 monthly-total alarm over a ~$120 baseline trips **within ~1.2 days** of an attack starting.
-  Cost Anomaly Detection (free) fires faster still.
+- Time-to-fire matters more than the exact number. The $3,210 scenario burns ~$107/day, so against
+  the measured ~$107/month baseline a $250 monthly-total alarm trips **within about two days** of an
+  attack starting (sooner if it begins later in the month, when MTD is already higher). Cost Anomaly
+  Detection at $25/day absolute fires **inside one day** — which is exactly why both exist: the
+  detector warns, the budget confirms.
 
 ⚠️ **Read the real baseline before committing to the number.** The operator already has it: the
 Admin → Finances panel calls Cost Explorer and groups by service. If the trailing-3-month AWS
