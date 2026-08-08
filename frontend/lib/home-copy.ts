@@ -228,6 +228,9 @@ export const MLB_PROOF = {
   agreementHint:
     "Two independent Credence models — one estimating the win probability directly, the other from the projected run differential — land within two points of each other on this game. It is a statement about our own models, computed without looking at the odds, and it says nothing about whether the market is wrong.",
   yesterdayLabel: "Yesterday's featured read",
+  /** Used on a CARRIED-OVER card when the recap's date cannot be derived — "Yesterday" would name
+   *  the wrong day there, and a date we cannot compute is worse than no date. */
+  previousReadLabel: "The read before this one",
   /** ⭐ THE RECORD SENTENCE. It has to do two things at once: not claim an edge, and not pretend we
    *  fail to measure one. Both halves are load-bearing — see the module header. */
   recordNote:
