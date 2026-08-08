@@ -80,6 +80,19 @@ const ROUTES: Record<
     sMaxAge: 300,
     swr: 900,
   },
+  // E9.46 — the landing page's fantasy proof card. Same profile as `featured` above: no token,
+  // identical payload for every caller, on the most-hit anonymous surface we have. Derived from the
+  // published projections blob, so it moves only when the operator re-exports — hence the board
+  // blobs' window rather than the featured pick's intraday one.
+  // ⚠️ QUOTED KEY, because of the hyphen. `test_every_cdn_surface_is_also_mapped_in_the_e2e_harness`
+  // parses these keys with a regex; it was extended to accept the quoted form in the same change,
+  // or this entry would have been INVISIBLE to the guard rather than checked by it.
+  "featured-player": {
+    upstream: "/fantasy/nfl/featured-player",
+    params: {},
+    sMaxAge: 900,
+    swr: 3600,
+  },
   board: {
     upstream: "/fantasy/nfl/board",
     // `config` mirrors the backend's `_CONFIG_RE`; `size` is the same 2..32 bound the API enforces.

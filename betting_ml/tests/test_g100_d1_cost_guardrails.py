@@ -628,8 +628,17 @@ def test_every_cdn_surface_is_also_mapped_in_the_e2e_harness():
     harness_code = _ts_code("e2e/support/api-mock.ts")
 
     # The allowlist keys are the top-level `ROUTES` entries plus the track-record special case.
-    keys = set(re.findall(r"^\s{2}([a-zA-Z][\w-]*): \{$", route_code, flags=re.M))
+    # ⚠️ THE OPTIONAL QUOTES ARE LOAD-BEARING (E9.46). A key containing a hyphen — `featured-player`
+    # — MUST be quoted in TypeScript, and the original pattern required a bare identifier, so a
+    # hyphenated surface was silently INVISIBLE here: the guard passed while checking nothing about
+    # it. That is the vacuous-guard class this file is otherwise careful about, and a hyphen is the
+    # natural way to name a multi-word surface, so it would have recurred.
+    keys = set(re.findall(r'^\s{2}"?([a-zA-Z][\w-]*)"?: \{$', route_code, flags=re.M))
     assert keys, "could not parse the CDN route's allowlist — the guard would be vacuous"
+    assert any("-" in k for k in keys), (
+        "no hyphenated surface was parsed — either none exists yet (delete this line when that is "
+        "true) or the quoted-key form has stopped matching and this guard is silently skipping it"
+    )
 
     for key in keys:
         assert f'"{key}"' in harness_code, (

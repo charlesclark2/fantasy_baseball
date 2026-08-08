@@ -290,6 +290,11 @@ _DEGRADE_ALLOWED_PREFIXES: tuple[str, ...] = (
     # The public marketing surfaces. `/picks/featured` is a DynamoDB point read on the cache-hit
     # path (G100-D1 removed its per-request lakehouse fallback, so it is genuinely cheap now).
     "/picks/featured",
+    # E9.46 — the home page's fantasy proof card. Same class as `/picks/featured`: it is on the
+    # landing page, every caller gets the identical payload, and it is a memoized read of the
+    # already-published projections blob rather than a lakehouse query. Refusing it in degrade mode
+    # would blank the FIRST thing on the page a cost event most needs to keep converting.
+    "/fantasy/nfl/featured-player",
     "/blog/posts",
     # Pricing must stay readable or the upgrade funnel dies exactly when we most want revenue.
     "/stripe/public",
@@ -357,6 +362,9 @@ _PUBLIC_CACHE_RULES: tuple[tuple[str, int, int], ...] = (
     # Re-written intraday by each re-score, so a much shorter window. Still collapses a burst of
     # landing-page views onto one origin read.
     ("/picks/featured", 300, 900),
+    # E9.46 — derived from the published projections blob, so it changes only when the operator
+    # re-exports; the board blobs' window, not the intraday one.
+    ("/fantasy/nfl/featured-player", 900, 3600),
     ("/blog/posts", 600, 3600),
 )
 

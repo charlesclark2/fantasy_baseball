@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query"
 import { ArrowRight, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { apiFetch } from "@/lib/api"
+import { cdnFetch } from "@/lib/api"
 import { nflTeamLogoUrl } from "@/lib/nfl-teams"
 import { DISAGREEMENT_HOOK } from "@/lib/fantasy-claim-copy"
 import { FANTASY_PROOF as COPY } from "@/lib/home-copy"
@@ -83,7 +83,12 @@ function PositionRank({ label, pos, rank }: { label: string; pos: string; rank: 
 export function FeaturedFantasyPlayer() {
   const { data, isLoading, isError } = useQuery<FeaturedFantasyPlayer>({
     queryKey: ["home", "featured-fantasy-player"],
-    queryFn: () => apiFetch("/fantasy/nfl/featured-player"),
+    // G100-D1 — through our own CDN, not the API Lambda. This read carries NO token and every
+    // visitor receives the identical payload, so it is cacheable once for everybody; leaving it on
+    // `apiFetch` would put one API Gateway request and one Lambda invocation back on every view of
+    // the highest-traffic anonymous page in the product, directly undoing what G100-D1 shipped for
+    // the pick card sitting right below this one.
+    queryFn: () => cdnFetch("/api/public/featured-player"),
     staleTime: 15 * 60 * 1000,
     retry: 1,
   })

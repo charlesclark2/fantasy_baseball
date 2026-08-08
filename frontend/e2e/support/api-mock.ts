@@ -128,6 +128,7 @@ function cdnPathToApiPath(pathname: string): string | undefined {
   if (!pathname.startsWith(CDN_PREFIX + "/")) return undefined
   const rest = pathname.slice(CDN_PREFIX.length + 1)
   if (rest === "featured") return "/picks/featured"
+  if (rest === "featured-player") return "/fantasy/nfl/featured-player"
   if (rest === "manifest") return "/fantasy/nfl/manifest"
   if (rest === "projections") return "/fantasy/nfl/projections"
   if (rest === "board") return "/fantasy/nfl/board"
