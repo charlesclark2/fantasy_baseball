@@ -1216,14 +1216,31 @@ aws cloudwatch describe-alarms --region us-east-1 \
 A monthly-total alarm at $250 over a ~$120 baseline trips ~1.2 days into a $107/day scrape. Anomaly
 detection compares against a learned daily baseline and is materially quicker; it costs nothing.
 
+🔴 **AWS ALLOWS EXACTLY ONE DIMENSIONAL (`SERVICE`) SPEND MONITOR PER ACCOUNT, AND THIS ACCOUNT
+ALREADY HAS ONE.** Measured 2026-08-08: `create-anomaly-monitor` returns
+`ValidationException: Limit exceeded on dimensional spend monitor creation`. That is not a
+misconfiguration and nothing needs deleting — **the monitor is the detector, the SUBSCRIPTION is the
+notification**, and it is only the subscription we are missing. ⇒ LIST FIRST, REUSE THE ARN.
+
 ```bash
-export AWS_PROFILE=<your-admin-profile>
+export AWS_PROFILE=<your-admin-profile>          # `baseball-access-user` is denied ce:*
 EMAIL=ctcb57@gmail.com
 
-MONITOR_ARN=$(aws ce create-anomaly-monitor --region us-east-1 \
-  --anomaly-monitor '{"MonitorName":"credence-prod-services","MonitorType":"DIMENSIONAL","MonitorDimension":"SERVICE"}' \
-  --query MonitorArn --output text)
+# 1. Find the existing dimensional monitor and take its ARN.
+aws ce get-anomaly-monitors --region us-east-1 \
+  --query 'AnomalyMonitors[].{Name:MonitorName,Type:MonitorType,Dim:MonitorDimension,Arn:MonitorArn}' \
+  --output table
+
+MONITOR_ARN=$(aws ce get-anomaly-monitors --region us-east-1 \
+  --query 'AnomalyMonitors[?MonitorType==`DIMENSIONAL`]|[0].MonitorArn' --output text)
 echo "MonitorArn: $MONITOR_ARN"
+# ⚠️ If this prints `None`, there genuinely is no dimensional monitor — only then create one:
+#   aws ce create-anomaly-monitor --region us-east-1 \
+#     --anomaly-monitor '{"MonitorName":"credence-prod-services","MonitorType":"DIMENSIONAL","MonitorDimension":"SERVICE"}'
+
+# 2. Check whether it already has a subscription, so this does not add a duplicate email.
+aws ce get-anomaly-subscriptions --region us-east-1 \
+  --query 'AnomalySubscriptions[].{Name:SubscriptionName,Freq:Frequency}' --output table
 
 aws ce create-anomaly-subscription --region us-east-1 \
   --anomaly-subscription "{
@@ -1293,6 +1310,25 @@ one-logical-thing-many-owners trap). `COST_DEGRADE_MODE` unset simply means "off
 
 CI mocks all IO, so neither the throttle nor the degrade flag is provable in the merge gate.
 
+✅ **RUN AGAINST PROD 2026-08-08, backend half PASSED** — results inline below.
+
+🔴 **THE FRONT-END HOST IS `www.credencesports.com`. THE APEX `credencesports.com` DOES NOT RESOLVE**
+(measured: curl exit 6, `000`). An earlier draft of this section used the apex and the CDN check
+appeared to fail for a reason that had nothing to do with the route. The API host
+(`api.credencesports.com`) is unaffected.
+
+⚠️ **THE TWO HALVES DEPLOY SEPARATELY AND THE CDN CHECK NEEDS THE FRONT-END HALF.** `deploy.sh`
+ships the API from whatever is checked out; the Next front end deploys to PRODUCTION only from
+`main`. A commit merged to `dev` therefore has a live backend and no `/api/public/*` route — that
+path 404s until `dev` → `main` lands. This is the safe direction (the deployed front end still calls
+the API directly, and the backend change is purely additive), but do not read the 404 as a defect.
+
+⚠️ **THE `dev` PREVIEW URL CANNOT BE CURLED.** Vercel Deployment Protection 302s every path to
+`vercel.com/sso-api`, so a shell check sees the SSO redirect's headers (`no-store`), never the
+route's. Either open the URL in a logged-in browser and read DevTools → Network, or mint a
+**Protection Bypass for Automation** secret (Project → Settings → Deployment Protection) and pass
+`-H "x-vercel-protection-bypass: <secret>"`.
+
 ```bash
 # (a) The per-IP limit engages and returns an honest 429 with Retry-After.
 for i in $(seq 1 60); do
@@ -1303,6 +1339,13 @@ curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest \
   -H 'Origin: https://credencesports.com' | grep -iE 'HTTP/|retry-after|access-control-allow-origin|cache-control'
 # ⭐ access-control-allow-origin MUST be present on the 429 — without it the browser sees an
 #    opaque network error instead of a throttle, and the frontend cannot tell them apart.
+#
+#   MEASURED 2026-08-08 (prod): 33 × 200, then 429s with occasional 200s interleaved.
+#     HTTP/2 429 · retry-after: 2 · cache-control: no-store
+#     access-control-allow-origin: https://www.credencesports.com     ← the ordering property, live
+#   ⭐ The interleaved 200s are the REFILL, not a leak: 0.5 tokens/s = one request per 2 s, which is
+#     exactly what `retry-after: 2` advertises. A run of unbroken 429s would mean the bucket was not
+#     refilling and legitimate callers would be locked out until the container cycled.
 
 # (b) Cache headers are entitlement-keyed.
 curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest | grep -i 'cache-control\|vary'
@@ -1310,10 +1353,16 @@ curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest | grep
 curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest \
   -H 'Authorization: Bearer anything' | grep -i 'cache-control'
 #   expect: private, no-store    ← a token must NEVER produce a shared-cacheable response
+#
+#   MEASURED 2026-08-08 (prod), both PASS:
+#     anonymous → cache-control: public, s-maxage=3600, stale-while-revalidate=86400 · vary: Authorization
+#     +Bearer  → cache-control: private, no-store                                    · vary: Authorization
 
-# (c) The CDN read path really is cached (run twice; the second should be a HIT and much faster).
-curl -si https://credencesports.com/api/public/featured | grep -iE 'HTTP/|cache-control|x-vercel-cache'
-curl -si https://credencesports.com/api/public/featured | grep -i 'x-vercel-cache'   # expect HIT
+# (c) The CDN read path really is cached. ⚠️ `www.`, not the apex — and only after dev → main.
+curl -si https://www.credencesports.com/api/public/featured | grep -iE 'HTTP/|cache-control|x-vercel-cache'
+curl -si https://www.credencesports.com/api/public/featured | grep -i 'x-vercel-cache'   # expect HIT
+#   expect: 200 · public, s-maxage=300, stale-while-revalidate=900 · MISS then HIT
+#   a 404 here means the front-end half has not deployed yet (see the warning above), not a bug
 
 # (d) Then exercise §5 above: flip the degrade flag on, confirm the two curls, flip it back OFF.
 ```
