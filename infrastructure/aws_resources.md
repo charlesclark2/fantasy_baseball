@@ -1552,6 +1552,15 @@ any token-free smoke of it can only ever produce a false pass. Anonymous curls v
 (a); only an authenticated one verifies the *denial* (b). Both halves are needed — (a) alone cannot
 distinguish "degrade is working" from "degrade never turned on."
 
+🪤 **AND IT HAS ALREADY BEEN RELIED ON, THE SAME MORNING, BY A DIFFERENT SESSION.** The E9.46
+carry-over fix (`4b74506f`, 09:25Z 2026-08-08) ruled the kill switch out of a live prod diagnosis
+with: *"degrade mode is OFF (a non-floor public path returns 200)."* There is **no such thing as a
+non-floor public path** — the two allowlists coincide — so that observation is equally consistent
+with degrade being ON. The conclusion happened to be correct (the flag was not flipped until 09:32Z)
+but the inference was not, and it was one of four bullets eliminating causes on a P1. ⇒ **to
+establish the flag's state, READ THE FLAG** — `aws lambda get-function-configuration … --query
+'Environment.Variables.COST_DEGRADE_MODE'` — never infer it from a 200 on any anonymous route.
+
 Rate-limit tuning knobs on the same function (all optional; defaults in
 `app/backend/services/cost_guardrails.py`): `COST_RL_PUBLIC_BURST` (30),
 `COST_RL_PUBLIC_PER_SECOND` (0.5), `COST_RL_AUTH_BURST` (60), `COST_RL_AUTH_PER_SECOND` (2.0).
