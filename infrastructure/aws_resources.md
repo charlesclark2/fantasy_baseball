@@ -1120,8 +1120,15 @@ Verify:
 >
 > **Why this exists:** organic traffic is cheap (~$21/month all-in at 100k monthly visitors), but a
 > single un-throttled scraper on the newly-public board costs **~$3,210/month, $2,772 of it egress**.
-> There is currently **no AWS Budget and no billing alarm on this account** — the first signal of a
-> runaway bill would be the invoice.
+>
+> **Measured pre-existing state (2026-08-08)** — corrects an earlier draft of this section that said
+> there was no monitoring at all. **No AWS Budget and no CloudWatch billing alarm**: that part
+> stands. But AWS had auto-enabled **Cost Anomaly Detection**, and its default subscription was live
+> the whole time — **paging a university address rather than the `ctcb57@gmail.com` inbox every
+> other alarm in this stack uses**, at a threshold needing roughly a full day of a $107/day scrape
+> to accumulate. So the honest description is not "no monitoring" but **"one detector, pointed at a
+> different inbox, firing about a day late"** — the harder failure to notice, because the console
+> renders it as configured and healthy. Details and the fix in §3.
 
 ### Two gotchas that make a billing alarm silently useless
 
@@ -1256,7 +1263,33 @@ aws ce get-anomaly-subscriptions --region us-east-1 \
   --query 'AnomalySubscriptions[].{Name:SubscriptionName,Freq:Frequency,Arn:SubscriptionArn,Subs:Subscribers,Threshold:ThresholdExpression,Monitors:MonitorArnList}' \
   --output json
 
-# 2b. If it exists but does not notify you (or uses a percentage threshold), UPDATE it:
+# 2b. UPDATE it. ── THE MEASURED STATE, 2026-08-08 ──────────────────────────────────────────────
+#
+#   Subscribers : ccl1196@wgu.edu  (EMAIL, CONFIRMED)
+#   Threshold   : AND[ ANOMALY_TOTAL_IMPACT_ABSOLUTE >= 100.0,
+#                      ANOMALY_TOTAL_IMPACT_PERCENTAGE >= 40.0 ]
+#   Monitor     : …anomalymonitor/eaf80e43-28c0-4251-bee5-6ce3dc8192b8   ✅ correctly attached
+#
+# 🔴 FINDING 1 — IT PAGED A DIFFERENT INBOX FROM EVERY OTHER ALARM IN THIS STACK. The budget and
+#    the `credence-prod-alerts` SNS topic both go to ctcb57@gmail.com; this one went to a
+#    university address. Not merely inconsistent: a `.edu` address is the kind that gets
+#    deactivated, and when it does, delivery stops SILENTLY — the subscription still reads
+#    CONFIRMED. Split alert destinations are how one channel goes unwatched without anyone
+#    deciding that it should.
+#
+# ⚠️ FINDING 2 — THE THRESHOLD IS AN `And`, SO THE STRICTER LEG BINDS, AND HERE THAT IS THE
+#    ABSOLUTE ONE. Against this account's actual risk the percentage leg is free: the egress
+#    baseline is ~zero, so a scrape is thousands of percent and clears 40% instantly. The $100
+#    absolute leg is what sets the delay — at the ~$107/day scrape rate, roughly a FULL DAY must
+#    accumulate before it fires. Lowering it to $25 fires ~4x sooner.
+#
+# ⚖️ THE TRADEOFF, STATED: the percentage leg CANNOT separate a scrape from a legitimate spike
+#    (both are enormous against a ~zero egress baseline), so the absolute leg is the only real
+#    discriminator. At $25 a laptop-run lakehouse backfill — which writes to PROD S3 — may
+#    occasionally trip it. Those are deliberate, recognisable events and missing a scrape costs
+#    far more than recognising a backfill. If it proves noisy, raise to $50; do not remove the
+#    percentage leg, which is what keeps ordinary drift out.
+
 SUB_ARN=$(aws ce get-anomaly-subscriptions --region us-east-1 \
   --query 'AnomalySubscriptions[?SubscriptionName==`Default-Services-Subscription`]|[0].SubscriptionArn' \
   --output text)
@@ -1265,16 +1298,16 @@ aws ce update-anomaly-subscription --region us-east-1 \
   --subscription-arn "$SUB_ARN" \
   --subscribers "[{\"Type\":\"EMAIL\",\"Address\":\"$EMAIL\",\"Status\":\"CONFIRMED\"}]" \
   --threshold-expression '{
-    "Dimensions": {
-      "Key": "ANOMALY_TOTAL_IMPACT_ABSOLUTE",
-      "MatchOptions": ["GREATER_THAN_OR_EQUAL"],
-      "Values": ["25"]
-    }
+    "And": [
+      {"Dimensions":{"Key":"ANOMALY_TOTAL_IMPACT_ABSOLUTE","MatchOptions":["GREATER_THAN_OR_EQUAL"],"Values":["25.0"]}},
+      {"Dimensions":{"Key":"ANOMALY_TOTAL_IMPACT_PERCENTAGE","MatchOptions":["GREATER_THAN_OR_EQUAL"],"Values":["40.0"]}}
+    ]
   }'
 
-# Why $25 ABSOLUTE and not a percentage: it is noise against the ~$120 baseline, but the $3,210
-# scrape scenario burns ~$107/day, so it clears the bar on day ONE. That is the entire reason to
-# run a daily detector alongside the monthly $250 budget — the budget confirms, this one warns.
+# `--subscribers` REPLACES the list — to keep the old address as well, pass both entries.
+# Verify (the only proof the update took):
+aws ce get-anomaly-subscriptions --region us-east-1 \
+  --query 'AnomalySubscriptions[].{Subs:Subscribers,Threshold:ThresholdExpression}' --output json
 
 # 2c. ONLY if step 2 returned no subscription at all, create one: ─────────────────────────────
 
