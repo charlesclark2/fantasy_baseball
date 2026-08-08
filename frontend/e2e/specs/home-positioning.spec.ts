@@ -55,6 +55,7 @@ const PICK = FIXTURES.featuredPick() as {
   edge: number
   model_prob: number
   market_prob: number
+  pick_date: string
   yesterday: { matchup: string; outcome: string } | null
 }
 
@@ -234,6 +235,46 @@ test("a slate with nothing published says so, and the positioning survives it", 
   await expect(page.getByRole("link", { name: /model-vs-market read/i }).first()).toBeVisible()
 
   expectApiFullyMocked(mock)
+  expectNoPageErrors(errors)
+})
+
+test("a carried-over read announces itself as a previous day's, not today's", async ({ page }) => {
+  // ⭐ THE THIRD STATE, added when the operator asked for the previous read to stay up until the
+  // morning run publishes (2026-08-08). It is the one state of the four that can state something
+  // FALSE about a live slate: empty and failed both describe themselves accurately, but a
+  // yesterday card rendered as today's read shows a probability for a game that has already been
+  // played. So the assertion is not "the note exists" — it is that the note and the date agree,
+  // and that nothing on the card claims to be today.
+  const errors = collectPageErrors(page)
+  const mock = await mockApi(page, {
+    // `is_stale: true` is exactly what the API returns when today's run has not published and the
+    // carry-over query resolved the previous read. `yesterday` is dropped alongside it because the
+    // card IS yesterday — serving both would show the same day twice under two labels.
+    transform: (path, body) =>
+      path === "/picks/featured" ? { ...body, is_stale: true, yesterday: null } : body,
+  })
+  await gotoHome(page)
+
+  const block = page.locator("#today")
+  await expect(block.getByText(/hasn't published yet/i)).toBeVisible()
+  await expect(block.getByText(/not today's slate/i)).toBeVisible()
+
+  // The date the note points at ("the date shown above") has to actually be on screen, or the
+  // sentence is a dangling reference. PICK.pick_date is an ISO date; the card renders it long-form.
+  const d = new Date(PICK.pick_date + "T12:00:00")
+  const long = d.toLocaleDateString("en-US", { month: "long", day: "numeric" })
+  await expect(block.getByText(long)).toBeVisible()
+
+  // ⛔ AND THE CARD IS STILL THERE. A carry-over that blanked the numbers would satisfy any
+  // "does it say it is stale" check while delivering the empty page this change exists to avoid.
+  await expect(block.getByText(PICK.matchup)).toBeVisible()
+  await expect(
+    block.getByText(/Nothing to show yet/i),
+    "the carry-over collapsed into the empty state",
+  ).toHaveCount(0)
+
+  expectApiFullyMocked(mock)
+  await expectNoNaN(page)
   expectNoPageErrors(errors)
 })
 

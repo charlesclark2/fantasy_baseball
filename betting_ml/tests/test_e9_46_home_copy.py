@@ -496,3 +496,36 @@ def test_the_retired_tagline_is_scoped_to_the_mlb_product():
     assert 'MLB_PRODUCT_TAGLINE = "Daily edge, quantified."' in src
     pick = _strip_ts_comments(_PICK_COMPONENT_TSX.read_text())
     assert "MLB_PRODUCT_TAGLINE" in pick, "the MLB product tagline is not rendered on the MLB block"
+
+
+def test_a_carried_over_card_says_which_day_it_is_for():
+    """⭐ THE CARRY-OVER, WHICH IS A CLAIM SURFACE AND NOT JUST A LOADING STATE (operator,
+    2026-08-08: keep the previous read up until today's projections land).
+
+    A stale card that does not announce itself is the worst of the three states this block can be
+    in. The empty state is honest and the failed state is honest; a yesterday card presented as
+    today's read is a false statement about a live slate — a visitor could act on a number for a
+    game that has already been played. So the note has to carry BOTH halves: that today's run
+    hasn't published, and that what is on screen belongs to the date shown above it.
+
+    ⚠️ The date itself is rendered from `pick_date` and is what makes "the date shown above"
+    resolvable, so the component's rendering of both is asserted too — the sentence alone would be
+    a dangling reference if the date chip were ever dropped."""
+    src = _strip_ts_comments(_HOME_COPY_TS.read_text())
+    m = re.search(r"\n  staleNote:\s*\n?\s*\"(.*?)\",\n", src, re.S)
+    assert m, "MLB_PROOF.staleNote is gone — a carried-over card would be unlabelled"
+    note = m.group(1).lower()
+
+    assert "hasn't published" in note or "has not published" in note, (
+        f"the note does not say today's run is still pending: {note!r}"
+    )
+    assert "not today's slate" in note, (
+        f"the note does not tell a visitor this is a previous day's read: {note!r}"
+    )
+
+    pick = _strip_ts_comments(_PICK_COMPONENT_TSX.read_text())
+    assert "COPY.staleNote" in pick, "the component never renders the carry-over note"
+    assert "data.is_stale" in pick, "the component does not branch on the carried-over flag"
+    assert "pick_date" in pick, (
+        "the date chip is gone, so \"the date shown above\" in the note refers to nothing"
+    )

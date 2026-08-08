@@ -39,8 +39,31 @@ FOOTER = REPO / "frontend/components/site-footer.tsx"
 LAYOUT = REPO / "frontend/app/layout.tsx"
 NF_TR1 = REPO / "betting_ml/tests/test_nf_tr1_claim_copy.py"
 
+PICKS = REPO / "app/backend/routers/picks.py"
+WSS = REPO / "scripts/write_serving_store.py"
+
 SUITE = "betting_ml/tests/test_e9_46_home_copy.py"
 NF_TR1_SUITE = "betting_ml/tests/test_nf_tr1_claim_copy.py"
+SEL_SUITE = "betting_ml/tests/test_e9_46_featured_selection.py"
+
+# The two ORDER BY clauses the featured-selection cases swap between: the shared constant the code
+# uses now, and the pre-2026-08-08 rule that sorted on the clock.
+_START_TIME_RULE = "ORDER BY game_datetime ASC NULLS LAST, game_pk ASC"
+
+# Unique anchor for the ROUTER's today query specifically — `{_FEATURED_ORDER_BY}` appears four
+# times in picks.py, so a bare anchor would patch whichever came first regardless of intent.
+_ROUTER_TODAY_TAIL = """       pick_side
+FROM totals
+{_FEATURED_ORDER_BY}
+LIMIT 1
+\"\"\"
+
+# ⭐⭐ THE CARRY-OVER QUERY"""
+
+# …and for the stale-fallback query, which is the one that was dead in production.
+_ROUTER_STALE_TAIL = """       actual_outcome, pick_side
+FROM totals
+{_FEATURED_ORDER_BY}"""
 
 #: (label, file, old, new, test-name-substring, suite)
 CASES = [
@@ -199,6 +222,79 @@ CASES = [
      "        <p className=\"mt-6 text-xs leading-relaxed text-gray-600\">{FOOTER_CTA.disclaimer}</p>",
      "        <p className=\"mt-6 text-xs leading-relaxed text-gray-600\">{\"Everything here is analysis published for information only, it is not financial advice, and you alone are responsible for any wager you choose to place anywhere.\"}</p>",
      "test_the_page_and_component_carry_no_unscreened_prose", SUITE),
+
+    # ══ E9.46 REVISION 2 — THE FEATURED-PICK SELECTION RULE (operator, 2026-08-08) ═════════════
+    #
+    # ⭐ The pair below is the whole argument for `TestTheQueriesActuallyRun`, and they are the
+    # same break aimed at two different guards. Restoring `ABS(edge)` re-introduces the exact
+    # production defect: valid Snowflake, reads correctly, and DuckDB cannot bind it — so
+    # `lakehouse_query` swallows a BinderException into `[]` and the home page silently shows the
+    # empty state. A TEXT guard catches the token; only the EXECUTION guard catches the class, and
+    # the class is what shipped. Neither implies the other.
+    ("wrap the gap in ABS again — the ORDER BY token", PICKS,
+     _ROUTER_STALE_TAIL,
+     _ROUTER_STALE_TAIL.replace(
+         "{_FEATURED_ORDER_BY}",
+         "ORDER BY ABS(edge) DESC NULLS LAST, game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"),
+     "test_the_gap_is_never_wrapped_in_a_function_in_an_order_by", SEL_SUITE),
+
+    ("wrap the gap in ABS again — the query stops binding", PICKS,
+     _ROUTER_STALE_TAIL,
+     _ROUTER_STALE_TAIL.replace(
+         "{_FEATURED_ORDER_BY}",
+         "ORDER BY ABS(edge) DESC NULLS LAST, game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"),
+     "TestTheQueriesActuallyRun::test_the_query_binds_and_returns_a_row_on_duckdb", SEL_SUITE),
+
+    # ⚠️ ISOLATED FROM THE PAIR ABOVE ON PURPOSE (NF-D17 §7). This break BINDS fine — every key is
+    # a selected column — so it can only be caught by the cherry-pick guard. A break that tripped
+    # both clauses at once would prove neither.
+    ("carry forward yesterday's WINNER instead of yesterday's pick", PICKS,
+     _ROUTER_STALE_TAIL,
+     _ROUTER_STALE_TAIL.replace(
+         "{_FEATURED_ORDER_BY}",
+         "ORDER BY actual_outcome DESC NULLS LAST, edge DESC NULLS LAST, game_datetime ASC NULLS LAST"),
+     "test_no_featured_query_selects_on_the_outcome", SEL_SUITE),
+
+    ("go back to featuring the earliest game of the day", PICKS,
+     _ROUTER_TODAY_TAIL,
+     _ROUTER_TODAY_TAIL.replace("{_FEATURED_ORDER_BY}", _START_TIME_RULE),
+     "test_the_widest_gap_beats_an_earlier_start", SEL_SUITE),
+
+    # ⭐ THE DRIFT CASE. The rule is duplicated across six constants in two files; the recap is only
+    # a recap while all six agree. Move the WRITER's copy alone and require it to be caught — the
+    # router-side breaks above cannot detect a writer-side drift.
+    ("let the serving writer drift away from the router", WSS,
+     "       prediction_type, pick_side\nFROM totals\n{_FEATURED_ORDER_BY}",
+     "       prediction_type, pick_side\nFROM totals\n" + _START_TIME_RULE,
+     "test_every_featured_query_shares_the_rule", SEL_SUITE),
+
+    # ⛔ ELIGIBILITY IS WHAT KEEPS THE SORT HONEST — without it, "the widest gap on the board" is a
+    # maximum order statistic that selects our own worst row.
+    ("sort on the gap with no agreement filter at all", PICKS,
+     "    WHERE b.layer4_h2h_conviction_flag = TRUE\n      AND b.layer4_h2h_decision IN ('home', 'away')",
+     "    WHERE b.layer4_h2h_decision IN ('home', 'away')",
+     "test_a_game_our_models_disagree_on_is_never_featured_however_wide_the_gap", SEL_SUITE),
+
+    ("draw the recap from qualified_bet instead of the featured set", PICKS,
+     "      AND prediction_type IN ('post_lineup', 'morning')\n),\nbase AS (SELECT * FROM ranked WHERE _rn = 1),\nh2h AS (\n    SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,\n           b.game_datetime,",
+     "      AND qualified_bet = TRUE\n),\nbase AS (SELECT * FROM ranked WHERE _rn = 1),\nh2h AS (\n    SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,\n           b.game_datetime,",
+     "test_the_recap_uses_the_same_eligible_population_as_the_writer", SEL_SUITE),
+
+    # ── the copy is only true while the ORDER BY holds ────────────────────────────────────────
+    ("leave the retired start-time description in the copy", COPY,
+     "and feature the one where our number sits furthest from the market's",
+     "of those, the first to start",
+     "test_the_retired_start_time_rule_is_gone_from_the_copy", SEL_SUITE),
+
+    ("drop the maximum-order-statistic caveat from the gap explanation", COPY,
+     " — and because we feature the largest one on the board, it is also the read most likely to be ours getting something wrong rather than the market's.",
+     ".",
+     "test_the_gap_caveat_survives_the_sort_key", SEL_SUITE),
+
+    ("stop telling a visitor the carried-over card is not today's slate", COPY,
+     "for the date shown above, not today's slate",
+     "and it is current",
+     "test_a_carried_over_card_says_which_day_it_is_for", SUITE),
 ]
 
 

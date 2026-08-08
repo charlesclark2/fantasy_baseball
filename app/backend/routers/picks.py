@@ -69,6 +69,16 @@ _ML_SCHEMA = (
     else "baseball_data.betting_ml_dev"
 )
 
+# ⚠️ THE FEATURED-PICK SELECTION RULE — the canonical statement of it, and the reasoning for
+# ordering on the gap rather than the clock, lives on `_FEATURED_ORDER_BY` in
+# scripts/write_serving_store.py (the SERVING writer is the primary path; everything below is the
+# cold last-resort). These four constants must sort IDENTICALLY to those two, or "yesterday's
+# featured pick" resolves a different game than the one that was actually featured.
+# Pinned by test_e9_46_featured_selection.py.
+_FEATURED_ORDER_BY = (
+    "ORDER BY edge DESC NULLS LAST, game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"
+)
+
 _FEATURED_TODAY_QUERY = f"""
 WITH ranked AS (
     SELECT
@@ -135,10 +145,28 @@ SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
        pick_side
 FROM totals
-ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
+{_FEATURED_ORDER_BY}
 LIMIT 1
 """
 
+# ⭐⭐ THE CARRY-OVER QUERY — what keeps yesterday's read on the home page until today's run
+# publishes (operator, 2026-08-08: "we keep it up there until the new projections come in").
+#
+# 🩹 IT WAS DEAD IN PRODUCTION, SILENTLY, AND THE SYMPTOM WAS A BLANK CARD. It used to end
+# `ORDER BY actual_outcome DESC NULLS LAST, ABS(edge) DESC NULLS LAST, …`, and DuckDB — the ONLY
+# engine that runs it now (this whole path is Snowflake-free) — cannot ORDER a UNION by an
+# EXPRESSION over a selected column: `Binder Error: Could not ORDER BY column "abs(h2h.edge)"`.
+# `lakehouse_query` catches every exception and returns `[]` by design, so the failure surfaced as
+# "no rows" → `FeaturedPickResponse(game_pk=None)` → the empty state, on every day the morning run
+# had not landed yet. Measured on 2026-08-08: 08-07 held 45 prediction rows and the live endpoint
+# still served `game_pk: null`. `edge` is ALREADY `ABS(model − market)` in both branches, so the
+# `ABS()` bought nothing and cost the whole feature (the E9.26b silent-`[]` class).
+#
+# ⛔ AND THE LEAD KEY HAD TO GO REGARDLESS: `actual_outcome DESC NULLS LAST` means "of yesterday's
+# picks, prefer the one that WON". On the page whose argument is that we grade ourselves in public,
+# carrying forward a winner by construction is exactly the claim `best_alpha = 0` forbids — and it
+# also made this card disagree with the recap beside it. It now resolves the SAME pick the writer
+# featured yesterday, whatever happened to it.
 _FEATURED_STALE_FALLBACK_QUERY = f"""
 WITH ranked AS (
     SELECT
@@ -211,43 +239,63 @@ SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
        actual_outcome, pick_side
 FROM totals
-ORDER BY actual_outcome DESC NULLS LAST, ABS(edge) DESC NULLS LAST, game_datetime ASC NULLS LAST
+{_FEATURED_ORDER_BY}
 LIMIT 1
 """
 
+# The "Yesterday" recap beneath today's card. ⚠️ IT MUST RESOLVE THE PICK THAT WAS ACTUALLY
+# FEATURED YESTERDAY — it is presented as this card's own track record, so a recap that names a
+# different game than yesterday's card is not a recap, it is a second pick. Three things had to
+# change for that to be true, and all three were live defects:
+#   • population — it ranked over `qualified_bet = TRUE` and never applied the conviction flag,
+#     i.e. a DIFFERENT eligible set than the one that produces the featured pick;
+#   • per-game row choice — `lineup_confirmed` first, where the writer prefers rows that carry
+#     market data, then post_lineup, then latest `inserted_at` (a degraded post_lineup row with
+#     NULL odds otherwise shadows a complete morning row);
+#   • ORDER BY — `actual_outcome DESC` selected yesterday's WINNER out of the field.
+# It now mirrors _FEATURED_YESTERDAY_SERVING_SQL clause for clause.
 _FEATURED_YESTERDAY_QUERY = f"""
 WITH ranked AS (
     SELECT
         *,
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
-            ORDER BY CASE WHEN lineup_confirmed THEN 0 ELSE 1 END, inserted_at DESC
+            ORDER BY
+                CASE WHEN (h2h_market_implied_prob IS NOT NULL OR over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
+                CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+                inserted_at DESC
         ) AS _rn
     FROM {_ML_SCHEMA}.daily_model_predictions
     WHERE game_date = DATEADD(day, -1, %(today)s::DATE)
-      AND qualified_bet = TRUE
+      AND prediction_type IN ('post_lineup', 'morning')
 ),
 base AS (SELECT * FROM ranked WHERE _rn = 1),
 h2h AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,
+           b.game_datetime,
+           ABS(b.calibrated_win_prob - b.h2h_market_implied_prob)     AS edge,
            clv.actual_outcome
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
         ON clv.game_pk = b.game_pk AND clv.market_type = 'h2h'
-    WHERE b.layer4_h2h_decision IN ('home', 'away')
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_h2h_decision IN ('home', 'away')
 ),
 totals AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'totals' AS market_type,
+           b.game_datetime,
+           ABS(b.totals_model_prob - b.over_prob_consensus)           AS edge,
            clv.actual_outcome
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
         ON clv.game_pk = b.game_pk AND clv.market_type = 'totals'
-    WHERE b.layer4_totals_decision IN ('over', 'under')
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_totals_decision IN ('over', 'under')
 )
-SELECT * FROM h2h
+SELECT game_pk, home_team, away_team, market_type, game_datetime, edge, actual_outcome FROM h2h
 UNION ALL
-SELECT * FROM totals
-ORDER BY actual_outcome DESC NULLS LAST, game_pk, market_type
+SELECT game_pk, home_team, away_team, market_type, game_datetime, edge, actual_outcome FROM totals
+{_FEATURED_ORDER_BY}
 LIMIT 1
 """
 
@@ -255,7 +303,7 @@ _ET = ZoneInfo("America/New_York")
 
 # E9.41 follow-up — pending-yesterday self-heal. Re-resolves the SAME yesterday featured
 # pick the serving writer picked (mirrors write_serving_store._FEATURED_YESTERDAY_SERVING_SQL:
-# market-data-first, post_lineup, latest inserted_at; ORDER BY game_datetime ASC LIMIT 1) and
+# market-data-first, post_lineup, latest inserted_at; then _FEATURED_ORDER_BY LIMIT 1) and
 # computes its outcome from the FRESH mart_game_results (final score), NOT mart_clv_labeled_games.
 #
 # ⚠️ WHY NOT mart_clv_labeled_games (the 2026-07-19 SF/SEA finding): that mart is served as an S3
@@ -274,6 +322,10 @@ WITH ranked AS (
         game_pk, home_team, away_team, game_datetime,
         layer4_h2h_decision, layer4_totals_decision, layer4_h2h_conviction_flag,
         total_line_consensus,
+        -- Needed only to reproduce _FEATURED_ORDER_BY's `edge` key, so this query resolves the
+        -- SAME pick the writer featured. Still a narrow explicit list (E9.26b: a `SELECT *` over
+        -- the 94-col predictions table silently fails inside the API Lambda).
+        calibrated_win_prob, h2h_market_implied_prob, totals_model_prob, over_prob_consensus,
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
             ORDER BY
@@ -289,6 +341,7 @@ base AS (SELECT * FROM ranked WHERE _rn = 1),
 h2h AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,
            b.layer4_h2h_decision AS pick_side, b.game_datetime,
+           ABS(b.calibrated_win_prob - b.h2h_market_implied_prob) AS edge,
            r.home_team_won, r.home_final_score, r.away_final_score,
            CAST(NULL AS DOUBLE) AS total_line
     FROM base b
@@ -299,6 +352,7 @@ h2h AS (
 totals AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'totals' AS market_type,
            b.layer4_totals_decision AS pick_side, b.game_datetime,
+           ABS(b.totals_model_prob - b.over_prob_consensus) AS edge,
            CAST(NULL AS BOOLEAN) AS home_team_won, r.home_final_score, r.away_final_score,
            b.total_line_consensus AS total_line
     FROM base b
@@ -306,13 +360,13 @@ totals AS (
     WHERE b.layer4_h2h_conviction_flag = TRUE
       AND b.layer4_totals_decision IN ('over', 'under')
 )
-SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime,
+SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime, edge,
        home_team_won, home_final_score, away_final_score, total_line
 FROM h2h UNION ALL
-SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime,
+SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime, edge,
        home_team_won, home_final_score, away_final_score, total_line
 FROM totals
-ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
+{_FEATURED_ORDER_BY}
 LIMIT 1
 """
 

@@ -20,17 +20,18 @@ import { MLB_PRODUCT_TAGLINE, MLB_PROOF as COPY } from "@/lib/home-copy"
  * no-edge results, so a home page that told a stranger to place this bet would be making the one
  * claim this company has repeatedly measured and failed to find.
  *
- * ⚠️⚠️ WHICH GAME, EXACTLY — AND THE FIRST CUT OF THIS FILE GOT IT WRONG IN PRODUCTION COPY.
- * It said "today's widest disagreement between our model and the market". It is not. The serving
- * query (`_FEATURED_TODAY_SERVING_SQL`) filters to `layer4_h2h_conviction_flag = TRUE` and then
- * orders `game_datetime ASC … LIMIT 1` — so it is the EARLIEST-STARTING qualifying game of the day,
- * and NOTHING in the selection considers the size of the gap. The flag itself is
- * `|calibrated_win_prob − P(run_diff > 0)| ≤ 0.02` (`predict_today.py`): two independent Credence
- * estimators agreeing with each other, computed without reference to the odds at all.
+ * ⚠️⚠️ WHICH GAME, EXACTLY. `_FEATURED_TODAY_SERVING_SQL` filters to
+ * `layer4_h2h_conviction_flag = TRUE` — `|calibrated_win_prob − P(run_diff > 0)| ≤ 0.02`
+ * (`predict_today.py`), two independent Credence estimators agreeing with each other, computed
+ * without reference to the odds at all — and then orders by the LARGEST `|our probability − market
+ * consensus|` (`_FEATURED_ORDER_BY`).
  *
- * ⇒ the copy in `MLB_PROOF.frame` describes exactly that, and the badge says "our models agree"
- * rather than anything about the market. Do not reintroduce superlatives here — "widest", "biggest"
- * and "strongest" are all claims this selection cannot support.
+ * ⏪ It used to order `game_datetime ASC`, the earliest-starting qualifying game, which selected on
+ * nothing but the clock; the first cut of this file described it as the widest gap anyway and was
+ * simply wrong. The operator changed the QUERY (2026-08-08) rather than the copy. Both are now
+ * true, and they are pinned to each other by `test_e9_46_featured_selection.py` — so "widest" is a
+ * supportable word here ONLY while that ORDER BY stands. It is still not a superlative about
+ * QUALITY: biggest gap ≠ best read, and `MLB_PROOF.gapHint` says so on the card itself.
  *
  * `COPY.frame` carries that in words and renders ABOVE the numbers, because a visitor reads the
  * big figure first.
@@ -256,9 +257,10 @@ export function PickOfTheDay() {
               `predict_today.py` as `|calibrated_win_prob − P(run_diff > 0)| ≤ 0.02` — two
               INDEPENDENT Credence estimators agreeing with each other, computed without reference
               to the odds. So the badge states that, and the popover keeps it from being read as a
-              promise about the result. (Both alternatives considered were false: "high model
-              disagreement" inverts the flag's meaning, and "large model–market gap" describes
-              neither the flag nor the selection, which orders by earliest start time.) */}
+              promise about the result. ("High model disagreement" inverts the flag's meaning
+              outright. "Large model–market gap" is now true of the SELECTION — that is the sort
+              key — but it is not what this BADGE marks, and conflating the eligibility rule with
+              the ordering rule is how the first cut got the description wrong.) */}
           {!data.is_stale && data.conviction_label && (
             <Popover>
               <PopoverTrigger aria-label="What our models agreeing means">

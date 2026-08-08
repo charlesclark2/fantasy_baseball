@@ -1206,7 +1206,44 @@ QUALIFY ROW_NUMBER() OVER (
 ) = 1
 """
 
-_FEATURED_TODAY_SERVING_SQL = """
+# ══ THE FEATURED-PICK SELECTION RULE (E9.46, operator 2026-08-08) ══════════════════════════════
+#
+# Eligibility then ordering, and the two do different jobs:
+#
+#   ELIGIBILITY  `layer4_h2h_conviction_flag = TRUE` — `|calibrated_win_prob − P(run_diff > 0)|
+#                ≤ 0.02` (predict_today.py): our two INDEPENDENT estimators agreeing with each
+#                other, computed without reference to the odds.
+#   ORDERING     the LARGEST model-vs-market gap among those (was: the earliest start time, which
+#                selected on nothing but the clock).
+#
+# ⭐ WHY THE FLAG HAS TO STAY THE FILTER once the gap became the sort key. A max-of-the-day is a
+# maximum order statistic: absent any eligibility rule, "biggest disagreement" reliably selects the
+# game where OUR number is most likely to be wrong — a stale starter, a thin market, one model
+# mis-firing. Requiring the two estimators to agree first is what makes the widest remaining gap a
+# genuine disagreement with the market rather than an artefact of our own noise. Ordering by gap
+# WITHOUT the flag would be a materially different (and worse) feature.
+#
+# 🚨 THIS ORDER BY IS DUPLICATED IN SIX PLACES AND THEY MUST NOT DRIFT — here, the yesterday
+# serving SQL below, and four constants in app/backend/routers/picks.py (today, stale-fallback,
+# yesterday, yesterday-heal). "Yesterday's featured pick" is only meaningful if it resolves the
+# pick that was ACTUALLY featured yesterday, which is true only while every one of the six sorts
+# identically. Pinned by test_e9_46_featured_selection.py::test_every_featured_query_shares_the_rule.
+#
+# ⛔ DO NOT ADD `actual_outcome DESC` TO ANY OF THEM. Two of the router constants used to lead with
+# it, which quietly meant "when several picks are available, show the one that WON" — outcome
+# selection on the one surface whose whole argument is that we grade ourselves honestly. It also
+# made the recap name a different game than the card above it.
+#
+# ⚠️ `edge` is already `ABS(model − market)` in every branch, so it sorts DESC as a magnitude. Do
+# NOT wrap it in `ABS()` here: DuckDB cannot ORDER a UNION by an EXPRESSION over a selected column
+# ("add the expression/function to every SELECT, or move the UNION into a FROM clause"), and
+# `lakehouse_query` swallows that BinderException into `[]`. That is exactly how the stale fallback
+# was dead in production — see the note on _FEATURED_STALE_FALLBACK_QUERY.
+_FEATURED_ORDER_BY = (
+    "ORDER BY edge DESC NULLS LAST, game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"
+)
+
+_FEATURED_TODAY_SERVING_SQL = f"""
 WITH ranked AS (
     SELECT
         p.*,
@@ -1260,11 +1297,11 @@ SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date,
        prediction_type, pick_side
 FROM totals
-ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
+{_FEATURED_ORDER_BY}
 LIMIT 1
 """
 
-_FEATURED_YESTERDAY_SERVING_SQL = """
+_FEATURED_YESTERDAY_SERVING_SQL = f"""
 WITH ranked AS (
     SELECT
         *,
@@ -1273,7 +1310,9 @@ WITH ranked AS (
             ORDER BY
                 -- Mirror today's ranking: prefer rows with market data, then post_lineup,
                 -- then latest inserted_at — so yesterday's "featured" pick is the same
-                -- one that would have been shown as today's pick on that date.
+                -- one that would have been shown as today's pick on that date. The final
+                -- ORDER BY mirrors it too (_FEATURED_ORDER_BY), which is why `edge` is
+                -- computed here even though the recap never displays it.
                 CASE WHEN (h2h_market_implied_prob IS NOT NULL OR over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
                 CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
                 inserted_at DESC
@@ -1289,6 +1328,7 @@ h2h AS (
         'h2h'                     AS market_type,
         b.layer4_h2h_decision     AS pick_side,
         b.game_datetime,
+        ABS(b.calibrated_win_prob - b.h2h_market_implied_prob)        AS edge,
         clv.actual_outcome
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
@@ -1302,6 +1342,7 @@ totals AS (
         'totals'                      AS market_type,
         b.layer4_totals_decision      AS pick_side,
         b.game_datetime,
+        ABS(b.totals_model_prob - b.over_prob_consensus)              AS edge,
         clv.actual_outcome
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
@@ -1309,11 +1350,11 @@ totals AS (
     WHERE b.layer4_h2h_conviction_flag = TRUE
       AND b.layer4_totals_decision IN ('over', 'under')
 )
-SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime
+SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime, edge
 FROM h2h UNION ALL
-SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime
+SELECT game_pk, home_team, away_team, market_type, pick_side, actual_outcome, game_datetime, edge
 FROM totals
-ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
+{_FEATURED_ORDER_BY}
 LIMIT 1
 """
 

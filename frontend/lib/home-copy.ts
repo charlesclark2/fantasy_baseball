@@ -151,30 +151,47 @@ export const FANTASY_PROOF = {
 
 // ══ THE MLB PROOF ══════════════════════════════════════════════════════════════════════════════
 
-/** ⚠️⚠️ THE FRAMING HERE WAS FACTUALLY WRONG IN THE FIRST E9.46 CUT AND IS CORRECTED HERE.
+/** ⚠️⚠️ THIS COPY IS DOWNSTREAM OF A SQL ORDER BY, AND IT HAS ALREADY BEEN WRONG ONCE.
  *
- *  It said "today's widest model-vs-market gap" and "the one where our model's probability sits
- *  furthest from the market's implied price". Neither is true. `_FEATURED_TODAY_SERVING_SQL` in
- *  `scripts/write_serving_store.py` filters to `layer4_h2h_conviction_flag = TRUE` and then orders
- *  `game_datetime ASC … LIMIT 1` — so the featured game is the EARLIEST-STARTING qualifying game of
- *  the day, and nothing in the selection looks at the size of the gap at all.
+ *  The first E9.46 cut said "today's widest model-vs-market gap". That was false at the time — the
+ *  serving query ordered `game_datetime ASC`, i.e. the earliest-starting qualifying game, and
+ *  nothing in the selection looked at the gap. The operator's fix (2026-08-08) was to change the
+ *  QUERY rather than the copy, so the description below is now true by construction:
  *
- *  ⭐ AND THE FLAG IS NOT A MARKET MEASUREMENT EITHER. `layer4_h2h_conviction_flag` is
+ *    eligibility  `layer4_h2h_conviction_flag = TRUE`
+ *    ordering     `_FEATURED_ORDER_BY` — largest `|our probability − market consensus|` first
+ *
+ *  ⇒ if that ORDER BY ever changes again, THIS STRING IS WRONG THE SAME DAY. It is pinned against
+ *  the SQL by `test_e9_46_featured_selection.py::test_the_home_copy_describes_the_actual_order_by`.
+ *
+ *  ⭐ THE FLAG IS NOT A MARKET MEASUREMENT, and it is doing more work now than it was. It is
  *  `|calibrated_win_prob − P(run_diff > 0)| ≤ 0.02` (`scripts/predict_today.py`) — two INDEPENDENT
- *  Credence estimators agreeing with each other, computed with no reference to odds at all. That is
- *  why the badge reads "our models agree": it is what was measured. "High conviction" invites a
- *  bettor to read it as confidence in the result; "high model disagreement" would be the exact
- *  inverse of the truth; "large model–market gap" describes neither the flag nor the selection. */
+ *  Credence estimators agreeing with EACH OTHER, computed with no reference to odds at all. That is
+ *  why the badge reads "our models agree": it is what was measured. ("High conviction" invites a
+ *  bettor to read it as confidence in the result; "high model disagreement" is the exact inverse of
+ *  the truth.) Once the sort key became the gap, the flag also became the guard on a MAXIMUM ORDER
+ *  STATISTIC — see the note on `gapHint`, which is where that honesty lands in front of a visitor.
+ *
+ *  📊 MEASURED, AND WORTH KNOWING BEFORE EDITING ANY OF THIS (2026-07-01 → 08-07, 34 slates): the
+ *  gap now selects a TOTALS pick on 31 of 34 days, because the totals model's eligible gaps are
+ *  structurally ~3× wider than the moneyline's (median 0.116 vs 0.036) — a difference in the scale
+ *  of the two markets, not in how much we disagree. So this card is in practice a totals card. If
+ *  that is not wanted, the fix is in the ORDER BY (rank within market type), not here. */
 export const MLB_PROOF = {
   eyebrow: "Today's featured model-vs-market read",
   frame:
-    "A demonstration, not a recommendation. Each day we feature one game where our two independent models land in close agreement with each other — of those, the first to start. You get our probability, the market's, the gap between them, and the range around our estimate.",
+    "A demonstration, not a recommendation. Each day we take the games where our two independent models land in close agreement with each other, and feature the one where our number sits furthest from the market's. You get our probability, the market's, the distance between them, and the range around our estimate.",
   empty:
-    "Nothing to show yet for today. The morning run publishes after roughly 9am ET and re-scores once lineups are confirmed. Some days no game qualifies, which is a real answer rather than a gap in the page.",
+    "Nothing to show yet. The morning run publishes after roughly 9am ET and re-scores once lineups are confirmed, and until it does we leave the previous read up. Some days no game qualifies at all, which is a real answer rather than a gap in the page.",
   unavailable:
     "Today's read could not be loaded just now. Nothing is wrong with the model — this is the page failing to reach it. Try again shortly, or open the daily card.",
+  /** ⭐ Shown on a CARRIED-OVER card (`is_stale`). It has to say three things a visitor would
+   *  otherwise get wrong: that this is not today's slate, which day it IS (the date renders right
+   *  above it), and that nothing is broken. The card is deliberately left up rather than blanked —
+   *  operator, 2026-08-08 — so the section is never empty between the day rolling over and the
+   *  morning run publishing. */
   staleNote:
-    "Today's analysis is still processing — this is the most recent published read. New numbers arrive after lineup confirmation.",
+    "Today's run hasn't published yet, so this is the most recent read we've posted — for the date shown above, not today's slate. It stays up until the new numbers land.",
   preliminaryNote: "Preliminary — lineups are not confirmed yet.",
   /** ⚠️ "Gap", never "Edge". The served field is called `edge` and the signed-in surfaces render it
    *  that way; on a marketing page "edge" reads as a claim to have one. */
@@ -184,8 +201,15 @@ export const MLB_PROOF = {
     gap: "Gap",
     range: "80% range",
   },
+  /** ⭐⭐ THE SECOND SENTENCE IS THE PRICE OF SORTING ON THIS NUMBER, and it is not optional.
+   *  Featuring the day's LARGEST gap is a maximum order statistic: across a slate, the extreme
+   *  value is the one most likely to be produced by something wrong on our side — a stale starter,
+   *  a thin market, one model mis-firing — rather than by a market that has genuinely mispriced a
+   *  game. Six recorded no-edge results say we have not shown we can tell those apart. A big green
+   *  number with no such caveat reads as an opportunity, which is the one thing this card must not
+   *  claim to be. Pinned by `test_e9_46_home_copy.py`. */
   gapHint:
-    "The distance between our probability and the market's de-vigged consensus probability. It measures disagreement, not advantage.",
+    "The distance between our probability and the market's de-vigged consensus probability. It measures disagreement, not advantage — and because we feature the largest one on the board, it is also the read most likely to be ours getting something wrong rather than the market's.",
   /** The badge, and the popover that stops it being read as a promise about the result. */
   agreementBadge: "Our models agree",
   agreementHint:

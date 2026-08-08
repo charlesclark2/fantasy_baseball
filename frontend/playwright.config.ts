@@ -43,7 +43,19 @@ export default defineConfig({
   },
 
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      // ⚠️ `chromium` has no `testMatch`, so it runs EVERY file in `testDir` — including ones
+      // written for the phone. `home-mobile.spec.ts` is the only spec here that is mobile-ONLY
+      // (the two funnel specs below deliberately run on both), and running it on desktop is not
+      // merely redundant: `Desktop Chrome` has no touch support, so `page.tap()` throws outright
+      // ("The page does not support tap. Use hasTouch context option") — a hard failure that has
+      // nothing to do with the page under test. Its layout assertions are equally meaningless at
+      // 1280px, which is the quieter half of the same problem: they would pass on desktop while
+      // proving nothing about the viewport they exist for.
+      testIgnore: /home-mobile\.spec\.ts/,
+    },
     // E9.58's second defect was mobile-only — the logged-out nav had no signup affordance on a
     // small screen because the whole block was `hidden sm:flex`. A desktop-only suite cannot see
     // that, so the funnel specs run on a phone viewport too.
