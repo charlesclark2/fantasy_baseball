@@ -4,7 +4,7 @@
 // (/fantasy/nfl/*, require_fantasy_access → 403) so the paid gate can't be bypassed
 // by hitting the raw asset URL.
 
-import { apiFetch } from "@/lib/api"
+import { apiFetch, cdnFetch } from "@/lib/api"
 import type { Manifest, Player } from "@/lib/draft-optimizer"
 
 // NF3 — the format-INDEPENDENT season projection: one row per projectable player, the raw
@@ -294,7 +294,19 @@ export function marketLeaningPositions(
     .sort()
 }
 
+// ── G100-D1: the anonymous read path goes through our own CDN, not the API Lambda ────────────────
+//
+// An anonymous caller always receives the same LOCKED payload (E9.56), so it is cacheable once for
+// everybody. `/api/public/*` is a same-origin Next route handler that fetches it and
+// returns it with `s-maxage` — Vercel serves every subsequent view from the edge with no function
+// invocation and no Lambda call. See that route's module comment for the safety properties.
+//
+// A TOKEN-BEARING caller keeps going straight to the API, unchanged: their payload is
+// entitlement-dependent and must never be shared-cached. The `token ? … : …` split below IS that
+// boundary, so keep the two arms symmetric in shape — the callers cannot tell them apart, and the
+// response bodies are byte-identical (the route handler passes the upstream body through verbatim).
 export function getFantasyManifest(token: string | null, season: number): Promise<Manifest> {
+  if (!token) return cdnFetch(`/api/public/manifest?season=${season}`)
   return apiFetch(`/fantasy/nfl/manifest?season=${season}`, {}, token)
 }
 
@@ -304,17 +316,16 @@ export function getFantasyBoard(
   config: string,
   size: number,
 ): Promise<Player[]> {
-  return apiFetch(
-    `/fantasy/nfl/board?season=${season}&config=${encodeURIComponent(config)}&size=${size}`,
-    {},
-    token,
-  )
+  const qs = `season=${season}&config=${encodeURIComponent(config)}&size=${size}`
+  if (!token) return cdnFetch(`/api/public/board?${qs}`)
+  return apiFetch(`/fantasy/nfl/board?${qs}`, {}, token)
 }
 
 export function getFantasyProjections(
   token: string | null,
   season: number,
 ): Promise<ProjectionPayload> {
+  if (!token) return cdnFetch(`/api/public/projections?season=${season}`)
   return apiFetch(`/fantasy/nfl/projections?season=${season}`, {}, token)
 }
 

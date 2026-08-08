@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from datetime import date, datetime, timezone
 
 from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
@@ -53,7 +54,7 @@ from app.backend.models.picks import (
     WeatherInfo,
 )
 from app.backend.dependencies import get_optional_user_id
-from app.backend.services import dynamo, serving_cache
+from app.backend.services import cost_guardrails, dynamo, serving_cache
 from app.backend.services.lakehouse_read import lakehouse_query
 from app.backend.services.s3_cache import get_cache, set_cache
 from app.backend.services.scorecard import build_scorecard_from_detail, build_scorecard_summary
@@ -485,20 +486,56 @@ def _resolve_yesterday_recap(row: dict) -> dict | None:
             "outcome": outcome_str, "status": status}
 
 
+# G100-D1 — how long a container waits before re-attempting a heal that found nothing.
+#
+# ⭐ THE BUG THIS CLOSES: the heal only writes back on SUCCESS, so while yesterday's game is
+# genuinely still unsettled (the common case for hours every morning) the "at most once" promise in
+# the docstring below was false — EVERY request re-ran the query. `/picks/featured` is a PUBLIC,
+# unauthenticated route that the landing page fetches on load, so once anonymous traffic arrives
+# that is one DuckDB-over-S3 query PER VISITOR: seconds of Lambda wall-clock and an S3 GET each,
+# on the hottest public path we have. A cooldown makes the cost O(containers × hours) instead of
+# O(visitors) while keeping the heal's actual purpose — it still lands within 15 minutes of the
+# game settling, which is far inside the window that matters for a "Yesterday:" recap.
+_HEAL_COOLDOWN_SECONDS = 900
+# date -> monotonic timestamp of the last attempt in THIS container.
+_heal_last_attempt: dict[str, float] = {}
+
+
 def _heal_pending_featured_yesterday(payload: dict, today: str) -> dict:
     """Self-heal a stuck 'Yesterday: Pending' recap on the featured pick (E9.41 follow-up).
 
     Late (esp. West-coast) games often aren't in Savant/statcast when the morning
     serving write runs, so the featured payload's yesterday recap freezes on 'pending'
     (the outcome is INNER-JOINed off statcast-derived mart_game_results). This re-checks
-    the CLV mart once on read and patches the recap to Won/Lost the moment it settles —
+    the CLV mart on read and patches the recap to Won/Lost the moment it settles —
     regardless of whether the statcast catch-up job re-ran that day. Best-effort: any
     failure returns the payload unchanged. On a successful heal it writes the patched
-    payload back to the serving cache so the re-check runs at most once.
+    payload back to the serving cache so the re-check stops entirely.
+
+    G100-D1: an UNSUCCESSFUL attempt is now rate-limited per container (see
+    `_HEAL_COOLDOWN_SECONDS`) so an unsettled game cannot turn every anonymous page view into a
+    lakehouse query.
     """
     y = payload.get("yesterday")
     if not isinstance(y, dict) or y.get("status") != "pending":
         return payload
+
+    # G100-D1 — degrade mode: this is a cosmetic recap refinement, not the payload. Never spend a
+    # lakehouse query on it while the operator is actively containing spend.
+    if cost_guardrails.degrade_mode_enabled():
+        return payload
+
+    now = time.monotonic()
+    last = _heal_last_attempt.get(today)
+    if last is not None and (now - last) < _HEAL_COOLDOWN_SECONDS:
+        return payload
+    _heal_last_attempt[today] = now
+    # Bound the dict: one entry per date, and only today's is ever read. Without this a
+    # long-lived container accumulates an entry per day it survives.
+    if len(_heal_last_attempt) > 8:
+        for stale_key in [k for k in _heal_last_attempt if k != today]:
+            _heal_last_attempt.pop(stale_key, None)
+
     try:
         rows = lakehouse_query(_FEATURED_YESTERDAY_HEAL_QUERY, params={"today": today})
     except Exception:
@@ -536,6 +573,19 @@ def get_featured_pick() -> FeaturedPickResponse:
     cached = get_cache(f"picks/featured_{today}.json")
     if cached is not None and cached.get("game_pk") is not None and cached.get("model_narrative") is not None:
         return FeaturedPickResponse(**cached)
+
+    # G100-D1 — DEGRADE MODE STOPS HERE, BEFORE THE LAKEHOUSE.
+    #
+    # Everything above this line is a cheap point read (DynamoDB, then the S3 blob cache).
+    # Everything below is `lakehouse_query` — DuckDB over S3, seconds of Lambda wall-clock per call
+    # and up to four calls per request. This is a PUBLIC route the landing page fetches on load, so
+    # on a cache-cold morning that fallback is the single most expensive thing anonymous traffic can
+    # trigger, and it scales with visitors. When the operator has flipped the kill switch we serve
+    # the honest "nothing published" payload the client already renders (`game_pk: null` — the same
+    # state as a no-slate day) rather than spending the query.
+    if cost_guardrails.degrade_mode_enabled():
+        logger.info("featured: degrade mode — skipping the lakehouse fallback, serving empty")
+        return FeaturedPickResponse(game_pk=None)
 
     try:
         rows = lakehouse_query(_FEATURED_TODAY_QUERY, params={"today": today})

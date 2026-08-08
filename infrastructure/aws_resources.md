@@ -1113,6 +1113,213 @@ Verify:
 
 ---
 
+## 💸 Spend guardrails + billing alarms (G100-D1) — ⏭️ NOT YET APPLIED
+
+> Cost model and the reasoning behind the $250 threshold: **`docs/g100_d1_cost_model.md`**.
+> Regenerate its numbers with `uv run python scripts/estimate_launch_cost.py`.
+>
+> **Why this exists:** organic traffic is cheap (~$21/month all-in at 100k monthly visitors), but a
+> single un-throttled scraper on the newly-public board costs **~$3,210/month, $2,772 of it egress**.
+> There is currently **no AWS Budget and no billing alarm on this account** — the first signal of a
+> runaway bill would be the invoice.
+
+### Two gotchas that make a billing alarm silently useless
+
+- 🔴 **`AWS/Billing` `EstimatedCharges` is published ONLY in `us-east-1`.** An alarm created in any
+  other region watches a metric that does not exist, stays in `INSUFFICIENT_DATA` forever, and never
+  fires. This is the classic guard-that-cannot-fail; every command below pins `--region us-east-1`.
+- 🔴 **Billing metrics must be switched on first**, and they can take up to ~24 h to appear.
+  Billing console → **Billing preferences** → tick **"Receive CloudWatch billing alerts"**. Until
+  that is done the alarm below has nothing to watch.
+- ⚠️ **SNS here is `us-east-1`.** Do **not** export `AWS_DEFAULT_REGION=us-east-2` for these — that
+  is the S3 *lakehouse bucket* only, and passing it yields a misleading `InvalidParameter: TopicArn`.
+
+### 1. AWS Budget — $250/month, three notifications  ▸ LAPTOP
+
+```bash
+# `baseball-access-user` is unlikely to have budgets:* — use the admin SSO profile.
+export AWS_PROFILE=<your-admin-profile>
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+EMAIL=ctcb57@gmail.com
+
+cat > /tmp/g100-budget.json <<JSON
+{
+  "BudgetName": "credence-prod-monthly-250",
+  "BudgetLimit": { "Amount": "250", "Unit": "USD" },
+  "TimeUnit": "MONTHLY",
+  "BudgetType": "COST"
+}
+JSON
+
+# 80% actual = early warning · 100% actual = it happened · 100% FORECAST = it is going to happen.
+# The forecast notification is the one that catches a scrape on day 2 instead of day 20.
+cat > /tmp/g100-budget-notifications.json <<JSON
+[
+  { "Notification": { "NotificationType": "ACTUAL",     "ComparisonOperator": "GREATER_THAN",
+                      "Threshold": 80,  "ThresholdType": "PERCENTAGE" },
+    "Subscribers": [ { "SubscriptionType": "EMAIL", "Address": "$EMAIL" } ] },
+  { "Notification": { "NotificationType": "ACTUAL",     "ComparisonOperator": "GREATER_THAN",
+                      "Threshold": 100, "ThresholdType": "PERCENTAGE" },
+    "Subscribers": [ { "SubscriptionType": "EMAIL", "Address": "$EMAIL" } ] },
+  { "Notification": { "NotificationType": "FORECASTED", "ComparisonOperator": "GREATER_THAN",
+                      "Threshold": 100, "ThresholdType": "PERCENTAGE" },
+    "Subscribers": [ { "SubscriptionType": "EMAIL", "Address": "$EMAIL" } ] }
+]
+JSON
+
+aws budgets create-budget \
+  --account-id "$ACCOUNT_ID" \
+  --budget file:///tmp/g100-budget.json \
+  --notifications-with-subscribers file:///tmp/g100-budget-notifications.json \
+  --region us-east-1
+
+# Verify
+aws budgets describe-budgets --account-id "$ACCOUNT_ID" --region us-east-1 \
+  --query 'Budgets[].{Name:BudgetName,Limit:BudgetLimit.Amount}' --output table
+```
+
+### 2. CloudWatch billing alarm → the existing `credence-prod-alerts` topic  ▸ LAPTOP
+
+Reuses the same SNS topic as every other page (`pipeline/utils/alerting.py::send_alert`), so this
+lands in the inbox the operator already watches.
+
+```bash
+export AWS_PROFILE=<your-admin-profile>
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+TOPIC_ARN="arn:aws:sns:us-east-1:${ACCOUNT_ID}:credence-prod-alerts"
+
+aws cloudwatch put-metric-alarm \
+  --region us-east-1 \
+  --alarm-name "credence-prod-billing-over-250" \
+  --alarm-description "G100-D1: estimated monthly AWS charges exceeded \$250 — see docs/g100_d1_cost_model.md" \
+  --namespace "AWS/Billing" \
+  --metric-name "EstimatedCharges" \
+  --dimensions Name=Currency,Value=USD \
+  --statistic Maximum \
+  --period 21600 \
+  --evaluation-periods 1 \
+  --threshold 250 \
+  --comparison-operator GreaterThanThreshold \
+  --treat-missing-data notBreaching \
+  --alarm-actions "$TOPIC_ARN"
+
+# Verify — StateValue should be OK (or INSUFFICIENT_DATA for up to ~24h after enabling
+# billing alerts). ⚠️ If it is STILL InsufficientData after a day, the billing-preferences
+# tick above was not applied and the alarm is watching nothing.
+aws cloudwatch describe-alarms --region us-east-1 \
+  --alarm-names credence-prod-billing-over-250 \
+  --query 'MetricAlarms[].{Name:AlarmName,State:StateValue,Threshold:Threshold}' --output table
+```
+
+### 3. Cost Anomaly Detection — free, and the FAST signal  ▸ LAPTOP
+
+A monthly-total alarm at $250 over a ~$120 baseline trips ~1.2 days into a $107/day scrape. Anomaly
+detection compares against a learned daily baseline and is materially quicker; it costs nothing.
+
+```bash
+export AWS_PROFILE=<your-admin-profile>
+EMAIL=ctcb57@gmail.com
+
+MONITOR_ARN=$(aws ce create-anomaly-monitor --region us-east-1 \
+  --anomaly-monitor '{"MonitorName":"credence-prod-services","MonitorType":"DIMENSIONAL","MonitorDimension":"SERVICE"}' \
+  --query MonitorArn --output text)
+echo "MonitorArn: $MONITOR_ARN"
+
+aws ce create-anomaly-subscription --region us-east-1 \
+  --anomaly-subscription "{
+    \"SubscriptionName\": \"credence-prod-anomaly-daily\",
+    \"MonitorArnList\": [\"$MONITOR_ARN\"],
+    \"Subscribers\": [{\"Type\":\"EMAIL\",\"Address\":\"$EMAIL\",\"Status\":\"CONFIRMED\"}],
+    \"Frequency\": \"DAILY\",
+    \"ThresholdExpression\": {
+      \"Dimensions\": {
+        \"Key\": \"ANOMALY_TOTAL_IMPACT_ABSOLUTE\",
+        \"MatchOptions\": [\"GREATER_THAN_OR_EQUAL\"],
+        \"Values\": [\"25\"]
+      }
+    }
+  }"
+```
+
+### 4. Vercel spend notification  ▸ VERCEL DASHBOARD (no CLI)
+
+Vercel has no API for this — it is dashboard-only.
+
+1. **vercel.com** → your team → **Settings** → **Billing** → **Spend Management**.
+2. Set **Spend Amount** to **`$60`**. Rationale: the model puts us at $20 (the seat) up to ~250k
+   monthly visitors and ~$41 at 500k, so $60 is comfortably above any organic outcome and still
+   catches a genuine surprise early.
+3. Enable the **email notification** at that amount.
+4. ⛔ **Do NOT enable "Pause Production Deployment" as the spend-management action.** It takes the
+   *site* down to save money — an outage triggered by a billing threshold, which is strictly worse
+   than the overage it prevents and precisely the failure this project's degrade switch exists to
+   avoid. Notification only; the operator decides what to do.
+5. Also worth setting: **Settings → Billing → Usage Alerts** for **Edge Requests**, the quota that
+   binds first (§4 of the cost model).
+
+### 5. The degrade kill switch (what to do when an alarm fires)  ▸ LAPTOP
+
+```bash
+# ON — serve only the cached/static floor; the expensive personalized endpoints answer 503.
+# ⚠️ update-function-configuration REPLACES the whole Variables map — read the current env first
+#    and re-send everything, or you will wipe every other setting on the function.
+aws lambda get-function-configuration --function-name credence-prod-lambda-api \
+  --region us-east-1 --query 'Environment.Variables' > /tmp/lambda-env.json
+
+python3 - <<'PY'
+import json
+env = json.load(open('/tmp/lambda-env.json'))
+env['COST_DEGRADE_MODE'] = '1'          # '0' or remove the key to turn it back OFF
+json.dump({'Variables': env}, open('/tmp/lambda-env-new.json','w'))
+PY
+
+aws lambda update-function-configuration --function-name credence-prod-lambda-api \
+  --region us-east-1 --environment file:///tmp/lambda-env-new.json
+
+# Verify it took effect (the flag is read per-request, so it applies as containers cycle):
+curl -si https://api.credencesports.com/performance/summary | head -1   # expect 503
+curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest | head -1  # expect 200
+```
+
+Rate-limit tuning knobs on the same function (all optional; defaults in
+`app/backend/services/cost_guardrails.py`): `COST_RL_PUBLIC_BURST` (30),
+`COST_RL_PUBLIC_PER_SECOND` (0.5), `COST_RL_AUTH_BURST` (60), `COST_RL_AUTH_PER_SECOND` (2.0).
+
+⚠️ These are **not** in `env.required` on purpose — every one has a safe in-code default, and adding
+a required key means the next deploy FAILS until the box `.env` is hand-edited (the recurring
+one-logical-thing-many-owners trap). `COST_DEGRADE_MODE` unset simply means "off".
+
+### 6. Live smoke — the part CI cannot prove  ▸ LAPTOP, AFTER `deploy.sh`
+
+CI mocks all IO, so neither the throttle nor the degrade flag is provable in the merge gate.
+
+```bash
+# (a) The per-IP limit engages and returns an honest 429 with Retry-After.
+for i in $(seq 1 60); do
+  curl -s -o /dev/null -w "%{http_code} " https://api.credencesports.com/fantasy/nfl/track-record/manifest
+done; echo
+# Expect: 200s, then 429s. Confirm the headers on a throttled one:
+curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest \
+  -H 'Origin: https://credencesports.com' | grep -iE 'HTTP/|retry-after|access-control-allow-origin|cache-control'
+# ⭐ access-control-allow-origin MUST be present on the 429 — without it the browser sees an
+#    opaque network error instead of a throttle, and the frontend cannot tell them apart.
+
+# (b) Cache headers are entitlement-keyed.
+curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest | grep -i 'cache-control\|vary'
+#   expect: public, s-maxage=3600, stale-while-revalidate=86400   +   Vary: ... Authorization
+curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest \
+  -H 'Authorization: Bearer anything' | grep -i 'cache-control'
+#   expect: private, no-store    ← a token must NEVER produce a shared-cacheable response
+
+# (c) The CDN read path really is cached (run twice; the second should be a HIT and much faster).
+curl -si https://credencesports.com/api/public/featured | grep -iE 'HTTP/|cache-control|x-vercel-cache'
+curl -si https://credencesports.com/api/public/featured | grep -i 'x-vercel-cache'   # expect HIT
+
+# (d) Then exercise §5 above: flip the degrade flag on, confirm the two curls, flip it back OFF.
+```
+
+---
+
 ## Observability — INC-16-P6 (orchestration box alerting)
 
 > **Status: code-complete 2026-06-27; provisioned by `services/observability/provision-observability.sh` (operator-run).** One SNS topic is the unified channel — the Python notifier (`pipeline/utils/alerting.py`), the box shell notifier (`services/dagster/aws/notify.sh`), and all CloudWatch alarms publish to it; one email subscription delivers everything.
