@@ -1506,10 +1506,51 @@ PY
 aws lambda update-function-configuration --function-name credence-prod-lambda-api \
   --region us-east-1 --environment file:///tmp/lambda-env-new.json
 
-# Verify it took effect (the flag is read per-request, so it applies as containers cycle):
-curl -si https://api.credencesports.com/performance/summary | head -1   # expect 503
+# ⚠️ WAIT FOR PROPAGATION BEFORE CURLING. `update-function-configuration` RETURNS IMMEDIATELY with
+#    `"LastUpdateStatus": "InProgress"`; a curl fired before it flips to `Successful` hits the OLD
+#    env and reports the pre-flip behaviour. Poll until Successful:
+aws lambda get-function-configuration --function-name credence-prod-lambda-api --region us-east-1 \
+  --query '{degrade:Environment.Variables.COST_DEGRADE_MODE,status:LastUpdateStatus}'
+
+# (a) THE FLOOR STAYS UP — anonymous, no token required:
 curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest | head -1  # expect 200
+curl -si https://api.credencesports.com/subscription/public-pricing | head -1        # expect 200
+
+# (b) THE DENIAL — ⛔ REQUIRES A REAL BEARER TOKEN. Sign in at www.credencesports.com, open
+#     devtools → Network, click any API call, copy the `authorization` request header value.
+TOKEN='eyJ...'
+curl -si -H "Authorization: Bearer $TOKEN" \
+  https://api.credencesports.com/performance/summary | head -1                       # expect 503
+
+# OFF — remove the key (absent == off; `degrade_mode_enabled` reads it per request).
+python3 - <<'PY'
+import json
+env = json.load(open('/tmp/lambda-env.json'))
+env.pop('COST_DEGRADE_MODE', None)
+json.dump({'Variables': env}, open('/tmp/lambda-env-off.json','w'))
+PY
+aws lambda update-function-configuration --function-name credence-prod-lambda-api \
+  --region us-east-1 --environment file:///tmp/lambda-env-off.json
 ```
+
+⛔⛔ **AN UNAUTHENTICATED CURL CANNOT DEMONSTRATE THE 503, AND ITS `401` READS EXACTLY LIKE SUCCESS —
+this block prescribed precisely that broken check until 2026-08-08.** The original line was a bare
+`curl .../performance/summary` expecting 503. That path has **no explicit API Gateway route**, so it
+falls to `ANY /{proxy+}`, which carries the Cognito JWT authorizer (NF3.2) — **the gateway rejects it
+with 401 before the Lambda is ever invoked, degrade mode on or off.** A `401` is a blocked-looking
+status on an endpoint you expected to be blocked, so the check passes the eye test while measuring
+nothing about the flag. It is the repo's vacuous-guard class (NF1.7 (a) / INC-38) in an operator
+runbook rather than in a test.
+
+⭐ **AND IT IS NOT INCIDENTAL — IT IS STRUCTURAL, BECAUSE THE TWO ALLOWLISTS COINCIDE BY DESIGN.**
+Cross-check the 13 `--authorization-type NONE` routes above against `_DEGRADE_ALLOWED_PREFIXES` in
+`app/backend/services/cost_guardrails.py`: **every single public route is degrade-allowlisted.** That
+is the correct product outcome — degrade mode is *defined* as "keep exactly the anonymous free floor
+up" — but it has a verification consequence that is easy to miss: **there is no anonymous request
+that degrade mode refuses**, so the switch's denial half is unobservable without a valid token, and
+any token-free smoke of it can only ever produce a false pass. Anonymous curls verify the *floor*
+(a); only an authenticated one verifies the *denial* (b). Both halves are needed — (a) alone cannot
+distinguish "degrade is working" from "degrade never turned on."
 
 Rate-limit tuning knobs on the same function (all optional; defaults in
 `app/backend/services/cost_guardrails.py`): `COST_RL_PUBLIC_BURST` (30),
@@ -1619,7 +1660,11 @@ curl -si https://www.credencesports.com/api/public/featured | grep -i 'x-vercel-
 # Payload fidelity was checked the same way and is byte-identical to the direct API read, which is
 # the property that matters here: the route is a pass-through, not a transform.
 
-# (d) Then exercise §5 above: flip the degrade flag on, confirm the two curls, flip it back OFF.
+# (d) Then exercise §5 above: flip the degrade flag on, WAIT for LastUpdateStatus=Successful, then
+#     confirm BOTH halves — the anonymous floor still 200s AND an authenticated (real bearer token)
+#     call to /performance/summary 503s — then flip it back OFF and re-confirm the 200s.
+#     ⛔ A token-free curl of /performance/summary is NOT the denial half: it 401s at the gateway
+#        either way. See the warning under §5 — that false pass has already been shipped once.
 ```
 
 ---
