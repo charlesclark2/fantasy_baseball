@@ -1,0 +1,3222 @@
+{
+  "story": "NF-RECAL1",
+  "generated_at": "2026-08-08T08:36:29.228019+00:00",
+  "model_version": "nfl_fantasy_nf_recal1_veteran_level_v1",
+  "recalibrates": "nfl_fantasy_fastpath_v1",
+  "best_alpha": 0,
+  "preregistration": {
+    "framing": "pooled",
+    "framing_reason": "The ship UNIT is ONE change to the veteran level that applies at all four positions together or not at all \u2014 there is no product in which the correction ships at TE alone. Splitting one hypothesis into four tests pays a multiplicity penalty for a decomposition the hypothesis does not require (NF-D15 was blocked by exactly that framing; NF-D16 pre-registered pooled for this reason and NF-D18/NF-D20 inherited it). The per-position reading is a DISCLOSURE and does not gate.",
+    "dsr_reading": "whole_field",
+    "field_reason": "The DECLARED family is the 5 forms \u00d7 2 \u03bb-rules + the NULL = 11 trials, fixed before the run. MH2 (a) is two-sided: you get to PRE-REGISTER a family, you do NOT get to DISCOVER one \u2014 and trimming a field after the fact under-taxes it, because the arm you drop is dropped for LOSING. The season-total matched foils and every anchor are excluded from the trial field because a diagnostic is never a trial; the EXPANDED reading counting every constant-\u03bb point is reported as the conservative sensitivity so that exclusion is visible rather than assumed.",
+    "metric": "crps",
+    "metric_reason": "CRPS is proper and grades point AND spread jointly. MAE is minimised at the CONDITIONAL MEDIAN, so on this 31\u201335%-zero right-skewed target it PAYS FOR PESSIMISM \u2014 the very effect NF-D11 measured (an all-zero degenerate WINNING MAE at 43% zeros) and NF-D15 measured again (bias moving away from zero while MAE improved). Selecting a LEVEL correction on MAE would grade it on the statistic that caused the residual it exists to remove.",
+    "tier_anchor": "incumbent_projection",
+    "tier_anchor_reason": "The tier is fixed by the INCUMBENT'S OWN projection, identically for every arm, so no candidate or anchor can buy a friendlier subset. Anchoring on the REALIZED outcome (or merely on 'the player played') selects the rows on which any honest projection looks cold \u2014 NF-D17 measured a one-sided truncation manufacturing an arbitrary gap, and this product's own documentation forbids citing its outcome-bucketed decile table for the same reason. The outcome-conditioned readings are COMPUTED AND REPORTED as disclosures; nothing is fitted, selected or gated on them.",
+    "tier_n": 156,
+    "lambda_provenance": "\u03bb is never a knob. Every candidate is a deterministic RULE whose \u03bb is computed from folds strictly BEFORE the one it is scored on; the grid is `rookie_point_recalibration.SHRINK_GRID`, imported, written before any constraint result in this programme existed. No arm is fitted, filtered or selected on the 2026 serving board.",
+    "rookie_exclusion": "The rookie LEVEL is governed by the CLOSED NF-D16 \u2192 NF-D18 \u2192 NF-D20 \u2192 NF-D21 chain. NF-D21 was refused by the interval-floor gate and the PM CLOSED (not parked) it on 2026-08-05, naming the reason: a story left open pending a floor fix is exactly the pressure that would bias that floor toward clearing. Re-opening the rookie level inside a differently-named story would re-apply that pressure wearing a new badge. The exclusion is INHERITED BY IMPORT from `rookie_publish_policy`, not re-decided here.",
+    "qb_inclusion": "QB is IN scope, unlike NF-D16/D18/D20. Their exclusion rests on NF-D14's MEASURED rookie-QB double-pricing \u2014 a finding about the ROOKIE slot curve. No equivalent finding exists for the veteran leg, and the motivating table names a QB level gap, so excluding QB would be inheriting a reason that does not apply to this population.",
+    "forms": [
+      "global_const",
+      "pos_const",
+      "pos_offset",
+      "pos_affine",
+      "avail_cond"
+    ],
+    "spaces": [
+      "per_game",
+      "season_total"
+    ],
+    "space_invariant_forms": [
+      "global_const",
+      "pos_const",
+      "avail_cond"
+    ],
+    "lambda_grid": [
+      0.0,
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "rules": [
+      "infold",
+      "unconstrained"
+    ],
+    "declared_trial_field_size": 11,
+    "gates": {
+      "pbo_max": 0.2,
+      "dsr_min": 0.95,
+      "alpha": 0.1,
+      "coverage_floor": 0.8,
+      "ordering_do_no_harm": 0.02
+    }
+  },
+  "folds": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "premise": {
+    "universe": {
+      "reading": "universe (unconditional)",
+      "n": 8099,
+      "mean_bias": 0.84,
+      "median_bias": 13.84,
+      "ours_over_actual": 1.013,
+      "pct_zero_outcome": 0.324,
+      "per_position": {
+        "QB": {
+          "n": 1116,
+          "mean_bias": 8.54,
+          "ours_over_actual": 1.094
+        },
+        "RB": {
+          "n": 2018,
+          "mean_bias": -2.8,
+          "ours_over_actual": 0.956
+        },
+        "TE": {
+          "n": 1801,
+          "mean_bias": -0.03,
+          "ours_over_actual": 0.999
+        },
+        "WR": {
+          "n": 3164,
+          "mean_bias": 0.93,
+          "ours_over_actual": 1.015
+        }
+      }
+    },
+    "draftable_tier_incumbent_anchor": {
+      "reading": "draftable tier, INCUMBENT anchor (top 156/season) \u2b50 PRE-REGISTERED",
+      "n": 2028,
+      "mean_bias": -12.85,
+      "median_bias": -14.35,
+      "ours_over_actual": 0.919,
+      "pct_zero_outcome": 0.075,
+      "per_position": {
+        "QB": {
+          "n": 465,
+          "mean_bias": -0.57,
+          "ours_over_actual": 0.997
+        },
+        "RB": {
+          "n": 490,
+          "mean_bias": -21.54,
+          "ours_over_actual": 0.859
+        },
+        "TE": {
+          "n": 251,
+          "mean_bias": -9.05,
+          "ours_over_actual": 0.93
+        },
+        "WR": {
+          "n": 822,
+          "mean_bias": -15.78,
+          "ours_over_actual": 0.897
+        }
+      }
+    },
+    "draftable_tier_realized_anchor": {
+      "reading": "draftable tier, REALIZED anchor (top 156/season) \u26d4 forbidden",
+      "n": 2028,
+      "mean_bias": -64.8,
+      "median_bias": -65.53,
+      "ours_over_actual": 0.661,
+      "pct_zero_outcome": 0.0,
+      "per_position": {
+        "QB": {
+          "n": 383,
+          "mean_bias": -52.06,
+          "ours_over_actual": 0.781
+        },
+        "RB": {
+          "n": 529,
+          "mean_bias": -78.14,
+          "ours_over_actual": 0.582
+        },
+        "TE": {
+          "n": 284,
+          "mean_bias": -60.73,
+          "ours_over_actual": 0.614
+        },
+        "WR": {
+          "n": 832,
+          "mean_bias": -63.57,
+          "ours_over_actual": 0.654
+        }
+      }
+    },
+    "played_at_least_6_games": {
+      "reading": "played \u22656 games \u26d4 outcome-conditioned",
+      "n": 4708,
+      "mean_bias": -23.83,
+      "median_bias": -11.04,
+      "ours_over_actual": 0.773,
+      "pct_zero_outcome": 0.024,
+      "per_position": {
+        "QB": {
+          "n": 503,
+          "mean_bias": -35.29,
+          "ours_over_actual": 0.817
+        },
+        "RB": {
+          "n": 1188,
+          "mean_bias": -30.42,
+          "ours_over_actual": 0.714
+        },
+        "TE": {
+          "n": 1112,
+          "mean_bias": -14.42,
+          "ours_over_actual": 0.783
+        },
+        "WR": {
+          "n": 1905,
+          "mean_bias": -22.17,
+          "ours_over_actual": 0.785
+        }
+      }
+    },
+    "motivating_figures": {
+      "source": "production_model_state/nfl_season_fantasy.md \u2014 MEASURED LEVEL BIAS (NF-TR1)",
+      "n": 1165,
+      "mean_bias": -37.7,
+      "median_bias": -34.5,
+      "ours_over_actual": {
+        "QB": 0.923,
+        "RB": 0.693,
+        "WR": 0.778,
+        "TE": 0.816
+      },
+      "population_note": "stated as unconditional; not reproducible on this panel \u2014 see verdict"
+    },
+    "premise_confirmed": true,
+    "reproduces_motivating_magnitude": false,
+    "per_position_sign_agrees_with_motivating": {
+      "QB": true,
+      "RB": true,
+      "WR": true,
+      "TE": true
+    },
+    "table": [
+      {
+        "reading": "universe (unconditional)",
+        "n": 8099,
+        "mean_bias": 0.84,
+        "median_bias": 13.84,
+        "ours_over_actual": 1.013,
+        "pct_zero_outcome": 0.324
+      },
+      {
+        "reading": "draftable tier, INCUMBENT anchor (top 156/season) \u2b50 PRE-REGISTERED",
+        "n": 2028,
+        "mean_bias": -12.85,
+        "median_bias": -14.35,
+        "ours_over_actual": 0.919,
+        "pct_zero_outcome": 0.075
+      },
+      {
+        "reading": "draftable tier, REALIZED anchor (top 156/season) \u26d4 forbidden",
+        "n": 2028,
+        "mean_bias": -64.8,
+        "median_bias": -65.53,
+        "ours_over_actual": 0.661,
+        "pct_zero_outcome": 0.0
+      },
+      {
+        "reading": "played \u22656 games \u26d4 outcome-conditioned",
+        "n": 4708,
+        "mean_bias": -23.83,
+        "median_bias": -11.04,
+        "ours_over_actual": 0.773,
+        "pct_zero_outcome": 0.024
+      }
+    ]
+  },
+  "selection": {
+    "framing": "pooled",
+    "n_candidates": 11,
+    "n_eligible": 1,
+    "incumbent_metric": 53.04,
+    "winner": {
+      "label": "incumbent (NULL)",
+      "key": null,
+      "form": "incumbent",
+      "space": "per_game",
+      "rule": null,
+      "recalibrates": false,
+      "shippable": true,
+      "lam_by_fold": null,
+      "metric": 53.04,
+      "bias": -12.586,
+      "mae": 69.8654,
+      "coverage80": 0.5046,
+      "universe_bias": 0.8243,
+      "rho": {
+        "QB": 1.0,
+        "RB": 1.0,
+        "WR": 1.0,
+        "TE": 1.0
+      }
+    },
+    "best_any": {
+      "label": "pos_affine \u00b7 unconstrained",
+      "metric": 50.6773,
+      "eligible": false
+    },
+    "ordering": {
+      "per_position": {
+        "QB": {
+          "rho": 1.0,
+          "ok": true
+        },
+        "RB": {
+          "rho": 1.0,
+          "ok": true
+        },
+        "WR": {
+          "rho": 1.0,
+          "ok": true
+        },
+        "TE": {
+          "rho": 1.0,
+          "ok": true
+        }
+      }
+    },
+    "coverage": {
+      "ok": false,
+      "strict_ok": false,
+      "governs_the_change": true,
+      "floor": 0.8,
+      "per_position": {
+        "QB": {
+          "n": 262,
+          "coverage": 0.4962,
+          "covered_rows": 130,
+          "binding_level": 0.4962,
+          "rows_required": 130,
+          "rows_of_slack": 0,
+          "ok": true,
+          "rows_of_slack_strict": -80,
+          "strict_ok": false,
+          "incumbent_coverage": 0.4962
+        },
+        "RB": {
+          "n": 264,
+          "coverage": 0.4848,
+          "covered_rows": 128,
+          "binding_level": 0.4848,
+          "rows_required": 128,
+          "rows_of_slack": 0,
+          "ok": true,
+          "rows_of_slack_strict": -84,
+          "strict_ok": false,
+          "incumbent_coverage": 0.4848
+        },
+        "WR": {
+          "n": 436,
+          "coverage": 0.5023,
+          "covered_rows": 219,
+          "binding_level": 0.5023,
+          "rows_required": 220,
+          "rows_of_slack": -1,
+          "ok": false,
+          "rows_of_slack_strict": -130,
+          "strict_ok": false,
+          "incumbent_coverage": 0.5023
+        },
+        "TE": {
+          "n": 130,
+          "coverage": 0.5692,
+          "covered_rows": 74,
+          "binding_level": 0.5692,
+          "rows_required": 75,
+          "rows_of_slack": -1,
+          "ok": false,
+          "rows_of_slack_strict": -30,
+          "strict_ok": false,
+          "incumbent_coverage": 0.5692
+        }
+      },
+      "pooled_coverage": 0.5046,
+      "breaches": [
+        "WR 0.5023<0.502 (-1 rows)",
+        "TE 0.5692<0.569 (-1 rows)"
+      ],
+      "breaches_strict": [
+        "QB 0.4962<0.800 (-80 rows)",
+        "RB 0.4848<0.800 (-84 rows)",
+        "WR 0.5023<0.800 (-130 rows)",
+        "TE 0.5692<0.800 (-30 rows)"
+      ],
+      "evaluable": true
+    },
+    "placement": {
+      "holds_out": true,
+      "per_fold": {},
+      "c2_only": true,
+      "c3_only": true,
+      "failing_folds": []
+    },
+    "deflation": {
+      "pbo": null,
+      "n_splits": 0,
+      "note": "too few classes/configs for CSCV",
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "n_configs": 1,
+      "dsr": null,
+      "dsr_contenders": null
+    },
+    "deflation_unrestricted_disclosure": {
+      "pbo": 0.0,
+      "n_splits": 35,
+      "median_logit": 2.398,
+      "os_gap_pct": 0.0,
+      "os_gap_p90_pct": 0.0,
+      "contender_spread_pct": 3.01,
+      "flips": [
+        {
+          "config": "pos_affine \u00b7 unconstrained",
+          "IS-half wins": 35,
+          "share": 1.0,
+          "full-sample IS80": 50.677,
+          "\u0394 vs best %": 0.0
+        }
+      ],
+      "n_configs": 11,
+      "note": "the search that WOULD have run had the constraints not bound \u2014 a DISCLOSURE only, gating nothing; the pre-registered PBO is over the ELIGIBLE set"
+    },
+    "pvalue": 1.0,
+    "per_fold_delta": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "eligible_labels": [
+      "incumbent (NULL)"
+    ],
+    "ineligible": [
+      {
+        "label": "global_const \u00b7 infold",
+        "metric": 53.04,
+        "holds_out": false,
+        "failing_folds": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2024,
+          2025
+        ],
+        "c2_ok": true,
+        "c3_ok": false
+      },
+      {
+        "label": "global_const \u00b7 unconstrained",
+        "metric": 52.2005,
+        "holds_out": false,
+        "failing_folds": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2024,
+          2025
+        ],
+        "c2_ok": true,
+        "c3_ok": false
+      },
+      {
+        "label": "pos_const \u00b7 infold",
+        "metric": 53.04,
+        "holds_out": false,
+        "failing_folds": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2024,
+          2025
+        ],
+        "c2_ok": true,
+        "c3_ok": false
+      },
+      {
+        "label": "pos_const \u00b7 unconstrained",
+        "metric": 51.6904,
+        "holds_out": false,
+        "failing_folds": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2024,
+          2025
+        ],
+        "c2_ok": true,
+        "c3_ok": false
+      },
+      {
+        "label": "pos_offset \u00b7 infold",
+        "metric": 53.04,
+        "holds_out": false,
+        "failing_folds": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2024,
+          2025
+        ],
+        "c2_ok": true,
+        "c3_ok": false
+      },
+      {
+        "label": "pos_offset \u00b7 unconstrained",
+        "metric": 52.1666,
+        "holds_out": false,
+        "failing_folds": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2024,
+          2025
+        ],
+        "c2_ok": true,
+        "c3_ok": false
+      },
+      {
+        "label": "pos_affine \u00b7 infold",
+        "metric": 53.04,
+        "holds_out": false,
+        "failing_folds": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2024,
+          2025
+        ],
+        "c2_ok": true,
+        "c3_ok": false
+      },
+      {
+        "label": "pos_affine \u00b7 unconstrained",
+        "metric": 50.6773,
+        "holds_out": false,
+        "failing_folds": [
+          2019,
+          2021,
+          2022,
+          2025
+        ],
+        "c2_ok": true,
+        "c3_ok": false
+      },
+      {
+        "label": "avail_cond \u00b7 infold",
+        "metric": 53.04,
+        "holds_out": false,
+        "failing_folds": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2024,
+          2025
+        ],
+        "c2_ok": true,
+        "c3_ok": false
+      },
+      {
+        "label": "avail_cond \u00b7 unconstrained",
+        "metric": 52.2834,
+        "holds_out": false,
+        "failing_folds": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "c2_ok": false,
+        "c3_ok": false
+      }
+    ]
+  },
+  "per_position": {
+    "per_position": [
+      {
+        "position": "QB",
+        "incumbent_metric": 62.2165,
+        "winner": "incumbent (NULL)",
+        "metric": 62.2165,
+        "delta": 0.0,
+        "pbo": null,
+        "dsr": null,
+        "pvalue": 1.0
+      },
+      {
+        "position": "RB",
+        "incumbent_metric": 57.0873,
+        "winner": "incumbent (NULL)",
+        "metric": 57.0873,
+        "delta": 0.0,
+        "pbo": null,
+        "dsr": null,
+        "pvalue": 1.0
+      },
+      {
+        "position": "WR",
+        "incumbent_metric": 50.4046,
+        "winner": "incumbent (NULL)",
+        "metric": 50.4046,
+        "delta": 0.0,
+        "pbo": null,
+        "dsr": null,
+        "pvalue": 1.0
+      },
+      {
+        "position": "TE",
+        "incumbent_metric": 36.0582,
+        "winner": "incumbent (NULL)",
+        "metric": 36.0582,
+        "delta": 0.0,
+        "pbo": null,
+        "dsr": null,
+        "pvalue": 1.0
+      }
+    ],
+    "bh_cutoff_unconditional": 0.025,
+    "fdr": {
+      "QB": false,
+      "RB": false,
+      "WR": false,
+      "TE": false
+    }
+  },
+  "attribution": {
+    "rows": [
+      {
+        "arm": "global_const \u00b7 infold",
+        "foil": "global_const \u00b7 infold [season_total FOIL]",
+        "form": "global_const",
+        "per_game_crps": 53.04,
+        "season_total_crps": 53.04,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": true,
+        "expected_tie_holds": true
+      },
+      {
+        "arm": "global_const \u00b7 unconstrained",
+        "foil": "global_const \u00b7 unconstrained [season_total FOIL]",
+        "form": "global_const",
+        "per_game_crps": 52.2005,
+        "season_total_crps": 52.2005,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": true,
+        "expected_tie_holds": true
+      },
+      {
+        "arm": "pos_const \u00b7 infold",
+        "foil": "pos_const \u00b7 infold [season_total FOIL]",
+        "form": "pos_const",
+        "per_game_crps": 53.04,
+        "season_total_crps": 53.04,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": true,
+        "expected_tie_holds": true
+      },
+      {
+        "arm": "pos_const \u00b7 unconstrained",
+        "foil": "pos_const \u00b7 unconstrained [season_total FOIL]",
+        "form": "pos_const",
+        "per_game_crps": 51.6904,
+        "season_total_crps": 51.6904,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": true,
+        "expected_tie_holds": true
+      },
+      {
+        "arm": "pos_offset \u00b7 infold",
+        "foil": "pos_offset \u00b7 infold [season_total FOIL]",
+        "form": "pos_offset",
+        "per_game_crps": 53.04,
+        "season_total_crps": 53.04,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": false,
+        "expected_tie_holds": null
+      },
+      {
+        "arm": "pos_offset \u00b7 unconstrained",
+        "foil": "pos_offset \u00b7 unconstrained [season_total FOIL]",
+        "form": "pos_offset",
+        "per_game_crps": 52.1666,
+        "season_total_crps": 52.4,
+        "paired_delta": -0.2334,
+        "max_abs_fold_delta": 0.6457,
+        "per_game_wins": true,
+        "space_invariant_by_construction": false,
+        "expected_tie_holds": null
+      },
+      {
+        "arm": "pos_affine \u00b7 infold",
+        "foil": "pos_affine \u00b7 infold [season_total FOIL]",
+        "form": "pos_affine",
+        "per_game_crps": 53.04,
+        "season_total_crps": 53.04,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": false,
+        "expected_tie_holds": null
+      },
+      {
+        "arm": "pos_affine \u00b7 unconstrained",
+        "foil": "pos_affine \u00b7 unconstrained [season_total FOIL]",
+        "form": "pos_affine",
+        "per_game_crps": 50.6773,
+        "season_total_crps": 52.9064,
+        "paired_delta": -2.229157,
+        "max_abs_fold_delta": 4.3673,
+        "per_game_wins": true,
+        "space_invariant_by_construction": false,
+        "expected_tie_holds": null
+      },
+      {
+        "arm": "avail_cond \u00b7 infold",
+        "foil": "avail_cond \u00b7 infold [season_total FOIL]",
+        "form": "avail_cond",
+        "per_game_crps": 53.04,
+        "season_total_crps": 53.04,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": true,
+        "expected_tie_holds": true
+      },
+      {
+        "arm": "avail_cond \u00b7 unconstrained",
+        "foil": "avail_cond \u00b7 unconstrained [season_total FOIL]",
+        "form": "avail_cond",
+        "per_game_crps": 52.2834,
+        "season_total_crps": 52.2834,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": true,
+        "expected_tie_holds": true
+      }
+    ],
+    "n_pairs": 10,
+    "n_space_acting_pairs": 4,
+    "space_invariance_proven": true,
+    "per_game_wins_where_the_channel_can_act": [
+      2,
+      4
+    ],
+    "reading": "mixed"
+  },
+  "signature": {
+    "incumbent_bias": -12.586,
+    "winner_bias": -12.586,
+    "incumbent_metric": 53.04,
+    "winner_metric": 53.04,
+    "verdict": "no_lift",
+    "accuracy_improved": false,
+    "bias_moved_toward_zero": false,
+    "abs_bias_delta": 0.0
+  },
+  "verdict": {
+    "ship": false,
+    "pooled_gate_passes": false,
+    "premise_confirmed_in_this_population": true,
+    "sanity_degenerates_lose": true,
+    "permutation_across_beaten": true,
+    "oracle_respected": true,
+    "family_ceiling_respected": true,
+    "ceilings_order_by_capacity": true,
+    "over_scale_loses": false,
+    "wide_band_loses": true,
+    "rookie_leg_untouched": true,
+    "space_invariance_proven": true
+  },
+  "null": {
+    "state": "CONSTRAINT_REFUSED",
+    "taxonomy_would_say": "POWER_LIMITED",
+    "taxonomy_fits": false,
+    "why": "every recalibrating arm BEAT the incumbent on the metric and was removed by a DETERMINISTIC constraint with no sampling error to accumulate, so a statistical state would emit a re-test trigger more folds cannot satisfy",
+    "best_recalibrating_arm": "pos_affine \u00b7 unconstrained",
+    "best_recalibrating_metric": 50.6773,
+    "incumbent_metric": 53.04,
+    "beats_incumbent_on_accuracy": true,
+    "fold_wins": 6,
+    "n_folds": 7,
+    "observed_sr": 1.777,
+    "dsr_ceiling_at_this_fold_count": 0.9997,
+    "arms_that_beat_the_incumbent": [
+      "global_const \u00b7 unconstrained",
+      "pos_const \u00b7 unconstrained",
+      "pos_offset \u00b7 unconstrained",
+      "pos_affine \u00b7 unconstrained",
+      "avail_cond \u00b7 unconstrained"
+    ],
+    "arms_refused_by_the_constraints": [
+      "global_const \u00b7 infold",
+      "global_const \u00b7 unconstrained",
+      "pos_const \u00b7 infold",
+      "pos_const \u00b7 unconstrained",
+      "pos_offset \u00b7 infold",
+      "pos_offset \u00b7 unconstrained",
+      "pos_affine \u00b7 infold",
+      "pos_affine \u00b7 unconstrained",
+      "avail_cond \u00b7 infold",
+      "avail_cond \u00b7 unconstrained"
+    ],
+    "remedy": "a different MECHANISM or a PM decision \u2014 never more folds, which cannot move a deterministic constraint",
+    "wider_window_is_reachable_now": true,
+    "wider_window_note": "the veteran panel reaches target season 2013, so the METRIC is recomputable on 13 folds today; \u26d4 C2 is NOT, because the merged boards begin at 2019 and an unevaluable constraint is never a pass. Widening the constraint window requires an operator rebuild of the boards (`run_season_projection --backtest-from 2013`)."
+  },
+  "constraint_activity": [
+    {
+      "form": "global_const",
+      "n_folds": 7,
+      "folds_c2_can_act": 7,
+      "active_folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "c2_inactive_everywhere": false,
+      "why_inactive": null
+    },
+    {
+      "form": "pos_const",
+      "n_folds": 7,
+      "folds_c2_can_act": 7,
+      "active_folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "c2_inactive_everywhere": false,
+      "why_inactive": null
+    },
+    {
+      "form": "pos_offset",
+      "n_folds": 7,
+      "folds_c2_can_act": 7,
+      "active_folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "c2_inactive_everywhere": false,
+      "why_inactive": null
+    },
+    {
+      "form": "pos_affine",
+      "n_folds": 7,
+      "folds_c2_can_act": 7,
+      "active_folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "c2_inactive_everywhere": false,
+      "why_inactive": null
+    },
+    {
+      "form": "avail_cond",
+      "n_folds": 7,
+      "folds_c2_can_act": 7,
+      "active_folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "c2_inactive_everywhere": false,
+      "why_inactive": null
+    }
+  ],
+  "ceilings_order_by_capacity": true,
+  "ceilings_order_by_capacity_least_squares_fit": false,
+  "matched_objective_finding": "a peeking ceiling is a bound only at matched FAMILY, matched SAMPLE and \u2014 measured here \u2014 matched OBJECTIVE. Fitted by least squares the ceilings do NOT order by capacity; fitted on the CRPS the arms are scored on, they do.",
+  "family_ceiling_check": {
+    "ok": true,
+    "n_checked": 10,
+    "violations": [],
+    "per_arm": [
+      {
+        "arm": "global_const \u00b7 infold",
+        "form": "global_const",
+        "ceiling_anchor": "oracle_global_const",
+        "ceiling": 51.822,
+        "arm_metric": 53.04,
+        "margin": 1.218,
+        "ok": true
+      },
+      {
+        "arm": "global_const \u00b7 unconstrained",
+        "form": "global_const",
+        "ceiling_anchor": "oracle_global_const",
+        "ceiling": 51.822,
+        "arm_metric": 52.2005,
+        "margin": 0.3785,
+        "ok": true
+      },
+      {
+        "arm": "pos_const \u00b7 infold",
+        "form": "pos_const",
+        "ceiling_anchor": "oracle_pos_const",
+        "ceiling": 50.1788,
+        "arm_metric": 53.04,
+        "margin": 2.8612,
+        "ok": true
+      },
+      {
+        "arm": "pos_const \u00b7 unconstrained",
+        "form": "pos_const",
+        "ceiling_anchor": "oracle_pos_const",
+        "ceiling": 50.1788,
+        "arm_metric": 51.6904,
+        "margin": 1.5116,
+        "ok": true
+      },
+      {
+        "arm": "pos_offset \u00b7 infold",
+        "form": "pos_offset",
+        "ceiling_anchor": "oracle_pos_offset",
+        "ceiling": 50.883,
+        "arm_metric": 53.04,
+        "margin": 2.157,
+        "ok": true
+      },
+      {
+        "arm": "pos_offset \u00b7 unconstrained",
+        "form": "pos_offset",
+        "ceiling_anchor": "oracle_pos_offset",
+        "ceiling": 50.883,
+        "arm_metric": 52.1666,
+        "margin": 1.2836,
+        "ok": true
+      },
+      {
+        "arm": "pos_affine \u00b7 infold",
+        "form": "pos_affine",
+        "ceiling_anchor": "oracle_pos_affine",
+        "ceiling": 47.8661,
+        "arm_metric": 53.04,
+        "margin": 5.1739,
+        "ok": true
+      },
+      {
+        "arm": "pos_affine \u00b7 unconstrained",
+        "form": "pos_affine",
+        "ceiling_anchor": "oracle_pos_affine",
+        "ceiling": 47.8661,
+        "arm_metric": 50.6773,
+        "margin": 2.8112,
+        "ok": true
+      },
+      {
+        "arm": "avail_cond \u00b7 infold",
+        "form": "avail_cond",
+        "ceiling_anchor": "oracle_avail_cond",
+        "ceiling": 49.3797,
+        "arm_metric": 53.04,
+        "margin": 3.6603,
+        "ok": true
+      },
+      {
+        "arm": "avail_cond \u00b7 unconstrained",
+        "form": "avail_cond",
+        "ceiling_anchor": "oracle_avail_cond",
+        "ceiling": 49.3797,
+        "arm_metric": 52.2834,
+        "margin": 2.9037,
+        "ok": true
+      }
+    ]
+  },
+  "leaderboard": [
+    {
+      "arm": "pos_affine \u00b7 unconstrained",
+      "form": "pos_affine",
+      "rule": "unconstrained",
+      "\u03bb (final fold)": 1.0,
+      "CRPS": 50.6773,
+      "MAE": 68.3632,
+      "bias": -3.2728,
+      "cov80": 0.5733,
+      "universe CRPS": 28.0973,
+      "universe bias": 1.3763,
+      "eligible": false
+    },
+    {
+      "arm": "pos_const \u00b7 unconstrained",
+      "form": "pos_const",
+      "rule": "unconstrained",
+      "\u03bb (final fold)": 1.0,
+      "CRPS": 51.6904,
+      "MAE": 68.6812,
+      "bias": -0.0041,
+      "cov80": 0.5238,
+      "universe CRPS": 29.2768,
+      "universe bias": 5.9916,
+      "eligible": false
+    },
+    {
+      "arm": "pos_offset \u00b7 unconstrained",
+      "form": "pos_offset",
+      "rule": "unconstrained",
+      "\u03bb (final fold)": 1.0,
+      "CRPS": 52.1666,
+      "MAE": 68.6086,
+      "bias": -3.9162,
+      "cov80": 0.4954,
+      "universe CRPS": 30.4638,
+      "universe bias": 7.0759,
+      "eligible": false
+    },
+    {
+      "arm": "global_const \u00b7 unconstrained",
+      "form": "global_const",
+      "rule": "unconstrained",
+      "\u03bb (final fold)": 1.0,
+      "CRPS": 52.2005,
+      "MAE": 69.3639,
+      "bias": 0.5142,
+      "cov80": 0.5229,
+      "universe CRPS": 29.3962,
+      "universe bias": 6.0767,
+      "eligible": false
+    },
+    {
+      "arm": "avail_cond \u00b7 unconstrained",
+      "form": "avail_cond",
+      "rule": "unconstrained",
+      "\u03bb (final fold)": 0.75,
+      "CRPS": 52.2834,
+      "MAE": 69.3647,
+      "bias": -5.6426,
+      "cov80": 0.5211,
+      "universe CRPS": 29.5576,
+      "universe bias": 5.4547,
+      "eligible": false
+    },
+    {
+      "arm": "incumbent (NULL)",
+      "form": "incumbent",
+      "rule": null,
+      "\u03bb (final fold)": 0.0,
+      "CRPS": 53.04,
+      "MAE": 69.8654,
+      "bias": -12.586,
+      "cov80": 0.5046,
+      "universe CRPS": 29.2373,
+      "universe bias": 0.8243,
+      "eligible": true
+    },
+    {
+      "arm": "global_const \u00b7 infold",
+      "form": "global_const",
+      "rule": "infold",
+      "\u03bb (final fold)": 0.0,
+      "CRPS": 53.04,
+      "MAE": 69.8654,
+      "bias": -12.586,
+      "cov80": 0.5046,
+      "universe CRPS": 29.2373,
+      "universe bias": 0.8243,
+      "eligible": false
+    },
+    {
+      "arm": "pos_const \u00b7 infold",
+      "form": "pos_const",
+      "rule": "infold",
+      "\u03bb (final fold)": 0.0,
+      "CRPS": 53.04,
+      "MAE": 69.8654,
+      "bias": -12.586,
+      "cov80": 0.5046,
+      "universe CRPS": 29.2373,
+      "universe bias": 0.8243,
+      "eligible": false
+    },
+    {
+      "arm": "pos_offset \u00b7 infold",
+      "form": "pos_offset",
+      "rule": "infold",
+      "\u03bb (final fold)": 0.0,
+      "CRPS": 53.04,
+      "MAE": 69.8654,
+      "bias": -12.586,
+      "cov80": 0.5046,
+      "universe CRPS": 29.2373,
+      "universe bias": 0.8243,
+      "eligible": false
+    },
+    {
+      "arm": "pos_affine \u00b7 infold",
+      "form": "pos_affine",
+      "rule": "infold",
+      "\u03bb (final fold)": 0.0,
+      "CRPS": 53.04,
+      "MAE": 69.8654,
+      "bias": -12.586,
+      "cov80": 0.5046,
+      "universe CRPS": 29.2373,
+      "universe bias": 0.8243,
+      "eligible": false
+    },
+    {
+      "arm": "avail_cond \u00b7 infold",
+      "form": "avail_cond",
+      "rule": "infold",
+      "\u03bb (final fold)": 0.0,
+      "CRPS": 53.04,
+      "MAE": 69.8654,
+      "bias": -12.586,
+      "cov80": 0.5046,
+      "universe CRPS": 29.2373,
+      "universe bias": 0.8243,
+      "eligible": false
+    }
+  ],
+  "anchor_table": [
+    {
+      "anchor": "oracle_perplayer",
+      "role": "ceiling",
+      "expected": "beats every real arm",
+      "CRPS": 0.0026,
+      "MAE": 0.0026,
+      "bias": 0.0026,
+      "cov80": 0.9945,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "permuted_across@pos_offset",
+      "role": "permutation",
+      "expected": "loses to every real arm",
+      "CRPS": 52.7481,
+      "MAE": 69.5562,
+      "bias": -6.4266,
+      "cov80": 0.4909,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "permuted_across@pos_const",
+      "role": "permutation",
+      "expected": "loses to every real arm",
+      "CRPS": 51.9322,
+      "MAE": 69.6195,
+      "bias": 14.1788,
+      "cov80": 0.555,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "permuted_across@pos_affine",
+      "role": "permutation",
+      "expected": "loses to every real arm",
+      "CRPS": 74.7637,
+      "MAE": 80.3563,
+      "bias": -8.955,
+      "cov80": 0.0962,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "permuted_within@pos_offset",
+      "role": "permutation",
+      "expected": "loses to every real arm",
+      "CRPS": 51.897,
+      "MAE": 68.4348,
+      "bias": -6.3202,
+      "cov80": 0.5119,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "permuted_within@pos_const",
+      "role": "permutation",
+      "expected": "loses to every real arm",
+      "CRPS": 52.7828,
+      "MAE": 70.8057,
+      "bias": 16.4229,
+      "cov80": 0.5595,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "permuted_within@pos_affine",
+      "role": "permutation",
+      "expected": "loses to every real arm",
+      "CRPS": 72.4806,
+      "MAE": 79.8869,
+      "bias": -9.1651,
+      "cov80": 0.1218,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "zero_project",
+      "role": "degenerate",
+      "expected": "loses to every real arm",
+      "CRPS": 162.7957,
+      "MAE": 162.7957,
+      "bias": -162.7905,
+      "cov80": 0.0549,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "pos_median",
+      "role": "degenerate",
+      "expected": "loses to every real arm",
+      "CRPS": 82.8171,
+      "MAE": 82.8171,
+      "bias": 0.8751,
+      "cov80": 0.0,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "over_scale",
+      "role": "degenerate",
+      "expected": "loses to every real arm",
+      "CRPS": 50.2491,
+      "MAE": 68.9244,
+      "bias": 9.0457,
+      "cov80": 0.6868,
+      "behaves as expected": false
+    },
+    {
+      "anchor": "wide_band",
+      "role": "degenerate",
+      "expected": "loses to every real arm",
+      "CRPS": 50.7451,
+      "MAE": 69.8654,
+      "bias": -12.586,
+      "cov80": 0.9405,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "oracle_global_const",
+      "role": "ceiling",
+      "expected": "beats every real arm",
+      "CRPS": 51.822,
+      "MAE": 69.0854,
+      "bias": 2.7845,
+      "cov80": 0.5385,
+      "behaves as expected": false
+    },
+    {
+      "anchor": "oracle_pos_const",
+      "role": "ceiling",
+      "expected": "beats every real arm",
+      "CRPS": 50.1788,
+      "MAE": 67.1964,
+      "bias": 3.9824,
+      "cov80": 0.565,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "oracle_pos_offset",
+      "role": "ceiling",
+      "expected": "beats every real arm",
+      "CRPS": 50.883,
+      "MAE": 67.1845,
+      "bias": -2.0603,
+      "cov80": 0.5229,
+      "behaves as expected": false
+    },
+    {
+      "anchor": "oracle_pos_affine",
+      "role": "ceiling",
+      "expected": "beats every real arm",
+      "CRPS": 47.8661,
+      "MAE": 66.3102,
+      "bias": -4.5068,
+      "cov80": 0.7207,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "oracle_avail_cond",
+      "role": "ceiling",
+      "expected": "beats every real arm",
+      "CRPS": 49.3797,
+      "MAE": 66.4447,
+      "bias": 5.136,
+      "cov80": 0.5696,
+      "behaves as expected": true
+    }
+  ],
+  "anchor_constraint_state": [
+    {
+      "anchor": "zero_project",
+      "satisfies C2 on every fold": false,
+      "satisfies C3 on every fold": false,
+      "breaches C2 somewhere": true,
+      "breaches C3 somewhere": true,
+      "per_fold": {
+        "2019": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 22,
+          "worst_rank_move": 30.0
+        },
+        "2020": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 15,
+          "worst_rank_move": 31.0
+        },
+        "2021": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 10,
+          "worst_rank_move": 33.0
+        },
+        "2022": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 31,
+          "worst_rank_move": 31.0
+        },
+        "2023": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 19,
+          "worst_rank_move": 29.0
+        },
+        "2024": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 17,
+          "worst_rank_move": 31.0
+        },
+        "2025": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 14,
+          "worst_rank_move": 29.5
+        }
+      }
+    },
+    {
+      "anchor": "over_scale",
+      "satisfies C2 on every fold": true,
+      "satisfies C3 on every fold": false,
+      "breaches C2 somewhere": false,
+      "breaches C3 somewhere": true,
+      "per_fold": {
+        "2019": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": false,
+          "rank": 37.0,
+          "incumbent_rank": 22,
+          "worst_rank_move": 12.0
+        },
+        "2020": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 29.0,
+          "incumbent_rank": 15,
+          "worst_rank_move": 7.0
+        },
+        "2021": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 19.0,
+          "incumbent_rank": 10,
+          "worst_rank_move": 14.0
+        },
+        "2022": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 52.0,
+          "incumbent_rank": 31,
+          "worst_rank_move": 8.0
+        },
+        "2023": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 28.0,
+          "incumbent_rank": 19,
+          "worst_rank_move": 7.0
+        },
+        "2024": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 33.0,
+          "incumbent_rank": 17,
+          "worst_rank_move": 5.0
+        },
+        "2025": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": false,
+          "rank": 27.0,
+          "incumbent_rank": 14,
+          "worst_rank_move": 5.0
+        }
+      }
+    },
+    {
+      "anchor": "wide_band",
+      "satisfies C2 on every fold": true,
+      "satisfies C3 on every fold": true,
+      "breaches C2 somewhere": false,
+      "breaches C3 somewhere": false,
+      "per_fold": {
+        "2019": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 22.0,
+          "incumbent_rank": 22,
+          "worst_rank_move": 0.0
+        },
+        "2020": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 15.0,
+          "incumbent_rank": 15,
+          "worst_rank_move": 0.0
+        },
+        "2021": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 10.0,
+          "incumbent_rank": 10,
+          "worst_rank_move": 0.0
+        },
+        "2022": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 31.0,
+          "incumbent_rank": 31,
+          "worst_rank_move": 0.0
+        },
+        "2023": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 19.0,
+          "incumbent_rank": 19,
+          "worst_rank_move": 0.0
+        },
+        "2024": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 17.0,
+          "incumbent_rank": 17,
+          "worst_rank_move": 0.0
+        },
+        "2025": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 14.0,
+          "incumbent_rank": 14,
+          "worst_rank_move": 0.0
+        }
+      }
+    }
+  ],
+  "ceiling_table": [
+    {
+      "form": "global_const",
+      "anchor": "oracle_global_const",
+      "ceiling fitted on CRPS \u2b50": 51.822,
+      "ceiling fitted by least squares": 51.8869,
+      "LS is not a bound (worse than the CRPS fit)": true
+    },
+    {
+      "form": "pos_const",
+      "anchor": "oracle_pos_const",
+      "ceiling fitted on CRPS \u2b50": 50.1788,
+      "ceiling fitted by least squares": 50.6173,
+      "LS is not a bound (worse than the CRPS fit)": true
+    },
+    {
+      "form": "pos_offset",
+      "anchor": "oracle_pos_offset",
+      "ceiling fitted on CRPS \u2b50": 50.883,
+      "ceiling fitted by least squares": 51.0516,
+      "LS is not a bound (worse than the CRPS fit)": true
+    },
+    {
+      "form": "pos_affine",
+      "anchor": "oracle_pos_affine",
+      "ceiling fitted on CRPS \u2b50": 47.8661,
+      "ceiling fitted by least squares": 50.7962,
+      "LS is not a bound (worse than the CRPS fit)": true
+    },
+    {
+      "form": "avail_cond",
+      "anchor": "oracle_avail_cond",
+      "ceiling fitted on CRPS \u2b50": 49.3797,
+      "ceiling fitted by least squares": 50.5359,
+      "LS is not a bound (worse than the CRPS fit)": true
+    }
+  ],
+  "constraint_table": [
+    {
+      "arm": "incumbent (NULL)",
+      "holds out (C1\u2227C2\u2227C3)": true,
+      "C2 only": true,
+      "C3 only": true,
+      "failing folds": []
+    },
+    {
+      "arm": "global_const \u00b7 infold",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": true,
+      "C3 only": false,
+      "failing folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2024,
+        2025
+      ]
+    },
+    {
+      "arm": "global_const \u00b7 unconstrained",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": true,
+      "C3 only": false,
+      "failing folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2024,
+        2025
+      ]
+    },
+    {
+      "arm": "pos_const \u00b7 infold",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": true,
+      "C3 only": false,
+      "failing folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2024,
+        2025
+      ]
+    },
+    {
+      "arm": "pos_const \u00b7 unconstrained",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": true,
+      "C3 only": false,
+      "failing folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2024,
+        2025
+      ]
+    },
+    {
+      "arm": "pos_offset \u00b7 infold",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": true,
+      "C3 only": false,
+      "failing folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2024,
+        2025
+      ]
+    },
+    {
+      "arm": "pos_offset \u00b7 unconstrained",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": true,
+      "C3 only": false,
+      "failing folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2024,
+        2025
+      ]
+    },
+    {
+      "arm": "pos_affine \u00b7 infold",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": true,
+      "C3 only": false,
+      "failing folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2024,
+        2025
+      ]
+    },
+    {
+      "arm": "pos_affine \u00b7 unconstrained",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": true,
+      "C3 only": false,
+      "failing folds": [
+        2019,
+        2021,
+        2022,
+        2025
+      ]
+    },
+    {
+      "arm": "avail_cond \u00b7 infold",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": true,
+      "C3 only": false,
+      "failing folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2024,
+        2025
+      ]
+    },
+    {
+      "arm": "avail_cond \u00b7 unconstrained",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": false,
+      "C3 only": false,
+      "failing folds": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ]
+    }
+  ],
+  "cross_position_table": [
+    {
+      "arm": "global_const \u00b7 infold",
+      "\u03bb": 0.0,
+      "n_board": 786,
+      "median_abs_rank_move": 0.0,
+      "p90_abs_rank_move": 0.0,
+      "max_abs_rank_move": 0.0,
+      "n_moved": 0,
+      "top100_churn": 0,
+      "top100_membership_stable": true,
+      "top10_order_stable": true
+    },
+    {
+      "arm": "global_const \u00b7 unconstrained",
+      "\u03bb": 1.0,
+      "n_board": 786,
+      "median_abs_rank_move": 2.0,
+      "p90_abs_rank_move": 12.0,
+      "max_abs_rank_move": 35.0,
+      "n_moved": 585,
+      "top100_churn": 0,
+      "top100_membership_stable": true,
+      "top10_order_stable": true
+    },
+    {
+      "arm": "pos_const \u00b7 infold",
+      "\u03bb": 0.0,
+      "n_board": 786,
+      "median_abs_rank_move": 0.0,
+      "p90_abs_rank_move": 0.0,
+      "max_abs_rank_move": 0.0,
+      "n_moved": 0,
+      "top100_churn": 0,
+      "top100_membership_stable": true,
+      "top10_order_stable": true
+    },
+    {
+      "arm": "pos_const \u00b7 unconstrained",
+      "\u03bb": 1.0,
+      "n_board": 786,
+      "median_abs_rank_move": 7.0,
+      "p90_abs_rank_move": 22.0,
+      "max_abs_rank_move": 39.0,
+      "n_moved": 737,
+      "top100_churn": 2,
+      "top100_membership_stable": false,
+      "top10_order_stable": false
+    },
+    {
+      "arm": "pos_offset \u00b7 infold",
+      "\u03bb": 0.0,
+      "n_board": 786,
+      "median_abs_rank_move": 0.0,
+      "p90_abs_rank_move": 0.0,
+      "max_abs_rank_move": 0.0,
+      "n_moved": 0,
+      "top100_churn": 0,
+      "top100_membership_stable": true,
+      "top10_order_stable": true
+    },
+    {
+      "arm": "pos_offset \u00b7 unconstrained",
+      "\u03bb": 1.0,
+      "n_board": 786,
+      "median_abs_rank_move": 16.0,
+      "p90_abs_rank_move": 71.0,
+      "max_abs_rank_move": 136.0,
+      "n_moved": 760,
+      "top100_churn": 3,
+      "top100_membership_stable": false,
+      "top10_order_stable": false
+    },
+    {
+      "arm": "pos_affine \u00b7 infold",
+      "\u03bb": 0.0,
+      "n_board": 786,
+      "median_abs_rank_move": 0.0,
+      "p90_abs_rank_move": 0.0,
+      "max_abs_rank_move": 0.0,
+      "n_moved": 0,
+      "top100_churn": 0,
+      "top100_membership_stable": true,
+      "top10_order_stable": true
+    },
+    {
+      "arm": "pos_affine \u00b7 unconstrained",
+      "\u03bb": 1.0,
+      "n_board": 786,
+      "median_abs_rank_move": 13.0,
+      "p90_abs_rank_move": 47.0,
+      "max_abs_rank_move": 156.0,
+      "n_moved": 769,
+      "top100_churn": 3,
+      "top100_membership_stable": false,
+      "top10_order_stable": false
+    },
+    {
+      "arm": "avail_cond \u00b7 infold",
+      "\u03bb": 0.0,
+      "n_board": 786,
+      "median_abs_rank_move": 0.0,
+      "p90_abs_rank_move": 0.0,
+      "max_abs_rank_move": 0.0,
+      "n_moved": 0,
+      "top100_churn": 0,
+      "top100_membership_stable": true,
+      "top10_order_stable": true
+    },
+    {
+      "arm": "avail_cond \u00b7 unconstrained",
+      "\u03bb": 0.75,
+      "n_board": 786,
+      "median_abs_rank_move": 7.0,
+      "p90_abs_rank_move": 20.0,
+      "max_abs_rank_move": 35.0,
+      "n_moved": 731,
+      "top100_churn": 2,
+      "top100_membership_stable": false,
+      "top10_order_stable": false
+    }
+  ],
+  "gate_table": {
+    "ship": false,
+    "framing": "pooled",
+    "has_eligible_winner": true,
+    "recalibrates": false,
+    "beats_incumbent": false,
+    "ordering_ok_every_position": true,
+    "placement_holds_out_every_fold": true,
+    "coverage_floors_hold": false,
+    "pbo_ok": false,
+    "dsr_ok": false,
+    "significant": false
+  },
+  "sensitivities": {
+    "dsr_at_0.0": false,
+    "dsr_removed_would_ship": false,
+    "expanded_field_trials": 36,
+    "note": "the EXPANDED reading counts every constant-\u03bb point as its own trial; the pre-registered field is the RULES (MH2 (a): a family gets its own declared field, and \u26d4 trimming one after the fact under-taxes it)"
+  },
+  "permutation_vacuity": [
+    {
+      "space": "per_game",
+      "max |\u0394 param| across folds": 1.0083765152297028,
+      "verdict": "ACTS \u2014 the fit re-pairs each outcome with a different expected-games value, so the correction is NOT purely marginal"
+    },
+    {
+      "space": "season_total",
+      "max |\u0394 param| across folds": 5.329070518200751e-15,
+      "verdict": "VACUOUS \u2014 a pure marginal statistic the shuffle cannot move"
+    }
+  ],
+  "permutation_vacuity_per_fold": [
+    {
+      "fold": 2019,
+      "space": "per_game",
+      "max |\u0394 param| under a within-position shuffle": 1.0083765152297028
+    },
+    {
+      "fold": 2019,
+      "space": "season_total",
+      "max |\u0394 param| under a within-position shuffle": 5.329070518200751e-15
+    },
+    {
+      "fold": 2020,
+      "space": "per_game",
+      "max |\u0394 param| under a within-position shuffle": 0.6165573196260711
+    },
+    {
+      "fold": 2020,
+      "space": "season_total",
+      "max |\u0394 param| under a within-position shuffle": 3.552713678800501e-15
+    },
+    {
+      "fold": 2021,
+      "space": "per_game",
+      "max |\u0394 param| under a within-position shuffle": 0.6985335121645858
+    },
+    {
+      "fold": 2021,
+      "space": "season_total",
+      "max |\u0394 param| under a within-position shuffle": 3.552713678800501e-15
+    },
+    {
+      "fold": 2022,
+      "space": "per_game",
+      "max |\u0394 param| under a within-position shuffle": 0.5292802129604182
+    },
+    {
+      "fold": 2022,
+      "space": "season_total",
+      "max |\u0394 param| under a within-position shuffle": 3.552713678800501e-15
+    },
+    {
+      "fold": 2023,
+      "space": "per_game",
+      "max |\u0394 param| under a within-position shuffle": 0.9926921516985711
+    },
+    {
+      "fold": 2023,
+      "space": "season_total",
+      "max |\u0394 param| under a within-position shuffle": 3.552713678800501e-15
+    },
+    {
+      "fold": 2024,
+      "space": "per_game",
+      "max |\u0394 param| under a within-position shuffle": 0.9864580190487784
+    },
+    {
+      "fold": 2024,
+      "space": "season_total",
+      "max |\u0394 param| under a within-position shuffle": 3.552713678800501e-15
+    },
+    {
+      "fold": 2025,
+      "space": "per_game",
+      "max |\u0394 param| under a within-position shuffle": 0.6290077438545847
+    },
+    {
+      "fold": 2025,
+      "space": "season_total",
+      "max |\u0394 param| under a within-position shuffle": 2.6645352591003757e-15
+    }
+  ],
+  "fitted_map": [
+    {
+      "form": "global_const",
+      "fold": 2019,
+      "cell": "k",
+      "params": 1.101
+    },
+    {
+      "form": "global_const",
+      "fold": 2020,
+      "cell": "k",
+      "params": 1.1105
+    },
+    {
+      "form": "global_const",
+      "fold": 2021,
+      "cell": "k",
+      "params": 1.1055
+    },
+    {
+      "form": "global_const",
+      "fold": 2022,
+      "cell": "k",
+      "params": 1.098
+    },
+    {
+      "form": "global_const",
+      "fold": 2023,
+      "cell": "k",
+      "params": 1.0943
+    },
+    {
+      "form": "global_const",
+      "fold": 2024,
+      "cell": "k",
+      "params": 1.0978
+    },
+    {
+      "form": "global_const",
+      "fold": 2025,
+      "cell": "k",
+      "params": 1.0993
+    },
+    {
+      "form": "pos_const",
+      "fold": 2019,
+      "cell": "QB",
+      "params": 1.1133
+    },
+    {
+      "form": "pos_const",
+      "fold": 2019,
+      "cell": "RB",
+      "params": 1.0952
+    },
+    {
+      "form": "pos_const",
+      "fold": 2019,
+      "cell": "WR",
+      "params": 1.1097
+    },
+    {
+      "form": "pos_const",
+      "fold": 2019,
+      "cell": "TE",
+      "params": 1.0637
+    },
+    {
+      "form": "pos_const",
+      "fold": 2020,
+      "cell": "QB",
+      "params": 1.0963
+    },
+    {
+      "form": "pos_const",
+      "fold": 2020,
+      "cell": "RB",
+      "params": 1.1322
+    },
+    {
+      "form": "pos_const",
+      "fold": 2020,
+      "cell": "WR",
+      "params": 1.1243
+    },
+    {
+      "form": "pos_const",
+      "fold": 2020,
+      "cell": "TE",
+      "params": 1.0469
+    },
+    {
+      "form": "pos_const",
+      "fold": 2021,
+      "cell": "QB",
+      "params": 1.0813
+    },
+    {
+      "form": "pos_const",
+      "fold": 2021,
+      "cell": "RB",
+      "params": 1.1144
+    },
+    {
+      "form": "pos_const",
+      "fold": 2021,
+      "cell": "WR",
+      "params": 1.1304
+    },
+    {
+      "form": "pos_const",
+      "fold": 2021,
+      "cell": "TE",
+      "params": 1.0476
+    },
+    {
+      "form": "pos_const",
+      "fold": 2022,
+      "cell": "QB",
+      "params": 1.0516
+    },
+    {
+      "form": "pos_const",
+      "fold": 2022,
+      "cell": "RB",
+      "params": 1.1294
+    },
+    {
+      "form": "pos_const",
+      "fold": 2022,
+      "cell": "WR",
+      "params": 1.1151
+    },
+    {
+      "form": "pos_const",
+      "fold": 2022,
+      "cell": "TE",
+      "params": 1.0626
+    },
+    {
+      "form": "pos_const",
+      "fold": 2023,
+      "cell": "QB",
+      "params": 1.0498
+    },
+    {
+      "form": "pos_const",
+      "fold": 2023,
+      "cell": "RB",
+      "params": 1.1324
+    },
+    {
+      "form": "pos_const",
+      "fold": 2023,
+      "cell": "WR",
+      "params": 1.1068
+    },
+    {
+      "form": "pos_const",
+      "fold": 2023,
+      "cell": "TE",
+      "params": 1.0583
+    },
+    {
+      "form": "pos_const",
+      "fold": 2024,
+      "cell": "QB",
+      "params": 1.0334
+    },
+    {
+      "form": "pos_const",
+      "fold": 2024,
+      "cell": "RB",
+      "params": 1.1434
+    },
+    {
+      "form": "pos_const",
+      "fold": 2024,
+      "cell": "WR",
+      "params": 1.1175
+    },
+    {
+      "form": "pos_const",
+      "fold": 2024,
+      "cell": "TE",
+      "params": 1.0606
+    },
+    {
+      "form": "pos_const",
+      "fold": 2025,
+      "cell": "QB",
+      "params": 1.0279
+    },
+    {
+      "form": "pos_const",
+      "fold": 2025,
+      "cell": "RB",
+      "params": 1.1604
+    },
+    {
+      "form": "pos_const",
+      "fold": 2025,
+      "cell": "WR",
+      "params": 1.1126
+    },
+    {
+      "form": "pos_const",
+      "fold": 2025,
+      "cell": "TE",
+      "params": 1.0667
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2019,
+      "cell": "QB",
+      "params": 0.4958
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2019,
+      "cell": "RB",
+      "params": 0.8046
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2019,
+      "cell": "WR",
+      "params": 1.001
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2019,
+      "cell": "TE",
+      "params": 0.4645
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2020,
+      "cell": "QB",
+      "params": 0.2516
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2020,
+      "cell": "RB",
+      "params": 1.201
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2020,
+      "cell": "WR",
+      "params": 1.0841
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2020,
+      "cell": "TE",
+      "params": 0.3599
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2021,
+      "cell": "QB",
+      "params": 0.1509
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2021,
+      "cell": "RB",
+      "params": 1.0012
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2021,
+      "cell": "WR",
+      "params": 1.1121
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2021,
+      "cell": "TE",
+      "params": 0.3872
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2022,
+      "cell": "QB",
+      "params": -0.0835
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2022,
+      "cell": "RB",
+      "params": 1.1148
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2022,
+      "cell": "WR",
+      "params": 1.0377
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2022,
+      "cell": "TE",
+      "params": 0.5095
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2023,
+      "cell": "QB",
+      "params": -0.1877
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2023,
+      "cell": "RB",
+      "params": 1.2164
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2023,
+      "cell": "WR",
+      "params": 1.031
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2023,
+      "cell": "TE",
+      "params": 0.4594
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2024,
+      "cell": "QB",
+      "params": -0.431
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2024,
+      "cell": "RB",
+      "params": 1.298
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2024,
+      "cell": "WR",
+      "params": 1.1497
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2024,
+      "cell": "TE",
+      "params": 0.4688
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2025,
+      "cell": "QB",
+      "params": -0.3948
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2025,
+      "cell": "RB",
+      "params": 1.5276
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2025,
+      "cell": "WR",
+      "params": 1.1361
+    },
+    {
+      "form": "pos_offset",
+      "fold": 2025,
+      "cell": "TE",
+      "params": 0.4935
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2019,
+      "cell": "QB",
+      "params": [
+        -8.7651,
+        1.5892
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2019,
+      "cell": "RB",
+      "params": [
+        -2.0692,
+        1.283
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2019,
+      "cell": "WR",
+      "params": [
+        -2.0289,
+        1.3016
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2019,
+      "cell": "TE",
+      "params": [
+        -0.6643,
+        1.1394
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2020,
+      "cell": "QB",
+      "params": [
+        -4.8413,
+        1.3225
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2020,
+      "cell": "RB",
+      "params": [
+        -2.4331,
+        1.3545
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2020,
+      "cell": "WR",
+      "params": [
+        -1.0881,
+        1.2166
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2020,
+      "cell": "TE",
+      "params": [
+        -1.4195,
+        1.2193
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2021,
+      "cell": "QB",
+      "params": [
+        -7.0616,
+        1.4533
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2021,
+      "cell": "RB",
+      "params": [
+        -1.1948,
+        1.2118
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2021,
+      "cell": "WR",
+      "params": [
+        -0.6194,
+        1.1722
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2021,
+      "cell": "TE",
+      "params": [
+        -1.525,
+        1.2341
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2022,
+      "cell": "QB",
+      "params": [
+        -5.5927,
+        1.3438
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2022,
+      "cell": "RB",
+      "params": [
+        -0.9441,
+        1.1965
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2022,
+      "cell": "WR",
+      "params": [
+        -0.7709,
+        1.1789
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2022,
+      "cell": "TE",
+      "params": [
+        -1.3203,
+        1.2233
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2023,
+      "cell": "QB",
+      "params": [
+        -3.3561,
+        1.1972
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2023,
+      "cell": "RB",
+      "params": [
+        -1.4858,
+        1.256
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2023,
+      "cell": "WR",
+      "params": [
+        -1.457,
+        1.2458
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2023,
+      "cell": "TE",
+      "params": [
+        -1.2271,
+        1.2041
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2024,
+      "cell": "QB",
+      "params": [
+        -2.8687,
+        1.152
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2024,
+      "cell": "RB",
+      "params": [
+        -1.3473,
+        1.2502
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2024,
+      "cell": "WR",
+      "params": [
+        -1.6155,
+        1.2731
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2024,
+      "cell": "TE",
+      "params": [
+        -0.6883,
+        1.1401
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2025,
+      "cell": "QB",
+      "params": [
+        -2.3147,
+        1.1201
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2025,
+      "cell": "RB",
+      "params": [
+        -0.8737,
+        1.2261
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2025,
+      "cell": "WR",
+      "params": [
+        -1.6079,
+        1.2704
+      ]
+    },
+    {
+      "form": "pos_affine",
+      "fold": 2025,
+      "cell": "TE",
+      "params": [
+        -0.3786,
+        1.1058
+      ]
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2019,
+      "cell": "('QB', 'part')",
+      "params": 1.1133
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2019,
+      "cell": "('QB', 'most')",
+      "params": 1.2416
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2019,
+      "cell": "('QB', 'full')",
+      "params": 0.8514
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2019,
+      "cell": "('RB', 'part')",
+      "params": 1.0952
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2019,
+      "cell": "('RB', 'most')",
+      "params": 1.1931
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2019,
+      "cell": "('RB', 'full')",
+      "params": 0.9227
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2019,
+      "cell": "('WR', 'part')",
+      "params": 1.1097
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2019,
+      "cell": "('WR', 'most')",
+      "params": 1.2317
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2019,
+      "cell": "('WR', 'full')",
+      "params": 1.0677
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2019,
+      "cell": "('TE', 'part')",
+      "params": 1.0637
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2019,
+      "cell": "('TE', 'most')",
+      "params": 1.0637
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2019,
+      "cell": "('TE', 'full')",
+      "params": 1.0553
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2020,
+      "cell": "('QB', 'part')",
+      "params": 1.2542
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2020,
+      "cell": "('QB', 'most')",
+      "params": 1.1961
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2020,
+      "cell": "('QB', 'full')",
+      "params": 0.8619
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2020,
+      "cell": "('RB', 'part')",
+      "params": 1.1322
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2020,
+      "cell": "('RB', 'most')",
+      "params": 1.2273
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2020,
+      "cell": "('RB', 'full')",
+      "params": 0.9532
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2020,
+      "cell": "('WR', 'part')",
+      "params": 1.1243
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2020,
+      "cell": "('WR', 'most')",
+      "params": 1.2539
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2020,
+      "cell": "('WR', 'full')",
+      "params": 1.0797
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2020,
+      "cell": "('TE', 'part')",
+      "params": 1.0469
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2020,
+      "cell": "('TE', 'most')",
+      "params": 1.0469
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2020,
+      "cell": "('TE', 'full')",
+      "params": 1.0363
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2021,
+      "cell": "('QB', 'part')",
+      "params": 1.2542
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2021,
+      "cell": "('QB', 'most')",
+      "params": 1.1816
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2021,
+      "cell": "('QB', 'full')",
+      "params": 0.8612
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2021,
+      "cell": "('RB', 'part')",
+      "params": 1.1144
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2021,
+      "cell": "('RB', 'most')",
+      "params": 1.2006
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2021,
+      "cell": "('RB', 'full')",
+      "params": 0.9473
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2021,
+      "cell": "('WR', 'part')",
+      "params": 1.1304
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2021,
+      "cell": "('WR', 'most')",
+      "params": 1.2813
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2021,
+      "cell": "('WR', 'full')",
+      "params": 1.0761
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2021,
+      "cell": "('TE', 'part')",
+      "params": 1.0476
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2021,
+      "cell": "('TE', 'most')",
+      "params": 1.0476
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2021,
+      "cell": "('TE', 'full')",
+      "params": 1.0382
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2022,
+      "cell": "('QB', 'part')",
+      "params": 1.1541
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2022,
+      "cell": "('QB', 'most')",
+      "params": 1.1422
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2022,
+      "cell": "('QB', 'full')",
+      "params": 0.8785
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2022,
+      "cell": "('RB', 'part')",
+      "params": 1.1294
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2022,
+      "cell": "('RB', 'most')",
+      "params": 1.2118
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2022,
+      "cell": "('RB', 'full')",
+      "params": 0.9715
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2022,
+      "cell": "('WR', 'part')",
+      "params": 1.1151
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2022,
+      "cell": "('WR', 'most')",
+      "params": 1.2285
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2022,
+      "cell": "('WR', 'full')",
+      "params": 1.0763
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2022,
+      "cell": "('TE', 'part')",
+      "params": 1.0626
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2022,
+      "cell": "('TE', 'most')",
+      "params": 1.0626
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2022,
+      "cell": "('TE', 'full')",
+      "params": 1.0515
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2023,
+      "cell": "('QB', 'part')",
+      "params": 1.1468
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2023,
+      "cell": "('QB', 'most')",
+      "params": 1.1427
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2023,
+      "cell": "('QB', 'full')",
+      "params": 0.8854
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2023,
+      "cell": "('RB', 'part')",
+      "params": 1.1324
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2023,
+      "cell": "('RB', 'most')",
+      "params": 1.2164
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2023,
+      "cell": "('RB', 'full')",
+      "params": 0.9737
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2023,
+      "cell": "('WR', 'part')",
+      "params": 1.1068
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2023,
+      "cell": "('WR', 'most')",
+      "params": 1.1979
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2023,
+      "cell": "('WR', 'full')",
+      "params": 1.0762
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2023,
+      "cell": "('TE', 'part')",
+      "params": 1.0583
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2023,
+      "cell": "('TE', 'most')",
+      "params": 1.0583
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2023,
+      "cell": "('TE', 'full')",
+      "params": 1.0482
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2024,
+      "cell": "('QB', 'part')",
+      "params": 1.0972
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2024,
+      "cell": "('QB', 'most')",
+      "params": 1.1274
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2024,
+      "cell": "('QB', 'full')",
+      "params": 0.8818
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2024,
+      "cell": "('RB', 'part')",
+      "params": 1.1434
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2024,
+      "cell": "('RB', 'most')",
+      "params": 1.222
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2024,
+      "cell": "('RB', 'full')",
+      "params": 0.9827
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2024,
+      "cell": "('WR', 'part')",
+      "params": 1.1175
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2024,
+      "cell": "('WR', 'most')",
+      "params": 1.2063
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2024,
+      "cell": "('WR', 'full')",
+      "params": 1.0873
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2024,
+      "cell": "('TE', 'part')",
+      "params": 1.0606
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2024,
+      "cell": "('TE', 'most')",
+      "params": 1.0606
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2024,
+      "cell": "('TE', 'full')",
+      "params": 1.0516
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2025,
+      "cell": "('QB', 'part')",
+      "params": 1.0576
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2025,
+      "cell": "('QB', 'most')",
+      "params": 1.1128
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2025,
+      "cell": "('QB', 'full')",
+      "params": 0.9049
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2025,
+      "cell": "('RB', 'part')",
+      "params": 1.1604
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2025,
+      "cell": "('RB', 'most')",
+      "params": 1.2222
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2025,
+      "cell": "('RB', 'full')",
+      "params": 1.0443
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2025,
+      "cell": "('WR', 'part')",
+      "params": 1.1126
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2025,
+      "cell": "('WR', 'most')",
+      "params": 1.1852
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2025,
+      "cell": "('WR', 'full')",
+      "params": 1.0889
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2025,
+      "cell": "('TE', 'part')",
+      "params": 1.0667
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2025,
+      "cell": "('TE', 'most')",
+      "params": 1.0667
+    },
+    {
+      "form": "avail_cond",
+      "fold": 2025,
+      "cell": "('TE', 'full')",
+      "params": 1.0589
+    }
+  ],
+  "fitted_map_summary": [
+    {
+      "form": "global_const",
+      "cell": "k",
+      "mean param": 1.1009,
+      "min": 1.0943,
+      "max": 1.1105,
+      "folds": 7
+    },
+    {
+      "form": "pos_const",
+      "cell": "QB",
+      "mean param": 1.0648,
+      "min": 1.0279,
+      "max": 1.1133,
+      "folds": 7
+    },
+    {
+      "form": "pos_const",
+      "cell": "RB",
+      "mean param": 1.1296,
+      "min": 1.0952,
+      "max": 1.1604,
+      "folds": 7
+    },
+    {
+      "form": "pos_const",
+      "cell": "TE",
+      "mean param": 1.0581,
+      "min": 1.0469,
+      "max": 1.0667,
+      "folds": 7
+    },
+    {
+      "form": "pos_const",
+      "cell": "WR",
+      "mean param": 1.1166,
+      "min": 1.1068,
+      "max": 1.1304,
+      "folds": 7
+    },
+    {
+      "form": "pos_offset",
+      "cell": "QB",
+      "mean param": -0.0284,
+      "min": -0.431,
+      "max": 0.4958,
+      "folds": 7
+    },
+    {
+      "form": "pos_offset",
+      "cell": "RB",
+      "mean param": 1.1662,
+      "min": 0.8046,
+      "max": 1.5276,
+      "folds": 7
+    },
+    {
+      "form": "pos_offset",
+      "cell": "TE",
+      "mean param": 0.449,
+      "min": 0.3599,
+      "max": 0.5095,
+      "folds": 7
+    },
+    {
+      "form": "pos_offset",
+      "cell": "WR",
+      "mean param": 1.0788,
+      "min": 1.001,
+      "max": 1.1497,
+      "folds": 7
+    },
+    {
+      "form": "pos_affine",
+      "cell": "QB",
+      "mean intercept": -4.971,
+      "mean slope": 1.3112,
+      "folds": 7
+    },
+    {
+      "form": "pos_affine",
+      "cell": "RB",
+      "mean intercept": -1.478,
+      "mean slope": 1.254,
+      "folds": 7
+    },
+    {
+      "form": "pos_affine",
+      "cell": "TE",
+      "mean intercept": -1.032,
+      "mean slope": 1.1809,
+      "folds": 7
+    },
+    {
+      "form": "pos_affine",
+      "cell": "WR",
+      "mean intercept": -1.313,
+      "mean slope": 1.2369,
+      "folds": 7
+    },
+    {
+      "form": "avail_cond",
+      "cell": "('QB', 'full')",
+      "mean param": 0.875,
+      "min": 0.8514,
+      "max": 0.9049,
+      "folds": 7
+    },
+    {
+      "form": "avail_cond",
+      "cell": "('QB', 'most')",
+      "mean param": 1.1635,
+      "min": 1.1128,
+      "max": 1.2416,
+      "folds": 7
+    },
+    {
+      "form": "avail_cond",
+      "cell": "('QB', 'part')",
+      "mean param": 1.1539,
+      "min": 1.0576,
+      "max": 1.2542,
+      "folds": 7
+    },
+    {
+      "form": "avail_cond",
+      "cell": "('RB', 'full')",
+      "mean param": 0.9708,
+      "min": 0.9227,
+      "max": 1.0443,
+      "folds": 7
+    },
+    {
+      "form": "avail_cond",
+      "cell": "('RB', 'most')",
+      "mean param": 1.2133,
+      "min": 1.1931,
+      "max": 1.2273,
+      "folds": 7
+    },
+    {
+      "form": "avail_cond",
+      "cell": "('RB', 'part')",
+      "mean param": 1.1296,
+      "min": 1.0952,
+      "max": 1.1604,
+      "folds": 7
+    },
+    {
+      "form": "avail_cond",
+      "cell": "('TE', 'full')",
+      "mean param": 1.0486,
+      "min": 1.0363,
+      "max": 1.0589,
+      "folds": 7
+    },
+    {
+      "form": "avail_cond",
+      "cell": "('TE', 'most')",
+      "mean param": 1.0581,
+      "min": 1.0469,
+      "max": 1.0667,
+      "folds": 7
+    },
+    {
+      "form": "avail_cond",
+      "cell": "('TE', 'part')",
+      "mean param": 1.0581,
+      "min": 1.0469,
+      "max": 1.0667,
+      "folds": 7
+    },
+    {
+      "form": "avail_cond",
+      "cell": "('WR', 'full')",
+      "mean param": 1.0789,
+      "min": 1.0677,
+      "max": 1.0889,
+      "folds": 7
+    },
+    {
+      "form": "avail_cond",
+      "cell": "('WR', 'most')",
+      "mean param": 1.2264,
+      "min": 1.1852,
+      "max": 1.2813,
+      "folds": 7
+    },
+    {
+      "form": "avail_cond",
+      "cell": "('WR', 'part')",
+      "mean param": 1.1166,
+      "min": 1.1068,
+      "max": 1.1304,
+      "folds": 7
+    }
+  ],
+  "registry_action": {
+    "registry": "betting_ml/models/model_family_registry.yaml (NF-G0)",
+    "action": "NONE \u2014 nothing was promoted",
+    "reason": "the promotion state machine has states pending/challenger/champion/deprecated and NO state for a recorded null; a `challenger` entry means 'artifact built + STAGED', which would misrepresent a refused arm as being on a publish path. NF-D18 and NF-D20 \u2014 both CONSTRAINT_REFUSED \u2014 likewise created no entry. The record of this story is its ablation memo."
+  },
+  "headline": "RECORDED NULL \u2014 CONSTRAINT_REFUSED",
+  "verdict_prose": "On the pre-registered population \u2014 the veteran leg's draftable tier, fixed by the INCUMBENT's own projection \u2014 the measured level bias is **-12.85 PPR** over n = 2028, against the motivating **\u221237.7** over n = 1165. The unconditional universe reading is **0.84** and the same tier anchored on the REALIZED outcome is **-64.8** \u2014 the spread across those three readings is the whole methodological point, and it is why the anchor is pre-registered rather than chosen.\n\nBest recalibrating arm: `pos_affine \u00b7 unconstrained` at CRPS 50.6773 vs the incumbent's 53.04 (6/7 folds). Matched-foil reading: **mixed**. Null state: **CONSTRAINT_REFUSED**."
+}

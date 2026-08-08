@@ -75,6 +75,40 @@ Every position is negative, every season is negative (2019 −44.8 → 2025 −2
 - ✅ Ranking / draft ORDER is fine (why the product still works — you draft in the right order).
 - 🔴 **Any ABSOLUTE-points use is affected**: track-record page credibility (a reader sees Bijan 236 proj vs 371 actual and reads "broken"), trade valuation, start/sit margins, projected league totals — the absolute number is **not comparable to another site's "if-healthy" number**.
 
+> ### ⚠️⚠️ AMENDED BY NF-RECAL1 (2026-08-08) — THE MAGNITUDE ABOVE IS POPULATION-DEPENDENT AND DOES NOT REPRODUCE
+>
+> NF-RECAL1's premise check re-measured this bias on the veteran walk-forward panel (2019–2025) with
+> the tier fixed by the INCUMBENT's own projection (NF1.1's fixed-anchor rule). **The SIGN and the
+> per-position ORDERING reproduce at all four positions; the MAGNITUDE does not — it is ~3× smaller.**
+>
+> | population (2019–2025 veterans) | n | mean bias | our/actual | % zero outcome |
+> |---|---|---|---|---|
+> | universe, unconditional | 8,099 | **+0.84** | 1.013 | 0.324 |
+> | draftable tier (top 156/season), **INCUMBENT anchor** ⭐ | 2,028 | **−12.85** | 0.919 | 0.075 |
+> | draftable tier (top 156/season), REALIZED anchor ⛔ | 2,028 | **−64.80** | 0.661 | **0.000** |
+> | played ≥6 games ⛔ | 4,708 | −23.83 | 0.773 | 0.024 |
+>
+> ⭐ **The `% zero outcome` column is the mechanism, and it is the tell.** Anchoring the tier on the
+> REALIZED outcome removes **100%** of the zero-outcome seasons; the incumbent anchor keeps 7.5% and
+> the unconditional universe 32.4%. Every zero-outcome row is one the projection necessarily
+> over-projects, so removing them mechanically manufactures a downward bias — which is **caution 1
+> below, applied to a LEVEL statistic instead of the decile table it was written for.** The −37.7
+> figure sits between the two outcome-conditioned readings and above the honest one.
+>
+> ⇒ **The honest statement is "the draftable tier runs ~13 PPR cold, RB worst (−21.5) and QB
+> essentially calibrated (−0.6, our/actual 0.997)", not −37.7 board-wide.** ⛔ Do not re-derive a
+> correction from the −37.7 figure.
+>
+> ⭐ **AND THE TIER-VS-UNIVERSE TENSION IS REAL EVEN AT THE HONEST SIZE, WHICH IS THE FINDING A
+> SUCCESSOR NEEDS.** A correction fitted on the incumbent-anchored TIER is applied BOARD-WIDE at
+> serving time, and NF-RECAL1 measured what that costs: every recalibrating arm moves the UNIVERSE
+> bias from the incumbent's **+0.84 to +5.5…+7.1** while improving the tier. The board is not
+> uniformly cold — it is cold at the top and slightly hot overall — so a single per-position level
+> cannot fix both ends, and a correction sized on the −37.7 figure would be worse again. (That figure
+> was not reproducible exactly because its population is not recorded; it also includes rookies,
+> whose leg is separately and knowingly cold.) Full measurement:
+> `ablation_results/nf_recal1_level_recalibration.md` §0–1.
+
 **Two durable methodology cautions:**
 1. ⛔ **Do NOT cite the outcome-BUCKETED decile table** (−123 on the top realized decile, +45 on the bottom) as evidence of bias/compression — that pattern appears even for a **perfectly-calibrated** projection because sorting on the REALIZED outcome selects for positive noise; it cannot distinguish bias from correct shrinkage. The **unconditional per-position means above** are the honest statistic.
 2. The games figures are from the **live 2026 board** while the bias is from the **frozen backtest** — suggestive, not proof of the availability decomposition; the same gap must be **confirmed on the live board** (2026 has no realized outcomes yet) before scoping any recalibration.
@@ -332,6 +366,7 @@ _So a future audit never re-runs a settled recalibration or re-recommends a dead
 | NF-D17(b) track-record Δρ population sensitivity | 2026-08-03 | **RECORDED NULL, premise refuted** — matching moves nothing (FFC ⊂ MFL); shipped +0.022 stands WITH its zero-including CI; MFL +0.173 is a DEPTH effect, not the headline. One-sided top-N truncation manufactures a 0.20-wide Δρ | `nf_d17_track_record_population.md` |
 | NF-D18 attenuate-at-the-top (power/huber/qmap/isotonic @ λ=1) | 2026-08-02 | **RECORDED NULL — `CONSTRAINT_REFUSED`** (the 8th null state, coined here; `classify_null`'s POWER_LIMITED rejected as a misleading trigger — no amount of draft classes moves a board rank). 3 of 4 shapes place the top rookie WORSE; **frontier finding: a plain global shrink clears the cap to λ=0.75 retaining 81.5% of the gain** (measured, ⛔ not taken — un-pre-registerable). Premises refuted by fits: "concave" came back convex; huber went the wrong way (the influential extremes are the zeros) | `nf_d18_rookie_top_attenuation.md` |
 | NF-D20 in-fold shrink selection under a per-fold placement constraint | 2026-08-04 | **FINAL RECORDED NULL — `CONSTRAINT_REFUSED`.** Every recalibrating arm beats the incumbent on the metric AND is refused by C2 out-of-sample; the **blind λ=0.5 constant satisfies C2 on every board while no in-fold rule does** (the constraint is INACTIVE on 4/8 boards — best rookie a QB — so its activity is a draft-class accident, unlearnable). `over_scale` (λ=2, registered to lose) beat every real arm = refuted magnitude hypothesis, gate left False. Disclosed: blind-half would have shipped had it been registered shippable — the null rests on a registration choice, stated plainly. ⛔ a successor may not pre-register λ=0.5 | `nf_d20_infold_shrink.md` |
+| **NF-RECAL1 veteran LEVEL recalibration** (5 forms × 2 λ-rules, per-game primary + season-total matched foil, CRPS) | 2026-08-08 | **RECORDED NULL — `CONSTRAINT_REFUSED`.** All 5 unconstrained arms BEAT the incumbent on CRPS (best `pos_affine` 50.68 vs 53.04, 6/7 folds) and every one is refused OUT-OF-SAMPLE by **C3, the interval-coverage floor — the same gate that refused NF-D21**, on a different leg. ⭐ Premise AMENDED: the motivating −37.7 does not reproduce (−12.85 on the pre-registered population; the realized-anchored slice strips 100% of zero outcomes). ⭐ `over_scale` (λ=2, registered to lose) WON ⇒ refuted MAGNITUDE, not a metric inversion — the fit under-corrects. Three method findings: a peeking ceiling needs matched **OBJECTIVE** as well as family+sample; permutation vacuity is a property of the **SPACE**; a leg-scoped constant is **not** whole-board monotone | `nf_recal1_level_recalibration.md` |
 | **NF-D21 publish-at-λ=0.5** | — | **🟢 READY, UNSTARTED as of 2026-08-04** — the PM-judgment Route-1 publish (see field 6 PENDING). Not a selection; NF-D20's numbers are evidence base only | catalog:528 |
 
 ### The NF-C0 scoring/import findings
