@@ -903,10 +903,25 @@ const CASES = [
   {
     id: "late-page-survives-a-filter-change",
     shipped: "pre-emptive: an empty table that reads as 'you have no TEs'",
-    detail: "Uses the raw page index, so a filter that shrinks the rows leaves it past the end.",
+    // ⭐ DECLARED GREEN, and MEASURED both ways round rather than reasoned about — which is the only
+    // reason it is here. Two independent mechanisms deliver "a filter change never empties the
+    // table": the tab handler resets the page to 0, and the render clamps `page` to the new last
+    // page. Breaking EITHER alone leaves the other holding, so no single-line defect is observable
+    // and the case is a statement about defence in depth, not about the assertion being decorative.
+    //
+    // ⚠️ THIS IS THE `and`-COMPOSED-CLAUSE TRAP FACING THE OTHER WAY (NF-D17): there, a guard stayed
+    // green because a DIFFERENT clause already refused the fixture. Here the redundancy is
+    // deliberate and wanted — but it has the same consequence for provability, so it gets said out
+    // loud instead of being left as a case that quietly always passes. The break below removes the
+    // PRIMARY mechanism (the reset); the clamp catches it and the table stays populated.
+    //
+    // If this ever flips to RED, the two mechanisms are no longer independent and this note is
+    // stale — fix the note, do not delete the case.
+    expect: "GREEN",
+    detail: "Removes the page reset on a position change; the render-time clamp still holds.",
     file: "components/fantasy/my-league.tsx",
-    from: "  const safePage = Math.min(page, pageCount - 1)",
-    to: "  const safePage = page",
+    from: "                setPos(v)\n                setPage(0)",
+    to: "                setPos(v)",
     grep: "never shows an empty table",
   },
   {
