@@ -51,6 +51,7 @@ import pytest
 
 from scripts.provision_posthog_funnel_dashboard import (
     FUNNEL_SPINE,
+    MAX_DESCRIPTION_CHARS,
     RATES,
     STEP_LABELS,
     build_dashboard_spec,
@@ -302,6 +303,71 @@ def test_each_rate_divides_the_documented_numerator_by_the_documented_denominato
     # The definition travels with the chart. A rate whose denominator is not visible beside it will
     # be misread, and each of these statements names the specific misreading it is exposed to.
     assert "NUMERATOR:" in insight["description"] and "DENOMINATOR:" in insight["description"]
+
+
+def test_no_description_exceeds_what_posthog_will_accept():
+    """⭐ A LIVE PROVISIONING FAILURE, turned into an offline one.
+
+    The first real `--apply` created three insights and then died on the fourth with
+    `{"code":"max_length","detail":"Ensure this field has no more than 400 characters."}` — an
+    ONLINE, PARTIAL failure, which is the worst shape available for a step the operator runs once
+    and reads the output of. It left a half-built dashboard behind.
+
+    `build_dashboard_spec` now refuses over-budget text itself, so `--dry-run` catches it with no
+    network and no credential; this pins the budget so a future edit that grows a description finds
+    out in CI rather than mid-provision.
+    """
+    spec = build_dashboard_spec()
+    texts = [("<dashboard>", spec["dashboard"]["description"])]
+    texts += [(i["name"], i["description"]) for i in spec["insights"]]
+    assert texts, "no descriptions found — this assertion would pass on an empty dashboard"
+    over = [(n, len(t)) for n, t in texts if len(t) > MAX_DESCRIPTION_CHARS]
+    assert not over, f"PostHog will reject these: {over}"
+
+
+def test_the_dashboard_lookup_never_uses_the_insight_filter_posthog_500s_on():
+    """⭐ THE OTHER LIVE FAILURE. `GET /insights/?dashboards=<id>` returns HTTP 500 from PostHog.
+
+    Measured 2026-08-09 against us.posthog.com: the same key lists `/insights/?limit=1` at 200, so
+    it is a server-side fault in that filter rather than a scope or auth problem. The idempotency
+    lookup therefore reads `tiles[].insight` off the dashboard's own detail payload.
+
+    ⭐ That is also the BETTER question — a name-matched global insight list would collide with an
+    insight of the same name on somebody ELSE'S dashboard, so the original form was one PostHog
+    bugfix away from silently updating the wrong object.
+
+    ⚠️ ASSERTS THE REQUEST, NOT THE SOURCE TEXT. The first cut of this test scanned the module for
+    the offending URL and FAILED — because `insights_on`'s own docstring documents the trap, and a
+    `#`-only comment stripper does not remove docstrings. That is the INC-38 prose problem facing
+    the other way: prose causing a false FAILURE rather than a false pass. Driving the real method
+    against a recording transport is immune to both, and it exercises the tile parsing as well.
+    """
+    from scripts.provision_posthog_funnel_dashboard import PostHogApi
+
+    api = PostHogApi("https://example.invalid", "1", "key")
+    calls: list[tuple[str, str]] = []
+
+    def record(method: str, path: str, body: dict | None = None) -> dict:
+        calls.append((method, path))
+        return {
+            "tiles": [
+                {"insight": {"id": 1, "name": "Live one"}},
+                # A soft-deleted insight keeps its row; a detached tile must not be mistaken for a
+                # live one, or the next run would "update" a chart nobody can see.
+                {"insight": {"id": 2, "name": "Removed one", "deleted": True}},
+                # Text/widget tiles carry no insight at all.
+                {"insight": None, "text": {"body": "a note"}},
+            ]
+        }
+
+    api._request = record  # type: ignore[method-assign]
+    found = api.insights_on(1974886)
+
+    assert calls == [("GET", "/dashboards/1974886/")], (
+        f"the idempotency lookup requested {calls} — it must read the dashboard's own tiles, never "
+        f"the insight filter PostHog 500s on"
+    )
+    assert found == {"Live one": 1}
 
 
 def test_activation_is_the_denominator_of_paid_conversion():

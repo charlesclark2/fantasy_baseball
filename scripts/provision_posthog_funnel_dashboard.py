@@ -91,6 +91,18 @@ DEFAULT_DATE_FROM = "-30d"
 DEFAULT_HOST = "https://us.posthog.com"
 DASHBOARD_NAME = "G100 — Founder daily funnel"
 
+#: PostHog's own limit on a dashboard/insight `description`, measured the hard way: a first
+#: provisioning run created three insights and then died on the fourth with
+#: `{"code":"max_length","detail":"Ensure this field has no more than 400 characters."}`, leaving
+#: the dashboard half-built.
+#:
+#: ⭐ ENFORCED AT BUILD TIME (see `build_dashboard_spec`) so the failure is OFFLINE and total rather
+#: than online and partial. `--dry-run` now catches it, no network required, and a description that
+#: has grown too long can never again strand a run halfway through. The re-run is idempotent, so a
+#: partial build is recoverable — but "recoverable" is not "acceptable" for a step the operator runs
+#: once and reads the output of.
+MAX_DESCRIPTION_CHARS = 400
+
 
 @dataclass(frozen=True)
 class Rate:
@@ -108,6 +120,16 @@ class Rate:
     numerator: str
     statement: str
 
+    def description(self) -> str:
+        """What the reader sees under the chart title.
+
+        ⚠️ BUDGETED AGAINST `MAX_DESCRIPTION_CHARS`. The full reasoning for each caveat lives in
+        `docs/g100_d0_funnel.md` §3; what has to survive the trim is the pair of definitions and
+        the ONE misreading that would send the next story at the wrong thing. A rate whose
+        denominator is not visible beside it WILL be misread.
+        """
+        return f"{self.statement} Same-day ratio, not cohort — see docs/g100_d0_funnel.md §3."
+
 
 RATES: tuple[Rate, ...] = (
     Rate(
@@ -116,15 +138,11 @@ RATES: tuple[Rate, ...] = (
         denominator=LANDING_VIEW,
         numerator=SIGNUP_COMPLETED,
         statement=(
-            "NUMERATOR: distinct persons with >=1 `user_signup_completed`. "
-            "DENOMINATOR: distinct persons with >=1 `landing_view`. "
-            "A 'visitor' is a PostHog PERSON — a de-duplicated device+storage identity, not a "
-            "human: one person on a phone and a laptop counts twice, so this is a FLOOR on the "
-            "true rate. "
-            "WARNING: `user_signup_completed` is NOT `account_created` — it means 'clicked Sign Up, "
-            "completed the OAuth round-trip, has a session', which INCLUDES a returning user who "
-            "clicked Sign Up. For new-account counts use COGNITO creation dates; if the two "
-            "disagree, Cognito is right."
+            "NUMERATOR: distinct persons with >=1 user_signup_completed. "
+            "DENOMINATOR: distinct persons with >=1 landing_view. "
+            "A visitor is a PostHog PERSON, not a human, so this is a FLOOR. "
+            "WARNING: user_signup_completed is NOT account_created — it includes a returning user "
+            "who clicked Sign Up. New-account truth is COGNITO."
         ),
     ),
     Rate(
@@ -133,13 +151,11 @@ RATES: tuple[Rate, ...] = (
         denominator=SIGNUP_COMPLETED,
         numerator=CUSTOM_BOARD_VIEWED,
         statement=(
-            "NUMERATOR: distinct persons with >=1 `custom_board_viewed`. "
-            "DENOMINATOR: distinct persons with >=1 `user_signup_completed`. "
-            "Activation is G100-C1's conjunction (account_created AND league_config_completed AND "
-            "custom_board_viewed); `custom_board_viewed` is its TERMINAL clause and is unreachable "
-            "without a saved league, which is why it stands for the whole. "
-            "WARNING: counted on PERSONS, never events — `custom_board_viewed` fires once per page "
-            "mount and one user produced three in an hour."
+            "NUMERATOR: distinct persons with >=1 custom_board_viewed. "
+            "DENOMINATOR: distinct persons with >=1 user_signup_completed. "
+            "custom_board_viewed is activation's TERMINAL clause — unreachable without a saved "
+            "league — so it stands for the whole conjunction. "
+            "WARNING: counted on PERSONS, never events; it fires once per page mount."
         ),
     ),
     Rate(
@@ -148,13 +164,11 @@ RATES: tuple[Rate, ...] = (
         denominator=CUSTOM_BOARD_VIEWED,
         numerator=SUBSCRIPTION_STARTED,
         statement=(
-            "NUMERATOR: distinct persons with >=1 `subscription_started`. "
-            "DENOMINATOR: distinct persons with >=1 `custom_board_viewed` — ACTIVATION IS THE PAID "
+            "NUMERATOR: distinct persons with >=1 subscription_started. "
+            "DENOMINATOR: distinct persons with >=1 custom_board_viewed — ACTIVATION IS THE PAID "
             "DENOMINATOR. "
-            "WARNING: `subscription_started` is client-confirmed (it fires once the Stripe webhook "
-            "has granted access, on the post-checkout screen), so a buyer who closes the tab during "
-            "provisioning is never counted. It is a FLOOR on paid conversions; STRIPE is the source "
-            "of truth for the paid COUNT."
+            "WARNING: subscription_started is client-confirmed — a buyer who closes the tab during "
+            "provisioning is never counted. It is a FLOOR; STRIPE is the paid COUNT."
         ),
     ),
 )
@@ -291,16 +305,9 @@ class Insight:
 
 
 _WINDOW_NOTE = (
-    f"Cohort funnel, {FUNNEL_WINDOW_DAYS}-day conversion window, person-level. "
-    f"NOTE: the most recent {FUNNEL_WINDOW_DAYS} days are INCOMPLETE by construction — those "
-    "cohorts have not finished converting, so a dip at the right-hand edge is the window, not a "
-    "regression."
-)
-
-_RATIO_NOTE = (
-    "SAME-DAY RATIO, not a cohort conversion: the numerator and denominator are different people "
-    "(someone signing up today may have landed last week). Use it for TREND ('is today unusual?'); "
-    "for LEVEL ('what fraction convert?') read the funnel insight."
+    f"Cohort funnel, {FUNNEL_WINDOW_DAYS}-day window, person-level. NOTE: the most recent "
+    f"{FUNNEL_WINDOW_DAYS} days are INCOMPLETE by construction — a dip at the right-hand edge is "
+    "the window, not a regression."
 )
 
 
@@ -310,15 +317,15 @@ def build_insights() -> list[Insight]:
         Insight(
             name="Funnel · full spine",
             description=(
-                "The G100 acquisition funnel end to end, on DISTINCT PERSONS. "
-                "Step 4 is ACTIVATION and is the denominator of paid conversion. " + _WINDOW_NOTE
+                "The G100 acquisition funnel end to end, on DISTINCT PERSONS. Step 4 is ACTIVATION "
+                "and is the denominator of paid conversion. " + _WINDOW_NOTE
             ),
             query=build_funnel_query(),
         ),
         Insight(
             name="Funnel · by acquisition source",
             description=(
-                "The same funnel split by first-touch `acquisition_source` (utm_source, else the "
+                "The same funnel split by first-touch acquisition_source (utm_source, else the "
                 "external referrer host, else 'direct'; an internal referrer is never recorded). "
                 + _WINDOW_NOTE
             ),
@@ -328,24 +335,23 @@ def build_insights() -> list[Insight]:
             name="Daily distinct persons per step",
             description=(
                 "Unique persons per day at each step. ⛔ Persons, never events: "
-                "`custom_board_viewed` fires once per page mount, so an event count here would "
+                "custom_board_viewed fires once per page mount, so an event count here would "
                 "inflate activation with revisits and read as a conversion problem."
             ),
             query=build_step_counts_query(),
         ),
     ]
     insights += [
-        Insight(name=r.title, description=f"{r.statement} {_RATIO_NOTE}", query=build_rate_query(r))
+        Insight(name=r.title, description=r.description(), query=build_rate_query(r))
         for r in RATES
     ]
     insights.append(
         Insight(
             name="ACTIVATION → paid, by device",
             description=(
-                "Where the paid drop-off differs by viewport class. Add a `free_paid_status` "
-                "breakdown to separate genuinely-free accounts from comped ones (admin / "
-                "beta_tester / fantasy_comp are `comped`, never `paid` — folding them in would put "
-                "the operator's own account in the numerator). " + _WINDOW_NOTE
+                "Where the paid drop-off differs by viewport class. Break down by free_paid_status "
+                "to separate free from comped — admin / beta_tester / fantasy_comp are 'comped', "
+                "never 'paid'. " + _WINDOW_NOTE
             ),
             query=build_segment_query(),
         )
@@ -353,9 +359,32 @@ def build_insights() -> list[Insight]:
     return insights
 
 
+def _check_description_budget(spec: dict) -> None:
+    """Refuse a spec PostHog would reject, before a single request is sent.
+
+    ⭐ THE POINT IS THAT THE FAILURE IS TOTAL AND OFFLINE. The first live run created three
+    insights and then died on the fourth's over-long description, leaving a half-built dashboard —
+    an online, PARTIAL failure, which is the worst shape for a step the operator runs once and reads
+    the output of. Validating here makes `--dry-run` catch it with no network and no credential.
+    """
+    too_long = [
+        (name, len(text))
+        for name, text in [(spec["dashboard"]["name"], spec["dashboard"]["description"])]
+        + [(i["name"], i["description"]) for i in spec["insights"]]
+        if len(text) > MAX_DESCRIPTION_CHARS
+    ]
+    if too_long:
+        detail = "; ".join(f"{n!r} is {c} chars" for n, c in too_long)
+        raise SystemExit(
+            f"description exceeds PostHog's {MAX_DESCRIPTION_CHARS}-char limit: {detail}. "
+            f"Trim it here and move the reasoning to docs/g100_d0_funnel.md — but keep the "
+            f"NUMERATOR/DENOMINATOR line, which is the part that stops the chart being misread."
+        )
+
+
 def build_dashboard_spec() -> dict:
     """The whole thing as plain data — what `--dry-run` prints and what the guard test reads."""
-    return {
+    spec = {
         "dashboard": {
             "name": DASHBOARD_NAME,
             "description": (
@@ -369,6 +398,8 @@ def build_dashboard_spec() -> dict:
             for i in build_insights()
         ],
     }
+    _check_description_budget(spec)
+    return spec
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -405,12 +436,31 @@ class PostHogApi:
         return self._request("POST", "/dashboards/", spec)
 
     def insights_on(self, dashboard_id: int) -> dict[str, int]:
-        page = self._request("GET", f"/insights/?dashboards={dashboard_id}&limit=500")
-        return {
-            i["name"]: i["id"]
-            for i in page.get("results", [])
-            if i.get("name") and not i.get("deleted")
-        }
+        """{insight name -> id} for the insights already on this dashboard.
+
+        ⚠️ READ FROM THE DASHBOARD, NOT FROM A FILTERED INSIGHT LIST. The obvious spelling —
+        `GET /insights/?dashboards=<id>` — returns **HTTP 500 from PostHog** (measured against
+        us.posthog.com on 2026-08-09, project 470803: the same key lists `/insights/?limit=1`
+        happily at 200, so it is a server-side fault in that filter, not a scope or auth problem).
+        The dashboard's own detail payload carries `tiles[].insight`, which answers the same
+        question from a first-class read.
+
+        ⭐ It is also the BETTER question. A name-filtered global insight list would match an
+        insight of the same name sitting on somebody else's dashboard, and the whole point of this
+        lookup is "is this chart already on MY dashboard" — so the previous form was one PostHog
+        bugfix away from silently updating the wrong object.
+
+        `deleted` is honoured because PostHog soft-deletes: a removed insight keeps its row, and a
+        detached tile must not be mistaken for a live one.
+        """
+        dashboard = self._request("GET", f"/dashboards/{dashboard_id}/")
+        found: dict[str, int] = {}
+        for tile in dashboard.get("tiles") or []:
+            insight = tile.get("insight")  # text/widget tiles carry none
+            if not insight or insight.get("deleted") or not insight.get("name"):
+                continue
+            found[insight["name"]] = insight["id"]
+        return found
 
     def upsert_insight(self, dashboard_id: int, insight: dict, existing_id: int | None) -> dict:
         body = {**insight, "dashboards": [dashboard_id]}
