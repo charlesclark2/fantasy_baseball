@@ -137,20 +137,33 @@ its tests red. Both fixtures reset it now.
 | Every Python guard is falsifiable | `uv run python betting_ml/tests/g100_c1_red_proof.py` | **20/20 RED** |
 | The freemium boundary, re-pointed at the widened gate | `betting_ml/tests/test_freemium_tier.py` | **114 pass** (with `test_g100_c1_free_league.py`) |
 | …and still falsifiable | `betting_ml/tests/freemium_tier_red_proof.py` | **54/54 RED** |
-| Rendered browser behaviour | `frontend/e2e/specs/free-league.spec.ts` | **8 pass** |
-| The whole frontend suite | `npx playwright test` | **131 pass** (was 123) |
-| Every new e2e clause is falsifiable | `frontend/e2e/red-proof.mjs` (8 G100-C1 cases) | **6 RED, 2 declared not-observable** |
+| Rendered browser behaviour | `frontend/e2e/specs/free-league.spec.ts` | **10 pass** |
+| The whole frontend suite | `npx playwright test` | **133 pass** (was 123) |
+| Every new e2e clause is falsifiable | `frontend/e2e/red-proof.mjs` (10 G100-C1 cases) | **8 RED, 2 declared not-observable** |
 | Python fast gate / slow gate | `pytest -m "not slow"` / `-m "slow and not research"` | **6590 pass** / **26 pass** |
 
-**The red-proof harness earned its keep twice.**
+**The red-proof harness earned its keep three times, and a fourth defect came out of re-reading the
+component rather than the tests.**
 
 - The delta's sign test was a **tautology**: list membership and the arrow both derive from
   `ovrDelta`, so inverting the subtraction swapped both consistently and the test passed on the
   exact defect it existed to catch. Fixed by rendering the overall ranks themselves (`#128 → #34`)
   and asserting on those — board-derived, so the sign cannot produce them. It is also the more
-  concrete thing to show a drafter.
+  concrete thing to show a drafter. ⚠️ Two intermediate attempts failed for a reason worth
+  recording: aggregate position-rank and aggregate VOR movement are both unusable here, because the
+  two e2e board fixtures are **independently synthesised** (values seeded per player id by different
+  formulas), so any cross-board statistic over them is noise.
 - A quota-ordering fixture used timestamps whose `created_at` and `updated_at` sorted **identically**,
   so deleting the clause it named changed nothing (the NF-D17 shape).
+- A negative assertion **raced**: `toHaveCount(0)` passes the instant it is evaluated if the element
+  has not rendered *yet*, so leading with it tested the page mid-load rather than the settled page.
+  Ordering the positive wait first is what makes it a statement about the outcome.
+- ⭐ And the defect the harness could not have found, because no test existed to break:
+  `useMyTeams` collapses "not loaded yet" and "could not load" into a single `teams: null`, so
+  keying the empty state on the scored board told a user who had **configured a league last week**
+  to go and set one up — whenever the projections read was slow, 404'd before the first export, or
+  failed. Three states now, not two, and the first cut of the loading condition **contained its own
+  clause** so the page hung instead.
 
 **Two cases are declared GREEN, and that is a finding rather than a gap** — both are defence in
 depth, where no single-line break is observable:
