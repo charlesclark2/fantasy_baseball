@@ -209,8 +209,9 @@ def select_position(pos: str, fold_results: list[dict], n_folds: int) -> dict:
         "nihilist_loses": bool(mean_crps["nihilist_zero"] > mean_crps[winner]),
         "pos_marginal_loses": bool(mean_crps["pos_marginal"] > mean_crps[winner]),
         "winner_beats_permuted": bool(winner_vs_perm > 0),
+        # an unevaluable p (< 3 folds — smoke only) FAILS closed, never passes (NF1.7 (a))
         "permuted_lift_not_significant": bool(
-            float(np.nanmean(perm_lift)) <= 0 or p_perm >= 0.05),
+            float(np.nanmean(perm_lift)) <= 0 or (p_perm is not None and p_perm >= 0.05)),
         # NF-D16 per-form floors: no arm may beat ITS OWN form's availability oracle
         "no_arm_beats_own_oracle": bool(all(
             mean_crps[arm] > mean_crps[W2B.ORACLE_OF_FORM_W2B[arm]]
