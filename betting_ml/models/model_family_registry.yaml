@@ -1,37 +1,3 @@
-# =============================================================================
-# Model-FAMILY registry — the NAMED AUTHORITY for what production serves (NF-G0)
-# =============================================================================
-# ⛔ NOT a second registry. This file uses the SAME governance shape as the baseball sub-model
-# registry (`betting_ml/sub_model_registry.yaml`): the promotion state machine is literally the
-# same object, imported by both from `betting_ml/governance/registry.py`, and a guard test asserts
-# the identity so the two families cannot drift into two vocabularies.
-#
-# KEY: <model_family>__<target>__<served_version>. The VERSION is part of the key so a champion and
-# its challenger can coexist — keyed on (family, target) alone, staging a challenger would OVERWRITE
-# the champion and destroy the `fallback_artifact_uri` that makes the promotion reversible.
-#
-# PROMOTION STATE MACHINE (shared):
-#   pending → challenger  (artifact built + staged; NOTHING published)
-#   challenger → champion (every gate cleared + a NAMED human review)  ← "champion" == SERVED
-#   champion → deprecated (superseded, or rolled back)
-#
-# COMPOSITE LINEAGE: the served board is a STACK whose members version independently — MVP-1's
-# calibrated point LEVEL, NF1.5's learned ORDER over it, the rookie leg, and a 3-way interval family
-# (rookie NF1.8 / veteran NF1.9 / K-DST NF1.6). `served_version` is the family's version-of-record;
-# the `*_model_version` fields say what it is MADE of. A single `model_version` field cannot express
-# that, and a stale ordering version stamped over a fresh level model reads as one coherent release
-# while being two.
-#
-# ⚠️ WHEN THIS FILE AND AN ARTIFACT STAMP DISAGREE, THAT IS A GATE FAILURE — never a silent "trust
-# the artifact". That is the KP-V2.0 lesson as code: the MLB K-props model has no registry entry, so
-# its version-of-record lives only in code + an S3 path and reconciliation is structurally
-# impossible. Anything on this registry always has a third party to reconcile against.
-#
-# 🚀 DEPLOY: this file ships with the BOX IMAGE on merge to `main` (the MH2.1 mechanic — merging IS
-# the deploy, with no gate between merge and serve). Edit it through
-# `betting_ml/scripts/model_governance.py`, not by hand, so every write is schema-validated.
-# =============================================================================
-
 nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1:
   served_version: nfl_fantasy_nf1_5_v1
   level_model_version: nfl_fantasy_fastpath_v1
@@ -80,3 +46,41 @@ nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1:
     the governance layer works than a clean pass would have been.'
   model_family: nfl_fantasy
   target: season_projection
+nfl_fantasy__weekly_projection__nfl_fantasy_w2b_v1:
+  served_version: nfl_fantasy_w2b_v1
+  base_model_version: nfl_fantasy_nf_w1_v1
+  per_position_spec:
+    QB: inj_zero_leg
+    RB: inj_both
+    WR: inj_both
+    TE: inj_zero_leg
+  feature_bundle: weekly_projection.FEATURES + injury_rate + injury_report (= weekly_projection_w2b.FEATURES_W2B;
+    per-arm legs per spec)
+  scoring_contract_version: nf_c0e
+  fallback_artifact_uri: repo:quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w1_weekly_bakeoff.json
+  validation_report: 'NF-W2b bake-off SHIP x4 (2026-08-09): pure player-level lift
+    vs the marginal-rate-carrying foil QB +0.098 (11/12) / RB +0.135 (12/12) / WR
+    +0.126 (12/12) / TE +0.059 (12/12) CRPS/wk; PBO <=0.14, DSR >=0.993, BH-FDR x4;
+    the permuted arm''s lift over base_rate NEGATIVE at all four positions (the NF-W2
+    refusal clause now passes two-sided). Record: quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w2b_injury_rate_bakeoff.md
+    (''Reading the result'').'
+  reviewed_by: Charlie (operator/PM) — Decision 1 = Option A (per-position certified
+    winners), 2026-08-09
+  notes: 'STAGED CHALLENGER (NF-W2b, 2026-08-09) — inert at serve by construction:
+    served_entry() returns champion-status entries only and no serving path reads
+    this registry (guard-tested two-sided in test_nf_w2b_staged_registry.py). PROMOTE/PUBLISH
+    BLOCKED until ALL of: (1) NF-C6 Phase 2 (the weekly serving path does not exist
+    yet); (2) NF-W0a stamped injury forward-capture arming the family LIVE in-season
+    (dark feed => serve the base champion; shadow-2025 measured the dark tax); (3)
+    pre-flip RETENTION snapshot + PROJECTION snapshot taken before any promote (run_nf_serving_board_snapshot.py
+    / run_nf_w2b_projection_snapshot.py). Nothing weekly has ever served, so there
+    is no previous served version; fallback_artifact_uri is the NF-W1 base champion''s
+    validated record — the spec the dark-feed serving rule falls back to. per_position_spec
+    is read from W2B.POST_FLIP_SPEC (guard-pinned to the validated artifact); the
+    RB/WR tie is not a licence to re-select (Option A explicitly rejects uniform inj_zero_leg).'
+  artifact_uri: repo:quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w2b_injury_rate_bakeoff.json
+  promotion_status: challenger
+  generated_at: '2026-08-09T05:34:33.358208+00:00'
+  staged_digest: 87b1669bac7e448bf5f9af38251026d3b1b54f9534432996aca0ee4c2ce6ba1c
+  model_family: nfl_fantasy
+  target: weekly_projection

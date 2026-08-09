@@ -428,52 +428,51 @@ def build_lines(con, seasons: list[int]) -> None:
                 FROM raw_{market}
             ) WHERE rn = 1
         """)
-        # Per-book two-way de-vig, then plain unweighted average across books.
+        # Per-book two-way de-vig, kept at BOOK level — the consensus is deliberately
+        # NOT formed here.
+        #
+        # ⚠️⚠️ Aggregating to a consensus keyed on `player_name` (the obvious shape, and
+        # the one this script originally used) SPLITS ONE PLAYER ACROSS TWO ROWS whenever
+        # the feed spells them two ways — "Matt Duffy"/"Matthew Duffy",
+        # "MJ Melendez"/"M.J. Melendez" — because both spellings resolve to the SAME
+        # batter_id downstream.  Measured on the first published artifact: 11,461
+        # duplicate (game_pk, batter_id, market_key) keys, 23,720 rows, ~99.7% of them in
+        # 2023, and the pairs carried DIFFERENT lines and probabilities — so the books'
+        # quotes for one player were being split into two competing half-consensuses
+        # rather than pooled.  (Our own two-tier name matching is a main driver: the
+        # `exact` tier catches one spelling and `last_initial` the other.)
+        #
+        # ⇒ resolve player_name → batter_id FIRST (in `assemble`), then form the consensus
+        # over the UNION of books for that batter.  Grouping by a display string is the
+        # bug; grouping by the resolved identity is the fix.
         con.execute(f"""
-            CREATE OR REPLACE TABLE cons_{market} AS
-            WITH devig AS (
-                SELECT event_id, player_name, line, bookmaker_key,
+            CREATE OR REPLACE TABLE quotes_{market} AS
+            SELECT event_id, player_name,
+                   '{market}'  AS market_key,
+                   bookmaker_key, line,
+                   (over_price IS NOT NULL AND under_price IS NOT NULL) AS two_sided,
+                   CASE WHEN over_price IS NOT NULL AND under_price IS NOT NULL THEN
                        (CASE WHEN over_price  < 0 THEN abs(over_price)/(abs(over_price)+100.0)
                              ELSE 100.0/(over_price+100.0) END)
                        / nullif(
                            (CASE WHEN over_price  < 0 THEN abs(over_price)/(abs(over_price)+100.0)
                                  ELSE 100.0/(over_price+100.0) END)
                          + (CASE WHEN under_price < 0 THEN abs(under_price)/(abs(under_price)+100.0)
-                                 ELSE 100.0/(under_price+100.0) END), 0)  AS p_over_devig
-                FROM close_{market}
-                WHERE over_price IS NOT NULL AND under_price IS NOT NULL
-            ),
-            allq AS (
-                SELECT event_id, player_name, line, bookmaker_key,
-                       (over_price IS NOT NULL AND under_price IS NOT NULL) AS two_sided
-                FROM close_{market}
-            )
-            SELECT a.event_id, a.player_name,
-                   '{market}'                                   AS market_key,
-                   median(a.line)                               AS line_consensus,
-                   nullif(stddev(a.line), 0)                    AS line_std,
-                   count(DISTINCT a.bookmaker_key)              AS n_books,
-                   sum(CASE WHEN a.two_sided THEN 1 ELSE 0 END) AS n_books_two_sided,
-                   avg(d.p_over_devig)                          AS p_over_consensus,
-                   nullif(stddev(d.p_over_devig), 0)            AS p_over_std
-            FROM allq a
-            LEFT JOIN devig d
-              ON d.event_id=a.event_id AND d.player_name=a.player_name
-             AND d.line=a.line AND d.bookmaker_key=a.bookmaker_key
-            GROUP BY 1, 2
+                                 ELSE 100.0/(under_price+100.0) END), 0)
+                   END AS p_over_devig
+            FROM close_{market}
         """)
-        frames.append(f"SELECT * FROM cons_{market}")
+        frames.append(f"SELECT * FROM quotes_{market}")
 
-    con.execute("CREATE OR REPLACE TABLE lines_all AS " + " UNION ALL ".join(frames))
+    con.execute("CREATE OR REPLACE TABLE quotes_all AS " + " UNION ALL ".join(frames))
     summary = con.execute("""
-        SELECT market_key, count(*) AS quotes,
-               round(avg(n_books), 2)                                AS avg_books,
-               round(100.0*avg(CASE WHEN p_over_consensus IS NOT NULL
-                                    THEN 1.0 ELSE 0 END), 1)          AS pct_devigged,
-               round(avg(line_consensus), 3)                          AS avg_line
-        FROM lines_all GROUP BY 1 ORDER BY 1
+        SELECT market_key, count(*) AS book_quotes,
+               count(DISTINCT event_id || '|' || player_name) AS event_players,
+               round(100.0*avg(CASE WHEN two_sided THEN 1.0 ELSE 0 END), 1) AS pct_two_sided,
+               round(avg(line), 3) AS avg_line
+        FROM quotes_all GROUP BY 1 ORDER BY 1
     """).fetchdf()
-    log.info("consensus lines:\n%s", summary.to_string(index=False))
+    log.info("book-level quotes:\n%s", summary.to_string(index=False))
 
 
 # ── step 5: leak-safe pregame features ─────────────────────────────────────────
@@ -636,13 +635,13 @@ def assemble(con) -> pd.DataFrame:
     con.execute("""
         CREATE OR REPLACE TABLE substrate AS
         WITH quoted AS (
-            -- lines → game_pk (via event_map) and → candidate batter_ids (via name)
-            SELECT l.*, em.game_pk, em.season, em.resolver AS event_resolver,
+            -- BOOK-level quotes → game_pk (via event_map) and → candidate batter_ids
+            SELECT q.*, em.game_pk, em.season, em.resolver AS event_resolver,
                    nc.batter_id, nc.match_tier AS name_match_tier
-            FROM lines_all l
-            JOIN event_map em      ON em.event_id = l.event_id
+            FROM quotes_all q
+            JOIN event_map em      ON em.event_id = q.event_id
                                   AND em.game_pk IS NOT NULL
-            JOIN name_candidates nc ON nc.player_name = l.player_name
+            JOIN name_candidates nc ON nc.player_name = q.player_name
         ),
         -- APPEARANCE ARBITRATION: keep only the candidate id that actually batted
         -- in that game.  This is what makes the last-initial fallback safe.
@@ -655,12 +654,46 @@ def assemble(con) -> pd.DataFrame:
         ),
         -- A name that still maps to >1 id WITHIN one game/market is genuinely
         -- ambiguous (both players batted) — drop it rather than guess.
-        deduped AS (
+        unambiguous AS (
             SELECT * FROM (
-                SELECT *, count(*) OVER (
+                SELECT *, count(DISTINCT batter_id) OVER (
                     PARTITION BY game_pk, market_key, player_name) AS n_ids_in_game
                 FROM resolved
             ) WHERE n_ids_in_game = 1
+        ),
+        -- ONE quote per (batter-game, market, BOOK).  Two name spellings for the same
+        -- batter are the same book's single opinion, not two — collapse them here so
+        -- the consensus below pools books rather than double-counting one.
+        per_book AS (
+            SELECT * EXCLUDE (rn) FROM (
+                SELECT *, row_number() OVER (
+                    PARTITION BY game_pk, batter_id, market_key, bookmaker_key
+                    ORDER BY two_sided DESC, p_over_devig NULLS LAST, line) AS rn
+                FROM unambiguous
+            ) WHERE rn = 1
+        ),
+        -- NOW form the consensus, keyed on the RESOLVED identity.
+        deduped AS (
+            SELECT game_pk, batter_id, market_key,
+                   any_value(season)          AS season,
+                   any_value(game_date)       AS game_date,
+                   any_value(event_id)        AS event_id,
+                   min(player_name)           AS player_name,
+                   any_value(event_resolver)  AS event_resolver,
+                   min(name_match_tier)       AS name_match_tier,
+                   any_value(pa) AS pa, any_value(hits) AS hits,
+                   any_value(home_runs) AS home_runs, any_value(total_bases) AS total_bases,
+                   any_value(singles) AS singles, any_value(doubles) AS doubles,
+                   any_value(triples) AS triples, any_value(walks) AS walks,
+                   any_value(strikeouts) AS strikeouts,
+                   median(line)                                   AS line_consensus,
+                   nullif(stddev(line), 0)                        AS line_std,
+                   count(DISTINCT bookmaker_key)                  AS n_books,
+                   sum(CASE WHEN two_sided THEN 1 ELSE 0 END)     AS n_books_two_sided,
+                   avg(p_over_devig)                              AS p_over_consensus,
+                   nullif(stddev(p_over_devig), 0)                AS p_over_std
+            FROM per_book
+            GROUP BY 1, 2, 3
         )
         SELECT
             d.game_pk, d.batter_id, d.market_key, d.season, d.game_date,
@@ -691,6 +724,21 @@ def assemble(con) -> pd.DataFrame:
         LEFT JOIN feat_park    p ON p.venue_id = s.venue_id
                                 AND p.apply_season = d.season
     """)
+    # ⭐ GRAIN GUARD — the substrate's declared grain is (game_pk, batter_id,
+    # market_key) and NOTHING downstream re-checks it.  The first published artifact
+    # shipped 11,461 duplicate keys (two name spellings for one batter) and it was
+    # caught only by reading the artifact back afterwards.  Fail the BUILD instead.
+    fan = con.execute("""
+        SELECT count(*) FROM (
+            SELECT game_pk, batter_id, market_key FROM substrate
+            GROUP BY 1, 2, 3 HAVING count(*) > 1)
+    """).fetchone()[0]
+    if fan:
+        raise RuntimeError(
+            f"substrate fans out on {fan} (game_pk, batter_id, market_key) keys — "
+            "the declared grain is violated; do NOT publish. Most likely two "
+            "player_name spellings resolving to one batter_id (see build_lines)."
+        )
     return con.execute("SELECT * FROM substrate").fetchdf()
 
 
