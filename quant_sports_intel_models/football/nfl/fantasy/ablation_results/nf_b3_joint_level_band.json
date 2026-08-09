@@ -1,0 +1,2096 @@
+{
+  "story": "NF-B3",
+  "generated_at": "2026-08-09T00:32:08.128852+00:00",
+  "model_version": "nfl_fantasy_nf_b3_joint_level_band_v1",
+  "recalibrates": "nfl_fantasy_fastpath_v1",
+  "best_alpha": 0,
+  "wall_time_s": 12.3,
+  "preregistration": {
+    "story": "NF-B3",
+    "model_version": "nfl_fantasy_nf_b3_joint_level_band_v1",
+    "recalibrates": "nfl_fantasy_fastpath_v1",
+    "fold_seasons": [
+      2013,
+      2014,
+      2015,
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "train_panel_start": 2007,
+    "band": {
+      "form": "knn_norm",
+      "k": 300,
+      "source": "model-path refit (NF1.9-R incumbent arm)",
+      "forbidden_source": "the veteran panel's served_p10/served_p90 columns"
+    },
+    "c3_equality_exact": true,
+    "rookie_substrate_start": 2016,
+    "incumbent_challenger_note": "NF-C3-REREAD READ 2's winner (global_const \u00b7 infold, \u03bb\u22480.5) is a replay figure derived with the answer partially in view; B3 re-derives every \u03bb path from its own 13-fold evidence and the winner is whatever the pre-registered rules select.",
+    "inherited_from": "level_recalibration.py (NF-RECAL1) \u2014 forms, spaces, \u03bb grid+rules, metric, constraints, framing, deflation gates, anchor set",
+    "framing": "pooled",
+    "dsr_reading": "whole_field",
+    "metric": "crps",
+    "tier_anchor": "incumbent_projection",
+    "tier_n": 156,
+    "forms": [
+      "global_const",
+      "pos_const",
+      "pos_offset",
+      "pos_affine",
+      "avail_cond"
+    ],
+    "spaces": [
+      "per_game",
+      "season_total"
+    ],
+    "lambda_grid": [
+      0.0,
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "rules": [
+      "infold",
+      "unconstrained"
+    ],
+    "declared_trial_field_size": 11,
+    "gates": {
+      "pbo_max": 0.2,
+      "dsr_min": 0.95,
+      "alpha": 0.1,
+      "coverage_floor": 0.8,
+      "ordering_do_no_harm": 0.02
+    }
+  },
+  "step0_reproduction": {
+    "universe_is80": 160.888,
+    "universe_is80_recorded": 160.888,
+    "universe_is80_delta_pct": 0.0,
+    "tier_coverage_full_window": 0.8328,
+    "served_tier_coverage_2019_2025": 0.8452,
+    "served_tier_coverage_2019_2025_recorded": 0.8452,
+    "panel_column_tier_coverage_2019_2025": 0.5046,
+    "panel_column_tier_coverage_2019_2025_recorded": 0.5046,
+    "incumbent_fallback_frac": 0.0,
+    "n_universe": 8398,
+    "n_tier": 2028
+  },
+  "structurally_rookieless_boards": [
+    2013,
+    2014,
+    2015
+  ],
+  "folds": [
+    2013,
+    2014,
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "premise": {
+    "universe": {
+      "reading": "universe (unconditional)",
+      "n": 8099,
+      "mean_bias": 0.84,
+      "median_bias": 13.84,
+      "ours_over_actual": 1.013,
+      "pct_zero_outcome": 0.324,
+      "per_position": {
+        "QB": {
+          "n": 1116,
+          "mean_bias": 8.54,
+          "ours_over_actual": 1.094
+        },
+        "RB": {
+          "n": 2018,
+          "mean_bias": -2.8,
+          "ours_over_actual": 0.956
+        },
+        "TE": {
+          "n": 1801,
+          "mean_bias": -0.03,
+          "ours_over_actual": 0.999
+        },
+        "WR": {
+          "n": 3164,
+          "mean_bias": 0.93,
+          "ours_over_actual": 1.015
+        }
+      }
+    },
+    "draftable_tier_incumbent_anchor": {
+      "reading": "draftable tier, INCUMBENT anchor (top 156/season) \u2b50 PRE-REGISTERED",
+      "n": 2028,
+      "mean_bias": -12.85,
+      "median_bias": -14.35,
+      "ours_over_actual": 0.919,
+      "pct_zero_outcome": 0.075,
+      "per_position": {
+        "QB": {
+          "n": 465,
+          "mean_bias": -0.57,
+          "ours_over_actual": 0.997
+        },
+        "RB": {
+          "n": 490,
+          "mean_bias": -21.54,
+          "ours_over_actual": 0.859
+        },
+        "TE": {
+          "n": 251,
+          "mean_bias": -9.05,
+          "ours_over_actual": 0.93
+        },
+        "WR": {
+          "n": 822,
+          "mean_bias": -15.78,
+          "ours_over_actual": 0.897
+        }
+      }
+    },
+    "draftable_tier_realized_anchor": {
+      "reading": "draftable tier, REALIZED anchor (top 156/season) \u26d4 forbidden",
+      "n": 2028,
+      "mean_bias": -64.8,
+      "median_bias": -65.53,
+      "ours_over_actual": 0.661,
+      "pct_zero_outcome": 0.0,
+      "per_position": {
+        "QB": {
+          "n": 383,
+          "mean_bias": -52.06,
+          "ours_over_actual": 0.781
+        },
+        "RB": {
+          "n": 529,
+          "mean_bias": -78.14,
+          "ours_over_actual": 0.582
+        },
+        "TE": {
+          "n": 284,
+          "mean_bias": -60.73,
+          "ours_over_actual": 0.614
+        },
+        "WR": {
+          "n": 832,
+          "mean_bias": -63.57,
+          "ours_over_actual": 0.654
+        }
+      }
+    },
+    "played_at_least_6_games": {
+      "reading": "played \u22656 games \u26d4 outcome-conditioned",
+      "n": 4708,
+      "mean_bias": -23.83,
+      "median_bias": -11.04,
+      "ours_over_actual": 0.773,
+      "pct_zero_outcome": 0.024,
+      "per_position": {
+        "QB": {
+          "n": 503,
+          "mean_bias": -35.29,
+          "ours_over_actual": 0.817
+        },
+        "RB": {
+          "n": 1188,
+          "mean_bias": -30.42,
+          "ours_over_actual": 0.714
+        },
+        "TE": {
+          "n": 1112,
+          "mean_bias": -14.42,
+          "ours_over_actual": 0.783
+        },
+        "WR": {
+          "n": 1905,
+          "mean_bias": -22.17,
+          "ours_over_actual": 0.785
+        }
+      }
+    },
+    "motivating_figures": {
+      "source": "production_model_state/nfl_season_fantasy.md \u2014 MEASURED LEVEL BIAS (NF-TR1)",
+      "n": 1165,
+      "mean_bias": -37.7,
+      "median_bias": -34.5,
+      "ours_over_actual": {
+        "QB": 0.923,
+        "RB": 0.693,
+        "WR": 0.778,
+        "TE": 0.816
+      },
+      "population_note": "stated as unconditional; not reproducible on this panel \u2014 see verdict"
+    },
+    "premise_confirmed": true,
+    "reproduces_motivating_magnitude": false,
+    "per_position_sign_agrees_with_motivating": {
+      "QB": true,
+      "RB": true,
+      "WR": true,
+      "TE": true
+    },
+    "table": [
+      {
+        "reading": "universe (unconditional)",
+        "n": 8099,
+        "mean_bias": 0.84,
+        "median_bias": 13.84,
+        "ours_over_actual": 1.013,
+        "pct_zero_outcome": 0.324
+      },
+      {
+        "reading": "draftable tier, INCUMBENT anchor (top 156/season) \u2b50 PRE-REGISTERED",
+        "n": 2028,
+        "mean_bias": -12.85,
+        "median_bias": -14.35,
+        "ours_over_actual": 0.919,
+        "pct_zero_outcome": 0.075
+      },
+      {
+        "reading": "draftable tier, REALIZED anchor (top 156/season) \u26d4 forbidden",
+        "n": 2028,
+        "mean_bias": -64.8,
+        "median_bias": -65.53,
+        "ours_over_actual": 0.661,
+        "pct_zero_outcome": 0.0
+      },
+      {
+        "reading": "played \u22656 games \u26d4 outcome-conditioned",
+        "n": 4708,
+        "mean_bias": -23.83,
+        "median_bias": -11.04,
+        "ours_over_actual": 0.773,
+        "pct_zero_outcome": 0.024
+      }
+    ]
+  },
+  "selection": {
+    "framing": "pooled",
+    "n_candidates": 11,
+    "n_eligible": 7,
+    "incumbent_metric": 49.9214,
+    "winner": {
+      "label": "pos_const \u00b7 infold",
+      "key": "pos_const@per_game@infold",
+      "form": "pos_const",
+      "space": "per_game",
+      "rule": "infold",
+      "recalibrates": true,
+      "shippable": true,
+      "lam_by_fold": {
+        "2013": 0.0,
+        "2014": 0.25,
+        "2015": 0.25,
+        "2016": 0.5,
+        "2017": 0.25,
+        "2018": 0.25,
+        "2019": 0.25,
+        "2020": 0.25,
+        "2021": 0.25,
+        "2022": 0.25,
+        "2023": 0.25,
+        "2024": 0.25,
+        "2025": 0.25
+      },
+      "metric": 49.6817,
+      "bias": -7.0769,
+      "mae": 71.0498,
+      "coverage80": 0.8521,
+      "universe_bias": 3.4921,
+      "rho": {
+        "QB": 1.0,
+        "RB": 1.0,
+        "WR": 1.0,
+        "TE": 1.0
+      }
+    },
+    "best_any": {
+      "label": "avail_cond \u00b7 unconstrained",
+      "metric": 49.5122,
+      "eligible": false
+    },
+    "ordering": {
+      "per_position": {
+        "QB": {
+          "rho": 1.0,
+          "ok": true
+        },
+        "RB": {
+          "rho": 1.0,
+          "ok": true
+        },
+        "WR": {
+          "rho": 1.0,
+          "ok": true
+        },
+        "TE": {
+          "rho": 1.0,
+          "ok": true
+        }
+      }
+    },
+    "coverage": {
+      "ok": true,
+      "strict_ok": false,
+      "governs_the_change": true,
+      "floor": 0.8,
+      "per_position": {
+        "QB": {
+          "n": 465,
+          "coverage": 0.8602,
+          "covered_rows": 400,
+          "binding_level": 0.8,
+          "rows_required": 372,
+          "rows_of_slack": 28,
+          "ok": true,
+          "rows_of_slack_strict": 28,
+          "strict_ok": true,
+          "incumbent_coverage": 0.8559
+        },
+        "RB": {
+          "n": 490,
+          "coverage": 0.8408,
+          "covered_rows": 412,
+          "binding_level": 0.8,
+          "rows_required": 392,
+          "rows_of_slack": 20,
+          "ok": true,
+          "rows_of_slack_strict": 20,
+          "strict_ok": true,
+          "incumbent_coverage": 0.8245
+        },
+        "WR": {
+          "n": 822,
+          "coverage": 0.882,
+          "covered_rows": 725,
+          "binding_level": 0.8,
+          "rows_required": 658,
+          "rows_of_slack": 67,
+          "ok": true,
+          "rows_of_slack_strict": 67,
+          "strict_ok": true,
+          "incumbent_coverage": 0.8552
+        },
+        "TE": {
+          "n": 251,
+          "coverage": 0.761,
+          "covered_rows": 191,
+          "binding_level": 0.7371,
+          "rows_required": 185,
+          "rows_of_slack": 6,
+          "ok": true,
+          "rows_of_slack_strict": -10,
+          "strict_ok": false,
+          "incumbent_coverage": 0.7371
+        }
+      },
+      "pooled_coverage": 0.8521,
+      "breaches": [],
+      "breaches_strict": [
+        "TE 0.7610<0.800 (-10 rows)"
+      ],
+      "evaluable": true
+    },
+    "placement": {
+      "holds_out": true,
+      "per_fold": {
+        "2013": {
+          "lam": 0.0,
+          "c1_ordering_ok": true,
+          "c2_placement_ok": true,
+          "c2_inactive_structural": true,
+          "c3_coverage_ok": true,
+          "admissible": true,
+          "rank": null,
+          "worst_rank_move": 0.0,
+          "coverage_breaches": []
+        },
+        "2014": {
+          "lam": 0.25,
+          "c1_ordering_ok": true,
+          "c2_placement_ok": true,
+          "c2_inactive_structural": true,
+          "c3_coverage_ok": true,
+          "admissible": true,
+          "rank": null,
+          "worst_rank_move": 0.0,
+          "coverage_breaches": []
+        },
+        "2015": {
+          "lam": 0.25,
+          "c1_ordering_ok": true,
+          "c2_placement_ok": true,
+          "c2_inactive_structural": true,
+          "c3_coverage_ok": true,
+          "admissible": true,
+          "rank": null,
+          "worst_rank_move": 0.0,
+          "coverage_breaches": []
+        },
+        "2016": {
+          "lam": 0.5,
+          "c1_ordering_ok": true,
+          "c2_placement_ok": true,
+          "c2_inactive_structural": false,
+          "c3_coverage_ok": true,
+          "admissible": true,
+          "rank": 636.0,
+          "worst_rank_move": 0.0,
+          "coverage_breaches": []
+        },
+        "2017": {
+          "lam": 0.25,
+          "c1_ordering_ok": true,
+          "c2_placement_ok": true,
+          "c2_inactive_structural": false,
+          "c3_coverage_ok": true,
+          "admissible": true,
+          "rank": 21.0,
+          "worst_rank_move": 0.0,
+          "coverage_breaches": []
+        },
+        "2018": {
+          "lam": 0.25,
+          "c1_ordering_ok": true,
+          "c2_placement_ok": true,
+          "c2_inactive_structural": false,
+          "c3_coverage_ok": true,
+          "admissible": true,
+          "rank": 9.0,
+          "worst_rank_move": 0.0,
+          "coverage_breaches": []
+        },
+        "2019": {
+          "lam": 0.25,
+          "c1_ordering_ok": true,
+          "c2_placement_ok": true,
+          "c2_inactive_structural": false,
+          "c3_coverage_ok": true,
+          "admissible": true,
+          "rank": 25.0,
+          "worst_rank_move": 0.0,
+          "coverage_breaches": []
+        },
+        "2020": {
+          "lam": 0.25,
+          "c1_ordering_ok": true,
+          "c2_placement_ok": true,
+          "c2_inactive_structural": false,
+          "c3_coverage_ok": true,
+          "admissible": true,
+          "rank": 17.0,
+          "worst_rank_move": 0.0,
+          "coverage_breaches": []
+        },
+        "2021": {
+          "lam": 0.25,
+          "c1_ordering_ok": true,
+          "c2_placement_ok": true,
+          "c2_inactive_structural": false,
+          "c3_coverage_ok": true,
+          "admissible": true,
+          "rank": 12.0,
+          "worst_rank_move": 0.0,
+          "coverage_breaches": []
+        },
+        "2022": {
+          "lam": 0.25,
+          "c1_ordering_ok": true,
+          "c2_placement_ok": true,
+          "c2_inactive_structural": false,
+          "c3_coverage_ok": true,
+          "admissible": true,
+          "rank": 35.0,
+          "worst_rank_move": 0.0,
+          "coverage_breaches": []
+        },
+        "2023": {
+          "lam": 0.25,
+          "c1_ordering_ok": true,
+          "c2_placement_ok": true,
+          "c2_inactive_structural": false,
+          "c3_coverage_ok": true,
+          "admissible": true,
+          "rank": 19.0,
+          "worst_rank_move": 0.0,
+          "coverage_breaches": []
+        },
+        "2024": {
+          "lam": 0.25,
+          "c1_ordering_ok": true,
+          "c2_placement_ok": true,
+          "c2_inactive_structural": false,
+          "c3_coverage_ok": true,
+          "admissible": true,
+          "rank": 22.0,
+          "worst_rank_move": 0.0,
+          "coverage_breaches": []
+        },
+        "2025": {
+          "lam": 0.25,
+          "c1_ordering_ok": true,
+          "c2_placement_ok": true,
+          "c2_inactive_structural": false,
+          "c3_coverage_ok": true,
+          "admissible": true,
+          "rank": 15.0,
+          "worst_rank_move": 0.0,
+          "coverage_breaches": []
+        }
+      },
+      "c2_only": true,
+      "c3_only": true,
+      "failing_folds": []
+    },
+    "deflation": {
+      "pbo": 0.039,
+      "n_splits": 1716,
+      "median_logit": 1.466,
+      "os_gap_pct": 0.0,
+      "os_gap_p90_pct": 0.284,
+      "contender_spread_pct": 0.12,
+      "flips": [
+        {
+          "config": "pos_const \u00b7 infold",
+          "IS-half wins": 1322,
+          "share": 0.77,
+          "full-sample IS80": 49.682,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "global_const \u00b7 infold",
+          "IS-half wins": 387,
+          "share": 0.226,
+          "full-sample IS80": 49.74,
+          "\u0394 vs best %": 0.12
+        },
+        {
+          "config": "incumbent (NULL)",
+          "IS-half wins": 7,
+          "share": 0.004,
+          "full-sample IS80": 49.921,
+          "\u0394 vs best %": 0.48
+        }
+      ],
+      "n_configs": 7,
+      "dsr": 0.8773,
+      "dsr_contenders": 0.938
+    },
+    "deflation_unrestricted_disclosure": {
+      "pbo": 0.1096,
+      "n_splits": 1716,
+      "median_logit": 2.398,
+      "os_gap_pct": 0.0,
+      "os_gap_p90_pct": 0.716,
+      "contender_spread_pct": 0.34,
+      "flips": [
+        {
+          "config": "avail_cond \u00b7 unconstrained",
+          "IS-half wins": 1276,
+          "share": 0.744,
+          "full-sample IS80": 49.512,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "pos_offset \u00b7 unconstrained",
+          "IS-half wins": 350,
+          "share": 0.204,
+          "full-sample IS80": 49.642,
+          "\u0394 vs best %": 0.26
+        },
+        {
+          "config": "pos_affine \u00b7 unconstrained",
+          "IS-half wins": 32,
+          "share": 0.019,
+          "full-sample IS80": 49.667,
+          "\u0394 vs best %": 0.31
+        },
+        {
+          "config": "global_const \u00b7 infold",
+          "IS-half wins": 26,
+          "share": 0.015,
+          "full-sample IS80": 49.74,
+          "\u0394 vs best %": 0.46
+        },
+        {
+          "config": "avail_cond \u00b7 infold",
+          "IS-half wins": 20,
+          "share": 0.012,
+          "full-sample IS80": 49.816,
+          "\u0394 vs best %": 0.61
+        },
+        {
+          "config": "pos_const \u00b7 infold",
+          "IS-half wins": 12,
+          "share": 0.007,
+          "full-sample IS80": 49.682,
+          "\u0394 vs best %": 0.34
+        }
+      ],
+      "n_configs": 11,
+      "note": "the search that WOULD have run had the constraints not bound \u2014 a DISCLOSURE only, gating nothing; the pre-registered PBO is over the ELIGIBLE set"
+    },
+    "pvalue": 0.0119,
+    "per_fold_delta": [
+      0.0,
+      0.5174,
+      0.6401,
+      -0.4002,
+      -0.3576,
+      0.483,
+      0.4943,
+      0.2196,
+      0.0605,
+      0.2437,
+      0.5302,
+      0.4357,
+      0.2494
+    ],
+    "eligible_labels": [
+      "incumbent (NULL)",
+      "global_const \u00b7 infold",
+      "global_const \u00b7 unconstrained",
+      "pos_const \u00b7 infold",
+      "pos_const \u00b7 unconstrained",
+      "pos_offset \u00b7 infold",
+      "pos_affine \u00b7 infold"
+    ],
+    "ineligible": [
+      {
+        "label": "pos_offset \u00b7 unconstrained",
+        "metric": 49.6423,
+        "holds_out": false,
+        "failing_folds": [
+          2014,
+          2016,
+          2017,
+          2018,
+          2020,
+          2022,
+          2025
+        ],
+        "c2_ok": true,
+        "c3_ok": false
+      },
+      {
+        "label": "pos_affine \u00b7 unconstrained",
+        "metric": 49.6665,
+        "holds_out": false,
+        "failing_folds": [
+          2014,
+          2020
+        ],
+        "c2_ok": true,
+        "c3_ok": false
+      },
+      {
+        "label": "avail_cond \u00b7 infold",
+        "metric": 49.8164,
+        "holds_out": false,
+        "failing_folds": [
+          2017
+        ],
+        "c2_ok": true,
+        "c3_ok": true
+      },
+      {
+        "label": "avail_cond \u00b7 unconstrained",
+        "metric": 49.5122,
+        "holds_out": false,
+        "failing_folds": [
+          2014,
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021
+        ],
+        "c2_ok": false,
+        "c3_ok": true
+      }
+    ]
+  },
+  "per_position": {
+    "per_position": [
+      {
+        "position": "QB",
+        "incumbent_metric": 59.2997,
+        "winner": "pos_const \u00b7 infold",
+        "metric": 59.2932,
+        "delta": -0.0065,
+        "pbo": 0.7955,
+        "dsr": 0.0623,
+        "pvalue": 0.4793
+      },
+      {
+        "position": "RB",
+        "incumbent_metric": 51.7438,
+        "winner": "pos_const \u00b7 infold",
+        "metric": 51.3073,
+        "delta": -0.4365,
+        "pbo": 0.0274,
+        "dsr": 0.9699,
+        "pvalue": 0.0137
+      },
+      {
+        "position": "WR",
+        "incumbent_metric": 47.4356,
+        "winner": "pos_const \u00b7 infold",
+        "metric": 47.2439,
+        "delta": -0.1917,
+        "pbo": 0.3258,
+        "dsr": 0.5497,
+        "pvalue": 0.1686
+      },
+      {
+        "position": "TE",
+        "incumbent_metric": 37.4341,
+        "winner": "global_const \u00b7 infold",
+        "metric": 36.8243,
+        "delta": -0.6098,
+        "pbo": 0.0012,
+        "dsr": 0.9799,
+        "pvalue": 0.0207
+      }
+    ],
+    "bh_cutoff_unconditional": 0.025,
+    "fdr": {
+      "QB": false,
+      "RB": true,
+      "WR": false,
+      "TE": true
+    }
+  },
+  "attribution": {
+    "rows": [
+      {
+        "arm": "global_const \u00b7 infold",
+        "foil": "global_const \u00b7 infold [season_total FOIL]",
+        "form": "global_const",
+        "per_game_crps": 49.7402,
+        "season_total_crps": 49.7402,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": true,
+        "expected_tie_holds": true
+      },
+      {
+        "arm": "global_const \u00b7 unconstrained",
+        "foil": "global_const \u00b7 unconstrained [season_total FOIL]",
+        "form": "global_const",
+        "per_game_crps": 49.7402,
+        "season_total_crps": 49.7402,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": true,
+        "expected_tie_holds": true
+      },
+      {
+        "arm": "pos_const \u00b7 infold",
+        "foil": "pos_const \u00b7 infold [season_total FOIL]",
+        "form": "pos_const",
+        "per_game_crps": 49.6817,
+        "season_total_crps": 49.6817,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": true,
+        "expected_tie_holds": true
+      },
+      {
+        "arm": "pos_const \u00b7 unconstrained",
+        "foil": "pos_const \u00b7 unconstrained [season_total FOIL]",
+        "form": "pos_const",
+        "per_game_crps": 49.6817,
+        "season_total_crps": 49.6817,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": true,
+        "expected_tie_holds": true
+      },
+      {
+        "arm": "pos_offset \u00b7 infold",
+        "foil": "pos_offset \u00b7 infold [season_total FOIL]",
+        "form": "pos_offset",
+        "per_game_crps": 49.9214,
+        "season_total_crps": 49.9214,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": false,
+        "expected_tie_holds": null
+      },
+      {
+        "arm": "pos_offset \u00b7 unconstrained",
+        "foil": "pos_offset \u00b7 unconstrained [season_total FOIL]",
+        "form": "pos_offset",
+        "per_game_crps": 49.6423,
+        "season_total_crps": 49.6349,
+        "paired_delta": 0.007469,
+        "max_abs_fold_delta": 0.4093,
+        "per_game_wins": false,
+        "space_invariant_by_construction": false,
+        "expected_tie_holds": null
+      },
+      {
+        "arm": "pos_affine \u00b7 infold",
+        "foil": "pos_affine \u00b7 infold [season_total FOIL]",
+        "form": "pos_affine",
+        "per_game_crps": 49.9214,
+        "season_total_crps": 49.9214,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": false,
+        "expected_tie_holds": null
+      },
+      {
+        "arm": "pos_affine \u00b7 unconstrained",
+        "foil": "pos_affine \u00b7 unconstrained [season_total FOIL]",
+        "form": "pos_affine",
+        "per_game_crps": 49.6665,
+        "season_total_crps": 49.7354,
+        "paired_delta": -0.068915,
+        "max_abs_fold_delta": 0.3992,
+        "per_game_wins": true,
+        "space_invariant_by_construction": false,
+        "expected_tie_holds": null
+      },
+      {
+        "arm": "avail_cond \u00b7 infold",
+        "foil": "avail_cond \u00b7 infold [season_total FOIL]",
+        "form": "avail_cond",
+        "per_game_crps": 49.8164,
+        "season_total_crps": 49.8164,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": true,
+        "expected_tie_holds": true
+      },
+      {
+        "arm": "avail_cond \u00b7 unconstrained",
+        "foil": "avail_cond \u00b7 unconstrained [season_total FOIL]",
+        "form": "avail_cond",
+        "per_game_crps": 49.5122,
+        "season_total_crps": 49.5122,
+        "paired_delta": 0.0,
+        "max_abs_fold_delta": 0.0,
+        "per_game_wins": false,
+        "space_invariant_by_construction": true,
+        "expected_tie_holds": true
+      }
+    ],
+    "n_pairs": 10,
+    "n_space_acting_pairs": 4,
+    "space_invariance_proven": true,
+    "per_game_wins_where_the_channel_can_act": [
+      1,
+      4
+    ],
+    "reading": "mixed"
+  },
+  "signature": {
+    "incumbent_bias": -12.8503,
+    "winner_bias": -7.0769,
+    "incumbent_metric": 49.9214,
+    "winner_metric": 49.6817,
+    "verdict": "level_fix",
+    "accuracy_improved": true,
+    "bias_moved_toward_zero": true,
+    "abs_bias_delta": -5.7734
+  },
+  "verdict": {
+    "ship": false,
+    "pooled_gate_passes": false,
+    "premise_confirmed_in_this_population": true,
+    "sanity_degenerates_lose": true,
+    "permutation_across_beaten": true,
+    "oracle_respected": true,
+    "family_ceiling_respected": true,
+    "ceilings_order_by_capacity": true,
+    "over_scale_loses": true,
+    "wide_band_loses": true,
+    "rookie_leg_untouched": true,
+    "space_invariance_proven": true
+  },
+  "null": {
+    "state": "POWER_LIMITED",
+    "taxonomy_would_say": "POWER_LIMITED",
+    "taxonomy_fits": true,
+    "why": "at least one recalibrating arm survived the constraints, so whatever refused this story was the METRIC or the deflation gates \u2014 the taxonomy applies as written",
+    "best_recalibrating_arm": "avail_cond \u00b7 unconstrained",
+    "best_recalibrating_metric": 49.5122,
+    "incumbent_metric": 49.9214,
+    "beats_incumbent_on_accuracy": true,
+    "fold_wins": 9,
+    "n_folds": 13,
+    "observed_sr": 0.6657,
+    "dsr_ceiling_at_this_fold_count": 1.0,
+    "arms_that_beat_the_incumbent": [
+      "global_const \u00b7 infold",
+      "global_const \u00b7 unconstrained",
+      "pos_const \u00b7 infold",
+      "pos_const \u00b7 unconstrained",
+      "pos_offset \u00b7 unconstrained",
+      "pos_affine \u00b7 unconstrained",
+      "avail_cond \u00b7 infold",
+      "avail_cond \u00b7 unconstrained"
+    ],
+    "arms_refused_by_the_constraints": [
+      "pos_offset \u00b7 unconstrained",
+      "pos_affine \u00b7 unconstrained",
+      "avail_cond \u00b7 infold",
+      "avail_cond \u00b7 unconstrained"
+    ],
+    "remedy": "REACHABLE: at the observed SR (0.717) under the declared field (SR0 0.271), DSR \u2265 0.95 needs ~26 folds vs 13 today. The reachable-now widening (the 2013 board rebuild) is EXHAUSTED; every future season adds one fold, so this is a CALENDAR-bound re-test \u2014 and \u26d4 the field may not be trimmed to lower SR0 (MH2 (a): a family is pre-registered, never discovered).",
+    "wider_window_is_reachable_now": false,
+    "wider_window_note": "NF-B3 IS the wide-window run: 13 folds (2013\u20132025) is the maximal constraint-evaluable window today \u2014 the veteran panel reaches 2007 but merged boards below 2013 do not exist, and the rookie substrate (hence C2's subject) begins at draft class 2016. Any further widening is a new operator precursor, not a property of this data."
+  },
+  "constraint_activity": [
+    {
+      "form": "global_const",
+      "n_folds": 13,
+      "folds_c2_can_act": 9,
+      "active_folds": [
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "folds_c2_structurally_absent": [
+        2013,
+        2014,
+        2015
+      ],
+      "c2_inactive_everywhere": false,
+      "why_inactive": null
+    },
+    {
+      "form": "pos_const",
+      "n_folds": 13,
+      "folds_c2_can_act": 9,
+      "active_folds": [
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "folds_c2_structurally_absent": [
+        2013,
+        2014,
+        2015
+      ],
+      "c2_inactive_everywhere": false,
+      "why_inactive": null
+    },
+    {
+      "form": "pos_offset",
+      "n_folds": 13,
+      "folds_c2_can_act": 9,
+      "active_folds": [
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "folds_c2_structurally_absent": [
+        2013,
+        2014,
+        2015
+      ],
+      "c2_inactive_everywhere": false,
+      "why_inactive": null
+    },
+    {
+      "form": "pos_affine",
+      "n_folds": 13,
+      "folds_c2_can_act": 10,
+      "active_folds": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "folds_c2_structurally_absent": [
+        2013,
+        2014,
+        2015
+      ],
+      "c2_inactive_everywhere": false,
+      "why_inactive": null
+    },
+    {
+      "form": "avail_cond",
+      "n_folds": 13,
+      "folds_c2_can_act": 9,
+      "active_folds": [
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "folds_c2_structurally_absent": [
+        2013,
+        2014,
+        2015
+      ],
+      "c2_inactive_everywhere": false,
+      "why_inactive": null
+    }
+  ],
+  "ceilings_order_by_capacity": true,
+  "ceilings_order_by_capacity_least_squares_fit": false,
+  "family_ceiling_check": {
+    "ok": true,
+    "n_checked": 10,
+    "violations": [],
+    "per_arm": [
+      {
+        "arm": "global_const \u00b7 infold",
+        "form": "global_const",
+        "ceiling_anchor": "oracle_global_const",
+        "ceiling": 49.5452,
+        "arm_metric": 49.7402,
+        "margin": 0.195,
+        "ok": true
+      },
+      {
+        "arm": "global_const \u00b7 unconstrained",
+        "form": "global_const",
+        "ceiling_anchor": "oracle_global_const",
+        "ceiling": 49.5452,
+        "arm_metric": 49.7402,
+        "margin": 0.195,
+        "ok": true
+      },
+      {
+        "arm": "pos_const \u00b7 infold",
+        "form": "pos_const",
+        "ceiling_anchor": "oracle_pos_const",
+        "ceiling": 48.9885,
+        "arm_metric": 49.6817,
+        "margin": 0.6932,
+        "ok": true
+      },
+      {
+        "arm": "pos_const \u00b7 unconstrained",
+        "form": "pos_const",
+        "ceiling_anchor": "oracle_pos_const",
+        "ceiling": 48.9885,
+        "arm_metric": 49.6817,
+        "margin": 0.6932,
+        "ok": true
+      },
+      {
+        "arm": "pos_offset \u00b7 infold",
+        "form": "pos_offset",
+        "ceiling_anchor": "oracle_pos_offset",
+        "ceiling": 48.9508,
+        "arm_metric": 49.9214,
+        "margin": 0.9706,
+        "ok": true
+      },
+      {
+        "arm": "pos_offset \u00b7 unconstrained",
+        "form": "pos_offset",
+        "ceiling_anchor": "oracle_pos_offset",
+        "ceiling": 48.9508,
+        "arm_metric": 49.6423,
+        "margin": 0.6915,
+        "ok": true
+      },
+      {
+        "arm": "pos_affine \u00b7 infold",
+        "form": "pos_affine",
+        "ceiling_anchor": "oracle_pos_affine",
+        "ceiling": 48.5282,
+        "arm_metric": 49.9214,
+        "margin": 1.3932,
+        "ok": true
+      },
+      {
+        "arm": "pos_affine \u00b7 unconstrained",
+        "form": "pos_affine",
+        "ceiling_anchor": "oracle_pos_affine",
+        "ceiling": 48.5282,
+        "arm_metric": 49.6665,
+        "margin": 1.1383,
+        "ok": true
+      },
+      {
+        "arm": "avail_cond \u00b7 infold",
+        "form": "avail_cond",
+        "ceiling_anchor": "oracle_avail_cond",
+        "ceiling": 48.216,
+        "arm_metric": 49.8164,
+        "margin": 1.6004,
+        "ok": true
+      },
+      {
+        "arm": "avail_cond \u00b7 unconstrained",
+        "form": "avail_cond",
+        "ceiling_anchor": "oracle_avail_cond",
+        "ceiling": 48.216,
+        "arm_metric": 49.5122,
+        "margin": 1.2962,
+        "ok": true
+      }
+    ]
+  },
+  "ceiling_table": [
+    {
+      "form": "global_const",
+      "anchor": "oracle_global_const",
+      "ceiling fitted on CRPS \u2b50": 49.5452,
+      "ceiling fitted by least squares": 49.7789
+    },
+    {
+      "form": "pos_const",
+      "anchor": "oracle_pos_const",
+      "ceiling fitted on CRPS \u2b50": 48.9885,
+      "ceiling fitted by least squares": 49.3994
+    },
+    {
+      "form": "pos_offset",
+      "anchor": "oracle_pos_offset",
+      "ceiling fitted on CRPS \u2b50": 48.9508,
+      "ceiling fitted by least squares": 49.0773
+    },
+    {
+      "form": "pos_affine",
+      "anchor": "oracle_pos_affine",
+      "ceiling fitted on CRPS \u2b50": 48.5282,
+      "ceiling fitted by least squares": 50.9142
+    },
+    {
+      "form": "avail_cond",
+      "anchor": "oracle_avail_cond",
+      "ceiling fitted on CRPS \u2b50": 48.216,
+      "ceiling fitted by least squares": 49.2782
+    }
+  ],
+  "leaderboard": [
+    {
+      "arm": "avail_cond \u00b7 unconstrained",
+      "form": "avail_cond",
+      "rule": "unconstrained",
+      "\u03bb (final fold)": 0.5,
+      "CRPS": 49.5122,
+      "MAE": 70.4379,
+      "bias": -4.871,
+      "cov80": 0.859,
+      "universe CRPS": 30.0889,
+      "universe bias": 6.2466,
+      "eligible": false
+    },
+    {
+      "arm": "pos_offset \u00b7 unconstrained",
+      "form": "pos_offset",
+      "rule": "unconstrained",
+      "\u03bb (final fold)": 0.5,
+      "CRPS": 49.6423,
+      "MAE": 71.0207,
+      "bias": -6.2117,
+      "cov80": 0.8028,
+      "universe CRPS": 30.3375,
+      "universe bias": 5.6821,
+      "eligible": false
+    },
+    {
+      "arm": "pos_affine \u00b7 unconstrained",
+      "form": "pos_affine",
+      "rule": "unconstrained",
+      "\u03bb (final fold)": 0.5,
+      "CRPS": 49.6665,
+      "MAE": 71.0416,
+      "bias": -8.0403,
+      "cov80": 0.8432,
+      "universe CRPS": 29.6227,
+      "universe bias": 2.9898,
+      "eligible": false
+    },
+    {
+      "arm": "pos_const \u00b7 infold",
+      "form": "pos_const",
+      "rule": "infold",
+      "\u03bb (final fold)": 0.25,
+      "CRPS": 49.6817,
+      "MAE": 71.0498,
+      "bias": -7.0769,
+      "cov80": 0.8521,
+      "universe CRPS": 29.59,
+      "universe bias": 3.4921,
+      "eligible": true
+    },
+    {
+      "arm": "pos_const \u00b7 unconstrained",
+      "form": "pos_const",
+      "rule": "unconstrained",
+      "\u03bb (final fold)": 0.25,
+      "CRPS": 49.6817,
+      "MAE": 71.0498,
+      "bias": -7.0769,
+      "cov80": 0.8521,
+      "universe CRPS": 29.59,
+      "universe bias": 3.4921,
+      "eligible": true
+    },
+    {
+      "arm": "global_const \u00b7 infold",
+      "form": "global_const",
+      "rule": "infold",
+      "\u03bb (final fold)": 0.25,
+      "CRPS": 49.7402,
+      "MAE": 71.1031,
+      "bias": -5.3809,
+      "cov80": 0.8585,
+      "universe CRPS": 29.6746,
+      "universe bias": 4.1808,
+      "eligible": true
+    },
+    {
+      "arm": "global_const \u00b7 unconstrained",
+      "form": "global_const",
+      "rule": "unconstrained",
+      "\u03bb (final fold)": 0.25,
+      "CRPS": 49.7402,
+      "MAE": 71.1031,
+      "bias": -5.3809,
+      "cov80": 0.8585,
+      "universe CRPS": 29.6746,
+      "universe bias": 4.1808,
+      "eligible": true
+    },
+    {
+      "arm": "avail_cond \u00b7 infold",
+      "form": "avail_cond",
+      "rule": "infold",
+      "\u03bb (final fold)": 0.0,
+      "CRPS": 49.8164,
+      "MAE": 71.4303,
+      "bias": -11.1722,
+      "cov80": 0.8378,
+      "universe CRPS": 29.5087,
+      "universe bias": 1.9235,
+      "eligible": false
+    },
+    {
+      "arm": "incumbent (NULL)",
+      "form": "incumbent",
+      "rule": null,
+      "\u03bb (final fold)": 0.0,
+      "CRPS": 49.9214,
+      "MAE": 71.7011,
+      "bias": -12.8503,
+      "cov80": 0.8333,
+      "universe CRPS": 29.3817,
+      "universe bias": 0.8286,
+      "eligible": true
+    },
+    {
+      "arm": "pos_offset \u00b7 infold",
+      "form": "pos_offset",
+      "rule": "infold",
+      "\u03bb (final fold)": 0.0,
+      "CRPS": 49.9214,
+      "MAE": 71.7011,
+      "bias": -12.8503,
+      "cov80": 0.8333,
+      "universe CRPS": 29.3817,
+      "universe bias": 0.8286,
+      "eligible": true
+    },
+    {
+      "arm": "pos_affine \u00b7 infold",
+      "form": "pos_affine",
+      "rule": "infold",
+      "\u03bb (final fold)": 0.0,
+      "CRPS": 49.9214,
+      "MAE": 71.7011,
+      "bias": -12.8503,
+      "cov80": 0.8333,
+      "universe CRPS": 29.3817,
+      "universe bias": 0.8286,
+      "eligible": true
+    }
+  ],
+  "anchor_table": [
+    {
+      "anchor": "oracle_perplayer",
+      "role": "ceiling",
+      "expected": "beats every real arm",
+      "CRPS": 0.0043,
+      "MAE": 0.0043,
+      "bias": 0.0043,
+      "cov80": 0.9951,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "permuted_across@pos_offset",
+      "role": "permutation",
+      "expected": "loses to every real arm",
+      "CRPS": 50.3175,
+      "MAE": 71.8257,
+      "bias": -0.9509,
+      "cov80": 0.7978,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "permuted_across@pos_const",
+      "role": "permutation",
+      "expected": "loses to every real arm",
+      "CRPS": 52.8248,
+      "MAE": 73.9502,
+      "bias": 25.1071,
+      "cov80": 0.9097,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "permuted_across@pos_affine",
+      "role": "permutation",
+      "expected": "loses to every real arm",
+      "CRPS": 72.639,
+      "MAE": 83.3639,
+      "bias": -12.3605,
+      "cov80": 0.1677,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "permuted_within@pos_offset",
+      "role": "permutation",
+      "expected": "loses to every real arm",
+      "CRPS": 49.7173,
+      "MAE": 70.8655,
+      "bias": -0.6643,
+      "cov80": 0.8141,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "permuted_within@pos_const",
+      "role": "permutation",
+      "expected": "loses to every real arm",
+      "CRPS": 53.2595,
+      "MAE": 74.5655,
+      "bias": 26.6296,
+      "cov80": 0.9112,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "permuted_within@pos_affine",
+      "role": "permutation",
+      "expected": "loses to every real arm",
+      "CRPS": 70.4098,
+      "MAE": 82.008,
+      "bias": -12.354,
+      "cov80": 0.1893,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "zero_project",
+      "role": "degenerate",
+      "expected": "loses to every real arm",
+      "CRPS": 157.9249,
+      "MAE": 157.9249,
+      "bias": -157.9163,
+      "cov80": 0.0705,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "pos_median",
+      "role": "degenerate",
+      "expected": "loses to every real arm",
+      "CRPS": 81.9364,
+      "MAE": 81.9364,
+      "bias": -2.7007,
+      "cov80": 0.0,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "over_scale",
+      "role": "degenerate",
+      "expected": "loses to every real arm",
+      "CRPS": 54.2873,
+      "MAE": 73.8696,
+      "bias": 23.7646,
+      "cov80": 0.8856,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "wide_band",
+      "role": "degenerate",
+      "expected": "loses to every real arm",
+      "CRPS": 63.3477,
+      "MAE": 71.7011,
+      "bias": -12.8503,
+      "cov80": 0.9916,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "oracle_global_const",
+      "role": "ceiling",
+      "expected": "beats every real arm",
+      "CRPS": 49.5452,
+      "MAE": 71.0163,
+      "bias": -4.7789,
+      "cov80": 0.8619,
+      "behaves as expected": false
+    },
+    {
+      "anchor": "oracle_pos_const",
+      "role": "ceiling",
+      "expected": "beats every real arm",
+      "CRPS": 48.9885,
+      "MAE": 70.0068,
+      "bias": -4.7295,
+      "cov80": 0.8693,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "oracle_pos_offset",
+      "role": "ceiling",
+      "expected": "beats every real arm",
+      "CRPS": 48.9508,
+      "MAE": 70.0349,
+      "bias": -4.2627,
+      "cov80": 0.8185,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "oracle_pos_affine",
+      "role": "ceiling",
+      "expected": "beats every real arm",
+      "CRPS": 48.5282,
+      "MAE": 69.5391,
+      "bias": -6.1788,
+      "cov80": 0.8516,
+      "behaves as expected": true
+    },
+    {
+      "anchor": "oracle_avail_cond",
+      "role": "ceiling",
+      "expected": "beats every real arm",
+      "CRPS": 48.216,
+      "MAE": 68.4822,
+      "bias": -4.2865,
+      "cov80": 0.8762,
+      "behaves as expected": true
+    }
+  ],
+  "anchor_constraint_state": [
+    {
+      "anchor": "zero_project",
+      "satisfies C2 on every fold": false,
+      "satisfies C3 on every fold": false,
+      "breaches C2 somewhere": true,
+      "breaches C3 somewhere": true,
+      "per_fold": {
+        "2013": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": false,
+          "rank": null,
+          "incumbent_rank": null,
+          "worst_rank_move": 31.0
+        },
+        "2014": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": false,
+          "rank": null,
+          "incumbent_rank": null,
+          "worst_rank_move": 35.0
+        },
+        "2015": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": false,
+          "rank": null,
+          "incumbent_rank": null,
+          "worst_rank_move": 35.0
+        },
+        "2016": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": false,
+          "rank": 182.0,
+          "incumbent_rank": 636,
+          "worst_rank_move": 31.5
+        },
+        "2017": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 17,
+          "worst_rank_move": 30.5
+        },
+        "2018": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 8,
+          "worst_rank_move": 27.0
+        },
+        "2019": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 22,
+          "worst_rank_move": 30.0
+        },
+        "2020": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 15,
+          "worst_rank_move": 31.0
+        },
+        "2021": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 10,
+          "worst_rank_move": 33.0
+        },
+        "2022": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 31,
+          "worst_rank_move": 31.0
+        },
+        "2023": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 19,
+          "worst_rank_move": 29.0
+        },
+        "2024": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 17,
+          "worst_rank_move": 31.0
+        },
+        "2025": {
+          "c2_placement_ok": false,
+          "c3_coverage_ok": false,
+          "rank": 1.0,
+          "incumbent_rank": 14,
+          "worst_rank_move": 29.5
+        }
+      }
+    },
+    {
+      "anchor": "over_scale",
+      "satisfies C2 on every fold": true,
+      "satisfies C3 on every fold": false,
+      "breaches C2 somewhere": false,
+      "breaches C3 somewhere": true,
+      "per_fold": {
+        "2013": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": false,
+          "rank": null,
+          "incumbent_rank": null,
+          "worst_rank_move": 15.0
+        },
+        "2014": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": false,
+          "rank": null,
+          "incumbent_rank": null,
+          "worst_rank_move": 9.0
+        },
+        "2015": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": null,
+          "incumbent_rank": null,
+          "worst_rank_move": 9.0
+        },
+        "2016": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": false,
+          "rank": 632.0,
+          "incumbent_rank": 636,
+          "worst_rank_move": 8.0
+        },
+        "2017": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": false,
+          "rank": 40.0,
+          "incumbent_rank": 17,
+          "worst_rank_move": 14.0
+        },
+        "2018": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 24.0,
+          "incumbent_rank": 8,
+          "worst_rank_move": 12.0
+        },
+        "2019": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 48.0,
+          "incumbent_rank": 22,
+          "worst_rank_move": 10.0
+        },
+        "2020": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": false,
+          "rank": 31.0,
+          "incumbent_rank": 15,
+          "worst_rank_move": 7.0
+        },
+        "2021": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": false,
+          "rank": 21.0,
+          "incumbent_rank": 10,
+          "worst_rank_move": 13.0
+        },
+        "2022": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 58.0,
+          "incumbent_rank": 31,
+          "worst_rank_move": 9.0
+        },
+        "2023": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 32.0,
+          "incumbent_rank": 19,
+          "worst_rank_move": 8.0
+        },
+        "2024": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 36.0,
+          "incumbent_rank": 17,
+          "worst_rank_move": 5.0
+        },
+        "2025": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 29.0,
+          "incumbent_rank": 14,
+          "worst_rank_move": 3.0
+        }
+      }
+    },
+    {
+      "anchor": "wide_band",
+      "satisfies C2 on every fold": true,
+      "satisfies C3 on every fold": true,
+      "breaches C2 somewhere": false,
+      "breaches C3 somewhere": false,
+      "per_fold": {
+        "2013": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": null,
+          "incumbent_rank": null,
+          "worst_rank_move": 0.0
+        },
+        "2014": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": null,
+          "incumbent_rank": null,
+          "worst_rank_move": 0.0
+        },
+        "2015": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": null,
+          "incumbent_rank": null,
+          "worst_rank_move": 0.0
+        },
+        "2016": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 636.0,
+          "incumbent_rank": 636,
+          "worst_rank_move": 0.0
+        },
+        "2017": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 17.0,
+          "incumbent_rank": 17,
+          "worst_rank_move": 0.0
+        },
+        "2018": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 8.0,
+          "incumbent_rank": 8,
+          "worst_rank_move": 0.0
+        },
+        "2019": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 22.0,
+          "incumbent_rank": 22,
+          "worst_rank_move": 0.0
+        },
+        "2020": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 15.0,
+          "incumbent_rank": 15,
+          "worst_rank_move": 0.0
+        },
+        "2021": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 10.0,
+          "incumbent_rank": 10,
+          "worst_rank_move": 0.0
+        },
+        "2022": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 31.0,
+          "incumbent_rank": 31,
+          "worst_rank_move": 0.0
+        },
+        "2023": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 19.0,
+          "incumbent_rank": 19,
+          "worst_rank_move": 0.0
+        },
+        "2024": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 17.0,
+          "incumbent_rank": 17,
+          "worst_rank_move": 0.0
+        },
+        "2025": {
+          "c2_placement_ok": true,
+          "c3_coverage_ok": true,
+          "rank": 14.0,
+          "incumbent_rank": 14,
+          "worst_rank_move": 0.0
+        }
+      }
+    }
+  ],
+  "c3_cannot_police_magnitude_from_above": {
+    "note": "inherited from NF-C3-REREAD: a proportional over-widen keeps coverage on the corrected band, so over_scale/wide_band can SATISFY C3 \u2014 magnitude policing lives in the METRIC, and both anchors must LOSE it (measured above)",
+    "over_scale_satisfies_c3_everywhere": false,
+    "wide_band_satisfies_c3_everywhere": true,
+    "over_scale_loses_metric": true,
+    "wide_band_loses_metric": true
+  },
+  "constraint_table": [
+    {
+      "arm": "incumbent (NULL)",
+      "holds out (C1\u2227C2\u2227C3)": true,
+      "C2 only": true,
+      "C3 only": true,
+      "failing folds": []
+    },
+    {
+      "arm": "global_const \u00b7 infold",
+      "holds out (C1\u2227C2\u2227C3)": true,
+      "C2 only": true,
+      "C3 only": true,
+      "failing folds": []
+    },
+    {
+      "arm": "global_const \u00b7 unconstrained",
+      "holds out (C1\u2227C2\u2227C3)": true,
+      "C2 only": true,
+      "C3 only": true,
+      "failing folds": []
+    },
+    {
+      "arm": "pos_const \u00b7 infold",
+      "holds out (C1\u2227C2\u2227C3)": true,
+      "C2 only": true,
+      "C3 only": true,
+      "failing folds": []
+    },
+    {
+      "arm": "pos_const \u00b7 unconstrained",
+      "holds out (C1\u2227C2\u2227C3)": true,
+      "C2 only": true,
+      "C3 only": true,
+      "failing folds": []
+    },
+    {
+      "arm": "pos_offset \u00b7 infold",
+      "holds out (C1\u2227C2\u2227C3)": true,
+      "C2 only": true,
+      "C3 only": true,
+      "failing folds": []
+    },
+    {
+      "arm": "pos_offset \u00b7 unconstrained",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": true,
+      "C3 only": false,
+      "failing folds": [
+        2014,
+        2016,
+        2017,
+        2018,
+        2020,
+        2022,
+        2025
+      ]
+    },
+    {
+      "arm": "pos_affine \u00b7 infold",
+      "holds out (C1\u2227C2\u2227C3)": true,
+      "C2 only": true,
+      "C3 only": true,
+      "failing folds": []
+    },
+    {
+      "arm": "pos_affine \u00b7 unconstrained",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": true,
+      "C3 only": false,
+      "failing folds": [
+        2014,
+        2020
+      ]
+    },
+    {
+      "arm": "avail_cond \u00b7 infold",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": true,
+      "C3 only": true,
+      "failing folds": [
+        2017
+      ]
+    },
+    {
+      "arm": "avail_cond \u00b7 unconstrained",
+      "holds out (C1\u2227C2\u2227C3)": false,
+      "C2 only": false,
+      "C3 only": true,
+      "failing folds": [
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021
+      ]
+    }
+  ],
+  "cross_position_table": [
+    {
+      "arm": "global_const \u00b7 infold",
+      "\u03bb": 0.25,
+      "n_board": 786,
+      "median_abs_rank_move": 0.5,
+      "p90_abs_rank_move": 4.0,
+      "max_abs_rank_move": 15.0,
+      "n_moved": 393,
+      "top100_churn": 0,
+      "top100_membership_stable": true,
+      "top10_order_stable": true
+    },
+    {
+      "arm": "global_const \u00b7 unconstrained",
+      "\u03bb": 0.25,
+      "n_board": 786,
+      "median_abs_rank_move": 0.5,
+      "p90_abs_rank_move": 4.0,
+      "max_abs_rank_move": 15.0,
+      "n_moved": 393,
+      "top100_churn": 0,
+      "top100_membership_stable": true,
+      "top10_order_stable": true
+    },
+    {
+      "arm": "pos_const \u00b7 infold",
+      "\u03bb": 0.25,
+      "n_board": 786,
+      "median_abs_rank_move": 2.0,
+      "p90_abs_rank_move": 7.0,
+      "max_abs_rank_move": 16.0,
+      "n_moved": 632,
+      "top100_churn": 1,
+      "top100_membership_stable": false,
+      "top10_order_stable": false
+    },
+    {
+      "arm": "pos_const \u00b7 unconstrained",
+      "\u03bb": 0.25,
+      "n_board": 786,
+      "median_abs_rank_move": 2.0,
+      "p90_abs_rank_move": 7.0,
+      "max_abs_rank_move": 16.0,
+      "n_moved": 632,
+      "top100_churn": 1,
+      "top100_membership_stable": false,
+      "top10_order_stable": false
+    },
+    {
+      "arm": "pos_offset \u00b7 infold",
+      "\u03bb": 0.0,
+      "n_board": 786,
+      "median_abs_rank_move": 0.0,
+      "p90_abs_rank_move": 0.0,
+      "max_abs_rank_move": 0.0,
+      "n_moved": 0,
+      "top100_churn": 0,
+      "top100_membership_stable": true,
+      "top10_order_stable": true
+    },
+    {
+      "arm": "pos_offset \u00b7 unconstrained",
+      "\u03bb": 0.5,
+      "n_board": 786,
+      "median_abs_rank_move": 9.0,
+      "p90_abs_rank_move": 38.0,
+      "max_abs_rank_move": 83.0,
+      "n_moved": 751,
+      "top100_churn": 1,
+      "top100_membership_stable": false,
+      "top10_order_stable": false
+    },
+    {
+      "arm": "pos_affine \u00b7 infold",
+      "\u03bb": 0.0,
+      "n_board": 786,
+      "median_abs_rank_move": 0.0,
+      "p90_abs_rank_move": 0.0,
+      "max_abs_rank_move": 0.0,
+      "n_moved": 0,
+      "top100_churn": 0,
+      "top100_membership_stable": true,
+      "top10_order_stable": true
+    },
+    {
+      "arm": "pos_affine \u00b7 unconstrained",
+      "\u03bb": 0.5,
+      "n_board": 786,
+      "median_abs_rank_move": 12.0,
+      "p90_abs_rank_move": 35.0,
+      "max_abs_rank_move": 123.0,
+      "n_moved": 748,
+      "top100_churn": 1,
+      "top100_membership_stable": false,
+      "top10_order_stable": false
+    },
+    {
+      "arm": "avail_cond \u00b7 infold",
+      "\u03bb": 0.0,
+      "n_board": 786,
+      "median_abs_rank_move": 0.0,
+      "p90_abs_rank_move": 0.0,
+      "max_abs_rank_move": 0.0,
+      "n_moved": 0,
+      "top100_churn": 0,
+      "top100_membership_stable": true,
+      "top10_order_stable": true
+    },
+    {
+      "arm": "avail_cond \u00b7 unconstrained",
+      "\u03bb": 0.5,
+      "n_board": 786,
+      "median_abs_rank_move": 5.0,
+      "p90_abs_rank_move": 31.0,
+      "max_abs_rank_move": 60.0,
+      "n_moved": 731,
+      "top100_churn": 1,
+      "top100_membership_stable": false,
+      "top10_order_stable": false
+    }
+  ],
+  "gate_table": {
+    "ship": false,
+    "framing": "pooled",
+    "has_eligible_winner": true,
+    "recalibrates": true,
+    "beats_incumbent": true,
+    "ordering_ok_every_position": true,
+    "placement_holds_out_every_fold": true,
+    "coverage_floors_hold": true,
+    "pbo_ok": true,
+    "dsr_ok": false,
+    "significant": true
+  },
+  "dsr_margin": {
+    "winner_sr": 0.7172,
+    "expected_max_sr_under_field_sr0": 0.271,
+    "sr_exceeds_sr0": true,
+    "n_trials_in_field": 8,
+    "folds_needed_for_dsr_gate": 26,
+    "folds_available_today": 13,
+    "reading": "REACHABLE: at the observed SR (0.717) under the declared field (SR0 0.271), DSR \u2265 0.95 needs ~26 folds vs 13 today. The reachable-now widening (the 2013 board rebuild) is EXHAUSTED; every future season adds one fold, so this is a CALENDAR-bound re-test \u2014 and \u26d4 the field may not be trimmed to lower SR0 (MH2 (a): a family is pre-registered, never discovered)."
+  },
+  "sensitivities": {
+    "dsr_at_0.0": true,
+    "dsr_removed_would_ship": true,
+    "expanded_field_trials": 36,
+    "note": "the EXPANDED reading counts every constant-\u03bb point as its own trial; the pre-registered field is the RULES (MH2 (a))"
+  },
+  "anchor_table_note": "the anchor table's generic 'beats every real arm' expectation is COARSER than the per-form check for the family ceilings: a RICHER real arm can legitimately beat a COARSER family's peeking ceiling (the NF-D16 (g\u2034) capacity effect \u2014 here avail_cond\u00b7unconstrained beats oracle_global_const). The binding checks are `family_ceiling_check` (no arm beats its OWN form's ceiling) and `ceilings_order_by_capacity`, both PASS.",
+  "registry_action": {
+    "registry": "betting_ml/models/model_family_registry.yaml (NF-G0)",
+    "action": "NONE \u2014 nothing was promoted",
+    "reason": "the pooled gate fails on the whole-field DSR alone, so this is a RECORDED NULL (POWER_LIMITED, calendar-bound re-test). The promotion state machine has no state for a recorded null; a `challenger` entry would misrepresent a non-shipped arm as staged (NF-RECAL1 / NF-D18 / NF-D20 precedent). The record of this story is its ablation memo + the scheduled re-validation trigger in `null.remedy`."
+  },
+  "headline": "RECORDED NULL \u2014 POWER_LIMITED",
+  "verdict_prose": "On the 13-fold wide window (2013\u20132025), tier bias **-12.85 PPR** (n = 2028). Best recalibrating arm: `avail_cond \u00b7 unconstrained` at CRPS 49.5122 vs the incumbent's 49.9214 (9/13 folds). Whole-field DSR `0.8773` (gate \u2265 0.95) \u00b7 PBO(eligible) `0.039` \u00b7 p `0.0119`. Matched-foil reading: **mixed** \u00b7 attribution signature: **level_fix** \u00b7 null state: **POWER_LIMITED**."
+}
