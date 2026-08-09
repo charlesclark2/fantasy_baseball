@@ -192,6 +192,34 @@ test.describe("the free personalized league", () => {
     expectNoPageErrors(errors)
   })
 
+  test("a configured league is never described as 'no league' when scoring fails", async ({
+    page,
+  }) => {
+    // ⭐ THREE FACTS, NOT TWO. `useMyTeams` cannot produce a scored board without the PROJECTIONS
+    // blob, so its `teams` stays null until both reads land. Keying the empty state on that would
+    // tell someone who configured a league last week to go and set one up — every time the
+    // projections read is slow, 404s before the first export, or fails. That is the silent-empty
+    // class (E9.56b) landing on the one screen this whole story exists for.
+    //
+    // Failing the projections read is the deterministic form of the race: my-teams succeeds, the
+    // board cannot be built, and the page must say so.
+    await signIn(page, SIGNED_IN_FREE)
+    const errors = collectPageErrors(page)
+    await mockApi(page, {
+      entitlement: "free",
+      leagues: "one",
+      fail: ["/fantasy/nfl/projections"],
+    })
+    await page.goto("/fantasy/my-league")
+
+    // Neither the "set up your league" prompt…
+    await expect(page.getByTestId("my-league-empty")).toHaveCount(0)
+    // …nor a spinner that never resolves. An honest, bounded statement instead.
+    await expect(page.getByText(/couldn't score your league/i)).toBeVisible()
+    await expect(page.getByText(/your league settings are safe/i)).toBeVisible()
+    expectNoPageErrors(errors)
+  })
+
   test("the activation event does NOT fire on an empty state", async ({ page }) => {
     // ⭐ THE OTHER HALF OF THE ACTIVATION CONTRACT, and the one an implementation naturally gets
     // wrong by firing on mount. A visitor who arrived, saw "set up your league" and left has not

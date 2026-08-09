@@ -843,6 +843,19 @@ const CASES = [
     to: '  const free = freeSelection(manifest) ?? { config: "full_ppr", size: 12 }',
     grep: "manifest has not named a free board yet",
   },
+  {
+    id: "configured-league-reads-as-no-league",
+    shipped: "pre-emptive: telling a user with a saved league to go and set one up",
+    // `useMyTeams` cannot score a board without the PROJECTIONS blob, so its `teams` stays null
+    // until both reads land — collapsing "you have no league" and "we cannot score yours yet" into
+    // one state. Keying the empty state on the scored board is the natural way to write it, and it
+    // fires whenever the projections read is slow, 404s before the first export, or fails.
+    detail: "Keys the empty state on the scored board rather than on the saved-league payload.",
+    file: "components/fantasy/my-league.tsx",
+    from: "      {!teamsLoading && !hasSavedLeague && (",
+    to: "      {!teamsLoading && !league && (",
+    grep: "never described as 'no league' when scoring fails",
+  },
 ]
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.

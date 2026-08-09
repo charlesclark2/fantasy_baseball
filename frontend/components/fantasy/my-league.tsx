@@ -37,6 +37,7 @@ import posthog from "posthog-js"
 import {
   useFantasyBoard,
   useFantasyManifest,
+  useFantasyProjections,
   useMyTeams,
 } from "@/lib/fantasy-queries"
 import { freeSelection } from "@/lib/draft-optimizer"
@@ -142,6 +143,12 @@ function MoverCard({ d }: { d: PlayerDelta }) {
 export function MyLeague() {
   const { data: manifest } = useFantasyManifest()
   const { teams, isLoading: teamsLoading, data: payload } = useMyTeams()
+  // ⚠️ READ DIRECTLY, even though `useMyTeams` consumes it internally: that hook collapses "not
+  // loaded yet" and "could not load" into a single `teams: null`, and those are different things
+  // to tell a user. Without the error flag the loading condition below can never clear and the
+  // page spins forever — a hang, which reads worse than the outage it is hiding. The query is
+  // shared and cached, so this costs no extra request.
+  const { isError: projectionsFailed } = useFantasyProjections()
   const [pos, setPos] = useState("All")
 
   // The FREE preset is the comparison baseline — read from the manifest rather than hardcoded, so
@@ -161,6 +168,19 @@ export function MyLeague() {
   const entry = teams?.[0] ?? null
   const league = entry?.league ?? null
   const leagueBoard = entry?.board?.players ?? null
+
+  // ⭐ "HAS A LEAGUE" MUST COME FROM THE PAYLOAD, NOT FROM THE SCORED BOARD, and this is the one
+  // distinction on the page that a user would actually be hurt by.
+  //
+  // `useMyTeams` returns `teams: null` until BOTH the league read and the PROJECTIONS blob have
+  // landed, because it cannot score a board without the projections. So `entry` being null covers
+  // two completely different facts: "you have not set up a league" and "your league is here, we
+  // just cannot score it yet". Keying the empty state on `league` therefore tells someone who
+  // configured a league last week to go and set one up — the moment the projections read is slow,
+  // 404s before the first export, or fails. That is the silent-empty class (E9.56b) landing on the
+  // single screen this whole story exists for.
+  const savedLeagueCount = payload?.leagues?.length ?? 0
+  const hasSavedLeague = savedLeagueCount > 0
 
   const delta = useMemo(
     () => computeLeagueDelta(genericBoard, leagueBoard),
@@ -218,7 +238,10 @@ export function MyLeague() {
     })
   }, [league, ranked.length, delta])
 
-  const loading = teamsLoading || genericLoading || (!!league && !leagueBoard)
+  // Scoring is still in flight while the payload says a league exists but no board has been
+  // built from it — the honest state is LOADING, never empty.
+  const loading =
+    teamsLoading || genericLoading || (hasSavedLeague && !leagueBoard && !projectionsFailed)
   const withheld = payload?.withheld_by_quota ?? 0
 
   return (
@@ -243,7 +266,7 @@ export function MyLeague() {
       </SurfaceHeader>
 
       {/* ── no league yet ─────────────────────────────────────────────────────────────────────── */}
-      {!teamsLoading && !league && (
+      {!teamsLoading && !hasSavedLeague && (
         <div data-testid="my-league-empty">
           <EmptyBlock title={MY_LEAGUE_EMPTY_TITLE} detail={MY_LEAGUE_EMPTY_DETAIL} />
           <div className="mt-4 flex flex-wrap gap-3">
@@ -264,6 +287,17 @@ export function MyLeague() {
       )}
 
       {loading && <LoadingBlock label="Scoring your league…" />}
+
+      {/* ⚠️ THE THIRD FACT. "You have no league", "your league is being scored" and "we could not
+          reach the projections" are three different things, and only the first two are covered
+          above. Without this branch a failed projections read leaves `loading` true forever and
+          the page spins — which reads as a hang rather than as an outage we know about. */}
+      {hasSavedLeague && !leagueBoard && projectionsFailed && (
+        <EmptyBlock
+          title="We couldn't score your league just now"
+          detail="Your league settings are safe — the projections this board is built from didn't load. Refresh in a moment, or check back shortly."
+        />
+      )}
 
       {league && !loading && (
         <>
