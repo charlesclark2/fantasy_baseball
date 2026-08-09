@@ -557,6 +557,42 @@ class NullVerdict:
     detail: dict = field(default_factory=dict)
 
 
+# ⭐⭐ DSR-CONV (2026-08-08) — THE INSTRUMENT'S REMEDY IS ONLY AS TRUSTWORTHY AS THE `V` IT WAS
+# HANDED. Every DSR-derived verdict below (`DSR_UNREACHABLE`'s "use a smaller field",
+# `POWER_LIMITED`'s "+N folds OR ≤M arms") is computed from `var_trials_sr` via `SR0 = √V·z(N)`. If
+# that `V` was measured over a field CONTAINING its pre-registered lose-by-construction degenerates,
+# it is inflated for a structural reason — a designed loser's consistency is not evidence about how
+# real configurations disperse — and so the remedy prescribes a FIELD TRIM to fix what is actually a
+# CONVENTION defect. That is the third member of the MH2.2 family (the first: `classify_null`
+# prescribing a field below a story's DECLARED minimum; the second: a post-hoc trim reported as if it
+# were a design choice). The cure is provenance: the caller states whether the `V` it handed over was
+# degenerate-excluded, and an UNSTATED provenance is hedged, never assumed clean (NF1.7 (a) — a check
+# that did not run is not a check that passed).
+_V_PROVENANCE_CLEAN = (
+    "`V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction "
+    "degenerates, which remain in `n_trials`), so the field-size reading below is about the "
+    "EVIDENCE.")
+_V_PROVENANCE_INFLATED = (
+    "⛔ **DO NOT QUOTE THIS REMEDY BARE.** The `V` handed to this classifier INCLUDES the "
+    "pre-registered lose-by-construction degenerates, which inflate it for a structural reason "
+    "(`SR0 = √V·z(N)`). The FIRST lever is therefore the DSR-CONV convention — re-measure `V` over "
+    "the non-degenerate arms, keeping `n_trials` at the full declared field — NOT a field trim. "
+    "Re-classify on the degenerate-excluded `V` before treating any field-size trigger as advice.")
+_V_PROVENANCE_UNKNOWN = (
+    "⚠️ The provenance of `V` was NOT stated (`degenerates_excluded_from_v=None`), so this "
+    "classifier cannot tell a DSR-CONV-correct dispersion from one inflated by pre-registered "
+    "degenerates. Treat the field-size reading as UNVERIFIED — establish the provenance and "
+    "re-classify rather than acting on it.")
+
+
+def _v_provenance_note(degenerates_excluded_from_v: bool | None) -> str:
+    if degenerates_excluded_from_v is True:
+        return _V_PROVENANCE_CLEAN
+    if degenerates_excluded_from_v is False:
+        return _V_PROVENANCE_INFLATED
+    return _V_PROVENANCE_UNKNOWN
+
+
 def classify_null(*, metric: str, n_folds: int, n_arms: int,
                   beats_foil: bool, observed_sr: float | None = None,
                   var_trials_sr: float | None = None,
@@ -566,7 +602,9 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
                   mde_sd_units: float | None = None,
                   meaningful_sd_units: float | None = None,
                   skew: float = 0.0, kurt: float = 3.0,
-                  confidence: float = DSR_CONFIDENCE) -> NullVerdict:
+                  confidence: float = DSR_CONFIDENCE,
+                  degenerates_excluded_from_v: bool | None = None,
+                  var_trials_sr_with_degenerates: float | None = None) -> NullVerdict:
     """Classify one recorded null into one of `NULL_STATES`. **Order matters** — each state below is checked before the ones
     that would otherwise absorb it.
 
@@ -585,6 +623,15 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
     n (NF-D15 g″), and `DSR_UNREACHABLE` outranks `POWER_LIMITED` because its remedy is a smaller
     FIELD, not more seasons — reporting it as "needs N more seasons" (which a naive search does) is
     an actively misleading re-test trigger.
+
+    ⭐ **`degenerates_excluded_from_v` (DSR-CONV) states the PROVENANCE of `var_trials_sr`**, because
+    every field-size remedy below is computed from it. Pass `True` when `V` was measured excluding the
+    pre-registered lose-by-construction degenerates (what `dsr_gate`'s binding `var_trials_sr` now
+    is), `False` when they are still in it, and leave it `None` only if you genuinely do not know —
+    an unstated provenance is HEDGED in the remedy text, never assumed clean. `var_trials_sr_with_
+    degenerates` is recorded beside it so the size of the inflation is on the record rather than
+    asserted. None of this changes a STATE — the classification is unchanged for a given `V`; what
+    changes is whether the remedy sentence may be acted on.
     """
     d: dict = {"n_folds": int(n_folds), "n_arms": int(n_arms)}
 
@@ -627,7 +674,15 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
         # normal-moment world while the gate it is classifying used the real ones — the two then
         # disagree about whether a metric is DSR-reachable, which is the whole verdict.
         sr0 = dsr_benchmark_sr0(int(n_arms), float(var_trials_sr))
-        d.update({"observed_sr": round(float(observed_sr), 4), "sr0": round(sr0, 4)})
+        d.update({"observed_sr": round(float(observed_sr), 4), "sr0": round(sr0, 4),
+                  "var_trials_sr": float(var_trials_sr),
+                  "degenerates_excluded_from_v": degenerates_excluded_from_v})
+        v_note = _v_provenance_note(degenerates_excluded_from_v)
+        if var_trials_sr_with_degenerates is not None:
+            d["var_trials_sr_with_degenerates"] = float(var_trials_sr_with_degenerates)
+            d["v_inflation_factor_from_degenerates"] = (
+                round(float(var_trials_sr_with_degenerates) / float(var_trials_sr), 4)
+                if float(var_trials_sr) > 0 else None)
         need = folds_to_clear_dsr(observed_sr=float(observed_sr), n_trials=int(n_arms),
                                   var_trials_sr=float(var_trials_sr), skew=skew, kurt=kurt,
                                   confidence=confidence)
@@ -639,12 +694,15 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
                 f"`{metric}`: the winner's per-fold Sharpe {observed_sr:.3f} sits at or BELOW the "
                 f"{n_arms}-arm field's deflated benchmark SR0 {sr0:.3f}, so DSR is unreachable at "
                 f"ANY fold count — `n` scales a positive gap, it cannot create one. The remedy is a "
-                f"SMALLER, pre-registered field, not more seasons."),
-                retest_trigger=(f"re-run the mechanism in a field of ≤{max_field} arms"
-                                if max_field >= 2 else
-                                "NOT rescuable by field size either — even a 2-arm field does not "
-                                "clear at this fold count and dispersion, so the only lever left "
-                                "is a lower-variance design (more rows per fold / a sharper metric)"),
+                f"SMALLER, pre-registered field, not more seasons. {v_note}"),
+                retest_trigger=(
+                    (f"re-run the mechanism in a field of ≤{max_field} arms"
+                     if max_field >= 2 else
+                     "NOT rescuable by field size either — even a 2-arm field does not "
+                     "clear at this fold count and dispersion, so the only lever left "
+                     "is a lower-variance design (more rows per fold / a sharper metric)")
+                    + ("" if degenerates_excluded_from_v is True
+                       else f" — ⚠️ BUT FIRST: {v_note}")),
                 folds_have=int(n_folds), max_field_size=max_field, detail=d)
         if need > int(n_folds):
             # ⚠️ Stated in FOLDS, never translated to seasons here. The fold RULE differs per tier
@@ -656,11 +714,13 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
             return NullVerdict("POWER_LIMITED", (
                 f"`{metric}`: the effect is positive and every gate is REACHABLE, but this design "
                 f"cannot resolve it — DSR alone needs {need} folds against {n_folds} (the BH-FDR "
-                f"requirement is separate and may be larger)."),
+                f"requirement is separate and may be larger). {v_note}"),
                 retest_trigger=(f"+{need - int(n_folds)} folds for the DSR gate"
                                 + (f", OR a field of ≤{max_field} arms at the CURRENT fold count"
                                    if max_field >= 2 else
-                                   " — field size alone cannot rescue it at this dispersion")),
+                                   " — field size alone cannot rescue it at this dispersion")
+                                + ("" if degenerates_excluded_from_v is True
+                                   else f" — ⚠️ BUT FIRST: {v_note}")),
                 folds_have=int(n_folds), folds_needed=need,
                 extra_seasons=need - int(n_folds), max_field_size=max_field, detail=d)
 
