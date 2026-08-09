@@ -77,20 +77,49 @@ test.describe("the free personalized league", () => {
     await openMyLeague(page)
     await expect(page.getByTestId("league-delta")).toBeVisible()
 
-    // ⭐ THE ASSERTION A SIGN ERROR CANNOT SURVIVE, and the reason the fixture league is a
-    // superflex/TE-premium 10-teamer rather than something close to full-PPR/12: a "riser" must
-    // carry an UP marker and a "faller" a DOWN one. Reversing `ovrDelta`'s subtraction swaps every
-    // arrow while leaving the page otherwise identical — no error, no blank, nothing to notice.
     const risers = page.locator('[data-testid="risers"] [data-testid="mover-card"]')
     const fallers = page.locator('[data-testid="fallers"] [data-testid="mover-card"]')
     expect(await risers.count(), "no risers — the delta computed nothing").toBeGreaterThan(0)
     expect(await fallers.count(), "no fallers — the delta computed nothing").toBeGreaterThan(0)
 
-    for (const chip of await risers.locator('[data-testid="move-chip"]').allTextContents()) {
-      expect(chip, "a RISER rendered a downward marker — the rank delta's sign is inverted").toContain("▲")
+    // ⭐⭐ THE ANCHOR MUST BE A QUANTITY THE DELTA'S SIGN DOES NOT PRODUCE.
+    //
+    // The first cut asserted that every card in `risers` carried a "▲", and the red-proof harness
+    // caught it as a TAUTOLOGY: the list MEMBERSHIP and the arrow both derive from `ovrDelta`, so
+    // inverting the subtraction moves each player into the other list AND flips their arrow —
+    // perfectly self-consistent, and the assertion passes on the exact defect it was written for.
+    // (The NF-C0e "reading a value back under the key the code wrote" shape.)
+    //
+    // The card's OVERALL RANK PAIR ("#128 → #34") is the independent quantity: both numbers are
+    // read straight off the two boards, so inverting the rank subtraction changes WHICH players
+    // appear in each block but cannot change the numbers on their cards. A "riser" whose rank got
+    // BIGGER is then a visible contradiction.
+    //
+    // ⚠️ Asserted per card, not on an aggregate. Rank is exact here — there is no averaging to do
+    // and no player who can legitimately buck it: `ovrDelta > 0` means precisely
+    // `genericOvrRank > leagueOvrRank`, so every single riser card must show a decrease.
+    const rankMoves = async (block: typeof risers, label: string) => {
+      const out: { from: number; to: number }[] = []
+      for (const text of await block.locator('[data-testid="ovr-rank-move"]').allTextContents()) {
+        const m = text.match(/#(\d+)\s*→\s*#(\d+)/)
+        if (m) out.push({ from: Number(m[1]), to: Number(m[2]) })
+      }
+      expect(out.length, `no ${label} card rendered an overall-rank pair — the anchor is missing`)
+        .toBeGreaterThan(0)
+      return out
     }
-    for (const chip of await fallers.locator('[data-testid="move-chip"]').allTextContents()) {
-      expect(chip, "a FALLER rendered an upward marker — the rank delta's sign is inverted").toContain("▼")
+
+    for (const { from, to } of await rankMoves(risers, "riser")) {
+      expect(
+        to,
+        `a RISER moved from #${from} to #${to} — a worse rank. The rank delta's sign is inverted.`,
+      ).toBeLessThan(from)
+    }
+    for (const { from, to } of await rankMoves(fallers, "faller")) {
+      expect(
+        to,
+        `a FALLER moved from #${from} to #${to} — a better rank. The rank delta's sign is inverted.`,
+      ).toBeGreaterThan(from)
     }
 
     // The summary counts something, and the count is bounded by what was compared — a delta that

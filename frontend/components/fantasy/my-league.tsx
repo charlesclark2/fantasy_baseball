@@ -122,8 +122,17 @@ function MoverCard({ d }: { d: PlayerDelta }) {
           {d.leaguePosRank}
         </span>
       </div>
-      <div className="mt-1 text-[11px] text-gray-600">
-        {signed(d.ovrDelta)} overall
+      {/* ⭐ THE OVERALL RANKS THEMSELVES, not just the size of the move. Two reasons, and the
+          second is why it is written this way round:
+          (a) "#128 → #34" is concrete in a way "+94 overall" is not — it says where he actually
+              sits on the board the reader is about to scroll;
+          (b) these two numbers come from the BOARDS, whereas the arrow above comes from `ovrDelta`.
+              That makes them the independent quantity a test can anchor on: inverting the rank
+              subtraction swaps which players appear here but cannot change these ranks, so a sign
+              error becomes visible as a "riser" whose number got bigger. The first version of the
+              spec asserted on the arrow and was a tautology (see `free-league.spec.ts`). */}
+      <div className="mt-1 text-[11px] text-gray-600" data-testid="ovr-rank-move">
+        #{d.genericOvrRank ?? "—"} → #{d.leagueOvrRank}
         {d.vorDelta != null && <> · {signed(d.vorDelta, 1)} value</>}
       </div>
     </li>
