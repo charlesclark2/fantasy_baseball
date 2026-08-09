@@ -214,6 +214,36 @@ rather than decline to headline it.
 12-team/20-spot one. A hardcoded "top 200" would be a different, wrong answer for most leagues and
 would stop scaling the moment someone imports a 14-team dynasty.
 
+### 7.1b …and then four defenses led the list anyway
+
+The pool fixed *which part of the board* the highlights come from and did nothing about this,
+because **K and D/ST sit comfortably inside any real draft pool**. On the operator's league the top
+five movers were CLE, KC, NE and GB defenses.
+
+The arithmetic: there are ~32 of each and their projections sit in a **near-flat band**, so any
+difference in a league's K/DST scoring reorders the whole position *at once* — and because the band
+sits deep in the overall list, a one-tier shuffle there is worth dozens of overall places. Every one
+of those places is noise (held-out rank correlation ~0.32 for DST, ~0.23 among startable kickers).
+
+⭐ **But the decisive argument is internal consistency, not noise.** The section directly beneath the
+highlights — *"why those players moved"* — is computed over `SKILL_POSITIONS` only. So the page could
+headline a mover it **structurally could not explain**: a D/ST leaping 40 places, above a
+replacement-level table that does not mention D/ST. Explanation is the entire reason this screen
+exists ("surfaced, not asserted"), and a headline with no available explanation is exactly the
+assertion it was built to avoid.
+
+This is the same rule `draft-optimizer.positionTierMap` already applies for the same stated reason
+("a tier break inside a near-flat/noisy field is not a real signal"), so the two surfaces now agree.
+⛔ K and DST keep their board rows, VOR and move column — they simply cannot **lead**.
+
+⚠️ Kept as a **predicate separate from `draftable`** rather than folded into one `eligible` flag:
+they are different disqualifications with different reasons, and a clause you cannot isolate is a
+clause you cannot prove (NF-D17 — a fixture that trips two clauses proves neither).
+
+⚠️ And the summary sentence had to move with it. Both exclusions now appear in the copy, because
+"**14** of **131**" printed under a note reading "the top **160**" is a discrepancy a careful reader
+will spot and be right to distrust.
+
 ### 7.2 The board was one unbroken run of several hundred rows
 
 Paged with the shared `Pagination` (Track Record's). Two failure modes that look normal and are not:
@@ -257,10 +287,15 @@ route is the conversion the funnel exists for.
 
 | Layer | Instrument | Result |
 |---|---|---|
-| The pool arithmetic, the pager, both create paths | `frontend/e2e/specs/free-league.spec.ts` (+9) | **19 pass** |
-| Whole frontend suite | `npx playwright test` | **142 pass** (was 133) |
-| Every new clause is falsifiable | `frontend/e2e/red-proof.mjs` (+7 cases) | **6 RED, 1 declared not-observable** |
+| The pool arithmetic, the K/DST rule, the pager, both create paths | `frontend/e2e/specs/free-league.spec.ts` (+11) | **21 pass** |
+| Whole frontend suite | `npx playwright test` | **144 pass** (was 133) |
+| Every new clause is falsifiable | `frontend/e2e/red-proof.mjs` (+8 cases) | **7 RED, 1 declared not-observable** |
 | Backend untouched, boundary still holds | `test_g100_c1_free_league.py` + `test_freemium_tier.py` + `test_e9_56c_cta_routes.py` | **127 pass** |
+
+⭐ **The K/DST red proof did a second job.** Removing the exclusion turned the spec RED, which is
+what proves the assertion is not vacuous *on this fixture* — i.e. the synthetic boards reproduce the
+operator's live symptom rather than merely failing to contradict it. A new test that passes because
+its fixture cannot produce the defect is the most convincing kind of dead coverage.
 
 ⭐ **The declared-GREEN case is the honest one.** "A filter change never empties the table" is
 delivered by **two** independent mechanisms — the tab handler resets the page, and the render clamps
