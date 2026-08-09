@@ -134,10 +134,16 @@ def main(argv=None) -> int:
                     help="snapshot season (default 2024 — the latest gated season)")
     ap.add_argument("--half", type=int, choices=(1, 2), default=None,
                     help="restrict to one half-season block (default: both)")
+    ap.add_argument("--all-gated", action="store_true",
+                    help="snapshot EVERY gated season (2019–2024, all 12 blocks) — the "
+                         "full-history model-side reference (~30 min)")
     args = ap.parse_args(argv)
 
     feat, _ = build_matrix_w2b(SEASONS)
-    blocks = tuple((args.season, h) for h in ((args.half,) if args.half else (1, 2)))
+    if args.all_gated:
+        blocks = W2B.TEST_BLOCKS_W2B
+    else:
+        blocks = tuple((args.season, h) for h in ((args.half,) if args.half else (1, 2)))
     folds = W2.build_folds_w2(feat, blocks)
     if not folds:
         raise SystemExit(f"no test rows for blocks {blocks}")
@@ -145,7 +151,10 @@ def main(argv=None) -> int:
              args.season, len(folds), [f.label for f in folds])
 
     snap = pd.concat([snapshot_fold(f, feat) for f in folds], ignore_index=True)
-    tag = f"{args.season}" + (f"H{args.half}" if args.half else "")
+    if args.all_gated:
+        tag = f"{blocks[0][0]}_{blocks[-1][0]}"
+    else:
+        tag = f"{args.season}" + (f"H{args.half}" if args.half else "")
     _ARTIFACTS.mkdir(parents=True, exist_ok=True)
     pq = _ARTIFACTS / f"nf_w2b_projection_snapshot_{tag}.parquet"
     snap.to_parquet(pq, index=False)
