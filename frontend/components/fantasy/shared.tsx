@@ -10,7 +10,8 @@
 // place that framing is written down; keep new copy inside it.
 
 import { useId, useState } from "react"
-import { Info } from "lucide-react"
+import Link from "next/link"
+import { Info, Lock } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Picker } from "@/components/ui/picker"
 import type { LeagueConfigMeta, Manifest } from "@/lib/draft-optimizer"
@@ -1053,6 +1054,54 @@ export function AdpDelta({ delta }: { delta: number | null }) {
     <span className={rounded > 0 ? "text-emerald-400" : "text-rose-400"}>
       {rounded > 0 ? `+${rounded}` : rounded}
     </span>
+  )
+}
+
+// ══ G100-C1 — THE ONE-LEAGUE BOUNDARY, STATED AT THE CONTROL ═════════════════════════════════════
+//
+// ⭐ WHY THIS IS A SHARED COMPONENT AND NOT A BLOCK OF JSX IN EACH EDITOR. There are TWO ways to
+// create a league — the manual editor and platform import — and the first cut gated only the editor.
+// So a free account at its quota was refused by the form and waved through by the importer, right up
+// to a 409 it met after choosing a platform, typing a username, waiting on a preview and pressing
+// Save. That is the freemium build's own lesson recurring (#681 gated one of three renderers and
+// looked done): the tier is enforced by WHICH COMPONENT RENDERS, so the boundary has to be one
+// component that every create path shows.
+//
+// ⭐ THE UPGRADE CTA IS BUILT IN, DELIBERATELY. A limit with no way past it is a dead end, and the
+// way past it is the conversion this whole funnel exists for. Making it part of the notice means a
+// third create path cannot ship the refusal without the offer — the failure mode a per-call-site
+// `<Link>` invites.
+export function LeagueQuotaNotice({
+  title,
+  detail,
+  action,
+  testId = "league-quota-notice",
+}: {
+  title: string
+  detail: string
+  /** An escape hatch that does NOT cost money — "edit the league you have", "re-import this one".
+   *  Rendered before the upgrade so the free path is offered first. */
+  action?: React.ReactNode
+  testId?: string
+}) {
+  return (
+    <div
+      className="rounded border border-[#262626] bg-[#0f0f0f] p-3 text-xs leading-relaxed"
+      data-testid={testId}
+    >
+      <p className="font-medium text-gray-200">{title}</p>
+      <p className="mt-1 text-gray-500">{detail}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        {action}
+        <Link
+          href={SUBSCRIBE_HREF}
+          className="inline-flex items-center gap-1.5 rounded border border-[#10b981]/40 bg-[#10b981]/10 px-2.5 py-1 font-semibold text-[#10b981] transition-colors hover:bg-[#10b981]/20"
+          data-testid="league-quota-upgrade"
+        >
+          <Lock className="h-3 w-3" /> Become a member for more leagues
+        </Link>
+      </div>
+    </div>
   )
 }
 

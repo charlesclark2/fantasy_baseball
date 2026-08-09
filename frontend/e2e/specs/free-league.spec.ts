@@ -34,14 +34,34 @@ const SIGNED_IN_FREE = { groups: [] as string[] }
 /** Every spec here needs the same three things: a session, the API, and no third-party traffic. */
 async function openMyLeague(
   page: Page,
-  options: { leagues?: "none" | "one" | "overQuota"; groups?: string[] } = {},
+  options: {
+    leagues?: "none" | "one" | "overQuota"
+    groups?: string[]
+    /** Rewrite a payload before it is served — how the pool tests below change the league's ROSTER
+     *  without a second fixture, so the arithmetic is exercised on more than one shape. */
+    transform?: (pathname: string, body: any) => any
+  } = {},
 ) {
   await signIn(page, { groups: options.groups ?? SIGNED_IN_FREE.groups })
   const errors = collectPageErrors(page)
-  const mock = await mockApi(page, { entitlement: "free", leagues: options.leagues ?? "one" })
+  const mock = await mockApi(page, {
+    entitlement: "free",
+    leagues: options.leagues ?? "one",
+    transform: options.transform,
+  })
   const events = await captureAnalytics(page)
   await page.goto("/fantasy/my-league")
   return { errors, mock, events }
+}
+
+/** Replace the saved league's roster/size — the two inputs to the draft pool. */
+function withLeague(patch: Record<string, unknown>) {
+  return (pathname: string, body: any) => {
+    if (pathname === "/fantasy/nfl/my-teams" && body?.leagues?.[0]) {
+      body.leagues[0] = { ...body.leagues[0], ...patch }
+    }
+    return body
+  }
 }
 
 test.describe("the free personalized league", () => {
@@ -314,5 +334,195 @@ test.describe("the free personalized league", () => {
         `${href} was offered to a logged-out visitor, who cannot use it`,
       ).toBe(0)
     }
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+// G100-C1 FOLLOW-UP — the three defects the first real league surfaced (operator, 2026-08-08)
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+//
+// Every one of these was invisible to the suite above and visible in the first ten seconds of using
+// the page, which is worth recording: the original spec proved the delta was CORRECT and never asked
+// whether it was USEFUL, whether the table below it was navigable, or whether the second create path
+// enforced the same limit as the first.
+
+test.describe("the draftable pool bounds the highlights", () => {
+  test("the pool states its own arithmetic, and counts bench spots", async ({ page }) => {
+    const { errors } = await openMyLeague(page)
+    await expect(page.getByTestId("league-delta")).toBeVisible()
+
+    // 10 teams × 16 drafted spots (QB1 RB2 WR2 TE2 SF1 K1 DST1 + 6 bench). Bench IS drafted, and
+    // that is the point of the number: a last-round bench pick is exactly the "does my scoring make
+    // him worth a pick?" call this screen should be able to speak to.
+    await expect(page.getByTestId("delta-pool-note")).toContainText("10 teams × 16")
+    await expect(page.getByTestId("delta-pool-note")).toContainText("the top 160")
+    expectNoPageErrors(errors)
+  })
+
+  test("IR and taxi spots are not draft picks, so they do not widen the pool", async ({ page }) => {
+    // ⚠️ ISOLATING: the ONLY change from the test above is three IR spots and two taxi spots. If the
+    // exclusion is dropped the pool becomes 10 × 21 = 210 and both assertions move together, so this
+    // case can only fail for the reason it names. The default fixture has no reserve slots at all —
+    // which is exactly why an inclusion bug would have shipped invisibly.
+    const { errors } = await openMyLeague(page, {
+      transform: withLeague({
+        roster: [
+          { name: "QB", count: 1, eligible: ["QB"], bench: false },
+          { name: "RB", count: 2, eligible: ["RB"], bench: false },
+          { name: "WR", count: 2, eligible: ["WR"], bench: false },
+          { name: "TE", count: 2, eligible: ["TE"], bench: false },
+          { name: "SUPERFLEX", count: 1, eligible: ["QB", "RB", "WR", "TE"], bench: false },
+          { name: "K", count: 1, eligible: ["K"], bench: false },
+          { name: "DST", count: 1, eligible: ["DST"], bench: false },
+          { name: "BENCH", count: 6, eligible: [], bench: true },
+          { name: "IR", count: 3, eligible: [], bench: true },
+          { name: "TAXI", count: 2, eligible: [], bench: true },
+        ],
+      }),
+    })
+    await expect(page.getByTestId("delta-pool-note")).toContainText("10 teams × 16")
+    await expect(page.getByTestId("delta-pool-note")).toContainText("the top 160")
+    expectNoPageErrors(errors)
+  })
+
+  test("shrinking the pool shrinks the highlights — the filter actually gates them", async ({
+    page,
+  }) => {
+    // ⭐ THE DIFFERENTIAL, and the only assertion here that proves the pool REACHES the highlight
+    // lists rather than merely being computed and rendered. A 4-team league with one starter and no
+    // bench drafts four players; five risers and five fallers cannot come out of four players.
+    //
+    // Stated as a comparison rather than an absolute count because the absolute is a property of
+    // the fixture's numbers, while "a smaller pool yields no more highlights" is a property of the
+    // CODE — the distinction the repo keeps relearning about assertions that inherit their
+    // artifact's incidentals.
+    const wide = await openMyLeague(page)
+    await expect(page.getByTestId("league-delta")).toBeVisible()
+    const wideCards = await page.getByTestId("mover-card").count()
+    expect(wideCards, "the default league produced no highlights to compare against").toBeGreaterThan(0)
+    expectNoPageErrors(wide.errors)
+
+    const narrow = await openMyLeague(page, {
+      transform: withLeague({
+        n_teams: 4,
+        roster: [{ name: "QB", count: 1, eligible: ["QB"], bench: false }],
+      }),
+    })
+    await expect(page.getByTestId("delta-pool-note")).toContainText("the top 4")
+    expect(
+      await page.getByTestId("mover-card").count(),
+      "a 4-player draft pool still produced as many highlights as a 160-player one",
+    ).toBeLessThan(wideCards)
+    expectNoPageErrors(narrow.errors)
+  })
+
+  test("the board below still carries every player, and their moves", async ({ page }) => {
+    // The pool bounds the HIGHLIGHTS, never the data. Filtering the board itself would blank the
+    // "vs free board" column for most rows — hiding a real number rather than declining to lead
+    // with it.
+    const { errors } = await openMyLeague(page)
+    await expect(page.getByTestId("my-league-board")).toBeVisible()
+    const total = Number(
+      (await page.getByText(/\d+–\d+ of [\d,]+/).first().textContent())
+        ?.split("of")[1]
+        ?.replace(/[^\d]/g, "") ?? 0,
+    )
+    expect(total, "the board was truncated to the draft pool").toBeGreaterThan(160)
+    expectNoPageErrors(errors)
+  })
+})
+
+test.describe("the board is paged", () => {
+  test("a page holds one page of rows, and the numbering continues across pages", async ({
+    page,
+  }) => {
+    const { errors } = await openMyLeague(page)
+    await expect(page.getByTestId("my-league-board")).toBeVisible()
+
+    const rows = page.locator('[data-testid="my-league-board"] tbody tr')
+    await expect(rows).toHaveCount(50)
+    await expect(rows.first().locator("td").first()).toHaveText("1")
+
+    await page.getByRole("button", { name: "Next" }).first().click()
+    // ⚠️ THE ASSERTION THAT MATTERS. A bare `i + 1` renders "1" at the top of every page, and the
+    // row number silently stops meaning rank and starts meaning position-on-screen. It looks
+    // completely normal.
+    await expect(rows.first().locator("td").first()).toHaveText("51")
+    expectNoPageErrors(errors)
+  })
+
+  test("changing position while deep in the pages never shows an empty table", async ({ page }) => {
+    // The classic paging bug: the filter shrinks the row count and the page index is left pointing
+    // past the end, so the table renders EMPTY — which reads as "you have no TEs" rather than "you
+    // are on page 9 of 2".
+    const { errors } = await openMyLeague(page)
+    await expect(page.getByTestId("my-league-board")).toBeVisible()
+
+    await page.getByRole("button", { name: "»" }).first().click()
+    await page.getByRole("button", { name: "TE", exact: true }).click()
+
+    const rows = page.locator('[data-testid="my-league-board"] tbody tr')
+    expect(await rows.count(), "the table was empty after filtering from a late page").toBeGreaterThan(0)
+    expectNoPageErrors(errors)
+  })
+})
+
+test.describe("the one-league quota is enforced on BOTH create paths", () => {
+  /** Open a surface as a signed-in free account with `n` leagues already saved. */
+  async function open(page: Page, path: string, leagues: "none" | "one") {
+    await signIn(page, { groups: [] })
+    const errors = collectPageErrors(page)
+    await mockApi(page, { entitlement: "free", leagues })
+    await page.goto(path)
+    return { errors }
+  }
+
+  test("import: a SECOND league cannot be chosen, and the way out is offered", async ({ page }) => {
+    // ⭐ THE DEFECT. The manual editor refused a second league from the first cut; the IMPORTER did
+    // not, so a free account at its quota could pick a platform, type a username, wait on a preview
+    // and press Save before meeting a 409. The tier is enforced by WHICH COMPONENT RENDERS — this
+    // is the freemium build's own lesson (#681 gated one of three renderers) recurring on the two
+    // create paths.
+    const { errors } = await open(page, "/fantasy/import", "one")
+
+    await page.getByPlaceholder("Paste your Sleeper league ID").fill("e2e-tester")
+    await page.getByRole("button", { name: "Import", exact: true }).click()
+
+    await expect(page.getByTestId("league-quota-notice")).toBeVisible()
+    // Two rows, and they must behave DIFFERENTLY — one saved (re-import = update, allowed), one new.
+    await expect(page.getByTestId("import-league-locked")).toHaveCount(1)
+    await expect(page.getByTestId("import-league-locked")).toBeDisabled()
+    await expect(page.getByTestId("import-league-option")).toHaveCount(1)
+    await expect(page.getByTestId("import-league-option")).toBeEnabled()
+    expectNoPageErrors(errors)
+  })
+
+  test("import: with no league saved, nothing is locked", async ({ page }) => {
+    // The other side of the same clause. Without this, "lock everything always" passes the test
+    // above — and the free tier's one league would be unreachable.
+    const { errors } = await open(page, "/fantasy/import", "none")
+
+    await page.getByPlaceholder("Paste your Sleeper league ID").fill("e2e-tester")
+    await page.getByRole("button", { name: "Import", exact: true }).click()
+
+    await expect(page.getByTestId("import-league-option")).toHaveCount(2)
+    await expect(page.getByTestId("league-quota-notice")).toHaveCount(0)
+    expectNoPageErrors(errors)
+  })
+
+  test("the refusal always carries a way to lift it", async ({ page }) => {
+    // ⭐ A limit with no way past it is a dead end, and the way past it is the conversion this whole
+    // funnel exists for. The CTA lives INSIDE `LeagueQuotaNotice` precisely so a third create path
+    // cannot ship the refusal without the offer.
+    const { errors } = await open(page, "/fantasy/league-settings", "one")
+    // The editor opens on the league you already have (returning users land on their own settings),
+    // so the refusal is met the moment you ask for a SECOND one — which is the honest trigger, and
+    // the reason `atQuota` is keyed on `leagueId === null` rather than on the saved count alone.
+    await page.getByRole("button", { name: "New league" }).click()
+    await expect(page.getByTestId("league-quota-notice")).toBeVisible()
+    const cta = page.getByTestId("league-quota-upgrade")
+    await expect(cta).toBeVisible()
+    await expect(cta).toHaveAttribute("href", "/subscribe")
+    expectNoPageErrors(errors)
   })
 })

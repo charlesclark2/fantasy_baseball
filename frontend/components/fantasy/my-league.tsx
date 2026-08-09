@@ -47,6 +47,8 @@ import {
   MEANINGFUL_MOVE,
   computeLeagueDelta,
   computePositionShifts,
+  draftablePoolSize,
+  draftedSlotsPerTeam,
 } from "@/lib/league-delta"
 import type { PlayerDelta } from "@/lib/league-delta"
 import {
@@ -63,10 +65,13 @@ import {
 } from "@/lib/fantasy-claim-copy"
 import {
   ALL_POSITIONS,
+  ALL_ROWS,
   EmptyBlock,
   GLOSSARY,
   InfoTip,
   LoadingBlock,
+  PAGE_SIZES,
+  Pagination,
   PosBadge,
   PositionTabs,
   ProvenanceLine,
@@ -182,9 +187,15 @@ export function MyLeague() {
   const savedLeagueCount = payload?.leagues?.length ?? 0
   const hasSavedLeague = savedLeagueCount > 0
 
+  // ⭐ THE HIGHLIGHT POPULATION. Sized from the league's OWN settings (teams × drafted slots), so a
+  // 10-team/10-round league and a 12-team/15-round one get different, correct answers off the same
+  // board. See `draftablePoolSize` for why a highlight list unbounded by this is structurally junk.
+  const pool = useMemo(() => draftablePoolSize(league), [league])
+  const draftedSlots = useMemo(() => draftedSlotsPerTeam(league), [league])
+
   const delta = useMemo(
-    () => computeLeagueDelta(genericBoard, leagueBoard),
-    [genericBoard, leagueBoard],
+    () => computeLeagueDelta(genericBoard, leagueBoard, pool),
+    [genericBoard, leagueBoard, pool],
   )
   const shifts = useMemo(
     () => computePositionShifts(genericBoard, leagueBoard, SKILL_POSITIONS),
@@ -209,6 +220,39 @@ export function MyLeague() {
       .map((p) => ({ player: p, d: byId.get(p.id) ?? null }))
   }, [ranked, pos, delta])
 
+  // ── PAGINATION ────────────────────────────────────────────────────────────────────────────────
+  //
+  // The board is the whole ranked player pool — several hundred rows — and rendering it in one
+  // unbroken table buried the notes beneath it and made the page expensive to scroll on a phone.
+  // Reuses the shared `Pagination` rather than a local one so the control behaves identically to
+  // Track Record's.
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZES[1])
+
+  // ⚠️ CLAMP, DO NOT JUST RESET. Switching the position tab shrinks the row count, and a page index
+  // left pointing past the new end renders an EMPTY table with no explanation — which reads as "we
+  // have no TEs" rather than "you are on page 9 of 2". Clamping during render (rather than in an
+  // effect) means there is never a frame showing the empty state.
+  const pageCount = pageSize === ALL_ROWS ? 1 : Math.max(1, Math.ceil(rows.length / pageSize))
+  const safePage = Math.min(page, pageCount - 1)
+  const visibleRows = useMemo(
+    () =>
+      pageSize === ALL_ROWS
+        ? rows
+        : rows.slice(safePage * pageSize, safePage * pageSize + pageSize),
+    [rows, safePage, pageSize],
+  )
+
+  // Scoring is still in flight while the payload says a league exists but no board has been
+  // built from it — the honest state is LOADING, never empty.
+  //
+  // ⚠️ DECLARED ABOVE THE ACTIVATION EFFECT ON PURPOSE: the effect's dependency array is evaluated
+  // where it is written, so a `loading` declared below it would be a temporal-dead-zone
+  // ReferenceError rather than a stale read.
+  const loading =
+    teamsLoading || genericLoading || (hasSavedLeague && !leagueBoard && !projectionsFailed)
+  const withheld = payload?.withheld_by_quota ?? 0
+
   // ── THE ACTIVATION EVENT ──────────────────────────────────────────────────────────────────────
   //
   // `custom_board_viewed` is the third clause of G100-C1's activation definition
@@ -223,9 +267,16 @@ export function MyLeague() {
   //
   // The ref makes it once-per-mount: this component re-renders on every position-tab click, and a
   // per-render capture would multiply one activation by however much the user browsed.
+  // ⚠️ AND IT WAITS FOR `loading` TO CLEAR, not merely for the rows to exist. `ranked` is derived
+  // from the LEAGUE board alone, which lands independently of the GENERIC board the delta needs — so
+  // firing on rows-exist raced the comparison and shipped `players_moved: null` whenever the generic
+  // board settled second. That is the worst kind of telemetry bug: the event still arrives, the
+  // funnel still counts the activation, and only the dimension that says whether anything CHANGED is
+  // quietly absent — a null indistinguishable from "a league where nothing moved". Gating on
+  // `loading` fires it when the screen the user is looking at is actually complete.
   const fired = useRef(false)
   useEffect(() => {
-    if (fired.current || !league || ranked.length === 0) return
+    if (fired.current || loading || !league || ranked.length === 0) return
     fired.current = true
     posthog.capture("custom_board_viewed", {
       league_platform: league.source_platform ?? "manual",
@@ -233,16 +284,16 @@ export function MyLeague() {
       league_size: league.n_teams ?? null,
       // The delta is what makes the view an ACTIVATION rather than a page load; carrying its size
       // lets the funnel tell "saw their board" from "saw their board CHANGE something".
+      //
+      // ⚠️ BOTH ARE SCOPED TO THE DRAFT POOL as of the highlight fix — they count players who would
+      // realistically be drafted in this league, not every ranked player. `draft_pool_size` is
+      // emitted BESIDE them so the dashboard can see the denominator's definition rather than
+      // inferring it, and so a league-size effect on the ratio is separable from a scoring one.
       players_moved: delta?.meaningfulMoves ?? null,
       players_compared: delta?.compared ?? null,
+      draft_pool_size: delta?.poolSize ?? null,
     })
-  }, [league, ranked.length, delta])
-
-  // Scoring is still in flight while the payload says a league exists but no board has been
-  // built from it — the honest state is LOADING, never empty.
-  const loading =
-    teamsLoading || genericLoading || (hasSavedLeague && !leagueBoard && !projectionsFailed)
-  const withheld = payload?.withheld_by_quota ?? 0
+  }, [league, ranked.length, delta, loading])
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -321,18 +372,34 @@ export function MyLeague() {
                 {LEAGUE_DELTA_DEFINITION}
               </p>
 
+              {/* ⚠️ THE DENOMINATOR NAMES ITS OWN POPULATION. Both numbers are scoped to the draft
+                  pool, and "N of 180" with no scope reads as "N of every player alive" — a smaller,
+                  wrong-looking fraction of a population the reader never asked about. Saying which
+                  players were counted is what makes the ratio interpretable. */}
               <p className="mt-3 text-sm text-gray-300" data-testid="delta-summary">
                 <span className="font-semibold text-gray-100">{delta.meaningfulMoves}</span> of{" "}
-                {delta.compared} players move at least {MEANINGFUL_MOVE} places in your scoring.
+                {delta.compared}{" "}
+                {delta.poolSize != null
+                  ? "players drafted in a league your size"
+                  : "ranked players"}{" "}
+                move at least {MEANINGFUL_MOVE} places in your scoring.
               </p>
+              {delta.poolSize != null && (
+                <p className="mt-1 text-[11px] text-gray-600" data-testid="delta-pool-note">
+                  {league?.n_teams} teams × {draftedSlots} drafted roster spots = the top{" "}
+                  {delta.poolSize}. Deeper players are still on the board below, with their move —
+                  they just don&apos;t lead this list.
+                </p>
+              )}
 
               {delta.risers.length + delta.fallers.length === 0 ? (
                 // ⚠️ A REAL AND CORRECT OUTCOME, not an error: a league configured close to
                 // full-PPR/12 genuinely produces almost no movement. Saying so plainly is more
                 // honest — and more trust-building — than manufacturing a highlight out of noise.
                 <p className="mt-3 text-xs text-gray-500" data-testid="delta-no-movement">
-                  Your settings are close enough to the free board that almost nothing moves. That
-                  is a real answer: the generic rankings already describe your league well.
+                  Your settings are close enough to the free board that nothing{" "}
+                  {delta.poolSize != null ? "worth drafting " : ""}moves. That is a real answer: the
+                  generic rankings already describe your league well.
                 </p>
               ) : (
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -420,8 +487,21 @@ export function MyLeague() {
           )}
 
           {/* ── the board ─────────────────────────────────────────────────────────────────────── */}
-          <div className="mb-4">
-            <PositionTabs value={pos} onChange={setPos} />
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <PositionTabs
+              value={pos}
+              onChange={(v) => {
+                setPos(v)
+                setPage(0)
+              }}
+            />
+            <Pagination
+              page={safePage}
+              pageSize={pageSize}
+              total={rows.length}
+              onPage={setPage}
+              onPageSize={setPageSize}
+            />
           </div>
 
           <div className="overflow-x-auto rounded-lg border border-[#262626]">
@@ -447,9 +527,14 @@ export function MyLeague() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1a1a1a]">
-                {rows.map(({ player: p, d }, i) => (
+                {visibleRows.map(({ player: p, d }, i) => (
                   <tr key={p.id} className="hover:bg-[#0f0f0f]">
-                    <td className="px-3 py-2 text-gray-600">{i + 1}</td>
+                    {/* ⚠️ CONTINUES ACROSS PAGES. A bare `i + 1` restarts at 1 on every page, so
+                        page 2 would open with a second "1" — the row number would silently stop
+                        meaning rank and start meaning "position on screen". */}
+                    <td className="px-3 py-2 text-gray-600">
+                      {(pageSize === ALL_ROWS ? 0 : safePage * pageSize) + i + 1}
+                    </td>
                     <td className="px-3 py-2">
                       <Link
                         href={`/fantasy/player/${p.id}`}
@@ -484,6 +569,19 @@ export function MyLeague() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* A second pager under the table: after scrolling several hundred rows the control at
+              the top is off-screen, and "page down then scroll back up to page" is the shape that
+              makes people give up on a paged table. */}
+          <div className="mt-3 flex justify-end">
+            <Pagination
+              page={safePage}
+              pageSize={pageSize}
+              total={rows.length}
+              onPage={setPage}
+              onPageSize={setPageSize}
+            />
           </div>
 
           <div className="mt-6">

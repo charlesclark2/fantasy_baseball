@@ -50,6 +50,12 @@ export interface PlayerDelta {
   /** On the league board but NOT the free one — e.g. a superflex league ranking a QB the free
    *  board's roster shape leaves unranked. A rank delta is UNDEFINED for these, not zero. */
   onlyInLeague: boolean
+  /** Market average draft position, from whichever board carries one for him. A REFERENCE used
+   *  ONLY to decide whether he is realistically drafted — never an input to any ranking. */
+  adp: number | null
+  /** Inside this league's draft pool — see `isDraftable`. Every player still appears on the board;
+   *  this only decides who is eligible to be a HIGHLIGHT. */
+  draftable: boolean
 }
 
 export interface PositionShift {
@@ -71,10 +77,15 @@ export interface LeagueDelta {
   risers: PlayerDelta[]
   fallers: PlayerDelta[]
   positions: PositionShift[]
-  /** How many players moved at least `MEANINGFUL_MOVE` places overall — the one-line summary. */
+  /** How many DRAFTABLE players moved at least `MEANINGFUL_MOVE` places overall — the one-line
+   *  summary. Pool-scoped for the same reason the highlights are (see `draftablePoolSize`). */
   meaningfulMoves: number
-  /** Players compared on both boards. A denominator, so "14 of 312 moved" is readable. */
+  /** Draftable players compared on both boards. The denominator, so "14 of 180 moved" is readable
+   *  AND is a sentence about players the reader might actually draft. */
   compared: number
+  /** The pool the two numbers above are scoped to, or null when it could not be computed (then
+   *  nothing is filtered and these are whole-board counts). Rendered, so the scope is stated. */
+  poolSize: number | null
 }
 
 /**
@@ -89,6 +100,91 @@ export const MEANINGFUL_MOVE = 5
 
 /** How many risers/fallers the activation screen leads with. */
 export const HIGHLIGHT_COUNT = 5
+
+// ══ THE DRAFTABLE POOL ═══════════════════════════════════════════════════════════════════════════
+//
+// ⭐ WHY THIS EXISTS (operator, live on the first real league). The first cut ranked highlights by
+// raw overall-rank movement across the WHOLE board, and every riser and faller it produced was a
+// player nobody would draft in any league. That is not a tuning miss, it is STRUCTURAL: rank density
+// grows down the board. Around pick 30 a few points of projection separates adjacent players; around
+// rank 400 the same few points spans dozens of them. So the largest RANK moves live in the deep tail
+// by construction, and a highlight list sorted by rank movement is a list of waiver-wire churn —
+// arithmetically correct, and useless on the one screen the funnel converts on.
+//
+// The fix is a POPULATION, not a different sort: compare everyone, but only let a player who might
+// actually be drafted in THIS league be the headline.
+//
+// ⚠️ THE POOL IS A LEAGUE PROPERTY, WHICH IS THE POINT. `n_teams × drafted slots` is 180 in a
+// 12-team/15-round league and 100 in a 10-team/10-round one, so the same board yields a different
+// (correct) highlight set per league. A hardcoded "top 200" would be a different, wrong answer for
+// most leagues and would silently stop scaling the moment someone imports a 14-team dynasty.
+
+/** Roster slots that are NOT filled from the draft. All three import adapters normalise to these
+ *  exact names (`espn.py` / `yahoo.py` / `sleeper.py` ROSTER_SLOT_MAPs), and the manual editor
+ *  offers no such slot, so a name match is reliable across every path a config can arrive by. */
+const NON_DRAFT_SLOTS = new Set(["IR", "TAXI"])
+
+/** Shape needed to size the pool — a structural subset of `LeagueConfig`, so this module keeps
+ *  taking plain data and does not have to import the config types. */
+export interface PoolShape {
+  n_teams?: number | null
+  roster?: { name?: string | null; count?: number | null }[] | null
+}
+
+/**
+ * How many players get drafted in this league: teams × roster slots, EXCLUDING IR and taxi.
+ *
+ * Bench slots are deliberately INCLUDED — bench spots are filled in the draft, and a player taken
+ * in the last round is exactly the kind of "does my scoring make him worth a pick?" call this screen
+ * should be able to speak to. IR and taxi are excluded because they are filled after it.
+ *
+ * Returns null when the config cannot answer (no teams, no roster) rather than guessing a default:
+ * an invented pool would silently filter a real board against a made-up number.
+ */
+export function draftablePoolSize(config: PoolShape | null | undefined): number | null {
+  const teams = Number(config?.n_teams ?? 0)
+  const slots = draftedSlotsPerTeam(config)
+  if (!Number.isFinite(teams) || teams <= 0 || slots == null) return null
+  return Math.round(teams * slots)
+}
+
+/** Drafted roster spots per team — the other half of the pool, exported so the screen can SHOW the
+ *  arithmetic ("12 teams × 15 spots") instead of dividing the product back out, which would be a
+ *  second, silently-derived definition of the same number. */
+export function draftedSlotsPerTeam(config: PoolShape | null | undefined): number | null {
+  const slots = (config?.roster ?? []).reduce((n, s) => {
+    if (NON_DRAFT_SLOTS.has(String(s?.name ?? "").toUpperCase())) return n
+    const c = Number(s?.count ?? 0)
+    return n + (Number.isFinite(c) && c > 0 ? c : 0)
+  }, 0)
+  return slots > 0 ? slots : null
+}
+
+/**
+ * Is this player realistically drafted in a league of this size?
+ *
+ * TWO independent reasons to say yes, OR'd — and the OR is load-bearing in both directions:
+ *
+ *  • MARKET: his ADP is inside the pool. The market is the authority on who actually gets drafted,
+ *    and deferring to it here is the opposite of a claim against it — we are using ADP to bound OUR
+ *    list, never to say we beat it. ⛔ Nothing downstream may present this as an ADP comparison.
+ *  • THIS LEAGUE'S BOARD: he is inside the pool on the board the reader is about to use. Required,
+ *    because ADP is sampled in ONE format: a superflex QB, a rookie with no sample, and every player
+ *    on a board exported before ADP existed all have `adp == null`, and judging them by the market
+ *    alone would delete exactly the players whose value this league CREATES — the most interesting
+ *    highlights on the page.
+ *
+ * A null pool means "unknown", and unknown must not filter: everyone stays eligible.
+ */
+export function isDraftable(
+  adp: number | null,
+  leagueOvrRank: number,
+  pool: number | null,
+): boolean {
+  if (pool == null) return true
+  if (adp != null && adp <= pool) return true
+  return leagueOvrRank <= pool
+}
 
 function rankable(p: Player): boolean {
   // A locked row (E9.56's retired redaction) carries no rank; a K/DST gap-fill row can carry a rank
@@ -106,6 +202,7 @@ function rankable(p: Player): boolean {
 export function computeLeagueDelta(
   genericBoard: Player[] | undefined | null,
   leagueBoard: Player[] | undefined | null,
+  pool: number | null = null,
 ): LeagueDelta | null {
   if (!genericBoard?.length || !leagueBoard?.length) return null
 
@@ -118,6 +215,10 @@ export function computeLeagueDelta(
   for (const p of leagueBoard) {
     if (!rankable(p)) continue
     const g = generic.get(p.id)
+    // Either board's ADP will do — it is the same market sample, and the league board inherits it
+    // from the projections row (`league-scoring.buildBoard`). Taking the league side first keeps a
+    // format-matched value when one exists.
+    const adp = p.adp ?? g?.adp ?? null
     players.push({
       id: p.id,
       name: p.name,
@@ -135,13 +236,22 @@ export function computeLeagueDelta(
       posDelta: g ? g.posRank - p.posRank : null,
       vorDelta: g && g.vor != null && p.vor != null ? p.vor - g.vor : null,
       onlyInLeague: !g,
+      adp,
+      draftable: isDraftable(adp, p.ovrRank, pool),
     })
   }
 
-  const comparable = players.filter((d) => d.ovrDelta != null)
+  // ⚠️ THE POOL FILTER APPLIES TO THE HIGHLIGHTS AND THE SUMMARY, NEVER TO `players`. That array
+  // feeds the board's "vs free board" column for EVERY row, so filtering it here would blank the
+  // column for most of the table — hiding a real number rather than declining to headline it. A
+  // deep-tail move is still shown where the reader is looking at that player; it just cannot be the
+  // headline. `allComparable` is therefore the full set and `comparable` the pool-scoped one.
+  const allComparable = players.filter((d) => d.ovrDelta != null)
+  const comparable = allComparable.filter((d) => d.draftable)
+
   // Sorted by SIZE of move, ties broken by the league rank so the order is deterministic — an
   // unstable order here would make the headline players change on every re-render.
-  const byMove = comparable
+  const byMove = allComparable
     .slice()
     .sort(
       (a, b) =>
@@ -167,6 +277,7 @@ export function computeLeagueDelta(
     meaningfulMoves: comparable.filter((d) => Math.abs(d.ovrDelta as number) >= MEANINGFUL_MOVE)
       .length,
     compared: comparable.length,
+    poolSize: pool,
   }
 }
 

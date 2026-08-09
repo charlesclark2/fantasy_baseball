@@ -1,0 +1,23 @@
+{
+  "kind": "user",
+  "season": "2026",
+  "user": { "user_id": "e2e-sleeper-user", "display_name": "e2e-tester" },
+  "leagues": [
+    {
+      "league_id": "999999",
+      "name": "Sunday Money",
+      "season": "2026",
+      "total_rosters": 10,
+      "status": "in_season",
+      "sport": "nfl"
+    },
+    {
+      "league_id": "888888",
+      "name": "The Other League",
+      "season": "2026",
+      "total_rosters": 12,
+      "status": "in_season",
+      "sport": "nfl"
+    }
+  ]
+}

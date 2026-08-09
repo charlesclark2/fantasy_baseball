@@ -173,6 +173,102 @@ depth, where no single-line break is observable:
 - the logged-out nav protection is delivered by `freeSignedIn`'s `isSignedIn` half **and** by
   `showSubNav`, which hides the whole surface menu pre-login.
 
+---
+
+## 7. ⭐ What the first real league found (2026-08-08, post-merge)
+
+The story shipped, the operator configured an actual league on an actual free account, and three
+defects were visible inside a minute. None was caught by anything above, and the reason they were
+not is worth more than the fixes: **§6 proved the delta was CORRECT and never asked whether the
+screen was USABLE.** Correctness was heavily instrumented — a sign convention, an anchor that cannot
+be produced by the sign, a red proof for the tautology. Nobody asserted that the players named were
+players you would draft, that the table under them could be navigated, or that the *other* create
+path enforced the same limit as the first.
+
+### 7.1 The highlights were waiver-wire churn — and it was structural
+
+Every riser and faller on the first real league was a player nobody would draft. This was not a
+threshold that needed tuning. **Rank density grows down the board:** around pick 30 a few points of
+projection separates adjacent players; around rank 400 the same few points spans dozens of them. So
+the largest *rank* moves live in the deep tail **by construction**, and a highlight list sorted by
+rank movement is a list of churn — arithmetically perfect, and useless on the one screen the funnel
+converts on.
+
+The fix is a **population**, not a different sort. `draftablePoolSize` = `n_teams ×` drafted roster
+spots, bench included (bench spots are drafted; a last-round pick is exactly the "does my scoring
+make him worth it?" call this screen should answer) and **IR/taxi excluded** (filled after the
+draft). A player is eligible to be a headline if he is inside that pool on **either** measure:
+
+- **market ADP** — the authority on who actually gets drafted. ⛔ Used to bound *our* list, never to
+  claim anything against it; nothing on the surface presents this as an ADP comparison.
+- **this league's board** — required, not a nicety. ADP is sampled in one format, so a superflex QB,
+  a rookie with no sample, and every row of a pre-ADP board all carry `adp == null`. Judging by the
+  market alone would delete exactly the players whose value this league *creates* — the most
+  interesting highlights on the page.
+
+⚠️ **The pool bounds what LEADS, never what is shown.** `players` stays the full comparison so the
+board's "vs free board" column is populated for every row; filtering it would hide a real number
+rather than decline to headline it.
+
+⚠️ **The pool is a league property, which is the point.** 160 in a 10-team/16-spot league, 240 in a
+12-team/20-spot one. A hardcoded "top 200" would be a different, wrong answer for most leagues and
+would stop scaling the moment someone imports a 14-team dynasty.
+
+### 7.2 The board was one unbroken run of several hundred rows
+
+Paged with the shared `Pagination` (Track Record's). Two failure modes that look normal and are not:
+the row number **continues across pages** (a bare `i + 1` reprints "1" at the top of every page, and
+the column silently stops meaning rank), and the page index is **clamped during render** so a
+position filter that shrinks the row count can never show an empty table — which would read as "you
+have no TEs" rather than "you are on page 9 of 2".
+
+### 7.3 The importer ignored the quota the editor enforced
+
+**The freemium build's own lesson, recurring on the two create paths.** #681 gated one of three
+renderers that print the paid scorings and looked complete; here the manual editor refused a second
+league from day one and **platform import did not** — so a free account at its quota could choose a
+platform, type a username, wait for us to read the league, and press Save before meeting a 409. The
+tier is enforced by **which component renders**, and there were two.
+
+Now refused at the **league list**, before any work. ⚠️ **The rule is "a different league", not "any
+import"**: re-importing the league you already have is an *update*, costs no quota (`PUT` is not
+capped server-side either), and is how a returning user refreshes a roster mid-season. Blocking it
+would break the re-sync everyone needs in order to enforce a limit nobody exceeded — which is why
+the e2e fixture carries **both** a saved and an unsaved league, and why `the-quota-locks-the-league-
+you-already-have` is a red-proof case in its own right.
+
+The refusal and the **upgrade CTA** are one component (`LeagueQuotaNotice`), so a third create path
+cannot ship the limit without the way past it. A limit with no route past it is a dead end, and that
+route is the conversion the funnel exists for.
+
+### 7.4 Two defects found while fixing the three
+
+- **The activation event raced its own delta.** It fired when the league board's rows existed, but
+  `players_moved`/`players_compared` come from a comparison against the **generic** board, which
+  lands independently — so whenever the generic board settled second the event still arrived, the
+  funnel still counted the activation, and only the dimension saying whether anything *changed* was
+  quietly null. Indistinguishable from "a league where nothing moved". It now waits for `loading` to
+  clear, which is also the more faithful reading of "viewed their custom board".
+- **Both summary numbers are now pool-scoped**, so `players_compared` changed meaning.
+  `draft_pool_size` is emitted beside them rather than left to be inferred. Event *names* are still
+  G100-D0's contract and unchanged.
+
+### 7.5 Verification
+
+| Layer | Instrument | Result |
+|---|---|---|
+| The pool arithmetic, the pager, both create paths | `frontend/e2e/specs/free-league.spec.ts` (+9) | **19 pass** |
+| Whole frontend suite | `npx playwright test` | **142 pass** (was 133) |
+| Every new clause is falsifiable | `frontend/e2e/red-proof.mjs` (+7 cases) | **6 RED, 1 declared not-observable** |
+| Backend untouched, boundary still holds | `test_g100_c1_free_league.py` + `test_freemium_tier.py` + `test_e9_56c_cta_routes.py` | **127 pass** |
+
+⭐ **The declared-GREEN case is the honest one.** "A filter change never empties the table" is
+delivered by **two** independent mechanisms — the tab handler resets the page, and the render clamps
+the index — so breaking either alone leaves the other holding and no single-line defect is
+observable. That is the NF-D17 `and`-composed-clause trap facing the other way: the redundancy is
+deliberate and wanted, but it has the same consequence for provability, so it is stated rather than
+left as a case that quietly always passes. Measured both ways round, not reasoned about.
+
 ### What is NOT proven here
 
 - **The API Gateway authorizer.** These routes are authenticated, so they inherit the default
