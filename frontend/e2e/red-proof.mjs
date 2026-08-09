@@ -872,8 +872,8 @@ const CASES = [
     // makes this the honest re-introduction rather than a synthetic break.
     detail: "Drops the draft pool, so highlights are drawn from the whole board again.",
     file: "components/fantasy/my-league.tsx",
-    from: "    () => computeLeagueDelta(genericBoard, leagueBoard, pool),",
-    to: "    () => computeLeagueDelta(genericBoard, leagueBoard, null),",
+    from: "    () => computeLeagueDelta(genericBoard, leagueBoard, pool, LOW_PREDICTABILITY_POSITIONS),",
+    to: "    () => computeLeagueDelta(genericBoard, leagueBoard, null, LOW_PREDICTABILITY_POSITIONS),",
     grep: "shrinking the pool shrinks the highlights",
   },
   {
