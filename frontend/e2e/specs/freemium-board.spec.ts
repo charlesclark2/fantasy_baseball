@@ -497,10 +497,16 @@ test.describe("the paid scorings are not readable, or derivable, on a free surfa
       await expect(el.locator(LOCK_CHIP), `${tile} shows no lock`).toHaveCount(1)
       // ⭐ THE NUMBER ITSELF MUST BE GONE, not merely accompanied by a padlock. A lock rendered
       // beside a visible figure is decoration, and it is what a half-applied gate looks like.
-      await expect(el, `${tile} still prints a number`).not.toHaveText(/\d[\d,]*\.\d/)
+      //
+      // ⚠️ SCOPED TO THE VALUE, not the tile. A tile's SUB-LINE carries numbers of its own (the
+      // full-season rate, the 80% bounds), so a whole-tile text match is satisfied by the sub-line
+      // — measured: the red-proof case that locks the FREE total stayed GREEN against the tile-wide
+      // form, because "Full-season rate: 193.2" matched. The value has its own handle for this.
+      await expect(page.getByTestId(`${tile}-value`), `${tile} still prints a number`)
+        .not.toHaveText(/\d[\d,]*\.\d/)
     }
     // ...and the free total is untouched, so the gate cannot be satisfied by locking everything.
-    await expect(page.getByTestId("format-tile-ppr")).toHaveText(/\d[\d,]*\.\d/)
+    await expect(page.getByTestId("format-tile-ppr-value")).toHaveText(/\d[\d,]*\.\d/)
     await expectNoPageErrors(errors)
   })
 

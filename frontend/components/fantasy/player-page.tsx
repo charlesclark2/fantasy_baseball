@@ -167,7 +167,14 @@ function Tile({
       className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-3"
     >
       <div className="text-[11px] font-medium uppercase tracking-wider text-gray-500">{label}</div>
-      <div className={`mt-1 tabular-nums ${emphasis ? "text-2xl font-bold text-white" : "text-lg font-semibold text-gray-100"}`}>
+      {/* ⚠️ THE VALUE CARRIES ITS OWN HANDLE, separate from the tile's. A tile's SUB-LINE holds
+          numbers of its own (the full-season rate, the 80% bounds), so "this tile shows no number"
+          asserted over the whole tile is satisfied by the sub-line and passes with the value
+          locked — measured, via the red-proof case that locks the FREE total and stayed green. */}
+      <div
+        data-testid={testId ? `${testId}-value` : undefined}
+        className={`mt-1 tabular-nums ${emphasis ? "text-2xl font-bold text-white" : "text-lg font-semibold text-gray-100"}`}
+      >
         {value}
       </div>
       {sub && <div className="mt-1 text-[11px] text-gray-500">{sub}</div>}

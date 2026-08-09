@@ -59,6 +59,50 @@ asked for; here the client keeps them on the free board and states the boundary 
 lock payload would be an elaborate description of a page nobody is looking at. It also keeps the
 answer unambiguous for the CDN.
 
+### ⭐⭐ The paid scorings surface in THREE places, and one of them is arithmetic
+
+The board's format picker was the first. The other two print the same `fpStd`/`fpHalf` the API
+serves to everybody by design, so nothing server-side can hold this line — the gate is entirely
+which component chooses to render them:
+
+| Surface | What leaked | Gate |
+|---|---|---|
+| **Season Projections** | Its "reference scoring" picker offered half-PPR and standard. A different control in a different file that happens to mean the same thing — which is exactly how one gets locked and the other does not. | Paid options listed + disabled; **and every read goes through a derived `effScoring`**, because a disabled option is presentation and a state variable is not a gate. |
+| **Player page tiles** | All three totals side by side. | Standard and half-PPR render a `LockChip`; the percentile sub-line goes with them (it is a rank computed *from* the withheld scoring). |
+| **The raw stat line** | ⭐ Not a column — an **identity**. | Gated for an unentitled viewer, with the section heading kept so the page reads as *withheld* rather than as one that quietly lost a section. |
+
+The third is the one the other two depend on. The reference totals differ **only** in how a
+reception scores:
+
+```
+half = full − 0.5 × rec          standard = full − 1.0 × rec
+```
+
+Measured on a real served player — full **178.4**, half **147.5**, standard **116.5**, receptions
+**61.9** — both hold to a tenth. Locking the totals while printing the reception count underneath is
+a paywall the reader can do in their head, on the single page that shows both. The identity is
+pinned as an **executable test** (`test_the_derivation_the_stat_line_gate_exists_to_prevent`) rather
+than left as a comment: if a scoring change ever breaks it, the gate's *justification* has changed
+and the reasoning needs rewriting, not just a threshold.
+
+⛔ **It is not anti-scraping, and the copy is guarded against drifting into that claim.** The free
+board is scrapeable by design and that was accepted when this tier was drawn. This is about not
+printing the answer next to the question.
+
+### Two honesty fixes that came with it
+
+**"(your league)" is a claim about the reader.** The player page's fourth tile was labelled
+`{format} (your league)` for everyone — false for a free visitor, who has no saved league and whose
+format selector is pinned to the free preset, so that card is the generic board. It also spends the
+exact phrase the paid tier is sold on before it means anything. Unentitled now sees the format name
+alone.
+
+**An existing assertion was narrowed rather than deleted.** The player-page spec asserted *zero*
+padlocks anywhere on the page — correct when nothing was withheld, false now. Raising the count to
+two would have passed on a padlock over the **free** tile, so it is scoped to the tiles carrying
+free numbers. The four format tiles gained test ids for that: a text locator lets a different
+element satisfy the assertion, which has already shipped green on this page once.
+
 ### A preset is still not personalization
 
 A board scored for *your* league is a different thing again — computed from a stored per-user
@@ -271,12 +315,12 @@ split in `lib/fantasy.ts` is where it would land.
 
 | Layer | Instrument | Result |
 |---|---|---|
-| The capability map, the free preset, the quota seam, the frontend mirror | `betting_ml/tests/test_freemium_tier.py` | 72 pass |
+| The capability map, the free preset, the three leak surfaces, the quota seam, the frontend mirror | `betting_ml/tests/test_freemium_tier.py` | **80 pass** (48 → 72 → 80) |
 | End to end through the real ASGI app (anonymous / forged token / signed-in non-subscriber / gateway-validated subscriber) | same file | free URLs byte-identical across all four; paid presets 403/200 |
-| Rendered browser behaviour | `frontend/e2e/specs/freemium-board.spec.ts` | 20 pass |
-| The whole frontend suite | `npx playwright test` | 119 pass |
-| Every Python guard is falsifiable | `uv run python betting_ml/tests/freemium_tier_red_proof.py` | **45/45 RED** |
-| Every new e2e clause is falsifiable | `frontend/e2e/red-proof.mjs` (12 freemium cases) | **12/12 RED** |
+| Rendered browser behaviour | `frontend/e2e/specs/freemium-board.spec.ts` | **24 pass** (14 → 20 → 24) |
+| The whole frontend suite | `npx playwright test` | **123 pass** |
+| Every Python guard is falsifiable | `uv run python betting_ml/tests/freemium_tier_red_proof.py` | **52/52 RED** |
+| Every new e2e clause is falsifiable | `frontend/e2e/red-proof.mjs` (17 freemium cases) | **17/17 RED** |
 
 The red-proof harness earned its keep twice. On the freemium build's first run **five clauses were
 vacuous**; on the format-split's first run, **three more**.
