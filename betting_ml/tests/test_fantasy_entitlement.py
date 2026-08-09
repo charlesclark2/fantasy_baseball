@@ -172,15 +172,22 @@ def board_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
-# ⭐ THESE THREE HANDLERS TAKE NO CALLER AT ALL SINCE THE FREEMIUM BUILD, and the missing parameter
-# is the point rather than an accident. They are `Capability.GENERIC_BOARD` — free for everyone —
-# so a handler that cannot see who is asking cannot branch on them, which is the strongest available
-# statement that these payloads are entitlement-independent.
+# ⭐ TWO OF THE THREE HANDLERS TAKE NO CALLER AT ALL, and the missing parameter is the point rather
+# than an accident. The manifest and the projections are `Capability.GENERIC_BOARD` and are
+# format-INDEPENDENT, so a handler that cannot see who is asking cannot branch on them — the
+# strongest available statement that those payloads are entitlement-independent.
 #
-# 🗄️ HISTORY, because the signature has now moved twice and each move was a real change:
+# ⚠️ `nfl_board` IS THE EXCEPTION and takes a `request`. Since 2026-08-08 exactly one preset
+# (`full_ppr`/12) is free and the other thirteen are paid, so that route has to know its caller.
+# Both facts are asserted, in opposite directions, by `test_the_generic_board_handlers_take_no_caller`
+# and `test_the_board_handler_does_take_a_caller` below — either alone is satisfiable by breaking the
+# other.
+#
+# 🗄️ HISTORY, because these signatures have now moved three times and each move was a real change:
 #   · pre-E9.56 they took no Request and 403'd a non-entitled caller at the ROUTER.
 #   · E9.56 gave them a Request so they could serve a LOCKED payload instead of a 403.
-#   · the freemium build removed it again — nothing is locked, so nothing needs the caller.
+#   · the freemium build removed it again — nothing was locked, so nothing needed the caller.
+#   · the format split gave it back to `nfl_board` alone.
 #
 # What these tests have always asserted is the READ ITSELF: the right blob, the right container
 # type, and 404/422 where they belong. That is preserved verbatim. The free/paid split is asserted
@@ -196,21 +203,29 @@ def test_manifest_endpoint_serves_local(board_dir):
 
 
 def test_board_endpoint_serves_local(board_dir):
-    out = fantasy.nfl_board(config="full_ppr", size=12, season=2026)
+    # ⚠️ TAKES A `request` SINCE THE FREEMIUM FORMAT SPLIT — one preset is free and thirteen are
+    # paid, so this route (alone among the three) has to see its caller. `full_ppr`/12 is the free
+    # one, so an anonymous request is the right fixture here.
+    out = fantasy.nfl_board(_request(), config="full_ppr", size=12, season=2026)
     # Still the raw list, byte-for-byte (NF-C0: the container type and contents must not move for
     # anyone who could already read it).
     assert out == [{"id": "1", "pos": "RB"}]
 
 
 def test_board_endpoint_404_on_missing(board_dir):
+    # ⚠️ ENTITLED, DELIBERATELY. `superflex`/10 is a PAID preset, so an anonymous caller would be
+    # refused with a 403 before the read ever happens and this clause would assert the paywall
+    # while claiming to test the missing-file path — a test passing for the wrong reason.
     with pytest.raises(HTTPException) as exc:
-        fantasy.nfl_board(config="superflex", size=10, season=2026)
+        fantasy.nfl_board(
+            _request(ctx_groups=["subscriber"]), config="superflex", size=10, season=2026
+        )
     assert exc.value.status_code == 404
 
 
 def test_board_endpoint_rejects_path_traversal(board_dir):
     with pytest.raises(HTTPException) as exc:
-        fantasy.nfl_board(config="../../etc/passwd", size=12, season=2026)
+        fantasy.nfl_board(_request(), config="../../etc/passwd", size=12, season=2026)
     assert exc.value.status_code == 422
 
 
@@ -236,15 +251,31 @@ def test_the_generic_board_handlers_take_no_caller(board_dir):
     ⭐ Kept as a clause rather than deleted, because the *signature* is load-bearing and nothing else
     in this file would notice it changing. A `Request` parameter reappearing here is the first step
     of re-gating the free board, and it would type-check, build and pass every other test in this
-    module — the handlers would simply start being able to tell callers apart again."""
+    module — the handlers would simply start being able to tell callers apart again.
+
+    ⚠️ `nfl_board` IS EXCLUDED, DELIBERATELY, AND IS ASSERTED THE OTHER WAY BELOW. Since the free
+    tier narrowed to one preset (2026-08-08) that route must read its caller — one board is free and
+    thirteen are not. The two format-independent payloads are the ones that still cannot vary."""
     import inspect
 
-    for handler in (fantasy.nfl_manifest, fantasy.nfl_projections, fantasy.nfl_board):
+    for handler in (fantasy.nfl_manifest, fantasy.nfl_projections):
         params = inspect.signature(handler).parameters
         assert "request" not in params, (
             f"{handler.__name__} takes a Request again — a generic-board handler that can see its "
             f"caller can branch on them; see test_freemium_tier.py"
         )
+
+
+def test_the_board_handler_does_take_a_caller():
+    """The other side of the clause above, so 'no handler takes a Request' cannot be satisfied by
+    dropping the one that must. `nfl_board` gates the paid presets and therefore has to know who is
+    asking; a signature that loses `request` again would make every preset free without a single
+    other test noticing."""
+    import inspect
+
+    assert "request" in inspect.signature(fantasy.nfl_board).parameters, (
+        "nfl_board can no longer see its caller — every paid preset is now free"
+    )
 
 
 def test_router_declares_the_fantasy_gate():

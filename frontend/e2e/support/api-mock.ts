@@ -102,6 +102,11 @@ export type ApiMock = {
   unmatched: string[]
 }
 
+/** The one free (config, size) preset — mirrors `entitlement.FREE_BOARD_CONFIG`/`FREE_BOARD_SIZE`.
+ *  Held here as well as in the fixture so the harness can REFUSE a paid board rather than serving
+ *  every preset a 200 and letting a spec assert against a state the API never produces. */
+export const FREE_BOARD = { config: "full_ppr", size: 12 } as const
+
 function payloadFor(pathname: string, entitlement: Entitlement): unknown | undefined {
   const locked = entitlement === "locked"
   if (pathname === "/fantasy/nfl/projections") {
@@ -186,6 +191,28 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
         body: JSON.stringify({ detail: "e2e: deliberate read failure" }),
       })
       return
+    }
+
+    // ⭐ THE HARNESS MODELS THE FORMAT PAYWALL, because a mock that answered 200 for every preset
+    // would let a spec "prove" a locked format renders fine — a state no user can reach. One preset
+    // is free (`entitlement.FREE_BOARD_CONFIG`/`FREE_BOARD_SIZE`); anything else is a 403.
+    // Mirrors `routers/fantasy.py::nfl_board`.
+    //
+    // ⚠️ "free" ONLY, NOT "not entitled". `"locked"` models the RETIRED E9.56 server, which served
+    // every preset with its values removed and had no format tier at all — applying today's paywall
+    // there would refuse boards that server answered, and `locked-surfaces.spec.ts` would fail
+    // describing a world neither server ever produced. A mock must model ONE server per mode.
+    if (apiPath === "/fantasy/nfl/board" && entitlement === "free") {
+      const q = new URLSearchParams(search)
+      const isFreeBoard = q.get("config") === FREE_BOARD.config && q.get("size") === String(FREE_BOARD.size)
+      if (!isFreeBoard) {
+        await route.fulfill({
+          status: 403,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "This league format is part of a Credence membership." }),
+        })
+        return
+      }
     }
 
     let body = payloadFor(apiPath, entitlement)

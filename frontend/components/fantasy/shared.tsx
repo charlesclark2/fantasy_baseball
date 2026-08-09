@@ -14,6 +14,7 @@ import { Info } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Picker } from "@/components/ui/picker"
 import type { LeagueConfigMeta, Manifest } from "@/lib/draft-optimizer"
+import { freeSelection, isFreeConfig } from "@/lib/draft-optimizer"
 import { marketLeaningPositions } from "@/lib/fantasy"
 import type { ProjectedPlayer } from "@/lib/fantasy"
 import { useTrackRecordManifest } from "@/lib/fantasy-track-record"
@@ -21,6 +22,8 @@ import {
   DECISION_SUPPORT_LINE,
   DISAGREEMENT_HOOK,
   EXPECTED_POINTS_DEFINITION,
+  FORMAT_LOCK_EXPLANATION,
+  FORMAT_LOCK_SUFFIX,
   FREE_TIER_SUMMARY,
   FULL_SEASON_RATE_DEFINITION,
   MEMBERSHIP_CTA_LABEL,
@@ -865,6 +868,7 @@ export function FormatSelector({
   onConfig,
   onSize,
   savedLeagues,
+  entitled = true,
 }: {
   manifest: Manifest | undefined
   configName: string | null
@@ -875,11 +879,24 @@ export function FormatSelector({
    *  presets. Selecting one switches the surface to that league's exact settings; because a saved
    *  league carries its OWN team count, the size control is not applicable and is hidden. */
   savedLeagues?: { league_id: string; name: string; n_teams: number }[]
+  /** Freemium build — whether the caller may open the PAID presets. When false the paid options are
+   *  still LISTED, disabled and suffixed, rather than removed.
+   *
+   *  ⭐ LISTED-BUT-DISABLED IS THE DELIBERATE CHOICE. Removing them would make the free board look
+   *  like the only board we publish, which is both untrue and the opposite of what an upgrade
+   *  prompt is for; showing them tells the visitor exactly what the membership is. Defaults to true
+   *  so a call site that has not been updated keeps its current behaviour. */
+  entitled?: boolean
 }) {
   // useId (not a literal) so a page rendering two selectors cannot emit duplicate ids.
   const configSelectId = useId()
   const sizeSelectId = useId()
   if (!manifest) return null
+  const free = freeSelection(manifest)
+  // A locked control only makes sense once the manifest has actually named a free board. On a
+  // pre-deploy manifest (`free` null) nothing is marked, which reproduces the old fully-open
+  // picker — the honest rendering of "this backend has not narrowed the tier".
+  const lockFormats = !entitled && !!free
   const isCustom = !!configName?.startsWith("custom:")
   const config: LeagueConfigMeta | undefined = manifest.configs.find((c) => c.name === configName)
   const league = isCustom
@@ -911,7 +928,14 @@ export function FormatSelector({
             },
             {
               label: "Standard formats",
-              options: manifest.configs.map((c) => ({ value: c.name, label: c.label })),
+              options: manifest.configs.map((c) => {
+                const locked = lockFormats && !isFreeConfig(c)
+                return {
+                  value: c.name,
+                  label: locked ? `${c.label} · ${FORMAT_LOCK_SUFFIX}` : c.label,
+                  disabled: locked,
+                }
+              }),
             },
           ]}
         />
@@ -927,7 +951,16 @@ export function FormatSelector({
             value={size == null ? null : String(size)}
             onValueChange={(v) => onSize(Number(v))}
             ariaLabel="League size"
-            options={manifest.sizes.map((n) => ({ value: String(n), label: `${n} teams` }))}
+            options={manifest.sizes.map((n) => {
+              // ⚠️ The SIZE is locked too, and separately: `full_ppr` at ten teams is a paid board.
+              // A picker that locked only the format would offer a combination the API 403s.
+              const locked = lockFormats && n !== free!.size
+              return {
+                value: String(n),
+                label: locked ? `${n} teams · ${FORMAT_LOCK_SUFFIX}` : `${n} teams`,
+                disabled: locked,
+              }
+            })}
           />
         </div>
       )}
@@ -943,6 +976,14 @@ export function FormatSelector({
           <a href="/fantasy/league-settings" className="text-sky-400 hover:underline">
             Edit
           </a>
+        </p>
+      )}
+      {lockFormats && (
+        <p
+          data-testid="format-lock-note"
+          className="w-full text-[11px] leading-relaxed text-gray-500"
+        >
+          {FORMAT_LOCK_EXPLANATION}
         </p>
       )}
     </div>

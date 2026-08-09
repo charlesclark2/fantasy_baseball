@@ -97,12 +97,24 @@ const ROUTES: Record<
     sMaxAge: 900,
     swr: 3600,
   },
+  // ⭐ THE FREE BOARD ONLY, AND THE NARROW REGEXES ARE THE ENFORCEMENT — not decoration.
+  //
+  // Since the free tier narrowed to one preset (2026-08-08) the upstream `/fantasy/nfl/board`
+  // answers 200 or 403 depending on who is asking, for every preset EXCEPT `full_ppr`/12. That
+  // makes it the one upstream on this list whose response is not a pure function of the URL — and
+  // this handler deliberately strips `Authorization` (property 1), so a paid board fetched through
+  // here would be an anonymous request: a 403 written into a public CDN entry and served to
+  // subscribers for the rest of the window. Pinning `config`/`size` to the free selection means the
+  // edge CANNOT ask the upstream a question whose answer depends on the caller, which is a stronger
+  // guarantee than remembering not to.
+  //
+  // ⇒ an entitled client fetches a paid board straight from the API (`apiFetch` in lib/fantasy.ts).
+  // ⚠️ These two literals must move with `entitlement.FREE_BOARD_CONFIG` / `FREE_BOARD_SIZE`;
+  // `test_freemium_tier.py::test_the_cdn_route_only_proxies_the_free_board` reads them from here
+  // and compares, so a one-sided edit goes red rather than quietly opening or breaking the edge.
   board: {
     upstream: "/fantasy/nfl/board",
-    // `config` mirrors the backend's `_CONFIG_RE`; `size` is the same 2..32 bound the API enforces.
-    // Validating here as well means a junk value is rejected at the edge instead of minting a CDN
-    // entry per junk value — an unvalidated param is a cache-key explosion, not just a bad request.
-    params: { season: /^\d{4}$/, config: /^[a-z0-9_]{1,64}$/, size: /^(?:[2-9]|[12]\d|3[0-2])$/ },
+    params: { season: /^\d{4}$/, config: /^full_ppr$/, size: /^12$/ },
     sMaxAge: 900,
     swr: 3600,
   },

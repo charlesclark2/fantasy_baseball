@@ -23,7 +23,7 @@ from pathlib import Path
 
 import boto3
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.backend.dependencies import (
     get_admin_user,
@@ -51,8 +51,10 @@ router = APIRouter(
 # everything else (`/leagues`, `/nfl/my-teams`, the admin-only MLB board), so the safe default is
 # unchanged and nothing can accidentally fall out of the gate by being added to the wrong function.
 #
-# These three routes are the FREE half of the product: the generic board. Anonymous, free and paying
-# callers all receive the SAME payload — the full model output for the shipped league presets.
+# These three routes are the FREE half of the product: the generic board — the season projection and
+# ONE scored preset board (`full_ppr`/12), with the full model output, for anonymous, free and
+# paying callers alike. The other 13 preset boards the exporter publishes are paid; `nfl_board`
+# below is the only route here that reads its caller, and its docstring says why.
 #
 # 🗄️ WHAT CHANGED. Until 2026-08-08 these were DUAL-MODE: an entitled caller got the numbers and
 # everyone else got an E9.56 LOCKED payload (identity + ADP, every model value stripped, rows
@@ -61,13 +63,18 @@ router = APIRouter(
 # The redaction code still exists in `services/entitlement.py`, clearly marked retired; nothing here
 # calls it.
 #
-# ⭐⭐ THE PROPERTY THREE OTHER SYSTEMS DEPEND ON: these responses are ENTITLEMENT-INDEPENDENT.
-# Because the bytes do not vary by caller, (a) G100-D1's CDN route may cache one copy for everybody,
-# (b) `cost_guardrails.cache_control_for`'s "same URL, two bodies" hazard does not arise here, and
-# (c) the frontend's `entitled`-keyed query cache can never strand a new subscriber on a stale view.
-# ⛔ Re-introducing any per-caller variation on these three routes silently invalidates all three at
-# once — it would need the CDN allowlist, the cache rules and the query keys revisited together.
-# Pinned by `test_freemium_tier.py::test_the_generic_board_is_byte_identical_for_every_caller`.
+# ⭐⭐ THE PROPERTY THREE OTHER SYSTEMS DEPEND ON: every FREE response here is ENTITLEMENT-INDEPENDENT
+# — the manifest, the projections, and the free board URL are byte-identical for anonymous, free and
+# paying callers. Because those bytes do not vary, (a) G100-D1's CDN route may cache one copy for
+# everybody, (b) `cost_guardrails.cache_control_for`'s "same URL, two bodies" hazard does not arise,
+# and (c) the frontend's `entitled`-keyed query cache can never strand a new subscriber on a stale
+# view. ⛔ Re-introducing per-caller variation on a FREE url silently invalidates all three at once.
+# Pinned by `test_freemium_tier.py::test_the_free_generic_board_is_byte_identical_for_every_caller`.
+#
+# ⚠️ THE PAID BOARD URLS ARE THE EXPLICIT EXCEPTION and must be kept outside all three: they answer
+# 200 or 403 depending on the caller, so the public CDN route's allowlist validates `config`/`size`
+# against the free selection and refuses to proxy anything else. A paid board is fetched by the
+# entitled client straight from the API, never through the edge.
 #
 # ⚠️ GATEWAY. A route is only reachable anonymously once its API Gateway authorizer is set to NONE —
 # that is per-route console config, outside this repo's IaC (NF3.2), so a route that is public in
@@ -150,24 +157,48 @@ def nfl_projections(season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=210
 
 @board_router.get("/nfl/board")
 def nfl_board(
+    request: Request,
     config: str = Query(..., description="league preset name, e.g. full_ppr_3wr"),
     size: int = Query(..., ge=2, le=32, description="team count"),
     season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
 ):
     """A single (config, size) NFL fantasy draft board for a shipped league PRESET.
 
-    FREE — `Capability.GENERIC_BOARD`. ⭐ A PRESET IS NOT PERSONALIZATION, and that distinction is
-    the whole free/paid line on this surface: `config`/`size` select one of the boards the exporter
-    published for everyone, so every caller asking for `full_ppr_3wr`/12 gets the same bytes. A
-    board scored for the caller's OWN saved league is a different thing entirely — it is computed
-    from a stored per-user config, it is `Capability.PERSONALIZATION`, and it lives behind
-    `require_fantasy_access` on `/fantasy/leagues` + `/fantasy/nfl/my-teams`.
+    ⭐ ONE PRESET IS FREE — `full_ppr`/12 (`entitlement.FREE_BOARD_CONFIG`/`FREE_BOARD_SIZE`); the
+    other 13 the exporter publishes need full entitlement. Operator decision 2026-08-08: the free
+    board is the acquisition wedge and one format makes that case, while "the board scored for the
+    format you actually play" is a real, legible thing a membership buys. The reason it is full PPR
+    at 12 teams rather than any other preset is a DATA fact — that is the league our ADP sample
+    describes — and it is written up on the constant.
+
+    ⚠️ THIS IS THE ONE ROUTE ON THIS ROUTER THAT READS ITS CALLER, and it is why `nfl_manifest` /
+    `nfl_projections` take no `Request` while this one does. The consequence for the CDN is exact:
+    the FREE board URL is still byte-identical for everybody and stays cacheable, and every PAID
+    board URL is caller-dependent and must never be proxied through the public edge route (the
+    Next.js allowlist validates `config`/`size` against the free selection for precisely this
+    reason). Pinned by `test_freemium_tier.py`.
+
+    A paid board is a 403, NOT a redacted 200. The E9.56 lock existed to render a per-cell CTA on a
+    board the visitor had asked for; here the visitor is not on a paid board at all — the client
+    keeps them on the free one and shows the boundary — so a lock payload would be an elaborate way
+    of describing a page nobody is looking at. 403 also keeps the answer unambiguous for the CDN.
+
+    ⛔ A PERSONALIZED board is a different thing again: computed from a stored per-user config, it
+    is `Capability.PERSONALIZATION`, and it lives behind `require_fantasy_access` on
+    `/fantasy/leagues` + `/fantasy/nfl/my-teams`. Nothing here serves one.
 
     Returns a bare LIST — never an envelope object; the deployed client indexes it directly and
     wrapping it would be the NF-C0 blank-screen break.
     """
     if not _CONFIG_RE.match(config):
         raise HTTPException(status_code=422, detail="Invalid config name")
+    # Resolved AFTER the syntactic check so a junk config is a 422 for everyone rather than leaking
+    # the caller's tier through the status code.
+    if not entitlement.allows_board(config, size, entitlement.resolve_entitlement(request)):
+        raise HTTPException(
+            status_code=403,
+            detail="This league format is part of a Credence membership.",
+        )
     data = _load_json(f"{season}/board_{config}_{size}.json")
     if data is None:
         raise HTTPException(status_code=404, detail="Fantasy board not found")

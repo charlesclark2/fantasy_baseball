@@ -67,6 +67,15 @@ export interface LeagueConfigMeta {
   /** Which FFC ADP sample this board's `adp` came from ("ppr" | "half-ppr" | "standard" | "2qb").
    *  Surfaced so the UI can name the reference instead of implying it is the user's exact format. */
   adpFormat?: string | null
+  /** Freemium build (2026-08-08) — whether this preset is the FREE one. Server-stamped in
+   *  `entitlement.open_manifest_payload`, identically for every caller, so the paywall is stated in
+   *  one place instead of being re-derived from a hardcoded format name in the client.
+   *
+   *  ⚠️ OPTIONAL, and `undefined` must be read as NOT free (see `isFreeConfig`): this key is absent
+   *  from any manifest served by a Lambda that predates the deploy, and during that skew window the
+   *  safe reading is the restrictive one — a locked control on a board the user can in fact see is
+   *  a cosmetic bug, while an open control on one they cannot is a 403 with no explanation. */
+  free?: boolean
 }
 
 /** NF3.4 — the plain-language label + description for one FEATURE key, shared across every player's
@@ -129,6 +138,30 @@ export interface Manifest {
     projection_season: number
     n_players: number
   } | null
+  /** Freemium build — which single (config, size) preset board is free, server-stamped identically
+   *  for every caller. The client uses it to DEFAULT an unentitled visitor onto a board they can
+   *  actually read, and to lock the size control. Absent on a pre-deploy manifest ⇒ treat nothing
+   *  as free-by-name and fall back to `free` on each config (see `freeSelection`). */
+  freeBoard?: { config: string; size: number } | null
+}
+
+/** The free (config, size) preset, or null if this manifest doesn't say.
+ *
+ * ⚠️ Read through this rather than reaching for `manifest.freeBoard` directly: during the deploy
+ * skew window (frontend ships on merge, the API only on `deploy.sh` — NF-C0) the key is absent, and
+ * the honest answer is "unknown", not a guessed default. Callers decide what to do with null; what
+ * they must NOT do is invent `full_ppr`/12 locally, because then the paywall is stated in two
+ * places and only one of them is deployed.
+ */
+export function freeSelection(manifest: Manifest | undefined | null) {
+  const fb = manifest?.freeBoard
+  if (!fb || typeof fb.config !== "string" || typeof fb.size !== "number") return null
+  return { config: fb.config, size: fb.size }
+}
+
+/** Whether a preset NAME is the free one. `undefined` ⇒ false — see the note on `free`. */
+export function isFreeConfig(config: LeagueConfigMeta | undefined | null): boolean {
+  return config?.free === true
 }
 
 const NEED_W_DEDICATED = 1.0

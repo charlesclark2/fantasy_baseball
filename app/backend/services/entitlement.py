@@ -171,6 +171,54 @@ PAID_CAPABILITIES: frozenset[Capability] = frozenset(
 FREE_PERSONALIZED_LEAGUE_QUOTA = int(os.getenv("FREE_PERSONALIZED_LEAGUE_QUOTA", "0"))
 
 
+# ── Which PRESET BOARDS the free capability covers ───────────────────────────────────────────────
+#
+# `Capability.GENERIC_BOARD` says a caller may read the generic board. This says WHICH ONE. The
+# exporter publishes 7 scoring presets × 2 league sizes = 14 boards; the operator's call (2026-08-08)
+# is that ONE of them is the free wedge and the other 13 are part of what a membership buys.
+#
+# ⭐ WHY FULL PPR AT 12 TEAMS SPECIFICALLY. The ADP column we show beside our number is an FFC
+# 12-team PPR sample (`nfl/fantasy/benchmarks/adp_benchmark`). At any other preset our points and
+# the market's ADP describe DIFFERENT leagues, so the one comparison the free board is built to
+# support — ours vs the market's — is only honest here. Picking the free format is therefore a data
+# fact as much as a pricing one, and moving it means moving the ADP sample too.
+#
+# ⚠️ A CONSTANT, DELIBERATELY NOT AN ENV VAR. `FREE_PERSONALIZED_LEAGUE_QUOTA` above is env-read
+# because it is a seam a future story flips on purpose. This is the paywall itself: an env var that
+# drifts (or is never set on one of the two owners) moves the paywall SILENTLY in either direction,
+# which is this repo's documented-but-never-set class (`W7B_LAKEHOUSE_S3`) pointed at revenue.
+# Changing it should be a reviewed diff.
+FREE_BOARD_CONFIG = "full_ppr"
+FREE_BOARD_SIZE = 12
+
+
+def is_free_board(config: str, size: int) -> bool:
+    """Whether the (config, size) board is the free one.
+
+    ⚠️ BOTH must match. A free scoring format at a paid league SIZE is a paid board — the size
+    changes the replacement level, so `full_ppr`/10 is a different set of numbers, not a cosmetic
+    variant of the free one.
+    """
+    try:
+        return str(config) == FREE_BOARD_CONFIG and int(size) == FREE_BOARD_SIZE
+    except (TypeError, ValueError):
+        # An unparseable size cannot be the free board. Fail closed: the caller gets the paid path,
+        # which 403s an unentitled reader rather than serving them a board on a junk parameter.
+        return False
+
+
+def allows_board(config: str, size: int, ent: "Entitlement | None") -> bool:
+    """Whether `ent` may read the (config, size) preset board.
+
+    The free board is readable by anyone; every other preset needs full entitlement. Expressed here
+    rather than in the router so the two questions a reviewer asks — "which board is free?" and "who
+    may read a paid one?" — are answered next to each other and tested in one place.
+    """
+    if is_free_board(config, size):
+        return True
+    return bool(ent and ent.fantasy)
+
+
 def allows(capability: Capability, ent: "Entitlement | None") -> bool:
     """Whether `ent` may exercise `capability`.
 
@@ -503,7 +551,29 @@ def lock_projections_payload(data: dict) -> dict:
 
 
 def open_manifest_payload(data: dict) -> dict:
-    return {**data, **entitlement_envelope(locked=False)}
+    """The manifest UNCHANGED, plus the entitlement envelope and the free-board markings.
+
+    ⭐ THE MARKINGS ARE THE SAME FOR EVERY CALLER, and that is the point. The client has to know
+    which preset is free in order to draw the boundary — to default an anonymous visitor onto the
+    free board, and to show a lock rather than a dead control on the other 13. Deriving that
+    client-side from a hardcoded string would put the paywall in two places that drift; sending a
+    DIFFERENT manifest to an entitled caller would make this route caller-dependent and cost the
+    CDN cache (see the invariant note in `routers/fantasy.py`). Marking every preset identically for
+    everybody does neither: the bytes are constant, and the boundary is stated once, here.
+
+    ADDITIVE ONLY (NF-C0). `free` is a new key on each config and `freeBoard` is a new top-level
+    key; nothing existing is renamed or removed, so the deployed client — which knows neither —
+    keeps rendering exactly what it renders today.
+    """
+    configs = [
+        {**c, "free": c.get("name") == FREE_BOARD_CONFIG} if isinstance(c, dict) else c
+        for c in (data.get("configs") or [])
+    ]
+    out = {**data, **entitlement_envelope(locked=False)}
+    if data.get("configs") is not None:
+        out["configs"] = configs
+    out["freeBoard"] = {"config": FREE_BOARD_CONFIG, "size": FREE_BOARD_SIZE}
+    return out
 
 
 def lock_manifest_payload(data: dict) -> dict:

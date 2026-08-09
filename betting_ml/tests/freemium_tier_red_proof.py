@@ -60,21 +60,21 @@ CASES = [
 
     # ⭐ THE SUBTLEST BREAK IN THE FILE, and the one that justifies asserting byte EQUALITY rather
     # than "both payloads look right". The board keeps every number, so every "the free board has
-    # the numbers" clause stays green; only equality across callers sees the extra field. It needs a
-    # TWO-PART patch (re-import `Request`, then take it and branch on it) — which is itself the
-    # finding: the route currently cannot see the caller AT ALL, so there is no one-line way to make
-    # it vary. That is the design doing its job.
+    # the numbers" clause stays green; only equality across callers sees the extra field.
+    #
+    # 🗄️ It USED to need a three-part patch, because the module imported no `Request` at all and the
+    # route could not see its caller by construction. `nfl_board` now takes one (one preset is free,
+    # thirteen are not), so the import is present and the break is two edits. The two
+    # format-independent routes still take no caller, which is what the clause one case down pins.
     ("make the projections payload vary by caller", ROUTER,
-     [("from fastapi import APIRouter, Depends, HTTPException, Query",
-       "from fastapi import APIRouter, Depends, HTTPException, Query, Request"),
-      ("def nfl_projections(season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):",
+     [("def nfl_projections(season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):",
        "def nfl_projections(request: Request, "
        "season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):"),
       ("    return entitlement.open_projections_payload(data)",
        "    _e = entitlement.resolve_entitlement(request)\n"
        "    return {**entitlement.open_projections_payload(data), 'vip': _e.fantasy}")],
      None,
-     "test_the_generic_board_is_byte_identical_for_every_caller", SUITE),
+     "test_the_free_generic_board_is_byte_identical_for_every_caller", SUITE),
 
     # The SAME break, seen from the signature clause one suite over. A `Request` parameter
     # reappearing is the first step of re-gating the free board, and it type-checks, builds and
@@ -87,6 +87,13 @@ CASES = [
        "season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):")],
      None,
      "test_the_generic_board_handlers_take_no_caller", E9_45_SUITE),
+
+    # ...and the same signature clause pointing the OTHER way. `nfl_board` MUST see its caller now,
+    # so "no handler takes a Request" must not be satisfiable by deleting the one that needs one.
+    ("take the caller away from the board handler", ROUTER,
+     [("def nfl_board(\n    request: Request,", "def nfl_board(")],
+     None,
+     "test_the_board_handler_does_take_a_caller", E9_45_SUITE),
 
     # ── the no-regression half: what must STAY paid ───────────────────────────────────────────
     # ⚠️ THE FIRST ATTEMPT DROPPED THE ROUTER-LEVEL `dependencies=` AND THE CLAUSE STAYED GREEN —
@@ -112,9 +119,13 @@ CASES = [
      "        return True",
      "test_an_unplaced_capability_fails_closed", SUITE),
 
+    # ⚠️ THE ANCHOR CARRIES THE PRECEDING LINE ON PURPOSE. `allows_board` (added when the tier
+    # narrowed) ends with the IDENTICAL `return bool(ent and ent.fantasy)` and is defined FIRST, so
+    # the bare line patched the wrong function and this case reported GREEN — VACUOUS. A
+    # first-occurrence replace is only as precise as its anchor is unique.
     ("grant the paid half to anyone who is merely signed in", ENTITLEMENT,
-     "    return bool(ent and ent.fantasy)",
-     "    return bool(ent and not ent.is_anonymous)",
+     "        return False\n    return bool(ent and ent.fantasy)",
+     "        return False\n    return bool(ent and not ent.is_anonymous)",
      "test_a_signed_in_caller_without_fantasy_is_treated_as_free_not_as_entitled", SUITE),
 
     # ── the G100-C1 seam ──────────────────────────────────────────────────────────────────────
@@ -122,6 +133,167 @@ CASES = [
      'FREE_PERSONALIZED_LEAGUE_QUOTA = int(os.getenv("FREE_PERSONALIZED_LEAGUE_QUOTA", "0"))',
      'FREE_PERSONALIZED_LEAGUE_QUOTA = int(os.getenv("FREE_PERSONALIZED_LEAGUE_QUOTA", "1"))',
      "test_the_free_personalized_league_quota_is_zero_today", SUITE),
+
+    # ── ONE preset is free (2026-08-08) ───────────────────────────────────────────────────────
+    # The whole gate is one predicate and one call site, so it has exactly two ways to fail open:
+    # the predicate says yes to everything, or the route stops asking. Both are here, plus the two
+    # SHAPES of paid board (a different format, and the free format at a different size) — a gate
+    # written against the format alone passes the first and fails the second.
+    ("call every preset the free one", ENTITLEMENT,
+     [('        return str(config) == FREE_BOARD_CONFIG and int(size) == FREE_BOARD_SIZE',
+       '        return True')],
+     None,
+     "test_only_the_one_preset_is_free", SUITE),
+
+    ("gate on the FORMAT and forget the league SIZE", ENTITLEMENT,
+     [('        return str(config) == FREE_BOARD_CONFIG and int(size) == FREE_BOARD_SIZE',
+       '        return str(config) == FREE_BOARD_CONFIG')],
+     None,
+     "test_only_the_one_preset_is_free", SUITE),
+
+    # ⭐ The same size-blindness seen END TO END rather than as a predicate. The unit clause above
+    # could be satisfied by a correct predicate nobody calls; this one fails only if a real request
+    # for `full_ppr`/10 is actually refused.
+    ("gate on the FORMAT only, seen through the API", ENTITLEMENT,
+     [('        return str(config) == FREE_BOARD_CONFIG and int(size) == FREE_BOARD_SIZE',
+       '        return str(config) == FREE_BOARD_CONFIG')],
+     None,
+     "test_an_anonymous_caller_is_refused_a_paid_preset", SUITE),
+
+    ("stop asking who is requesting the board", ROUTER,
+     [("    if not entitlement.allows_board(config, size, entitlement.resolve_entitlement(request)):",
+       "    if False:")],
+     None,
+     "test_an_anonymous_caller_is_refused_a_paid_preset", SUITE),
+
+    # The OPPOSITE failure, and the one a nervous fix produces: refusing everyone. Every "anonymous
+    # is refused" clause above stays green while subscribers lose the thing they pay for.
+    ("refuse the paid presets to subscribers too", ENTITLEMENT,
+     [("    if is_free_board(config, size):\n        return True\n"
+       "    return bool(ent and ent.fantasy)",
+       "    if is_free_board(config, size):\n        return True\n    return False")],
+     None,
+     "test_a_subscriber_gets_a_paid_preset", SUITE),
+
+    # ⚠️ TWO INSUFFICIENT BREAKS BEFORE THIS ONE, and both were the same lesson as the
+    # `require_fantasy_access` case above: the guard stayed GREEN because a DIFFERENT layer was
+    # still refusing. (a) Forcing `verified` truthy left the GROUPS coming from
+    # `jwt_verify.verified_groups`, which still returned nothing for an unsigned token. (b) Reading
+    # them via `dependencies._groups_from_request` failed too — E9.56 hardened that helper to fall
+    # back to a VERIFIED decode whenever the authorizer context is absent, which is exactly the
+    # public-route case. Both are defence in depth working.
+    #
+    # ⇒ the break has to remove the signature check at its SOURCE. `_unverified_claims` is the
+    # pre-verification decode the module already has, so this is the shape a real regression takes:
+    # someone reaches for the convenient decode and skips the verify.
+    ("skip the signature check and trust the token's own claims", REPO / "app/backend/services/jwt_verify.py",
+     [("def verify_cognito_token(token: str | None) -> dict | None:",
+       "def verify_cognito_token(token: str | None) -> dict | None:\n"
+       "    import base64 as _b64, json as _json\n"
+       "    try:\n"
+       "        _p = str(token).split()[-1].split('.')[1]\n"
+       "        return _json.loads(_b64.urlsafe_b64decode(_p + '=' * (-len(_p) % 4)))\n"
+       "    except Exception:\n"
+       "        return None\n")],
+     None,
+     "test_a_forged_token_does_not_unlock_a_paid_preset", SUITE),
+
+    # A junk config must be rejected on SYNTAX before entitlement is consulted, or the status code
+    # tells an attacker whether their token is entitled on a request that was never valid anyway.
+    ("check entitlement before validating the config name", ROUTER,
+     [("    if not _CONFIG_RE.match(config):\n"
+       '        raise HTTPException(status_code=422, detail="Invalid config name")',
+       "    pass")],
+     None,
+     "test_a_junk_config_reads_the_same_to_everyone", SUITE),
+
+    # ── the manifest is how the client learns where the line is ───────────────────────────────
+    ("stop telling the client which preset is free", ENTITLEMENT,
+     [('    out["freeBoard"] = {"config": FREE_BOARD_CONFIG, "size": FREE_BOARD_SIZE}', "    pass")],
+     None,
+     "test_the_manifest_marks_exactly_the_free_preset", SUITE),
+
+    ("mark every preset free in the manifest", ENTITLEMENT,
+     [('{**c, "free": c.get("name") == FREE_BOARD_CONFIG} if isinstance(c, dict) else c',
+       '{**c, "free": True} if isinstance(c, dict) else c')],
+     None,
+     "test_the_manifest_marks_exactly_the_free_preset", SUITE),
+
+    # ⚠️ The NF-C0 shape break: marking the presets by REBUILDING each config instead of spreading
+    # it drops every other key (`label`, `description`, `roster`, `adpFormat`) — a 200 whose format
+    # picker renders blank rows. The clause above cannot see it; it only reads `name` and `free`.
+    ("rebuild each config instead of extending it", ENTITLEMENT,
+     [('{**c, "free": c.get("name") == FREE_BOARD_CONFIG} if isinstance(c, dict) else c',
+       '{"name": c.get("name"), "free": c.get("name") == FREE_BOARD_CONFIG} '
+       "if isinstance(c, dict) else c")],
+     None,
+     "test_the_manifest_marking_is_purely_additive", SUITE),
+
+    # ── the edge must not be able to ask a caller-dependent question ──────────────────────────
+    ("let the CDN route proxy any preset", REPO / "frontend/app/api/public/[...path]/route.ts",
+     [("params: { season: /^\\d{4}$/, config: /^full_ppr$/, size: /^12$/ },",
+       "params: { season: /^\\d{4}$/, config: /^[a-z0-9_]{1,64}$/, "
+       "size: /^(?:[2-9]|[12]\\d|3[0-2])$/ },")],
+     None,
+     "test_the_cdn_route_can_only_ask_for_the_free_board", SUITE),
+
+    # ── the picker, and the two ways it goes wrong ────────────────────────────────────────────
+    ("leave the paid presets selectable", SHARED,
+     [("                  disabled: locked,\n                }\n              }),",
+       "                  disabled: false,\n                }\n              }),")],
+     None,
+     "test_the_picker_disables_every_paid_preset_for_an_unentitled_caller", SUITE),
+
+    ("lock the format but leave the paid league SIZE selectable", SHARED,
+     [("              const locked = lockFormats && n !== free!.size",
+       "              const locked = false && n !== free!.size")],
+     None,
+     "test_the_picker_disables_every_paid_preset_for_an_unentitled_caller", SUITE),
+
+    # ⭐ The tempting "fix" that satisfies the two clauses above completely: remove the paid presets
+    # rather than disable them. The visitor can no longer select one — and can no longer SEE that
+    # they exist, which is the opposite of what an upgrade prompt is for.
+    ("hide the paid presets instead of disabling them", SHARED,
+     [("              options: manifest.configs.map((c) => {",
+       "              options: manifest.configs.filter((c) => isFreeConfig(c)).map((c) => {")],
+     None,
+     "test_a_locked_preset_is_listed_rather_than_removed", SUITE),
+
+    ("default an unentitled visitor onto a paid preset", QUERIES,
+     [("    if (!entitled && free) {", "    if (false && free) {")],
+     None,
+     "test_an_unentitled_visitor_is_defaulted_onto_a_board_they_can_read", SUITE),
+
+    # ⚠️ THE BREAK HAD TO CHANGE WITH THE CLAUSE, and the reason is worth keeping: the first version
+    # patched a `storedIsFree` ternary whose two arms were IDENTICAL, so the break was a genuine
+    # no-op and reported GREEN — VACUOUS. That was a defect in the SOURCE, not in the harness: dead
+    # code cannot be broken. The branch now ignores `stored` outright, and the honest regression is
+    # putting it back.
+    ("honour a stored paid selection for an unentitled caller", QUERIES,
+     [("      setConfigName(names.includes(free.config) ? free.config : names[0] ?? null)",
+       "      setConfigName(stored.configName ?? free.config)")],
+     None,
+     "test_an_unentitled_visitor_is_defaulted_onto_a_board_they_can_read", SUITE),
+
+    ("report a refused board as an empty search", RANKINGS,
+     [("          {!boardLoading && boardError && (", "          {false && boardError && (")],
+     None,
+     "test_a_refused_board_does_not_render_as_an_empty_search", SUITE),
+
+    # ── copy that describes an entitlement goes stale silently ────────────────────────────────
+    ("let the free-tier copy claim a format it no longer covers", COPY,
+     [('"Every player we project, every ranking, every 80% range and the market ADP beside it '
+       "— no account, no trial, and no number quietly withheld. It is the same board for everyone, "
+       'which is exactly what makes it free.",',
+       '"Every player we project, scored for every PPR preset we publish.",')],
+     None,
+     "test_the_free_tier_summary_names_no_league_format", SUITE),
+
+    ("stop naming the format half in the paid summary", COPY,
+     [('    title: "Every scoring format, at your league\'s size",',
+       '    title: "More of the board",')],
+     None,
+     "test_the_paid_summary_names_both_halves_of_the_boundary", SUITE),
 
     # ── the frontend mirror ───────────────────────────────────────────────────────────────────
     ("quietly make the paid League Board public", LEAGUE_BOARD_PAGE,

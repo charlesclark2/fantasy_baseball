@@ -203,7 +203,11 @@ function PlayerView({ playerId }: { playerId: string }) {
   const { data: projPayload, isLoading: projLoading, error: projError } = useFantasyProjections()
   const { data: manifest } = useFantasyManifest()
   const { data: savedLeagues } = useSavedLeagues()
-  const { configName, size, setConfigName, setSize } = useFormatSelection(manifest, savedLeagues)
+  const { configName, size, setConfigName, setSize } = useFormatSelection(
+    manifest,
+    savedLeagues,
+    entitled,
+  )
   const { board, isLoading: boardLoading } = useResolvedBoard(configName, size)
 
   const config = manifest?.configs.find((c) => c.name === configName)
@@ -425,6 +429,7 @@ function PlayerView({ playerId }: { playerId: string }) {
               onConfig={setConfigName}
               onSize={setSize}
               savedLeagues={savedLeagues}
+              entitled={entitled}
             />
           </div>
 

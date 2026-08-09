@@ -309,6 +309,21 @@ paragraph below describes the E9.56 state (2026 locked behind a per-point marker
 the enforcement deployed*, and the `jwt_verify` argument underneath it: on a `NONE` route the Bearer
 token is attacker-controlled, which is what makes the PAID capabilities safe to decide there.
 
+⚠️⚠️ **`GET /fantasy/nfl/board` IS NOW APPLICATION-GATED PER PRESET, AND IT STAYS `NONE` AT THE
+GATEWAY.** One preset is free (`full_ppr`/12) and the other 13 answer **403** to an unentitled
+caller — decided inside the Lambda, by `entitlement.allows_board`, because the gateway authorizer is
+all-or-nothing and cannot see a query parameter. So the route must remain anonymously reachable:
+⛔ **do not "tighten" it by putting the authorizer back on**, which would 401 the free board and take
+the whole wedge offline. This is also precisely why `jwt_verify` is load-bearing on this route rather
+than merely tidy — the Bearer token that decides a paid preset arrives unvalidated by anything
+upstream, so only a locally signature-verified one may grant it.
+
+⇒ **the two answers a paid board URL can give are each individually safe to cache, for two separate
+reasons**: an entitled caller carries `Authorization` ⇒ `private`, and an anonymous one gets a 403 ⇒
+non-200 ⇒ `no-store`. Losing either is a breach, not a caching regression. The Vercel CDN route
+(`frontend/app/api/public/[...path]/route.ts`) additionally pins its `config`/`size` patterns to the
+free selection, so the edge cannot fetch a paid board at all.
+
 🕐 **A ROLLBACK HAS A CACHE TAIL.** These responses are CDN-cached `s-maxage=900,
 stale-while-revalidate=3600`, so the open board propagates within ~15 min of `deploy.sh` and — if
 the Lambda is rolled back — the edge may keep serving the open payload for up to ~75 min afterwards.

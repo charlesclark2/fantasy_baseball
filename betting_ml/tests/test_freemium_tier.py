@@ -170,11 +170,21 @@ _PLAYERS = [
 ]
 _PROJECTIONS = {"season": 2026, "generated_at": "2026-08-08T00:00:00Z", "players": _PLAYERS,
                 "adp_format": "ppr", "adp_teams": 12}
+#: ⚠️ CARRIES A PAID PRESET AND A PAID SIZE ON PURPOSE. A fixture holding only `full_ppr`/12 would
+#: make every free-tier assertion below pass vacuously — there would be no paid board to refuse, so
+#: deleting the gate entirely would not fail a single test.
 _MANIFEST = {"season": 2026, "generated_at": "2026-08-08T00:00:00Z",
-             "configs": [{"name": "full_ppr", "label": "Full PPR"}], "sizes": [12],
+             "configs": [{"name": "full_ppr", "label": "Full PPR"},
+                         {"name": "half_ppr", "label": "Half PPR"}], "sizes": [10, 12],
              "positions": ["QB", "RB", "WR", "TE"],
              "featureLegend": {"pergame_fp": "Points per game"},
              "projections": {"players": 2, "model_version": "nf1.5b"}}
+
+#: The one free (config, size), and a paid one of each kind — a different FORMAT at the free size,
+#: and the free FORMAT at a different size. The second is the one a format-only gate would miss.
+_FREE_BOARD_QUERY = "season=2026&config=full_ppr&size=12"
+_PAID_FORMAT_QUERY = "season=2026&config=half_ppr&size=12"
+_PAID_SIZE_QUERY = "season=2026&config=full_ppr&size=10"
 _BOARD = [
     {"id": "p1", "name": "Alpha Back", "pos": "RB", "pts": 325.7, "vor": 88.2, "ovrRank": 1,
      "posRank": 1, "adp": 14.2, "g": 15.5},
@@ -335,9 +345,13 @@ def test_no_row_carries_a_lock_marker_on_the_free_board(app_env):
         ("/fantasy/nfl/board", "season=2026&config=full_ppr&size=12"),
     ],
 )
-def test_the_generic_board_is_byte_identical_for_every_caller(app_env, path, query):
+def test_the_free_generic_board_is_byte_identical_for_every_caller(app_env, path, query):
     """⭐⭐ THE INVARIANT THREE OTHER SYSTEMS REST ON, asserted as literal byte equality rather than
     as 'both look right'.
+
+    ⚠️ SCOPED TO THE *FREE* URLS since the tier narrowed to one preset (2026-08-08). A PAID board URL
+    is deliberately caller-dependent (200 or 403), which is why the CDN allowlist cannot reach one —
+    see `test_the_cdn_route_can_only_ask_for_the_free_board`.
 
     Because these responses cannot vary by caller: G100-D1's CDN route may cache ONE copy for
     everybody; `cost_guardrails.cache_control_for`'s 'same URL, two bodies' hazard cannot arise
@@ -362,6 +376,150 @@ def test_the_free_board_is_free_for_a_past_season_too(app_env):
     """The NF3.2 receipts rule survives: nothing about the freemium build re-gates history."""
     status, raw = _call("/fantasy/nfl/projections", "season=2025")
     assert status == 200 and json.loads(raw)["locked"] is False
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 3b. ONE preset is free — the other thirteen are the membership (operator decision 2026-08-08)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# `Capability.GENERIC_BOARD` says a caller may read the generic board; `FREE_BOARD_CONFIG`/
+# `FREE_BOARD_SIZE` say WHICH one. Both halves need pinning, and the size half is the one an
+# implementation naturally forgets: locking the format alone still offers `full_ppr`/10, a board the
+# API refuses, so the picker would present a combination that cannot load.
+
+
+def test_the_free_preset_is_full_ppr_at_twelve_teams():
+    """The paywall itself, as a literal. ⭐ The reason it is THIS preset is a data fact, not a taste:
+    the ADP column shown beside our number is an FFC 12-team PPR sample, so at any other preset the
+    two columns describe different leagues. Moving this constant means moving that sample."""
+    assert entitlement.FREE_BOARD_CONFIG == "full_ppr"
+    assert entitlement.FREE_BOARD_SIZE == 12
+
+
+@pytest.mark.parametrize(
+    "config,size,expected",
+    [
+        ("full_ppr", 12, True),
+        ("half_ppr", 12, False),  # a paid FORMAT at the free size
+        ("full_ppr", 10, False),  # the free format at a paid SIZE — the easy one to miss
+        ("superflex", 10, False),
+    ],
+)
+def test_only_the_one_preset_is_free(config, size, expected):
+    """⚠️ BOTH coordinates matter. League size sets the replacement level, so `full_ppr`/10 is a
+    different set of numbers rather than a relabelling of the free board."""
+    assert entitlement.is_free_board(config, size) is expected
+
+
+def test_an_unparseable_size_is_not_the_free_board():
+    """Fail closed on junk: an unparseable size must not fall through to 'free'."""
+    assert entitlement.is_free_board("full_ppr", None) is False
+    assert entitlement.is_free_board("full_ppr", "twelve") is False
+
+
+def test_a_paid_preset_needs_entitlement_and_the_free_one_never_does():
+    ent = entitlement.Entitlement(fantasy=True, source="gateway")
+    assert entitlement.allows_board("half_ppr", 12, None) is False
+    assert entitlement.allows_board("half_ppr", 12, ent) is True
+    assert entitlement.allows_board("full_ppr", 12, None) is True
+
+
+@pytest.mark.parametrize("query", [_PAID_FORMAT_QUERY, _PAID_SIZE_QUERY])
+def test_an_anonymous_caller_is_refused_a_paid_preset(app_env, query):
+    """⭐ THE CLAUSE THAT STOPS 'MAKE EVERYTHING FREE' FROM SATISFYING THIS FILE, at the format
+    grain. 403 rather than a redacted 200: the E9.56 lock existed to draw a per-cell CTA on a board
+    the visitor was looking at, and here the client keeps them on the free board instead."""
+    status, _ = _call("/fantasy/nfl/board", query)
+    assert status == 403, "a paid preset is reachable anonymously"
+
+
+@pytest.mark.parametrize("query", [_PAID_FORMAT_QUERY, _PAID_SIZE_QUERY])
+def test_a_subscriber_gets_a_paid_preset(app_env, query):
+    """The other side — a gate that refused EVERYONE would pass the test above."""
+    status, _ = _call("/fantasy/nfl/board", query, aws_event=_entitled_event())
+    assert status == 200, "a subscriber lost a preset they pay for"
+
+
+@pytest.mark.parametrize("query", [_PAID_FORMAT_QUERY, _PAID_SIZE_QUERY])
+def test_a_forged_token_does_not_unlock_a_paid_preset(app_env, query):
+    """With the gateway authorizer set to NONE on these routes the Bearer token is
+    attacker-controlled, so `jwt_verify` — not the presence of a token — is what grants a preset."""
+    status, _ = _call(
+        "/fantasy/nfl/board",
+        query,
+        headers={"Authorization": "Bearer " + _unsigned_token(["subscriber", "admin"])},
+    )
+    assert status == 403, "a forged token bought a paid preset"
+
+
+def test_a_signed_in_non_subscriber_is_refused_a_paid_preset(app_env):
+    """A real, gateway-validated account with no fantasy entitlement is on the FREE tier — the
+    third caller class, and the one a naive `has a token ⇒ entitled` check would let through."""
+    status, _ = _call(
+        "/fantasy/nfl/board", _PAID_FORMAT_QUERY, aws_event=_entitled_event(groups="[beta_tester]")
+    )
+    assert status == 403
+
+
+def test_a_junk_config_reads_the_same_to_everyone(app_env):
+    """A malformed `config` must be rejected on its syntax BEFORE entitlement is consulted, or the
+    status code leaks the caller's tier on a request that was never valid for anybody."""
+    bad = "season=2026&config=NOT-A-CONFIG&size=12"
+    anon, _ = _call("/fantasy/nfl/board", bad)
+    sub, _ = _call("/fantasy/nfl/board", bad, aws_event=_entitled_event())
+    assert anon == sub == 422
+
+
+def test_neither_answer_to_a_paid_board_is_shared_cacheable():
+    """⭐ THE COST-GUARDRAIL CONSEQUENCE OF MAKING A ROUTE CALLER-DEPENDENT, checked rather than
+    assumed. `cost_guardrails.cache_control_for` is keyed on the PATH — it cannot see `config` — so
+    `/fantasy/nfl/board` has one caching rule covering both the free preset and the paid ones, and
+    the paid ones now answer 200-or-403 depending on who asks. That is precisely the 'same URL, two
+    bodies' shape G100-D1 exists to prevent.
+
+    It is safe, but for two SEPARATE pre-existing reasons, and the point of this clause is that
+    losing either one is a paid-data breach rather than a caching regression:
+      · a subscriber's request carries `Authorization` ⇒ `private`, so their 200 is never shared;
+      · an anonymous request gets 403 ⇒ non-200 ⇒ `no-store`, so the refusal is never pinned into
+        the edge and served to subscribers.
+    Remove the status check and every subscriber gets a cached 403; remove the authorization check
+    and every anonymous visitor gets a cached paid board.
+    """
+    from app.backend.services import cost_guardrails as cg
+
+    assert cg.cache_control_for(
+        "/fantasy/nfl/board", has_authorization=True, status_code=200
+    ) == cg.PRIVATE_CACHE_CONTROL
+    assert cg.cache_control_for(
+        "/fantasy/nfl/board", has_authorization=False, status_code=403
+    ) == "no-store"
+
+
+def test_the_manifest_marks_exactly_the_free_preset(app_env):
+    """The client cannot draw the boundary it cannot see. The manifest is where the paywall is
+    stated to the frontend — deriving it there from a hardcoded format name would put the same fact
+    in two places, and only one of them deploys with `deploy.sh`."""
+    _, raw = _call("/fantasy/nfl/manifest", "season=2026")
+    body = json.loads(raw)
+    free = {c["name"] for c in body["configs"] if c.get("free")}
+    assert free == {entitlement.FREE_BOARD_CONFIG}
+    assert body["freeBoard"] == {
+        "config": entitlement.FREE_BOARD_CONFIG,
+        "size": entitlement.FREE_BOARD_SIZE,
+    }
+
+
+def test_the_manifest_marking_is_purely_additive(app_env):
+    """NF-C0: the deployed client knows neither key. Adding them must not rename, drop or reorder
+    anything it does read — a response-shape break here is a 200 with a blank screen."""
+    _, raw = _call("/fantasy/nfl/manifest", "season=2026")
+    body = json.loads(raw)
+    for key, value in _MANIFEST.items():
+        if key == "configs":
+            continue
+        assert body[key] == value, f"the manifest lost or changed {key!r}"
+    assert [c["name"] for c in body["configs"]] == [c["name"] for c in _MANIFEST["configs"]]
+    for served, original in zip(body["configs"], _MANIFEST["configs"]):
+        assert served["label"] == original["label"]
 
 
 # ── the no-regression half: what must STAY paid ───────────────────────────────────────────────
@@ -471,6 +629,114 @@ def test_the_frontend_capability_sets_mirror_the_backend():
         assert set(re.findall(r'"([a-z_]+)"', m.group(1))) == {c.value for c in expected}, (
             f"{const} has drifted from the backend's set"
         )
+
+
+def test_the_cdn_route_can_only_ask_for_the_free_board():
+    """⭐ THE EDGE MUST NOT BE ABLE TO ASK A CALLER-DEPENDENT QUESTION.
+
+    The public CDN handler strips `Authorization` unconditionally (its property 1), so any board it
+    fetches is fetched ANONYMOUSLY — and since the tier narrowed, a paid preset answers 403 to an
+    anonymous caller. Left proxyable, a subscriber's request for `half_ppr` would mint a public CDN
+    entry containing a 403 and serve it to every subscriber for the rest of the window. Pinning the
+    `config`/`size` patterns to the free selection removes the possibility rather than relying on
+    the client never to ask.
+
+    Read from the route source and compared against the BACKEND constants, so a one-sided edit to
+    either owner goes red (INC-38: one logical thing, two owners)."""
+    code = _code("app/api/public/[...path]/route.ts")
+    m = re.search(r"board:\s*\{(.*?)\n  \}", code, re.S)
+    assert m, "the board entry is no longer recognisable in the CDN allowlist"
+    entry = m.group(1)
+    assert f"/^{entitlement.FREE_BOARD_CONFIG}$/" in entry, (
+        "the CDN board route accepts a config other than the free preset"
+    )
+    assert f"/^{entitlement.FREE_BOARD_SIZE}$/" in entry, (
+        "the CDN board route accepts a size other than the free one"
+    )
+
+
+def test_the_picker_disables_every_paid_preset_for_an_unentitled_caller():
+    """Asserted on the RENDER, not on the import: a file that still imports the lock copy while
+    handing `Picker` an unconditional option list passes any name-in-file grep. The claim here is
+    that `disabled` is wired to the lock state on BOTH controls."""
+    code = _code("components/fantasy/shared.tsx")
+    start = code.index("export function FormatSelector")
+    end = code.index("export function PositionTabs")
+    body = code[start:end]
+    assert "lockFormats = !entitled" in body, "the picker no longer derives a lock state"
+    # Two controls, two independent locks — the size lock is the one an implementation forgets.
+    assert body.count("disabled: locked") == 2, (
+        "a format/size control stopped disabling its paid options"
+    )
+    assert re.search(r"locked\s*=\s*lockFormats\s*&&\s*!isFreeConfig\(c\)", body), (
+        "the format options are no longer locked by the manifest's own `free` marking"
+    )
+    assert re.search(r"locked\s*=\s*lockFormats\s*&&\s*n\s*!==\s*free!\.size", body), (
+        "the size options are no longer locked against the free size"
+    )
+
+
+def test_a_locked_preset_is_listed_rather_than_removed():
+    """⚠️ THE OPPOSITE FAILURE, and the more tempting fix. Dropping the paid presets from the picker
+    would satisfy 'an unentitled caller cannot select one' completely — and would make the free
+    board look like the only board we publish, which is both untrue and the reverse of what an
+    upgrade prompt is for. The list stays whole; the options go disabled."""
+    code = _code("components/fantasy/shared.tsx")
+    start = code.index("export function FormatSelector")
+    end = code.index("export function PositionTabs")
+    body = code[start:end]
+    assert "manifest.configs.map(" in body, "the picker no longer offers every exported preset"
+    assert not re.search(r"manifest\.configs\s*\.\s*filter", body), (
+        "paid presets are being filtered out of the picker instead of disabled"
+    )
+    assert not re.search(r"manifest\.sizes\s*\.\s*filter", body), (
+        "paid sizes are being filtered out of the picker instead of disabled"
+    )
+
+
+def test_an_unentitled_visitor_is_defaulted_onto_a_board_they_can_read():
+    """A first visit that opens on `half_ppr` would fire a request the API refuses, and the surface
+    would render its refusal state before the visitor had done anything — a paywall presented as a
+    broken page. The default has to come from the manifest's own `freeBoard`, not from the entitled
+    default constant."""
+    code = _code("lib/fantasy-queries.ts")
+    start = code.index("export function useFormatSelection")
+    end = code.index("const persist =")
+    body = code[start:end]
+    assert "freeSelection(manifest)" in body, "the selection hook never reads the free board"
+    assert re.search(r"if\s*\(!entitled\s*&&\s*free\)", body), (
+        "the unentitled branch is gone — an unentitled visitor can be defaulted onto a paid preset"
+    )
+    # ⛔ AND THE BRANCH MUST NOT READ `stored` AT ALL. There is one preset this caller can open, so
+    # a stored paid selection — written while subscribed and surviving the lapse in localStorage —
+    # has to be ignored outright rather than consulted.
+    #
+    # ⚠️ TWO EARLIER SPELLINGS OF THIS CLAUSE WERE VACUOUS AND THE RED PROOF CAUGHT BOTH. First
+    # `assert "storedIsFree" in body`, which a break replacing the whole expression with `= true`
+    # satisfied because the NAME survived (the import-vs-render shape). Then asserting the
+    # comparison itself — which was still vacuous, for a better reason: the ternary it guarded had
+    # IDENTICAL ARMS, so the check genuinely did nothing and no break of it could fail. Asserting an
+    # absence is what finally holds, and it is also what let the dead branch be deleted.
+    branch = body[body.index("if (!entitled && free)"):]
+    branch = branch[: branch.index("return")]
+    assert "stored" not in branch, (
+        "the unentitled branch consults the stored selection — a paid preset written while "
+        "subscribed will survive a lapse and reopen on a board the API now refuses"
+    )
+
+
+def test_a_refused_board_does_not_render_as_an_empty_search():
+    """A 403 arriving as zero rows previously rendered 'No players match — try clearing the search
+    box': a paywall described as a typo. Reachable through a stale stored selection or the NF-C0
+    skew window, i.e. exactly when a misleading message costs most."""
+    code = _code("components/fantasy/rankings-board.tsx")
+    assert "error: boardError" in code, "the board's error is no longer surfaced"
+    assert re.search(r"!boardLoading\s*&&\s*boardError\s*&&", code), (
+        "there is no distinct branch for a refused board"
+    )
+    assert re.search(r"!boardLoading\s*&&\s*!boardError\s*&&\s*rows\.length === 0", code), (
+        "the empty-search branch still swallows a refusal"
+    )
 
 
 def test_the_three_board_hooks_never_gate_their_fetch_on_entitlement():
@@ -588,6 +854,30 @@ def test_the_paid_summary_names_both_halves_of_the_boundary():
     block = block[: block.index("\n]")].lower()
     assert "scoring" in block and "roster" in block, "the personalization half is not described"
     assert "draft" in block, "the decision-support half is not described"
+    # The third half, added when the tier narrowed to one preset: the formats are now a membership
+    # feature and the paid summary is what states that in the user's words.
+    assert "format" in block, "the scoring-format half is not described"
+
+
+def test_the_free_tier_summary_names_no_league_format():
+    """⚠️ THE COPY THAT WENT STALE ONCE, AND WOULD AGAIN.
+
+    Two independent reasons this sentence must not name a format. (1) CORRECTNESS TODAY: the block
+    renders on Projections, which is format-INDEPENDENT — one projection with no scoring applied —
+    so 'scored for full-PPR, twelve teams' would be false on one of the two pages that shows it.
+    (2) STALENESS: until 2026-08-08 it read 'scored for the common league presets', true while all
+    14 boards were free and false the instant the tier narrowed. Nothing renders differently when
+    copy stops being accurate, so nothing catches it. The format scope belongs to the controls it
+    constrains (`FORMAT_LOCK_EXPLANATION`) and to the paid summary, both of which are asserted
+    separately above."""
+    src = (_FRONTEND / "lib/fantasy-claim-copy.ts").read_text()
+    block = src[src.index("FREE_TIER_SUMMARY"):]
+    block = block[: block.index("} as const")].lower()
+    for token in ("ppr", "superflex", "twelve team", "12-team", "preset"):
+        assert token not in block, (
+            f"FREE_TIER_SUMMARY names a league format ({token!r}) — it renders on the "
+            f"format-independent Projections surface too, and it goes stale when the tier moves"
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

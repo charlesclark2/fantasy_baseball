@@ -26,7 +26,10 @@ import { canUse } from "@/lib/entitlements"
 import { assignTiers, type Player } from "@/lib/draft-optimizer"
 import { fullSeasonRate, rowsAreLocked, trimLockedTail } from "@/lib/fantasy"
 import {
+  BOARD_LOAD_ERROR_DETAIL,
   EXPECTED_POINTS_LABEL,
+  FORMAT_LOCK_EXPLANATION,
+  FORMAT_LOCK_TITLE,
   FULL_SEASON_RATE_LABEL,
   PROJECTED_GAMES_LABEL,
 } from "@/lib/fantasy-claim-copy"
@@ -75,8 +78,12 @@ export function RankingsBoard() {
   const { data: manifest, isLoading: manifestLoading, error: manifestError } = useFantasyManifest()
   // NF-C0b: a saved hand-entered league ranks through the identical Player[] interface.
   const { data: savedLeagues } = useSavedLeagues()
-  const { configName, size, setConfigName, setSize } = useFormatSelection(manifest, savedLeagues)
-  const { board, isLoading: boardLoading } = useResolvedBoard(configName, size)
+  const { configName, size, setConfigName, setSize } = useFormatSelection(
+    manifest,
+    savedLeagues,
+    entitled,
+  )
+  const { board, isLoading: boardLoading, error: boardError } = useResolvedBoard(configName, size)
   const [pos, setPos] = useState("Overall")
   const [q, setQ] = useState("")
   const [page, setPage] = useState(0)
@@ -277,6 +284,7 @@ export function RankingsBoard() {
               onConfig={setConfigName}
               onSize={setSize}
               savedLeagues={savedLeagues}
+              entitled={entitled}
             />
           </div>
 
@@ -311,7 +319,19 @@ export function RankingsBoard() {
 
           {boardLoading && <LoadingBlock label="Scoring the board…" />}
 
-          {!boardLoading && rows.length === 0 && (
+          {/* A REFUSAL AND AN EMPTY SEARCH ARE DIFFERENT ANSWERS, and this branch exists so they
+              read differently. A paid preset answers 403; without it that arrived as zero rows and
+              rendered "No players match — try clearing the search box", i.e. a paywall described as
+              a typo. Reachable in normal use only through a stale stored selection or the NF-C0
+              deploy-skew window, which is exactly when a misleading message costs the most. */}
+          {!boardLoading && boardError && (
+            <EmptyBlock
+              title={entitled ? "This board didn't load" : FORMAT_LOCK_TITLE}
+              detail={entitled ? BOARD_LOAD_ERROR_DETAIL : FORMAT_LOCK_EXPLANATION}
+            />
+          )}
+
+          {!boardLoading && !boardError && rows.length === 0 && (
             <EmptyBlock
               title="No players match"
               detail="Try clearing the search box or switching position."
