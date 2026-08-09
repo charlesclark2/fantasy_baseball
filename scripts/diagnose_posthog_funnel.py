@@ -103,6 +103,49 @@ def main(argv: list[str] | None = None) -> int:
         flag = "  " if events else "⛔"
         print(f"{flag}{i}. {event:<24} {events:>7} {persons:>8}  {latest}")
 
+    # ── 1b. WHICH AUTH DOOR was used, and what the round-trip carried. ────────────────────────
+    #
+    # ⭐ THE DECISIVE CHECK WHEN STEP 2 IS ZERO, and the two causes it separates are completely
+    # different problems:
+    #
+    #   · `user_signup_started` never fired  ⇒ nobody clicked a SIGN-UP affordance. They used the
+    #     sign-in door (or password login). `user_signup_completed` is correctly silent; the walk
+    #     simply did not exercise signup.
+    #   · `user_signup_started` fired but `user_signup_completed` did not, and `user_signed_in`
+    #     carries `intent: "unknown"`  ⇒ THE SIGN-IN CONTEXT WAS LOST ACROSS THE COGNITO REDIRECT.
+    #     That is a real defect and it breaks signup measurement for EVERY user, not just this walk.
+    #
+    # The `intent` / `surface` / `method` properties are what tell those apart, so they are printed
+    # rather than summarised — a count here would collapse the exact distinction being drawn.
+    print(f"\n══ AUTH DOOR ══")
+    auth = q(
+        f"select timestamp, event, properties.intent, properties.surface, properties.method, "
+        f"person_id from events where {window} and event in "
+        f"('user_signup_started', 'user_signup_completed', 'user_signin_started', 'user_signed_in') "
+        f"order by timestamp desc limit 30"
+    )
+    if not auth:
+        print("  no auth events at all in the window — nobody signed in or up.")
+    for ts, event, intent, surface, method, person_id in auth:
+        print(f"  {ts}  {event:<24} intent={intent or '—'} surface={surface or '—'} "
+              f"method={method or '—'}  {person_id}")
+    started = [r for r in auth if r[1] == "user_signup_started"]
+    completed = [r for r in auth if r[1] == "user_signup_completed"]
+    if not started and not completed:
+        print(
+            "\n  ⇒ NO SIGN-UP INTENT was recorded. `user_signup_completed` fires only when the "
+            "round-trip\n     began at a SIGN-UP affordance, so a sign-in (or a password login) "
+            "correctly produces\n     nothing. The funnel is telling the truth about a walk that "
+            "never signed up."
+        )
+    elif started and not completed:
+        print(
+            "\n  ⛔ SIGN-UP STARTED BUT NEVER COMPLETED. If `user_signed_in` above reads "
+            "intent=unknown,\n     the context was LOST across the Cognito redirect — a real defect "
+            "that silently zeroes\n     step 2 for every user. If it reads intent=signup, the "
+            "round-trip itself failed."
+        )
+
     # ── 2. THE STITCH. One walker should be ONE person across the whole spine. ─────────────────
     print(f"\n══ IDENTITY STITCH ══")
     stitch = q(
