@@ -13,8 +13,13 @@ const geistMono = Geist_Mono({ subsets: ['latin'] })
 // not export its own metadata (i.e. the string a link preview showed when any of them was pasted
 // into a chat). It is also single-vertical, from before the NFL fantasy product existed. The home
 // route overrides both fields with `HERO.subhead`; this is the fallback for everything else.
+// ⭐ E9.60 — FANTASY-FIRST (spec §2). E9.46 had already removed the "Daily edge, quantified" claim
+// and the baseball-only framing; what it left was MLB-first ordering, which is the one place the
+// site still stated a different product priority than the home page, About and the nav. This is the
+// SEO/link-preview surface — the sentence a link shows when any route is pasted into a chat — so it
+// is also the most widely distributed copy in the product.
 const SITE_DESCRIPTION =
-  'Transparent, model-driven sports analysis — MLB betting intelligence and NFL fantasy rankings, each published with the uncertainty around it.'
+  'Transparent, model-driven sports analysis — NFL fantasy rankings and MLB betting intelligence, each published with the uncertainty around it.'
 
 export const metadata: Metadata = {
   title: 'Credence Sports',

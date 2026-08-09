@@ -49,7 +49,13 @@ _SUBSCRIBE_TSX = _REPO / "frontend/app/subscribe/page.tsx"
 #: working as designed rather than a courtesy. `test_e9_46_home_copy.py` asserts the membership
 #: from the other side, so removing it here is a red build there.
 _HOME_PAGE_TSX = _REPO / "frontend/app/page.tsx"
-_MARKETING_SURFACES = (_UPGRADE_BANNER_TSX, _SUBSCRIBE_TSX, _HOME_PAGE_TSX)
+_ABOUT_TSX = _REPO / "frontend/app/about/page.tsx"
+_FAQ_TSX = _REPO / "frontend/app/faq/page.tsx"
+# E9.60 — About and FAQ join the registry. They are marketing surfaces by any reading (they pitch
+# both products to a logged-out visitor) and had never been in it, which is part of how they drifted
+# into describing a baseball-only company. The two clauses below now bind them as well: neither may
+# QUOTE the track-record measurement, and both must LINK to it.
+_MARKETING_SURFACES = (_UPGRADE_BANNER_TSX, _SUBSCRIBE_TSX, _HOME_PAGE_TSX, _ABOUT_TSX, _FAQ_TSX)
 _TRACK_RECORD_TSX = _REPO / "frontend/components/fantasy/track-record-page.tsx"
 _E2E_MANIFEST = _REPO / "frontend/e2e/fixtures/api/fantasy-nfl-track-record-manifest.json"
 
