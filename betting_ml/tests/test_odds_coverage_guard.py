@@ -54,17 +54,23 @@ class TestClassify:
         assert coc._classify(spine_games=10, odds_events=10, bridge_with_odds=5) == "OK"
 
 
+_ROW_FIELDS = ("d", "spine_games", "odds_events", "bridge_games", "bridge_with_odds")
+
+
 def _run_main(rows, argv, capsys):
-    """Run check_odds_coverage.main() with a mocked Snowflake cursor returning `rows`
+    """Run check_odds_coverage.main() with the data read stubbed to return `rows`
     (list of (d, spine_games, odds_events, bridge_games, bridge_with_odds) tuples).
-    Returns (return_code, stdout_text)."""
-    cur = mock.MagicMock()
-    cur.description = [("d",), ("spine_games",), ("odds_events",),
-                       ("bridge_games",), ("bridge_with_odds",)]
-    cur.fetchall.return_value = rows
-    conn = mock.MagicMock()
-    conn.cursor.return_value = cur
-    with mock.patch.object(coc, "get_snowflake_connection", return_value=conn), \
+    Returns (return_code, stdout_text).
+
+    E11.24 target 3: the injection point moved from a mocked Snowflake cursor to
+    `fetch_coverage_rows` when the check was repointed to DuckDB-over-S3. Every assertion in
+    TestMain is unchanged — these tests are about the CLASSIFICATION + exit-code contract, not
+    the store. The read itself (including the load-bearing ::date casts on the VARCHAR
+    game_date columns) is exercised for real against seeded parquet-shaped fixtures in
+    test_e11_24_check_guard_s3_repoint.py.
+    """
+    with mock.patch.object(coc, "fetch_coverage_rows",
+                           return_value=[dict(zip(_ROW_FIELDS, r)) for r in rows]), \
          mock.patch.object(sys, "argv", ["check_odds_coverage.py", *argv]):
         rc = coc.main()
     return rc, capsys.readouterr().out
