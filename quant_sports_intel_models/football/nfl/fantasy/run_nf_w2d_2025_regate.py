@@ -237,6 +237,94 @@ def era_delta(fold_results: list[dict], winners: dict[str, str]) -> dict:
     return out
 
 
+def era_rank_diagnostic(fold_results: list[dict], winners: dict[str, str]) -> dict:
+    """How LOW do the 2025 fold lifts sit against the 12 legacy ones? (exact Mann-Whitney, 2 vs 12)
+
+    ⚠️ POST-HOC — a reading of the PRE-REGISTERED era-delta diagnostic, never a gate and never
+    part of the ship decision. Reported with the BH cutoff over the four positions so a reader
+    cannot take four uncorrected p-values at face value.
+    """
+    from scipy.stats import mannwhitneyu
+    legacy = [fr for fr in fold_results if int(fr["label"][:4]) in W2D.LEGACY_SEASONS]
+    new = [fr for fr in fold_results if int(fr["label"][:4]) not in W2D.LEGACY_SEASONS]
+    if len(new) < 1 or len(legacy) < 2:
+        return {"state": "UNEVALUABLE",
+                "reason": f"{len(new)} new / {len(legacy)} legacy folds — not comparable"}
+    out: dict = {"state": "OK", "n_new": len(new), "n_legacy": len(legacy),
+                 "note": "POST-HOC reading of the pre-registered era delta; NEVER a gate"}
+    pvals = {}
+    for pos in WP.POSITIONS:
+        w = winners[pos]
+        lg = [fr["scores"][W2D.FOIL_W2D][pos] - fr["scores"][w][pos] for fr in legacy]
+        nw = [fr["scores"][W2D.FOIL_W2D][pos] - fr["scores"][w][pos] for fr in new]
+        _, p = mannwhitneyu(nw, lg, alternative="less", method="exact")
+        pvals[pos] = float(p)
+        out[pos] = {
+            "arm": w, "new_lifts": [round(v, 4) for v in nw],
+            "legacy_min": round(float(np.min(lg)), 4), "legacy_max": round(float(np.max(lg)), 4),
+            "legacy_median": round(float(np.median(lg)), 4),
+            "below_legacy_pairs": int(sum(1 for a in nw for b in lg if a < b)),
+            "of_pairs": len(nw) * len(lg),
+            "exact_one_sided_p": round(float(p), 4),
+            # relative lift removes the season-difficulty SCALE explanation
+            "relative_lift_legacy_pct": round(100 * float(np.mean(lg)) / float(np.mean(
+                [fr["scores"][W2D.FOIL_W2D][pos] for fr in legacy])), 3),
+            "relative_lift_new_pct": round(100 * float(np.mean(nw)) / float(np.mean(
+                [fr["scores"][W2D.FOIL_W2D][pos] for fr in new])), 3),
+        }
+    ranked = sorted(pvals.items(), key=lambda kv: kv[1])
+    m = len(ranked)
+    out["bh_q10_cutoffs"] = {pos: round(WP.FDR_Q * (i + 1) / m, 4)
+                             for i, (pos, _) in enumerate(ranked)}
+    out["survives_bh_q10"] = {pos: bool(p <= WP.FDR_Q * (i + 1) / m)
+                              for i, (pos, p) in enumerate(ranked)}
+    return out
+
+
+def arm_invariance_diagnostic(fold_results: list[dict]) -> dict:
+    """Is any era attenuation a property of the ARM or of the POSITION?
+
+    ⭐ The discriminating question the winner-arm coincidence invites: RB/WR's winner uses the
+    injury family in BOTH legs while QB/TE's uses it in the zero leg only, so "the 2025 practice
+    line is 34% absent, which should hurt the two-leg arm most" is a tempting mechanism. It is
+    testable with data already in hand — if it were true, `inj_both`'s era ratio would sit BELOW
+    `inj_zero_leg`'s at every position. Reporting the ratio per ARM is what turns that story into
+    a measurement instead of a just-so explanation (NF-D15 (g′): a pattern lining up with an arm
+    is not that arm causing it).
+    """
+    legacy = [fr for fr in fold_results if int(fr["label"][:4]) in W2D.LEGACY_SEASONS]
+    new = [fr for fr in fold_results if int(fr["label"][:4]) not in W2D.LEGACY_SEASONS]
+    if not legacy or not new:
+        return {"state": "UNEVALUABLE", "reason": "one era is empty"}
+    rows, spreads = [], []
+    for pos in WP.POSITIONS:
+        ratios = {}
+        for arm in W2D.REAL_ARMS_W2D:
+            a = float(np.mean([fr["scores"][W2D.FOIL_W2D][pos] - fr["scores"][arm][pos]
+                               for fr in legacy]))
+            b = float(np.mean([fr["scores"][W2D.FOIL_W2D][pos] - fr["scores"][arm][pos]
+                               for fr in new]))
+            ratios[arm] = round(b / a, 3) if a > 0 else None
+            rows.append({"position": pos, "arm": arm, "legacy_lift": round(a, 4),
+                         "new_lift": round(b, 4), "era_ratio": ratios[arm]})
+        pair = [ratios.get("inj_both"), ratios.get("inj_zero_leg")]
+        if all(v is not None for v in pair):
+            spreads.append({"position": pos, "both_minus_zero_leg": round(pair[0] - pair[1], 3)})
+    max_spread = max((abs(s["both_minus_zero_leg"]) for s in spreads), default=None)
+    return {
+        "state": "OK", "per_arm": rows, "both_minus_zero_leg": spreads,
+        "max_abs_spread": max_spread,
+        "reading": (
+            "the era ratio is essentially ARM-INVARIANT (max |inj_both − inj_zero_leg| = "
+            f"{max_spread}) ⇒ any attenuation is a property of the POSITION, not of how much of "
+            "the family an arm consumes — which REFUTES the practice-line-absence mechanism as "
+            "the explanation for the position pattern"
+            if max_spread is not None and max_spread < 0.10 else
+            "the era ratio differs materially by arm — the arm-sensitivity mechanism is LIVE and "
+            "must be pursued before attributing the attenuation to the position"),
+    }
+
+
 def covered_subset_diagnostic(feat: pd.DataFrame, folds: list[WP.Fold]) -> dict:
     """Where the mechanism CAN act on the new folds (NF-D20 active-fold count).
 
@@ -327,6 +415,7 @@ def write_report(out: dict, path: Path) -> None:  # noqa: C901 — a report, not
           f"coverage(80) {sel['coverage']}")
         p(f"- MAE (report-only, never selects): {sel['mean_mae_report_only']}")
         p(f"- ERA DELTA (diagnostic): {out['era_delta'][pos]}")
+        p(f"- ERA RANK (post-hoc diagnostic): {out['era_rank_diagnostic'].get(pos)}")
         p("")
     p("## Per-fold family activity (the NF-D20 discipline)")
     p("")
@@ -335,6 +424,18 @@ def write_report(out: dict, path: Path) -> None:  # noqa: C901 — a report, not
     p("## Covered-subset diagnostic (where the mechanism can act) — never gated")
     p("")
     p(pd.DataFrame(out["covered_subset"]["per_fold"]).to_markdown(index=False))
+    p("")
+    p("## Era attenuation — is it the ARM or the POSITION? (post-hoc, never gated)")
+    p("")
+    inv = out["arm_invariance_diagnostic"]
+    p(f"**{inv.get('reading', inv.get('reason'))}**")
+    p("")
+    if inv.get("per_arm"):
+        p(pd.DataFrame(inv["per_arm"]).to_markdown(index=False))
+        p("")
+    erd = out["era_rank_diagnostic"]
+    p(f"BH q=0.10 cutoffs over the four positions: {erd.get('bh_q10_cutoffs')} · "
+      f"survives: {erd.get('survives_bh_q10')}")
     p("")
     p("## Deflation convention")
     p("")
@@ -351,6 +452,44 @@ def write_report(out: dict, path: Path) -> None:  # noqa: C901 — a report, not
     path.write_text("\n".join(a))
 
 
+def _reanalyze(*, smoke: bool) -> int:
+    """Recompute the post-hoc DIAGNOSTICS from the stored per-fold scores and rewrite the report.
+
+    ⛔ Structurally cannot change a verdict: the gates, per-position winners, FDR, null states and
+    the reproduction control are READ BACK from the artifact and written through unchanged — only
+    the diagnostic blocks are recomputed. This exists so the numbers quoted in the writeup are
+    GENERATED from the run's own scores rather than hand-transcribed, at zero refit cost.
+    """
+    suffix = "_smoke" if smoke else ""
+    path = _REPORT_DIR / f"nf_w2d_2025_regate{suffix}.json"
+    if not path.exists():
+        raise SystemExit(f"{path.name} absent — run the bake-off before --reanalyze")
+    out = json.loads(path.read_text())
+    fold_results = out["fold_results"]
+    winners = {pos: out["positions"][pos]["winner"] for pos in WP.POSITIONS}
+    before = json.dumps({k: out[k] for k in
+                         ("verdict", "gates", "positions", "fdr", "reproduction_control")},
+                        sort_keys=True, default=str)
+    out["era_delta"] = era_delta(fold_results, winners)
+    out["era_rank_diagnostic"] = era_rank_diagnostic(fold_results, winners)
+    out["arm_invariance_diagnostic"] = arm_invariance_diagnostic(fold_results)
+    out["reanalyzed_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    after = json.dumps({k: out[k] for k in
+                        ("verdict", "gates", "positions", "fdr", "reproduction_control")},
+                       sort_keys=True, default=str)
+    if before != after:  # a reanalysis that moved a verdict is a BUG, not a finding
+        raise SystemExit("--reanalyze changed a verdict/gate/winner — refusing to write; the "
+                         "diagnostic path must be decision-inert by construction")
+    path.write_text(json.dumps(out, indent=2, default=float))
+    write_report(out, _REPORT_DIR / f"nf_w2d_2025_regate{suffix}.md")
+    log.info("reanalysis complete (verdicts unchanged): %s", out["headline"])
+    print(json.dumps({"verdict": out["verdict"],
+                      "arm_invariance": out["arm_invariance_diagnostic"].get("max_abs_spread"),
+                      "era_rank_p": {p: out["era_rank_diagnostic"][p]["exact_one_sided_p"]
+                                     for p in WP.POSITIONS}}, indent=2))
+    return 0
+
+
 # ── Runner ──────────────────────────────────────────────────────────────────────────────────────
 def main(argv=None) -> int:  # noqa: C901 — orchestration
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -359,7 +498,15 @@ def main(argv=None) -> int:  # noqa: C901 — orchestration
                     help="last 2 legacy folds + both 2025 folds, artifacts suffixed _smoke")
     ap.add_argument("--rebuild-cache", action="store_true")
     ap.add_argument("--no-report", action="store_true")
+    ap.add_argument("--reanalyze", action="store_true",
+                    help="recompute the post-hoc DIAGNOSTICS from the stored per-fold scores and "
+                         "rewrite the report — no refit. ⛔ Cannot change a verdict: the gates, "
+                         "the winners and the reproduction control are re-read from the artifact, "
+                         "never recomputed, so this path can only add reading, never selection.")
     args = ap.parse_args(argv)
+
+    if args.reanalyze:
+        return _reanalyze(smoke=args.smoke)
 
     t0 = time.time()
     feat, pit_audit, store_raw = build_matrix_w2d(SEASONS, rebuild_cache=args.rebuild_cache)
@@ -456,6 +603,9 @@ def main(argv=None) -> int:  # noqa: C901 — orchestration
         "covered_subset": covered_subset_diagnostic(feat, gated),
         "era_delta": era_delta(fold_results,
                                {pos: positions[pos]["winner"] for pos in WP.POSITIONS}),
+        "era_rank_diagnostic": era_rank_diagnostic(
+            fold_results, {pos: positions[pos]["winner"] for pos in WP.POSITIONS}),
+        "arm_invariance_diagnostic": arm_invariance_diagnostic(fold_results),
         "fold_results": [{k: fr[k] for k in ("label", "scores", "n_train", "n_test")}
                          for fr in fold_results],
     }

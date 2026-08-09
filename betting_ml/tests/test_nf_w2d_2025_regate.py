@@ -675,6 +675,79 @@ class TestRedProofs:
             "the registered one-game-week bound must refuse a 26-day-old capture")
 
 
+# ══ 12b. The post-hoc era diagnostics are two-sided and decision-INERT ══════════════════════════
+class TestEraDiagnostics:
+    @staticmethod
+    def _folds(spec: dict[str, dict[str, float]]) -> list[dict]:
+        """spec: {fold_label: {arm: lift_over_foil}} → fold_results with foil CRPS pinned at 1.0"""
+        out = []
+        for label, lifts in spec.items():
+            scores = {W2D.FOIL_W2D: {p: 1.0 for p in WP.POSITIONS}}
+            for arm, lift in lifts.items():
+                scores[arm] = {p: 1.0 - lift for p in WP.POSITIONS}
+            out.append({"label": label, "scores": scores})
+        return out
+
+    def _uniform(self, legacy_lift, new_lift, arm_offsets=None):
+        arm_offsets = arm_offsets or {a: 0.0 for a in W2D.REAL_ARMS_W2D}
+        spec = {}
+        for i, (s, h) in enumerate(W2D.LEGACY_BLOCKS_W2D):
+            spec[f"{s}H{h}"] = {a: legacy_lift + 0.001 * i for a in W2D.REAL_ARMS_W2D}
+        for s, h in ((2025, 1), (2025, 2)):
+            spec[f"{s}H{h}"] = {a: new_lift * (1 + arm_offsets[a]) for a in W2D.REAL_ARMS_W2D}
+        return self._folds(spec)
+
+    def test_arm_invariance_reads_INVARIANT_when_every_arm_degrades_alike(self):
+        from quant_sports_intel_models.football.nfl.fantasy import run_nf_w2d_2025_regate as R
+        got = R.arm_invariance_diagnostic(self._uniform(0.10, 0.03))
+        assert got["state"] == "OK"
+        assert got["max_abs_spread"] < 0.10
+        assert "ARM-INVARIANT" in got["reading"] and "REFUTES" in got["reading"]
+
+    def test_arm_invariance_reads_ARM_SENSITIVE_when_one_arm_degrades_more(self):
+        """The other side of the two-sided check — a reading that can only ever say one thing is
+        not a measurement (the degenerate-anchor discipline applied to a narrative)."""
+        from quant_sports_intel_models.football.nfl.fantasy import run_nf_w2d_2025_regate as R
+        got = R.arm_invariance_diagnostic(self._uniform(
+            0.10, 0.03, arm_offsets={"inj_both": -0.9, "inj_zero_leg": 0.0,
+                                     "inj_override": 0.0}))
+        assert got["max_abs_spread"] >= 0.10
+        assert "LIVE" in got["reading"]
+
+    def test_the_era_rank_diagnostic_fails_closed_when_an_era_is_empty(self):
+        from quant_sports_intel_models.football.nfl.fantasy import run_nf_w2d_2025_regate as R
+        legacy_only = [fr for fr in self._uniform(0.10, 0.03)
+                       if not fr["label"].startswith("2025")]
+        got = R.era_rank_diagnostic(legacy_only, {p: "inj_both" for p in WP.POSITIONS})
+        assert got["state"] == "UNEVALUABLE"
+        assert R.arm_invariance_diagnostic(legacy_only)["state"] == "UNEVALUABLE"
+
+    def test_the_era_rank_diagnostic_reports_a_BH_cutoff_for_every_position(self):
+        """Four uncorrected p-values must never be presented bare."""
+        from quant_sports_intel_models.football.nfl.fantasy import run_nf_w2d_2025_regate as R
+        got = R.era_rank_diagnostic(self._uniform(0.10, 0.01),
+                                    {p: "inj_both" for p in WP.POSITIONS})
+        assert set(got["bh_q10_cutoffs"]) == set(WP.POSITIONS)
+        assert set(got["survives_bh_q10"]) == set(WP.POSITIONS)
+        assert "NEVER a gate" in got["note"]
+
+    def test_reanalyze_is_decision_inert_by_construction(self):
+        """A diagnostic path that could move a verdict would be a laundering surface."""
+        src = (_MODULE.parent / "run_nf_w2d_2025_regate.py").read_text()
+        body = "\n".join(ln for ln in src.splitlines() if not ln.strip().startswith("#"))
+        assert "def _reanalyze(" in body
+        assert 'if before != after:' in body and "refusing to write" in body
+        pinned = ("verdict", "gates", "positions", "fdr", "reproduction_control")
+        for key in pinned:
+            assert f'"{key}"' in body.split("def _reanalyze(")[1].split("\ndef ")[0], key
+        # the recompute must touch ONLY diagnostic keys
+        recompute = body.split("def _reanalyze(")[1].split("\ndef ")[0]
+        assigned = set(re.findall(r'out\["([a-z_]+)"\]\s*=', recompute))
+        assert assigned, "vacuity: no reassignment found in the reanalysis path"
+        assert assigned <= {"era_delta", "era_rank_diagnostic", "arm_invariance_diagnostic",
+                            "reanalyzed_at"}, f"reanalysis writes non-diagnostic keys: {assigned}"
+
+
 # ══ 13. The legacy era is untouched at the COLUMN level (the CRPS control's cheap sibling) ══════
 class TestLegacyEraUntouched:
     def test_the_nflverse_path_reproduces_W2s_engineering_exactly(self):
