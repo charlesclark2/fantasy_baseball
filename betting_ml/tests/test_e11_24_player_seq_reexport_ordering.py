@@ -183,6 +183,28 @@ def test_the_op_exports_exactly_the_player_sequential_mirror():
     )
 
 
+def test_the_subprocess_has_a_finite_timeout():
+    """INC-32 — and being a LEAF does not excuse it. Both jobs use `in_process_executor`, which
+    runs steps one at a time in topological order, so a hung leaf stalls every step scheduled
+    after it, predict included. Without a cap, a wedged Snowflake fetch or S3 upload is a
+    stalled slate instead of this op's own page."""
+    code = _code_only(DAILY_OPS)
+    start = code.find(f"def {REEXPORT}")
+    body = code[start:start + 6000]
+    if '"""' in body:
+        head, _, rest = body.partition('"""')
+        body = head + rest.partition('"""')[2]
+    nxt = body.find("@op(")
+    if nxt != -1:
+        body = body[:nxt]
+    m = re.search(r"timeout\s*=\s*(\d+)", body)
+    assert m, f"{REEXPORT} calls _run_script with no finite timeout= (INC-32)"
+    assert 0 < int(m.group(1)) <= 1800, (
+        f"the re-export's timeout is {m.group(1)}s — a cap that long stops bounding the stall "
+        f"it exists to prevent."
+    )
+
+
 def test_the_op_is_alert_tier_and_cannot_raise():
     """ALERT-loud-but-continue, and it must actually PAGE — E11.30's finding was that several
     ops labelled ALERT only ever reached context.log.warning, so a real failure was detected

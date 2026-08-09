@@ -1819,10 +1819,17 @@ def reexport_player_seq_posteriors_op(context):
     possible follow-up, not part of this change: at lk9 the two schemes carry byte-identical
     content, but only lk9 picks up an out-of-band write (a hand-run backfill) made between
     writer runs.
+
+    INC-32 — FINITE TIMEOUT, and "it is a leaf" does NOT make one unnecessary. Both jobs use
+    ``in_process_executor``, which runs steps ONE AT A TIME in topological order, so a hung leaf
+    stalls every step scheduled after it — including predict. A wall-clock cap turns a wedged
+    Snowflake fetch or S3 upload into this op's own ALERT instead of a stalled slate. 900s is
+    generous against a ~400k-row single-table export (the lk9 copy of the same table runs in
+    well under a minute).
     """
     try:
         _run_script(context, "export_w8a_precursors_to_s3.py",
-                    ["--table", "player_sequential_posteriors"])
+                    ["--table", "player_sequential_posteriors"], timeout=900)
         context.log.info(
             "[player-seq-mirror] re-exported player_sequential_posteriors to S3 after the "
             "writer — the mirror now carries this run's chain advance."
