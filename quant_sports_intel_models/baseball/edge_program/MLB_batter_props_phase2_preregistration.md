@@ -28,7 +28,16 @@ Substrate: `scripts/build_batter_prop_substrate.py` →
 `s3://baseball-betting-ml-artifacts/baseball/research/batter_prop_substrate/batter_prop_substrate_v1.parquet`
 Grain: one row per `(game_pk, batter_id, market_key)`.
 
-**BUILT 2026-08-09 — 370,872 rows × 66 cols**, 181,922 batter-games, all four seasons:
+**BUILT + REPUBLISHED 2026-08-09 — 360,826 rows × 66 cols**, 182,230 batter-games, all four
+seasons. ⚠️ The FIRST publish (370,872 rows) was withdrawn: it carried **11,461 duplicate
+`(game_pk, batter_id, market_key)` keys** from two `player_name` spellings resolving to one
+`batter_id` — caught only by reading the published artifact back, since the single-season smoke had
+zero duplicates and the build reported success. Fixed by keying the consensus on the RESOLVED
+IDENTITY rather than a display string, and the builder now **raises** on a grain violation
+(PR #706). The republished artifact was independently re-verified: 0 duplicate keys, 0 null labels,
+0 probabilities without a two-sided book, no impossible outcome combinations.
+
+Coverage/provenance (unchanged by the fix):
 
 | | 2023 | 2024 | 2025 | 2026 |
 |---|---|---|---|---|
@@ -48,11 +57,34 @@ factors 96.1–96.2%. Name resolution: 1,157 of 1,230 distinct names carried a c
 
 ## 1. Frame (binding; a Phase-2 run may not renegotiate these)
 
-- **Population**: batter-games that carry at least one pregame prop quote in the market being
-  modelled. ⚠️ This is a **selected** population, not all batter-games — books quote better
-  hitters. Measured 2025: substrate mean hits **0.872** vs the all-batter-game population
-  **0.822**. Every figure is conditional on "the market quoted this batter"; a claim about all
-  batters is out of scope.
+- **Population**: **regular-season** batter-games that carry at least one pregame prop quote in the
+  market being modelled.
+  - ⚠️ **Market-selected, not all batter-games** — books quote better hitters. Measured 2025:
+    substrate mean hits **0.872** vs the all-batter-game population **0.822**. Every figure is
+    conditional on "the market quoted this batter"; a claim about all batters is out of scope.
+  - ⚠️ **REGULAR SEASON ONLY, and this is an UPSTREAM boundary rather than a design choice**
+    (measured 2026-08-09 on the published artifact, whose max `game_date` per season lands exactly
+    on the regular-season end: 2023-10-01 / 2024-09-30 / 2025-09-28). Postseason prop quotes DO
+    exist in the archive (2023-10 alone: 2,811 quotes across 21 events), but
+    `stg_batter_pitches` — the realized-outcome source — carries **`game_type='R'` only**, so those
+    games have **no label**. `mart_game_odds_bridge` is likewise REG-only. The builder's inner join
+    to `outcomes` therefore drops them, which is correct (no label, no training row) but silent.
+    Scale of the exclusion:
+
+    | season | postseason prop events dropped | total prop events | share |
+    |---|---|---|---|
+    | 2023 | 23 | 939 | 2.4% |
+    | 2024 | 43 | 1,926 | 2.2% |
+    | 2025 | 47 | 2,346 | 2.0% |
+
+    (2026's 10 excluded events are **not** postseason — they are the leading edge past the Statcast
+    cutoff in an in-progress season, and they land as soon as pitch data catches up.)
+
+    ⇒ **Consequence Phase 2 must carry**: a model fit here is a REGULAR-SEASON model. Applying it
+    to a postseason slate is an **extrapolation** — different rosters, bullpen usage and lineup
+    construction — and must be labelled as such, not reported as in-sample performance. Recovering
+    postseason would require a postseason-bearing outcome source upstream; it is **not** fixable in
+    this builder.
 - **Seasons**: 2023 (from 2023-05-03) – 2026.
 - **Leakage contract** (enforced in the builder, not asserted in prose):
   - prop lines: only snapshots with `snapshot_ts < commence_time`; the **latest** such snapshot
