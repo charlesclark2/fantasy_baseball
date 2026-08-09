@@ -28,6 +28,22 @@ Substrate: `scripts/build_batter_prop_substrate.py` →
 `s3://baseball-betting-ml-artifacts/baseball/research/batter_prop_substrate/batter_prop_substrate_v1.parquet`
 Grain: one row per `(game_pk, batter_id, market_key)`.
 
+**BUILT 2026-08-09 — 370,872 rows × 66 cols**, 181,922 batter-games, all four seasons:
+
+| | 2023 | 2024 | 2025 | 2026 |
+|---|---|---|---|---|
+| event resolution | 97.2% | 96.9% | 96.9% | 98.5% |
+| …of which via the first-pitch fallback | **658 / 913** | 625 | 603 | 243 |
+| resolver disagreements | 1 | 0 | 1 | 2 |
+
+⭐ The fallback resolver is **load-bearing, not a long tail**: in 2023 it resolves 658 events to the
+bridge's 255, i.e. **72% of that season's usable events would not exist without it**. Across all
+four seasons the two resolvers disagree on **4 events out of ~125,000 joined rows**.
+
+Feature coverage on the built artifact: lagged rolling 99.9%, EB posteriors 95.3–95.6%, park
+factors 96.1–96.2%. Name resolution: 1,157 of 1,230 distinct names carried a candidate; 7,587 of
+370,872 rows (2.0%) resolved via the `last_initial` tier, the rest exact.
+
 ---
 
 ## 1. Frame (binding; a Phase-2 run may not renegotiate these)
@@ -218,14 +234,60 @@ honest, and where it is not. An arm that fails to beat the market is **not** a f
 
 ## 9. Known substrate limitations Phase 2 must carry (not discover)
 
-1. **HR de-vig is effectively single-book.** Two-sidedness is a **book property**, not noise:
-   betmgm ~99%, draftkings ~99.9%, pointsbetus/unibet_us 100%; fanduel, williamhill_us,
-   mybookieag **0%** (they offer the one-way "anytime HR" form). Across the whole HR market only
-   **33.2%** of quotes are two-sided, and the substrate's mean books-per-quote is 5.16 while mean
-   **two-sided** books is **0.95**. So `p_over_consensus` for HR rests on ~1 book even though
-   `line_consensus` uses ~5. `n_books_two_sided` is carried on every row — **any HR calibration
-   claim must condition on it**, and a "consensus" framing for HR would overstate the evidence.
-   (hits 75.7% / TB 81.2% two-sided at quote level are comfortable.)
+1. ### ⭐ HR two-sided coverage is COLLAPSING over time — and it is not buyable back
+
+   ⚠️ **AMENDED 2026-08-09 after the full 4-season build.** The pre-amendment text named
+   "betmgm ~99%, draftkings ~99.9%, pointsbetus/unibet_us 100%" as the two-sided books. That is
+   **true pooled and misleading forward** — a pooled book statistic across a regime change measures
+   the regime that is ending (the MH2.1 (c) lesson: report per-period absence, never a pooled mean).
+   The per-season truth:
+
+   | season | HR quotes | books | **% two-sided** | hits % two-sided (control) |
+   |---|---|---|---|---|
+   | 2023 | 145,069 | 11 | **60.9** | 75.2 |
+   | 2024 | 313,610 | 12 | **41.9** | 79.8 |
+   | 2025 | 292,035 | 8 | **18.5** | 71.5 |
+   | 2026 | 101,181 | 6 | **8.7** | 77.5 |
+
+   **The decline is HR-SPECIFIC, not a capture regression** — the `batter_hits` control is flat at
+   71–80% across the same seasons and the same pulls. Mechanism, measured per book in 2026:
+
+   - `draftkings` — 39,941 `batter_hits` quotes, **0 HR quotes**: still captured, has dropped the
+     two-way HR line entirely.
+   - `betrivers` (34,690) and `williamhill_us` (39,557) — plenty of HR quotes, **0 two-sided**:
+     migrated to the one-way "anytime HR" presentation.
+   - `betmgm` — 38,997 hits vs only 1,225 HR: largely stopped posting the HR line.
+   - `pinnacle` — 3,653 HR quotes, **3,653 two-sided (100%)**, first appearing 2026-06-03. From
+     2026-07 onward **Pinnacle is the ONLY source of a two-sided HR price**
+     (`two_sided_non_pinnacle` = 0 in July and August). It never appears in `batter_hits` at all —
+     a narrow prop menu.
+
+   ⛔ **This is NOT recoverable by spending credits.** The other books' HR quotes are one-way *by
+   construction*; a re-pull returns the same one-way data. A `--force` eu re-pull of 2023–2025 HR
+   would cost on the order of ~280k credits (10 × 1 market × 2 regions × ~7k events × 2 snapshots)
+   against a post-2026-07-17 budget of ~100k/month, to recover a Pinnacle history that was itself
+   thin (6,621 two-sided quotes in 2024, 702 in 2025). **Registered as not worth buying.**
+
+   **Binding consequence for the HR leg** — the HR *market-benchmark* comparison is only
+   well-supported on the EARLY folds and degrades to a single sharp book by the late ones:
+
+   | fold | HR de-vigged coverage |
+   |---|---|
+   | 2023H2 | 87.6% |
+   | 2024H1 / 2024H2 | 91.1% |
+   | 2025H1 / 2025H2 | 93.7% |
+   | **2026H1** | **20.4%** (Pinnacle-dominated) |
+
+   ⇒ the HR leg **must report per-fold de-vigged coverage beside every calibration figure**, and a
+   pooled HR calibration number across all six folds is **forbidden** — it would silently average a
+   broad-market benchmark with a single-book one. `n_books_two_sided` is on every row for exactly
+   this; **any HR calibration claim must condition on it.** A Pinnacle-only benchmark is not worse
+   in *quality* (it is the sharpest, lowest-hold book) but it is a **different estimand** from a
+   multi-book consensus and may not be pooled with one.
+
+   The **modelling** target (`y_actual`) is unaffected — this limits only what the HR predictive can
+   be *graded against*, not what it can be *fit to*. hits (75–80%) and TB (81%) are unaffected
+   throughout and need no fold restriction.
 2. **~3% of prop events never resolve to a `game_pk`** (§ handoff). Unresolved events are dropped,
    not guessed. This is not missing-at-random and should not be characterised as such without
    checking.
