@@ -78,3 +78,36 @@ matrix reload); the build writes `nf_w2c_wayback_injuries.{md,json}` with the pe
 `wayback_injuries`) is a separate deliberate step after reviewing the measurement. Re-gating
 the 2025 folds (making them gated-evaluable in a future bake-off) is a successor registration
 once the landed coverage is known — NOT this story's scope.
+
+## Measurement review (2026-08-09, post-crawl — the reading that clears `--land`)
+
+Crawl: 178/179 snapshots cached (1 CDX-listed capture 404s on replay — skipped, its coverage
+simply absent). Build: 24,634 capture-stamped rows parsed from 111 snapshots → 6,657
+crosswalked to a gsis id → **1,166 admissible (player, week, source) rows, 0 PIT drops,
+17 of 18 REG weeks with stamped rows** (week 18 has no pre-gameday capture; week 12 —
+Thanksgiving — has 2 rows). Full per-week table: `nf_w2c_wayback_injuries.md`.
+
+The pooled per-week agreement column is BIMODAL (1.00 in weeks 7/15/16/17 vs 0.25–0.44
+elsewhere) — the discriminating cut is **source × capture-to-gameday distance**, not week:
+
+| cut | agreement | n |
+|---|---|---|
+| nfl (all — captures land 1–2 days pre-gameday) | **1.000** | 119 |
+| espn, 1 day pre-gameday | 0.800 | 45 |
+| espn, 2 days | 0.443 | 88 |
+| espn, 4+ days | ~0.31–0.48 | 122 |
+
+- **The parser + crosswalk are proven correct by the NFL source's 119/119** (and ESPN's
+  day-1 0.80): identical vocabulary both sides (`out/doubtful/questionable`), no mapping
+  mismatch.
+- **ESPN's low pooled agreement is capture TIMING, not a defect**: the dominant "disagreement"
+  is `questionable → out` (104 of 136 — the canonical mid-week downgrade), and agreement
+  decays monotonically with capture distance. An early-week capture SHOULD disagree with the
+  lake's FINAL designation — that early-week reading is precisely the point-in-time
+  information this story exists to recover, so the disagreement is signal, not noise.
+- Consequence for the successor registration: an ESPN-stamped row is an as-of-that-instant
+  observation, NOT a proxy for the final Friday designation. Any 2025 re-gating must consume
+  it as such (the observed-flag-per-covered-instant design already does).
+
+**Verdict: the measurement supports `--land`.** The agreement table above is the quality
+proof the design section asked for.
