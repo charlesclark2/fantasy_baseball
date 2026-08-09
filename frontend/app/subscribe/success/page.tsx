@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
 import { forceRefreshTokens } from "@/lib/cognito"
 import { getSubscriptionStatus } from "@/lib/subscription"
+import { captureSubscriptionStarted } from "@/lib/funnel-telemetry-emit"
 
 // Post-checkout landing. Stripe redirects here after a successful payment; the
 // subscriber group is granted asynchronously by the webhook, so we poll the
@@ -18,6 +19,8 @@ function SuccessInner() {
   const [ready, setReady] = useState(false)
   const [timedOut, setTimedOut] = useState(false)
   const cancelled = useRef(false)
+  /** G100-D0 — one `subscription_started` per mount. See the capture site below. */
+  const fired = useRef(false)
 
   useEffect(() => {
     cancelled.current = false
@@ -30,6 +33,24 @@ function SuccessInner() {
       try {
         const status = await getSubscriptionStatus(accessToken)
         if (status.has_access) {
+          // ── G100-D0: the funnel's PAID step ────────────────────────────────────────────────
+          //
+          // ⭐ HERE, NOT ON PAGE LOAD. Landing on this route only means Stripe redirected; access
+          // is granted asynchronously by the webhook, and this poll is the first moment anyone can
+          // honestly say the person is a subscriber. Firing on mount would count a payment that
+          // later failed to provision — and would fire again on every refresh of this URL, which a
+          // confused user does exactly when provisioning is slow.
+          //
+          // ⚠️ It is inside the `has_access` branch and therefore INSIDE the `cancelled` guard's
+          // blast radius by design: a tab closed mid-poll produces no event. See
+          // `captureSubscriptionStarted` — this is a FLOOR on paid conversions, and the dashboard
+          // names Stripe as the source of truth for the count.
+          //
+          // `fired` makes it once-per-mount: React 19 StrictMode double-invokes this effect in dev.
+          if (!fired.current) {
+            fired.current = true
+            captureSubscriptionStarted({ attempts })
+          }
           // Refresh tokens so the paywall gate (which reads JWT groups) lets us in.
           const tokens = await forceRefreshTokens()
           if (tokens) onLoginSuccess(tokens.accessToken, tokens.idToken)
