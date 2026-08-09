@@ -1,14 +1,18 @@
 """run_nf_w2c_wayback_injuries.py — NF-W2c: reconstruct PIT-clean 2025 injury rows from Wayback.
 
 PIPELINE: CDX enumeration (nfl/espn/cbs injury pages, Aug 2025–Feb 2026) → snapshot crawl
-(bytes, disk-cached, ~170 requests at a polite 2s pause — OPERATOR, ~10 min) → parse (nfl
-official report: practice + designations + declared week; espn: designations + per-player game
-date; cbs: fetched + retained, parser deferred) → crosswalk names → gsis (lake
-`stats_player_week` 2025, the adp_source name-normalization) → per-(player, week) admissibility
-(capture_ts STRICTLY BEFORE the player's own gameday 00:00 UTC, gamedays from the W2b matrix)
-→ the NF-W0a §13 PIT gate over every admissible row (fail-closed) → coverage + lake-agreement
-measurement → artifacts. `--land` (separate, operator, after review) appends the rows to the
-immutable NF-W0a store (`pit.store.append_captures`, source `wayback_injuries`).
+(bytes, disk-cached, a polite 2s pause — OPERATOR for the full ~250-snapshot crawl) → parse
+(nfl official report: practice + designations + a page-level declared week; espn: designations
++ per-player game date; cbs, NF-W2c-CBS: practice + designations + injury, week declared PER
+ROW — a page mixes the current week with a preview of next) → crosswalk names → gsis (lake
+`stats_player_week` 2025, the adp_source name-normalization; unresolved names are LOGGED per
+source, never silently dropped) → per-(player, week) admissibility (capture_ts STRICTLY BEFORE
+the player's own gameday 00:00 UTC, gamedays from the W2b matrix) → the NF-W0a §13 PIT gate
+over every admissible row (fail-closed) → coverage + lake-agreement measurement → artifacts.
+`--land` (separate, operator, after review) appends the rows to the immutable NF-W0a store
+(`pit.store.append_captures`, source `wayback_injuries`) — dedup on `capture_id` makes a
+re-land of the already-landed nfl/espn rows a no-op, so a full-source `--land` is additive by
+construction.
 
 RUN (LAPTOP — network to web.archive.org + the S3 lake read-only):
 
@@ -83,8 +87,6 @@ def crawl(caps: pd.DataFrame, limit: int | None = None) -> int:
 def parse_cached(caps: pd.DataFrame) -> pd.DataFrame:
     frames, skipped = [], 0
     for _, r in caps.iterrows():
-        if r["source"] == "cbs":
-            continue  # fetched + retained; parser deferred (carded)
         key = f"{r['timestamp']}_" + __import__("re").sub(
             r"[^A-Za-z0-9]+", "_", r["url"])[:80]
         f = _CACHE / f"snap_{key}.bin"
@@ -137,6 +139,16 @@ def build(caps: pd.DataFrame) -> dict:
     xw = ADP.attach_gsis(con, parsed, WB.SEASON, schema="temp.main")
     stamped = xw[xw["player_id"].notna()].copy()
     log.info("crosswalk: %d/%d rows resolved to a gsis id", len(stamped), len(parsed))
+    # unmatched names are LOGGED per source, never silently dropped (NF-W2c-CBS: CBS introduces
+    # its own name forms — short "H. Conner" is never the crosswalk key, but the CBS-specific
+    # long-form spelling can still miss the lake's nflverse spelling).
+    unmatched = xw[xw["player_id"].isna()]
+    for src in sorted(unmatched["source"].dropna().unique()):
+        su = unmatched[unmatched["source"] == src]
+        names = sorted(su["player_name"].dropna().unique())
+        log.warning("%s: %d/%d rows unresolved to a gsis id (%d distinct names)%s", src,
+                    len(su), len(parsed[parsed["source"] == src]), len(names),
+                    f" — e.g. {names[:15]}" if names else "")
 
     # week attribution + the player's own gameday
     gd = _gamedays_2025().rename(columns={"gsis_id": "player_id"})
@@ -150,7 +162,14 @@ def build(caps: pd.DataFrame) -> dict:
         gd[["player_id", "week", "gameday_iso"]],
         left_on=["player_id", "game_date_hint"], right_on=["player_id", "gameday_iso"],
         how="inner")
-    rows = pd.concat([nfl_rows, espn_rows], ignore_index=True)
+    # CBS declares its own week PER ROW (like nfl.com's page-level week, just finer-grained) —
+    # same join shape as nfl_rows.
+    cbs_rows = stamped[stamped["source"] == "cbs"].merge(
+        gd.rename(columns={"week": "declared_week"})[
+            ["player_id", "declared_week", "gameday_iso"]],
+        on=["player_id", "declared_week"], how="inner")
+    cbs_rows["week"] = cbs_rows["declared_week"]
+    rows = pd.concat([nfl_rows, espn_rows, cbs_rows], ignore_index=True)
 
     # admissibility: capture strictly before the player's own gameday 00:00 UTC
     cap_ts = pd.to_datetime(rows["capture_ts"], utc=True)
@@ -204,6 +223,24 @@ def build(caps: pd.DataFrame) -> dict:
     lake_m = lake[lake["position"].isin(MODELED_POSITIONS)]
     fin_m = final[final["position_x" if "position_x" in final.columns else "position"]
                   .isin(MODELED_POSITIONS)] if not final.empty else final
+
+    # ── NF-W2c-CBS: the per-week coverage-floor lift CBS adds over nfl+espn alone ──────────────
+    cbs_rows_admissible = int((final["source"] == "cbs").sum()) if not final.empty else 0
+    if not fin_m.empty:
+        before_ct = fin_m[fin_m["source"] != "cbs"].groupby("week")["player_id"].nunique()
+        after_ct = fin_m.groupby("week")["player_id"].nunique()
+    else:
+        before_ct = after_ct = pd.Series(dtype=int)
+    cbs_lift, cbs_unique_weeks = [], []
+    for week in sorted(set(before_ct.index) | set(after_ct.index)):
+        b, a = int(before_ct.get(week, 0)), int(after_ct.get(week, 0))
+        cbs_lift.append({"week": int(week), "modeled_players_before_cbs": b,
+                          "modeled_players_after_cbs": a, "lift": a - b})
+        if b == 0 and a > 0:
+            cbs_unique_weeks.append(int(week))
+    log.info("CBS addition: %d admissible rows, %d weeks uniquely covered (0→%s players)",
+             cbs_rows_admissible, len(cbs_unique_weeks), cbs_unique_weeks)
+
     per_week = []
     for week in sorted(lake_m["week"].unique()):
         lw = lake_m[lake_m["week"] == week]
@@ -235,6 +272,11 @@ def build(caps: pd.DataFrame) -> dict:
         "pit_records_checked": checked, "pit_rows_dropped": dropped,
         "weeks_with_any_stamped_row": covered_weeks,
         "per_week": per_week,
+        "cbs_addition": {
+            "rows_admissible": cbs_rows_admissible,
+            "weeks_cbs_uniquely_covers": cbs_unique_weeks,
+            "modeled_players_per_week_before_vs_after": cbs_lift,
+        },
     }
     if not final.empty:
         final.to_parquet(_ARTIFACT, index=False)
@@ -246,7 +288,12 @@ def build(caps: pd.DataFrame) -> dict:
           f"(third-party-attested); admissibility = capture strictly before the player's own "
           f"gameday 00:00 UTC; every row through the NF-W0a §13 gate.", "",
           pd.DataFrame(per_week).to_markdown(index=False), "",
-          "```json", json.dumps({k: v for k, v in summary.items() if k != "per_week"},
+          "## NF-W2c-CBS: the per-week coverage-floor lift CBS adds", "",
+          f"CBS admissible rows: {cbs_rows_admissible}. Weeks CBS uniquely covers (zero "
+          f"modeled-position players before CBS, ≥1 after): {cbs_unique_weeks or 'none'}.", "",
+          pd.DataFrame(cbs_lift).to_markdown(index=False) if cbs_lift else "(no rows)", "",
+          "```json", json.dumps({k: v for k, v in summary.items()
+                                  if k not in ("per_week", "cbs_addition")},
                                 indent=2, default=str), "```"]
     (_REPORT_DIR / "nf_w2c_wayback_injuries.md").write_text("\n".join(md))
     log.info("→ %s + .md (%d weeks with stamped rows)", "nf_w2c_wayback_injuries.json",

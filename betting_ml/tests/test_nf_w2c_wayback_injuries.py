@@ -33,6 +33,21 @@ ESPN_HTML = """<script>window['__espnfitt__']={"page":{"content":{"injuries":[
  "status":"injury-5","description":"Out for the season.","date":"Oct 12","statusDesc":"Injured Reserve"}
 ]}}};</script>"""
 
+# cbssports.com/nfl/injuries captured 20251206173109 — 7 real rows cut verbatim from the
+# actual capture (NF-C0e: only whitespace is reformatted; every href/name/status string is
+# byte-identical to what CBS served), covering the full observed status vocabulary: a bare
+# weekly designation, both practice-prefix forms, an Out-with-expected-return, and the three
+# roster/empty forms that must be EXCLUDED (IR, NFI-R, a bare "—").
+CBS_HTML = """<table><tbody>
+<tr class="TableBase-bodyTr"><td class="TableBase-bodyTd " style=" width: 35%;"><span class="CellPlayerName--short"><span class=""><a href="/nfl/players/28912047/james-pearce-jr/" class="">J. Pearce Jr.</a></span></span><span class="CellPlayerName--long"><span class=""><a href="/nfl/players/28912047/james-pearce-jr/" class="">James Pearce Jr.</a></span></span></td><td class="TableBase-bodyTd "> DE </td><td class="TableBase-bodyTd "><span class="CellGameDate"> Fri, Dec 5 </span></td><td class="TableBase-bodyTd " style=" width: 20%;"> Back </td><td class="TableBase-bodyTd " style=" min-width: 200px; width: 40%;"> Questionable for Week 14 vs. Seattle </td></tr>
+<tr class="TableBase-bodyTr"><td class="TableBase-bodyTd " style=" width: 35%;"><span class="CellPlayerName--short"><span class=""><a href="/nfl/players/2780917/trey-smith/" class="">T. Smith</a></span></span><span class="CellPlayerName--long"><span class=""><a href="/nfl/players/2780917/trey-smith/" class="">Trey Smith</a></span></span></td><td class="TableBase-bodyTd "> G </td><td class="TableBase-bodyTd "><span class="CellGameDate"> Fri, Dec 5 </span></td><td class="TableBase-bodyTd " style=" width: 20%;"> Ankle </td><td class="TableBase-bodyTd " style=" min-width: 200px; width: 40%;"> Did Not Practice on Friday. Doubtful for Week 14 vs. Houston </td></tr>
+<tr class="TableBase-bodyTr"><td class="TableBase-bodyTd " style=" width: 35%;"><span class="CellPlayerName--short"><span class=""><a href="/nfl/players/2867425/dylan-parham/" class="">D. Parham</a></span></span><span class="CellPlayerName--long"><span class=""><a href="/nfl/players/2867425/dylan-parham/" class="">Dylan Parham</a></span></span></td><td class="TableBase-bodyTd "> OG </td><td class="TableBase-bodyTd "><span class="CellGameDate"> Wed, Dec 3 </span></td><td class="TableBase-bodyTd " style=" width: 20%;"> Back </td><td class="TableBase-bodyTd " style=" min-width: 200px; width: 40%;"> Full Practice on Friday. Questionable for Week 14 vs. Denver </td></tr>
+<tr class="TableBase-bodyTr"><td class="TableBase-bodyTd " style=" width: 35%;"><span class="CellPlayerName--short"><span class=""><a href="/nfl/players/3177371/max-melton/" class="">M. Melton</a></span></span><span class="CellPlayerName--long"><span class=""><a href="/nfl/players/3177371/max-melton/" class="">Max Melton</a></span></span></td><td class="TableBase-bodyTd "> CB </td><td class="TableBase-bodyTd "><span class="CellGameDate"> Fri, Dec 5 </span></td><td class="TableBase-bodyTd " style=" width: 20%;"> Heel </td><td class="TableBase-bodyTd " style=" min-width: 200px; width: 40%;"> Out for Week 14 vs. L.A. Rams. Expected Return - Week 15 </td></tr>
+<tr class="TableBase-bodyTr"><td class="TableBase-bodyTd " style=" width: 35%;"><span class="CellPlayerName--short"><span class=""><a href="/nfl/players/2180829/kyler-murray/" class="">K. Murray</a></span></span><span class="CellPlayerName--long"><span class=""><a href="/nfl/players/2180829/kyler-murray/" class="">Kyler Murray</a></span></span></td><td class="TableBase-bodyTd "> QB </td><td class="TableBase-bodyTd "><span class="CellGameDate"> Fri, Dec 5 </span></td><td class="TableBase-bodyTd " style=" width: 20%;"> Foot </td><td class="TableBase-bodyTd " style=" min-width: 200px; width: 40%;"> IR. Injured Reserve </td></tr>
+<tr class="TableBase-bodyTr"><td class="TableBase-bodyTd " style=" width: 35%;"><span class="CellPlayerName--short"><span class=""><a href="/nfl/players/2188984/sean-murphy-bunting/" class="">S. Murphy-Bunting</a></span></span><span class="CellPlayerName--long"><span class=""><a href="/nfl/players/2188984/sean-murphy-bunting/" class="">Sean Murphy-Bunting</a></span></span></td><td class="TableBase-bodyTd "> CB </td><td class="TableBase-bodyTd "><span class="CellGameDate"> Wed, Oct 1 </span></td><td class="TableBase-bodyTd " style=" width: 20%;"> Knee </td><td class="TableBase-bodyTd " style=" min-width: 200px; width: 40%;"> NFI-R for Week 14 vs. L.A. Rams </td></tr>
+<tr class="TableBase-bodyTr"><td class="TableBase-bodyTd " style=" width: 35%;"><span class="CellPlayerName--short"><span class=""><a href="/nfl/players/28875227/jaydon-blue/" class="">J. Blue</a></span></span><span class="CellPlayerName--long"><span class=""><a href="/nfl/players/28875227/jaydon-blue/" class="">Jaydon Blue</a></span></span></td><td class="TableBase-bodyTd "> RB </td><td class="TableBase-bodyTd "><span class="CellGameDate"> Sat, Dec 6 </span></td><td class="TableBase-bodyTd " style=" width: 20%;"> Coach's Decision </td><td class="TableBase-bodyTd " style=" min-width: 200px; width: 40%;"> — </td></tr>
+</tbody></table>"""
+
 
 class TestNflParser:
     def test_declared_week_and_rows(self):
@@ -77,6 +92,69 @@ class TestEspnParser:
 
     def test_missing_state_object_parses_empty_not_crash(self):
         assert WB.parse_espn("<html><body>nothing here</body></html>") == []
+
+
+class TestCbsParser:
+    def test_bare_weekly_designation(self):
+        rows = WB.parse_cbs(CBS_HTML)
+        by = {r["player_name"]: r for r in rows}
+        pearce = by["James Pearce Jr."]
+        assert pearce["report_status"] == "questionable"
+        assert pearce["practice_status"] is None
+        assert pearce["declared_week"] == 14
+        assert pearce["position"] == "DE"
+        assert pearce["injury"] == "Back"
+
+    def test_did_not_practice_prefix(self):
+        rows = WB.parse_cbs(CBS_HTML)
+        by = {r["player_name"]: r for r in rows}
+        assert by["Trey Smith"]["practice_status"] == "dnp"
+        assert by["Trey Smith"]["report_status"] == "doubtful"
+        assert by["Trey Smith"]["declared_week"] == 14
+
+    def test_full_practice_prefix(self):
+        rows = WB.parse_cbs(CBS_HTML)
+        by = {r["player_name"]: r for r in rows}
+        assert by["Dylan Parham"]["practice_status"] == "full"
+        assert by["Dylan Parham"]["report_status"] == "questionable"
+
+    def test_out_with_expected_return_keeps_the_report_week_not_the_return_week(self):
+        """'Out for Week 14 … Expected Return - Week 15' must declare week 14 (the report
+        week), never week 15 (the return week) — the regex stops at the first 'for Week N'."""
+        rows = WB.parse_cbs(CBS_HTML)
+        by = {r["player_name"]: r for r in rows}
+        assert by["Max Melton"]["report_status"] == "out"
+        assert by["Max Melton"]["declared_week"] == 14
+
+    def test_ir_designation_excluded(self):
+        """IR is a roster designation, not the weekly report channel — excluded by
+        construction (the status cell never starts with Out/Doubtful/Questionable)."""
+        rows = WB.parse_cbs(CBS_HTML)
+        assert not any(r["player_name"] == "Kyler Murray" for r in rows)
+
+    def test_nfir_designation_excluded(self):
+        rows = WB.parse_cbs(CBS_HTML)
+        assert not any(r["player_name"] == "Sean Murphy-Bunting" for r in rows)
+
+    def test_emdash_status_excluded(self):
+        rows = WB.parse_cbs(CBS_HTML)
+        assert not any(r["player_name"] == "Jaydon Blue" for r in rows)
+
+    def test_row_count_is_exactly_the_four_admissible_designations(self):
+        """7 rows in the fixture, 4 weekly designations + 3 excluded roster/empty forms."""
+        rows = WB.parse_cbs(CBS_HTML)
+        assert len(rows) == 4
+
+    def test_long_form_name_used_not_the_short_abbreviation(self):
+        """CBS renders both a short ('J. Pearce Jr.') and long ('James Pearce Jr.') name per
+        row — the crosswalk needs the long form (matches nflverse's full-name convention)."""
+        rows = WB.parse_cbs(CBS_HTML)
+        names = {r["player_name"] for r in rows}
+        assert "James Pearce Jr." in names
+        assert "J. Pearce Jr." not in names
+
+    def test_missing_table_parses_empty_not_crash(self):
+        assert WB.parse_cbs("<html><body>nothing here</body></html>") == []
 
 
 class TestSnapshotBytes:
@@ -124,9 +202,17 @@ class TestStamping:
         assert pd.isna(elliss["report_status"]) or elliss["report_status"] is None
         assert elliss["report_status"] != 0.0
 
+    def test_cbs_stamped_rows_carry_the_capture_instant_and_per_row_week(self):
+        df = WB.stamped_rows_from_capture("cbs", "20251206173109", CBS_HTML)
+        assert (df["capture_ts"] == "2025-12-06T17:31:09+00:00").all()
+        assert (df["source"] == "cbs").all()
+        assert set(df["declared_week"]) == {14}  # every kept row is week 14 in this fixture
+        assert (df["declared_season"] == WB.SEASON).all()
+        assert df["game_date_hint"].isna().all()
+
     def test_unparsed_source_raises(self):
         with pytest.raises(ValueError, match="no parser"):
-            WB.stamped_rows_from_capture("cbs", "20251003095717", "<html></html>")
+            WB.stamped_rows_from_capture("bogus", "20251003095717", "<html></html>")
 
 
 class TestCrawlResilience:
