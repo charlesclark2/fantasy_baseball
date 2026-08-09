@@ -213,8 +213,36 @@ each time: **do not chart a metric that is not emitted, and do not emit one nobo
 
 ## 6. Operator: provisioning the dashboard
 
-**Where:** LAPTOP. Needs a PostHog **personal API key** with project write scope
-(PostHog → Settings → Personal API keys), and the numeric project id (PostHog → Settings → Project).
+**Where:** LAPTOP. Needs the numeric project id (PostHog → Settings → Project) and a **personal API
+key** (PostHog → Settings → Personal API keys) carrying **exactly two scopes**:
+
+| Scope | What needs it |
+|---|---|
+| `dashboard:write` | `POST /api/projects/{id}/dashboards/` — creating the dashboard |
+| `insight:write` | `POST` / `PATCH /api/projects/{id}/insights/` — creating and updating each insight |
+
+⭐ **The `:read` scopes are NOT needed, and adding them grants nothing extra.** The script also lists
+dashboards and insights (to be idempotent), which derives `dashboard:read` / `insight:read` — but
+PostHog's `APIScopePermission` accepts the `:write` scope wherever a `:read` is required
+(`posthog/permissions.py`: *"For all valid scopes with :read we also add :write"*). Two scopes is the
+minimum, not a shortcut.
+
+⛔ **It does NOT need `query:read`, `event:read` or `person:read`** — worth stating because
+`query:read` is the one you would expect. This script only writes insight *definitions*; the queries
+execute when a human opens the dashboard, under their own session auth. The key never reads an event
+or a person.
+
+Two hardening steps, both cheap:
+
+- **Scope the key to this one project.** A key's project restriction is independent of its scope
+  list, so set it to the single project rather than "all projects" — a leaked key then cannot reach
+  another project even within those two scopes.
+- **Delete the key once the dashboard exists.** It is used once, at provisioning; nothing in the
+  shipped app holds it, and no read path needs it. Re-issuing later is a 30-second job.
+
+⚠️ If a scope is short the failure names itself — PostHog answers
+`API key missing required scope '<scope>'`, which the script surfaces verbatim rather than as a bare
+`HTTP 403`. `--dry-run` needs no key at all.
 
 Review the payloads first — this never writes on a dry run:
 
