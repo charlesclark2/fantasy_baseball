@@ -210,6 +210,128 @@ class TestSwitchHitterCollapse:
             broken(con, rel)
 
 
+# ── name-variant pooling (the SECOND grain defect) ─────────────────────────────
+
+def _assemble_fixture(con, quote_rows: list[str], name_rows: list[str]) -> None:
+    """Minimal in-memory versions of every table `assemble` reads.
+
+    One game (pk 1), one batter (100), one book unless a row says otherwise.
+    `quote_rows`/`name_rows` are SQL VALUES tuples supplied by the test.
+    """
+    con.execute(f"""CREATE OR REPLACE TABLE quotes_all AS SELECT * FROM (VALUES {','.join(quote_rows)})
+        AS t(event_id, player_name, market_key, bookmaker_key, line, two_sided, p_over_devig)""")
+    con.execute(f"""CREATE OR REPLACE TABLE name_candidates AS SELECT * FROM (VALUES {','.join(name_rows)})
+        AS t(player_name, batter_id, match_tier)""")
+    con.execute("""CREATE OR REPLACE TABLE event_map AS
+        SELECT 2025::INTEGER AS season, 'E1' AS event_id, 1::BIGINT AS game_pk,
+               'bridge' AS resolver, false AS resolvers_disagree""")
+    con.execute("""CREATE OR REPLACE TABLE outcomes AS
+        SELECT 1::BIGINT AS game_pk, 100::BIGINT AS batter_id, DATE '2025-05-05' AS game_date,
+               4 AS pa, 2 AS hits, 1 AS home_runs, 5 AS total_bases, 1 AS singles,
+               0 AS doubles, 0 AS triples, 0 AS walks, 1 AS strikeouts""")
+    con.execute("""CREATE OR REPLACE TABLE feat_eb AS
+        SELECT 1::BIGINT AS game_pk, 100::BIGINT AS batter_id, 3 AS batting_slot,
+               0.34::DOUBLE AS eb_woba, 0.22::DOUBLE AS eb_k_pct, 0.08::DOUBLE AS eb_bb_pct,
+               0.17::DOUBLE AS eb_iso, 0.02::DOUBLE AS eb_woba_uncertainty,
+               400.0::DOUBLE AS pa_weight, 'full_eb' AS eb_data_source""")
+    con.execute("""CREATE OR REPLACE TABLE spine AS
+        SELECT 1::BIGINT AS game_pk, 'H' AS home_team_name, 'A' AS away_team_name,
+               TIMESTAMP '2025-05-05 23:00:00' AS first_pitch, DATE '2025-05-05' AS official_date,
+               10::BIGINT AS venue_id, 2025::INTEGER AS season""")
+    con.execute("""CREATE OR REPLACE TABLE feat_park AS
+        SELECT 10::BIGINT AS venue_id, 2025::INTEGER AS apply_season,
+               1.0::DOUBLE AS eb_hr_factor, 1.0::DOUBLE AS eb_singles_factor,
+               1.0::DOUBLE AS eb_doubles_triples_factor, 1.0::DOUBLE AS eb_woba_factor,
+               1.0::DOUBLE AS eb_so_factor, 1.0::DOUBLE AS eb_bb_factor""")
+    bps.build_rolling_features(con, _fixture_relation([
+        _row(0, 100, 1, "R", 4, 0.300, 0.310),
+        _row(1, 100, 5, "R", 4, 0.400, 0.410),
+    ]))
+
+
+class TestNameVariantPooling:
+    """The feed spells one player two ways — "Matt Duffy"/"Matthew Duffy",
+    "MJ Melendez"/"M.J. Melendez" — and BOTH resolve to the same batter_id.  Forming
+    the consensus on `player_name` splits one batter into TWO rows carrying different
+    lines and probabilities.  Measured on the first published artifact: 11,461
+    duplicate keys / 23,720 rows.  The consensus must key on the RESOLVED identity."""
+
+    def test_two_spellings_of_one_batter_collapse_to_one_row(self, con):
+        _assemble_fixture(
+            con,
+            quote_rows=[
+                "('E1','Matt Duffy','batter_hits','bookA',0.5::DOUBLE,true,0.48::DOUBLE)",
+                "('E1','Matthew Duffy','batter_hits','bookB',0.5::DOUBLE,true,0.58::DOUBLE)",
+            ],
+            name_rows=["('Matt Duffy',100::BIGINT,'exact')",
+                       "('Matthew Duffy',100::BIGINT,'last_initial')"],
+        )
+        bps.assemble(con)   # raises via the grain guard if it fans out
+        n = con.execute("SELECT count(*) FROM substrate").fetchone()[0]
+        assert n == 1, f"two spellings of one batter must yield ONE row, got {n}"
+
+    def test_both_books_are_POOLED_not_dropped(self, con):
+        """Collapsing must not silently discard the other spelling's book — the whole
+        point is that the two variants' books form ONE consensus.  A naive
+        'take the first row' fix would pass the row-count test and fail this one."""
+        _assemble_fixture(
+            con,
+            quote_rows=[
+                "('E1','Matt Duffy','batter_hits','bookA',0.5::DOUBLE,true,0.40::DOUBLE)",
+                "('E1','Matthew Duffy','batter_hits','bookB',0.5::DOUBLE,true,0.60::DOUBLE)",
+            ],
+            name_rows=["('Matt Duffy',100::BIGINT,'exact')",
+                       "('Matthew Duffy',100::BIGINT,'last_initial')"],
+        )
+        bps.assemble(con)
+        books, p = con.execute(
+            "SELECT n_books, p_over_consensus FROM substrate").fetchone()
+        assert books == 2, f"both books must survive the collapse, got n_books={books}"
+        assert p == pytest.approx(0.50), (
+            "consensus must POOL the two variants' books (mean of 0.40/0.60), "
+            f"not pick one — got {p}"
+        )
+
+    def test_one_book_quoting_both_spellings_counts_ONCE(self, con):
+        """The mirror risk: pooling must not double-count a single book that happens to
+        post under both spellings — that would inflate n_books and let one book
+        dominate the consensus."""
+        _assemble_fixture(
+            con,
+            quote_rows=[
+                "('E1','Matt Duffy','batter_hits','bookA',0.5::DOUBLE,true,0.40::DOUBLE)",
+                "('E1','Matthew Duffy','batter_hits','bookA',0.5::DOUBLE,true,0.90::DOUBLE)",
+            ],
+            name_rows=["('Matt Duffy',100::BIGINT,'exact')",
+                       "('Matthew Duffy',100::BIGINT,'last_initial')"],
+        )
+        bps.assemble(con)
+        books = con.execute("SELECT n_books FROM substrate").fetchone()[0]
+        assert books == 1, f"one book must count once across spellings, got {books}"
+
+    def test_genuinely_different_batters_are_NOT_merged(self, con):
+        """Two-sided: the collapse keys on batter_id, so two real players in one game
+        must stay two rows.  Without this the row-count assertions above would also
+        pass on code that merged everything."""
+        con.execute("")  # no-op, keeps the fixture call adjacent for readability
+        _assemble_fixture(
+            con,
+            quote_rows=[
+                "('E1','Matt Duffy','batter_hits','bookA',0.5::DOUBLE,true,0.48::DOUBLE)",
+                "('E1','Other Guy','batter_hits','bookA',0.5::DOUBLE,true,0.58::DOUBLE)",
+            ],
+            name_rows=["('Matt Duffy',100::BIGINT,'exact')",
+                       "('Other Guy',200::BIGINT,'exact')"],
+        )
+        # batter 200 must also have batted, or appearance arbitration drops it
+        con.execute("""INSERT INTO outcomes VALUES
+            (1, 200, DATE '2025-05-05', 3, 1, 0, 1, 1, 0, 0, 0, 1)""")
+        bps.assemble(con)
+        ids = [r[0] for r in con.execute(
+            "SELECT batter_id FROM substrate ORDER BY batter_id").fetchall()]
+        assert ids == [100, 200], f"distinct batters must not merge, got {ids}"
+
+
 # ── market/outcome column contract ─────────────────────────────────────────────
 
 class TestMarketContract:
