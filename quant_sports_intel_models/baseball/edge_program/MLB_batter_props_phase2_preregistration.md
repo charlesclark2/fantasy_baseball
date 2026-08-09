@@ -28,6 +28,22 @@ Substrate: `scripts/build_batter_prop_substrate.py` →
 `s3://baseball-betting-ml-artifacts/baseball/research/batter_prop_substrate/batter_prop_substrate_v1.parquet`
 Grain: one row per `(game_pk, batter_id, market_key)`.
 
+**BUILT 2026-08-09 — 370,872 rows × 66 cols**, 181,922 batter-games, all four seasons:
+
+| | 2023 | 2024 | 2025 | 2026 |
+|---|---|---|---|---|
+| event resolution | 97.2% | 96.9% | 96.9% | 98.5% |
+| …of which via the first-pitch fallback | **658 / 913** | 625 | 603 | 243 |
+| resolver disagreements | 1 | 0 | 1 | 2 |
+
+⭐ The fallback resolver is **load-bearing, not a long tail**: in 2023 it resolves 658 events to the
+bridge's 255, i.e. **72% of that season's usable events would not exist without it**. Across all
+four seasons the two resolvers disagree on **4 events out of ~125,000 joined rows**.
+
+Feature coverage on the built artifact: lagged rolling 99.9%, EB posteriors 95.3–95.6%, park
+factors 96.1–96.2%. Name resolution: 1,157 of 1,230 distinct names carried a candidate; 7,587 of
+370,872 rows (2.0%) resolved via the `last_initial` tier, the rest exact.
+
 ---
 
 ## 1. Frame (binding; a Phase-2 run may not renegotiate these)
@@ -46,6 +62,26 @@ Grain: one row per `(game_pk, batter_id, market_key)`.
     the label outright.
   - `eb_batter_posteriors_raw` is already pregame (confirmed-lineup build) and is used as-is.
   - park factors joined on the **prior** season.
+- **Seasons floor — INDEPENDENTLY VERIFIED 2026-08-09, and the prior evidence was invalid.**
+  The 2023-05-03 start is the Odds API player-prop archive floor. ⚠️ The repo's only prior probe of
+  pre-2023 dates lives in the DEPRECATED `backfill_mlb_props_to_s3.py`, which used the
+  **featured-markets** historical endpoint — the one that returns `INVALID_MARKET` for every player
+  prop key — so **its negative result for 2021/2022 was never evidence.** Re-probed on the correct
+  two-step event endpoint (`scripts/probe_batter_prop_coverage.py --probe floor`):
+
+  | date | events archived | `batter_home_runs` |
+  |---|---|---|
+  | 2023-04-12 | 6 | **none** |
+  | 2023-03-30 | 8 | **none** |
+  | 2022-07-13 | 11 | **none** |
+  | 2021-07-14 | 0 | — |
+
+  ⭐ The *shape* of the negative is what makes it trustworthy: 2022-07-13 returns **11 archived
+  events but zero prop data** — the archive has the GAMES and simply lacks the prop MARKETS. That
+  is "props absent", not "no archive", so the floor is real and **no spend extends the window
+  backwards.** This matters because the fold count is the binding power constraint below — it is
+  now a **data limit**, not a window choice, and that is a stronger claim than the one this
+  document originally made.
 - **Folds**: expanding-window **half-season blocks**, purged + embargoed at the block boundary
   (2023H2, 2024H1, 2024H2, 2025H1, 2025H2, 2026H1) ⇒ **6 gated folds**.
   ⭐ Registered deliberately as half-seasons, not seasons. Season blocks would give 3 folds, and
@@ -218,14 +254,84 @@ honest, and where it is not. An arm that fails to beat the market is **not** a f
 
 ## 9. Known substrate limitations Phase 2 must carry (not discover)
 
-1. **HR de-vig is effectively single-book.** Two-sidedness is a **book property**, not noise:
-   betmgm ~99%, draftkings ~99.9%, pointsbetus/unibet_us 100%; fanduel, williamhill_us,
-   mybookieag **0%** (they offer the one-way "anytime HR" form). Across the whole HR market only
-   **33.2%** of quotes are two-sided, and the substrate's mean books-per-quote is 5.16 while mean
-   **two-sided** books is **0.95**. So `p_over_consensus` for HR rests on ~1 book even though
-   `line_consensus` uses ~5. `n_books_two_sided` is carried on every row — **any HR calibration
-   claim must condition on it**, and a "consensus" framing for HR would overstate the evidence.
-   (hits 75.7% / TB 81.2% two-sided at quote level are comfortable.)
+1. ### ⭐ HR two-sided coverage is COLLAPSING over time — and it is not buyable back
+
+   ⚠️ **AMENDED 2026-08-09 after the full 4-season build.** The pre-amendment text named
+   "betmgm ~99%, draftkings ~99.9%, pointsbetus/unibet_us 100%" as the two-sided books. That is
+   **true pooled and misleading forward** — a pooled book statistic across a regime change measures
+   the regime that is ending (the MH2.1 (c) lesson: report per-period absence, never a pooled mean).
+   The per-season truth:
+
+   | season | HR quotes | books | **% two-sided** | hits % two-sided (control) |
+   |---|---|---|---|---|
+   | 2023 | 145,069 | 11 | **60.9** | 75.2 |
+   | 2024 | 313,610 | 12 | **41.9** | 79.8 |
+   | 2025 | 292,035 | 8 | **18.5** | 71.5 |
+   | 2026 | 101,181 | 6 | **8.7** | 77.5 |
+
+   **The decline is HR-SPECIFIC, not a capture regression** — the `batter_hits` control is flat at
+   71–80% across the same seasons and the same pulls. Mechanism, measured per book in 2026:
+
+   - `draftkings` — 39,941 `batter_hits` quotes, **0 HR quotes**: still captured, has dropped the
+     two-way HR line entirely.
+   - `betrivers` (34,690) and `williamhill_us` (39,557) — plenty of HR quotes, **0 two-sided**:
+     migrated to the one-way "anytime HR" presentation.
+   - `betmgm` — 38,997 hits vs only 1,225 HR: largely stopped posting the HR line.
+   - `pinnacle` — 3,653 HR quotes, **3,653 two-sided (100%)**, first appearing 2026-06-03. From
+     2026-07 onward **Pinnacle is the ONLY source of a two-sided HR price**
+     (`two_sided_non_pinnacle` = 0 in July and August). It never appears in `batter_hits` at all —
+     a narrow prop menu.
+
+   ⛔ **NOT recoverable by spending credits — PROBED, not inferred (2026-08-09).**
+
+   The first version of this section justified "not buyable" partly on cost. That reasoning was
+   **wrong on the cost half and untested on the data half**, and both have now been fixed:
+
+   - **The cost argument was based on a stale budget.** The docstrings in
+     `backfill_multisport_props_to_s3.py` describe a post-2026-07-17 drop to ~100k/month; the live
+     `x-requests-remaining` header reads **4,753,551**. A ~280k re-pull is ~5.9% of the real
+     balance — i.e. **affordable**. Cost was never the binding reason.
+   - **The data argument rested on a 2-point sample.** The archive only ever pulled 17:00Z and
+     23:30Z, and the two-sided share visibly *moves* between them (28.9% → 40.4%), so "these books
+     are one-way by construction" was an inference from two samples of a varying quantity — a fair
+     challenge, and it was tested rather than defended.
+
+   `scripts/probe_batter_prop_coverage.py --probe snapshot` re-requested the same events at four
+   additional timestamps (2026-08-05, 3 events × 13:00/15:00/20:00/22:00Z, leakage-clamped below
+   commence_time):
+
+   | book | 13:00Z | 15:00Z | 20:00Z | 22:00Z |
+   |---|---|---|---|---|
+   | `betrivers` | 0% | 0% | 0% | 0% |
+   | `williamhill_us` | 0% | 0% | 0% | 0% |
+   | `pinnacle` | 100% | 100% | 100% | 100% |
+
+   ⇒ the one-way books are one-way at **every** sampled hour. **The 17:00→23:30 aggregate
+   difference is a BOOK-COMPOSITION effect — which books are present at each snapshot — not books
+   flipping presentation intraday.** So the gap is genuinely market structure, and a re-pull at any
+   other hour returns the same one-way data. **Registered as not worth buying — because it would
+   recover nothing, not because of budget.**
+
+   **Binding consequence for the HR leg** — the HR *market-benchmark* comparison is only
+   well-supported on the EARLY folds and degrades to a single sharp book by the late ones:
+
+   | fold | HR de-vigged coverage |
+   |---|---|
+   | 2023H2 | 87.6% |
+   | 2024H1 / 2024H2 | 91.1% |
+   | 2025H1 / 2025H2 | 93.7% |
+   | **2026H1** | **20.4%** (Pinnacle-dominated) |
+
+   ⇒ the HR leg **must report per-fold de-vigged coverage beside every calibration figure**, and a
+   pooled HR calibration number across all six folds is **forbidden** — it would silently average a
+   broad-market benchmark with a single-book one. `n_books_two_sided` is on every row for exactly
+   this; **any HR calibration claim must condition on it.** A Pinnacle-only benchmark is not worse
+   in *quality* (it is the sharpest, lowest-hold book) but it is a **different estimand** from a
+   multi-book consensus and may not be pooled with one.
+
+   The **modelling** target (`y_actual`) is unaffected — this limits only what the HR predictive can
+   be *graded against*, not what it can be *fit to*. hits (75–80%) and TB (81%) are unaffected
+   throughout and need no fold restriction.
 2. **~3% of prop events never resolve to a `game_pk`** (§ handoff). Unresolved events are dropped,
    not guessed. This is not missing-at-random and should not be characterised as such without
    checking.
