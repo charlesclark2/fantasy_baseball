@@ -44,8 +44,12 @@ import { fullSeasonRate } from "@/lib/fantasy"
 import type { ProjectedPlayer } from "@/lib/fantasy"
 import {
   EXPECTED_POINTS_LABEL,
+  FORMAT_TILE_LOCK_SUB,
   FULL_SEASON_RATE_LABEL,
+  MEMBERSHIP_CTA_LABEL,
   PROJECTED_GAMES_LABEL,
+  STAT_LINE_LOCK_DETAIL,
+  STAT_LINE_LOCK_TITLE,
 } from "@/lib/fantasy-claim-copy"
 import { PlayerHistoryPanel } from "@/components/fantasy/player-history-panel"
 import {
@@ -67,8 +71,10 @@ import {
   PosBadge,
   ProvenanceLine,
   RangeCell,
+  LockChip,
   RookieBadge,
   STAT_COLS,
+  SUBSCRIBE_HREF,
   UNCERTAINTY_HELP,
   UNCERTAINTY_LABEL,
   MarketLeanNote,
@@ -142,14 +148,24 @@ function Tile({
   value,
   sub,
   emphasis = false,
+  testId,
 }: {
   label: React.ReactNode
   value: React.ReactNode
   sub?: React.ReactNode
   emphasis?: boolean
+  /** A stable handle for the E2E suite. Only the four per-format tiles carry one, because they are
+   *  the only ones whose CONTENT differs by entitlement — and a spec asserting "the half-PPR tile
+   *  is locked" must be able to name that tile. Locating it by its visible label would let a
+   *  different element satisfy the assertion (a padlock anywhere on the page, a heading that
+   *  happens to contain "Half PPR"), which is the shape that has already shipped green here once. */
+  testId?: string
 }) {
   return (
-    <div className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-3">
+    <div
+      data-testid={testId}
+      className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-3"
+    >
       <div className="text-[11px] font-medium uppercase tracking-wider text-gray-500">{label}</div>
       <div className={`mt-1 tabular-nums ${emphasis ? "text-2xl font-bold text-white" : "text-lg font-semibold text-gray-100"}`}>
         {value}
@@ -447,15 +463,30 @@ function PlayerView({ playerId }: { playerId: string }) {
               </InfoTip>
             </h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {/* ⭐ THE TWO PAID REFERENCE FORMATS. Rendered as tiles with a lock rather than
+                  removed, so the page still shows what a membership adds — and so the grid keeps
+                  its four columns instead of reflowing into a different-looking page for a free
+                  visitor. The percentile sub-line goes with the number: it is a position rank
+                  computed FROM that scoring, so leaving it would describe the withheld figure. */}
               <Tile
+                testId="format-tile-std"
                 label="Standard"
-                value={num(proj.fpStd)}
-                sub={combineSub(pctStd != null && `${ordinal(pctStd)} pct. among ${proj.pos}s`)}
+                value={entitled ? num(proj.fpStd) : <LockChip title={STAT_LINE_LOCK_TITLE} />}
+                sub={
+                  entitled
+                    ? combineSub(pctStd != null && `${ordinal(pctStd)} pct. among ${proj.pos}s`)
+                    : FORMAT_TILE_LOCK_SUB
+                }
               />
               <Tile
+                testId="format-tile-half"
                 label="Half PPR"
-                value={num(proj.fpHalf)}
-                sub={combineSub(pctHalf != null && `${ordinal(pctHalf)} pct. among ${proj.pos}s`)}
+                value={entitled ? num(proj.fpHalf) : <LockChip title={STAT_LINE_LOCK_TITLE} />}
+                sub={
+                  entitled
+                    ? combineSub(pctHalf != null && `${ordinal(pctHalf)} pct. among ${proj.pos}s`)
+                    : FORMAT_TILE_LOCK_SUB
+                }
               />
               {/* The full-season rate rides as a SUB-LINE on the two totals a drafter actually
                   reads, rather than as a fifth tile: it is the same number re-expressed, so it
@@ -464,6 +495,7 @@ function PlayerView({ playerId }: { playerId: string }) {
                   games figure to divide by, and `combineSub` drops a false entry — so the line is
                   simply absent rather than showing an em-dash of its own. */}
               <Tile
+                testId="format-tile-ppr"
                 label="Full PPR (reference)"
                 value={num(proj.fpPpr)}
                 sub={combineSub(
@@ -474,7 +506,20 @@ function PlayerView({ playerId }: { playerId: string }) {
                 )}
               />
               <Tile
-                label={config ? `${config.label} (your league)` : "Your league"}
+                testId="format-tile-league"
+                // ⚠️ "(your league)" IS A CLAIM ABOUT THE READER, and it is false for a free
+                // visitor: they have no saved league, and the format selector above is pinned to
+                // the free preset, so this tile is the generic board — not theirs. Dropping the
+                // suffix is the honest label, and it is also what makes the boundary legible:
+                // "your league" is the thing a membership adds, so printing it over a preset
+                // spends the phrase before it means anything.
+                label={
+                  entitled
+                    ? config
+                      ? `${config.label} (your league)`
+                      : "Your league"
+                    : config?.label ?? "Board scoring"
+                }
                 value={boardLoading ? "…" : boardRow?.pts != null ? num(boardRow.pts) : "—"}
                 sub={
                   !boardLoading && boardRow?.pts == null
@@ -492,10 +537,22 @@ function PlayerView({ playerId }: { playerId: string }) {
               />
             </div>
             <p className="mt-2 text-[11px] leading-relaxed text-gray-600">
-              Standard / Half PPR / Full PPR are a fixed reference scoring, independent of your
-              league&apos;s actual rules. The last card is this player re-scored under your selected
-              league&apos;s exact format and roster shape. &ldquo;Pct.&rdquo; is where this projection
-              ranks among every currently-projected player at his position — not his league board rank.
+              {entitled ? (
+                <>
+                  Standard / Half PPR / Full PPR are a fixed reference scoring, independent of your
+                  league&apos;s actual rules. The last card is this player re-scored under your
+                  selected league&apos;s exact format and roster shape.
+                </>
+              ) : (
+                <>
+                  Full PPR is a fixed reference scoring; the card beside it is the same player on the
+                  free board, scored at full-PPR for twelve teams. Standard and half-PPR — and this
+                  player re-scored under your own league&apos;s exact rules — are part of a
+                  membership.
+                </>
+              )}{" "}
+              &ldquo;Pct.&rdquo; is where this projection ranks among every currently-projected
+              player at his position — not his league board rank.
             </p>
           </section>
 
@@ -627,15 +684,44 @@ function PlayerView({ playerId }: { playerId: string }) {
                   </>
                 ) : null}
               </h2>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-                {statCols.map((c) => (
-                  <Tile
-                    key={String(c.key)}
-                    label={c.label}
-                    value={num(proj[c.key] as number | null, c.nd ?? 1)}
-                  />
-                ))}
-              </div>
+              {/* ⭐⭐ THE STAT LINE IS THE REASON THE FORMAT LOCK ABOVE IS WORTH ANYTHING. The three
+                  reference totals differ ONLY in how a reception scores, so printing the reception
+                  count beside them makes the two withheld numbers exact mental arithmetic:
+                  `half = full − 0.5 × rec`, `standard = full − 1.0 × rec`. Measured on a real
+                  served player — full 178.4, half 147.5, standard 116.5, rec 61.9 — both identities
+                  hold to a tenth. A lock over the totals with the receptions underneath is a
+                  paywall the reader can do in their head, on the one page that shows both.
+
+                  ⛔ NOT AN ANTI-SCRAPING MEASURE, and it should not be defended as one — the free
+                  board is scrapeable by design and that was accepted when this tier was drawn. It
+                  is about not printing the answer next to the question. */}
+              {entitled ? (
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+                  {statCols.map((c) => (
+                    <Tile
+                      key={String(c.key)}
+                      label={c.label}
+                      value={num(proj[c.key] as number | null, c.nd ?? 1)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div
+                  data-testid="stat-line-lock"
+                  className="rounded-lg border border-[#262626] bg-[#0f0f0f] px-4 py-4"
+                >
+                  <p className="text-[13px] font-semibold text-gray-200">{STAT_LINE_LOCK_TITLE}</p>
+                  <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-gray-500">
+                    {STAT_LINE_LOCK_DETAIL}
+                  </p>
+                  <a
+                    href={SUBSCRIBE_HREF}
+                    className="mt-3 inline-block rounded-md border border-[#262626] px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:border-[#3a3a3a] hover:text-gray-100"
+                  >
+                    {MEMBERSHIP_CTA_LABEL}
+                  </a>
+                </div>
+              )}
             </section>
           )}
 

@@ -766,6 +766,137 @@ def test_the_entitlement_is_still_part_of_every_dual_mode_query_key():
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+# 4b. The paid formats must not be READABLE — or DERIVABLE — on a free surface
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# The board's format picker was only the first of three places the paid scorings surface. The other
+# two are client-side renders of a payload that is (correctly) identical for every caller, so the
+# API cannot help here — `projections.json` carries `fpStd`/`fpHalf` for everybody by design, and
+# the whole gate is which of them a component chooses to print.
+#
+# ⭐⭐ AND THE THIRD LEAK IS ARITHMETIC, NOT A COLUMN. The three reference totals differ ONLY in how
+# a reception scores, so a visible reception count makes the two withheld numbers exact:
+#     half = full − 0.5 × rec        standard = full − 1.0 × rec
+# Measured on a real served player — full 178.4, half 147.5, standard 116.5, rec 61.9 — both hold to
+# a tenth. Locking the totals while printing the stat line underneath is a paywall the reader can do
+# in their head, on the one page that shows both. Hence the stat line is gated too, and hence this
+# section exists rather than the checks being scattered next to their components.
+
+
+def test_the_derivation_the_stat_line_gate_exists_to_prevent():
+    """⭐ THE ARITHMETIC ITSELF, executable, so the REASON for the gate cannot rot into folklore.
+
+    A future reader deciding whether the stat-line lock is worth its cost needs the identity in
+    front of them, not a claim about it. These are the served figures from a real player page.
+    If this ever stops holding — a scoring change, a different reception weight — the gate's
+    justification has changed and the comment above it needs rewriting, not just its threshold.
+    """
+    full, half, standard, receptions = 178.4, 147.5, 116.5, 61.9
+    assert abs((full - 0.5 * receptions) - half) < 0.15, "half-PPR is no longer full − 0.5·rec"
+    assert abs((full - 1.0 * receptions) - standard) < 0.15, "standard is no longer full − 1.0·rec"
+
+
+def test_the_projections_page_offers_only_the_free_reference_scoring():
+    """Season Projections lays a reference TOTAL over a scoring-independent table. That control is
+    not the board's format picker and does not share its code, which is exactly how one of the two
+    ends up gated and the other does not."""
+    code = _code("components/fantasy/projections-table.tsx")
+    assert re.search(r'const FREE_SCORING: Scoring = "fpPpr"', code), (
+        "the projections page no longer names a single free reference scoring"
+    )
+    assert re.search(r"const lockedOption = !entitled && s !== FREE_SCORING", code), (
+        "the reference-scoring picker no longer locks the paid options"
+    )
+    assert "disabled: lockedOption" in code, "the locked reference scorings are still selectable"
+
+
+def test_the_projections_page_reads_the_derived_scoring_not_the_raw_state():
+    """⭐ A DISABLED OPTION IS PRESENTATION; A STATE VARIABLE IS NOT A GATE.
+
+    Every read has to go through `effScoring` (which collapses to the free scoring for an
+    unentitled caller), so the `scoring` state cannot reach a number even if something else sets
+    it. The NF-C0e 'wired ≠ invoked' shape pointed the other way: here the state IS wired and must
+    not be invoked.
+
+    Asserted as an ABSENCE of raw `[scoring]` reads, because the presence of `effScoring` somewhere
+    in the file says nothing about whether the one read that matters uses it."""
+    code = _code("components/fantasy/projections-table.tsx")
+    body = code[code.index("export function ProjectionsTable") :]
+    assert "effScoring: Scoring = entitled ? scoring : FREE_SCORING" in body, (
+        "the derived scoring is gone — the picker state now reaches the table directly"
+    )
+    raw = re.findall(r"(?<!eff)\[scoring\]|p\[scoring\]|value=\{scoring\}", body)
+    assert not raw, f"a value is still read off the raw picker state rather than `effScoring`: {raw}"
+
+
+def test_the_player_page_locks_the_two_paid_reference_totals():
+    """Standard and half-PPR render a lock rather than a number for an unentitled caller — and the
+    PERCENTILE goes with them, because it is a position rank computed from the withheld scoring and
+    would otherwise describe the number it replaces."""
+    code = _code("components/fantasy/player-page.tsx")
+    for field, label in (("fpStd", "Standard"), ("fpHalf", "Half PPR")):
+        assert re.search(
+            rf"value=\{{entitled \? num\(proj\.{field}\) : <LockChip", code
+        ), f"the {label} tile still prints its number to an unentitled caller"
+    assert code.count("FORMAT_TILE_LOCK_SUB") >= 2, (
+        "a locked format tile keeps a sub-line describing the number it is withholding"
+    )
+
+
+def test_the_player_page_gates_the_raw_stat_line():
+    """⭐ THE GATE THAT MAKES THE TWO ABOVE MEAN ANYTHING — see the section header for the identity.
+
+    Asserted on the RENDER (`entitled ? <grid of tiles> : <lock>`), not on the presence of the copy
+    constants: a component can import every string in this module and still map `statCols` to tiles
+    unconditionally."""
+    code = _code("components/fantasy/player-page.tsx")
+    assert re.search(r"\{entitled \? \(\s*<div className=\"grid grid-cols-3", code), (
+        "the raw stat line is no longer gated on entitlement"
+    )
+    assert 'data-testid="stat-line-lock"' in code, "there is no locked state for the stat line"
+
+
+def test_the_free_player_page_makes_no_claim_about_the_readers_league():
+    """"(your league)" is a claim ABOUT THE READER, and it is false for a free visitor: they have no
+    saved league, and the format selector above the tile is pinned to the free preset, so that card
+    is the generic board rather than theirs. It is also the phrase the paid tier is sold on, so
+    spending it over a preset costs the boundary its own vocabulary."""
+    code = _code("components/fantasy/player-page.tsx")
+    m = re.search(r"label=\{\s*entitled\s*\?(.*?)\n\s*\}", code, re.S)
+    assert m, "the league tile's label no longer branches on entitlement"
+    assert "your league" not in m.group(1).split(":")[-1].lower(), (
+        "the unentitled branch still labels a preset as the reader's own league"
+    )
+
+
+def test_the_locked_format_copy_lives_in_the_governed_module():
+    """Every string these three gates render is claim-adjacent — it says what a membership buys —
+    so it goes through the same denylist screening as the rest, and none of it is typed inline."""
+    copy_src = (_FRONTEND / "lib/fantasy-claim-copy.ts").read_text()
+    for const in (
+        "REFERENCE_SCORING_LOCK_NOTE",
+        "FORMAT_TILE_LOCK_SUB",
+        "STAT_LINE_LOCK_TITLE",
+        "STAT_LINE_LOCK_DETAIL",
+    ):
+        assert f"export const {const}" in copy_src, f"{const} is not in the governed copy module"
+
+
+def test_the_stat_line_lock_does_not_claim_to_stop_scraping():
+    """⛔ AN HONESTY CLAUSE, not a copy-style one. The free board is scrapeable BY DESIGN and that
+    was accepted when this tier was drawn (it is the marketing wedge). A lock that presented itself
+    as protection against copying would be claiming a property the product does not have, on a
+    surface whose whole argument is that we say what is true. It withholds a figure; it does not
+    defend one."""
+    copy_src = (_FRONTEND / "lib/fantasy-claim-copy.ts").read_text()
+    block = copy_src[copy_src.index("STAT_LINE_LOCK_TITLE") :]
+    block = block[: block.index("\n\n\n")] if "\n\n\n" in block else block
+    for word in ("scrap", "steal", "copy-protect", "piracy", "unauthorized"):
+        assert word not in block.lower(), (
+            f"the stat-line lock copy claims anti-{word} protection the product does not provide"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
 # 5. The paywall boundary is EXPLICIT in the UX
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 

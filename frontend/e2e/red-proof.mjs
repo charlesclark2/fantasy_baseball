@@ -639,6 +639,63 @@ const CASES = [
     to: "          {false && boardError && (",
     grep: "not as an empty search",
   },
+  // ══ THE PAID SCORINGS ON THE OTHER TWO SURFACES ═══════════════════════════════════════════
+  {
+    id: "projections-offers-every-scoring",
+    shipped: "the state PR #681 left behind on Season Projections",
+    // #681 locked the BOARD's format picker and left this one open, because they are different
+    // controls in different files that happen to mean the same thing. The page kept offering
+    // half-PPR and standard to a logged-out visitor for the whole of that PR's life.
+    detail: "Unlocks every reference scoring in the projections picker.",
+    file: "components/fantasy/projections-table.tsx",
+    from: "                  const lockedOption = !entitled && s !== FREE_SCORING",
+    to: "                  const lockedOption = false",
+    grep: "only the free reference scoring",
+  },
+  {
+    id: "player-page-prints-the-paid-totals",
+    shipped: "the same gap on the player page — the surface that shows all three side by side",
+    detail: "Prints the standard total to a free visitor.",
+    file: "components/fantasy/player-page.tsx",
+    from: "value={entitled ? num(proj.fpStd) : <LockChip title={STAT_LINE_LOCK_TITLE} />}",
+    to: "value={num(proj.fpStd)}",
+    grep: "locks the two paid totals",
+  },
+  {
+    id: "everything-locked-including-the-free-total",
+    shipped: "pre-emptive: the nervous fix that locks the free number too",
+    // ⚠️ THE OPPOSITE FAILURE. Every "the paid total is locked" assertion stays green while the
+    // free board loses the one number it exists to show — and it would look, to whoever made the
+    // change, exactly like being careful.
+    detail: "Locks the free full-PPR total along with the paid ones.",
+    file: "components/fantasy/player-page.tsx",
+    from: "                value={num(proj.fpPpr)}",
+    to: "                value={<LockChip />}",
+    grep: "keeps the free one",
+  },
+  {
+    id: "stat-line-printed-beside-locked-totals",
+    shipped: "pre-emptive: a paywall the reader can do in their head",
+    // \u2b50\u2b50 The reference totals differ ONLY in how a reception scores, so with the stat line back
+    // the two locked figures are one subtraction away on the same screen —
+    // `half = full - 0.5 x rec`. Every "the total is locked" case above stays green.
+    detail: "Restores the raw stat line under the locked totals.",
+    file: "components/fantasy/player-page.tsx",
+    from: '              {entitled ? (\n                <div className="grid grid-cols-3',
+    to: '              {true ? (\n                <div className="grid grid-cols-3',
+    grep: "raw stat line is withheld",
+  },
+  {
+    id: "preset-called-the-readers-league",
+    shipped: "pre-emptive: telling a free visitor a preset is their own league",
+    // Not a leak — a false statement about the reader, on the tile whose label is the exact phrase
+    // the paid tier is sold on. Spending it over a preset costs the boundary its vocabulary.
+    detail: "Labels the free board's tile as the visitor's own league.",
+    file: "components/fantasy/player-page.tsx",
+    from: '                    : config?.label ?? "Board scoring"',
+    to: '                    : config ? `${config.label} (your league)` : "Your league"',
+    grep: "own league",
+  },
   {
     id: "stored-paid-selection-survives-a-lapse",
     shipped: "pre-emptive: a lapsed member greeted by a refusal on the page they were reading",

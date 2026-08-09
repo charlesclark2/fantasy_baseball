@@ -34,6 +34,8 @@ QUERIES = REPO / "frontend/lib/fantasy-queries.ts"
 COPY = REPO / "frontend/lib/fantasy-claim-copy.ts"
 SHARED = REPO / "frontend/components/fantasy/shared.tsx"
 RANKINGS = REPO / "frontend/components/fantasy/rankings-board.tsx"
+PROJECTIONS = REPO / "frontend/components/fantasy/projections-table.tsx"
+PLAYER_PAGE = REPO / "frontend/components/fantasy/player-page.tsx"
 SCORING = REPO / "frontend/lib/league-scoring.ts"
 DRAFT_PAGE = REPO / "frontend/app/fantasy/draft/page.tsx"
 LEAGUE_BOARD_PAGE = REPO / "frontend/app/fantasy/league-board/page.tsx"
@@ -279,6 +281,57 @@ CASES = [
      [("          {!boardLoading && boardError && (", "          {false && boardError && (")],
      None,
      "test_a_refused_board_does_not_render_as_an_empty_search", SUITE),
+
+    # ── the paid formats must not be readable, or derivable, on a free surface ────────────────
+    # Three leaks, all client-side: the API serves `fpStd`/`fpHalf` to everyone by design, so the
+    # gate is entirely which component prints them. The third is arithmetic rather than a column.
+    ("offer every reference scoring on the projections page", PROJECTIONS,
+     [("                  const lockedOption = !entitled && s !== FREE_SCORING",
+       "                  const lockedOption = false")],
+     None,
+     "test_the_projections_page_offers_only_the_free_reference_scoring", SUITE),
+
+    # ⭐ THE SUBTLE ONE. The picker still LOOKS locked — the options are disabled, the note renders,
+    # every "is it locked" assertion stays green — but the table reads the raw state, so anything
+    # that sets it (a future URL param, a restored preference, a test) reaches the paid numbers.
+    ("read the picker state directly instead of the derived scoring", PROJECTIONS,
+     [("  const effScoring: Scoring = entitled ? scoring : FREE_SCORING",
+       "  const effScoring: Scoring = scoring")],
+     None,
+     "test_the_projections_page_reads_the_derived_scoring_not_the_raw_state", SUITE),
+
+    ("print the standard total on a free player page", PLAYER_PAGE,
+     [("value={entitled ? num(proj.fpStd) : <LockChip title={STAT_LINE_LOCK_TITLE} />}",
+       "value={num(proj.fpStd)}")],
+     None,
+     "test_the_player_page_locks_the_two_paid_reference_totals", SUITE),
+
+    ("print the half-PPR total on a free player page", PLAYER_PAGE,
+     [("value={entitled ? num(proj.fpHalf) : <LockChip title={STAT_LINE_LOCK_TITLE} />}",
+       "value={num(proj.fpHalf)}")],
+     None,
+     "test_the_player_page_locks_the_two_paid_reference_totals", SUITE),
+
+    # ⭐⭐ THE CASE THE WHOLE SECTION TURNS ON. With the stat line back, the two locked totals are
+    # exact mental arithmetic (`half = full − 0.5·rec`), so every "the total is locked" clause above
+    # stays green while the withheld numbers are one subtraction away on the same screen.
+    ("show the raw stat line beside the locked totals", PLAYER_PAGE,
+     [('              {entitled ? (\n                <div className="grid grid-cols-3',
+       '              {true ? (\n                <div className="grid grid-cols-3')],
+     None,
+     "test_the_player_page_gates_the_raw_stat_line", SUITE),
+
+    ("tell a free visitor a preset is their own league", PLAYER_PAGE,
+     [("                    : config?.label ?? \"Board scoring\"",
+       "                    : config ? `${config.label} (your league)` : \"Your league\"")],
+     None,
+     "test_the_free_player_page_makes_no_claim_about_the_readers_league", SUITE),
+
+    ("claim the stat-line lock stops scraping", COPY,
+     [('  "Targets, receptions, yards and touchdowns',
+       '  "Stops scraping. Targets, receptions, yards and touchdowns')],
+     None,
+     "test_the_stat_line_lock_does_not_claim_to_stop_scraping", SUITE),
 
     # ── copy that describes an entitlement goes stale silently ────────────────────────────────
     ("let the free-tier copy claim a format it no longer covers", COPY,
