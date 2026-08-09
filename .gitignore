@@ -157,3 +157,7 @@ quant_sports_intel_models/baseball/edge_program/ablation_results/e8_7_artifacts/
 # in the S3 lake at nfl/fantasy/derived/kdst_projections). The canonical forward-season report is
 # deliberately NOT matched by the 4-digit class and stays tracked.
 quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf1_6_kdst_base_projection_[0-9][0-9][0-9][0-9].md
+# NF-W2b flip-tracking local copies: the retained SERVED-board snapshot's canonical home is
+# s3://credence-prod-s3-api-cache/snapshots/<tag>/ (immutable); --download copies are a local
+# convenience, never committed (a convenience commit must not sweep prod JSON into git).
+quant_sports_intel_models/football/nfl/fantasy/artifacts/served_board_snapshots/
