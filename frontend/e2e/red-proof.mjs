@@ -975,6 +975,43 @@ const CASES = [
     to: "          href=\"/pricing\"\n          className=\"inline-flex items-center gap-1.5 rounded border border-[#10b981]/40",
     grep: "carries a way to lift it",
   },
+  {
+    id: "landing-view-loses-its-surface",
+    shipped: "G100-D0 — the first cut, caught on the wire before merge",
+    // ⭐ A DEFECT THIS SUITE ACTUALLY FOUND, and the reason `funnel-telemetry.ts` carries no
+    // `"use client"`. A constant imported from a client-boundary module into a SERVER component
+    // resolves to a client REFERENCE, not to its value — so `<LandingView surface={…HOME}/>` on the
+    // (server-rendered) home page received `undefined` and every `landing_view` from the
+    // highest-traffic page in the product shipped with no `surface`.
+    //
+    // Nothing else in the toolchain can see it: the types are real so `tsc` passes, `next build`
+    // passes, the component renders, and the event still fires. Only reading the property off the
+    // ingest request body distinguishes "the event fired" from "the event fired with its
+    // dimensions", which is the whole difference between a funnel you can segment and one you
+    // cannot.
+    detail: "Re-marks the contract module as a client boundary; the server component's prop becomes undefined.",
+    file: "lib/funnel-telemetry.ts",
+    from: "/**\n * G100-D0 — THE FUNNEL EVENT CONTRACT.",
+    to: '"use client"\n\n/**\n * G100-D0 — THE FUNNEL EVENT CONTRACT.',
+    grep: "landing_view under the name the dashboard reads",
+  },
+  {
+    id: "landing-view-races-the-session",
+    shipped: "G100-D0 — the second cut, also caught on the wire before merge",
+    // The other half of the same discovery. `landing_view` is the ONLY funnel event that can fire
+    // before the auth provider has restored a session, and `free_paid_status` cannot be registered
+    // until that resolves. Firing on bare mount raced it, and the top of the funnel — the one step
+    // with the most traffic — became the one step that could not be split by tier.
+    //
+    // It is the quietest possible failure: the event arrives, the funnel counts the visitor, the
+    // rate is correct, and a single breakdown dimension is silently absent. Same shape as G100-C1's
+    // `players_moved: null` race, one step up the funnel.
+    detail: "Drops the wait for the session, so the event outruns the property that describes the caller.",
+    file: "components/analytics/landing-view.tsx",
+    from: "    if (fired.current || loading) return",
+    to: "    if (fired.current) return",
+    grep: "reports `comped`, never `paid`",
+  },
 ]
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
