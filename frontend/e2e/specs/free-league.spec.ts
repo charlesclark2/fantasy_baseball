@@ -153,6 +153,19 @@ test.describe("the free personalized league", () => {
     // wrong thing.
     expect(captured.length, "the activation event fired more than once for one view").toBe(1)
 
+    // …and it stays one while the user BROWSES. A position-tab click re-renders the component,
+    // which is the cheapest way to reproduce the "counted per render" defect. Today two layers
+    // prevent it (the once-per-mount ref, and an effect dependency list that a tab click does not
+    // disturb), so no single-line break can falsify this — see the `activation-fires-per-render`
+    // case in `e2e/red-proof.mjs`, which is declared GREEN for exactly that reason. Exercising it
+    // here is what catches a future edit that makes those dependencies unstable.
+    await page.getByRole("button", { name: "RB", exact: true }).click()
+    await page.waitForTimeout(2_000)
+    expect(
+      events.filter((e) => e.event === "custom_board_viewed").length,
+      "browsing the board counted a second activation",
+    ).toBe(1)
+
     // G100-D0's required dimensions, carried on the event the dashboard keys off.
     const props = captured[0].properties
     expect(props.league_platform).toBe("sleeper")

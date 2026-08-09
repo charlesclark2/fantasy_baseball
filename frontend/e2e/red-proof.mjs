@@ -747,6 +747,18 @@ const CASES = [
     from: "    if (fired.current || !league || ranked.length === 0) return\n    fired.current = true",
     to: "    if (!league || ranked.length === 0) return",
     grep: "under the name the funnel reads",
+    // ⭐ DECLARED GREEN, and it is a FINDING rather than a gap — defence in depth, measured.
+    //
+    // Once-per-mount is delivered TWICE over here, independently: by the `fired` ref, and by the
+    // effect's dependency list (`[league, ranked.length, delta]`), none of which changes when the
+    // user browses — a position-tab click re-renders the component but re-runs no effect. So
+    // removing the ref alone changes no observable behaviour, and no SINGLE-line break can falsify
+    // the clause. The spec exercises the property anyway (it clicks a tab and re-counts), so a
+    // future edit that makes those deps unstable is caught by the test even though this case
+    // cannot express it.
+    //
+    // ⚠️ If this ever flips to RED, one of the two layers has gone and the note above is stale.
+    expect: "GREEN",
   },
   {
     id: "activation-event-renamed",
@@ -781,6 +793,18 @@ const CASES = [
     from: "surfaceItems(g).filter((i) => i.public || (i.freeSignedIn && isSignedIn))",
     to: "surfaceItems(g).filter((i) => i.public || i.freeSignedIn)",
     grep: "is not offered the league surfaces",
+    // ⭐ DECLARED GREEN — a FINDING, and the same defence-in-depth shape as
+    // `activation-fires-per-render`. A logged-out visitor never reaches this filter at all: the
+    // whole surface sub-nav is behind `showSubNav` (`authenticated || isSignedIn`), so the fantasy
+    // dropdown is not rendered and its items cannot appear however this line is written.
+    //
+    // The `isSignedIn` half is therefore belt-and-braces — and worth keeping, because the ONE path
+    // that does render nav items to a logged-out visitor is `publicNavItems()` (E9.58 lifted the
+    // public surfaces into the top bar for exactly that reason). A future change that widened that
+    // path would meet this clause. The spec's assertion is a real user-facing property either way.
+    //
+    // ⚠️ If this flips to RED, the sub-nav has become reachable logged-out and the note is stale.
+    expect: "GREEN",
   },
   {
     id: "withheld-leagues-vanish-silently",

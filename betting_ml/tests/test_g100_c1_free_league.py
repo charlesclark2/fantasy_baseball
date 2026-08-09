@@ -312,7 +312,19 @@ _LEAGUE_BODY = {
 def api(monkeypatch):
     """Stub ONLY the storage boundary. Routing, both router dependencies, the entitlement resolver
     and the Pydantic response models are all the real thing."""
-    from app.backend.services import dynamo, jwt_verify
+    from app.backend.services import cost_guardrails, dynamo, jwt_verify
+
+    # ⭐ THE PER-IP RATE LIMITER IS PROCESS-GLOBAL AND STATEFUL, so it carries token depletion ACROSS
+    # tests and across FILES. Every `_call` below arrives from the same fake client, so a suite that
+    # makes enough requests exhausts the bucket and the NEXT file starts receiving 429s — which
+    # surface as `KeyError: 'configs'` and similar, i.e. as assertion failures about payload shape
+    # rather than as anything resembling throttling. (Measured: adding `test_g100_c1_free_league.py`
+    # ahead of this file turned 17 of its tests red until this reset was added.)
+    #
+    # The limiter's own behaviour has its own suite; here it must simply not be a hidden dependency
+    # between unrelated tests.
+    cost_guardrails.get_limiter().reset()
+
 
     tables: dict[str, _FakeTable] = {}
 

@@ -232,7 +232,19 @@ def app_env(monkeypatch):
     """Stub ONLY the two IO boundaries. Routing, router dependencies, the entitlement resolver and
     JSON serialization are all the real thing."""
     from app.backend.routers import fantasy
-    from app.backend.services import jwt_verify
+    from app.backend.services import cost_guardrails, jwt_verify
+
+    # ⭐ THE PER-IP RATE LIMITER IS PROCESS-GLOBAL AND STATEFUL, so it carries token depletion ACROSS
+    # tests and across FILES. Every `_call` below arrives from the same fake client, so a suite that
+    # makes enough requests exhausts the bucket and the NEXT file starts receiving 429s — which
+    # surface as `KeyError: 'configs'` and similar, i.e. as assertion failures about payload shape
+    # rather than as anything resembling throttling. (Measured: adding `test_g100_c1_free_league.py`
+    # ahead of this file turned 17 of its tests red until this reset was added.)
+    #
+    # The limiter's own behaviour has its own suite; here it must simply not be a hidden dependency
+    # between unrelated tests.
+    cost_guardrails.get_limiter().reset()
+
 
     def fake_load(rel_key: str, sport: str = "nfl"):
         if rel_key.endswith("projections.json"):
@@ -551,21 +563,42 @@ def test_the_manifest_marking_is_purely_additive(app_env):
 # ── the no-regression half: what must STAY paid ───────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    "path,query",
-    [
-        ("/fantasy/nfl/my-teams", "season=2026"),
-        ("/fantasy/leagues", ""),
-    ],
-)
-def test_the_personalization_endpoints_still_403_a_non_entitled_caller(app_env, path, query):
-    """⭐ WITHOUT THIS CLAUSE THE WHOLE FILE IS SATISFIED BY MAKING EVERYTHING FREE.
+#: The personalization reads. ⚠️ G100-C1 changed WHO may reach these — see below.
+_PERSONALIZATION_PATHS = [("/fantasy/nfl/my-teams", "season=2026"), ("/fantasy/leagues", "")]
 
-    These are `Capability.PERSONALIZATION`: a user's own saved leagues and their linked rosters.
-    They stay on the gated router with its blanket `require_fantasy_access`, so a validated but
-    non-entitled caller is refused outright rather than served anything."""
+
+@pytest.mark.parametrize("path,query", _PERSONALIZATION_PATHS)
+def test_a_signed_in_free_account_reaches_personalization_with_a_quota_of_one(app_env, path, query):
+    """🗄️ THIS CLAUSE USED TO ASSERT 403, AND G100-C1 (2026-08-08) IS WHY IT NO LONGER DOES.
+
+    When the freemium boundary was drawn, `Capability.PERSONALIZATION` had no free form at all and
+    these endpoints refused every non-entitled caller outright. G100-C1 grants a free account ONE
+    personalized league, so a validated-but-unentitled caller now reaches them and is served their
+    own single league.
+
+    ⛔ THE CAPABILITY IS STILL PAID. What changed is a QUOTA, not the tier — see
+    `test_personalization_is_still_a_paid_capability_after_the_free_grant` above, and
+    `test_g100_c1_free_league.py` for the cap that keeps it at one. The no-regression half this
+    clause carries moved to the two tests below, which is where it still has teeth.
+    """
     status, _ = _call(path, query, aws_event=_entitled_event(groups="[beta_tester]"))
-    assert status == 403, f"{path} no longer refuses a non-entitled caller"
+    assert status == 200, f"{path} refuses a signed-in free account its one league"
+
+
+@pytest.mark.parametrize("path,query", _PERSONALIZATION_PATHS)
+def test_personalization_is_still_refused_when_the_free_quota_is_withdrawn(
+    app_env, path, query, monkeypatch
+):
+    """⭐ WITHOUT THIS THE WHOLE FILE IS SATISFIED BY MAKING EVERYTHING FREE.
+
+    The clause above no longer discriminates on its own — after G100-C1 it passes just as well
+    against a server with no gate at all. What still discriminates is the quota: set it to 0 (the
+    operator's one-flip withdrawal of the free tier) and an unentitled caller must be refused
+    again, which proves the gate is READING the quota rather than waving everyone through.
+    """
+    monkeypatch.setattr(entitlement, "FREE_PERSONALIZED_LEAGUE_QUOTA", 0)
+    status, _ = _call(path, query, aws_event=_entitled_event(groups="[beta_tester]"))
+    assert status == 403, f"{path} served personalization with the free quota withdrawn"
 
 
 def test_the_personalization_endpoints_still_serve_an_entitled_caller(app_env):
@@ -622,7 +655,11 @@ def test_personalization_and_decision_pages_stay_gated(page):
     best, and exposes a user's own league data at worst."""
     code = _code(page)
     assert "FantasyPublicGuard" not in code, f"{page} became PUBLIC"
-    assert re.search(r"<(FantasyGuard|FantasyBetaGuard|AdminGuard)\b", code), (
+    # `FantasyLeagueGuard` (G100-C1) joins the list: signed in + a personalization quota above
+    # zero. It is a GATE, not an exemption — an anonymous visitor is still bounced — and the pages
+    # behind it are still refused server-side when the quota is withdrawn. What it is NOT is
+    # `FantasyPublicGuard`, which is the assertion above and the one that matters here.
+    assert re.search(r"<(FantasyGuard|FantasyBetaGuard|FantasyLeagueGuard|AdminGuard)\b", code), (
         f"{page} lost its guard entirely"
     )
 
@@ -913,9 +950,19 @@ def test_the_stat_line_lock_does_not_claim_to_stop_scraping():
     as protection against copying would be claiming a property the product does not have, on a
     surface whose whole argument is that we say what is true. It withholds a figure; it does not
     defend one."""
+    # ⚠️ SCOPED TO THE STRING LITERALS, not to a slice of the file.
+    #
+    # This used to read from `STAT_LINE_LOCK_TITLE` to the next blank-line run, which made it
+    # depend on the FORMATTING of whatever happened to be written below it: G100-C1 appended a
+    # section whose explanatory comment legitimately contains "scrapeable" (the free board IS
+    # scrapeable by design — saying so in a comment is the opposite of the defect this guards),
+    # and the slice swallowed it. A comment cannot mislead a reader of the product; only the copy
+    # can, so only the copy is screened.
     copy_src = (_FRONTEND / "lib/fantasy-claim-copy.ts").read_text()
-    block = copy_src[copy_src.index("STAT_LINE_LOCK_TITLE") :]
-    block = block[: block.index("\n\n\n")] if "\n\n\n" in block else block
+    block = " ".join(
+        re.findall(rf'{name}\s*=\s*\n?\s*"([^"]*)"', copy_src)[0]
+        for name in ("STAT_LINE_LOCK_TITLE", "STAT_LINE_LOCK_DETAIL")
+    )
     for word in ("scrap", "steal", "copy-protect", "piracy", "unauthorized"):
         assert word not in block.lower(), (
             f"the stat-line lock copy claims anti-{word} protection the product does not provide"

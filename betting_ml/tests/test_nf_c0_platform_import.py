@@ -890,10 +890,20 @@ class TestRouteGating:
         assert len(public) == 1, "exactly one unauthenticated route (the OAuth callback) is allowed"
         assert "@public_router.get(\"/yahoo/callback\")" in self.SOURCE
 
-    def test_gated_routes_all_depend_on_the_beta_entitlement(self):
-        # One `Depends(require_fantasy_beta_access)` per gated route — importing WRITES a user's
-        # league config, so the server-side gate is the real one.
-        assert self.SOURCE.count("Depends(require_fantasy_beta_access)") == len(
+    def test_gated_routes_all_depend_on_the_personalization_gate(self):
+        """One `Depends(require_personalized_league_access)` per gated route — importing WRITES a
+        user's league config, so the server-side gate is the real one.
+
+        🗄️ THE GATE WIDENED AT G100-C1 (2026-08-08): `require_fantasy_beta_access` (`admin` +
+        `fantasy_comp`) → the caller's personalization QUOTA. Import is one of the two ways a free
+        account configures the ONE league it is now entitled to, so gating it on a group list would
+        have left the free tier with only the manual editor. The COUNT is enforced where a league is
+        SAVED (`POST /fantasy/leagues`); a preview writes nothing.
+
+        ⭐ The clause itself is unchanged and is the load-bearing part: EVERY route on the gated
+        router carries the dependency, so a new import endpoint cannot ship ungated.
+        """
+        assert self.SOURCE.count("Depends(require_personalized_league_access)") == len(
             re.findall(r"@router\.(get|post|put|delete)\(", self.SOURCE)
         )
 

@@ -257,18 +257,33 @@ class TestTsMirrorMatchesPython:
         )
         assert "subscriber" not in ts_groups
 
-    def test_the_league_settings_nav_item_is_restricted(self):
-        """The nav entry must carry `restrict: "fantasy_beta"`.
+    def test_the_league_settings_nav_item_is_marked_free_but_signed_in(self):
+        """The nav entry must carry `freeSignedIn: true`.
 
-        Without it the item renders for every subscriber and links to a page that bounces them
-        — a broken-looking nav rather than a staged rollout.
+        🗄️ IT USED TO CARRY `restrict: "fantasy_beta"`, and G100-C1 (2026-08-08) is why it does
+        not. A free account now gets ONE personalized league, so the editor that configures it can
+        no longer be `admin` + `fantasy_comp` only.
+
+        ⭐ THE CLAUSE IS STILL A GATE, JUST A DIFFERENT ONE, and BOTH halves of the new marker
+        matter. `freeSignedIn` keeps the item visible when the fantasy surface is LOCKED (a free
+        account has no subscription, so without it the whole menu collapses to an upsell and the
+        free league is unreachable); and it stays HIDDEN from a logged-out visitor, because a
+        league is stored against a Cognito `sub` and the page would bounce them to /login. Marking
+        it `public: true` instead would satisfy the first half and break the second — which is
+        exactly the mistake this asserts against.
         """
         nav_src = (REPO / "frontend" / "lib" / "nav-model.ts").read_text()
         entry = re.search(
             r"\{\s*label:\s*\"My League Settings\".*?\}", nav_src, re.S
         )
         assert entry, "My League Settings nav item not found"
-        assert 'restrict: "fantasy_beta"' in entry.group(0)
+        assert "freeSignedIn: true" in entry.group(0), (
+            "the editor's nav item is not marked free-but-signed-in; a free account cannot find it"
+        )
+        assert "public: true" not in entry.group(0), (
+            "the editor was marked PUBLIC — it would be offered to logged-out visitors, who are "
+            "bounced to /login the moment they click it"
+        )
 
     def test_captured_rule_catalog_matches(self):
         src = _ts_source()
