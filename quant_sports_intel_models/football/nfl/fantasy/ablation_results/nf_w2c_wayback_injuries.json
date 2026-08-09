@@ -1,0 +1,160 @@
+{
+  "generated_at": "2026-08-09T14:20:04+00:00",
+  "story": "NF-W2c",
+  "season": 2025,
+  "snapshots_enumerated": 179,
+  "snapshots_parsed": 111,
+  "rows_parsed": 24634,
+  "rows_crosswalked": 6657,
+  "rows_admissible": 1166,
+  "pit_records_checked": 1166,
+  "pit_rows_dropped": 0,
+  "weeks_with_any_stamped_row": 17,
+  "per_week": [
+    {
+      "week": 1,
+      "lake_listed_modeled": 60,
+      "stamped_admissible": 38,
+      "coverage": 0.6333,
+      "designation_rows_compared": 19,
+      "designation_agreement": 0.5789
+    },
+    {
+      "week": 2,
+      "lake_listed_modeled": 72,
+      "stamped_admissible": 91,
+      "coverage": 0.8922,
+      "designation_rows_compared": 25,
+      "designation_agreement": 0.36
+    },
+    {
+      "week": 3,
+      "lake_listed_modeled": 82,
+      "stamped_admissible": 130,
+      "coverage": 0.9701,
+      "designation_rows_compared": 63,
+      "designation_agreement": 0.7302
+    },
+    {
+      "week": 4,
+      "lake_listed_modeled": 92,
+      "stamped_admissible": 36,
+      "coverage": 0.3913,
+      "designation_rows_compared": 25,
+      "designation_agreement": 0.44
+    },
+    {
+      "week": 5,
+      "lake_listed_modeled": 81,
+      "stamped_admissible": 20,
+      "coverage": 0.2469,
+      "designation_rows_compared": 13,
+      "designation_agreement": 0.6154
+    },
+    {
+      "week": 6,
+      "lake_listed_modeled": 94,
+      "stamped_admissible": 137,
+      "coverage": 0.932,
+      "designation_rows_compared": 37,
+      "designation_agreement": 0.5135
+    },
+    {
+      "week": 7,
+      "lake_listed_modeled": 98,
+      "stamped_admissible": 25,
+      "coverage": 0.2551,
+      "designation_rows_compared": 24,
+      "designation_agreement": 1.0
+    },
+    {
+      "week": 8,
+      "lake_listed_modeled": 89,
+      "stamped_admissible": 56,
+      "coverage": 0.6292,
+      "designation_rows_compared": 28,
+      "designation_agreement": 0.3571
+    },
+    {
+      "week": 9,
+      "lake_listed_modeled": 99,
+      "stamped_admissible": 15,
+      "coverage": 0.1515,
+      "designation_rows_compared": 8,
+      "designation_agreement": 0.25
+    },
+    {
+      "week": 10,
+      "lake_listed_modeled": 101,
+      "stamped_admissible": 29,
+      "coverage": 0.2871,
+      "designation_rows_compared": 17,
+      "designation_agreement": 0.5882
+    },
+    {
+      "week": 11,
+      "lake_listed_modeled": 108,
+      "stamped_admissible": 122,
+      "coverage": 0.8714,
+      "designation_rows_compared": 25,
+      "designation_agreement": 0.4
+    },
+    {
+      "week": 12,
+      "lake_listed_modeled": 97,
+      "stamped_admissible": 2,
+      "coverage": 0.0206,
+      "designation_rows_compared": 0,
+      "designation_agreement": null
+    },
+    {
+      "week": 13,
+      "lake_listed_modeled": 110,
+      "stamped_admissible": 41,
+      "coverage": 0.3727,
+      "designation_rows_compared": 20,
+      "designation_agreement": 0.4
+    },
+    {
+      "week": 14,
+      "lake_listed_modeled": 91,
+      "stamped_admissible": 71,
+      "coverage": 0.7634,
+      "designation_rows_compared": 0,
+      "designation_agreement": null
+    },
+    {
+      "week": 15,
+      "lake_listed_modeled": 118,
+      "stamped_admissible": 97,
+      "coverage": 0.822,
+      "designation_rows_compared": 41,
+      "designation_agreement": 1.0
+    },
+    {
+      "week": 16,
+      "lake_listed_modeled": 117,
+      "stamped_admissible": 90,
+      "coverage": 0.7692,
+      "designation_rows_compared": 11,
+      "designation_agreement": 1.0
+    },
+    {
+      "week": 17,
+      "lake_listed_modeled": 122,
+      "stamped_admissible": 63,
+      "coverage": 0.5164,
+      "designation_rows_compared": 28,
+      "designation_agreement": 1.0
+    },
+    {
+      "week": 18,
+      "lake_listed_modeled": 119,
+      "stamped_admissible": 0,
+      "coverage": 0.0,
+      "designation_rows_compared": 0,
+      "designation_agreement": null
+    }
+  ],
+  "artifact": "quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w2c_wayback_injuries_2025.parquet"
+}
