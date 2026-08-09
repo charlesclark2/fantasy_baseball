@@ -363,10 +363,17 @@ const CASES = [
     // on its own front door, the exact advantage it has repeatedly measured and failed to find.
     // The remaining copy stays denylist-clean, so no word list can catch this — only an assertion
     // naming the disclaimer can.
+    // ⚠️ THIS ANCHOR WENT STALE ONCE ALREADY (found 2026-08-08, unrelated story). E9.46's
+    // alternate-the-market fix reworded the sentence after the frame — "Each day…" became "We look
+    // at the games where…" — and the anchor kept naming the old wording, so the harness reported
+    // ANCHOR-MISSING and this case proved nothing until someone read the summary. ⭐ Anchor a
+    // red-proof case on the SHORTEST text that carries the thing being removed (here the frame
+    // itself), never on the sentence that happens to follow it: the surrounding copy is the part
+    // most likely to be rewritten, and it takes the guard with it.
     detail: "Removes the demonstration-not-recommendation frame from the live block.",
     file: "lib/home-copy.ts",
-    from: '    "A demonstration, not a recommendation. Each day',
-    to: '    "Each day',
+    from: '"A demonstration, not a recommendation. ',
+    to: '"',
     grep: "framed as a demonstration",
   },
   {
@@ -478,6 +485,227 @@ const CASES = [
     from: "              <span\n                className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${",
     to: "              <Link href=\"/about\">soon</Link>\n              <span\n                className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${",
     grep: "teasers, not links",
+  },
+
+  // ══ THE FREEMIUM BUILD — the free board, the boundary, the full-season rate ════════════════
+  {
+    id: "free-board-re-gated",
+    shipped: "the pre-freemium state: a logged-out visitor bounced off the rankings",
+    // ⭐ THE FUNNEL-KILLING FAILURE, and the one no Python assertion in the repo can see. The API
+    // is perfectly happy — it serves the full board to anyone — so every server-side test stays
+    // green; the visitor simply never arrives. A redirect leaves no error, no log and nothing in
+    // the payload. Only a browser that follows the navigation can tell "the board is free" from
+    // "the board is free and unreachable".
+    //
+    // ⚠️ BROKEN AT THE IMPORT, NOT AT THE JSX TAG. The harness applies ONE first-occurrence
+    // replacement, so swapping `<FantasyPublicGuard>` leaves `</FantasyPublicGuard>` behind and the
+    // build fails on unbalanced JSX — which reports as BUILD-CAUGHT and proves nothing about the
+    // spec. Aliasing the import produces the real defect (the page is gated) in one contiguous edit.
+    detail: "Puts the paid guard back on Rankings, so a stranger is redirected before it renders.",
+    file: "app/fantasy/rankings/page.tsx",
+    from: 'import { FantasyPublicGuard } from "@/components/auth-guard"',
+    to: 'import { FantasyGuard as FantasyPublicGuard } from "@/components/auth-guard"',
+    grep: "renders the full board for a logged-out visitor",
+  },
+  {
+    id: "paid-half-un-gated",
+    shipped: "pre-emptive: the whole product becoming free",
+    // ⚠️ THE CASE THAT PROVES THE SUITE IS NOT SELF-SATISFYING. Every other freemium assertion is
+    // "the free thing is visible" — a change that un-gated EVERYTHING would pass all of them and
+    // the suite would be green with the business given away. This is the only case whose failure
+    // means the opposite of the others'.
+    detail: "Makes the Draft Optimizer public, so a logged-out visitor reaches the paid half.",
+    file: "app/fantasy/draft/page.tsx",
+    from: 'import { FantasyGuard } from "@/components/auth-guard"',
+    to: 'import { FantasyPublicGuard as FantasyGuard } from "@/components/auth-guard"',
+    grep: "still bounces a logged-out visitor",
+  },
+  {
+    id: "player-page-content-re-split",
+    shipped: "NF3.2's state: a public player ROUTE whose CONTENT was still split by entitlement",
+    // ⚠️ THE FAILURE MODE THAT LOOKS LEAST LIKE ONE. The route stays public, the page renders, the
+    // header and bio are right, nothing errors and no test that asserts "the player page loads"
+    // notices — a visitor simply never sees the projection they came for. `route-integrity` passes,
+    // `tsc` passes, and the API is serving the full payload the whole time.
+    detail: "Sends every visitor back to the track-record-only view, as NF3.2 did.",
+    file: "components/fantasy/player-page.tsx",
+    from: "  return <PlayerView playerId={playerId} />",
+    to: "  return <TrackRecordOnlyView playerId={playerId} />",
+    grep: "player page renders the real projection",
+  },
+  {
+    id: "boundary-not-stated",
+    shipped: "pre-emptive: a complete free board with nothing to buy",
+    // Not a rendering fault — the page looks perfect. It is a POSITIONING fault: a complete-looking
+    // free board with no boundary stated reads as the whole product, so the paid aha ("what changed
+    // because it is MY league") never gets posed and nobody converts. Invisible to every gate that
+    // asks whether the page works, because it does.
+    detail: "Removes the free/paid boundary block from below the rankings board.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: "          <FreemiumBoundary entitled={entitled} />",
+    to: "",
+    grep: "states what a membership adds",
+  },
+  {
+    id: "full-season-rate-divides-by-zero",
+    shipped: "pre-emptive: `Infinity` rendered as a projection",
+    // ⭐ THE DEFECT THE FIXTURE'S THREE DEGENERATE ROWS EXIST TO CATCH. `pts * 17 / 0` is
+    // `Infinity`, which is a `number` in JS — so it survives every `!= null` guard a caller might
+    // write and prints "∞" in a points column. `tsc` cannot see it (the arithmetic is valid), and
+    // a fixture where every row has a healthy games figure cannot see it either — which is exactly
+    // the fixture anyone would write by hand.
+    detail: "Drops the zero-games guard, so a player projected to miss the season renders ∞.",
+    file: "lib/fantasy.ts",
+    from: "  if (games <= 0) return null",
+    to: "  if (games < 0) return null",
+    grep: "renders an em-dash",
+  },
+  {
+    id: "boundary-recites-the-measurement",
+    shipped: "NF-TR1's rule, on the surface that replaced the one it was written for",
+    // The banner NF-TR1 wrote this rule against renders only on a LOCKED payload, which no live
+    // caller now receives. So the rule's original guard would go on passing forever while the
+    // surface a visitor ACTUALLY meets quietly grew a quotation of the statistic. This is that
+    // rule re-proved on the live surface.
+    detail: "Puts the generated claim into the freemium boundary in place of the trust link.",
+    file: "components/fantasy/shared.tsx",
+    from: "        {FREE_TIER_SUMMARY.detail}",
+    to: "        {\"Our 2025 rankings modestly outperformed ADP (+0.022 rank correlation).\"}",
+    grep: "does not quote its number",
+  },
+
+  // ══ ONE PRESET IS FREE (2026-08-08) ════════════════════════════════════════════════════════
+  {
+    id: "unentitled-defaulted-onto-a-paid-preset",
+    shipped: "pre-emptive: a first visit that opens on a board the API refuses",
+    // ⭐ A FIRST IMPRESSION, and nothing server-side can see it. The API behaves perfectly — it
+    // refuses a paid preset, which is its job — and every Python assertion stays green. What breaks
+    // is that the CLIENT asked for the wrong one, so the visitor's opening screen is a refusal they
+    // did nothing to earn. `tsc` cannot see it (both branches type-check) and it is invisible to
+    // anyone testing while logged in as a subscriber, i.e. to us.
+    detail: "Restores the entitled default (half-PPR) for everyone, including the logged out.",
+    file: "lib/fantasy-queries.ts",
+    from: "    if (!entitled && free) {",
+    to: "    if (false && free) {",
+    grep: "lands on the free preset",
+  },
+  {
+    id: "paid-presets-left-selectable",
+    shipped: "pre-emptive: a picker that offers boards the API will not serve",
+    // The dropdown is the one place the boundary has to be legible BEFORE a click. Leaving the paid
+    // options enabled turns every one of them into a dead end discovered only after selecting it —
+    // and a dead end is indistinguishable from a bug to the person who hit it.
+    detail: "Stops disabling the paid options in the format picker.",
+    file: "components/fantasy/shared.tsx",
+    from: "                  disabled: locked,\n                }\n              }),",
+    to: "                  disabled: false,\n                }\n              }),",
+    grep: "not selectable",
+  },
+  {
+    id: "paid-presets-hidden-instead-of-locked",
+    shipped: "pre-emptive: the tempting fix that removes the upsell along with the problem",
+    // ⚠️ THIS SATISFIES THE CASE ABOVE COMPLETELY — a removed option cannot be selected. It also
+    // makes the free board look like the only board we publish, which is untrue and is the reverse
+    // of what an upgrade prompt is for. The two cases have to coexist or one of them can be
+    // "fixed" into the other.
+    detail: "Filters the paid presets out of the picker rather than disabling them.",
+    file: "components/fantasy/shared.tsx",
+    from: "              options: manifest.configs.map((c) => {",
+    to: "              options: manifest.configs.filter((c) => isFreeConfig(c)).map((c) => {",
+    grep: "not selectable",
+  },
+  {
+    id: "paid-league-size-left-selectable",
+    shipped: "pre-emptive: locking the FORMAT and forgetting the SIZE",
+    // `full_ppr` at ten teams is a different board — league size sets the replacement level — and
+    // the API refuses it. A format-only lock leaves the two controls able to compose a request that
+    // cannot load, which is the same dead end as above reached by a different route.
+    detail: "Stops locking the paid league size.",
+    file: "components/fantasy/shared.tsx",
+    from: "              const locked = lockFormats && n !== free!.size",
+    to: "              const locked = false && n !== free!.size",
+    grep: "league SIZE is locked",
+  },
+  {
+    id: "refusal-reads-as-an-empty-search",
+    shipped: "pre-emptive: a paywall described as a typo",
+    // The 403 arrives as zero rows, and the pre-existing empty branch says "No players match — try
+    // clearing the search box". Every gate that asks whether the page WORKS is satisfied: it
+    // renders, nothing errors, the copy is grammatical. It is simply an answer to a question the
+    // visitor did not ask, on the one visit where being wrong costs most.
+    detail: "Removes the refused-board branch so a 403 falls through to the empty-search state.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: "          {!boardLoading && boardError && (",
+    to: "          {false && boardError && (",
+    grep: "not as an empty search",
+  },
+  // ══ THE PAID SCORINGS ON THE OTHER TWO SURFACES ═══════════════════════════════════════════
+  {
+    id: "projections-offers-every-scoring",
+    shipped: "the state PR #681 left behind on Season Projections",
+    // #681 locked the BOARD's format picker and left this one open, because they are different
+    // controls in different files that happen to mean the same thing. The page kept offering
+    // half-PPR and standard to a logged-out visitor for the whole of that PR's life.
+    detail: "Unlocks every reference scoring in the projections picker.",
+    file: "components/fantasy/projections-table.tsx",
+    from: "                  const lockedOption = !entitled && s !== FREE_SCORING",
+    to: "                  const lockedOption = false",
+    grep: "only the free reference scoring",
+  },
+  {
+    id: "player-page-prints-the-paid-totals",
+    shipped: "the same gap on the player page — the surface that shows all three side by side",
+    detail: "Prints the standard total to a free visitor.",
+    file: "components/fantasy/player-page.tsx",
+    from: "value={entitled ? num(proj.fpStd) : <LockChip title={STAT_LINE_LOCK_TITLE} />}",
+    to: "value={num(proj.fpStd)}",
+    grep: "locks the two paid totals",
+  },
+  {
+    id: "everything-locked-including-the-free-total",
+    shipped: "pre-emptive: the nervous fix that locks the free number too",
+    // ⚠️ THE OPPOSITE FAILURE. Every "the paid total is locked" assertion stays green while the
+    // free board loses the one number it exists to show — and it would look, to whoever made the
+    // change, exactly like being careful.
+    detail: "Locks the free full-PPR total along with the paid ones.",
+    file: "components/fantasy/player-page.tsx",
+    from: "                value={num(proj.fpPpr)}",
+    to: "                value={<LockChip />}",
+    grep: "keeps the free one",
+  },
+  {
+    id: "stat-line-printed-beside-locked-totals",
+    shipped: "pre-emptive: a paywall the reader can do in their head",
+    // \u2b50\u2b50 The reference totals differ ONLY in how a reception scores, so with the stat line back
+    // the two locked figures are one subtraction away on the same screen —
+    // `half = full - 0.5 x rec`. Every "the total is locked" case above stays green.
+    detail: "Restores the raw stat line under the locked totals.",
+    file: "components/fantasy/player-page.tsx",
+    from: '              {entitled ? (\n                <div className="grid grid-cols-3',
+    to: '              {true ? (\n                <div className="grid grid-cols-3',
+    grep: "raw stat line is withheld",
+  },
+  {
+    id: "preset-called-the-readers-league",
+    shipped: "pre-emptive: telling a free visitor a preset is their own league",
+    // Not a leak — a false statement about the reader, on the tile whose label is the exact phrase
+    // the paid tier is sold on. Spending it over a preset costs the boundary its vocabulary.
+    detail: "Labels the free board's tile as the visitor's own league.",
+    file: "components/fantasy/player-page.tsx",
+    from: '                    : config?.label ?? "Board scoring"',
+    to: '                    : config ? `${config.label} (your league)` : "Your league"',
+    grep: "own league",
+  },
+  {
+    id: "stored-paid-selection-survives-a-lapse",
+    shipped: "pre-emptive: a lapsed member greeted by a refusal on the page they were reading",
+    // The format selection outlives the membership in localStorage. Re-checking it against the free
+    // board is one line, and skipping it strands exactly the person most likely to come back.
+    detail: "Honours the stored selection for an unentitled caller.",
+    file: "lib/fantasy-queries.ts",
+    from: "      setConfigName(names.includes(free.config) ? free.config : names[0] ?? null)",
+    to: "      setConfigName(stored.configName ?? free.config)",
+    grep: "does not strand a lapsed member",
   },
 ]
 

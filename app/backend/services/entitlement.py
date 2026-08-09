@@ -1,16 +1,46 @@
-"""E9.56 — server-side entitlement resolution + the LOCKED-MARKER redaction for gated seasons.
+"""Server-side entitlement resolution + the fantasy FREE/PAID capability split.
 
-THE RULE THIS ENFORCES (operator, 2026-08-01). FREE (unauthenticated or non-subscriber) sees the
-PAST-SEASON model output — that is the NF3.2 receipts surface, public by design. The CURRENT season
-(`LOCKED_SEASON`, 2026) projection is LOCKED **everywhere**: rankings, player pages, board, tools.
-And a locked point must render a "subscribe to unlock" CTA rather than vanishing, so the payload has
-to say a value EXISTS here without ever carrying it.
+═══════════════════════════════════════════════════════════════════════════════════════════════════
+⭐ THE CURRENT RULE — THE FREEMIUM BUILD (operator, 2026-08-08, GROWTH-100 §1/§6/§14)
+═══════════════════════════════════════════════════════════════════════════════════════════════════
 
-⇒ the split is NOT "omit 2026". It is: the row survives with its PUBLICLY-KNOWN identity, every
-model-derived number is REMOVED, and a `locked: true` marker takes its place.
+The boundary is now drawn by CAPABILITY, not by SEASON:
+
+  FREE, for everyone including anonymous — the GENERIC board. Overall + position rankings for the
+  shipped league PRESETS, the format-independent projections, the 80% ranges, market ADP, the
+  player pages and the methodology. This is the acquisition wedge: "free tells you what Credence
+  thinks."
+
+  PAID — PERSONALIZATION (a board re-scored for YOUR league's saved settings, VOR against your
+  roster shape, saved state) and DECISION SUPPORT (the draft optimizer, the weekly tools). "A
+  membership helps you decide."
+
+⚠️ A FULLY-FREE GENERIC BOARD IS SCRAPEABLE, AND THAT IS AN ACCEPTED COST, not an oversight. It is
+the marketing wedge; the defence is cost-shaping (G100-D1's per-IP limiter + the CDN), never
+redaction. Do not "fix" this by re-locking values.
+
+═══════════════════════════════════════════════════════════════════════════════════════════════════
+🗄️ WHAT THIS REPLACED — E9.56's LOCKED-MARKER REDACTION (RETIRED FROM THE LIVE PATH 2026-08-08)
+═══════════════════════════════════════════════════════════════════════════════════════════════════
+
+Until the freemium build, the rule was season-scoped: the current season (`LOCKED_SEASON`) was
+locked everywhere, and a non-entitled caller received each row with its public identity, market ADP
+and `locked: true` in place of every model value. That machinery — `lock_projection_rows`,
+`lock_board_rows`, `lock_manifest`, the `_PUBLIC_*` allowlists and `_public_sort_key` — is KEPT
+below and still unit-tested, but **no live route calls it any more**. Read it as the mechanism the
+operator would flip back on if the open board ever has to be withdrawn, NOT as a description of what
+users receive today.
+
+⛔ Do not reason from it about current behaviour, and do not re-introduce a call to it without an
+operator decision — `test_freemium_tier.py` pins the generic surfaces as free and will go red.
+
+⭐ `resolve_entitlement` below is NOT retired and is MORE load-bearing than before, not less: the
+generic routes are reachable without the API Gateway authorizer, so a Bearer token on them is
+attacker-controlled. It is what decides whether a caller gets the PAID capabilities.
 
 ───────────────────────────────────────────────────────────────────────────────────────────────────
-THREE THINGS THAT MAKE THIS ACTUALLY SAFE (each one is a way a "redacted" payload still leaks)
+THREE THINGS THAT MADE THE RETIRED REDACTION SAFE (each one is a way a "redacted" payload still
+leaks — kept with the code they describe)
 ───────────────────────────────────────────────────────────────────────────────────────────────────
 
 1. ⭐ **ALLOWLIST, NEVER DENYLIST.** `_PUBLIC_*_FIELDS` names the fields a non-entitled caller MAY
@@ -44,12 +74,19 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
+from enum import Enum
 
 from fastapi import Request
 
 logger = logging.getLogger(__name__)
 
-# The first season that is PAID. Everything strictly before it is free.
+# The first season with NO GRADED OUTCOMES yet.
+#
+# ⚠️ THIS IS NO LONGER A PAYWALL BOUNDARY (freemium build, 2026-08-08). The generic board is free
+# for every season; what this literal still means is "the season the track record cannot cover",
+# because a season that has not been played has nothing to grade a projection against. That is why
+# `export_track_record_json` refuses to emit it and why `fantasy_public._LOCKED_SEASON` bounds the
+# public receipts route — both are statements about DATA EXISTING, not about entitlement.
 #
 # ⚠️ MOVES WITH TWO OTHER LITERALS, and all three must change together at the season roll:
 #   • `quant_sports_intel_models/football/nfl/fantasy/export_track_record_json.py::LOCKED_SEASON`
@@ -61,8 +98,154 @@ LOCKED_SEASON = int(os.getenv("FANTASY_LOCKED_SEASON", "2026"))
 
 
 def is_locked_season(season: int) -> bool:
-    """True iff `season` is paid content. Free is strictly-past only."""
+    """True iff `season` has no graded outcomes yet (so the track record cannot cover it).
+
+    ⚠️ NOT an entitlement predicate any more — see the note on `LOCKED_SEASON`. Asking this question
+    to decide whether someone may see a NUMBER is the pre-freemium reading and is wrong; ask
+    `allows(...)` instead.
+    """
     return int(season) >= LOCKED_SEASON
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# ⭐ THE FREE / PAID SPLIT — one map, and it is the only place the boundary is stated
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# Written as a CAPABILITY map rather than a list of route paths on purpose. A path list has to be
+# re-derived every time a surface is added or renamed, and the characteristic failure of getting it
+# wrong is SILENT in the dangerous direction: a new personalized endpoint that nobody remembered to
+# add is free by default. Naming the capability forces the question "which half is this?" at the
+# point a route is written, and `test_freemium_tier.py` asserts every fantasy route resolves to one.
+
+
+class Capability(str, Enum):
+    """What a caller is trying to do, in the terms the pricing page uses.
+
+    `str` mixin so a capability serializes as its own name in a payload/log without a conversion
+    step, and so a stale string comparison still works if one leaks into a response.
+    """
+
+    #: The generic board: rankings + projections for the shipped PRESETS, ranges, ADP, player pages,
+    #: methodology. Identical bytes for every caller — which is exactly what makes it CDN-cacheable
+    #: (G100-D1) and what `test_freemium_tier` proves.
+    GENERIC_BOARD = "generic_board"
+
+    #: The board re-scored for the caller's OWN saved league — their scoring, roster shape and size,
+    #: their VOR baseline, their linked roster. Per-user by construction, so it can never be cached
+    #: publicly and can never be free-by-accident.
+    PERSONALIZATION = "personalization"
+
+    #: Tools that turn the board into a CHOICE: the draft optimizer, and the weekly surfaces as they
+    #: land. The paid half of "free tells you what Credence thinks; a membership helps you decide."
+    DECISION_SUPPORT = "decision_support"
+
+
+#: Everything an anonymous visitor gets. Deliberately a frozenset of ONE — the wedge is the generic
+#: board and nothing else, and widening this is a pricing decision, not a refactor.
+FREE_CAPABILITIES: frozenset[Capability] = frozenset({Capability.GENERIC_BOARD})
+
+#: Stated explicitly rather than derived as "everything else", so a NEW capability is in neither set
+#: until someone places it and `test_every_capability_is_placed_on_exactly_one_side` goes red. The
+#: alternative ("paid = all - free") makes a forgotten capability silently PAID, which fails safe on
+#: revenue but silently breaks a surface nobody tested — and the reverse spelling would make it
+#: silently free, which is worse. Neither default is acceptable; being forced to choose is.
+PAID_CAPABILITIES: frozenset[Capability] = frozenset(
+    {Capability.PERSONALIZATION, Capability.DECISION_SUPPORT}
+)
+
+
+# ── The G100-C1 seam: "1 free personalized league" must be EXPRESSIBLE without being built ────────
+#
+# G100-C1 will grant a free account ONE personalized league. That story builds the personalization;
+# this one only has to leave a boundary it can be expressed in. So the quota is a real, read
+# parameter with a real default of ZERO — not a TODO comment, and not a flag that silently does
+# nothing.
+#
+# ⚠️ WHY A QUOTA AND NOT A `free_personalization: bool`. A boolean cannot express "one league but
+# not five", so G100-C1 would have had to replace it — and replacing an entitlement predicate is
+# exactly when a surface quietly falls out of its gate. A count expresses today (0), G100-C1 (1) and
+# the paid tier (`dynamo.MAX_LEAGUES_PER_USER`) in one shape that never needs re-typing.
+#
+# ⛔ Today NOTHING calls this to grant access — the personalization endpoints still require full
+# entitlement. It is the seam, not a live free tier. `test_freemium_tier` pins the default at 0 so
+# raising it is a deliberate, reviewed edit rather than a default drifting in.
+FREE_PERSONALIZED_LEAGUE_QUOTA = int(os.getenv("FREE_PERSONALIZED_LEAGUE_QUOTA", "0"))
+
+
+# ── Which PRESET BOARDS the free capability covers ───────────────────────────────────────────────
+#
+# `Capability.GENERIC_BOARD` says a caller may read the generic board. This says WHICH ONE. The
+# exporter publishes 7 scoring presets × 2 league sizes = 14 boards; the operator's call (2026-08-08)
+# is that ONE of them is the free wedge and the other 13 are part of what a membership buys.
+#
+# ⭐ WHY FULL PPR AT 12 TEAMS SPECIFICALLY. The ADP column we show beside our number is an FFC
+# 12-team PPR sample (`nfl/fantasy/benchmarks/adp_benchmark`). At any other preset our points and
+# the market's ADP describe DIFFERENT leagues, so the one comparison the free board is built to
+# support — ours vs the market's — is only honest here. Picking the free format is therefore a data
+# fact as much as a pricing one, and moving it means moving the ADP sample too.
+#
+# ⚠️ A CONSTANT, DELIBERATELY NOT AN ENV VAR. `FREE_PERSONALIZED_LEAGUE_QUOTA` above is env-read
+# because it is a seam a future story flips on purpose. This is the paywall itself: an env var that
+# drifts (or is never set on one of the two owners) moves the paywall SILENTLY in either direction,
+# which is this repo's documented-but-never-set class (`W7B_LAKEHOUSE_S3`) pointed at revenue.
+# Changing it should be a reviewed diff.
+FREE_BOARD_CONFIG = "full_ppr"
+FREE_BOARD_SIZE = 12
+
+
+def is_free_board(config: str, size: int) -> bool:
+    """Whether the (config, size) board is the free one.
+
+    ⚠️ BOTH must match. A free scoring format at a paid league SIZE is a paid board — the size
+    changes the replacement level, so `full_ppr`/10 is a different set of numbers, not a cosmetic
+    variant of the free one.
+    """
+    try:
+        return str(config) == FREE_BOARD_CONFIG and int(size) == FREE_BOARD_SIZE
+    except (TypeError, ValueError):
+        # An unparseable size cannot be the free board. Fail closed: the caller gets the paid path,
+        # which 403s an unentitled reader rather than serving them a board on a junk parameter.
+        return False
+
+
+def allows_board(config: str, size: int, ent: "Entitlement | None") -> bool:
+    """Whether `ent` may read the (config, size) preset board.
+
+    The free board is readable by anyone; every other preset needs full entitlement. Expressed here
+    rather than in the router so the two questions a reviewer asks — "which board is free?" and "who
+    may read a paid one?" — are answered next to each other and tested in one place.
+    """
+    if is_free_board(config, size):
+        return True
+    return bool(ent and ent.fantasy)
+
+
+def allows(capability: Capability, ent: "Entitlement | None") -> bool:
+    """Whether `ent` may exercise `capability`.
+
+    FAIL CLOSED on anything unrecognised: an unknown capability is PAID, so a capability added
+    without being placed in either set above is refused rather than served. That is the safe
+    direction — a refused paid surface is visible and reversible; a leaked one is not.
+    """
+    if capability in FREE_CAPABILITIES:
+        return True
+    if capability not in PAID_CAPABILITIES:
+        logger.warning("entitlement: unplaced capability %r treated as PAID", capability)
+        return False
+    return bool(ent and ent.fantasy)
+
+
+def personalized_league_quota(ent: "Entitlement | None") -> int:
+    """How many personalized leagues this caller may keep.
+
+    Full entitlement ⇒ the storage cap; otherwise the free quota (0 today, 1 after G100-C1). Read
+    through this rather than branching on `ent.fantasy` at each call site, so G100-C1 changes one
+    number instead of hunting for every place the tier was re-derived.
+    """
+    if ent and ent.fantasy:
+        from app.backend.services import dynamo
+
+        return int(dynamo.MAX_LEAGUES_PER_USER)
+    return FREE_PERSONALIZED_LEAGUE_QUOTA
 
 
 # ── Entitlement resolution ───────────────────────────────────────────────────────────────────────
@@ -126,6 +309,13 @@ def resolve_entitlement(request: Request) -> Entitlement:
     )
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# 🗄️ EVERYTHING BELOW IS THE RETIRED E9.56 REDACTION — NOT ON ANY LIVE ROUTE (see the module header)
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# Kept because it is the mechanism for withdrawing the open board, and it was expensive to get right
+# (the ORDER-leak in point 2 above is the non-obvious half). Still unit-tested so it would work if
+# re-wired. ⛔ It does not describe what any caller receives today.
+#
 # ── The public field allowlists ──────────────────────────────────────────────────────────────────
 # Everything here is a fact about the PLAYER that anyone can look up (identity, team, physicals,
 # draft slot) or a THIRD-PARTY market number we did not produce (`adp`). Nothing here is model
@@ -280,11 +470,23 @@ def lock_manifest(manifest: dict) -> dict:
     return out
 
 
-# ── Response envelopes ───────────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# ✅ LIVE AGAIN FROM HERE — the response envelopes
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# `entitlement_envelope` and the `open_*_payload` transforms ARE on the live path: every generic
+# response carries them. The `lock_*_payload` transforms below them are part of the retired block
+# above and are called by nothing.
+#
 # ⚠️ ADDITIVE ONLY (NF-C0 / E9.41). These keys are ADDED to the existing payload shapes; no key the
 # deployed client already reads is renamed or removed, and the container type is preserved —
-# projections/manifest stay dicts, the board stays a LIST. A client that has not shipped the
-# locked-marker rendering yet keeps working against an entitled response byte-for-byte.
+# projections/manifest stay dicts, the board stays a LIST.
+#
+# ⭐ WHY THE ENVELOPE SURVIVES THE FREEMIUM FLIP RATHER THAN BEING DELETED. The deployed frontend
+# reads `locked`/`entitled` on every board response and branches on them. Dropping the keys would be
+# the NF-C0 break in its exact original form — a 200 whose missing key makes the client render
+# nothing — and the API Lambda ships only via a manual `deploy.sh`, so the two halves cross over in
+# an order nobody controls. Every caller now gets `locked: false, entitled: true`, which the already-
+# deployed client renders as the full board with no change at all.
 
 
 @dataclass
@@ -322,9 +524,12 @@ def entitlement_envelope(locked: bool, locked_fields: list[str] | None = None) -
     return out
 
 
-# ── The three payload transforms the routers call ────────────────────────────────────────────────
+# ── The payload transforms ───────────────────────────────────────────────────────────────────────
 # The whole public/paid policy lives here rather than in the routers, so there is ONE place to read,
-# ONE place to test, and no chance of two endpoints redacting to different rules.
+# ONE place to test, and no chance of two endpoints answering to different rules.
+#
+# ✅ LIVE: `open_*_payload` — what every caller gets on the generic surfaces.
+# 🗄️ RETIRED: `lock_*_payload` — part of the withdrawn E9.56 redaction; called by nothing.
 
 
 def open_projections_payload(data: dict) -> dict:
@@ -346,7 +551,29 @@ def lock_projections_payload(data: dict) -> dict:
 
 
 def open_manifest_payload(data: dict) -> dict:
-    return {**data, **entitlement_envelope(locked=False)}
+    """The manifest UNCHANGED, plus the entitlement envelope and the free-board markings.
+
+    ⭐ THE MARKINGS ARE THE SAME FOR EVERY CALLER, and that is the point. The client has to know
+    which preset is free in order to draw the boundary — to default an anonymous visitor onto the
+    free board, and to show a lock rather than a dead control on the other 13. Deriving that
+    client-side from a hardcoded string would put the paywall in two places that drift; sending a
+    DIFFERENT manifest to an entitled caller would make this route caller-dependent and cost the
+    CDN cache (see the invariant note in `routers/fantasy.py`). Marking every preset identically for
+    everybody does neither: the bytes are constant, and the boundary is stated once, here.
+
+    ADDITIVE ONLY (NF-C0). `free` is a new key on each config and `freeBoard` is a new top-level
+    key; nothing existing is renamed or removed, so the deployed client — which knows neither —
+    keeps rendering exactly what it renders today.
+    """
+    configs = [
+        {**c, "free": c.get("name") == FREE_BOARD_CONFIG} if isinstance(c, dict) else c
+        for c in (data.get("configs") or [])
+    ]
+    out = {**data, **entitlement_envelope(locked=False)}
+    if data.get("configs") is not None:
+        out["configs"] = configs
+    out["freeBoard"] = {"config": FREE_BOARD_CONFIG, "size": FREE_BOARD_SIZE}
+    return out
 
 
 def lock_manifest_payload(data: dict) -> dict:

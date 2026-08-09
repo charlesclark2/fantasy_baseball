@@ -240,7 +240,7 @@ def build_folds(d: pd.DataFrame, tier: np.ndarray, seasons: tuple) -> list[dict]
     return folds
 
 
-def fold_fits(fold: dict, *, seed: int = 20260808) -> dict:
+def fold_fits(fold: dict, *, seed: int = 20260808, cov_rounding: int | None = 6) -> dict:
     """Every fitted correction for ONE held-out season, computed once and shared by every arm.
 
     ⭐ THE CANDIDATE FITS ARE STRICTLY IN-FOLD (train = seasons < Y). `_peek_*` are the ORACLE CEILINGS
@@ -301,7 +301,9 @@ def fold_fits(fold: dict, *, seed: int = 20260808) -> dict:
     fits["_pos_median"] = {q: float(np.median(y_tr[pos_tr == q]))
                            for q in LR.RECALIBRATED_POSITIONS if (pos_tr == q).any()}
     # The incumbent's OWN per-position coverage on this fold's tier — the second term C3 is built on.
-    fits["_inc_coverage"] = LR.per_position_coverage(band_te[3], band_te[1], band_te[2], band_te[4])
+    # `cov_rounding=None` (NF-B3) keeps it UNROUNDED so the exact equality boundary can hold.
+    fits["_inc_coverage"] = LR.per_position_coverage(band_te[3], band_te[1], band_te[2], band_te[4],
+                                                     rounding=cov_rounding)
     return fits
 
 
@@ -315,7 +317,8 @@ def _triples(fold: dict, key: str = "test") -> tuple:
             d["proj_games"].to_numpy(dtype=float), d["real_fp_ppr"].to_numpy(dtype=float))
 
 
-def score_fold(fold: dict, adjust, inc_coverage: dict | None = None) -> dict:
+def score_fold(fold: dict, adjust, inc_coverage: dict | None = None, *,
+               cov_exact: bool = False) -> dict:
     """Score ANY arm on ONE fold through the IDENTICAL reducer, so the anchors and the candidates are
     demonstrably answering the same question rather than merely being described that way.
 
@@ -333,7 +336,8 @@ def score_fold(fold: dict, adjust, inc_coverage: dict | None = None) -> dict:
     m = LR.band_metrics(ap, alo, ahi, y)
     m["ordering"] = LR.ordering_movement(p, ap, pos)
     m["coverage"] = LR.coverage_floor_check(y, alo, ahi, pos,
-                                            incumbent_coverage=inc_coverage)
+                                            incumbent_coverage=inc_coverage,
+                                            equality_exact=cov_exact)
     m["per_position"] = {q: LR.band_metrics(ap[pos == q], alo[pos == q], ahi[pos == q], y[pos == q])
                          for q in LR.RECALIBRATED_POSITIONS if (pos == q).any()}
     pu, lou, hiu, posu, gu, yu = _triples(fold, "test_universe")
@@ -344,13 +348,14 @@ def score_fold(fold: dict, adjust, inc_coverage: dict | None = None) -> dict:
     return m
 
 
-def score_arm(folds: list[dict], fits: dict, adjust_for, label: str, extra: dict | None = None
-              ) -> dict:
+def score_arm(folds: list[dict], fits: dict, adjust_for, label: str, extra: dict | None = None,
+              *, cov_exact: bool = False) -> dict:
     """Aggregate one arm over every fold. `adjust_for(fold, fits_for_that_fold)` returns the fold's
     `adjust` callable, so an arm whose λ VARIES BY FOLD (every in-fold rule does) and an arm with a
     constant λ go through exactly the same path."""
     per = {f["year"]: score_fold(f, adjust_for(f, fits[f["year"]]),
-                                 fits[f["year"]]["_inc_coverage"]) for f in folds}
+                                 fits[f["year"]]["_inc_coverage"], cov_exact=cov_exact)
+           for f in folds}
     def _m(key, nd=4):
         v = [per[y].get(key) for y in per if per[y].get(key) is not None]
         return round(float(np.mean(v)), nd) if v else None
@@ -381,9 +386,11 @@ def score_arm(folds: list[dict], fits: dict, adjust_for, label: str, extra: dict
         los.append(alo); his.append(ahi)
     inc_pooled = LR.per_position_coverage(
         yy, np.concatenate([f["test"]["served_p10"].to_numpy(dtype=float) for f in folds]),
-        np.concatenate([f["test"]["served_p90"].to_numpy(dtype=float) for f in folds]), pos)
+        np.concatenate([f["test"]["served_p90"].to_numpy(dtype=float) for f in folds]), pos,
+        rounding=None if cov_exact else 6)
     out["coverage_pooled"] = LR.coverage_floor_check(yy, np.concatenate(los), np.concatenate(his),
-                                                     pos, incumbent_coverage=inc_pooled)
+                                                     pos, incumbent_coverage=inc_pooled,
+                                                     equality_exact=cov_exact)
     out["worst_rank_move"] = max(per[y]["ordering"]["worst_rank_move"] for y in per)
     return out
 
@@ -499,14 +506,26 @@ def board_admits(rank_lambda, rank_incumbent) -> dict:
             "incumbent_itself_breaches": bool(ri < cap)}
 
 
-def build_fold_evidence(folds, fits, boards, forms=LR.FORMS, space=LR.PRIMARY_SPACE) -> dict:
+def build_fold_evidence(folds, fits, boards, forms=LR.FORMS, space=LR.PRIMARY_SPACE, *,
+                        cov_exact: bool = False,
+                        structural_c2_inactive: tuple = ()) -> dict:
     """Per (form, fold): the λ → admissibility map under C1 ∧ C2 ∧ C3, all three evaluated on THAT
     fold's own held-out data and board.
 
     An arm's rule may then read only the folds strictly BEFORE the one it is scored on, which is what
     makes the constraint an OUT-OF-SAMPLE question ("does an in-fold-selected correction still clear
-    on the NEXT board?") rather than a description of the set it was optimised against."""
+    on the NEXT board?") rather than a description of the set it was optimised against.
+
+    ⭐ `structural_c2_inactive` (NF-B3) — fold years whose merged board has NO rookie leg because the
+    rookie SUBSTRATE does not exist for that draft class (the NCAAF projection source begins at 2016).
+    On those folds C2's protected object is ABSENT, which is a different situation from a broken
+    board: the constraint has no subject, so it is VACUOUSLY ADMISSIBLE and counted INACTIVE — the
+    NF-D20 (g⁗) treatment (an inactive fold is uninformative, never a pass, and never a refusal
+    manufactured by the instrument). ⚠️ Only years in this tuple get the treatment; a rookie-less
+    board for any OTHER year keeps `board_admits`'s refusal (unevaluable is never a pass), and the
+    NF-B3 loader separately RAISES on it — so the vacuous branch cannot silently widen."""
     ev: dict = {}
+    structural = {int(x) for x in structural_c2_inactive}
     for form in forms:
         ev[form] = {}
         for f in folds:
@@ -523,10 +542,17 @@ def build_fold_evidence(folds, fits, boards, forms=LR.FORMS, space=LR.PRIMARY_SP
                 c1_ok = all(v >= inc_rho[q] - LR.ORDERING_DO_NO_HARM
                             for q, v in c1["within_position_rho"].items())
                 c2 = board_admits(ranks["rank_by_lambda"].get(float(lam)), inc_rank)
+                if y in structural and not c2.get("evaluable"):
+                    c2 = {**c2, "admits": True, "inactive_structural": True,
+                          "note": ("no rookie leg EXISTS for this draft class (NCAAF substrate "
+                                   "starts 2016) — C2 has no subject: vacuously admissible, "
+                                   "counted INACTIVE, never credited (NF-D20 (g⁗))")}
                 c3 = LR.coverage_floor_check(real, alo, ahi, pos,
-                                             incumbent_coverage=fits[y]["_inc_coverage"])
+                                             incumbent_coverage=fits[y]["_inc_coverage"],
+                                             equality_exact=cov_exact)
                 per_lam[float(lam)] = {
                     "c1_ordering_ok": bool(c1_ok), "c2_placement_ok": bool(c2["admits"]),
+                    "c2_inactive_structural": bool(c2.get("inactive_structural", False)),
                     "c3_coverage_ok": bool(c3["ok"]),
                     "admissible": bool(c1_ok and c2["admits"] and c3["ok"]),
                     "rank": c2.get("rank"), "worst_rank_move": c1["worst_rank_move"],
@@ -536,6 +562,7 @@ def build_fold_evidence(folds, fits, boards, forms=LR.FORMS, space=LR.PRIMARY_SP
                 "admissible": tuple(sorted(l for l, v in per_lam.items() if v["admissible"])),
                 "incumbent_rank": inc_rank,
                 "rank_by_lambda": ranks["rank_by_lambda"],
+                "c2_inactive_structural": bool(y in structural and inc_rank is None),
                 "constraint_can_act": bool(len(set(
                     v for v in ranks["rank_by_lambda"].values() if v is not None)) > 1),
                 "top_rookie": ranks["placement_by_lambda"][0.0].get("best_rookie"),
@@ -553,7 +580,9 @@ def _anchor_role(tag: str) -> str:
     return "degenerate"
 
 
-def anchor_constraint_state(folds, fits, boards, anchor_adjust, tag: str) -> dict:
+def anchor_constraint_state(folds, fits, boards, anchor_adjust, tag: str, *,
+                            cov_exact: bool = False,
+                            structural_c2_inactive: tuple = ()) -> dict:
     """⭐ THE CONSTRAINTS' TEETH, READ IN BOTH DIRECTIONS (NF1.8, and NF-D20's extension of it).
 
     A constraint is only shown to be a CONSTRAINT rather than a smuggled selection CRITERION when
@@ -565,13 +594,15 @@ def anchor_constraint_state(folds, fits, boards, anchor_adjust, tag: str) -> dic
 
     Reporting them is the proof this story did not quietly promote C2 or C3 into a criterion."""
     per = {}
+    structural = {int(x) for x in structural_c2_inactive}
     for f in folds:
         y = f["year"]
         p, lo, hi, pos, g, real = _triples(f)
         ap, alo, ahi = anchor_adjust(f, fits[y])(p, lo, hi, pos, g, real)
         c1 = LR.ordering_movement(p, ap, pos)
         c3 = LR.coverage_floor_check(real, alo, ahi, pos,
-                                     incumbent_coverage=fits[y]["_inc_coverage"])
+                                     incumbent_coverage=fits[y]["_inc_coverage"],
+                                     equality_exact=cov_exact)
         board = boards[y]
         vet = ~board["is_rookie"].fillna(False).astype(bool).to_numpy()
         bp = pd.to_numeric(board["proj_fp_ppr"], errors="coerce").to_numpy(dtype=float)
@@ -585,6 +616,8 @@ def anchor_constraint_state(folds, fits, boards, anchor_adjust, tag: str) -> dic
         inc_rank = LR.board_placement(board).get("best_rookie_overall_rank")
         new_rank = LR.board_placement(board.assign(proj_fp_ppr=adj)).get("best_rookie_overall_rank")
         c2 = board_admits(new_rank, inc_rank)
+        if y in structural and not c2.get("evaluable"):
+            c2 = {**c2, "admits": True, "inactive_structural": True}
         per[y] = {"c2_placement_ok": bool(c2["admits"]), "c3_coverage_ok": bool(c3["ok"]),
                   "rank": c2.get("rank"), "incumbent_rank": inc_rank,
                   "worst_rank_move": c1["worst_rank_move"]}
@@ -603,8 +636,10 @@ def constraint_activity(evidence: dict) -> list[dict]:
     rows = []
     for form, per in evidence.items():
         act = [y for y, v in per.items() if v["constraint_can_act"]]
+        structural = sorted(y for y, v in per.items() if v.get("c2_inactive_structural"))
         rows.append({"form": form, "n_folds": len(per), "folds_c2_can_act": len(act),
                      "active_folds": act,
+                     "folds_c2_structurally_absent": structural,
                      "c2_inactive_everywhere": bool(not act),
                      "why_inactive": ("a leg-monotone correction moves no rank WITHIN the recalibrated "
                                       "leg (it can still move the board — see cross-position)"

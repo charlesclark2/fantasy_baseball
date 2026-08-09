@@ -926,7 +926,8 @@ def blend_band_toward_incumbent(point, p10, p90, adj, lam: float) -> tuple:
 # THE THREE CONSTRAINTS (§5)
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def coverage_floor_check(y, p10, p90, positions, *, floor: float = COVERAGE_FLOOR,
-                         incumbent_coverage: dict | None = None) -> dict:
+                         incumbent_coverage: dict | None = None,
+                         equality_exact: bool = False) -> dict:
     """C3 — the 80% coverage FLOOR after the level shift, PER POSITION and POOLED OVER ROWS.
 
     ⭐⭐ **THE CLAUSE GOVERNS THE CHANGE, NOT THE LEVEL: `coverage_λ ≥ min(floor, coverage_incumbent)`
@@ -958,7 +959,19 @@ def coverage_floor_check(y, p10, p90, positions, *, floor: float = COVERAGE_FLOO
     is — and NF-D21 turned on exactly that distinction.
 
     ⛔ THIS IS A CONSTRAINT AND NEVER A TARGET. Nothing in this story selects on coverage headroom;
-    that criterion is monotone in widening and the `wide_band` degenerate wins it outright."""
+    that criterion is monotone in widening and the `wide_band` degenerate wins it outright.
+
+    ⭐ `equality_exact` — THE NF-B3 HARNESS FIX (flagged by NF-C3-REREAD, made canonical there-after).
+    The legacy clause computes `need = ceil(round(inc, 6) · n)` off a 6-dp-ROUNDED incumbent coverage
+    (`per_position_coverage`'s default), so whenever the rounding rounds the incumbent's own coverage
+    UP, an arm whose coverage EQUALS the incumbent's — including λ = 0, which IS the incumbent — fails
+    by exactly one row. A governs-the-change clause's equality boundary must hold: doing nothing must
+    always be admissible under a constraint on the CHANGE. With `equality_exact=True` the requirement
+    is `need = ceil(bind · n − 1e-9)` and the caller must pass the UNROUNDED incumbent
+    (`per_position_coverage(..., rounding=None)`), so `coverage == incumbent` sits exactly ON the
+    boundary and passes. ⚠️ The default stays False so the RECORDED NF-RECAL1 / NF-C3-REREAD runs
+    (whose reproduction gates require the artifact, ε-sensitivity and all) remain byte-reproducible;
+    NF-B3 and every successor pass True."""
     yy = np.asarray(y, dtype=float)
     lo = np.minimum(np.asarray(p10, dtype=float), np.asarray(p90, dtype=float))
     hi = np.maximum(np.asarray(p10, dtype=float), np.asarray(p90, dtype=float))
@@ -974,8 +987,9 @@ def coverage_floor_check(y, p10, p90, positions, *, floor: float = COVERAGE_FLOO
         # The binding level: the floor, or the incumbent's own coverage where the SHIPPED product
         # already falls short of it. Never above the floor — a floor is not a target.
         bind = min(float(floor), float(inc[q])) if q in inc and inc[q] is not None else float(floor)
-        need = int(np.ceil(bind * n))
-        need_strict = int(np.ceil(float(floor) * n))
+        eps = 1e-9 if equality_exact else 0.0
+        need = int(np.ceil(bind * n - eps))
+        need_strict = int(np.ceil(float(floor) * n - eps))
         got = int(covered[sel].sum())
         per[q] = {"n": n, "coverage": round(got / n, 4), "covered_rows": got,
                   "binding_level": round(bind, 4), "rows_required": need,
@@ -1000,17 +1014,24 @@ def coverage_floor_check(y, p10, p90, positions, *, floor: float = COVERAGE_FLOO
     }
 
 
-def per_position_coverage(y, p10, p90, positions) -> dict:
+def per_position_coverage(y, p10, p90, positions, *, rounding: int | None = 6) -> dict:
     """The incumbent's own per-position 80% coverage — the second term C3's clause is built on.
 
     Computed from the SHIPPED band on the SAME population the constraint is evaluated over, so
-    "coverage_incumbent" can never be a number from a different slice than the one it governs."""
+    "coverage_incumbent" can never be a number from a different slice than the one it governs.
+
+    ⚠️ `rounding=None` returns the UNROUNDED coverage — REQUIRED whenever the caller evaluates C3
+    with `equality_exact=True` (the NF-B3 boundary fix): the 6-dp rounding is exactly what
+    manufactures the one-row failure at the equality boundary. The rounded default is kept only so
+    the recorded NF-RECAL1 / NF-C3-REREAD artifacts stay byte-reproducible."""
     yy = np.asarray(y, dtype=float)
     lo = np.minimum(np.asarray(p10, dtype=float), np.asarray(p90, dtype=float))
     hi = np.maximum(np.asarray(p10, dtype=float), np.asarray(p90, dtype=float))
     pos = _pos(positions)
     cov = (yy >= lo) & (yy <= hi)
-    return {q: (round(float(cov[pos == q].mean()), 6) if (pos == q).any() else None)
+    def _r(v: float) -> float:
+        return float(v) if rounding is None else round(float(v), rounding)
+    return {q: (_r(cov[pos == q].mean()) if (pos == q).any() else None)
             for q in RECALIBRATED_POSITIONS}
 
 
