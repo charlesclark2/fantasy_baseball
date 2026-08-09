@@ -73,6 +73,7 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_weather,
     finalize_prior_slate_game_detail_op,
     predict_today_morning,
+    reexport_player_seq_posteriors_op,
     settle_user_bets_op,
     update_lineup_state_scd2,
     update_market_features_scd2,
@@ -244,6 +245,15 @@ def daily_ingestion_job():
     # (dbt_daily_build) lands and before feature_pregame_game_features is rebuilt
     # in dbt_umpire_feature_rebuild, so it picks up the fresh team posteriors.
     p_player  = update_player_posteriors_op(start=eb_bullpen)
+    # 🩸 INC-25 ORDERING FIX (E11.24, 2026-08-09) — re-mirror player_sequential_posteriors to S3
+    # NOW, downstream of the writer directly above. lakehouse_w8a_feature_layer_op mirrors that
+    # table at lk9, ~40 min EARLIER in this same run, so the S3 parquet was always exactly one
+    # writer-cycle behind: measured 2026-08-09, SF max(update_ts) 08-08 13:02:18 vs S3 08-07
+    # 13:02:08 — a +24.00h gap and 38.7h of staleness against a 36h freshness threshold.
+    # A FAN-OUT LEAF, deliberately: nothing consumes its output, so a mirror failure can never
+    # block p_team / p_matchup / predict. It pages instead (ALERT tier). Do NOT thread it into
+    # the p_player → p_team chain.
+    reexport_player_seq_posteriors_op(start=p_player)
     p_team    = update_team_posteriors_op(start=p_player)
     p_matchup = update_matchup_cell_posteriors_op(start=p_team)
     # E11.8 (INC-8 fix) — archetype posteriors MUST also run in the daily job,
