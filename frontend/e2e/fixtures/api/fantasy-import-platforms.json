@@ -1,0 +1,31 @@
+[
+  {
+    "id": "sleeper",
+    "label": "Sleeper",
+    "auth": "public",
+    "available": true,
+    "configured": true,
+    "connected": false,
+    "help": "Enter your Sleeper username or league ID.",
+    "attribution": "Sleeper",
+    "attribution_url": "https://sleeper.com"
+  },
+  {
+    "id": "yahoo",
+    "label": "Yahoo",
+    "auth": "oauth",
+    "available": true,
+    "configured": false,
+    "connected": false,
+    "help": "Sign in with Yahoo to import a league."
+  },
+  {
+    "id": "espn",
+    "label": "ESPN",
+    "auth": "paste",
+    "available": true,
+    "configured": true,
+    "connected": false,
+    "help": "You make the request in your own browser and paste the response back."
+  }
+]
