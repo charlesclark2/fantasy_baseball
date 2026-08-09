@@ -361,3 +361,103 @@ class TestFlipSpecs:
         assert WP.Q_LEVELS[SNAP.Q10] == pytest.approx(0.10)
         assert WP.Q_LEVELS[SNAP.Q50] == pytest.approx(0.50)
         assert WP.Q_LEVELS[SNAP.Q90] == pytest.approx(0.90)
+
+
+# ── the served-board retention tool (flip tracking, serving side) ───────────────────────────────
+class _FakeS3:
+    """Minimal fake: a dict of key → size; records every write. No boto3/moto needed."""
+
+    def __init__(self, objects: dict[str, int]):
+        self.objects = dict(objects)
+        self.copies: list[tuple[str, str]] = []
+        self.puts: list[str] = []
+
+    def get_paginator(self, name):
+        assert name == "list_objects_v2"
+        outer = self
+
+        class _P:
+            def paginate(self, Bucket, Prefix):
+                contents = [{"Key": k, "Size": v, "LastModified": ""}
+                            for k, v in sorted(outer.objects.items()) if k.startswith(Prefix)]
+                yield {"Contents": contents} if contents else {}
+        return _P()
+
+    def list_objects_v2(self, Bucket, Prefix, MaxKeys=1000):
+        hits = [k for k in self.objects if k.startswith(Prefix)]
+        return {"KeyCount": len(hits[:MaxKeys])}
+
+    def copy_object(self, Bucket, Key, CopySource):
+        self.copies.append((CopySource["Key"], Key))
+        self.objects[Key] = self.objects[CopySource["Key"]]
+
+    def put_object(self, Bucket, Key, Body, ContentType):
+        self.puts.append(Key)
+        self.objects[Key] = len(Body)
+
+
+_LIVE = {
+    "fantasy/nfl/2025/board_ppr_12.json": 10,
+    "fantasy/nfl/2025/projections.json": 20,
+    "fantasy/nfl/2026/board_ppr_12.json": 30,
+    "fantasy/nfl/2026/manifest.json": 5,
+    "fantasy/nfl/track_record/2019.json": 7,
+    "fantasy/mlb/2026/board.json": 99,  # a DIFFERENT sport's key space — must not be swept
+}
+
+
+class TestServedBoardSnapshot:
+    def _mod(self):
+        from quant_sports_intel_models.football.nfl.fantasy import (
+            run_nf_serving_board_snapshot as SBS,
+        )
+        return SBS
+
+    def test_enumerates_every_year_the_app_serves_and_nothing_else(self):
+        """'All years we're currently showing' = an ENUMERATION of the live prefix — every
+        season + track_record retained, other key spaces untouched."""
+        SBS = self._mod()
+        s3 = _FakeS3(_LIVE)
+        out = SBS.run_snapshot(s3, "bucket", "fantasy/nfl/", "preflip-t", execute=True)
+        assert set(out["groups"]) == {"2025", "2026", "track_record"}
+        copied_src = {src for src, _ in s3.copies}
+        assert copied_src == {k for k in _LIVE if k.startswith("fantasy/nfl/")}
+        assert "fantasy/mlb/2026/board.json" not in copied_src
+
+    def test_destination_is_outside_the_served_key_space(self):
+        """Nothing the snapshot writes may land under `fantasy/` — the backend serves that
+        prefix, and a retained copy must never be servable."""
+        SBS = self._mod()
+        s3 = _FakeS3(_LIVE)
+        SBS.run_snapshot(s3, "bucket", "fantasy/nfl/", "preflip-t", execute=True)
+        written = [dst for _, dst in s3.copies] + s3.puts
+        assert written, "the snapshot wrote nothing (NF1.7 (a))"
+        for key in written:
+            assert key.startswith("snapshots/preflip-t/"), key
+            assert not key.startswith("fantasy/"), f"snapshot wrote into the SERVED space: {key}"
+
+    def test_dry_run_is_the_default_and_writes_nothing(self):
+        SBS = self._mod()
+        s3 = _FakeS3(_LIVE)
+        out = SBS.run_snapshot(s3, "bucket", "fantasy/nfl/", "preflip-t", execute=False)
+        assert not s3.copies and not s3.puts
+        assert out["executed"] is False and out["n_files"] == 5
+
+    def test_existing_tag_refuses_immutably(self):
+        SBS = self._mod()
+        s3 = _FakeS3({**_LIVE, "snapshots/preflip-t/fantasy/nfl/2026/manifest.json": 5})
+        with pytest.raises(SystemExit, match="immutable"):
+            SBS.run_snapshot(s3, "bucket", "fantasy/nfl/", "preflip-t", execute=True)
+
+    def test_empty_live_prefix_refuses(self):
+        """An empty snapshot recorded as 'what the app was showing' would be a vacuous record
+        (NF1.7 (a)) — refuse it."""
+        SBS = self._mod()
+        with pytest.raises(SystemExit, match="refusing"):
+            SBS.run_snapshot(_FakeS3({}), "bucket", "fantasy/nfl/", "t", execute=True)
+
+    def test_tag_validation_rejects_a_path_breaking_tag(self):
+        SBS = self._mod()
+        with pytest.raises(ValueError):
+            SBS.validate_tag("../overwrite")
+        assert SBS.validate_tag("preflip-20260808") == "preflip-20260808"
