@@ -173,9 +173,11 @@ test("the FAQ carries no stake-sizing guidance", async ({ page }) => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// AC 4 — a signed-out visitor finds a door to BOTH products
+// AC 4 — every signed-out nav entry opens for the visitor it is drawn for
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-test("the signed-out desktop nav offers both products", async ({ page }) => {
+test("the signed-out desktop nav names the fantasy sport and offers no MLB door", async ({
+  page,
+}) => {
   await mockApi(page)
   await page.goto("/about")
 
@@ -184,31 +186,91 @@ test("the signed-out desktop nav offers both products", async ({ page }) => {
   const doors = await page.evaluate(() =>
     [...document.querySelectorAll("[data-primary-nav] [data-signed-out-nav]")]
       .filter((el) => !el.closest("footer"))
-      .map((el) => el.getAttribute("data-signed-out-nav") ?? ""),
+      .map((el) => ({
+        product: el.getAttribute("data-signed-out-nav") ?? "",
+        text: (el.textContent ?? "").trim(),
+      })),
   )
 
   expect(doors.length, "the signed-out nav rendered nothing — this clause would be vacuous")
     .toBeGreaterThan(0)
-  expect(doors, "the signed-out nav has no door to the fantasy product").toContain("fantasy")
-  expect(doors, "the signed-out nav has no door to the MLB betting product").toContain("betting")
-  // Fantasy first, matching About and the home page.
-  expect(doors.indexOf("fantasy")).toBeLessThan(doors.indexOf("betting"))
+  expect(
+    doors.map((d) => d.product),
+    "the signed-out nav has no door to the fantasy product",
+  ).toContain("fantasy")
+
+  // ⭐ OPERATOR, 2026-08-09 — the sport is NAMED. `nav-model.ts` already declares an MLB→Fantasy
+  // surface, so a bare "Fantasy" is ambiguous the moment the baseball board stops being admin-only.
+  const fantasyBar = page.locator('[data-primary-nav] [data-signed-out-nav="fantasy"]:visible')
+  await expect(
+    fantasyBar.filter({ hasText: /fantasy football/i }).first(),
+    "the fantasy door does not name its sport",
+  ).toBeVisible()
+
+  // ⛔ NO MLB DOOR — reversing E9.60's own first cut. There is no MLB destination an anonymous
+  // visitor can open (every route is `dependencies=_paid`, and the product is intended to become
+  // signup-gated rather than public), so the entry could only ever be an anchor into the home
+  // page. Read the SIGNED_OUT_NAV section header in `positioning-copy.ts` before re-adding one.
+  expect(
+    doors.map((d) => d.product),
+    "an MLB/betting door was re-added to the signed-out nav",
+  ).not.toContain("betting")
 })
 
-test("the signed-out MLB door does not lead to a login wall", async ({ page }) => {
+test("no signed-out nav entry leads to a login wall", async ({ page }) => {
   await mockApi(page)
   await page.goto("/about")
 
-  const href = await page
-    .locator('[data-primary-nav] [data-signed-out-nav="betting"]')
-    .first()
-    .getAttribute("href")
-  expect(href, "no MLB door found in the signed-out nav").toBeTruthy()
-  // ⛔ Every MLB betting route is mounted `dependencies=_paid`; the public MLB surface is the home
-  // page's featured read. A door into any of these would be a login wall wearing a product label.
-  for (const gated of ["/performance", "/dashboard", "/picks", "/props", "/ev-tracker"]) {
-    expect(href, `the signed-out MLB door points at the gated ${gated}`).not.toContain(gated)
+  // ⚠️ WIDENED from the single MLB door to EVERY entry when that door was removed. The narrow
+  // version located `[data-signed-out-nav="betting"]`, which no longer exists — so it would have
+  // failed on its own missing fixture rather than on the property. This asks the real question,
+  // and of more links than the original did.
+  const hrefs = await page
+    .locator("[data-primary-nav] [data-signed-out-nav]")
+    .evaluateAll((els) => els.map((e) => e.getAttribute("href") ?? ""))
+  expect(hrefs.length, "no signed-out nav entries found — this clause would be vacuous")
+    .toBeGreaterThan(0)
+
+  // ⛔ Every MLB betting route is mounted `dependencies=_paid`. A door into any of these would be
+  // a login wall wearing a product label.
+  for (const href of hrefs) {
+    for (const gated of ["/performance", "/dashboard", "/picks", "/props", "/ev-tracker"]) {
+      expect(href, `a signed-out nav entry points at the gated ${gated}`).not.toContain(gated)
+    }
   }
+})
+
+test("the signed-out desktop bar fits at the breakpoint where it first renders", async ({
+  page,
+}) => {
+  // ⭐ THE GUARD THAT TURNS "this looks like it fits" INTO A MEASUREMENT. These links are
+  // `hidden sm:block`, so 640px is the NARROWEST width at which the full bar is on screen — i.e.
+  // the worst case, and the one nobody develops at. E9.58 already recorded this bar overflowing
+  // (the wordmark overlapped the first link, "Track Record" wrapped onto two lines), and every
+  // label edit in `SIGNED_OUT_NAV` is a width edit — "Fantasy" → "Fantasy Football" is ~60px.
+  await page.setViewportSize({ width: 640, height: 900 })
+  await mockApi(page)
+  await page.goto("/about")
+
+  const nav = page.locator("[data-primary-nav]")
+  await expect(nav).toBeVisible()
+
+  // 1px of tolerance for sub-pixel rounding, matching `home-mobile.spec.ts`.
+  const overflow = await nav.evaluate((el) => el.scrollWidth - el.clientWidth)
+  expect(overflow, "the signed-out nav bar overflows horizontally at the sm breakpoint")
+    .toBeLessThanOrEqual(1)
+
+  // ⚠️ AND THE LINKS MUST NOT HAVE WRAPPED. A bar can fit its container by letting a link break
+  // onto a second line, which is the E9.58 symptom and is invisible to a scrollWidth check. Every
+  // link carries `whitespace-nowrap`, so a wrapped link shows up as a taller-than-one-line box.
+  const tall = await page
+    .locator('[data-primary-nav] [data-signed-out-nav]:visible')
+    .evaluateAll((els) =>
+      els
+        .filter((e) => e.getBoundingClientRect().height > 28)
+        .map((e) => (e.textContent ?? "").trim()),
+    )
+  expect(tall, "a signed-out nav link wrapped onto a second line at the sm breakpoint").toEqual([])
 })
 
 test("the FAQ is reachable from the signed-out mobile nav", async ({ page }) => {
@@ -232,9 +294,14 @@ test("the FAQ is reachable from the signed-out mobile nav", async ({ page }) => 
   // actually says.
   const navFaq = page.locator('[data-primary-nav] [data-signed-out-nav="company"][href="/faq"]:visible')
   await expect(navFaq, "the FAQ is not in the signed-out mobile nav").toBeVisible()
+
+  // ⚠️ THE MLB HALF OF THIS CLAUSE WAS REMOVED, not weakened, when the MLB door was (operator,
+  // 2026-08-09). What is left still carries the property the clause exists for — that the phone
+  // menu renders the FULL `SIGNED_OUT_NAV` set rather than the `desktop` subset — because FAQ is
+  // itself a `desktop: false` entry and appears at no other viewport.
   await expect(
-    page.locator('[data-primary-nav] [data-signed-out-nav="betting"]:visible'),
-    "the MLB door is not reachable from the signed-out mobile nav",
+    page.locator('[data-primary-nav] [data-signed-out-nav="fantasy"]:visible').first(),
+    "the fantasy doors are not reachable from the signed-out mobile nav",
   ).toBeVisible()
 })
 
@@ -413,4 +480,15 @@ test("the footer leads with fantasy and never links an unshipped product", async
       els.filter((e) => /ncaaf|nfl betting/i.test(e.textContent ?? "")).length,
     )
   expect(comingLinks, "an un-shipped product is rendered as a link in the footer").toBe(0)
+
+  // ⭐ THE ALIGNMENT BUG (operator report + screenshot, 2026-08-09), as a structural assertion.
+  // Each coming row used to carry its OWN "Coming this season" chip beside the label in a
+  // `flex-wrap`. The Products column is ~250px at `md`: that fits "NFL Betting Intelligence" plus
+  // its chip but NOT "NCAAF Betting Intelligence", so one row wrapped its chip to a second line
+  // and the other did not — ragged, and it read as broken layout. Hoisting the status to a shared
+  // sub-heading makes the wrap structurally impossible. ONE occurrence is the tell that it is a
+  // sub-heading rather than a per-row chip, which is the actual fix; a count check survives
+  // restyling in a way a pixel assertion would not.
+  const statusCount = (text.match(/coming this season/g) ?? []).length
+  expect(statusCount, "the coming-soon status is repeated per row, so it can wrap again").toBe(1)
 })

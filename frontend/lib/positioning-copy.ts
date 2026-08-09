@@ -494,18 +494,54 @@ export const FAQ_HEADER = {
 
 // ══ NAVIGATION ═════════════════════════════════════════════════════════════════════════════════
 //
-// ⭐⭐ THE DEFECT THIS FIXES, and it is the largest of the three in E9.60: a signed-out visitor had
-// NO DOOR TO THE BETTING PRODUCT ANYWHERE IN THE NAV. `publicNavItems()` flattens every
-// `public: true` item in `nav-model.ts`, and all four of them (Rankings, Projections, Player Search,
-// fantasy Track Record) are FANTASY. So the nav of a company whose home page sells two products
-// listed exactly one of them — while the MLB half is the older, live, revenue product.
+// ⭐ THE ONE RULE THIS LIST IS GOVERNED BY: **every entry must open for the visitor it is drawn
+// for.** This list renders ONLY when signed out, so every href has to serve an ANONYMOUS caller. A
+// nav item whose only behaviour is a bounce to /login is a menu that lies about what it opens —
+// the same rule `nav-model.ts`'s `freeSignedIn` doc records for the signed-in menu, and the reason
+// there is no MLB entry here (below).
 //
-// ⚠️ WHY `/#today` AND NOT A BETTING PAGE. There is no public MLB route to send them to: `/dashboard`,
-// `/performance`, `/picks/*`, `/props` and `/ev-tracker` are all mounted `dependencies=_paid`. The
-// ONE public MLB surface in the product is the home page's featured read, which renders from
-// `/api/public/featured` through the G100-D1 CDN route — so `/#today` is the honest door, and it is
-// the same target the home page's own betting CTA uses (`VERTICALS[betting].cta.href`). ⛔ Do not
-// "improve" this to `/performance`: that is a login wall wearing a product label.
+// ══ ⭐⭐ WHY THERE IS NO MLB DOOR (operator decision, 2026-08-09) ═══════════════════════════════
+//
+// E9.60's first cut ADDED one, on the reasoning that a two-product company listing one product in
+// its nav is a defect. That reasoning was incomplete, and the operator overrode it. Both halves
+// matter, because a future session will otherwise re-add the link:
+//
+//   1. THERE IS NO ANONYMOUS MLB DESTINATION. `/dashboard`, `/performance`, `/picks/*`, `/props`
+//      and `/ev-tracker` are all mounted `dependencies=_paid` in `app/backend/main.py`. The only
+//      public MLB surface is the home page's featured read, so the door had to be `/#today` — an
+//      ANCHOR, which on the home page is a scroll to a section already on screen and from /about
+//      or /faq is a jump to a different page's section. That is a weak nav item, not a product
+//      door, which is exactly what the operator reported.
+//   2. ⭐ MLB IS INTENDED TO BE ACCOUNT-GATED, NOT PUBLIC. The stated direction is that MLB
+//      betting intelligence should require a SIGN-UP (user-gated) rather than a subscription
+//      (paid-gated). Under rule 1 above that changes nothing here: an account-gated product still
+//      has no entry that a signed-out visitor can open, so there is still no signed-out MLB door.
+//      ⛔ So do NOT "restore" this link when the paid gate is relaxed to a signup gate — the
+//      absence is correct under BOTH gate models, for the same reason.
+//
+// MLB is still visible to a signed-out visitor in the two places that carry it honestly: the home
+// page's own betting section + CTA, and the footer's Products column, which renders on every page.
+// What is removed is a top-bar link, not the product's presence.
+//
+// ⚠️ The `"betting"` member of `SignedOutNavLink.product` is deliberately KEPT even with no entry
+// using it — the mobile grouping logic is product-keyed, and narrowing the type would make adding
+// a genuinely public betting surface later a type change rather than a data edit.
+//
+// ══ ⭐ WHY THE FANTASY DOOR SAYS "FANTASY FOOTBALL" (operator, 2026-08-09) ══════════════════════
+//
+// It said "Fantasy". `nav-model.ts` already declares an MLB→Fantasy surface (E8.1's prospect
+// board), so "fantasy" is ALREADY ambiguous between two sports inside this product — it is just
+// that the baseball half is `restrict: "admin"` and therefore invisible to everyone but the
+// operator today. Naming the sport now costs nothing and stops the label from silently becoming
+// wrong the day fantasy baseball opens up.
+//
+// ⛔ A "Fantasy Sports ▾" DROPDOWN WAS CONSIDERED AND DECLINED FOR NOW. It is the right structure
+// once there are two live fantasy sports — but today it would contain exactly ONE clickable sport
+// and would put a hover in front of the free board, which is the site's primary free acquisition
+// surface. Promoting this entry to a dropdown when fantasy baseball ships is a data edit in this
+// list. (It would also want the signed-in nav flipped to match: that one is SPORT-first —
+// NFL▾ → Fantasy, MLB▾ → Betting/Fantasy — so a product-first signed-out menu would have the two
+// auth states disagreeing about the site's primary axis.)
 //
 // ⚠️ ORDER IS FANTASY-FIRST (spec §2/§20), matching the home page's `VERTICALS`.
 
@@ -516,10 +552,13 @@ export type SignedOutNavLink = {
    *
    *  ⚠️ THIS EXISTS BECAUSE OF A REAL CONSTRAINT, not for tidiness. E9.58 already recorded this bar
    *  overflowing on a phone — the wordmark overlapped the first link and "Track Record" wrapped
-   *  onto two lines — and E9.60 both ADDS a link (the MLB door) and BUMPS the type size (the E9.61
-   *  nav-sizing note, absorbed here). "MLB betting intelligence" at `text-sm` beside three other
-   *  links and two buttons does not fit a laptop bar. The mobile menu, which has the room and the
-   *  product grouping, keeps the full descriptive label. */
+   *  onto two lines — and E9.60 BUMPS the type size (the E9.61 nav-sizing note, absorbed here) and
+   *  lengthens the fantasy label to name its sport. The mobile menu, which has the room and the
+   *  product grouping, keeps the fuller descriptive label.
+   *
+   *  The bar's total width is pinned at the `sm` breakpoint by
+   *  `positioning-alignment.spec.ts` — the guard that turns "this looks like it fits" into a
+   *  measurement, since every label change here is a width change. */
   short?: string
   /** Which product this door belongs to; `null` for the company-level pages. Rendered as a group
    *  separator on mobile, where there is room to group. */
@@ -534,7 +573,15 @@ export type SignedOutNavLink = {
  *  redirect to /login is a menu that lies about what it opens (`nav-model.ts`'s `freeSignedIn`
  *  doc records the same rule for the signed-in menu). */
 export const SIGNED_OUT_NAV: readonly SignedOutNavLink[] = [
-  { label: "Fantasy rankings", short: "Fantasy", href: "/fantasy/rankings", product: "fantasy", desktop: true },
+  // ⭐ "Fantasy Football", not "Fantasy" — the sport is named because a second fantasy sport
+  // already exists in the nav model (see the section header above).
+  {
+    label: "Fantasy Football rankings",
+    short: "Fantasy Football",
+    href: "/fantasy/rankings",
+    product: "fantasy",
+    desktop: true,
+  },
   { label: "Projections", href: "/fantasy/projections", product: "fantasy", desktop: false },
   { label: "Player search", href: "/fantasy/players", product: "fantasy", desktop: false },
   // ⭐ TRACK RECORD IS TOP-LEVEL (spec §20/§21, operator 2026-08-09) — it is the site's central
@@ -547,8 +594,8 @@ export const SIGNED_OUT_NAV: readonly SignedOutNavLink[] = [
     product: "fantasy",
     desktop: true,
   },
-  // ⭐ THE DOOR THAT WAS MISSING.
-  { label: "MLB betting intelligence", short: "MLB", href: "/#today", product: "betting", desktop: true },
+  // ⛔ NO MLB ENTRY — deliberate, and correct under both the current paid gate and the intended
+  // signup gate. See the section header above before adding one.
   { label: "About", href: "/about", product: null, desktop: true },
   { label: "FAQ", href: "/faq", product: null, desktop: false },
 ]

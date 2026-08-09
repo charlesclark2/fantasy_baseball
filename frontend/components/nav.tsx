@@ -165,24 +165,24 @@ export function Nav({
         </Link>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* ⭐⭐ E9.60 — THE SIGNED-OUT BAR, AND THE DEFECT IT FIXES.
+          {/* ⭐⭐ E9.60 — THE SIGNED-OUT BAR.
 
               This used to render `publicNavItems()` — every `public: true` item in `nav-model.ts` —
-              plus a hardcoded About link. All four public items are FANTASY (Rankings, Projections,
-              Player Search, fantasy Track Record), so a signed-out visitor arriving from a home page
-              that sells TWO products found exactly ONE of them in the nav. The MLB betting product,
-              which is the older and live one, had no door here at all.
+              plus a hardcoded About link, which is why it had drifted: the list was derived from an
+              ENTITLEMENT flag rather than authored as marketing navigation, so it said whatever the
+              entitlement model happened to say. `SIGNED_OUT_NAV` is authored, in the site's one
+              product order (fantasy first, matching the home page's `VERTICALS` and About), and the
+              `desktop` flag keeps the bar from overflowing on a laptop — the fuller set renders in
+              the mobile menu below, which is also where FAQ becomes reachable from the nav at all
+              (spec §22).
 
-              `SIGNED_OUT_NAV` now carries both products in the site's one order (fantasy first,
-              matching the home page's `VERTICALS` and About), and the `desktop` flag keeps the bar
-              from overflowing on a laptop — the fuller set renders in the mobile menu below, which
-              is also where FAQ becomes reachable from the nav at all (spec §22).
-
-              ⚠️ THE MLB DOOR IS `/#today` BECAUSE THERE IS NO PUBLIC MLB PAGE: `/dashboard`,
-              `/performance`, `/picks/*`, `/props` and `/ev-tracker` are all mounted
-              `dependencies=_paid`. `/#today` is the home page's public featured read and the same
-              target its own betting CTA uses. ⛔ Do not repoint this at `/performance` — that is a
-              login wall wearing a product label. See the note on `SIGNED_OUT_NAV`.
+              ⛔ THERE IS DELIBERATELY NO MLB ENTRY, and the reasoning is load-bearing enough that
+              it lives in full beside the list itself — read the `SIGNED_OUT_NAV` section header in
+              `positioning-copy.ts` BEFORE adding one. Short version: every MLB route refuses an
+              anonymous caller, and the product is intended to become signup-gated rather than
+              public, so there is no MLB destination a signed-out visitor can open under either
+              gate model. MLB reaches a logged-out visitor through the home page's betting section
+              and the footer's Products column instead.
 
               ⛔ BLOG IS STILL DELIBERATELY ABSENT (E9.46, operator decision 3, 2026-08-07) — a
               demotion, not a removal: the footer renders it on every page and the home page carries

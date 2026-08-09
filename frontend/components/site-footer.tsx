@@ -34,7 +34,21 @@ const PRODUCTS = [
 ] as const
 
 /** ⛔ NO `href` FIELD AT ALL — not an empty string, not a `#`. The type simply cannot express a
- *  destination for these, so a future edit cannot accidentally make one clickable. */
+ *  destination for these, so a future edit cannot accidentally make one clickable.
+ *
+ *  ⭐ THESE SIT UNDER A SHARED "Coming this season" SUB-HEADING rather than each carrying its own
+ *  chip, and that is a BUG FIX, not a restyle (operator report, 2026-08-09). Each row used to be
+ *  `label + <chip>` in a `flex-wrap` — and the footer's Products column is roughly 250px at `md`,
+ *  which fits "NFL Betting Intelligence" beside its chip but NOT "NCAAF Betting Intelligence". So
+ *  one row wrapped its chip onto a second line and the other did not, and the ragged result read
+ *  as broken layout.
+ *
+ *  ⛔ The tempting patches are both worse: `whitespace-nowrap` makes the row overflow the column
+ *  instead of wrapping, and always-stacking the chip doubles the height of every row to fix one.
+ *  Hoisting the label to a sub-heading makes the overflow IMPOSSIBLE (there is nothing beside the
+ *  text to wrap), and it reads better — a labelled group is clearer than a repeated chip. The
+ *  "coming this season" string is still present exactly once, which is what
+ *  `positioning-alignment.spec.ts` asserts. */
 const COMING = [
   { label: "NFL Betting Intelligence" },
   { label: "NCAAF Betting Intelligence" },
@@ -74,13 +88,18 @@ export function SiteFooter() {
             {PRODUCTS.map(({ label, href }) => (
               <FooterLink key={label} href={href} label={label} />
             ))}
+            {/* The sub-heading carries the status once; the rows below are plain text, never
+                links — see the note on COMING. `aria-hidden` is deliberately NOT used: this is
+                real information for a screen reader too. */}
+            <li className="pt-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-600">
+                Coming this season
+              </p>
+            </li>
             {COMING.map(({ label }) => (
               // Text, not a link — see the module header.
-              <li key={label} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <li key={label}>
                 <span className="text-xs text-gray-600">{label}</span>
-                <span className="rounded border border-[#262626] px-1.5 py-0.5 text-[10px] text-gray-600">
-                  Coming this season
-                </span>
               </li>
             ))}
           </FooterColumn>
