@@ -71,6 +71,15 @@ export const FIXTURES = {
   // wrong" shape. These settings move QBs and TEs by whole tiers, so the screen has something real
   // to show and a sign error is visible.
   myTeams: () => fixture("fantasy-nfl-my-teams.json"),
+  // ⭐ G100-C1 (live fix) — the import platform list and one Sleeper account's leagues.
+  //
+  // ⚠️ THE LEAGUE LIST DELIBERATELY CONTAINS BOTH CASES: `999999` is the league `myTeams` already
+  // holds (so it is an UPDATE, which costs no quota and must stay importable) and `888888` is a
+  // second one (a CREATE, which the free quota refuses). A fixture with only the unsaved league
+  // would let "everything is locked" pass as correct, which is the defect facing the other way —
+  // a returning user could no longer re-sync the roster they already have.
+  importPlatforms: () => fixture("fantasy-import-platforms.json"),
+  importSleeperLeagues: () => fixture("fantasy-import-sleeper-leagues.json"),
 }
 
 /**
@@ -154,6 +163,13 @@ function payloadFor(pathname: string, entitlement: Entitlement): unknown | undef
   if (/^\/fantasy\/nfl\/track-record\/\d{4}$/.test(pathname)) return FIXTURES.trackRecordSeason()
   if (pathname === "/picks/featured") return FIXTURES.featuredPick()
   if (pathname === "/fantasy/nfl/featured-player") return FIXTURES.featuredFantasyPlayer()
+  // ── PLATFORM IMPORT (NF-C0), as far as the LEAGUE LIST ────────────────────────────────────────
+  // Deliberately NOT the preview endpoint. The list is where G100-C1's quota boundary is drawn —
+  // once an account is at its quota, every league here except the one it already saved is
+  // unimportable, and that has to be visible BEFORE the work. Mocking `preview` too would model a
+  // flow the free tier is not supposed to be able to reach.
+  if (pathname === "/fantasy/import/platforms") return FIXTURES.importPlatforms()
+  if (pathname === "/fantasy/import/sleeper/leagues") return FIXTURES.importSleeperLeagues()
   return undefined
 }
 

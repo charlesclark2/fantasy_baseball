@@ -55,7 +55,14 @@ import {
 import type { LeagueConfig, RosterSlotConfig, TermCoverage } from "@/lib/league-config"
 import { availableFields } from "@/lib/league-scoring"
 import { useFantasyProjections } from "@/lib/fantasy-queries"
-import { EmptyBlock, LoadingBlock, PosBadge, SurfaceHeader, num } from "@/components/fantasy/shared"
+import {
+  EmptyBlock,
+  LeagueQuotaNotice,
+  LoadingBlock,
+  PosBadge,
+  SurfaceHeader,
+  num,
+} from "@/components/fantasy/shared"
 import { NumericInput } from "@/components/ui/numeric-input"
 import { Picker } from "@/components/ui/picker"
 
@@ -472,20 +479,19 @@ export function LeagueSettingsEditor() {
             "state the lock where the visitor meets it" pattern the format picker uses.
             ⛔ Advisory only — the server is the gate, and this disables a button, which is not one. */}
         {atQuota && (
-          <div
-            className="mt-2 rounded border border-[#262626] bg-[#0f0f0f] p-3 text-xs leading-relaxed"
-            data-testid="league-quota-notice"
-          >
-            <p className="font-medium text-gray-200">{LEAGUE_QUOTA_REACHED_TITLE}</p>
-            <p className="mt-1 text-gray-500">{LEAGUE_QUOTA_REACHED_DETAIL}</p>
-            <p className="mt-2">
-              <button
-                onClick={() => leagues?.[0] && onSelectLeague(leagues[0].league_id)}
-                className="text-gray-300 underline hover:text-[#10b981]"
-              >
-                Edit the league you have
-              </button>
-            </p>
+          <div className="mt-2">
+            <LeagueQuotaNotice
+              title={LEAGUE_QUOTA_REACHED_TITLE}
+              detail={LEAGUE_QUOTA_REACHED_DETAIL}
+              action={
+                <button
+                  onClick={() => leagues?.[0] && onSelectLeague(leagues[0].league_id)}
+                  className="text-gray-300 underline hover:text-[#10b981]"
+                >
+                  Edit the league you have
+                </button>
+              }
+            />
           </div>
         )}
         {errors.length > 0 && (

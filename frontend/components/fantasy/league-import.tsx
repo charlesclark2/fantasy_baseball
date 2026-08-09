@@ -19,6 +19,7 @@
 // projection columns that actually exist — this surface cannot promote a term by asserting it.
 
 import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import posthog from "posthog-js"
 import {
@@ -28,6 +29,7 @@ import {
   Download,
   Link2,
   Loader2,
+  Lock,
   Unlink,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
@@ -50,7 +52,18 @@ import {
 import type { LeagueSaveInput } from "@/lib/fantasy"
 import { resolveScoring, type TermCoverage } from "@/lib/league-config"
 import { availableFields } from "@/lib/league-scoring"
-import { EmptyBlock, LoadingBlock, SurfaceHeader, num } from "@/components/fantasy/shared"
+import { canSaveAnotherLeague } from "@/lib/entitlements"
+import {
+  LEAGUE_QUOTA_REACHED_DETAIL,
+  LEAGUE_QUOTA_REACHED_TITLE,
+} from "@/lib/fantasy-claim-copy"
+import {
+  EmptyBlock,
+  LeagueQuotaNotice,
+  LoadingBlock,
+  SurfaceHeader,
+  num,
+} from "@/components/fantasy/shared"
 
 const SEASON = process.env.NEXT_PUBLIC_NFL_FANTASY_SEASON ?? "2026"
 
@@ -83,11 +96,30 @@ function errorText(e: unknown): string {
 }
 
 export function LeagueImport() {
-  const { accessToken } = useAuth()
+  const { accessToken, groups } = useAuth()
   const search = useSearchParams()
   const saveLeague = useSaveLeague()
   const { data: savedLeagues } = useSavedLeagues()
   const { data: projections } = useFantasyProjections()
+
+  // ── G100-C1 (live fix): THE QUOTA, ENFORCED ON THIS PATH TOO ──────────────────────────────────
+  //
+  // There are two ways to create a league and the first cut gated only the manual editor, so a free
+  // account at its quota was refused by the form and waved through by the importer — all the way to
+  // a 409 it met after picking a platform, entering a username, waiting on a preview and pressing
+  // Save. Refusing that late is worse than refusing at all: the work is already done.
+  //
+  // ⚠️ THE RULE IS "A DIFFERENT LEAGUE", NOT "ANY IMPORT". Re-importing a league you already saved
+  // is an UPDATE — it creates nothing, the server's cap does not apply to it (`PUT`), and it is how
+  // you refresh a roster mid-season. Blocking it would break the re-sync every returning user needs,
+  // to enforce a limit that was never exceeded. So the block is keyed on whether THIS preview would
+  // create a SECOND league.
+  const atQuota = !canSaveAnotherLeague((savedLeagues ?? []).length, groups)
+  /** The saved league this platform league already maps to, if any — the update case. */
+  const savedMatchFor = (platform: string | null, sourceLeagueId: string | null) =>
+    (savedLeagues ?? []).find(
+      (l) => l.source_platform === platform && l.source_league_id === sourceLeagueId,
+    ) ?? null
 
   const [platforms, setPlatforms] = useState<ImportPlatform[] | null>(null)
   const [platformId, setPlatformId] = useState<string>("sleeper")
@@ -118,6 +150,12 @@ export function LeagueImport() {
   // The Yahoo callback returns the browser here with a status flag rather than a JSON body — the
   // user is mid-flow in a browser, so the outcome has to be visible on the page they land on.
   const yahooFlag = search.get("yahoo")
+
+  /** Would saving THIS preview create a second league the caller has no quota for? Recomputed from
+   *  the preview rather than latched at pick time, so the ESPN paste path — which produces a preview
+   *  without ever going through the league list — is covered by the same flag. */
+  const previewBlockedByQuota =
+    !!preview && atQuota && !savedMatchFor(preview.platform, preview.source_league_id)
 
   const refreshPlatforms = useMemo(
     () => async () => {
@@ -249,11 +287,11 @@ export function LeagueImport() {
     if (!preview) return
     // Re-importing a league you already saved UPDATES it rather than creating a duplicate. Two
     // copies of the same league is a silent trap: the user edits one and the board reads the other.
-    const already = (savedLeagues ?? []).find(
-      (l) =>
-        l.source_platform === preview.platform &&
-        l.source_league_id === preview.source_league_id,
-    )
+    const already = savedMatchFor(preview.platform, preview.source_league_id)
+    // Belt and braces with the disabled button: a disabled control is presentation, and this is the
+    // one call that would meet the server's 409. Refusing here keeps the reason on screen next to
+    // the control instead of surfacing as a raw error string.
+    if (atQuota && !already) return
     // NF-C6 — the team the reviewer picked below, if any. `null` is honest and saveable: the league
     // settings are still useful (rankings/board/draft) even before a roster is linked to it.
     const myTeam = preview.teams.find((t) => t.team_key === selectedTeamKey) ?? null
@@ -689,28 +727,66 @@ export function LeagueImport() {
         )}
 
         {leagues && leagues.length > 0 && (
-          <div className="mt-4 divide-y divide-white/5 rounded-lg border border-white/10">
-            {leagues.map((l) => (
-              <button
-                key={l.league_id}
-                onClick={() => void loadPreview(l.league_id)}
-                className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-white/[0.03]"
-              >
-                <div>
-                  <div className="text-sm text-gray-100">{l.name}</div>
-                  <div className="text-xs text-gray-500">
-                    {l.total_rosters || "?"}-team · {l.season}
-                    {l.status ? ` · ${l.status.replace(/_/g, " ")}` : ""}
-                  </div>
-                </div>
-                {busy === "preview" ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
-                ) : (
-                  <ArrowRight className="h-4 w-4 text-gray-500" />
-                )}
-              </button>
-            ))}
-          </div>
+          <>
+            {/* ⭐ THE BOUNDARY IS DRAWN BEFORE THE WORK, not after it. Once the account is at its
+                quota, every league here except the one already saved is unimportable — saying so
+                above the list is what stops someone picking one, waiting for a preview and only
+                then learning it cannot be saved. */}
+            {atQuota && (
+              <div className="mt-4">
+                <LeagueQuotaNotice
+                  title={LEAGUE_QUOTA_REACHED_TITLE}
+                  detail={`${LEAGUE_QUOTA_REACHED_DETAIL} You can still re-import the league you already have to refresh its roster.`}
+                  action={
+                    <Link
+                      href="/fantasy/league-settings"
+                      className="text-gray-300 underline hover:text-[#10b981]"
+                    >
+                      Manage the league you have
+                    </Link>
+                  }
+                />
+              </div>
+            )}
+            <div className="mt-4 divide-y divide-white/5 rounded-lg border border-white/10">
+              {leagues.map((l) => {
+                const saved = savedMatchFor(platformId, l.league_id)
+                // An import that would CREATE a second league is locked; re-importing the saved one
+                // stays open, because that is an update and costs no quota.
+                const locked = atQuota && !saved
+                return (
+                  <button
+                    key={l.league_id}
+                    onClick={() => {
+                      if (locked) return
+                      void loadPreview(l.league_id)
+                    }}
+                    disabled={locked}
+                    data-testid={locked ? "import-league-locked" : "import-league-option"}
+                    className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-white/[0.03] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                  >
+                    <div>
+                      <div className="text-sm text-gray-100">{l.name}</div>
+                      <div className="text-xs text-gray-500">
+                        {l.total_rosters || "?"}-team · {l.season}
+                        {l.status ? ` · ${l.status.replace(/_/g, " ")}` : ""}
+                        {saved ? " · already saved" : ""}
+                      </div>
+                    </div>
+                    {locked ? (
+                      <span className="flex items-center gap-1.5 text-xs text-gray-500">
+                        <Lock className="h-3.5 w-3.5" /> Members only
+                      </span>
+                    ) : busy === "preview" ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                    ) : (
+                      <ArrowRight className="h-4 w-4 text-gray-500" />
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </>
         )}
       </section>
 
@@ -734,17 +810,55 @@ export function LeagueImport() {
               </div>
               <button
                 onClick={() => void saveImported()}
-                disabled={busy === "save"}
+                disabled={busy === "save" || previewBlockedByQuota}
                 className="flex items-center gap-1.5 rounded bg-emerald-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-40"
               >
                 {busy === "save" ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : previewBlockedByQuota ? (
+                  <Lock className="h-3.5 w-3.5" />
                 ) : (
                   <Download className="h-3.5 w-3.5" />
                 )}
                 Save this league
               </button>
             </div>
+
+            {/* ⭐ THE OUTCOME BELONGS AT THE CONTROL. Errors render in a banner at the top of the
+                page, which on this surface sits several hundred pixels above the Save button behind
+                a full settings review — so a refused save looked like nothing happened at all, and
+                the reason was only findable by scrolling back up. The banner stays (it is also
+                where connect/preview failures land); this repeats the outcome where the click was.
+                Same failure shape E8.6 fixed for the manual editor: a save that reports nothing is
+                indistinguishable from a save that silently did not happen. */}
+            {error && !busy && (
+              <p
+                className="mt-3 flex items-start gap-1.5 text-xs text-amber-400"
+                data-testid="import-save-error"
+                role="status"
+              >
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{error}</span>
+              </p>
+            )}
+
+            {previewBlockedByQuota && (
+              <div className="mt-3">
+                <LeagueQuotaNotice
+                  title={LEAGUE_QUOTA_REACHED_TITLE}
+                  detail={`${LEAGUE_QUOTA_REACHED_DETAIL} This one would be your second, so it can't be saved on a free account.`}
+                  testId="import-quota-notice"
+                  action={
+                    <Link
+                      href="/fantasy/my-league"
+                      className="text-gray-300 underline hover:text-[#10b981]"
+                    >
+                      See the league you have
+                    </Link>
+                  }
+                />
+              </div>
+            )}
 
             {saved && (
               <p className="mt-3 text-xs text-emerald-400">

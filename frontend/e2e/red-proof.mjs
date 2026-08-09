@@ -856,6 +856,111 @@ const CASES = [
     to: "      {!teamsLoading && !league && (",
     grep: "never described as 'no league' when scoring fails",
   },
+
+  // ── G100-C1 FOLLOW-UP (operator, 2026-08-08) ────────────────────────────────────────────────
+  // Three defects the first REAL league surfaced in under a minute, none of which the original
+  // suite could see. The pattern is worth naming: every one of them is about whether the screen is
+  // USABLE, and the original spec only ever asked whether it was CORRECT.
+  {
+    id: "pool-ignored-highlights-the-waiver-wire",
+    shipped:
+      "G100-C1 — every riser and faller was a player nobody would draft, on the first real league",
+    // Rank density grows down the board: a few points separates adjacent players at pick 30 and
+    // dozens of them at rank 400. So the largest RANK moves live in the deep tail BY CONSTRUCTION,
+    // and a highlight list sorted by rank movement is a list of waiver-wire churn. Passing a null
+    // pool restores exactly that (the parameter's own "unknown must not filter" fallback), which
+    // makes this the honest re-introduction rather than a synthetic break.
+    detail: "Drops the draft pool, so highlights are drawn from the whole board again.",
+    file: "components/fantasy/my-league.tsx",
+    from: "    () => computeLeagueDelta(genericBoard, leagueBoard, pool),",
+    to: "    () => computeLeagueDelta(genericBoard, leagueBoard, null),",
+    grep: "shrinking the pool shrinks the highlights",
+  },
+  {
+    id: "ir-slots-counted-as-draft-picks",
+    shipped: "pre-emptive: an IR spot is not a draft pick",
+    // ⚠️ THE ISOLATING CASE. The default fixture has NO reserve slots, so this defect is invisible
+    // to every other test in the suite — which is precisely how it would have shipped. A 3-IR
+    // league would draft 160 players and be told its pool is 190.
+    detail: "Counts IR/taxi spots toward the pool, inflating it by the whole reserve bench.",
+    file: "lib/league-delta.ts",
+    from: 'const NON_DRAFT_SLOTS = new Set(["IR", "TAXI"])',
+    to: "const NON_DRAFT_SLOTS = new Set([])",
+    grep: "IR and taxi spots are not draft picks",
+  },
+  {
+    id: "page-numbering-restarts-each-page",
+    shipped: "pre-emptive: the row number silently stops meaning rank",
+    // `i + 1` over a paged slice renders "1" at the top of every page. Nothing looks broken — the
+    // rows are right, the order is right, and only the leftmost column is quietly lying about what
+    // it measures.
+    detail: "Numbers rows by their position on screen rather than their position in the board.",
+    file: "components/fantasy/my-league.tsx",
+    from: "                      {(pageSize === ALL_ROWS ? 0 : safePage * pageSize) + i + 1}",
+    to: "                      {i + 1}",
+    grep: "numbering continues across pages",
+  },
+  {
+    id: "late-page-survives-a-filter-change",
+    shipped: "pre-emptive: an empty table that reads as 'you have no TEs'",
+    // ⭐ DECLARED GREEN, and MEASURED both ways round rather than reasoned about — which is the only
+    // reason it is here. Two independent mechanisms deliver "a filter change never empties the
+    // table": the tab handler resets the page to 0, and the render clamps `page` to the new last
+    // page. Breaking EITHER alone leaves the other holding, so no single-line defect is observable
+    // and the case is a statement about defence in depth, not about the assertion being decorative.
+    //
+    // ⚠️ THIS IS THE `and`-COMPOSED-CLAUSE TRAP FACING THE OTHER WAY (NF-D17): there, a guard stayed
+    // green because a DIFFERENT clause already refused the fixture. Here the redundancy is
+    // deliberate and wanted — but it has the same consequence for provability, so it gets said out
+    // loud instead of being left as a case that quietly always passes. The break below removes the
+    // PRIMARY mechanism (the reset); the clamp catches it and the table stays populated.
+    //
+    // If this ever flips to RED, the two mechanisms are no longer independent and this note is
+    // stale — fix the note, do not delete the case.
+    expect: "GREEN",
+    detail: "Removes the page reset on a position change; the render-time clamp still holds.",
+    file: "components/fantasy/my-league.tsx",
+    from: "                setPos(v)\n                setPage(0)",
+    to: "                setPos(v)",
+    grep: "never shows an empty table",
+  },
+  {
+    id: "importer-ignores-the-quota",
+    shipped: "G100-C1 — a free account at its quota could still import a SECOND league",
+    // ⭐ THE ONE THE OPERATOR HIT. The manual editor refused it and the importer did not, so the
+    // limit was met as a 409 after choosing a platform, typing a username and waiting on a preview.
+    // The tier is enforced by WHICH COMPONENT RENDERS — #681's lesson, on the two create paths.
+    detail: "Restores the ungated league list: every league is importable regardless of quota.",
+    file: "components/fantasy/league-import.tsx",
+    from: "                const locked = atQuota && !saved",
+    to: "                const locked = false",
+    grep: "a SECOND league cannot be chosen",
+  },
+  {
+    id: "the-quota-locks-the-league-you-already-have",
+    shipped: "pre-emptive: the fix, applied one clause too widely",
+    // ⚠️ THE OTHER SIDE OF THE SAME CLAUSE, and the reason the fixture carries both a saved and an
+    // unsaved league. Re-importing the league you already have is an UPDATE — it creates nothing,
+    // the server's cap does not apply, and it is how a returning user refreshes a roster mid-season.
+    // "Lock everything once at quota" passes the case above and breaks that.
+    detail: "Locks every league at quota, including the one already saved (an update, not a create).",
+    file: "components/fantasy/league-import.tsx",
+    from: "                const locked = atQuota && !saved",
+    to: "                const locked = atQuota",
+    grep: "a SECOND league cannot be chosen",
+  },
+  {
+    id: "refusal-leads-to-a-dead-route",
+    shipped: "E9.56c — every locked CTA pointed at `/pricing`, a route that does not exist",
+    // The real defect, re-introduced on the new surface. A dead CTA is invisible to `next build`
+    // (these are `<Link href>` to a literal, resolved at runtime) and to any test that does not
+    // assert the target — so the entire conversion path off a refusal 404s and looks perfect.
+    detail: "Points the upgrade CTA at the route E9.56c shipped and had to fix.",
+    file: "components/fantasy/shared.tsx",
+    from: "          href={SUBSCRIBE_HREF}\n          className=\"inline-flex items-center gap-1.5 rounded border border-[#10b981]/40",
+    to: "          href=\"/pricing\"\n          className=\"inline-flex items-center gap-1.5 rounded border border-[#10b981]/40",
+    grep: "carries a way to lift it",
+  },
 ]
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
