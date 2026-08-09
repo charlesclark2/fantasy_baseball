@@ -246,22 +246,66 @@ def test_the_recorded_MH2_5_and_NF_B3_verdicts_are_untouched():
     assert "0.8773" in nb, "NF-B3's recorded whole-field DSR must remain on the record verbatim"
 
 
-def test_dsr_conv_is_not_retro_wired_into_either_recorded_harness():
-    """⭐ THE STRONGEST FORM OF 'CANNOT RE-DECIDE': the recorded stories' own harnesses must still
-    call `dsr_gate` WITHOUT `degenerate_arms`, so re-running them reproduces the recorded number.
+# ⚠️ WHICH recorded harness routes through `dsr_gate` is a MEASURED fact, not an assumption — and
+# getting it wrong makes the forward-only guard below vacuous. `run_nf_b3_joint.py` does NOT call
+# `dsr_gate` at all (its only textual hit is the dict key "folds_needed_for_dsr_gate"); it reaches
+# DSR through the shared `deflated_sharpe` primitive, as most fantasy legs do. So the two harnesses
+# need DIFFERENT invariants, and each must be proven NON-VACUOUSLY.
+_RECORDED_HARNESSES = {
+    "betting_ml/scripts/mh2_5_sigma_recalibration.py": True,                                # calls
+    "quant_sports_intel_models/football/nfl/fantasy/run_nf_b3_joint.py": False,             # doesn't
+}
 
-    ⚠️ Comments are stripped first — a source-inspection guard that prose can satisfy is vacuous
-    (INC-38). Here the inverse: a comment merely MENTIONING the parameter must not trip it.
-    """
-    for rel in ("betting_ml/scripts/mh2_5_sigma_recalibration.py",
-                "quant_sports_intel_models/football/nfl/fantasy/run_nf_b3_joint.py"):
-        src = (REPO / rel).read_text()
-        code = "\n".join(ln.split("#")[0] for ln in src.splitlines())
-        for m in re.finditer(r"dsr_gate\s*\(", code):
+
+def _code_of(rel: str) -> str:
+    """Source with `#` comments stripped — a source guard that PROSE can satisfy is vacuous
+    (INC-38), and a comment merely MENTIONING the parameter must not trip these."""
+    return "\n".join(ln.split("#")[0] for ln in (REPO / rel).read_text().splitlines())
+
+
+@pytest.mark.parametrize("rel,calls_dsr_gate", sorted(_RECORDED_HARNESSES.items()))
+def test_dsr_conv_is_not_retro_wired_into_a_recorded_harness(rel, calls_dsr_gate):
+    """⭐ THE STRONGEST FORM OF 'CANNOT RE-DECIDE': re-running either recorded harness must
+    reproduce its recorded number, so neither may have picked up the new convention."""
+    code = _code_of(rel)
+    sites = list(re.finditer(r"dsr_gate\s*\(", code))
+
+    if calls_dsr_gate:
+        # ⚠️ The anti-vacuity assertion. Without it, a harness that stopped calling `dsr_gate`
+        # (or a renamed function) would make the loop below iterate ZERO times and PASS on nothing.
+        assert sites, (f"{rel} is registered as a dsr_gate caller but has no call site — the "
+                       f"forward-only check below would pass vacuously")
+        for m in sites:
             tail = code[m.end():m.end() + 400]
             assert "degenerate_arms" not in tail, (
                 f"{rel} calls dsr_gate with degenerate_arms — DSR-CONV is FORWARD-ONLY and must "
                 f"never be retro-applied to a recorded story's harness (its null STANDS)")
+    else:
+        # This harness reaches DSR through `deflated_sharpe` directly. Its forward-only guarantee is
+        # therefore that it does not use the new parameter AND that the shared primitive is
+        # unchanged (pinned separately, below).
+        assert not sites, (f"{rel} now calls dsr_gate — update _RECORDED_HARNESSES and re-check "
+                           f"that its recorded verdict is still reproducible")
+        assert "degenerate_arms" not in code, (
+            f"{rel} references degenerate_arms — DSR-CONV must not reach a recorded harness")
+
+
+def test_the_shared_deflated_sharpe_primitive_has_no_degenerate_concept():
+    """⭐ THE REAL REASON EVERY NON-`dsr_gate` LEG IS SAFE, asserted rather than assumed.
+
+    Most §0.5 legs — including every fantasy leg except via its own harness — call
+    `deflated_sharpe` directly. DSR-CONV lives ONE LAYER UP, in `dsr_gate`, so the primitive is
+    untouched and those legs are byte-identical. If a future change pushed the convention DOWN into
+    `deflated_sharpe`, it would silently alter every recorded leg at once — this is the tripwire.
+    """
+    import inspect
+
+    from betting_ml.utils import overfitting
+
+    params = inspect.signature(overfitting.deflated_sharpe).parameters
+    assert "degenerate_arms" not in params and "degenerates" not in params, (
+        "deflated_sharpe grew a degenerate concept — DSR-CONV must stay in `dsr_gate`, or it "
+        "silently re-scores every leg that calls the primitive directly")
 
 
 def test_even_the_recorded_degenerate_excluded_figures_do_not_cross_the_gate():
