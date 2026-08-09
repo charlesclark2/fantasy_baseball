@@ -272,6 +272,32 @@ export const FORMAT_LOCK_EXPLANATION =
  *  window where the frontend has shipped and the API has not (NF-C0). */
 export const FORMAT_LOCK_TITLE = "That format is part of a membership"
 
+/** Under the Season Projections "reference scoring" picker, where the same lock applies to a
+ *  control that is NOT the board's format picker — the page is scoring-independent and this only
+ *  chooses which reference total the table shows and sorts by. */
+export const REFERENCE_SCORING_LOCK_NOTE =
+  "The reference total shown here is full-PPR, which is free for everyone. Half-PPR and standard are re-scored for members."
+
+/** The player page's per-format tiles, where the two paid ones render a lock instead of a number. */
+export const FORMAT_TILE_LOCK_SUB = "Part of a membership"
+
+// ── The raw projected stat line ─────────────────────────────────────────────────────────────────
+//
+// ⚠️ WHY THIS IS GATED AT ALL, since it is the one piece of this that is not obviously a "format".
+// The per-format totals differ ONLY by how receptions are scored, so a visible reception count
+// makes the paid numbers exact arithmetic: `half = full − 0.5 × rec`, `standard = full − 1.0 × rec`.
+// Measured on a real served player — full 178.4, half 147.5, standard 116.5, receptions 61.9 —
+// both identities hold to a tenth. Locking the totals while printing the receptions beside them
+// would be a paywall anyone can do in their head, on the page that shows both.
+//
+// ⛔ It is NOT claimed as anti-scraping. The free board is scrapeable by design and that was
+// accepted when this tier was drawn; this is about not printing the answer next to the question.
+
+export const STAT_LINE_LOCK_TITLE = "The projected stat line is part of a membership"
+
+export const STAT_LINE_LOCK_DETAIL =
+  "Targets, receptions, yards and touchdowns — the projected production the scoring formats are applied to. Members see the full line for every player, in every format."
+
 /** ...and the entitled version of the same refusal, which is a genuine fault and must not be
  *  dressed up as one. */
 export const BOARD_LOAD_ERROR_DETAIL =

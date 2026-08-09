@@ -112,10 +112,18 @@ test.describe("the free generic board", () => {
 
     await expect(page.getByRole("heading", { name, level: 1 })).toBeVisible()
     expect(page.url(), "a logged-out visitor was redirected off a player page").toContain(id)
-    expect(
-      await page.locator(LOCK_CHIP).count(),
-      "a padlock rendered on a free player page",
-    ).toBe(0)
+
+    // ⚠️ NARROWED FROM "no padlock anywhere on the page". That was right when nothing on this page
+    // was withheld; two of the four format tiles are legitimately locked now, so a page-wide count
+    // of zero would fail on correct behaviour — and raising the count to two would pass on a
+    // padlock over ANY tile, including the free one. The claim that actually matters is that the
+    // FREE numbers are not locked, so it is scoped to the tiles that carry them.
+    for (const tile of ["format-tile-ppr", "format-tile-league"]) {
+      expect(
+        await page.getByTestId(tile).locator(LOCK_CHIP).count(),
+        `a padlock rendered over the free ${tile} figure`,
+      ).toBe(0)
+    }
 
     // The projection itself, not merely the identity header — identity alone is exactly what the
     // retired public view showed, so a page rendering only that would look right and be the bug.
@@ -449,6 +457,90 @@ test.describe("one preset is free, the rest are the membership", () => {
     await expect(body, "a refused board says nothing about why").toContainText(
       "That format is part of a membership",
     )
+  })
+})
+
+test.describe("the paid scorings are not readable, or derivable, on a free surface", () => {
+  // The board's format picker was one of three places the paid scorings surface. The other two are
+  // client-side renders of a payload that is identical for every caller by design, so nothing
+  // server-side can hold this line — only what a component chooses to print.
+
+  test("Season Projections offers only the free reference scoring", async ({ page }) => {
+    await mockApi(page)
+    await page.goto("/fantasy/projections")
+    await expect(page.locator("table tbody tr").first()).toBeVisible()
+
+    await page.getByLabel("Reference scoring").click()
+    const options = page.getByRole("option")
+    await expect(options.first()).toBeVisible()
+    await expect(options.filter({ hasText: /^Full PPR$/ })).toBeEnabled()
+    for (const paid of [/Half PPR/, /Standard/]) {
+      const opt = options.filter({ hasText: paid }).first()
+      await expect(opt, `a paid reference scoring was removed rather than locked`).toBeVisible()
+      await expect(opt, `a paid reference scoring is selectable`).toBeDisabled()
+      await expect(opt).toContainText(/members/i)
+    }
+    await page.keyboard.press("Escape")
+    await expect(page.getByTestId("reference-scoring-lock-note")).toBeVisible()
+  })
+
+  test("the player page locks the two paid totals and keeps the free one", async ({ page }) => {
+    const errors = collectPageErrors(page)
+    await mockApi(page)
+    const { id } = FIXTURES.projectionsEntitled().players[0]
+    await page.goto(`/fantasy/player/${id}`)
+    await expect(page.getByTestId("format-tile-ppr")).toBeVisible()
+
+    for (const tile of ["format-tile-std", "format-tile-half"]) {
+      const el = page.getByTestId(tile)
+      await expect(el, `${tile} was removed rather than locked`).toBeVisible()
+      await expect(el.locator(LOCK_CHIP), `${tile} shows no lock`).toHaveCount(1)
+      // ⭐ THE NUMBER ITSELF MUST BE GONE, not merely accompanied by a padlock. A lock rendered
+      // beside a visible figure is decoration, and it is what a half-applied gate looks like.
+      //
+      // ⚠️ SCOPED TO THE VALUE, not the tile. A tile's SUB-LINE carries numbers of its own (the
+      // full-season rate, the 80% bounds), so a whole-tile text match is satisfied by the sub-line
+      // — measured: the red-proof case that locks the FREE total stayed GREEN against the tile-wide
+      // form, because "Full-season rate: 193.2" matched. The value has its own handle for this.
+      await expect(page.getByTestId(`${tile}-value`), `${tile} still prints a number`)
+        .not.toHaveText(/\d[\d,]*\.\d/)
+    }
+    // ...and the free total is untouched, so the gate cannot be satisfied by locking everything.
+    await expect(page.getByTestId("format-tile-ppr-value")).toHaveText(/\d[\d,]*\.\d/)
+    await expectNoPageErrors(errors)
+  })
+
+  test("the raw stat line is withheld, and says so", async ({ page }) => {
+    // ⭐⭐ THE ONE THE OTHER TWO DEPEND ON. The reference totals differ only in how a reception
+    // scores, so a visible reception count makes the locked figures exact arithmetic:
+    // half = full − 0.5·rec. Locking the totals with the stat line underneath is a paywall the
+    // reader can do in their head, on the single page that shows both.
+    await mockApi(page)
+    const { id } = FIXTURES.projectionsEntitled().players[0]
+    await page.goto(`/fantasy/player/${id}`)
+    await expect(page.getByTestId("format-tile-ppr")).toBeVisible()
+
+    const lock = page.getByTestId("stat-line-lock")
+    await expect(lock, "the stat line is neither shown nor explained").toBeVisible()
+    await expect(lock.getByRole("link")).toBeVisible()
+
+    // The section heading stays — the page should read as "this exists and is withheld", not as a
+    // page that quietly lost a section.
+    await expect(page.locator("body")).toContainText("2026 season projection")
+
+    const text = await page.locator("body").innerText()
+    expect(forbiddenPhrasesIn(text), "denied claim language on the locked player page").toEqual([])
+  })
+
+  test("a free player page does not call a preset the reader's own league", async ({ page }) => {
+    await mockApi(page)
+    const { id } = FIXTURES.projectionsEntitled().players[0]
+    await page.goto(`/fantasy/player/${id}`)
+    await expect(page.getByTestId("format-tile-league")).toBeVisible()
+    await expect(
+      page.getByTestId("format-tile-league"),
+      "a preset is labelled as the free visitor's own league",
+    ).not.toContainText(/your league/i)
   })
 })
 
