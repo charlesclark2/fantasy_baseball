@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { Page, Request, Route } from "@playwright/test"
+import { buildEnv } from "./env"
 
 /**
  * E9.63 — hermetic API + third-party interception.
@@ -13,6 +14,11 @@ import type { Page, Request, Route } from "@playwright/test"
  */
 
 export const API_PREFIX = "/__e2e-api"
+
+/** The fake PostHog token the E2E build is compiled with — read from the same file the build
+ *  sourced, never hardcoded, so a change to `e2e.env` cannot silently orphan the remote-config
+ *  stub keyed on it (`buildEnv` throws rather than returning undefined). */
+const POSTHOG_E2E_TOKEN = buildEnv("NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN")
 
 const FIXTURE_DIR = join(process.cwd(), "e2e", "fixtures", "api")
 
@@ -56,6 +62,15 @@ export const FIXTURES = {
   // expected-games rows — see that script's header.
   boardFree: () => fixture("fantasy-nfl-board-full_ppr-12-2026-free.json"),
   manifestFree: () => fixture("fantasy-nfl-manifest-2026-free.json"),
+  // ⭐ G100-C1 — a free account's ONE saved league, as `/fantasy/nfl/my-teams` serves it.
+  //
+  // Deliberately a league that DIFFERS from the free preset in three ways at once (10 teams not 12,
+  // half-PPR not full, superflex + two starting TEs with a TE reception premium). A fixture close to
+  // `full_ppr`/12 would produce a near-empty delta, and every assertion about the activation screen
+  // would pass just as well against a broken delta computation — the "fixture where nothing can go
+  // wrong" shape. These settings move QBs and TEs by whole tiers, so the screen has something real
+  // to show and a sign error is visible.
+  myTeams: () => fixture("fantasy-nfl-my-teams.json"),
 }
 
 /**
@@ -92,6 +107,18 @@ export type MockOptions = {
    * harness like a page that never asked for anything.
    */
   fail?: string[]
+  /**
+   * ⭐ G100-C1 — how many personalized leagues this caller has SAVED.
+   *
+   *   "none"     — a fresh free account. THE DEFAULT, because it is the state every new user is in
+   *                and the state the activation screen's empty branch has to handle. A spec that
+   *                forgets to name a mode gets the honest starting point rather than a configured
+   *                league it never asked for.
+   *   "one"      — the free tier, in use.
+   *   "overQuota"— a LAPSED SUBSCRIBER: three saved, one served. `withheld_by_quota` is non-zero,
+   *                which is the only way to exercise the "nothing was deleted" notice.
+   */
+  leagues?: "none" | "one" | "overQuota"
 }
 
 export type ApiMock = {
@@ -128,6 +155,47 @@ function payloadFor(pathname: string, entitlement: Entitlement): unknown | undef
   if (pathname === "/picks/featured") return FIXTURES.featuredPick()
   if (pathname === "/fantasy/nfl/featured-player") return FIXTURES.featuredFantasyPlayer()
   return undefined
+}
+
+/**
+ * G100-C1 — the PER-CALLER saved-league reads.
+ *
+ * ⚠️ Kept OUT of `payloadFor` on purpose. That function is a pure map from (path, entitlement) to a
+ * fixture, which is exactly right for the generic surfaces — their whole invariant is that the
+ * payload does NOT depend on the caller. These two do. Threading a saved-league count through
+ * `payloadFor` would blur the one distinction the harness exists to model, so the per-caller reads
+ * get their own resolver and the shape of the code states which half of the tier each path is in.
+ */
+function personalPayloadFor(
+  pathname: string,
+  leagues: NonNullable<MockOptions["leagues"]>,
+): unknown | undefined {
+  if (pathname !== "/fantasy/nfl/my-teams" && pathname !== "/fantasy/leagues") return undefined
+
+  const base = FIXTURES.myTeams()
+  const one = base.leagues[0]
+
+  if (leagues === "none") {
+    return pathname === "/fantasy/leagues"
+      ? []
+      : { ...base, leagues: [], saved_total: 0, withheld_by_quota: 0 }
+  }
+
+  if (leagues === "overQuota") {
+    // A lapsed subscriber: three saved, one served. The MANAGEMENT list returns all three (they are
+    // the user's own configs and must stay deletable); the PERSONALIZATION serve returns one. That
+    // asymmetry is the behaviour, so the harness has to reproduce it rather than smoothing it over.
+    const all = [
+      one,
+      { ...one, league_id: "e2e-league-2", name: "Dynasty B", created_at: "2026-08-02T12:00:00Z" },
+      { ...one, league_id: "e2e-league-3", name: "Dynasty C", created_at: "2026-08-03T12:00:00Z" },
+    ]
+    return pathname === "/fantasy/leagues"
+      ? all
+      : { ...base, leagues: [one], saved_total: 3, withheld_by_quota: 2 }
+  }
+
+  return pathname === "/fantasy/leagues" ? [one] : base
 }
 
 /**
@@ -215,7 +283,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
       }
     }
 
-    let body = payloadFor(apiPath, entitlement)
+    let body = personalPayloadFor(apiPath, options.leagues ?? "none") ?? payloadFor(apiPath, entitlement)
     if (body === undefined) {
       mock.unmatched.push(apiPath + search)
       await route.fulfill({
@@ -281,4 +349,134 @@ export function collectPageErrors(page: Page): string[] {
   const errors: string[] = []
   page.on("pageerror", (e) => errors.push(String(e)))
   return errors
+}
+
+/**
+ * G100-C1 — intercept the analytics wire and record what was CAPTURED.
+ *
+ * ⭐ WHY THE WIRE AND NOT A STUB. The activation event is a CONTRACT with G100-D0's funnel
+ * dashboard: the event NAME and its dimensions are what the dashboard reads. A test that stubbed
+ * `posthog.capture` and asserted it was called would pass even if PostHog were never initialised —
+ * which is exactly the state this suite was in until G100-C1 armed the token, and is the "asserting
+ * a NAME rather than the thing the name refers to" shape the red-proof harness exists to catch.
+ * Reading the request body proves the event actually left the page under the name the dashboard
+ * expects.
+ *
+ * ⚠️ Install INSTEAD OF `mockApi`'s `blockThirdParty` for the ingest route — this route is
+ * registered after it, and Playwright matches the most recently added handler first.
+ *
+ * PostHog batches, so a captured event may arrive in a `batch` array or as a single `{event, ...}`;
+ * both shapes are flattened here. Bodies can also be compressed or form-encoded depending on
+ * transport, so a body this cannot parse is IGNORED rather than throwing — an assertion that an
+ * event is ABSENT must therefore never rest on this alone (see `expectCaptured`).
+ */
+export type CapturedEvent = { event: string; properties: Record<string, unknown> }
+
+export async function captureAnalytics(page: Page): Promise<CapturedEvent[]> {
+  const events: CapturedEvent[] = []
+
+  // ⭐⭐ WITHOUT THIS, POSTHOG CAPTURES NOTHING IN PLAYWRIGHT AND EVERY ANALYTICS ASSERTION IS
+  // VACUOUS — INCLUDING, AND ESPECIALLY, ONE ASSERTING AN EVENT DID *NOT* FIRE.
+  //
+  // posthog-js runs a bot filter on every `capture()` (`_is_bot` → `xo`, measured against 1.386.6)
+  // and TWO of its clauses catch Playwright. BOTH have to be defeated; clearing either one alone
+  // changes nothing, which is what makes this so easy to misdiagnose:
+  //
+  //   1. `!!navigator.webdriver` — Playwright sets it on every page.
+  //   2. `navigator.userAgentData.brands` containing "HeadlessChrome". ⚠️ NOT fixed by overriding
+  //      the user-agent STRING via `test.use({ userAgent })`: `userAgentData` is a separate
+  //      structured field and keeps reporting the real brand. A UA override therefore LOOKS like
+  //      the fix and does nothing — measured.
+  //
+  // The failure is completely silent: the SDK initialises, POSTs `/flags/`, loads its remote
+  // config, and then drops every event including `$pageview`. An empty ingest log is
+  // indistinguishable from "the app never called capture()". Two other plausible causes were
+  // measured and RULED OUT along the way, so nobody re-chases them: the shipped CSP (`connect-src
+  // 'self'` already covers the same-origin `/ingest` path — allowing `blob:` workers changed
+  // nothing) and the remote-config stub below.
+  //
+  // Confined to the harness — no application code knows about it — and `addInitScript` runs before
+  // any page script, so the SDK never observes the real values.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => false, configurable: true })
+    Object.defineProperty(navigator, "userAgentData", {
+      get: () => ({
+        brands: [
+          { brand: "Chromium", version: "140" },
+          { brand: "Google Chrome", version: "140" },
+        ],
+        mobile: false,
+        platform: "macOS",
+      }),
+      configurable: true,
+    })
+  })
+
+  await page.route("**/ingest/**", async (route: Route, request: Request) => {
+    const path = new URL(request.url()).pathname
+
+    // posthog-js will not finish initialising until its REMOTE CONFIG resolves, and it reads that
+    // from `window._POSTHOG_REMOTE_CONFIG[token].config` set by this script. An empty body leaves
+    // the SDK waiting; every feature is switched OFF here so the harness pulls in no further
+    // external dependencies (recordings, surveys, experiments) that it would then have to model.
+    if (path.endsWith("/config.js")) {
+      const token = POSTHOG_E2E_TOKEN
+      const config = {
+        supportedCompression: [],
+        autocapture_opt_out: true,
+        hasFeatureFlags: false,
+        sessionRecording: null,
+        surveys: false,
+        captureDeadClicks: false,
+        defaultIdentifiedOnly: false,
+        errorTracking: { autocaptureExceptions: false },
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/javascript",
+        body: `window._POSTHOG_REMOTE_CONFIG = ${JSON.stringify({ [token]: { config, siteApps: [] } })};`,
+      })
+      return
+    }
+
+    // ⚠️ ANY OTHER SCRIPT MUST BE ANSWERED AS JAVASCRIPT, NOT JSON. `/ingest/**` also serves
+    // posthog-js's own assets, and a JSON body handed to a `<script>` throws
+    // `SyntaxError: Unexpected token ':'` — which surfaced as three uncaught page errors and failed
+    // four unrelated assertions running `expectNoPageErrors`, i.e. a harness bug wearing an
+    // application defect's clothes.
+    if (path.endsWith(".js")) {
+      await route.fulfill({ status: 200, contentType: "application/javascript", body: "" })
+      return
+    }
+
+    if (request.method() === "POST" && /\/(e|i\/v0\/e)\/?$/.test(path)) {
+      try {
+        const raw = request.postData()
+        if (raw) {
+          const text = raw.startsWith("data=") ? decodeURIComponent(raw.slice(5)) : raw
+          const decoded = /^[A-Za-z0-9+/=_-]+$/.test(text.trim())
+            ? Buffer.from(text.trim(), "base64").toString("utf8")
+            : text
+          const parsed = JSON.parse(decoded)
+          for (const item of Array.isArray(parsed) ? parsed : (parsed.batch ?? [parsed])) {
+            if (item && typeof item.event === "string") {
+              events.push({ event: item.event, properties: item.properties ?? {} })
+            }
+          }
+        }
+      } catch {
+        /* unparseable transport — never throw from a route handler; see the note above */
+      }
+    }
+
+    // Answered, never aborted: an aborted request makes posthog-js RETRY, which would multiply a
+    // single capture across the retry schedule and break any "fired exactly once" assertion.
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: 1 }),
+    })
+  })
+
+  return events
 }

@@ -3,7 +3,7 @@
 import React, { useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
-import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
+import { canAccess, canAccessFantasyBeta, canConfigureLeague } from "@/lib/entitlements"
 import { getMfaStatus, getSessionAuthMethod, subscriberMfaRequired } from "@/lib/cognito"
 import { TermsGate } from "@/components/terms-gate"
 
@@ -131,6 +131,37 @@ export function FantasyBetaGuard({ children }: { children: React.ReactNode }) {
   }, [loading, accessToken, groups, router, pathname])
 
   if (loading || accessToken === null || !canAccessFantasyBeta(groups)) return null
+  return <>{children}</>
+}
+
+// ⭐ G100-C1 — the SAVED-LEAGUE surfaces: My League, League Settings, Import.
+//
+// Signed in + a personalization quota above zero. That is every signed-in account today (the free
+// quota is 1) and it is deliberately NOT `canAccess("fantasy", …)`: the whole story is that a free
+// account gets one personalized league, so gating these on fantasy entitlement would 403 exactly
+// the users this exists for.
+//
+// ⚠️ THE TWO REFUSALS GO TO DIFFERENT PLACES, and getting that wrong costs signups. A logged-out
+// visitor is sent to LOGIN (with `next`, so they land back here) — they need an ACCOUNT, and
+// sending them to /subscribe asks them to pay for something free. A signed-in caller whose quota
+// has been withdrawn (`FREE_PERSONALIZED_LEAGUE_QUOTA=0`) is sent to /subscribe, because for them
+// it genuinely is a membership. This mirrors the server exactly: 401 vs 403.
+//
+// ⛔ NOT the gate. `/fantasy/leagues` and `/fantasy/import/*` enforce the same rule server-side and
+// these are WRITE endpoints — hiding a page stops nobody from POSTing a config straight to the API.
+export function FantasyLeagueGuard({ children }: { children: React.ReactNode }) {
+  const { accessToken, groups, loading } = useAuth()
+  const router = useRouter()
+  const pathname = usePathname()
+  const allowed = canConfigureLeague(accessToken !== null, groups)
+
+  useEffect(() => {
+    if (loading) return
+    if (accessToken === null) { router.push(loginHref(pathname)); return }
+    if (!allowed) { router.push("/subscribe"); return }
+  }, [loading, accessToken, allowed, router, pathname])
+
+  if (loading || !allowed) return null
   return <>{children}</>
 }
 

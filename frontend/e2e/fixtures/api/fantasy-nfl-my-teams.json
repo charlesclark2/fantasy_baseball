@@ -1,0 +1,53 @@
+{
+  "season": 2026,
+  "quota": 1,
+  "saved_total": 1,
+  "withheld_by_quota": 0,
+  "leagues": [
+    {
+      "league_id": "e2e-league-1",
+      "name": "Sunday Money",
+      "sport": "nfl",
+      "n_teams": 10,
+      "ppr": "half",
+      "superflex": true,
+      "description": "",
+      "format_version": "1.0",
+      "created_at": "2026-08-01T12:00:00Z",
+      "updated_at": "2026-08-01T12:00:00Z",
+      "source_platform": "sleeper",
+      "source_league_id": "999999",
+      "imported_at": "2026-08-01T12:00:00Z",
+      "source_team_key": null,
+      "source_team_name": null,
+      "imported_roster": null,
+      "roster_synced_at": null,
+      "captured_rules": {},
+      "scoring": {
+        "per_stat": {
+          "pass_yds": 0.04,
+          "pass_td": 4,
+          "pass_int": -2,
+          "rush_yds": 0.1,
+          "rush_td": 6,
+          "rec": 0.5,
+          "rec_yds": 0.1,
+          "rec_td": 6,
+          "fum_lost": -2,
+          "two_pt": 2
+        },
+        "position_bonuses": { "TE": { "rec": 0.5 } }
+      },
+      "roster": [
+        { "name": "QB", "count": 1, "eligible": ["QB"], "bench": false },
+        { "name": "RB", "count": 2, "eligible": ["RB"], "bench": false },
+        { "name": "WR", "count": 2, "eligible": ["WR"], "bench": false },
+        { "name": "TE", "count": 2, "eligible": ["TE"], "bench": false },
+        { "name": "SUPERFLEX", "count": 1, "eligible": ["QB", "RB", "WR", "TE"], "bench": false },
+        { "name": "K", "count": 1, "eligible": ["K"], "bench": false },
+        { "name": "DST", "count": 1, "eligible": ["DST"], "bench": false },
+        { "name": "BENCH", "count": 6, "eligible": [], "bench": true }
+      ]
+    }
+  ]
+}

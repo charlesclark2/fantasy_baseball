@@ -26,6 +26,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 
 ENTITLEMENT = REPO / "app/backend/services/entitlement.py"
+DEPENDENCIES = REPO / "app/backend/dependencies.py"
 ROUTER = REPO / "app/backend/routers/fantasy.py"
 TS_ENTITLEMENTS = REPO / "frontend/lib/entitlements.ts"
 NAV = REPO / "frontend/lib/nav-model.ts"
@@ -130,11 +131,32 @@ CASES = [
      "        return False\n    return bool(ent and not ent.is_anonymous)",
      "test_a_signed_in_caller_without_fantasy_is_treated_as_free_not_as_entitled", SUITE),
 
-    # ── the G100-C1 seam ──────────────────────────────────────────────────────────────────────
-    ("let the free personalization quota drift in as a default", ENTITLEMENT,
-     'FREE_PERSONALIZED_LEAGUE_QUOTA = int(os.getenv("FREE_PERSONALIZED_LEAGUE_QUOTA", "0"))',
+    # ── the G100-C1 seam, now FLIPPED ON ──────────────────────────────────────────────────────
+    # 🗄️ This case used to break the quota by raising it 0 → 1, which was the drift the seam
+    # existed to prevent. G100-C1 (2026-08-08) made that raise the SHIPPED value, so the same case
+    # now points the other way: the number is pinned in BOTH directions, and either a revert or a
+    # further raise is a pricing change that has to be seen.
+    ("drift the free personalization quota away from one", ENTITLEMENT,
      'FREE_PERSONALIZED_LEAGUE_QUOTA = int(os.getenv("FREE_PERSONALIZED_LEAGUE_QUOTA", "1"))',
-     "test_the_free_personalized_league_quota_is_zero_today", SUITE),
+     'FREE_PERSONALIZED_LEAGUE_QUOTA = int(os.getenv("FREE_PERSONALIZED_LEAGUE_QUOTA", "3"))',
+     "test_the_free_personalized_league_quota_is_one", SUITE),
+
+    # ⭐ AND THE CAPABILITY ITSELF — the one-line "fix" that opens every gate at once. A free
+    # account holds a QUOTA against a PAID capability; moving the capability into FREE_CAPABILITIES
+    # would silently free every other surface that reads it.
+    ("reclassify PERSONALIZATION as free rather than granting a quota", ENTITLEMENT,
+     "FREE_CAPABILITIES: frozenset[Capability] = frozenset({Capability.GENERIC_BOARD})",
+     "FREE_CAPABILITIES: frozenset[Capability] = frozenset("
+     "{Capability.GENERIC_BOARD, Capability.PERSONALIZATION})",
+     "test_personalization_is_still_a_paid_capability_after_the_free_grant", SUITE),
+
+    # ⭐ THE NO-REGRESSION HALF, after G100-C1 moved it. "personalization is reachable" no longer
+    # discriminates on its own — it passes against a server with no gate at all. Withdrawing the
+    # quota is what proves the gate READS it.
+    ("wave every caller through the personalization gate", DEPENDENCIES,
+     "    if entitlement.allows_personalization(entitlement.resolve_entitlement(request)):",
+     "    if True:",
+     "test_personalization_is_still_refused_when_the_free_quota_is_withdrawn", SUITE),
 
     # ── ONE preset is free (2026-08-08) ───────────────────────────────────────────────────────
     # The whole gate is one predicate and one call site, so it has exactly two ways to fail open:

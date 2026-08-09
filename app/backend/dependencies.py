@@ -176,6 +176,37 @@ def require_fantasy_beta_access(request: Request, user_id: str = Depends(get_use
     raise HTTPException(status_code=403, detail="Fantasy league settings access required")
 
 
+def require_personalized_league_access(
+    request: Request, user_id: str = Depends(get_user_id)
+) -> str:
+    """G100-C1 — gate the SAVED-LEAGUE surface on the caller's personalization QUOTA.
+
+    ⭐ REPLACES `require_fantasy_beta_access` on the league editor + platform import. Until G100-C1
+    those were `admin` + `fantasy_comp` only; a free account now gets ONE personalized league, so the
+    question the gate asks changed from "which group are you in?" to "do you have a quota to spend?"
+    — and the answer comes from ONE place, `entitlement.personalized_league_quota`, rather than being
+    re-derived here. That is what makes the free tier a number an operator can move (including back
+    to 0) instead of a predicate someone has to rewrite.
+
+    ⚠️ IDENTITY FIRST, ENTITLEMENT SECOND, and the order is load-bearing. `get_user_id` resolves as a
+    dependency, so an anonymous caller gets 401 before the quota is consulted. That is the honest
+    status: every league record is keyed on a Cognito `sub`, so an anonymous caller has nowhere to
+    save one — this is "sign in", not "pay". Returning 403 there would send the client to the upgrade
+    CTA when the real next step is the signup one.
+
+    ⛔ A quota of 0 (the operator setting `FREE_PERSONALIZED_LEAGUE_QUOTA=0` to withdraw the free
+    tier) refuses a non-entitled caller with 403 — the paid message — while a subscriber is unaffected
+    because their quota comes from the storage cap, not from that env var.
+    """
+    from app.backend.services import entitlement
+
+    if entitlement.allows_personalization(entitlement.resolve_entitlement(request)):
+        return user_id
+    raise HTTPException(
+        status_code=403, detail="A Credence membership is required to save a league."
+    )
+
+
 def get_admin_user(request: Request, user_id: str = Depends(get_user_id)) -> str:
     """Like get_user_id, but raises 403 if the caller is not an admin.
 

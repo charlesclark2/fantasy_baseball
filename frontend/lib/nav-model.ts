@@ -28,6 +28,19 @@ export interface NavItem {
    *  see `isLocked`/the locked-branch rendering in `nav.tsx`). Only the past-season track record
    *  qualifies today: its data is genuinely public regardless of fantasy entitlement. */
   public?: boolean
+  /** ⭐ G100-C1 — free, but ONLY once signed in. Like `public` it survives a LOCKED surface; unlike
+   *  `public` it is hidden from a logged-out visitor.
+   *
+   *  ⚠️ WHY IT IS NOT JUST `public: true`. These surfaces need an account: a league is stored
+   *  against a Cognito `sub`, so `/fantasy/leagues` answers 401 without one and `FantasyLeagueGuard`
+   *  bounces to /login. Marking them public would put items in a logged-out visitor's nav whose only
+   *  behaviour is an immediate redirect — a menu that lies about what it opens. The signup pitch for
+   *  these belongs on the marketing surfaces, not in a nav item that bounces.
+   *
+   *  ⛔ It is NOT a way to make a paid surface free. The item's ENDPOINTS must genuinely serve a
+   *  free signed-in caller (the free personalization quota), which the server enforces
+   *  independently — this only decides whether a link is drawn. */
+  freeSignedIn?: boolean
 }
 
 export interface SurfaceGroup {
@@ -151,22 +164,36 @@ export const SPORTS: SportNav[] = [
               // OTHER surface's Player cell links out to, so it needs to be reachable on its own.
               { label: "Player Search", href: "/fantasy/players", key: "fantasy-players", public: true },
               { label: "Draft Optimizer", href: "/fantasy/draft", key: "fantasy-draft" },
+              // ⭐ G100-C1 — the ACTIVATION screen: a free account's one personalized board, led by
+              // the generic-vs-your-league delta. `freeSignedIn` because it survives the locked
+              // fantasy surface (it IS the free tier's personalization) but needs an account.
+              // Placed FIRST of the three league items: it is the payoff, and the two below it are
+              // how you get there.
+              {
+                label: "My League",
+                href: "/fantasy/my-league",
+                key: "fantasy-my-league",
+                freeSignedIn: true,
+              },
               // NF-C0 — platform import: pull the real league in from Sleeper/Yahoo. Sits ABOVE
               // the manual editor because it is the path most users should take; the editor stays
               // as the floor beneath it for every league we cannot reach compliantly.
+              // G100-C1: was `restrict: "fantasy_beta"` (admin + fantasy_comp); import is one of the
+              // two ways a free account configures its one league, so it is now free-signed-in.
               {
                 label: "Import League",
                 href: "/fantasy/import",
                 key: "fantasy-import",
-                restrict: "fantasy_beta",
+                freeSignedIn: true,
               },
               // NF-C0b — the manual customization floor: hand-enter a league we cannot import.
-              // Restricted to admin + fantasy_comp while the editor is still proving out.
+              // G100-C1: same widening as Import above. The editor is the GUARANTEE underneath the
+              // importer rather than a fallback, so the free tier gets both or neither.
               {
                 label: "My League Settings",
                 href: "/fantasy/league-settings",
                 key: "fantasy-league-settings",
-                restrict: "fantasy_beta",
+                freeSignedIn: true,
               },
               // NF-C6 — cross-league browse: every saved league's roster, scored under its own
               // format, in one place. Deliberately NOT `fantasy_beta`-restricted like Import/League
