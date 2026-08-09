@@ -327,3 +327,37 @@ class TestRegistration:
 
     def test_every_arm_and_foil_has_an_own_form_oracle(self):
         assert set(W2B.ORACLE_OF_FORM_W2B) == set(W2B.REAL_ARMS_W2B) | {W2B.FOIL_W2B}
+
+
+# ── the flip specs serve the object that was validated (MH2.1 (b)) ──────────────────────────────
+class TestFlipSpecs:
+    def test_post_flip_spec_matches_the_validated_artifact(self):
+        """`POST_FLIP_SPEC` is pinned to the committed bake-off artifact: the spec constant the
+        snapshot/staging path serves must be EXACTLY the per-position winners the gates
+        certified — a hand-edited spec that drifts from the validated artifact is the
+        'documented ≠ actually served' class."""
+        import json
+        from pathlib import Path
+        artifact = (Path(W2B.__file__).parent / "ablation_results"
+                    / "nf_w2b_injury_rate_bakeoff.json")
+        out = json.loads(artifact.read_text())
+        assert not out["smoke"], "the pinned artifact must be the REAL run, never a smoke"
+        for pos, spec in W2B.POST_FLIP_SPEC.items():
+            assert out["gates"][pos]["ship"], f"{pos} did not ship in the pinned artifact"
+            assert spec == out["positions"][pos]["winner"], (
+                f"{pos}: POST_FLIP_SPEC serves {spec} but the artifact validated "
+                f"{out['positions'][pos]['winner']}")
+
+    def test_specs_cover_every_position_with_legal_arms(self):
+        assert set(W2B.PRE_FLIP_SPEC) == set(WP.POSITIONS)
+        assert set(W2B.POST_FLIP_SPEC) == set(WP.POSITIONS)
+        assert set(W2B.POST_FLIP_SPEC.values()) <= set(W2B.REAL_ARMS_W2B)
+        assert set(W2B.PRE_FLIP_SPEC.values()) == {"base_noRate"}
+
+    def test_snapshot_quantile_indices_resolve(self):
+        from quant_sports_intel_models.football.nfl.fantasy import (
+            run_nf_w2b_projection_snapshot as SNAP,
+        )
+        assert WP.Q_LEVELS[SNAP.Q10] == pytest.approx(0.10)
+        assert WP.Q_LEVELS[SNAP.Q50] == pytest.approx(0.50)
+        assert WP.Q_LEVELS[SNAP.Q90] == pytest.approx(0.90)

@@ -268,6 +268,22 @@ def matrix_key_w2b(seasons: tuple[int, int]) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
 
+# ── The validated ship specs (MH2.1 (b): serve the object that was validated) ───────────────────
+#: PRE-flip: the production-incumbent lineage — the NF-W1 champion spec (base features, no
+#: injury families). NF-W2's TE `inj_zero_leg` (non-rate bundle) was validated but never
+#: staged, so the deployed baseline every position flips FROM is the NF-W1 champion.
+PRE_FLIP_SPEC: dict[str, str] = {p: "base_noRate" for p in WP.POSITIONS}
+#: POST-flip: the per-position WINNERS this bake-off certified — pinned to the committed
+#: artifact by guard test (`test_post_flip_spec_matches_the_validated_artifact`), so the spec
+#: constant cannot drift from what the gates actually validated.
+POST_FLIP_SPEC: dict[str, str] = {
+    "QB": "inj_zero_leg",
+    "RB": "inj_both",
+    "WR": "inj_both",
+    "TE": "inj_zero_leg",
+}
+
+
 # ── Gate composition + the hand null-classifier (the NF-D18/MH2.7 classify_null gap) ────────────
 #: Checks that are ANCHOR/REGISTRATION clauses (a refusal here with all statistical gates green
 #: is a CONSTRAINT_REFUSED-family null — more data makes it fail HARDER, never better).
