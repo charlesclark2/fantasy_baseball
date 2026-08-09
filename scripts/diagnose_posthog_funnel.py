@@ -45,6 +45,19 @@ import urllib.request
 
 from scripts.provision_posthog_funnel_dashboard import DEFAULT_HOST, FUNNEL_SPINE
 
+# How close to "now" the newest ingested event has to be before this script stops trusting its own
+# zeros.
+#
+# ⭐ MEASURED, NOT GUESSED, and the first guess was wrong in the dangerous direction. A `capture()`
+# at 20:12:55 was STILL NOT QUERYABLE at 20:16 (3.1 min later) and was by 20:18 — so PostHog's
+# client-batch → ClickHouse path ran 3–5 minutes on the walk that motivated this. An initial 180s
+# grace would therefore have expired while the event was still invisible and re-armed the very
+# false alarm it was written to prevent.
+#
+# Generous on purpose: waiting five minutes costs nothing, and reading a lagged zero as a defect
+# costs an hour of debugging working code (which is exactly what it cost once).
+LIVE_EDGE_SECONDS = 300
+
 
 def run_query(host: str, project_id: str, api_key: str, hogql: str) -> list[list]:
     body = json.dumps({"query": {"kind": "HogQLQuery", "query": hogql}}).encode()
@@ -85,6 +98,33 @@ def main(argv: list[str] | None = None) -> int:
 
     window = f"timestamp > now() - interval {args.hours} hour"
 
+    # ── 0. IS THE TAIL EVEN READABLE YET? ─────────────────────────────────────────────────────
+    #
+    # ⭐ THE FIRST THING TO ESTABLISH, because a zero has TWO causes that are byte-identical:
+    # "the event never fired" and "the event fired and has not been ingested yet". PostHog batches
+    # on the client and takes seconds-to-minutes to reach ClickHouse, and the moment you are most
+    # likely to run this is SECONDS AFTER FINISHING A WALK — precisely when the last steps are
+    # still in flight. That is exactly what happened on the first real signup walk: every step had
+    # fired, `user_signup_completed` at 20:12:55.401 was already in PostHog, and this script — run
+    # moments later, when events up to 20:12:36 had landed — reported it as ZERO and printed the
+    # "SIGN-UP STARTED BUT NEVER COMPLETED" alarm over a completely healthy funnel.
+    #
+    # A check that cannot separate "not yet evaluable" from "failed" must say so rather than pick
+    # the scarier reading. So: measure how close the newest ingested event is to the server's own
+    # clock, and if we are at the live edge, DOWNGRADE every zero from a verdict to "unverified".
+    edge = q(
+        f"select dateDiff('second', max(timestamp), now()) from events where {window}"
+    )
+    edge_seconds = int(edge[0][0]) if edge and edge[0][0] is not None else None
+    at_live_edge = edge_seconds is not None and edge_seconds < LIVE_EDGE_SECONDS
+    if at_live_edge:
+        print(
+            f"\n⏳ THE NEWEST EVENT IS {edge_seconds}s OLD — you are at the live edge of ingestion.\n"
+            f"   Anything that fired in the last ~{LIVE_EDGE_SECONDS}s may not have landed yet, so a "
+            f"ZERO below is\n   UNVERIFIED, not absent. Wait a couple of minutes and re-run before "
+            f"believing any ⛔."
+        )
+
     # ── 1. Did each spine step arrive AT ALL? ─────────────────────────────────────────────────
     # `event IN (…)` rather than a group-by-everything, so a step with ZERO rows is reported as a
     # zero rather than silently missing from the output — an absent row and a zero look the same in
@@ -100,7 +140,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  {'step':<26} {'events':>7} {'persons':>8}  latest")
     for i, event in enumerate(FUNNEL_SPINE, 1):
         events, persons, latest = seen.get(event, (0, 0, "—"))
-        flag = "  " if events else "⛔"
+        # ⏳ rather than ⛔ at the live edge: the step is UNVERIFIED, and calling it dead is the
+        # false alarm this section exists to prevent.
+        flag = "  " if events else ("⏳" if at_live_edge else "⛔")
         print(f"{flag}{i}. {event:<24} {events:>7} {persons:>8}  {latest}")
 
     # ── 1b. WHICH AUTH DOOR was used, and what the round-trip carried. ────────────────────────
@@ -138,12 +180,24 @@ def main(argv: list[str] | None = None) -> int:
             "correctly produces\n     nothing. The funnel is telling the truth about a walk that "
             "never signed up."
         )
+    elif started and not completed and at_live_edge:
+        # ⭐ THE EXACT FALSE ALARM THIS SCRIPT ONCE RAISED. A signup round-trip takes ~18s of
+        # wall-clock (redirect out to Cognito → Google → back to /callback), so the START lands a
+        # full batch earlier than the COMPLETE. Read at the live edge, a perfectly healthy walk
+        # presents as "started but never completed" — the single most alarming shape here.
+        print(
+            "\n  ⏳ STARTED WITH NO COMPLETE *YET*, AND WE ARE AT THE LIVE EDGE. This is the normal\n"
+            "     appearance of a walk still being ingested — the round-trip through Cognito takes\n"
+            "     ~20s, so the completion lands in a later batch than the start. NOT a verdict.\n"
+            "     Re-run in two minutes; only then does the ⛔ reading below apply."
+        )
     elif started and not completed:
         print(
             "\n  ⛔ SIGN-UP STARTED BUT NEVER COMPLETED. If `user_signed_in` above reads "
             "intent=unknown,\n     the context was LOST across the Cognito redirect — a real defect "
             "that silently zeroes\n     step 2 for every user. If it reads intent=signup, the "
-            "round-trip itself failed."
+            "round-trip itself failed.\n     If there is NO `user_signed_in` at all, the walker "
+            "abandoned at Google's account picker."
         )
 
     # ── 2. THE STITCH. One walker should be ONE person across the whole spine. ─────────────────
