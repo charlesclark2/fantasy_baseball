@@ -69,6 +69,7 @@ import {
   EmptyBlock,
   GLOSSARY,
   InfoTip,
+  LOW_PREDICTABILITY_POSITIONS,
   LoadingBlock,
   PAGE_SIZES,
   Pagination,
@@ -194,7 +195,11 @@ export function MyLeague() {
   const draftedSlots = useMemo(() => draftedSlotsPerTeam(league), [league])
 
   const delta = useMemo(
-    () => computeLeagueDelta(genericBoard, leagueBoard, pool),
+    // ⭐ K and D/ST are excluded from the HIGHLIGHTS (never from the board). Their rank is not a
+    // confident signal, and — the decisive reason — the "why those players moved" section below is
+    // computed over SKILL_POSITIONS only, so headlining a defense would show a mover this page
+    // structurally cannot explain. See `isLowPredictability`.
+    () => computeLeagueDelta(genericBoard, leagueBoard, pool, LOW_PREDICTABILITY_POSITIONS),
     [genericBoard, leagueBoard, pool],
   )
   const shifts = useMemo(
@@ -376,19 +381,24 @@ export function MyLeague() {
                   pool, and "N of 180" with no scope reads as "N of every player alive" — a smaller,
                   wrong-looking fraction of a population the reader never asked about. Saying which
                   players were counted is what makes the ratio interpretable. */}
+              {/* ⚠️ THE DENOMINATOR NAMES ITS OWN POPULATION — and it has to name BOTH exclusions,
+                  or the sentence is quietly false. "N of 131" under a note that says "the top 160"
+                  is a discrepancy a careful reader will spot and be right to distrust. */}
               <p className="mt-3 text-sm text-gray-300" data-testid="delta-summary">
                 <span className="font-semibold text-gray-100">{delta.meaningfulMoves}</span> of{" "}
                 {delta.compared}{" "}
                 {delta.poolSize != null
-                  ? "players drafted in a league your size"
-                  : "ranked players"}{" "}
+                  ? "draftable QBs, RBs, WRs and TEs"
+                  : "ranked QBs, RBs, WRs and TEs"}{" "}
                 move at least {MEANINGFUL_MOVE} places in your scoring.
               </p>
               {delta.poolSize != null && (
                 <p className="mt-1 text-[11px] text-gray-600" data-testid="delta-pool-note">
                   {league?.n_teams} teams × {draftedSlots} drafted roster spots = the top{" "}
-                  {delta.poolSize}. Deeper players are still on the board below, with their move —
-                  they just don&apos;t lead this list.
+                  {delta.poolSize}. Kickers and defenses are left out: there are only about 32 of
+                  each, they project within a narrow band, so any scoring difference reshuffles the
+                  whole position at once and a big move there says nothing. Everyone is still on the
+                  board below with their move — this list is just about what leads.
                 </p>
               )}
 

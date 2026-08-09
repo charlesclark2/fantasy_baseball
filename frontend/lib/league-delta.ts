@@ -56,6 +56,10 @@ export interface PlayerDelta {
   /** Inside this league's draft pool — see `isDraftable`. Every player still appears on the board;
    *  this only decides who is eligible to be a HIGHLIGHT. */
   draftable: boolean
+  /** A position whose RANK is not a confident signal (K, DST). Kept separate from `draftable`
+   *  because it is a different disqualification with a different reason — and because a clause you
+   *  cannot isolate is a clause you cannot prove. */
+  lowPred: boolean
 }
 
 export interface PositionShift {
@@ -186,6 +190,43 @@ export function isDraftable(
   return leagueOvrRank <= pool
 }
 
+// ══ THE SECOND DISQUALIFICATION — A RANK THAT IS NOT A SIGNAL ════════════════════════════════════
+//
+// ⭐ WHY K AND D/ST CANNOT BE HEADLINES (operator, live: four defenses in the top five movers).
+//
+// The pool filter above fixed WHICH PART OF THE BOARD the highlights come from and did nothing about
+// this, because kickers and defenses are comfortably inside any real draft pool. They dominated
+// anyway, for a reason that is arithmetic rather than bad luck: there are ~32 of each and their
+// projections sit in a near-flat band, so ANY difference in a league's K/DST scoring reorders the
+// whole position at once — and because the band sits deep in the overall list, a one-tier shuffle
+// there is worth dozens of overall places. Every one of those places is noise.
+//
+// ⭐ THE DECISIVE ARGUMENT IS NOT NOISE, IT IS INTERNAL CONSISTENCY. The section directly beneath the
+// highlights — "why those players moved" — is computed over SKILL_POSITIONS only. So the page was
+// able to headline a mover it structurally could not explain: the reader is shown a D/ST leaping 40
+// places and then a replacement-level table that does not mention D/ST. The explanation is the whole
+// reason this screen exists ("surfaced, not asserted"), and a headline with no available explanation
+// is exactly the assertion it was built to avoid.
+//
+// This is the same rule `draft-optimizer.positionTierMap` already applies for the same reason — a
+// tier break inside a near-flat, noisy field is not a real signal — so the two surfaces now agree.
+// ⛔ It does NOT hide them: K and DST keep their board rows, their VOR and their move column. They
+// simply cannot LEAD, which is the distinction this whole screen is built on.
+
+/** True when this row's RANK must not be presented as a confident signal.
+ *
+ *  Reads the exporter's own per-row `lowPred` flag FIRST (NF1.6 declares it on every row, so a
+ *  future position the model marks soft is covered without a second edit here) and falls back to the
+ *  position list for boards exported before that flag existed. */
+export function isLowPredictability(
+  pos: string,
+  lowPred: boolean | undefined,
+  positions: readonly string[],
+): boolean {
+  if (lowPred === true) return true
+  return positions.includes(pos)
+}
+
 function rankable(p: Player): boolean {
   // A locked row (E9.56's retired redaction) carries no rank; a K/DST gap-fill row can carry a rank
   // with no points. Both would produce a meaningless delta, so neither enters the comparison.
@@ -203,6 +244,7 @@ export function computeLeagueDelta(
   genericBoard: Player[] | undefined | null,
   leagueBoard: Player[] | undefined | null,
   pool: number | null = null,
+  lowPredictabilityPositions: readonly string[] = [],
 ): LeagueDelta | null {
   if (!genericBoard?.length || !leagueBoard?.length) return null
 
@@ -238,6 +280,7 @@ export function computeLeagueDelta(
       onlyInLeague: !g,
       adp,
       draftable: isDraftable(adp, p.ovrRank, pool),
+      lowPred: isLowPredictability(p.pos, p.lowPred, lowPredictabilityPositions),
     })
   }
 
@@ -247,7 +290,10 @@ export function computeLeagueDelta(
   // deep-tail move is still shown where the reader is looking at that player; it just cannot be the
   // headline. `allComparable` is therefore the full set and `comparable` the pool-scoped one.
   const allComparable = players.filter((d) => d.ovrDelta != null)
-  const comparable = allComparable.filter((d) => d.draftable)
+  // TWO disqualifications, and they are deliberately separate predicates rather than one combined
+  // `eligible` flag: they have different reasons, and each has to be breakable on its own for the
+  // red proof to say anything (a fixture that trips both clauses proves neither — NF-D17).
+  const comparable = allComparable.filter((d) => d.draftable && !d.lowPred)
 
   // Sorted by SIZE of move, ties broken by the league rank so the order is deterministic — an
   // unstable order here would make the headline players change on every re-render.
