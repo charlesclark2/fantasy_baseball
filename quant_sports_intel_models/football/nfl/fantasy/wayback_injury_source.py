@@ -20,8 +20,15 @@ SOURCES (assessed 2026-08-09; each capture decompresses to a full data-bearing p
     status, the page title declares its week. Sparse but covers December (23 captures).
   · espn.com/nfl/injuries — `window['__espnfitt__']` embedded JSON: per-athlete statusDesc
     (Out/Doubtful/Questionable) + the game date. Dense Sep–Nov (79 captures), dark in December.
-  · cbssports.com/nfl/injuries — data-bearing (65 captures) but its parser is DEFERRED
-    (carded); enumerate + fetch it so the crawl retains the raw bytes either way.
+  · cbssports.com/nfl/injuries — the per-team TableBase report: player/position/injury cells
+    plus a STATUS CELL that embeds its OWN declared week per row (e.g. "Questionable for Week
+    14 vs. L.A. Rams", "Did Not Practice on Friday. Doubtful for Week 14 at Arizona") — unlike
+    nfl.com's single page-level week, CBS's report mixes the current + a preview of next week
+    on one page, so week is parsed PER ROW. Roster/reserve tags (IR, NFI-R, Physically Unable
+    to Perform, Suspended, Retired) and playoff/training-camp rows ("for Divisional Playoffs",
+    "for start of Training Camp") share the same cell but never match the Out/Doubtful/
+    Questionable + "for Week N" vocabulary, so they are excluded by construction, not by an
+    explicit denylist (NF-W2c-CBS).
 
 ⚠️ SNAPSHOT BYTES ARE BYTES: archived bodies are frequently stored gzip'd, and decoding them
 as text with errors="ignore" DESTROYS the gzip magic and yields a confident, empty parse — this
@@ -52,7 +59,7 @@ log = logging.getLogger("nfl.fantasy.wayback_injury")
 SEASON = 2025
 CAPTURE_SOURCE = "wayback_injuries"
 
-#: The enumerated capture families. CBS is fetched (raw bytes retained) but not yet parsed.
+#: The enumerated capture families (NF-W2c: nfl/espn; NF-W2c-CBS: cbs).
 CDX_TARGETS: tuple[tuple[str, str], ...] = (
     ("nfl", "nfl.com/injuries*"),
     ("espn", "espn.com/nfl/injuries"),
@@ -242,6 +249,59 @@ def resolve_game_date_hint(hint: str | None, capture_ts_iso: str) -> str | None:
     return d.replace(year=year).date().isoformat()
 
 
+#: CBS's rows carry a class attribute (`<tr class="TableBase-bodyTr">`), unlike nfl.com's bare
+#: `<tr>` — `_NFL_TR_RE` would silently match zero rows here.
+_CBS_TR_RE = re.compile(r"<tr[^>]*>(.*?)</tr>", re.S)
+_CBS_PLAYER_RE = re.compile(
+    r'CellPlayerName--long">\s*<span[^>]*>\s*<a href="/nfl/players/\d+/[^/"]+/"[^>]*>'
+    r'\s*([^<]+?)\s*</a>', re.S)
+#: Optional practice-participation prefix, then the weekly report status + its OWN declared
+#: week (CBS embeds week per ROW, not per page — a page mixes the current week's report with a
+#: preview of next week's). Roster tags (IR/NFI-R/PUP/Suspended/Retired) and playoff/training-
+#: camp rows never match this — they don't start with Out/Doubtful/Questionable, or have no
+#: "Week N" (playoff rows say "for Divisional Playoffs" instead) — so they're excluded by the
+#: vocabulary itself, matching ESPN's roster-designation exclusion.
+_CBS_STATUS_RE = re.compile(
+    r'^(Did Not Practice|Limited Practice|Full Practice)?\s*(?:on\s+\w+\.\s*)?'
+    r'(Out|Doubtful|Questionable)\s+for\s+Week\s+(\d+)\b', re.I)
+_CBS_PRACTICE_MAP = {"did not practice": "dnp", "limited practice": "limited",
+                      "full practice": "full"}
+
+
+def parse_cbs(text: str) -> list[dict]:
+    """cbssports.com/nfl/injuries → rows from the per-team TableBase report.
+
+    Row cells (observed layout): player name (short + long spans; the long-form name is used
+    for the crosswalk) · position · last-report date · injury · status text. The status cell
+    carries an OPTIONAL practice-participation prefix ("Did Not Practice on Friday. ") then the
+    weekly designation + its own "for Week N" — so `declared_week` is PER ROW here, unlike
+    nfl.com's page-level week. A row whose status cell doesn't match the Out/Doubtful/
+    Questionable + "for Week N" vocabulary (IR, NFI-R, Physically Unable to Perform, Suspended,
+    Retired, a bare "—", a playoff/training-camp preview) is SKIPPED — never coerced."""
+    rows: list[dict] = []
+    for tr in _CBS_TR_RE.findall(text):
+        pm = _CBS_PLAYER_RE.search(tr)
+        if not pm:
+            continue
+        cells = [re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", c)).strip()
+                 for c in _NFL_TD_RE.findall(tr)]
+        if len(cells) < 5:
+            continue
+        sm = _CBS_STATUS_RE.match(cells[4])
+        if not sm:
+            continue
+        practice = _CBS_PRACTICE_MAP.get(sm.group(1).strip().lower()) if sm.group(1) else None
+        rows.append({
+            "player_slug": None, "player_name": pm.group(1).strip(),
+            "position": cells[1].strip().upper() or None,
+            "injury": cells[3].strip() or None,
+            "practice_status": practice,
+            "report_status": _STATUS_MAP.get(sm.group(2).strip().lower()),
+            "declared_week": int(sm.group(3)),
+        })
+    return rows
+
+
 # ── Normalization to capture-stamped rows ───────────────────────────────────────────────────────
 def stamped_rows_from_capture(source: str, timestamp: str, text: str) -> pd.DataFrame:
     """One snapshot → a frame of capture-stamped designation rows (no week/gsis resolution yet;
@@ -265,8 +325,14 @@ def stamped_rows_from_capture(source: str, timestamp: str, text: str) -> pd.Data
             lambda h: resolve_game_date_hint(h, ts_iso))
         df["player_slug"] = None
         df["injury"] = None
+    elif source == "cbs":
+        df = pd.DataFrame(parse_cbs(text))
+        if df.empty:
+            return df
+        df["declared_season"] = SEASON
+        df["game_date_hint"] = None
     else:
-        raise ValueError(f"no parser for source {source!r} (cbs is enumerated but deferred)")
+        raise ValueError(f"no parser for source {source!r}")
     df["capture_ts"] = ts_iso
     df["capture_wayback"] = timestamp
     df["source"] = source
