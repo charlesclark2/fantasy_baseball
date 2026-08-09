@@ -324,3 +324,66 @@ export const MEMBERSHIP_CTA_LABEL = "See membership options"
  *  prefer `claim.architecture` so there is one string, not two. */
 export const ARCHITECTURE_CAVEAT =
   "Our projected points come from a model that never looks at the draft market. A second model sets the order players are ranked in, and at most positions that order blends the market's own consensus with ours — so our ranking is not an independent read on the market."
+
+// ══ G100-C1 — ONE FREE PERSONALIZED LEAGUE ═══════════════════════════════════════════════════════
+//
+// The free tier now includes a board re-scored for ONE league the user configures themselves. That
+// makes a new kind of claim available to overclaim with, and it is a tempting one: the whole point
+// of the screen is that the numbers MOVED, so the copy naturally reaches for "we found value the
+// market missed". ⛔ It may not. What we can honestly say is narrow and it is enough:
+//
+//   ✅ "these are YOUR league's numbers, and here is what changed"   — arithmetic we performed
+//   ✅ "value over replacement, in your scoring"                     — a definition
+//   ⛔ "players the consensus is undervaluing"                       — a claim about the MARKET
+//   ⛔ "sleepers", "steals", "out-draft your league-mates"           — the same claim, dressed up
+//
+// The delta is between TWO OF OUR OWN BOARDS. It says nothing whatsoever about ADP, consensus or
+// anyone else's rankings, and a reader will assume otherwise unless the copy says so — which is
+// what `LEAGUE_DELTA_DEFINITION` exists to do. `best_alpha = 0`.
+//
+// Screened by `test_nf_tr1_claim_copy.py`, which parses this file's string literals through the
+// export's `_CLAIM_DENYLIST` plus the governance gate.
+
+/** The activation screen's headline — the question the product has to answer visibly. */
+export const MY_LEAGUE_HEADING = "What changed because it's your league"
+
+export const MY_LEAGUE_BLURB =
+  "The same season projection, re-scored under your league's rules and roster shape, then compared against the free board everyone else sees."
+
+/** ⭐ THE LOAD-BEARING SENTENCE ON THE SCREEN. Without it a reader takes a movement column to be a
+ *  claim about the market, because that is what every other fantasy product means by one. */
+export const LEAGUE_DELTA_DEFINITION =
+  "Movement is between two of our own boards — the free full-PPR, twelve-team board and yours. It is a measure of how much your settings matter, not a view on where anyone else is drafting."
+
+/** Why a player moved. Stated as a mechanism rather than an insight, because it IS one: replacement
+ *  level is a function of the roster shape and league size, and nothing here is a prediction. */
+export const LEAGUE_DELTA_MECHANISM =
+  "A player moves when your scoring changes his point total, or when your starting requirements change how many players at his position are worth having at all. Both are arithmetic on settings you entered."
+
+/** Under the risers/fallers blocks. Keeps the reader from treating a small move as a signal — the
+ *  same discipline as the League Board's "read the gaps, not the decimals". */
+export const LEAGUE_DELTA_UNCERTAINTY =
+  "Small moves are noise inside the 80% ranges these projections carry. A player crossing several positions in your scoring is the part worth acting on."
+
+/** VOR, as the free tier is allowed to describe it. ⚠️ "in your scoring" is the whole claim — it is
+ *  a decision AID, and the draft-state-aware version is the paid one. */
+export const LEAGUE_VOR_DEFINITION =
+  "Value over replacement is a player's projected points minus the points of the first player at his position who does not start anywhere in your league. It is a way to compare a quarterback to a running back on one board."
+
+/** The empty state, before a league exists. Names both routes in, because the manual editor is the
+ *  guarantee underneath the importer rather than a fallback for when it fails. */
+export const MY_LEAGUE_EMPTY_TITLE = "Set up your league to see your own board"
+export const MY_LEAGUE_EMPTY_DETAIL =
+  "Import it from Sleeper, Yahoo or ESPN, or enter the scoring and roster by hand. Either way you get the same board — one league is included with a free account."
+
+/** At the control, when the caller is at their quota. States the boundary where they meet it, rather
+ *  than letting them fill in a form the API is going to refuse (the freemium build's pattern). */
+export const LEAGUE_QUOTA_REACHED_TITLE = "You're using your free league"
+export const LEAGUE_QUOTA_REACHED_DETAIL =
+  "A free account keeps one personalized league. You can edit or replace this one whenever you like; members keep several and can switch between them."
+
+/** ⚠️ A LAPSED SUBSCRIBER, whose stored leagues outnumber their quota. This state is easy to render
+ *  as an accusation or as a silent disappearance; it must be neither. Their configs are all still
+ *  there and still deletable — what is paused is the board we compute from them. */
+export const LEAGUE_WITHHELD_BY_QUOTA_DETAIL =
+  "Your other saved leagues are still here — a free account personalizes one at a time. Nothing has been deleted, and you can choose a different one in League Settings."

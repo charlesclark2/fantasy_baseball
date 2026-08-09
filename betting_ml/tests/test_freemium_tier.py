@@ -130,26 +130,52 @@ def test_an_unplaced_capability_fails_closed():
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-# 2. The G100-C1 seam — "1 free personalized league" must be EXPRESSIBLE without being built
+# 2. The G100-C1 seam — "1 free personalized league", now FLIPPED ON
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+# 🗄️ THIS SECTION USED TO ASSERT THE QUOTA WAS ZERO. That pin existed so raising it would be a
+# deliberate, reviewed edit rather than a default drifting in — and it did its job: G100-C1
+# (2026-08-08) is the reviewed edit, and this is what it looks like on the other side. The behaviour
+# of the free tier is exercised in `test_g100_c1_free_league.py`; what stays HERE is the boundary
+# this story drew, which G100-C1 built inside rather than replaced.
 
 
-def test_the_free_personalized_league_quota_is_zero_today():
-    """⛔ This story draws the boundary; G100-C1 builds the free personalization INSIDE it. The
-    quota is real and read, so raising it is a one-line reviewed edit — but it must not drift in as
-    a default. If this goes red because someone raised it, that is G100-C1 landing, not a bug."""
-    assert entitlement.FREE_PERSONALIZED_LEAGUE_QUOTA == 0
-    assert entitlement.personalized_league_quota(None) == 0
+def test_the_free_personalized_league_quota_is_one():
+    """⭐ G100-C1 raised this 0 → 1, and it is still pinned — in the other direction now.
+
+    The number is the whole free tier, so it must not drift again. If this goes red, someone has
+    changed how many leagues a free account gets, which is a pricing decision.
+    """
+    assert entitlement.FREE_PERSONALIZED_LEAGUE_QUOTA == 1
+    assert entitlement.personalized_league_quota(None) == 1
 
 
-def test_the_quota_is_a_count_so_one_free_league_is_expressible():
-    """⭐ WHY A COUNT AND NOT A BOOLEAN. A `free_personalization: bool` cannot express 'one league
-    but not five', so G100-C1 would have had to REPLACE the predicate — and replacing an entitlement
-    predicate is exactly when a surface quietly falls out of its gate. This asserts the shape can
-    carry the future value, without today granting it."""
+def test_the_quota_is_a_count_so_one_free_league_was_expressible():
+    """⭐ WHY A COUNT AND NOT A BOOLEAN — vindicated. A `free_personalization: bool` could not have
+    expressed 'one league but not five', so G100-C1 would have had to REPLACE the predicate, and
+    replacing an entitlement predicate is exactly when a surface quietly falls out of its gate.
+    Because it was a count, the whole flip was ONE literal and no gate was rewritten."""
     assert isinstance(entitlement.FREE_PERSONALIZED_LEAGUE_QUOTA, int)
     sub_quota = entitlement.personalized_league_quota(entitlement.Entitlement(fantasy=True))
-    assert sub_quota > 1, "a subscriber's quota must exceed the free tier's future value of 1"
+    assert sub_quota > entitlement.FREE_PERSONALIZED_LEAGUE_QUOTA, (
+        "a subscriber's quota must exceed the free tier's"
+    )
+
+
+def test_personalization_is_still_a_paid_capability_after_the_free_grant():
+    """⛔ THE DISTINCTION THE WHOLE STORY RESTS ON. A free account may KEEP one personalized league;
+    `Capability.PERSONALIZATION` is still what a membership sells and must stay in PAID_CAPABILITIES.
+
+    The tempting shortcut was to move the capability into `FREE_CAPABILITIES` — one line, and every
+    gate would have opened. It would also have freed every OTHER surface that reads the same
+    capability, silently, which is why the grant is a quota beside the capability rather than a
+    reclassification of it.
+    """
+    assert entitlement.Capability.PERSONALIZATION in entitlement.PAID_CAPABILITIES
+    assert entitlement.Capability.PERSONALIZATION not in entitlement.FREE_CAPABILITIES
+    free_caller = entitlement.Entitlement(user_id="u1", fantasy=False, source="gateway")
+    assert entitlement.allows(entitlement.Capability.PERSONALIZATION, free_caller) is False
+    # …and yet they hold a quota. The two answers differ ON PURPOSE — see `allows_personalization`.
+    assert entitlement.allows_personalization(free_caller) is True
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

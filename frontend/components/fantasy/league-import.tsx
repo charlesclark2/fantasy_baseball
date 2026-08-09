@@ -20,6 +20,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
+import posthog from "posthog-js"
 import {
   AlertTriangle,
   ArrowRight,
@@ -230,6 +231,12 @@ export function LeagueImport() {
   }
 
   async function loadPreview(leagueId: string) {
+    // G100-D0's `league_import_started`. Fired when a specific league is chosen — the first
+    // irreversible-feeling step and the one whose drop-off is worth measuring — rather than on page
+    // view, which would count every visitor as having started an import. Its pair is
+    // `league_import_completed` in `saveImported`, so the gap between them IS the import funnel.
+    // ⛔ Do not rename: G100-D0's dashboard consumes these names.
+    posthog.capture("league_import_started", { league_platform: platformId })
     const res = await run("preview", () =>
       platformId === "yahoo"
         ? yahooPreview(accessToken, leagueId)
@@ -265,6 +272,36 @@ export function LeagueImport() {
     )
     if (res) {
       setSaved(already ? "updated" : "saved")
+
+      // ── G100-C1: the SECOND clause of the activation definition ──────────────────────────────
+      //
+      // `account_created AND league_config_completed AND custom_board_viewed`. The manual editor
+      // fires the SAME event with `method: "manual"` — activation is about HAVING a configured
+      // league, not about which door it came through, and a funnel that counted only the imported
+      // route would read the manual floor's users as never activating at all.
+      //
+      // `league_import_completed` is emitted BESIDE it (not instead of): it is G100-D0's own
+      // platform-specific event, and the two answer different questions — "did import work for
+      // Sleeper?" versus "does this account have a league?". ⛔ Neither name may be changed.
+      //
+      // ⭐ ONLY ON A CREATE. Re-importing an existing league is an UPDATE, and counting it as a
+      // fresh activation would let one user inflate the denominator paid conversion is measured
+      // against simply by re-syncing their roster.
+      posthog.capture("league_import_completed", {
+        league_platform: preview.platform,
+        league_format: preview.config.ppr ?? null,
+        league_size: preview.config.n_teams ?? null,
+        updated: !!already,
+      })
+      if (!already) {
+        posthog.capture("league_config_completed", {
+          method: "import",
+          league_platform: preview.platform,
+          league_format: preview.config.ppr ?? null,
+          league_size: preview.config.n_teams ?? null,
+        })
+      }
+
       // NF-C0d — coverage-gap telemetry: which settings this league scores that we could not
       // apply (the rule + its point value only, never anything about the user or their roster —
       // see recordCapturedTermTelemetry's docstring). Fire-and-forget: the import already

@@ -632,20 +632,38 @@ def get_fantasy_league(user_id: str, league_id: str) -> dict | None:
     return None
 
 
-def put_fantasy_league(user_id: str, league_id: str | None, config: dict) -> dict:
+def put_fantasy_league(
+    user_id: str, league_id: str | None, config: dict, max_leagues: int | None = None
+) -> dict:
     """Create or overwrite one league. Returns the stored record.
 
     Writes a SINGLE map entry (`SET #fl.#id = :cfg`) rather than the whole map, so two
     browser tabs saving different leagues cannot clobber each other. That needs the parent
     map to exist, so a missing `fantasy_leagues` is created first with an
     attribute_not_exists guard.
+
+    ⭐ G100-C1 — `max_leagues` is THE CALLER'S QUOTA, not this module's storage ceiling.
+    `MAX_LEAGUES_PER_USER` is what the ITEM can hold; how many a given caller may keep is an
+    ENTITLEMENT question (`entitlement.personalized_league_quota`) and is now passed in. It is
+    optional and defaults to the storage ceiling purely so existing callers keep their exact
+    behaviour (NF-C0 additivity) — the router always passes the real value.
+
+    ⚠️ THE CAP IS CHECKED ON CREATE ONLY, and that is deliberate rather than an oversight: a caller
+    who is AT their quota must still be able to EDIT the league they have. Making an update fail at
+    the cap would leave a free user's one league permanently frozen at whatever they first typed —
+    the failure would present as "saving is broken", which is exactly the shape E8.6 was about.
     """
     is_new = not league_id
     league_id = league_id or str(uuid4())
     now = _now_iso()
 
+    cap = MAX_LEAGUES_PER_USER if max_leagues is None else int(max_leagues)
+    # Clamped to the storage ceiling so an entitlement bug can never authorise an item-size overflow:
+    # the quota may only ever be MORE restrictive than what this table can physically hold.
+    cap = min(cap, MAX_LEAGUES_PER_USER)
+
     existing = get_fantasy_league(user_id, league_id) if not is_new else None
-    if is_new and len(list_fantasy_leagues(user_id)) >= MAX_LEAGUES_PER_USER:
+    if is_new and len(list_fantasy_leagues(user_id)) >= cap:
         raise ValueError("too_many_leagues")
 
     record = dict(config)

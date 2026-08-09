@@ -28,7 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from app.backend.dependencies import (
     get_admin_user,
     require_fantasy_access,
-    require_fantasy_beta_access,
+    require_personalized_league_access,
 )
 from app.backend.models.fantasy import League, LeagueSave
 from app.backend.services import dynamo, entitlement
@@ -284,6 +284,7 @@ def mlb_prospect_board(
 
 # ══════════════════════════════════════════════════════════════════════════════
 # NF-C0b — saved league settings (the manual customization FLOOR)
+# ⭐ G100-C1 — AND THE FREE TIER'S ONE PERSONALIZED LEAGUE
 # ══════════════════════════════════════════════════════════════════════════════
 # Platform import (NF-C0) is the convenience path and it will never cover every
 # league: unofficial/fragile ESPN endpoints, long-tail platforms, private leagues,
@@ -294,18 +295,47 @@ def mlb_prospect_board(
 # as its `to_dict()` JSON. An imported league and a typed-in league are therefore
 # indistinguishable to every consumer, and a config is portable between them.
 #
-# 🔒 ENTITLEMENT — NARROWER THAN THE REST OF THIS ROUTER. The read-only board endpoints
-# above run on the router-level `require_fantasy_access` (subscriber OR admin OR comp).
-# These league routes additionally require `require_fantasy_beta_access`: `admin` +
-# `fantasy_comp` ONLY, so a paying subscriber does NOT get the editor yet.
+# 🔒 ENTITLEMENT — A THIRD ROUTER OBJECT, NOT A PER-ROUTE OVERRIDE (G100-C1, 2026-08-08)
+# ──────────────────────────────────────────────────────────────────────────────
+# These routes moved OFF `router` entirely. They used to sit on it and add a NARROWER
+# per-route `require_fantasy_beta_access` (`admin` + `fantasy_comp`), which worked only
+# because that set is a strict SUBSET of the router's `require_fantasy_access` — both
+# dependencies ran and the stricter one bound. G100-C1 inverts that relationship: a free
+# signed-in account now has a quota of one league and NO fantasy entitlement at all, so
+# the router-level `require_fantasy_access` would 403 them before the route was reached.
+# A per-route dependency cannot WIDEN a router-level one; only a separate mount can.
 #
-# The narrower gate lives on each ROUTE rather than on the router, because the router's
-# dependency is shared with the board endpoints that must stay open to subscribers.
-# Since FANTASY_BETA_GROUPS is a strict subset of FANTASY_ACCESS_GROUPS, both
-# dependencies run and the stricter one binds.
+# That is also this codebase's standing rule (`board_router`, `fantasy_public.router`,
+# `fantasy_import.public_router`, `stripe.public_router`): an exemption is a router
+# OBJECT, never a flag inside a gated one — so `router` keeps its blanket 403 and nothing
+# can fall out of the gate by being written on the wrong function.
+#
+# ⭐ THE GATE IS THE QUOTA. `require_personalized_league_access` asks
+# `entitlement.personalized_league_quota(...) > 0`, so the tier is a NUMBER an operator
+# can move (1 today, 0 to withdraw, 25 for a subscriber) rather than a group list. And it
+# resolves identity FIRST: an anonymous caller gets 401 ("sign in"), not 403 ("pay"),
+# because there is nowhere to store a league without a Cognito `sub`.
+#
+# ⛔ PERSONALIZATION IS STILL A PAID CAPABILITY. `Capability.PERSONALIZATION` remains in
+# `PAID_CAPABILITIES` and is NOT reclassified — the free tier is a quota GRANT against a
+# paid capability. Moving the capability itself would have silently freed the surfaces
+# that share it.
+#
+# ⚠️ THESE RESPONSES ARE PER-CALLER BY CONSTRUCTION, so they are the exact opposite of the
+# free board's byte-identity invariant above. They must never be added to the CDN
+# allowlist (`frontend/app/api/public/[...path]/route.ts`) or to `_PUBLIC_CACHE_RULES` —
+# a shared cache entry here would hand one user's league to another. They are safe today
+# for a structural reason rather than a remembered one: every request carries an
+# `Authorization` header, and `cost_guardrails.cache_control_for` answers `private,
+# no-store` unconditionally when it sees one. `test_g100_c1_free_league.py` pins both.
 #
 # These are WRITE endpoints, so server-side enforcement is the real gate — hiding the
 # nav item stops nobody from POSTing a config straight to the API.
+personal_router = APIRouter(
+    prefix="/fantasy",
+    tags=["fantasy"],
+    dependencies=[Depends(require_personalized_league_access)],
+)
 
 
 def _league_response(record: dict) -> dict:
@@ -317,11 +347,9 @@ def _league_response(record: dict) -> dict:
     return League(**record).model_dump()
 
 
-@router.get("/leagues")
-def list_leagues(user_id: str = Depends(require_fantasy_beta_access)):
-    """Every league this user has saved."""
+def _serialize_leagues(records: list[dict]) -> list[dict]:
     out = []
-    for record in dynamo.list_fantasy_leagues(user_id):
+    for record in records:
         try:
             out.append(_league_response(record))
         except Exception:  # noqa: BLE001
@@ -331,10 +359,27 @@ def list_leagues(user_id: str = Depends(require_fantasy_beta_access)):
     return out
 
 
-@router.get("/nfl/my-teams")
+@personal_router.get("/leagues")
+def list_leagues(user_id: str = Depends(require_personalized_league_access)):
+    """Every league this user has saved — the MANAGEMENT list.
+
+    ⚠️ DELIBERATELY NOT QUOTA-CAPPED, unlike `/nfl/my-teams` below. This is the surface the
+    editor lists and deletes from, and these are configs the user typed in themselves. A
+    lapsed subscriber holding five leagues must be able to SEE and DELETE all five —
+    capping here would strand them above a quota they can never get back under, and would
+    hide their own data from them. What the free tier limits is how many personalized
+    BOARDS we compute, which is capped at the point of serving.
+
+    Returns a bare LIST — unchanged shape (NF-C0); the deployed client indexes it directly.
+    """
+    return _serialize_leagues(dynamo.list_fantasy_leagues(user_id))
+
+
+@personal_router.get("/nfl/my-teams")
 def nfl_my_teams(
+    request: Request,
     season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
-    user_id: str = Depends(require_fantasy_access),
+    user_id: str = Depends(require_personalized_league_access),
 ):
     """NF-C6 — every saved NFL league's linked team, ready for CLIENT-SIDE league-scoring.
 
@@ -350,53 +395,96 @@ def nfl_my_teams(
     A single narrow DynamoDB item read (E9.26b: never a wide/lakehouse query that can fail silently
     inside this Lambda and come back `[]`), one row per league, malformed rows skipped individually.
 
-    🔒 BROADER gate than `/fantasy/leagues` (`require_fantasy_access`, not the beta-only editor
-    gate) on purpose: these are the user's OWN leagues, and the 2026 projection VALUES a subscriber
-    is entitled to are gated identically to every other NFL fantasy read in this router — the same
-    `require_fantasy_access` check `/fantasy/nfl/projections` and `/fantasy/nfl/board` already use.
-    A caller who is not yet entitled to IMPORT a league (still beta-only) simply sees an honest empty
-    list here, not a 403 — this stays correct without a second migration whenever NF-C0 opens wider.
+    ⭐ G100-C1 — THIS IS THE SERVE POINT OF THE FREE QUOTA, and the only one that can be. Creation
+    is refused at the quota (`create_league` below), but that check never runs for a subscriber who
+    saved five leagues and then LAPSED: no create happens, so without a cap here they would keep
+    receiving five personalized boards indefinitely — the paid tier, retained by having once paid
+    for it. `leagues_within_quota` keeps the OLDEST by `created_at`, deterministically.
+
+    The withheld leagues are still fully visible and deletable on `/fantasy/leagues` — the cap is on
+    the personalization we COMPUTE, never on the user's access to their own configs.
+
+    ⚠️ ADDITIVE RESPONSE KEYS ONLY (NF-C0/E8.6). `quota`, `saved_total` and `withheld_by_quota` are
+    NEW; `season` and `leagues` are untouched, so the deployed client — which knows none of them —
+    keeps rendering exactly what it renders today rather than going blank on a missing key. The
+    client reads each new key with a `?? default`.
+
+    🔒 The gate is the caller's QUOTA (`require_personalized_league_access`), not fantasy
+    entitlement. It used to be `require_fantasy_access` so that a subscriber who could not yet
+    IMPORT a league still saw an honest empty list; that reasoning survives intact — a caller with
+    no saved leagues still gets `leagues: []` rather than a refusal — but the set of callers who may
+    reach it is now everyone with a quota to spend, which is every signed-in account.
     """
-    out = []
-    for record in dynamo.list_fantasy_leagues(user_id):
-        if str(record.get("sport") or "nfl") != "nfl":
-            continue
-        try:
-            out.append(_league_response(record))
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                "skipping unserializable stored league %s for my-teams", record.get("league_id")
-            )
-    return {"season": season, "leagues": out}
+    nfl_records = [
+        r for r in dynamo.list_fantasy_leagues(user_id) if str(r.get("sport") or "nfl") == "nfl"
+    ]
+    quota = entitlement.personalized_league_quota(entitlement.resolve_entitlement(request))
+    served = entitlement.leagues_within_quota(nfl_records, quota)
+    out = _serialize_leagues(served)
+    return {
+        "season": season,
+        "leagues": out,
+        "quota": quota,
+        "saved_total": len(nfl_records),
+        "withheld_by_quota": max(0, len(nfl_records) - len(served)),
+    }
 
 
-@router.post("/leagues", status_code=201)
-def create_league(payload: LeagueSave, user_id: str = Depends(require_fantasy_beta_access)):
-    """Save a new league config (the editor's 'start from a preset, then edit' output)."""
+@personal_router.post("/leagues", status_code=201)
+def create_league(
+    request: Request,
+    payload: LeagueSave,
+    user_id: str = Depends(require_personalized_league_access),
+):
+    """Save a NEW league config (the editor's 'start from a preset, then edit' output).
+
+    ⭐ G100-C1 — THE FREE CAP IS ENFORCED HERE, SERVER-SIDE. The quota comes from the caller's
+    entitlement, not from `dynamo.MAX_LEAGUES_PER_USER` (which is the storage ceiling and is what a
+    SUBSCRIBER's quota resolves to). A free account's second league is a 409 whether it arrives from
+    the UI or from a hand-rolled POST — hiding the button is not a gate.
+
+    The 409 detail is written from the caller's OWN quota so a free user reads "1" and a subscriber
+    reads "25"; quoting the storage constant would have told a free user the wrong number, which on
+    a paywall is worse than saying nothing.
+    """
+    quota = entitlement.personalized_league_quota(entitlement.resolve_entitlement(request))
     try:
-        record = dynamo.put_fantasy_league(user_id, None, payload.model_dump())
+        record = dynamo.put_fantasy_league(
+            user_id, None, payload.model_dump(), max_leagues=quota
+        )
     except ValueError as e:
         if str(e) == "too_many_leagues":
             raise HTTPException(
                 status_code=409,
-                detail=f"You can save at most {dynamo.MAX_LEAGUES_PER_USER} leagues",
+                detail=(
+                    f"You can save {quota} league{'s' if quota != 1 else ''} on your current plan."
+                ),
             ) from e
         raise HTTPException(status_code=400, detail="Could not save league") from e
     return _league_response(record)
 
 
-@router.put("/leagues/{league_id}")
+@personal_router.put("/leagues/{league_id}")
 def update_league(
-    league_id: str, payload: LeagueSave, user_id: str = Depends(require_fantasy_beta_access)
+    league_id: str,
+    payload: LeagueSave,
+    user_id: str = Depends(require_personalized_league_access),
 ):
+    """Overwrite an EXISTING league.
+
+    ⚠️ No quota check, deliberately: the cap counts leagues, and an update creates none. A free user
+    at their quota of one must still be able to edit that one — a cap applied here would freeze their
+    league at whatever they first typed and present as "saving is broken" (E8.6's silent-save class).
+    The `get_fantasy_league` ownership check is what keeps this from reaching anyone else's record.
+    """
     if dynamo.get_fantasy_league(user_id, league_id) is None:
         raise HTTPException(status_code=404, detail="League not found")
     record = dynamo.put_fantasy_league(user_id, league_id, payload.model_dump())
     return _league_response(record)
 
 
-@router.delete("/leagues/{league_id}", status_code=204)
-def delete_league(league_id: str, user_id: str = Depends(require_fantasy_beta_access)):
+@personal_router.delete("/leagues/{league_id}", status_code=204)
+def delete_league(league_id: str, user_id: str = Depends(require_personalized_league_access)):
     try:
         dynamo.delete_fantasy_league(user_id, league_id)
     except ValueError as e:

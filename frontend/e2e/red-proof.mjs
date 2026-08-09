@@ -707,6 +707,105 @@ const CASES = [
     to: "      setConfigName(stored.configName ?? free.config)",
     grep: "does not strand a lapsed member",
   },
+
+  // ══ G100-C1 — one free personalized league ═════════════════════════════════════════════════
+  {
+    id: "delta-sign-inverted",
+    shipped: "pre-emptive: the rank delta subtracted the wrong way round",
+    // ⭐ THE DEFECT THIS SURFACE IS MOST LIKELY TO SHIP. Rank is an INVERTED scale — smaller is
+    // better — so `league - generic` is the spelling that reads naturally and is wrong. Every
+    // riser then renders a down arrow and vice versa, on a page that is otherwise completely
+    // normal: no error, no blank, no NaN, and the numbers are all real. Only an assertion tying
+    // the ARROW to the LIST it is in can see it.
+    detail: "Inverts `ovrDelta`, so risers render as fallers.",
+    file: "lib/league-delta.ts",
+    from: "      ovrDelta: g ? g.ovrRank - p.ovrRank : null,",
+    to: "      ovrDelta: g ? p.ovrRank - g.ovrRank : null,",
+    grep: "sign points the way the column says",
+  },
+  {
+    id: "activation-fires-on-mount",
+    shipped: "pre-emptive: counting a visitor who saw an empty state as ACTIVATED",
+    // The activation event is the funnel's DENOMINATOR, so a false positive here is worse than a
+    // miss: it inflates activation, which reads as a CONVERSION problem and sends the next story
+    // at the wrong thing entirely. Firing on mount rather than on the board rendering is the
+    // natural way to write it.
+    detail: "Fires `custom_board_viewed` even with no league configured.",
+    file: "components/fantasy/my-league.tsx",
+    from: "    if (fired.current || !league || ranked.length === 0) return",
+    to: "    if (fired.current) return",
+    grep: "does NOT fire on an empty state",
+  },
+  {
+    id: "activation-fires-per-render",
+    shipped: "pre-emptive: one activation counted many times",
+    // Same denominator, the other way: without the once-per-mount ref the capture re-fires on
+    // every re-render (a position-tab click, a query settling), so a single user inflates the
+    // metric by however much they browsed.
+    detail: "Drops the once-per-mount guard on the activation capture.",
+    file: "components/fantasy/my-league.tsx",
+    from: "    if (fired.current || !league || ranked.length === 0) return\n    fired.current = true",
+    to: "    if (!league || ranked.length === 0) return",
+    grep: "under the name the funnel reads",
+  },
+  {
+    id: "activation-event-renamed",
+    shipped: "pre-emptive: renaming an event G100-D0's dashboard reads",
+    // The event NAME is a contract with the funnel dashboard, not an implementation detail. A
+    // rename breaks measurement silently — the app keeps working perfectly and the chart goes flat.
+    detail: "Renames the activation event.",
+    file: "components/fantasy/my-league.tsx",
+    from: 'posthog.capture("custom_board_viewed", {',
+    to: 'posthog.capture("my_league_viewed", {',
+    grep: "under the name the funnel reads",
+  },
+  {
+    id: "free-league-nav-hidden",
+    shipped: "pre-emptive: the free tier ships with no way to reach it",
+    // The fantasy surface is LOCKED for a free account, so without `freeSignedIn` the whole menu
+    // collapses to an upsell and the one league a free user is entitled to becomes unreachable.
+    // The feature would exist, work, and be invisible.
+    detail: "Drops the locked-surface exemption for the free league items.",
+    file: "components/nav.tsx",
+    from: "surfaceItems(g).filter((i) => i.public || (i.freeSignedIn && isSignedIn))",
+    to: "surfaceItems(g).filter((i) => i.public)",
+    grep: "can reach the league surfaces from the nav",
+  },
+  {
+    id: "free-league-nav-shown-logged-out",
+    shipped: "pre-emptive: a nav item whose only behaviour is a redirect",
+    // The mirror image. A league is stored against a Cognito `sub`, so these pages bounce an
+    // anonymous visitor to /login — offering them is a menu that lies about what it opens.
+    detail: "Shows the signed-in-only league items to a logged-out visitor.",
+    file: "components/nav.tsx",
+    from: "surfaceItems(g).filter((i) => i.public || (i.freeSignedIn && isSignedIn))",
+    to: "surfaceItems(g).filter((i) => i.public || i.freeSignedIn)",
+    grep: "is not offered the league surfaces",
+  },
+  {
+    id: "withheld-leagues-vanish-silently",
+    shipped: "pre-emptive: a lapsed member's leagues disappear with no account of why",
+    // Two of their leagues stop being personalized. Rendering that as SILENCE — on a surface they
+    // typed their own settings into — reads as data loss, which is a support ticket and a churn
+    // event rather than an upgrade prompt.
+    detail: "Suppresses the 'nothing has been deleted' notice.",
+    file: "components/fantasy/my-league.tsx",
+    from: "          {withheld > 0 && (",
+    to: "          {false && (",
+    grep: "told nothing was deleted",
+  },
+  {
+    id: "delta-claims-the-market",
+    shipped: "pre-emptive: a movement column read as a claim about the market",
+    // ⛔ `best_alpha = 0`. The delta is between two of OUR boards and says nothing about ADP or
+    // consensus — but "movement" means "versus the market" everywhere else in this category, so a
+    // reader imports that meaning unless the page refuses it explicitly.
+    detail: "Removes the sentence saying the comparison is between our own boards.",
+    file: "lib/fantasy-claim-copy.ts",
+    from: "  \"Movement is between two of our own boards",
+    to: "  \"Movement shows where your league values a player differently",
+    grep: "sees its own board and the delta that explains it",
+  },
 ]
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
