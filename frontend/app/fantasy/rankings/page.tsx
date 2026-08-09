@@ -12,11 +12,15 @@ import { Nav } from "@/components/nav"
 import { FantasyPublicGuard } from "@/components/auth-guard"
 import { useAuth } from "@/lib/auth-context"
 import { RankingsBoard } from "@/components/fantasy/rankings-board"
+import { LandingView } from "@/components/analytics/landing-view"
+import { ACQUISITION_SURFACES } from "@/lib/funnel-telemetry"
 
 export default function FantasyRankingsPage() {
   const { accessToken, email } = useAuth()
   return (
     <FantasyPublicGuard>
+      {/* G100-D0 — an acquisition surface: the free board is the value a stranger comes for. */}
+      <LandingView surface={ACQUISITION_SURFACES.FANTASY_RANKINGS} />
       <div className="min-h-screen bg-[#0a0a0a]">
         {/* `authenticated` is now CONDITIONAL — a logged-out visitor needs a Login affordance, not
             signed-in chrome. Mirrors the NF3.2 player route. */}

@@ -128,6 +128,20 @@ export type MockOptions = {
    *                which is the only way to exercise the "nothing was deleted" notice.
    */
   leagues?: "none" | "one" | "overQuota"
+  /**
+   * ⭐ G100-D0 — what `/subscription/status` reports for this caller.
+   *
+   *   "none"     — THE DEFAULT. No access: the state a visitor is in when they click Subscribe,
+   *                and the state the post-checkout screen is in while the Stripe webhook has not
+   *                landed yet.
+   *   "active"   — `has_access: true`. The post-checkout screen's poll succeeds.
+   *
+   * Both are needed and neither is redundant: `subscription_started` must fire on the second and
+   * must NOT fire on the first, and a harness that could only produce "active" would make the
+   * negative half of that contract untestable — i.e. it could not tell "fires when access lands"
+   * from "fires on page load", which is the defect this event is most likely to have.
+   */
+  subscription?: "none" | "active"
 }
 
 export type ApiMock = {
@@ -170,6 +184,90 @@ function payloadFor(pathname: string, entitlement: Entitlement): unknown | undef
   // flow the free tier is not supposed to be able to reach.
   if (pathname === "/fantasy/import/platforms") return FIXTURES.importPlatforms()
   if (pathname === "/fantasy/import/sleeper/leagues") return FIXTURES.importSleeperLeagues()
+  return undefined
+}
+
+/**
+ * G100-D0 — the BILLING reads, which are per-caller and therefore kept out of `payloadFor` for the
+ * same reason the saved-league reads are (that function's whole point is a payload that does not
+ * depend on who is asking).
+ *
+ * ⚠️ The checkout-session URL is a host the spec ANSWERS rather than one it aborts. `startCheckout`
+ * ends in `window.location.href = res.url`, and an aborted top-level navigation strands the tab on
+ * `about:blank` — whose origin is `null`, so reading `localStorage` throws `SecurityError` and the
+ * failure has nothing to do with the page under test (the same trap `signup-funnel.spec.ts`
+ * documents for the Cognito redirect).
+ */
+export const E2E_CHECKOUT_URL = "https://checkout.stripe.com/c/pay/e2e-fake-session"
+
+/** The id a CREATE hands back. A spec can assert on it to prove the save round-tripped. */
+export const E2E_CREATED_LEAGUE_ID = "e2e-created-league"
+
+/**
+ * G100-D0 — the league WRITE path (`POST` creates, `PUT` updates).
+ *
+ * Returns `undefined` for anything that is not a league write, so the read map is reached unchanged.
+ *
+ * ⚠️ The `POST`/`PUT` split is not cosmetic — it is the exact distinction `league_config_completed`
+ * keys on. The editor treats a `null` league id as a CREATE and fires the activation clause; an
+ * update fires nothing, deliberately, so that one user tweaking a scoring weight cannot inflate the
+ * denominator paid conversion is measured against. A harness that answered both identically could
+ * not tell those two apart, and the "fires on every save" defect would pass.
+ *
+ * ⛔ It does NOT model the server's quota refusal (`409` on a second create). That is enforced
+ * server-side and asserted against the real ASGI app in `test_g100_c1_free_league.py`; reproducing
+ * it here would be a browser test appearing to check authorization, which is the most convincing
+ * vacuous guard available.
+ */
+function writeResponseFor(
+  pathname: string,
+  method: string,
+  postData: string | null,
+): unknown | undefined {
+  const isCreate = method === "POST" && pathname === "/fantasy/leagues"
+  const isUpdate = method === "PUT" && /^\/fantasy\/leagues\/[^/]+$/.test(pathname)
+  if (!isCreate && !isUpdate) return undefined
+
+  let config: Record<string, unknown> = {}
+  try {
+    config = postData ? JSON.parse(postData) : {}
+  } catch {
+    config = {}
+  }
+  return {
+    ...config,
+    league_id: isCreate ? E2E_CREATED_LEAGUE_ID : pathname.split("/").pop(),
+    created_at: "2026-08-09T12:00:00Z",
+    updated_at: "2026-08-09T12:00:00Z",
+  }
+}
+
+function billingPayloadFor(
+  pathname: string,
+  subscription: NonNullable<MockOptions["subscription"]>,
+): unknown | undefined {
+  if (pathname === "/subscription/status") {
+    const active = subscription === "active"
+    return {
+      tier: active ? "subscriber" : "free",
+      has_access: active,
+      is_beta: false,
+      has_billing: active,
+      cancel_at_period_end: false,
+      current_period_end: null,
+    }
+  }
+  if (pathname === "/subscription/pricing") {
+    return {
+      tier: "founding",
+      unit_amount: 1000,
+      currency: "usd",
+      founding_slots_used: 3,
+      founding_cap: 50,
+      founding_available: true,
+    }
+  }
+  if (pathname === "/stripe/create-checkout-session") return { url: E2E_CHECKOUT_URL }
   return undefined
 }
 
@@ -268,6 +366,29 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
   const fulfil = async (route: Route, apiPath: string, search: string) => {
     mock.requested.push(apiPath + search)
 
+    // ⭐ G100-D0 — SAVING a league, which is a WRITE and therefore invisible to `payloadFor`'s
+    // (path, entitlement) map.
+    //
+    // This exists for one specific assertion. `league_config_completed` is the second clause of the
+    // activation definition and the ONLY one with no production evidence yet — it fires on a CREATE
+    // and not on an update, and until this handler existed nothing anywhere could drive that path.
+    // A funnel step that has never been observed firing is a step the dashboard may well be
+    // charting a permanent zero for.
+    //
+    // Echoing the posted config back (rather than serving a canned league) is what makes the
+    // response a real round trip: the editor writes `result.league_id` into its own state and
+    // re-reads the config from the response, so a canned body would silently discard what the user
+    // typed and the spec would be asserting against a league nobody configured.
+    const written = writeResponseFor(apiPath, route.request().method(), route.request().postData())
+    if (written !== undefined) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(written),
+      })
+      return
+    }
+
     if (options.fail?.includes(apiPath)) {
       await route.fulfill({
         status: 503,
@@ -299,7 +420,10 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
       }
     }
 
-    let body = personalPayloadFor(apiPath, options.leagues ?? "none") ?? payloadFor(apiPath, entitlement)
+    let body =
+      personalPayloadFor(apiPath, options.leagues ?? "none") ??
+      billingPayloadFor(apiPath, options.subscription ?? "none") ??
+      payloadFor(apiPath, entitlement)
     if (body === undefined) {
       mock.unmatched.push(apiPath + search)
       await route.fulfill({
