@@ -97,6 +97,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
@@ -311,7 +312,7 @@ def _sharpe(series) -> float:
 
 
 def dsr_gate(fold_scores: dict[str, list[float]], incumbent_arm: str, leader_arm: str,
-             *, n_trials: int) -> dict:
+             *, n_trials: int, degenerate_arms: Sequence[str] = ()) -> dict:
     """⭐ **LOCK 3 — E7.9's DSR CONVENTION, FIXED (MH2 defect 2). Both legacy biases INFLATED DSR.**
 
     E7.9 computed DSR on ~19 year-MONTH buckets and passed NO `trial_sharpes`. Two independent
@@ -344,6 +345,37 @@ def dsr_gate(fold_scores: dict[str, list[float]], incumbent_arm: str, leader_arm
     size, because every arm — the incumbent included — was a configuration that could have won, and
     multiplicity must not be understated. Both choices push the bar UP relative to the alternative,
     which is the right direction for a gate.
+
+    ⭐⭐ **DSR-CONV (2026-08-08) — A PRE-REGISTERED LOSE-BY-CONSTRUCTION DEGENERATE IS A TRIAL FOR
+    MULTIPLICITY BUT NOT EVIDENCE ABOUT DISPERSION.** `degenerate_arms` names the arms a story
+    pre-registers to LOSE (NF1.8's `max_width`/`zero_width` shape). They stay in `n_trials` — we DID
+    try them — and they are EXCLUDED from `V`, exactly and only for the reason the incumbent already
+    is: a skill series whose size is fixed BY DESIGN is not a measurement of how much real
+    configurations disperse. `SR0 = √V·z(N)` scales with that dispersion, so an arm that loses hugely
+    and CONSISTENTLY raises the bar for a real winner just as effectively as one that wins hugely.
+    Two §0.5 rules that are each individually right — NF1.8 "keep degenerates in the field so the
+    metric is proven two-sided" and MH2 §a "keep the full DECLARED field in `n_trials`" — jointly made
+    whole-field DSR unclearable for a purely ARITHMETIC reason. This resolves them the same way the
+    reference arm already is, rather than by weakening either.
+
+    ⛔ **FORWARD-ONLY, AND IT IS NOT A CONTENDER-SET READING.** The binding statistic stays a
+    WHOLE-FIELD one — every non-degenerate arm that could have won is in `V`, and every arm including
+    the degenerates is in `n_trials`. A "contender set" chosen after the scores are in would be the
+    laundering surface this convention exists to avoid (MH2 §a: you PRE-REGISTER a family, you do not
+    DISCOVER one), so `degenerate_arms` is only ever legitimate when the story declared those arms as
+    designed losers BEFORE the run. ⛔ It must never be applied retroactively to re-decide a recorded
+    verdict; the DSR bar itself (0.95) is unchanged.
+
+    BOTH figures are returned on EVERY run — `dsr` (binding, V excluding the declared degenerates)
+    and `dsr_with_degenerates_in_V` (the pre-DSR-CONV whole-field figure) — with `binds` naming which.
+    With no degenerates declared the two coincide and every pre-existing key is unchanged, so an
+    un-updated caller cannot silently change its own verdicts.
+
+    ⚠️ `V` needs ≥2 arms to be estimable. If dropping the degenerates leaves fewer than that, the
+    degenerate-excluded figure is UNDEFINED — reported as `None`, never silently replaced by
+    `deflated_sharpe`'s asymptotic `1/n_obs` fallback (which is a DIFFERENT convention, not this one)
+    — and the whole-field figure BINDS instead. That is the conservative direction, and it is stated
+    rather than inferred.
 
     🪤 **AND `V` FROM A SMALL FAMILY IS ITSELF UNSTABLE, so it is disclosed rather than trusted
     silently.** Two arms differing from the incumbent by a nearly CONSTANT amount across folds have
@@ -380,21 +412,74 @@ def dsr_gate(fold_scores: dict[str, list[float]], incumbent_arm: str, leader_arm
 
     trial_arms = [a for a in fold_scores if a != incumbent_arm]
     trial_sharpes = [_sharpe(skill[a]) for a in trial_arms]
-    res = deflated_sharpe(lead, n_trials=int(n_trials), trial_sharpes=trial_sharpes)
     n_obs = int(len(lead))
+
+    # ── DSR-CONV: the whole-field-WITH-degenerates figure, always computed, always reported ──
+    with_deg = deflated_sharpe(lead, n_trials=int(n_trials), trial_sharpes=trial_sharpes)
+
+    # ── DSR-CONV: the DEGENERATE-EXCLUDED figure — the pre-registered binding statistic ──
+    # ⚠️ A declared name that did not actually become a `V` exclusion is RECORDED, never silently
+    # dropped: a degenerate that was never scored is a check that did not run, not a check that
+    # passed (NF1.7 (a)). This covers BOTH a typo'd/unscored name AND the incumbent, which is
+    # already out of `V` — either way the declaration had no effect, and that must be visible.
+    declared = [str(a) for a in degenerate_arms]
+    deg_present = [a for a in trial_arms if a in set(declared)]
+    deg_not_applied = [a for a in declared if a not in set(deg_present)]
+    keep = [a for a in trial_arms if a not in set(deg_present)]
+    keep_sharpes = [s for a, s in zip(trial_arms, trial_sharpes) if a in set(keep)]
+
+    if not deg_present:
+        # No degenerate was declared (or none matched an arm) ⇒ the two conventions COINCIDE.
+        # Reported as the same number rather than as `None`, so a reader never has to infer it.
+        excl, binding, binds = with_deg, with_deg, "whole_field_no_degenerates_declared"
+        excl_note = None
+    elif len(keep_sharpes) > 1:
+        # `n_trials` is UNCHANGED — a degenerate we tried still costs multiplicity.
+        excl = deflated_sharpe(lead, n_trials=int(n_trials), trial_sharpes=keep_sharpes)
+        binding, binds = excl, "degenerate_excluded_whole_field"
+        excl_note = None
+    else:
+        # ⛔ NOT silently the asymptotic fallback — that is a different convention, not this one.
+        excl, binding, binds = None, with_deg, "whole_field_with_degenerates"
+        excl_note = (f"the degenerate-excluded V is UNDEFINED — dropping the declared degenerates "
+                     f"leaves {len(keep_sharpes)} non-degenerate trial arm(s), and a cross-trial "
+                     f"dispersion needs ≥2. The whole-field figure BINDS here (the conservative "
+                     f"direction), and this is a statement about the DESIGN, not the evidence.")
+
+    def _var(sharpes: list[float]) -> float:
+        """The cross-trial dispersion `V` actually handed to `deflated_sharpe`, or NaN when it was
+        not estimable (in which case `deflated_sharpe` used its own documented fallback)."""
+        return (float(np.var(np.asarray(sharpes, float), ddof=1)) if len(sharpes) > 1
+                else float("nan"))
+
+    # the `V` behind the BINDING figure — the excluded set when that figure was estimable, else the
+    # whole field, matching exactly which `deflated_sharpe` result `binding` points at.
+    v_binding = _var(keep_sharpes if excl is not None else trial_sharpes)
+
     asym = deflated_sharpe(lead, n_trials=int(n_trials), var_trials_sr=1.0 / n_obs)
     degenerate = [a for a, s in zip(trial_arms, trial_sharpes) if abs(s) > 10.0]
     out.update({
         "available": True,
-        "dsr": float(res.dsr),
-        "observed_sr": float(res.observed_sr),
-        "sr0": float(res.sr0),
-        "var_trials_sr": float(np.var(np.asarray(trial_sharpes, float), ddof=1))
-        if len(trial_sharpes) > 1 else float("nan"),
+        # the BINDING figures (DSR-CONV: V excludes the pre-registered degenerates)
+        "dsr": float(binding.dsr),
+        "observed_sr": float(binding.observed_sr),
+        "sr0": float(binding.sr0),
+        "var_trials_sr": v_binding,
         "skill_mean": float(np.mean(lead)),
         "skill_sd": float(np.std(lead, ddof=1)),
         "trial_arms": trial_arms,
         "trial_sharpes": [round(float(t), 4) for t in trial_sharpes],
+        # ⭐ DSR-CONV — BOTH conventions on every run, and which one BINDS
+        "binds": binds,
+        "dsr_with_degenerates_in_V": float(with_deg.dsr),
+        "sr0_with_degenerates_in_V": float(with_deg.sr0),
+        "var_trials_sr_with_degenerates": _var(trial_sharpes),
+        "dsr_degenerate_excluded": float(excl.dsr) if excl is not None else None,
+        "sr0_degenerate_excluded": float(excl.sr0) if excl is not None else None,
+        "declared_degenerate_arms": deg_present,
+        "declared_degenerate_arms_not_applied": deg_not_applied,
+        "v_trial_arms": keep,
+        "degenerate_exclusion_note": excl_note,
         # reported, NEVER binding — the benchmark MH2 §7's design table used
         "dsr_asymptotic_V": float(asym.dsr),
         "sr0_asymptotic_V": float(asym.sr0),
