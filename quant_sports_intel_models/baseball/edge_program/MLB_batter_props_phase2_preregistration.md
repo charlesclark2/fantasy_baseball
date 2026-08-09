@@ -62,6 +62,26 @@ factors 96.1–96.2%. Name resolution: 1,157 of 1,230 distinct names carried a c
     the label outright.
   - `eb_batter_posteriors_raw` is already pregame (confirmed-lineup build) and is used as-is.
   - park factors joined on the **prior** season.
+- **Seasons floor — INDEPENDENTLY VERIFIED 2026-08-09, and the prior evidence was invalid.**
+  The 2023-05-03 start is the Odds API player-prop archive floor. ⚠️ The repo's only prior probe of
+  pre-2023 dates lives in the DEPRECATED `backfill_mlb_props_to_s3.py`, which used the
+  **featured-markets** historical endpoint — the one that returns `INVALID_MARKET` for every player
+  prop key — so **its negative result for 2021/2022 was never evidence.** Re-probed on the correct
+  two-step event endpoint (`scripts/probe_batter_prop_coverage.py --probe floor`):
+
+  | date | events archived | `batter_home_runs` |
+  |---|---|---|
+  | 2023-04-12 | 6 | **none** |
+  | 2023-03-30 | 8 | **none** |
+  | 2022-07-13 | 11 | **none** |
+  | 2021-07-14 | 0 | — |
+
+  ⭐ The *shape* of the negative is what makes it trustworthy: 2022-07-13 returns **11 archived
+  events but zero prop data** — the archive has the GAMES and simply lacks the prop MARKETS. That
+  is "props absent", not "no archive", so the floor is real and **no spend extends the window
+  backwards.** This matters because the fold count is the binding power constraint below — it is
+  now a **data limit**, not a window choice, and that is a stronger claim than the one this
+  document originally made.
 - **Folds**: expanding-window **half-season blocks**, purged + embargoed at the block boundary
   (2023H2, 2024H1, 2024H2, 2025H1, 2025H2, 2026H1) ⇒ **6 gated folds**.
   ⭐ Registered deliberately as half-seasons, not seasons. Season blocks would give 3 folds, and
@@ -262,11 +282,35 @@ honest, and where it is not. An arm that fails to beat the market is **not** a f
      (`two_sided_non_pinnacle` = 0 in July and August). It never appears in `batter_hits` at all —
      a narrow prop menu.
 
-   ⛔ **This is NOT recoverable by spending credits.** The other books' HR quotes are one-way *by
-   construction*; a re-pull returns the same one-way data. A `--force` eu re-pull of 2023–2025 HR
-   would cost on the order of ~280k credits (10 × 1 market × 2 regions × ~7k events × 2 snapshots)
-   against a post-2026-07-17 budget of ~100k/month, to recover a Pinnacle history that was itself
-   thin (6,621 two-sided quotes in 2024, 702 in 2025). **Registered as not worth buying.**
+   ⛔ **NOT recoverable by spending credits — PROBED, not inferred (2026-08-09).**
+
+   The first version of this section justified "not buyable" partly on cost. That reasoning was
+   **wrong on the cost half and untested on the data half**, and both have now been fixed:
+
+   - **The cost argument was based on a stale budget.** The docstrings in
+     `backfill_multisport_props_to_s3.py` describe a post-2026-07-17 drop to ~100k/month; the live
+     `x-requests-remaining` header reads **4,753,551**. A ~280k re-pull is ~5.9% of the real
+     balance — i.e. **affordable**. Cost was never the binding reason.
+   - **The data argument rested on a 2-point sample.** The archive only ever pulled 17:00Z and
+     23:30Z, and the two-sided share visibly *moves* between them (28.9% → 40.4%), so "these books
+     are one-way by construction" was an inference from two samples of a varying quantity — a fair
+     challenge, and it was tested rather than defended.
+
+   `scripts/probe_batter_prop_coverage.py --probe snapshot` re-requested the same events at four
+   additional timestamps (2026-08-05, 3 events × 13:00/15:00/20:00/22:00Z, leakage-clamped below
+   commence_time):
+
+   | book | 13:00Z | 15:00Z | 20:00Z | 22:00Z |
+   |---|---|---|---|---|
+   | `betrivers` | 0% | 0% | 0% | 0% |
+   | `williamhill_us` | 0% | 0% | 0% | 0% |
+   | `pinnacle` | 100% | 100% | 100% | 100% |
+
+   ⇒ the one-way books are one-way at **every** sampled hour. **The 17:00→23:30 aggregate
+   difference is a BOOK-COMPOSITION effect — which books are present at each snapshot — not books
+   flipping presentation intraday.** So the gap is genuinely market structure, and a re-pull at any
+   other hour returns the same one-way data. **Registered as not worth buying — because it would
+   recover nothing, not because of budget.**
 
    **Binding consequence for the HR leg** — the HR *market-benchmark* comparison is only
    well-supported on the EARLY folds and degrades to a single sharp book by the late ones:
