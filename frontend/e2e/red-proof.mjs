@@ -877,6 +877,20 @@ const CASES = [
     grep: "shrinking the pool shrinks the highlights",
   },
   {
+    id: "kickers-and-defenses-lead-the-movers",
+    shipped:
+      "G100-C1 — four D/STs in the top five movers on the first real league (CLE, KC, NE, GB)",
+    // The pool filter did NOT fix this and could not: K and D/ST sit comfortably inside any real
+    // draft pool. ~32 of each project within a narrow band, so any difference in a league's K/DST
+    // scoring reorders the whole position at once, and the band sits deep enough in the overall list
+    // that a one-tier shuffle is worth dozens of places. Every one of them is noise.
+    detail: "Drops the low-predictability exclusion, so K/DST compete for the headlines again.",
+    file: "components/fantasy/my-league.tsx",
+    from: "    () => computeLeagueDelta(genericBoard, leagueBoard, pool, LOW_PREDICTABILITY_POSITIONS),",
+    to: "    () => computeLeagueDelta(genericBoard, leagueBoard, pool, []),",
+    grep: "no kicker or defense can lead the list",
+  },
+  {
     id: "ir-slots-counted-as-draft-picks",
     shipped: "pre-emptive: an IR spot is not a draft pick",
     // ⚠️ THE ISOLATING CASE. The default fixture has NO reserve slots, so this defect is invisible
