@@ -40,6 +40,7 @@ import json
 import logging
 import re
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -95,9 +96,17 @@ def cdx_captures(url_pattern: str, cache_dir: Path, *, frm: str = CDX_FROM, to: 
     return [{"timestamp": r[1], "url": r[2]} for r in rows]
 
 
+class SnapshotUnavailable(RuntimeError):
+    """A capture CDX lists but the archive cannot replay (404/403 on the `id_` URL) — a known
+    Wayback inconsistency. DETERMINISTIC: retrying is pointless, and one missing snapshot must
+    cost only its own coverage, never the crawl."""
+
+
 def fetch_snapshot_bytes(timestamp: str, url: str, cache_dir: Path,
                          *, retries: int = 3, pause_s: float = 2.0) -> bytes:
-    """One archived body, RAW BYTES, disk-cached. `id_` mode returns the original response."""
+    """One archived body, RAW BYTES, disk-cached. `id_` mode returns the original response.
+    An HTTP 404/403 raises `SnapshotUnavailable` immediately (no retries); transient errors
+    retry with backoff."""
     cache_dir.mkdir(parents=True, exist_ok=True)
     key = f"{timestamp}_{re.sub(r'[^A-Za-z0-9]+', '_', url)[:80]}"
     f = cache_dir / f"snap_{key}.bin"
@@ -110,8 +119,14 @@ def fetch_snapshot_bytes(timestamp: str, url: str, cache_dir: Path,
             with urllib.request.urlopen(req, timeout=120) as r:
                 raw = r.read()
             f.write_bytes(raw)
-            time.sleep(pause_s)  # be a polite archive citizen — the crawl is ~150 requests
+            time.sleep(pause_s)  # be a polite archive citizen — the crawl is ~180 requests
             return raw
+        except urllib.error.HTTPError as exc:
+            if exc.code in (403, 404):
+                raise SnapshotUnavailable(
+                    f"archive cannot replay {timestamp} {url} (HTTP {exc.code})") from exc
+            err: Exception = exc
+            time.sleep(8 * (attempt + 1))
         except Exception as exc:  # noqa: BLE001
             err = exc
             time.sleep(8 * (attempt + 1))

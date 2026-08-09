@@ -127,3 +127,30 @@ class TestStamping:
     def test_unparsed_source_raises(self):
         with pytest.raises(ValueError, match="no parser"):
             WB.stamped_rows_from_capture("cbs", "20251003095717", "<html></html>")
+
+
+class TestCrawlResilience:
+    def test_an_unreplayable_snapshot_is_skipped_not_fatal(self, monkeypatch):
+        """A CDX-listed capture can 404 on replay (archive inconsistency — the live crawl hit
+        this at snapshot 26/179). One bad capture must cost only its own coverage, never abort
+        the crawl."""
+        from quant_sports_intel_models.football.nfl.fantasy import (
+            run_nf_w2c_wayback_injuries as RUN,
+        )
+        calls = []
+
+        def fake_fetch(ts, url, cache_dir):
+            calls.append(ts)
+            if ts == "bad":
+                raise WB.SnapshotUnavailable("archive cannot replay bad (HTTP 404)")
+            return b"ok"
+
+        monkeypatch.setattr(RUN.WB, "fetch_snapshot_bytes", fake_fetch)
+        caps = pd.DataFrame([
+            {"timestamp": "good1", "url": "u1", "source": "nfl"},
+            {"timestamp": "bad", "url": "u2", "source": "nfl"},
+            {"timestamp": "good2", "url": "u3", "source": "espn"},
+        ])
+        n = RUN.crawl(caps)
+        assert n == 2, "the crawl must continue past an unavailable snapshot"
+        assert calls == ["good1", "bad", "good2"], "the crawl aborted instead of skipping"

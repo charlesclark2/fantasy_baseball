@@ -59,13 +59,24 @@ def enumerate_captures() -> pd.DataFrame:
 
 
 def crawl(caps: pd.DataFrame, limit: int | None = None) -> int:
-    n = 0
+    """Fetch every enumerated snapshot into the cache. A snapshot the archive cannot replay
+    (or that keeps failing) is SKIPPED and counted — one bad capture costs only its own
+    coverage, never the crawl (the build's missing-cache warning stays the reconciliation)."""
+    n = failed = 0
     rows = caps if limit is None else caps.head(limit)
     for _, r in rows.iterrows():
-        WB.fetch_snapshot_bytes(r["timestamp"], r["url"], _CACHE)
-        n += 1
-        if n % 25 == 0:
-            log.info("crawled %d/%d snapshots", n, len(rows))
+        try:
+            WB.fetch_snapshot_bytes(r["timestamp"], r["url"], _CACHE)
+            n += 1
+        except (WB.SnapshotUnavailable, RuntimeError) as exc:
+            failed += 1
+            log.warning("skipping snapshot %s %s: %s", r["timestamp"], r["url"],
+                        str(exc)[:120])
+        if (n + failed) % 25 == 0:
+            log.info("crawled %d/%d snapshots (%d unavailable)", n + failed, len(rows), failed)
+    if failed:
+        log.warning("crawl complete with %d/%d snapshots UNAVAILABLE — their coverage is "
+                    "simply absent (never zero-filled)", failed, len(rows))
     return n
 
 
