@@ -220,6 +220,38 @@ test.describe("the free personalized league", () => {
     expectNoPageErrors(errors)
   })
 
+  test("the board still renders when the manifest has not named a free board yet", async ({
+    page,
+  }) => {
+    // ⚠️ THE DEPLOY-SKEW WINDOW (NF-C0). `frontend/` ships on merge and the API Lambda only on a
+    // manual `deploy.sh`, so there is always an interval where the client is new and the manifest
+    // has no `freeBoard` key. `freeSelection` returns null there — deliberately, rather than
+    // guessing `full_ppr`/12 locally, which would state the paywall in two places and render a
+    // confident comparison against a board we were not told is the free one.
+    //
+    // The page must degrade to "your board, no delta" rather than to a blank screen or a wrong
+    // one. This is the assertion that a `?? "full_ppr"` shortcut would quietly break.
+    await signIn(page, SIGNED_IN_FREE)
+    const errors = collectPageErrors(page)
+    await mockApi(page, {
+      entitlement: "free",
+      leagues: "one",
+      transform: (path, body) => {
+        if (path !== "/fantasy/nfl/manifest") return body
+        const { freeBoard: _dropped, ...rest } = body
+        return rest
+      },
+    })
+    await page.goto("/fantasy/my-league")
+
+    await expect(page.getByTestId("my-league-board")).toBeVisible()
+    await expect(page.locator('[data-testid="my-league-board"] tbody tr').first()).toBeVisible()
+    // No baseline ⇒ no comparison. Absent, not an empty block reading "0 of 0 players move".
+    await expect(page.getByTestId("league-delta")).toHaveCount(0)
+    await expectNoNaN(page)
+    expectNoPageErrors(errors)
+  })
+
   test("a signed-in free account can reach the league surfaces from the nav", async ({ page }) => {
     // The fantasy surface is LOCKED for a free account (no subscription), and before G100-C1 that
     // meant the whole menu collapsed to an "Unlock Fantasy" upsell. The three league items have to

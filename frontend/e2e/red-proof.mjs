@@ -830,6 +830,19 @@ const CASES = [
     to: "  \"Movement shows where your league values a player differently",
     grep: "sees its own board and the delta that explains it",
   },
+  {
+    id: "free-board-guessed-locally",
+    shipped: "pre-emptive: guessing the free preset client-side during the deploy-skew window",
+    // NF-C0. `frontend/` ships on merge, the API only on a manual `deploy.sh`, so the manifest
+    // spends a window without `freeBoard`. Defaulting to "full_ppr" locally states the paywall in
+    // TWO places — and during that window it renders a confident comparison against a board the
+    // server never said was free.
+    detail: "Falls back to a hardcoded free preset instead of withholding the comparison.",
+    file: "components/fantasy/my-league.tsx",
+    from: "  const free = freeSelection(manifest)",
+    to: '  const free = freeSelection(manifest) ?? { config: "full_ppr", size: 12 }',
+    grep: "manifest has not named a free board yet",
+  },
 ]
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
