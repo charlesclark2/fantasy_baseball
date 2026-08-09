@@ -363,10 +363,17 @@ const CASES = [
     // on its own front door, the exact advantage it has repeatedly measured and failed to find.
     // The remaining copy stays denylist-clean, so no word list can catch this — only an assertion
     // naming the disclaimer can.
+    // ⚠️ THIS ANCHOR WENT STALE ONCE ALREADY (found 2026-08-08, unrelated story). E9.46's
+    // alternate-the-market fix reworded the sentence after the frame — "Each day…" became "We look
+    // at the games where…" — and the anchor kept naming the old wording, so the harness reported
+    // ANCHOR-MISSING and this case proved nothing until someone read the summary. ⭐ Anchor a
+    // red-proof case on the SHORTEST text that carries the thing being removed (here the frame
+    // itself), never on the sentence that happens to follow it: the surrounding copy is the part
+    // most likely to be rewritten, and it takes the guard with it.
     detail: "Removes the demonstration-not-recommendation frame from the live block.",
     file: "lib/home-copy.ts",
-    from: '    "A demonstration, not a recommendation. Each day',
-    to: '    "Each day',
+    from: '"A demonstration, not a recommendation. ',
+    to: '"',
     grep: "framed as a demonstration",
   },
   {
