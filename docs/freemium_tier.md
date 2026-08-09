@@ -111,10 +111,9 @@ config, behind `require_fantasy_access` on `/fantasy/leagues` and `/fantasy/nfl/
 **personalization**. The paid tier now contains both, and they are sold as separate lines because
 they are separate things: one is "the format you actually play", the other is "your league".
 
-### The G100-C1 seam
+### The G100-C1 seam — ⭐ FLIPPED ON 2026-08-08
 
-G100-C1 will grant a free account **one** personalized league. This story does not build that; it
-leaves a boundary the grant is expressible in:
+This story left a boundary a free personalized league could be expressed in:
 
 ```python
 FREE_PERSONALIZED_LEAGUE_QUOTA = int(os.getenv("FREE_PERSONALIZED_LEAGUE_QUOTA", "0"))
@@ -122,8 +121,47 @@ FREE_PERSONALIZED_LEAGUE_QUOTA = int(os.getenv("FREE_PERSONALIZED_LEAGUE_QUOTA",
 
 A **count**, not a `free_personalization: bool` — a boolean cannot express "one league but not
 five", so G100-C1 would have had to *replace* the predicate, and replacing an entitlement predicate
-is exactly when a surface quietly falls out of its gate. Nothing reads it to grant access today, and
-the default of 0 is pinned so raising it is a reviewed edit rather than a drift.
+is exactly when a surface quietly falls out of its gate.
+
+**G100-C1 raised it to 1, and the shape paid off exactly as intended: the whole flip was one
+literal and no gate was rewritten.** What it did *not* do is move `Capability.PERSONALIZATION`,
+and that distinction is the thing to hold on to:
+
+| Question | Predicate | A free account |
+|---|---|---|
+| Is personalization in your tier? | `allows(PERSONALIZATION, ent)` | **False** — it is what a membership sells |
+| How many leagues may you keep? | `personalized_league_quota(ent)` | **1** |
+| May you keep any at all? | `allows_personalization(ent)` | **True** |
+
+The free tier is a **quota granted against a paid capability**, not a reclassification of it. The
+tempting one-line alternative — moving `PERSONALIZATION` into `FREE_CAPABILITIES` — opens every
+gate at once and silently frees every *other* surface reading the same capability;
+`test_personalization_is_still_a_paid_capability_after_the_free_grant` holds that line, and the
+red-proof harness carries a case for it.
+
+**The gate is the quota.** `require_personalized_league_access` asks `quota > 0`, so an operator can
+withdraw the free tier with one env var and it refuses cleanly. Zero is a live setting with its own
+test, because a gate only ever exercised at its open setting is not a tested gate.
+
+**The saved-league routes moved to their own router object** (`fantasy.personal_router`), and that
+was forced rather than stylistic: their gate is now *wider* than `fantasy.router`'s blanket
+`require_fantasy_access`, and a per-route dependency can only ever tighten a router-level one. Same
+rule as `board_router` and the other public mounts — an exemption is an object, never a flag inside
+a gated one.
+
+**The cap is enforced in two places, because one check cannot see both cases.** `POST
+/fantasy/leagues` refuses the second league (409, quoting the *caller's* quota — a free user told
+"25" reads a paywall as a bug). And `/fantasy/nfl/my-teams` serves at most `quota` leagues, which is
+the only place the **lapsed subscriber** is visible: someone who saved five and then lapsed makes no
+further create call, so a create-only cap would keep serving them five personalized boards forever.
+`/fantasy/leagues` stays uncapped on purpose — those are the user's own typed-in configs and they
+must be able to see and delete their way back under quota.
+
+⚠️ **`/fantasy/my-league` is per-caller and must stay out of every shared cache.** It is the exact
+opposite of the byte-identity invariant below. It is safe structurally rather than by memory — every
+request it makes carries `Authorization`, and `cache_control_for` answers `private, no-store` on any
+such request — and `test_g100_c1_free_league.py` pins it out of the CDN allowlist, the public cache
+rules and the degrade floor.
 
 ---
 

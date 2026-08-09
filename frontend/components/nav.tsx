@@ -72,6 +72,17 @@ export function Nav({
       return true
     })
 
+  // ⭐ G100-C1 — what a LOCKED fantasy surface still shows. `public` items need no account; a
+  // `freeSignedIn` item is free but stores data against a Cognito `sub`, so drawing it for a
+  // logged-out visitor would be a menu entry whose only behaviour is a redirect to /login.
+  //
+  // ⚠️ `isSignedIn`, not the `authenticated` PROP. The prop is what a page passes to pick its
+  // chrome, and the public fantasy pages pass `authenticated={!!accessToken}` while others hardcode
+  // `authenticated` — reading it here would make the same account see a different menu depending on
+  // which page it was on.
+  const lockedVisibleItems = (g: SurfaceGroup) =>
+    surfaceItems(g).filter((i) => i.public || (i.freeSignedIn && isSignedIn))
+
   // 🐛 A surface whose items are ALL restricted away must not render at all. E8.1 added an
   // MLB→Fantasy surface whose only two items are admin-only, so for an entitled NON-admin
   // `isLocked` is false (they do have fantasy) while `visibleItems` is empty — which would draw
@@ -265,8 +276,10 @@ export function Nav({
                               </span>
                             </Link>
                             {/* NF3.2 — items marked `public` stay reachable even when the surface
-                                itself is locked (the past-season track record needs no entitlement). */}
-                            {surfaceItems(g).filter((i) => i.public).map((item) => (
+                                itself is locked (the past-season track record needs no entitlement).
+                                G100-C1 — and `freeSignedIn` ones do too, for a signed-in caller:
+                                the free tier's one personalized league lives behind this lock. */}
+                            {lockedVisibleItems(g).map((item) => (
                               <Link key={item.key} href={item.href} className={itemClass(item.key)}>
                                 {item.label}
                               </Link>
@@ -415,8 +428,9 @@ export function Nav({
                             Upgrade
                           </span>
                         </Link>
-                        {/* NF3.2 — `public` items stay reachable even when the surface is locked. */}
-                        {surfaceItems(g).filter((i) => i.public).map((item) => (
+                        {/* NF3.2 — `public` items stay reachable even when the surface is locked;
+                            G100-C1 — so do `freeSignedIn` ones, for a signed-in caller. */}
+                        {lockedVisibleItems(g).map((item) => (
                           <Link
                             key={item.key}
                             href={item.href}

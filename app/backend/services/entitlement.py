@@ -153,22 +153,29 @@ PAID_CAPABILITIES: frozenset[Capability] = frozenset(
 )
 
 
-# ── The G100-C1 seam: "1 free personalized league" must be EXPRESSIBLE without being built ────────
+# ── G100-C1: ONE free personalized league ────────────────────────────────────────────────────────
 #
-# G100-C1 will grant a free account ONE personalized league. That story builds the personalization;
-# this one only has to leave a boundary it can be expressed in. So the quota is a real, read
-# parameter with a real default of ZERO — not a TODO comment, and not a flag that silently does
-# nothing.
+# ⭐ RAISED 0 → 1 (G100-C1, 2026-08-08). The freemium build left this as a seam with a real default
+# of ZERO and nothing reading it; this story is the flip, and it is deliberately the ONLY number
+# that changes. Personalization is still `Capability.PERSONALIZATION` and still PAID — what a free
+# account gets is a QUOTA of one, not the capability.
 #
 # ⚠️ WHY A QUOTA AND NOT A `free_personalization: bool`. A boolean cannot express "one league but
-# not five", so G100-C1 would have had to replace it — and replacing an entitlement predicate is
-# exactly when a surface quietly falls out of its gate. A count expresses today (0), G100-C1 (1) and
-# the paid tier (`dynamo.MAX_LEAGUES_PER_USER`) in one shape that never needs re-typing.
+# not five", so this story would have had to REPLACE the predicate — and replacing an entitlement
+# predicate is exactly when a surface quietly falls out of its gate. A count expresses the old state
+# (0), today (1) and the paid tier (`dynamo.MAX_LEAGUES_PER_USER`) in one shape, so raising it moved
+# one literal instead of re-typing a gate.
 #
-# ⛔ Today NOTHING calls this to grant access — the personalization endpoints still require full
-# entitlement. It is the seam, not a live free tier. `test_freemium_tier` pins the default at 0 so
-# raising it is a deliberate, reviewed edit rather than a default drifting in.
-FREE_PERSONALIZED_LEAGUE_QUOTA = int(os.getenv("FREE_PERSONALIZED_LEAGUE_QUOTA", "0"))
+# ⭐ THE QUOTA IS THE GATE — read it through `personalized_league_quota` / `allows_personalization`,
+# never by re-deriving the tier at a call site. Both `dependencies.require_personalized_league_access`
+# and the create/serve caps below go through those two functions, so there is one place a reviewer
+# has to read to know who gets what.
+#
+# ⛔ ZERO IS STILL A MEANINGFUL VALUE and the code must keep honouring it: setting the env var back
+# to "0" is the operator's one-flip withdrawal of the free tier, and it has to refuse cleanly (403 at
+# the dependency, not a half-working page). `test_g100_c1_free_league.py` exercises the 0 case
+# explicitly, because a gate that has only ever been tested at its open setting is not a tested gate.
+FREE_PERSONALIZED_LEAGUE_QUOTA = int(os.getenv("FREE_PERSONALIZED_LEAGUE_QUOTA", "1"))
 
 
 # ── Which PRESET BOARDS the free capability covers ───────────────────────────────────────────────
@@ -237,15 +244,71 @@ def allows(capability: Capability, ent: "Entitlement | None") -> bool:
 def personalized_league_quota(ent: "Entitlement | None") -> int:
     """How many personalized leagues this caller may keep.
 
-    Full entitlement ⇒ the storage cap; otherwise the free quota (0 today, 1 after G100-C1). Read
-    through this rather than branching on `ent.fantasy` at each call site, so G100-C1 changes one
-    number instead of hunting for every place the tier was re-derived.
+    Full entitlement ⇒ the storage cap; otherwise the free quota (1 since G100-C1). Read through
+    this rather than branching on `ent.fantasy` at each call site — that is what made raising the
+    free tier a one-number edit instead of a hunt through every place the tier was re-derived.
+
+    ⚠️ AN ANONYMOUS CALLER GETS THE FREE QUOTA HERE TOO, and that is correct: this function answers
+    "how many", not "may you". There is nowhere to STORE an anonymous caller's league (every record
+    is keyed on a Cognito `sub`), so identity is required by the dependency —
+    `require_personalized_league_access` resolves `get_user_id` FIRST and 401s before this is ever
+    consulted. Keeping the two questions apart is what lets the quota be tested without a request.
     """
     if ent and ent.fantasy:
         from app.backend.services import dynamo
 
         return int(dynamo.MAX_LEAGUES_PER_USER)
     return FREE_PERSONALIZED_LEAGUE_QUOTA
+
+
+def allows_personalization(ent: "Entitlement | None") -> bool:
+    """Whether this caller may keep ANY personalized league at all.
+
+    ⭐ NOT `allows(Capability.PERSONALIZATION, ent)`, and the difference is the whole story. That
+    predicate answers "is personalization in this caller's tier?" — still FALSE for a free account,
+    and it must stay false, because `Capability.PERSONALIZATION` is what the pricing page sells and
+    what `PAID_CAPABILITIES` has to keep naming. This one answers the narrower operational question
+    the routes actually need: "does this caller have a quota to spend?"
+
+    So a free account is `allows(PERSONALIZATION) == False` and `allows_personalization() == True`
+    with a quota of exactly 1 — the free tier is a GRANT AGAINST A PAID CAPABILITY, not a
+    reclassification of it. Collapsing the two would have moved `PERSONALIZATION` into
+    `FREE_CAPABILITIES`, which is a pricing change wearing a refactor's clothes and would have
+    silently freed the draft optimizer's sibling surfaces too.
+    """
+    return personalized_league_quota(ent) > 0
+
+
+def leagues_within_quota(records: list[dict], quota: int) -> list[dict]:
+    """The leagues a caller may have SERVED as personalized boards, capped at `quota`.
+
+    ⭐ WHY A SERVE-SIDE CAP EXISTS AT ALL, when creation is already refused at the quota. A
+    subscriber who saves five leagues and then lapses keeps five stored records, and without this
+    they would keep receiving five personalized boards forever — the paid tier, retained by having
+    once paid for it. The create check cannot see that case, because no create happens.
+
+    ⚠️ THIS IS NOT A DELETE, AND IT IS NOT APPLIED TO `/fantasy/leagues`. The user's own typed-in
+    configs stay fully readable and deletable on the MANAGEMENT surface; what is capped is the
+    PERSONALIZATION we compute from them. Capping the management list too would strand a lapsed user
+    holding data they can see the count of but never reach — hostile, and it would make getting back
+    under quota impossible.
+
+    Ordering is OLDEST-FIRST by `created_at`, so which league survives the cap is deterministic and
+    is the one the user has had LONGEST. ⚠️ Deliberately NOT `updated_at`, which `list_fantasy_leagues`
+    already sorts on: that moves on every edit, so a lapsed user's kept league would change under
+    them the moment they opened a different one — the cap has to be stable against browsing.
+
+    A record with a missing/blank `created_at` sorts LAST (it cannot out-rank a known timestamp) with
+    a stable `league_id` tiebreak, so one malformed field can never reorder the healthy records.
+    """
+    if quota <= 0:
+        return []
+
+    def key(record: dict):
+        raw = str(record.get("created_at") or "")
+        return (not raw, raw, str(record.get("league_id") or ""))
+
+    return sorted(records, key=key)[:quota]
 
 
 # ── Entitlement resolution ───────────────────────────────────────────────────────────────────────

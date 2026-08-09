@@ -545,13 +545,23 @@ def test_e2e_a_past_season_is_free_for_everyone(app_env):
 
 
 def test_e2e_the_gated_router_still_403s_a_non_entitled_caller(app_env):
-    """The dual-mode router must NOT have widened anything else. `/fantasy/nfl/my-teams` stays on
-    the gated router, so a caller with a validated token but no fantasy entitlement is refused
-    outright rather than served a locked payload."""
+    """The dual-mode router must NOT have widened anything else.
+
+    🗄️ THE PROBE MOVED AT G100-C1 (2026-08-08), THE CLAUSE DID NOT. This used to point at
+    `/fantasy/nfl/my-teams`, which was then the nearest gated neighbour of the dual-mode board
+    routes. G100-C1 moved that endpoint onto its own quota-gated router (a free account gets ONE
+    personalized league), so it no longer answers the question this test asks — pointing at it now
+    would assert the OPPOSITE of the shipped tier.
+
+    `/fantasy/mlb/prospects/board` is the replacement: still on the blanket-gated `fantasy.router`,
+    admin-only on top, and unaffected by the free tier. ⛔ The point is not which path is used but
+    that SOMETHING adjacent to the dual-mode routes still refuses outright — deleting the clause
+    because its subject moved is how a widening goes unnoticed.
+    """
     beta_only = {
         "requestContext": {
             "authorizer": {"jwt": {"claims": {"sub": "sub-2", "cognito:groups": "[beta_tester]"}}}
         }
     }
-    status, _ = _call("/fantasy/nfl/my-teams", "season=2026", aws_event=beta_only)
+    status, _ = _call("/fantasy/mlb/prospects/board", "season=2026", aws_event=beta_only)
     assert status == 403

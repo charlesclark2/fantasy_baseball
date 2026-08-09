@@ -460,6 +460,16 @@ export function deleteSavedLeague(token: string | null, leagueId: string): Promi
 export interface MyTeamsPayload {
   season: number
   leagues: SavedLeague[]
+  // ── G100-C1, ADDITIVE (NF-C0/E8.6) ──────────────────────────────────────────────────────────
+  // OPTIONAL because the deployed API does not send them until `deploy.sh` runs, and the two halves
+  // cross over in an order nobody controls. Every read below uses `?? default`, so during the skew
+  // window the page behaves exactly as it does today rather than rendering `undefined`.
+  /** How many personalized leagues this caller may keep (1 free, 25 subscriber). */
+  quota?: number
+  /** How many NFL leagues they have SAVED — may exceed `quota` for a lapsed subscriber. */
+  saved_total?: number
+  /** `saved_total − served`. Non-zero means leagues exist that we are not personalizing. */
+  withheld_by_quota?: number
 }
 
 export function getMyTeams(token: string | null, season: number): Promise<MyTeamsPayload> {

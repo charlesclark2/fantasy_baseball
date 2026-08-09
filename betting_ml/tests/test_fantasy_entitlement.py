@@ -342,17 +342,39 @@ def test_beta_groups_are_a_strict_subset_of_fantasy_access_groups():
     assert "subscriber" not in cognito.FANTASY_BETA_GROUPS
 
 
-def test_every_league_route_carries_the_narrower_gate():
-    """The gate lives per-ROUTE (the router-level dep is shared with the open board
-    endpoints), so a new /leagues route could silently ship without it. These are WRITE
-    endpoints — hiding the nav item stops nobody from POSTing straight to the API."""
+def test_every_league_route_carries_the_personalization_gate():
+    """Every `/fantasy/leagues` route is gated, and a new one cannot ship without it.
+
+    🗄️ THE GATE CHANGED AT G100-C1 (2026-08-08): `require_fantasy_beta_access` (`admin` +
+    `fantasy_comp`) → `require_personalized_league_access` (signed in, with a personalization
+    QUOTA above zero). A free account now gets ONE personalized league, so a group-list gate would
+    refuse exactly the users the free tier exists for.
+
+    ⭐ The routes also MOVED, from `fantasy.router` to `fantasy.personal_router`, and that is not
+    cosmetic: their gate is now WIDER than the parent router's blanket `require_fantasy_access`,
+    and a per-route dependency can only ever TIGHTEN a router-level one. So the exemption had to
+    become its own mount — this repo's standing rule.
+
+    These are WRITE endpoints; hiding the nav item stops nobody from POSTing straight to the API.
+    """
     league_routes = [
-        r for r in fantasy.router.routes
+        r for r in fantasy.personal_router.routes
         if getattr(r, "path", "").startswith("/fantasy/leagues")
     ]
-    assert league_routes, "expected the NF-C0b /fantasy/leagues routes to exist"
-    for route in league_routes:
-        deps_for_route = [d.call for d in route.dependant.dependencies]
-        assert deps.require_fantasy_beta_access in deps_for_route, (
-            f"{route.methods} {route.path} is missing require_fantasy_beta_access"
-        )
+    assert league_routes, "expected the /fantasy/leagues routes to exist"
+    # The gate is declared once on the ROUTER, so assert it there and then confirm every league
+    # route actually hangs off that router (a route added to the wrong object would be missed).
+    router_deps = [d.dependency for d in fantasy.personal_router.dependencies]
+    assert deps.require_personalized_league_access in router_deps, (
+        "personal_router lost its personalization gate — every league route is now open"
+    )
+    from app.backend.main import app
+
+    mounted = {
+        getattr(r, "path", "") for r in app.routes
+        if getattr(r, "path", "").startswith("/fantasy/leagues")
+    }
+    assert mounted <= {getattr(r, "path", "") for r in league_routes}, (
+        f"a /fantasy/leagues route is mounted outside personal_router and is ungated: "
+        f"{mounted - {getattr(r, 'path', '') for r in league_routes}}"
+    )

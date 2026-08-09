@@ -1,0 +1,2505 @@
+{
+  "generated_at": "2026-08-09T02:28:43+00:00",
+  "story": "NF-W2",
+  "smoke": false,
+  "evaluation_label_version": "v1.nflverse.stats_player_week",
+  "scoring_system_id": "ppr",
+  "selection_metric": "crps_q39",
+  "n_rows": 84553,
+  "n_folds": 12,
+  "fold_labels": [
+    "2019H1",
+    "2019H2",
+    "2020H1",
+    "2020H2",
+    "2021H1",
+    "2021H2",
+    "2022H1",
+    "2022H2",
+    "2023H1",
+    "2023H2",
+    "2024H1",
+    "2024H2"
+  ],
+  "shadow_fold_labels": [
+    "2025H1",
+    "2025H2"
+  ],
+  "pit_audit": {
+    "game_groups_checked": 532,
+    "records_checked": 98611,
+    "injury_records_checked": 14058,
+    "groups_dropped": [],
+    "rows_dropped": 0
+  },
+  "preregistration": {
+    "hypothesis": "current-week injury-report state improves the weekly distribution, primarily through the zero/availability leg (NF-W4 lean form)",
+    "real_arms": [
+      "inj_both",
+      "inj_zero_leg",
+      "inj_override"
+    ],
+    "foil": "base_hurdle",
+    "anchors": [
+      "nihilist_zero",
+      "pos_marginal",
+      "inj_permuted",
+      "oracle_avail__base",
+      "oracle_avail__inj"
+    ],
+    "oracle_of_form": {
+      "base_hurdle": "oracle_avail__base",
+      "inj_zero_leg": "oracle_avail__base",
+      "inj_override": "oracle_avail__base",
+      "inj_both": "oracle_avail__inj"
+    },
+    "test_blocks": [
+      [
+        2019,
+        1
+      ],
+      [
+        2019,
+        2
+      ],
+      [
+        2020,
+        1
+      ],
+      [
+        2020,
+        2
+      ],
+      [
+        2021,
+        1
+      ],
+      [
+        2021,
+        2
+      ],
+      [
+        2022,
+        1
+      ],
+      [
+        2022,
+        2
+      ],
+      [
+        2023,
+        1
+      ],
+      [
+        2023,
+        2
+      ],
+      [
+        2024,
+        1
+      ],
+      [
+        2024,
+        2
+      ]
+    ],
+    "shadow_blocks": [
+      [
+        2025,
+        1
+      ],
+      [
+        2025,
+        2
+      ]
+    ],
+    "purge_weeks": 2,
+    "pbo_max": 0.2,
+    "dsr_min": 0.95,
+    "fdr_q": 0.1,
+    "coverage_floor": 0.8,
+    "injury_features": [
+      "injury_report__listed",
+      "injury_report__status_out",
+      "injury_report__status_doubtful",
+      "injury_report__status_questionable",
+      "injury_report__practice_dnp",
+      "injury_report__practice_limited",
+      "injury_report__observed"
+    ],
+    "injury_verified_max_season": 2024,
+    "override_statuses": [
+      "out",
+      "doubtful"
+    ],
+    "override_min_n": 200,
+    "features": [
+      "game_context__is_home",
+      "game_context__div_game",
+      "game_context__week_index",
+      "game_context__days_since_last_game",
+      "prior_week_box__ppr_l1",
+      "prior_week_box__ppr_l4_mean",
+      "prior_week_box__ppr_ewm",
+      "prior_week_box__ppr_s2d_mean",
+      "prior_week_box__targets_l4",
+      "prior_week_box__carries_l4",
+      "prior_week_box__attempts_l4",
+      "prior_week_box__receptions_l4",
+      "prior_week_box__rec_yards_l4",
+      "prior_week_box__rush_yards_l4",
+      "prior_week_box__pass_yards_l4",
+      "prior_week_box__played_share_l4",
+      "prior_week_box__games_s2d",
+      "prior_week_box__ppr_sum_s2d",
+      "snap_share__l1",
+      "snap_share__l4_mean",
+      "snap_share__observed_l4",
+      "team_environment__pass_att_l4",
+      "team_environment__rush_att_l4",
+      "team_environment__ppr_l4",
+      "opponent_matchup__dvp_ppr_index_l8",
+      "opponent_matchup__def_ppr_allowed_l8",
+      "prior_season_priors__ppg_prior",
+      "prior_season_priors__games_prior",
+      "prior_season_priors__rookie_flag",
+      "injury_report__listed",
+      "injury_report__status_out",
+      "injury_report__status_doubtful",
+      "injury_report__status_questionable",
+      "injury_report__practice_dnp",
+      "injury_report__practice_limited",
+      "injury_report__observed"
+    ]
+  },
+  "positions": {
+    "QB": {
+      "winner": "inj_both",
+      "foil": "base_hurdle",
+      "mean_crps": {
+        "base_hurdle": 2.5924,
+        "inj_both": 2.4868,
+        "inj_zero_leg": 2.4884,
+        "inj_override": 2.5101,
+        "nihilist_zero": 6.7135,
+        "pos_marginal": 4.817,
+        "inj_permuted": 2.5827,
+        "oracle_avail__base": 2.0737,
+        "oracle_avail__inj": 2.0737
+      },
+      "mean_mae_report_only": {
+        "inj_both": 3.2763,
+        "base_hurdle": 3.4029,
+        "nihilist_zero": 6.7135
+      },
+      "pair_deltas_vs_base": {
+        "inj_both": {
+          "mean": 0.1055,
+          "fold_wins": 11
+        },
+        "inj_zero_leg": {
+          "mean": 0.104,
+          "fold_wins": 11
+        },
+        "inj_override": {
+          "mean": 0.0822,
+          "fold_wins": 12
+        }
+      },
+      "deltas_by_fold": [
+        0.0697,
+        0.0422,
+        -0.0027,
+        0.1463,
+        0.1569,
+        0.0985,
+        0.1307,
+        0.2022,
+        0.0999,
+        0.1061,
+        0.0437,
+        0.1728
+      ],
+      "beats_foil": true,
+      "fold_wins": 11,
+      "fold_clause": {
+        "required": 8,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": 0.0357,
+      "os_gap_pct": 0.0,
+      "contender_spread_pct": 4.24,
+      "flips": [
+        {
+          "config": "inj_both",
+          "IS-half wins": 707,
+          "share": 0.765,
+          "full-sample IS80": 2.487,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "inj_zero_leg",
+          "IS-half wins": 198,
+          "share": 0.214,
+          "full-sample IS80": 2.488,
+          "\u0394 vs best %": 0.06
+        },
+        {
+          "config": "inj_override",
+          "IS-half wins": 19,
+          "share": 0.021,
+          "full-sample IS80": 2.51,
+          "\u0394 vs best %": 0.94
+        }
+      ],
+      "dsr": 0.9987,
+      "p_one_sided": 0.0,
+      "trial_srs": [
+        1.756,
+        1.721,
+        2.559
+      ],
+      "observed_sr": 1.756,
+      "var_trials_sr": 0.22465,
+      "anchors": {
+        "nihilist_loses": true,
+        "pos_marginal_loses": true,
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": false,
+        "no_arm_beats_own_oracle": true,
+        "base_respects_oracle": true
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_base_mean": 0.0096,
+        "permuted_lift_p_one_sided": 0.0327,
+        "winner_vs_permuted_mean": 0.0959
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8172,
+        "n_rows": 8111,
+        "binomial_se": 0.0044,
+        "blocking_shortfall": false
+      }
+    },
+    "RB": {
+      "winner": "inj_both",
+      "foil": "base_hurdle",
+      "mean_crps": {
+        "base_hurdle": 2.6211,
+        "inj_both": 2.4813,
+        "inj_zero_leg": 2.4856,
+        "inj_override": 2.5129,
+        "nihilist_zero": 5.5872,
+        "pos_marginal": 3.836,
+        "inj_permuted": 2.6131,
+        "oracle_avail__base": 2.1888,
+        "oracle_avail__inj": 2.1855
+      },
+      "mean_mae_report_only": {
+        "inj_both": 3.3348,
+        "base_hurdle": 3.5176,
+        "nihilist_zero": 5.5872
+      },
+      "pair_deltas_vs_base": {
+        "inj_both": {
+          "mean": 0.1398,
+          "fold_wins": 12
+        },
+        "inj_zero_leg": {
+          "mean": 0.1355,
+          "fold_wins": 12
+        },
+        "inj_override": {
+          "mean": 0.1082,
+          "fold_wins": 12
+        }
+      },
+      "deltas_by_fold": [
+        0.123,
+        0.1653,
+        0.1375,
+        0.2054,
+        0.1051,
+        0.1746,
+        0.1296,
+        0.0789,
+        0.0969,
+        0.159,
+        0.1321,
+        0.1701
+      ],
+      "beats_foil": true,
+      "fold_wins": 12,
+      "fold_clause": {
+        "required": 8,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.0,
+      "contender_spread_pct": 5.63,
+      "flips": [
+        {
+          "config": "inj_both",
+          "IS-half wins": 924,
+          "share": 1.0,
+          "full-sample IS80": 2.481,
+          "\u0394 vs best %": 0.0
+        }
+      ],
+      "dsr": 1.0,
+      "p_one_sided": 0.0,
+      "trial_srs": [
+        3.828,
+        3.805,
+        3.735
+      ],
+      "observed_sr": 3.828,
+      "var_trials_sr": 0.00235,
+      "anchors": {
+        "nihilist_loses": true,
+        "pos_marginal_loses": true,
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": false,
+        "no_arm_beats_own_oracle": true,
+        "base_respects_oracle": true
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_base_mean": 0.008,
+        "permuted_lift_p_one_sided": 0.0089,
+        "winner_vs_permuted_mean": 0.1318
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8297,
+        "n_rows": 13102,
+        "binomial_se": 0.0035,
+        "blocking_shortfall": false
+      }
+    },
+    "WR": {
+      "winner": "inj_both",
+      "foil": "base_hurdle",
+      "mean_crps": {
+        "base_hurdle": 2.8041,
+        "inj_both": 2.6727,
+        "inj_zero_leg": 2.6732,
+        "inj_override": 2.7067,
+        "nihilist_zero": 5.807,
+        "pos_marginal": 3.8876,
+        "inj_permuted": 2.8007,
+        "oracle_avail__base": 2.1972,
+        "oracle_avail__inj": 2.1969
+      },
+      "mean_mae_report_only": {
+        "inj_both": 3.6139,
+        "base_hurdle": 3.7895,
+        "nihilist_zero": 5.807
+      },
+      "pair_deltas_vs_base": {
+        "inj_both": {
+          "mean": 0.1315,
+          "fold_wins": 12
+        },
+        "inj_zero_leg": {
+          "mean": 0.1309,
+          "fold_wins": 12
+        },
+        "inj_override": {
+          "mean": 0.0974,
+          "fold_wins": 12
+        }
+      },
+      "deltas_by_fold": [
+        0.149,
+        0.1168,
+        0.1761,
+        0.1123,
+        0.1468,
+        0.1037,
+        0.1642,
+        0.1287,
+        0.0873,
+        0.1352,
+        0.1322,
+        0.1252
+      ],
+      "beats_foil": true,
+      "fold_wins": 12,
+      "fold_clause": {
+        "required": 8,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.002,
+      "contender_spread_pct": 4.92,
+      "flips": [
+        {
+          "config": "inj_both",
+          "IS-half wins": 681,
+          "share": 0.737,
+          "full-sample IS80": 2.673,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "inj_zero_leg",
+          "IS-half wins": 243,
+          "share": 0.263,
+          "full-sample IS80": 2.673,
+          "\u0394 vs best %": 0.02
+        }
+      ],
+      "dsr": 1.0,
+      "p_one_sided": 0.0,
+      "trial_srs": [
+        5.223,
+        5.027,
+        4.137
+      ],
+      "observed_sr": 5.223,
+      "var_trials_sr": 0.33486,
+      "anchors": {
+        "nihilist_loses": true,
+        "pos_marginal_loses": true,
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": false,
+        "no_arm_beats_own_oracle": true,
+        "base_respects_oracle": true
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_base_mean": 0.0034,
+        "permuted_lift_p_one_sided": 0.0361,
+        "winner_vs_permuted_mean": 0.1281
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8351,
+        "n_rows": 18873,
+        "binomial_se": 0.0029,
+        "blocking_shortfall": false
+      }
+    },
+    "TE": {
+      "winner": "inj_zero_leg",
+      "foil": "base_hurdle",
+      "mean_crps": {
+        "base_hurdle": 1.8578,
+        "inj_both": 1.7968,
+        "inj_zero_leg": 1.7964,
+        "inj_override": 1.8119,
+        "nihilist_zero": 3.5336,
+        "pos_marginal": 2.584,
+        "inj_permuted": 1.8565,
+        "oracle_avail__base": 1.3629,
+        "oracle_avail__inj": 1.3639
+      },
+      "mean_mae_report_only": {
+        "inj_zero_leg": 2.4211,
+        "base_hurdle": 2.4953,
+        "nihilist_zero": 3.5336
+      },
+      "pair_deltas_vs_base": {
+        "inj_both": {
+          "mean": 0.0611,
+          "fold_wins": 12
+        },
+        "inj_zero_leg": {
+          "mean": 0.0614,
+          "fold_wins": 12
+        },
+        "inj_override": {
+          "mean": 0.0459,
+          "fold_wins": 12
+        }
+      },
+      "deltas_by_fold": [
+        0.0637,
+        0.0926,
+        0.0382,
+        0.0465,
+        0.0507,
+        0.064,
+        0.0771,
+        0.0532,
+        0.0396,
+        0.0588,
+        0.0693,
+        0.0834
+      ],
+      "beats_foil": true,
+      "fold_wins": 12,
+      "fold_clause": {
+        "required": 8,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.003,
+      "contender_spread_pct": 3.42,
+      "flips": [
+        {
+          "config": "inj_zero_leg",
+          "IS-half wins": 681,
+          "share": 0.737,
+          "full-sample IS80": 1.796,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "inj_both",
+          "IS-half wins": 243,
+          "share": 0.263,
+          "full-sample IS80": 1.797,
+          "\u0394 vs best %": 0.02
+        }
+      ],
+      "dsr": 1.0,
+      "p_one_sided": 0.0,
+      "trial_srs": [
+        3.571,
+        3.598,
+        2.538
+      ],
+      "observed_sr": 3.598,
+      "var_trials_sr": 0.36504,
+      "anchors": {
+        "nihilist_loses": true,
+        "pos_marginal_loses": true,
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "base_respects_oracle": true
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_base_mean": 0.0013,
+        "permuted_lift_p_one_sided": 0.1922,
+        "winner_vs_permuted_mean": 0.0602
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8797,
+        "n_rows": 11006,
+        "binomial_se": 0.0038,
+        "blocking_shortfall": false
+      }
+    }
+  },
+  "gates": {
+    "QB": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": true,
+        "pbo_ok": true,
+        "dsr_ok": true,
+        "fdr_ok": true,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "RB": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": true,
+        "pbo_ok": true,
+        "dsr_ok": true,
+        "fdr_ok": true,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "WR": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": true,
+        "pbo_ok": true,
+        "dsr_ok": true,
+        "fdr_ok": true,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "TE": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": true,
+        "pbo_ok": true,
+        "dsr_ok": true,
+        "fdr_ok": true,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": true
+    }
+  },
+  "fdr": {
+    "QB": true,
+    "RB": true,
+    "WR": true,
+    "TE": true
+  },
+  "null_states": {
+    "QB": {
+      "state": "POWER_LIMITED",
+      "reason": "`nf_w2_injury_crps_QB`: insufficient recorded statistics to certify the null as powered. Absent a detectability figure the honest default is POWER-LIMITED \u2014 a null is trustworthy only when something was computed to make it so.",
+      "retest_trigger": null
+    },
+    "RB": {
+      "state": "POWER_LIMITED",
+      "reason": "`nf_w2_injury_crps_RB`: insufficient recorded statistics to certify the null as powered. Absent a detectability figure the honest default is POWER-LIMITED \u2014 a null is trustworthy only when something was computed to make it so.",
+      "retest_trigger": null
+    },
+    "WR": {
+      "state": "POWER_LIMITED",
+      "reason": "`nf_w2_injury_crps_WR`: insufficient recorded statistics to certify the null as powered. Absent a detectability figure the honest default is POWER-LIMITED \u2014 a null is trustworthy only when something was computed to make it so.",
+      "retest_trigger": null
+    }
+  },
+  "fold_activity": [
+    {
+      "fold": "2019H1",
+      "n_test": 4291,
+      "listed_share": 0.1906,
+      "out_doubtful_share": 0.0506,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.999,
+        "n_train_cell": 953,
+        "n_test_overridden": 217
+      }
+    },
+    {
+      "fold": "2019H2",
+      "n_test": 3833,
+      "listed_share": 0.1962,
+      "out_doubtful_share": 0.042,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.9983,
+        "n_train_cell": 1168,
+        "n_test_overridden": 161
+      }
+    },
+    {
+      "fold": "2020H1",
+      "n_test": 4367,
+      "listed_share": 0.1802,
+      "out_doubtful_share": 0.036,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.9985,
+        "n_train_cell": 1338,
+        "n_test_overridden": 157
+      }
+    },
+    {
+      "fold": "2020H2",
+      "n_test": 4038,
+      "listed_share": 0.2117,
+      "out_doubtful_share": 0.0332,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.998,
+        "n_train_cell": 1483,
+        "n_test_overridden": 134
+      }
+    },
+    {
+      "fold": "2021H1",
+      "n_test": 4337,
+      "listed_share": 0.1729,
+      "out_doubtful_share": 0.0327,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.9981,
+        "n_train_cell": 1617,
+        "n_test_overridden": 142
+      }
+    },
+    {
+      "fold": "2021H2",
+      "n_test": 4362,
+      "listed_share": 0.1992,
+      "out_doubtful_share": 0.0353,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.9983,
+        "n_train_cell": 1764,
+        "n_test_overridden": 154
+      }
+    },
+    {
+      "fold": "2022H1",
+      "n_test": 4387,
+      "listed_share": 0.1798,
+      "out_doubtful_share": 0.0429,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.9984,
+        "n_train_cell": 1928,
+        "n_test_overridden": 188
+      }
+    },
+    {
+      "fold": "2022H2",
+      "n_test": 4299,
+      "listed_share": 0.1849,
+      "out_doubtful_share": 0.0354,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.9986,
+        "n_train_cell": 2099,
+        "n_test_overridden": 152
+      }
+    },
+    {
+      "fold": "2023H1",
+      "n_test": 4264,
+      "listed_share": 0.1524,
+      "out_doubtful_share": 0.0237,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.9987,
+        "n_train_cell": 2264,
+        "n_test_overridden": 101
+      }
+    },
+    {
+      "fold": "2023H2",
+      "n_test": 4337,
+      "listed_share": 0.2156,
+      "out_doubtful_share": 0.0399,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.9987,
+        "n_train_cell": 2367,
+        "n_test_overridden": 173
+      }
+    },
+    {
+      "fold": "2024H1",
+      "n_test": 4365,
+      "listed_share": 0.1805,
+      "out_doubtful_share": 0.0323,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.9984,
+        "n_train_cell": 2526,
+        "n_test_overridden": 141
+      }
+    },
+    {
+      "fold": "2024H2",
+      "n_test": 4212,
+      "listed_share": 0.194,
+      "out_doubtful_share": 0.0332,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.9985,
+        "n_train_cell": 2676,
+        "n_test_overridden": 140
+      }
+    }
+  ],
+  "shadow": {
+    "QB": {
+      "inj_both": {
+        "mean_delta_vs_base": -0.0306,
+        "max_abs_delta": 0.0392
+      },
+      "inj_zero_leg": {
+        "mean_delta_vs_base": -0.0318,
+        "max_abs_delta": 0.0381
+      },
+      "inj_override": {
+        "mean_delta_vs_base": 0.0,
+        "max_abs_delta": 0.0
+      }
+    },
+    "RB": {
+      "inj_both": {
+        "mean_delta_vs_base": -0.0227,
+        "max_abs_delta": 0.0319
+      },
+      "inj_zero_leg": {
+        "mean_delta_vs_base": -0.0265,
+        "max_abs_delta": 0.0376
+      },
+      "inj_override": {
+        "mean_delta_vs_base": 0.0,
+        "max_abs_delta": 0.0
+      }
+    },
+    "WR": {
+      "inj_both": {
+        "mean_delta_vs_base": -0.0329,
+        "max_abs_delta": 0.0579
+      },
+      "inj_zero_leg": {
+        "mean_delta_vs_base": -0.0369,
+        "max_abs_delta": 0.0638
+      },
+      "inj_override": {
+        "mean_delta_vs_base": 0.0,
+        "max_abs_delta": 0.0
+      }
+    },
+    "TE": {
+      "inj_both": {
+        "mean_delta_vs_base": -0.0113,
+        "max_abs_delta": 0.0148
+      },
+      "inj_zero_leg": {
+        "mean_delta_vs_base": -0.0079,
+        "max_abs_delta": 0.0137
+      },
+      "inj_override": {
+        "mean_delta_vs_base": 0.0,
+        "max_abs_delta": 0.0
+      }
+    },
+    "activity": [
+      {
+        "fold": "2025H1",
+        "n_test": 4308,
+        "listed_share": null,
+        "out_doubtful_share": 0.0,
+        "observed_share": 0.0
+      },
+      {
+        "fold": "2025H2",
+        "n_test": 4380,
+        "listed_share": null,
+        "out_doubtful_share": 0.0,
+        "observed_share": 0.0
+      }
+    ]
+  },
+  "fold_results": [
+    {
+      "label": "2019H1",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.6648550083075118,
+          "mae_pooled": 3.540032306851875,
+          "QB": 2.7301223660439966,
+          "mae_QB": 3.558879281948938,
+          "RB": 2.6577802181419363,
+          "mae_RB": 3.517612426086363,
+          "WR": 3.030393506820451,
+          "mae_WR": 4.053485501397497,
+          "TE": 1.9643644770015363,
+          "mae_TE": 2.626470272964869
+        },
+        "inj_both": {
+          "pooled": 2.552672021295214,
+          "mae_pooled": 3.3927907936838757,
+          "QB": 2.6604177529062194,
+          "mae_QB": 3.458616950831695,
+          "RB": 2.534778546004439,
+          "mae_RB": 3.3645195319728605,
+          "WR": 2.881409673513175,
+          "mae_WR": 3.864522843329428,
+          "TE": 1.9012635806783929,
+          "mae_TE": 2.527398134860372
+        },
+        "inj_zero_leg": {
+          "pooled": 2.552102974421537,
+          "mae_pooled": 3.3890631932870594,
+          "QB": 2.6531752293230433,
+          "mae_QB": 3.4810008537900172,
+          "RB": 2.5345633321557934,
+          "mae_RB": 3.3441452662094022,
+          "WR": 2.88333641144156,
+          "mae_WR": 3.8467301532969946,
+          "TE": 1.900679208564708,
+          "mae_TE": 2.55137996032332
+        },
+        "inj_override": {
+          "pooled": 2.5599544410849604,
+          "mae_pooled": 3.400537815574174,
+          "QB": 2.6567288083245995,
+          "mae_QB": 3.4643729311218907,
+          "RB": 2.529951106929391,
+          "mae_RB": 3.351941116296948,
+          "WR": 2.90605150608947,
+          "mae_WR": 3.8801208010398742,
+          "TE": 1.9010674177754654,
+          "mae_TE": 2.548888422128001
+        },
+        "nihilist_zero": {
+          "pooled": 5.531367979491961,
+          "mae_pooled": 5.531367979491961,
+          "QB": 7.02779299847793,
+          "mae_QB": 7.02779299847793,
+          "RB": 5.62338835794961,
+          "mae_RB": 5.62338835794961,
+          "WR": 5.880187617260788,
+          "mae_WR": 5.880187617260788,
+          "TE": 3.66843891402715,
+          "mae_TE": 3.66843891402715
+        },
+        "pos_marginal": {
+          "pooled": 3.8543457990486947,
+          "mae_pooled": 5.3490375203915175,
+          "QB": 5.00185323244741,
+          "mae_QB": 7.02779299847793,
+          "RB": 3.946367968767404,
+          "mae_RB": 5.451016507384883,
+          "WR": 3.9804069530636137,
+          "mae_WR": 5.561751094434021,
+          "TE": 2.653665158371041,
+          "mae_TE": 3.5838235294117644
+        },
+        "inj_permuted": {
+          "pooled": 2.6583390757939562,
+          "mae_pooled": 3.527847904814009,
+          "QB": 2.7331102275750556,
+          "mae_QB": 3.563511116487096,
+          "RB": 2.64276403193992,
+          "mae_RB": 3.480203502252777,
+          "WR": 3.026547932964702,
+          "mae_WR": 4.055849767337158,
+          "TE": 1.9570226347756183,
+          "mae_TE": 2.6083150983708494
+        },
+        "oracle_avail__base": {
+          "pooled": 2.121590216839621,
+          "mae_pooled": 2.861212343652334,
+          "QB": 2.2990480668780138,
+          "mae_QB": 3.1146663251094258,
+          "RB": 2.2227885402505048,
+          "mae_RB": 2.979227462768852,
+          "WR": 2.325847610381184,
+          "mae_WR": 3.1348814214614116,
+          "TE": 1.4884718344933394,
+          "mae_TE": 2.0241631091080636
+        },
+        "oracle_avail__inj": {
+          "pooled": 2.12220194515637,
+          "mae_pooled": 2.869186516488959,
+          "QB": 2.3040029723203195,
+          "mae_QB": 3.1131659828352745,
+          "RB": 2.222944086988633,
+          "mae_RB": 3.0064158957252083,
+          "WR": 2.3235981156358996,
+          "mae_WR": 3.146721735645986,
+          "TE": 1.491625071069926,
+          "mae_TE": 2.007168031961202
+        }
+      },
+      "n_train": 23765,
+      "n_test": 4291
+    },
+    {
+      "label": "2019H2",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.5510884598685863,
+          "mae_pooled": 3.4178062806335525,
+          "QB": 2.5601635879364033,
+          "mae_QB": 3.3889951133423524,
+          "RB": 2.67902268045311,
+          "mae_RB": 3.5559349365699426,
+          "WR": 2.74414861347864,
+          "mae_WR": 3.7222017217422874,
+          "TE": 2.0442521919582624,
+          "mae_TE": 2.7299754422715012
+        },
+        "inj_both": {
+          "pooled": 2.4384106134862638,
+          "mae_pooled": 3.283080295788347,
+          "QB": 2.517934393970192,
+          "mae_QB": 3.3426171470785757,
+          "RB": 2.5137106763721517,
+          "mae_RB": 3.3653529492262626,
+          "WR": 2.627385842140887,
+          "mae_WR": 3.569394766569738,
+          "TE": 1.9526396246551956,
+          "mae_TE": 2.631808038926289
+        },
+        "inj_zero_leg": {
+          "pooled": 2.441004554214461,
+          "mae_pooled": 3.278665766837339,
+          "QB": 2.5253733419729287,
+          "mae_QB": 3.3453964843122823,
+          "RB": 2.5165190937869384,
+          "mae_RB": 3.349858103931695,
+          "WR": 2.6298553605480084,
+          "mae_WR": 3.5676644463922678,
+          "TE": 1.9516124281286824,
+          "mae_TE": 2.631213514851089
+        },
+        "inj_override": {
+          "pooled": 2.4545285095463787,
+          "mae_pooled": 3.2963994852235414,
+          "QB": 2.518435363852833,
+          "mae_QB": 3.3341800067036895,
+          "RB": 2.5384731489625074,
+          "mae_RB": 3.376868964191776,
+          "WR": 2.650363031613865,
+          "mae_WR": 3.602128344553155,
+          "TE": 1.9573768244618934,
+          "mae_TE": 2.6292129269504945
+        },
+        "nihilist_zero": {
+          "pooled": 5.477589355596139,
+          "mae_pooled": 5.477589355596139,
+          "QB": 6.9117983193277315,
+          "mae_QB": 6.9117983193277315,
+          "RB": 5.742874132804758,
+          "mae_RB": 5.742874132804758,
+          "WR": 5.6758931082981725,
+          "mae_WR": 5.6758931082981725,
+          "TE": 3.7390334572490707,
+          "mae_TE": 3.7390334572490707
+        },
+        "pos_marginal": {
+          "pooled": 3.801136709212172,
+          "mae_pooled": 5.290456561440125,
+          "QB": 4.9107240573152335,
+          "mae_QB": 6.9117983193277315,
+          "RB": 3.9441250444715505,
+          "mae_RB": 5.489078295341923,
+          "WR": 3.847122867755779,
+          "mae_WR": 5.387707454289733,
+          "TE": 2.723228382264163,
+          "mae_TE": 3.675340768277571
+        },
+        "inj_permuted": {
+          "pooled": 2.5450811920039262,
+          "mae_pooled": 3.4055024027623437,
+          "QB": 2.553859080557397,
+          "mae_QB": 3.388911106768987,
+          "RB": 2.6665065499512144,
+          "mae_RB": 3.5224098295580046,
+          "WR": 2.7377586176154813,
+          "mae_WR": 3.693706927899239,
+          "TE": 2.0472765710897263,
+          "mae_TE": 2.7637246985920334
+        },
+        "oracle_avail__base": {
+          "pooled": 2.0126367366961873,
+          "mae_pooled": 2.7470432806421825,
+          "QB": 2.1337658058765503,
+          "mae_QB": 2.8847268327060878,
+          "RB": 2.1896374563370116,
+          "mae_RB": 2.959865022792587,
+          "WR": 2.126170633768593,
+          "mae_WR": 2.925268060831469,
+          "TE": 1.5019666946678496,
+          "mae_TE": 2.065389639084626
+        },
+        "oracle_avail__inj": {
+          "pooled": 2.01075670130732,
+          "mae_pooled": 2.7546660010867337,
+          "QB": 2.1318591297897753,
+          "mae_QB": 2.8970576818996374,
+          "RB": 2.18880163651522,
+          "mae_RB": 2.9780658941062623,
+          "WR": 2.1227651843837627,
+          "mae_WR": 2.9230989419545197,
+          "TE": 1.5014886126994713,
+          "mae_TE": 2.073569118739307
+        }
+      },
+      "n_train": 28143,
+      "n_test": 3833
+    },
+    {
+      "label": "2020H1",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.6620213938449906,
+          "mae_pooled": 3.5607059978202362,
+          "QB": 2.5359310613118677,
+          "mae_QB": 3.325464843088508,
+          "RB": 2.655268288399011,
+          "mae_RB": 3.530418999598893,
+          "WR": 3.1212915315511967,
+          "mae_WR": 4.200676661900285,
+          "TE": 1.9655126467103994,
+          "mae_TE": 2.6616213517653793
+        },
+        "inj_both": {
+          "pooled": 2.5537749654922592,
+          "mae_pooled": 3.4232567653024186,
+          "QB": 2.5386518474388997,
+          "mae_QB": 3.3556472441026055,
+          "RB": 2.51778123205169,
+          "mae_RB": 3.3384697334518108,
+          "WR": 2.945236230090925,
+          "mae_WR": 3.9864832748911208,
+          "TE": 1.9276294040761928,
+          "mae_TE": 2.598587607419525
+        },
+        "inj_zero_leg": {
+          "pooled": 2.553349762430176,
+          "mae_pooled": 3.425163399405288,
+          "QB": 2.5407527077113192,
+          "mae_QB": 3.3594826234657442,
+          "RB": 2.5201551218469236,
+          "mae_RB": 3.3526954920237304,
+          "WR": 2.9416330168305103,
+          "mae_WR": 3.9776307735418204,
+          "TE": 1.9273197983601351,
+          "mae_TE": 2.602370612880846
+        },
+        "inj_override": {
+          "pooled": 2.5638531434189837,
+          "mae_pooled": 3.4302934887238146,
+          "QB": 2.4676819622396815,
+          "mae_QB": 3.2380234203059253,
+          "RB": 2.543377226880205,
+          "mae_RB": 3.3789296131579394,
+          "WR": 2.9888425554190046,
+          "mae_WR": 4.025625135549046,
+          "TE": 1.9215246413877827,
+          "mae_TE": 2.602720399706491
+        },
+        "nihilist_zero": {
+          "pooled": 5.688738264254638,
+          "mae_pooled": 5.688738264254638,
+          "QB": 7.251416309012876,
+          "mae_QB": 7.251416309012876,
+          "RB": 5.547780678851176,
+          "mae_RB": 5.547780678851176,
+          "WR": 6.272879450343536,
+          "mae_WR": 6.272879450343536,
+          "TE": 3.656535947712418,
+          "mae_TE": 3.6565359477124186
+        },
+        "pos_marginal": {
+          "pooled": 3.910336324003453,
+          "mae_pooled": 5.451939546599497,
+          "QB": 5.267666110927699,
+          "mae_QB": 7.251416309012876,
+          "RB": 3.8050803625225953,
+          "mae_RB": 5.284073107049608,
+          "WR": 4.099377446387674,
+          "mae_WR": 5.822848219862586,
+          "TE": 2.6788665437685046,
+          "mae_TE": 3.6449891067538127
+        },
+        "inj_permuted": {
+          "pooled": 2.652421525936218,
+          "mae_pooled": 3.5541729456582507,
+          "QB": 2.511423473589901,
+          "mae_QB": 3.313935636782693,
+          "RB": 2.6394222109621834,
+          "mae_RB": 3.526993880857463,
+          "WR": 3.117287651280481,
+          "mae_WR": 4.189308547966484,
+          "TE": 1.9653225987238836,
+          "mae_TE": 2.663434955532583
+        },
+        "oracle_avail__base": {
+          "pooled": 2.1100345839479373,
+          "mae_pooled": 2.8892605123611346,
+          "QB": 2.1292840834129723,
+          "mae_QB": 2.9424401916475627,
+          "RB": 2.2265846629320656,
+          "mae_RB": 3.0164080071397223,
+          "WR": 2.3741532769120735,
+          "mae_WR": 3.2405724597204655,
+          "TE": 1.488873943082572,
+          "mae_TE": 2.0769342650364067
+        },
+        "oracle_avail__inj": {
+          "pooled": 2.1111384941635585,
+          "mae_pooled": 2.8777893069582614,
+          "QB": 2.1251598417623585,
+          "mae_QB": 2.934060026489004,
+          "RB": 2.224982960571008,
+          "mae_RB": 3.0012153624676268,
+          "WR": 2.379742771616619,
+          "mae_WR": 3.228197330955284,
+          "TE": 1.489522304538211,
+          "mae_TE": 2.069343754505664
+        }
+      },
+      "n_train": 31889,
+      "n_test": 4367
+    },
+    {
+      "label": "2020H2",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.58112391323811,
+          "mae_pooled": 3.4646709582921438,
+          "QB": 2.749907652370446,
+          "mae_QB": 3.568255213945389,
+          "RB": 2.6654574230927572,
+          "mae_RB": 3.555919393564131,
+          "WR": 2.8856539099128007,
+          "mae_WR": 3.930921061812218,
+          "TE": 1.8202212352694178,
+          "mae_TE": 2.4681897480353183
+        },
+        "inj_both": {
+          "pooled": 2.4521743891127614,
+          "mae_pooled": 3.3171840129400954,
+          "QB": 2.6036463025539565,
+          "mae_QB": 3.4038193017511387,
+          "RB": 2.460053973362466,
+          "mae_RB": 3.3350503202860184,
+          "WR": 2.7733446982288394,
+          "mae_WR": 3.782220430112834,
+          "TE": 1.7751171228124056,
+          "mae_TE": 2.4308649073895734
+        },
+        "inj_zero_leg": {
+          "pooled": 2.4555412846005673,
+          "mae_pooled": 3.322557214967206,
+          "QB": 2.6095120367687206,
+          "mae_QB": 3.381194728715713,
+          "RB": 2.4695259202839788,
+          "mae_RB": 3.3518788049545067,
+          "WR": 2.77374180423324,
+          "mae_WR": 3.7904295995233324,
+          "TE": 1.7737374103286558,
+          "mae_TE": 2.438153879034841
+        },
+        "inj_override": {
+          "pooled": 2.4968839883782916,
+          "mae_pooled": 3.357546923270634,
+          "QB": 2.676590153528282,
+          "mae_QB": 3.4747363856410853,
+          "RB": 2.522330057218165,
+          "mae_RB": 3.3759879863102746,
+          "WR": 2.809406638295641,
+          "mae_WR": 3.8334037312408187,
+          "TE": 1.7901068364031212,
+          "mae_TE": 2.428379049230683
+        },
+        "nihilist_zero": {
+          "pooled": 5.504254581475978,
+          "mae_pooled": 5.504254581475978,
+          "QB": 6.829110429447852,
+          "mae_QB": 6.829110429447852,
+          "RB": 5.288756855575869,
+          "mae_RB": 5.288756855575869,
+          "WR": 6.151015894955078,
+          "mae_WR": 6.151015894955078,
+          "TE": 3.653467455621302,
+          "mae_TE": 3.653467455621302
+        },
+        "pos_marginal": {
+          "pooled": 3.8154186764201623,
+          "mae_pooled": 5.287072808320952,
+          "QB": 4.940666092496461,
+          "mae_QB": 6.829110429447852,
+          "RB": 3.7300099610931423,
+          "mae_RB": 5.091864716636198,
+          "WR": 4.051316368082505,
+          "mae_WR": 5.699751209398757,
+          "TE": 2.6537995751782733,
+          "mae_TE": 3.6432899408284034
+        },
+        "inj_permuted": {
+          "pooled": 2.5741340463929934,
+          "mae_pooled": 3.4552936595696164,
+          "QB": 2.7233026131138374,
+          "mae_QB": 3.5365450799412517,
+          "RB": 2.668595078172473,
+          "mae_RB": 3.584653755794558,
+          "WR": 2.8734228652686724,
+          "mae_WR": 3.891625881261225,
+          "TE": 1.8242296733967251,
+          "mae_TE": 2.477934374196657
+        },
+        "oracle_avail__base": {
+          "pooled": 2.037787700383807,
+          "mae_pooled": 2.8004624068242547,
+          "QB": 2.134768186759165,
+          "mae_QB": 2.8773661733137046,
+          "RB": 2.1523016685883527,
+          "mae_RB": 2.9239605564509445,
+          "WR": 2.327142363436527,
+          "mae_WR": 3.221452119018372,
+          "TE": 1.3192010071651195,
+          "mae_TE": 1.8603199867205773
+        },
+        "oracle_avail__inj": {
+          "pooled": 2.0339211537015958,
+          "mae_pooled": 2.7948845602768966,
+          "QB": 2.1266516947827667,
+          "mae_QB": 2.898032086801341,
+          "RB": 2.1453795841429004,
+          "mae_RB": 2.9156468346309636,
+          "WR": 2.3238855260609608,
+          "mae_WR": 3.213181045955877,
+          "TE": 1.3215255531196881,
+          "mae_TE": 1.8426465363540896
+        }
+      },
+      "n_train": 36342,
+      "n_test": 4038
+    },
+    {
+      "label": "2021H1",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.6214969235785492,
+          "mae_pooled": 3.5316070060333646,
+          "QB": 2.6438573221400876,
+          "mae_QB": 3.5312205960938328,
+          "RB": 2.794223564593165,
+          "mae_RB": 3.7888817157393193,
+          "WR": 2.925592585994597,
+          "mae_WR": 3.9448467062589967,
+          "TE": 1.8837196587114862,
+          "mae_TE": 2.5247490530102845
+        },
+        "inj_both": {
+          "pooled": 2.504531082893774,
+          "mae_pooled": 3.3712190993576874,
+          "QB": 2.486991672001217,
+          "mae_QB": 3.2952755902639814,
+          "RB": 2.6891499811844293,
+          "mae_RB": 3.6131992092487266,
+          "WR": 2.778788266965112,
+          "mae_WR": 3.7661109094305836,
+          "TE": 1.832481785540503,
+          "mae_TE": 2.4682544719229456
+        },
+        "inj_zero_leg": {
+          "pooled": 2.509266974152552,
+          "mae_pooled": 3.3801329922800964,
+          "QB": 2.497831574324899,
+          "mae_QB": 3.31453943215196,
+          "RB": 2.6932933463532502,
+          "mae_RB": 3.640028350806885,
+          "WR": 2.783822138428113,
+          "mae_WR": 3.7628607593666903,
+          "TE": 1.8329938245322817,
+          "mae_TE": 2.4693520615566484
+        },
+        "inj_override": {
+          "pooled": 2.5527993687548958,
+          "mae_pooled": 3.4484853286868073,
+          "QB": 2.5756347261133774,
+          "mae_QB": 3.4513350173254107,
+          "RB": 2.729260777448338,
+          "mae_RB": 3.704457064970033,
+          "WR": 2.8339533774968224,
+          "mae_WR": 3.834531991624409,
+          "TE": 1.849398671055324,
+          "mae_TE": 2.487181440743611
+        },
+        "nihilist_zero": {
+          "pooled": 5.6864191837675815,
+          "mae_pooled": 5.6864191837675815,
+          "QB": 7.266549192364171,
+          "mae_QB": 7.266549192364171,
+          "RB": 5.917509025270759,
+          "mae_RB": 5.917509025270759,
+          "WR": 6.050049813200498,
+          "mae_WR": 6.0500498132004985,
+          "TE": 3.652335456475584,
+          "mae_TE": 3.652335456475584
+        },
+        "pos_marginal": {
+          "pooled": 3.88124888541057,
+          "mae_pooled": 5.439520405810468,
+          "QB": 5.137741988591439,
+          "mae_QB": 7.266549192364171,
+          "RB": 4.013333333333334,
+          "mae_RB": 5.609747292418772,
+          "WR": 3.980630807548616,
+          "mae_WR": 5.611693648816937,
+          "TE": 2.6480973583210843,
+          "mae_TE": 3.6249469214437373
+        },
+        "inj_permuted": {
+          "pooled": 2.608573545803972,
+          "mae_pooled": 3.5081027764765613,
+          "QB": 2.6124056173926764,
+          "mae_QB": 3.413233701327878,
+          "RB": 2.7745107078586764,
+          "mae_RB": 3.739167666729717,
+          "WR": 2.922699353525632,
+          "mae_WR": 3.9671483732685826,
+          "TE": 1.8750766630974913,
+          "mae_TE": 2.522284000816022
+        },
+        "oracle_avail__base": {
+          "pooled": 2.107335049043687,
+          "mae_pooled": 2.9006626363380894,
+          "QB": 2.2212748955131185,
+          "mae_QB": 3.0830964245777404,
+          "RB": 2.3792341065675817,
+          "mae_RB": 3.2677186974507895,
+          "WR": 2.278182961248211,
+          "mae_WR": 3.129687816222939,
+          "TE": 1.4138754543699867,
+          "mae_TE": 1.9465756252986588
+        },
+        "oracle_avail__inj": {
+          "pooled": 2.101967481385275,
+          "mae_pooled": 2.8850366882418332,
+          "QB": 2.2108684971996153,
+          "mae_QB": 3.057383064991943,
+          "RB": 2.370689574854803,
+          "mae_RB": 3.2441283054106393,
+          "WR": 2.2738616549025994,
+          "mae_WR": 3.121271255603261,
+          "TE": 1.414103666095861,
+          "mae_TE": 1.9353189498423486
+        }
+      },
+      "n_train": 40234,
+      "n_test": 4337
+    },
+    {
+      "label": "2021H2",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.525655300477566,
+          "mae_pooled": 3.3726810723181706,
+          "QB": 2.5803800936256955,
+          "mae_QB": 3.3817631036152926,
+          "RB": 2.8147543314611987,
+          "mae_RB": 3.7654863847433755,
+          "WR": 2.7025409593086263,
+          "mae_WR": 3.634897727088808,
+          "TE": 1.801516033071361,
+          "mae_TE": 2.401589133622894
+        },
+        "inj_both": {
+          "pooled": 2.4123658568689734,
+          "mae_pooled": 3.2227536131124697,
+          "QB": 2.48185063379165,
+          "mae_QB": 3.2652146832597073,
+          "RB": 2.64010618984372,
+          "mae_RB": 3.544343542505327,
+          "WR": 2.5988439003731356,
+          "mae_WR": 3.4870594313621566,
+          "TE": 1.7373271680224438,
+          "mae_TE": 2.3118511694910135
+        },
+        "inj_zero_leg": {
+          "pooled": 2.413781329902887,
+          "mae_pooled": 3.2298287971439077,
+          "QB": 2.484410266599066,
+          "mae_QB": 3.2843134556363376,
+          "RB": 2.64644641188776,
+          "mae_RB": 3.57998983179971,
+          "WR": 2.5969325777158225,
+          "mae_WR": 3.4801324185702254,
+          "TE": 1.737499496656668,
+          "mae_TE": 2.2980409131807225
+        },
+        "inj_override": {
+          "pooled": 2.439251895567344,
+          "mae_pooled": 3.2672619048809177,
+          "QB": 2.4849345934990485,
+          "mae_QB": 3.2639540681034354,
+          "RB": 2.676610359014305,
+          "mae_RB": 3.588983845086308,
+          "WR": 2.6291484654182082,
+          "mae_WR": 3.5477431475202357,
+          "TE": 1.7647842310355855,
+          "mae_TE": 2.363693107936317
+        },
+        "nihilist_zero": {
+          "pooled": 5.212636405318661,
+          "mae_pooled": 5.212636405318661,
+          "QB": 6.04501400560224,
+          "mae_QB": 6.0450140056022414,
+          "RB": 5.384055944055944,
+          "mae_RB": 5.384055944055944,
+          "WR": 5.674419475655431,
+          "mae_WR": 5.674419475655431,
+          "TE": 3.516186252771619,
+          "mae_TE": 3.516186252771619
+        },
+        "pos_marginal": {
+          "pooled": 3.638900760648491,
+          "mae_pooled": 5.018972948188905,
+          "QB": 4.437080104862457,
+          "mae_QB": 6.0450140056022414,
+          "RB": 3.7476048951048955,
+          "mae_RB": 5.166748251748253,
+          "WR": 3.8086829604020616,
+          "mae_WR": 5.314144818976281,
+          "TE": 2.567671641366763,
+          "mae_TE": 3.4951219512195126
+        },
+        "inj_permuted": {
+          "pooled": 2.523830368980622,
+          "mae_pooled": 3.366028216945336,
+          "QB": 2.5733124443629927,
+          "mae_QB": 3.341651479138328,
+          "RB": 2.8017190834208643,
+          "mae_RB": 3.743904034699523,
+          "WR": 2.708052487313737,
+          "mae_WR": 3.645693887161761,
+          "TE": 1.8050291220711978,
+          "mae_TE": 2.4093659681611896
+        },
+        "oracle_avail__base": {
+          "pooled": 1.9815068475939097,
+          "mae_pooled": 2.7081533240554267,
+          "QB": 1.9877126795703406,
+          "mae_QB": 2.730358963060667,
+          "RB": 2.231273037235454,
+          "mae_RB": 3.0309486620262325,
+          "WR": 2.1681914894800567,
+          "mae_WR": 2.967664603874854,
+          "TE": 1.3282559814268313,
+          "mae_TE": 1.8202711032582362
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.9828784589774782,
+          "mae_pooled": 2.7062637549198905,
+          "QB": 1.9952877060452148,
+          "mae_QB": 2.7331025166332847,
+          "RB": 2.229731912535046,
+          "mae_RB": 3.017038391110223,
+          "WR": 2.1688965519098704,
+          "mae_WR": 2.9728635902402165,
+          "TE": 1.329595157254735,
+          "mae_TE": 1.8173701896779095
+        }
+      },
+      "n_train": 44712,
+      "n_test": 4362
+    },
+    {
+      "label": "2022H1",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.482162928784675,
+          "mae_pooled": 3.34561821135831,
+          "QB": 2.4020081930812816,
+          "mae_QB": 3.174545023050722,
+          "RB": 2.6586612764442923,
+          "mae_RB": 3.5638938848234765,
+          "WR": 2.737228226411166,
+          "mae_WR": 3.7368763861568035,
+          "TE": 1.8912063835506268,
+          "mae_TE": 2.5353411836266604
+        },
+        "inj_both": {
+          "pooled": 2.3505980294416307,
+          "mae_pooled": 3.17149454390786,
+          "QB": 2.271318321680915,
+          "mae_QB": 3.020589343867345,
+          "RB": 2.5291101489700196,
+          "mae_RB": 3.382597731362459,
+          "WR": 2.573041188156298,
+          "mae_WR": 3.5160064379448785,
+          "TE": 1.8127566716966894,
+          "mae_TE": 2.4358336155260156
+        },
+        "inj_zero_leg": {
+          "pooled": 2.352474658081363,
+          "mae_pooled": 3.1803013921121654,
+          "QB": 2.265490648387029,
+          "mae_QB": 3.024855997430116,
+          "RB": 2.538471228849357,
+          "mae_RB": 3.3993670547396024,
+          "WR": 2.5732422642530794,
+          "mae_WR": 3.5211172696028563,
+          "TE": 1.8141142796926064,
+          "mae_TE": 2.4447887573302904
+        },
+        "inj_override": {
+          "pooled": 2.3821863485641117,
+          "mae_pooled": 3.2208095359497846,
+          "QB": 2.285662378131144,
+          "mae_QB": 3.038308091760726,
+          "RB": 2.566116449315328,
+          "mae_RB": 3.440600953492469,
+          "WR": 2.6124623755361793,
+          "mae_WR": 3.5828743971320587,
+          "TE": 1.8366766561347199,
+          "mae_TE": 2.467058457438913
+        },
+        "nihilist_zero": {
+          "pooled": 5.241271939822202,
+          "mae_pooled": 5.241271939822202,
+          "QB": 6.6129970326409495,
+          "mae_QB": 6.6129970326409495,
+          "RB": 5.572486678507993,
+          "mae_RB": 5.572486678507993,
+          "WR": 5.5075916870415655,
+          "mae_WR": 5.5075916870415655,
+          "TE": 3.4187802313354365,
+          "mae_TE": 3.4187802313354365
+        },
+        "pos_marginal": {
+          "pooled": 3.666607116597406,
+          "mae_pooled": 5.103264189651243,
+          "QB": 4.725714007456442,
+          "mae_QB": 6.6129970326409495,
+          "RB": 3.8697814592157393,
+          "mae_RB": 5.384209591474245,
+          "WR": 3.774959877123692,
+          "mae_WR": 5.283141809290954,
+          "TE": 2.4890282833185045,
+          "mae_TE": 3.391188222923239
+        },
+        "inj_permuted": {
+          "pooled": 2.478339797807913,
+          "mae_pooled": 3.3293406847824567,
+          "QB": 2.413555587572754,
+          "mae_QB": 3.182846171180709,
+          "RB": 2.6353055054011794,
+          "mae_RB": 3.522822183802345,
+          "WR": 2.7420054958711852,
+          "mae_WR": 3.7155614169251585,
+          "TE": 1.8848214896238604,
+          "mae_TE": 2.5396666747779597
+        },
+        "oracle_avail__base": {
+          "pooled": 1.910728279219664,
+          "mae_pooled": 2.622350137094973,
+          "QB": 1.9074850332894755,
+          "mae_QB": 2.6103126304191693,
+          "RB": 2.2141996010364724,
+          "mae_RB": 3.0034500327655365,
+          "WR": 2.0526298347360914,
+          "mae_WR": 2.8411837038809287,
+          "TE": 1.3095992514240222,
+          "mae_TE": 1.8031945973606025
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.9099913391806993,
+          "mae_pooled": 2.616592968448369,
+          "QB": 1.913644089923974,
+          "mae_QB": 2.587894441151279,
+          "RB": 2.2076036629264504,
+          "mae_RB": 2.998383885256309,
+          "WR": 2.0548249485446584,
+          "mae_WR": 2.844564301914451,
+          "TE": 1.3058680842299946,
+          "mae_TE": 1.7927077250435184
+        }
+      },
+      "n_train": 48973,
+      "n_test": 4387
+    },
+    {
+      "label": "2022H2",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.43899666821858,
+          "mae_pooled": 3.2551224854875125,
+          "QB": 2.609128423931754,
+          "mae_QB": 3.3669506072141835,
+          "RB": 2.4752652623529983,
+          "mae_RB": 3.355422119591504,
+          "WR": 2.7111408644259245,
+          "mae_WR": 3.6381021206329724,
+          "TE": 1.8308765956718829,
+          "mae_TE": 2.4336554991609227
+        },
+        "inj_both": {
+          "pooled": 2.3273143846553697,
+          "mae_pooled": 3.0980734613424676,
+          "QB": 2.406915007760347,
+          "mae_QB": 3.097931693967616,
+          "RB": 2.3963957946957004,
+          "mae_RB": 3.254994247310556,
+          "WR": 2.582412267238812,
+          "mae_WR": 3.441213008340768,
+          "TE": 1.773813660633692,
+          "mae_TE": 2.3560027471059812
+        },
+        "inj_zero_leg": {
+          "pooled": 2.331504795444399,
+          "mae_pooled": 3.1060749639263534,
+          "QB": 2.413897020106636,
+          "mae_QB": 3.110068188102877,
+          "RB": 2.408327681541197,
+          "mae_RB": 3.245032750091817,
+          "WR": 2.5800160475791523,
+          "mae_WR": 3.4514392975291304,
+          "TE": 1.777691925267741,
+          "mae_TE": 2.3783674634970944
+        },
+        "inj_override": {
+          "pooled": 2.3607840468146817,
+          "mae_pooled": 3.1571790670908935,
+          "QB": 2.471501628275197,
+          "mae_QB": 3.1989169113820473,
+          "RB": 2.4156788283933386,
+          "mae_RB": 3.275900158733914,
+          "WR": 2.6155906713057484,
+          "mae_WR": 3.5186534525394797,
+          "TE": 1.8019240465836057,
+          "mae_TE": 2.399682924248882
+        },
+        "nihilist_zero": {
+          "pooled": 5.198781111886485,
+          "mae_pooled": 5.198781111886484,
+          "QB": 6.326715328467153,
+          "mae_QB": 6.326715328467153,
+          "RB": 5.383582358235824,
+          "mae_RB": 5.383582358235824,
+          "WR": 5.690225660863959,
+          "mae_WR": 5.690225660863959,
+          "TE": 3.3708613445378157,
+          "mae_TE": 3.3708613445378157
+        },
+        "pos_marginal": {
+          "pooled": 3.5835107903746253,
+          "mae_pooled": 4.9828936962084205,
+          "QB": 4.542058188283735,
+          "mae_QB": 6.326715328467153,
+          "RB": 3.647414433751067,
+          "mae_RB": 5.073861386138614,
+          "WR": 3.7931702974921064,
+          "mae_WR": 5.31678916827853,
+          "TE": 2.4776454427925017,
+          "mae_TE": 3.3658193277310926
+        },
+        "inj_permuted": {
+          "pooled": 2.430502101953908,
+          "mae_pooled": 3.2320742586902504,
+          "QB": 2.5815675280883603,
+          "mae_QB": 3.2993157126343253,
+          "RB": 2.478069748572249,
+          "mae_RB": 3.3480601427550516,
+          "WR": 2.7004841051971096,
+          "mae_WR": 3.614107886686657,
+          "TE": 1.8264374387971005,
+          "mae_TE": 2.425924184982151
+        },
+        "oracle_avail__base": {
+          "pooled": 1.924187051672295,
+          "mae_pooled": 2.627855582839529,
+          "QB": 1.850714360179421,
+          "mae_QB": 2.5615564485479947,
+          "RB": 2.1104133689606943,
+          "mae_RB": 2.8769117712085266,
+          "WR": 2.172742421595757,
+          "mae_WR": 2.955343652146225,
+          "TE": 1.3547773630314508,
+          "mae_TE": 1.8513634465129107
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.920685436264039,
+          "mae_pooled": 2.614929431288907,
+          "QB": 1.8454693327360818,
+          "mae_QB": 2.5211016540983184,
+          "RB": 2.0970756771238315,
+          "mae_RB": 2.890834495253479,
+          "WR": 2.177216192663724,
+          "mae_WR": 2.9457195390224613,
+          "TE": 1.3510155519631035,
+          "mae_TE": 1.821532418910934
+        }
+      },
+      "n_train": 53487,
+      "n_test": 4299
+    },
+    {
+      "label": "2023H1",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.3878908534415975,
+          "mae_pooled": 3.2095632016740585,
+          "QB": 2.455673550138403,
+          "mae_QB": 3.2330541011018914,
+          "RB": 2.484283803355078,
+          "mae_RB": 3.3410063079342804,
+          "WR": 2.6723572603554135,
+          "mae_WR": 3.623758836909198,
+          "TE": 1.744973811797663,
+          "mae_TE": 2.338523900121452
+        },
+        "inj_both": {
+          "pooled": 2.3072077664163966,
+          "mae_pooled": 3.115479740773437,
+          "QB": 2.3557894665052648,
+          "mae_QB": 3.1435768625871514,
+          "RB": 2.3873708156531017,
+          "mae_RB": 3.2319602329118,
+          "WR": 2.585063809431147,
+          "mae_WR": 3.51045621856762,
+          "TE": 1.7079521426504978,
+          "mae_TE": 2.2907229805145843
+        },
+        "inj_zero_leg": {
+          "pooled": 2.307222471218793,
+          "mae_pooled": 3.110071298433793,
+          "QB": 2.3562197680016936,
+          "mae_QB": 3.1154450398738165,
+          "RB": 2.3835571186115114,
+          "mae_RB": 3.2243847272224615,
+          "WR": 2.5889577858362953,
+          "mae_WR": 3.510945600875635,
+          "TE": 1.7053916080082447,
+          "mae_TE": 2.294343567688946
+        },
+        "inj_override": {
+          "pooled": 2.3317756712023714,
+          "mae_pooled": 3.1359898846427217,
+          "QB": 2.388020220874053,
+          "mae_QB": 3.140083431040307,
+          "RB": 2.4028027951848823,
+          "mae_RB": 3.2381869434116797,
+          "WR": 2.6171243983856436,
+          "mae_WR": 3.5501579320079273,
+          "TE": 1.7245003246320567,
+          "mae_TE": 2.312279629161978
+        },
+        "nihilist_zero": {
+          "pooled": 5.302256097560975,
+          "mae_pooled": 5.302256097560975,
+          "QB": 6.494787701317716,
+          "mae_QB": 6.494787701317716,
+          "RB": 5.436348155156103,
+          "mae_RB": 5.436348155156103,
+          "WR": 5.837396226415094,
+          "mae_WR": 5.837396226415094,
+          "TE": 3.3674518201284793,
+          "mae_TE": 3.3674518201284793
+        },
+        "pos_marginal": {
+          "pooled": 3.6410624792538604,
+          "mae_pooled": 5.056829268292683,
+          "QB": 4.643367601456621,
+          "mae_QB": 6.494787701317716,
+          "RB": 3.684330713436674,
+          "mae_RB": 5.088666035950805,
+          "WR": 3.849736494113853,
+          "mae_WR": 5.388465408805032,
+          "TE": 2.503909796573876,
+          "mae_TE": 3.4047109207708783
+        },
+        "inj_permuted": {
+          "pooled": 2.389944347180837,
+          "mae_pooled": 3.2128487848821234,
+          "QB": 2.465512294270188,
+          "mae_QB": 3.2906064649557765,
+          "RB": 2.490213889935541,
+          "mae_RB": 3.345775300570272,
+          "WR": 2.6689215309182672,
+          "mae_WR": 3.6110182017517376,
+          "TE": 1.7462917382983287,
+          "mae_TE": 2.327729731996295
+        },
+        "oracle_avail__base": {
+          "pooled": 1.927141880407704,
+          "mae_pooled": 2.6401100979074426,
+          "QB": 2.0273804821554355,
+          "mae_QB": 2.784957145370955,
+          "RB": 2.1008089153918306,
+          "mae_RB": 2.8819459313806823,
+          "WR": 2.1510153025334184,
+          "mae_WR": 2.941787473495655,
+          "TE": 1.2761913855984865,
+          "mae_TE": 1.7469430351836204
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.9274280299770996,
+          "mae_pooled": 2.6419666506649584,
+          "QB": 2.028462651309433,
+          "mae_QB": 2.8228885706732476,
+          "RB": 2.104937762947066,
+          "mae_RB": 2.8750986133780465,
+          "WR": 2.1471216195888725,
+          "mae_WR": 2.9311291165521363,
+          "TE": 1.2786622466773594,
+          "mae_TE": 1.7535742773094896
+        }
+      },
+      "n_train": 57690,
+      "n_test": 4264
+    },
+    {
+      "label": "2023H2",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.4100934853321765,
+          "mae_pooled": 3.260752497223115,
+          "QB": 2.5704859384513155,
+          "mae_QB": 3.4099414183522243,
+          "RB": 2.467780180819587,
+          "mae_RB": 3.3585068520865247,
+          "WR": 2.686631490988505,
+          "mae_WR": 3.6564329799433914,
+          "TE": 1.7451566913679537,
+          "mae_TE": 2.3528906397623466
+        },
+        "inj_both": {
+          "pooled": 2.290950612896734,
+          "mae_pooled": 3.0878400043466976,
+          "QB": 2.4644144929949876,
+          "mae_QB": 3.2575192881329595,
+          "RB": 2.3087301933016837,
+          "mae_RB": 3.1067770358074696,
+          "WR": 2.551401970023817,
+          "mae_WR": 3.465302693368853,
+          "TE": 1.6885905158468233,
+          "mae_TE": 2.2840723340540023
+        },
+        "inj_zero_leg": {
+          "pooled": 2.290719455098164,
+          "mae_pooled": 3.0804320853812914,
+          "QB": 2.455698804190393,
+          "mae_QB": 3.232431357654687,
+          "RB": 2.3138070189077014,
+          "mae_RB": 3.113569348072647,
+          "WR": 2.5525923944455027,
+          "mae_WR": 3.45787899932357,
+          "TE": 1.6863662169741136,
+          "mae_TE": 2.2741741195804326
+        },
+        "inj_override": {
+          "pooled": 2.317642878728184,
+          "mae_pooled": 3.1394575134881237,
+          "QB": 2.4737976741258723,
+          "mae_QB": 3.2780937771282637,
+          "RB": 2.3584955304621733,
+          "mae_RB": 3.2141107024426936,
+          "WR": 2.5794761670787465,
+          "mae_WR": 3.5176216303036902,
+          "TE": 1.70018891389846,
+          "mae_TE": 2.2957076030291144
+        },
+        "nihilist_zero": {
+          "pooled": 5.224961955268619,
+          "mae_pooled": 5.224961955268619,
+          "QB": 6.295746478873239,
+          "mae_QB": 6.295746478873239,
+          "RB": 5.689552806850618,
+          "mae_RB": 5.689552806850618,
+          "WR": 5.491468788249695,
+          "mae_WR": 5.491468788249695,
+          "TE": 3.437261146496815,
+          "mae_TE": 3.4372611464968155
+        },
+        "pos_marginal": {
+          "pooled": 3.6282456198305577,
+          "mae_pooled": 5.011307355314734,
+          "QB": 4.540124864572047,
+          "mae_QB": 6.295746478873239,
+          "RB": 3.848571406352924,
+          "mae_RB": 5.366336822074215,
+          "WR": 3.752727112952327,
+          "mae_WR": 5.1490452876376995,
+          "TE": 2.4792016440742555,
+          "mae_TE": 3.408174097664544
+        },
+        "inj_permuted": {
+          "pooled": 2.406877226715552,
+          "mae_pooled": 3.2554667006379083,
+          "QB": 2.5821207646403224,
+          "mae_QB": 3.406427785776537,
+          "RB": 2.4601782473755165,
+          "mae_RB": 3.345802983083556,
+          "WR": 2.6810942922123013,
+          "mae_WR": 3.6433012865770613,
+          "TE": 1.7396660062676752,
+          "mae_TE": 2.368155111759589
+        },
+        "oracle_avail__base": {
+          "pooled": 1.8979769001406883,
+          "mae_pooled": 2.6048790754382165,
+          "QB": 2.038719566799361,
+          "mae_QB": 2.80923096510413,
+          "RB": 2.080371167919142,
+          "mae_RB": 2.847622794594483,
+          "WR": 2.1075677385231315,
+          "mae_WR": 2.897521751572866,
+          "TE": 1.2248398527099829,
+          "mae_TE": 1.6724038914678856
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.9005451064762446,
+          "mae_pooled": 2.6195321196791927,
+          "QB": 2.052087489670529,
+          "mae_QB": 2.8437134853265067,
+          "RB": 2.0758680041137247,
+          "mae_RB": 2.832960258043492,
+          "WR": 2.108027159704354,
+          "mae_WR": 2.9231018528396437,
+          "TE": 1.2308156664978334,
+          "mae_TE": 1.6858647236976132
+        }
+      },
+      "n_train": 62012,
+      "n_test": 4337
+    },
+    {
+      "label": "2024H1",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.4296734878055113,
+          "mae_pooled": 3.2744102959092016,
+          "QB": 2.425166337581102,
+          "mae_QB": 3.1917868449865954,
+          "RB": 2.5793694223368395,
+          "mae_RB": 3.4677643867978136,
+          "WR": 2.736331563165328,
+          "mae_WR": 3.7198932578107753,
+          "TE": 1.7614425787126016,
+          "mae_TE": 2.3832597798955404
+        },
+        "inj_both": {
+          "pooled": 2.3254501452290794,
+          "mae_pooled": 3.1384864787935207,
+          "QB": 2.381423634145528,
+          "mae_QB": 3.1699216435877444,
+          "RB": 2.447288336342566,
+          "mae_RB": 3.284740124686104,
+          "WR": 2.60409478013276,
+          "mae_WR": 3.5367630151502567,
+          "TE": 1.6918893199989424,
+          "mae_TE": 2.2974540562848733
+        },
+        "inj_zero_leg": {
+          "pooled": 2.3246636223099313,
+          "mae_pooled": 3.14095670922464,
+          "QB": 2.3901223204113022,
+          "mae_QB": 3.182644528302434,
+          "RB": 2.442162694257937,
+          "mae_RB": 3.298604530074629,
+          "WR": 2.601583295605984,
+          "mae_WR": 3.531160659862457,
+          "TE": 1.692095407454029,
+          "mae_TE": 2.2936033279216166
+        },
+        "inj_override": {
+          "pooled": 2.3476541859887865,
+          "mae_pooled": 3.1705428091968373,
+          "QB": 2.3970462553292458,
+          "mae_QB": 3.155642654147949,
+          "RB": 2.479178673524128,
+          "mae_RB": 3.346332276124506,
+          "WR": 2.6238556827954818,
+          "mae_WR": 3.569511861202306,
+          "TE": 1.712094279368771,
+          "mae_TE": 2.328293622626522
+        },
+        "nihilist_zero": {
+          "pooled": 5.272701030927835,
+          "mae_pooled": 5.272701030927835,
+          "QB": 6.56621897810219,
+          "mae_QB": 6.56621897810219,
+          "RB": 5.8381801299907155,
+          "mae_RB": 5.8381801299907155,
+          "WR": 5.550764488286067,
+          "mae_WR": 5.550764488286067,
+          "TE": 3.288909276248726,
+          "mae_TE": 3.288909276248726
+        },
+        "pos_marginal": {
+          "pooled": 3.653953614855934,
+          "mae_pooled": 5.08634135166094,
+          "QB": 4.652293131199701,
+          "mae_QB": 6.56621897810219,
+          "RB": 3.982893903411661,
+          "mae_RB": 5.547093779015785,
+          "WR": 3.742167472888805,
+          "mae_WR": 5.222651048088779,
+          "TE": 2.44986173188008,
+          "mae_TE": 3.32177370030581
+        },
+        "inj_permuted": {
+          "pooled": 2.4293895414904454,
+          "mae_pooled": 3.2682464429631244,
+          "QB": 2.4036591937266762,
+          "mae_QB": 3.162310491155745,
+          "RB": 2.5812020641603497,
+          "mae_RB": 3.4498337690597682,
+          "WR": 2.74156028881829,
+          "mae_WR": 3.7215168226770197,
+          "TE": 1.7645396425474578,
+          "mae_TE": 2.3934166987083136
+        },
+        "oracle_avail__base": {
+          "pooled": 1.9345008219803188,
+          "mae_pooled": 2.6722392718580528,
+          "QB": 1.9046038972495898,
+          "mae_QB": 2.6425968827963238,
+          "RB": 2.2122839469443774,
+          "mae_RB": 3.0444868784045074,
+          "WR": 2.144313543088863,
+          "mae_WR": 2.960360253517298,
+          "TE": 1.303502589784804,
+          "mae_TE": 1.8078785501510757
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.9345602110726225,
+          "mae_pooled": 2.6728853886683877,
+          "QB": 1.894333449524015,
+          "mae_QB": 2.634337053572717,
+          "RB": 2.218029716915022,
+          "mae_RB": 3.033474933255563,
+          "WR": 2.1460371636273194,
+          "mae_WR": 2.974509045760313,
+          "TE": 1.301780452484258,
+          "mae_TE": 1.805216783385047
+        }
+      },
+      "n_train": 66275,
+      "n_test": 4365
+    },
+    {
+      "label": "2024H2",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.484850863301142,
+          "mae_pooled": 3.3244675860517003,
+          "QB": 2.8453813036325326,
+          "mae_QB": 3.7039718404656217,
+          "RB": 2.521125132022338,
+          "mae_RB": 3.4104588465778614,
+          "WR": 2.695998897136348,
+          "mae_WR": 3.6114226319663594,
+          "TE": 1.84041617976984,
+          "mae_TE": 2.487762253997127
+        },
+        "inj_both": {
+          "pooled": 2.35108459046338,
+          "mae_pooled": 3.1509920728791174,
+          "QB": 2.6725364225285952,
+          "mae_QB": 3.5049889041487723,
+          "RB": 2.3510669048627975,
+          "mae_RB": 3.1950983069091317,
+          "WR": 2.5708258121839958,
+          "mae_WR": 3.441173074760572,
+          "TE": 1.7595879234962788,
+          "mae_TE": 2.3724439149046836
+        },
+        "inj_zero_leg": {
+          "pooled": 2.3525146301389017,
+          "mae_pooled": 3.1508835910181645,
+          "QB": 2.668058889509263,
+          "mae_QB": 3.500229423693533,
+          "RB": 2.3598346170979263,
+          "mae_RB": 3.1932369581480273,
+          "WR": 2.572425128203244,
+          "mae_WR": 3.441201630394695,
+          "TE": 1.7570177794617594,
+          "mae_TE": 2.3773212706150266
+        },
+        "inj_override": {
+          "pooled": 2.391069841891113,
+          "mae_pooled": 3.2032601816135386,
+          "QB": 2.725608894540293,
+          "mae_QB": 3.540305864072692,
+          "RB": 2.3928232991181693,
+          "mae_RB": 3.252269034693858,
+          "WR": 2.6136356705718047,
+          "mae_WR": 3.5047313411238297,
+          "TE": 1.7836689099538778,
+          "mae_TE": 2.412884255385374
+        },
+        "nihilist_zero": {
+          "pooled": 5.488850902184236,
+          "mae_pooled": 5.488850902184236,
+          "QB": 6.933313609467456,
+          "mae_QB": 6.933313609467456,
+          "RB": 5.622243902439026,
+          "mae_RB": 5.622243902439024,
+          "WR": 5.901791426743442,
+          "mae_WR": 5.901791426743442,
+          "TE": 3.633776371308017,
+          "mae_TE": 3.633776371308017
+        },
+        "pos_marginal": {
+          "pooled": 3.8085312394988673,
+          "mae_pooled": 5.263993352326686,
+          "QB": 5.005260275375512,
+          "mae_QB": 6.933313609467456,
+          "RB": 3.8127073170731705,
+          "mae_RB": 5.2652682926829275,
+          "WR": 3.9711585338845414,
+          "mae_WR": 5.534932821497121,
+          "TE": 2.6825230444660826,
+          "mae_TE": 3.6255485232067515
+        },
+        "inj_permuted": {
+          "pooled": 2.481189126816181,
+          "mae_pooled": 3.3235654436116553,
+          "QB": 2.8390075916944655,
+          "mae_QB": 3.687977173730875,
+          "RB": 2.5185383449968533,
+          "mae_RB": 3.412195805334347,
+          "WR": 2.6891170448874826,
+          "mae_WR": 3.6126967885983583,
+          "TE": 1.8428351533580032,
+          "mae_TE": 2.4911806940962875
+        },
+        "oracle_avail__base": {
+          "pooled": 1.9797663053518828,
+          "mae_pooled": 2.6999351976163712,
+          "QB": 2.249839668345478,
+          "mae_QB": 3.046047429438832,
+          "RB": 2.1458906339381594,
+          "mae_RB": 2.936700980274076,
+          "WR": 2.1388894464296273,
+          "mae_WR": 2.9149664035076768,
+          "TE": 1.3452130356376213,
+          "mae_TE": 1.8426033719367934
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.9798829120471932,
+          "mae_pooled": 2.694381718018066,
+          "QB": 2.2563241133586227,
+          "mae_QB": 3.055853928319901,
+          "RB": 2.1395816285294127,
+          "mae_RB": 2.9269402703306784,
+          "WR": 2.136972224127287,
+          "mae_WR": 2.905771568582618,
+          "TE": 1.3510896301252655,
+          "mae_TE": 1.8366495801310787
+        }
+      },
+      "n_train": 70680,
+      "n_test": 4212
+    },
+    {
+      "label": "2025H1",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.423863293205388,
+          "mae_pooled": 3.239286460073652,
+          "QB": 2.7643865306604583,
+          "mae_QB": 3.657697340604554,
+          "RB": 2.42991040566725,
+          "mae_RB": 3.216109465190272,
+          "WR": 2.582911588298622,
+          "mae_WR": 3.480388962921637,
+          "TE": 1.915766158037828,
+          "mae_TE": 2.5725435414892908
+        },
+        "inj_both": {
+          "pooled": 2.4585255298061,
+          "mae_pooled": 3.2918433756966228,
+          "QB": 2.786475935677174,
+          "mae_QB": 3.6504670132978307,
+          "RB": 2.4618047539367858,
+          "mae_RB": 3.2900718998522986,
+          "WR": 2.6408149105827725,
+          "mae_WR": 3.582948791071167,
+          "TE": 1.9234935711767593,
+          "mae_TE": 2.559810490788364
+        },
+        "inj_zero_leg": {
+          "pooled": 2.4613976274700833,
+          "mae_pooled": 3.287995177724756,
+          "QB": 2.789860111315243,
+          "mae_QB": 3.660675877305001,
+          "RB": 2.467466634022471,
+          "mae_RB": 3.2759215874556173,
+          "WR": 2.646685719602953,
+          "mae_WR": 3.5735604063022035,
+          "TE": 1.917948194902252,
+          "mae_TE": 2.566751855433212
+        },
+        "inj_override": {
+          "pooled": 2.423863293205388,
+          "mae_pooled": 3.239286460073652,
+          "QB": 2.7643865306604583,
+          "mae_QB": 3.657697340604554,
+          "RB": 2.42991040566725,
+          "mae_RB": 3.216109465190272,
+          "WR": 2.582911588298622,
+          "mae_WR": 3.480388962921637,
+          "TE": 1.915766158037828,
+          "mae_TE": 2.5725435414892908
+        },
+        "nihilist_zero": {
+          "pooled": 5.330324976787373,
+          "mae_pooled": 5.330324976787373,
+          "QB": 6.952727272727274,
+          "mae_QB": 6.952727272727274,
+          "RB": 5.549868173258004,
+          "mae_RB": 5.549868173258004,
+          "WR": 5.4426973275326285,
+          "mae_WR": 5.4426973275326285,
+          "TE": 3.7748447204968945,
+          "mae_TE": 3.7748447204968945
+        },
+        "pos_marginal": {
+          "pooled": 3.7030652387924676,
+          "mae_pooled": 5.138774373259054,
+          "QB": 4.962893438801636,
+          "mae_QB": 6.952727272727274,
+          "RB": 3.8509928050606015,
+          "mae_RB": 5.286967984934087,
+          "WR": 3.6543545919586937,
+          "mae_WR": 5.116159105034184,
+          "TE": 2.746472726548814,
+          "mae_TE": 3.7535196687370607
+        },
+        "inj_permuted": {
+          "pooled": 2.417431149903309,
+          "mae_pooled": 3.238022205393832,
+          "QB": 2.7503054907205655,
+          "mae_QB": 3.6640064255249696,
+          "RB": 2.4201564211514213,
+          "mae_RB": 3.2075669038488264,
+          "WR": 2.5796255595613795,
+          "mae_WR": 3.4897580922185605,
+          "TE": 1.9130587628497797,
+          "mae_TE": 2.556309034205233
+        },
+        "oracle_avail__base": {
+          "pooled": 1.9469850187335165,
+          "mae_pooled": 2.652293854655061,
+          "QB": 2.1755381154008733,
+          "mae_QB": 2.976856906160855,
+          "RB": 2.1733719829641447,
+          "mae_RB": 2.918921114457722,
+          "WR": 2.009883586545764,
+          "mae_WR": 2.7419555819216175,
+          "TE": 1.4345772759937359,
+          "mae_TE": 1.9843790755218298
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.94453683549025,
+          "mae_pooled": 2.6535655199193195,
+          "QB": 2.173386429556852,
+          "mae_QB": 2.9771901330653217,
+          "RB": 2.1682918643329323,
+          "mae_RB": 2.9342342647823956,
+          "WR": 2.004215818346366,
+          "mae_WR": 2.7338934252858205,
+          "TE": 1.4401792768307156,
+          "mae_TE": 1.9864123913476288
+        }
+      },
+      "n_train": 74849,
+      "n_test": 4308
+    },
+    {
+      "label": "2025H2",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.3723449241198487,
+          "mae_pooled": 3.2128263476717422,
+          "QB": 2.638411251376779,
+          "mae_QB": 3.5269303756148127,
+          "RB": 2.4510237178674408,
+          "mae_RB": 3.3303229149160574,
+          "WR": 2.5438865189783986,
+          "mae_WR": 3.4679133943477245,
+          "TE": 1.808361932219778,
+          "mae_TE": 2.432242348641091
+        },
+        "inj_both": {
+          "pooled": 2.3881650725514394,
+          "mae_pooled": 3.2431990137184874,
+          "QB": 2.6775697742022553,
+          "mae_QB": 3.6128460351199196,
+          "RB": 2.464538056064286,
+          "mae_RB": 3.3352627255592284,
+          "WR": 2.5517838983318173,
+          "mae_WR": 3.5064196337531484,
+          "TE": 1.823141483388471,
+          "mae_TE": 2.437374045605354
+        },
+        "inj_zero_leg": {
+          "pooled": 2.3890033630190755,
+          "mae_pooled": 3.2457778088835427,
+          "QB": 2.6765408837737463,
+          "mae_QB": 3.6172751111527406,
+          "RB": 2.4664559676638005,
+          "mae_RB": 3.3479197585552942,
+          "WR": 2.553852750175428,
+          "mae_WR": 3.4996300534674827,
+          "TE": 1.8220769771296181,
+          "mae_TE": 2.443023409754626
+        },
+        "inj_override": {
+          "pooled": 2.3723449241198487,
+          "mae_pooled": 3.2128263476717422,
+          "QB": 2.638411251376779,
+          "mae_QB": 3.5269303756148127,
+          "RB": 2.4510237178674408,
+          "mae_RB": 3.3303229149160574,
+          "WR": 2.5438865189783986,
+          "mae_WR": 3.4679133943477245,
+          "TE": 1.808361932219778,
+          "mae_TE": 2.432242348641091
+        },
+        "nihilist_zero": {
+          "pooled": 5.0428356164383565,
+          "mae_pooled": 5.0428356164383565,
+          "QB": 6.1409415121255355,
+          "mae_QB": 6.1409415121255355,
+          "RB": 5.733271719038817,
+          "mae_RB": 5.733271719038816,
+          "WR": 4.949395807644883,
+          "mae_WR": 4.9493958076448825,
+          "TE": 3.6425641025641027,
+          "mae_TE": 3.6425641025641027
+        },
+        "pos_marginal": {
+          "pooled": 3.5534086845802597,
+          "mae_pooled": 4.876922374429223,
+          "QB": 4.520184201141227,
+          "mae_QB": 6.1409415121255355,
+          "RB": 3.913267927389924,
+          "mae_RB": 5.429205175600739,
+          "WR": 3.4535113345347623,
+          "mae_WR": 4.749519112207152,
+          "TE": 2.625158596318212,
+          "mae_TE": 3.5671794871794873
+        },
+        "inj_permuted": {
+          "pooled": 2.375511803862066,
+          "mae_pooled": 3.232681508073146,
+          "QB": 2.6350394640716193,
+          "mae_QB": 3.550393894005303,
+          "RB": 2.445922116193268,
+          "mae_RB": 3.3288557335022015,
+          "WR": 2.5541220676749568,
+          "mae_WR": 3.502518951677585,
+          "TE": 1.8136464749864092,
+          "mae_TE": 2.4486269152740894
+        },
+        "oracle_avail__base": {
+          "pooled": 1.9099262216786286,
+          "mae_pooled": 2.624864198439203,
+          "QB": 2.156662806031114,
+          "mae_QB": 2.962734177855674,
+          "RB": 2.189236886226907,
+          "mae_RB": 2.998335288038356,
+          "WR": 1.9295076324093279,
+          "mae_WR": 2.6712661041532733,
+          "TE": 1.3899902905221924,
+          "mae_TE": 1.8902934645054055
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.9108321963017219,
+          "mae_pooled": 2.627129617281858,
+          "QB": 2.162512086256293,
+          "mae_QB": 2.9717755821106566,
+          "RB": 2.189007400953771,
+          "mae_RB": 2.992699242247005,
+          "WR": 1.9284202939804256,
+          "mae_WR": 2.6802998730273666,
+          "TE": 1.3919182796591285,
+          "mae_TE": 1.8851959656136617
+        }
+      },
+      "n_train": 79307,
+      "n_test": 4380
+    }
+  ],
+  "verdict": {
+    "QB": "POWER_LIMITED",
+    "RB": "POWER_LIMITED",
+    "WR": "POWER_LIMITED",
+    "TE": "SHIP"
+  },
+  "headline": "QB:POWER_LIMITED \u00b7 RB:POWER_LIMITED \u00b7 WR:POWER_LIMITED \u00b7 TE:SHIP"
+}

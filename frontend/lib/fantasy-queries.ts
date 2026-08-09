@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth-context"
-import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
+import { canAccess } from "@/lib/entitlements"
 import {
   createSavedLeague,
   deleteSavedLeague,
@@ -153,20 +153,26 @@ export function useFantasyProjections(season: number = FANTASY_SEASON) {
 /**
  * The user's saved leagues.
  *
- * ⚠️ Only FIRES for a caller entitled to the editor (`admin` + `fantasy_comp` — NF-C0b ships
- * narrower than the fantasy surface). The board, rankings and draft surfaces all call this to offer
- * "Your leagues" beside the presets, and those pages are open to every SUBSCRIBER — so without the
- * `enabled` gate every subscriber page-load would fire a request that 403s by design. Skipping the
- * call leaves `data` undefined, which those surfaces already treat as "no saved leagues" and fall
- * back to the presets. Cosmetic only: `/fantasy/leagues` enforces the same rule server-side.
+ * ⭐ G100-C1 — FIRES FOR ANY SIGNED-IN CALLER. It used to be gated on `canAccessFantasyBeta`
+ * (`admin` + `fantasy_comp`), because `/fantasy/leagues` refused everyone else and every subscriber
+ * page-load would otherwise have fired a request that 403s by design. A free account now has a
+ * quota of one, so the server answers this for them and the gate would hide their own league.
+ *
+ * ⚠️ THE `enabled` PREDICATE IS NOW IDENTITY, NOT ENTITLEMENT, and it must stay one or the other —
+ * never nothing. A logged-out visitor has no token, so the request would 401; skipping it leaves
+ * `data` undefined, which every consumer already reads as "no saved leagues" and falls back to the
+ * presets. Cosmetic only: `/fantasy/leagues` enforces the real rule server-side.
+ *
+ * ⚠️ The query key carries no entitlement discriminator ON PURPOSE, unlike the three dual-mode board
+ * hooks above. This response is already per-user and `queryClient.clear()` runs on sign-out, so
+ * there is no shape for one caller's leagues to be served to another out of this cache.
  */
 export function useSavedLeagues() {
-  const { accessToken, groups } = useAuth()
-  const entitled = canAccessFantasyBeta(groups)
+  const { accessToken } = useAuth()
   return useQuery<SavedLeague[]>({
     queryKey: ["nfl-fantasy-leagues"],
     queryFn: () => listSavedLeagues(accessToken),
-    enabled: entitled,
+    enabled: !!accessToken,
     staleTime: 60_000,
     retry: false,
   })
@@ -238,13 +244,15 @@ export interface MyTeamEntry {
  * Lambda; see `models/fantasy.py`).
  */
 export function useMyTeams() {
-  const { accessToken, groups } = useAuth()
-  const entitled = canAccess("fantasy", groups)
+  const { accessToken } = useAuth()
   const { data: projections } = useFantasyProjections()
   const query = useQuery<MyTeamsPayload>({
     queryKey: ["nfl-fantasy-my-teams"],
+    // ⭐ G100-C1 — identity, not entitlement (see `useSavedLeagues`). `/fantasy/nfl/my-teams` now
+    // serves any signed-in caller their quota's worth of leagues, so gating on `canAccess("fantasy")`
+    // would leave a free user's own league invisible on the surface built to show it.
+    enabled: !!accessToken,
     queryFn: () => getMyTeamsPayload(accessToken, FANTASY_SEASON),
-    enabled: entitled,
     staleTime: 60_000,
     retry: false,
   })

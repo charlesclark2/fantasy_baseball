@@ -125,8 +125,17 @@ app.include_router(fantasy.router, dependencies=_paid)
 # `require_subscriber_mfa` resolves identity OPTIONALLY, so an anonymous caller passes through it
 # untouched while a subscriber still gets the MFA backstop.
 app.include_router(fantasy.board_router, dependencies=_paid)
-# NF-C0 platform league import. The authenticated half gates on require_fantasy_beta_access
-# (per-route, like NF-C0b's editor). The `public_router` carries EXACTLY ONE route — Yahoo's OAuth
+# ⭐ G100-C1 — the SAVED-LEAGUE surface (league CRUD + `/nfl/my-teams`), on its own router object
+# because its gate is WIDER than `fantasy.router`'s, not narrower. A per-route dependency can only
+# tighten a router-level one, and a free signed-in account has a personalization QUOTA but no
+# fantasy entitlement — so these had to move off `fantasy.router` to be reachable at all.
+# `require_personalized_league_access` gates on that quota (401 anonymous, 403 at quota 0).
+# ⚠️ Every response here is PER-CALLER, so it must never join the CDN allowlist or the public cache
+# rules; `cache_control_for` already forces `private, no-store` on any request carrying a token.
+app.include_router(fantasy.personal_router, dependencies=_paid)
+# NF-C0 platform league import. The authenticated half gates on require_personalized_league_access
+# (per-route) — widened from `require_fantasy_beta_access` at G100-C1, because import is one of the
+# two ways a free account configures its one league. The `public_router` carries EXACTLY ONE route — Yahoo's OAuth
 # callback — which the user's BROWSER enters on a redirect back from Yahoo and so cannot present a
 # bearer token; it authenticates on the HMAC-signed `state` instead (see the router's docstring).
 # It is mounted separately so that exemption stays one visible route rather than a hole in the gate.
