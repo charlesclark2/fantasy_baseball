@@ -148,23 +148,41 @@ def main(argv: list[str] | None = None) -> int:
 
     # ── 2. THE STITCH. One walker should be ONE person across the whole spine. ─────────────────
     print(f"\n══ IDENTITY STITCH ══")
+    # ⭐ THE IDENTIFIED DISTINCT_IDS ARE THE DISCRIMINATOR, and without them this section raises a
+    # false alarm on completely healthy data. "Two persons carry spine events" is the SAME shape
+    # whether it is one human split across two person ids (a broken stitch) or two genuinely
+    # different accounts (nothing wrong at all) — and on the first real run it was the latter, with
+    # three separate test accounts, while the banner suggested a stitch failure.
+    #
+    # An identified distinct_id is an EMAIL (that is what `identify()` is called with), so listing
+    # them per person settles it: two persons carrying the same email is a broken stitch; two
+    # persons carrying different emails is two users.
     stitch = q(
         f"select person_id, count(distinct event) as steps, "
-        f"arraySort(groupUniqArray(event)) as which, min(timestamp) as first, max(timestamp) as last "
+        f"arraySort(groupUniqArray(event)) as which, min(timestamp) as first, max(timestamp) as last, "
+        f"arraySort(groupUniqArrayIf(distinct_id, distinct_id like '%@%')) as identified "
         f"from events where {window} and event in ('{spine}') "
         f"group by person_id order by last desc limit 10"
     )
     if not stitch:
         print("  no spine events in the window at all — nothing to stitch.")
-    for person_id, steps, which, first, last in stitch:
+    emails: list[str] = []
+    for person_id, steps, which, first, last, identified in stitch:
+        emails += list(identified)
+        who_label = ", ".join(identified) if identified else "(never identified — anonymous only)"
         print(f"  {person_id}  {steps} step(s)  {first} → {last}")
+        print(f"      as: {who_label}")
         print(f"      {', '.join(which)}")
-    if len(stitch) > 1:
+    if len(emails) != len(set(emails)):
         print(
-            "\n  ⚠️ MORE THAN ONE PERSON carries spine events. If one of them holds only\n"
-            "     `landing_view` and another holds the post-signup steps, that is a BROKEN STITCH,\n"
-            "     not a drop-off: an ORDERED funnel discards anyone missing an earlier step, so the\n"
-            "     chart will read 'abandoned at signup' when the visitor completed everything."
+            "\n  ⛔ THE SAME EMAIL APPEARS ON MORE THAN ONE PERSON — that is a BROKEN STITCH. An\n"
+            "     ORDERED funnel discards anyone missing an earlier step, so the chart will read\n"
+            "     'abandoned at signup' for a visitor who completed everything."
+        )
+    elif len(stitch) > 1:
+        print(
+            "\n  ✅ Each person carries a DIFFERENT identity (or none), so these are separate\n"
+            "     visitors rather than one visitor split in two. Not a stitch problem."
         )
 
     # ── 3. The walker's full timeline, in order. ──────────────────────────────────────────────
