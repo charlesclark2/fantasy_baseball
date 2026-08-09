@@ -416,6 +416,47 @@ test.describe("the draftable pool bounds the highlights", () => {
     expectNoPageErrors(narrow.errors)
   })
 
+  test("no kicker or defense can lead the list", async ({ page }) => {
+    // ⭐ THE SECOND DISQUALIFICATION, and the one the pool filter did NOT fix: K and D/ST sit
+    // comfortably inside any real draft pool, and on the first real league four of the top five
+    // movers were defenses. ~32 of each project within a narrow band, so any difference in a
+    // league's K/DST scoring reorders the whole position at once — and the band sits deep enough in
+    // the overall list that a one-tier shuffle is worth dozens of places, every one of them noise.
+    //
+    // ⚠️ ASSERTED ON THE RENDERED POSITION, not on the delta's own `lowPred` field. Reading back the
+    // value the filter wrote would be the "test restates the code" shape (NF-C0e): it would pass
+    // just as well if the flag were computed correctly and then never consulted. The badge is what
+    // the reader sees.
+    const { errors } = await openMyLeague(page)
+    await expect(page.getByTestId("league-delta")).toBeVisible()
+
+    const cards = page.getByTestId("mover-card")
+    expect(await cards.count(), "no highlights rendered — the assertion below is vacuous")
+      .toBeGreaterThan(0)
+
+    for (const text of await cards.allInnerTexts()) {
+      const pos = text.match(/\b(QB|RB|WR|TE|K|DST)\b/)?.[1]
+      expect(pos, `a highlight card carried no position at all: ${text}`).toBeTruthy()
+      expect(
+        ["K", "DST"].includes(pos as string),
+        `a ${pos} led the movers — its rank is not a signal, and the section below cannot explain it`,
+      ).toBe(false)
+    }
+    expectNoPageErrors(errors)
+  })
+
+  test("…but they keep their place on the board", async ({ page }) => {
+    // The other side of the clause, and the reason it is a HIGHLIGHT filter rather than a data one.
+    // Dropping K/DST from the board would delete two roster slots the user has to fill — the NF1.6
+    // defect that put them on the board in the first place.
+    const { errors } = await openMyLeague(page)
+    await expect(page.getByTestId("my-league-board")).toBeVisible()
+    await page.getByRole("button", { name: "DST", exact: true }).click()
+    const rows = page.locator('[data-testid="my-league-board"] tbody tr')
+    expect(await rows.count(), "the board dropped D/ST entirely").toBeGreaterThan(0)
+    expectNoPageErrors(errors)
+  })
+
   test("the board below still carries every player, and their moves", async ({ page }) => {
     // The pool bounds the HIGHLIGHTS, never the data. Filtering the board itself would blank the
     // "vs free board" column for most rows — hiding a real number rather than declining to lead
