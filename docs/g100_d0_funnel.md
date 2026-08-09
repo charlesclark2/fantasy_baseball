@@ -122,6 +122,33 @@ happened to click Sign Up**. That is the right denominator for a funnel *step* a
 for counting new accounts. **New-account counts come from Cognito user creation dates**, not from
 this event. If the two disagree, Cognito is right.
 
+⛔ **AND IT MISSES A NEW USER WHO ENTERS THROUGH `/login` ENTIRELY — R1 UNDER-COUNTS.** The event
+keys on *which button was clicked*, not on whether an account was created: `/signup` stashes
+`intent: "signup"` before the Cognito redirect and `/callback` fires this event only on that branch
+([`app/callback/page.tsx`](../frontend/app/callback/page.tsx)). But **Google federation
+auto-provisions an account at either door** — so a first-time visitor who clicks *Sign In* gets a
+real, new Cognito account and emits `user_signin_started` / `user_signed_in intent=signin` and **no
+signup event at all**. Because R1's funnel is *ordered*, those users are then discarded from it
+outright: they appear neither as signups nor as drop-offs.
+
+This is not hypothetical and it is not rare. In the first 48h of production data, **every one of
+16 auth events used the `/login` door**; the `/signup` door was first exercised by the deliberate
+verification walk. Read R1 as **a floor that is blind to the `/login` door**, and until it is fixed,
+reconcile against Cognito creation dates before drawing any conclusion about signup conversion.
+
+**The fix is known but unbuilt** (deliberately out of D0's scope — it changes an event's meaning,
+which is a contract change, not a measurement change). Two candidates:
+
+- *Server-side, authoritative:* `acceptTerms` writes with `if_not_exists`, so the backend already
+  knows whether this was the first acceptance. Returning `{created: bool}` would make the signal
+  exact — but it is an API response-shape change, so it needs `deploy.sh` and must be **additive**
+  (NF-C0).
+- *Client-side, no deploy:* a federated Cognito ID token carries an `identities` claim with
+  `dateCreated`; if that timestamp is seconds old, this sign-in **is** the account creation,
+  whichever door was used. ⚠️ **Unverified** — the claim's presence and shape have not been checked
+  against a real token from our pool, and getting it wrong double-counts signups, which is worse
+  than the current under-count.
+
 ### R2 — signup → ACTIVATION
 
 | | |
@@ -272,7 +299,7 @@ CI proves the events leave the page under the right names
 intercepted ingest endpoint). It cannot prove they arrive in *your* PostHog project. Walk the real
 funnel on production once, with PostHog's **Activity → Live events** view open:
 
-1. Open `credencesports.com/?utm_source=verify&utm_campaign=g100d0` in a **fresh private window**.
+1. Open `www.credencesports.com/?utm_source=verify&utm_campaign=g100d0` in a **fresh private window**.
    → `landing_view` (`surface: home`), carrying `acquisition_source: verify`,
    `campaign: g100d0`, `free_paid_status: anonymous`.
 2. Navigate to `/fantasy/rankings`. → a second `landing_view` (`surface: fantasy_rankings`) **still
@@ -291,3 +318,44 @@ funnel on production once, with PostHog's **Activity → Live events** view open
    completing gives you `subscription_started` on the success screen once access lands.
 
 Then confirm the dashboard populates and that step 5's reload did not move the activation count.
+
+### ✅ Walked and verified — 2026-08-09
+
+Every spine step except `subscription_started` was observed in production on one stitched person
+(`credencesports26@gmail.com`), including the two the story flagged as unproven:
+
+| Step | Observed | Note |
+|---|---|---|
+| `landing_view` | 20:12:28 | `surface=home`, attribution rode to `/fantasy/rankings` |
+| `user_signup_completed` | 20:12:55 | `surface=signup`; `user_signed_in` carried `intent=signup` ⇒ the context survives the Cognito redirect |
+| `league_config_completed` | 16:38:29 | ⭐ **first production evidence** for the activation clause that had none |
+| `custom_board_viewed` | 16:38:34 + :46 | **6 events / 2 persons** ⇒ live proof of the ~3× event-vs-person inflation the persons-not-events rule exists to prevent |
+| `checkout_started` | 16:39:12 | |
+| `subscription_started` | — | **still unobserved**; needs a real card. Stripe is the count of truth regardless. |
+
+⚠️ **The walk's steps landed out of order** (league import 16:38 via `/login`, signup 20:12), so
+that person reads as a step-2 drop-off in the *ordered* funnel despite completing everything. An
+artifact of the test sequence, not a defect — but do not read the first days of the chart as a
+conversion signal.
+
+### ⏳ Do not read a zero within ~5 minutes of walking
+
+**Measured on this walk: a `capture()` at 20:12:55 was still not queryable at 20:16 and was by
+20:18** — PostHog's client-batch → ClickHouse path ran **3–5 minutes**. Run seconds after finishing,
+a query reported a `user_signup_completed` that had already fired as **zero**.
+
+That is the trap this whole section is exposed to: *"never fired"* and *"not ingested yet"* are
+byte-identical at a zero, and the alarming reading is the wrong one. **Live events** (above) is
+immune because it streams; a *query* is not.
+
+[`scripts/diagnose_posthog_funnel.py`](../scripts/diagnose_posthog_funnel.py) is the query-side
+instrument and now guards this itself — it measures the newest ingested event against the server
+clock and downgrades every zero to an explicit ⏳ UNVERIFIED inside a 300s grace. It separates the
+four causes of an apparent drop-off (never fired / broken stitch / did not qualify / outside the
+window), and needs the **`query:read`** scope, which the provisioning key deliberately lacks:
+
+```bash
+# LAPTOP — add query:read to the personal API key first, and REMOVE IT AFTERWARDS.
+set -a; . ./.env; set +a
+uv run python scripts/diagnose_posthog_funnel.py --hours 48
+```
