@@ -190,17 +190,30 @@ def select_position(pos: str, fold_results: list[dict], n_folds: int) -> dict:
         for arm in W2.REAL_ARMS_W2
     }
 
+    # the amended permutation pair (pre-run amendment, see the registration):
+    # (1) content check — the winner must beat the capacity foil (permuted) on the mean;
+    # (2) capacity sanity — permuted's lift over base must be non-positive or non-significant
+    #     (a strict binary on tied means is a ~50% false-veto coin flip — NF1.8/MH2-H8).
+    perm_lift = (crps[W2.FOIL_W2] - crps["inj_permuted"]).to_numpy(dtype=float)
+    p_perm = M14.onesided_paired_pvalue(perm_lift)
+    winner_vs_perm = float(np.nanmean(
+        (crps["inj_permuted"] - crps[winner]).to_numpy(dtype=float)))
     anchor_checks = {
         "nihilist_loses": bool(mean_crps["nihilist_zero"] > mean_crps[winner]),
         "pos_marginal_loses": bool(mean_crps["pos_marginal"] > mean_crps[winner]),
-        # the permutation must NOT beat the incumbent — content, not capacity (NF-D10)
-        "inj_permuted_does_not_beat_base": bool(
-            mean_crps["inj_permuted"] >= mean_crps[W2.FOIL_W2]),
+        "winner_beats_permuted": bool(winner_vs_perm > 0),
+        "permuted_lift_not_significant": bool(
+            float(np.nanmean(perm_lift)) <= 0 or p_perm >= 0.05),
         # NF-D16 per-form floors: no arm may beat ITS OWN form's availability oracle
         "no_arm_beats_own_oracle": bool(all(
             mean_crps[arm] > mean_crps[W2.ORACLE_OF_FORM[arm]] for arm in W2.REAL_ARMS_W2)),
         "base_respects_oracle": bool(
             mean_crps[W2.FOIL_W2] > mean_crps[W2.ORACLE_OF_FORM[W2.FOIL_W2]]),
+    }
+    permutation_detail = {
+        "permuted_lift_vs_base_mean": round(float(np.nanmean(perm_lift)), 4),
+        "permuted_lift_p_one_sided": p_perm,
+        "winner_vs_permuted_mean": round(winner_vs_perm, 4),
     }
 
     covs = [fr["coverage"][winner][pos] for fr in fold_results]
@@ -234,7 +247,8 @@ def select_position(pos: str, fold_results: list[dict], n_folds: int) -> dict:
         "trial_srs": [round(t, 3) for t in trial_srs],
         "observed_sr": None if observed_sr is None else round(observed_sr, 3),
         "var_trials_sr": None if var_trials is None else round(var_trials, 5),
-        "anchors": anchor_checks, "coverage": coverage,
+        "anchors": anchor_checks, "permutation_detail": permutation_detail,
+        "coverage": coverage,
     }
 
 
@@ -247,7 +261,8 @@ def position_gate(sel: dict, fdr_pass: bool) -> dict:
         "fdr_ok": bool(fdr_pass),
         "degenerates_lose": bool(sel["anchors"]["nihilist_loses"]
                                  and sel["anchors"]["pos_marginal_loses"]),
-        "permutation_behaves": bool(sel["anchors"]["inj_permuted_does_not_beat_base"]),
+        "permutation_behaves": bool(sel["anchors"]["winner_beats_permuted"]
+                                    and sel["anchors"]["permuted_lift_not_significant"]),
         "oracle_floors_respected": bool(sel["anchors"]["no_arm_beats_own_oracle"]),
         "coverage_floor_ok": not sel["coverage"]["blocking_shortfall"],
     }
@@ -310,7 +325,8 @@ def write_report(out: dict, path: Path) -> None:  # noqa: C901 — a report, not
           f"(clause requires {sel['fold_clause']['required']}) · PBO {sel['pbo']} · DSR {sel['dsr']} "
           f"· p {sel['p_one_sided']} · FDR pass {gate['checks']['fdr_ok']}")
         p(f"- matched-pair deltas vs base (the attribution): {sel['pair_deltas_vs_base']}")
-        p(f"- anchors: {sel['anchors']} · coverage(80) {sel['coverage']}")
+        p(f"- anchors: {sel['anchors']} · permutation detail {sel['permutation_detail']} · "
+          f"coverage(80) {sel['coverage']}")
         p(f"- MAE (report-only): {sel['mean_mae_report_only']}")
         p("")
     p("## Per-fold family activity (the NF-D20 discipline)")

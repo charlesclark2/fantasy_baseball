@@ -100,7 +100,7 @@ incorporation; this is the DSR trial field):**
 |---|---|---|
 | `nihilist_zero` | all-zero degenerate ceiling | MUST lose to every real arm (measured every run, never reasoned — NF-D14) |
 | `pos_marginal` | train climatology per position (the all-mean analog) | MUST lose |
-| `inj_permuted` | `inj_both`'s exact form with the injury columns' values permuted within (position × global week) in train AND test | MUST NOT beat `base_hurdle` — any win must be the family's CONTENT, not added capacity (NF-D10) |
+| `inj_permuted` | `inj_both`'s exact form with the injury columns' values permuted within (position × global week) in train AND test | see the PRE-RUN AMENDMENT below — (a) the winner MUST beat it (content over capacity, the positive NF-D10 check); (b) its lift over `base_hurdle` must not be statistically significant (one-sided paired p ≥ 0.05) |
 | `oracle_avail__base` | PEEKING availability ceiling of the base form: `p0 = 1{y=0}` realized, base's conditional leg | floors `base_hurdle` / `inj_zero_leg` / `inj_override` (their shared conditional form) |
 | `oracle_avail__inj` | same, with `inj_both`'s conditional leg | floors `inj_both` |
 
@@ -108,6 +108,27 @@ Per NF-D16, each arm is floored by the peeking version of **its own form**: an a
 own availability oracle is a metric-inversion tell, never a win. The two oracles differ only in
 the conditional leg (same family, same sample, same capacity — the NF1.7 (b) requirements hold by
 construction).
+
+### ⚠️ PRE-RUN AMENDMENT (2026-08-08, committed BEFORE the full 12-fold run; disclosed)
+
+The first registration's permutation clause was the strict binary "`inj_permuted` must not beat
+`base_hurdle` on the raw mean". The smoke (2 folds — a code-path validation, artifacts suffixed
+`_smoke`) surfaced what is in fact an ANALYTIC defect in that clause, not an empirical result:
+when the permuted family is INERT (the expected case), the two arms are a statistical tie, and a
+strict `≥` on tied means is a **~50% false-veto coin flip** — the NF1.8 "a rank statistic cannot
+tell a tie from a loss" lesson, and exactly the un-calibrated-clause class MH2-H8 exists to fix.
+The measured smoke magnitudes (permuted "beating" base by 0.0003–0.014 CRPS vs arm lifts of
+0.05–0.15) are tie-scale, consistent with the analytic reading. The amended clause is
+calibrated, two-part, and STRICTER on the question that matters (content):
+
+1. **`winner_beats_permuted`** — the winning arm's mean fold CRPS must beat `inj_permuted`'s
+   (the positive content-over-capacity attribution check; the permuted arm is the capacity foil).
+2. **`permuted_lift_not_significant`** — `inj_permuted`'s lift over `base_hurdle` must be
+   non-positive OR non-significant (one-sided paired p ≥ 0.05 over the 12 folds). A significant
+   permuted lift means the added columns carry non-player-level (week×position marginal-rate)
+   signal, and the attribution must then be read as winner−permuted, not winner−base.
+
+The winner−permuted paired delta is reported per position either way (the content attribution).
 
 ## Metric
 
@@ -123,9 +144,10 @@ SHIP requires ALL of: winner (among the 3 arms, mean fold CRPS over the 12 gated
 `base_hurdle` · `cv_power.fold_consistency_clause(12)` = 8/12 paired fold wins · PBO < 0.20 over
 the eligible set {3 arms + `base_hurdle`} (`NF18.deflate`; flips + contender spread + os-gap
 reported) · DSR ≥ 0.95 over the declared 3-arm family (paired per-fold deltas vs `base_hurdle`;
-`M14.deflated_sharpe`) · BH-FDR q = 0.10 across the 4 position tests · every MUST-lose/MUST-NOT-
-beat anchor behaves · no arm beats its own-form availability oracle · coverage floor not in
-blocking shortfall. Anything else ⇒ the position's verdict is a `classify_null` state, recorded
+`M14.deflated_sharpe`) · BH-FDR q = 0.10 across the 4 position tests · every MUST-lose anchor
+loses · the amended permutation pair (`winner_beats_permuted` AND
+`permuted_lift_not_significant`) holds · no arm beats its own-form availability oracle ·
+coverage floor not in blocking shortfall. Anything else ⇒ the position's verdict is a `classify_null` state, recorded
 with the NF-D20 active-fold count.
 
 ## Outputs
