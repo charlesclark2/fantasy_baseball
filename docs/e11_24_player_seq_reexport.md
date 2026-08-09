@@ -71,6 +71,9 @@ Design points, each pinned by a RED-proven guard:
   the `--w8a` DuckDB build. Gating it would freeze the mirror silently if the flag ever lapsed
   (the documented-but-never-set class), and a new flag means a box `.env` edit that fails the next
   deploy until the operator makes it.
+- **Finite subprocess timeout (900 s), and being a leaf does not excuse it.** `in_process_executor`
+  runs steps one at a time in topological order, so a hung leaf stalls every step scheduled after
+  it — predict included. INC-32.
 - **The lk9 export stays.** It is what guarantees the mirror exists *before* the `--w8a` DuckDB
   build reads it. Keeping both costs one extra `SELECT *` of a ~400 k-row table on a warehouse the
   writer immediately above has already resumed — **added active-time, not an added wake** (#679:
