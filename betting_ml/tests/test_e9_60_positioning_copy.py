@@ -384,11 +384,77 @@ def test_the_free_tier_is_described_as_the_freemium_build_shipped_it(faq_answers
         f"the free/paid answer no longer names the free preset, so a visitor cannot tell which "
         f"board is open: {ans!r}"
     )
-    assert "one personalized league" in low, (
-        f"the free tier's one personalized league (G100-C1, quota 1) is not described: {ans!r}"
-    )
     assert "draft optimizer" in low, (
         f"the answer no longer names the decision-support half of the paid tier: {ans!r}"
+    )
+
+
+def test_the_in_flight_free_league_grant_is_not_promised_as_live(copy_literals):
+    """⚠️⚠️ VERIFY_LIVE_PRODUCT (spec §18.13, operator flag 2026-08-09) — THE CLAIM THIS SUITE'S
+    FIRST CUT GOT WRONG.
+
+    G100-C1's free one-personalized-league grant (`FREE_PERSONALIZED_LEAGUE_QUOTA`) is IN FLIGHT.
+    The code is on `main`, but the API Lambda ships only via a manual `deploy.sh`, so a merged
+    quota is not a served one — and no anonymous probe can settle it, because every saved-league
+    route needs an account and the gateway's Cognito authorizer answers 401 before the Lambda runs
+    (NF3.2), making "deployed and gated" indistinguishable from "not deployed".
+
+    ⛔ So the copy must not promise a free personalized league. Personalization is described only
+    where it is true in BOTH states — as what a membership adds, which is what
+    `docs/freemium_tier.md` says it is regardless of the quota ("a QUOTA granted against a PAID
+    capability, never a reclassification of it").
+
+    ⭐ WHEN THE GRANT IS CONFIRMED SERVING, this clause comes out in the SAME change that puts the
+    claim back — deliberately coupled, so the copy and the guard cannot drift apart."""
+    joined = " ".join(copy_literals).lower()
+    for promise in (
+        "free account can keep one personalized league",
+        "free account can save one personalized league",
+        "one free personalized league",
+    ):
+        assert promise not in joined, (
+            f"the copy promises {promise!r}, but the free-league grant is not verified as serving — "
+            f"a merged quota is not a deployed one"
+        )
+
+    # ⚠️ THE SECOND FORM, AND THE FIRST CUT OF THIS CLAUSE MISSED IT. Forbidding only the "free
+    # account" phrasings left the FAQ's "what sports do you cover?" answer saying "…projection
+    # ranges and per-league personalization are available now" — the SAME claim without the word
+    # "free" in it.
+    #
+    # ⚠️ AND THE FIRST FIX FOR THAT WAS TOO CRUDE: it forbade "personalization" anywhere in a
+    # sentence containing "available now", which also refuses the CORRECT copy — "…are available
+    # now, WITH personalization … part of a membership" — a sentence whose whole job is to draw the
+    # distinction. Co-occurrence is not assertion. So the clause reads the LIST that precedes the
+    # claim, which is the only place being in it means "this is available now".
+    for m in re.finditer(r"are available now", joined):
+        listed = joined[max(0, m.start() - 220):m.start()]
+        listed = listed.rsplit(".", 1)[-1]  # this sentence only
+        assert "personalization" not in listed, (
+            f"personalization is listed among the available-now capabilities: {listed.strip()!r}"
+        )
+
+
+def test_the_available_now_list_holds_only_what_was_verified_serving(copy_src):
+    """⭐ THE POSITIVE HALF, and it is what stops the clause above being satisfied by saying less
+    about everything.
+
+    These three were read from the LIVE production board on 2026-08-09 — an anonymous
+    `GET /api/public/board?config=full_ppr&size=12` returned 858 rows, ZERO `locked`, every one
+    carrying `pts` and a `ptsP10`/`ptsP90` band. They are the claim the free tier actually
+    supports, and they must stay stated."""
+    block = copy_src.split("export const ABOUT_PRODUCTS", 1)[1].split("\n]", 1)[0]
+    live = re.search(r"live:\s*\{(.*?)\n    \},", block, re.S)
+    assert live, "no fantasy live block extracted — this clause would be vacuous"
+    body = live.group(1).lower()
+    for verified in ("draft rankings", "player projections", "projection ranges"):
+        assert verified in body, (
+            f"{verified!r} is verified live on the production board and is no longer listed as "
+            f"available"
+        )
+    assert "per-league personalization" not in body, (
+        "personalization is back in the fantasy Available-now list, but the free grant that would "
+        "make it available is not verified as serving"
     )
 
 
@@ -596,6 +662,156 @@ def test_about_remains_reachable_for_a_signed_in_visitor():
     nav = _strip_ts_comments(_NAV_TSX.read_text())
     assert "showSubNav && (" in nav and 'href="/about"' in nav, (
         "there is no About link on the signed-in path — the rewrite dropped it"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# AC — the mobile menu is a viewport-capped scroll container (the LIVE bug)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_the_mobile_menu_is_capped_to_the_viewport():
+    """⭐⭐ THE LIVE BUG (operator, 2026-08-09). Both mobile panels were plain in-flow `<div>`s
+    inside a `sticky top-0` nav with NO height cap, so on a phone the signed-in menu grew taller
+    than the viewport and spilled into the page flow — putting Sign Out and Settings below the fold
+    of whatever page you were on.
+
+    ⛔ `overflow-y-auto` ALONE DOES NOT FIX IT: a scroll container with no bounded height simply
+    grows. The cap is the load-bearing half, so it is asserted separately from the overflow."""
+    nav = _strip_ts_comments(_NAV_TSX.read_text())
+    panel = re.search(r"const MOBILE_MENU_PANEL\s*=(.*?)\n\n", nav, re.S)
+    assert panel, "the shared mobile-menu panel class is gone"
+    cls = panel.group(1)
+    assert "max-h-" in cls, (
+        f"the mobile menu has no height cap, so it can grow past the viewport and push Sign Out "
+        f"into the page flow again: {cls!r}"
+    )
+    assert "overflow-y-auto" in cls, (
+        f"the mobile menu is not its own scroll container, so its overflow has nowhere to go but "
+        f"the page: {cls!r}"
+    )
+
+
+def test_the_mobile_menu_cap_uses_the_dynamic_viewport_unit():
+    """⚠️ THE iOS-SAFARI CLAUSE, asserted on its own because it is invisible on a desktop browser
+    and on Chrome's device emulation alike.
+
+    `vh` is the LARGEST viewport — it ignores the browser chrome actually on screen — so a
+    `100vh`-based cap is ~60-100px too tall on iPhone Safari and the last item stays unreachable:
+    the bug surviving its own fix. `dvh` tracks the live viewport."""
+    nav = _strip_ts_comments(_NAV_TSX.read_text())
+    cls = re.search(r"const MOBILE_MENU_PANEL\s*=(.*?)\n\n", nav, re.S).group(1)
+    assert "dvh" in cls, (
+        f"the mobile menu caps on a static viewport unit; on iPhone Safari that is taller than the "
+        f"visible viewport and the bottom of the menu stays unreachable: {cls!r}"
+    )
+
+
+def test_the_mobile_menu_does_not_chain_its_scroll_to_the_page():
+    """The other half of the acceptance bar — "page scroll position untouched". Without
+    `overscroll-contain`, reaching the end of the menu hands the gesture to the document, so
+    closing the menu leaves the page somewhere the user never chose to go."""
+    nav = _strip_ts_comments(_NAV_TSX.read_text())
+    cls = re.search(r"const MOBILE_MENU_PANEL\s*=(.*?)\n\n", nav, re.S).group(1)
+    assert "overscroll-contain" in cls, (
+        f"the mobile menu chains its scroll to the page: {cls!r}"
+    )
+
+
+def test_both_mobile_panels_use_the_shared_capped_class():
+    """⭐ BOTH AUTH STATES, and the signed-in one is where the bug actually bit — Sign Out and
+    Settings only exist in that panel. A fix applied to one panel would leave the reported defect
+    exactly as it was while looking fixed."""
+    nav = _strip_ts_comments(_NAV_TSX.read_text())
+    uses = nav.count("className={MOBILE_MENU_PANEL}")
+    assert uses == 2, (
+        f"expected both mobile menu panels (signed-out and signed-in) to use the capped class, "
+        f"found {uses} — the signed-in panel is the one holding Sign Out"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# AC — nav IA: fantasy-first everywhere, Track Record top-level, coming never linked
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_the_signed_in_nav_is_fantasy_first():
+    """Spec §2/§21. `SPORTS` order IS the rendered order of the signed-in sport dropdowns, so this
+    is the signed-in half of the one-product-order rule the home page, About and the signed-out bar
+    already follow."""
+    model = _strip_ts_comments((_FRONTEND / "lib/nav-model.ts").read_text())
+    block = model.split("export const SPORTS", 1)[1]
+    nfl, mlb = block.find('sport: "nfl"'), block.find('sport: "mlb"')
+    assert nfl >= 0 and mlb >= 0, "a sport is missing from the signed-in nav model"
+    assert nfl < mlb, (
+        "the signed-in nav leads with MLB; every other surface leads with fantasy"
+    )
+
+
+def test_track_record_is_a_top_level_nav_entry_in_both_auth_states():
+    """Spec §20/§21 — promoted to top level. It is the site's central trust asset and the one
+    record readable without an account, so it should not be reachable only from inside a product
+    menu. Asserted in BOTH states because they are rendered by different code paths."""
+    nav = _strip_ts_comments(_NAV_TSX.read_text())
+    assert 'href="/fantasy/track-record"' in nav, (
+        "the signed-in nav has no top-level Track Record link"
+    )
+    positioning = _strip_ts_comments(_COPY_TS.read_text())
+    signed_out = positioning.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
+    # ⚠️ SPLIT INTO ENTRIES, NOT LINES. The Track Record entry is a MULTI-LINE object literal, so a
+    # per-line scan for "track" never sees the `desktop:` flag three lines below it and the clause
+    # failed on its own slice rather than on the source. Entries are `},`-delimited.
+    entries = [e for e in re.split(r"\},", signed_out) if e.strip()]
+    assert len(entries) >= 5, f"only {len(entries)} nav entries parsed — this clause would be vacuous"
+    tr = [e for e in entries if "track" in e.lower()]
+    assert tr, "the signed-out nav has no Track Record entry"
+    assert any("desktop: true" in e for e in tr), (
+        "the signed-out Track Record entry is not in the desktop bar, so it is not top-level there"
+    )
+
+
+def test_the_footer_leads_with_the_fantasy_product():
+    """One product order, on the one navigation surface that renders on every page."""
+    footer = _strip_ts_comments(_FOOTER_TSX.read_text())
+    products = footer.split("const PRODUCTS", 1)[1].split("] as const", 1)[0]
+    assert "Fantasy Football" in products and "MLB Betting Intelligence" in products, (
+        "a product is missing from the footer's product column"
+    )
+    assert products.index("Fantasy Football") < products.index("MLB Betting Intelligence"), (
+        "the footer leads with MLB; every other surface leads with fantasy"
+    )
+
+
+def test_an_unshipped_product_is_listed_in_the_footer_but_carries_no_link():
+    """⛔ E9.56c's dead `/pricing` CTA class, and BOTH halves matter.
+
+    A visitor deciding whether to subscribe should see where this is going, so the un-shipped
+    verticals are listed — but they must carry no destination at all. The `COMING` entries have no
+    `href` FIELD, so a future edit cannot make one clickable by filling in a blank."""
+    footer = _strip_ts_comments(_FOOTER_TSX.read_text())
+    coming = footer.split("const COMING", 1)[1].split("] as const", 1)[0]
+    assert "NFL Betting Intelligence" in coming and "NCAAF Betting Intelligence" in coming, (
+        "the un-shipped betting verticals vanished from the footer rather than being labelled"
+    )
+    assert "href" not in coming, (
+        f"a coming-soon footer entry carries an href — an un-shipped product must have no "
+        f"destination at all: {coming!r}"
+    )
+    assert "Coming this season" in footer, (
+        "the un-shipped footer entries render without a label saying they are not live"
+    )
+
+
+def test_the_site_description_is_fantasy_first(copy_literals):
+    """The SEO / link-preview surface — the sentence shown whenever any route is pasted into a
+    chat, and therefore the most widely distributed copy in the product. E9.46 removed the edge
+    claim and the baseball-only framing from it; what it left was MLB-first ordering."""
+    layout = _strip_ts_comments((_FRONTEND / "app/layout.tsx").read_text())
+    m = re.search(r"const SITE_DESCRIPTION\s*=\s*\n?\s*'([^']*)'", layout)
+    assert m, "the site description constant is gone"
+    desc = m.group(1).lower()
+    assert "fantasy" in desc and "mlb" in desc, f"the site description names only one product: {desc!r}"
+    assert desc.index("fantasy") < desc.index("mlb"), (
+        f"the site description leads with MLB; every other surface leads with fantasy: {desc!r}"
+    )
+    assert "baseball" not in desc, (
+        f"the site description still argues from baseball data: {desc!r}"
     )
 
 

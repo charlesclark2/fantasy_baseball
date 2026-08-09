@@ -41,6 +41,8 @@ FAQ = REPO / "frontend/app/faq/page.tsx"
 NAV = REPO / "frontend/components/nav.tsx"
 FOOTER = REPO / "frontend/components/site-footer.tsx"
 NF_TR1 = REPO / "betting_ml/tests/test_nf_tr1_claim_copy.py"
+NAV_MODEL = REPO / "frontend/lib/nav-model.ts"
+LAYOUT = REPO / "frontend/app/layout.tsx"
 
 SUITE = "betting_ml/tests/test_e9_60_positioning_copy.py"
 
@@ -94,8 +96,8 @@ CASES = [
 
     # ── only what is live reads as live ───────────────────────────────────────────────────────
     ("advertise start/sit as available now", COPY,
-     '        "Per-league personalization",\n      ],\n      note: "The current product answers one question',
-     '        "Per-league personalization",\n        "Start/sit decision support",\n      ],\n      note: "The current product answers one question',
+     '      items: ["Draft rankings", "Player projections", "Projection ranges"],',
+     '      items: ["Draft rankings", "Start/sit decision support"],',
      "test_no_unshipped_fantasy_capability_sits_in_a_live_list", SUITE),
 
     # ⭐ THE OTHER SIDE OF THE SAME RULE. Deleting the roadmap satisfies "nothing un-shipped is in a
@@ -172,18 +174,18 @@ CASES = [
 
     # ── a signed-out visitor finds a door to BOTH products ────────────────────────────────────
     ("remove the MLB door from the signed-out nav", COPY,
-     '{ label: "MLB betting intelligence", href: "/#today", product: "betting", desktop: true },',
-     '{ label: "Projections", href: "/fantasy/projections", product: "fantasy", desktop: true },',
+     '{ label: "MLB betting intelligence", short: "MLB", href: "/#today", product: "betting", desktop: true },',
+     '{ label: "Projections", short: "P", href: "/fantasy/projections", product: "fantasy", desktop: true },',
      "test_the_signed_out_nav_carries_both_products", SUITE),
 
     ("put the MLB door before the fantasy ones", COPY,
-     '  { label: "Fantasy rankings", href: "/fantasy/rankings", product: "fantasy", desktop: true },',
-     '  { label: "MLB betting intelligence", href: "/#mlb-first", product: "betting", desktop: true },',
+     '  { label: "Fantasy rankings", short: "Fantasy", href: "/fantasy/rankings", product: "fantasy", desktop: true },',
+     '  { label: "MLB first", short: "MLB", href: "/#mlb-first", product: "betting", desktop: true },',
      "test_the_signed_out_nav_is_fantasy_first", SUITE),
 
     ("point the MLB door at a paid route", COPY,
-     '{ label: "MLB betting intelligence", href: "/#today", product: "betting", desktop: true },',
-     '{ label: "MLB betting intelligence", href: "/performance", product: "betting", desktop: true },',
+     '{ label: "MLB betting intelligence", short: "MLB", href: "/#today", product: "betting", desktop: true },',
+     '{ label: "MLB betting intelligence", short: "MLB", href: "/performance", product: "betting", desktop: true },',
      "test_the_betting_door_is_a_route_an_anonymous_visitor_can_actually_open", SUITE),
 
     ("drop the FAQ from the signed-out nav", COPY,
@@ -211,13 +213,74 @@ CASES = [
      "test_about_remains_reachable_for_a_signed_in_visitor", SUITE),
 
     ("drop About from the site footer", FOOTER,
-     '            { label: "About", href: "/about" },\n',
+     '  { label: "About", href: "/about" },\n',
      '',
      "test_the_footer_reaches_both_pages_this_story_rewrote", SUITE),
 ]
 
 # ⚠️ The anti-scraping case needs a real sentence rather than a token swap, so it is built here
 # instead of as a two-string replace above (the placeholder rows keep the table shape uniform).
+CASES += [
+    # ── the verify-flag: an in-flight capability must not read as shipped ──────────────────────
+    ("promise the in-flight free personalized league", COPY,
+     'export const FAQ_HEADER = {',
+     'export const FREE_LEAGUE_CLAIM = "A free account can keep one personalized league."\n\nexport const FAQ_HEADER = {',
+     "test_the_in_flight_free_league_grant_is_not_promised_as_live", SUITE),
+
+    ("put personalization back in the Available-now list", COPY,
+     '      items: ["Draft rankings", "Player projections", "Projection ranges"],',
+     '      items: ["Draft rankings", "Player projections", "Per-league personalization"],',
+     "test_the_available_now_list_holds_only_what_was_verified_serving", SUITE),
+
+    # ── ⭐ the LIVE mobile-nav bug ─────────────────────────────────────────────────────────────
+    ("remove the mobile menu height cap", NAV,
+     '  "max-h-[calc(100dvh-4.25rem)] overflow-y-auto overscroll-contain"',
+     '  "overflow-y-auto overscroll-contain"',
+     "test_the_mobile_menu_is_capped_to_the_viewport", SUITE),
+
+    # ⚠️ ANCHORED ON THE CODE LINE, NOT THE BARE TOKEN. `max-h-[calc(100dvh-4.25rem)]` appears in
+    # the panel's DOC COMMENT first, so a first-occurrence patch broke the COMMENT — which the
+    # guard strips before scanning — and the clause reported GREEN on an unbroken class string.
+    # The same first-occurrence collision `docs/freemium_tier.md` records for `allows_board`.
+    ("cap the mobile menu on a static viewport unit", NAV,
+     '  "max-h-[calc(100dvh-4.25rem)] overflow-y-auto overscroll-contain"',
+     '  "max-h-[calc(100vh-4.25rem)] overflow-y-auto overscroll-contain"',
+     "test_the_mobile_menu_cap_uses_the_dynamic_viewport_unit", SUITE),
+
+    ("let the mobile menu chain its scroll to the page", NAV,
+     " overscroll-contain\"", "\"",
+     "test_the_mobile_menu_does_not_chain_its_scroll_to_the_page", SUITE),
+
+    ("fix only ONE of the two mobile panels", NAV,
+     "{!showSubNav && mobileOpen && (\n        <div className={MOBILE_MENU_PANEL}>",
+     "{!showSubNav && mobileOpen && (\n        <div className=\"border-t px-4 py-3 sm:hidden\">",
+     "test_both_mobile_panels_use_the_shared_capped_class", SUITE),
+
+    # ── nav IA ────────────────────────────────────────────────────────────────────────────────
+    ("put MLB before fantasy in the signed-in nav", NAV_MODEL,
+     '    sport: "nfl",\n    label: "NFL",', '    sport: "zzz",\n    label: "NFL",',
+     "test_the_signed_in_nav_is_fantasy_first", SUITE),
+
+    ("drop the top-level Track Record link", NAV,
+     '            href="/fantasy/track-record"', '            href="/changelog"',
+     "test_track_record_is_a_top_level_nav_entry_in_both_auth_states", SUITE),
+
+    ("put MLB before fantasy in the footer", FOOTER,
+     '  { label: "Fantasy Football", href: "/fantasy/rankings" },\n  { label: "MLB Betting Intelligence", href: "/#today" },',
+     '  { label: "MLB Betting Intelligence", href: "/#today" },\n  { label: "Fantasy Football", href: "/fantasy/rankings" },',
+     "test_the_footer_leads_with_the_fantasy_product", SUITE),
+
+    ("make an unshipped footer product clickable", FOOTER,
+     '  { label: "NFL Betting Intelligence" },',
+     '  { label: "NFL Betting Intelligence", href: "/nfl" },',
+     "test_an_unshipped_product_is_listed_in_the_footer_but_carries_no_link", SUITE),
+
+    ("put MLB before fantasy in the SEO description", LAYOUT,
+     "NFL fantasy rankings and MLB betting intelligence",
+     "MLB betting intelligence and NFL fantasy rankings",
+     "test_the_site_description_is_fantasy_first", SUITE),
+]
+
 CASES = [c for c in CASES if c[2] != "STAT_LINE_PLACEHOLDER_UNUSED"] + [
     ("sell the paid line as anti-scraping", COPY,
      'export const FAQ_HEADER = {',

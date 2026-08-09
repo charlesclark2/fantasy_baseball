@@ -56,81 +56,18 @@ export interface SportNav {
   surfaces: SurfaceGroup[]
 }
 
+// ⭐⭐ E9.60 — FANTASY-FIRST ORDER (spec §2/§21, operator 2026-08-09).
+//
+// NFL/Fantasy now leads. This array's order IS the rendered order of the signed-in sport
+// dropdowns, so it is the signed-in half of the same one-product-order rule the home page's
+// `VERTICALS`, About's `ABOUT_PRODUCTS` and the nav's `SIGNED_OUT_NAV` already follow: fantasy is
+// the current acquisition priority, and a visitor should never have to infer a different product
+// priority from a different surface.
+//
+// ⚠️ THE SWAP IS ORDER-ONLY. Nothing about entitlement, gating or item membership changes with it —
+// `isLocked` keys on `g.surface`, never on the sport or its index — so this is a presentation
+// decision that cannot alter who can open what. Pinned by `test_e9_60_positioning_copy.py`.
 export const SPORTS: SportNav[] = [
-  {
-    sport: "mlb",
-    label: "MLB",
-    surfaces: [
-      {
-        surface: "betting",
-        label: "Betting",
-        sections: [
-          {
-            label: null,
-            items: [
-              { label: "Dashboard", href: "/dashboard", key: "dashboard" },
-              { label: "EV Tracker", href: "/ev-tracker", key: "ev-tracker" },
-              { label: "Props", href: "/props", key: "props" },
-              { label: "Parlay Calculator", href: "/parlay", key: "parlay" },
-              { label: "Performance", href: "/performance", key: "performance" },
-              { label: "Bet Log", href: "/bet-log", key: "bet-log" },
-            ],
-          },
-          {
-            label: "Research",
-            items: [
-              { label: "Teams", href: "/teams", key: "teams" },
-              { label: "Players", href: "/players", key: "players" },
-            ],
-          },
-        ],
-      },
-      // E8.1 — MLB→Fantasy. The comment at the top of this file said "today MLB has Betting only
-      // and NFL has Fantasy only… adding MLB→Fantasy later is a data edit here, not a nav rewrite";
-      // this is that edit. It inherits the fantasy surface gate automatically (`isLocked` in
-      // nav.tsx keys on `g.surface === "fantasy"`, not on the sport), so the MLB board is upsold to
-      // an unentitled visitor exactly like the NFL one.
-      {
-        surface: "fantasy",
-        label: "Fantasy",
-        sections: [
-          {
-            label: null,
-            items: [
-              // Order is PRODUCT order: the board is the surface, the disagreement view is the
-              // differentiated cut OF that board and only makes sense after it.
-              //
-              // 🔒 `restrict: "admin"` — ADMIN ONLY while the surface is in development
-              // (operator, 2026-08-02). Deliberately NOT `fantasy_beta`, which would also admit
-              // `fantasy_comp`. Mirrors `get_admin_user` on the two `/fantasy/mlb/prospects/*`
-              // routes; the API is the real gate, this only hides the nav entries. Both move
-              // together when the surface opens up.
-              {
-                label: "Prospect Board",
-                href: "/fantasy/mlb/prospects",
-                key: "mlb-prospects",
-                restrict: "admin",
-              },
-              {
-                label: "Where We Disagree",
-                href: "/fantasy/mlb/disagreements",
-                key: "mlb-disagreements",
-                restrict: "admin",
-              },
-              // E8.2 — league roster import. Same admin restriction as the board it overlays; it
-              // opens up in the same single change (see the E8.1 comment above).
-              {
-                label: "My League",
-                href: "/fantasy/mlb/league",
-                key: "mlb-league",
-                restrict: "admin",
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  },
   {
     sport: "nfl",
     label: "NFL",
@@ -204,11 +141,89 @@ export const SPORTS: SportNav[] = [
               // NF3.2 — the past-season "receipts" proof asset. `public: true`: it stays reachable
               // even for a caller not entitled to Fantasy, since none of its data is the paid
               // current-season projection (see nav-model.ts's `NavItem.public` doc).
+              // ⚠️ E9.60 KEEPS IT HERE as well as promoting it to a TOP-LEVEL nav entry: the
+              // top-level link is for discovery, this one is for someone already inside the
+              // fantasy menu. Removing it here would make the surface's own menu the one place
+              // its receipts are missing.
               {
                 label: "Track Record",
                 href: "/fantasy/track-record",
                 key: "fantasy-track-record",
                 public: true,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+  {
+    sport: "mlb",
+    label: "MLB",
+    surfaces: [
+      {
+        surface: "betting",
+        label: "Betting",
+        sections: [
+          {
+            label: null,
+            items: [
+              { label: "Dashboard", href: "/dashboard", key: "dashboard" },
+              { label: "EV Tracker", href: "/ev-tracker", key: "ev-tracker" },
+              { label: "Props", href: "/props", key: "props" },
+              { label: "Parlay Calculator", href: "/parlay", key: "parlay" },
+              { label: "Performance", href: "/performance", key: "performance" },
+              { label: "Bet Log", href: "/bet-log", key: "bet-log" },
+            ],
+          },
+          {
+            label: "Research",
+            items: [
+              { label: "Teams", href: "/teams", key: "teams" },
+              { label: "Players", href: "/players", key: "players" },
+            ],
+          },
+        ],
+      },
+      // E8.1 — MLB→Fantasy. The comment at the top of this file said "today MLB has Betting only
+      // and NFL has Fantasy only… adding MLB→Fantasy later is a data edit here, not a nav rewrite";
+      // this is that edit. It inherits the fantasy surface gate automatically (`isLocked` in
+      // nav.tsx keys on `g.surface === "fantasy"`, not on the sport), so the MLB board is upsold to
+      // an unentitled visitor exactly like the NFL one.
+      {
+        surface: "fantasy",
+        label: "Fantasy",
+        sections: [
+          {
+            label: null,
+            items: [
+              // Order is PRODUCT order: the board is the surface, the disagreement view is the
+              // differentiated cut OF that board and only makes sense after it.
+              //
+              // 🔒 `restrict: "admin"` — ADMIN ONLY while the surface is in development
+              // (operator, 2026-08-02). Deliberately NOT `fantasy_beta`, which would also admit
+              // `fantasy_comp`. Mirrors `get_admin_user` on the two `/fantasy/mlb/prospects/*`
+              // routes; the API is the real gate, this only hides the nav entries. Both move
+              // together when the surface opens up.
+              {
+                label: "Prospect Board",
+                href: "/fantasy/mlb/prospects",
+                key: "mlb-prospects",
+                restrict: "admin",
+              },
+              {
+                label: "Where We Disagree",
+                href: "/fantasy/mlb/disagreements",
+                key: "mlb-disagreements",
+                restrict: "admin",
+              },
+              // E8.2 — league roster import. Same admin restriction as the board it overlays; it
+              // opens up in the same single change (see the E8.1 comment above).
+              {
+                label: "My League",
+                href: "/fantasy/mlb/league",
+                key: "mlb-league",
+                restrict: "admin",
               },
             ],
           },

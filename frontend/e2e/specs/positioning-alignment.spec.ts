@@ -1,7 +1,8 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import { collectPageErrors, mockApi } from "../support/api-mock"
 import { expectNoPageErrors } from "../support/assertions"
 import { forbiddenPhrasesIn } from "../support/claim-denylist"
+import { signIn } from "../support/signed-in"
 
 /**
  * E9.60 — About, FAQ and the signed-out nav must tell the SAME story as the home page.
@@ -24,9 +25,11 @@ import { forbiddenPhrasesIn } from "../support/claim-denylist"
  * type-correct, fully rendering, and describing a company that no longer existed. Nothing except a
  * check on the rendered document can catch that class.
  *
- * ⚠️ SIGNED OUT THROUGHOUT. `mockApi` provides no token, which is the state these surfaces are
- * written for — a first-touch visitor. The signed-in nav is a different menu and is not this
- * story's subject.
+ * ⚠️ BOTH AUTH STATES. The positioning and copy clauses run SIGNED OUT, which is the state those
+ * surfaces are written for — a first-touch visitor. The nav clauses run in BOTH, via
+ * `support/signed-in.ts`, because the two menus are rendered by two different branches and the
+ * mobile bug this story fixes lives in the SIGNED-IN one: Sign Out and Settings exist nowhere else.
+ * A fix verified only signed-out would have left the reported defect exactly as it was.
  */
 
 /** The positioning contract, in one place: these are the claims the whole site must agree on. */
@@ -179,7 +182,7 @@ test("the signed-out desktop nav offers both products", async ({ page }) => {
   // ⚠️ SCOPED TO THE PRIMARY <nav> AND EXCLUDING THE FOOTER — `SiteFooter` wraps its own links in a
   // `<nav>`, the collision `home-positioning.spec.ts` hit on its blog clause.
   const doors = await page.evaluate(() =>
-    [...document.querySelectorAll("nav [data-signed-out-nav]")]
+    [...document.querySelectorAll("[data-primary-nav] [data-signed-out-nav]")]
       .filter((el) => !el.closest("footer"))
       .map((el) => el.getAttribute("data-signed-out-nav") ?? ""),
   )
@@ -197,7 +200,7 @@ test("the signed-out MLB door does not lead to a login wall", async ({ page }) =
   await page.goto("/about")
 
   const href = await page
-    .locator('nav [data-signed-out-nav="betting"]')
+    .locator('[data-primary-nav] [data-signed-out-nav="betting"]')
     .first()
     .getAttribute("href")
   expect(href, "no MLB door found in the signed-out nav").toBeTruthy()
@@ -227,10 +230,10 @@ test("the FAQ is reachable from the signed-out mobile nav", async ({ page }) => 
   // is correctly hidden at 390px and the clause failed on the wrong node. The property being
   // asserted is "a door to each product is REACHABLE at this viewport", which is what `:visible`
   // actually says.
-  const navFaq = page.locator('nav [data-signed-out-nav="company"][href="/faq"]:visible')
+  const navFaq = page.locator('[data-primary-nav] [data-signed-out-nav="company"][href="/faq"]:visible')
   await expect(navFaq, "the FAQ is not in the signed-out mobile nav").toBeVisible()
   await expect(
-    page.locator('nav [data-signed-out-nav="betting"]:visible'),
+    page.locator('[data-primary-nav] [data-signed-out-nav="betting"]:visible'),
     "the MLB door is not reachable from the signed-out mobile nav",
   ).toBeVisible()
 })
@@ -242,4 +245,172 @@ test("About and FAQ reach each other, and the footer reaches both", async ({ pag
   await expect(page.locator('a[href="/faq"]').first()).toBeVisible()
   await expect(page.locator('footer a[href="/about"]')).toBeVisible()
   await expect(page.locator('footer a[href="/faq"]')).toBeVisible()
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// AC 5 — ⭐ THE LIVE MOBILE-NAV BUG (operator, 2026-08-09)
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// The open mobile menu had no height cap inside a `sticky top-0` nav, so on a phone it grew past
+// the viewport and spilled into the page flow — putting SIGN OUT and Settings below the fold of
+// whatever page you were on. Reaching Sign Out meant scrolling to the bottom of the entire page,
+// and closing the menu then left the page somewhere the user never chose to be.
+//
+// ⚠️ WHY THESE RUN AT EXPLICIT VIEWPORTS RATHER THAN ON THE `mobile` PROJECT. The bug is a
+// RELATIONSHIP between the menu's height and the viewport's, so the shortest viewport is the one
+// that matters — iPhone SE (667px) is 200px shorter than a Pixel 7 and is where a menu that "fits"
+// on the taller phone does not. Running both, named, is the point; inheriting one project's
+// viewport would test the easier case and report the harder one as covered.
+const PHONES = [
+  { name: "Pixel 7", width: 412, height: 915 },
+  { name: "iPhone SE", width: 375, height: 667 },
+]
+
+/** The open menu panel — the element that must own its own scroll. */
+const PANEL = "[data-primary-nav] div.overflow-y-auto"
+
+async function openMobileMenu(page: Page) {
+  await page.getByRole("button", { name: /toggle menu/i }).click()
+  await expect(page.locator(PANEL)).toBeVisible()
+}
+
+for (const phone of PHONES) {
+  test(`${phone.name}: the signed-in mobile menu keeps Sign Out reachable without scrolling the page`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: phone.width, height: phone.height })
+    await signIn(page)
+    await mockApi(page)
+    // `/settings` renders the full authenticated chrome — the account block with Settings and Sign
+    // Out is the part of the menu the bug actually buried.
+    await page.goto("/settings")
+    await page.waitForLoadState("networkidle")
+
+    const scrollY = await page.evaluate(() => window.scrollY)
+    await openMobileMenu(page)
+
+    // ⭐ 1. THE CAP. The panel must not be taller than the viewport — that is the defect itself,
+    // and it is the half `overflow-y-auto` alone does not fix.
+    const panel = page.locator(PANEL)
+    const box = await panel.boundingBox()
+    expect(box, "the open menu panel has no box").toBeTruthy()
+    expect(
+      box!.height,
+      `the open menu is ${box!.height}px tall on a ${phone.height}px viewport — it has spilled ` +
+        `into the page flow again`,
+    ).toBeLessThanOrEqual(phone.height)
+
+    // ⭐ 2. IT IS ITS OWN SCROLL CONTAINER. `scrollHeight > clientHeight` is what makes "scroll
+    // within the menu" a thing that can happen at all; without the cap this is false because the
+    // element simply grew to fit.
+    const { scrollHeight, clientHeight } = await panel.evaluate((el) => ({
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }))
+    expect(
+      scrollHeight,
+      "the menu content fits without scrolling on this viewport — the scroll assertion below " +
+        "would be vacuous, so this spec is no longer testing the reported bug",
+    ).toBeGreaterThan(clientHeight)
+
+    // ⭐ 3. SIGN OUT IS REACHED BY SCROLLING INSIDE THE MENU. This is the acceptance bar verbatim.
+    // ⚠️ SCOPED TO THE NAV, and this is not fussiness: `/settings` renders its OWN
+    // "Sign out everywhere" button, so a page-wide `/sign out/i` matched two elements and blew up
+    // on strict mode. Worse, had the nav's button been the one missing, a loose locator would have
+    // found the settings button and PASSED — the exact collision class the fantasy-door and
+    // market-label locators in `home-positioning.spec.ts` both record.
+    const signOut = page.locator("[data-primary-nav]").getByRole("button", { name: "Sign Out", exact: true })
+    await signOut.scrollIntoViewIfNeeded()
+    await expect(signOut).toBeInViewport()
+
+    // ⭐ 4. THE PAGE DID NOT MOVE. `overscroll-contain` plus the cap means the document scroll is
+    // untouched — the other half of the acceptance bar, and the part that made the old behaviour
+    // actively disorienting rather than merely awkward.
+    expect(
+      await page.evaluate(() => window.scrollY),
+      "reaching Sign Out scrolled the underlying page",
+    ).toBe(scrollY)
+  })
+
+  test(`${phone.name}: the signed-out mobile menu also stays inside the viewport`, async ({ page }) => {
+    await page.setViewportSize({ width: phone.width, height: phone.height })
+    await mockApi(page)
+    await page.goto("/about")
+
+    await openMobileMenu(page)
+    const box = await page.locator(PANEL).boundingBox()
+    expect(box, "the open menu panel has no box").toBeTruthy()
+    // Both auth states share one class, but they are rendered by two different branches — a fix
+    // applied to one is invisible in the other, which is exactly how half a fix ships.
+    expect(
+      box!.height,
+      `the signed-out menu is ${box!.height}px tall on a ${phone.height}px viewport`,
+    ).toBeLessThanOrEqual(phone.height)
+
+    // The last item in this panel is Sign In; it must be reachable the same way.
+    const signIn = page.locator('[data-primary-nav] a[href="/login"]:visible')
+    await signIn.scrollIntoViewIfNeeded()
+    await expect(signIn).toBeInViewport()
+  })
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// AC 6 — the nav IA holds in the SIGNED-IN state too
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+test("the signed-in nav leads with fantasy and carries Track Record top-level", async ({ page }) => {
+  await signIn(page)
+  await mockApi(page)
+  await page.goto("/about")
+  await page.waitForLoadState("networkidle")
+
+  // ⚠️ ASSERT THE SIGNED-IN CHROME ACTUALLY RENDERED FIRST. If the seeded session did not take
+  // (a client-id drift in `signed-in.ts` would do it silently), every clause below would be
+  // asserting about a signed-OUT page while reading as coverage.
+  const subNav = page.locator("[data-primary-nav]").getByRole("link", { name: "What's New" })
+  await expect(subNav, "the signed-in sub-nav did not render — the seeded session did not take")
+    .toBeVisible()
+
+  const triggers = await page
+    .locator("[data-primary-nav] button")
+    .evaluateAll((els) => els.map((e) => (e.textContent ?? "").trim()))
+  const nfl = triggers.findIndex((t) => t.startsWith("NFL"))
+  const mlb = triggers.findIndex((t) => t.startsWith("MLB"))
+  expect(nfl, "no NFL dropdown in the signed-in nav").toBeGreaterThanOrEqual(0)
+  expect(mlb, "no MLB dropdown in the signed-in nav").toBeGreaterThanOrEqual(0)
+  expect(nfl, "the signed-in nav leads with MLB; every other surface leads with fantasy")
+    .toBeLessThan(mlb)
+
+  await expect(
+    page.locator("[data-primary-nav]").getByRole("link", { name: "Track Record", exact: true }),
+    "Track Record is not a top-level entry in the signed-in nav",
+  ).toBeVisible()
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// AC 7 — the footer: fantasy-first, and an un-shipped product is never a link
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+test("the footer leads with fantasy and never links an unshipped product", async ({ page }) => {
+  await mockApi(page)
+  await page.goto("/about")
+
+  const footer = page.locator("footer")
+  const text = (await footer.innerText()).toLowerCase()
+  expect(text.indexOf("fantasy football"), "the footer has no fantasy product entry")
+    .toBeGreaterThanOrEqual(0)
+  expect(
+    text.indexOf("fantasy football"),
+    "the footer leads with MLB; every other surface leads with fantasy",
+  ).toBeLessThan(text.indexOf("mlb betting intelligence"))
+
+  // ⛔ E9.56c's dead-`/pricing` class. The coming rows must be listed AND unclickable.
+  expect(text, "the un-shipped verticals vanished rather than being labelled").toContain(
+    "ncaaf betting intelligence",
+  )
+  expect(text).toContain("coming this season")
+  const comingLinks = await footer
+    .locator("a")
+    .evaluateAll((els) =>
+      els.filter((e) => /ncaaf|nfl betting/i.test(e.textContent ?? "")).length,
+    )
+  expect(comingLinks, "an un-shipped product is rendered as a link in the footer").toBe(0)
 })

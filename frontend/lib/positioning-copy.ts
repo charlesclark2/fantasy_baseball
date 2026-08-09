@@ -99,13 +99,27 @@ export const ABOUT_PRODUCTS: readonly ProductBlock[] = [
     lede: "Credence turns player projections into rankings and decisions that reflect the league you actually play in rather than a generic scoring format.",
     live: {
       heading: "Available now",
-      items: [
-        "Draft rankings",
-        "Player projections",
-        "Projection ranges",
-        "Per-league personalization",
-      ],
-      note: "The current product answers one question: how should this player be valued in my league, under my scoring settings?",
+      // ⚠️⚠️ VERIFY_LIVE_PRODUCT — AND THIS LIST IS SHORTER THAN THE SPEC'S ON PURPOSE.
+      //
+      // Spec §3.1/§7 lists "Per-league personalization" as Available now. ⛔ IT IS NOT SAFE TO SAY
+      // SO HERE. The free one-personalized-league grant (G100-C1's `FREE_PERSONALIZED_LEAGUE_QUOTA`)
+      // is IN FLIGHT: the code is on `main`, but the API Lambda ships only via a manual
+      // `deploy.sh`, so a merged quota is not a served one — and the operator flagged it as not yet
+      // shipped. There is no anonymous probe that can settle it either, because every saved-league
+      // route needs an account and the gateway's Cognito authorizer answers 401 before the Lambda
+      // runs (NF3.2), so a 401 cannot distinguish "deployed and gated" from "not deployed".
+      //
+      // ⭐ WHAT IS VERIFIED, and how: the three below were read from the LIVE production board on
+      // 2026-08-09 — `GET /api/public/board?config=full_ppr&size=12` anonymously returned 858 rows,
+      // ZERO of them `locked`, every one carrying `pts` and a `ptsP10`/`ptsP90` band. That is the
+      // whole claim: rankings, projections and ranges, free, with nothing withheld.
+      //
+      // Personalization is therefore described where it is unambiguously true in BOTH states — as
+      // what a membership adds (`docs/freemium_tier.md`: the free tier is a QUOTA granted against a
+      // PAID capability, never a reclassification of it). When the free grant is confirmed live,
+      // this list gains it back in the same change that updates the FAQ.
+      items: ["Draft rankings", "Player projections", "Projection ranges"],
+      note: "Free to read without an account: every player we project, our rank for him, the 80% range on his season, and the market's ADP beside it. A membership re-scores that board for your own league's scoring and roster.",
     },
     coming: {
       heading: "Coming this season",
@@ -332,7 +346,7 @@ export const FAQ_SECTIONS: readonly { category: string; items: readonly FaqItem[
       },
       {
         q: "What sports does Credence cover?",
-        a: "NFL fantasy football and MLB betting intelligence are live today. NFL and NCAAF betting intelligence are coming this season and have not shipped. On the fantasy side, draft rankings, player projections, projection ranges and per-league personalization are available now; weekly projections, start/sit, waiver tools and matchup-aware recommendations are also still to come.",
+        a: "NFL fantasy football and MLB betting intelligence are live today. NFL and NCAAF betting intelligence are coming this season and have not shipped. On the fantasy side, draft rankings, player projections and projection ranges are available now, with personalization for your own league's scoring and roster part of a membership; weekly projections, start/sit, waiver tools and matchup-aware recommendations are also still to come.",
       },
     ],
   },
@@ -345,7 +359,7 @@ export const FAQ_SECTIONS: readonly { category: string; items: readonly FaqItem[
       },
       {
         q: "Are rankings customized for my league?",
-        a: "Yes, with a membership. Save your league's real scoring, roster shape and team count and the whole board re-scores against it — including value over replacement, which depends entirely on how many of each position your league actually starts. A free account can keep one personalized league. The open board everyone sees is full-PPR at twelve teams.",
+        a: "Yes, with a membership. Save your league's real scoring, roster shape and team count and the whole board re-scores against it — including value over replacement, which depends entirely on how many of each position your league actually starts. The board everyone can read without an account is full-PPR at twelve teams, and every number on it is real.",
         link: { label: "See what a membership adds", href: "/subscribe" },
       },
       {
@@ -366,12 +380,15 @@ export const FAQ_SECTIONS: readonly { category: string; items: readonly FaqItem[
       },
       {
         q: "What is free, and what does a membership cover?",
-        a: "Free, including without an account: the full rankings board at full-PPR twelve teams, the format-independent projections, the 80% ranges, market ADP beside our number, every player page and player search. Nothing on those pages is withheld or blurred. A membership adds the other scoring formats and league sizes, personalization for your own league's scoring and roster, and the decision tools — the draft optimizer, and the weekly calls as they land. A free account can keep one personalized league.",
+        // ⚠️ SCOPED TO WHAT IS VERIFIED SERVING — see the note on `ABOUT_PRODUCTS`. The free
+        // one-personalized-league grant is in flight, so it is not promised here; the sentence is
+        // true whether or not that grant is live yet.
+        a: "Free, including without an account: the full rankings board at full-PPR twelve teams, the format-independent projections, the 80% ranges, market ADP beside our number, every player page and player search. Nothing on those pages is withheld or blurred. A membership adds the other scoring formats and league sizes, personalization for your own league's scoring and roster, and the decision tools — the draft optimizer, and the weekly calls as they land.",
         link: { label: "See what a membership adds", href: "/subscribe" },
       },
       {
         q: "Can I use Credence for more than one league?",
-        a: "A free account can save one personalized league. A membership lifts that, and adds the cross-league view where every saved roster is scored under its own format in one place. Leagues can be imported from a supported platform or entered by hand if we cannot reach yours.",
+        a: "Personalized leagues are part of a membership, which also carries the cross-league view where every saved roster is scored under its own format in one place. A league can be imported from a supported platform, or typed in by hand if we cannot reach yours.",
       },
     ],
   },
@@ -495,8 +512,17 @@ export const FAQ_HEADER = {
 export type SignedOutNavLink = {
   label: string
   href: string
+  /** ⭐ The DESKTOP label, when the full one is too long for a single bar.
+   *
+   *  ⚠️ THIS EXISTS BECAUSE OF A REAL CONSTRAINT, not for tidiness. E9.58 already recorded this bar
+   *  overflowing on a phone — the wordmark overlapped the first link and "Track Record" wrapped
+   *  onto two lines — and E9.60 both ADDS a link (the MLB door) and BUMPS the type size (the E9.61
+   *  nav-sizing note, absorbed here). "MLB betting intelligence" at `text-sm` beside three other
+   *  links and two buttons does not fit a laptop bar. The mobile menu, which has the room and the
+   *  product grouping, keeps the full descriptive label. */
+  short?: string
   /** Which product this door belongs to; `null` for the company-level pages. Rendered as a group
-   *  label on mobile, where there is room to group. */
+   *  separator on mobile, where there is room to group. */
   product: "fantasy" | "betting" | null
   /** Desktop shows a trimmed set — the bar overflows on a laptop at more than about five links.
    *  Mobile shows everything (spec §22), which is where FAQ becomes reachable from the nav at all. */
@@ -508,17 +534,21 @@ export type SignedOutNavLink = {
  *  redirect to /login is a menu that lies about what it opens (`nav-model.ts`'s `freeSignedIn`
  *  doc records the same rule for the signed-in menu). */
 export const SIGNED_OUT_NAV: readonly SignedOutNavLink[] = [
-  { label: "Fantasy rankings", href: "/fantasy/rankings", product: "fantasy", desktop: true },
+  { label: "Fantasy rankings", short: "Fantasy", href: "/fantasy/rankings", product: "fantasy", desktop: true },
   { label: "Projections", href: "/fantasy/projections", product: "fantasy", desktop: false },
   { label: "Player search", href: "/fantasy/players", product: "fantasy", desktop: false },
+  // ⭐ TRACK RECORD IS TOP-LEVEL (spec §20/§21, operator 2026-08-09) — it is the site's central
+  // trust asset and the one record a stranger can read without an account, so it earns a bar slot
+  // rather than living only inside a product menu.
   {
     label: "Fantasy track record",
+    short: "Track Record",
     href: TRACK_RECORD_TRUST_LINK.href,
     product: "fantasy",
     desktop: true,
   },
   // ⭐ THE DOOR THAT WAS MISSING.
-  { label: "MLB betting intelligence", href: "/#today", product: "betting", desktop: true },
+  { label: "MLB betting intelligence", short: "MLB", href: "/#today", product: "betting", desktop: true },
   { label: "About", href: "/about", product: null, desktop: true },
   { label: "FAQ", href: "/faq", product: null, desktop: false },
 ]

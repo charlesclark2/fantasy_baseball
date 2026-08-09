@@ -421,7 +421,17 @@ def _mlb_nav_block(strip_comments: bool = True) -> str:
         test must match CODE, never the commentary about it.
     """
     nav = (_FRONTEND / "lib/nav-model.ts").read_text(encoding="utf-8")
-    block = nav[nav.index('sport: "mlb"'):nav.index('sport: "nfl"')]
+    # ⚠️ ORDER-INDEPENDENT (E9.60, 2026-08-09). This was `nav[index('sport: "mlb"'):index('sport:
+    # "nfl"')]`, which silently ASSUMED MLB was declared before NFL. E9.60 made the nav fantasy-first
+    # — NFL now leads — so the end index fell BEFORE the start and the slice came back EMPTY, taking
+    # both clauses below down with it. It failed loudly, which is the lucky direction; the same
+    # assumption facing the other way is a slice that reads the WRONG sport's block and passes for
+    # the wrong reason (the trap `test_e9_46_home_copy.py` records on `VERTICALS`).
+    #
+    # Slice from MLB to the NEXT sport declared after it, or to the end of the array.
+    start = nav.index('sport: "mlb"')
+    nxt = nav.find('sport: "', start + len('sport: "mlb"'))
+    block = nav[start:nxt] if nxt != -1 else nav[start:]
     if not strip_comments:
         return block
     return "\n".join(ln for ln in block.splitlines() if not ln.strip().startswith("//"))
