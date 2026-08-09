@@ -212,11 +212,15 @@ test.describe("the free personalized league", () => {
     })
     await page.goto("/fantasy/my-league")
 
-    // Neither the "set up your league" prompt…
-    await expect(page.getByTestId("my-league-empty")).toHaveCount(0)
-    // …nor a spinner that never resolves. An honest, bounded statement instead.
+    // ⚠️ THE POSITIVE ASSERTION RUNS FIRST, AND THE ORDER IS LOAD-BEARING. `toHaveCount(0)` passes
+    // the instant it is evaluated if the element has not rendered YET, so putting it first makes it
+    // a race against the page settling rather than a statement about the settled page — it passed
+    // against the deliberately-broken source until this was reordered (caught by the red proof).
+    // Waiting for the error message is what proves the page has finished.
     await expect(page.getByText(/couldn't score your league/i)).toBeVisible()
     await expect(page.getByText(/your league settings are safe/i)).toBeVisible()
+    // …and the "set up your league" prompt is NOT also on screen.
+    await expect(page.getByTestId("my-league-empty")).toHaveCount(0)
     expectNoPageErrors(errors)
   })
 
