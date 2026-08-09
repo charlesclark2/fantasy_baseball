@@ -1,6 +1,6 @@
 # NF-FASTPATH — 2026 NFL fantasy season projections (raw stat-line, MVP-1)
 
-**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-08-02T05:04:49.084987+00:00
+**Model:** `nfl_fantasy_fastpath_v1` · **base season:** 2025 → **projects:** 2026 · **generated:** 2026-08-09T00:10:31.496005+00:00
 
 > ⚖️ **A PROJECTION PRODUCT, edge-independent** — no `best_alpha`/PBO/DSR/CLV gate (that is the betting posture). The gate is FACE-VALIDITY + COVERAGE + a holdout rank-correlation sanity check. The emitted `proj_*` columns are a **RAW STAT LINE** (season totals); the `proj_fp_*` points are a CONVENIENCE (standard nflverse scoring) for ranking/validation only — **MVP-2 / NF-C1 rescore the raw line per league**. Uncertainty is surfaced (an 80% PPR interval), not hidden; NULL = unknown kept NULL. Rookie intervals use PARAMETER uncertainty (slot-curve + P1A) and must be recalibrated before pricing.
 
@@ -150,6 +150,12 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 
 |   projection_season |   n |   spearman_all |   mae_ppr | top24_hit   |   sp_QB |   sp_RB |   sp_WR |   sp_TE |
 |--------------------:|----:|---------------:|----------:|:------------|--------:|--------:|--------:|--------:|
+|                2013 | 344 |            0.8 |      49.1 | 8/24        |     0.6 |     0.7 |     0.7 |     0.7 |
+|                2014 | 352 |            0.7 |      48.8 | 10/24       |     0.8 |     0.6 |     0.7 |     0.6 |
+|                2015 | 370 |            0.7 |      49.3 | 10/24       |     0.6 |     0.5 |     0.7 |     0.6 |
+|                2016 | 404 |            0.7 |      52.0 | 8/24        |     0.6 |     0.5 |     0.7 |     0.7 |
+|                2017 | 420 |            0.7 |      42.9 | 9/24        |     0.6 |     0.7 |     0.7 |     0.7 |
+|                2018 | 419 |            0.7 |      49.5 | 14/24       |     0.7 |     0.7 |     0.6 |     0.7 |
 |                2019 | 413 |            0.7 |      45.6 | 10/24       |     0.6 |     0.7 |     0.7 |     0.7 |
 |                2020 | 439 |            0.7 |      48.1 | 8/24        |     0.6 |     0.6 |     0.7 |     0.7 |
 |                2021 | 469 |            0.7 |      44.9 | 11/24       |     0.7 |     0.7 |     0.7 |     0.7 |
@@ -173,7 +179,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | CHRISTIAN MCCAFFREY | RB         | SF        | veteran  |         15.5 |         279.9 |        103.7 |        347.4 |
 | BAKER MAYFIELD      | QB         | TB        | veteran  |         16.5 |         279.2 |        127.2 |        418.0 |
 | PATRICK MAHOMES     | QB         | KC        | veteran  |         15.0 |         271.2 |        130.7 |        430.7 |
-| Fernando Mendoza    | QB         | nan       | rookie   |         12.4 |         268.3 |         49.9 |        446.7 |
+| Fernando Mendoza    | QB         | nan       | rookie   |         12.4 |         268.3 |         49.8 |        446.8 |
 | CALEB WILLIAMS      | QB         | CHI       | veteran  |         16.5 |         266.4 |        130.0 |        430.7 |
 | BO NIX              | QB         | DEN       | veteran  |         16.5 |         265.4 |        127.2 |        429.6 |
 | DRAKE MAYE          | QB         | NE        | veteran  |         16.5 |         261.5 |        127.2 |        419.0 |
@@ -202,7 +208,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | TREVOR LAWRENCE  | QB         | JAX       | veteran  |         16.5 |         282.5 |        130.4 |        429.6 |
 | BAKER MAYFIELD   | QB         | TB        | veteran  |         16.5 |         279.2 |        127.2 |        418.0 |
 | PATRICK MAHOMES  | QB         | KC        | veteran  |         15.0 |         271.2 |        130.7 |        430.7 |
-| Fernando Mendoza | QB         | nan       | rookie   |         12.4 |         268.3 |         49.9 |        446.7 |
+| Fernando Mendoza | QB         | nan       | rookie   |         12.4 |         268.3 |         49.8 |        446.8 |
 | CALEB WILLIAMS   | QB         | CHI       | veteran  |         16.5 |         266.4 |        130.0 |        430.7 |
 
 ### Top 12 RB
@@ -285,7 +291,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 
 | player_name        | position   |   draft_overall |   proj_games |   proj_fp_ppr |   fp_ppr_p10 |   fp_ppr_p90 |
 |:-------------------|:-----------|----------------:|-------------:|--------------:|-------------:|-------------:|
-| Fernando Mendoza   | QB         |             1.0 |         12.4 |         268.3 |         49.9 |        446.7 |
+| Fernando Mendoza   | QB         |             1.0 |         12.4 |         268.3 |         49.8 |        446.8 |
 | Jeremiyah Love     | RB         |             3.0 |         16.0 |         208.4 |         32.5 |        375.6 |
 | Jordyn Tyson       | WR         |             8.0 |         13.6 |         191.4 |         18.5 |        330.9 |
 | Carnell Tate       | WR         |             4.0 |         13.6 |         171.3 |         27.5 |        345.7 |
@@ -296,7 +302,7 @@ Each PRIOR season below was projected with the SAME model (base = season−1, 3-
 | De'Zhaun Stribling | WR         |            33.0 |         14.1 |          63.4 |          5.6 |        195.2 |
 | Omar Cooper Jr.    | WR         |            30.0 |         14.1 |          62.9 |          6.3 |        197.2 |
 | Denzel Boston      | WR         |            39.0 |         14.1 |          62.4 |          4.6 |        189.5 |
-| Ty Simpson         | QB         |            13.0 |         12.4 |          58.1 |         12.4 |        216.0 |
+| Ty Simpson         | QB         |            13.0 |         12.4 |          58.1 |         12.3 |        216.1 |
 | Eli Stowers        | TE         |            54.0 |         13.9 |          52.3 |          2.9 |        168.9 |
 | Germie Bernard     | WR         |            47.0 |         14.1 |          50.7 |          3.6 |        170.4 |
 | Antonio Williams   | WR         |            71.0 |         14.1 |          43.3 |          1.8 |        149.9 |
