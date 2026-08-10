@@ -2659,3 +2659,59 @@ wolf (`NO_ODDS_YET` vs `FREEZE`) is intact.
 census buckets as `4 player posteriors`. That family will rise ~2/day while `other` falls ~4.5.
 **Reading that as "target 4 regressed" would be wrong** — it is the #679 queue again, one family
 over.
+
+---
+
+# 🚨 DEPLOY LANDMINE — A STANDING `dev→main` PR CAN SHIP AN EARLIER `dev`, AND EVERY STATUS SIGNAL STAYS GREEN (2026-08-10)
+
+Recorded because it happened during this promotion and cost a real deploy cycle.
+
+The repo keeps a **standing `dev→main` PR open** (it is literally titled "Dev" and is recreated as
+soon as `dev` moves ahead). On 2026-08-10 the open one was **#718**. It merged at **05:25:02Z** —
+carrying the `dev` that existed *at that moment*, which did **NOT** include #662/#675. The
+`Orchestration CD` run for it went **`completed/success`**.
+
+**So every signal a human normally reads said the deploy worked:**
+
+| signal | what it said | what was true |
+|---|---|---|
+| PR merged | ✅ merged | ✅ merged — but the *wrong* `dev` |
+| `Orchestration CD` | ✅ `completed/success` | ✅ genuinely succeeded — it deployed the previous content |
+| `gh pr view 718 --json mergeable` | `UNKNOWN/UNKNOWN` | reads UNKNOWN because it is **closed**, not because it is stuck |
+
+⭐ **The `UNKNOWN/UNKNOWN` is the tell, and it is easy to misread as GitHub being slow.** GitHub
+returns `UNKNOWN` for a *merged/closed* PR exactly as it does for a not-yet-computed open one. A
+retry loop — the correct fix for the lazy-computation case — **spins forever** here and looks like a
+GitHub outage. **Check `state` alongside `mergeable`; `MERGED` explains the `UNKNOWN` instantly.**
+
+## THE RULE
+
+⛔ **Never conclude a promotion shipped your change from the PR's merge status or a green CD run.**
+Both are true of a promotion that shipped *someone else's* commit. **Verify the CONTENT on `main`:**
+
+```bash
+git fetch origin
+git show origin/main:<the file your change edits> | grep -c "<the thing you changed>"
+git rev-list --count origin/main..origin/dev      # must be 0 when the promotion is complete
+```
+
+On #718 the first command printed **0** and the second **8**. On the correct promotion (#720,
+merged 05:56:34Z, sha `e348d63e`) they print **1** and **0**. That one grep is the whole difference
+between "deployed" and "deployed nothing", and nothing else in the pipeline reports it.
+
+This is the program's **"verify the published artifact, not the build log"** rule (NF-C0e) applied
+to a *deploy* rather than to a data artifact — and the same shape as the `W7B_LAKEHOUSE_S3`
+documented-but-never-set class: **a state everyone believed, that nobody had read.**
+
+## Sibling: check for an in-flight CD before promoting again
+
+#718's CD had to be `completed` before #720 could be merged safely — two concurrent `deploy.sh` is
+**INC-36**, which took the Dagster daemon down for ~10 minutes. Always:
+
+```bash
+gh run list --repo charlesclark2/fantasy_baseball --workflow "Orchestration CD" --limit 3 \
+  --json status,conclusion,createdAt,headSha \
+  --jq '.[]|"\(.createdAt) \(.status)/\(.conclusion // "-") sha=\(.headSha[0:8])"'
+```
+
+Every row must be `completed` before merging a promotion PR.
