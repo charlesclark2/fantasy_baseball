@@ -370,6 +370,30 @@ export const LEAGUE_DELTA_UNCERTAINTY =
 export const LEAGUE_VOR_DEFINITION =
   "Value over replacement is a player's projected points minus the points of the first player at his position who does not start anywhere in your league. It is a way to compare a quarterback to a running back on one board."
 
+// ══ E9.61 — THE SAME DELTA, NOW ON THE BROWSE BOARDS ═════════════════════════════════════════════
+//
+// My League is the ACTIVATION screen and leads with the delta. Rankings and the League Board are
+// the HABITUAL surfaces, and a returning user browsing them wants the same quantity as a column.
+// Both readings are legitimate; what is not legitimate is two labels for one number.
+
+/** ⭐ THE COLUMN HEADER, and the one string on this surface that has to be spelled out.
+ *
+ *  Every other delta column in this product — and in the category — means "versus ADP", i.e. versus
+ *  the market. This one does not: it is the distance between two of OUR boards. A bare "Δ", "Move"
+ *  or "vs board" inherits the market reading by default, so the header names the comparison
+ *  outright and `LEAGUE_DELTA_DEFINITION` rides on it as the tooltip.
+ *
+ *  ⚠️ ONE constant for all three renderers (My League, Rankings, League Board). My League shipped
+ *  with "vs free board" and the boards would have arrived with something else; the same number
+ *  under two names on adjacent pages is how a reader concludes they are two different numbers. */
+export const GENERIC_DELTA_LABEL = "vs our generic board"
+
+/** The band above a personalized browse board. Says WHICH board is selected is doing the work, and
+ *  sends the reader to the screen that explains WHY — rather than re-deriving the explanation on a
+ *  page whose job is browsing. */
+export const GENERIC_DELTA_BAND_DETAIL =
+  "You're looking at this board re-scored for your league. The column on the right is how far each player has moved from our generic board — not from where anyone else is drafting."
+
 /** The empty state, before a league exists. Names both routes in, because the manual editor is the
  *  guarantee underneath the importer rather than a fallback for when it fails. */
 export const MY_LEAGUE_EMPTY_TITLE = "Set up your league to see your own board"

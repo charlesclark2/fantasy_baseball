@@ -356,12 +356,31 @@ export function useFormatSelection(
    *  reads as a broken page rather than as a paywall. The server is still the authority; this is
    *  about not steering someone into a 403. */
   entitled: boolean = true,
+  /** ⭐ E9.61 — whether `savedLeagues` is still IN FLIGHT.
+   *
+   *  ⚠️ WITHOUT THIS THE STORED-CUSTOM RESTORE IS A RACE IT USUALLY LOSES, and the loss is silent.
+   *  The effect below commits a selection the first time it sees a manifest and then locks itself
+   *  out (`configName !== null`). `savedLeagues` is a SECOND, independent request, so when it lands
+   *  after the manifest — the common case, since the manifest is CDN-cached and this one is not —
+   *  `customIds` is empty at decision time, the stored `custom:<id>` matches nothing, and the user
+   *  is put on a preset. The effect re-runs when the leagues arrive and returns immediately.
+   *
+   *  MEASURED on the real build before this argument existed: pick your league on Rankings, reload,
+   *  and you are back on Full-PPR with the personalized board and its delta gone. No error.
+   *
+   *  Defaults to `false` so every existing call site keeps its exact behaviour; a caller that reads
+   *  saved leagues passes the real flag. Use react-query's `isLoading` (`pending AND fetching`),
+   *  never `isPending` — a DISABLED query (an anonymous visitor, `enabled: !!accessToken`) is
+   *  pending forever, and gating on that would hang the picker on every logged-out page load. */
+  savedLeaguesLoading: boolean = false,
 ) {
   const [configName, setConfigName] = useState<string | null>(null)
   const [size, setSize] = useState<number | null>(null)
 
   useEffect(() => {
     if (!manifest || configName !== null) return
+    // Decide once, with the whole input in hand. See `savedLeaguesLoading`.
+    if (savedLeaguesLoading) return
     let stored: { configName?: string; size?: number } = {}
     try {
       stored = JSON.parse(localStorage.getItem(FORMAT_STORAGE_KEY) ?? "{}")
@@ -378,15 +397,28 @@ export function useFormatSelection(
     // falls through to the entitled path — the old behaviour, which is right for a backend that has
     // not narrowed yet.
     if (!entitled && free) {
-      // ⛔ `stored` IS NOT READ IN THIS BRANCH, and the omission is the whole behaviour. There is
-      // exactly one preset this caller can open, so "validate the stored value against it" and
-      // "ignore the stored value" are the same operation — and the first spelling invites a
-      // ternary whose arms are identical, which is precisely what the first cut of this shipped
-      // (both arms set `free.config`, so the check did nothing and its red-proof case could not
-      // fail). Ignoring it outright is honest and has no dead branch to rot.
+      // ⭐ E9.61 — A STORED *CUSTOM* SELECTION SURVIVES THIS BRANCH; a stored PAID PRESET does not.
       //
-      // The value stays in localStorage untouched, so a member who lapses and re-subscribes lands
-      // back on the format they were using.
+      // This branch used to discard `stored` outright, on the reasoning that there is exactly one
+      // preset an unentitled caller can open. That reasoning is sound for PRESETS and wrong for
+      // saved leagues, because G100-C1 changed what "unentitled" owns: a free account keeps ONE
+      // personalized league, `/fantasy/leagues` serves it to them, and `FormatSelector` offers it
+      // ungated. `entitled` here is `canUse("personalization", …)`, which is false for a free
+      // account BY DESIGN (it is the pricing statement, not the quota — see `entitlements.ts`), so
+      // keying the discard on it swept up the one thing they are allowed to have.
+      //
+      // MEASURED, on the real build: a free user picked their league on Rankings, the board and the
+      // delta rendered, and a reload put them back on Full-PPR with the delta gone. Nothing errored
+      // — it just silently un-personalized the surface the personalization is for.
+      //
+      // ⚠️ It is still a VALIDATED restore, not a blanket one: the id must be in `customIds` (the
+      // league still exists), and a stored PAID PRESET is still replaced by the free board so a
+      // lapsed member is never steered into a 403. Both halves have their own red-proof case.
+      if (stored.configName && customIds.has(stored.configName)) {
+        setConfigName(stored.configName)
+        setSize(stored.size ?? DEFAULT_SIZE)
+        return
+      }
       setConfigName(names.includes(free.config) ? free.config : names[0] ?? null)
       setSize(manifest.sizes.includes(free.size) ? free.size : manifest.sizes[0] ?? null)
       return
@@ -403,7 +435,7 @@ export function useFormatSelection(
     setConfigName(pick ?? names[0] ?? null)
     const sizePick = [stored.size, DEFAULT_SIZE].find((n) => n && manifest.sizes.includes(n))
     setSize(sizePick ?? manifest.sizes[0] ?? null)
-  }, [manifest, configName, savedLeagues, entitled])
+  }, [manifest, configName, savedLeagues, entitled, savedLeaguesLoading])
 
   const persist = (next: { configName?: string; size?: number }) => {
     if (next.configName !== undefined) setConfigName(next.configName)

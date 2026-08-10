@@ -48,6 +48,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from quant_sports_intel_models.football.nfl.fantasy import captured_terms  # noqa: E402
+from quant_sports_intel_models.football.nfl.fantasy import player_naming as PN  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy.league_presets import (  # noqa: E402
     NFL_PROFILE,
     PRESETS,
@@ -175,34 +176,22 @@ CONFIG_LABELS = {
 }
 
 
-# Generational suffixes `.title()` mangles (JAMES COOK III → "Iii"). Only ever applied to the LAST
-# token of a name, so a real name that happens to look like one (Ivory, Vince) is never touched.
-_NAME_SUFFIXES = {"Ii": "II", "Iii": "III", "Iv": "IV", "Vi": "VI"}
+def _titlecase(name: str, authority: str | None = None,
+               draft_board: str | None = None) -> str:
+    """A board name rendered for display — delegated to `player_naming.display_name`, the ONE casing
+    authority shared with the track-record export (E9.61 item 4).
 
+    ⚠️ THIS FUNCTION USED TO PRODUCE "MacK Hollins" ON THE LIVE BOARD. It ran `.title()` over EVERY
+    name (damaging the rookie pipeline's already-correct `KC Concepcion` -> "Kc Concepcion") and
+    then upper-cased the letter after any "Mac", which turns MACK into MacK. Both are fixed in
+    `player_naming`; the measurement and the reasoning live in that module's docstring — read it
+    before changing casing behaviour here.
 
-def _titlecase(name: str) -> str:
-    """ALLCAPS board name → display case, with the common Mc/Mac fix (MCCAFFREY → McCaffrey) and
-    generational suffixes restored (JAMES COOK III → James Cook III, not "Cook Iii").
-
-    ⚠️ NF1.6 exception: a DST unit name is a TEAM CODE plus a unit label ("DEN D/ST"), not a person's
-    name — `.title()` would render it "Den D/St". Those names are already display-ready, so they pass
-    through untouched."""
-    raw = str(name)
-    if raw.upper().endswith(("D/ST", "DST", "DEFENSE")):
-        return raw
-    out = raw.title()
-    for pre in ("Mc", "Mac"):
-        i = 0
-        while (i := out.find(pre, i)) != -1:
-            j = i + len(pre)
-            if j < len(out) and out[j].isalpha():
-                out = out[:j] + out[j].upper() + out[j + 1 :]
-            i = j
-    parts = out.split()
-    if parts and parts[-1] in _NAME_SUFFIXES:
-        parts[-1] = _NAME_SUFFIXES[parts[-1]]
-        out = " ".join(parts)
-    return out
+    `authority` is that player's nflverse roster name (`player_naming.roster_casing_authority`),
+    used for CASE ONLY: 703 of 784 source rows arrive ALL-CAPS and casing is not recoverable from an
+    upper-case string by rule ("DEVONTA FREEMAN" -> Devonta, "DEVONTA SMITH" -> DeVonta). Omitted, the
+    rule pass still runs — it just cannot fix the 30 names only the authority knows."""
+    return PN.display_name(name, authority, draft_board)
 
 
 def _to_bool(v) -> bool:
@@ -401,6 +390,8 @@ def projection_records(
     byes: dict[str, int] | None = None,
     bio: dict[str, dict] | None = None,
     contributions: dict[str, dict] | None = None,
+    casing: dict[str, str] | None = None,
+    board_names: dict[tuple[str, str], str] | None = None,
 ) -> list[dict]:
     """MVP-1's season projection → display-ready records for the NF3 browse "Projections" surface.
 
@@ -422,6 +413,8 @@ def projection_records(
     byes = byes or {}
     bio = bio or {}
     contributions = contributions or {}
+    casing = casing or {}
+    board_names = board_names or {}
     recs: list[dict] = []
     seen: set[str] = set()
     for _, r in df.sort_values("proj_fp_ppr", ascending=False).iterrows():
@@ -438,7 +431,8 @@ def projection_records(
             team = rookie_teams.get(pid)
         rec = {
             "id": pid,
-            "name": _titlecase(r["player_name"]),
+            "name": _titlecase(r["player_name"], casing.get(pid),
+                               board_names.get(_adp_key(pos, r["player_name"], team) or ("", ""))),
             "pos": pos,
             "team": team,
             "bye": byes.get(team) if team else None,
@@ -507,6 +501,42 @@ def _adp_key(pos: str, name: str | None, team: str | None) -> tuple[str, str] | 
         t = _norm_team(str(team)) if team else None
         return (t, pos) if t else None
     return (A._normalize_name(name), pos) if name else None
+
+
+@functools.lru_cache(maxsize=8)
+def draft_board_names(season: int, fmt: str = "ppr", teams: int = 12) -> dict[tuple[str, str], str]:
+    """`{(normalized name, position) -> the name a DRAFT BOARD shows}` from Fantasy Football
+    Calculator — see `player_naming.drafted_as` for why a draft board is the right authority for a
+    drafter-facing name, and for the one change it is not allowed to make.
+
+    ⭐ THE KEY IS `_adp_key`, THE SAME CROSSWALK THE ADP COLUMN ALREADY JOINS ON. That matters twice
+    over: it is a vetted normalizer (it folds accents, generational suffixes and FFC's own nickname
+    aliases, so "Kenny Gainwell" and "Kenneth Gainwell" land on one key), and it introduces no new
+    matching surface — if this join could put the wrong name on a row, the ADP column would already
+    be wrong for that row.
+
+    ⚠️ A DEFENCE IS DELIBERATELY EXCLUDED. `_adp_key` keys a DST on its TEAM CODE, so every defence
+    in the sample would collide onto a handful of keys, and their names are unit labels ("DEN D/ST")
+    rather than anything a person spells. Named players only.
+
+    Best-effort, exactly like `adp_lookup`, and off the same cached fetch — the export already pulls
+    this sample for the ADP column, so this adds no network call."""
+    try:
+        df = A_fetch(season, fmt, teams)
+    except Exception as e:  # noqa: BLE001 — a display name must never break the boards
+        log.warning("draft-board names unavailable for %s %s/%dteam (%s: %s)",
+                    season, fmt, teams, type(e).__name__, e)
+        return {}
+    out: dict[tuple[str, str], str] = {}
+    for _, r in df.iterrows():
+        pos = NFL_PROFILE.normalize_position(str(r.get("position") or ""))
+        name = r.get("player_name")
+        if pos not in PROJECTABLE or pos == "DST" or not name:
+            continue
+        key = _adp_key(pos, name, r.get("team"))
+        if key is not None:
+            out.setdefault(key, str(name))
+    return out
 
 
 def adp_lookup(season: int, fmt: str, teams: int) -> dict[tuple[str, str], float]:
@@ -829,12 +859,16 @@ def board_records(
     df: pd.DataFrame,
     rookie_teams: dict[str, str] | None = None,
     byes: dict[str, int] | None = None,
+    casing: dict[str, str] | None = None,
+    board_names: dict[tuple[str, str], str] | None = None,
 ) -> list[dict]:
     """One board (already filtered to a config+size) → trimmed, display-ready player records, sorted by
     overall_rank. FB folds into RB; names title-cased; interval carried honestly. A rookie with no
     projection team is backfilled from `rookie_teams`; `bye` is the team's bye week (null until known)."""
     rookie_teams = rookie_teams or {}
     byes = byes or {}
+    casing = casing or {}
+    board_names = board_names or {}
     recs = []
     seen: set[str] = set()
     for _, r in df.sort_values("overall_rank").iterrows():
@@ -851,7 +885,8 @@ def board_records(
             team = rookie_teams.get(str(r["player_id"]))
         recs.append({
             "id": str(r["player_id"]),
-            "name": _titlecase(r["player_name"]),
+            "name": _titlecase(r["player_name"], casing.get(pid),
+                               board_names.get(_adp_key(pos, r["player_name"], team) or ("", ""))),
             "pos": pos,
             "team": team,
             "bye": byes.get(team) if team else None,
@@ -1116,6 +1151,18 @@ def main(argv: list[str] | None = None) -> int:
     # because a board that failed to project K/DST needs different placeholders than one that did.
     kicker_names = kicker_map()
 
+    # E9.61: the nflverse roster's own casing, for CASE ONLY (`player_naming`). The source frame is
+    # 90% ALL-CAPS and casing is not rule-recoverable from it, so without this the board publishes
+    # "Ceedee Lamb" / "Dj Moore" / "Sam Laporta". Reported rather than assumed — a silent empty read
+    # would just restore the old wrong names, so the repair COUNT is logged per board below.
+    casing = PN.roster_casing_authority()
+    log.info("name-casing authority: %d roster names", len(casing))
+    # E9.61 (2nd pass): the name a DRAFT BOARD shows, for the players a drafter is actually looking
+    # for. Off the SAME cached FFC sample the ADP column already pulls, keyed on the SAME crosswalk,
+    # so it adds no fetch and no new matching surface. See `player_naming.drafted_as`.
+    board_names = draft_board_names(args.season, PROJECTION_ADP_FORMAT, PROJECTION_ADP_TEAMS)
+    log.info("draft-board names: %d", len(board_names))
+
     configs_present: list[str] = []
     sizes_present: set[int] = set()
     combos = 0
@@ -1126,7 +1173,7 @@ def main(argv: list[str] | None = None) -> int:
         if config_name not in PRESETS:
             log.warning("skipping unknown config %s (not a shipped preset)", config_name)
             continue
-        skill = board_records(grp, rookie_teams, byes)
+        skill = board_records(grp, rookie_teams, byes, casing, board_names)
         # market ADP, matched to THIS board's scoring format + league size (see PRESET_ADP_FORMAT)
         adp_fmt = PRESET_ADP_FORMAT.get(config_name, "ppr")
         matched = _attach_adp(skill, adp_cache_for(args.season, adp_fmt, n_teams))
@@ -1184,7 +1231,36 @@ def main(argv: list[str] | None = None) -> int:
         if len(kdf):
             pdf = pd.concat([pdf, kdf], ignore_index=True, sort=False)
             log.info("  projections: folded in %d NF1.6 K/DST rows", len(kdf))
-        projections = projection_records(pdf, rookie_teams, byes, bio, contrib_map)
+        projections = projection_records(pdf, rookie_teams, byes, bio, contrib_map, casing,
+                                         board_names)
+        # E9.61 — what the casing authority DID, so a silent S3 failure reads as a zero rather than
+        # as a clean run. `repaired` counts names the rule pass ALONE would have got wrong (measured
+        # against the source frame, not against the output); `kept` counts roster disagreements the
+        # casefold gate deliberately refused (suffix / nickname — see `player_naming`).
+        src_names = dict(zip(pdf["player_id"].astype(str), pdf["player_name"].astype(str)))
+        repaired = sum(
+            1 for pid, src in src_names.items()
+            if PN.display_name(src, casing.get(pid)) != PN.display_name(src)
+        )
+        # Counted separately: a draft-board name is a DIFFERENT claim from a casing repair (it may
+        # change characters), so folding the two into one number would hide which authority acted.
+        renamed = sum(
+            1 for p in projections
+            if (b := board_names.get(_adp_key(p["pos"], p["name"], p.get("team")) or ("", "")))
+            and b == p["name"]
+            and b != PN.display_name(src_names.get(p["id"], p["name"]), casing.get(p["id"]))
+        )
+        log.info("  projections: %d name(s) taken from the draft board", renamed)
+        kept = sum(
+            1 for p in projections
+            if (a := casing.get(p["id"])) and a.casefold() != p["name"].casefold()
+        )
+        log.info("  projections: casing authority repaired %d name(s); refused %d roster "
+                 "disagreement(s) that were more than case (suffix/nickname — by design)",
+                 repaired, kept)
+        if casing and not repaired:
+            log.warning("[ALERT] the name-casing authority repaired NOTHING across %d players — "
+                        "expected ~30 on a 2026-shaped board. Check the roster join.", len(projections))
         n_with_contrib = sum(1 for p in projections if p.get("contrib"))
         log.info("  projections: %d/%d players carry an NF1 per-player contribution breakdown",
                  n_with_contrib, len(projections))

@@ -98,7 +98,25 @@ resolved as (
     select
         k.season, k.week, k.player_id,
         coalesce(st.team_id, rw.team_id)         as team_id,
-        coalesce(rw.player_name, st.player_name) as player_name,
+        -- ⭐ E9.61: the BOX SCORE's name wins, and the role name is the fallback (it was the other
+        -- way round, which is where every SHOUTING player name in this repo came from).
+        --
+        -- `st.player_name` traces to `stg_nfl_weekly_data`, which coalesces nflverse's
+        -- `player_display_name` first — i.e. "CeeDee Lamb", properly cased. `rw.player_name` comes
+        -- from `dim_player_role`, whose "canonicalize inputs" block deliberately `upper()`s every
+        -- field so an upstream casing wobble cannot fabricate an SCD-2 change record. That `upper()`
+        -- is correct AT ITS SOURCE and must stay; the defect was PREFERRING it here, which pushed
+        -- "CEEDEE LAMB" into fct_player_week -> mart_player_season -> the NF1.5 projection artifacts
+        -- -> the served board, where a display-time de-shouter then had to guess the casing back
+        -- (and cannot: "DEVONTA FREEMAN" is Devonta, "DEVONTA SMITH" is DeVonta).
+        --
+        -- Note this now MATCHES the `team_id` line directly above, which already prefers the box
+        -- score. The two were asymmetric for no stated reason, which is what made it easy to miss.
+        --
+        -- ⚠️ It stays a COALESCE, not a swap: a bye/DNP week has no box-score row at all, so the
+        -- role name is genuinely needed there — and such a row keeps the ALL-CAPS name, which is why
+        -- `player_naming`'s de-shouter remains the backstop rather than being retired by this.
+        coalesce(st.player_name, rw.player_name) as player_name,
         coalesce(rw.position, st.position)       as position,
         rw.status,
         rw.depth_chart_position_rank

@@ -12,13 +12,20 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import {
+  useFantasyBoard,
   useFantasyManifest,
   useFormatSelection,
   useResolvedBoard,
   useSavedLeagues,
 } from "@/lib/fantasy-queries"
-import { EXPECTED_POINTS_LABEL } from "@/lib/fantasy-claim-copy"
-import type { Player } from "@/lib/draft-optimizer"
+import {
+  EXPECTED_POINTS_LABEL,
+  GENERIC_DELTA_LABEL,
+  LEAGUE_DELTA_DEFINITION,
+} from "@/lib/fantasy-claim-copy"
+import { computeLeagueDelta, draftablePoolSize } from "@/lib/league-delta"
+import { GenericDeltaBand, GenericDeltaCell } from "@/components/fantasy/league-delta-ui"
+import { freeSelection, type Player } from "@/lib/draft-optimizer"
 import {
   ADP_DELTA_LABEL,
   AdpDelta,
@@ -33,6 +40,7 @@ import {
   ProvenanceLine,
   RookieBadge,
   ALL_POSITIONS,
+  LOW_PREDICTABILITY_POSITIONS,
   SKILL_POSITIONS,
   SurfaceHeader,
   MarketLeanNote,
@@ -55,10 +63,42 @@ export function LeagueBoard() {
   const { data: manifest, isLoading: manifestLoading, error: manifestError } = useFantasyManifest()
   // NF-C0b: a hand-entered league is selectable beside the shipped presets, and `useResolvedBoard`
   // hands back the SAME Player[] either way — nothing below this line branches on provenance.
-  const { data: savedLeagues } = useSavedLeagues()
-  const { configName, size, setConfigName, setSize } = useFormatSelection(manifest, savedLeagues)
+  // `isLoading`, not `isPending` — see `useFormatSelection`'s `savedLeaguesLoading`.
+  const { data: savedLeagues, isLoading: savedLeaguesLoading } = useSavedLeagues()
+  const { configName, size, setConfigName, setSize } = useFormatSelection(
+    manifest,
+    savedLeagues,
+    true,
+    savedLeaguesLoading,
+  )
   const { board, isLoading: boardLoading, isCustom, league } = useResolvedBoard(configName, size)
   const [pos, setPos] = useState("All")
+
+  // ── E9.61 — the "vs our generic board" comparison ─────────────────────────────────────────────
+  //
+  // Identical shape to Rankings', deliberately: same hook, same gate, same shared renderers. This
+  // route is `FantasyGuard`-gated so the anonymous case cannot arise here at all, but the fetch
+  // still hangs off `isCustom` so a member browsing a PRESET pays nothing for a comparison that
+  // would be a wall of zeroes. See the gating block in `league-delta-ui.tsx`.
+  const freePreset = freeSelection(manifest)
+  const { data: genericBoard } = useFantasyBoard(
+    isCustom ? freePreset?.config ?? null : null,
+    isCustom ? freePreset?.size ?? null : null,
+  )
+  const pool = useMemo(() => draftablePoolSize(league), [league])
+  const delta = useMemo(
+    () =>
+      isCustom ? computeLeagueDelta(genericBoard, board, pool, LOW_PREDICTABILITY_POSITIONS) : null,
+    [isCustom, genericBoard, board, pool],
+  )
+  const deltaById = useMemo(
+    () => new Map((delta?.players ?? []).map((d) => [d.id, d])),
+    [delta],
+  )
+  // ⚠️ This board's "#" column is a row INDEX within the filtered view, not a stored rank — so the
+  // scale that matters is the position FILTER, exactly as on Rankings' tabs. On "All" the reader is
+  // looking at a whole-board ordering, so the overall move is the right companion.
+  const deltaScale = pos === "All" ? ("overall" as const) : ("position" as const)
 
   const config = manifest?.configs.find((c) => c.name === configName)
 
@@ -189,6 +229,10 @@ export function LeagueBoard() {
 
           {boardLoading && <LoadingBlock label="Building the value board…" />}
 
+          {/* E9.61 — the summary band, above the replacement-level panel so the first thing a
+              member reads on their own board is that it IS their own board. */}
+          {!boardLoading && delta && <GenericDeltaBand delta={delta} leagueName={league?.name} />}
+
           {!boardLoading && ranked.length > 0 && (
             <>
               {/* replacement-level transparency */}
@@ -237,7 +281,13 @@ export function LeagueBoard() {
               </div>
 
               <div className="overflow-x-auto rounded-lg border border-[#262626]">
-                <table className="w-full min-w-[760px] text-left text-xs">
+                {/* Both widths spelled out — Tailwind scans source text, so an interpolated
+                    arbitrary value emits no CSS. */}
+                <table
+                  className={`w-full text-left text-xs ${
+                    delta ? "min-w-[860px]" : "min-w-[760px]"
+                  }`}
+                >
                   <thead className="bg-[#0f0f0f] text-gray-500">
                     <tr>
                       <th className="px-3 py-2 font-medium">#</th>
@@ -262,6 +312,12 @@ export function LeagueBoard() {
                       <th className="px-3 py-2 text-right font-medium">
                         <InfoTip label="Next at pos">{GLOSSARY.nextAtPos}</InfoTip>
                       </th>
+                      {/* E9.61 — personalized boards only; on a preset this is the same board. */}
+                      {delta && (
+                        <th className="px-3 py-2 text-right font-medium">
+                          <InfoTip label={GENERIC_DELTA_LABEL}>{LEAGUE_DELTA_DEFINITION}</InfoTip>
+                        </th>
+                      )}
                       {hasAdp && (
                         <>
                           <th className="px-3 py-2 text-right font-medium">
@@ -323,6 +379,11 @@ export function LeagueBoard() {
                         <td className="px-3 py-2 text-right text-gray-500">
                           {dropoff.has(p.id) ? num(dropoff.get(p.id)) : "—"}
                         </td>
+                        {delta && (
+                          <td className="px-3 py-2 text-right">
+                            <GenericDeltaCell d={deltaById.get(p.id)} scale={deltaScale} />
+                          </td>
+                        )}
                         {hasAdp && (
                           <>
                             <td className="px-3 py-2 text-right text-gray-400">

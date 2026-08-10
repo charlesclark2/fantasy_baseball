@@ -1012,6 +1012,93 @@ const CASES = [
     to: "    if (fired.current) return",
     grep: "reports `comped`, never `paid`",
   },
+
+  // ══ E9.61 — the "vs our generic board" delta on the browse boards ═════════════════════════════
+  {
+    id: "personalization-leaks-onto-the-public-board",
+    shipped: "pre-emptive: the gate this story is most likely to lose",
+    // ⭐ THE ONE THAT MATTERS. `/fantasy/rankings` is PUBLIC, and this column renders
+    // PERSONALIZATION. The gate is not a check anyone wrote — it is that `isCustom` is unreachable
+    // without a token — so the way it breaks is not "someone deletes the guard" but "someone
+    // computes the delta unconditionally and hides it in the render", which is what the freemium
+    // build already shipped once in a different costume (#681 gated one of three renderers).
+    detail: "Computes the delta for every caller, so the band renders on the anonymous free board.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: "      isCustom\n        ? computeLeagueDelta(genericBoard, board, pool, LOW_PREDICTABILITY_POSITIONS)\n        : null,",
+    to: "      computeLeagueDelta(genericBoard ?? board, board, pool, LOW_PREDICTABILITY_POSITIONS),",
+    grep: "an ANONYMOUS visitor",
+  },
+  {
+    id: "delta-column-ignores-the-rank-scale",
+    shipped: "pre-emptive: the two-scales trap `adpPositionRanks` already exists for",
+    // A position tab ranks 1..n WITHIN the position; an OVERALL move printed beside it compares two
+    // different scales. Arithmetically wrong, and it looks entirely normal — which is why the spec
+    // compares two RENDERINGS of the same player rather than reading a value back.
+    detail: "Pins the column to the overall scale on every tab.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: 'const deltaScale = pos === "Overall" ? ("overall" as const) : ("position" as const)',
+    to: 'const deltaScale = "overall" as const',
+    grep: "changes with the tab",
+  },
+  {
+    id: "delta-column-loses-its-label",
+    shipped: "pre-emptive: an unlabelled delta inherits the market reading",
+    // Every other delta column in this product means "versus ADP". A bare one on a fantasy board is
+    // read as a claim about where the room is drafting — i.e. as an edge claim, on a surface whose
+    // whole honesty argument is that it makes none. `best_alpha = 0`.
+    detail: "Replaces the explicit label with the ambiguous one the category defaults to.",
+    file: "lib/fantasy-claim-copy.ts",
+    from: 'export const GENERIC_DELTA_LABEL = "vs our generic board"',
+    to: 'export const GENERIC_DELTA_LABEL = "Move"',
+    grep: "under the label that says what they compare",
+  },
+  {
+    id: "custom-selection-lost-to-the-load-race",
+    shipped: "E9.61 — MEASURED LIVE on the real build, and silent",
+    // ⭐ NOT PRE-EMPTIVE. Before the `savedLeaguesLoading` deferral, a free account picked its
+    // league on Rankings, saw the personalized board and the delta, reloaded — and was put back on
+    // the generic preset with the column gone. `useFormatSelection` commits on the first manifest
+    // and locks itself out, so the stored `custom:<id>` lost the race against the (uncached)
+    // saved-league request and matched nothing. No error, no log; the feature just was not there
+    // the second time.
+    detail: "Removes the deferral, restoring the race the stored custom selection usually loses.",
+    file: "lib/fantasy-queries.ts",
+    from: "    if (savedLeaguesLoading) return",
+    to: "    if (false) return",
+    grep: "survive a reload",
+  },
+  {
+    id: "vor-delta-subtraction-inverted",
+    shipped: "pre-emptive: the sign error the highlights' new ranking can have",
+    // ⭐ THE ANCHOR THIS STORY HAD TO REPLACE. The previous check — "every riser's overall rank
+    // improved" — was exact while the list was SELECTED on rank movement, and became false when the
+    // ranking moved to VOR (value and board position can legitimately disagree). The replacement
+    // re-derives the chip from the league board's own rendered VOR and the generic board FIXTURE,
+    // neither of which passes through `computeLeagueDelta` — so an inverted subtraction flips the
+    // chip while both inputs stay put. A "risers all show a positive number" check would NOT catch
+    // this: membership and the number flip together, which is the tautology E9.63 caught once
+    // already.
+    detail: "Inverts `vorDelta`, so every riser is really a faller and the chip agrees with itself.",
+    file: "lib/league-delta.ts",
+    from: "vorDelta: g && g.vor != null && p.vor != null ? p.vor - g.vor : null,",
+    to: "vorDelta: g && g.vor != null && p.vor != null ? g.vor - p.vor : null,",
+    grep: "the movement is real",
+  },
+  {
+    id: "low-predictability-positions-lead-again",
+    shipped: "G100-C1 (live) — four defenses in the top five movers",
+    // ⭐ RE-PROVEN UNDER THE NEW METRIC, which is the point of keeping it. The exclusion was
+    // originally argued from rank DENSITY, and E9.61 replaced rank movement with VOR delta — so the
+    // density argument no longer applies and the clause could look redundant. It is not: the reason
+    // that survives is that "why those players moved" is computed over skill positions only, so a
+    // headlined D/ST is a mover the page structurally cannot explain. On this fixture the league
+    // board's entire top is D/ST, so it is the hardest available case.
+    detail: "Drops the low-predictability exclusion from the highlight population.",
+    file: "lib/league-delta.ts",
+    from: "  const comparable = allComparable.filter((d) => d.draftable && !d.lowPred)",
+    to: "  const comparable = allComparable.filter((d) => d.draftable)",
+    grep: "no kicker or defense can lead the list",
+  },
 ]
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.

@@ -1,0 +1,894 @@
+{
+  "generated_at": "2026-08-10T02:02:04+00:00",
+  "story": "NF-W3",
+  "smoke": true,
+  "skip_layer_b": true,
+  "runtime_seconds": 78.9,
+  "selection_metric": "crps_q39",
+  "targets": [
+    "off_plays",
+    "pass_share"
+  ],
+  "n_folds": 2,
+  "fold_labels": [
+    "2025H1",
+    "2025H2"
+  ],
+  "n_team_rows": 5278,
+  "n_player_rows": 0,
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 5278,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "env_forms": {
+    "off_plays": "negbin_glm",
+    "pass_share": "betabinom"
+  },
+  "preregistration": {
+    "real_arms": {
+      "off_plays": [
+        "pois_glm",
+        "negbin_glm",
+        "lgbm_quantile",
+        "knn_quantile"
+      ],
+      "pass_share": [
+        "binom_glm",
+        "betabinom",
+        "lgbm_quantile",
+        "knn_quantile"
+      ]
+    },
+    "foils": [
+      "foil_team_eb",
+      "foil_team_eb_matchup"
+    ],
+    "anchors": {
+      "off_plays": [
+        "nihilist_zero",
+        "marginal_train",
+        "zero_width",
+        "max_width",
+        "permuted_within_week",
+        "oracle__pois_glm",
+        "oracle__negbin_glm",
+        "oracle__lgbm_quantile",
+        "oracle__knn_quantile",
+        "oracle__foil_team_eb",
+        "oracle__foil_team_eb_matchup",
+        "matched_n__pois_glm",
+        "matched_n__negbin_glm",
+        "matched_n__lgbm_quantile",
+        "matched_n__knn_quantile"
+      ],
+      "pass_share": [
+        "nihilist_zero",
+        "marginal_train",
+        "zero_width",
+        "max_width",
+        "permuted_within_week",
+        "oracle__binom_glm",
+        "oracle__betabinom",
+        "oracle__lgbm_quantile",
+        "oracle__knn_quantile",
+        "oracle__foil_team_eb",
+        "oracle__foil_team_eb_matchup",
+        "matched_n__binom_glm",
+        "matched_n__betabinom",
+        "matched_n__lgbm_quantile",
+        "matched_n__knn_quantile"
+      ]
+    },
+    "eligible": {
+      "off_plays": [
+        "pois_glm",
+        "negbin_glm",
+        "lgbm_quantile",
+        "knn_quantile",
+        "foil_team_eb",
+        "foil_team_eb_matchup"
+      ],
+      "pass_share": [
+        "binom_glm",
+        "betabinom",
+        "lgbm_quantile",
+        "knn_quantile",
+        "foil_team_eb",
+        "foil_team_eb_matchup"
+      ]
+    },
+    "layer_b_eligible": [
+      "champion",
+      "champion_env"
+    ],
+    "layer_b_anchors": [
+      "champion_env_shuffled",
+      "champion_env_oracle"
+    ],
+    "test_blocks": [
+      [
+        2022,
+        1
+      ],
+      [
+        2022,
+        2
+      ],
+      [
+        2023,
+        1
+      ],
+      [
+        2023,
+        2
+      ],
+      [
+        2024,
+        1
+      ],
+      [
+        2024,
+        2
+      ],
+      [
+        2025,
+        1
+      ],
+      [
+        2025,
+        2
+      ]
+    ],
+    "purge_weeks": 2,
+    "pbo_max": 0.2,
+    "dsr_min": 0.95,
+    "fdr_q": 0.1,
+    "fdr_families": {
+      "component": [
+        "off_plays",
+        "pass_share"
+      ],
+      "downstream": [
+        "QB",
+        "RB",
+        "WR",
+        "TE"
+      ]
+    },
+    "coverage_floor": 0.8,
+    "eb_kappa_team": 4.0,
+    "matchup_clip": [
+      0.9,
+      1.1
+    ],
+    "features": [
+      "game_context__is_home",
+      "game_context__div_game",
+      "game_context__week_index",
+      "game_context__days_since_last_game",
+      "team_environment__off_plays_l4",
+      "team_environment__off_plays_l8",
+      "team_environment__off_plays_ewm",
+      "team_environment__off_plays_s2d",
+      "team_environment__off_plays_prior_season",
+      "team_environment__pass_share_l4",
+      "team_environment__pass_share_l8",
+      "team_environment__pass_share_ewm",
+      "team_environment__pass_share_s2d",
+      "team_environment__pass_share_prior_season",
+      "team_environment__neutral_pass_rate_l4",
+      "team_environment__proe_l4",
+      "team_environment__no_huddle_l4",
+      "team_environment__sec_per_play_l4",
+      "team_environment__drives_l4",
+      "team_environment__plays_per_drive_l4",
+      "team_environment__epa_per_play_l4",
+      "team_environment__success_rate_l4",
+      "team_environment__points_l4",
+      "team_environment__sack_rate_l4",
+      "team_environment__games_prior_season",
+      "opponent_matchup__def_plays_faced_l4",
+      "opponent_matchup__def_pass_share_faced_l4",
+      "opponent_matchup__def_epa_allowed_l4",
+      "opponent_matchup__def_success_allowed_l4",
+      "opponent_matchup__def_sec_per_play_faced_l4",
+      "opponent_matchup__def_points_allowed_l4",
+      "opponent_matchup__def_drives_faced_l4",
+      "opponent_matchup__opp_off_plays_l4",
+      "opponent_matchup__opp_off_pass_share_l4",
+      "opponent_matchup__opp_off_epa_l4",
+      "opponent_matchup__opp_off_sec_per_play_l4"
+    ],
+    "env_features": [
+      "team_environment__proj_off_plays",
+      "team_environment__proj_pass_plays",
+      "team_environment__proj_rush_plays",
+      "team_environment__proj_pass_share",
+      "team_environment__proj_off_plays_sd",
+      "opponent_matchup__proj_opp_off_plays",
+      "opponent_matchup__proj_opp_pass_plays"
+    ],
+    "era_forbidden_tokens": [
+      "pressure",
+      "coverage",
+      "route",
+      "ngs_air_yards"
+    ],
+    "banned_source_tokens": [
+      "spread_line",
+      "total_line",
+      "vegas_wp",
+      "vegas_home_wp",
+      "vegas_wpa",
+      "vegas_home_wpa",
+      "temp",
+      "wind",
+      "moneyline",
+      "depth_team",
+      "depth_chart"
+    ]
+  },
+  "layer_a": {
+    "off_plays": {
+      "target": "off_plays",
+      "winner": "negbin_glm",
+      "best_foil": "foil_team_eb",
+      "mean_crps": {
+        "foil_team_eb": 4.9937,
+        "foil_team_eb_matchup": 5.304,
+        "nihilist_zero": 60.5449,
+        "marginal_train": 5.0853,
+        "zero_width": 6.8572,
+        "max_width": 7.1686,
+        "pois_glm": 4.9948,
+        "oracle__pois_glm": 4.6002,
+        "matched_n__pois_glm": 7.1375,
+        "negbin_glm": 4.986,
+        "oracle__negbin_glm": 4.599,
+        "matched_n__negbin_glm": 7.1321,
+        "lgbm_quantile": 5.125,
+        "oracle__lgbm_quantile": 2.9416,
+        "matched_n__lgbm_quantile": 5.3781,
+        "knn_quantile": 5.0069,
+        "oracle__knn_quantile": 4.913,
+        "matched_n__knn_quantile": 4.9843,
+        "oracle__foil_team_eb": 4.9673,
+        "oracle__foil_team_eb_matchup": 5.2843,
+        "permuted_within_week": 5.0632
+      },
+      "mean_mae_report_only": {
+        "negbin_glm": 6.852,
+        "foil_team_eb": 6.8426,
+        "nihilist_zero": 60.5449,
+        "marginal_train": 7.0403
+      },
+      "deltas_by_fold": [
+        -0.0127,
+        0.0281
+      ],
+      "mean_delta": 0.0077,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 1,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        -0.053,
+        0.266,
+        -7.861,
+        -0.133
+      ],
+      "observed_sr": 0.266,
+      "var_trials_sr": 15.58424,
+      "anchors": {
+        "nihilist_loses": true,
+        "marginal_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "pois_glm": {
+          "arm": 4.9948,
+          "own_form_oracle": 4.6002,
+          "matched_n": 7.1375,
+          "oracle_beats_matched_n": true
+        },
+        "negbin_glm": {
+          "arm": 4.986,
+          "own_form_oracle": 4.599,
+          "matched_n": 7.1321,
+          "oracle_beats_matched_n": true
+        },
+        "lgbm_quantile": {
+          "arm": 5.125,
+          "own_form_oracle": 2.9416,
+          "matched_n": 5.3781,
+          "oracle_beats_matched_n": true
+        },
+        "knn_quantile": {
+          "arm": 5.0069,
+          "own_form_oracle": 4.913,
+          "matched_n": 4.9843,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0696,
+        "permuted_lift_p_one_sided": null
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8051,
+        "n_rows": 544,
+        "binomial_se": 0.0171,
+        "blocking_shortfall": false
+      }
+    },
+    "pass_share": {
+      "target": "pass_share",
+      "winner": "betabinom",
+      "best_foil": "foil_team_eb",
+      "mean_crps": {
+        "foil_team_eb": 0.059,
+        "foil_team_eb_matchup": 0.0601,
+        "nihilist_zero": 0.5682,
+        "marginal_train": 0.0601,
+        "zero_width": 0.0818,
+        "max_width": 0.0877,
+        "binom_glm": 0.0598,
+        "oracle__binom_glm": 0.0555,
+        "matched_n__binom_glm": 0.0905,
+        "betabinom": 0.0574,
+        "oracle__betabinom": 0.0538,
+        "matched_n__betabinom": 0.0875,
+        "lgbm_quantile": 0.0583,
+        "oracle__lgbm_quantile": 0.033,
+        "matched_n__lgbm_quantile": 0.0615,
+        "knn_quantile": 0.0579,
+        "oracle__knn_quantile": 0.0582,
+        "matched_n__knn_quantile": 0.0592,
+        "oracle__foil_team_eb": 0.0586,
+        "oracle__foil_team_eb_matchup": 0.0601,
+        "permuted_within_week": 0.0612
+      },
+      "mean_mae_report_only": {
+        "betabinom": 0.0801,
+        "foil_team_eb": 0.0818,
+        "nihilist_zero": 0.5682,
+        "marginal_train": 0.0842
+      },
+      "deltas_by_fold": [
+        0.0012,
+        0.002
+      ],
+      "mean_delta": 0.0016,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        -1.611,
+        2.64,
+        4.699,
+        5.477
+      ],
+      "observed_sr": 2.64,
+      "var_trials_sr": 10.08575,
+      "anchors": {
+        "nihilist_loses": true,
+        "marginal_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": false,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "binom_glm": {
+          "arm": 0.0598,
+          "own_form_oracle": 0.0555,
+          "matched_n": 0.0905,
+          "oracle_beats_matched_n": true
+        },
+        "betabinom": {
+          "arm": 0.0574,
+          "own_form_oracle": 0.0538,
+          "matched_n": 0.0875,
+          "oracle_beats_matched_n": true
+        },
+        "lgbm_quantile": {
+          "arm": 0.0583,
+          "own_form_oracle": 0.033,
+          "matched_n": 0.0615,
+          "oracle_beats_matched_n": true
+        },
+        "knn_quantile": {
+          "arm": 0.0579,
+          "own_form_oracle": 0.0582,
+          "matched_n": 0.0592,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0022,
+        "permuted_lift_p_one_sided": null
+      },
+      "coverage": {
+        "winner_coverage_80": 0.7996,
+        "n_rows": 544,
+        "binomial_se": 0.0171,
+        "blocking_shortfall": false
+      }
+    }
+  },
+  "gates_a": {
+    "off_plays": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "pass_share": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    }
+  },
+  "layer_b": {},
+  "gates_b": {},
+  "fdr": {
+    "own_family": {
+      "off_plays": false,
+      "pass_share": false
+    },
+    "pooled": {
+      "off_plays": false,
+      "pass_share": false
+    },
+    "binding": {
+      "off_plays": false,
+      "pass_share": false
+    }
+  },
+  "null_states": {
+    "layer_a::off_plays": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w3_off_plays_crps`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_a::pass_share": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w3_pass_share_crps`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    }
+  },
+  "verdict": {
+    "layer_a": {
+      "off_plays": "UNDEFINED",
+      "pass_share": "UNDEFINED"
+    },
+    "layer_b": {}
+  },
+  "fold_results_a": {
+    "off_plays": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "foil_team_eb": {
+            "crps": 4.877961021065521,
+            "mae_report_only": 6.677496468988839
+          },
+          "foil_team_eb_matchup": {
+            "crps": 5.119963577634911,
+            "mae_report_only": 7.120213730771197
+          },
+          "nihilist_zero": {
+            "crps": 60.4,
+            "mae_report_only": 60.4
+          },
+          "marginal_train": {
+            "crps": 4.8882716049382715,
+            "mae_report_only": 6.777777777777778
+          },
+          "zero_width": {
+            "crps": 6.686450107042132,
+            "mae_report_only": 6.686450107042133
+          },
+          "max_width": {
+            "crps": 7.105875313613751,
+            "mae_report_only": 6.682823223505683
+          },
+          "pois_glm": {
+            "crps": 4.894981006647674,
+            "mae_report_only": 6.725925925925926
+          },
+          "oracle__pois_glm": {
+            "crps": 4.416286799620133,
+            "mae_report_only": 6.066666666666666
+          },
+          "matched_n__pois_glm": {
+            "crps": 8.817136752136753,
+            "mae_report_only": 11.018518518518519
+          },
+          "negbin_glm": {
+            "crps": 4.890669515669517,
+            "mae_report_only": 6.725925925925926
+          },
+          "oracle__negbin_glm": {
+            "crps": 4.416229819563153,
+            "mae_report_only": 6.066666666666666
+          },
+          "matched_n__negbin_glm": {
+            "crps": 8.817307692307693,
+            "mae_report_only": 11.018518518518519
+          },
+          "lgbm_quantile": {
+            "crps": 5.021140126827186,
+            "mae_report_only": 6.838637934489401
+          },
+          "oracle__lgbm_quantile": {
+            "crps": 2.773177260899037,
+            "mae_report_only": 3.690371830706431
+          },
+          "matched_n__lgbm_quantile": {
+            "crps": 5.132652507987357,
+            "mae_report_only": 6.790653531301085
+          },
+          "knn_quantile": {
+            "crps": 4.820513770180437,
+            "mae_report_only": 6.553703703703704
+          },
+          "oracle__knn_quantile": {
+            "crps": 4.709608380816714,
+            "mae_report_only": 6.518518518518518
+          },
+          "matched_n__knn_quantile": {
+            "crps": 4.781108262108262,
+            "mae_report_only": 6.538888888888889
+          },
+          "oracle__foil_team_eb": {
+            "crps": 4.840063819864697,
+            "mae_report_only": 6.674806538477492
+          },
+          "oracle__foil_team_eb_matchup": {
+            "crps": 5.121360563644342,
+            "mae_report_only": 7.134576182894485
+          },
+          "permuted_within_week": {
+            "crps": 4.841702964891125,
+            "mae_report_only": 6.560588553941999
+          }
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "foil_team_eb": {
+            "crps": 5.109342365448934,
+            "mae_report_only": 7.007653354458964
+          },
+          "foil_team_eb_matchup": {
+            "crps": 5.48799810809305,
+            "mae_report_only": 7.609074083079301
+          },
+          "nihilist_zero": {
+            "crps": 60.68978102189781,
+            "mae_report_only": 60.68978102189781
+          },
+          "marginal_train": {
+            "crps": 5.28228523301516,
+            "mae_report_only": 7.302919708029197
+          },
+          "zero_width": {
+            "crps": 7.028007318514571,
+            "mae_report_only": 7.028007318514571
+          },
+          "max_width": {
+            "crps": 7.231268637726576,
+            "mae_report_only": 6.98620200846377
+          },
+          "pois_glm": {
+            "crps": 5.09468931311997,
+            "mae_report_only": 6.978102189781022
+          },
+          "oracle__pois_glm": {
+            "crps": 4.7841708777840175,
+            "mae_report_only": 6.5583941605839415
+          },
+          "matched_n__pois_glm": {
+            "crps": 5.457799925135691,
+            "mae_report_only": 7.5
+          },
+          "negbin_glm": {
+            "crps": 5.081279243870485,
+            "mae_report_only": 6.978102189781022
+          },
+          "oracle__negbin_glm": {
+            "crps": 4.781812652068127,
+            "mae_report_only": 6.572992700729927
+          },
+          "matched_n__negbin_glm": {
+            "crps": 5.44679955081415,
+            "mae_report_only": 7.5036496350364965
+          },
+          "lgbm_quantile": {
+            "crps": 5.228888720780952,
+            "mae_report_only": 7.088828505849058
+          },
+          "oracle__lgbm_quantile": {
+            "crps": 3.109933914262622,
+            "mae_report_only": 4.176885011624587
+          },
+          "matched_n__lgbm_quantile": {
+            "crps": 5.6234644363138795,
+            "mae_report_only": 7.542605758266409
+          },
+          "knn_quantile": {
+            "crps": 5.193319764177428,
+            "mae_report_only": 7.140510948905109
+          },
+          "oracle__knn_quantile": {
+            "crps": 5.116460906793936,
+            "mae_report_only": 7.041970802919708
+          },
+          "matched_n__knn_quantile": {
+            "crps": 5.187568898558862,
+            "mae_report_only": 7.085766423357664
+          },
+          "oracle__foil_team_eb": {
+            "crps": 5.094456924957283,
+            "mae_report_only": 6.9832095509891525
+          },
+          "oracle__foil_team_eb_matchup": {
+            "crps": 5.447258461589055,
+            "mae_report_only": 7.608215568842639
+          },
+          "permuted_within_week": {
+            "crps": 5.284700549479434,
+            "mae_report_only": 7.133514872252737
+          }
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "pass_share": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "foil_team_eb": {
+            "crps": 0.057920124279998875,
+            "mae_report_only": 0.08017249266868308
+          },
+          "foil_team_eb_matchup": {
+            "crps": 0.05950864039988963,
+            "mae_report_only": 0.08138537110981228
+          },
+          "nihilist_zero": {
+            "crps": 0.5780225800339769,
+            "mae_report_only": 0.5780225800339769
+          },
+          "marginal_train": {
+            "crps": 0.05823006460962048,
+            "mae_report_only": 0.08149727866752726
+          },
+          "zero_width": {
+            "crps": 0.08016734625633841,
+            "mae_report_only": 0.08016734625633841
+          },
+          "max_width": {
+            "crps": 0.08739704879942319,
+            "mae_report_only": 0.08018325834217653
+          },
+          "binom_glm": {
+            "crps": 0.05908611666545663,
+            "mae_report_only": 0.07849742480930016
+          },
+          "oracle__binom_glm": {
+            "crps": 0.053182920259206554,
+            "mae_report_only": 0.0711059985761784
+          },
+          "matched_n__binom_glm": {
+            "crps": 0.11570783523614364,
+            "mae_report_only": 0.13655213115178078
+          },
+          "betabinom": {
+            "crps": 0.05675003748985797,
+            "mae_report_only": 0.07886425945314184
+          },
+          "oracle__betabinom": {
+            "crps": 0.05194061447548148,
+            "mae_report_only": 0.07124291891967112
+          },
+          "matched_n__betabinom": {
+            "crps": 0.11245029062584527,
+            "mae_report_only": 0.13777182604421237
+          },
+          "lgbm_quantile": {
+            "crps": 0.057124659919569165,
+            "mae_report_only": 0.07891863032338345
+          },
+          "oracle__lgbm_quantile": {
+            "crps": 0.032115378519257075,
+            "mae_report_only": 0.04392375306106074
+          },
+          "matched_n__lgbm_quantile": {
+            "crps": 0.059650721964841766,
+            "mae_report_only": 0.08004292938472683
+          },
+          "knn_quantile": {
+            "crps": 0.05676013922910291,
+            "mae_report_only": 0.07984010929899962
+          },
+          "oracle__knn_quantile": {
+            "crps": 0.05727512096550345,
+            "mae_report_only": 0.07967543269469451
+          },
+          "matched_n__knn_quantile": {
+            "crps": 0.05771882403532547,
+            "mae_report_only": 0.0806441531268932
+          },
+          "oracle__foil_team_eb": {
+            "crps": 0.05783215880811184,
+            "mae_report_only": 0.0801108632531277
+          },
+          "oracle__foil_team_eb_matchup": {
+            "crps": 0.058975115496031856,
+            "mae_report_only": 0.08046696302920157
+          },
+          "permuted_within_week": {
+            "crps": 0.060659086232598816,
+            "mae_report_only": 0.08489325666123712
+          }
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "foil_team_eb": {
+            "crps": 0.05998402382059079,
+            "mae_report_only": 0.08338360169959251
+          },
+          "foil_team_eb_matchup": {
+            "crps": 0.06074858923073683,
+            "mae_report_only": 0.08453289547111942
+          },
+          "nihilist_zero": {
+            "crps": 0.5584129650284516,
+            "mae_report_only": 0.5584129650284516
+          },
+          "marginal_train": {
+            "crps": 0.06206269463243334,
+            "mae_report_only": 0.08682468785480735
+          },
+          "zero_width": {
+            "crps": 0.08340639995051649,
+            "mae_report_only": 0.08340639995051649
+          },
+          "max_width": {
+            "crps": 0.08807595233652138,
+            "mae_report_only": 0.08333949825315655
+          },
+          "binom_glm": {
+            "crps": 0.060438672256350245,
+            "mae_report_only": 0.08116094160292495
+          },
+          "oracle__binom_glm": {
+            "crps": 0.05774924265323117,
+            "mae_report_only": 0.07753206978069407
+          },
+          "matched_n__binom_glm": {
+            "crps": 0.06521906313847367,
+            "mae_report_only": 0.08688688383595826
+          },
+          "betabinom": {
+            "crps": 0.05795776018992157,
+            "mae_report_only": 0.08140293243698224
+          },
+          "oracle__betabinom": {
+            "crps": 0.05570054317393207,
+            "mae_report_only": 0.07742923004168652
+          },
+          "matched_n__betabinom": {
+            "crps": 0.06264780185011543,
+            "mae_report_only": 0.08691077125225775
+          },
+          "lgbm_quantile": {
+            "crps": 0.059396631336042185,
+            "mae_report_only": 0.08223907441487484
+          },
+          "oracle__lgbm_quantile": {
+            "crps": 0.0339317439947234,
+            "mae_report_only": 0.046390336416610056
+          },
+          "matched_n__lgbm_quantile": {
+            "crps": 0.06338972285829073,
+            "mae_report_only": 0.08648140203471245
+          },
+          "knn_quantile": {
+            "crps": 0.059089306264720705,
+            "mae_report_only": 0.08231151160934262
+          },
+          "oracle__knn_quantile": {
+            "crps": 0.059123729691299275,
+            "mae_report_only": 0.08166550536786626
+          },
+          "matched_n__knn_quantile": {
+            "crps": 0.06059042491876585,
+            "mae_report_only": 0.08330848846586905
+          },
+          "oracle__foil_team_eb": {
+            "crps": 0.05927793068106991,
+            "mae_report_only": 0.08164228723523648
+          },
+          "oracle__foil_team_eb_matchup": {
+            "crps": 0.061191465543945715,
+            "mae_report_only": 0.08550193058248755
+          },
+          "permuted_within_week": {
+            "crps": 0.06165841517072537,
+            "mae_report_only": 0.0852583969226789
+          }
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ]
+  },
+  "fold_results_b": [],
+  "headline": "A[off_plays:UNDEFINED pass_share:UNDEFINED] B[]"
+}
