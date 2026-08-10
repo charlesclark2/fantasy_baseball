@@ -74,7 +74,7 @@ CASES: list[tuple[str, str, str, str, str]] = [
         "ignore the authority entirely (a module that is wired but inert)",
         NAMING,
         "    if authority and str(authority).casefold() == name.casefold():\n"
-        "        return str(authority)",
+        "        name = str(authority)",
         "    if False:\n        pass",
         "test_every_live_case_defect_is_repaired_when_the_authority_knows",
     ),
@@ -89,8 +89,8 @@ CASES: list[tuple[str, str, str, str, str]] = [
         "let the frozen map override a live authority (the precedence bug this proof caught)",
         NAMING,
         "    if authority and str(authority).casefold() == name.casefold():\n"
-        "        return str(authority)\n"
-        "    if raw_name.isupper():",
+        "        name = str(authority)\n"
+        "    elif raw_name.isupper():",
         "    if raw_name.isupper():",
         "test_the_authority_wins_over_the_frozen_fallback",
     ),
@@ -132,15 +132,17 @@ CASES: list[tuple[str, str, str, str, str]] = [
     (
         "stop passing the authority to board_records (Rankings + league boards)",
         BOARD,
-        "        skill = board_records(grp, rookie_teams, byes, casing)",
-        "        skill = board_records(grp, rookie_teams, byes)",
+        "        skill = board_records(grp, rookie_teams, byes, casing, board_names)",
+        "        skill = board_records(grp, rookie_teams, byes, None, board_names)",
         "test_the_board_export_passes_the_authority_to_both_record_builders[board_records]",
     ),
     (
         "stop passing the authority to projection_records (Projections + Player Search)",
         BOARD,
-        "        projections = projection_records(pdf, rookie_teams, byes, bio, contrib_map, casing)",
-        "        projections = projection_records(pdf, rookie_teams, byes, bio, contrib_map)",
+        "        projections = projection_records(pdf, rookie_teams, byes, bio, contrib_map, casing,\n"
+        "                                         board_names)",
+        "        projections = projection_records(pdf, rookie_teams, byes, bio, contrib_map, None,\n"
+        "                                         board_names)",
         "test_the_board_export_passes_the_authority_to_both_record_builders[projection_records]",
     ),
     (
@@ -160,8 +162,10 @@ CASES: list[tuple[str, str, str, str, str]] = [
     (
         "re-grow an independent rule pass in the board exporter",
         BOARD,
-        "def _titlecase(name: str, authority: str | None = None) -> str:",
-        "def _titlecase(name: str, authority: str | None = None) -> str:\n"
+        "def _titlecase(name: str, authority: str | None = None,\n"
+        "               draft_board: str | None = None) -> str:",
+        "def _titlecase(name: str, authority: str | None = None,\n"
+        "               draft_board: str | None = None) -> str:\n"
         "    if name.isupper():\n"
         "        return name.title()",
         "test_the_board_exporter_no_longer_carries_its_own_rule_pass",
@@ -180,6 +184,55 @@ CASES: list[tuple[str, str, str, str, str]] = [
         '    "DK METCALF": "DK Metcalf",',
         '    "DK METCALF": "DK Metcalf",\n    "SOME NEWGUY": "Some NewGuy",',
         "test_the_frozen_fallback_map_is_not_quietly_growing",
+    ),
+    (
+        "the draft-board name is ignored (a second authority that is wired but inert)",
+        NAMING,
+        "    return drafted_as(name, draft_board)",
+        "    return name",
+        "test_the_draft_board_overrides_the_spelling_authority",
+    ),
+    (
+        "the suffix-DROP clause is removed, so FFC's house style deletes a III",
+        NAMING,
+        "    if _suffix_of(ours) and not _suffix_of(theirs):\n        return ours  # the drop clause — see above",
+        "    if False:\n        pass",
+        "test_a_generational_suffix_is_never_dropped",
+    ),
+    (
+        "the suffix check becomes case/punctuation sensitive, so 'JR' reads as a different token",
+        NAMING,
+        '    tok = last.replace(".", "").upper()',
+        "    tok = last",
+        "test_a_generational_suffix_is_never_dropped",
+    ),
+    (
+        "the draft board stops overriding the spelling authority",
+        NAMING,
+        "    if authority and str(authority).casefold() == name.casefold():\n        name = str(authority)",
+        "    if authority and str(authority).casefold() == name.casefold():\n        return str(authority)",
+        "test_the_draft_board_overrides_the_spelling_authority",
+    ),
+    (
+        "board_records stops receiving the draft-board names",
+        BOARD,
+        "        skill = board_records(grp, rookie_teams, byes, casing, board_names)",
+        "        skill = board_records(grp, rookie_teams, byes, casing)",
+        "test_the_draft_board_layer_is_wired_into_both_record_builders",
+    ),
+    (
+        "the draft-board join invents its own crosswalk instead of reusing the ADP one",
+        BOARD,
+        "        key = _adp_key(pos, name, r.get(\"team\"))\n        if key is not None:\n            out.setdefault(key, str(name))",
+        "        out.setdefault((str(name).lower(), pos), str(name))",
+        "test_the_draft_board_join_reuses_the_adp_crosswalk_rather_than_inventing_one",
+    ),
+    (
+        "defences join the draft-board name map, colliding the whole position onto team codes",
+        BOARD,
+        '        if pos not in PROJECTABLE or pos == "DST" or not name:',
+        "        if pos not in PROJECTABLE or not name:",
+        "test_the_draft_board_join_reuses_the_adp_crosswalk_rather_than_inventing_one",
     ),
 ]
 

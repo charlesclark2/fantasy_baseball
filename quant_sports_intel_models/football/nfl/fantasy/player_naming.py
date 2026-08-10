@@ -151,7 +151,48 @@ def reconcile_casing(ours: str, authority: str | None) -> str:
     return authority if ours.casefold() == str(authority).casefold() else ours
 
 
-def display_name(raw, authority: str | None = None) -> str:
+def drafted_as(ours: str, draft_board: str | None) -> str:
+    """`ours`, replaced by the name a DRAFT BOARD shows for the same player — the name a draft
+    participant is actually looking for.
+
+    ⭐ WHY A SECOND AUTHORITY RATHER THAN A WIDER GATE ON THE FIRST. The roster authority is
+    deliberately case-only, because the roster is good at spelling and bad at identity: it wants to
+    call Hollywood Brown "Marquise Brown". Fantasy Football Calculator is the opposite — it is a real
+    draft board, so its display name IS the drafter-facing name BY CONSTRUCTION, and it is the right
+    source for exactly the changes the case gate refuses. Measured on the live 2026 board: of the 232
+    players FFC also drafts, our names (after the case fix) match on 228.
+
+    ⛔ ONE EXCEPTION, AND IT IS NOT A STYLE PREFERENCE: **a generational suffix is never DROPPED.**
+    FFC's suffix handling is its own house style and is not self-consistent — it keeps "James Cook
+    III" and "Aaron Jones Sr." but renders Kenneth Walker III as "Kenneth Walker", where our name and
+    the roster BOTH carry the III (as do ESPN/Yahoo/Sleeper). The asymmetry is the point: a suffix is
+    what separates two real people (Frank Gore from Frank Gore Jr.), so ADDING one can only ever
+    disambiguate while REMOVING one destroys information. Adds are taken, drops are refused.
+
+    Measured effect today — four names, each a case the reader would notice: `Kenneth Gainwell` ->
+    **Kenny Gainwell** (nickname; a genuinely drafted RB at ADP 99), `Eddy Pineiro` -> **Eddy
+    Piñeiro** (diacritic), `Deebo Samuel` -> **Deebo Samuel Sr.** (suffix ADD, and the roster agrees),
+    and `Kenneth Walker III` left alone (suffix DROP, refused).
+    """
+    if not draft_board:
+        return ours
+    theirs = str(draft_board).strip()
+    if theirs == ours:
+        return ours
+    if _suffix_of(ours) and not _suffix_of(theirs):
+        return ours  # the drop clause — see above
+    return theirs
+
+
+def _suffix_of(name: str) -> str | None:
+    """The trailing generational suffix, if any. Compared case- and dot-insensitively so "Jr." and
+    "JR" are the same token."""
+    last = name.strip().split()[-1] if name.strip() else ""
+    tok = last.replace(".", "").upper()
+    return tok if tok in {"JR", "SR", "II", "III", "IV", "V", "VI"} else None
+
+
+def display_name(raw, authority: str | None = None, draft_board: str | None = None) -> str:
     """A source name rendered for display: repaired if it is a known mis-spelling, de-shouted if it
     is shouting, re-cased to the authority when that is a pure case change, and otherwise UNTOUCHED.
 
@@ -171,12 +212,16 @@ def display_name(raw, authority: str | None = None) -> str:
     # the rule pass the output is also unchanged, and an unchanged-keyed fallback then overrides a
     # live, correct authority with a frozen answer — precisely the staleness this design ends.
     if authority and str(authority).casefold() == name.casefold():
-        return str(authority)
-    if raw_name.isupper():
+        name = str(authority)
+    elif raw_name.isupper():
         # No roster row (or the read failed). Fall back to the frozen map so a missing authority
         # cannot publish a name WORSE than the pre-authority behaviour did.
-        return _FALLBACK_CASINGS.get(raw_name, name)
-    return name
+        name = _FALLBACK_CASINGS.get(raw_name, name)
+    # LAST, so it can override the spelling authorities: the name a draft board actually shows.
+    # Ordering is deliberate — the roster is the better speller, the draft board is the better
+    # answer to "who is the reader looking for", and only the second of those is what a drafter
+    # types into a search box.
+    return drafted_as(name, draft_board)
 
 
 @functools.lru_cache(maxsize=4)

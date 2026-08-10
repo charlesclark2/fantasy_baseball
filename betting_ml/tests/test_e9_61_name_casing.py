@@ -374,3 +374,88 @@ def test_the_frozen_fallback_map_is_not_quietly_growing():
         "_REPAIRS is for repairs that change CHARACTERS (De'Von Achane's apostrophe), never casing"
     )
 
+
+
+# ── 6. the DRAFT-BOARD name: what a draft participant expects to see ─────────────────────────────
+#
+# A second authority with a different job. The roster is the better SPELLER and a bad judge of
+# IDENTITY (it wants "Marquise Brown"); a draft board is the reverse — its display name IS the
+# drafter-facing name by construction. Measured on the live 2026 board: after the casing fix our
+# names match FFC's on 228 of the 232 players it drafts.
+
+#: Live pairs. `ours` is what the board carried after the casing pass; `ffc` is the draft board.
+_DRAFT_BOARD = [
+    ("Kenneth Gainwell", "Kenny Gainwell", "Kenny Gainwell"),      # nickname — ADP 99, genuinely drafted
+    ("Eddy Pineiro", "Eddy Piñeiro", "Eddy Piñeiro"),              # diacritic
+    ("Deebo Samuel", "Deebo Samuel Sr.", "Deebo Samuel Sr."),      # suffix ADD (the roster agrees)
+    ("Kenneth Walker III", "Kenneth Walker", "Kenneth Walker III"),  # suffix DROP — REFUSED
+    ("James Cook III", "James Cook III", "James Cook III"),        # FFC agrees; no-op
+]
+
+
+@pytest.mark.parametrize("ours,ffc,want", _DRAFT_BOARD)
+def test_the_draft_boards_name_is_what_the_reader_is_looking_for(ours, ffc, want):
+    assert PN.drafted_as(ours, ffc) == want
+
+
+def test_a_generational_suffix_is_never_dropped():
+    """⛔ THE ONE CHANGE THE DRAFT BOARD IS NOT ALLOWED TO MAKE, and it is not a style preference.
+
+    FFC's suffix handling is its own house style and is NOT self-consistent — it keeps "James Cook
+    III" and "Aaron Jones Sr." but renders Kenneth Walker III as "Kenneth Walker", where our name,
+    the roster, and the platforms a drafter actually uses all carry the III. The asymmetry is the
+    point: a suffix is what separates two real people (Frank Gore from Frank Gore Jr.), so ADDING one
+    can only disambiguate while REMOVING one destroys information.
+    """
+    for suffix in ("Jr.", "Sr.", "II", "III", "IV", "V"):
+        assert PN.drafted_as(f"Some Player {suffix}", "Some Player") == f"Some Player {suffix}"
+    # ...and the ADD direction is still taken, or the clause would just be "never change a name".
+    assert PN.drafted_as("Some Player", "Some Player Jr.") == "Some Player Jr."
+    # Case/punctuation of the suffix must not matter, or "JR" reads as a different token than "Jr.".
+    assert PN.drafted_as("Some Player JR", "Some Player") == "Some Player JR"
+
+
+def test_an_absent_draft_board_name_changes_nothing():
+    """FFC drafts ~232 of 858. Everyone else — deep bench, most rookies — keeps the spelling
+    authority's answer; there is no drafter expectation to honour for a player nobody drafts."""
+    for name in ("Hollywood Brown", "Ashton Jeanty", "Mack Hollins"):
+        assert PN.display_name(name, None, None) == name
+
+
+def test_the_draft_board_overrides_the_spelling_authority():
+    """Ordering is load-bearing and the two can genuinely disagree: the roster calls him "Kenneth
+    Gainwell" (correctly, legally) and every draft board calls him Kenny. The reader is looking for
+    Kenny."""
+    assert PN.display_name("KENNETH GAINWELL", "Kenneth Gainwell", "Kenny Gainwell") == "Kenny Gainwell"
+
+
+def test_the_draft_board_layer_is_wired_into_both_record_builders():
+    """Same wiring clause as the casing authority, for the same reason — a second authority that no
+    renderer consults is a module that changes nothing, silently (NF-C0e "wired ≠ invoked")."""
+    src = _BOARD.read_text()
+    assert re.search(r"board_names\s*=\s*draft_board_names\(", src), \
+        "main() no longer resolves the draft-board names"
+    for builder in ("board_records", "projection_records"):
+        calls = _call_sites(src, builder)
+        assert calls, f"{builder} is never called"
+        assert all(
+            "board_names" in [a.id for a in c.args if isinstance(a, ast.Name)]
+            + [k.value.id for k in c.keywords if isinstance(k.value, ast.Name)]
+            for c in calls
+        ), f"a {builder} call does not receive the draft-board names"
+
+
+def test_the_draft_board_join_reuses_the_adp_crosswalk_rather_than_inventing_one():
+    """⭐ WHY THIS IS SAFE. `_adp_key` is the vetted normalizer the ADP column already joins on — it
+    folds accents, generational suffixes and FFC's own nickname aliases. Reusing it means this adds
+    NO new matching surface: if the join could put the wrong name on a row, that row's ADP would
+    already be wrong. A bespoke key here would be a second, unvetted crosswalk."""
+    src = _BOARD.read_text()
+    body = src[src.index("def draft_board_names"):]
+    body = body[: body.index("\ndef ")]
+    assert "_adp_key(" in body, "the draft-board join no longer uses the ADP crosswalk"
+    assert 'pos == "DST"' in body, (
+        "defences must be excluded — `_adp_key` keys a DST on its TEAM CODE, so the whole position "
+        "would collide onto a handful of keys, and a unit label is not a name anyone spells"
+    )
+    assert "log.warning" in body, "a failed FFC read must warn, not fail silently"
