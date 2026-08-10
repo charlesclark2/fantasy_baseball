@@ -2276,20 +2276,41 @@ from final
 
 {% else %}
 
-{{ config(
-    materialized='incremental',
-    unique_key='game_pk',
-    incremental_strategy='delete+insert',
-    on_schema_change='sync_all_columns'
-) }}
+-- E11.1-W8b: the Snowflake side is a pure COPY of the lakehouse_ext external table over the
+-- DuckDB-built S3 parquet — it does no compute of its own (all of the assembly above runs in
+-- the DuckDB branch).
+--
+-- E11.24 TARGET-6 SUCCESSOR (2026-08-08) — incremental → VIEW. Same shape and same rationale as
+-- target 6's four ext-table-COPY models, one materialization over: a `delete+insert` incremental
+-- runs a temp CTAS + DELETE + INSERT on every intraday lineup tick (lineup_dbt_feature_rebuild)
+-- and again in the daily dbt_umpire_feature_rebuild; each of those RESUMES COMPUTE_WH, while
+-- `create or replace view` is metadata-only and never does.
+--
+-- CONTENT-NEUTRAL, AND MEASURED SO (2026-08-08, MONITOR_WH — not asserted from the shape):
+--   • row counts identical, 26,969 = 26,969, with ZERO game_dates differing in count;
+--   • column sets identical, 756 = 756, with ZERO data_type mismatches — so the INC-19
+--     NUMBER↔FLOAT surface this model is the canonical victim of is already converged, and a
+--     view removes it outright (a view has no stored type to drift);
+--   • values agree on every game inside the 7-day incremental window. 77 of 26,969 game_pks
+--     (0.29%) differ OUTSIDE it — the drift this model's own header already anticipates ("the
+--     weekly Sunday `dbtf build --full-refresh` net corrects any drift"). A view converges that
+--     drift permanently, toward the same parquet the served `--s3` path already reads.
+--
+-- SAFE because nothing on the Snowflake target needs this materialized: every dbt ref() to this
+-- model lives in a DuckDB branch (its own wrapper and feature_league_contact_baseline both read
+-- their OWN ext table on Snowflake, not this one), and the raw-SQL Snowflake readers are the
+-- offline training loaders (betting_ml/utils/data_loader.load_features, the bake-off/ablation
+-- scripts) plus predict_today's aux reads, which are dead under W7B_LAKEHOUSE_S3 /
+-- W7B_INTRADAY_S3 (predict runs --s3). The API Lambda reads it through lakehouse_query (DuckDB
+-- over S3), never Snowflake.
+--
+-- ⚠️ NOT the tick's waker. Measured on 2026-08-07 (the one clean fully-post-target-6 day) this
+-- model took ZERO provisioning waits in the 14-23 UTC band; the tick's wake sits on the
+-- eb_starter/eb_batter MERGEs and the feature_pregame_lineup_state SCD-2 UPDATE, none of which
+-- is flippable (see betting_ml/tests/test_e11_24_pregame_features_are_views.py). This flip is
+-- correctness/drift cleanup that happens to be free — do NOT credit it with a wake reduction.
+{{ config(materialized='view') }}
 
--- E11.1-W8b: the Snowflake side MERGEs from the lakehouse_ext external table over the
--- DuckDB-built S3 parquet. ⚠️ At cutover the operator DROPs+rebuilds this incremental
--- (home_win_rate_trailing_3yr flips NUMBER(21,4)→FLOAT — dbt --full-refresh MERGEs, does
--- NOT DROP). The is_incremental window mirrors the DuckDB branch's games spine scope.
 select * from baseball_data.lakehouse_ext.feature_pregame_game_features_raw
-{% if is_incremental() %}
-where game_date::date >= dateadd('day', -{{ var('pregame_incremental_lookback_days', 7) }}, current_date)
-{% endif %}
 
 {% endif %}

@@ -530,11 +530,50 @@ from final
 -- TYPE-PIN-END
 {% else %}
 
-{{ config(materialized='incremental', unique_key=['game_pk', 'pitcher_id'], incremental_strategy='merge') }}
+-- E11.24 TARGET-6 SUCCESSOR (2026-08-08) — incremental MERGE → VIEW. This branch is a pure
+-- ext-table COPY, and its MERGE was re-run on EVERY intraday lineup tick (lineup_dbt_feature_rebuild)
+-- plus once in dbt_umpire_feature_rebuild. A MERGE RESUMES COMPUTE_WH; `create or replace view` is
+-- metadata-only and never does. Measured on the clean 2026-08-07 tick band (14-23 UTC): this MERGE
+-- and its eb_batter_posteriors_raw sibling were 6 of the 9 remaining waits.
+--
+-- SAFE ONLY BECAUSE THE READER REPOINT SHIPS WITH IT — this is the ordering that matters:
+--   • Every dbt ref() to this model lives in the DuckDB branch of its consumer
+--     (feature_pregame_starter_features), which on Snowflake reads its OWN ext table.
+--   • betting_ml/scripts/sequential_bayes/update_player_posteriors.py was the one Snowflake
+--     reader whose consumption spans the WHOLE accumulated history (the season-first-appearance
+--     cold-start prior + the pitcher-role map). It now reads the S3 parquet under --s3
+--     (W7A_LAKEHOUSE_S3=1, in env.required) — the PRECONDITION for this flip.
+--   • The remaining Snowflake readers are date-scoped and a view serves them unchanged:
+--     dbt/tests/assert_eb_starter_posteriors_covers_today.sql (WARN-tier, `game_date = current_date()`)
+--     and scripts/predict_today.py's _FRESHNESS_QUERY.
+--     ⚠️ CORRECTED 2026-08-09 — an earlier draft of this comment claimed _FRESHNESS_QUERY was
+--     "already DEAD in prod (W8B_FRESHNESS_S3=1)". IT IS NOT. Measured on MONITOR_WH: that exact
+--     shape executed on COMPUTE_WH on 08-02, 08-05, 08-08 and 08-09 (1×/day, 0 waits). The flag is
+--     NOT in services/dagster/aws/env.required, and .env.example documents it as 0 — i.e. nothing
+--     forces it on, and the observed traffic says it is off (this repo's "documented cutover ≠
+--     actually set on the box" class; CLAUDE.md E11.20-COST). ⇒ treat the SF probe as LIVE.
+--     THE FLIP IS SAFE ANYWAY, and for a reason that does not depend on the flag: the probe is
+--     date-scoped AND ghost-immune. Its probe side `p` is today's CURRENT probables from
+--     stg_statsapi_probable_pitchers; a ghost row here belongs to a SUPERSEDED probable, which is
+--     by construction no longer in `p`, so it can never satisfy that LEFT JOIN. `starter_missing`
+--     is therefore identical against the table and against the view.
+--
+-- ⚠️ NOT CONTENT-NEUTRAL, unlike the target-6 view flips — and that is the POINT. A `merge`
+-- incremental never DELETES, so the table was an ACCUMULATING SUPERSET carrying rows for
+-- probable-starter snapshots a later rebuild superseded (#662 measured +3). A view returns exactly
+-- the current rebuild. It can only DROP superseded rows, never add anything.
+--
+-- 🧭 PM DESIGN CALL (deliberate): a VIEW, not `enabled=false`. Once nothing on Snowflake reads a
+-- model, `enabled=false` is the cleaner end state — it deletes the object rather than leaving a
+-- shell. It is NOT taken here because two Snowflake readers above still resolve this name, and a
+-- disabled model makes `ref()` unresolvable and DROPs nothing (the relation lingers, stale, as a
+-- table nobody rebuilds — the silent-staleness bomb this program keeps paying for). The view is
+-- the ESTABLISHED shape for this exact case on this target (stg_statsapi_games,
+-- stg_statsapi_probable_pitchers, mart_odds_outcomes, mart_game_odds_bridge, and the four
+-- target-6 / #662 pregame models). `enabled=false` becomes correct only after those two readers
+-- are themselves repointed — a separate story, not a rider on a serving flip.
+{{ config(materialized='view') }}
 
 select * from baseball_data.lakehouse_ext.eb_starter_posteriors
-{% if is_incremental() %}
-  where game_date >= dateadd('day', -7, current_date())
-{% endif %}
 
 {% endif %}
