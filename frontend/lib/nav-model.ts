@@ -28,6 +28,19 @@ export interface NavItem {
    *  see `isLocked`/the locked-branch rendering in `nav.tsx`). Only the past-season track record
    *  qualifies today: its data is genuinely public regardless of fantasy entitlement. */
   public?: boolean
+  /** ⭐ G100-C1 — free, but ONLY once signed in. Like `public` it survives a LOCKED surface; unlike
+   *  `public` it is hidden from a logged-out visitor.
+   *
+   *  ⚠️ WHY IT IS NOT JUST `public: true`. These surfaces need an account: a league is stored
+   *  against a Cognito `sub`, so `/fantasy/leagues` answers 401 without one and `FantasyLeagueGuard`
+   *  bounces to /login. Marking them public would put items in a logged-out visitor's nav whose only
+   *  behaviour is an immediate redirect — a menu that lies about what it opens. The signup pitch for
+   *  these belongs on the marketing surfaces, not in a nav item that bounces.
+   *
+   *  ⛔ It is NOT a way to make a paid surface free. The item's ENDPOINTS must genuinely serve a
+   *  free signed-in caller (the free personalization quota), which the server enforces
+   *  independently — this only decides whether a link is drawn. */
+  freeSignedIn?: boolean
 }
 
 export interface SurfaceGroup {
@@ -43,7 +56,107 @@ export interface SportNav {
   surfaces: SurfaceGroup[]
 }
 
+// ⭐⭐ E9.60 — FANTASY-FIRST ORDER (spec §2/§21, operator 2026-08-09).
+//
+// NFL/Fantasy now leads. This array's order IS the rendered order of the signed-in sport
+// dropdowns, so it is the signed-in half of the same one-product-order rule the home page's
+// `VERTICALS`, About's `ABOUT_PRODUCTS` and the nav's `SIGNED_OUT_NAV` already follow: fantasy is
+// the current acquisition priority, and a visitor should never have to infer a different product
+// priority from a different surface.
+//
+// ⚠️ THE SWAP IS ORDER-ONLY. Nothing about entitlement, gating or item membership changes with it —
+// `isLocked` keys on `g.surface`, never on the sport or its index — so this is a presentation
+// decision that cannot alter who can open what. Pinned by `test_e9_60_positioning_copy.py`.
 export const SPORTS: SportNav[] = [
+  {
+    sport: "nfl",
+    label: "NFL",
+    surfaces: [
+      {
+        surface: "fantasy",
+        label: "Fantasy",
+        sections: [
+          {
+            label: null,
+            items: [
+              // ⭐ Order is PRODUCT order, not build order. Rankings leads because it is the actual
+              // product — the projection re-scored for YOUR league's format and roster. Projections
+              // is the format-independent raw line underneath it: useful, but a supporting view.
+              // ⭐ FREEMIUM BUILD — `public: true` marks the FREE GENERIC BOARD: Rankings,
+              // Projections and Player Search. Their data is now identical for every caller
+              // (`Capability.GENERIC_BOARD`), so a logged-out visitor gets the real page rather
+              // than the "Unlock Fantasy" stub. E9.56b put the first two here when the server was
+              // serving them LOCKED; the freemium build removed the lock and added Search, which is
+              // the only route to a player page that does not start on a board.
+              //
+              // ⛔ League Board, Draft Optimizer, Import, League Settings and My Teams deliberately
+              // stay OFF this list — they are PERSONALIZATION / DECISION SUPPORT, their endpoints
+              // 403 a free caller, and marking one public renders a permanently broken page. The
+              // membership is pinned both ways by `test_freemium_tier.py`.
+              { label: "Rankings", href: "/fantasy/rankings", key: "fantasy-rankings", public: true },
+              { label: "League Board", href: "/fantasy/league-board", key: "fantasy-league-board" },
+              { label: "Projections", href: "/fantasy/projections", key: "fantasy-projections", public: true },
+              // NF3.1 — direct lookup: search a name, land on his player page. A separate nav item
+              // (not folded into Projections' own search box) because it is the entry point every
+              // OTHER surface's Player cell links out to, so it needs to be reachable on its own.
+              { label: "Player Search", href: "/fantasy/players", key: "fantasy-players", public: true },
+              { label: "Draft Optimizer", href: "/fantasy/draft", key: "fantasy-draft" },
+              // ⭐ G100-C1 — the ACTIVATION screen: a free account's one personalized board, led by
+              // the generic-vs-your-league delta. `freeSignedIn` because it survives the locked
+              // fantasy surface (it IS the free tier's personalization) but needs an account.
+              // Placed FIRST of the three league items: it is the payoff, and the two below it are
+              // how you get there.
+              {
+                label: "My League",
+                href: "/fantasy/my-league",
+                key: "fantasy-my-league",
+                freeSignedIn: true,
+              },
+              // NF-C0 — platform import: pull the real league in from Sleeper/Yahoo. Sits ABOVE
+              // the manual editor because it is the path most users should take; the editor stays
+              // as the floor beneath it for every league we cannot reach compliantly.
+              // G100-C1: was `restrict: "fantasy_beta"` (admin + fantasy_comp); import is one of the
+              // two ways a free account configures its one league, so it is now free-signed-in.
+              {
+                label: "Import League",
+                href: "/fantasy/import",
+                key: "fantasy-import",
+                freeSignedIn: true,
+              },
+              // NF-C0b — the manual customization floor: hand-enter a league we cannot import.
+              // G100-C1: same widening as Import above. The editor is the GUARANTEE underneath the
+              // importer rather than a fallback, so the free tier gets both or neither.
+              {
+                label: "My League Settings",
+                href: "/fantasy/league-settings",
+                key: "fantasy-league-settings",
+                freeSignedIn: true,
+              },
+              // NF-C6 — cross-league browse: every saved league's roster, scored under its own
+              // format, in one place. Deliberately NOT `fantasy_beta`-restricted like Import/League
+              // Settings above it: the endpoint reads at the standard fantasy gate (any subscriber),
+              // so this stays correct without a second nav edit whenever NF-C0's write side opens
+              // wider — today it just means an honest empty state for anyone without a saved league.
+              { label: "My Teams", href: "/fantasy/my-teams", key: "fantasy-my-teams" },
+              // NF3.2 — the past-season "receipts" proof asset. `public: true`: it stays reachable
+              // even for a caller not entitled to Fantasy, since none of its data is the paid
+              // current-season projection (see nav-model.ts's `NavItem.public` doc).
+              // ⚠️ E9.60 KEEPS IT HERE as well as promoting it to a TOP-LEVEL nav entry: the
+              // top-level link is for discovery, this one is for someone already inside the
+              // fantasy menu. Removing it here would make the surface's own menu the one place
+              // its receipts are missing.
+              {
+                label: "Track Record",
+                href: "/fantasy/track-record",
+                key: "fantasy-track-record",
+                public: true,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
   {
     sport: "mlb",
     label: "MLB",
@@ -111,72 +224,6 @@ export const SPORTS: SportNav[] = [
                 href: "/fantasy/mlb/league",
                 key: "mlb-league",
                 restrict: "admin",
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    sport: "nfl",
-    label: "NFL",
-    surfaces: [
-      {
-        surface: "fantasy",
-        label: "Fantasy",
-        sections: [
-          {
-            label: null,
-            items: [
-              // ⭐ Order is PRODUCT order, not build order. Rankings leads because it is the actual
-              // product — the projection re-scored for YOUR league's format and roster. Projections
-              // is the format-independent raw line underneath it: useful, but a supporting view.
-              // E9.56b — `public: true` on Rankings + Projections ONLY. These are the two surfaces
-              // the server now serves in a LOCKED form (every model value removed, `locked: true`
-              // in its place, rows re-ordered onto market ADP), so a free visitor gets a real page
-              // with a subscribe CTA on every withheld number instead of the "Unlock Fantasy" stub.
-              // League Board deliberately does NOT get it: it renders a SAVED league's config,
-              // which is per-user data behind `require_fantasy_access` and has no locked form.
-              { label: "Rankings", href: "/fantasy/rankings", key: "fantasy-rankings", public: true },
-              { label: "League Board", href: "/fantasy/league-board", key: "fantasy-league-board" },
-              { label: "Projections", href: "/fantasy/projections", key: "fantasy-projections", public: true },
-              // NF3.1 — direct lookup: search a name, land on his player page. A separate nav item
-              // (not folded into Projections' own search box) because it is the entry point every
-              // OTHER surface's Player cell links out to, so it needs to be reachable on its own.
-              { label: "Player Search", href: "/fantasy/players", key: "fantasy-players" },
-              { label: "Draft Optimizer", href: "/fantasy/draft", key: "fantasy-draft" },
-              // NF-C0 — platform import: pull the real league in from Sleeper/Yahoo. Sits ABOVE
-              // the manual editor because it is the path most users should take; the editor stays
-              // as the floor beneath it for every league we cannot reach compliantly.
-              {
-                label: "Import League",
-                href: "/fantasy/import",
-                key: "fantasy-import",
-                restrict: "fantasy_beta",
-              },
-              // NF-C0b — the manual customization floor: hand-enter a league we cannot import.
-              // Restricted to admin + fantasy_comp while the editor is still proving out.
-              {
-                label: "My League Settings",
-                href: "/fantasy/league-settings",
-                key: "fantasy-league-settings",
-                restrict: "fantasy_beta",
-              },
-              // NF-C6 — cross-league browse: every saved league's roster, scored under its own
-              // format, in one place. Deliberately NOT `fantasy_beta`-restricted like Import/League
-              // Settings above it: the endpoint reads at the standard fantasy gate (any subscriber),
-              // so this stays correct without a second nav edit whenever NF-C0's write side opens
-              // wider — today it just means an honest empty state for anyone without a saved league.
-              { label: "My Teams", href: "/fantasy/my-teams", key: "fantasy-my-teams" },
-              // NF3.2 — the past-season "receipts" proof asset. `public: true`: it stays reachable
-              // even for a caller not entitled to Fantasy, since none of its data is the paid
-              // current-season projection (see nav-model.ts's `NavItem.public` doc).
-              {
-                label: "Track Record",
-                href: "/fantasy/track-record",
-                key: "fantasy-track-record",
-                public: true,
               },
             ],
           },

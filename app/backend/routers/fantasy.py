@@ -28,7 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from app.backend.dependencies import (
     get_admin_user,
     require_fantasy_access,
-    require_fantasy_beta_access,
+    require_personalized_league_access,
 )
 from app.backend.models.fantasy import League, LeagueSave
 from app.backend.services import dynamo, entitlement
@@ -43,7 +43,7 @@ router = APIRouter(
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
-# E9.56 — the ENTITLEMENT-AWARE (dual-mode) NFL board reads
+# ⭐ THE FREE GENERIC BOARD — `Capability.GENERIC_BOARD` (freemium build, 2026-08-08)
 # ══════════════════════════════════════════════════════════════════════════════
 # A SECOND router object with NO `require_fantasy_access`, mirroring `fantasy_public.router` and
 # `fantasy_import.public_router`: this codebase's rule is that an exemption lives as a separate
@@ -51,19 +51,37 @@ router = APIRouter(
 # everything else (`/leagues`, `/nfl/my-teams`, the admin-only MLB board), so the safe default is
 # unchanged and nothing can accidentally fall out of the gate by being added to the wrong function.
 #
-# These three routes do not 403 a non-entitled caller. They serve the SAME endpoint two ways —
-# the real numbers to an entitled caller, and a LOCKED payload (public identity + market ADP,
-# re-ordered, `locked: true`) to everyone else — because the operator's rule is that a locked 2026
-# point must render a "subscribe to unlock" CTA rather than be blank or absent. The redaction policy
-# is entirely in `services/entitlement.py`; these handlers only choose which transform to apply.
+# These three routes are the FREE half of the product: the generic board — the season projection and
+# ONE scored preset board (`full_ppr`/12), with the full model output, for anonymous, free and
+# paying callers alike. The other 13 preset boards the exporter publishes are paid; `nfl_board`
+# below is the only route here that reads its caller, and its docstring says why.
 #
-# ⚠️ GATEWAY. These routes are still behind the API Gateway Cognito authorizer today, so an
-# UNAUTHENTICATED caller gets 401 before Lambda runs and the change is only visible to logged-in
-# non-entitled users (403 → locked payload + CTA). Opening them to logged-out visitors at launch is
-# a deliberate, separate operator step: `aws apigatewayv2 create-route … --authorization-type NONE`
-# per route (see `infrastructure/aws_resources.md`). That step is what makes
-# `services/jwt_verify.py` load-bearing — the moment the authorizer comes off, the Bearer token is
-# attacker-controlled and only its verified signature may be trusted.
+# 🗄️ WHAT CHANGED. Until 2026-08-08 these were DUAL-MODE: an entitled caller got the numbers and
+# everyone else got an E9.56 LOCKED payload (identity + ADP, every model value stripped, rows
+# re-ordered onto market ADP). The freemium build retired that — the generic board is the
+# acquisition wedge, so withholding its numbers was withholding the thing that earns the signup.
+# The redaction code still exists in `services/entitlement.py`, clearly marked retired; nothing here
+# calls it.
+#
+# ⭐⭐ THE PROPERTY THREE OTHER SYSTEMS DEPEND ON: every FREE response here is ENTITLEMENT-INDEPENDENT
+# — the manifest, the projections, and the free board URL are byte-identical for anonymous, free and
+# paying callers. Because those bytes do not vary, (a) G100-D1's CDN route may cache one copy for
+# everybody, (b) `cost_guardrails.cache_control_for`'s "same URL, two bodies" hazard does not arise,
+# and (c) the frontend's `entitled`-keyed query cache can never strand a new subscriber on a stale
+# view. ⛔ Re-introducing per-caller variation on a FREE url silently invalidates all three at once.
+# Pinned by `test_freemium_tier.py::test_the_free_generic_board_is_byte_identical_for_every_caller`.
+#
+# ⚠️ THE PAID BOARD URLS ARE THE EXPLICIT EXCEPTION and must be kept outside all three: they answer
+# 200 or 403 depending on the caller, so the public CDN route's allowlist validates `config`/`size`
+# against the free selection and refuses to proxy anything else. A paid board is fetched by the
+# entitled client straight from the API, never through the edge.
+#
+# ⚠️ GATEWAY. A route is only reachable anonymously once its API Gateway authorizer is set to NONE —
+# that is per-route console config, outside this repo's IaC (NF3.2), so a route that is public in
+# code still returns 401 before Lambda until the operator flips it. Commands in
+# `infrastructure/aws_resources.md`. That flip is also what makes `services/jwt_verify.py`
+# load-bearing: with no authorizer the Bearer token is attacker-controlled, and only a
+# signature-verified one may grant the PAID capabilities.
 board_router = APIRouter(prefix="/fantasy", tags=["fantasy"])
 
 _DEFAULT_SEASON = int(os.getenv("NFL_FANTASY_SEASON", "2026"))
@@ -109,50 +127,32 @@ def _load_json(rel_key: str, sport: str = "nfl") -> dict | list | None:
         raise HTTPException(status_code=502, detail="Could not read fantasy data") from e
 
 
-def _may_see_values(request: Request, season: int) -> bool:
-    """True iff this caller may receive the REAL numbers for `season`.
-
-    Two independent ways to qualify: the season is already free (strictly before
-    `LOCKED_SEASON` — the NF3.2 receipts rule), or the caller holds fantasy entitlement. Anything
-    else — including an unverifiable or forged token — is locked.
-    """
-    if not entitlement.is_locked_season(season):
-        return True
-    return entitlement.resolve_entitlement(request).fantasy
-
-
 @board_router.get("/nfl/manifest")
-def nfl_manifest(request: Request, season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):
+def nfl_manifest(season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):
     """The NFL fantasy draft-board manifest (available configs + sizes + roster shapes).
 
-    Locked form keeps the page shell so a non-entitled visitor sees a real board frame to put the
-    CTA on; it drops the feature legend/attribution metadata, which exists only to label the
-    entitled `contrib` panel (payload minimization — don't ship what isn't rendered)."""
+    FREE — `Capability.GENERIC_BOARD`. No `Request` parameter and no entitlement read at all: the
+    absence is deliberate and is the strongest available statement that nothing here varies by
+    caller (a handler that cannot see the caller cannot branch on them).
+    """
     data = _load_json(f"{season}/manifest.json")
     if data is None:
         raise HTTPException(status_code=404, detail="Fantasy manifest not found")
-    if _may_see_values(request, season):
-        return entitlement.open_manifest_payload(data)
-    return entitlement.lock_manifest_payload(data)
+    return entitlement.open_manifest_payload(data)
 
 
 @board_router.get("/nfl/projections")
-def nfl_projections(
-    request: Request, season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)
-):
+def nfl_projections(season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):
     """NF3 — the format-INDEPENDENT NFL season projection (raw stat line + the 80% PPR
     interval + uncertainty type / confidence). The browse Projections surface reads this;
     the format-SCORED numbers come from /nfl/board.
 
-    Locked form carries each player's public identity + market ADP with `locked: true` and NO
-    model output, RE-SORTED onto a public key — the stored array is ordered by our projection, so
-    keeping the order would hand over the ranking even with every number stripped."""
+    FREE — `Capability.GENERIC_BOARD`; see `nfl_manifest` for why there is no caller parameter.
+    """
     data = _load_json(f"{season}/projections.json")
     if data is None:
         raise HTTPException(status_code=404, detail="Fantasy projections not found")
-    if _may_see_values(request, season):
-        return entitlement.open_projections_payload(data)
-    return entitlement.lock_projections_payload(data)
+    return entitlement.open_projections_payload(data)
 
 
 @board_router.get("/nfl/board")
@@ -162,19 +162,47 @@ def nfl_board(
     size: int = Query(..., ge=2, le=32, description="team count"),
     season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
 ):
-    """A single (config, size) NFL fantasy draft board.
+    """A single (config, size) NFL fantasy draft board for a shipped league PRESET.
 
-    Returns a LIST in both modes (never an envelope object — the deployed client indexes it
-    directly; see `entitlement.lock_board_payload`). A board is entirely model output, so the
-    locked form is the player universe with every number removed and the order rebuilt."""
+    ⭐ ONE PRESET IS FREE — `full_ppr`/12 (`entitlement.FREE_BOARD_CONFIG`/`FREE_BOARD_SIZE`); the
+    other 13 the exporter publishes need full entitlement. Operator decision 2026-08-08: the free
+    board is the acquisition wedge and one format makes that case, while "the board scored for the
+    format you actually play" is a real, legible thing a membership buys. The reason it is full PPR
+    at 12 teams rather than any other preset is a DATA fact — that is the league our ADP sample
+    describes — and it is written up on the constant.
+
+    ⚠️ THIS IS THE ONE ROUTE ON THIS ROUTER THAT READS ITS CALLER, and it is why `nfl_manifest` /
+    `nfl_projections` take no `Request` while this one does. The consequence for the CDN is exact:
+    the FREE board URL is still byte-identical for everybody and stays cacheable, and every PAID
+    board URL is caller-dependent and must never be proxied through the public edge route (the
+    Next.js allowlist validates `config`/`size` against the free selection for precisely this
+    reason). Pinned by `test_freemium_tier.py`.
+
+    A paid board is a 403, NOT a redacted 200. The E9.56 lock existed to render a per-cell CTA on a
+    board the visitor had asked for; here the visitor is not on a paid board at all — the client
+    keeps them on the free one and shows the boundary — so a lock payload would be an elaborate way
+    of describing a page nobody is looking at. 403 also keeps the answer unambiguous for the CDN.
+
+    ⛔ A PERSONALIZED board is a different thing again: computed from a stored per-user config, it
+    is `Capability.PERSONALIZATION`, and it lives behind `require_fantasy_access` on
+    `/fantasy/leagues` + `/fantasy/nfl/my-teams`. Nothing here serves one.
+
+    Returns a bare LIST — never an envelope object; the deployed client indexes it directly and
+    wrapping it would be the NF-C0 blank-screen break.
+    """
     if not _CONFIG_RE.match(config):
         raise HTTPException(status_code=422, detail="Invalid config name")
+    # Resolved AFTER the syntactic check so a junk config is a 422 for everyone rather than leaking
+    # the caller's tier through the status code.
+    if not entitlement.allows_board(config, size, entitlement.resolve_entitlement(request)):
+        raise HTTPException(
+            status_code=403,
+            detail="This league format is part of a Credence membership.",
+        )
     data = _load_json(f"{season}/board_{config}_{size}.json")
     if data is None:
         raise HTTPException(status_code=404, detail="Fantasy board not found")
-    if _may_see_values(request, season):
-        return data
-    return entitlement.lock_board_payload(data if isinstance(data, list) else [])
+    return data
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -256,6 +284,7 @@ def mlb_prospect_board(
 
 # ══════════════════════════════════════════════════════════════════════════════
 # NF-C0b — saved league settings (the manual customization FLOOR)
+# ⭐ G100-C1 — AND THE FREE TIER'S ONE PERSONALIZED LEAGUE
 # ══════════════════════════════════════════════════════════════════════════════
 # Platform import (NF-C0) is the convenience path and it will never cover every
 # league: unofficial/fragile ESPN endpoints, long-tail platforms, private leagues,
@@ -266,18 +295,47 @@ def mlb_prospect_board(
 # as its `to_dict()` JSON. An imported league and a typed-in league are therefore
 # indistinguishable to every consumer, and a config is portable between them.
 #
-# 🔒 ENTITLEMENT — NARROWER THAN THE REST OF THIS ROUTER. The read-only board endpoints
-# above run on the router-level `require_fantasy_access` (subscriber OR admin OR comp).
-# These league routes additionally require `require_fantasy_beta_access`: `admin` +
-# `fantasy_comp` ONLY, so a paying subscriber does NOT get the editor yet.
+# 🔒 ENTITLEMENT — A THIRD ROUTER OBJECT, NOT A PER-ROUTE OVERRIDE (G100-C1, 2026-08-08)
+# ──────────────────────────────────────────────────────────────────────────────
+# These routes moved OFF `router` entirely. They used to sit on it and add a NARROWER
+# per-route `require_fantasy_beta_access` (`admin` + `fantasy_comp`), which worked only
+# because that set is a strict SUBSET of the router's `require_fantasy_access` — both
+# dependencies ran and the stricter one bound. G100-C1 inverts that relationship: a free
+# signed-in account now has a quota of one league and NO fantasy entitlement at all, so
+# the router-level `require_fantasy_access` would 403 them before the route was reached.
+# A per-route dependency cannot WIDEN a router-level one; only a separate mount can.
 #
-# The narrower gate lives on each ROUTE rather than on the router, because the router's
-# dependency is shared with the board endpoints that must stay open to subscribers.
-# Since FANTASY_BETA_GROUPS is a strict subset of FANTASY_ACCESS_GROUPS, both
-# dependencies run and the stricter one binds.
+# That is also this codebase's standing rule (`board_router`, `fantasy_public.router`,
+# `fantasy_import.public_router`, `stripe.public_router`): an exemption is a router
+# OBJECT, never a flag inside a gated one — so `router` keeps its blanket 403 and nothing
+# can fall out of the gate by being written on the wrong function.
+#
+# ⭐ THE GATE IS THE QUOTA. `require_personalized_league_access` asks
+# `entitlement.personalized_league_quota(...) > 0`, so the tier is a NUMBER an operator
+# can move (1 today, 0 to withdraw, 25 for a subscriber) rather than a group list. And it
+# resolves identity FIRST: an anonymous caller gets 401 ("sign in"), not 403 ("pay"),
+# because there is nowhere to store a league without a Cognito `sub`.
+#
+# ⛔ PERSONALIZATION IS STILL A PAID CAPABILITY. `Capability.PERSONALIZATION` remains in
+# `PAID_CAPABILITIES` and is NOT reclassified — the free tier is a quota GRANT against a
+# paid capability. Moving the capability itself would have silently freed the surfaces
+# that share it.
+#
+# ⚠️ THESE RESPONSES ARE PER-CALLER BY CONSTRUCTION, so they are the exact opposite of the
+# free board's byte-identity invariant above. They must never be added to the CDN
+# allowlist (`frontend/app/api/public/[...path]/route.ts`) or to `_PUBLIC_CACHE_RULES` —
+# a shared cache entry here would hand one user's league to another. They are safe today
+# for a structural reason rather than a remembered one: every request carries an
+# `Authorization` header, and `cost_guardrails.cache_control_for` answers `private,
+# no-store` unconditionally when it sees one. `test_g100_c1_free_league.py` pins both.
 #
 # These are WRITE endpoints, so server-side enforcement is the real gate — hiding the
 # nav item stops nobody from POSTing a config straight to the API.
+personal_router = APIRouter(
+    prefix="/fantasy",
+    tags=["fantasy"],
+    dependencies=[Depends(require_personalized_league_access)],
+)
 
 
 def _league_response(record: dict) -> dict:
@@ -289,11 +347,9 @@ def _league_response(record: dict) -> dict:
     return League(**record).model_dump()
 
 
-@router.get("/leagues")
-def list_leagues(user_id: str = Depends(require_fantasy_beta_access)):
-    """Every league this user has saved."""
+def _serialize_leagues(records: list[dict]) -> list[dict]:
     out = []
-    for record in dynamo.list_fantasy_leagues(user_id):
+    for record in records:
         try:
             out.append(_league_response(record))
         except Exception:  # noqa: BLE001
@@ -303,10 +359,27 @@ def list_leagues(user_id: str = Depends(require_fantasy_beta_access)):
     return out
 
 
-@router.get("/nfl/my-teams")
+@personal_router.get("/leagues")
+def list_leagues(user_id: str = Depends(require_personalized_league_access)):
+    """Every league this user has saved — the MANAGEMENT list.
+
+    ⚠️ DELIBERATELY NOT QUOTA-CAPPED, unlike `/nfl/my-teams` below. This is the surface the
+    editor lists and deletes from, and these are configs the user typed in themselves. A
+    lapsed subscriber holding five leagues must be able to SEE and DELETE all five —
+    capping here would strand them above a quota they can never get back under, and would
+    hide their own data from them. What the free tier limits is how many personalized
+    BOARDS we compute, which is capped at the point of serving.
+
+    Returns a bare LIST — unchanged shape (NF-C0); the deployed client indexes it directly.
+    """
+    return _serialize_leagues(dynamo.list_fantasy_leagues(user_id))
+
+
+@personal_router.get("/nfl/my-teams")
 def nfl_my_teams(
+    request: Request,
     season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
-    user_id: str = Depends(require_fantasy_access),
+    user_id: str = Depends(require_personalized_league_access),
 ):
     """NF-C6 — every saved NFL league's linked team, ready for CLIENT-SIDE league-scoring.
 
@@ -322,53 +395,96 @@ def nfl_my_teams(
     A single narrow DynamoDB item read (E9.26b: never a wide/lakehouse query that can fail silently
     inside this Lambda and come back `[]`), one row per league, malformed rows skipped individually.
 
-    🔒 BROADER gate than `/fantasy/leagues` (`require_fantasy_access`, not the beta-only editor
-    gate) on purpose: these are the user's OWN leagues, and the 2026 projection VALUES a subscriber
-    is entitled to are gated identically to every other NFL fantasy read in this router — the same
-    `require_fantasy_access` check `/fantasy/nfl/projections` and `/fantasy/nfl/board` already use.
-    A caller who is not yet entitled to IMPORT a league (still beta-only) simply sees an honest empty
-    list here, not a 403 — this stays correct without a second migration whenever NF-C0 opens wider.
+    ⭐ G100-C1 — THIS IS THE SERVE POINT OF THE FREE QUOTA, and the only one that can be. Creation
+    is refused at the quota (`create_league` below), but that check never runs for a subscriber who
+    saved five leagues and then LAPSED: no create happens, so without a cap here they would keep
+    receiving five personalized boards indefinitely — the paid tier, retained by having once paid
+    for it. `leagues_within_quota` keeps the OLDEST by `created_at`, deterministically.
+
+    The withheld leagues are still fully visible and deletable on `/fantasy/leagues` — the cap is on
+    the personalization we COMPUTE, never on the user's access to their own configs.
+
+    ⚠️ ADDITIVE RESPONSE KEYS ONLY (NF-C0/E8.6). `quota`, `saved_total` and `withheld_by_quota` are
+    NEW; `season` and `leagues` are untouched, so the deployed client — which knows none of them —
+    keeps rendering exactly what it renders today rather than going blank on a missing key. The
+    client reads each new key with a `?? default`.
+
+    🔒 The gate is the caller's QUOTA (`require_personalized_league_access`), not fantasy
+    entitlement. It used to be `require_fantasy_access` so that a subscriber who could not yet
+    IMPORT a league still saw an honest empty list; that reasoning survives intact — a caller with
+    no saved leagues still gets `leagues: []` rather than a refusal — but the set of callers who may
+    reach it is now everyone with a quota to spend, which is every signed-in account.
     """
-    out = []
-    for record in dynamo.list_fantasy_leagues(user_id):
-        if str(record.get("sport") or "nfl") != "nfl":
-            continue
-        try:
-            out.append(_league_response(record))
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                "skipping unserializable stored league %s for my-teams", record.get("league_id")
-            )
-    return {"season": season, "leagues": out}
+    nfl_records = [
+        r for r in dynamo.list_fantasy_leagues(user_id) if str(r.get("sport") or "nfl") == "nfl"
+    ]
+    quota = entitlement.personalized_league_quota(entitlement.resolve_entitlement(request))
+    served = entitlement.leagues_within_quota(nfl_records, quota)
+    out = _serialize_leagues(served)
+    return {
+        "season": season,
+        "leagues": out,
+        "quota": quota,
+        "saved_total": len(nfl_records),
+        "withheld_by_quota": max(0, len(nfl_records) - len(served)),
+    }
 
 
-@router.post("/leagues", status_code=201)
-def create_league(payload: LeagueSave, user_id: str = Depends(require_fantasy_beta_access)):
-    """Save a new league config (the editor's 'start from a preset, then edit' output)."""
+@personal_router.post("/leagues", status_code=201)
+def create_league(
+    request: Request,
+    payload: LeagueSave,
+    user_id: str = Depends(require_personalized_league_access),
+):
+    """Save a NEW league config (the editor's 'start from a preset, then edit' output).
+
+    ⭐ G100-C1 — THE FREE CAP IS ENFORCED HERE, SERVER-SIDE. The quota comes from the caller's
+    entitlement, not from `dynamo.MAX_LEAGUES_PER_USER` (which is the storage ceiling and is what a
+    SUBSCRIBER's quota resolves to). A free account's second league is a 409 whether it arrives from
+    the UI or from a hand-rolled POST — hiding the button is not a gate.
+
+    The 409 detail is written from the caller's OWN quota so a free user reads "1" and a subscriber
+    reads "25"; quoting the storage constant would have told a free user the wrong number, which on
+    a paywall is worse than saying nothing.
+    """
+    quota = entitlement.personalized_league_quota(entitlement.resolve_entitlement(request))
     try:
-        record = dynamo.put_fantasy_league(user_id, None, payload.model_dump())
+        record = dynamo.put_fantasy_league(
+            user_id, None, payload.model_dump(), max_leagues=quota
+        )
     except ValueError as e:
         if str(e) == "too_many_leagues":
             raise HTTPException(
                 status_code=409,
-                detail=f"You can save at most {dynamo.MAX_LEAGUES_PER_USER} leagues",
+                detail=(
+                    f"You can save {quota} league{'s' if quota != 1 else ''} on your current plan."
+                ),
             ) from e
         raise HTTPException(status_code=400, detail="Could not save league") from e
     return _league_response(record)
 
 
-@router.put("/leagues/{league_id}")
+@personal_router.put("/leagues/{league_id}")
 def update_league(
-    league_id: str, payload: LeagueSave, user_id: str = Depends(require_fantasy_beta_access)
+    league_id: str,
+    payload: LeagueSave,
+    user_id: str = Depends(require_personalized_league_access),
 ):
+    """Overwrite an EXISTING league.
+
+    ⚠️ No quota check, deliberately: the cap counts leagues, and an update creates none. A free user
+    at their quota of one must still be able to edit that one — a cap applied here would freeze their
+    league at whatever they first typed and present as "saving is broken" (E8.6's silent-save class).
+    The `get_fantasy_league` ownership check is what keeps this from reaching anyone else's record.
+    """
     if dynamo.get_fantasy_league(user_id, league_id) is None:
         raise HTTPException(status_code=404, detail="League not found")
     record = dynamo.put_fantasy_league(user_id, league_id, payload.model_dump())
     return _league_response(record)
 
 
-@router.delete("/leagues/{league_id}", status_code=204)
-def delete_league(league_id: str, user_id: str = Depends(require_fantasy_beta_access)):
+@personal_router.delete("/leagues/{league_id}", status_code=204)
+def delete_league(league_id: str, user_id: str = Depends(require_personalized_league_access)):
     try:
         dynamo.delete_fantasy_league(user_id, league_id)
     except ValueError as e:

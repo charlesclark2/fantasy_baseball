@@ -4,7 +4,7 @@
 // (/fantasy/nfl/*, require_fantasy_access → 403) so the paid gate can't be bypassed
 // by hitting the raw asset URL.
 
-import { apiFetch } from "@/lib/api"
+import { apiFetch, cdnFetch } from "@/lib/api"
 import type { Manifest, Player } from "@/lib/draft-optimizer"
 
 // NF3 — the format-INDEPENDENT season projection: one row per projectable player, the raw
@@ -281,6 +281,46 @@ export function trimLockedTail<T extends { adp?: number | null; locked?: boolean
   return { rows: kept, hiddenCount: rows.length - kept.length }
 }
 
+// ── The FULL-SEASON RATE — a pure DISPLAY transform over two already-served fields ───────────────
+//
+// `expected_pts × 17 ÷ expected_games`. Both inputs are in the payload the page already renders, so
+// this is arithmetic, not a model output: no re-fit, no re-export, no new endpoint, and nothing to
+// re-validate. See `FULL_SEASON_RATE_DEFINITION` in `fantasy-claim-copy.ts` for what it means and
+// what it deliberately does not claim.
+//
+// ⛔⛔ DISPLAY ONLY. It must never reach VOR, the board ordering, tiering or the optimizer — ranking
+// on a full-slate rate ranks players as if availability did not exist, systematically promoting
+// exactly the players the projection discounts on purpose, and because it REORDERS the board it
+// becomes a model decision subject to the whole-board placement gate rather than a UI change.
+// `test_freemium_tier.py` asserts this helper is absent from every scoring/ordering module.
+
+/** An NFL regular season. Named rather than inlined so the three surfaces that render this number
+ *  cannot disagree about it, and so a schedule change is one edit. */
+export const FULL_SEASON_GAMES = 17
+
+/**
+ * The full-season rate, or `null` when it cannot be computed.
+ *
+ * ⚠️ RETURNS NULL RATHER THAN 0/Infinity/NaN, and every branch here is a real payload state rather
+ * than defensive padding:
+ *   • `games === 0` — a player projected to miss the whole season. Dividing gives `Infinity`, which
+ *     renders as "∞" beside a points column, and in JS `Infinity` is a `number` that passes every
+ *     `!= null` check a caller might guard with.
+ *   • `games`/`pts` absent — K/DST and gap-filled rows do not always carry both; a missing field
+ *     type-checks as its declared type at runtime (the E9.56b lesson) and `undefined * 17` is NaN.
+ *   • a NEGATIVE `games` cannot occur today but would silently flip the sign, so it is refused too.
+ * Callers render `null` as an em-dash — never a blank cell, which reads as a rendering fault.
+ */
+export function fullSeasonRate(
+  pts: number | null | undefined,
+  games: number | null | undefined,
+): number | null {
+  if (typeof pts !== "number" || !Number.isFinite(pts)) return null
+  if (typeof games !== "number" || !Number.isFinite(games)) return null
+  if (games <= 0) return null
+  return (pts * FULL_SEASON_GAMES) / games
+}
+
 /** NF1.5b — the positions whose ordering INCORPORATES market consensus, from a `market_lean` map.
  *  Anything that is not explicitly independent counts, so a new lean label added upstream is treated
  *  as market-leaning (the conservative direction) rather than silently dropping the caveat. */
@@ -294,7 +334,29 @@ export function marketLeaningPositions(
     .sort()
 }
 
+// ── G100-D1: the anonymous read path goes through our own CDN, not the API Lambda ────────────────
+//
+// `/api/public/*` is a same-origin Next route handler that fetches the payload and returns it with
+// `s-maxage` — Vercel serves every subsequent view from the edge with no function invocation and no
+// Lambda call. See that route's module comment for the safety properties.
+//
+// ⚠️ WHY THE `token ? … : …` SPLIT SURVIVES THE FREEMIUM FLIP, WHEN ITS ORIGINAL REASON DID NOT.
+// Pre-freemium the two arms returned DIFFERENT bodies (anonymous got E9.56's locked payload), so
+// routing a subscriber through a shared cache would have been a paid-data breach. That is no longer
+// true: these three reads are now entitlement-independent, so both arms fetch the same bytes and
+// sending everyone through the CDN would be SAFE — and cheaper, since a signed-in free user is
+// currently one Lambda invocation per view.
+//
+// It is deliberately NOT done here. Making the CDN the serving path for PAYING users is a serving
+// change, not a UI un-gate, and it moves subscribers onto a cache whose staleness window (900s) was
+// chosen for anonymous traffic. Carried as a follow-up rather than smuggled into this story.
+//
+// ⛔ THE INVARIANT THAT KEEPS BOTH ARMS CORRECT: whatever else changes, these three endpoints must
+// stay entitlement-independent. If one ever varies by caller again, the CDN arm starts publishing
+// one caller's payload to everybody — so that change would have to revisit the CDN allowlist, the
+// backend cache rules and the query keys together. Pinned by `test_freemium_tier.py`.
 export function getFantasyManifest(token: string | null, season: number): Promise<Manifest> {
+  if (!token) return cdnFetch(`/api/public/manifest?season=${season}`)
   return apiFetch(`/fantasy/nfl/manifest?season=${season}`, {}, token)
 }
 
@@ -304,17 +366,16 @@ export function getFantasyBoard(
   config: string,
   size: number,
 ): Promise<Player[]> {
-  return apiFetch(
-    `/fantasy/nfl/board?season=${season}&config=${encodeURIComponent(config)}&size=${size}`,
-    {},
-    token,
-  )
+  const qs = `season=${season}&config=${encodeURIComponent(config)}&size=${size}`
+  if (!token) return cdnFetch(`/api/public/board?${qs}`)
+  return apiFetch(`/fantasy/nfl/board?${qs}`, {}, token)
 }
 
 export function getFantasyProjections(
   token: string | null,
   season: number,
 ): Promise<ProjectionPayload> {
+  if (!token) return cdnFetch(`/api/public/projections?season=${season}`)
   return apiFetch(`/fantasy/nfl/projections?season=${season}`, {}, token)
 }
 
@@ -399,6 +460,16 @@ export function deleteSavedLeague(token: string | null, leagueId: string): Promi
 export interface MyTeamsPayload {
   season: number
   leagues: SavedLeague[]
+  // ── G100-C1, ADDITIVE (NF-C0/E8.6) ──────────────────────────────────────────────────────────
+  // OPTIONAL because the deployed API does not send them until `deploy.sh` runs, and the two halves
+  // cross over in an order nobody controls. Every read below uses `?? default`, so during the skew
+  // window the page behaves exactly as it does today rather than rendering `undefined`.
+  /** How many personalized leagues this caller may keep (1 free, 25 subscriber). */
+  quota?: number
+  /** How many NFL leagues they have SAVED — may exceed `quota` for a lapsed subscriber. */
+  saved_total?: number
+  /** `saved_total − served`. Non-zero means leagues exist that we are not personalizing. */
+  withheld_by_quota?: number
 }
 
 export function getMyTeams(token: string | null, season: number): Promise<MyTeamsPayload> {

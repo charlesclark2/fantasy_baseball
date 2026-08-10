@@ -1,72 +1,75 @@
 import Link from "next/link"
-import { Badge } from "@/components/ui/badge"
+import { ArrowRight, Eye, FileText, Lock, ShieldCheck, Trash2, Wrench } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Separator } from "@/components/ui/separator"
-import { ProbabilityBar } from "@/components/probability-bar"
 import { Nav } from "@/components/nav"
-import { SIGNUP_HREF } from "@/lib/access"
 import { LandingFaqSection } from "@/components/landing-faq"
-import { FeaturedPickExplanation, type PickDriver } from "@/components/pick-explanation-home"
+import { FeaturedFantasyPlayer } from "@/components/home/featured-fantasy-player"
+import { PickOfTheDay } from "@/components/home/pick-of-the-day"
+import { LandingView } from "@/components/analytics/landing-view"
+import { ACQUISITION_SURFACES } from "@/lib/funnel-telemetry"
+import { SIGNUP_HREF } from "@/lib/access"
+import { TRACK_RECORD_TRUST_LINK } from "@/lib/fantasy-claim-copy"
 import {
-  BookOpen,
-  CheckCircle2,
-  ChevronDown,
-  Clock,
-  Database,
-  Eye,
-  FlaskConical,
-  Pencil,
-  ShieldCheck,
-  XCircle,
-  Zap,
-} from "lucide-react"
+  FOOTER_CTA,
+  HERO,
+  METHOD,
+  PRINCIPLES,
+  ROADMAP_HEADING,
+  ROADMAP_NOTE,
+  SEASON_ROADMAP,
+  VERTICALS,
+} from "@/lib/home-copy"
 
-// ---------------------------------------------------------------------------
-// API types
-// ---------------------------------------------------------------------------
+/**
+ * E9.46 — the home page as a POSITIONING page for the whole company.
+ *
+ * ══ THE STORY THE PAGE TELLS, IN ORDER (operator, 2026-08-08) ══════════════════════════════════
+ *
+ *   Betting intelligence · Fantasy decision tools
+ *   "The number is only half the answer."       ← what we model, how sure we are, what to do
+ *        ↓
+ *   FANTASY PRODUCT PROOF                       ← real player, real projection, real uncertainty,
+ *        ↓                                        real disagreement, real personalisation
+ *   MLB PRODUCT PROOF                           ← model vs market consensus, uncertainty, record
+ *        ↓
+ *   "Sports models that admit what they don't know."   ← the four principles ARE the proof
+ *        ↓
+ *   What is live, and what is next
+ *        ↓
+ *   Common questions
+ *
+ * ⭐ FANTASY LEADS because it is the current acquisition priority — so the first substantive
+ * demonstration after the hero is the fantasy card, not the MLB one. Both verticals still get a
+ * peer door in the hero; the ORDER of the proofs is what changed.
+ *
+ * ⭐ "Sports models that admit what they don't know" was the hero H1 in the first cut and is now
+ * the methodology heading, because the four cells beneath it are its evidence. A claim sitting
+ * three screens above its own proof is a slogan; sitting on top of it, it is a thesis statement.
+ *
+ * ⛔ THE CLAIM RULE. `best_alpha = 0`. Neither vertical may claim an advantage over a market or a
+ * competitor — not in the hero, not on a card, not in a season teaser. Every claim-bearing sentence
+ * lives in `lib/home-copy.ts` or `lib/fantasy-claim-copy.ts` and is screened by
+ * `betting_ml/tests/test_e9_46_home_copy.py`; the RENDERED page is scanned again by
+ * `e2e/specs/home-positioning.spec.ts`, the only instrument that can see a static heading or CTA.
+ *
+ * ⭐ THIS PAGE IS STATIC. Both live blocks are client components, so no read at request time and
+ * no read can leave the positioning blank.
+ */
 
-type YesterdayResult = {
-  matchup: string
-  market_type: string
-  outcome: string
-  status?: "win" | "loss" | "pending"
+export const metadata = {
+  title: "Credence Sports — betting intelligence and fantasy decision tools",
+  description: HERO.subhead,
+  openGraph: {
+    title: "Credence Sports — betting intelligence and fantasy decision tools",
+    description: HERO.subhead,
+    images: ["/brand/logo-full.svg"],
+  },
 }
-
-type FeaturedPick = {
-  game_pk: string | null
-  matchup: string
-  game_time_et: string
-  market_type: string
-  edge: number
-  model_prob: number
-  market_prob: number
-  ci_low: number
-  ci_high: number
-  conviction_label: string
-  ai_summary: string
-  yesterday: YesterdayResult | null
-  is_stale?: boolean
-  is_preliminary?: boolean
-  pick_date?: string | null
-  home_team?: string | null
-  away_team?: string | null
-  pick_side?: string | null  // 'home'|'away' for h2h; 'over'|'under' for totals
-  // Story 30.15 — model explanation
-  model_narrative?: string | null
-  top_drivers?: PickDriver[] | null
-  top_drivers_h2h?: PickDriver[] | null
-  top_drivers_totals?: PickDriver[] | null
-  served_tier?: string | null
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
 
 function HeroSection() {
   return (
     <section
-      className="relative overflow-hidden border-b border-[#262626] py-24 md:py-36"
+      className="relative overflow-hidden border-b border-[#262626] py-20 md:py-28"
       style={{
         backgroundImage: `
           linear-gradient(rgba(16,185,129,0.03) 1px, transparent 1px),
@@ -75,7 +78,6 @@ function HeroSection() {
         backgroundSize: "48px 48px",
       }}
     >
-      {/* Subtle radial fade over the grid */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -84,281 +86,78 @@ function HeroSection() {
         }}
       />
 
-      <div className="relative mx-auto max-w-4xl px-4 text-center">
-        <h1 className="text-balance text-5xl font-bold tracking-tight text-white md:text-7xl">
-          Daily edge,{" "}
-          <span className="text-[#10b981]">quantified.</span>
-        </h1>
-        <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg leading-relaxed text-gray-400 md:text-xl">
-          Bayesian sports analytics that shows its work — model probability,
-          uncertainty range, and the reasoning behind every pick.
-        </p>
-
-        <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Button
-            size="lg"
-            asChild
-            className="w-full bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669] sm:w-auto"
-          >
-            {/* E9.58 — was a `mailto:` "Request Access"; signup is self-serve now. */}
-            <Link href={SIGNUP_HREF}>Get Started Free</Link>
-          </Button>
-          <Button
-            variant="outline"
-            size="lg"
-            asChild
-            className="w-full border-[#262626] bg-transparent text-gray-300 hover:bg-[#141414] hover:text-white sm:w-auto"
-          >
-            <a href="#featured-pick">
-              See Today&apos;s Pick
-              <ChevronDown className="ml-2 h-4 w-4" />
-            </a>
-          </Button>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function FeaturedPickCard({ pick }: { pick: FeaturedPick }) {
-  const edgeStr =
-    pick.game_pk !== null && pick.edge != null
-      ? "+" + Math.abs(pick.edge).toFixed(1) + "%"
-      : ""
-
-  // model_prob is always P(home wins) for h2h, or P(over) for totals.
-  // When < 0.5 the pick is on the away team / under — flip to the picked side.
-  const awayOrUnder = pick.model_prob != null && pick.model_prob < 0.5
-  const displayModelProb = awayOrUnder && pick.model_prob != null ? 1 - pick.model_prob : pick.model_prob
-  const displayMarketProb = awayOrUnder && pick.market_prob != null ? 1 - pick.market_prob : pick.market_prob
-  const displayCiLow = awayOrUnder && pick.ci_high != null ? 1 - pick.ci_high : pick.ci_low
-  const displayCiHigh = awayOrUnder && pick.ci_low != null ? 1 - pick.ci_low : pick.ci_high
-
-  return (
-    <section id="featured-pick" className="py-16 md:py-24">
-      <div className="mx-auto max-w-2xl px-4">
-        <div
-          className="rounded-xl border border-[#262626] bg-[#141414] shadow-xl shadow-black/40"
-          style={{ borderLeft: "3px solid #10b981" }}
-        >
-          <div className="p-6 md:p-8">
-            {/* Header row */}
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-widest text-[#10b981]">
-                {pick.is_stale && pick.pick_date
-                  ? new Date(pick.pick_date + "T12:00:00").toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    }) + " Pick"
-                  : "Today’s Pick"}
-              </span>
-              <span className="text-xs text-gray-500">
-                {new Date().toLocaleDateString("en-US", {
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </span>
-            </div>
-
-            {/* Stale banner */}
-            {pick.is_stale && pick.game_pk !== null && (
-              <div className="mt-3 rounded-lg border border-[#2a2a2a] bg-[#111] px-3 py-2">
-                <p className="text-xs text-gray-400">
-                  Today&apos;s analysis is processing — new picks arrive after lineup confirmation.
-                </p>
-              </div>
-            )}
-
-            {pick.game_pk === null ? (
-              <p className="mt-6 text-sm leading-relaxed text-gray-400">
-                No picks available right now — check back after ~9am ET when the morning pipeline runs.
-              </p>
-            ) : (
-              <>
-                {/* Matchup */}
-                <div className="mt-4">
-                  <h2 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
-                    {pick.matchup}
-                  </h2>
-                  {pick.pick_side && (
-                    <p className="mt-1.5 text-base font-semibold text-[#10b981]">
-                      {pick.market_type === "h2h"
-                        ? `Picking: ${pick.pick_side === "home" ? pick.home_team : pick.away_team} to win`
-                        : `Picking: ${pick.pick_side.charAt(0).toUpperCase() + pick.pick_side.slice(1)}`}
-                    </p>
-                  )}
-                  <p className="mt-1 text-sm text-gray-500">{pick.game_time_et}</p>
-                </div>
-
-                {/* Market badge */}
-                <div className="mt-4">
-                  <Badge className="bg-blue-500/15 text-blue-400 border border-blue-500/25 text-sm font-medium">
-                    {pick.market_type}
-                  </Badge>
-                </div>
-
-                {/* Stat chips */}
-                <div className="mt-5 flex flex-wrap gap-3">
-                  {edgeStr && (
-                    <div className="flex items-center gap-2 rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
-                      <span className="text-xs uppercase tracking-wider text-gray-500">Edge</span>
-                      <span className="font-mono text-sm font-bold text-[#10b981]">
-                        {edgeStr}
-                      </span>
-                    </div>
-                  )}
-                  {displayModelProb != null && (
-                    <div className="flex items-center gap-2 rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
-                      <span className="text-xs uppercase tracking-wider text-gray-500">Model</span>
-                      <span className="font-mono text-sm font-semibold text-white">
-                        {(displayModelProb * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                  )}
-                  {displayMarketProb != null && (
-                    <div className="flex items-center gap-2 rounded-lg border border-[#262626] bg-[#0a0a0a] px-3 py-2">
-                      <span className="text-xs uppercase tracking-wider text-gray-500">Market</span>
-                      <span className="font-mono text-sm text-gray-400">
-                        {(displayMarketProb * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Conviction / preliminary badge */}
-                <div className="mt-5 flex flex-wrap gap-2">
-                  {!pick.is_stale && pick.conviction_label && (
-                    <Badge className="bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 text-xs font-bold uppercase tracking-widest">
-                      {pick.conviction_label}
-                    </Badge>
-                  )}
-                  {pick.is_preliminary && (
-                    <Badge className="bg-amber-500/15 text-amber-400 border border-amber-500/25 text-xs font-semibold">
-                      Preliminary — Lineups Not Yet Confirmed
-                    </Badge>
-                  )}
-                </div>
-
-                {/* Probability bar */}
-                {displayModelProb != null && displayMarketProb != null && (
-                  <div className="mt-6">
-                    <ProbabilityBar
-                      ciLow={displayCiLow}
-                      ciHigh={displayCiHigh}
-                      modelProb={displayModelProb}
-                      marketProb={displayMarketProb}
-                      showHighConviction={false}
-                      teamLabel={
-                        pick.market_type === "h2h"
-                          ? (pick.pick_side === "away" ? pick.away_team : pick.home_team) ?? null
-                          : null
-                      }
-                    />
-                  </div>
-                )}
-
-                {/* AI summary — hidden when model narrative is available */}
-                {!pick.model_narrative && (
-                  <p className="mt-6 text-sm leading-relaxed text-gray-400">
-                    {pick.ai_summary}
-                  </p>
-                )}
-
-                {/* Story 30.15 — model narrative + top drivers */}
-                <FeaturedPickExplanation
-                  narrative={pick.model_narrative}
-                  topDriversH2h={pick.top_drivers_h2h}
-                  topDriversTotals={pick.top_drivers_totals}
-                  defaultMarket={pick.market_type}
-                  servedTier={pick.served_tier}
-                />
-
-                {pick.yesterday && (
-                  <>
-                    <Separator className="my-6 bg-[#262626]" />
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <span className="text-xs text-gray-500">
-                        <span className="text-gray-400 font-medium">Yesterday:</span>{" "}
-                        {pick.yesterday.matchup}
-                      </span>
-                      {pick.yesterday.status === "win" ? (
-                        <Badge className="bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/25 text-xs">
-                          <CheckCircle2 className="mr-1 h-3 w-3" />
-                          {pick.yesterday.outcome}
-                        </Badge>
-                      ) : pick.yesterday.status === "loss" ? (
-                        <Badge className="bg-red-500/10 text-red-400 border border-red-500/25 text-xs">
-                          <XCircle className="mr-1 h-3 w-3" />
-                          {pick.yesterday.outcome}
-                        </Badge>
-                      ) : (
-                        <Badge className="bg-gray-500/10 text-gray-400 border border-gray-500/25 text-xs">
-                          <Clock className="mr-1 h-3 w-3" />
-                          {pick.yesterday.outcome}
-                        </Badge>
-                      )}
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </div>
+      <div className="relative mx-auto max-w-5xl px-4">
+        <div className="text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#10b981]">
+            {HERO.eyebrow}
+          </p>
+          <h1 className="mt-5 text-balance text-4xl font-bold tracking-tight text-white sm:text-5xl md:text-6xl">
+            {HERO.headline}
+          </h1>
+          <p className="mx-auto mt-6 max-w-2xl text-pretty text-base leading-relaxed text-gray-400 md:text-lg">
+            {HERO.subhead}
+          </p>
         </div>
 
-        {/* CTA below card */}
-        <p className="mt-4 text-center text-sm text-gray-600">
-          <Link
-            href="/login"
-            className="text-gray-500 underline-offset-4 hover:text-[#10b981] hover:underline transition-colors"
-          >
-            Sign in to see all picks &rarr;
-          </Link>
-        </p>
-      </div>
-    </section>
-  )
-}
-
-function WhyCredenceStrip() {
-  const pillars = [
-    {
-      icon: Eye,
-      title: "Transparent",
-      description:
-        "Every pick shows the model probability, market probability, and the full uncertainty range — not just a directional call.",
-    },
-    {
-      icon: ShieldCheck,
-      title: "Rigorous",
-      description:
-        "Only picks where the entire credible interval clears the market line reach the dashboard. Marginal calls stay out.",
-    },
-    {
-      icon: BookOpen,
-      title: "Shows its work",
-      description:
-        "Bayesian sub-models for pitching, offense, bullpen, and run environment — every factor is visible and labeled.",
-    },
-  ]
-
-  return (
-    <section className="border-y border-[#262626] py-10 md:py-14">
-      <div className="mx-auto max-w-4xl px-4">
-        <h2 className="text-balance text-center text-2xl font-bold text-white md:text-3xl mb-10">
-          Why Credence
-        </h2>
-        <div className="grid gap-px bg-[#262626] sm:grid-cols-3 rounded-xl overflow-hidden">
-          {pillars.map(({ icon: Icon, title, description }) => (
+        {/* ⭐ THE DUAL ENTRY. Peer cards in a `md:grid-cols-2`, not a primary/secondary split —
+            the defect being fixed is a home page that read as one product. Fantasy is first in
+            `VERTICALS`, so it is the left/top card as well as the first proof below. */}
+        <div className="mt-12 grid gap-4 md:grid-cols-2">
+          {VERTICALS.map((v) => (
+            // `data-vertical` is a TEST HANDLE and is load-bearing, not decoration. Both CTA
+            // labels also appear elsewhere on the page, so a spec that located a door by its link
+            // text alone would go on passing with the whole card deleted — measured.
             <div
-              key={title}
-              className="flex flex-col gap-3 bg-[#141414] px-6 py-7"
+              key={v.key}
+              data-vertical={v.key}
+              className="flex flex-col rounded-xl border border-[#262626] bg-[#141414]/80 p-6 backdrop-blur-sm transition-colors hover:border-[#10b981]/40 md:p-7"
             >
               <div className="flex items-center gap-2">
-                <Icon className="h-4 w-4 shrink-0 text-[#10b981]" />
-                <span className="text-sm font-semibold text-white">{title}</span>
+                <span className="rounded bg-[#10b981]/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#10b981]">
+                  {v.sport}
+                </span>
+                <span className="text-[11px] font-medium uppercase tracking-wider text-gray-500">
+                  {v.surface}
+                </span>
+                <span className="ml-auto text-[11px] text-gray-600">{v.status}</span>
               </div>
-              <p className="text-sm leading-relaxed text-gray-500">{description}</p>
+
+              <h2 className="mt-4 text-balance text-xl font-bold text-white md:text-2xl">
+                {v.headline}
+              </h2>
+              <p className="mt-3 flex-1 text-sm leading-relaxed text-gray-400">{v.detail}</p>
+
+              <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2">
+                <Button
+                  asChild
+                  className="bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669]"
+                >
+                  <Link href={v.cta.href}>
+                    {v.cta.label}
+                    <ArrowRight className="ml-1.5 h-4 w-4" />
+                  </Link>
+                </Button>
+
+                {/* ⭐ THE TRUST LINK — the proof that earns the click, and deliberately NOT a
+                    statistic (NF-TR1: a marketing surface links to the record, it never quotes its
+                    number). `needsAccount` keeps the MLB one from being a small lie: every MLB
+                    record endpoint 401s for an anonymous caller (verified 2026-08-08), so the link
+                    is marked, while the fantasy record is genuinely open and says so. */}
+                <Link
+                  href={v.trust.href}
+                  className="inline-flex items-center gap-1.5 text-sm text-gray-400 underline-offset-4 transition-colors hover:text-[#10b981] hover:underline"
+                >
+                  {v.trust.label}
+                  {v.trust.needsAccount ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-gray-600">
+                      <Lock className="h-3 w-3" />
+                      members
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-gray-600">(free, no account)</span>
+                  )}
+                </Link>
+              </div>
             </div>
           ))}
         </div>
@@ -367,55 +166,28 @@ function WhyCredenceStrip() {
   )
 }
 
-function HowItWorks() {
-  const steps = [
-    {
-      num: "01",
-      title: "Data",
-      icon: Database,
-      description:
-        "Statcast pitch data, live odds feeds, and confirmed lineup data form the foundation of every analysis run.",
-    },
-    {
-      num: "02",
-      title: "Model",
-      icon: FlaskConical,
-      description:
-        "Bayesian sub-models quantify uncertainty across run environment, pitching, offense, and bullpen — producing a credible interval, not just a point estimate.",
-    },
-    {
-      num: "03",
-      title: "Signal",
-      icon: Zap,
-      description:
-        "Only picks where the full credible interval clears the market line reach your dashboard. No marginal calls.",
-    },
-  ]
+const PRINCIPLE_ICONS = [Eye, ShieldCheck, Wrench, Trash2] as const
 
+function MethodSection() {
   return (
-    <section className="py-16 md:py-24">
-      <div className="mx-auto max-w-4xl px-4">
-        <h2 className="text-balance text-center text-2xl font-bold text-white md:text-3xl">
-          How it works
-        </h2>
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {steps.map((step) => {
-            const Icon = step.icon
+    <section className="border-t border-[#262626] py-16 md:py-20">
+      <div className="mx-auto max-w-5xl px-4">
+        <div className="mx-auto max-w-2xl text-center">
+          <h2 className="text-balance text-2xl font-bold text-white md:text-3xl">
+            {METHOD.heading}
+          </h2>
+          <p className="mt-4 text-sm leading-relaxed text-gray-400">{METHOD.intro}</p>
+        </div>
+        <div className="mt-10 grid gap-px overflow-hidden rounded-xl bg-[#262626] sm:grid-cols-2">
+          {PRINCIPLES.map(({ title, detail }, i) => {
+            const Icon = PRINCIPLE_ICONS[i] ?? Eye
             return (
-              <div
-                key={step.num}
-                className="rounded-xl border border-[#262626] bg-[#141414] p-6"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs font-bold text-[#10b981]">
-                    {step.num}
-                  </span>
-                  <Icon className="h-4 w-4 text-[#10b981]" />
-                  <span className="font-semibold text-white">{step.title}</span>
+              <div key={title} className="flex flex-col gap-3 bg-[#141414] px-6 py-7">
+                <div className="flex items-center gap-2">
+                  <Icon className="h-4 w-4 shrink-0 text-[#10b981]" />
+                  <span className="text-sm font-semibold text-white">{title}</span>
                 </div>
-                <p className="mt-4 text-sm leading-relaxed text-gray-400">
-                  {step.description}
-                </p>
+                <p className="text-sm leading-relaxed text-gray-500">{detail}</p>
               </div>
             )
           })}
@@ -425,44 +197,83 @@ function HowItWorks() {
   )
 }
 
-function TrustSection() {
+function SeasonRoadmapSection() {
   return (
-    <section className="py-10 md:py-14 border-t border-[#262626]">
-      <div className="mx-auto max-w-2xl px-4">
-        <div className="rounded-xl border border-[#262626] bg-[#141414] p-8 md:p-10">
-          <p className="text-pretty text-base leading-relaxed text-gray-300 md:text-lg">
-            Credence Sports shows every losing bet. Win rate, mean CLV, and P&amp;L
-            are calculated from all qualified picks — not a curated subset. The
-            model&apos;s uncertainty is always visible.
-          </p>
-        </div>
+    <section className="border-t border-[#262626] py-16 md:py-20">
+      <div className="mx-auto max-w-3xl px-4">
+        {/* Centred to match every other section heading on the page. It was left-aligned in the
+            first cut, which broke the page's vertical rhythm for no design-system reason. */}
+        <h2 className="text-balance text-center text-2xl font-bold text-white md:text-3xl">
+          {ROADMAP_HEADING}
+        </h2>
+
+        <ul className="mt-8 divide-y divide-[#262626] border-y border-[#262626]">
+          {SEASON_ROADMAP.map((row) => (
+            <li
+              key={`${row.sport}-${row.what}`}
+              className="flex flex-wrap items-center gap-x-4 gap-y-1 py-4"
+            >
+              <span
+                className={`w-16 shrink-0 text-xs font-bold uppercase tracking-wider ${
+                  row.live ? "text-[#10b981]" : "text-gray-600"
+                }`}
+              >
+                {row.sport}
+              </span>
+              <span className={`flex-1 text-sm ${row.live ? "text-gray-200" : "text-gray-500"}`}>
+                {row.what}
+              </span>
+              {/* ⛔ A not-yet-live row is TEXT, never a link — E9.56c's dead `/pricing` CTA
+                  wearing a friendlier label. */}
+              <span
+                className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${
+                  row.live
+                    ? "bg-[#10b981]/10 text-[#10b981]"
+                    : "border border-[#262626] text-gray-500"
+                }`}
+              >
+                {row.when}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        <p className="mt-6 text-sm leading-relaxed text-gray-500">{ROADMAP_NOTE}</p>
       </div>
     </section>
   )
 }
 
-function LatestPost({ post }: { post: { post_id: string; title: string; excerpt?: string | null; published_at?: string | null } | null }) {
-  if (!post) return null
+/** The blog, demoted (operator decision, 2026-08-07) — a real content surface that no longer
+ *  competes with the products for the home page. Static link, never a featured post. */
+function SecondaryLinks() {
   return (
-    <section className="py-12 md:py-16 border-t border-[#262626]">
-      <div className="mx-auto max-w-4xl px-4">
-        <div className="flex items-center gap-2 mb-5">
-          <Pencil className="h-4 w-4 text-[#10b981]" />
-          <span className="text-xs uppercase tracking-widest text-[#10b981] font-semibold">
-            From the Blog
-          </span>
-        </div>
+    <section className="border-t border-[#262626] py-8">
+      <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-center gap-x-6 gap-y-2 px-4">
         <Link
-          href={`/blog/${post.post_id}`}
-          className="group block rounded-xl border border-[#262626] bg-[#141414] p-6 hover:border-[#10b981]/30 transition-colors"
+          href="/blog"
+          className="inline-flex items-center gap-1.5 text-xs text-gray-500 underline-offset-4 transition-colors hover:text-gray-300 hover:underline"
         >
-          <h3 className="text-lg font-bold text-white group-hover:text-[#10b981] transition-colors">
-            {post.title}
-          </h3>
-          {post.excerpt && (
-            <p className="mt-2 text-sm leading-relaxed text-gray-400 line-clamp-2">{post.excerpt}</p>
-          )}
-          <p className="mt-3 text-xs text-[#10b981]">Read more →</p>
+          <FileText className="h-3.5 w-3.5" />
+          Notes from the blog
+        </Link>
+        <Link
+          href="/about"
+          className="text-xs text-gray-500 underline-offset-4 transition-colors hover:text-gray-300 hover:underline"
+        >
+          How we think about this
+        </Link>
+        <Link
+          href={TRACK_RECORD_TRUST_LINK.href}
+          className="text-xs text-gray-500 underline-offset-4 transition-colors hover:text-gray-300 hover:underline"
+        >
+          {TRACK_RECORD_TRUST_LINK.label}
+        </Link>
+        <Link
+          href="/changelog"
+          className="text-xs text-gray-500 underline-offset-4 transition-colors hover:text-gray-300 hover:underline"
+        >
+          What we shipped recently
         </Link>
       </div>
     </section>
@@ -471,75 +282,56 @@ function LatestPost({ post }: { post: { post_id: string; title: string; excerpt?
 
 function FooterCta() {
   return (
-    <section className="py-20 md:py-28 border-t border-[#262626]">
+    <section className="border-t border-[#262626] py-20 md:py-24">
       <div className="mx-auto max-w-2xl px-4 text-center">
         <h2 className="text-balance text-3xl font-bold text-white md:text-4xl">
-          Ready to see every pick?
+          {FOOTER_CTA.headline}
         </h2>
-        {/* E9.58 — the copy said "private beta, send an email". Both are now false: signup is
-            open and self-serve, and the previous CTA was a mailto. */}
-        <p className="mt-4 text-sm text-gray-400">
-          Create a free account in seconds — then subscribe whenever you&apos;re ready.
-        </p>
+        <p className="mt-4 text-sm leading-relaxed text-gray-400">{FOOTER_CTA.detail}</p>
+
         <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
           <Button
             size="lg"
             asChild
-            className="bg-[#10b981] text-[#0a0a0a] font-semibold hover:bg-[#059669]"
+            className="bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669]"
           >
-            <Link href={SIGNUP_HREF}>Get Started Free</Link>
+            <Link href={SIGNUP_HREF}>Create a free account</Link>
           </Button>
           <Button
             variant="ghost"
             size="lg"
             asChild
-            className="text-gray-400 hover:text-white hover:bg-[#141414]"
+            className="text-gray-400 hover:bg-[#141414] hover:text-white"
           >
-            <Link href="/login">Sign In</Link>
+            <Link href="/subscribe">See what a membership adds</Link>
           </Button>
         </div>
-        <p className="mt-6 text-xs leading-relaxed text-gray-600">
-          Picks are informational only and do not constitute financial advice.
-          You are solely responsible for any wagers placed.
-        </p>
+
+        <p className="mt-6 text-xs leading-relaxed text-gray-600">{FOOTER_CTA.disclaimer}</p>
       </div>
     </section>
   )
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
-
-export default async function LandingPage() {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? ""
-
-  const [featuredRes, blogData] = await Promise.all([
-    base
-      ? fetch(`${base}/picks/featured`, { cache: "no-store" })
-          .then((r) => (r.ok ? r.json() : { game_pk: null }))
-          .catch(() => ({ game_pk: null }))
-      : Promise.resolve({ game_pk: null }),
-    base
-      ? fetch(`${base}/blog/posts`, { cache: "no-store" })
-          .then((r) => (r.ok ? r.json() : { posts: [] }))
-          .catch(() => ({ posts: [] }))
-      : Promise.resolve({ posts: [] }),
-  ])
-
-  const latestPost = (blogData.posts ?? [])[0] ?? null
-
+export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-sans">
+      {/* G100-D0 — the funnel's first step. A client island on an otherwise static page, so the
+          page stays static (no read at request time; see the module header). */}
+      <LandingView surface={ACQUISITION_SURFACES.HOME} />
       <Nav />
       <main>
         <HeroSection />
-        <LatestPost post={latestPost} />
-        <FeaturedPickCard pick={featuredRes as FeaturedPick} />
-        <WhyCredenceStrip />
-        <HowItWorks />
-        <TrustSection />
+        {/* ⭐ FANTASY PROOF FIRST — the acquisition priority gets the first demonstration. */}
+        <FeaturedFantasyPlayer />
+        {/* The MLB proof renders `id="today"`, which is the betting card's own CTA target
+            (`VERTICALS[betting].cta.href`). That pairing is two string literals in two files, so it
+            is pinned by navigation: `home-positioning.spec.ts` clicks the CTA and asserts it lands. */}
+        <PickOfTheDay />
+        <MethodSection />
+        <SeasonRoadmapSection />
         <LandingFaqSection />
+        <SecondaryLinks />
         <FooterCta />
       </main>
     </div>

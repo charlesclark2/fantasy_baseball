@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/auth-context"
 import { signupHref } from "@/lib/access"
 import { startGoogleSignIn, isHostedUiConfigured } from "@/lib/cognito"
 import { GoogleIcon } from "@/components/google-icon"
+import { captureCheckoutStarted } from "@/lib/funnel-telemetry-emit"
 import {
   getPublicPricing,
   getSubscriptionPricing,
@@ -148,6 +149,26 @@ export default function SubscribePage() {
   async function handleSubscribe() {
     setError(null)
     setBusy(true)
+    // ── G100-D0: the funnel's CHECKOUT step ──────────────────────────────────────────────────
+    //
+    // ⭐ FIRED BEFORE THE AWAIT, NOT AFTER. `startCheckout` ends in `window.location.href = …`, so
+    // there is no "after" on the success path — the document is gone. Putting the capture behind
+    // the await would record ONLY the checkouts that FAILED to start, which is the most misleading
+    // possible version of this metric: the chart would be titled "checkout started" and would in
+    // fact be a chart of backend errors, reading a healthy zero on a perfect day.
+    //
+    // The cost of firing first is that a caller whose Checkout Session creation 500s is still
+    // counted as having started checkout. That is the right side to err on — they DID try to buy,
+    // and activation→checkout is a measure of intent — and the drop from here to
+    // `subscription_started` is where a broken checkout would show up.
+    //
+    // The price comes from the server (E9.59's rule: never a constant), so it may not have loaded;
+    // `null` is honest and keeps the event's shape stable.
+    captureCheckoutStarted({
+      surface: "subscribe",
+      tier: pricing.data?.tier ?? null,
+      unit_amount: pricing.data?.unit_amount ?? null,
+    })
     try {
       await startCheckout(accessToken) // full-page redirect to Stripe Checkout
     } catch {

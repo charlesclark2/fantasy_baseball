@@ -10,11 +10,15 @@
 import { Nav } from "@/components/nav"
 import { useAuth } from "@/lib/auth-context"
 import { FantasyPlayerPage } from "@/components/fantasy/player-page"
+import { LandingView } from "@/components/analytics/landing-view"
+import { ACQUISITION_SURFACES } from "@/lib/funnel-telemetry"
 
 export default function FantasyPlayerRoute() {
   const { accessToken, email } = useAuth()
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
+      {/* G100-D0 — an acquisition surface: this is where an indexed search result lands. */}
+      <LandingView surface={ACQUISITION_SURFACES.FANTASY_PLAYER} />
       <Nav authenticated={!!accessToken} userEmail={email} />
       <FantasyPlayerPage />
     </div>

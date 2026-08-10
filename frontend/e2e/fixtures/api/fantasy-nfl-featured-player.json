@@ -1,0 +1,49 @@
+{
+  "season": 2026,
+  "generatedAt": "2026-08-04T04:49:33.066347+00:00",
+  "player": {
+    "id": "00-0033288",
+    "name": "George Kittle",
+    "pos": "TE",
+    "team": "SF",
+    "bye": 8,
+    "headshot": "https://static.www.nfl.com/image/upload/f_auto,q_auto/league/vkicdglglkyukgyxtmpx"
+  },
+  "projection": {
+    "ptsStd": 65.9,
+    "ptsHalf": 83.2,
+    "ptsPpr": 100.6,
+    "p10": 26.4,
+    "p90": 179.2,
+    "games": 7.3,
+    "conf": "high"
+  },
+  "market": {
+    "adp": 106.5,
+    "adpFormat": "ppr",
+    "adpTeams": 12,
+    "adpRank": 10,
+    "ourRank": 21,
+    "rankGap": -11
+  },
+  "drivers": [
+    {
+      "feature": "pergame_fp",
+      "label": "Recent per-game scoring pace",
+      "pts": 17.3
+    },
+    {
+      "feature": "age",
+      "label": "Player age",
+      "pts": -13.9
+    },
+    {
+      "feature": "carry_share",
+      "label": "Carry share (rushing role)",
+      "pts": -2.3
+    }
+  ],
+  "lean": "market-blend",
+  "leanNote": "At positions labelled market-led or market-blend, the ranking INCORPORATES market consensus (ADP/ECR) alongside our own model \u2014 so it is not an independent read on the market at those positions, and a gap between our order and the market's is a smaller, less independent signal there than it would be from a model that ignored the market. The point projections and their ranges are unchanged from the market-blind model, so this is a re-ORDERING of the same numbers, not a re-pricing.",
+  "universeSize": 111
+}

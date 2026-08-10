@@ -118,6 +118,33 @@ class TestMyTeamsEndpoint:
     convention of calling FastAPI route functions as plain Python once `Depends` is bypassed."""
 
     @staticmethod
+    def _request(groups: str = "[]"):
+        """A minimal Starlette request carrying the API-Gateway authorizer context.
+
+        ⭐ G100-C1 gave `nfl_my_teams` a `request` parameter, because the number of leagues it may
+        SERVE is now the caller's personalization quota rather than a constant. These tests call the
+        route function directly (this file's convention), so they have to supply one.
+
+        `groups="[]"` is a signed-in FREE account — the tier this endpoint now serves — so these
+        assertions exercise the free path rather than only the subscriber one.
+        """
+        from starlette.requests import Request
+
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/fantasy/nfl/my-teams",
+            "headers": [],
+            "query_string": b"",
+            "aws.event": {
+                "requestContext": {
+                    "authorizer": {"jwt": {"claims": {"sub": "u1", "cognito:groups": groups}}}
+                }
+            },
+        }
+        return Request(scope)
+
+    @staticmethod
     def _fake_table():
         class FakeTable:
             def __init__(self):
@@ -181,7 +208,7 @@ class TestMyTeamsEndpoint:
         dynamo.put_fantasy_league("u1", None, self._cfg(source_team_key="7", imported_roster=roster))
         dynamo.put_fantasy_league("u2", None, self._cfg(name="Someone else's"))
 
-        out = fantasy_router.nfl_my_teams(season=2026, user_id="u1")
+        out = fantasy_router.nfl_my_teams(self._request(), season=2026, user_id="u1")
         assert out["season"] == 2026
         assert len(out["leagues"]) == 1
         assert out["leagues"][0]["imported_roster"] == roster
@@ -192,14 +219,14 @@ class TestMyTeamsEndpoint:
         up — `imported_roster` is honestly `None`, never hidden. The frontend's "not linked yet"
         state is built off exactly this (never a dropped league)."""
         dynamo.put_fantasy_league("u1", None, self._cfg())
-        out = fantasy_router.nfl_my_teams(season=2026, user_id="u1")
+        out = fantasy_router.nfl_my_teams(self._request(), season=2026, user_id="u1")
         assert len(out["leagues"]) == 1
         assert out["leagues"][0]["imported_roster"] is None
 
     def test_non_nfl_leagues_are_excluded(self, dynamo, fantasy_router):
         dynamo.put_fantasy_league("u1", None, self._cfg(sport="mlb", name="MLB one"))
         dynamo.put_fantasy_league("u1", None, self._cfg(name="NFL one"))
-        out = fantasy_router.nfl_my_teams(season=2026, user_id="u1")
+        out = fantasy_router.nfl_my_teams(self._request(), season=2026, user_id="u1")
         assert [l["name"] for l in out["leagues"]] == ["NFL one"]
 
     def test_a_malformed_stored_league_does_not_blank_the_collection(self, dynamo, fantasy_router):
@@ -208,14 +235,22 @@ class TestMyTeamsEndpoint:
         table = dynamo._users_table()
         table.items["u1"]["fantasy_leagues"]["corrupt"] = "not-a-dict"
 
-        out = fantasy_router.nfl_my_teams(season=2026, user_id="u1")
+        out = fantasy_router.nfl_my_teams(self._request(), season=2026, user_id="u1")
         assert [l["league_id"] for l in out["leagues"]] == [good["league_id"]]
 
-    def test_the_gate_is_the_broader_fantasy_access_gate_not_the_beta_editor_gate(self, fantasy_router):
-        """The endpoint must depend on `require_fantasy_access` (subscriber/admin/fantasy_comp),
-        NOT `require_fantasy_beta_access` (admin/fantasy_comp only) — this is what lets a plain
-        subscriber's own leagues read here the moment NF-C0's write side opens wider, without a
-        second migration (see the endpoint's own docstring)."""
+    def test_the_gate_is_the_personalization_quota_not_a_group_list(self, fantasy_router):
+        """The endpoint depends on `require_personalized_league_access` — the caller's QUOTA.
+
+        🗄️ IT USED TO BE `require_fantasy_access` (subscriber/admin/fantasy_comp), chosen so a
+        plain subscriber's own leagues would read here the moment NF-C0's write side opened wider,
+        without a second migration. G100-C1 is that widening, and it went further than NF-C6
+        anticipated: a signed-in FREE account has a personalization quota of one, so a gate keyed on
+        fantasy entitlement would refuse exactly the users the free tier exists for.
+
+        ⭐ The clause's PURPOSE is unchanged — this endpoint must not be gated more narrowly than
+        the surface it serves — and the quota is the widest correct predicate: it admits anyone with
+        a league to show, and refuses anyone whose quota has been withdrawn.
+        """
         sig = inspect.signature(fantasy_router.nfl_my_teams)
         dep = sig.parameters["user_id"].default
-        assert dep.dependency is fantasy_router.require_fantasy_access
+        assert dep.dependency is fantasy_router.require_personalized_league_access

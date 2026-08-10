@@ -1,0 +1,451 @@
+// G100-C1 — the generic-vs-your-league DELTA. The activation moment, as arithmetic.
+//
+// ══ WHAT THIS COMPARES, AND WHAT IT DOES NOT ═══════════════════════════════════════════════════
+//
+// TWO OF OUR OWN BOARDS: the free preset (`full_ppr` at 12 teams — `entitlement.FREE_BOARD_CONFIG`)
+// and the same season projection re-scored for the caller's saved league. Nothing here touches ADP,
+// consensus, or anyone else's rankings.
+//
+// ⛔ THAT DISTINCTION IS THE WHOLE HONESTY RISK ON THIS SURFACE. A column headed "movement" on a
+// fantasy board means "versus the market" everywhere else in the category, so a reader imports that
+// reading unless the page states otherwise — which is why `LEAGUE_DELTA_DEFINITION` is rendered
+// beside the table rather than kept in a tooltip. A delta between two of our boards measures HOW
+// MUCH THE READER'S SETTINGS MATTER. It is not an edge, and `best_alpha = 0`.
+//
+// ══ WHY IT IS A PURE MODULE ════════════════════════════════════════════════════════════════════
+//
+// Same reasoning as `league-scoring.ts`: pure and synchronous, so it is testable without a browser
+// and re-runs instantly on an edit. It also keeps the component free of the two arithmetic traps
+// below, which are the parts most likely to be written wrong.
+
+import type { Player } from "@/lib/draft-optimizer"
+
+export interface PlayerDelta {
+  id: string
+  name: string
+  pos: string
+  team: string | null
+  /** Rank on the free preset board. Null when the player is not ON it (see `onlyInLeague`). */
+  genericOvrRank: number | null
+  genericPosRank: number | null
+  genericVor: number | null
+  /** Rank on the caller's league board. */
+  leagueOvrRank: number
+  leaguePosRank: number
+  leagueVor: number | null
+  leaguePts: number | null
+  /**
+   * Places GAINED overall: `generic − league`, so POSITIVE means the player moved UP (toward rank
+   * 1) in this league. Null when he is on only one of the two boards.
+   *
+   * ⚠️ THE SIGN IS THE EASIEST THING HERE TO GET BACKWARDS, because rank is an inverted scale: a
+   * SMALLER number is BETTER, so the intuitive `league − generic` yields a negative number for a
+   * player who improved. It is spelled this way round once, here, and every consumer reads
+   * "positive = riser" — rather than each component re-deciding and one of them getting it wrong.
+   */
+  ovrDelta: number | null
+  posDelta: number | null
+  /** VOR gained in this league's scoring. Positive = worth more here. */
+  vorDelta: number | null
+  /** On the league board but NOT the free one — e.g. a superflex league ranking a QB the free
+   *  board's roster shape leaves unranked. A rank delta is UNDEFINED for these, not zero. */
+  onlyInLeague: boolean
+  /** Market average draft position, from whichever board carries one for him. A REFERENCE used
+   *  ONLY to decide whether he is realistically drafted — never an input to any ranking. */
+  adp: number | null
+  /** Inside this league's draft pool — see `isDraftable`. Every player still appears on the board;
+   *  this only decides who is eligible to be a HIGHLIGHT. */
+  draftable: boolean
+  /** A position whose RANK is not a confident signal (K, DST). Kept separate from `draftable`
+   *  because it is a different disqualification with a different reason — and because a clause you
+   *  cannot isolate is a clause you cannot prove. */
+  lowPred: boolean
+}
+
+export interface PositionShift {
+  pos: string
+  genericReplacement: number | null
+  leagueReplacement: number | null
+  /** League minus generic. Positive = replacement level is HIGHER here, so the position is
+   *  shallower and its players are worth LESS above the baseline. */
+  replacementDelta: number | null
+  /** How many players at this position clear replacement in each board — the "how many actually
+   *  matter" number a drafter reasons with. */
+  genericStartable: number | null
+  leagueStartable: number | null
+}
+
+export interface LeagueDelta {
+  /** Every player on the league board that we could compare, biggest absolute move first. */
+  players: PlayerDelta[]
+  /** ⭐ E9.61 — ranked by VOR DELTA, not by rank movement. See `HIGHLIGHTS_RANK_BY_VOR`. */
+  risers: PlayerDelta[]
+  fallers: PlayerDelta[]
+  positions: PositionShift[]
+  /** How many DRAFTABLE players moved at least `MEANINGFUL_MOVE` places overall — the one-line
+   *  summary. Pool-scoped for the same reason the highlights are (see `draftablePoolSize`). */
+  meaningfulMoves: number
+  /** Draftable players compared on both boards. The denominator, so "14 of 180 moved" is readable
+   *  AND is a sentence about players the reader might actually draft. */
+  compared: number
+  /** The pool the two numbers above are scoped to, or null when it could not be computed (then
+   *  nothing is filtered and these are whole-board counts). Rendered, so the scope is stated. */
+  poolSize: number | null
+}
+
+/**
+ * How many places a player must move before the screen calls it a move.
+ *
+ * ⚠️ A PRESENTATION THRESHOLD, NOT A STATISTICAL ONE, and it must not be described as one. These
+ * projections carry 80% ranges wide enough that a handful of rank places is well inside the noise
+ * (`LEAGUE_DELTA_UNCERTAINTY` says so on the surface). This exists so the summary line counts
+ * something a reader would recognise as movement rather than counting rounding.
+ */
+export const MEANINGFUL_MOVE = 5
+
+/** How many risers/fallers the activation screen leads with. */
+export const HIGHLIGHT_COUNT = 5
+
+/**
+ * The smallest |VOR delta| allowed to LEAD as a riser/faller. Below this the number is rounding,
+ * not the reader's settings.
+ *
+ * ⭐ MEASURED, NOT CHOSEN (E9.61, live 2026 payload, all 858 players). The two sides of the delta
+ * are produced differently: the generic board arrives from the API with `pts`/`vor` already rounded
+ * to 1dp, while the league board is re-scored IN THE BROWSER from the raw stat line (itself 1dp).
+ * So even a league byte-identical to the free preset — where every true delta is exactly 0 —
+ * reconstructs with a small non-zero delta:
+ *
+ *     p50 0.30   p90 1.20   p99 1.60   MAX 1.70          (n = 858, true answer 0 for every one)
+ *
+ * At 2.0, **none** of those 858 survive, and nothing real is lost: across five differing league
+ * shapes the smallest GENUINE highlight measured 4.1. The gap between 1.7 and 4.1 is what makes
+ * this a floor rather than a fudge.
+ *
+ * ⚠️ IT IS A FUNCTION OF THE EXPORT'S PRECISION. If `export_draft_board_json` ever changes how many
+ * decimals it publishes, re-measure — do not scale this by intuition.
+ *
+ * ⛔ WHY A FLOOR RATHER THAN "SHOW THE TOP 5 ANYWAY": without it, a league that genuinely differs
+ * in ONE DIRECTION prints a fabricated list in the other. Measured: a superflex league (QBs rise,
+ * nobody's value falls) filled its "Worth less in your league" column with five players at 0.6–0.7,
+ * and a 3-WR league filled it with tight ends at 0.5. Both columns had a heading, five names and an
+ * explanation — and one of them was rounding. An empty column that says so is the honest answer,
+ * and the surface already has that state for the both-empty case.
+ *
+ * ⭐ This is also why the switch to VOR needed a floor and rank movement did not: an integer rank
+ * move of −11 is a real re-ordering even when the player's VALUE is unchanged (in a 3-WR league,
+ * tight ends genuinely slide as receivers climb past them). Ranking on value states something
+ * stronger and therefore has to be quiet when it has nothing to say.
+ */
+export const MIN_HIGHLIGHT_VOR_DELTA = 2
+
+// ══ E9.61 — THE HIGHLIGHTS RANK ON *VALUE*, NOT ON RANK MOVEMENT ═════════════════════════════════
+//
+// ⭐ WHY THIS CHANGED. The two fixes below (`draftablePoolSize`, `isLowPredictability`) were both
+// forced by the same underlying defect and both treat it by RESTRICTING THE POPULATION: rank
+// movement is not a measure of value, so sorting by it surfaces the wrong players and each new
+// costume of that has needed its own exclusion. The deep tail went first (rank density grows down
+// the board, so the biggest rank moves are waiver churn), then K/DST (a near-flat band, so any
+// scoring difference reorders the whole position at once).
+//
+// Both of those are symptoms. RANK MOVEMENT IS A PROXY, and a badly behaved one: how many places a
+// player crosses depends on how tightly packed his neighbours are, which is a property of the board
+// around him rather than of him. VOR DELTA IS THE QUANTITY ITSELF — "this player is worth N more
+// points above replacement in your league than in ours" — and it has no density problem at all,
+// because it never counts players in between.
+//
+// The population filters STAY, and are not redundant:
+//   • `draftable` — a huge VOR swing on an undrafted player is still not a headline.
+//   • `lowPred` — the decisive reason was never density. It is that "why those players moved" is
+//     computed over SKILL_POSITIONS only, so headlining a D/ST shows a mover the page structurally
+//     cannot explain. That argument is about the EXPLANATION, so it survives the metric change
+//     unchanged and is asserted separately (`free-league.spec.ts`).
+//
+// ⚠️ WHAT THIS DOES NOT CLAIM. VOR is denominated in each board's OWN points, so a league that
+// simply scores higher across the board lifts every VOR and a league that scores lower depresses
+// every one. That is a real statement about the reader's settings rather than an artifact — but it
+// means the two lists need not be symmetric, and a league can legitimately produce many risers and
+// few fallers. Both lists are therefore rendered independently and neither is padded to length.
+export const HIGHLIGHTS_RANK_BY_VOR = true
+
+// ══ THE DRAFTABLE POOL ═══════════════════════════════════════════════════════════════════════════
+//
+// ⭐ WHY THIS EXISTS (operator, live on the first real league). The first cut ranked highlights by
+// raw overall-rank movement across the WHOLE board, and every riser and faller it produced was a
+// player nobody would draft in any league. That is not a tuning miss, it is STRUCTURAL: rank density
+// grows down the board. Around pick 30 a few points of projection separates adjacent players; around
+// rank 400 the same few points spans dozens of them. So the largest RANK moves live in the deep tail
+// by construction, and a highlight list sorted by rank movement is a list of waiver-wire churn —
+// arithmetically correct, and useless on the one screen the funnel converts on.
+//
+// The fix is a POPULATION, not a different sort: compare everyone, but only let a player who might
+// actually be drafted in THIS league be the headline.
+//
+// ⚠️ THE POOL IS A LEAGUE PROPERTY, WHICH IS THE POINT. `n_teams × drafted slots` is 180 in a
+// 12-team/15-round league and 100 in a 10-team/10-round one, so the same board yields a different
+// (correct) highlight set per league. A hardcoded "top 200" would be a different, wrong answer for
+// most leagues and would silently stop scaling the moment someone imports a 14-team dynasty.
+
+/** Roster slots that are NOT filled from the draft. All three import adapters normalise to these
+ *  exact names (`espn.py` / `yahoo.py` / `sleeper.py` ROSTER_SLOT_MAPs), and the manual editor
+ *  offers no such slot, so a name match is reliable across every path a config can arrive by. */
+const NON_DRAFT_SLOTS = new Set(["IR", "TAXI"])
+
+/** Shape needed to size the pool — a structural subset of `LeagueConfig`, so this module keeps
+ *  taking plain data and does not have to import the config types. */
+export interface PoolShape {
+  n_teams?: number | null
+  roster?: { name?: string | null; count?: number | null }[] | null
+}
+
+/**
+ * How many players get drafted in this league: teams × roster slots, EXCLUDING IR and taxi.
+ *
+ * Bench slots are deliberately INCLUDED — bench spots are filled in the draft, and a player taken
+ * in the last round is exactly the kind of "does my scoring make him worth a pick?" call this screen
+ * should be able to speak to. IR and taxi are excluded because they are filled after it.
+ *
+ * Returns null when the config cannot answer (no teams, no roster) rather than guessing a default:
+ * an invented pool would silently filter a real board against a made-up number.
+ */
+export function draftablePoolSize(config: PoolShape | null | undefined): number | null {
+  const teams = Number(config?.n_teams ?? 0)
+  const slots = draftedSlotsPerTeam(config)
+  if (!Number.isFinite(teams) || teams <= 0 || slots == null) return null
+  return Math.round(teams * slots)
+}
+
+/** Drafted roster spots per team — the other half of the pool, exported so the screen can SHOW the
+ *  arithmetic ("12 teams × 15 spots") instead of dividing the product back out, which would be a
+ *  second, silently-derived definition of the same number. */
+export function draftedSlotsPerTeam(config: PoolShape | null | undefined): number | null {
+  const slots = (config?.roster ?? []).reduce((n, s) => {
+    if (NON_DRAFT_SLOTS.has(String(s?.name ?? "").toUpperCase())) return n
+    const c = Number(s?.count ?? 0)
+    return n + (Number.isFinite(c) && c > 0 ? c : 0)
+  }, 0)
+  return slots > 0 ? slots : null
+}
+
+/**
+ * Is this player realistically drafted in a league of this size?
+ *
+ * TWO independent reasons to say yes, OR'd — and the OR is load-bearing in both directions:
+ *
+ *  • MARKET: his ADP is inside the pool. The market is the authority on who actually gets drafted,
+ *    and deferring to it here is the opposite of a claim against it — we are using ADP to bound OUR
+ *    list, never to say we beat it. ⛔ Nothing downstream may present this as an ADP comparison.
+ *  • THIS LEAGUE'S BOARD: he is inside the pool on the board the reader is about to use. Required,
+ *    because ADP is sampled in ONE format: a superflex QB, a rookie with no sample, and every player
+ *    on a board exported before ADP existed all have `adp == null`, and judging them by the market
+ *    alone would delete exactly the players whose value this league CREATES — the most interesting
+ *    highlights on the page.
+ *
+ * A null pool means "unknown", and unknown must not filter: everyone stays eligible.
+ */
+export function isDraftable(
+  adp: number | null,
+  leagueOvrRank: number,
+  pool: number | null,
+): boolean {
+  if (pool == null) return true
+  if (adp != null && adp <= pool) return true
+  return leagueOvrRank <= pool
+}
+
+// ══ THE SECOND DISQUALIFICATION — A RANK THAT IS NOT A SIGNAL ════════════════════════════════════
+//
+// ⭐ WHY K AND D/ST CANNOT BE HEADLINES (operator, live: four defenses in the top five movers).
+//
+// The pool filter above fixed WHICH PART OF THE BOARD the highlights come from and did nothing about
+// this, because kickers and defenses are comfortably inside any real draft pool. They dominated
+// anyway, for a reason that is arithmetic rather than bad luck: there are ~32 of each and their
+// projections sit in a near-flat band, so ANY difference in a league's K/DST scoring reorders the
+// whole position at once — and because the band sits deep in the overall list, a one-tier shuffle
+// there is worth dozens of overall places. Every one of those places is noise.
+//
+// ⭐ THE DECISIVE ARGUMENT IS NOT NOISE, IT IS INTERNAL CONSISTENCY. The section directly beneath the
+// highlights — "why those players moved" — is computed over SKILL_POSITIONS only. So the page was
+// able to headline a mover it structurally could not explain: the reader is shown a D/ST leaping 40
+// places and then a replacement-level table that does not mention D/ST. The explanation is the whole
+// reason this screen exists ("surfaced, not asserted"), and a headline with no available explanation
+// is exactly the assertion it was built to avoid.
+//
+// This is the same rule `draft-optimizer.positionTierMap` already applies for the same reason — a
+// tier break inside a near-flat, noisy field is not a real signal — so the two surfaces now agree.
+// ⛔ It does NOT hide them: K and DST keep their board rows, their VOR and their move column. They
+// simply cannot LEAD, which is the distinction this whole screen is built on.
+
+/** True when this row's RANK must not be presented as a confident signal.
+ *
+ *  Reads the exporter's own per-row `lowPred` flag FIRST (NF1.6 declares it on every row, so a
+ *  future position the model marks soft is covered without a second edit here) and falls back to the
+ *  position list for boards exported before that flag existed. */
+export function isLowPredictability(
+  pos: string,
+  lowPred: boolean | undefined,
+  positions: readonly string[],
+): boolean {
+  if (lowPred === true) return true
+  return positions.includes(pos)
+}
+
+function rankable(p: Player): boolean {
+  // A locked row (E9.56's retired redaction) carries no rank; a K/DST gap-fill row can carry a rank
+  // with no points. Both would produce a meaningless delta, so neither enters the comparison.
+  return p.ovrRank != null && p.pts != null
+}
+
+/**
+ * Compare a league board against the free generic board.
+ *
+ * Returns `null` when either board is unavailable, so a caller renders a LOADING state rather than
+ * an empty one — mirroring `useCustomBoard`'s null-until-ready contract. An empty delta and an
+ * un-loaded delta are different facts and the screen states them differently.
+ */
+export function computeLeagueDelta(
+  genericBoard: Player[] | undefined | null,
+  leagueBoard: Player[] | undefined | null,
+  pool: number | null = null,
+  lowPredictabilityPositions: readonly string[] = [],
+): LeagueDelta | null {
+  if (!genericBoard?.length || !leagueBoard?.length) return null
+
+  const generic = new Map<string, Player>()
+  for (const p of genericBoard) {
+    if (rankable(p)) generic.set(p.id, p)
+  }
+
+  const players: PlayerDelta[] = []
+  for (const p of leagueBoard) {
+    if (!rankable(p)) continue
+    const g = generic.get(p.id)
+    // Either board's ADP will do — it is the same market sample, and the league board inherits it
+    // from the projections row (`league-scoring.buildBoard`). Taking the league side first keeps a
+    // format-matched value when one exists.
+    const adp = p.adp ?? g?.adp ?? null
+    players.push({
+      id: p.id,
+      name: p.name,
+      pos: p.pos,
+      team: p.team,
+      genericOvrRank: g?.ovrRank ?? null,
+      genericPosRank: g?.posRank ?? null,
+      genericVor: g?.vor ?? null,
+      leagueOvrRank: p.ovrRank,
+      leaguePosRank: p.posRank,
+      leagueVor: p.vor ?? null,
+      leaguePts: p.pts ?? null,
+      // POSITIVE = moved UP. See the field docstring: rank is an inverted scale.
+      ovrDelta: g ? g.ovrRank - p.ovrRank : null,
+      posDelta: g ? g.posRank - p.posRank : null,
+      vorDelta: g && g.vor != null && p.vor != null ? p.vor - g.vor : null,
+      onlyInLeague: !g,
+      adp,
+      draftable: isDraftable(adp, p.ovrRank, pool),
+      lowPred: isLowPredictability(p.pos, p.lowPred, lowPredictabilityPositions),
+    })
+  }
+
+  // ⚠️ THE POOL FILTER APPLIES TO THE HIGHLIGHTS AND THE SUMMARY, NEVER TO `players`. That array
+  // feeds the board's "vs free board" column for EVERY row, so filtering it here would blank the
+  // column for most of the table — hiding a real number rather than declining to headline it. A
+  // deep-tail move is still shown where the reader is looking at that player; it just cannot be the
+  // headline. `allComparable` is therefore the full set and `comparable` the pool-scoped one.
+  const allComparable = players.filter((d) => d.ovrDelta != null)
+  // TWO disqualifications, and they are deliberately separate predicates rather than one combined
+  // `eligible` flag: they have different reasons, and each has to be breakable on its own for the
+  // red proof to say anything (a fixture that trips both clauses proves neither — NF-D17).
+  const comparable = allComparable.filter((d) => d.draftable && !d.lowPred)
+
+  // Sorted by SIZE of move, ties broken by the league rank so the order is deterministic — an
+  // unstable order here would make the headline players change on every re-render.
+  const byMove = allComparable
+    .slice()
+    .sort(
+      (a, b) =>
+        Math.abs(b.ovrDelta as number) - Math.abs(a.ovrDelta as number) ||
+        a.leagueOvrRank - b.leagueOvrRank,
+    )
+
+  // ⭐ E9.61 — ranked on VOR DELTA (see `HIGHLIGHTS_RANK_BY_VOR`). A player with no VOR on one of the
+  // two boards has no value change to report, so he is not eligible to LEAD — distinct from being
+  // excluded from `players`, where his rank move is still shown in his own row.
+  // ...and only where that value change is bigger than the reconstruction noise between the two
+  // boards (`MIN_HIGHLIGHT_VOR_DELTA`). Each side is filtered INDEPENDENTLY, so a league that moves
+  // value in one direction only gets one populated column rather than a fabricated second one.
+  const valued = comparable.filter(
+    (d) => d.vorDelta != null && Math.abs(d.vorDelta) >= MIN_HIGHLIGHT_VOR_DELTA,
+  )
+
+  const risers = valued
+    .filter((d) => (d.vorDelta as number) > 0)
+    .sort((a, b) => (b.vorDelta as number) - (a.vorDelta as number) || a.leagueOvrRank - b.leagueOvrRank)
+    .slice(0, HIGHLIGHT_COUNT)
+
+  const fallers = valued
+    .filter((d) => (d.vorDelta as number) < 0)
+    .sort((a, b) => (a.vorDelta as number) - (b.vorDelta as number) || a.leagueOvrRank - b.leagueOvrRank)
+    .slice(0, HIGHLIGHT_COUNT)
+
+  return {
+    players: byMove,
+    risers,
+    fallers,
+    positions: [],
+    meaningfulMoves: comparable.filter((d) => Math.abs(d.ovrDelta as number) >= MEANINGFUL_MOVE)
+      .length,
+    compared: comparable.length,
+    poolSize: pool,
+  }
+}
+
+/**
+ * Per-position replacement-level shift — the MECHANISM behind the player moves above.
+ *
+ * ⭐ THIS IS THE HALF THAT MAKES THE SCREEN EXPLANATORY RATHER THAN ASSERTIVE. "Kyle Pitts moved up
+ * 18 places" is a fact the reader has to take on trust; "your league starts two tight ends, so TE
+ * replacement level sits 31 points lower" is the reason, and it is arithmetic on settings they
+ * typed in themselves. Surfaced, not asserted.
+ *
+ * ⚠️ REPLACEMENT LEVEL IS READ FROM THE ROWS, not from `BuiltBoard.replacement`, and deliberately:
+ * the free board arrives as a bare `Player[]` from the pre-exported blob and has no such map, so a
+ * `BuiltBoard`-only path would work for the league side and silently produce nulls for the generic
+ * one. Every row carries its own `repl`, on both boards, which is the one field both shapes share.
+ */
+export function computePositionShifts(
+  genericBoard: Player[] | undefined | null,
+  leagueBoard: Player[] | undefined | null,
+  positions: readonly string[],
+): PositionShift[] {
+  if (!genericBoard?.length || !leagueBoard?.length) return []
+
+  const replacementFor = (board: Player[], pos: string): number | null => {
+    for (const p of board) {
+      if (p.pos === pos && p.repl != null) return p.repl
+    }
+    return null
+  }
+  const startableFor = (board: Player[], pos: string, repl: number | null): number | null => {
+    if (repl == null) return null
+    return board.filter((p) => p.pos === pos && p.pts != null && (p.pts as number) > repl).length
+  }
+
+  const out: PositionShift[] = []
+  for (const pos of positions) {
+    const g = replacementFor(genericBoard, pos)
+    const l = replacementFor(leagueBoard, pos)
+    // A position the league does not roster at all is absent from its board — skip it rather than
+    // rendering a row of dashes that reads like missing data.
+    if (l == null) continue
+    out.push({
+      pos,
+      genericReplacement: g,
+      leagueReplacement: l,
+      replacementDelta: g == null ? null : l - g,
+      genericStartable: startableFor(genericBoard, pos, g),
+      leagueStartable: startableFor(leagueBoard, pos, l),
+    })
+  }
+  return out
+}

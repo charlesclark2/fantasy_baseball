@@ -15,9 +15,17 @@ artifact — DevTools' "Copy as cURL" embeds the whole `Cookie:` header. ESPN's 
 private-league path remains refused: it is the same line CBS was declined on at E8.2a. Full
 reasoning, including why the paste flow is categorically different: `docs/nf_c0_espn_access_probe.md`.
 
-🔒 ENTITLEMENT. Every route requires `require_fantasy_beta_access` (admin + fantasy_comp), matching
-NF-C0b's editor rather than the wider board surface — these WRITE a user's league configuration, so
-the server-side gate is the real one.
+🔒 ENTITLEMENT (⭐ WIDENED AT G100-C1, 2026-08-08). Every route requires
+`require_personalized_league_access` — the caller's personalization QUOTA
+(`entitlement.personalized_league_quota(...) > 0`), which is one for any signed-in free account and
+the storage cap for a subscriber. It was `require_fantasy_beta_access` (`admin` + `fantasy_comp`),
+matching NF-C0b's editor; G100-C1 grants a free account ONE personalized league, and import is one
+of the two ways to configure it, so gating it on a group list would have left the free tier with
+only the manual editor. The COUNT is enforced where a league is SAVED (`POST /fantasy/leagues`),
+not here — import produces a config to save, and a preview writes nothing.
+
+These WRITE a user's league configuration, so the server-side gate is the real one; hiding the nav
+item stops nobody from POSTing a config straight to the API.
 
 ⚠️ THE ONE UNAUTHENTICATED ROUTE, AND WHY IT IS SAFE. `GET /fantasy/import/yahoo/callback` is
 entered by the USER'S BROWSER being redirected back from Yahoo, so it carries no Authorization
@@ -39,7 +47,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
-from app.backend.dependencies import require_fantasy_beta_access
+from app.backend.dependencies import require_personalized_league_access
 from app.backend.services import dynamo, fantasy_import_telemetry
 from app.backend.services.platform_import import PLATFORMS, espn, sleeper, yahoo, yahoo_oauth
 from app.backend.services.platform_import.http import PlatformHTTPError
@@ -128,7 +136,7 @@ def _handle_platform_error(e: Exception) -> HTTPException:
 
 
 @router.get("/platforms")
-def list_platforms(user_id: str = Depends(require_fantasy_beta_access)):
+def list_platforms(user_id: str = Depends(require_personalized_league_access)):
     """Which platforms can be imported RIGHT NOW, and whether the user is already connected.
 
     `available` is the static capability; `configured` is the runtime truth for an OAuth platform
@@ -164,7 +172,7 @@ def list_platforms(user_id: str = Depends(require_fantasy_beta_access)):
 
 
 @router.post("/sleeper/leagues")
-def sleeper_leagues(payload: SleeperUserRequest, user_id: str = Depends(require_fantasy_beta_access)):
+def sleeper_leagues(payload: SleeperUserRequest, user_id: str = Depends(require_personalized_league_access)):
     """Resolve whatever identifier the user has — username, league ID or user ID.
 
     Returns `{"kind": "league", "league": {...}}` when the value WAS a league (the caller skips the
@@ -178,7 +186,7 @@ def sleeper_leagues(payload: SleeperUserRequest, user_id: str = Depends(require_
 
 
 @router.post("/sleeper/preview")
-def sleeper_preview(payload: PreviewRequest, user_id: str = Depends(require_fantasy_beta_access)):
+def sleeper_preview(payload: PreviewRequest, user_id: str = Depends(require_personalized_league_access)):
     """Read a Sleeper league WITHOUT saving it.
 
     Preview-then-save is deliberate: the response carries the coverage-relevant facts (which of the
@@ -209,7 +217,7 @@ class EspnPasteRequest(BaseModel):
 
 
 @router.post("/espn/read-url")
-def espn_read_url(payload: EspnReadUrlRequest, user_id: str = Depends(require_fantasy_beta_access)):
+def espn_read_url(payload: EspnReadUrlRequest, user_id: str = Depends(require_personalized_league_access)):
     """Build the link the USER opens themselves. Nothing here fetches it.
 
     We construct it server-side so the user never has to assemble a URL by hand, and so the league
@@ -222,7 +230,7 @@ def espn_read_url(payload: EspnReadUrlRequest, user_id: str = Depends(require_fa
 
 
 @router.post("/espn/preview")
-def espn_preview(payload: EspnPasteRequest, user_id: str = Depends(require_fantasy_beta_access)):
+def espn_preview(payload: EspnPasteRequest, user_id: str = Depends(require_personalized_league_access)):
     """Parse a pasted ESPN settings response WITHOUT saving it.
 
     🔒 The pasted body is treated as hostile input and is NEVER logged — not on the happy path and
@@ -291,7 +299,7 @@ def _access_token(user_id: str) -> str:
 
 
 @router.get("/yahoo/authorize")
-def yahoo_authorize(user_id: str = Depends(require_fantasy_beta_access)):
+def yahoo_authorize(user_id: str = Depends(require_personalized_league_access)):
     """Where to send the user to grant read access (Yahoo's OWN consent screen)."""
     try:
         _require_yahoo_enabled()
@@ -337,7 +345,7 @@ def yahoo_callback(
 
 
 @router.get("/yahoo/leagues")
-def yahoo_leagues(user_id: str = Depends(require_fantasy_beta_access)):
+def yahoo_leagues(user_id: str = Depends(require_personalized_league_access)):
     try:
         return {"leagues": yahoo.list_leagues(_access_token(user_id))}
     except Exception as e:  # noqa: BLE001
@@ -345,7 +353,7 @@ def yahoo_leagues(user_id: str = Depends(require_fantasy_beta_access)):
 
 
 @router.post("/yahoo/preview")
-def yahoo_preview(payload: PreviewRequest, user_id: str = Depends(require_fantasy_beta_access)):
+def yahoo_preview(payload: PreviewRequest, user_id: str = Depends(require_personalized_league_access)):
     try:
         return yahoo.import_league(
             payload.league_id, _access_token(user_id), include_draft=payload.include_draft
@@ -355,7 +363,7 @@ def yahoo_preview(payload: PreviewRequest, user_id: str = Depends(require_fantas
 
 
 @router.delete("/yahoo/connection", status_code=204)
-def yahoo_disconnect(user_id: str = Depends(require_fantasy_beta_access)):
+def yahoo_disconnect(user_id: str = Depends(require_personalized_league_access)):
     """Forget the user's Yahoo grant on our side.
 
     ⚠️ Says exactly what it does: this deletes OUR copy. The authoritative revocation is the user's
@@ -371,7 +379,7 @@ def yahoo_disconnect(user_id: str = Depends(require_fantasy_beta_access)):
 
 @router.post("/telemetry", status_code=202)
 def record_import_telemetry(
-    payload: ImportTelemetryRequest, user_id: str = Depends(require_fantasy_beta_access)
+    payload: ImportTelemetryRequest, user_id: str = Depends(require_personalized_league_access)
 ) -> dict:
     """Record which of this JUST-SAVED league's scoring terms we could not apply.
 
@@ -397,7 +405,7 @@ def record_import_telemetry(
 
 
 @router.get("/live/{league_id}")
-def live_state(league_id: str, user_id: str = Depends(require_fantasy_beta_access)):
+def live_state(league_id: str, user_id: str = Depends(require_personalized_league_access)):
     """Re-read LIVE rosters + draft state for a saved league that was imported.
 
     ⭐ WHY THIS IS A SEPARATE READ AND NOT A STORED FIELD. Draft state is the one part of an import

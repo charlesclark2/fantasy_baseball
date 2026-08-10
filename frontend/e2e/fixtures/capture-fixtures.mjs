@@ -62,6 +62,11 @@ const TARGETS = [
     note: "Public past-season track record. REAL, UNLOCKED model output — the honest 'a real payload renders real numbers' fixture.",
   },
   {
+    file: "picks-featured.json",
+    path: "/picks/featured",
+    note: "E9.46 — the home page's live model-vs-market element. PUBLIC (the pre-E9.46 home page fetched it server-side with no token). ⚠️ CHANGES DAILY: it is the current slate's widest model-vs-market gap, so a re-capture will always differ. The specs read the payload's own values rather than hardcoded numbers, so drift is not a failure — but a SHAPE change (a dropped field, a renamed side) is exactly what a re-capture is for.",
+  },
+  {
     file: "subscription-public-pricing.json",
     path: "/subscription/public-pricing",
     note: "Public price (E9.59). Read server-side from the Stripe Price object Checkout charges against — so this capture is the number a logged-out visitor actually sees. ⚠️ Stripe TEST mode until E9.8-P2; the amount will change at the live flip and this fixture should be re-captured then.",

@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import date, datetime, timezone
+import time
+from datetime import date, datetime, timedelta, timezone
 
 from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 from zoneinfo import ZoneInfo
@@ -53,7 +54,7 @@ from app.backend.models.picks import (
     WeatherInfo,
 )
 from app.backend.dependencies import get_optional_user_id
-from app.backend.services import dynamo, serving_cache
+from app.backend.services import cost_guardrails, dynamo, serving_cache
 from app.backend.services.lakehouse_read import lakehouse_query
 from app.backend.services.s3_cache import get_cache, set_cache
 from app.backend.services.scorecard import build_scorecard_from_detail, build_scorecard_summary
@@ -67,6 +68,19 @@ _ML_SCHEMA = (
     if _TARGET_ENV == "prod"
     else "baseball_data.betting_ml_dev"
 )
+
+# ⚠️ THE FEATURED-PICK SELECTION RULE — the canonical statement of it, and the reasoning for
+# ordering on the gap rather than the clock, lives on `_FEATURED_ORDER_BY` in
+# scripts/write_serving_store.py (the SERVING writer is the primary path; everything below is the
+# cold last-resort). These four constants must sort IDENTICALLY to those two, or "yesterday's
+# featured pick" resolves a different game than the one that was actually featured.
+# Pinned by test_e9_46_featured_selection.py.
+_FEATURED_ORDER_BY = (
+    "ORDER BY market_pref ASC, edge DESC NULLS LAST, "
+    "game_datetime ASC NULLS LAST, game_pk ASC, market_type ASC"
+)
+_MARKET_PREF_H2H = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 0 ELSE 1 END AS market_pref"
+_MARKET_PREF_TOTALS = "CASE WHEN DAYOFYEAR(b.game_date) % 2 = 0 THEN 1 ELSE 0 END AS market_pref"
 
 _FEATURED_TODAY_QUERY = f"""
 WITH ranked AS (
@@ -101,6 +115,8 @@ h2h AS (
         b.game_datetime,
         b.game_date,
         b.prediction_type,
+        CAST(NULL AS DOUBLE)                                          AS total_line,
+        {_MARKET_PREF_H2H},
         b.layer4_h2h_decision                                         AS pick_side
     FROM base b
     WHERE b.layer4_h2h_conviction_flag = TRUE
@@ -120,6 +136,8 @@ totals AS (
         b.game_datetime,
         b.game_date,
         b.prediction_type,
+        b.total_line_consensus                                         AS total_line,
+        {_MARKET_PREF_TOTALS},
         b.layer4_totals_decision                                       AS pick_side
     FROM base b
     WHERE b.layer4_h2h_conviction_flag = TRUE
@@ -127,17 +145,35 @@ totals AS (
 )
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
-       pick_side
+       total_line, market_pref, pick_side
 FROM h2h
 UNION ALL
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
-       pick_side
+       total_line, market_pref, pick_side
 FROM totals
-ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
+{_FEATURED_ORDER_BY}
 LIMIT 1
 """
 
+# ⭐⭐ THE CARRY-OVER QUERY — what keeps yesterday's read on the home page until today's run
+# publishes (operator, 2026-08-08: "we keep it up there until the new projections come in").
+#
+# 🩹 IT WAS DEAD IN PRODUCTION, SILENTLY, AND THE SYMPTOM WAS A BLANK CARD. It used to end
+# `ORDER BY actual_outcome DESC NULLS LAST, ABS(edge) DESC NULLS LAST, …`, and DuckDB — the ONLY
+# engine that runs it now (this whole path is Snowflake-free) — cannot ORDER a UNION by an
+# EXPRESSION over a selected column: `Binder Error: Could not ORDER BY column "abs(h2h.edge)"`.
+# `lakehouse_query` catches every exception and returns `[]` by design, so the failure surfaced as
+# "no rows" → `FeaturedPickResponse(game_pk=None)` → the empty state, on every day the morning run
+# had not landed yet. Measured on 2026-08-08: 08-07 held 45 prediction rows and the live endpoint
+# still served `game_pk: null`. `edge` is ALREADY `ABS(model − market)` in both branches, so the
+# `ABS()` bought nothing and cost the whole feature (the E9.26b silent-`[]` class).
+#
+# ⛔ AND THE LEAD KEY HAD TO GO REGARDLESS: `actual_outcome DESC NULLS LAST` means "of yesterday's
+# picks, prefer the one that WON". On the page whose argument is that we grade ourselves in public,
+# carrying forward a winner by construction is exactly the claim `best_alpha = 0` forbids — and it
+# also made this card disagree with the recap beside it. It now resolves the SAME pick the writer
+# featured yesterday, whatever happened to it.
 _FEATURED_STALE_FALLBACK_QUERY = f"""
 WITH ranked AS (
     SELECT
@@ -171,6 +207,8 @@ h2h AS (
         b.game_datetime,
         b.game_date,
         b.prediction_type,
+        CAST(NULL AS DOUBLE)                                          AS total_line,
+        {_MARKET_PREF_H2H},
         clv.actual_outcome,
         b.layer4_h2h_decision                                         AS pick_side
     FROM base b
@@ -193,6 +231,8 @@ totals AS (
         b.game_datetime,
         b.game_date,
         b.prediction_type,
+        b.total_line_consensus                                         AS total_line,
+        {_MARKET_PREF_TOTALS},
         clv.actual_outcome,
         b.layer4_totals_decision                                       AS pick_side
     FROM base b
@@ -203,50 +243,72 @@ totals AS (
 )
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
-       actual_outcome, pick_side
+       total_line, market_pref, actual_outcome, pick_side
 FROM h2h
 UNION ALL
 SELECT game_pk, home_team, away_team, market_type, model_prob, market_prob,
        edge, win_prob_ci_low, win_prob_ci_high, game_datetime, game_date, prediction_type,
-       actual_outcome, pick_side
+       total_line, market_pref, actual_outcome, pick_side
 FROM totals
-ORDER BY actual_outcome DESC NULLS LAST, ABS(edge) DESC NULLS LAST, game_datetime ASC NULLS LAST
+{_FEATURED_ORDER_BY}
 LIMIT 1
 """
 
+# The "Yesterday" recap beneath today's card. ⚠️ IT MUST RESOLVE THE PICK THAT WAS ACTUALLY
+# FEATURED YESTERDAY — it is presented as this card's own track record, so a recap that names a
+# different game than yesterday's card is not a recap, it is a second pick. Three things had to
+# change for that to be true, and all three were live defects:
+#   • population — it ranked over `qualified_bet = TRUE` and never applied the conviction flag,
+#     i.e. a DIFFERENT eligible set than the one that produces the featured pick;
+#   • per-game row choice — `lineup_confirmed` first, where the writer prefers rows that carry
+#     market data, then post_lineup, then latest `inserted_at` (a degraded post_lineup row with
+#     NULL odds otherwise shadows a complete morning row);
+#   • ORDER BY — `actual_outcome DESC` selected yesterday's WINNER out of the field.
+# It now mirrors _FEATURED_YESTERDAY_SERVING_SQL clause for clause.
 _FEATURED_YESTERDAY_QUERY = f"""
 WITH ranked AS (
     SELECT
         *,
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
-            ORDER BY CASE WHEN lineup_confirmed THEN 0 ELSE 1 END, inserted_at DESC
+            ORDER BY
+                CASE WHEN (h2h_market_implied_prob IS NOT NULL OR over_prob_consensus IS NOT NULL) THEN 0 ELSE 1 END,
+                CASE WHEN prediction_type = 'post_lineup' THEN 0 ELSE 1 END,
+                inserted_at DESC
         ) AS _rn
     FROM {_ML_SCHEMA}.daily_model_predictions
     WHERE game_date = DATEADD(day, -1, %(today)s::DATE)
-      AND qualified_bet = TRUE
+      AND prediction_type IN ('post_lineup', 'morning')
 ),
 base AS (SELECT * FROM ranked WHERE _rn = 1),
 h2h AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,
+           b.game_datetime, b.game_date,
+           ABS(b.calibrated_win_prob - b.h2h_market_implied_prob)     AS edge,
+           {_MARKET_PREF_H2H},
            clv.actual_outcome
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
         ON clv.game_pk = b.game_pk AND clv.market_type = 'h2h'
-    WHERE b.layer4_h2h_decision IN ('home', 'away')
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_h2h_decision IN ('home', 'away')
 ),
 totals AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'totals' AS market_type,
+           b.game_datetime, b.game_date,
+           ABS(b.totals_model_prob - b.over_prob_consensus)           AS edge,
+           {_MARKET_PREF_TOTALS},
            clv.actual_outcome
     FROM base b
     LEFT JOIN baseball_data.betting.mart_clv_labeled_games clv
         ON clv.game_pk = b.game_pk AND clv.market_type = 'totals'
-    WHERE b.layer4_totals_decision IN ('over', 'under')
+    WHERE b.layer4_h2h_conviction_flag = TRUE
+      AND b.layer4_totals_decision IN ('over', 'under')
 )
-SELECT * FROM h2h
+SELECT game_pk, home_team, away_team, market_type, game_datetime, edge, market_pref, actual_outcome FROM h2h
 UNION ALL
-SELECT * FROM totals
-ORDER BY actual_outcome DESC NULLS LAST, game_pk, market_type
+SELECT game_pk, home_team, away_team, market_type, game_datetime, edge, market_pref, actual_outcome FROM totals
+{_FEATURED_ORDER_BY}
 LIMIT 1
 """
 
@@ -254,7 +316,7 @@ _ET = ZoneInfo("America/New_York")
 
 # E9.41 follow-up — pending-yesterday self-heal. Re-resolves the SAME yesterday featured
 # pick the serving writer picked (mirrors write_serving_store._FEATURED_YESTERDAY_SERVING_SQL:
-# market-data-first, post_lineup, latest inserted_at; ORDER BY game_datetime ASC LIMIT 1) and
+# market-data-first, post_lineup, latest inserted_at; then _FEATURED_ORDER_BY LIMIT 1) and
 # computes its outcome from the FRESH mart_game_results (final score), NOT mart_clv_labeled_games.
 #
 # ⚠️ WHY NOT mart_clv_labeled_games (the 2026-07-19 SF/SEA finding): that mart is served as an S3
@@ -270,9 +332,13 @@ _ET = ZoneInfo("America/New_York")
 _FEATURED_YESTERDAY_HEAL_QUERY = f"""
 WITH ranked AS (
     SELECT
-        game_pk, home_team, away_team, game_datetime,
+        game_pk, home_team, away_team, game_datetime, game_date,
         layer4_h2h_decision, layer4_totals_decision, layer4_h2h_conviction_flag,
         total_line_consensus,
+        -- Needed only to reproduce _FEATURED_ORDER_BY's `edge` key, so this query resolves the
+        -- SAME pick the writer featured. Still a narrow explicit list (E9.26b: a `SELECT *` over
+        -- the 94-col predictions table silently fails inside the API Lambda).
+        calibrated_win_prob, h2h_market_implied_prob, totals_model_prob, over_prob_consensus,
         ROW_NUMBER() OVER (
             PARTITION BY game_pk
             ORDER BY
@@ -288,6 +354,8 @@ base AS (SELECT * FROM ranked WHERE _rn = 1),
 h2h AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'h2h' AS market_type,
            b.layer4_h2h_decision AS pick_side, b.game_datetime,
+           ABS(b.calibrated_win_prob - b.h2h_market_implied_prob) AS edge,
+           {_MARKET_PREF_H2H},
            r.home_team_won, r.home_final_score, r.away_final_score,
            CAST(NULL AS DOUBLE) AS total_line
     FROM base b
@@ -298,6 +366,8 @@ h2h AS (
 totals AS (
     SELECT b.game_pk, b.home_team, b.away_team, 'totals' AS market_type,
            b.layer4_totals_decision AS pick_side, b.game_datetime,
+           ABS(b.totals_model_prob - b.over_prob_consensus) AS edge,
+           {_MARKET_PREF_TOTALS},
            CAST(NULL AS BOOLEAN) AS home_team_won, r.home_final_score, r.away_final_score,
            b.total_line_consensus AS total_line
     FROM base b
@@ -305,13 +375,13 @@ totals AS (
     WHERE b.layer4_h2h_conviction_flag = TRUE
       AND b.layer4_totals_decision IN ('over', 'under')
 )
-SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime,
+SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime, edge, market_pref,
        home_team_won, home_final_score, away_final_score, total_line
 FROM h2h UNION ALL
-SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime,
+SELECT game_pk, home_team, away_team, market_type, pick_side, game_datetime, edge, market_pref,
        home_team_won, home_final_score, away_final_score, total_line
 FROM totals
-ORDER BY game_datetime ASC NULLS LAST, game_pk ASC
+{_FEATURED_ORDER_BY}
 LIMIT 1
 """
 
@@ -438,6 +508,7 @@ def _build_featured_result(
         home_team=home or None,
         away_team=away or None,
         pick_side=r.get("PICK_SIDE"),
+        total_line=r.get("TOTAL_LINE"),
         model_narrative=narrative,
         top_drivers=top_drivers,
         served_tier=served_tier,
@@ -485,20 +556,56 @@ def _resolve_yesterday_recap(row: dict) -> dict | None:
             "outcome": outcome_str, "status": status}
 
 
+# G100-D1 — how long a container waits before re-attempting a heal that found nothing.
+#
+# ⭐ THE BUG THIS CLOSES: the heal only writes back on SUCCESS, so while yesterday's game is
+# genuinely still unsettled (the common case for hours every morning) the "at most once" promise in
+# the docstring below was false — EVERY request re-ran the query. `/picks/featured` is a PUBLIC,
+# unauthenticated route that the landing page fetches on load, so once anonymous traffic arrives
+# that is one DuckDB-over-S3 query PER VISITOR: seconds of Lambda wall-clock and an S3 GET each,
+# on the hottest public path we have. A cooldown makes the cost O(containers × hours) instead of
+# O(visitors) while keeping the heal's actual purpose — it still lands within 15 minutes of the
+# game settling, which is far inside the window that matters for a "Yesterday:" recap.
+_HEAL_COOLDOWN_SECONDS = 900
+# date -> monotonic timestamp of the last attempt in THIS container.
+_heal_last_attempt: dict[str, float] = {}
+
+
 def _heal_pending_featured_yesterday(payload: dict, today: str) -> dict:
     """Self-heal a stuck 'Yesterday: Pending' recap on the featured pick (E9.41 follow-up).
 
     Late (esp. West-coast) games often aren't in Savant/statcast when the morning
     serving write runs, so the featured payload's yesterday recap freezes on 'pending'
     (the outcome is INNER-JOINed off statcast-derived mart_game_results). This re-checks
-    the CLV mart once on read and patches the recap to Won/Lost the moment it settles —
+    the CLV mart on read and patches the recap to Won/Lost the moment it settles —
     regardless of whether the statcast catch-up job re-ran that day. Best-effort: any
     failure returns the payload unchanged. On a successful heal it writes the patched
-    payload back to the serving cache so the re-check runs at most once.
+    payload back to the serving cache so the re-check stops entirely.
+
+    G100-D1: an UNSUCCESSFUL attempt is now rate-limited per container (see
+    `_HEAL_COOLDOWN_SECONDS`) so an unsettled game cannot turn every anonymous page view into a
+    lakehouse query.
     """
     y = payload.get("yesterday")
     if not isinstance(y, dict) or y.get("status") != "pending":
         return payload
+
+    # G100-D1 — degrade mode: this is a cosmetic recap refinement, not the payload. Never spend a
+    # lakehouse query on it while the operator is actively containing spend.
+    if cost_guardrails.degrade_mode_enabled():
+        return payload
+
+    now = time.monotonic()
+    last = _heal_last_attempt.get(today)
+    if last is not None and (now - last) < _HEAL_COOLDOWN_SECONDS:
+        return payload
+    _heal_last_attempt[today] = now
+    # Bound the dict: one entry per date, and only today's is ever read. Without this a
+    # long-lived container accumulates an entry per day it survives.
+    if len(_heal_last_attempt) > 8:
+        for stale_key in [k for k in _heal_last_attempt if k != today]:
+            _heal_last_attempt.pop(stale_key, None)
+
     try:
         rows = lakehouse_query(_FEATURED_YESTERDAY_HEAL_QUERY, params={"today": today})
     except Exception:
@@ -516,6 +623,69 @@ def _heal_pending_featured_yesterday(payload: dict, today: str) -> dict:
     except Exception:
         logger.warning("featured: pending-yesterday heal write-back failed (serving unaffected)")
     return patched
+
+
+#: How far back the home page will reach for a read to carry over. The season plays daily, so one
+#: day is the normal case and two covers a late/failed run; a gap longer than this means something
+#: is genuinely wrong, and the honest empty state is a better answer than a card from last week.
+_CARRY_OVER_MAX_DAYS = 3
+
+
+def _carry_over_recent_featured(today: str) -> FeaturedPickResponse | None:
+    """The most recently PUBLISHED featured read, for the home page to keep up until today's run
+    lands. Returns None when there is nothing recent enough — the caller then falls through to its
+    existing paths and, ultimately, to the honest empty state.
+
+    ⚠️ THREE FIELDS ARE REWRITTEN, and each would otherwise be a false statement about a live page:
+
+    • `is_stale=True` is what makes the card announce itself. Serving yesterday's numbers unlabelled
+      is the one genuinely dangerous state this block can be in — a visitor could read a probability
+      for a game that has already been played.
+    • `is_preliminary=False` — it describes whether lineups were confirmed when the blob was written,
+      which says nothing useful about a slate that has since finished.
+
+    ⭐ THE STORED RECAP IS KEPT, and an earlier cut of this was wrong to drop it. The reasoning for
+    dropping it — "the card IS yesterday, so a recap labelled *Yesterday* beside it names the wrong
+    day" — identified a real ambiguity and then solved it by deleting the content instead of fixing
+    the label. It is the only self-grading on a card that is purely retrospective, so throwing it
+    away is the worst available trade on a page whose argument is that we publish our results.
+
+    ⚠️ AND IT IS THE ONLY RESULT THAT *CAN* BE SHOWN HERE. The obvious alternative — grade the
+    carried pick's OWN game — is structurally unavailable for almost the whole window this path
+    covers. Measured 2026-08-08 09:45Z: the carried game read `In Progress` in
+    `stg_statsapi_games` (schedule capture has a deliberate 10.5h overnight gap, `*/30 14-23` +
+    `0,30 0-3` UTC, so the table is frozen until ~14:00Z) and `mart_game_results` held ZERO of the
+    previous day's games (it is statcast-derived and rebuilt by the daily job). Both sources
+    refresh at roughly the moment today's run publishes and the carry-over ends — so a
+    carried-pick outcome would read "Pending" for essentially the entire period it applies to.
+    The component labels the recap by DATE on a stale card, which removes the ambiguity without
+    removing the content.
+
+    Best-effort by construction: a DynamoDB failure or a payload this build cannot parse returns
+    None rather than raising, because a missing carry-over is a cosmetic gap and a 500 is an outage.
+    """
+    try:
+        anchor = date.fromisoformat(today)
+    except ValueError:
+        return None
+    for back in range(1, _CARRY_OVER_MAX_DAYS + 1):
+        day = (anchor - timedelta(days=back)).isoformat()
+        try:
+            blob = serving_cache.get_cache("picks/featured", day)
+        except Exception:
+            logger.warning("featured: carry-over read failed for %s", day, exc_info=True)
+            return None
+        if not blob or blob.get("game_pk") is None:
+            continue
+        patched = {**blob, "is_stale": True, "is_preliminary": False}
+        try:
+            result = FeaturedPickResponse(**patched)
+        except Exception:
+            logger.warning("featured: carry-over blob for %s is unparseable", day, exc_info=True)
+            return None
+        logger.info("featured: carrying over the read published for %s", day)
+        return result
+    return None
 
 
 @router.get("/featured", response_model=FeaturedPickResponse)
@@ -536,6 +706,42 @@ def get_featured_pick() -> FeaturedPickResponse:
     cached = get_cache(f"picks/featured_{today}.json")
     if cached is not None and cached.get("game_pk") is not None and cached.get("model_narrative") is not None:
         return FeaturedPickResponse(**cached)
+
+    # ⭐⭐ CARRY OVER THE PREVIOUS DAY'S SERVED BLOB — a DynamoDB POINT READ, not a lakehouse query.
+    #
+    # This sits above the degrade check on purpose: it is the same class of read as the two cache
+    # lookups above it, and cheaper than the empty payload it replaces is expensive to explain.
+    #
+    # 🩹 IT REPLACES A CARRY-OVER THAT COULD NEVER HAVE WORKED IN PRODUCTION. The lakehouse
+    # `_FEATURED_STALE_FALLBACK_QUERY` below resolves exactly the same thing and was, twice over,
+    # unable to deliver it: its ORDER BY did not bind on DuckDB at all (fixed earlier in this
+    # story), and even fixed it is a `SELECT p.*` over the 94-column `daily_model_predictions` —
+    # the read E9.26b documents as reliably failing INSIDE the API Lambda while working perfectly
+    # outside it. `lakehouse_query` swallows both into `[]`, so the page showed "nothing published"
+    # on every morning before the run landed. Measured 2026-08-08 09:17Z against the deployed
+    # Lambda: `/picks/featured` served `game_pk: null` while yesterday's blob sat complete in
+    # DynamoDB and the same query returned the right row from a laptop.
+    #
+    # ⭐ AND IT IS THE BETTER ANSWER ANYWAY, not merely the reachable one. The blob IS what was
+    # featured yesterday — the writer published it — so carrying it forward cannot disagree with
+    # the recap or re-derive a different pick under a rule that has since changed. Re-running the
+    # selection over yesterday's rows is a reconstruction; this is the record.
+    _carried = _carry_over_recent_featured(today)
+    if _carried is not None:
+        return _carried
+
+    # G100-D1 — DEGRADE MODE STOPS HERE, BEFORE THE LAKEHOUSE.
+    #
+    # Everything above this line is a cheap point read (DynamoDB, then the S3 blob cache).
+    # Everything below is `lakehouse_query` — DuckDB over S3, seconds of Lambda wall-clock per call
+    # and up to four calls per request. This is a PUBLIC route the landing page fetches on load, so
+    # on a cache-cold morning that fallback is the single most expensive thing anonymous traffic can
+    # trigger, and it scales with visitors. When the operator has flipped the kill switch we serve
+    # the honest "nothing published" payload the client already renders (`game_pk: null` — the same
+    # state as a no-slate day) rather than spending the query.
+    if cost_guardrails.degrade_mode_enabled():
+        logger.info("featured: degrade mode — skipping the lakehouse fallback, serving empty")
+        return FeaturedPickResponse(game_pk=None)
 
     try:
         rows = lakehouse_query(_FEATURED_TODAY_QUERY, params={"today": today})

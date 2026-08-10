@@ -162,8 +162,252 @@ export const EXPECTED_POINTS_NOTE = {
     "The points we publish are an expected season total: the chance a player misses games is already priced into the number. That puts ours below the “if he plays every week” projections most sites show, and below what a player who stayed healthy actually finished on — by design, not by accident. The projected-games column shows how much of that discount is availability for each player. It is not the only reason a projection lands under a finished season, and we do not present it as one.",
 } as const
 
+// ══ THE FULL-SEASON RATE — the second reading of the same number ═══════════════════════════════
+//
+// `EXPECTED_POINTS_LABEL` above is the availability-weighted season total: the chance a player
+// misses games is already multiplied through it. That is the honest number and it stays the
+// headline. But it answers only one of the two questions a drafter actually has, and the other one
+// — "what is he worth in the weeks he plays?" — is the one that makes two players comparable when
+// their injury risks differ.
+//
+// So this is `expected_pts × 17 ÷ expected_games`: the same projection, re-expressed as a
+// full-slate rate. NO NEW MODEL RUN, no re-fit — both inputs are already in the served payload, and
+// dividing one by the other is arithmetic on numbers the page already shows.
+//
+// ⛔⛔ DISPLAY ONLY, AND THIS IS A HARD BOUNDARY, NOT A STYLE NOTE. It must never feed VOR, the
+// board ordering, tiering, or the optimizer. Ranking on a full-slate rate would rank players as if
+// availability did not exist — it would systematically promote exactly the players our projection
+// discounts on purpose — and because it re-orders the board it would land on the whole-board
+// placement gate (NF-D18/NF-D20's `CONSTRAINT_REFUSED`), which is a model decision with its own
+// pre-registration, not a display change. `test_freemium_tier.py` asserts the helper is absent from
+// every scoring/ordering module.
+//
+// ⛔ AND IT IS NOT A CONSENSUS-CALIBRATED NUMBER. It is our own projection divided by our own
+// expected games — it is NOT reconciled against anyone else's published "if he plays every week"
+// figure, and it is still conservative at running back, where the residual miscalibration
+// `EXPECTED_POINTS_NOTE` refuses to bury has not gone anywhere. The copy below says both.
+
+/** The column/tile label for the full-slate reading. "Rate" rather than "if healthy" deliberately:
+ *  "if healthy" reads as a PREDICTION about a specific player staying healthy, which is precisely
+ *  what this number does not claim. */
+export const FULL_SEASON_RATE_LABEL = "Full-season rate"
+
+/** The tappable definition behind that label (rendered through `InfoTip`, so it opens on TAP — the
+ *  E9.63/NF3 touch lesson). */
+export const FULL_SEASON_RATE_DEFINITION =
+  "The same projection, stretched back out to a full seventeen games: expected points divided by expected games. It answers “what is he worth in the weeks he plays?”, which is the fairer way to compare two players whose injury risk differs. It is not a prediction that he plays all seventeen — the expected-points column beside it is the number that prices that in, and it is the one our rankings are built on. It is also our own arithmetic, not a figure reconciled against anyone else's published projections, and it stays conservative at running back."
+
+/** Shown where a full-season rate cannot be computed — no expected-games figure, or zero. An
+ *  em-dash with this behind it, never a blank and never a divide-by-zero. */
+export const FULL_SEASON_RATE_UNAVAILABLE =
+  "We don't publish an expected-games figure for this player, so there is nothing to divide by."
+
+// ══ THE FREE / PAID BOUNDARY — stated as a division of labour, never as a withheld feature ══════
+//
+// ⭐ THE PRODUCT POINT THIS COPY HAS TO CARRY (GROWTH-100 §1): the paid aha is "what changed
+// because it is MY league", and a visitor cannot want that until they have seen the generic board
+// and understood that it is generic. So this block only ever appears BESIDE a fully-visible free
+// board — it says what the free thing is, then what a membership adds. It is not a lock, there is
+// nothing behind it on this page, and it must never be written as though there were.
+//
+// ⛔ NO PERFORMANCE PROMISE. Not "win your league", not "beat your leaguemates", not "beat ADP".
+// The paid half does more of the WORK; it does not claim a better outcome. `best_alpha = 0`.
+
+/** The free half, said plainly so the free surfaces are understood as complete rather than as a
+ *  sample.
+ *
+ *  ⚠️ IT MUST NOT NAME A FORMAT, and that is a correctness constraint rather than a style one. This
+ *  block renders on Projections (format-INDEPENDENT — one projection, no scoring applied) as well as
+ *  on the scored surfaces, so a sentence about full-PPR at twelve teams would be false on one of the
+ *  two pages that shows it. The format scope belongs to the controls it constrains:
+ *  `FORMAT_LOCK_EXPLANATION` under the pickers, and `PAID_TIER_SUMMARY[0]` in the paid half below.
+ *
+ *  ⚠️ AND IT WENT STALE ONCE ALREADY. Until 2026-08-08 it read "scored for the common league
+ *  presets" — true while all 14 preset boards were free, false the moment the tier narrowed, and
+ *  invisible either way because nothing renders differently when copy stops being accurate. */
+export const FREE_TIER_SUMMARY = {
+  title: "This is free, and every number on it is real",
+  detail:
+    "Every player we project, every ranking, every 80% range and the market ADP beside it — no account, no trial, and no number quietly withheld. It is the same board for everyone, which is exactly what makes it free.",
+} as const
+
+/** The paid half, in the two categories the entitlement actually splits on, plus the format lever.
+ *  Each `title` names the capability in the user's words; `detail` says what it does, never how well
+ *  it does it. */
+export const PAID_TIER_SUMMARY: readonly { title: string; detail: string }[] = [
+  {
+    title: "Every scoring format, at your league's size",
+    detail:
+      "Half-PPR, standard, superflex, three-receiver, and ten- or twelve-team — each one re-scored, not relabelled. League size moves the replacement level, so it moves the ranking.",
+  },
+  {
+    title: "Your league, not a preset",
+    detail:
+      "Save your league's real scoring, roster shape and size, and the whole board re-scores against it — including value over replacement, which depends entirely on how many of each position your league actually starts.",
+  },
+  {
+    title: "The tools that turn a board into a pick",
+    detail:
+      "The draft optimizer, and the in-season calls — waivers, trades, start/sit — worked in your league's scoring rather than left as an exercise.",
+  },
+]
+
+// ══ THE FORMAT LOCK — what a visitor reads on a preset they cannot open ═════════════════════════
+//
+// Rendered on the format/size controls themselves, so the boundary is legible AT the control rather
+// than only in a block underneath it. Two rules this copy is written to:
+//   • It says the format is a MEMBERSHIP feature, not that the numbers behind it are better. The
+//     free board is the same model; a different preset is a different SCORING of it.
+//   • It never implies the visitor is missing an edge. `best_alpha = 0`.
+
+/** Suffix on a locked option's label in the format/size pickers. Terse by necessity — it sits
+ *  inside a dropdown row — with `FORMAT_LOCK_EXPLANATION` carrying the actual sentence. */
+export const FORMAT_LOCK_SUFFIX = "Members"
+
+/** The sentence under the pickers when the caller can only open the free preset. */
+export const FORMAT_LOCK_EXPLANATION =
+  "Full-PPR at twelve teams is free for everyone. The other scoring formats and league sizes are re-scored for members — a different format is a different set of numbers, not a different label on these."
+
+/** Heading when a board REFUSED rather than came back empty — a stale stored selection, or the
+ *  window where the frontend has shipped and the API has not (NF-C0). */
+export const FORMAT_LOCK_TITLE = "That format is part of a membership"
+
+/** Under the Season Projections "reference scoring" picker, where the same lock applies to a
+ *  control that is NOT the board's format picker — the page is scoring-independent and this only
+ *  chooses which reference total the table shows and sorts by. */
+export const REFERENCE_SCORING_LOCK_NOTE =
+  "The reference total shown here is full-PPR, which is free for everyone. Half-PPR and standard are re-scored for members."
+
+/** The player page's per-format tiles, where the two paid ones render a lock instead of a number. */
+export const FORMAT_TILE_LOCK_SUB = "Part of a membership"
+
+// ── The raw projected stat line ─────────────────────────────────────────────────────────────────
+//
+// ⚠️ WHY THIS IS GATED AT ALL, since it is the one piece of this that is not obviously a "format".
+// The per-format totals differ ONLY by how receptions are scored, so a visible reception count
+// makes the paid numbers exact arithmetic: `half = full − 0.5 × rec`, `standard = full − 1.0 × rec`.
+// Measured on a real served player — full 178.4, half 147.5, standard 116.5, receptions 61.9 —
+// both identities hold to a tenth. Locking the totals while printing the receptions beside them
+// would be a paywall anyone can do in their head, on the page that shows both.
+//
+// ⛔ It is NOT claimed as anti-scraping. The free board is scrapeable by design and that was
+// accepted when this tier was drawn; this is about not printing the answer next to the question.
+
+export const STAT_LINE_LOCK_TITLE = "The projected stat line is part of a membership"
+
+export const STAT_LINE_LOCK_DETAIL =
+  "Targets, receptions, yards and touchdowns — the projected production the scoring formats are applied to. Members see the full line for every player, in every format."
+
+/** ...and the entitled version of the same refusal, which is a genuine fault and must not be
+ *  dressed up as one. */
+export const BOARD_LOAD_ERROR_DETAIL =
+  "We couldn't load this board just now. Refresh, or pick another format while we look into it."
+
+// ⚠️ A one-line `FREEMIUM_BOUNDARY_LINE` was written here for "a compact surface that has no room
+// for the two blocks above" and then DELETED, because nothing renders it. An exported copy constant
+// with no caller reads as shipped wording — the NF-C0e "wired ≠ invoked" shape, one domain over —
+// and the next surface to want a one-liner should reach for `DECISION_SUPPORT_LINE`, which is the
+// same promise and is actually rendered. Add a second one only when something calls it.
+
+/** The heading over the paid half, and the CTA label under it.
+ *
+ *  ⚠️ THESE ARE CHROME, NOT CLAIMS — and they live here anyway. `test_freemium_tier.py` asserts
+ *  that NO prose is written inline in `FreemiumBoundary`, without trying to distinguish a heading
+ *  from a promise. That distinction is exactly what a guard cannot make and what a well-meaning
+ *  copy edit erodes: an exception list for "just a heading" is how the first claim gets typed into
+ *  a component. One rule, no exceptions, and the screening covers everything the surface renders. */
+export const PAID_TIER_HEADING = "What a membership adds"
+export const MEMBERSHIP_CTA_LABEL = "See membership options"
+
 /** The standing statement of what the served board actually is, for a surface that renders without
  *  the artifact. Mirrors `build_claim`'s `architecture` note; when the artifact IS available,
  *  prefer `claim.architecture` so there is one string, not two. */
 export const ARCHITECTURE_CAVEAT =
   "Our projected points come from a model that never looks at the draft market. A second model sets the order players are ranked in, and at most positions that order blends the market's own consensus with ours — so our ranking is not an independent read on the market."
+
+// ══ G100-C1 — ONE FREE PERSONALIZED LEAGUE ═══════════════════════════════════════════════════════
+//
+// The free tier now includes a board re-scored for ONE league the user configures themselves. That
+// makes a new kind of claim available to overclaim with, and it is a tempting one: the whole point
+// of the screen is that the numbers MOVED, so the copy naturally reaches for "we found value the
+// market missed". ⛔ It may not. What we can honestly say is narrow and it is enough:
+//
+//   ✅ "these are YOUR league's numbers, and here is what changed"   — arithmetic we performed
+//   ✅ "value over replacement, in your scoring"                     — a definition
+//   ⛔ "players the consensus is undervaluing"                       — a claim about the MARKET
+//   ⛔ "sleepers", "steals", "out-draft your league-mates"           — the same claim, dressed up
+//
+// The delta is between TWO OF OUR OWN BOARDS. It says nothing whatsoever about ADP, consensus or
+// anyone else's rankings, and a reader will assume otherwise unless the copy says so — which is
+// what `LEAGUE_DELTA_DEFINITION` exists to do. `best_alpha = 0`.
+//
+// Screened by `test_nf_tr1_claim_copy.py`, which parses this file's string literals through the
+// export's `_CLAIM_DENYLIST` plus the governance gate.
+
+/** The activation screen's headline — the question the product has to answer visibly. */
+export const MY_LEAGUE_HEADING = "What changed because it's your league"
+
+export const MY_LEAGUE_BLURB =
+  "The same season projection, re-scored under your league's rules and roster shape, then compared against the free board everyone else sees."
+
+/** ⭐ THE LOAD-BEARING SENTENCE ON THE SCREEN. Without it a reader takes a movement column to be a
+ *  claim about the market, because that is what every other fantasy product means by one. */
+export const LEAGUE_DELTA_DEFINITION =
+  "Movement is between two of our own boards — the free full-PPR, twelve-team board and yours. It is a measure of how much your settings matter, not a view on where anyone else is drafting."
+
+/** Why a player moved. Stated as a mechanism rather than an insight, because it IS one: replacement
+ *  level is a function of the roster shape and league size, and nothing here is a prediction. */
+export const LEAGUE_DELTA_MECHANISM =
+  "A player moves when your scoring changes his point total, or when your starting requirements change how many players at his position are worth having at all. Both are arithmetic on settings you entered."
+
+/** Under the risers/fallers blocks. Keeps the reader from treating a small move as a signal — the
+ *  same discipline as the League Board's "read the gaps, not the decimals". */
+export const LEAGUE_DELTA_UNCERTAINTY =
+  "Small moves are noise inside the 80% ranges these projections carry. A player crossing several positions in your scoring is the part worth acting on."
+
+/** VOR, as the free tier is allowed to describe it. ⚠️ "in your scoring" is the whole claim — it is
+ *  a decision AID, and the draft-state-aware version is the paid one. */
+export const LEAGUE_VOR_DEFINITION =
+  "Value over replacement is a player's projected points minus the points of the first player at his position who does not start anywhere in your league. It is a way to compare a quarterback to a running back on one board."
+
+// ══ E9.61 — THE SAME DELTA, NOW ON THE BROWSE BOARDS ═════════════════════════════════════════════
+//
+// My League is the ACTIVATION screen and leads with the delta. Rankings and the League Board are
+// the HABITUAL surfaces, and a returning user browsing them wants the same quantity as a column.
+// Both readings are legitimate; what is not legitimate is two labels for one number.
+
+/** ⭐ THE COLUMN HEADER, and the one string on this surface that has to be spelled out.
+ *
+ *  Every other delta column in this product — and in the category — means "versus ADP", i.e. versus
+ *  the market. This one does not: it is the distance between two of OUR boards. A bare "Δ", "Move"
+ *  or "vs board" inherits the market reading by default, so the header names the comparison
+ *  outright and `LEAGUE_DELTA_DEFINITION` rides on it as the tooltip.
+ *
+ *  ⚠️ ONE constant for all three renderers (My League, Rankings, League Board). My League shipped
+ *  with "vs free board" and the boards would have arrived with something else; the same number
+ *  under two names on adjacent pages is how a reader concludes they are two different numbers. */
+export const GENERIC_DELTA_LABEL = "vs our generic board"
+
+/** The band above a personalized browse board. Says WHICH board is selected is doing the work, and
+ *  sends the reader to the screen that explains WHY — rather than re-deriving the explanation on a
+ *  page whose job is browsing. */
+export const GENERIC_DELTA_BAND_DETAIL =
+  "You're looking at this board re-scored for your league. The column on the right is how far each player has moved from our generic board — not from where anyone else is drafting."
+
+/** The empty state, before a league exists. Names both routes in, because the manual editor is the
+ *  guarantee underneath the importer rather than a fallback for when it fails. */
+export const MY_LEAGUE_EMPTY_TITLE = "Set up your league to see your own board"
+export const MY_LEAGUE_EMPTY_DETAIL =
+  "Import it from Sleeper, Yahoo or ESPN, or enter the scoring and roster by hand. Either way you get the same board — one league is included with a free account."
+
+/** At the control, when the caller is at their quota. States the boundary where they meet it, rather
+ *  than letting them fill in a form the API is going to refuse (the freemium build's pattern). */
+export const LEAGUE_QUOTA_REACHED_TITLE = "You're using your free league"
+export const LEAGUE_QUOTA_REACHED_DETAIL =
+  "A free account keeps one personalized league. You can edit or replace this one whenever you like; members keep several and can switch between them."
+
+/** ⚠️ A LAPSED SUBSCRIBER, whose stored leagues outnumber their quota. This state is easy to render
+ *  as an accusation or as a silent disappearance; it must be neither. Their configs are all still
+ *  there and still deletable — what is paused is the board we compute from them. */
+export const LEAGUE_WITHHELD_BY_QUOTA_DETAIL =
+  "Your other saved leagues are still here — a free account personalizes one at a time. Nothing has been deleted, and you can choose a different one in League Settings."

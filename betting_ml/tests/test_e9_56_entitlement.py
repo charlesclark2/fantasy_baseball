@@ -1,4 +1,17 @@
-"""E9.56 — guards for the server-side entitlement split and the locked-marker redaction.
+"""E9.56 — guards for the server-side entitlement resolution and the locked-marker redaction.
+
+🗄️ SCOPE CHANGED AT THE FREEMIUM BUILD (2026-08-08). The generic board is now FREE for every
+caller, so the redaction below is RETIRED from every live route and the three e2e tests asserting
+"anonymous gets a locked payload" were replaced (see the block above
+`test_the_locked_redaction_is_retired_from_every_live_route`). What this file still owns, and what
+is still live and load-bearing:
+
+  ✅ `resolve_entitlement` + `jwt_verify` — MORE load-bearing than before, not less: the generic
+     routes are reachable without the API Gateway authorizer, so a Bearer token on them is
+     attacker-controlled, and this is what decides who gets the PAID capabilities.
+  ✅ The redaction unit tests — the mechanism must still work if the operator ever withdraws the
+     open board.
+  ➡️ The LIVE free/paid behaviour is owned by `test_freemium_tier.py`.
 
 Every test here was RED-proven against deliberately-broken source before being trusted (a guard that
 cannot fail is worse than none — INC-38/INC-39). The four breaks used, and what went red:
@@ -474,37 +487,43 @@ def _entitled_headers():
     }
 
 
-def test_e2e_anonymous_caller_gets_a_locked_projections_payload(app_env):
-    status, body = _call("/fantasy/nfl/projections", "season=2026")
-    assert status == 200
-
-    assert body["locked"] is True and body["entitled"] is False
-    numbers = {v for v in _all_scalars(body) if isinstance(v, (int, float)) and not isinstance(v, bool)}
-    assert not (numbers & _SECRET_NUMBERS), "a model value survived the full response path"
-    assert [p["name"] for p in body["players"]] != [p["name"] for p in PROJECTION_ROWS]
-    assert all(p["locked"] is True for p in body["players"])
-
-
-def test_e2e_anonymous_caller_gets_a_locked_board_that_is_still_a_list(app_env):
-    status, body = _call("/fantasy/nfl/board", "season=2026&config=full_ppr&size=12")
-    assert status == 200
-    assert isinstance(body, list), "board container type changed — the NF-C0 blank-screen break"
-    assert all("ovrRank" not in r and "pts" not in r for r in body)
-    assert all(r["locked"] is True for r in body)
+# ── 🗄️ THE THREE "ANONYMOUS GETS A LOCKED PAYLOAD" E2E TESTS WERE RETIRED (freemium build) ───────
+#
+# They asserted the OPPOSITE of what the product now does: the generic board is free, so an
+# anonymous caller receives the real numbers. Their replacements — including the forged-token case,
+# which still matters and now asserts that a forged token changes nothing rather than that it
+# unlocks nothing — live in `test_freemium_tier.py`, which owns the live behaviour.
+#
+# ⭐ WHAT REPLACES THEM HERE IS ONE CLAUSE WITH A DIFFERENT JOB, and it is the reason this file did
+# not simply shrink. The redaction unit tests above still pass because the machinery still WORKS;
+# nothing in them can tell you it is no longer CALLED. Left at that, this file would read as live
+# coverage of a live gate — the most misleading state a retired mechanism can be in. The clause
+# below makes "retired" an asserted fact instead of a comment, and makes silently re-wiring the
+# lock — which would re-gate the free board with no operator decision — a red build.
 
 
-def test_e2e_a_forged_subscriber_token_still_gets_the_locked_payload(app_env):
-    """The launch-state breach, end to end: with the gateway authorizer OFF, a hand-written token
-    claiming `subscriber` must buy nothing."""
-    status, body = _call(
-        "/fantasy/nfl/projections",
-        "season=2026",
-        headers={"Authorization": "Bearer " + _unsigned_token(["subscriber", "admin"])},
+def test_the_locked_redaction_is_retired_from_every_live_route(app_env):
+    """⭐ THE REDACTION EXISTS AND NOTHING CALLS IT. Both halves are the assertion.
+
+    Withdrawing the open board is a pricing decision the operator may want back, so the mechanism is
+    kept and still unit-tested above. But a reader who found `lock_projections_payload` in this file
+    and assumed it described what users receive would be wrong, and a session that re-wired it would
+    silently un-ship the freemium build.
+
+    Asserted on the ROUTER SOURCE rather than on a response, so it fails on the re-wiring itself
+    rather than only once a payload happens to be exercised."""
+    from pathlib import Path
+
+    src = Path("app/backend/routers/fantasy.py").read_text()
+    code = "\n".join(ln for ln in src.splitlines() if not ln.lstrip().startswith("#"))
+    called = [fn for fn in ("lock_projections_payload", "lock_manifest_payload", "lock_board_payload")
+              if f"entitlement.{fn}" in code]
+    assert not called, (
+        f"{called} is called from a live route — the generic board is being redacted again. That is "
+        f"a pricing decision, not a refactor: see test_freemium_tier.py."
     )
-    assert status == 200
-    assert body["locked"] is True, "a forged token unlocked the paid projections"
-    numbers = {v for v in _all_scalars(body) if isinstance(v, (int, float)) and not isinstance(v, bool)}
-    assert not (numbers & _SECRET_NUMBERS)
+    # The other half: the machinery is still here to be re-wired if that decision is ever made.
+    assert callable(entitlement.lock_projections_payload)
 
 
 def test_e2e_a_gateway_validated_subscriber_gets_the_REAL_numbers(app_env):
@@ -526,13 +545,23 @@ def test_e2e_a_past_season_is_free_for_everyone(app_env):
 
 
 def test_e2e_the_gated_router_still_403s_a_non_entitled_caller(app_env):
-    """The dual-mode router must NOT have widened anything else. `/fantasy/nfl/my-teams` stays on
-    the gated router, so a caller with a validated token but no fantasy entitlement is refused
-    outright rather than served a locked payload."""
+    """The dual-mode router must NOT have widened anything else.
+
+    🗄️ THE PROBE MOVED AT G100-C1 (2026-08-08), THE CLAUSE DID NOT. This used to point at
+    `/fantasy/nfl/my-teams`, which was then the nearest gated neighbour of the dual-mode board
+    routes. G100-C1 moved that endpoint onto its own quota-gated router (a free account gets ONE
+    personalized league), so it no longer answers the question this test asks — pointing at it now
+    would assert the OPPOSITE of the shipped tier.
+
+    `/fantasy/mlb/prospects/board` is the replacement: still on the blanket-gated `fantasy.router`,
+    admin-only on top, and unaffected by the free tier. ⛔ The point is not which path is used but
+    that SOMETHING adjacent to the dual-mode routes still refuses outright — deleting the clause
+    because its subject moved is how a widening goes unnoticed.
+    """
     beta_only = {
         "requestContext": {
             "authorizer": {"jwt": {"claims": {"sub": "sub-2", "cognito:groups": "[beta_tester]"}}}
         }
     }
-    status, _ = _call("/fantasy/nfl/my-teams", "season=2026", aws_event=beta_only)
+    status, _ = _call("/fantasy/mlb/prospects/board", "season=2026", aws_event=beta_only)
     assert status == 403

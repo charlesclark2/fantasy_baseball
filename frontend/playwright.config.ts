@@ -43,7 +43,19 @@ export default defineConfig({
   },
 
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      // ⚠️ `chromium` has no `testMatch`, so it runs EVERY file in `testDir` — including ones
+      // written for the phone. `home-mobile.spec.ts` is the only spec here that is mobile-ONLY
+      // (the two funnel specs below deliberately run on both), and running it on desktop is not
+      // merely redundant: `Desktop Chrome` has no touch support, so `page.tap()` throws outright
+      // ("The page does not support tap. Use hasTouch context option") — a hard failure that has
+      // nothing to do with the page under test. Its layout assertions are equally meaningless at
+      // 1280px, which is the quieter half of the same problem: they would pass on desktop while
+      // proving nothing about the viewport they exist for.
+      testIgnore: /home-mobile\.spec\.ts/,
+    },
     // E9.58's second defect was mobile-only — the logged-out nav had no signup affordance on a
     // small screen because the whole block was `hidden sm:flex`. A desktop-only suite cannot see
     // that, so the funnel specs run on a phone viewport too.
@@ -56,7 +68,13 @@ export default defineConfig({
     {
       name: "mobile",
       use: { ...devices["Pixel 7"] },
-      testMatch: /(signup-funnel|expected-points-label)\.spec\.ts/,
+    // ⭐ E9.46 joins for a THIRD reason. The home page is the highest-traffic surface in the
+    // product and its two live cards are the densest layouts on it — the fantasy card alone packs
+    // a four-column rank/ADP/games grid and a three-column format row. Those wrap, overflow or
+    // truncate on a phone in ways `tsc` and `next build` cannot see, and this is the page a cold
+    // visitor from a shared link lands on. `home-mobile.spec.ts` is scoped to what only a small
+    // viewport can tell you; the rest of the home suite stays desktop-only rather than doubling.
+      testMatch: /(signup-funnel|expected-points-label|home-mobile)\.spec\.ts/,
     },
   ],
 

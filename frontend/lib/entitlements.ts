@@ -45,3 +45,111 @@ const FANTASY_BETA_GROUPS = ["admin", "fantasy_comp"] as const
 export function canAccessFantasyBeta(groups: string[]): boolean {
   return FANTASY_BETA_GROUPS.some((g) => groups.includes(g))
 }
+
+// ══ THE FREEMIUM BOUNDARY (2026-08-08, GROWTH-100) ═══════════════════════════════════════════════
+//
+// ⭐ MIRROR OF `app/backend/services/entitlement.py::Capability`. The server is the gate; this is
+// what the UI branches on so a surface can say WHICH half it is in rather than re-deriving it from
+// a group list. Both sides are pinned together by `test_freemium_tier.py` — a capability added on
+// one side and not the other fails the build, because a UI that thinks a surface is free while the
+// API 403s it renders a permanently broken page with no error anywhere.
+//
+// The split, in the terms the pricing page uses:
+//   FREE  — the GENERIC board. Rankings + projections for the shipped presets, the 80% ranges,
+//           market ADP, player pages, methodology. Anonymous included.
+//   PAID  — PERSONALIZATION (your league's scoring/roster shape re-scoring the board, saved state)
+//           and DECISION SUPPORT (the draft optimizer, the weekly tools).
+//
+// ⚠️ THIS IS NOT WHAT E9.56 DID. That story locked the CURRENT SEASON everywhere and served a
+// per-point "subscribe to unlock" marker on the generic board. The freemium build retired that: the
+// generic board's numbers are the acquisition wedge, so withholding them withheld the thing that
+// earns the signup. The `locked` handling downstream (`LockChip`, `numOrLock`, `rowsAreLocked`) is
+// KEPT as defensive rendering — a row that arrives without `pts` must render a chip, never `NaN` —
+// but on the generic surfaces nothing sets it any more.
+
+export type FantasyCapability = "generic_board" | "personalization" | "decision_support"
+
+/** Free for everyone, including logged-out. One entry on purpose — widening it is a pricing
+ *  decision, not a refactor. */
+export const FREE_CAPABILITIES: readonly FantasyCapability[] = ["generic_board"] as const
+
+/** Stated explicitly rather than as "everything else", so a NEW capability belongs to neither set
+ *  until someone places it — and the guard test says so — instead of defaulting into one silently. */
+export const PAID_CAPABILITIES: readonly FantasyCapability[] = [
+  "personalization",
+  "decision_support",
+] as const
+
+/**
+ * Whether these Cognito groups may exercise `capability`.
+ *
+ * FAILS CLOSED on anything unplaced: an unrecognised capability is treated as PAID, matching the
+ * server's `allows()`. A refused paid surface is visible and reversible; a leaked one is not.
+ */
+export function canUse(capability: FantasyCapability, groups: string[]): boolean {
+  if ((FREE_CAPABILITIES as readonly string[]).includes(capability)) return true
+  if (!(PAID_CAPABILITIES as readonly string[]).includes(capability)) return false
+  return canAccess("fantasy", groups)
+}
+
+// ══ G100-C1 — ONE FREE PERSONALIZED LEAGUE ═══════════════════════════════════════════════════════
+//
+// ⭐ MIRROR OF `entitlement.FREE_PERSONALIZED_LEAGUE_QUOTA` / `personalized_league_quota` /
+// `allows_personalization`. Pinned to the Python side by `test_g100_c1_free_league.py`, because a UI
+// that thinks a surface is free while the API 403s it renders a permanently broken page with no
+// error anywhere (and the reverse hides a feature the user is paying for).
+//
+// ⛔ `personalization` IS STILL A PAID CAPABILITY and `canUse("personalization", …)` still returns
+// false for a free account. That is not a contradiction to fix — it is the distinction the whole
+// tier rests on:
+//
+//   canUse("personalization", groups)   "is personalization in your tier?"   → what the PRICING says
+//   personalizedLeagueQuota(groups)     "how many leagues may you keep?"     → what you may DO today
+//
+// A free account is `false` on the first and `1` on the second. Collapsing them by moving
+// `personalization` into FREE_CAPABILITIES would be a pricing change wearing a refactor's clothes,
+// and would silently free every other surface reading the same capability.
+//
+// ⚠️ SO: a component deciding whether to OFFER league setup must read `canConfigureLeague`, never
+// `canUse("personalization", …)`. The freemium build's own lesson is that the gate is WHICH
+// COMPONENT RENDERS — #681 gated one of three renderers and looked done — so the surfaces are
+// enumerated in `docs/freemium_tier.md` and pinned by the e2e spec rather than left to memory.
+
+/** How many personalized leagues a signed-in FREE account may keep. Mirrors the Python default. */
+export const FREE_PERSONALIZED_LEAGUE_QUOTA = 1
+
+/** The paid ceiling — mirrors `dynamo.MAX_LEAGUES_PER_USER`, which is what a subscriber's quota
+ *  resolves to. Used only for copy ("you can save N leagues"); the server is the gate. */
+export const MAX_LEAGUES_PER_USER = 25
+
+/**
+ * How many leagues these groups may keep.
+ *
+ * ⚠️ This answers "how many", not "may you" — it cannot see whether the caller is signed in, and a
+ * league can only be stored against a Cognito `sub`. `canConfigureLeague` is the one that asks both.
+ */
+export function personalizedLeagueQuota(groups: string[]): number {
+  return canAccess("fantasy", groups) ? MAX_LEAGUES_PER_USER : FREE_PERSONALIZED_LEAGUE_QUOTA
+}
+
+/**
+ * Whether this caller may configure a personalized league at all.
+ *
+ * SIGNED IN + a quota above zero. Both halves matter and they fail differently: a logged-out visitor
+ * needs SIGNUP (the server answers 401), a caller whose quota has been withdrawn needs a MEMBERSHIP
+ * (403). Sending the first group to a paywall asks them to buy what they can have for free.
+ */
+export function canConfigureLeague(signedIn: boolean, groups: string[]): boolean {
+  return signedIn && personalizedLeagueQuota(groups) > 0
+}
+
+/**
+ * Whether this caller may save ANOTHER league given how many they already have.
+ *
+ * ⚠️ ADVISORY ONLY — `POST /fantasy/leagues` enforces the same rule and answers 409. This exists so
+ * the UI can state the boundary at the control instead of letting someone fill in a form that is
+ * going to be refused, which is the freemium build's "state the lock AT the control" pattern.
+ */
+export function canSaveAnotherLeague(savedCount: number, groups: string[]): boolean {
+  return savedCount < personalizedLeagueQuota(groups)
+}

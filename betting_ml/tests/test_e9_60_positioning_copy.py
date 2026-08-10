@@ -1,0 +1,897 @@
+"""E9.60 — COPY GOVERNANCE for the About and FAQ pages, and the signed-out navigation.
+
+E9.46 screened the home page; NF-TR1 screened the fantasy product copy. About and FAQ were the last
+two public marketing surfaces whose prose lived INLINE in JSX, read by no denylist — and both had
+gone false in the same way the landing FAQ had before E9.46 fixed it: the FAQ answered "What
+sport(s) does Credence cover?" with "MLB baseball only, for the 2026 season" and About's subhead
+read "We forecast baseball the way the evidence supports", on a site whose home page leads with an
+NFL fantasy product.
+
+So this suite is the About/FAQ twin of `test_e9_46_home_copy.py`. It screens
+`frontend/lib/positioning-copy.ts` the same way, and adds the clauses specific to these surfaces:
+only shipped capabilities may read as shipped, the MLB record may not be advertised as public, the
+free/paid line must match `docs/freemium_tier.md`, the paid line must not be sold as anti-scraping,
+and a signed-out visitor must find a door to BOTH products.
+
+⭐ EACH CLAUSE IS INDEPENDENTLY RED-PROVABLE (NF-D17 §7): a guard on an `and`-composed condition
+passes with the clause it NAMES deleted whenever a different clause already refuses the fixture.
+Every assertion below names one thing and is written so removing that one thing turns it red;
+verified with `uv run python betting_ml/tests/e9_60_positioning_copy_red_proof.py`.
+
+⚠️ SOURCE-INSPECTION, SO COMMENTS ARE STRIPPED FIRST (INC-38). The module under test DISCUSSES these
+rules at length — it explains why "public track record" is forbidden, by writing the phrase — and a
+raw substring search would be satisfied by the comment explaining the rule.
+
+Pure/offline (fast gate): reads source files only, no DuckDB/S3/network.
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+from betting_ml.governance import gates
+from quant_sports_intel_models.football.nfl.fantasy import export_track_record_json as ex
+
+_REPO = Path(__file__).resolve().parents[2]
+_FRONTEND = _REPO / "frontend"
+_APP = _FRONTEND / "app"
+_COPY_TS = _FRONTEND / "lib/positioning-copy.ts"
+_ABOUT_TSX = _APP / "about/page.tsx"
+_FAQ_TSX = _APP / "faq/page.tsx"
+_NAV_TSX = _FRONTEND / "components/nav.tsx"
+_FOOTER_TSX = _FRONTEND / "components/site-footer.tsx"
+_NF_TR1_SUITE = _REPO / "betting_ml/tests/test_nf_tr1_claim_copy.py"
+
+pytestmark = pytest.mark.skipif(not _APP.is_dir(), reason="frontend/ not present")
+
+
+def _strip_ts_comments(src: str) -> str:
+    """⚠️ LINE COMMENTS FIRST, then block comments — the opposite of the obvious order, and the
+    order matters. A `//` comment containing a URL fragment or a path glob can open what the block
+    regex reads as a comment and swallow real source up to the next close. Stripping `//` lines
+    first removes that whole class (`test_e9_46_home_copy.py` records the same lesson)."""
+    src = "\n".join(line for line in src.split("\n") if not line.lstrip().startswith("//"))
+    return re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+
+
+def _ts_string_literals(src: str) -> list[str]:
+    """Every double-quoted string literal, comments stripped. Crude on purpose — a screening pass
+    over prose constants, not a parser. Its own vacuity is asserted below."""
+    return re.findall(r'"((?:[^"\\]|\\.)*)"', _strip_ts_comments(src))
+
+
+@pytest.fixture(scope="module")
+def copy_literals() -> list[str]:
+    return _ts_string_literals(_COPY_TS.read_text())
+
+
+@pytest.fixture(scope="module")
+def copy_src() -> str:
+    return _strip_ts_comments(_COPY_TS.read_text())
+
+
+@pytest.fixture(scope="module")
+def faq_answers(copy_src) -> list[str]:
+    """⚠️ THE FAQ ANSWERS ALONE, and the fixture exists because the first cut of this suite did not
+    have it and four clauses picked the WRONG STRING.
+
+    About and the FAQ deliberately make the same points in different words, so a scan over every
+    literal in the module finds an About sentence that merely CONTAINS the anchor phrase and asserts
+    against it: `"featured MLB read"` matched `ABOUT_NOT`'s bullet rather than the FAQ answer, and
+    `"de-vigged market consensus"` matched the betting product's `live.note`. Both then failed for
+    the right-looking reason on the wrong text.
+
+    Anchoring inside `FAQ_SECTIONS` makes each clause name exactly one string."""
+    block = copy_src.split("export const FAQ_SECTIONS", 1)[1].split("\nexport const FAQ_HEADER", 1)[0]
+    answers = re.findall(r'\n        a:\s*"((?:[^"\\]|\\.)*)"', block)
+    assert len(answers) >= 25, (
+        f"only {len(answers)} FAQ answer(s) extracted — every FAQ clause below would be vacuous"
+    )
+    return answers
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# The guard on the guard
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_the_copy_module_scan_actually_finds_strings(copy_literals):
+    """⚠️ NF1.7 (a): an extractor that silently returned nothing would make every screening clause
+    in this file vacuously true, and the file would read as coverage the whole time."""
+    assert len(copy_literals) >= 80, (
+        f"only {len(copy_literals)} string literal(s) extracted from the positioning copy module — "
+        f"the screening below would be passing on nothing"
+    )
+    assert any("knowing what you don" in s for s in copy_literals), (
+        "the About H1 was not extracted — the scan is not reading the block that most needs "
+        "screening"
+    )
+    assert any("de-vigged market consensus" in s for s in copy_literals), (
+        "the FAQ answers were not extracted — the scan is reading only the About half"
+    )
+
+
+def test_the_comment_stripper_does_not_eat_real_source(copy_src):
+    """The other half of the vacuity guard, and a bug this repo has actually shipped: a stripper
+    that swallowed the file would make every source-inspection clause below pass on an empty
+    string."""
+    assert "export const ABOUT_HERO" in copy_src
+    assert "export const FAQ_SECTIONS" in copy_src
+    assert "export const SIGNED_OUT_NAV" in copy_src
+    assert len(copy_src) > 0.25 * len(_COPY_TS.read_text()), (
+        "comment stripping removed most of the file — a `//` line containing a block-comment "
+        "opener is the usual cause"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# AC — the claim discipline reaches these surfaces too
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_the_positioning_copy_passes_the_denylist(copy_literals):
+    """`best_alpha = 0`. The same denylist E9.46 runs over the home copy and NF-TR1 runs over the
+    fantasy copy, now over the last two unscreened public marketing surfaces."""
+    for text in copy_literals:
+        hits = [t for t in ex._CLAIM_DENYLIST if t in text.lower()]
+        assert not hits, f"About/FAQ copy makes a forbidden claim {hits}: {text!r}"
+
+
+def test_the_governance_gate_passes_the_positioning_copy(copy_literals):
+    """Run the ACTUAL promotion gate over the ACTUAL copy, not a re-implementation of its rule with
+    the same word list."""
+    result = gates.track_record_copy_compatible(copy_literals)
+    assert result.status == gates.PASS, result.detail
+
+
+def test_that_gate_can_still_refuse_positioning_copy():
+    """⚠️ A GATE THAT CANNOT FAIL IS NOT A GATE. The clause above is only evidence if the same call
+    goes red on copy that should be refused."""
+    bad = gates.track_record_copy_compatible(
+        ["Credence beats the market on MLB and fantasy alike — profitable, guaranteed."]
+    )
+    assert bad.status == gates.FAIL
+
+
+def test_the_pages_carry_no_unscreened_prose():
+    """⭐ THE HOLE THIS FILE EXISTS TO CLOSE. Screening a copy MODULE proves nothing if the page can
+    write its own sentences inline — which is exactly what both pre-E9.60 pages did.
+
+    Enforced as a LENGTH rule on string literals in the JSX, because a heading ("What we believe")
+    is fine and a paragraph is not, and the difference between them is length rather than kind. The
+    threshold sits well above every label and CTA these pages render and well below any real
+    sentence. Same instrument as `test_e9_46_home_copy.py`'s equivalent clause."""
+    for path in (_ABOUT_TSX, _FAQ_TSX):
+        long_literals = [
+            s
+            for s in _ts_string_literals(path.read_text())
+            # Tailwind class strings are long, quoted, and not prose.
+            if len(s) > 120 and not re.search(r"[a-z]-\[|text-|bg-|border-|grid-|flex", s)
+        ]
+        assert not long_literals, (
+            f"{path.name} contains inline prose that no denylist screens: {long_literals[:2]}"
+        )
+
+
+def test_the_marketing_surfaces_are_registered_with_nf_tr1():
+    """⭐ THE REGISTRY IS THE POINT. `test_nf_tr1_claim_copy.py` keeps `_MARKETING_SURFACES` so a new
+    marketing page that forgets to appear there is a red build rather than a silent hole. About and
+    FAQ are marketing surfaces and were never in it — which is part of how they drifted."""
+    suite = _NF_TR1_SUITE.read_text()
+    registry = suite.split("_MARKETING_SURFACES = (", 1)[1].split(")", 1)[0]
+    for name in ("_ABOUT_TSX", "_FAQ_TSX"):
+        assert name in registry, (
+            f"{name} is not in the NF-TR1 marketing-surface registry, so nothing checks that it "
+            f"links to the track record instead of quoting its measurement"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# AC — the site tells ONE story: two products, fantasy first
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_about_declares_both_products_fantasy_first(copy_src):
+    """Spec §2: one product order everywhere. The home page's `VERTICALS` leads with fantasy
+    because that is the acquisition priority; About and the nav must not make a visitor infer a
+    different priority from a different page."""
+    block = copy_src.split("export const ABOUT_PRODUCTS", 1)[1].split("\n]", 1)[0]
+    assert block.count("key:") == 2, (
+        f"expected exactly two product blocks in the slice, found {block.count('key:')} — the "
+        f"slice bounds are wrong and every assertion below is suspect"
+    )
+    assert block.index('"fantasy"') < block.index('"betting"'), (
+        "About leads with betting; the home page leads with fantasy. One order, everywhere."
+    )
+
+
+def test_about_no_longer_describes_a_baseball_only_company(copy_literals):
+    """The literal defect this story was opened for. The page's subhead read "We forecast baseball
+    the way the evidence supports" and its audience paragraph addressed a Fangraphs reader — a
+    one-sport identity on a two-product site."""
+    joined = " ".join(copy_literals).lower()
+    assert "forecast baseball" not in joined, (
+        "the retired baseball-only positioning line is back in the About copy"
+    )
+    for vertical in ("fantasy", "mlb"):
+        assert vertical in joined, f"the About/FAQ copy never mentions {vertical}"
+
+
+def test_the_faq_covers_both_products_in_the_site_order(copy_src):
+    """Spec §17: the FAQ gained a dedicated fantasy section, and the sections run in the same
+    product order as About and the nav."""
+    block = copy_src.split("export const FAQ_SECTIONS", 1)[1]
+    cats = re.findall(r'category:\s*"([^"]+)"', block)
+    assert len(cats) >= 4, f"only {len(cats)} FAQ section(s) found — the slice is wrong: {cats}"
+    lowered = [c.lower() for c in cats]
+    fantasy_i = next(i for i, c in enumerate(lowered) if "fantasy" in c)
+    betting_i = next(i for i, c in enumerate(lowered) if "betting" in c)
+    assert fantasy_i < betting_i, (
+        f"the FAQ puts betting before fantasy, contradicting the site's product order: {cats}"
+    )
+
+
+def test_the_faq_no_longer_says_the_company_is_mlb_only(copy_literals):
+    """⛔ THE EXACT SENTENCE E9.46 ALREADY HAD TO DELETE FROM THE LANDING FAQ, which was still live
+    one route over on this page: "MLB baseball only, for the 2026 season"."""
+    joined = " ".join(copy_literals).lower()
+    for stale in ("mlb baseball only", "baseball analytics tool", "one sport well before expanding"):
+        assert stale not in joined, f"the FAQ still carries the retired MLB-only framing: {stale!r}"
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# AC — only what is LIVE reads as live
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Spec §3.1/§3.2: these are NOT shipped. A `live` list containing one of them is the defect this
+# whole story exists to prevent — advertising roadmap work as a capability.
+_UNSHIPPED = ("weekly projection", "start/sit", "waiver", "matchup-aware", "lineup win probability")
+
+
+def test_no_unshipped_fantasy_capability_sits_in_a_live_list(copy_src):
+    """⭐ THE STRUCTURAL GUARD, and the reason `ABOUT_PRODUCTS` is data rather than prose. Both
+    lists render the same words in different places, so a text scan cannot tell "weekly projections
+    are coming" from "weekly projections are available" — but the `live` / `coming` keys can."""
+    block = copy_src.split("export const ABOUT_PRODUCTS", 1)[1].split("\n]", 1)[0]
+    live_blocks = re.findall(r"live:\s*\{(.*?)\n    \},", block, re.S)
+    assert len(live_blocks) == 2, (
+        f"extracted {len(live_blocks)} live block(s), expected 2 — this clause would be vacuous"
+    )
+    for lb in live_blocks:
+        low = lb.lower()
+        for cap in _UNSHIPPED:
+            assert cap not in low, (
+                f"an un-shipped capability ({cap!r}) is listed as AVAILABLE NOW: {lb.strip()[:120]!r}"
+            )
+
+
+def test_the_unshipped_capabilities_are_still_named_as_coming(copy_src):
+    """⭐ THE HALF THAT MAKES THE RULE ABOVE SAFE RATHER THAN MERELY QUIETER. Deleting the weekly
+    tools entirely would satisfy the clause above completely — and would hide the roadmap from a
+    visitor deciding whether to subscribe. They must be present, and present as NOT YET."""
+    block = copy_src.split("export const ABOUT_PRODUCTS", 1)[1].split("\n]", 1)[0]
+    coming_blocks = re.findall(r"coming:\s*\{(.*?)\n    \},", block, re.S)
+    assert len(coming_blocks) == 2, (
+        f"extracted {len(coming_blocks)} coming block(s), expected 2 — this clause would be vacuous"
+    )
+    joined = " ".join(coming_blocks).lower()
+    for cap in ("weekly projection", "start/sit", "waiver", "matchup-aware"):
+        assert cap in joined, f"{cap!r} vanished from the roadmap rather than being labelled coming"
+    assert "nfl betting intelligence" in joined and "ncaaf betting intelligence" in joined, (
+        "the un-shipped betting verticals are no longer labelled as coming"
+    )
+
+
+def test_the_coming_lists_are_never_rendered_as_links():
+    """E9.56c's dead `/pricing` CTA wearing a friendlier label — the same rule the home page's
+    roadmap carries. An un-shipped capability must carry no anchor at all."""
+    page = _strip_ts_comments(_ABOUT_TSX.read_text())
+    coming_jsx = page.split('data-capability="coming"', 1)[1].split("</div>", 1)[0]
+    assert "<Link" not in coming_jsx and "<a " not in coming_jsx, (
+        "a coming-soon capability renders a link — that is a route that does not exist behind a "
+        "button"
+    )
+
+
+def test_about_does_not_advertise_unbuilt_simulation(copy_literals):
+    """Spec §10/§11. Lineup win-probability simulation, weekly matchup simulation and the known-truth
+    gate simulator (SIM-V1) are NOT operational. Advertising roadmap work as shipped, on the two
+    sections whose subject is our standard of evidence, would be self-refuting."""
+    ranges_and_eval = " ".join(
+        s for s in copy_literals if "predictive distribution" in s or "held-out" in s or "range" in s.lower()
+    ).lower()
+    assert ranges_and_eval, "no ranges/evaluation copy extracted — this clause would be vacuous"
+    for unbuilt in ("sim-v1", "matchup simulation", "lineup win probability", "known-truth"):
+        assert unbuilt not in ranges_and_eval, (
+            f"the copy advertises {unbuilt!r}, which is not operational"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# AC — the record is described the way it is actually served
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_the_mlb_record_is_not_advertised_as_public(copy_literals):
+    """⚠️ THE ONE PLACE THIS STORY DEPARTS FROM ITS OWN SPEC, and it is a live-product fact rather
+    than a preference. The spec calls the MLB track record PUBLIC in §3.3, §4.4 and §12. It is not:
+    `app/backend/main.py` mounts `picks.router` and `performance.router` with `dependencies=_paid`,
+    so `/picks/scorecard`, `/picks/today`, `/picks/history` and `/performance` all refuse an
+    anonymous caller.
+
+    The spec's own §25 subordinates its wording to the live product, so following the live truth IS
+    following the spec. `home-copy.ts` already carries the identical correction."""
+    joined = " ".join(copy_literals).lower()
+    for overclaim in ("public daily record", "public track record", "publicly available record"):
+        assert overclaim not in joined, (
+            f"the MLB record is advertised as {overclaim!r}, but every MLB record endpoint refuses "
+            f"an anonymous caller"
+        )
+    assert "members' scorecard" in joined, "the copy no longer says where the MLB record lives"
+
+
+def test_the_public_fantasy_record_is_still_described_as_open(faq_answers):
+    """⭐ THE ASYMMETRY IS REAL AND BOTH HALVES MATTER. `fantasy_public.router` carries no gate, so
+    the fantasy track record genuinely IS open to anyone. Collapsing both records into "members
+    only" to satisfy the clause above would throw away the site's one freely-inspectable proof
+    asset — which is exactly the wrong correction.
+
+    ⚠️ ANCHORED ON THE ONE ANSWER WHOSE JOB THIS IS, and the first cut was not: a module-wide
+    `"no account" in joined or "open to anyone" in joined` stayed GREEN when the record answer was
+    rewritten to say the fantasy record is members-only, because four OTHER strings still carried
+    the phrase. Caught by the red-proof; a clause that a different sentence can satisfy is testing
+    that sentence, not this one."""
+    ans = next((s for s in faq_answers if "The fantasy track record is" in s), None)
+    assert ans, "the 'where can I see the record' answer is gone"
+    low = ans.lower()
+    assert "no account" in low, (
+        f"the fantasy track record is no longer described as freely readable: {ans!r}"
+    )
+    assert "members' scorecard" in low, (
+        f"the answer no longer distinguishes the gated MLB record from the open fantasy one, which "
+        f"is the whole reason it names them separately: {ans!r}"
+    )
+
+
+def test_the_record_copy_states_both_halves(copy_src):
+    """⭐ THE TWO HALVES PULL AGAINST EACH OTHER AND BOTH ARE REQUIRED (the E9.46 rule, restated on
+    this surface). Copy implying we do not measure ourselves would be as false as copy claiming an
+    edge; copy claiming the edge is the overclaim `best_alpha = 0` forbids.
+
+    ⚠️ ANCHORED ON `ABOUT_ACCOUNTABILITY`, the section whose entire subject this is. The first cut
+    scanned the whole module and stayed GREEN when that section's limit was rewritten into a claim,
+    because the phrase survived in three FAQ answers — the identical vacuity as the clause above."""
+    block = copy_src.split("export const ABOUT_ACCOUNTABILITY", 1)[1].split("} as const", 1)[0]
+    assert "paragraphs:" in block, "the accountability slice is empty — this clause would be vacuous"
+    low = block.lower()
+    assert "durable advantage over the closing market" in low, (
+        "the accountability section states the grading without its honest limit"
+    )
+    assert "wins and losses" in low or "losing observations" in low, (
+        "the accountability section no longer says the losing observations stay on the page"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# AC — the free/paid line matches `docs/freemium_tier.md`
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_the_free_tier_is_described_as_the_freemium_build_shipped_it(faq_answers):
+    """Verified against `app/backend/services/entitlement.py`: `FREE_BOARD_CONFIG = "full_ppr"`,
+    `FREE_BOARD_SIZE = 12`, and `FREE_PERSONALIZED_LEAGUE_QUOTA` defaults to 1 (G100-C1). Copy that
+    describes an entitlement goes stale SILENTLY — nothing renders differently when a sentence stops
+    being true — which is precisely why it is pinned.
+
+    ⚠️ ANCHORED ON THE "what is free" ANSWER. A module-wide scan stayed GREEN when the scoring-format
+    answer stopped naming the free preset, because a second answer still mentioned it — the third
+    instance of the same vacuity the red-proof caught in this file."""
+    ans = next((s for s in faq_answers if s.startswith("Free, including without an account")), None)
+    assert ans, "the free/paid answer is gone"
+    low = ans.lower()
+    assert "full-ppr twelve teams" in low or "full-ppr at twelve teams" in low, (
+        f"the free/paid answer no longer names the free preset, so a visitor cannot tell which "
+        f"board is open: {ans!r}"
+    )
+    assert "draft optimizer" in low, (
+        f"the answer no longer names the decision-support half of the paid tier: {ans!r}"
+    )
+
+
+def test_the_in_flight_free_league_grant_is_not_promised_as_live(copy_literals):
+    """⚠️⚠️ VERIFY_LIVE_PRODUCT (spec §18.13, operator flag 2026-08-09) — THE CLAIM THIS SUITE'S
+    FIRST CUT GOT WRONG.
+
+    G100-C1's free one-personalized-league grant (`FREE_PERSONALIZED_LEAGUE_QUOTA`) is IN FLIGHT.
+    The code is on `main`, but the API Lambda ships only via a manual `deploy.sh`, so a merged
+    quota is not a served one — and no anonymous probe can settle it, because every saved-league
+    route needs an account and the gateway's Cognito authorizer answers 401 before the Lambda runs
+    (NF3.2), making "deployed and gated" indistinguishable from "not deployed".
+
+    ⛔ So the copy must not promise a free personalized league. Personalization is described only
+    where it is true in BOTH states — as what a membership adds, which is what
+    `docs/freemium_tier.md` says it is regardless of the quota ("a QUOTA granted against a PAID
+    capability, never a reclassification of it").
+
+    ⭐ WHEN THE GRANT IS CONFIRMED SERVING, this clause comes out in the SAME change that puts the
+    claim back — deliberately coupled, so the copy and the guard cannot drift apart."""
+    joined = " ".join(copy_literals).lower()
+    for promise in (
+        "free account can keep one personalized league",
+        "free account can save one personalized league",
+        "one free personalized league",
+    ):
+        assert promise not in joined, (
+            f"the copy promises {promise!r}, but the free-league grant is not verified as serving — "
+            f"a merged quota is not a deployed one"
+        )
+
+    # ⚠️ THE SECOND FORM, AND THE FIRST CUT OF THIS CLAUSE MISSED IT. Forbidding only the "free
+    # account" phrasings left the FAQ's "what sports do you cover?" answer saying "…projection
+    # ranges and per-league personalization are available now" — the SAME claim without the word
+    # "free" in it.
+    #
+    # ⚠️ AND THE FIRST FIX FOR THAT WAS TOO CRUDE: it forbade "personalization" anywhere in a
+    # sentence containing "available now", which also refuses the CORRECT copy — "…are available
+    # now, WITH personalization … part of a membership" — a sentence whose whole job is to draw the
+    # distinction. Co-occurrence is not assertion. So the clause reads the LIST that precedes the
+    # claim, which is the only place being in it means "this is available now".
+    for m in re.finditer(r"are available now", joined):
+        listed = joined[max(0, m.start() - 220):m.start()]
+        listed = listed.rsplit(".", 1)[-1]  # this sentence only
+        assert "personalization" not in listed, (
+            f"personalization is listed among the available-now capabilities: {listed.strip()!r}"
+        )
+
+
+def test_the_available_now_list_holds_only_what_was_verified_serving(copy_src):
+    """⭐ THE POSITIVE HALF, and it is what stops the clause above being satisfied by saying less
+    about everything.
+
+    These three were read from the LIVE production board on 2026-08-09 — an anonymous
+    `GET /api/public/board?config=full_ppr&size=12` returned 858 rows, ZERO `locked`, every one
+    carrying `pts` and a `ptsP10`/`ptsP90` band. They are the claim the free tier actually
+    supports, and they must stay stated."""
+    block = copy_src.split("export const ABOUT_PRODUCTS", 1)[1].split("\n]", 1)[0]
+    live = re.search(r"live:\s*\{(.*?)\n    \},", block, re.S)
+    assert live, "no fantasy live block extracted — this clause would be vacuous"
+    body = live.group(1).lower()
+    for verified in ("draft rankings", "player projections", "projection ranges"):
+        assert verified in body, (
+            f"{verified!r} is verified live on the production board and is no longer listed as "
+            f"available"
+        )
+    assert "per-league personalization" not in body, (
+        "personalization is back in the fantasy Available-now list, but the free grant that would "
+        "make it available is not verified as serving"
+    )
+
+
+def test_the_paid_line_is_never_sold_as_anti_scraping(copy_literals):
+    """⛔ `docs/freemium_tier.md` §1: the free board is scrapeable BY DESIGN and that was accepted
+    when the tier was drawn. An anti-scraping framing would be false, and the claim-copy module
+    already carries the same guard for the fantasy surfaces."""
+    joined = " ".join(copy_literals).lower()
+    # ⚠️ WORD BOUNDARIES, NOT SUBSTRINGS. The first cut used `"bot" in joined` and went RED on the
+    # phrase "BOTH are the same product" — a false positive that would have been "fixed" by
+    # weakening the guard rather than by noticing the bug in it.
+    for false_claim in (r"scrap", r"bots?\b", r"crawler", r"steal our numbers"):
+        assert not re.search(rf"\b{false_claim}", joined), (
+            f"the copy defends the paid line as protection against {false_claim!r} — the free board "
+            f"is scrapeable by design and that framing is false"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# AC — the FAQ stopped telling visitors how much to bet
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_the_faq_carries_no_stake_sizing_guidance(copy_literals):
+    """Spec §18.9. Stake sizing presumes something to size against, and `best_alpha = 0` says we do
+    not have it. ⚠️ The FEATURE is still live behind the paywall (`/ev-tracker` renders raw and
+    capped Kelly columns; `/settings` carries a Kelly cap) — removing it is a product decision
+    outside E9.60's scope and is flagged in the handoff. This guard covers the PUBLIC copy only."""
+    joined = " ".join(copy_literals).lower()
+    for sizing in ("kelly", "how much should i bet", "fraction of bankroll", "bankroll management"):
+        assert sizing not in joined, (
+            f"the public FAQ carries stake-sizing guidance ({sizing!r}); with no demonstrated edge "
+            f"there is nothing to size against"
+        )
+
+
+def test_the_ev_answer_is_conditional_rather_than_a_promise(copy_literals):
+    """Spec §18.8 keeps the EV question only because EV IS live (`/ev-tracker` renders it). Kept, but
+    the conditional is the whole answer: a positive number is a statement about our estimate, not
+    evidence the estimate is right."""
+    ev = next((s for s in copy_literals if "Expected Value is" in s), None)
+    assert ev, "the EV answer is gone while `/ev-tracker` still renders EV to members"
+    low = ev.lower()
+    assert "if the probability estimate behind it were correct" in low, (
+        f"the EV answer states the value without its conditional: {ev!r}"
+    )
+    assert "durable advantage" in low, (
+        f"the EV answer omits the record's honest limit, which is what stops it reading as a "
+        f"promise: {ev!r}"
+    )
+
+
+def test_the_market_consensus_is_described_as_the_code_computes_it(faq_answers):
+    """Spec §4.2, verified against `dbt/models/mart/mart_odds_consensus.sql`: each book's two-way
+    prices are de-vigged, then consensus is a PLAIN UNWEIGHTED average across every book pricing
+    both sides. ⛔ The pre-E9.60 FAQ said Bovada was "the benchmark we use for edge detection",
+    conflating the comparison probability with the book a price is graded at."""
+    ans = next((s for s in faq_answers if "de-vigged market consensus" in s), None)
+    assert ans, "the market-consensus answer is gone"
+    low = ans.lower()
+    assert "not one designated sportsbook" in low, (
+        f"the answer no longer rules out a single-book benchmark: {ans!r}"
+    )
+    assert "none weighted above another" in low, (
+        f"the answer no longer states the average is unweighted — there IS a sharp/soft split in "
+        f"that model and the column we score against does not use it: {ans!r}"
+    )
+
+
+def test_the_models_agree_answer_describes_what_is_measured(faq_answers):
+    """Spec §4.1. The flag is `|calibrated_win_prob − P(run_diff > 0)| ≤ 0.02` — two INDEPENDENT
+    Credence estimators agreeing with each other, computed with no reference to the odds. A visitor
+    reads "models agree" as confidence in the RESULT unless told otherwise."""
+    ans = next((s for s in faq_answers if "two independent Credence models" in s), None)
+    assert ans, "the models-agree answer is gone"
+    low = ans.lower()
+    assert "without looking at the odds" in low, (
+        f"the answer no longer says the indicator is computed market-blind: {ans!r}"
+    )
+    assert "not a confidence rating" in low, (
+        f"the answer no longer refuses the reading a visitor actually arrives with: {ans!r}"
+    )
+
+
+def test_the_featured_read_is_not_sold_as_the_best_bet(faq_answers):
+    """Spec §4.3. ⚠️ The spec's own phrasing is "not a guaranteed recommendation" and "guaranteed"
+    is a DENIED substring — a screening pass cannot see the "not" in front of it, the same reason
+    `home-copy.ts`'s roadmap note had to be rewritten rather than negated. So the refusal is worded
+    around the denylist rather than disclaiming it."""
+    ans = next((s for s in faq_answers if "worked example" in s), None)
+    assert ans, "the featured-read answer is gone"
+    low = ans.lower()
+    assert "demonstration, not a recommendation" in low, (
+        f"the featured read is no longer framed as a demonstration: {ans!r}"
+    )
+    assert "not labelled the day's best bet" in low, (
+        f"the answer no longer refuses the best-bet reading: {ans!r}"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# AC — every signed-out nav entry opens for the visitor it is drawn for
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_the_signed_out_nav_carries_the_fantasy_product(copy_src):
+    """The nav rendered `publicNavItems()` — an ENTITLEMENT flag flattened out of `nav-model.ts` —
+    rather than authored marketing navigation, which is why it had drifted from the product's own
+    positioning. This pins the authored list as the source of the signed-out bar."""
+    block = copy_src.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
+    assert block.count("href:") >= 5, (
+        f"only {block.count('href:')} nav entries extracted — the slice is wrong and every clause "
+        f"below is suspect"
+    )
+    # ⭐ THE SPECIFIC DOOR, not merely "some fantasy entry". `/fantasy/rankings` is the free board —
+    # the site's primary free acquisition surface and the destination the whole signed-out bar
+    # exists to lead to.
+    #
+    # ⚠️ ASSERTING `product: "fantasy"` ALONE WOULD BE 4-WAY REDUNDANT and therefore unfalsifiable
+    # by any single edit: four entries carry it, so three could be deleted and the clause would
+    # still pass. The red-proof harness caught exactly that — its break flipped one entry and the
+    # clause stayed GREEN. The product assert is kept below as a companion, but this href is the
+    # one that makes the clause bite.
+    assert '"/fantasy/rankings"' in block, (
+        "the signed-out nav has no door to the free fantasy board"
+    )
+    assert 'product: "fantasy"' in block, "the signed-out nav has no door to the fantasy product"
+
+
+def test_the_fantasy_door_names_its_sport(copy_src):
+    """⭐ OPERATOR, 2026-08-09. The desktop label was the bare word "Fantasy" — but `nav-model.ts`
+    ALREADY declares an MLB→Fantasy surface (E8.1's prospect board), so "fantasy" is ambiguous
+    between two sports inside this product today; it only *looks* unambiguous because the baseball
+    half is `restrict: "admin"` and therefore invisible to everyone but the operator. The label
+    would silently become wrong the day fantasy baseball opens up."""
+    block = copy_src.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
+    entries = [e for e in re.split(r"\},", block) if e.strip()]
+    assert len(entries) >= 5, f"only {len(entries)} nav entries parsed — this clause would be vacuous"
+
+    rankings = [e for e in entries if "/fantasy/rankings" in e]
+    assert rankings, "no fantasy rankings entry found — this clause would be vacuous"
+    # The DESKTOP label is what the bar renders (`item.short ?? item.label`), so that is the string
+    # the requirement is about — asserting on `label` alone would pass while the bar still said
+    # "Fantasy".
+    for entry in rankings:
+        # `item.short ?? item.label` — mirror the render, so the clause reads the same string the
+        # bar does whether or not a `short` is declared.
+        match = re.search(r'short:\s*"([^"]*)"', entry) or re.search(r'label:\s*"([^"]*)"', entry)
+        assert match, f"neither a short nor a label parsed from {entry.strip()!r}"
+        desktop_label = match.group(1)
+        assert "Football" in desktop_label, (
+            f"the fantasy door's desktop label is {desktop_label!r} — it does not name the sport, "
+            f"and a second fantasy sport already exists in nav-model.ts"
+        )
+
+
+def test_the_signed_out_nav_is_fantasy_first(copy_src):
+    """Spec §2/§20: the same product order as the home page's `VERTICALS` and About — the product
+    pages lead, the company pages (About/FAQ) follow.
+
+    ⚠️ THIS USED TO COMPARE FANTASY AGAINST BETTING and was amended when the MLB door was removed
+    (see the clause below). Comparing against the company entries keeps a real ordering claim
+    instead of leaving the file with no order assertion at all — which is what deleting it would
+    have done."""
+    block = copy_src.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
+    assert "product: null" in block, "no company-level entry — this clause would be vacuous"
+    assert block.index('product: "fantasy"') < block.index("product: null"), (
+        "the signed-out nav leads with the company pages; the product pages should lead"
+    )
+
+
+def test_no_signed_out_nav_entry_points_at_a_route_that_refuses_an_anonymous_caller(copy_src):
+    """⛔ THE TEMPTING WRONG FIX. `/performance`, `/dashboard`, `/picks/*`, `/props` and
+    `/ev-tracker` are all mounted `dependencies=_paid` in `app/backend/main.py`, so a nav entry
+    pointing at any of them is a login wall wearing a product label — the one surprise a
+    first-touch nav link cannot afford.
+
+    ⚠️ WIDENED from "the betting door" to EVERY entry when the MLB door was removed. The narrow
+    version keyed on `product: "betting"`, so with no betting row left it would have tripped its
+    own anti-vacuity assert; the widened version is strictly stronger (it now also covers the
+    fantasy and company entries, which the narrow one never checked) and cannot go vacuous."""
+    block = copy_src.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
+    hrefs = re.findall(r'href:\s*"(/[^"]*)"', block)
+    assert len(hrefs) >= 5, f"only {len(hrefs)} href(s) found — this clause would be vacuous"
+    for href in hrefs:
+        for gated in ("/performance", "/dashboard", "/picks", "/props", "/ev-tracker"):
+            assert not href.startswith(gated), (
+                f"the signed-out nav points at {href}, which refuses an anonymous caller"
+            )
+
+
+def test_the_signed_out_nav_has_no_mlb_door(copy_src):
+    """⭐⭐ OPERATOR DECISION, 2026-08-09 — and it REVERSES E9.60's own first cut, which is exactly
+    why it is pinned rather than left to a comment.
+
+    That cut added an MLB entry, reasoning that a two-product company listing one product in its
+    nav is a defect. The reasoning was incomplete on two counts:
+
+      1. There is no anonymous MLB destination, so the entry had to be `/#today` — an ANCHOR, which
+         on the home page is a scroll to a section already on screen. That is a weak nav item, not
+         a product door.
+      2. MLB is intended to become SIGNUP-gated rather than public. Under (1) that changes nothing:
+         an account-gated product still has no entry a signed-out visitor can open.
+
+    ⛔ DO NOT DELETE THIS CLAUSE when the paid gate is relaxed to a signup gate — the absence is
+    correct under BOTH gate models, for the same reason. It is legitimately deletable only if a
+    genuinely anonymous-readable MLB PAGE is built (not an anchor, not a signup wall)."""
+    block = copy_src.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
+    assert block.count("href:") >= 5, "the slice is wrong — this clause would be vacuous"
+    assert 'product: "betting"' not in block, (
+        "an MLB/betting door was re-added to the signed-out nav; there is still no MLB destination "
+        "an anonymous visitor can open — read the SIGNED_OUT_NAV section header before changing this"
+    )
+    assert '"/#today"' not in block, (
+        "the signed-out nav points at the home page's featured-pick ANCHOR, which is a scroll "
+        "rather than a product door"
+    )
+
+
+def test_the_faq_is_reachable_from_the_signed_out_nav(copy_src):
+    """Spec §22. The FAQ had NO nav entry at any viewport before this story — it was reachable only
+    from the footer and from an About CTA."""
+    block = copy_src.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
+    assert '"/faq"' in block, "the FAQ is still absent from the signed-out navigation"
+
+
+def test_every_signed_out_nav_href_resolves_to_a_real_route(copy_src):
+    """⭐ THE COVERAGE THIS STORY RELOCATED, RE-CLOSED HERE.
+
+    `test_e9_56c_cta_routes.py` catches a link pointing at a route with no `page.tsx` — but it scans
+    `.tsx` files for LITERAL `href="/…"`, and these entries now live in a `.ts` data module, so they
+    fell out of its scope. That is exactly the comment the pre-E9.60 nav carried as its reason for
+    writing the links as inline JSX. The coverage is not lost, it is re-derived here against the
+    same filesystem route table."""
+    block = copy_src.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
+    hrefs = re.findall(r'href:\s*"(/[^"]*)"', block)
+    # `TRACK_RECORD_TRUST_LINK.href` is a symbol rather than a literal, so it is resolved from its
+    # own module — otherwise this clause would silently skip the one entry it does not spell out.
+    claim_copy = _strip_ts_comments((_FRONTEND / "lib/fantasy-claim-copy.ts").read_text())
+    trust = re.search(
+        r"TRACK_RECORD_TRUST_LINK[^{]*\{(?:[^}]*?)href:\s*\"(/[^\"]*)\"", claim_copy, re.S
+    )
+    assert trust, "could not resolve TRACK_RECORD_TRUST_LINK.href — this clause would under-cover"
+    hrefs.append(trust.group(1))
+    assert len(hrefs) >= 5, f"only {len(hrefs)} href(s) resolved — this clause would be vacuous"
+
+    static = set()
+    for page in _APP.rglob("page.tsx"):
+        parts = [
+            p
+            for p in page.relative_to(_APP).parent.parts
+            if not (p.startswith("(") and p.endswith(")"))
+        ]
+        if any(p.startswith("[") for p in parts):
+            continue
+        static.add("/" + "/".join(parts) if parts else "/")
+
+    broken = [h for h in hrefs if (h.split("#")[0].rstrip("/") or "/") not in static]
+    assert not broken, (
+        f"signed-out nav link(s) point at a route with no page.tsx — a 404 behind a nav item: "
+        f"{broken}"
+    )
+
+
+def test_the_nav_renders_the_signed_out_set_rather_than_the_fantasy_only_one():
+    """Copy that exists but is never rendered is the "wired but never invoked" class (NF-C0e (b)).
+    The module is only the fix if the component actually reads it — and the old fantasy-only source
+    must be gone from the signed-out path, or both render and the nav simply doubles up."""
+    nav = _strip_ts_comments(_NAV_TSX.read_text())
+    assert "SIGNED_OUT_NAV" in nav, "the nav does not read the signed-out navigation model"
+    assert "publicNavItems" not in nav, (
+        "the nav still renders `publicNavItems()`, which is fantasy-only — the MLB door would be a "
+        "duplicate rather than a fix"
+    )
+
+
+def test_about_remains_reachable_for_a_signed_in_visitor():
+    """⚠️ A REGRESSION THIS STORY COULD EASILY HAVE SHIPPED. The About link used to render
+    unconditionally; folding it into `SIGNED_OUT_NAV` (which renders only when `!showSubNav`) would
+    have quietly removed it for every visitor with an account. Both halves are asserted because the
+    signed-out one alone would pass with the signed-in link deleted."""
+    nav = _strip_ts_comments(_NAV_TSX.read_text())
+    assert "showSubNav && (" in nav and 'href="/about"' in nav, (
+        "there is no About link on the signed-in path — the rewrite dropped it"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# AC — the mobile menu is a viewport-capped scroll container (the LIVE bug)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_the_mobile_menu_is_capped_to_the_viewport():
+    """⭐⭐ THE LIVE BUG (operator, 2026-08-09). Both mobile panels were plain in-flow `<div>`s
+    inside a `sticky top-0` nav with NO height cap, so on a phone the signed-in menu grew taller
+    than the viewport and spilled into the page flow — putting Sign Out and Settings below the fold
+    of whatever page you were on.
+
+    ⛔ `overflow-y-auto` ALONE DOES NOT FIX IT: a scroll container with no bounded height simply
+    grows. The cap is the load-bearing half, so it is asserted separately from the overflow."""
+    nav = _strip_ts_comments(_NAV_TSX.read_text())
+    panel = re.search(r"const MOBILE_MENU_PANEL\s*=(.*?)\n\n", nav, re.S)
+    assert panel, "the shared mobile-menu panel class is gone"
+    cls = panel.group(1)
+    assert "max-h-" in cls, (
+        f"the mobile menu has no height cap, so it can grow past the viewport and push Sign Out "
+        f"into the page flow again: {cls!r}"
+    )
+    assert "overflow-y-auto" in cls, (
+        f"the mobile menu is not its own scroll container, so its overflow has nowhere to go but "
+        f"the page: {cls!r}"
+    )
+
+
+def test_the_mobile_menu_cap_uses_the_dynamic_viewport_unit():
+    """⚠️ THE iOS-SAFARI CLAUSE, asserted on its own because it is invisible on a desktop browser
+    and on Chrome's device emulation alike.
+
+    `vh` is the LARGEST viewport — it ignores the browser chrome actually on screen — so a
+    `100vh`-based cap is ~60-100px too tall on iPhone Safari and the last item stays unreachable:
+    the bug surviving its own fix. `dvh` tracks the live viewport."""
+    nav = _strip_ts_comments(_NAV_TSX.read_text())
+    cls = re.search(r"const MOBILE_MENU_PANEL\s*=(.*?)\n\n", nav, re.S).group(1)
+    assert "dvh" in cls, (
+        f"the mobile menu caps on a static viewport unit; on iPhone Safari that is taller than the "
+        f"visible viewport and the bottom of the menu stays unreachable: {cls!r}"
+    )
+
+
+def test_the_mobile_menu_does_not_chain_its_scroll_to_the_page():
+    """The other half of the acceptance bar — "page scroll position untouched". Without
+    `overscroll-contain`, reaching the end of the menu hands the gesture to the document, so
+    closing the menu leaves the page somewhere the user never chose to go."""
+    nav = _strip_ts_comments(_NAV_TSX.read_text())
+    cls = re.search(r"const MOBILE_MENU_PANEL\s*=(.*?)\n\n", nav, re.S).group(1)
+    assert "overscroll-contain" in cls, (
+        f"the mobile menu chains its scroll to the page: {cls!r}"
+    )
+
+
+def test_both_mobile_panels_use_the_shared_capped_class():
+    """⭐ BOTH AUTH STATES, and the signed-in one is where the bug actually bit — Sign Out and
+    Settings only exist in that panel. A fix applied to one panel would leave the reported defect
+    exactly as it was while looking fixed."""
+    nav = _strip_ts_comments(_NAV_TSX.read_text())
+    uses = nav.count("className={MOBILE_MENU_PANEL}")
+    assert uses == 2, (
+        f"expected both mobile menu panels (signed-out and signed-in) to use the capped class, "
+        f"found {uses} — the signed-in panel is the one holding Sign Out"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# AC — nav IA: fantasy-first everywhere, Track Record top-level, coming never linked
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_the_signed_in_nav_is_fantasy_first():
+    """Spec §2/§21. `SPORTS` order IS the rendered order of the signed-in sport dropdowns, so this
+    is the signed-in half of the one-product-order rule the home page, About and the signed-out bar
+    already follow."""
+    model = _strip_ts_comments((_FRONTEND / "lib/nav-model.ts").read_text())
+    block = model.split("export const SPORTS", 1)[1]
+    nfl, mlb = block.find('sport: "nfl"'), block.find('sport: "mlb"')
+    assert nfl >= 0 and mlb >= 0, "a sport is missing from the signed-in nav model"
+    assert nfl < mlb, (
+        "the signed-in nav leads with MLB; every other surface leads with fantasy"
+    )
+
+
+def test_track_record_is_a_top_level_nav_entry_in_both_auth_states():
+    """Spec §20/§21 — promoted to top level. It is the site's central trust asset and the one
+    record readable without an account, so it should not be reachable only from inside a product
+    menu. Asserted in BOTH states because they are rendered by different code paths."""
+    nav = _strip_ts_comments(_NAV_TSX.read_text())
+    assert 'href="/fantasy/track-record"' in nav, (
+        "the signed-in nav has no top-level Track Record link"
+    )
+    positioning = _strip_ts_comments(_COPY_TS.read_text())
+    signed_out = positioning.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
+    # ⚠️ SPLIT INTO ENTRIES, NOT LINES. The Track Record entry is a MULTI-LINE object literal, so a
+    # per-line scan for "track" never sees the `desktop:` flag three lines below it and the clause
+    # failed on its own slice rather than on the source. Entries are `},`-delimited.
+    entries = [e for e in re.split(r"\},", signed_out) if e.strip()]
+    assert len(entries) >= 5, f"only {len(entries)} nav entries parsed — this clause would be vacuous"
+    tr = [e for e in entries if "track" in e.lower()]
+    assert tr, "the signed-out nav has no Track Record entry"
+    assert any("desktop: true" in e for e in tr), (
+        "the signed-out Track Record entry is not in the desktop bar, so it is not top-level there"
+    )
+
+
+def test_the_footer_leads_with_the_fantasy_product():
+    """One product order, on the one navigation surface that renders on every page."""
+    footer = _strip_ts_comments(_FOOTER_TSX.read_text())
+    products = footer.split("const PRODUCTS", 1)[1].split("] as const", 1)[0]
+    assert "Fantasy Football" in products and "MLB Betting Intelligence" in products, (
+        "a product is missing from the footer's product column"
+    )
+    assert products.index("Fantasy Football") < products.index("MLB Betting Intelligence"), (
+        "the footer leads with MLB; every other surface leads with fantasy"
+    )
+
+
+def test_an_unshipped_product_is_listed_in_the_footer_but_carries_no_link():
+    """⛔ E9.56c's dead `/pricing` CTA class, and BOTH halves matter.
+
+    A visitor deciding whether to subscribe should see where this is going, so the un-shipped
+    verticals are listed — but they must carry no destination at all. The `COMING` entries have no
+    `href` FIELD, so a future edit cannot make one clickable by filling in a blank."""
+    footer = _strip_ts_comments(_FOOTER_TSX.read_text())
+    coming = footer.split("const COMING", 1)[1].split("] as const", 1)[0]
+    assert "NFL Betting Intelligence" in coming and "NCAAF Betting Intelligence" in coming, (
+        "the un-shipped betting verticals vanished from the footer rather than being labelled"
+    )
+    assert "href" not in coming, (
+        f"a coming-soon footer entry carries an href — an un-shipped product must have no "
+        f"destination at all: {coming!r}"
+    )
+    assert "Coming this season" in footer, (
+        "the un-shipped footer entries render without a label saying they are not live"
+    )
+
+
+def test_the_site_description_is_fantasy_first(copy_literals):
+    """The SEO / link-preview surface — the sentence shown whenever any route is pasted into a
+    chat, and therefore the most widely distributed copy in the product. E9.46 removed the edge
+    claim and the baseball-only framing from it; what it left was MLB-first ordering."""
+    layout = _strip_ts_comments((_FRONTEND / "app/layout.tsx").read_text())
+    m = re.search(r"const SITE_DESCRIPTION\s*=\s*\n?\s*'([^']*)'", layout)
+    assert m, "the site description constant is gone"
+    desc = m.group(1).lower()
+    assert "fantasy" in desc and "mlb" in desc, f"the site description names only one product: {desc!r}"
+    assert desc.index("fantasy") < desc.index("mlb"), (
+        f"the site description leads with MLB; every other surface leads with fantasy: {desc!r}"
+    )
+    assert "baseball" not in desc, (
+        f"the site description still argues from baseball data: {desc!r}"
+    )
+
+
+def test_the_footer_reaches_both_pages_this_story_rewrote():
+    """The footer renders on EVERY page (`app/layout.tsx`) and carried FAQ but not About, so the two
+    rewritten pages linked to each other in one direction only. The track record — the site's
+    central trust asset — was absent from it entirely."""
+    footer = _strip_ts_comments(_FOOTER_TSX.read_text())
+    for href in ('href: "/about"', 'href: "/faq"', 'href: "/fantasy/track-record"'):
+        assert href in footer, f"the site footer no longer reaches {href}"
