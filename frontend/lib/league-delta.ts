@@ -78,6 +78,7 @@ export interface PositionShift {
 export interface LeagueDelta {
   /** Every player on the league board that we could compare, biggest absolute move first. */
   players: PlayerDelta[]
+  /** ⭐ E9.61 — ranked by VOR DELTA, not by rank movement. See `HIGHLIGHTS_RANK_BY_VOR`. */
   risers: PlayerDelta[]
   fallers: PlayerDelta[]
   positions: PositionShift[]
@@ -104,6 +105,68 @@ export const MEANINGFUL_MOVE = 5
 
 /** How many risers/fallers the activation screen leads with. */
 export const HIGHLIGHT_COUNT = 5
+
+/**
+ * The smallest |VOR delta| allowed to LEAD as a riser/faller. Below this the number is rounding,
+ * not the reader's settings.
+ *
+ * ⭐ MEASURED, NOT CHOSEN (E9.61, live 2026 payload, all 858 players). The two sides of the delta
+ * are produced differently: the generic board arrives from the API with `pts`/`vor` already rounded
+ * to 1dp, while the league board is re-scored IN THE BROWSER from the raw stat line (itself 1dp).
+ * So even a league byte-identical to the free preset — where every true delta is exactly 0 —
+ * reconstructs with a small non-zero delta:
+ *
+ *     p50 0.30   p90 1.20   p99 1.60   MAX 1.70          (n = 858, true answer 0 for every one)
+ *
+ * At 2.0, **none** of those 858 survive, and nothing real is lost: across five differing league
+ * shapes the smallest GENUINE highlight measured 4.1. The gap between 1.7 and 4.1 is what makes
+ * this a floor rather than a fudge.
+ *
+ * ⚠️ IT IS A FUNCTION OF THE EXPORT'S PRECISION. If `export_draft_board_json` ever changes how many
+ * decimals it publishes, re-measure — do not scale this by intuition.
+ *
+ * ⛔ WHY A FLOOR RATHER THAN "SHOW THE TOP 5 ANYWAY": without it, a league that genuinely differs
+ * in ONE DIRECTION prints a fabricated list in the other. Measured: a superflex league (QBs rise,
+ * nobody's value falls) filled its "Worth less in your league" column with five players at 0.6–0.7,
+ * and a 3-WR league filled it with tight ends at 0.5. Both columns had a heading, five names and an
+ * explanation — and one of them was rounding. An empty column that says so is the honest answer,
+ * and the surface already has that state for the both-empty case.
+ *
+ * ⭐ This is also why the switch to VOR needed a floor and rank movement did not: an integer rank
+ * move of −11 is a real re-ordering even when the player's VALUE is unchanged (in a 3-WR league,
+ * tight ends genuinely slide as receivers climb past them). Ranking on value states something
+ * stronger and therefore has to be quiet when it has nothing to say.
+ */
+export const MIN_HIGHLIGHT_VOR_DELTA = 2
+
+// ══ E9.61 — THE HIGHLIGHTS RANK ON *VALUE*, NOT ON RANK MOVEMENT ═════════════════════════════════
+//
+// ⭐ WHY THIS CHANGED. The two fixes below (`draftablePoolSize`, `isLowPredictability`) were both
+// forced by the same underlying defect and both treat it by RESTRICTING THE POPULATION: rank
+// movement is not a measure of value, so sorting by it surfaces the wrong players and each new
+// costume of that has needed its own exclusion. The deep tail went first (rank density grows down
+// the board, so the biggest rank moves are waiver churn), then K/DST (a near-flat band, so any
+// scoring difference reorders the whole position at once).
+//
+// Both of those are symptoms. RANK MOVEMENT IS A PROXY, and a badly behaved one: how many places a
+// player crosses depends on how tightly packed his neighbours are, which is a property of the board
+// around him rather than of him. VOR DELTA IS THE QUANTITY ITSELF — "this player is worth N more
+// points above replacement in your league than in ours" — and it has no density problem at all,
+// because it never counts players in between.
+//
+// The population filters STAY, and are not redundant:
+//   • `draftable` — a huge VOR swing on an undrafted player is still not a headline.
+//   • `lowPred` — the decisive reason was never density. It is that "why those players moved" is
+//     computed over SKILL_POSITIONS only, so headlining a D/ST shows a mover the page structurally
+//     cannot explain. That argument is about the EXPLANATION, so it survives the metric change
+//     unchanged and is asserted separately (`free-league.spec.ts`).
+//
+// ⚠️ WHAT THIS DOES NOT CLAIM. VOR is denominated in each board's OWN points, so a league that
+// simply scores higher across the board lifts every VOR and a league that scores lower depresses
+// every one. That is a real statement about the reader's settings rather than an artifact — but it
+// means the two lists need not be symmetric, and a league can legitimately produce many risers and
+// few fallers. Both lists are therefore rendered independently and neither is padded to length.
+export const HIGHLIGHTS_RANK_BY_VOR = true
 
 // ══ THE DRAFTABLE POOL ═══════════════════════════════════════════════════════════════════════════
 //
@@ -305,14 +368,24 @@ export function computeLeagueDelta(
         a.leagueOvrRank - b.leagueOvrRank,
     )
 
-  const risers = comparable
-    .filter((d) => (d.ovrDelta as number) > 0)
-    .sort((a, b) => (b.ovrDelta as number) - (a.ovrDelta as number) || a.leagueOvrRank - b.leagueOvrRank)
+  // ⭐ E9.61 — ranked on VOR DELTA (see `HIGHLIGHTS_RANK_BY_VOR`). A player with no VOR on one of the
+  // two boards has no value change to report, so he is not eligible to LEAD — distinct from being
+  // excluded from `players`, where his rank move is still shown in his own row.
+  // ...and only where that value change is bigger than the reconstruction noise between the two
+  // boards (`MIN_HIGHLIGHT_VOR_DELTA`). Each side is filtered INDEPENDENTLY, so a league that moves
+  // value in one direction only gets one populated column rather than a fabricated second one.
+  const valued = comparable.filter(
+    (d) => d.vorDelta != null && Math.abs(d.vorDelta) >= MIN_HIGHLIGHT_VOR_DELTA,
+  )
+
+  const risers = valued
+    .filter((d) => (d.vorDelta as number) > 0)
+    .sort((a, b) => (b.vorDelta as number) - (a.vorDelta as number) || a.leagueOvrRank - b.leagueOvrRank)
     .slice(0, HIGHLIGHT_COUNT)
 
-  const fallers = comparable
-    .filter((d) => (d.ovrDelta as number) < 0)
-    .sort((a, b) => (a.ovrDelta as number) - (b.ovrDelta as number) || a.leagueOvrRank - b.leagueOvrRank)
+  const fallers = valued
+    .filter((d) => (d.vorDelta as number) < 0)
+    .sort((a, b) => (a.vorDelta as number) - (b.vorDelta as number) || a.leagueOvrRank - b.leagueOvrRank)
     .slice(0, HIGHLIGHT_COUNT)
 
   return {
