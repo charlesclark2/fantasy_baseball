@@ -487,25 +487,36 @@ def test_no_published_name_is_ever_all_caps():
 def test_a_known_miscasing_is_repaired_even_though_it_is_not_shouting():
     """⭐ THE CASE THE SHOUTING GUARD STRUCTURALLY CANNOT SEE.
 
-    `display_name` used to return any mixed-case input untouched, on the premise that a name which
-    is not shouting came from the clean draft-class pipeline. Measured against the SERVED 2026
-    payload that premise is false: `Mack Hollins` ships as "MacK Hollins" — mixed case, and wrong.
-    `test_no_published_name_is_ever_all_caps` scores it perfectly healthy, because it is not
-    all-caps; only a check that knows the right answer can see it.
+    A mixed-case name that is WRONG passes `test_no_published_name_is_ever_all_caps` perfectly —
+    only a check that knows the right answer can see it. "MacK Hollins" is that case.
+
+    ⚠️ E9.61 CORRECTED THE ATTRIBUTION, AND IT CHANGED THE FIX. This test previously asserted that
+    the mixed-case spelling was repaired by a hand map, on the recorded finding that the defect was
+    "CARRIED IN THE DATA" because no `Mac` rule existed in the repo. That grep was run against THIS
+    module's regex (`\\bMc([a-z])`, which cannot match "Mack") — but the BOARD exporter had its own
+    rule pass looping over `("Mc", "Mac")`, so `MACK HOLLINS` -> "Mack Hollins" -> **"MacK Hollins"**.
+    We were producing it. The repair now comes from the roster authority (a pure case change), which
+    is why the assertion takes one: with no authority there is nothing to repair a mixed-case name
+    against, and inventing a "MacK" -> "Mack" rule would rewrite the real MacKenzie/MacKay family.
     """
-    assert ex.display_name("MacK Hollins") == "Mack Hollins"
+    assert ex.display_name("MacK Hollins", "Mack Hollins") == "Mack Hollins"
 
 
 def test_the_repair_reaches_the_shouting_spelling_of_the_same_name():
     """Both spellings land on one answer. Otherwise the correction depends on which form the source
-    happens to ship that season, which is the drift the single authority exists to prevent."""
+    happens to ship that season, which is the drift the single authority exists to prevent.
+
+    ⭐ This is the assertion that actually pins the LIVE defect, because ALL-CAPS is the form the
+    source really ships (703 of the 784 rows in the 2026 frame). It goes red against the pre-E9.61
+    board exporter."""
     assert ex.display_name("MACK HOLLINS") == "Mack Hollins"
+    assert ex.display_name("MACK HOLLINS", "Mack Hollins") == "Mack Hollins"
 
 
 def test_the_repair_does_not_touch_a_name_it_does_not_know():
-    """The other side, and the reason `_MISCASINGS` is a whole-name lookup rather than a "MacK" ->
-    "Mack" rule: that pattern would also rewrite the legitimately-capitalised MacKenzie/MacKay
-    family. A repair that invents corrections is worse than the defect it treats."""
+    """The other side, and the reason this is a lookup/authority rather than a "MacK" -> "Mack"
+    rule: that pattern would also rewrite the legitimately-capitalised MacKenzie/MacKay family. A
+    repair that invents corrections is worse than the defect it treats."""
     for name in ("MacKenzie Morgan", "Mack Hollins", "Christian McCaffrey", "Ashton Jeanty"):
         assert ex.display_name(name) == name
 

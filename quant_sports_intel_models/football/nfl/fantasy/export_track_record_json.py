@@ -63,6 +63,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from quant_sports_intel_models.football.nfl.fantasy import benchmark_scorecard as BS  # noqa: E402
+from quant_sports_intel_models.football.nfl.fantasy import player_naming as PN  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy.export_draft_board_json import (  # noqa: E402
     _fnum,
     load_projections_local,
@@ -162,50 +163,37 @@ _CLAIM_DENYLIST = (
 # surfaces read — applies no casing pass at all, so "MacK Hollins" is still what those serve. Giving
 # it one is a change to the launch artifact that only takes effect on an operator re-export, so it
 # is carded with the upstream fix rather than smuggled into a display patch.
-_MISCASINGS = {
-    "mack hollins": "Mack Hollins",
-}
+# ── E9.61: THE HAND MAP IS DEMOTED TO A BACKSTOP BEHIND A DERIVED AUTHORITY ─────────────────────
+#
+# Everything above described a nine-entry map, maintained roughly once per draft class, standing in
+# for casing that a rule cannot recover. `player_naming.roster_casing_authority` now supplies it from
+# the nflverse roster history, keyed on gsis id, covering 95.1% of the 1,664 players across the seven
+# published seasons — and it reproduces EIGHT of those nine names exactly (CEEDEE LAMB, DEANDRE
+# HOPKINS, DEVANTE PARKER, DEVONTA SMITH, DK METCALF, JUJU SMITH-SCHUSTER, LESEAN MCCOY, SAM LAPORTA).
+#
+# The ninth is the interesting one and it is why `_REPAIRS` still exists over there: "DEVON ACHANE" ->
+# "De'Von Achane" ADDS AN APOSTROPHE, so it is not a pure case change, so the casefold gate that makes
+# the authority safe refuses it — correctly, by the same rule that stops the roster overwriting
+# "Hollywood Brown" with "Marquise Brown". A repair that changes characters is a different KIND of
+# claim from a repair that changes case, and it keeps needing a human.
+#
+# ⭐ THE EIGHT ARE KEPT, NOT DELETED — as `player_naming._FALLBACK_CASINGS`, consulted only when the
+# authority has no row. Deleting them looked clean and was wrong: the authority is a best-effort S3
+# read, and without the map an unreachable roster does not merely fail to improve the names, it makes
+# these eight WORSE than the pre-authority behaviour ("DEVONTA SMITH" -> "Devonta Smith"). The two
+# tests below caught exactly that when the map was first removed — a test that passed before a
+# refactor and fails after it is reporting lost coverage, not obstructing the refactor.
+#
+# ⛔ Do NOT re-add a casing entry here or in `_REPAIRS`. If a name is mis-cased, the authority either
+# already knows or the roster row itself is wrong — the second is worth reporting upstream, not
+# papering over locally, and a local paper-over is invisible to the other renderer.
+def display_name(raw, authority: str | None = None) -> str:
+    """A source name rendered for display — delegated to `player_naming.display_name`, the ONE casing
+    authority shared with the draft-board export (E9.61 item 4).
 
-_KNOWN_CASINGS = {
-    "CEEDEE LAMB": "CeeDee Lamb",
-    "DEANDRE HOPKINS": "DeAndre Hopkins",
-    "DEVANTE PARKER": "DeVante Parker",
-    "DEVON ACHANE": "De'Von Achane",  # the source dropped the apostrophe entirely
-    "DEVONTA SMITH": "DeVonta Smith",
-    "DK METCALF": "DK Metcalf",
-    "JUJU SMITH-SCHUSTER": "JuJu Smith-Schuster",
-    "LESEAN MCCOY": "LeSean McCoy",
-    "SAM LAPORTA": "Sam LaPorta",
-}
-
-
-def display_name(raw) -> str:
-    """A source name rendered for display: de-shouted if it is shouting, repaired if it is a known
-    mis-casing, and otherwise returned UNTOUCHED.
-
-    `str.title()` alone already handles apostrophes, hyphens, periods and "St." ("JA'MARR CHASE" ->
-    "Ja'Marr Chase", "AMON-RA ST. BROWN" -> "Amon-Ra St. Brown", "A.J. BROWN" -> "A.J. Brown") but
-    lowercases the second capital in "MCCAFFREY" — 12 Mc/Mac names here — so that gets its own rule.
-    Roman-numeral suffixes are handled defensively: none appear in the current data, but they do in
-    the sibling board's names, so a future source change cannot reintroduce "Iii".
-
-    ⚠️ THE MIS-CASING LOOKUP RUNS FIRST AND ON EVERY INPUT (E9.61). The "already cased means already
-    correct" assumption held until the served payload was actually read; see `_MISCASINGS`. It is
-    checked before the `isupper()` early return so that BOTH spellings of a known-wrong name — the
-    shouting one and the already-mixed-case one — land on the same answer.
-    """
-    name = str(raw).strip()
-    fixed = _MISCASINGS.get(name.casefold())
-    if fixed is not None:
-        return fixed
-    if not name.isupper():  # rookies — and any future clean source — are already right
-        return name
-    if name in _KNOWN_CASINGS:
-        return _KNOWN_CASINGS[name]
-    out = name.title()
-    out = re.sub(r"\bMc([a-z])", lambda m: "Mc" + m.group(1).upper(), out)
-    out = re.sub(r"\b(Ii|Iii|Iv)\b", lambda m: m.group(1).upper(), out)
-    return out
+    Kept as a thin wrapper rather than an import alias so this module's existing callers and tests
+    keep their entry point, and so the docstring above can carry the map's retirement note."""
+    return PN.display_name(raw, authority)
 
 
 def _nf1_5_projection(con, season, schema):
@@ -227,14 +215,18 @@ def _inum(v) -> int | None:
     return None if pd.isna(v) else int(v)
 
 
-def season_records(df: pd.DataFrame) -> list[dict]:
-    """The per-player frame -> compact display-ready JSON records for one season."""
+def season_records(df: pd.DataFrame, casing: dict[str, str] | None = None) -> list[dict]:
+    """The per-player frame -> compact display-ready JSON records for one season.
+
+    `casing` is the nflverse roster's own spelling per gsis id (`player_naming`), used for CASE ONLY.
+    Optional so the existing offline callers/tests keep working; omitted, the rule pass still runs."""
+    casing = casing or {}
     recs = []
     for _, r in df.iterrows():
         recs.append({
             "season": int(r["season"]),
             "playerId": str(r["player_id"]),
-            "playerName": display_name(r["player_name"]),
+            "playerName": display_name(r["player_name"], casing.get(str(r["player_id"]))),
             "position": str(r["position"]),
             "ourPoints": _fnum(r["our_points"]),
             # The EXPECTED-GAMES figure `ourPoints` is scaled by. ⭐ It is what makes the points
@@ -771,6 +763,11 @@ def main(argv: list[str] | None = None) -> int:
     con = duckdb.connect(args.duckdb, read_only=True)
     seasons_written: list[int] = []
     adp_source_by_season: dict[str, str] = {}
+    # E9.61: shared with the board export — the roster's own casing, for CASE ONLY. Resolved once
+    # for every season (it is keyed on gsis id and takes each player's LATEST roster row, so a
+    # retired player still resolves; that is what makes it usable for a seven-season back-catalogue).
+    casing = PN.roster_casing_authority()
+    log.info("name-casing authority: %d roster names", len(casing))
     try:
         for y in seasons:
             try:
@@ -784,7 +781,7 @@ def main(argv: list[str] | None = None) -> int:
             if df.empty:
                 log.warning("season %d: 0 scored players (thin ADP/realized overlap) — writing an "
                             "empty season file rather than silently skipping it", y)
-            recs = season_records(df)
+            recs = season_records(df, casing)
             path = out_dir / f"season_{y}.json"
             path.write_text(json.dumps(recs, separators=(",", ":")))
             seasons_written.append(y)
