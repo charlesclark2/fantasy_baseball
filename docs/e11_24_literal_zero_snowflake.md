@@ -2942,3 +2942,28 @@ stripped whole-line `#` comments but not trailing ones, so
 the exact INC-38 prose-cannot-satisfy defect, inside the strip written to prevent it. **A
 comment-stripping guard must handle BOTH comment forms; testing only the whole-line form proves
 only the whole-line form.**
+
+## ✅ The one residual risk of a view flip, measured: reads did NOT get more expensive
+
+#679's own caveat is that *"a view RE-EVALUATES on read — measure ACTIVE-MINUTES after the flip,
+not just resumes; a full-history scan by a non-filtering reader could climb."* STEP B's wait-based
+gates structurally cannot see that, so it needs its own instrument. Warehouse-occupying `SELECT`s
+touching `feature_pregame_game_features*`:
+
+| UTC day | n | avg s | **max s** | avg MB scanned | total s |
+|---|---|---|---|---|---|
+| 08-05 | 27 | 2.29 | 24.86 | 1.0 | 61.7 |
+| 08-08 | 27 | 1.90 | 19.46 | 1.0 | 51.2 |
+| 08-09 (last pre-flip) | 28 | 1.07 | **20.09** | 4.7 | 29.9 |
+| **08-10 (post-flip)** | 25 | **0.90** | **1.41** | **0.0** | 22.5 |
+
+Reads got **cheaper, not dearer** — the ~20 s tail vanished and bytes scanned went to ~0, which is
+what #675 repointing the readers to S3 predicts (what is left on the Snowflake side is small
+metadata/probe traffic). ⚠️ Elapsed-seconds is still the WRONG instrument for a COST claim
+(E11.20-COST) — it is used here to answer a different question, "did a read get more expensive",
+which is exactly what it *is* right for. No cost credit is claimed from this table.
+
+*(Cross-check that the instrument is sane: 08-03 reads as avg 1070 s / max 2404 s, which reproduces
+the independently-recorded 8/3 provisioning-stall outlier — "11 of 33 over 600 s, max 2402.8 s" —
+to the second. The instrument agrees with a fact recorded from a different query months of context
+earlier.)*
