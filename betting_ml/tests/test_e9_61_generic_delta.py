@@ -248,3 +248,92 @@ def test_the_delta_added_no_new_endpoint_to_the_degrade_floor():
     assert cost_guardrails.is_allowed_in_degrade("/fantasy/nfl/board"), (
         "the free board left the degrade floor — the delta's generic side must stay up"
     )
+
+
+# ── item 2: the VOR-delta highlights, and the noise floor a REAL-DATA run forced ─────────────────
+#
+# The highlights rank on VOR delta rather than rank movement (see `HIGHLIGHTS_RANK_BY_VOR`). Running
+# the SHIPPED `buildBoard` + `computeLeagueDelta` over the LIVE 2026 payloads — which the e2e
+# fixtures structurally cannot do, their two boards being on incompatible point scales — surfaced a
+# defect the fixture suite could never see, so these clauses live here rather than in e2e.
+#
+# MEASURED (858 players, five league shapes, plus a control league identical to the free preset):
+#   * the control's true delta is 0 for every player, yet it RECONSTRUCTS at p50 0.30 / max 1.70,
+#     because the generic side arrives rounded to 1dp from the API while the league side is
+#     re-scored in the browser from the raw stat line;
+#   * so a superflex league (quarterbacks rise, nobody's value falls) filled its "Worth less in your
+#     league" column with five players at 0.6–0.7, and a 3-WR league filled it with tight ends
+#     at 0.5 — a heading, five names and an explanation, over rounding;
+#   * at a floor of 2.0 none of the 858 control players survive and nothing real is lost: the
+#     smallest GENUINE highlight across the five leagues measured 4.1.
+
+_LEAGUE_DELTA = "lib/league-delta.ts"
+_MY_LEAGUE = "components/fantasy/my-league.tsx"
+
+
+def test_the_highlights_rank_on_value_not_on_rank_movement():
+    """Item 2 itself. Rank movement is a density-dependent proxy — both prior highlight defects
+    (deep-tail churn, then K/DST) were that proxy misbehaving and each needed its own exclusion."""
+    src = (_FRONTEND / _LEAGUE_DELTA).read_text()
+    body = _code(_LEAGUE_DELTA)
+    assert "HIGHLIGHTS_RANK_BY_VOR" in src, "the rationale constant is gone"
+    for side in ("risers", "fallers"):
+        block = body[body.index(f"const {side} = valued"):]
+        block = block[: block.index(".slice(")]
+        assert "vorDelta" in block, f"{side} no longer sorts on VOR"
+        assert "ovrDelta" not in block, f"{side} went back to sorting on rank movement"
+
+
+def test_a_highlight_must_clear_the_measured_reconstruction_noise():
+    """⭐ The floor exists because the two sides of the delta are BUILT DIFFERENTLY, so "no change"
+    does not reconstruct as exactly zero. Without it a league that genuinely moves value in one
+    direction still prints a fabricated list in the other."""
+    body = _code(_LEAGUE_DELTA)
+    assert re.search(r"MIN_HIGHLIGHT_VOR_DELTA\s*=\s*2\b", body), \
+        "the noise floor is gone or is no longer the measured value"
+    gate = body[body.index("const valued = comparable.filter"):]
+    gate = gate[: gate.index(")\n")]
+    assert "MIN_HIGHLIGHT_VOR_DELTA" in gate and "Math.abs" in gate, (
+        "highlight eligibility no longer applies the floor — a two-sided |delta| test is required, "
+        "since a one-sided one would filter only risers or only fallers"
+    )
+
+
+def test_the_floor_is_documented_as_measured_rather_than_chosen():
+    """A magic threshold nobody can re-derive is un-maintainable: the right value is a function of
+    how many decimals the board export publishes, so the measurement and that dependency have to
+    travel with the constant."""
+    src = (_FRONTEND / _LEAGUE_DELTA).read_text()
+    doc = src[: src.index("export const MIN_HIGHLIGHT_VOR_DELTA")]
+    doc = doc[doc.rindex("/**"):]
+    assert "1.70" in doc, "the measured noise maximum is no longer recorded beside the floor"
+    assert "858" in doc, "the population the floor was measured over is no longer recorded"
+    assert "4.1" in doc, "the smallest GENUINE highlight is no longer recorded — without it the "\
+                         "floor cannot be shown to cost nothing"
+
+
+@pytest.mark.parametrize("side", ["risers", "fallers"])
+def test_each_highlight_column_has_its_own_empty_state(side):
+    """The floor makes a ONE-SIDED result common (measured: superflex and 3-WR both lift a position
+    and lower nothing), so a column can be legitimately empty while its neighbour is full. Rendering
+    a bare heading over nothing reads as a bug; each side says so in words instead."""
+    src = (_FRONTEND / _MY_LEAGUE).read_text()
+    marker = f'data-testid="{side}-none"'
+    assert marker in src, f"the {side} column has no empty state"
+
+    # ⚠️ PRESENCE OF THE MARKUP IS NOT THE CLAUSE — this guard's first cut asserted only that, and
+    # the red proof caught it: rewriting the condition to `{false ? (` leaves the empty-state <p>
+    # sitting in the file, unreachable, and the guard scored it healthy. (Reading back a substring
+    # the source still contains is the "assert the render, not the import" trap.) So walk BACK from
+    # the marker to the condition that actually guards it — and note the naive
+    # `src.index(f"delta.{side}.length === 0")` finds the EARLIER both-columns-empty check first,
+    # because `delta.risers.length + delta.fallers.length === 0` contains that exact substring.
+    guard = src[max(0, src.index(marker) - 240) : src.index(marker)]
+    assert f"delta.{side}.length === 0 ? (" in guard, (
+        f"the {side} empty state is no longer conditioned on that column being empty — the markup "
+        f"is present but unreachable"
+    )
+    body = src[src.index(marker) : src.index(marker) + 240]
+    assert "Nothing is worth meaningfully" in body, (
+        f"the {side} empty state no longer says plainly that nothing cleared the floor"
+    )

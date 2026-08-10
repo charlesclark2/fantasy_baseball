@@ -34,6 +34,7 @@ DRAFT = REPO / "frontend/components/fantasy/draft-optimizer.tsx"
 COPY = REPO / "frontend/lib/fantasy-claim-copy.ts"
 QUERIES = REPO / "frontend/lib/fantasy-queries.ts"
 GUARDRAILS = REPO / "app/backend/services/cost_guardrails.py"
+DELTA = REPO / "frontend/lib/league-delta.ts"
 
 SUITE = "betting_ml/tests/test_e9_61_generic_delta.py"
 
@@ -147,6 +148,51 @@ CASES = [
      [("    if has_authorization:\n        return PRIVATE_CACHE_CONTROL",
        "    if has_authorization and False:\n        return PRIVATE_CACHE_CONTROL")],
      "test_an_authenticated_read_of_one_is_private_no_store[/fantasy/leagues]"),
+
+    # ── item 2: the VOR highlights, and the noise floor a LIVE-DATA run forced ─────────────────
+    #
+    # These breaks are the ones a fixture-based suite could not have caught: the e2e boards are on
+    # incompatible point scales, so a floor measured in VOR points is meaningless there.
+
+    ("the highlights go back to ranking on rank movement", DELTA,
+     [("    .sort((a, b) => (b.vorDelta as number) - (a.vorDelta as number) || a.leagueOvrRank - b.leagueOvrRank)",
+       "    .sort((a, b) => (b.ovrDelta as number) - (a.ovrDelta as number) || a.leagueOvrRank - b.leagueOvrRank)")],
+     "test_the_highlights_rank_on_value_not_on_rank_movement"),
+
+    # The floor is deleted — the state this story found on the LIVE board, where two of five
+    # measured leagues filled an entire column with rounding.
+    ("the noise floor is removed from highlight eligibility", DELTA,
+     [("  const valued = comparable.filter(\n"
+       "    (d) => d.vorDelta != null && Math.abs(d.vorDelta) >= MIN_HIGHLIGHT_VOR_DELTA,\n  )",
+       "  const valued = comparable.filter((d) => d.vorDelta != null)")],
+     "test_a_highlight_must_clear_the_measured_reconstruction_noise"),
+
+    # ⭐ THE SUBTLE ONE. A ONE-SIDED test reads like a floor and filters only risers, so the
+    # fabricated column — the actual defect — survives untouched. `Math.abs` is the whole clause.
+    ("the floor becomes one-sided, so only risers are filtered", DELTA,
+     [("(d) => d.vorDelta != null && Math.abs(d.vorDelta) >= MIN_HIGHLIGHT_VOR_DELTA,",
+       "(d) => d.vorDelta != null && d.vorDelta >= MIN_HIGHLIGHT_VOR_DELTA,")],
+     "test_a_highlight_must_clear_the_measured_reconstruction_noise"),
+
+    # The measurement stops travelling with the constant, so nobody can re-derive it when the
+    # export's precision changes.
+    ("the floor keeps its value but loses its derivation", DELTA,
+     [(" *     p50 0.30   p90 1.20   p99 1.60   MAX 1.70          (n = 858, true answer 0 for every one)",
+       " *     (measured once; see the story record)")],
+     "test_the_floor_is_documented_as_measured_rather_than_chosen"),
+
+    # A one-sided result is COMMON under the floor, so a bare heading over nothing is exactly the
+    # shape a reader reads as a bug.
+    ("the fallers column loses its empty state", MY_LEAGUE,
+     [('{delta.fallers.length === 0 ? (', '{false ? (')],
+     "test_each_highlight_column_has_its_own_empty_state[fallers]"),
+
+    # The symmetric break, so the parametrized clause is proven on BOTH sides rather than on one
+    # side plus an assumption — a column whose empty state nobody proved is a column that can lose
+    # it silently.
+    ("the risers column loses its empty state", MY_LEAGUE,
+     [('{delta.risers.length === 0 ? (', '{false ? (')],
+     "test_each_highlight_column_has_its_own_empty_state[risers]"),
 ]
 
 

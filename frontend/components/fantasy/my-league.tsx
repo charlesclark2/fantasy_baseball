@@ -425,26 +425,44 @@ export function MyLeague() {
                   generic rankings already describe your league well.
                 </p>
               ) : (
+                // ⚠️ ONE COLUMN CAN BE LEGITIMATELY EMPTY WHILE THE OTHER IS FULL, and it is a
+                // COMMON shape rather than an edge case: measured on the live board, a superflex
+                // league lifts quarterbacks and lowers nobody's value, and a 3-WR league lifts
+                // receivers and lowers nobody's. Before E9.61's noise floor those columns filled
+                // with players at 0.5–0.7 — pure rounding, presented under a heading. Each side
+                // therefore renders its own empty line instead of a bare heading over nothing.
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-[#10b981]">
                       Worth more in your league
                     </h3>
-                    <ul className="mt-2 space-y-2" data-testid="risers">
-                      {delta.risers.map((d) => (
-                        <MoverCard key={d.id} d={d} />
-                      ))}
-                    </ul>
+                    {delta.risers.length === 0 ? (
+                      <p className="mt-2 text-xs text-gray-500" data-testid="risers-none">
+                        Nothing is worth meaningfully more here.
+                      </p>
+                    ) : (
+                      <ul className="mt-2 space-y-2" data-testid="risers">
+                        {delta.risers.map((d) => (
+                          <MoverCard key={d.id} d={d} />
+                        ))}
+                      </ul>
+                    )}
                   </div>
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-[#ef4444]">
                       Worth less in your league
                     </h3>
-                    <ul className="mt-2 space-y-2" data-testid="fallers">
-                      {delta.fallers.map((d) => (
-                        <MoverCard key={d.id} d={d} />
-                      ))}
-                    </ul>
+                    {delta.fallers.length === 0 ? (
+                      <p className="mt-2 text-xs text-gray-500" data-testid="fallers-none">
+                        Nothing is worth meaningfully less here.
+                      </p>
+                    ) : (
+                      <ul className="mt-2 space-y-2" data-testid="fallers">
+                        {delta.fallers.map((d) => (
+                          <MoverCard key={d.id} d={d} />
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 </div>
               )}

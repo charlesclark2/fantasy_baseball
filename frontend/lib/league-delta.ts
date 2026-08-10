@@ -106,6 +106,39 @@ export const MEANINGFUL_MOVE = 5
 /** How many risers/fallers the activation screen leads with. */
 export const HIGHLIGHT_COUNT = 5
 
+/**
+ * The smallest |VOR delta| allowed to LEAD as a riser/faller. Below this the number is rounding,
+ * not the reader's settings.
+ *
+ * ⭐ MEASURED, NOT CHOSEN (E9.61, live 2026 payload, all 858 players). The two sides of the delta
+ * are produced differently: the generic board arrives from the API with `pts`/`vor` already rounded
+ * to 1dp, while the league board is re-scored IN THE BROWSER from the raw stat line (itself 1dp).
+ * So even a league byte-identical to the free preset — where every true delta is exactly 0 —
+ * reconstructs with a small non-zero delta:
+ *
+ *     p50 0.30   p90 1.20   p99 1.60   MAX 1.70          (n = 858, true answer 0 for every one)
+ *
+ * At 2.0, **none** of those 858 survive, and nothing real is lost: across five differing league
+ * shapes the smallest GENUINE highlight measured 4.1. The gap between 1.7 and 4.1 is what makes
+ * this a floor rather than a fudge.
+ *
+ * ⚠️ IT IS A FUNCTION OF THE EXPORT'S PRECISION. If `export_draft_board_json` ever changes how many
+ * decimals it publishes, re-measure — do not scale this by intuition.
+ *
+ * ⛔ WHY A FLOOR RATHER THAN "SHOW THE TOP 5 ANYWAY": without it, a league that genuinely differs
+ * in ONE DIRECTION prints a fabricated list in the other. Measured: a superflex league (QBs rise,
+ * nobody's value falls) filled its "Worth less in your league" column with five players at 0.6–0.7,
+ * and a 3-WR league filled it with tight ends at 0.5. Both columns had a heading, five names and an
+ * explanation — and one of them was rounding. An empty column that says so is the honest answer,
+ * and the surface already has that state for the both-empty case.
+ *
+ * ⭐ This is also why the switch to VOR needed a floor and rank movement did not: an integer rank
+ * move of −11 is a real re-ordering even when the player's VALUE is unchanged (in a 3-WR league,
+ * tight ends genuinely slide as receivers climb past them). Ranking on value states something
+ * stronger and therefore has to be quiet when it has nothing to say.
+ */
+export const MIN_HIGHLIGHT_VOR_DELTA = 2
+
 // ══ E9.61 — THE HIGHLIGHTS RANK ON *VALUE*, NOT ON RANK MOVEMENT ═════════════════════════════════
 //
 // ⭐ WHY THIS CHANGED. The two fixes below (`draftablePoolSize`, `isLowPredictability`) were both
@@ -338,7 +371,12 @@ export function computeLeagueDelta(
   // ⭐ E9.61 — ranked on VOR DELTA (see `HIGHLIGHTS_RANK_BY_VOR`). A player with no VOR on one of the
   // two boards has no value change to report, so he is not eligible to LEAD — distinct from being
   // excluded from `players`, where his rank move is still shown in his own row.
-  const valued = comparable.filter((d) => d.vorDelta != null)
+  // ...and only where that value change is bigger than the reconstruction noise between the two
+  // boards (`MIN_HIGHLIGHT_VOR_DELTA`). Each side is filtered INDEPENDENTLY, so a league that moves
+  // value in one direction only gets one populated column rather than a fabricated second one.
+  const valued = comparable.filter(
+    (d) => d.vorDelta != null && Math.abs(d.vorDelta) >= MIN_HIGHLIGHT_VOR_DELTA,
+  )
 
   const risers = valued
     .filter((d) => (d.vorDelta as number) > 0)
