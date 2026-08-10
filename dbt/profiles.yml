@@ -36,7 +36,18 @@ baseball_betting_and_fantasy:
       user: dbt_rw
       role: ACCOUNTADMIN
       database: baseball_data
-      warehouse: COMPUTE_WH
+      # E11.24 — CI must not bill the warehouse the story is trying to let SLEEP. Measured
+      # 2026-08-10: the `ci_betting` schema is 74 of 346 COMPUTE_WH provisioning waits over
+      # 7 days (21.4%) and does NO serving work; on a promotion day its waits were the entire
+      # apparent eb_* "regression" a session opened by chasing.
+      # ⭐ THE DEFAULT IS THE FALLBACK: with SNOWFLAKE_CI_WAREHOUSE unset this is byte-identical
+      # to today, so the change is safe to ship BEFORE the warehouse exists. dbt's env_var()
+      # returns the default only when the var is UNSET — an EMPTY string is returned verbatim
+      # and would produce `warehouse: ""` — so the workflow must never pass it empty (the
+      # unset-vs-empty trap that made delta-rs sign an empty AKID). It uses its own `||`.
+      # ⛔ ONLY the `ci` target is env-driven. The default and `dev` targets stay hardcoded so
+      # a stray SNOWFLAKE_CI_WAREHOUSE can never steer the production daily build.
+      warehouse: "{{ env_var('SNOWFLAKE_CI_WAREHOUSE', 'COMPUTE_WH') }}"
       schema: ci_betting
       private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH', '/Users/charlesclark/Documents/machine_learning/baseball/betting_model/jaffle_shop/rsa_key.pem') }}"
       query_tag: "{{ env_var('DBT_JOB_NAME', 'dbt_manual') }}|{{ env_var('TARGET_ENV', 'dev') }}"

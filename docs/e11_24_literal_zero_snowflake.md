@@ -2908,10 +2908,16 @@ the *entire* apparent eb_* regression this session opened by chasing. Across the
 `CI on the prod WH` family reads **130/4 · 14/1 · 64/14 · 207/23 · 76/39** — the largest single
 wait bucket on the board.
 
-`.github/workflows/dbt_build_ci.yml` (both jobs) now resolves:
+⚠️ **The first cut of this was a NO-OP — see the correction at the end of this doc.** What
+actually ships is a change in **two places**, because dbt reads its warehouse from
+`profiles.yml`, not from the shell:
 
 ```yaml
-SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_CI_WAREHOUSE || secrets.SNOWFLAKE_WAREHOUSE }}
+# dbt/profiles.yml — the `ci` target (the only one changed)
+warehouse: "{{ env_var('SNOWFLAKE_CI_WAREHOUSE', 'COMPUTE_WH') }}"
+
+# .github/workflows/dbt_build_ci.yml — the dbt-build-ci job (the one that runs `--target ci`)
+SNOWFLAKE_CI_WAREHOUSE: ${{ secrets.SNOWFLAKE_CI_WAREHOUSE || 'COMPUTE_WH' }}
 ```
 
 ⭐ **The `||` fallback is the point: this is SAFE TO MERGE BEFORE THE WAREHOUSE EXISTS.** An unset
@@ -2967,3 +2973,243 @@ which is exactly what it *is* right for. No cost credit is claimed from this tab
 the independently-recorded 8/3 provisioning-stall outlier — "11 of 33 over 600 s, max 2402.8 s" —
 to the second. The instrument agrees with a fact recorded from a different query months of context
 earlier.)*
+
+---
+
+# 🔎 TARGET 5, RE-OPENED WITH A MEASUREMENT — AND A CORRECTION TO THE #675 CORRECTION (2026-08-10)
+
+Found while checking whether today's flip moved a freshness ANCHOR (the INC-23/INC-34 class: *a
+cutover invalidates an anchor, not the data*). `predict_today`'s `_FRESHNESS_QUERY` probes
+`information_schema.tables.last_altered` for **`FEATURE_PREGAME_GAME_FEATURES_RAW`** and joins
+**`eb_starter_posteriors`** — **both flipped to VIEW today**, so the question was live.
+
+## What is measured
+
+**1. The E11.20 phase-2b LTZ bug is STILL IN THE SOURCE.** `predict_today.py:999` reads
+`date_part(epoch_second, max(last_altered)::timestamp_ntz)`. The documented cure was to take the
+epoch of the LTZ value *directly*; the `::timestamp_ntz` cast is still there. Scored live, both ways,
+in one statement:
+
+| | value |
+|---|---|
+| as-coded (`::timestamp_ntz` cast) epoch | 1786377000 |
+| correct (direct epoch of the LTZ) | 1786402200 |
+| **delta** | **420.0 min** — the PT↔UTC offset, exactly |
+| `lag_min` **as coded** | **400.30** → `> 180` ⇒ **STALE, slate-wide abstain** |
+| `lag_min` **corrected** | **−19.70** ⇒ FRESH (the store was built ~20 min *after* the last ingest) |
+
+Session `TIMEZONE` is `America/Los_Angeles`, and **neither `get_snowflake_connection` nor
+`get_monitoring_connection` sets a session timezone** — so the box inherits the same account
+default. ⇒ if the SF branch ran, it would abstain every slate.
+
+**2. It has never abstained.** Served rows, deduped to current per (tier, game_pk), on `MONITOR_WH`:
+**zero rows in 14 days** carry a freshness `abstain_reason`, and the `feature_store` tier reads
+**15/15 with a non-null `h2h_edge`** on 08-04/05/07/08/09. A freshness abstain is slate-wide by
+construction, so it cannot hide.
+
+**3. The probe shape is essentially absent from the serving path.** Its distinctive fingerprint —
+`information_schema.tables` **and** `FEATURE_PREGAME_GAME_FEATURES_RAW` in one statement, which
+nothing else in the system emits — ran **6 times in 9 days**: five on `MONITOR_WH` (audit sessions,
+**two of them this session's own probes**) and **one** on `COMPUTE_WH` (08-04 22:29). `predict_today`
+runs several times a slate and would emit it on *every* SF-branch run.
+
+## ⇒ The correction
+
+The #675 prep record states: *"It is not dead. Measured on MONITOR_WH: that exact query shape
+executed on COMPUTE_WH on 08-02, 08-05, 08-08 and 08-09 (1×/day, 0 waits)."* On the distinctive
+fingerprint that does not reproduce — those days carry no such execution. The earlier match was
+almost certainly on a **looser pattern** (the query's `stg_statsapi_probable_pitchers` /
+`eb_starter_posteriors` subqueries, which many statements share) rather than on the
+`information_schema` probe that only `_FRESHNESS_QUERY` performs.
+
+⭐ **The measurement lesson: attribute a BRANCH from the outcome it would have produced, not from a
+query shape appearing.** A shape executing proves *something* ran it; it does not prove the serving
+gate took that branch — and here the served outcome (zero abstains, 15/15 edges) refutes the shape
+reading outright. Sibling of E11.24's own "executions HOLD while waits → 0" discipline, one level up:
+the artifact beats the query log.
+
+⇒ **`W8B_FRESHNESS_S3=1` is live on the box** — despite `.env.example` documenting it as `0`. That
+is the `W7B_LAKEHOUSE_S3` documented-≠-actual class **facing the other way**: not a flag believed on
+and never set, but a flag believed off and quietly on.
+
+## 🚨 The residual risk, and it is the real deliverable
+
+**`W8B_FRESHNESS_S3` is load-bearing and is pinned by NOTHING.** It is absent from
+`services/dagster/aws/env.required` (the deploy gate) and from
+`monitor_health.REQUIRED_INTRADAY_FLAGS` (the `check_monitors_healthy_op` page). The box's `.env` is
+uncommitted and **a `git pull` never touches it**, so if that key were ever lost — a box rebuild, a
+hand-edit, an `.env` restored from the committed example that says `0` — the gate silently reverts
+to the SF branch and **false-abstains every game of every slate, with no alarm**, exactly as it did
+for six days 7/24→7/29.
+
+**Two states are currently indistinguishable from any artifact reachable off-box:** the gate routed
+correctly to S3, and the gate taking the SF branch but dying in its `except` and **failing open**
+(the handler returns *not-stale* and prints only to stdout). Both yield zero abstains. **A serving
+gate whose healthy state and whose silently-disabled state produce byte-identical evidence has not
+been verified** — NF1.7(a), applied to a serving gate rather than a monitor.
+
+### ⏭️ Operator — the ONE command that settles it (BOX)
+
+```bash
+docker compose -f services/dagster/aws/docker-compose.yml exec -T dagster-codeloc \
+  printenv W8B_FRESHNESS_S3
+```
+⚠️ Must be run against the **persistent `dagster-codeloc`** container (FU-1's lesson: a throwaway
+`exec` proves nothing about the container that ran this morning's jobs). `1` confirms the inference;
+anything else means the gate has been failing open and the abstain-free record is a *disabled* gate,
+not a healthy one — a materially worse finding.
+
+### The fix, in the order it should ship — ⛔ NOT during this soak
+
+1. **Pin the flag** — add `W8B_FRESHNESS_S3` to `env.required` **and** to
+   `monitor_health.REQUIRED_INTRADAY_FLAGS`, the repo's standard cure for this class (already
+   applied to W7A/W7B). ⛔ **Do NOT ship this now:** a newly-`env.required` key makes the **next
+   deploy FAIL** until the operator adds it to the box's live `.env` — and #682/#693 have deploys
+   pending. Ship it *with* an explicit "set `W8B_FRESHNESS_S3=1` in
+   `services/dagster/aws/.env`" operator step.
+2. **Make the branch observable** — emit `[METRIC] freshness_probe_branch=s3|snowflake|failed_open`
+   so the two indistinguishable states separate in the served artifact.
+3. **Then target 5 proper** — delete the SF branch (with the branch-parity assertion the stage-3
+   plan already requires). Removing it retires the +420 cast with it; fixing the cast *in place* is
+   the lesser cure, because the branch is dead weight either way.
+
+⛔ Nothing here was shipped this session: `predict_today.py` is HALT-tier serving, the E11.24 rule is
+one serving-flip per soak, and the #675 soak is open. This is a recorded finding plus a box command.
+
+## Incidental — a #675 claim CONFIRMED post-flip
+
+The same probe returns `starter_missing 0 / starter_total 20` reading `eb_starter_posteriors` **as a
+view**. #675's ghost-immunity argument (the probe side is *today's current probables*, so a
+superseded ghost row can never satisfy the LEFT JOIN, making `starter_missing` identical against the
+table and the view) is now measured on the flipped object, not just reasoned about.
+
+---
+
+# 🎯 TARGET-7 CALLER INVENTORY (2026-08-10) — what stands between here and a suspended warehouse
+
+Target 6 is closed and #675 is flipped, so target 7 ("every `COMPUTE_WH` caller must be gone before
+the warehouse can be dropped") is next and needs a current list. Read on `MONITOR_WH`, 7 days,
+**warehouse-occupying statements only** (the #679 filter).
+
+⚠️ **This is an INVENTORY — an enumeration of callers — NOT a magnitude or trend claim.** The window
+straddles both the 08-06 target-6 flip and the 08-10 #675 flip, so per this story's own per-day rule
+nothing here may be quoted as a delta. It answers "who is left", not "how much".
+
+| caller | execs | waits | what it is |
+|---|---|---|---|
+| `DBT_RW` → schema `BETTING` | 5,430 | **145** | the pipeline's remaining Snowflake materialisations — the bulk, and the real target-7 body of work |
+| `DBT_RW` → no schema | 1,982 | 115 | session/DDL-adjacent traffic |
+| **`DBT_RW` → `CI_BETTING`** | 269 | **74** | **the dbt-Build CI — 21.4% of all COMPUTE_WH waits in the window** |
+| `DBT_RW` → `BETTING_FEATURES` | 134 | 2 | nearly gone (targets 6 + #662/#675 did this) |
+| `CCL1196` (operator Snowsight) | 108 | 22 | behavioural, not code — audit from `MONITOR_WH` |
+| `CREDENCE_API` | **16** | **7** | down to the 3 documented shapes |
+
+## Three things this changes
+
+**1. ⭐ The `CI_WH` item is not housekeeping — CI is 21.4% of the remaining waits.** 74 of 346 waits
+in seven days come from the `CI_BETTING` schema, i.e. `dbt Build CI` running against the production
+warehouse. That is the second-largest identified caller on the board and it does **no serving work
+at all**. The fallback-safe repoint shipped this session covers it; it is **inert until the operator
+creates `CI_WH` and sets `SNOWFLAKE_CI_WAREHOUSE`**, so that DDL is now the cheapest remaining wake
+reduction in the story by a wide margin.
+
+**2. `BETTING_FEATURES` is essentially done — 134 executions and 2 waits.** Targets 6, #662 and #675
+between them have emptied the feature-schema of warehouse-occupying work. What remains is
+concentrated in `BETTING`, which is where target 4 (the three sequential-posterior state writers)
+and the residual mart materialisations live. **Target 4 is now unblocked** (it was gated on 6) and
+is the natural body of work after #682/#693.
+
+**3. `CREDENCE_API` is down to 16 executions / 7 waits and exactly the 3 shapes the story already
+documented** — `DISTINCT model_version` (7), `/pipeline/status` (6), and the `model_registry`
+freshness read (3). The metering repoint plus the `staleTime` fix removed the admin cost panel
+entirely; these three are unchanged. They remain a **target-7 blocker and a request-path latency
+defect** (a CLAUDE.md rule violation), not a cost lever — do not re-litigate them as one, and mind
+the E9.26b landmine when repointing (`lakehouse_query` catches-and-returns `[]`, so the obvious fix
+fails *silently* inside the Lambda).
+
+## Recommended order from here
+
+**#682 → #693** (already sequenced) **→ `CI_WH` DDL** (cheapest, 21.4%, zero serving risk) **→
+target 4** (now unblocked) **→ target 5** (the freshness-gate finding above) **→ target 7**.
+
+
+---
+
+# 🪤 CORRECTION — THE FIRST CI_WH CUT WAS A DECLARATION WITH NO CONSUMER (2026-08-10, same session)
+
+Recorded because the defect is this repo's most-repeated shape and it was committed, CI-green and
+guarded before being caught.
+
+**What shipped first:** `.github/workflows/dbt_build_ci.yml` set
+`SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_CI_WAREHOUSE || secrets.SNOWFLAKE_WAREHOUSE }}` in both
+jobs. **dbt never reads that variable.** `dbt/profiles.yml` hardcoded `warehouse: COMPUTE_WH` in
+every target, so the change could not move a single query no matter what the secret said.
+
+⭐ **NF-C0e's "wired ≠ invoked", and the guard reproduced the same error one level up.** The test
+asserted the workflow *declared* the variable — i.e. it read the value back under the key the code
+wrote, which is the INC-38/NF-C0e vacuous shape. It was green, RED-proven on four breaks, and
+**proved nothing**, because every break it tested was on the declaring side. A guard on a
+declaration cannot detect that the declaration has no consumer.
+
+**What caught it:** answering the operator's plain question — *"where do we ensure the CI job uses
+that warehouse?"* — by going and reading `profiles.yml` instead of restating the diff. The check
+that would have caught it earlier is the mechanical one: **trace the variable to the process that
+reads it, before writing the guard.**
+
+**The corrected change, and why it is scoped this way:**
+
+* `dbt/profiles.yml` — **only** the `ci` target becomes `env_var('SNOWFLAKE_CI_WAREHOUSE',
+  'COMPUTE_WH')`. The default and `dev` targets stay hardcoded so a stray variable can never steer
+  the production daily build. A guard pins that asymmetry.
+* the workflow supplies the var on the **`dbt-build-ci` job only** — the one that passes
+  `--target ci`. ⚠️ **`dbt-compile` runs with NO `--target`, i.e. on the DEFAULT (production)
+  profile, and is therefore NOT covered by this change.** Worth knowing before reading the next
+  census: the `ci_betting` traffic (269 execs / 74 waits) moves; whatever `dbt-compile` costs does
+  not.
+* 🪤 **the `||` fallback in the workflow is load-bearing, not decorative.** An unset GitHub secret
+  interpolates to an **empty string**, and dbt's `env_var()` returns its default only for an
+  **UNSET** variable — an empty one is passed through verbatim, yielding `warehouse: ""`. Same
+  unset-vs-empty class as the delta-rs empty-AKID landmine. So the fallback has to live on the
+  supply side; the `profiles.yml` default alone would not save it.
+
+Guards: four clauses — consumer end, blast radius, supply end, and the empty-string trap — each
+RED-proven on its own break and **verified independent** (each break reddens only its own clause).
+
+## ⏭️ Operator, revised — the order that actually works
+
+1. **Create the warehouse + grant** (safe any time; a suspended warehouse costs nothing):
+   ```sql
+   CREATE WAREHOUSE IF NOT EXISTS CI_WH WITH WAREHOUSE_SIZE='XSMALL'
+     AUTO_SUSPEND=60 AUTO_RESUME=TRUE INITIALLY_SUSPENDED=TRUE;
+   GRANT USAGE ON WAREHOUSE CI_WH TO ROLE ACCOUNTADMIN;
+   ```
+   (CI runs as `DBT_RW` / role `ACCOUNTADMIN` — measured, not assumed. The grant is redundant for
+   ACCOUNTADMIN and is included to match MONITOR_WH's setup and survive a future role change.)
+   ⛔ **Do not reuse `COMPUTE_SMALL_WH`/`COMPUTE_MEDIUM_WH`** — both exist and are idle, but Small
+   is **2 credits/hr against X-Small's 1**, so CI would cost double what it does today.
+2. **Set the secret:** `gh secret set SNOWFLAKE_CI_WAREHOUSE --body CI_WH --repo charlesclark2/fantasy_baseball`
+3. ⚠️ **It takes effect only once the workflow file is on `main`.** `dbt Build CI` triggers on
+   `push`/`pull_request` to `main`, and a `push` run uses **main's** copy of the workflow. `main`
+   does not have it yet — so this lands with the next `dev→main` promotion, i.e. the #682 or #693
+   deploy. Setting the secret before then is harmless and inert.
+4. **Verify by measurement.** After that promotion, confirm the `ci_betting` statements moved:
+   ```sql
+   select warehouse_name, count(*) n
+   from snowflake.account_usage.query_history
+   where start_time >= dateadd(day,-2,current_timestamp()) and query_text ilike '%ci_betting%'
+   group by 1;
+   ```
+   ⭐ **And read the census correctly afterwards:** the `CI on the prod WH` family will show
+   **executions AND waits both → 0**, which this story's own rules say is the *dead-caller* shape.
+   Here it is a **MOVE, not a death** — the discriminator is that the GitHub Actions runs still
+   succeed and the same statements appear under `CI_WH`. Check both, exactly as #637's audit-INSERT
+   removal had to.
+
+## Honest framing — this is a STRUCTURAL prerequisite, not a credit lever
+
+It does not delete compute; it **relocates** it. Total credits move roughly sideways (possibly a
+hair worse — a cold `CI_WH` resume that previously rode an already-warm `COMPUTE_WH`). The value is
+that `COMPUTE_WH`'s quiet windows become genuinely quiet, which is the **precondition for target 7**
+(suspend/drop), and that CI stops contaminating every soak baseline read on a promotion day — which
+cost this session an hour of chasing a phantom eb_* regression. Do **not** book a credit saving for
+it; book it as removing 21.4% of the wakes standing between here and a suspendable warehouse.

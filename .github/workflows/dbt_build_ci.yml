@@ -38,19 +38,7 @@ jobs:
       SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
       SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
       SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-      # E11.24 — dbt CI must not wake the warehouse the story is trying to quiet.
-      # Measured 2026-08-10: the `CI on the prod WH` family is the largest single wait bucket
-      # on the board (130/4 · 14/1 · 64/14 · 207/23 · 76/39 over the census window), and on the
-      # #720 promotion day its 39 waits were the ENTIRE apparent eb_* "regression" (they run in
-      # the `ci_betting` schema, so they are separable — but they still bill COMPUTE_WH and they
-      # still contaminate every soak baseline read on a merge day).
-      # ⭐ FALLBACK BY DESIGN: with `SNOWFLAKE_CI_WAREHOUSE` unset this evaluates to today's
-      # value, so this change is safe to merge BEFORE the warehouse exists — the operator can
-      # create CI_WH and set the secret with no code change and no red-CI window. An unset
-      # GitHub secret is the empty string, which is falsy, so `||` selects the fallback.
-      # ⛔ NOT MONITOR_WH — that is the census's own read path; sharing it would make CI a line
-      # in the instrument that measures CI (target 3's self-inflicted-wake defect).
-      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_CI_WAREHOUSE || secrets.SNOWFLAKE_WAREHOUSE }}
+      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
       SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
 
     steps:
@@ -130,19 +118,14 @@ jobs:
       SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
       SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
       SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-      # E11.24 — dbt CI must not wake the warehouse the story is trying to quiet.
-      # Measured 2026-08-10: the `CI on the prod WH` family is the largest single wait bucket
-      # on the board (130/4 · 14/1 · 64/14 · 207/23 · 76/39 over the census window), and on the
-      # #720 promotion day its 39 waits were the ENTIRE apparent eb_* "regression" (they run in
-      # the `ci_betting` schema, so they are separable — but they still bill COMPUTE_WH and they
-      # still contaminate every soak baseline read on a merge day).
-      # ⭐ FALLBACK BY DESIGN: with `SNOWFLAKE_CI_WAREHOUSE` unset this evaluates to today's
-      # value, so this change is safe to merge BEFORE the warehouse exists — the operator can
-      # create CI_WH and set the secret with no code change and no red-CI window. An unset
-      # GitHub secret is the empty string, which is falsy, so `||` selects the fallback.
-      # ⛔ NOT MONITOR_WH — that is the census's own read path; sharing it would make CI a line
-      # in the instrument that measures CI (target 3's self-inflicted-wake defect).
-      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_CI_WAREHOUSE || secrets.SNOWFLAKE_WAREHOUSE }}
+      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+      # E11.24 — consumed by the `ci` target in dbt/profiles.yml (this job runs `--target ci`).
+      # ⚠️ The `|| 'COMPUTE_WH'` is REQUIRED, not decorative: an unset GitHub secret interpolates
+      # to an EMPTY STRING, and dbt's env_var() returns a default only for an UNSET var — an
+      # empty one is passed through verbatim as `warehouse: ""`. So the fallback lives here.
+      # ⛔ NOT on the dbt-compile job: it runs without --target, i.e. on the DEFAULT (production)
+      # profile, so this var would be inert there. That job is NOT covered by this change.
+      SNOWFLAKE_CI_WAREHOUSE: ${{ secrets.SNOWFLAKE_CI_WAREHOUSE || 'COMPUTE_WH' }}
       SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
 
     steps:
