@@ -24,6 +24,13 @@
 // Nothing here can promote a term to "applied" by asserting it; only a projection column can.
 
 import { useEffect, useMemo, useState } from "react"
+import posthog from "posthog-js"
+import { useAuth } from "@/lib/auth-context"
+import { canSaveAnotherLeague } from "@/lib/entitlements"
+import {
+  LEAGUE_QUOTA_REACHED_DETAIL,
+  LEAGUE_QUOTA_REACHED_TITLE,
+} from "@/lib/fantasy-claim-copy"
 import { Plus, Save, Trash2, TriangleAlert, Check, Info } from "lucide-react"
 import {
   useCustomBoard,
@@ -48,7 +55,14 @@ import {
 import type { LeagueConfig, RosterSlotConfig, TermCoverage } from "@/lib/league-config"
 import { availableFields } from "@/lib/league-scoring"
 import { useFantasyProjections } from "@/lib/fantasy-queries"
-import { EmptyBlock, LoadingBlock, PosBadge, SurfaceHeader, num } from "@/components/fantasy/shared"
+import {
+  EmptyBlock,
+  LeagueQuotaNotice,
+  LoadingBlock,
+  PosBadge,
+  SurfaceHeader,
+  num,
+} from "@/components/fantasy/shared"
 import { NumericInput } from "@/components/ui/numeric-input"
 import { Picker } from "@/components/ui/picker"
 
@@ -69,6 +83,7 @@ const VERDICT_COPY: Record<string, string> = {
 }
 
 export function LeagueSettingsEditor() {
+  const { groups } = useAuth()
   const { data: manifest } = useFantasyManifest()
   const { data: leagues, isLoading: leaguesLoading } = useSavedLeagues()
   const { data: projections } = useFantasyProjections()
@@ -107,6 +122,15 @@ export function LeagueSettingsEditor() {
 
   const errors = useMemo(() => validateConfig(cfg), [cfg])
 
+  // ⭐ G100-C1 — is this caller trying to CREATE a league they have no quota for?
+  //
+  // ⚠️ THE `leagueId === null` HALF IS LOAD-BEARING. The cap counts leagues, and editing an existing
+  // one creates none — a check that ignored it would freeze a free user's single league at whatever
+  // they first typed, which presents as "saving is broken" rather than as a limit (E8.6's class).
+  // The server draws the same distinction: `POST` enforces the quota, `PUT` does not.
+  const atQuota =
+    leagueId === null && !canSaveAnotherLeague((leagues ?? []).length, groups)
+
   // ── the honest-coverage report, computed against the data actually present ──────────────────
   const coverage = useMemo(() => {
     const fields = projections?.players?.length ? availableFields(projections.players) : undefined
@@ -131,11 +155,34 @@ export function LeagueSettingsEditor() {
       superflex: detectSuperflex(cfg.roster),
       ppr: derivePprLabel(cfg.scoring),
     }
+    const isNew = leagueId === null
     const result = await saveLeague.mutateAsync({ leagueId, config: payload })
     setLeagueId(result.league_id)
     setCfg(stripServerFields(result))
     setDirty(false)
     setSaved(true)
+
+    // ── G100-C1: the SECOND clause of the activation definition ────────────────────────────────
+    //
+    // `account_created AND league_config_completed AND custom_board_viewed`. This is the manual
+    // route in; `league-import.tsx` fires the same event for the imported one, because activation
+    // is about HAVING a configured league, not about which door it came through. The `method`
+    // dimension is what separates them in the funnel.
+    //
+    // ⭐ FIRES ONLY ON A CREATE, not on every edit. Re-firing when someone tweaks a scoring weight
+    // would count one user's activation many times and inflate the denominator paid conversion is
+    // measured against. ⛔ Do not rename — G100-D0's dashboard consumes these names.
+    //
+    // AFTER the await, deliberately: an event emitted before the server confirms would count a
+    // 409 (a free account at its quota) as an activation.
+    if (isNew) {
+      posthog.capture("league_config_completed", {
+        method: "manual",
+        league_platform: "manual",
+        league_format: payload.ppr ?? null,
+        league_size: payload.n_teams ?? null,
+      })
+    }
   }
 
   const onSelectLeague = (id: string) => {
@@ -405,7 +452,7 @@ export function LeagueSettingsEditor() {
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={onSave}
-            disabled={errors.length > 0 || saveLeague.isPending}
+            disabled={errors.length > 0 || saveLeague.isPending || atQuota}
             className="flex w-full items-center justify-center gap-1.5 rounded bg-sky-600 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-gray-700 sm:w-auto"
           >
             <Save className="h-4 w-4" />
@@ -426,6 +473,27 @@ export function LeagueSettingsEditor() {
             </span>
           )}
         </div>
+        {/* ⭐ G100-C1 — THE BOUNDARY, STATED AT THE CONTROL. A free account keeps one league, and
+            `POST /fantasy/leagues` answers 409 for the second. Letting someone fill in a long form
+            and meet that on submit is the worst version of a paywall; this is the same
+            "state the lock where the visitor meets it" pattern the format picker uses.
+            ⛔ Advisory only — the server is the gate, and this disables a button, which is not one. */}
+        {atQuota && (
+          <div className="mt-2">
+            <LeagueQuotaNotice
+              title={LEAGUE_QUOTA_REACHED_TITLE}
+              detail={LEAGUE_QUOTA_REACHED_DETAIL}
+              action={
+                <button
+                  onClick={() => leagues?.[0] && onSelectLeague(leagues[0].league_id)}
+                  className="text-gray-300 underline hover:text-[#10b981]"
+                >
+                  Edit the league you have
+                </button>
+              }
+            />
+          </div>
+        )}
         {errors.length > 0 && (
           <ul className="mt-2 text-xs text-red-400">
             {errors.map((e) => (

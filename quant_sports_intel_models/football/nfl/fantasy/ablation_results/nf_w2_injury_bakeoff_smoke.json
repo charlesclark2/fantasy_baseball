@@ -1,0 +1,983 @@
+{
+  "generated_at": "2026-08-09T01:45:05+00:00",
+  "story": "NF-W2",
+  "smoke": true,
+  "evaluation_label_version": "v1.nflverse.stats_player_week",
+  "scoring_system_id": "ppr",
+  "selection_metric": "crps_q39",
+  "n_rows": 84553,
+  "n_folds": 2,
+  "fold_labels": [
+    "2024H1",
+    "2024H2"
+  ],
+  "shadow_fold_labels": [
+    "2025H2"
+  ],
+  "pit_audit": {
+    "game_groups_checked": 532,
+    "records_checked": 98611,
+    "injury_records_checked": 14058,
+    "groups_dropped": [],
+    "rows_dropped": 0
+  },
+  "preregistration": {
+    "hypothesis": "current-week injury-report state improves the weekly distribution, primarily through the zero/availability leg (NF-W4 lean form)",
+    "real_arms": [
+      "inj_both",
+      "inj_zero_leg",
+      "inj_override"
+    ],
+    "foil": "base_hurdle",
+    "anchors": [
+      "nihilist_zero",
+      "pos_marginal",
+      "inj_permuted",
+      "oracle_avail__base",
+      "oracle_avail__inj"
+    ],
+    "oracle_of_form": {
+      "base_hurdle": "oracle_avail__base",
+      "inj_zero_leg": "oracle_avail__base",
+      "inj_override": "oracle_avail__base",
+      "inj_both": "oracle_avail__inj"
+    },
+    "test_blocks": [
+      [
+        2019,
+        1
+      ],
+      [
+        2019,
+        2
+      ],
+      [
+        2020,
+        1
+      ],
+      [
+        2020,
+        2
+      ],
+      [
+        2021,
+        1
+      ],
+      [
+        2021,
+        2
+      ],
+      [
+        2022,
+        1
+      ],
+      [
+        2022,
+        2
+      ],
+      [
+        2023,
+        1
+      ],
+      [
+        2023,
+        2
+      ],
+      [
+        2024,
+        1
+      ],
+      [
+        2024,
+        2
+      ]
+    ],
+    "shadow_blocks": [
+      [
+        2025,
+        1
+      ],
+      [
+        2025,
+        2
+      ]
+    ],
+    "purge_weeks": 2,
+    "pbo_max": 0.2,
+    "dsr_min": 0.95,
+    "fdr_q": 0.1,
+    "coverage_floor": 0.8,
+    "injury_features": [
+      "injury_report__listed",
+      "injury_report__status_out",
+      "injury_report__status_doubtful",
+      "injury_report__status_questionable",
+      "injury_report__practice_dnp",
+      "injury_report__practice_limited",
+      "injury_report__observed"
+    ],
+    "injury_verified_max_season": 2024,
+    "override_statuses": [
+      "out",
+      "doubtful"
+    ],
+    "override_min_n": 200,
+    "features": [
+      "game_context__is_home",
+      "game_context__div_game",
+      "game_context__week_index",
+      "game_context__days_since_last_game",
+      "prior_week_box__ppr_l1",
+      "prior_week_box__ppr_l4_mean",
+      "prior_week_box__ppr_ewm",
+      "prior_week_box__ppr_s2d_mean",
+      "prior_week_box__targets_l4",
+      "prior_week_box__carries_l4",
+      "prior_week_box__attempts_l4",
+      "prior_week_box__receptions_l4",
+      "prior_week_box__rec_yards_l4",
+      "prior_week_box__rush_yards_l4",
+      "prior_week_box__pass_yards_l4",
+      "prior_week_box__played_share_l4",
+      "prior_week_box__games_s2d",
+      "prior_week_box__ppr_sum_s2d",
+      "snap_share__l1",
+      "snap_share__l4_mean",
+      "snap_share__observed_l4",
+      "team_environment__pass_att_l4",
+      "team_environment__rush_att_l4",
+      "team_environment__ppr_l4",
+      "opponent_matchup__dvp_ppr_index_l8",
+      "opponent_matchup__def_ppr_allowed_l8",
+      "prior_season_priors__ppg_prior",
+      "prior_season_priors__games_prior",
+      "prior_season_priors__rookie_flag",
+      "injury_report__listed",
+      "injury_report__status_out",
+      "injury_report__status_doubtful",
+      "injury_report__status_questionable",
+      "injury_report__practice_dnp",
+      "injury_report__practice_limited",
+      "injury_report__observed"
+    ]
+  },
+  "positions": {
+    "QB": {
+      "winner": "inj_both",
+      "foil": "base_hurdle",
+      "mean_crps": {
+        "base_hurdle": 2.6353,
+        "inj_both": 2.527,
+        "inj_zero_leg": 2.5291,
+        "inj_override": 2.5613,
+        "nihilist_zero": 6.7498,
+        "pos_marginal": 4.8288,
+        "inj_permuted": 2.6213,
+        "oracle_avail__base": 2.0772,
+        "oracle_avail__inj": 2.0753
+      },
+      "mean_mae_report_only": {
+        "inj_both": 3.3375,
+        "base_hurdle": 3.4479,
+        "nihilist_zero": 6.7498
+      },
+      "pair_deltas_vs_base": {
+        "inj_both": {
+          "mean": 0.1083,
+          "fold_wins": 2
+        },
+        "inj_zero_leg": {
+          "mean": 0.1062,
+          "fold_wins": 2
+        },
+        "inj_override": {
+          "mean": 0.0739,
+          "fold_wins": 2
+        }
+      },
+      "deltas_by_fold": [
+        0.0437,
+        0.1728
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        1.186,
+        1.055,
+        1.141
+      ],
+      "observed_sr": 1.186,
+      "var_trials_sr": 0.00441,
+      "anchors": {
+        "nihilist_loses": true,
+        "pos_marginal_loses": true,
+        "inj_permuted_does_not_beat_base": false,
+        "no_arm_beats_own_oracle": true,
+        "base_respects_oracle": true
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8222,
+        "n_rows": 1361,
+        "binomial_se": 0.0108,
+        "blocking_shortfall": false
+      }
+    },
+    "RB": {
+      "winner": "inj_both",
+      "foil": "base_hurdle",
+      "mean_crps": {
+        "base_hurdle": 2.5502,
+        "inj_both": 2.3992,
+        "inj_zero_leg": 2.401,
+        "inj_override": 2.436,
+        "nihilist_zero": 5.7302,
+        "pos_marginal": 3.8978,
+        "inj_permuted": 2.5499,
+        "oracle_avail__base": 2.1791,
+        "oracle_avail__inj": 2.1788
+      },
+      "mean_mae_report_only": {
+        "inj_both": 3.2399,
+        "base_hurdle": 3.4391,
+        "nihilist_zero": 5.7302
+      },
+      "pair_deltas_vs_base": {
+        "inj_both": {
+          "mean": 0.1511,
+          "fold_wins": 2
+        },
+        "inj_zero_leg": {
+          "mean": 0.1492,
+          "fold_wins": 2
+        },
+        "inj_override": {
+          "mean": 0.1142,
+          "fold_wins": 2
+        }
+      },
+      "deltas_by_fold": [
+        0.1321,
+        0.1701
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        5.626,
+        8.764,
+        5.748
+      ],
+      "observed_sr": 5.626,
+      "var_trials_sr": 3.16052,
+      "anchors": {
+        "nihilist_loses": true,
+        "pos_marginal_loses": true,
+        "inj_permuted_does_not_beat_base": false,
+        "no_arm_beats_own_oracle": true,
+        "base_respects_oracle": true
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8368,
+        "n_rows": 2102,
+        "binomial_se": 0.0087,
+        "blocking_shortfall": false
+      }
+    },
+    "WR": {
+      "winner": "inj_zero_leg",
+      "foil": "base_hurdle",
+      "mean_crps": {
+        "base_hurdle": 2.7162,
+        "inj_both": 2.5875,
+        "inj_zero_leg": 2.587,
+        "inj_override": 2.6187,
+        "nihilist_zero": 5.7263,
+        "pos_marginal": 3.8567,
+        "inj_permuted": 2.7153,
+        "oracle_avail__base": 2.1416,
+        "oracle_avail__inj": 2.1415
+      },
+      "mean_mae_report_only": {
+        "inj_zero_leg": 3.4862,
+        "base_hurdle": 3.6657,
+        "nihilist_zero": 5.7263
+      },
+      "pair_deltas_vs_base": {
+        "inj_both": {
+          "mean": 0.1287,
+          "fold_wins": 2
+        },
+        "inj_zero_leg": {
+          "mean": 0.1292,
+          "fold_wins": 2
+        },
+        "inj_override": {
+          "mean": 0.0974,
+          "fold_wins": 2
+        }
+      },
+      "deltas_by_fold": [
+        0.1347,
+        0.1236
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        25.768,
+        16.346,
+        4.575
+      ],
+      "observed_sr": 16.346,
+      "var_trials_sr": 112.7418,
+      "anchors": {
+        "nihilist_loses": true,
+        "pos_marginal_loses": true,
+        "inj_permuted_does_not_beat_base": false,
+        "no_arm_beats_own_oracle": true,
+        "base_respects_oracle": true
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8512,
+        "n_rows": 3185,
+        "binomial_se": 0.0071,
+        "blocking_shortfall": false
+      }
+    },
+    "TE": {
+      "winner": "inj_zero_leg",
+      "foil": "base_hurdle",
+      "mean_crps": {
+        "base_hurdle": 1.8009,
+        "inj_both": 1.7257,
+        "inj_zero_leg": 1.7246,
+        "inj_override": 1.7479,
+        "nihilist_zero": 3.4613,
+        "pos_marginal": 2.5662,
+        "inj_permuted": 1.8037,
+        "oracle_avail__base": 1.3244,
+        "oracle_avail__inj": 1.3264
+      },
+      "mean_mae_report_only": {
+        "inj_zero_leg": 2.3355,
+        "base_hurdle": 2.4355,
+        "nihilist_zero": 3.4613
+      },
+      "pair_deltas_vs_base": {
+        "inj_both": {
+          "mean": 0.0752,
+          "fold_wins": 2
+        },
+        "inj_zero_leg": {
+          "mean": 0.0764,
+          "fold_wins": 2
+        },
+        "inj_override": {
+          "mean": 0.053,
+          "fold_wins": 2
+        }
+      },
+      "deltas_by_fold": [
+        0.0693,
+        0.0834
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        9.431,
+        7.687,
+        10.139
+      ],
+      "observed_sr": 7.687,
+      "var_trials_sr": 1.59338,
+      "anchors": {
+        "nihilist_loses": true,
+        "pos_marginal_loses": true,
+        "inj_permuted_does_not_beat_base": true,
+        "no_arm_beats_own_oracle": true,
+        "base_respects_oracle": true
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8906,
+        "n_rows": 1929,
+        "binomial_se": 0.0091,
+        "blocking_shortfall": false
+      }
+    }
+  },
+  "gates": {
+    "QB": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "RB": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "WR": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "TE": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    }
+  },
+  "fdr": {
+    "QB": false,
+    "RB": false,
+    "WR": false,
+    "TE": false
+  },
+  "null_states": {
+    "QB": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w2_injury_crps_QB`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "RB": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w2_injury_crps_RB`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "WR": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w2_injury_crps_WR`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "TE": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w2_injury_crps_TE`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    }
+  },
+  "fold_activity": [
+    {
+      "fold": "2024H1",
+      "n_test": 4365,
+      "listed_share": 0.1805,
+      "out_doubtful_share": 0.0323,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.9984,
+        "n_train_cell": 2526,
+        "n_test_overridden": 141
+      }
+    },
+    {
+      "fold": "2024H2",
+      "n_test": 4212,
+      "listed_share": 0.194,
+      "out_doubtful_share": 0.0332,
+      "observed_share": 1.0,
+      "override": {
+        "p_emp": 0.9985,
+        "n_train_cell": 2676,
+        "n_test_overridden": 140
+      }
+    }
+  ],
+  "shadow": {
+    "QB": {
+      "inj_both": {
+        "mean_delta_vs_base": -0.0392,
+        "max_abs_delta": 0.0392
+      },
+      "inj_zero_leg": {
+        "mean_delta_vs_base": -0.0381,
+        "max_abs_delta": 0.0381
+      },
+      "inj_override": {
+        "mean_delta_vs_base": 0.0,
+        "max_abs_delta": 0.0
+      }
+    },
+    "RB": {
+      "inj_both": {
+        "mean_delta_vs_base": -0.0135,
+        "max_abs_delta": 0.0135
+      },
+      "inj_zero_leg": {
+        "mean_delta_vs_base": -0.0154,
+        "max_abs_delta": 0.0154
+      },
+      "inj_override": {
+        "mean_delta_vs_base": 0.0,
+        "max_abs_delta": 0.0
+      }
+    },
+    "WR": {
+      "inj_both": {
+        "mean_delta_vs_base": -0.0079,
+        "max_abs_delta": 0.0079
+      },
+      "inj_zero_leg": {
+        "mean_delta_vs_base": -0.01,
+        "max_abs_delta": 0.01
+      },
+      "inj_override": {
+        "mean_delta_vs_base": 0.0,
+        "max_abs_delta": 0.0
+      }
+    },
+    "TE": {
+      "inj_both": {
+        "mean_delta_vs_base": -0.0148,
+        "max_abs_delta": 0.0148
+      },
+      "inj_zero_leg": {
+        "mean_delta_vs_base": -0.0137,
+        "max_abs_delta": 0.0137
+      },
+      "inj_override": {
+        "mean_delta_vs_base": 0.0,
+        "max_abs_delta": 0.0
+      }
+    },
+    "activity": [
+      {
+        "fold": "2025H2",
+        "n_test": 4380,
+        "listed_share": null,
+        "out_doubtful_share": 0.0,
+        "observed_share": 0.0
+      }
+    ]
+  },
+  "fold_results": [
+    {
+      "label": "2024H1",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.4296734878055113,
+          "mae_pooled": 3.2744102959092016,
+          "QB": 2.425166337581102,
+          "mae_QB": 3.1917868449865954,
+          "RB": 2.5793694223368395,
+          "mae_RB": 3.4677643867978136,
+          "WR": 2.736331563165328,
+          "mae_WR": 3.7198932578107753,
+          "TE": 1.7614425787126016,
+          "mae_TE": 2.3832597798955404
+        },
+        "inj_both": {
+          "pooled": 2.3254501452290794,
+          "mae_pooled": 3.1384864787935207,
+          "QB": 2.381423634145528,
+          "mae_QB": 3.1699216435877444,
+          "RB": 2.447288336342566,
+          "mae_RB": 3.284740124686104,
+          "WR": 2.60409478013276,
+          "mae_WR": 3.5367630151502567,
+          "TE": 1.6918893199989424,
+          "mae_TE": 2.2974540562848733
+        },
+        "inj_zero_leg": {
+          "pooled": 2.3246636223099313,
+          "mae_pooled": 3.14095670922464,
+          "QB": 2.3901223204113022,
+          "mae_QB": 3.182644528302434,
+          "RB": 2.442162694257937,
+          "mae_RB": 3.298604530074629,
+          "WR": 2.601583295605984,
+          "mae_WR": 3.531160659862457,
+          "TE": 1.692095407454029,
+          "mae_TE": 2.2936033279216166
+        },
+        "inj_override": {
+          "pooled": 2.3476541859887865,
+          "mae_pooled": 3.1705428091968373,
+          "QB": 2.3970462553292458,
+          "mae_QB": 3.155642654147949,
+          "RB": 2.479178673524128,
+          "mae_RB": 3.346332276124506,
+          "WR": 2.6238556827954818,
+          "mae_WR": 3.569511861202306,
+          "TE": 1.712094279368771,
+          "mae_TE": 2.328293622626522
+        },
+        "nihilist_zero": {
+          "pooled": 5.272701030927835,
+          "mae_pooled": 5.272701030927835,
+          "QB": 6.56621897810219,
+          "mae_QB": 6.56621897810219,
+          "RB": 5.8381801299907155,
+          "mae_RB": 5.8381801299907155,
+          "WR": 5.550764488286067,
+          "mae_WR": 5.550764488286067,
+          "TE": 3.288909276248726,
+          "mae_TE": 3.288909276248726
+        },
+        "pos_marginal": {
+          "pooled": 3.653953614855934,
+          "mae_pooled": 5.08634135166094,
+          "QB": 4.652293131199701,
+          "mae_QB": 6.56621897810219,
+          "RB": 3.982893903411661,
+          "mae_RB": 5.547093779015785,
+          "WR": 3.742167472888805,
+          "mae_WR": 5.222651048088779,
+          "TE": 2.44986173188008,
+          "mae_TE": 3.32177370030581
+        },
+        "inj_permuted": {
+          "pooled": 2.4293895414904454,
+          "mae_pooled": 3.2682464429631244,
+          "QB": 2.4036591937266762,
+          "mae_QB": 3.162310491155745,
+          "RB": 2.5812020641603497,
+          "mae_RB": 3.4498337690597682,
+          "WR": 2.74156028881829,
+          "mae_WR": 3.7215168226770197,
+          "TE": 1.7645396425474578,
+          "mae_TE": 2.3934166987083136
+        },
+        "oracle_avail__base": {
+          "pooled": 1.9345008219803188,
+          "mae_pooled": 2.6722392718580528,
+          "QB": 1.9046038972495898,
+          "mae_QB": 2.6425968827963238,
+          "RB": 2.2122839469443774,
+          "mae_RB": 3.0444868784045074,
+          "WR": 2.144313543088863,
+          "mae_WR": 2.960360253517298,
+          "TE": 1.303502589784804,
+          "mae_TE": 1.8078785501510757
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.9345602110726225,
+          "mae_pooled": 2.6728853886683877,
+          "QB": 1.894333449524015,
+          "mae_QB": 2.634337053572717,
+          "RB": 2.218029716915022,
+          "mae_RB": 3.033474933255563,
+          "WR": 2.1460371636273194,
+          "mae_WR": 2.974509045760313,
+          "TE": 1.301780452484258,
+          "mae_TE": 1.805216783385047
+        }
+      },
+      "n_train": 66275,
+      "n_test": 4365
+    },
+    {
+      "label": "2024H2",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.484850863301142,
+          "mae_pooled": 3.3244675860517003,
+          "QB": 2.8453813036325326,
+          "mae_QB": 3.7039718404656217,
+          "RB": 2.521125132022338,
+          "mae_RB": 3.4104588465778614,
+          "WR": 2.695998897136348,
+          "mae_WR": 3.6114226319663594,
+          "TE": 1.84041617976984,
+          "mae_TE": 2.487762253997127
+        },
+        "inj_both": {
+          "pooled": 2.35108459046338,
+          "mae_pooled": 3.1509920728791174,
+          "QB": 2.6725364225285952,
+          "mae_QB": 3.5049889041487723,
+          "RB": 2.3510669048627975,
+          "mae_RB": 3.1950983069091317,
+          "WR": 2.5708258121839958,
+          "mae_WR": 3.441173074760572,
+          "TE": 1.7595879234962788,
+          "mae_TE": 2.3724439149046836
+        },
+        "inj_zero_leg": {
+          "pooled": 2.3525146301389017,
+          "mae_pooled": 3.1508835910181645,
+          "QB": 2.668058889509263,
+          "mae_QB": 3.500229423693533,
+          "RB": 2.3598346170979263,
+          "mae_RB": 3.1932369581480273,
+          "WR": 2.572425128203244,
+          "mae_WR": 3.441201630394695,
+          "TE": 1.7570177794617594,
+          "mae_TE": 2.3773212706150266
+        },
+        "inj_override": {
+          "pooled": 2.391069841891113,
+          "mae_pooled": 3.2032601816135386,
+          "QB": 2.725608894540293,
+          "mae_QB": 3.540305864072692,
+          "RB": 2.3928232991181693,
+          "mae_RB": 3.252269034693858,
+          "WR": 2.6136356705718047,
+          "mae_WR": 3.5047313411238297,
+          "TE": 1.7836689099538778,
+          "mae_TE": 2.412884255385374
+        },
+        "nihilist_zero": {
+          "pooled": 5.488850902184236,
+          "mae_pooled": 5.488850902184236,
+          "QB": 6.933313609467456,
+          "mae_QB": 6.933313609467456,
+          "RB": 5.622243902439026,
+          "mae_RB": 5.622243902439024,
+          "WR": 5.901791426743442,
+          "mae_WR": 5.901791426743442,
+          "TE": 3.633776371308017,
+          "mae_TE": 3.633776371308017
+        },
+        "pos_marginal": {
+          "pooled": 3.8085312394988673,
+          "mae_pooled": 5.263993352326686,
+          "QB": 5.005260275375512,
+          "mae_QB": 6.933313609467456,
+          "RB": 3.8127073170731705,
+          "mae_RB": 5.2652682926829275,
+          "WR": 3.9711585338845414,
+          "mae_WR": 5.534932821497121,
+          "TE": 2.6825230444660826,
+          "mae_TE": 3.6255485232067515
+        },
+        "inj_permuted": {
+          "pooled": 2.481189126816181,
+          "mae_pooled": 3.3235654436116553,
+          "QB": 2.8390075916944655,
+          "mae_QB": 3.687977173730875,
+          "RB": 2.5185383449968533,
+          "mae_RB": 3.412195805334347,
+          "WR": 2.6891170448874826,
+          "mae_WR": 3.6126967885983583,
+          "TE": 1.8428351533580032,
+          "mae_TE": 2.4911806940962875
+        },
+        "oracle_avail__base": {
+          "pooled": 1.9797663053518828,
+          "mae_pooled": 2.6999351976163712,
+          "QB": 2.249839668345478,
+          "mae_QB": 3.046047429438832,
+          "RB": 2.1458906339381594,
+          "mae_RB": 2.936700980274076,
+          "WR": 2.1388894464296273,
+          "mae_WR": 2.9149664035076768,
+          "TE": 1.3452130356376213,
+          "mae_TE": 1.8426033719367934
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.9798829120471932,
+          "mae_pooled": 2.694381718018066,
+          "QB": 2.2563241133586227,
+          "mae_QB": 3.055853928319901,
+          "RB": 2.1395816285294127,
+          "mae_RB": 2.9269402703306784,
+          "WR": 2.136972224127287,
+          "mae_WR": 2.905771568582618,
+          "TE": 1.3510896301252655,
+          "mae_TE": 1.8366495801310787
+        }
+      },
+      "n_train": 70680,
+      "n_test": 4212
+    },
+    {
+      "label": "2025H2",
+      "scores": {
+        "base_hurdle": {
+          "pooled": 2.3723449241198487,
+          "mae_pooled": 3.2128263476717422,
+          "QB": 2.638411251376779,
+          "mae_QB": 3.5269303756148127,
+          "RB": 2.4510237178674408,
+          "mae_RB": 3.3303229149160574,
+          "WR": 2.5438865189783986,
+          "mae_WR": 3.4679133943477245,
+          "TE": 1.808361932219778,
+          "mae_TE": 2.432242348641091
+        },
+        "inj_both": {
+          "pooled": 2.3881650725514394,
+          "mae_pooled": 3.2431990137184874,
+          "QB": 2.6775697742022553,
+          "mae_QB": 3.6128460351199196,
+          "RB": 2.464538056064286,
+          "mae_RB": 3.3352627255592284,
+          "WR": 2.5517838983318173,
+          "mae_WR": 3.5064196337531484,
+          "TE": 1.823141483388471,
+          "mae_TE": 2.437374045605354
+        },
+        "inj_zero_leg": {
+          "pooled": 2.3890033630190755,
+          "mae_pooled": 3.2457778088835427,
+          "QB": 2.6765408837737463,
+          "mae_QB": 3.6172751111527406,
+          "RB": 2.4664559676638005,
+          "mae_RB": 3.3479197585552942,
+          "WR": 2.553852750175428,
+          "mae_WR": 3.4996300534674827,
+          "TE": 1.8220769771296181,
+          "mae_TE": 2.443023409754626
+        },
+        "inj_override": {
+          "pooled": 2.3723449241198487,
+          "mae_pooled": 3.2128263476717422,
+          "QB": 2.638411251376779,
+          "mae_QB": 3.5269303756148127,
+          "RB": 2.4510237178674408,
+          "mae_RB": 3.3303229149160574,
+          "WR": 2.5438865189783986,
+          "mae_WR": 3.4679133943477245,
+          "TE": 1.808361932219778,
+          "mae_TE": 2.432242348641091
+        },
+        "nihilist_zero": {
+          "pooled": 5.0428356164383565,
+          "mae_pooled": 5.0428356164383565,
+          "QB": 6.1409415121255355,
+          "mae_QB": 6.1409415121255355,
+          "RB": 5.733271719038817,
+          "mae_RB": 5.733271719038816,
+          "WR": 4.949395807644883,
+          "mae_WR": 4.9493958076448825,
+          "TE": 3.6425641025641027,
+          "mae_TE": 3.6425641025641027
+        },
+        "pos_marginal": {
+          "pooled": 3.5534086845802597,
+          "mae_pooled": 4.876922374429223,
+          "QB": 4.520184201141227,
+          "mae_QB": 6.1409415121255355,
+          "RB": 3.913267927389924,
+          "mae_RB": 5.429205175600739,
+          "WR": 3.4535113345347623,
+          "mae_WR": 4.749519112207152,
+          "TE": 2.625158596318212,
+          "mae_TE": 3.5671794871794873
+        },
+        "inj_permuted": {
+          "pooled": 2.375511803862066,
+          "mae_pooled": 3.232681508073146,
+          "QB": 2.6350394640716193,
+          "mae_QB": 3.550393894005303,
+          "RB": 2.445922116193268,
+          "mae_RB": 3.3288557335022015,
+          "WR": 2.5541220676749568,
+          "mae_WR": 3.502518951677585,
+          "TE": 1.8136464749864092,
+          "mae_TE": 2.4486269152740894
+        },
+        "oracle_avail__base": {
+          "pooled": 1.9099262216786286,
+          "mae_pooled": 2.624864198439203,
+          "QB": 2.156662806031114,
+          "mae_QB": 2.962734177855674,
+          "RB": 2.189236886226907,
+          "mae_RB": 2.998335288038356,
+          "WR": 1.9295076324093279,
+          "mae_WR": 2.6712661041532733,
+          "TE": 1.3899902905221924,
+          "mae_TE": 1.8902934645054055
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.9108321963017219,
+          "mae_pooled": 2.627129617281858,
+          "QB": 2.162512086256293,
+          "mae_QB": 2.9717755821106566,
+          "RB": 2.189007400953771,
+          "mae_RB": 2.992699242247005,
+          "WR": 1.9284202939804256,
+          "mae_WR": 2.6802998730273666,
+          "TE": 1.3919182796591285,
+          "mae_TE": 1.8851959656136617
+        }
+      },
+      "n_train": 79307,
+      "n_test": 4380
+    }
+  ],
+  "verdict": {
+    "QB": "UNDEFINED",
+    "RB": "UNDEFINED",
+    "WR": "UNDEFINED",
+    "TE": "UNDEFINED"
+  },
+  "headline": "QB:UNDEFINED \u00b7 RB:UNDEFINED \u00b7 WR:UNDEFINED \u00b7 TE:UNDEFINED"
+}

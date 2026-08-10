@@ -8,6 +8,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { CookieBanner } from '@/components/cookie-banner'
 import { Toaster } from '@/components/ui/toaster'
 import { SubscriptionGate } from '@/components/subscription-gate'
+import { FunnelTelemetry } from '@/components/funnel-telemetry'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -15,6 +16,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <DateProvider>
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
+            {/* G100-D0 — inside AuthProvider (it reads the session) and outside every page, so
+                attribution + identity are registered before any page fires a funnel event. */}
+            <FunnelTelemetry />
             <SubscriptionGate />
             {children}
             <CookieBanner />

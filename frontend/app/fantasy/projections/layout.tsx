@@ -1,21 +1,18 @@
-// E9.56b — SEO posture for the PUBLIC (locked) Projections surface.
+// SEO posture for the PUBLIC Projections surface.
 //
-// 🚦 THIS IS AN OPERATOR DECISION, RECORDED DELIBERATELY (2026-08-05) rather than inherited from
-// Next.js's default. The page is now crawlable, and what a crawler sees is the LOCKED view: every
-// player's identity + market ADP, with our projections withheld behind lock chips.
+// 🚦 AN OPERATOR DECISION, RECORDED DELIBERATELY (2026-08-05, re-affirmed 2026-08-08) rather than
+// inherited from Next.js's default. DECISION: INDEX IT.
 //
-// DECISION: INDEX IT. The freemium funnel's job is player-name search capture — someone googling
-// "Bijan Robinson 2026 projection" should be able to land here, see that we have a number, and see
-// the track-record evidence for why it is worth paying for. Two things make that defensible rather
-// than thin-content spam: the page leads with the past-season receipts (a genuinely differentiated,
-// genuinely free asset — 6 seasons of our projection vs ADP vs the realized outcome), and E9.56b
-// truncates the ~632 undrafted rows that carried no market signal, so the indexed page is the ~226
-// players anyone is actually searching for rather than a long empty tail.
+// ⭐ THE FREEMIUM BUILD MADE THIS DECISION STRICTLY EASIER, and the reasoning is worth keeping
+// because it inverts the old caveat. E9.56b indexed a LOCKED page — identity + market ADP with our
+// numbers behind lock chips — and the note here warned that if it ever lost its receipts framing it
+// would be thin content duplicating freely available ADP, at which point `index: false` was the
+// better posture. That risk is GONE: the crawler now sees the real projections, the real ranges and
+// the real ranks, which is genuinely differentiated content that exists nowhere else. The
+// thin-content condition that would have reversed this decision can no longer arise.
 //
-// ⚠️ IF THE LOCKED VIEW EVER LOSES THE RECEIPTS FRAMING, REVISIT THIS. A page that is only market
-// ADP plus lock icons is duplicative of freely available data and is exactly what search engines
-// discount — at which point `robots: { index: false }` here, and letting `/fantasy/track-record`
-// carry the funnel alone, is the better posture.
+// The funnel's job is unchanged — player-name search capture. Someone googling "Bijan Robinson 2026
+// projection" lands here, gets a real answer, and meets the membership case below it.
 //
 // A separate `layout.tsx` is required because `page.tsx` is a client component ("use client") and
 // Next.js only honours `metadata` exported from a server component.

@@ -243,7 +243,17 @@ test.describe("locked board — the track record is a trust LINK, not the pitch"
     page,
   }) => {
     const errors = collectPageErrors(page)
-    const mock = await mockApi(page)
+    // 🗄️ EXPLICITLY THE LOCKED MODE SINCE THE FREEMIUM BUILD. `UpgradeBanner` renders only when the
+    // payload says `locked`, which no live caller now receives — so without naming the mode this
+    // test navigated to a free board, found no banner, and failed on its own premise rather than
+    // on a defect. The banner is retained (withdrawing the open board must stay a config decision,
+    // not a rebuild), so its NF-TR1 copy contract is still worth holding.
+    //
+    // ⭐ THE SAME CONTRACT ON THE *LIVE* SURFACE IS HELD SEPARATELY, and this test cannot cover it:
+    // the conversion surface a real visitor now meets is `FreemiumBoundary`, asserted in
+    // `freemium-board.spec.ts`. Both are needed — this one would go on passing while the live
+    // surface quietly grew a quotation of the statistic.
+    const mock = await mockApi(page, { entitlement: "locked" })
 
     await page.goto("/fantasy/projections")
     await expect(page.locator("table tbody tr").first()).toBeVisible()

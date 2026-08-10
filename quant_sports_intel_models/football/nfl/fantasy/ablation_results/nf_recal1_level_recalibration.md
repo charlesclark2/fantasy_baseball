@@ -1,6 +1,22 @@
 # NF-RECAL1 — recalibrating the fastpath VETERAN point LEVEL
 _generated 2026-08-08T08:36:29.228019+00:00_ · `best_alpha = 0` · model `nfl_fantasy_nf_recal1_veteran_level_v1` · recalibrates `nfl_fantasy_fastpath_v1`
-## Verdict: **RECORDED NULL — CONSTRAINT_REFUSED**
+
+> ⚠️⚠️ **AMENDED BY NF-C3-REREAD (2026-08-08, `ablation_results/nf_c3_reread.md`) — the
+> CONSTRAINT_REFUSED state below DOES NOT STAND.** This run's C3 read `coverage_incumbent` — and
+> scored every arm's shifted band — off the panel's `served_p10`/`served_p90` columns, which NF1.9-R
+> proved carry the PRE-NF1.9 normal band (~0.50 tier coverage), not the band on the wire (0.845).
+> Re-read on the model-path-refit served band (reproducing NF1.9's universe IS80 160.888 Δ0.00%
+> first): `global_const/pos_const · unconstrained` CLEAR the corrected — stricter — C3 on every
+> fold; the full pre-registered replay yields an eligible winner (`global_const · infold`, λ≈0.5,
+> CRPS 48.700 vs 48.808, bias −12.59 → −5.44 = the NF-D15 `level_fix` signature) that passes every
+> constraint and PBO/p but **FAILS the pre-registered whole-field DSR gate (0.642 < 0.95) ⇒ nothing
+> ships**. Corrected null state: **POWER_LIMITED at the deflation gate**, not CONSTRAINT_REFUSED —
+> the level hypothesis is alive and belongs to B3 (joint level+band under the corrected C3). Also
+> overturned there: the `over_scale`-wins magnitude anomaly (panel-band artifact — on the served
+> band λ=2 loses and the in-fold optimum is λ≈0.5 inside the grid) and the `no_lift` attribution.
+> The §0 premise findings (−12.85 tier bias, not −37.7) and the C1/C2 findings STAND.
+
+## Verdict: **RECORDED NULL — CONSTRAINT_REFUSED** _(superseded — see the amendment banner above)_
 On the pre-registered population — the veteran leg's draftable tier, fixed by the INCUMBENT's own projection — the measured level bias is **-12.85 PPR** over n = 2028, against the motivating **−37.7** over n = 1165. The unconditional universe reading is **0.84** and the same tier anchored on the REALIZED outcome is **-64.8** — the spread across those three readings is the whole methodological point, and it is why the anchor is pre-registered rather than chosen.
 
 Best recalibrating arm: `pos_affine · unconstrained` at CRPS 50.6773 vs the incumbent's 53.04 (6/7 folds). Matched-foil reading: **mixed**. Null state: **CONSTRAINT_REFUSED**.

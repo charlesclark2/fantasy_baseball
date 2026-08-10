@@ -363,10 +363,17 @@ const CASES = [
     // on its own front door, the exact advantage it has repeatedly measured and failed to find.
     // The remaining copy stays denylist-clean, so no word list can catch this — only an assertion
     // naming the disclaimer can.
+    // ⚠️ THIS ANCHOR WENT STALE ONCE ALREADY (found 2026-08-08, unrelated story). E9.46's
+    // alternate-the-market fix reworded the sentence after the frame — "Each day…" became "We look
+    // at the games where…" — and the anchor kept naming the old wording, so the harness reported
+    // ANCHOR-MISSING and this case proved nothing until someone read the summary. ⭐ Anchor a
+    // red-proof case on the SHORTEST text that carries the thing being removed (here the frame
+    // itself), never on the sentence that happens to follow it: the surrounding copy is the part
+    // most likely to be rewritten, and it takes the guard with it.
     detail: "Removes the demonstration-not-recommendation frame from the live block.",
     file: "lib/home-copy.ts",
-    from: '    "A demonstration, not a recommendation. Each day',
-    to: '    "Each day',
+    from: '"A demonstration, not a recommendation. ',
+    to: '"',
     grep: "framed as a demonstration",
   },
   {
@@ -478,6 +485,619 @@ const CASES = [
     from: "              <span\n                className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${",
     to: "              <Link href=\"/about\">soon</Link>\n              <span\n                className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium ${",
     grep: "teasers, not links",
+  },
+
+  // ══ THE FREEMIUM BUILD — the free board, the boundary, the full-season rate ════════════════
+  {
+    id: "free-board-re-gated",
+    shipped: "the pre-freemium state: a logged-out visitor bounced off the rankings",
+    // ⭐ THE FUNNEL-KILLING FAILURE, and the one no Python assertion in the repo can see. The API
+    // is perfectly happy — it serves the full board to anyone — so every server-side test stays
+    // green; the visitor simply never arrives. A redirect leaves no error, no log and nothing in
+    // the payload. Only a browser that follows the navigation can tell "the board is free" from
+    // "the board is free and unreachable".
+    //
+    // ⚠️ BROKEN AT THE IMPORT, NOT AT THE JSX TAG. The harness applies ONE first-occurrence
+    // replacement, so swapping `<FantasyPublicGuard>` leaves `</FantasyPublicGuard>` behind and the
+    // build fails on unbalanced JSX — which reports as BUILD-CAUGHT and proves nothing about the
+    // spec. Aliasing the import produces the real defect (the page is gated) in one contiguous edit.
+    detail: "Puts the paid guard back on Rankings, so a stranger is redirected before it renders.",
+    file: "app/fantasy/rankings/page.tsx",
+    from: 'import { FantasyPublicGuard } from "@/components/auth-guard"',
+    to: 'import { FantasyGuard as FantasyPublicGuard } from "@/components/auth-guard"',
+    grep: "renders the full board for a logged-out visitor",
+  },
+  {
+    id: "paid-half-un-gated",
+    shipped: "pre-emptive: the whole product becoming free",
+    // ⚠️ THE CASE THAT PROVES THE SUITE IS NOT SELF-SATISFYING. Every other freemium assertion is
+    // "the free thing is visible" — a change that un-gated EVERYTHING would pass all of them and
+    // the suite would be green with the business given away. This is the only case whose failure
+    // means the opposite of the others'.
+    detail: "Makes the Draft Optimizer public, so a logged-out visitor reaches the paid half.",
+    file: "app/fantasy/draft/page.tsx",
+    from: 'import { FantasyGuard } from "@/components/auth-guard"',
+    to: 'import { FantasyPublicGuard as FantasyGuard } from "@/components/auth-guard"',
+    grep: "still bounces a logged-out visitor",
+  },
+  {
+    id: "player-page-content-re-split",
+    shipped: "NF3.2's state: a public player ROUTE whose CONTENT was still split by entitlement",
+    // ⚠️ THE FAILURE MODE THAT LOOKS LEAST LIKE ONE. The route stays public, the page renders, the
+    // header and bio are right, nothing errors and no test that asserts "the player page loads"
+    // notices — a visitor simply never sees the projection they came for. `route-integrity` passes,
+    // `tsc` passes, and the API is serving the full payload the whole time.
+    detail: "Sends every visitor back to the track-record-only view, as NF3.2 did.",
+    file: "components/fantasy/player-page.tsx",
+    from: "  return <PlayerView playerId={playerId} />",
+    to: "  return <TrackRecordOnlyView playerId={playerId} />",
+    grep: "player page renders the real projection",
+  },
+  {
+    id: "boundary-not-stated",
+    shipped: "pre-emptive: a complete free board with nothing to buy",
+    // Not a rendering fault — the page looks perfect. It is a POSITIONING fault: a complete-looking
+    // free board with no boundary stated reads as the whole product, so the paid aha ("what changed
+    // because it is MY league") never gets posed and nobody converts. Invisible to every gate that
+    // asks whether the page works, because it does.
+    detail: "Removes the free/paid boundary block from below the rankings board.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: "          <FreemiumBoundary entitled={entitled} />",
+    to: "",
+    grep: "states what a membership adds",
+  },
+  {
+    id: "full-season-rate-divides-by-zero",
+    shipped: "pre-emptive: `Infinity` rendered as a projection",
+    // ⭐ THE DEFECT THE FIXTURE'S THREE DEGENERATE ROWS EXIST TO CATCH. `pts * 17 / 0` is
+    // `Infinity`, which is a `number` in JS — so it survives every `!= null` guard a caller might
+    // write and prints "∞" in a points column. `tsc` cannot see it (the arithmetic is valid), and
+    // a fixture where every row has a healthy games figure cannot see it either — which is exactly
+    // the fixture anyone would write by hand.
+    detail: "Drops the zero-games guard, so a player projected to miss the season renders ∞.",
+    file: "lib/fantasy.ts",
+    from: "  if (games <= 0) return null",
+    to: "  if (games < 0) return null",
+    grep: "renders an em-dash",
+  },
+  {
+    id: "boundary-recites-the-measurement",
+    shipped: "NF-TR1's rule, on the surface that replaced the one it was written for",
+    // The banner NF-TR1 wrote this rule against renders only on a LOCKED payload, which no live
+    // caller now receives. So the rule's original guard would go on passing forever while the
+    // surface a visitor ACTUALLY meets quietly grew a quotation of the statistic. This is that
+    // rule re-proved on the live surface.
+    detail: "Puts the generated claim into the freemium boundary in place of the trust link.",
+    file: "components/fantasy/shared.tsx",
+    from: "        {FREE_TIER_SUMMARY.detail}",
+    to: "        {\"Our 2025 rankings modestly outperformed ADP (+0.022 rank correlation).\"}",
+    grep: "does not quote its number",
+  },
+
+  // ══ ONE PRESET IS FREE (2026-08-08) ════════════════════════════════════════════════════════
+  {
+    id: "unentitled-defaulted-onto-a-paid-preset",
+    shipped: "pre-emptive: a first visit that opens on a board the API refuses",
+    // ⭐ A FIRST IMPRESSION, and nothing server-side can see it. The API behaves perfectly — it
+    // refuses a paid preset, which is its job — and every Python assertion stays green. What breaks
+    // is that the CLIENT asked for the wrong one, so the visitor's opening screen is a refusal they
+    // did nothing to earn. `tsc` cannot see it (both branches type-check) and it is invisible to
+    // anyone testing while logged in as a subscriber, i.e. to us.
+    detail: "Restores the entitled default (half-PPR) for everyone, including the logged out.",
+    file: "lib/fantasy-queries.ts",
+    from: "    if (!entitled && free) {",
+    to: "    if (false && free) {",
+    grep: "lands on the free preset",
+  },
+  {
+    id: "paid-presets-left-selectable",
+    shipped: "pre-emptive: a picker that offers boards the API will not serve",
+    // The dropdown is the one place the boundary has to be legible BEFORE a click. Leaving the paid
+    // options enabled turns every one of them into a dead end discovered only after selecting it —
+    // and a dead end is indistinguishable from a bug to the person who hit it.
+    detail: "Stops disabling the paid options in the format picker.",
+    file: "components/fantasy/shared.tsx",
+    from: "                  disabled: locked,\n                }\n              }),",
+    to: "                  disabled: false,\n                }\n              }),",
+    grep: "not selectable",
+  },
+  {
+    id: "paid-presets-hidden-instead-of-locked",
+    shipped: "pre-emptive: the tempting fix that removes the upsell along with the problem",
+    // ⚠️ THIS SATISFIES THE CASE ABOVE COMPLETELY — a removed option cannot be selected. It also
+    // makes the free board look like the only board we publish, which is untrue and is the reverse
+    // of what an upgrade prompt is for. The two cases have to coexist or one of them can be
+    // "fixed" into the other.
+    detail: "Filters the paid presets out of the picker rather than disabling them.",
+    file: "components/fantasy/shared.tsx",
+    from: "              options: manifest.configs.map((c) => {",
+    to: "              options: manifest.configs.filter((c) => isFreeConfig(c)).map((c) => {",
+    grep: "not selectable",
+  },
+  {
+    id: "paid-league-size-left-selectable",
+    shipped: "pre-emptive: locking the FORMAT and forgetting the SIZE",
+    // `full_ppr` at ten teams is a different board — league size sets the replacement level — and
+    // the API refuses it. A format-only lock leaves the two controls able to compose a request that
+    // cannot load, which is the same dead end as above reached by a different route.
+    detail: "Stops locking the paid league size.",
+    file: "components/fantasy/shared.tsx",
+    from: "              const locked = lockFormats && n !== free!.size",
+    to: "              const locked = false && n !== free!.size",
+    grep: "league SIZE is locked",
+  },
+  {
+    id: "refusal-reads-as-an-empty-search",
+    shipped: "pre-emptive: a paywall described as a typo",
+    // The 403 arrives as zero rows, and the pre-existing empty branch says "No players match — try
+    // clearing the search box". Every gate that asks whether the page WORKS is satisfied: it
+    // renders, nothing errors, the copy is grammatical. It is simply an answer to a question the
+    // visitor did not ask, on the one visit where being wrong costs most.
+    detail: "Removes the refused-board branch so a 403 falls through to the empty-search state.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: "          {!boardLoading && boardError && (",
+    to: "          {false && boardError && (",
+    grep: "not as an empty search",
+  },
+  // ══ THE PAID SCORINGS ON THE OTHER TWO SURFACES ═══════════════════════════════════════════
+  {
+    id: "projections-offers-every-scoring",
+    shipped: "the state PR #681 left behind on Season Projections",
+    // #681 locked the BOARD's format picker and left this one open, because they are different
+    // controls in different files that happen to mean the same thing. The page kept offering
+    // half-PPR and standard to a logged-out visitor for the whole of that PR's life.
+    detail: "Unlocks every reference scoring in the projections picker.",
+    file: "components/fantasy/projections-table.tsx",
+    from: "                  const lockedOption = !entitled && s !== FREE_SCORING",
+    to: "                  const lockedOption = false",
+    grep: "only the free reference scoring",
+  },
+  {
+    id: "player-page-prints-the-paid-totals",
+    shipped: "the same gap on the player page — the surface that shows all three side by side",
+    detail: "Prints the standard total to a free visitor.",
+    file: "components/fantasy/player-page.tsx",
+    from: "value={entitled ? num(proj.fpStd) : <LockChip title={STAT_LINE_LOCK_TITLE} />}",
+    to: "value={num(proj.fpStd)}",
+    grep: "locks the two paid totals",
+  },
+  {
+    id: "everything-locked-including-the-free-total",
+    shipped: "pre-emptive: the nervous fix that locks the free number too",
+    // ⚠️ THE OPPOSITE FAILURE. Every "the paid total is locked" assertion stays green while the
+    // free board loses the one number it exists to show — and it would look, to whoever made the
+    // change, exactly like being careful.
+    detail: "Locks the free full-PPR total along with the paid ones.",
+    file: "components/fantasy/player-page.tsx",
+    from: "                value={num(proj.fpPpr)}",
+    to: "                value={<LockChip />}",
+    grep: "keeps the free one",
+  },
+  {
+    id: "stat-line-printed-beside-locked-totals",
+    shipped: "pre-emptive: a paywall the reader can do in their head",
+    // \u2b50\u2b50 The reference totals differ ONLY in how a reception scores, so with the stat line back
+    // the two locked figures are one subtraction away on the same screen —
+    // `half = full - 0.5 x rec`. Every "the total is locked" case above stays green.
+    detail: "Restores the raw stat line under the locked totals.",
+    file: "components/fantasy/player-page.tsx",
+    from: '              {entitled ? (\n                <div className="grid grid-cols-3',
+    to: '              {true ? (\n                <div className="grid grid-cols-3',
+    grep: "raw stat line is withheld",
+  },
+  {
+    id: "preset-called-the-readers-league",
+    shipped: "pre-emptive: telling a free visitor a preset is their own league",
+    // Not a leak — a false statement about the reader, on the tile whose label is the exact phrase
+    // the paid tier is sold on. Spending it over a preset costs the boundary its vocabulary.
+    detail: "Labels the free board's tile as the visitor's own league.",
+    file: "components/fantasy/player-page.tsx",
+    from: '                    : config?.label ?? "Board scoring"',
+    to: '                    : config ? `${config.label} (your league)` : "Your league"',
+    grep: "own league",
+  },
+  {
+    id: "stored-paid-selection-survives-a-lapse",
+    shipped: "pre-emptive: a lapsed member greeted by a refusal on the page they were reading",
+    // The format selection outlives the membership in localStorage. Re-checking it against the free
+    // board is one line, and skipping it strands exactly the person most likely to come back.
+    detail: "Honours the stored selection for an unentitled caller.",
+    file: "lib/fantasy-queries.ts",
+    from: "      setConfigName(names.includes(free.config) ? free.config : names[0] ?? null)",
+    to: "      setConfigName(stored.configName ?? free.config)",
+    grep: "does not strand a lapsed member",
+  },
+
+  // ══ G100-C1 — one free personalized league ═════════════════════════════════════════════════
+  {
+    id: "delta-sign-inverted",
+    shipped: "pre-emptive: the rank delta subtracted the wrong way round",
+    // ⭐ THE DEFECT THIS SURFACE IS MOST LIKELY TO SHIP. Rank is an INVERTED scale — smaller is
+    // better — so `league - generic` is the spelling that reads naturally and is wrong. Every
+    // riser then renders a down arrow and vice versa, on a page that is otherwise completely
+    // normal: no error, no blank, no NaN, and the numbers are all real. Only an assertion tying
+    // the ARROW to the LIST it is in can see it.
+    detail: "Inverts `ovrDelta`, so risers render as fallers.",
+    file: "lib/league-delta.ts",
+    from: "      ovrDelta: g ? g.ovrRank - p.ovrRank : null,",
+    to: "      ovrDelta: g ? p.ovrRank - g.ovrRank : null,",
+    grep: "sign points the way the column says",
+  },
+  {
+    id: "activation-fires-on-mount",
+    shipped: "pre-emptive: counting a visitor who saw an empty state as ACTIVATED",
+    // The activation event is the funnel's DENOMINATOR, so a false positive here is worse than a
+    // miss: it inflates activation, which reads as a CONVERSION problem and sends the next story
+    // at the wrong thing entirely. Firing on mount rather than on the board rendering is the
+    // natural way to write it.
+    detail: "Fires `custom_board_viewed` even with no league configured.",
+    file: "components/fantasy/my-league.tsx",
+    from: "    if (fired.current || !league || ranked.length === 0) return",
+    to: "    if (fired.current) return",
+    grep: "does NOT fire on an empty state",
+  },
+  {
+    id: "activation-fires-per-render",
+    shipped: "pre-emptive: one activation counted many times",
+    // Same denominator, the other way: without the once-per-mount ref the capture re-fires on
+    // every re-render (a position-tab click, a query settling), so a single user inflates the
+    // metric by however much they browsed.
+    detail: "Drops the once-per-mount guard on the activation capture.",
+    file: "components/fantasy/my-league.tsx",
+    from: "    if (fired.current || !league || ranked.length === 0) return\n    fired.current = true",
+    to: "    if (!league || ranked.length === 0) return",
+    grep: "under the name the funnel reads",
+    // ⭐ DECLARED GREEN, and it is a FINDING rather than a gap — defence in depth, measured.
+    //
+    // Once-per-mount is delivered TWICE over here, independently: by the `fired` ref, and by the
+    // effect's dependency list (`[league, ranked.length, delta]`), none of which changes when the
+    // user browses — a position-tab click re-renders the component but re-runs no effect. So
+    // removing the ref alone changes no observable behaviour, and no SINGLE-line break can falsify
+    // the clause. The spec exercises the property anyway (it clicks a tab and re-counts), so a
+    // future edit that makes those deps unstable is caught by the test even though this case
+    // cannot express it.
+    //
+    // ⚠️ If this ever flips to RED, one of the two layers has gone and the note above is stale.
+    expect: "GREEN",
+  },
+  {
+    id: "activation-event-renamed",
+    shipped: "pre-emptive: renaming an event G100-D0's dashboard reads",
+    // The event NAME is a contract with the funnel dashboard, not an implementation detail. A
+    // rename breaks measurement silently — the app keeps working perfectly and the chart goes flat.
+    detail: "Renames the activation event.",
+    file: "components/fantasy/my-league.tsx",
+    from: 'posthog.capture("custom_board_viewed", {',
+    to: 'posthog.capture("my_league_viewed", {',
+    grep: "under the name the funnel reads",
+  },
+  {
+    id: "free-league-nav-hidden",
+    shipped: "pre-emptive: the free tier ships with no way to reach it",
+    // The fantasy surface is LOCKED for a free account, so without `freeSignedIn` the whole menu
+    // collapses to an upsell and the one league a free user is entitled to becomes unreachable.
+    // The feature would exist, work, and be invisible.
+    detail: "Drops the locked-surface exemption for the free league items.",
+    file: "components/nav.tsx",
+    from: "surfaceItems(g).filter((i) => i.public || (i.freeSignedIn && isSignedIn))",
+    to: "surfaceItems(g).filter((i) => i.public)",
+    grep: "can reach the league surfaces from the nav",
+  },
+  {
+    id: "free-league-nav-shown-logged-out",
+    shipped: "pre-emptive: a nav item whose only behaviour is a redirect",
+    // The mirror image. A league is stored against a Cognito `sub`, so these pages bounce an
+    // anonymous visitor to /login — offering them is a menu that lies about what it opens.
+    detail: "Shows the signed-in-only league items to a logged-out visitor.",
+    file: "components/nav.tsx",
+    from: "surfaceItems(g).filter((i) => i.public || (i.freeSignedIn && isSignedIn))",
+    to: "surfaceItems(g).filter((i) => i.public || i.freeSignedIn)",
+    grep: "is not offered the league surfaces",
+    // ⭐ DECLARED GREEN — a FINDING, and the same defence-in-depth shape as
+    // `activation-fires-per-render`. A logged-out visitor never reaches this filter at all: the
+    // whole surface sub-nav is behind `showSubNav` (`authenticated || isSignedIn`), so the fantasy
+    // dropdown is not rendered and its items cannot appear however this line is written.
+    //
+    // The `isSignedIn` half is therefore belt-and-braces — and worth keeping, because the ONE path
+    // that does render nav items to a logged-out visitor is `publicNavItems()` (E9.58 lifted the
+    // public surfaces into the top bar for exactly that reason). A future change that widened that
+    // path would meet this clause. The spec's assertion is a real user-facing property either way.
+    //
+    // ⚠️ If this flips to RED, the sub-nav has become reachable logged-out and the note is stale.
+    expect: "GREEN",
+  },
+  {
+    id: "withheld-leagues-vanish-silently",
+    shipped: "pre-emptive: a lapsed member's leagues disappear with no account of why",
+    // Two of their leagues stop being personalized. Rendering that as SILENCE — on a surface they
+    // typed their own settings into — reads as data loss, which is a support ticket and a churn
+    // event rather than an upgrade prompt.
+    detail: "Suppresses the 'nothing has been deleted' notice.",
+    file: "components/fantasy/my-league.tsx",
+    from: "          {withheld > 0 && (",
+    to: "          {false && (",
+    grep: "told nothing was deleted",
+  },
+  {
+    id: "delta-claims-the-market",
+    shipped: "pre-emptive: a movement column read as a claim about the market",
+    // ⛔ `best_alpha = 0`. The delta is between two of OUR boards and says nothing about ADP or
+    // consensus — but "movement" means "versus the market" everywhere else in this category, so a
+    // reader imports that meaning unless the page refuses it explicitly.
+    detail: "Removes the sentence saying the comparison is between our own boards.",
+    file: "lib/fantasy-claim-copy.ts",
+    from: "  \"Movement is between two of our own boards",
+    to: "  \"Movement shows where your league values a player differently",
+    grep: "sees its own board and the delta that explains it",
+  },
+  {
+    id: "free-board-guessed-locally",
+    shipped: "pre-emptive: guessing the free preset client-side during the deploy-skew window",
+    // NF-C0. `frontend/` ships on merge, the API only on a manual `deploy.sh`, so the manifest
+    // spends a window without `freeBoard`. Defaulting to "full_ppr" locally states the paywall in
+    // TWO places — and during that window it renders a confident comparison against a board the
+    // server never said was free.
+    detail: "Falls back to a hardcoded free preset instead of withholding the comparison.",
+    file: "components/fantasy/my-league.tsx",
+    from: "  const free = freeSelection(manifest)",
+    to: '  const free = freeSelection(manifest) ?? { config: "full_ppr", size: 12 }',
+    grep: "manifest has not named a free board yet",
+  },
+  {
+    id: "configured-league-reads-as-no-league",
+    shipped: "pre-emptive: telling a user with a saved league to go and set one up",
+    // `useMyTeams` cannot score a board without the PROJECTIONS blob, so its `teams` stays null
+    // until both reads land — collapsing "you have no league" and "we cannot score yours yet" into
+    // one state. Keying the empty state on the scored board is the natural way to write it, and it
+    // fires whenever the projections read is slow, 404s before the first export, or fails.
+    detail: "Keys the empty state on the scored board rather than on the saved-league payload.",
+    file: "components/fantasy/my-league.tsx",
+    from: "      {!teamsLoading && !hasSavedLeague && (",
+    to: "      {!teamsLoading && !league && (",
+    grep: "never described as 'no league' when scoring fails",
+  },
+
+  // ── G100-C1 FOLLOW-UP (operator, 2026-08-08) ────────────────────────────────────────────────
+  // Three defects the first REAL league surfaced in under a minute, none of which the original
+  // suite could see. The pattern is worth naming: every one of them is about whether the screen is
+  // USABLE, and the original spec only ever asked whether it was CORRECT.
+  {
+    id: "pool-ignored-highlights-the-waiver-wire",
+    shipped:
+      "G100-C1 — every riser and faller was a player nobody would draft, on the first real league",
+    // Rank density grows down the board: a few points separates adjacent players at pick 30 and
+    // dozens of them at rank 400. So the largest RANK moves live in the deep tail BY CONSTRUCTION,
+    // and a highlight list sorted by rank movement is a list of waiver-wire churn. Passing a null
+    // pool restores exactly that (the parameter's own "unknown must not filter" fallback), which
+    // makes this the honest re-introduction rather than a synthetic break.
+    detail: "Drops the draft pool, so highlights are drawn from the whole board again.",
+    file: "components/fantasy/my-league.tsx",
+    from: "    () => computeLeagueDelta(genericBoard, leagueBoard, pool, LOW_PREDICTABILITY_POSITIONS),",
+    to: "    () => computeLeagueDelta(genericBoard, leagueBoard, null, LOW_PREDICTABILITY_POSITIONS),",
+    grep: "shrinking the pool shrinks the highlights",
+  },
+  {
+    id: "kickers-and-defenses-lead-the-movers",
+    shipped:
+      "G100-C1 — four D/STs in the top five movers on the first real league (CLE, KC, NE, GB)",
+    // The pool filter did NOT fix this and could not: K and D/ST sit comfortably inside any real
+    // draft pool. ~32 of each project within a narrow band, so any difference in a league's K/DST
+    // scoring reorders the whole position at once, and the band sits deep enough in the overall list
+    // that a one-tier shuffle is worth dozens of places. Every one of them is noise.
+    detail: "Drops the low-predictability exclusion, so K/DST compete for the headlines again.",
+    file: "components/fantasy/my-league.tsx",
+    from: "    () => computeLeagueDelta(genericBoard, leagueBoard, pool, LOW_PREDICTABILITY_POSITIONS),",
+    to: "    () => computeLeagueDelta(genericBoard, leagueBoard, pool, []),",
+    grep: "no kicker or defense can lead the list",
+  },
+  {
+    id: "ir-slots-counted-as-draft-picks",
+    shipped: "pre-emptive: an IR spot is not a draft pick",
+    // ⚠️ THE ISOLATING CASE. The default fixture has NO reserve slots, so this defect is invisible
+    // to every other test in the suite — which is precisely how it would have shipped. A 3-IR
+    // league would draft 160 players and be told its pool is 190.
+    detail: "Counts IR/taxi spots toward the pool, inflating it by the whole reserve bench.",
+    file: "lib/league-delta.ts",
+    from: 'const NON_DRAFT_SLOTS = new Set(["IR", "TAXI"])',
+    to: "const NON_DRAFT_SLOTS = new Set([])",
+    grep: "IR and taxi spots are not draft picks",
+  },
+  {
+    id: "page-numbering-restarts-each-page",
+    shipped: "pre-emptive: the row number silently stops meaning rank",
+    // `i + 1` over a paged slice renders "1" at the top of every page. Nothing looks broken — the
+    // rows are right, the order is right, and only the leftmost column is quietly lying about what
+    // it measures.
+    detail: "Numbers rows by their position on screen rather than their position in the board.",
+    file: "components/fantasy/my-league.tsx",
+    from: "                      {(pageSize === ALL_ROWS ? 0 : safePage * pageSize) + i + 1}",
+    to: "                      {i + 1}",
+    grep: "numbering continues across pages",
+  },
+  {
+    id: "late-page-survives-a-filter-change",
+    shipped: "pre-emptive: an empty table that reads as 'you have no TEs'",
+    // ⭐ DECLARED GREEN, and MEASURED both ways round rather than reasoned about — which is the only
+    // reason it is here. Two independent mechanisms deliver "a filter change never empties the
+    // table": the tab handler resets the page to 0, and the render clamps `page` to the new last
+    // page. Breaking EITHER alone leaves the other holding, so no single-line defect is observable
+    // and the case is a statement about defence in depth, not about the assertion being decorative.
+    //
+    // ⚠️ THIS IS THE `and`-COMPOSED-CLAUSE TRAP FACING THE OTHER WAY (NF-D17): there, a guard stayed
+    // green because a DIFFERENT clause already refused the fixture. Here the redundancy is
+    // deliberate and wanted — but it has the same consequence for provability, so it gets said out
+    // loud instead of being left as a case that quietly always passes. The break below removes the
+    // PRIMARY mechanism (the reset); the clamp catches it and the table stays populated.
+    //
+    // If this ever flips to RED, the two mechanisms are no longer independent and this note is
+    // stale — fix the note, do not delete the case.
+    expect: "GREEN",
+    detail: "Removes the page reset on a position change; the render-time clamp still holds.",
+    file: "components/fantasy/my-league.tsx",
+    from: "                setPos(v)\n                setPage(0)",
+    to: "                setPos(v)",
+    grep: "never shows an empty table",
+  },
+  {
+    id: "importer-ignores-the-quota",
+    shipped: "G100-C1 — a free account at its quota could still import a SECOND league",
+    // ⭐ THE ONE THE OPERATOR HIT. The manual editor refused it and the importer did not, so the
+    // limit was met as a 409 after choosing a platform, typing a username and waiting on a preview.
+    // The tier is enforced by WHICH COMPONENT RENDERS — #681's lesson, on the two create paths.
+    detail: "Restores the ungated league list: every league is importable regardless of quota.",
+    file: "components/fantasy/league-import.tsx",
+    from: "                const locked = atQuota && !saved",
+    to: "                const locked = false",
+    grep: "a SECOND league cannot be chosen",
+  },
+  {
+    id: "the-quota-locks-the-league-you-already-have",
+    shipped: "pre-emptive: the fix, applied one clause too widely",
+    // ⚠️ THE OTHER SIDE OF THE SAME CLAUSE, and the reason the fixture carries both a saved and an
+    // unsaved league. Re-importing the league you already have is an UPDATE — it creates nothing,
+    // the server's cap does not apply, and it is how a returning user refreshes a roster mid-season.
+    // "Lock everything once at quota" passes the case above and breaks that.
+    detail: "Locks every league at quota, including the one already saved (an update, not a create).",
+    file: "components/fantasy/league-import.tsx",
+    from: "                const locked = atQuota && !saved",
+    to: "                const locked = atQuota",
+    grep: "a SECOND league cannot be chosen",
+  },
+  {
+    id: "refusal-leads-to-a-dead-route",
+    shipped: "E9.56c — every locked CTA pointed at `/pricing`, a route that does not exist",
+    // The real defect, re-introduced on the new surface. A dead CTA is invisible to `next build`
+    // (these are `<Link href>` to a literal, resolved at runtime) and to any test that does not
+    // assert the target — so the entire conversion path off a refusal 404s and looks perfect.
+    detail: "Points the upgrade CTA at the route E9.56c shipped and had to fix.",
+    file: "components/fantasy/shared.tsx",
+    from: "          href={SUBSCRIBE_HREF}\n          className=\"inline-flex items-center gap-1.5 rounded border border-[#10b981]/40",
+    to: "          href=\"/pricing\"\n          className=\"inline-flex items-center gap-1.5 rounded border border-[#10b981]/40",
+    grep: "carries a way to lift it",
+  },
+  {
+    id: "landing-view-loses-its-surface",
+    shipped: "G100-D0 — the first cut, caught on the wire before merge",
+    // ⭐ A DEFECT THIS SUITE ACTUALLY FOUND, and the reason `funnel-telemetry.ts` carries no
+    // `"use client"`. A constant imported from a client-boundary module into a SERVER component
+    // resolves to a client REFERENCE, not to its value — so `<LandingView surface={…HOME}/>` on the
+    // (server-rendered) home page received `undefined` and every `landing_view` from the
+    // highest-traffic page in the product shipped with no `surface`.
+    //
+    // Nothing else in the toolchain can see it: the types are real so `tsc` passes, `next build`
+    // passes, the component renders, and the event still fires. Only reading the property off the
+    // ingest request body distinguishes "the event fired" from "the event fired with its
+    // dimensions", which is the whole difference between a funnel you can segment and one you
+    // cannot.
+    detail: "Re-marks the contract module as a client boundary; the server component's prop becomes undefined.",
+    file: "lib/funnel-telemetry.ts",
+    from: "/**\n * G100-D0 — THE FUNNEL EVENT CONTRACT.",
+    to: '"use client"\n\n/**\n * G100-D0 — THE FUNNEL EVENT CONTRACT.',
+    grep: "landing_view under the name the dashboard reads",
+  },
+  {
+    id: "landing-view-races-the-session",
+    shipped: "G100-D0 — the second cut, also caught on the wire before merge",
+    // The other half of the same discovery. `landing_view` is the ONLY funnel event that can fire
+    // before the auth provider has restored a session, and `free_paid_status` cannot be registered
+    // until that resolves. Firing on bare mount raced it, and the top of the funnel — the one step
+    // with the most traffic — became the one step that could not be split by tier.
+    //
+    // It is the quietest possible failure: the event arrives, the funnel counts the visitor, the
+    // rate is correct, and a single breakdown dimension is silently absent. Same shape as G100-C1's
+    // `players_moved: null` race, one step up the funnel.
+    detail: "Drops the wait for the session, so the event outruns the property that describes the caller.",
+    file: "components/analytics/landing-view.tsx",
+    from: "    if (fired.current || loading) return",
+    to: "    if (fired.current) return",
+    grep: "reports `comped`, never `paid`",
+  },
+
+  // ══ E9.61 — the "vs our generic board" delta on the browse boards ═════════════════════════════
+  {
+    id: "personalization-leaks-onto-the-public-board",
+    shipped: "pre-emptive: the gate this story is most likely to lose",
+    // ⭐ THE ONE THAT MATTERS. `/fantasy/rankings` is PUBLIC, and this column renders
+    // PERSONALIZATION. The gate is not a check anyone wrote — it is that `isCustom` is unreachable
+    // without a token — so the way it breaks is not "someone deletes the guard" but "someone
+    // computes the delta unconditionally and hides it in the render", which is what the freemium
+    // build already shipped once in a different costume (#681 gated one of three renderers).
+    detail: "Computes the delta for every caller, so the band renders on the anonymous free board.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: "      isCustom\n        ? computeLeagueDelta(genericBoard, board, pool, LOW_PREDICTABILITY_POSITIONS)\n        : null,",
+    to: "      computeLeagueDelta(genericBoard ?? board, board, pool, LOW_PREDICTABILITY_POSITIONS),",
+    grep: "an ANONYMOUS visitor",
+  },
+  {
+    id: "delta-column-ignores-the-rank-scale",
+    shipped: "pre-emptive: the two-scales trap `adpPositionRanks` already exists for",
+    // A position tab ranks 1..n WITHIN the position; an OVERALL move printed beside it compares two
+    // different scales. Arithmetically wrong, and it looks entirely normal — which is why the spec
+    // compares two RENDERINGS of the same player rather than reading a value back.
+    detail: "Pins the column to the overall scale on every tab.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: 'const deltaScale = pos === "Overall" ? ("overall" as const) : ("position" as const)',
+    to: 'const deltaScale = "overall" as const',
+    grep: "changes with the tab",
+  },
+  {
+    id: "delta-column-loses-its-label",
+    shipped: "pre-emptive: an unlabelled delta inherits the market reading",
+    // Every other delta column in this product means "versus ADP". A bare one on a fantasy board is
+    // read as a claim about where the room is drafting — i.e. as an edge claim, on a surface whose
+    // whole honesty argument is that it makes none. `best_alpha = 0`.
+    detail: "Replaces the explicit label with the ambiguous one the category defaults to.",
+    file: "lib/fantasy-claim-copy.ts",
+    from: 'export const GENERIC_DELTA_LABEL = "vs our generic board"',
+    to: 'export const GENERIC_DELTA_LABEL = "Move"',
+    grep: "under the label that says what they compare",
+  },
+  {
+    id: "custom-selection-lost-to-the-load-race",
+    shipped: "E9.61 — MEASURED LIVE on the real build, and silent",
+    // ⭐ NOT PRE-EMPTIVE. Before the `savedLeaguesLoading` deferral, a free account picked its
+    // league on Rankings, saw the personalized board and the delta, reloaded — and was put back on
+    // the generic preset with the column gone. `useFormatSelection` commits on the first manifest
+    // and locks itself out, so the stored `custom:<id>` lost the race against the (uncached)
+    // saved-league request and matched nothing. No error, no log; the feature just was not there
+    // the second time.
+    detail: "Removes the deferral, restoring the race the stored custom selection usually loses.",
+    file: "lib/fantasy-queries.ts",
+    from: "    if (savedLeaguesLoading) return",
+    to: "    if (false) return",
+    grep: "survive a reload",
+  },
+  {
+    id: "vor-delta-subtraction-inverted",
+    shipped: "pre-emptive: the sign error the highlights' new ranking can have",
+    // ⭐ THE ANCHOR THIS STORY HAD TO REPLACE. The previous check — "every riser's overall rank
+    // improved" — was exact while the list was SELECTED on rank movement, and became false when the
+    // ranking moved to VOR (value and board position can legitimately disagree). The replacement
+    // re-derives the chip from the league board's own rendered VOR and the generic board FIXTURE,
+    // neither of which passes through `computeLeagueDelta` — so an inverted subtraction flips the
+    // chip while both inputs stay put. A "risers all show a positive number" check would NOT catch
+    // this: membership and the number flip together, which is the tautology E9.63 caught once
+    // already.
+    detail: "Inverts `vorDelta`, so every riser is really a faller and the chip agrees with itself.",
+    file: "lib/league-delta.ts",
+    from: "vorDelta: g && g.vor != null && p.vor != null ? p.vor - g.vor : null,",
+    to: "vorDelta: g && g.vor != null && p.vor != null ? g.vor - p.vor : null,",
+    grep: "the movement is real",
+  },
+  {
+    id: "low-predictability-positions-lead-again",
+    shipped: "G100-C1 (live) — four defenses in the top five movers",
+    // ⭐ RE-PROVEN UNDER THE NEW METRIC, which is the point of keeping it. The exclusion was
+    // originally argued from rank DENSITY, and E9.61 replaced rank movement with VOR delta — so the
+    // density argument no longer applies and the clause could look redundant. It is not: the reason
+    // that survives is that "why those players moved" is computed over skill positions only, so a
+    // headlined D/ST is a mover the page structurally cannot explain. On this fixture the league
+    // board's entire top is D/ST, so it is the hardest available case.
+    detail: "Drops the low-predictability exclusion from the highlight population.",
+    file: "lib/league-delta.ts",
+    from: "  const comparable = allComparable.filter((d) => d.draftable && !d.lowPred)",
+    to: "  const comparable = allComparable.filter((d) => d.draftable)",
+    grep: "no kicker or defense can lead the list",
   },
 ]
 

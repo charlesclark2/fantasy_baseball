@@ -1,0 +1,39 @@
+{
+  "generated_at": "2026-08-09T21:20:25+00:00",
+  "story": "NF-W2c-CBS",
+  "season": 2025,
+  "snapshots_enumerated": 72,
+  "snapshots_unreplayable": 0,
+  "snapshots_parsed": 62,
+  "rows_parsed": 9268,
+  "rows_crosswalked": 2842,
+  "rows_admissible": 1021,
+  "pit_records_checked": 1021,
+  "pit_rows_dropped": 0,
+  "weeks_with_any_stamped_row": 18,
+  "crosswalk_modeled_positions": {
+    "rows_parsed": 2929,
+    "rows_matched": 2842,
+    "rows_unmatched": 87,
+    "distinct_unmatched_names": 40,
+    "match_rate": 0.9703
+  },
+  "landed": {
+    "written": 1021,
+    "skipped_duplicate": 0,
+    "skipped_recapture": 0,
+    "revisions": 0,
+    "store_totals_after_land": {"nfl": 629, "espn": 537, "cbs": 1021, "total": 2187}
+  },
+  "coverage_floor_lift_modeled_positions": {
+    "week": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+    "before_cbs": [69, 68, 86, 67, 22, 84, 29, 56, 16, 34, 92, 2, 42, 69, 98, 100, 63, 0],
+    "after_cbs": [119, 70, 86, 102, 63, 89, 77, 65, 72, 70, 94, 2, 59, 77, 105, 103, 87, 66],
+    "lift": [50, 2, 0, 35, 41, 5, 48, 9, 56, 36, 2, 0, 17, 8, 7, 3, 24, 66],
+    "total_before": 997,
+    "total_after": 1406,
+    "total_lift": 409,
+    "weeks_cbs_uniquely_covers": [18]
+  },
+  "artifact": "quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w2c_wayback_injuries_2025.parquet"
+}

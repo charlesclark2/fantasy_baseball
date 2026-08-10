@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth-context"
-import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
+import { canAccess } from "@/lib/entitlements"
 import {
   createSavedLeague,
   deleteSavedLeague,
@@ -27,6 +27,7 @@ import type { LeagueConfig } from "@/lib/league-config"
 import { buildBoard, matchRosterToBoard } from "@/lib/league-scoring"
 import type { BuiltBoard, RosterMatch } from "@/lib/league-scoring"
 import type { Manifest, Player } from "@/lib/draft-optimizer"
+import { freeSelection } from "@/lib/draft-optimizer"
 import {
   PROSPECT_SEASON,
   getProspectBoard,
@@ -152,20 +153,26 @@ export function useFantasyProjections(season: number = FANTASY_SEASON) {
 /**
  * The user's saved leagues.
  *
- * ⚠️ Only FIRES for a caller entitled to the editor (`admin` + `fantasy_comp` — NF-C0b ships
- * narrower than the fantasy surface). The board, rankings and draft surfaces all call this to offer
- * "Your leagues" beside the presets, and those pages are open to every SUBSCRIBER — so without the
- * `enabled` gate every subscriber page-load would fire a request that 403s by design. Skipping the
- * call leaves `data` undefined, which those surfaces already treat as "no saved leagues" and fall
- * back to the presets. Cosmetic only: `/fantasy/leagues` enforces the same rule server-side.
+ * ⭐ G100-C1 — FIRES FOR ANY SIGNED-IN CALLER. It used to be gated on `canAccessFantasyBeta`
+ * (`admin` + `fantasy_comp`), because `/fantasy/leagues` refused everyone else and every subscriber
+ * page-load would otherwise have fired a request that 403s by design. A free account now has a
+ * quota of one, so the server answers this for them and the gate would hide their own league.
+ *
+ * ⚠️ THE `enabled` PREDICATE IS NOW IDENTITY, NOT ENTITLEMENT, and it must stay one or the other —
+ * never nothing. A logged-out visitor has no token, so the request would 401; skipping it leaves
+ * `data` undefined, which every consumer already reads as "no saved leagues" and falls back to the
+ * presets. Cosmetic only: `/fantasy/leagues` enforces the real rule server-side.
+ *
+ * ⚠️ The query key carries no entitlement discriminator ON PURPOSE, unlike the three dual-mode board
+ * hooks above. This response is already per-user and `queryClient.clear()` runs on sign-out, so
+ * there is no shape for one caller's leagues to be served to another out of this cache.
  */
 export function useSavedLeagues() {
-  const { accessToken, groups } = useAuth()
-  const entitled = canAccessFantasyBeta(groups)
+  const { accessToken } = useAuth()
   return useQuery<SavedLeague[]>({
     queryKey: ["nfl-fantasy-leagues"],
     queryFn: () => listSavedLeagues(accessToken),
-    enabled: entitled,
+    enabled: !!accessToken,
     staleTime: 60_000,
     retry: false,
   })
@@ -237,13 +244,15 @@ export interface MyTeamEntry {
  * Lambda; see `models/fantasy.py`).
  */
 export function useMyTeams() {
-  const { accessToken, groups } = useAuth()
-  const entitled = canAccess("fantasy", groups)
+  const { accessToken } = useAuth()
   const { data: projections } = useFantasyProjections()
   const query = useQuery<MyTeamsPayload>({
     queryKey: ["nfl-fantasy-my-teams"],
+    // ⭐ G100-C1 — identity, not entitlement (see `useSavedLeagues`). `/fantasy/nfl/my-teams` now
+    // serves any signed-in caller their quota's worth of leagues, so gating on `canAccess("fantasy")`
+    // would leave a free user's own league invisible on the surface built to show it.
+    enabled: !!accessToken,
     queryFn: () => getMyTeamsPayload(accessToken, FANTASY_SEASON),
-    enabled: entitled,
     staleTime: 60_000,
     retry: false,
   })
@@ -301,6 +310,7 @@ export function useResolvedBoard(configName: string | null, size: number | null)
       isCustom: true as const,
       league: selectedLeague,
       coverage: customBoard?.coverage ?? null,
+      error: null,
     }
   }
   return {
@@ -309,12 +319,22 @@ export function useResolvedBoard(configName: string | null, size: number | null)
     isCustom: false as const,
     league: null,
     coverage: null,
+    // ⚠️ SURFACED DELIBERATELY (freemium build). A paid preset now answers 403, and without this the
+    // failure arrived as an empty array and rendered "No players match — try clearing the search
+    // box": a refusal disguised as a search result, which is the worst of both readings. A caller
+    // that can reach a paid board must be able to tell "refused" from "nothing here".
+    error: presetQuery.error ?? null,
   }
 }
 
 // ── league-format selection ──────────────────────────────────────────────────────────────────
 // Preferred defaults when a user has not chosen yet. Half-PPR at 12 teams is the most common
 // home-league shape; both fall back to whatever the manifest actually shipped.
+//
+// ⚠️ THESE ARE THE *ENTITLED* DEFAULTS. Since the free tier narrowed to one preset (2026-08-08) an
+// unentitled visitor is defaulted onto the manifest's own `freeBoard` instead — landing them on
+// half-PPR would open the surface on a board the API answers 403 for, i.e. an empty page on first
+// visit. See `entitledDefaults` below.
 const DEFAULT_CONFIG = "half_ppr"
 const DEFAULT_SIZE = 12
 const FORMAT_STORAGE_KEY = "nfl-fantasy-format"
@@ -328,12 +348,39 @@ export function useFormatSelection(
    *  leagues that still EXIST. A deleted league must fall back to a real preset rather than leave
    *  the surface pointing at nothing. */
   savedLeagues?: SavedLeague[],
+  /** Freemium build — whether this caller may read the PAID presets. Defaults to `true` so every
+   *  existing call site keeps its exact behaviour; the browse surfaces pass the real value.
+   *
+   *  ⚠️ Only ever RESTRICTS. When false, a stored paid selection is replaced by the free board and
+   *  the default lands there — because the alternative is a first visit that renders nothing and
+   *  reads as a broken page rather than as a paywall. The server is still the authority; this is
+   *  about not steering someone into a 403. */
+  entitled: boolean = true,
+  /** ⭐ E9.61 — whether `savedLeagues` is still IN FLIGHT.
+   *
+   *  ⚠️ WITHOUT THIS THE STORED-CUSTOM RESTORE IS A RACE IT USUALLY LOSES, and the loss is silent.
+   *  The effect below commits a selection the first time it sees a manifest and then locks itself
+   *  out (`configName !== null`). `savedLeagues` is a SECOND, independent request, so when it lands
+   *  after the manifest — the common case, since the manifest is CDN-cached and this one is not —
+   *  `customIds` is empty at decision time, the stored `custom:<id>` matches nothing, and the user
+   *  is put on a preset. The effect re-runs when the leagues arrive and returns immediately.
+   *
+   *  MEASURED on the real build before this argument existed: pick your league on Rankings, reload,
+   *  and you are back on Full-PPR with the personalized board and its delta gone. No error.
+   *
+   *  Defaults to `false` so every existing call site keeps its exact behaviour; a caller that reads
+   *  saved leagues passes the real flag. Use react-query's `isLoading` (`pending AND fetching`),
+   *  never `isPending` — a DISABLED query (an anonymous visitor, `enabled: !!accessToken`) is
+   *  pending forever, and gating on that would hang the picker on every logged-out page load. */
+  savedLeaguesLoading: boolean = false,
 ) {
   const [configName, setConfigName] = useState<string | null>(null)
   const [size, setSize] = useState<number | null>(null)
 
   useEffect(() => {
     if (!manifest || configName !== null) return
+    // Decide once, with the whole input in hand. See `savedLeaguesLoading`.
+    if (savedLeaguesLoading) return
     let stored: { configName?: string; size?: number } = {}
     try {
       stored = JSON.parse(localStorage.getItem(FORMAT_STORAGE_KEY) ?? "{}")
@@ -342,6 +389,41 @@ export function useFormatSelection(
     }
     const names = manifest.configs.map((c) => c.name)
     const customIds = new Set((savedLeagues ?? []).map((l) => CUSTOM_PREFIX + l.league_id))
+    const free = freeSelection(manifest)
+
+    // Unentitled: the free board is the only one the API will answer, so it is both the default and
+    // the only admissible stored value. A saved CUSTOM league is personalization and equally out of
+    // reach, so it does not win here either. `free` null (a pre-deploy manifest that doesn't say)
+    // falls through to the entitled path — the old behaviour, which is right for a backend that has
+    // not narrowed yet.
+    if (!entitled && free) {
+      // ⭐ E9.61 — A STORED *CUSTOM* SELECTION SURVIVES THIS BRANCH; a stored PAID PRESET does not.
+      //
+      // This branch used to discard `stored` outright, on the reasoning that there is exactly one
+      // preset an unentitled caller can open. That reasoning is sound for PRESETS and wrong for
+      // saved leagues, because G100-C1 changed what "unentitled" owns: a free account keeps ONE
+      // personalized league, `/fantasy/leagues` serves it to them, and `FormatSelector` offers it
+      // ungated. `entitled` here is `canUse("personalization", …)`, which is false for a free
+      // account BY DESIGN (it is the pricing statement, not the quota — see `entitlements.ts`), so
+      // keying the discard on it swept up the one thing they are allowed to have.
+      //
+      // MEASURED, on the real build: a free user picked their league on Rankings, the board and the
+      // delta rendered, and a reload put them back on Full-PPR with the delta gone. Nothing errored
+      // — it just silently un-personalized the surface the personalization is for.
+      //
+      // ⚠️ It is still a VALIDATED restore, not a blanket one: the id must be in `customIds` (the
+      // league still exists), and a stored PAID PRESET is still replaced by the free board so a
+      // lapsed member is never steered into a 403. Both halves have their own red-proof case.
+      if (stored.configName && customIds.has(stored.configName)) {
+        setConfigName(stored.configName)
+        setSize(stored.size ?? DEFAULT_SIZE)
+        return
+      }
+      setConfigName(names.includes(free.config) ? free.config : names[0] ?? null)
+      setSize(manifest.sizes.includes(free.size) ? free.size : manifest.sizes[0] ?? null)
+      return
+    }
+
     // A stored CUSTOM selection wins when that league still exists — a user who has entered their
     // own league should land back on it, not on a generic preset.
     if (stored.configName && customIds.has(stored.configName)) {
@@ -353,7 +435,7 @@ export function useFormatSelection(
     setConfigName(pick ?? names[0] ?? null)
     const sizePick = [stored.size, DEFAULT_SIZE].find((n) => n && manifest.sizes.includes(n))
     setSize(sizePick ?? manifest.sizes[0] ?? null)
-  }, [manifest, configName, savedLeagues])
+  }, [manifest, configName, savedLeagues, entitled, savedLeaguesLoading])
 
   const persist = (next: { configName?: string; size?: number }) => {
     if (next.configName !== undefined) setConfigName(next.configName)

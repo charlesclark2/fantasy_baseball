@@ -11,13 +11,22 @@
 import { useId, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Search } from "lucide-react"
+import { useAuth } from "@/lib/auth-context"
+import { canUse } from "@/lib/entitlements"
 import { useFantasyProjections, FANTASY_SEASON } from "@/lib/fantasy-queries"
-import { trimLockedTail } from "@/lib/fantasy"
-import { EXPECTED_POINTS_LABEL, PROJECTED_GAMES_LABEL } from "@/lib/fantasy-claim-copy"
+import { fullSeasonRate, trimLockedTail } from "@/lib/fantasy"
+import {
+  EXPECTED_POINTS_LABEL,
+  FORMAT_LOCK_SUFFIX,
+  FULL_SEASON_RATE_LABEL,
+  PROJECTED_GAMES_LABEL,
+  REFERENCE_SCORING_LOCK_NOTE,
+} from "@/lib/fantasy-claim-copy"
 import {
   ALL_ROWS,
   ConfidenceBadge,
   EmptyBlock,
+  FreemiumBoundary,
   GLOSSARY,
   InfoTip,
   IntervalBar,
@@ -51,10 +60,21 @@ const SCORING_LABEL: Record<Scoring, string> = {
   fpStd: "Standard",
 }
 
+/** The one reference scoring a free caller may see — the same preset the free BOARD is scored at
+ *  (`entitlement.FREE_BOARD_CONFIG`). Held as its own constant because this page's picker is not
+ *  the board's format picker: it is scoring-INDEPENDENT data with a reference total laid over it,
+ *  and conflating the two controls is how one of them ends up ungated. */
+const FREE_SCORING: Scoring = "fpPpr"
+
 export function ProjectionsTable() {
+  // The PROJECTION is free for everyone — this page's rows, ranges and ADP are identical for every
+  // caller. What entitlement decides here is which reference SCORING may be laid over it: full-PPR
+  // is free, half-PPR and standard are the membership, matching the board's own format split.
+  const { groups } = useAuth()
+  const entitled = canUse("personalization", groups)
   const { data, isLoading, error } = useFantasyProjections()
   const [pos, setPos] = useState("All")
-  const [scoring, setScoring] = useState<Scoring>("fpPpr")
+  const [scoring, setScoring] = useState<Scoring>(FREE_SCORING)
   const [q, setQ] = useState("")
   const [rookiesOnly, setRookiesOnly] = useState(false)
   const [page, setPage] = useState(0)
@@ -62,6 +82,12 @@ export function ProjectionsTable() {
   const scoringSelectId = useId()
 
   const locked = data?.locked === true
+
+  // ⭐ THE SELECTION IS RE-DERIVED, NOT JUST DISABLED IN THE UI. Every read below goes through
+  // `effScoring`, so an unentitled caller is on full-PPR no matter what the `scoring` STATE says —
+  // a disabled `<option>` is a presentation detail and a state variable is not a gate (NF-C0e's
+  // "wired ≠ invoked", pointed the other way: here the state is wired and must NOT be invoked).
+  const effScoring: Scoring = entitled ? scoring : FREE_SCORING
   // E9.56b — on a LOCKED view, drop the undrafted tail: 632 of 858 rows carry no ADP and no value,
   // so they would render as a long alphabetical list of names and padlocks. The hidden count is
   // surfaced below the table, never silently swallowed.
@@ -83,9 +109,9 @@ export function ProjectionsTable() {
     // the array index cannot reconstruct our ranking (E9.56). Keep the server's order EXPLICITLY.
     const ordered = locked
       ? scoped
-      : scoped.slice().sort((a, b) => (b[scoring] ?? -Infinity) - (a[scoring] ?? -Infinity))
+      : scoped.slice().sort((a, b) => (b[effScoring] ?? -Infinity) - (a[effScoring] ?? -Infinity))
     return ordered.map((p, i) => ({ player: p, rank: i + 1 }))
-  }, [players, pos, scoring, locked])
+  }, [players, pos, effScoring, locked])
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -99,7 +125,7 @@ export function ProjectionsTable() {
     [rows, page, pageSize],
   )
 
-  useEffect(() => setPage(0), [pos, q, rookiesOnly, scoring])
+  useEffect(() => setPage(0), [pos, q, rookiesOnly, effScoring])
 
   // A shared interval domain across the visible rows, so bar widths are comparable down the column.
   const domain = useMemo(() => {
@@ -175,21 +201,39 @@ export function ProjectionsTable() {
               </label>
               <Picker
                 id={scoringSelectId}
-                value={scoring}
+                value={effScoring}
                 onValueChange={(v) => setScoring(v as Scoring)}
                 ariaLabel="Reference scoring"
                 className="h-auto rounded border border-[#262626] bg-[#0f0f0f] px-2 py-1 text-base sm:text-xs text-gray-200 focus:border-[#10b981]"
-                options={(Object.keys(SCORING_LABEL) as Scoring[]).map((s) => ({
-                  value: s,
-                  label: SCORING_LABEL[s],
-                }))}
+                options={(Object.keys(SCORING_LABEL) as Scoring[]).map((s) => {
+                  // Listed and disabled, never removed — same reasoning as the board's format
+                  // picker: a menu showing only the free option makes it look like the only
+                  // scoring we publish, which is untrue and is the opposite of an upgrade prompt.
+                  const lockedOption = !entitled && s !== FREE_SCORING
+                  return {
+                    value: s,
+                    label: lockedOption
+                      ? `${SCORING_LABEL[s]} · ${FORMAT_LOCK_SUFFIX}`
+                      : SCORING_LABEL[s],
+                    disabled: lockedOption,
+                  }
+                })}
               />
             </div>
           </div>
 
+          {!entitled && (
+            <p
+              data-testid="reference-scoring-lock-note"
+              className="mb-3 text-[11px] leading-relaxed text-gray-500"
+            >
+              {REFERENCE_SCORING_LOCK_NOTE}
+            </p>
+          )}
+
           <p className="mb-3 text-[11px] text-gray-600">
             {`The points column is a reference ${SCORING_LABEL[
-              scoring
+              effScoring
             ].toLowerCase()} scoring used to order this table — for your league's own scoring and roster shape, use Rankings or the League Board.`}
           </p>
 
@@ -204,7 +248,8 @@ export function ProjectionsTable() {
           </div>
 
           <div className="overflow-x-auto rounded-lg border border-[#262626]">
-            <table className="w-full min-w-[900px] text-left text-xs">
+            {/* min-width bumped for the added full-season-rate column; the wrapper scrolls. */}
+            <table className="w-full min-w-[980px] text-left text-xs">
               <thead className="bg-[#0f0f0f] text-gray-500">
                 <tr>
                   <th className="px-3 py-2 font-medium">#</th>
@@ -228,6 +273,11 @@ export function ProjectionsTable() {
                       against an "if he plays every week" projection from anywhere else. */}
                   <th className="px-3 py-2 text-right font-medium">
                     <InfoTip label={EXPECTED_POINTS_LABEL}>{GLOSSARY.expectedPoints}</InfoTip>
+                  </th>
+                  {/* The same total re-expressed over a full 17 games — kept immediately beside the
+                      expected total, because the PAIR is the disclosure. See the rankings board. */}
+                  <th className="px-3 py-2 text-right font-medium">
+                    <InfoTip label={FULL_SEASON_RATE_LABEL}>{GLOSSARY.fullSeasonRate}</InfoTip>
                   </th>
                   {/* The interval is carried on the PPR total only, so it is labelled that way
                       rather than silently implying it tracks the selected reference scoring. */}
@@ -280,7 +330,17 @@ export function ProjectionsTable() {
                       </td>
                     ))}
                     <td className="px-3 py-2 text-right font-semibold text-gray-100">
-                      {numOrLock(p[scoring], p.locked)}
+                      {numOrLock(p[effScoring], p.locked)}
+                    </td>
+                    {/* ⚠️ Scaled from the SELECTED reference scoring, so it tracks the picker rather
+                        than silently quoting PPR while the column beside it shows standard. Null
+                        (no/zero expected games) renders as an em-dash — never a blank, never ∞. */}
+                    <td className="px-3 py-2 text-right text-gray-400">
+                      {p.locked ? (
+                        <LockChip title="Subscribe to unlock the full-season rate" />
+                      ) : (
+                        num(fullSeasonRate(p[effScoring], p.g))
+                      )}
                     </td>
                     {/* E9.56 — the interval is model output too. A locked row has no p10/p90, so
                         render the chip rather than an empty bar that reads as "no uncertainty". */}
@@ -383,6 +443,10 @@ export function ProjectionsTable() {
               <MarketLeanNote lean={data?.market_lean} note={data?.market_lean_note} />
             </UncertaintyNote>
           </div>
+
+          {/* Below the complete table, for the reason given on the rankings board: the boundary
+              only means something once the visitor has seen that nothing is withheld. */}
+          <FreemiumBoundary entitled={entitled} />
         </>
       )}
     </div>

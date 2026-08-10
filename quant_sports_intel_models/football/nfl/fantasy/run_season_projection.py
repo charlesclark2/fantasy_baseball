@@ -757,10 +757,20 @@ def fit_veteran_band_from_panel(panel: pd.DataFrame, projection_season: int):
                     "(a band fitted on them would leak the outcome it prices)",
                     int(fut.sum()), projection_season)
         panel = panel.loc[~fut]
+    # NF1.9-R: the draftable-tier overlay ships DARK (`_VET_TIER_RECAL = False`) — flipping it is a
+    # post-merge OPERATOR step (re-export + `run_interval_revalidation` re-run), never a default.
+    tier_kwargs = {}
+    if _SP._VET_TIER_RECAL:
+        tier_kwargs = {"tier_form": _SP._VET_TIER_FORM, "tier_k": _SP._VET_TIER_K,
+                       "tier_n": _SP.veteran_tier_size(),
+                       "tier_cqr_mode": _SP._VET_TIER_CQR_MODE,
+                       "tier_cqr_scale": _SP._VET_TIER_CQR_SCALE}
+        log.info("NF1.9-R veteran tier band ACTIVE: form=%s k=%s tier_n=%s",
+                 _SP._VET_TIER_FORM, _SP._VET_TIER_K, tier_kwargs["tier_n"])
     model = _SP.fit_veteran_band_model(
         panel, form=_SP._VET_BAND_FORM, k=_SP._VET_BAND_K, sd_gain=_SP._VET_BAND_SD_GAIN,
         qreg_alpha=_SP._VET_BAND_QREG_ALPHA, qreg_per_pos=_SP._VET_BAND_QREG_PER_POS,
-        cqr_mode=_SP._VET_BAND_CQR_MODE, cqr_scale=_SP._VET_BAND_CQR_SCALE)
+        cqr_mode=_SP._VET_BAND_CQR_MODE, cqr_scale=_SP._VET_BAND_CQR_SCALE, **tier_kwargs)
     if model is None:
         log.warning("[ALERT] the veteran band fit was REFUSED on %d panel rows — falling back to the "
                     "normal approximation", len(panel))

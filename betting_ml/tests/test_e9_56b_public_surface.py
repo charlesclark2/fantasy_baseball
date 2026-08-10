@@ -93,38 +93,13 @@ def _pages_using(guard: str) -> set[str]:
     }
 
 
-def test_exactly_two_pages_are_public():
-    """⭐ THE LOAD-BEARING GUARD. The entire risk of this story is a page that should be gated
-    quietly becoming public — a write surface, or one carrying a user's OWN league data. A named
-    guard makes the public set enumerable in one grep; this pins it."""
-    assert _pages_using("FantasyPublicGuard") == {
-        "app/fantasy/projections/page.tsx",
-        "app/fantasy/rankings/page.tsx",
-    }
-
-
-@pytest.mark.parametrize(
-    "page",
-    [
-        "app/fantasy/my-teams/page.tsx",
-        "app/fantasy/league-settings/page.tsx",
-        "app/fantasy/import/page.tsx",
-        "app/fantasy/draft/page.tsx",
-        "app/fantasy/league-board/page.tsx",
-        "app/fantasy/players/page.tsx",
-        "app/fantasy/mlb/prospects/page.tsx",
-    ],
-)
-def test_personal_and_write_surfaces_stay_gated(page):
-    """The inverse of the above, stated per page so a failure names the surface that leaked.
-
-    These have NO locked form — their endpoints 403 a free caller — so making one public would
-    render a permanently broken page at best, and expose a user's own league data at worst."""
-    code = _code(page)
-    assert "FantasyPublicGuard" not in code, f"{page} became PUBLIC"
-    assert re.search(r"<(FantasyGuard|FantasyBetaGuard|AdminGuard)\b", code), (
-        f"{page} lost its guard entirely"
-    )
+# 🗄️ MOVED, NOT DELETED (freemium build, 2026-08-08). The "which pages are public" and "the nav
+# marks exactly those public" invariants now live in `test_freemium_tier.py`, which owns the tier —
+# it added Player Search to the free set and has the matching PAID list beside it.
+#
+# ⭐ THEY ARE NOT RESTATED HERE, DELIBERATELY. Two files asserting the same membership can disagree,
+# and when they do the one a session happens to read first wins — the "one logical thing, many
+# owners" shape (INC-38) that this repo keeps paying for. One owner, and a pointer.
 
 
 # ── the cache-poisoning guard ────────────────────────────────────────────────────────────────────
@@ -207,16 +182,7 @@ def test_the_trim_reports_what_it_hid_rather_than_dropping_it_silently():
 # ── nav + SEO posture ────────────────────────────────────────────────────────────────────────────
 
 
-def test_nav_marks_exactly_the_two_public_surfaces_public():
-    """A public page the nav still hides is reachable only by typing the URL."""
-    code = _code("lib/nav-model.ts")
-    for key in ("fantasy-rankings", "fantasy-projections"):
-        line = next(ln for ln in code.splitlines() if f'key: "{key}"' in ln)
-        assert "public: true" in line, f"{key} is public but the nav still gates it"
-    for key in ("fantasy-league-board", "fantasy-players", "fantasy-draft"):
-        lines = [ln for ln in code.splitlines() if f'key: "{key}"' in ln]
-        if lines:
-            assert "public: true" not in lines[0], f"{key} was marked public but stays gated"
+# (the nav-membership guard moved to `test_freemium_tier.py` with the page-set guard above)
 
 
 @pytest.mark.parametrize("surface", ["projections", "rankings"])

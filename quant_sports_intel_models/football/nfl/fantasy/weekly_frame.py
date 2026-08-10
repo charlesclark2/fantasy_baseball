@@ -170,6 +170,16 @@ ALLOWED_FEATURE_CONTRACT: tuple[FeatureSpec, ...] = (
         "no designation yet', NOT 'healthy'.",
     ),
     FeatureSpec(
+        "injury_rate", "nflverse injuries (group aggregate of injury_report)", 0, "free/public",
+        "Wed-Fri publication; aggregates only rows stamped before the target row's own gameday",
+        "2009+", PIT_PROSPECTIVE_SHADOW, True, "designation-only model",
+        "NF-W2b: week×position GROUP rates (no player linkage) of the injury_report family — the "
+        "marginal-listing-rate channel absorbed into the base foil. Same source rows, same "
+        "fail-closed date_modified admissibility, aggregated strictly before each row's own "
+        "gameday 00:00 UTC (a whole-week rate would leak into Thursday games). Inherits the "
+        "SPLIT FIDELITY: 2025+ has no date_modified ⇒ NaN + observed=0, never fillna(0).",
+    ),
+    FeatureSpec(
         "prior_season_priors", "nflverse rosters / draft_picks / combine / players", 0, "free/public",
         "pre-season", "all-time", PIT_RETROSPECTIVE, True, "none needed",
         "age, experience, draft capital, athletic measurables — the NF1 season-model prior surface.",

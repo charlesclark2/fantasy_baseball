@@ -3,7 +3,7 @@
 import React, { useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
-import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
+import { canAccess, canAccessFantasyBeta, canConfigureLeague } from "@/lib/entitlements"
 import { getMfaStatus, getSessionAuthMethod, subscriberMfaRequired } from "@/lib/cognito"
 import { TermsGate } from "@/components/terms-gate"
 
@@ -76,18 +76,20 @@ export function FantasyGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// ── E9.56b: the FREE-TIER (locked-view) surfaces ─────────────────────────────────────────────────
+// ── The FREE GENERIC BOARD surfaces (`Capability.GENERIC_BOARD`) ─────────────────────────────────
 //
-// Renders its children for EVERYONE — logged out, free, subscriber alike — because on these two
-// surfaces the SERVER decides what is visible, per point. E9.56 made `/fantasy/nfl/{manifest,
-// projections,board}` dual-mode: an entitled caller gets the real numbers, everyone else gets the
-// same rows with every model value REMOVED and `locked: true` in its place, re-ordered onto market
-// ADP so the array index cannot reconstruct our ranking. Proven in production 2026-08-05:
-// 858/858 rows locked, 100% ADP-ascending, identical under a forged `subscriber` token.
+// Renders its children for EVERYONE — logged out, free, subscriber alike — because these surfaces
+// carry no per-caller content at all: `/fantasy/nfl/{manifest,projections,board}` return the same
+// bytes to every caller since the freemium build, so there is nothing here to gate.
 //
-// ⇒ bouncing a free user to /login here would defeat the whole point. The operator's rule is that a
-// locked 2026 point renders a "subscribe to unlock" CTA rather than being blank or absent — and a
-// redirect IS absent.
+// 🗄️ E9.56b introduced this guard for a WEAKER reason that no longer applies: those endpoints were
+// then DUAL-MODE (an entitled caller got the numbers, everyone else got the same rows with every
+// model value removed and `locked: true` in its place), and the point was that a locked point must
+// render a "subscribe to unlock" CTA rather than vanish. The lock is retired; the guard is not,
+// because its real job — below — was never about the lock.
+//
+// ⇒ bouncing a visitor to /login here would defeat the whole funnel. The free board IS the
+// acquisition wedge, and a redirect is how you lose the visitor before they see it.
 //
 // ⚠️ WHY THIS IS A NAMED COMPONENT RATHER THAN JUST OMITTING THE GUARD (which is what NF3.2's
 // player page does, and the reason that route has a long explanatory docstring instead):
@@ -100,10 +102,10 @@ export function FantasyGuard({ children }: { children: React.ReactNode }) {
 // thing. The NF3.1 player route predates this and could migrate onto it later — deliberately NOT
 // done here, to keep this story's blast radius to the two surfaces it is about.)
 //
-// ⛔ DO NOT wrap a surface in this unless the server returns a LOCKED-BUT-USEFUL payload for it.
+// ⛔ DO NOT wrap a surface in this unless every endpoint it reads is `Capability.GENERIC_BOARD`.
 // A page whose endpoints 403 a free caller (My Teams, League Settings, Import, saved leagues) would
-// render permanently broken, and one that computes over model values (the draft optimizer) would
-// produce NaN — see the `enabled`-gate note in `lib/fantasy-queries.ts`.
+// render permanently broken, and the draft optimizer is PAID for a product reason rather than a
+// data one — its inputs are free, but it is the decision-support half of the boundary.
 export function FantasyPublicGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
@@ -129,6 +131,37 @@ export function FantasyBetaGuard({ children }: { children: React.ReactNode }) {
   }, [loading, accessToken, groups, router, pathname])
 
   if (loading || accessToken === null || !canAccessFantasyBeta(groups)) return null
+  return <>{children}</>
+}
+
+// ⭐ G100-C1 — the SAVED-LEAGUE surfaces: My League, League Settings, Import.
+//
+// Signed in + a personalization quota above zero. That is every signed-in account today (the free
+// quota is 1) and it is deliberately NOT `canAccess("fantasy", …)`: the whole story is that a free
+// account gets one personalized league, so gating these on fantasy entitlement would 403 exactly
+// the users this exists for.
+//
+// ⚠️ THE TWO REFUSALS GO TO DIFFERENT PLACES, and getting that wrong costs signups. A logged-out
+// visitor is sent to LOGIN (with `next`, so they land back here) — they need an ACCOUNT, and
+// sending them to /subscribe asks them to pay for something free. A signed-in caller whose quota
+// has been withdrawn (`FREE_PERSONALIZED_LEAGUE_QUOTA=0`) is sent to /subscribe, because for them
+// it genuinely is a membership. This mirrors the server exactly: 401 vs 403.
+//
+// ⛔ NOT the gate. `/fantasy/leagues` and `/fantasy/import/*` enforce the same rule server-side and
+// these are WRITE endpoints — hiding a page stops nobody from POSTing a config straight to the API.
+export function FantasyLeagueGuard({ children }: { children: React.ReactNode }) {
+  const { accessToken, groups, loading } = useAuth()
+  const router = useRouter()
+  const pathname = usePathname()
+  const allowed = canConfigureLeague(accessToken !== null, groups)
+
+  useEffect(() => {
+    if (loading) return
+    if (accessToken === null) { router.push(loginHref(pathname)); return }
+    if (!allowed) { router.push("/subscribe"); return }
+  }, [loading, accessToken, allowed, router, pathname])
+
+  if (loading || !allowed) return null
   return <>{children}</>
 }
 

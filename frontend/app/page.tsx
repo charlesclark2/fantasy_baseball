@@ -5,6 +5,8 @@ import { Nav } from "@/components/nav"
 import { LandingFaqSection } from "@/components/landing-faq"
 import { FeaturedFantasyPlayer } from "@/components/home/featured-fantasy-player"
 import { PickOfTheDay } from "@/components/home/pick-of-the-day"
+import { LandingView } from "@/components/analytics/landing-view"
+import { ACQUISITION_SURFACES } from "@/lib/funnel-telemetry"
 import { SIGNUP_HREF } from "@/lib/access"
 import { TRACK_RECORD_TRUST_LINK } from "@/lib/fantasy-claim-copy"
 import {
@@ -314,6 +316,9 @@ function FooterCta() {
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] font-sans">
+      {/* G100-D0 — the funnel's first step. A client island on an otherwise static page, so the
+          page stays static (no read at request time; see the module header). */}
+      <LandingView surface={ACQUISITION_SURFACES.HOME} />
       <Nav />
       <main>
         <HeroSection />
