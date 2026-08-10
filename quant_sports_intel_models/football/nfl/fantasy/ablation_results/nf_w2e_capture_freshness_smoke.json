@@ -1,0 +1,1227 @@
+{
+  "generated_at": "2026-08-10T00:06:33+00:00",
+  "story": "NF-W2e",
+  "smoke": true,
+  "elapsed_seconds": 465.2,
+  "n_rows": 84553,
+  "fold_labels": [
+    "2024H1",
+    "2024H2",
+    "2025H1",
+    "2025H2"
+  ],
+  "run_valid": true,
+  "verdict": {
+    "QB": "NO_CERTIFICATION_POSSIBLE",
+    "RB": "NO_CERTIFICATION_POSSIBLE",
+    "WR": "NO_CERTIFICATION_POSSIBLE",
+    "TE": "NO_CERTIFICATION_POSSIBLE"
+  },
+  "verdict_text": "**NO_CERTIFICATION_POSSIBLE** \u2014 by design (see the power ceiling). Direction read at row level: `inj_fresh1d` LOSES TO the incumbent pooled (\u0394=-0.03523 \u00b1 0.01785 clustered, CI95 [-0.07022, -0.00024], excludes zero) \u00b7 `inj_freshest` TIES the incumbent pooled (\u0394=-0.00076 \u00b1 0.00726 clustered, CI95 [-0.01499, 0.01348], spans zero).",
+  "power_ceiling": {
+    "active_folds": 2,
+    "fold_clause_attainable": false,
+    "fold_clause_wins_required": null,
+    "pbo_evaluable": false,
+    "sign_test_floor": 0.25,
+    "dsr_ceiling": 0.9214,
+    "dsr_gate": 0.95,
+    "folds_for_sign_certifiability": 4,
+    "verdict": "NO_CERTIFICATION_POSSIBLE",
+    "reason": "the mechanism can only act on capture-era rows, so the active-fold count is a DESIGN quantity: no effect of any size could clear these gates. The re-test trigger is calendar-bound \u2014 the capture era gains ~2 folds per season of NF-W0a forward capture, so PBO becomes evaluable at 4 folds (end of 2026)."
+  },
+  "controls": {
+    "inertness": {
+      "state": "PASS",
+      "passes": true,
+      "legacy_rows": 75865,
+      "cells_compared": 28,
+      "differences": []
+    },
+    "population": {
+      "state": "PASS",
+      "passes": true,
+      "per_rung": {
+        "inj_latest": {
+          "rows": 84553,
+          "observed_rows": 84105
+        },
+        "inj_fresh1d": {
+          "rows": 84553,
+          "observed_rows": 84105
+        },
+        "inj_freshest": {
+          "rows": 84553,
+          "observed_rows": 84105
+        }
+      },
+      "mismatched_rungs": []
+    },
+    "alignment": {
+      "state": "PASS",
+      "passes": true,
+      "rows": 84553,
+      "misaligned_rungs": []
+    },
+    "measured_tie": {
+      "state": "PASS",
+      "passes": true,
+      "folds": [
+        "2024H1",
+        "2024H2"
+      ],
+      "comparisons": 16,
+      "tolerance": 1e-09,
+      "max_abs_delta": 0.0,
+      "differences": []
+    }
+  },
+  "stratifier_validation": {
+    "state": "VALIDATED",
+    "separates_designation_staleness": true,
+    "corrected": {
+      "n_pairs": 341,
+      "overall_change_rate": 0.2933,
+      "by_bin": [
+        {
+          "bin": "<0.5d",
+          "n": 52.0,
+          "change_rate": 0.0385,
+          "se": 0.0267
+        },
+        {
+          "bin": "0.5-1d",
+          "n": 66.0,
+          "change_rate": 0.2576,
+          "se": 0.0538
+        },
+        {
+          "bin": "1-2d",
+          "n": 84.0,
+          "change_rate": 0.3333,
+          "se": 0.0514
+        },
+        {
+          "bin": "2-3d",
+          "n": 10.0,
+          "change_rate": 0.2,
+          "se": 0.1265
+        },
+        {
+          "bin": ">3d",
+          "n": 129.0,
+          "change_rate": 0.3953,
+          "se": 0.043
+        }
+      ],
+      "rank_corr": 0.289,
+      "rank_corr_p": 0.0,
+      "boundary_days": 1.0,
+      "rate_at_or_below": 0.161,
+      "rate_above": 0.3632,
+      "n_at_or_below": 118,
+      "n_above": 223
+    },
+    "confounded_first_cut": {
+      "n_pairs": 627,
+      "overall_change_rate": 0.6156,
+      "by_bin": [
+        {
+          "bin": "<0.5d",
+          "n": 117.0,
+          "change_rate": 0.5726,
+          "se": 0.0457
+        },
+        {
+          "bin": "0.5-1d",
+          "n": 136.0,
+          "change_rate": 0.6397,
+          "se": 0.0412
+        },
+        {
+          "bin": "1-2d",
+          "n": 151.0,
+          "change_rate": 0.6291,
+          "se": 0.0393
+        },
+        {
+          "bin": "2-3d",
+          "n": 83.0,
+          "change_rate": 0.9036,
+          "se": 0.0324
+        },
+        {
+          "bin": ">3d",
+          "n": 140.0,
+          "change_rate": 0.4429,
+          "se": 0.042
+        }
+      ],
+      "rank_corr": -0.0026,
+      "rank_corr_p": 0.947432,
+      "boundary_days": 1.0,
+      "rate_at_or_below": 0.6087,
+      "rate_above": 0.6203,
+      "n_at_or_below": 253,
+      "n_above": 374
+    },
+    "confound": "nfl.com publishes practice-only rows with a NULL report_status, so a pair crossing between a designation-publishing source and a practice-publishing one scores as a 'change' that is a SOURCE-FORMAT difference, not a designation change",
+    "dropped_as_source_format_crossings": 286,
+    "note": "a stratifier that does not separate the realized quantity may not be read (MH2.1) \u2014 this block runs BEFORE any lift is scored"
+  },
+  "carryover": {
+    "state": "OK",
+    "listed_rows": 1343,
+    "superseded_rows": 487,
+    "superseded_share": 0.3626,
+    "carryover_gap_days": {
+      "50%": 1.653,
+      "90%": 4.078,
+      "max": 6.144
+    },
+    "note": "structurally impossible in the legacy era (one nflverse report per player-week), so this is a capture-regime property, not a defect"
+  },
+  "ladder_activity": {
+    "inj_latest": {
+      "listed_capture_era_rows": 1343,
+      "by_position": {
+        "QB": 159,
+        "RB": 279,
+        "TE": 298,
+        "WR": 607
+      },
+      "share_of_incumbent": 1.0
+    },
+    "inj_fresh1d": {
+      "listed_capture_era_rows": 475,
+      "by_position": {
+        "QB": 51,
+        "RB": 104,
+        "TE": 108,
+        "WR": 212
+      },
+      "share_of_incumbent": 0.3537
+    },
+    "inj_freshest": {
+      "listed_capture_era_rows": 856,
+      "by_position": {
+        "QB": 90,
+        "RB": 179,
+        "TE": 185,
+        "WR": 402
+      },
+      "share_of_incumbent": 0.6374
+    }
+  },
+  "pit_audits": {
+    "inj_latest": {
+      "game_groups_checked": 532,
+      "records_checked": 183314,
+      "injury_records_checked": 15401,
+      "rate_records_checked": 83360,
+      "wayback_records_checked": 9501,
+      "groups_dropped": [],
+      "rows_dropped": 0
+    },
+    "inj_fresh1d": {
+      "game_groups_checked": 532,
+      "records_checked": 180941,
+      "injury_records_checked": 14533,
+      "rate_records_checked": 81855,
+      "wayback_records_checked": 7128,
+      "groups_dropped": [],
+      "rows_dropped": 0
+    },
+    "inj_freshest": {
+      "game_groups_checked": 532,
+      "records_checked": 182553,
+      "injury_records_checked": 14914,
+      "rate_records_checked": 83086,
+      "wayback_records_checked": 8740,
+      "groups_dropped": [],
+      "rows_dropped": 0
+    }
+  },
+  "capture_era": {
+    "state": "OK",
+    "folds": [
+      "2025H1",
+      "2025H2"
+    ],
+    "n_rows": 8688,
+    "sign_convention": "positive = the tighter rung BEATS the incumbent",
+    "per_rung": {
+      "inj_fresh1d": {
+        "QB": {
+          "state": "OK",
+          "n": 1372,
+          "n_clusters": 18,
+          "mean_delta": -0.06624,
+          "naive_se": 0.03161,
+          "clustered_se": 0.0429,
+          "se_inflation_x": 1.36,
+          "ci95_clustered": [
+            -0.15033,
+            0.01784
+          ],
+          "spans_zero": true
+        },
+        "RB": {
+          "state": "OK",
+          "n": 2144,
+          "n_clusters": 18,
+          "mean_delta": -0.01794,
+          "naive_se": 0.01337,
+          "clustered_se": 0.01735,
+          "se_inflation_x": 1.3,
+          "ci95_clustered": [
+            -0.05194,
+            0.01606
+          ],
+          "spans_zero": true
+        },
+        "WR": {
+          "state": "OK",
+          "n": 3231,
+          "n_clusters": 18,
+          "mean_delta": -0.04772,
+          "naive_se": 0.01405,
+          "clustered_se": 0.0241,
+          "se_inflation_x": 1.72,
+          "ci95_clustered": [
+            -0.09496,
+            -0.00048
+          ],
+          "spans_zero": false
+        },
+        "TE": {
+          "state": "OK",
+          "n": 1941,
+          "n_clusters": 18,
+          "mean_delta": -0.01161,
+          "naive_se": 0.01247,
+          "clustered_se": 0.01398,
+          "se_inflation_x": 1.12,
+          "ci95_clustered": [
+            -0.03902,
+            0.01579
+          ],
+          "spans_zero": true
+        },
+        "ALL": {
+          "state": "OK",
+          "n": 8688,
+          "n_clusters": 18,
+          "mean_delta": -0.03523,
+          "naive_se": 0.00842,
+          "clustered_se": 0.01785,
+          "se_inflation_x": 2.12,
+          "ci95_clustered": [
+            -0.07022,
+            -0.00024
+          ],
+          "spans_zero": false
+        }
+      },
+      "inj_freshest": {
+        "QB": {
+          "state": "OK",
+          "n": 1372,
+          "n_clusters": 18,
+          "mean_delta": 0.00213,
+          "naive_se": 0.01362,
+          "clustered_se": 0.01331,
+          "se_inflation_x": 0.98,
+          "ci95_clustered": [
+            -0.02395,
+            0.02822
+          ],
+          "spans_zero": true
+        },
+        "RB": {
+          "state": "OK",
+          "n": 2144,
+          "n_clusters": 18,
+          "mean_delta": 0.01364,
+          "naive_se": 0.00694,
+          "clustered_se": 0.00529,
+          "se_inflation_x": 0.76,
+          "ci95_clustered": [
+            0.00327,
+            0.024
+          ],
+          "spans_zero": false
+        },
+        "WR": {
+          "state": "OK",
+          "n": 3231,
+          "n_clusters": 18,
+          "mean_delta": -0.01303,
+          "naive_se": 0.00917,
+          "clustered_se": 0.01252,
+          "se_inflation_x": 1.36,
+          "ci95_clustered": [
+            -0.03758,
+            0.01151
+          ],
+          "spans_zero": true
+        },
+        "TE": {
+          "state": "OK",
+          "n": 1941,
+          "n_clusters": 18,
+          "mean_delta": 0.00173,
+          "naive_se": 0.01031,
+          "clustered_se": 0.01154,
+          "se_inflation_x": 1.12,
+          "ci95_clustered": [
+            -0.02089,
+            0.02435
+          ],
+          "spans_zero": true
+        },
+        "ALL": {
+          "state": "OK",
+          "n": 8688,
+          "n_clusters": 18,
+          "mean_delta": -0.00076,
+          "naive_se": 0.00495,
+          "clustered_se": 0.00726,
+          "se_inflation_x": 1.47,
+          "ci95_clustered": [
+            -0.01499,
+            0.01348
+          ],
+          "spans_zero": true
+        }
+      }
+    },
+    "incumbent_lift_over_foil": {
+      "QB": {
+        "state": "OK",
+        "n": 1372,
+        "n_clusters": 18,
+        "mean_delta": 0.12004,
+        "naive_se": 0.0358,
+        "clustered_se": 0.04579,
+        "se_inflation_x": 1.28,
+        "ci95_clustered": [
+          0.03029,
+          0.20978
+        ],
+        "spans_zero": false
+      },
+      "RB": {
+        "state": "OK",
+        "n": 2144,
+        "n_clusters": 18,
+        "mean_delta": 0.04222,
+        "naive_se": 0.016,
+        "clustered_se": 0.02041,
+        "se_inflation_x": 1.28,
+        "ci95_clustered": [
+          0.00221,
+          0.08223
+        ],
+        "spans_zero": false
+      },
+      "WR": {
+        "state": "OK",
+        "n": 3231,
+        "n_clusters": 18,
+        "mean_delta": 0.08385,
+        "naive_se": 0.01531,
+        "clustered_se": 0.02055,
+        "se_inflation_x": 1.34,
+        "ci95_clustered": [
+          0.04356,
+          0.12413
+        ],
+        "spans_zero": false
+      },
+      "TE": {
+        "state": "OK",
+        "n": 1941,
+        "n_clusters": 18,
+        "mean_delta": 0.04164,
+        "naive_se": 0.01457,
+        "clustered_se": 0.02045,
+        "se_inflation_x": 1.4,
+        "ci95_clustered": [
+          0.00155,
+          0.08173
+        ],
+        "spans_zero": false
+      }
+    }
+  },
+  "stratified": {
+    "state": "OK",
+    "boundary_days": 1.0,
+    "note": "the boundary is the VALIDATED stratifier cut, measured before any lift",
+    "per_position": {
+      "QB": {
+        "listed_fresh_le_1d": {
+          "n": 51,
+          "state": "OK",
+          "n_clusters": 13,
+          "mean_delta": 1.83242,
+          "naive_se": 0.51671,
+          "clustered_se": 0.54858,
+          "se_inflation_x": 1.06,
+          "ci95_clustered": [
+            0.75721,
+            2.90763
+          ],
+          "spans_zero": false
+        },
+        "listed_stale_gt_1d": {
+          "n": 108,
+          "state": "OK",
+          "n_clusters": 16,
+          "mean_delta": 0.61993,
+          "naive_se": 0.31157,
+          "clustered_se": 0.3989,
+          "se_inflation_x": 1.28,
+          "ci95_clustered": [
+            -0.16192,
+            1.40177
+          ],
+          "spans_zero": true
+        },
+        "not_listed": {
+          "n": 1213,
+          "state": "OK",
+          "n_clusters": 18,
+          "mean_delta": 0.00353,
+          "naive_se": 0.01681,
+          "clustered_se": 0.02459,
+          "se_inflation_x": 1.46,
+          "ci95_clustered": [
+            -0.04467,
+            0.05173
+          ],
+          "spans_zero": true
+        }
+      },
+      "RB": {
+        "listed_fresh_le_1d": {
+          "n": 104,
+          "state": "OK",
+          "n_clusters": 15,
+          "mean_delta": 0.80084,
+          "naive_se": 0.23518,
+          "clustered_se": 0.35399,
+          "se_inflation_x": 1.51,
+          "ci95_clustered": [
+            0.10702,
+            1.49465
+          ],
+          "spans_zero": false
+        },
+        "listed_stale_gt_1d": {
+          "n": 175,
+          "state": "OK",
+          "n_clusters": 17,
+          "mean_delta": 0.11316,
+          "naive_se": 0.1005,
+          "clustered_se": 0.13703,
+          "se_inflation_x": 1.36,
+          "ci95_clustered": [
+            -0.15541,
+            0.38173
+          ],
+          "spans_zero": true
+        },
+        "not_listed": {
+          "n": 1865,
+          "state": "OK",
+          "n_clusters": 18,
+          "mean_delta": -0.00674,
+          "naive_se": 0.00778,
+          "clustered_se": 0.00871,
+          "se_inflation_x": 1.12,
+          "ci95_clustered": [
+            -0.02381,
+            0.01034
+          ],
+          "spans_zero": true
+        }
+      },
+      "WR": {
+        "listed_fresh_le_1d": {
+          "n": 212,
+          "state": "OK",
+          "n_clusters": 15,
+          "mean_delta": 0.88445,
+          "naive_se": 0.14234,
+          "clustered_se": 0.16661,
+          "se_inflation_x": 1.17,
+          "ci95_clustered": [
+            0.55789,
+            1.211
+          ],
+          "spans_zero": false
+        },
+        "listed_stale_gt_1d": {
+          "n": 395,
+          "state": "OK",
+          "n_clusters": 17,
+          "mean_delta": 0.24184,
+          "naive_se": 0.0799,
+          "clustered_se": 0.09891,
+          "se_inflation_x": 1.24,
+          "ci95_clustered": [
+            0.04797,
+            0.4357
+          ],
+          "spans_zero": false
+        },
+        "not_listed": {
+          "n": 2624,
+          "state": "OK",
+          "n_clusters": 18,
+          "mean_delta": -0.00462,
+          "naive_se": 0.00742,
+          "clustered_se": 0.0097,
+          "se_inflation_x": 1.31,
+          "ci95_clustered": [
+            -0.02363,
+            0.01439
+          ],
+          "spans_zero": true
+        }
+      },
+      "TE": {
+        "listed_fresh_le_1d": {
+          "n": 108,
+          "state": "OK",
+          "n_clusters": 15,
+          "mean_delta": 0.65606,
+          "naive_se": 0.13451,
+          "clustered_se": 0.12726,
+          "se_inflation_x": 0.95,
+          "ci95_clustered": [
+            0.40664,
+            0.90549
+          ],
+          "spans_zero": false
+        },
+        "listed_stale_gt_1d": {
+          "n": 190,
+          "state": "OK",
+          "n_clusters": 16,
+          "mean_delta": 0.00544,
+          "naive_se": 0.11088,
+          "clustered_se": 0.14059,
+          "se_inflation_x": 1.27,
+          "ci95_clustered": [
+            -0.2701,
+            0.28099
+          ],
+          "spans_zero": true
+        },
+        "not_listed": {
+          "n": 1643,
+          "state": "OK",
+          "n_clusters": 18,
+          "mean_delta": 0.00544,
+          "naive_se": 0.00626,
+          "clustered_se": 0.00609,
+          "se_inflation_x": 0.97,
+          "ci95_clustered": [
+            -0.0065,
+            0.01738
+          ],
+          "spans_zero": true
+        }
+      }
+    }
+  },
+  "anchors": {
+    "QB": {
+      "nihilist_loses": true,
+      "pos_marginal_loses": true,
+      "incumbent_respects_own_form_oracle": true,
+      "mean_crps": {
+        "inj_latest": 2.5377,
+        "nihilist_zero": 6.6483,
+        "pos_marginal": 4.7852,
+        "oracle_avail__inj": 2.1118
+      }
+    },
+    "RB": {
+      "nihilist_loses": true,
+      "pos_marginal_loses": true,
+      "incumbent_respects_own_form_oracle": true,
+      "mean_crps": {
+        "inj_latest": 2.4005,
+        "nihilist_zero": 5.6859,
+        "pos_marginal": 3.89,
+        "oracle_avail__inj": 2.1751
+      }
+    },
+    "WR": {
+      "nihilist_loses": true,
+      "pos_marginal_loses": true,
+      "incumbent_respects_own_form_oracle": true,
+      "mean_crps": {
+        "inj_latest": 2.5428,
+        "nihilist_zero": 5.4612,
+        "pos_marginal": 3.7053,
+        "oracle_avail__inj": 2.0604
+      }
+    },
+    "TE": {
+      "nihilist_loses": true,
+      "pos_marginal_loses": true,
+      "incumbent_respects_own_form_oracle": true,
+      "mean_crps": {
+        "inj_latest": 1.7727,
+        "nihilist_zero": 3.585,
+        "pos_marginal": 2.626,
+        "oracle_avail__inj": 1.3701
+      }
+    }
+  },
+  "fold_table": [
+    {
+      "fold": "2024H1",
+      "n_test": 4365,
+      "base_rate_RB": 2.576,
+      "inj_latest_RB": 2.4432,
+      "inj_fresh1d_RB": 2.4432,
+      "inj_freshest_RB": 2.4432
+    },
+    {
+      "fold": "2024H2",
+      "n_test": 4212,
+      "base_rate_RB": 2.5129,
+      "inj_latest_RB": 2.3438,
+      "inj_fresh1d_RB": 2.3438,
+      "inj_freshest_RB": 2.3438
+    },
+    {
+      "fold": "2025H1",
+      "n_test": 4308,
+      "base_rate_RB": 2.4371,
+      "inj_latest_RB": 2.3951,
+      "inj_fresh1d_RB": 2.4299,
+      "inj_freshest_RB": 2.38
+    },
+    {
+      "fold": "2025H2",
+      "n_test": 4380,
+      "base_rate_RB": 2.4625,
+      "inj_latest_RB": 2.4201,
+      "inj_fresh1d_RB": 2.4215,
+      "inj_freshest_RB": 2.4079
+    }
+  ],
+  "preregistration": {
+    "hypothesis": "NF-W2d's 2025 attenuation is caused by consuming designations a fresher available capture has already superseded; restricting consumption to fresher captures should recover lift. The competing outcome (freshness costs volume) is registered as equally informative.",
+    "ladder": [
+      [
+        "inj_latest",
+        7.0
+      ],
+      [
+        "inj_fresh1d",
+        1.0
+      ],
+      [
+        "inj_freshest",
+        "freshest"
+      ]
+    ],
+    "foil": "base_rate",
+    "anchors": [
+      "nihilist_zero",
+      "pos_marginal",
+      "oracle_avail__inj"
+    ],
+    "arm_form": "inj_both",
+    "arm_form_justification_max_spread": 0.062,
+    "validated_stratum_boundary_days": 1.0,
+    "coverage_max_age_days": 7.0,
+    "measured_tie_folds": [
+      "2024H1",
+      "2024H2"
+    ],
+    "certifies_nothing": true,
+    "deploy_held": "best_alpha=0; changes no incumbent, no construction, no serving"
+  },
+  "fold_results": [
+    {
+      "label": "2024H1",
+      "scores": {
+        "base_rate": {
+          "pooled": 2.422732339149836,
+          "mae_pooled": 3.256426192058113,
+          "QB": 2.381277336128294,
+          "mae_QB": 3.1454089406666794,
+          "RB": 2.5759840411537205,
+          "mae_RB": 3.448826109053496,
+          "WR": 2.737192809388633,
+          "mae_WR": 3.7077685594005496,
+          "TE": 1.763496570836121,
+          "mae_TE": 2.3764616525776576
+        },
+        "nihilist_zero": {
+          "pooled": 5.272701030927835,
+          "mae_pooled": 5.272701030927835,
+          "QB": 6.56621897810219,
+          "mae_QB": 6.56621897810219,
+          "RB": 5.8381801299907155,
+          "mae_RB": 5.8381801299907155,
+          "WR": 5.550764488286067,
+          "mae_WR": 5.550764488286067,
+          "TE": 3.288909276248726,
+          "mae_TE": 3.288909276248726
+        },
+        "pos_marginal": {
+          "pooled": 3.653953614855934,
+          "mae_pooled": 5.08634135166094,
+          "QB": 4.652293131199701,
+          "mae_QB": 6.56621897810219,
+          "RB": 3.982893903411661,
+          "mae_RB": 5.547093779015785,
+          "WR": 3.742167472888805,
+          "mae_WR": 5.222651048088779,
+          "TE": 2.44986173188008,
+          "mae_TE": 3.32177370030581
+        },
+        "inj_latest": {
+          "pooled": 2.324839788898365,
+          "mae_pooled": 3.14583774091623,
+          "QB": 2.3571398557833447,
+          "mae_QB": 3.1446105127206945,
+          "RB": 2.4432092730176964,
+          "mae_RB": 3.2940211994081205,
+          "WR": 2.610776375688354,
+          "mae_WR": 3.5540297757555646,
+          "TE": 1.6995608653651404,
+          "mae_TE": 2.30909929648073
+        },
+        "inj_fresh1d": {
+          "pooled": 2.324839788898365,
+          "mae_pooled": 3.14583774091623,
+          "QB": 2.3571398557833447,
+          "mae_QB": 3.1446105127206945,
+          "RB": 2.4432092730176964,
+          "mae_RB": 3.2940211994081205,
+          "WR": 2.610776375688354,
+          "mae_WR": 3.5540297757555646,
+          "TE": 1.6995608653651404,
+          "mae_TE": 2.30909929648073
+        },
+        "inj_freshest": {
+          "pooled": 2.324839788898365,
+          "mae_pooled": 3.14583774091623,
+          "QB": 2.3571398557833447,
+          "mae_QB": 3.1446105127206945,
+          "RB": 2.4432092730176964,
+          "mae_RB": 3.2940211994081205,
+          "WR": 2.610776375688354,
+          "mae_WR": 3.5540297757555646,
+          "TE": 1.6995608653651404,
+          "mae_TE": 2.30909929648073
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.933143550574073,
+          "mae_pooled": 2.6704067951480774,
+          "QB": 1.8884743010756397,
+          "mae_QB": 2.6524302624180436,
+          "RB": 2.2137982127170845,
+          "mae_RB": 3.044692577751385,
+          "WR": 2.1456908138352953,
+          "mae_WR": 2.9560439225162076,
+          "TE": 1.3047864698082225,
+          "mae_TE": 1.7997694011268786
+        }
+      },
+      "n_test": 4365,
+      "extra_rungs": true
+    },
+    {
+      "label": "2024H2",
+      "scores": {
+        "base_rate": {
+          "pooled": 2.47963196954346,
+          "mae_pooled": 3.3255511179906363,
+          "QB": 2.829325201745047,
+          "mae_QB": 3.6589443366792715,
+          "RB": 2.512940728314546,
+          "mae_RB": 3.410129522212161,
+          "WR": 2.6936292742338375,
+          "mae_WR": 3.6395960350759364,
+          "TE": 1.8414337734045416,
+          "mae_TE": 2.4785902682386265
+        },
+        "nihilist_zero": {
+          "pooled": 5.488850902184236,
+          "mae_pooled": 5.488850902184236,
+          "QB": 6.933313609467456,
+          "mae_QB": 6.933313609467456,
+          "RB": 5.622243902439026,
+          "mae_RB": 5.622243902439024,
+          "WR": 5.901791426743442,
+          "mae_WR": 5.901791426743442,
+          "TE": 3.633776371308017,
+          "mae_TE": 3.633776371308017
+        },
+        "pos_marginal": {
+          "pooled": 3.8085312394988673,
+          "mae_pooled": 5.263993352326686,
+          "QB": 5.005260275375512,
+          "mae_QB": 6.933313609467456,
+          "RB": 3.8127073170731705,
+          "mae_RB": 5.2652682926829275,
+          "WR": 3.9711585338845414,
+          "mae_WR": 5.534932821497121,
+          "TE": 2.6825230444660826,
+          "mae_TE": 3.6255485232067515
+        },
+        "inj_latest": {
+          "pooled": 2.3474391024650756,
+          "mae_pooled": 3.1514158327642043,
+          "QB": 2.6391577321399096,
+          "mae_QB": 3.465895138811344,
+          "RB": 2.3437690629521812,
+          "mae_RB": 3.180406284023451,
+          "WR": 2.583441415880754,
+          "mae_WR": 3.4751385078116113,
+          "TE": 1.7542833861906288,
+          "mae_TE": 2.3620890769333056
+        },
+        "inj_fresh1d": {
+          "pooled": 2.3474391024650756,
+          "mae_pooled": 3.1514158327642043,
+          "QB": 2.6391577321399096,
+          "mae_QB": 3.465895138811344,
+          "RB": 2.3437690629521812,
+          "mae_RB": 3.180406284023451,
+          "WR": 2.583441415880754,
+          "mae_WR": 3.4751385078116113,
+          "TE": 1.7542833861906288,
+          "mae_TE": 2.3620890769333056
+        },
+        "inj_freshest": {
+          "pooled": 2.3474391024650756,
+          "mae_pooled": 3.1514158327642043,
+          "QB": 2.6391577321399096,
+          "mae_QB": 3.465895138811344,
+          "RB": 2.3437690629521812,
+          "mae_RB": 3.180406284023451,
+          "WR": 2.583441415880754,
+          "mae_WR": 3.4751385078116113,
+          "TE": 1.7542833861906288,
+          "mae_TE": 2.3620890769333056
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.9791621666987056,
+          "mae_pooled": 2.7012290976924547,
+          "QB": 2.2371889037589794,
+          "mae_QB": 3.0298218152586913,
+          "RB": 2.1332902203319586,
+          "mae_RB": 2.9266973615844933,
+          "WR": 2.151220407412055,
+          "mae_WR": 2.933905396662398,
+          "TE": 1.3448432221187547,
+          "mae_TE": 1.8395131664117212
+        }
+      },
+      "n_test": 4212,
+      "extra_rungs": true
+    },
+    {
+      "label": "2025H1",
+      "scores": {
+        "base_rate": {
+          "pooled": 2.425478017901351,
+          "mae_pooled": 3.244497917670963,
+          "QB": 2.7711525216696287,
+          "mae_QB": 3.67121297965789,
+          "RB": 2.4371331488718,
+          "mae_RB": 3.2121147712410014,
+          "WR": 2.585328514735148,
+          "mae_WR": 3.4982022595602387,
+          "TE": 1.9063012161159376,
+          "mae_TE": 2.5611178025731847
+        },
+        "nihilist_zero": {
+          "pooled": 5.330324976787373,
+          "mae_pooled": 5.330324976787373,
+          "QB": 6.952727272727274,
+          "mae_QB": 6.952727272727274,
+          "RB": 5.549868173258004,
+          "mae_RB": 5.549868173258004,
+          "WR": 5.4426973275326285,
+          "mae_WR": 5.4426973275326285,
+          "TE": 3.7748447204968945,
+          "mae_TE": 3.7748447204968945
+        },
+        "pos_marginal": {
+          "pooled": 3.7030652387924676,
+          "mae_pooled": 5.138774373259054,
+          "QB": 4.962893438801636,
+          "mae_QB": 6.952727272727274,
+          "RB": 3.8509928050606015,
+          "mae_RB": 5.286967984934087,
+          "WR": 3.6543545919586937,
+          "mae_WR": 5.116159105034184,
+          "TE": 2.746472726548814,
+          "mae_TE": 3.7535196687370607
+        },
+        "inj_latest": {
+          "pooled": 2.3283489297562268,
+          "mae_pooled": 3.111455445108133,
+          "QB": 2.559297548605521,
+          "mae_QB": 3.392854291319088,
+          "RB": 2.3950816246762963,
+          "mae_RB": 3.173334983774265,
+          "WR": 2.470452405734153,
+          "mae_WR": 3.323533983538037,
+          "TE": 1.8578715611211631,
+          "mae_TE": 2.4947172834055458
+        },
+        "inj_fresh1d": {
+          "pooled": 2.4040240167497835,
+          "mae_pooled": 3.221751656100932,
+          "QB": 2.6859436540680153,
+          "mae_QB": 3.5726266507026296,
+          "RB": 2.42989805582598,
+          "mae_RB": 3.2249454819320538,
+          "WR": 2.5783436261481363,
+          "mae_WR": 3.485315557492619,
+          "TE": 1.8894002510547478,
+          "mae_TE": 2.5355163747866314
+        },
+        "inj_freshest": {
+          "pooled": 2.340164128754833,
+          "mae_pooled": 3.1318329221454464,
+          "QB": 2.5649871320259923,
+          "mae_QB": 3.3811381008418366,
+          "RB": 2.3799774041817026,
+          "mae_RB": 3.1607830682100087,
+          "WR": 2.499184436681285,
+          "mae_WR": 3.3781593558186382,
+          "TE": 1.8753591503366722,
+          "mae_TE": 2.5165450734849824
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.946690612733082,
+          "mae_pooled": 2.648233729871284,
+          "QB": 2.177218402708928,
+          "mae_QB": 2.9970739138343467,
+          "RB": 2.17009016190476,
+          "mae_RB": 2.911366768696415,
+          "WR": 2.0109877988390226,
+          "mae_WR": 2.729387108441362,
+          "TE": 1.4338659328794858,
+          "mae_TE": 1.981468888472984
+        }
+      },
+      "n_test": 4308,
+      "extra_rungs": true
+    },
+    {
+      "label": "2025H2",
+      "scores": {
+        "base_rate": {
+          "pooled": 2.3805337795661154,
+          "mae_pooled": 3.233215096266117,
+          "QB": 2.6272481638208234,
+          "mae_QB": 3.51174351069474,
+          "RB": 2.4624813905308334,
+          "mae_RB": 3.3607637892132893,
+          "WR": 2.559702789949624,
+          "mae_WR": 3.496609397271965,
+          "TE": 1.814147899290806,
+          "mae_TE": 2.4532339059945367
+        },
+        "nihilist_zero": {
+          "pooled": 5.0428356164383565,
+          "mae_pooled": 5.0428356164383565,
+          "QB": 6.1409415121255355,
+          "mae_QB": 6.1409415121255355,
+          "RB": 5.733271719038817,
+          "mae_RB": 5.733271719038816,
+          "WR": 4.949395807644883,
+          "mae_WR": 4.9493958076448825,
+          "TE": 3.6425641025641027,
+          "mae_TE": 3.6425641025641027
+        },
+        "pos_marginal": {
+          "pooled": 3.5534086845802597,
+          "mae_pooled": 4.876922374429223,
+          "QB": 4.520184201141227,
+          "mae_QB": 6.1409415121255355,
+          "RB": 3.913267927389924,
+          "mae_RB": 5.429205175600739,
+          "WR": 3.4535113345347623,
+          "mae_WR": 4.749519112207152,
+          "TE": 2.625158596318212,
+          "mae_TE": 3.5671794871794873
+        },
+        "inj_latest": {
+          "pooled": 2.3374936246534057,
+          "mae_pooled": 3.160818722659512,
+          "QB": 2.595098823004115,
+          "mae_QB": 3.4722062822435773,
+          "RB": 2.420091150164847,
+          "mae_RB": 3.2902096802853746,
+          "WR": 2.506638012503114,
+          "mae_WR": 3.4019269598706123,
+          "TE": 1.7792331490231965,
+          "mae_TE": 2.392243075299494
+        },
+        "inj_fresh1d": {
+          "pooled": 2.3329429970400892,
+          "mae_pooled": 3.1565098802135956,
+          "QB": 2.6035223557913585,
+          "mae_QB": 3.470924230458293,
+          "RB": 2.421472846033459,
+          "mae_RB": 3.281237348834363,
+          "WR": 2.494669462176786,
+          "mae_WR": 3.387406219050403,
+          "TE": 1.7711114549404097,
+          "mae_TE": 2.4079217344058983
+        },
+        "inj_freshest": {
+          "pooled": 2.327376261486093,
+          "mae_pooled": 3.1399391260958467,
+          "QB": 2.585474610292964,
+          "mae_QB": 3.4492705806762274,
+          "RB": 2.4078926921765818,
+          "mae_RB": 3.2577096640060645,
+          "WR": 2.5040965486513405,
+          "mae_WR": 3.386663488467998,
+          "TE": 1.7584675165601868,
+          "mae_TE": 2.376394523585762
+        },
+        "oracle_avail__inj": {
+          "pooled": 1.9095924729794629,
+          "mae_pooled": 2.61888959622565,
+          "QB": 2.144421103280242,
+          "mae_QB": 2.9211823722185666,
+          "RB": 2.1831312182283087,
+          "mae_RB": 2.993079676394665,
+          "WR": 1.9338818906149284,
+          "mae_WR": 2.6779580858107517,
+          "TE": 1.3967912138975933,
+          "mae_TE": 1.8880280651272454
+        }
+      },
+      "n_test": 4380,
+      "extra_rungs": true
+    }
+  ],
+  "multiplicity": {
+    "state": "OK",
+    "n_comparisons": 8,
+    "q": 0.1,
+    "any_survives": true,
+    "comparisons": [
+      {
+        "arm": "inj_freshest",
+        "position": "RB",
+        "mean_delta": 0.01364,
+        "z_clustered": 2.578,
+        "p_two_sided": 0.00992,
+        "bh_cutoff_q10": 0.0125,
+        "survives_bh_q10": true
+      },
+      {
+        "arm": "inj_fresh1d",
+        "position": "WR",
+        "mean_delta": -0.04772,
+        "z_clustered": -1.98,
+        "p_two_sided": 0.04769,
+        "bh_cutoff_q10": 0.025,
+        "survives_bh_q10": false
+      },
+      {
+        "arm": "inj_fresh1d",
+        "position": "QB",
+        "mean_delta": -0.06624,
+        "z_clustered": -1.544,
+        "p_two_sided": 0.12257,
+        "bh_cutoff_q10": 0.0375,
+        "survives_bh_q10": false
+      },
+      {
+        "arm": "inj_freshest",
+        "position": "WR",
+        "mean_delta": -0.01303,
+        "z_clustered": -1.041,
+        "p_two_sided": 0.298,
+        "bh_cutoff_q10": 0.05,
+        "survives_bh_q10": false
+      },
+      {
+        "arm": "inj_fresh1d",
+        "position": "RB",
+        "mean_delta": -0.01794,
+        "z_clustered": -1.034,
+        "p_two_sided": 0.30113,
+        "bh_cutoff_q10": 0.0625,
+        "survives_bh_q10": false
+      },
+      {
+        "arm": "inj_fresh1d",
+        "position": "TE",
+        "mean_delta": -0.01161,
+        "z_clustered": -0.83,
+        "p_two_sided": 0.40627,
+        "bh_cutoff_q10": 0.075,
+        "survives_bh_q10": false
+      },
+      {
+        "arm": "inj_freshest",
+        "position": "QB",
+        "mean_delta": 0.00213,
+        "z_clustered": 0.16,
+        "p_two_sided": 0.87286,
+        "bh_cutoff_q10": 0.0875,
+        "survives_bh_q10": false
+      },
+      {
+        "arm": "inj_freshest",
+        "position": "TE",
+        "mean_delta": 0.00173,
+        "z_clustered": 0.15,
+        "p_two_sided": 0.88083,
+        "bh_cutoff_q10": 0.1,
+        "survives_bh_q10": false
+      }
+    ],
+    "note": "a READING aid over the 8 reported comparisons \u2014 never a gate; at 2 active folds nothing is certifiable in either direction"
+  },
+  "era_stratum_shares": {
+    "state": "OK",
+    "boundary_days": 1.0,
+    "per_era": {
+      "legacy(nflverse)": {
+        "listed_rows": 14058,
+        "share_fresh_le_1d": 0.0756,
+        "share_stale_gt_1d": 0.9244,
+        "median_age_days": 1.435,
+        "sd_age_days": 0.439,
+        "share_gt_2d": 0.0394
+      },
+      "capture(2025)": {
+        "listed_rows": 1343,
+        "share_fresh_le_1d": 0.3537,
+        "share_stale_gt_1d": 0.6463,
+        "median_age_days": 1.483,
+        "sd_age_days": 1.375,
+        "share_gt_2d": 0.2695
+      }
+    },
+    "capture_era_is_fresher_on_this_cut": true,
+    "reading": "the capture era is FRESHER on this cut (0.354 vs 0.076 of listed rows within 1 day), so a freshness DEFICIT cannot explain its smaller lift \u2014 the within-2025 gradient is real but does not transfer into an era explanation",
+    "caveat": "a legacy `date_modified` is the REPORT's own timestamp; a capture instant is when the page was photographed. Stamp age is not the same quantity across eras, so this comparison BOUNDS the freshness explanation rather than settling it."
+  },
+  "reanalyzed_at": "2026-08-10T00:47:02+00:00"
+}
