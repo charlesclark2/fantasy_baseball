@@ -138,6 +138,34 @@ _CLAIM_DENYLIST = (
 # and "Dj Moore" (measured against the live API), i.e. it is WORSE than these rules, and it cannot
 # cover retired players at all. The real fix is upstream — the projection frame should carry
 # nflverse's `player_display_name` — which is a data-pipeline change, not a display fix.
+#
+# ── E9.61: THE SOURCE ALSO SHIPS NAMES THAT ARE ALREADY CASED AND ALREADY WRONG ─────────────────
+#
+# The map above only fires on an ALL-CAPS input, because the premise was that a name arriving in
+# mixed case came from the clean draft-class pipeline and was therefore right. Measured against the
+# SERVED 2026 payload, that premise is false: `Mack Hollins` is published as **"MacK Hollins"** —
+# real name, mixed case, an internal capital in the wrong place — so `display_name` returns it
+# untouched and the shouting guard scores it healthy.
+#
+# ⚠️ IT IS NOT OUR RULE PASS DOING IT. There is no `Mac` rule anywhere in this repo (`\bMc([a-z])`
+# cannot match "Mack" — M-a-c-k contains no "Mc"), and the value is identical in the raw capture,
+# the board and the projections. The defect is CARRIED IN THE DATA, which is precisely the argument
+# for the upstream fix noted above: a projection frame on nflverse's `player_display_name` would
+# not produce it. Until then the display layer is the only place it can be corrected.
+#
+# Keyed on the CASEFOLDED whole name and applied to EVERY input, cased or not — a repair, not a
+# de-shouting. Deliberately still a whole-name lookup rather than a rule: "MacK" → "Mack" as a
+# pattern would also rewrite the legitimately-capitalised "MacKenzie"/"MacKay" family.
+#
+# ⛔ SCOPE, STATED PLAINLY: this corrects the TRACK RECORD board only. `export_draft_board_json.py`
+# — which produces the projections and league boards the live Rankings/Projections/Player Search
+# surfaces read — applies no casing pass at all, so "MacK Hollins" is still what those serve. Giving
+# it one is a change to the launch artifact that only takes effect on an operator re-export, so it
+# is carded with the upstream fix rather than smuggled into a display patch.
+_MISCASINGS = {
+    "mack hollins": "Mack Hollins",
+}
+
 _KNOWN_CASINGS = {
     "CEEDEE LAMB": "CeeDee Lamb",
     "DEANDRE HOPKINS": "DeAndre Hopkins",
@@ -152,15 +180,24 @@ _KNOWN_CASINGS = {
 
 
 def display_name(raw) -> str:
-    """An all-caps source name rendered for display. Anything already cased is returned UNTOUCHED.
+    """A source name rendered for display: de-shouted if it is shouting, repaired if it is a known
+    mis-casing, and otherwise returned UNTOUCHED.
 
     `str.title()` alone already handles apostrophes, hyphens, periods and "St." ("JA'MARR CHASE" ->
     "Ja'Marr Chase", "AMON-RA ST. BROWN" -> "Amon-Ra St. Brown", "A.J. BROWN" -> "A.J. Brown") but
     lowercases the second capital in "MCCAFFREY" — 12 Mc/Mac names here — so that gets its own rule.
     Roman-numeral suffixes are handled defensively: none appear in the current data, but they do in
     the sibling board's names, so a future source change cannot reintroduce "Iii".
+
+    ⚠️ THE MIS-CASING LOOKUP RUNS FIRST AND ON EVERY INPUT (E9.61). The "already cased means already
+    correct" assumption held until the served payload was actually read; see `_MISCASINGS`. It is
+    checked before the `isupper()` early return so that BOTH spellings of a known-wrong name — the
+    shouting one and the already-mixed-case one — land on the same answer.
     """
     name = str(raw).strip()
+    fixed = _MISCASINGS.get(name.casefold())
+    if fixed is not None:
+        return fixed
     if not name.isupper():  # rookies — and any future clean source — are already right
         return name
     if name in _KNOWN_CASINGS:
