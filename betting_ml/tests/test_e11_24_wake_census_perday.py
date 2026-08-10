@@ -117,3 +117,69 @@ def test_perday_cut_selects_executions_as_well_as_waits():
         "4b must NOT filter to queued_provisioning_time > 0 in its WHERE clause — that would drop "
         "the executions denominator and reduce this cut to the aggregate it exists to replace."
     )
+
+
+# ── #679 — awake-time must be the BILLABLE cut, and ONLY awake-time ──────────────────────
+#
+# Two clauses that must fail INDEPENDENTLY (NF-D17: a fixture that trips more than one clause
+# proves none of them), because they point in OPPOSITE directions:
+#   (a) Table 2 MUST filter `warehouse_size is not null` — a cloud-services statement can
+#       neither resume the warehouse nor keep it awake, and unfiltered it inflated the figure
+#       40-138%, once ranking a Snowsight poll as the account's largest awake-time consumer.
+#   (b) the WAIT tables must NOT — a provisioning wait implies a real occupation, so the filter
+#       is redundant there and a careless sweep applying it everywhere would drop true wakers.
+
+def _sql_block(src: str, marker: str, end_marker: str) -> str:
+    """Slice a census table's SQL, anchored on its `run(cur, f"…` CALL SITE.
+
+    ⚠️ Anchoring on the bare title is the INC-38 prose-cannot-satisfy trap: every table title
+    also appears in the module docstring, `str.find` returns THAT one first, and the guard then
+    reads prose it can never be satisfied by (measured — the first cut of this test extracted the
+    docstring and was red on clean source, a false RED-proof, #682's lesson).
+    """
+    def site(m: str, frm: int = 0) -> int:
+        # `run(` and `run_pivot(`, f-string or plain — all four spellings are in use.
+        hit = re.search(rf'run(?:_pivot)?\(cur, f?"{re.escape(m)}', src[frm:])
+        assert hit, f"census table {m!r} SQL call site is missing (searched from offset {frm})."
+        return frm + hit.start()
+
+    start = site(marker)
+    return src[start:site(end_marker, start + 1)]
+
+
+def test_active_minutes_counts_only_warehouse_occupying_statements():
+    src = _src()
+    block = _sql_block(src, "2. ACTIVE MINUTES", "3. PROVISIONING WAITS")
+    assert re.search(r"warehouse_size\s+is\s+not\s+null", block), (
+        "Table 2 must count only minutes containing a WAREHOUSE-OCCUPYING statement "
+        "(warehouse_size is not null). SHOW / ALTER SESSION / ALTER EXTERNAL TABLE REFRESH / "
+        "CALL SYSTEM$ / every CREATE OR REPLACE VIEW are billed to cloud services and can neither "
+        "resume nor keep the warehouse awake (#679). This matters MORE after the #675/#662 view "
+        "flips, which replace MERGE/CTAS with `create or replace view`."
+    )
+
+
+def test_the_wait_tables_do_not_inherit_the_billable_filter():
+    """A provisioning wait implies the warehouse was occupied, so `warehouse_size is not null` is
+    redundant on the wait tables — and applying it there is not harmless, it is how a sweep drops
+    a genuine waker. Pin that Tables 3/4/4b stayed clean."""
+    src = _src()
+    pairs = (
+        ("3. PROVISIONING WAITS by day", "4. PROVISIONING WAITS by BAND"),
+        ("4. PROVISIONING WAITS by BAND", "4b. PER-DAY"),
+        ("4b. PER-DAY", "5. LEVER 1b"),
+    )
+    checked = 0
+    for marker, end_marker in pairs:
+        block = _sql_block(src, marker, end_marker)
+        assert block.strip(), f"{marker!r} sliced to an empty block — this guard would assert on nothing."
+        checked += 1
+        assert not re.search(r"warehouse_size", block), (
+            f"{marker!r} must NOT filter on warehouse_size — a wait already implies the statement "
+            "occupied the warehouse, and filtering the attribution instrument would silently drop "
+            "wakers. The billable filter belongs to Table 2 (awake-time) alone."
+        )
+    assert checked == len(pairs) == 3, (
+        "all three wait tables must be checked — a loop that silently examined fewer would pass "
+        "on nothing (#690: a guard that iterates matches must assert non-vacuity)."
+    )
