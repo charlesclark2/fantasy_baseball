@@ -3213,3 +3213,41 @@ that `COMPUTE_WH`'s quiet windows become genuinely quiet, which is the **precond
 (suspend/drop), and that CI stops contaminating every soak baseline read on a promotion day — which
 cost this session an hour of chasing a phantom eb_* regression. Do **not** book a credit saving for
 it; book it as removing 21.4% of the wakes standing between here and a suspendable warehouse.
+
+## ✅ END-TO-END VERIFIED, and the empty-string trap is WORSE than asserted (measured 2026-08-10)
+
+The corrected repoint was verified through **dbt's own profile rendering**, not by reading the diff
+— the appropriate standard given the first cut was a declaration with no consumer. Four cases,
+`dbt debug --target ci` (dbt-fusion 2.0.0-preview.204):
+
+| `SNOWFLAKE_CI_WAREHOUSE` | resolved `warehouse` | verdict |
+|---|---|---|
+| `CI_WH` | `CI_WH` | ✅ the repoint works |
+| a deliberate bogus name | that bogus name | ✅ proves the env var is genuinely read |
+| **unset** | `COMPUTE_WH` | ✅ the fallback — safe to ship before the warehouse exists |
+| **empty string** | **key absent entirely** | 🚨 see below |
+| `CI_WH`, but `--target baseball_betting_and_fantasy` | `COMPUTE_WH` | ✅ production is unaffected |
+
+🚨 **The empty-string case is worse than the comment I first wrote.** I asserted it would yield
+`warehouse: ""`. Measured, the `warehouse` key **vanishes from the resolved connection altogether**,
+so Snowflake falls back to the **user's** default warehouse — and `DBT_RW.default_warehouse` is
+**`COMPUTE_WH`**. ⇒ an empty secret would leave CI billing production **silently**, with `dbt debug`
+reporting *"All checks passed!"* and CI green. Nothing anywhere would say the repoint had not
+happened. That is the whole justification for the workflow-side `||`: **profiles.yml's default
+cannot rescue an empty value, only an absent one.**
+
+⭐ **AND `dbt debug` IS NOT A VALID VERIFICATION OF A WAREHOUSE.** It reported `connection test: OK`
+and *"All checks passed!"* against a **nonexistent** warehouse name *and* against **no warehouse at
+all** — Snowflake does not validate the warehouse at connect time, only at first query. So a green
+`dbt debug` (or a green CI run that selects zero models) proves the env var is *read*, never that
+the warehouse is *usable* or that traffic *moved*. **The only valid proof is `query_history` showing
+statements under `CI_WH`** — the "verify the published artifact, not the build log" rule, one layer
+down into a tool's own self-check.
+
+### Operator status (2026-08-10)
+
+`CI_WH` created and verified: **X-Small, `AUTO_SUSPEND=60`, `AUTO_RESUME=true`, `USAGE →
+ACCOUNTADMIN`** (the role CI actually runs as — measured). Secret set. ⏭️ Takes effect on the next
+`dev→main` PR, and note **`dbt-build-ci` runs on `pull_request` only** (`dbt-compile` runs on both,
+on the production target, and is deliberately not covered) — so the verification happens **on the
+PR, before the merge**.

@@ -41,10 +41,15 @@ baseball_betting_and_fantasy:
       # 7 days (21.4%) and does NO serving work; on a promotion day its waits were the entire
       # apparent eb_* "regression" a session opened by chasing.
       # ⭐ THE DEFAULT IS THE FALLBACK: with SNOWFLAKE_CI_WAREHOUSE unset this is byte-identical
-      # to today, so the change is safe to ship BEFORE the warehouse exists. dbt's env_var()
-      # returns the default only when the var is UNSET — an EMPTY string is returned verbatim
-      # and would produce `warehouse: ""` — so the workflow must never pass it empty (the
-      # unset-vs-empty trap that made delta-rs sign an empty AKID). It uses its own `||`.
+      # to today, so the change is safe to ship BEFORE the warehouse exists.
+      # 🪤 MEASURED 2026-08-10 (dbt-fusion 2.0.0-preview.204) — an EMPTY value is NOT the same as
+      # unset, and its failure is SILENT AND INVISIBLE: with `SNOWFLAKE_CI_WAREHOUSE=""` the
+      # `warehouse` key DISAPPEARS from the resolved connection entirely, Snowflake then falls
+      # back to the USER's default warehouse — and `DBT_RW.default_warehouse` is COMPUTE_WH — so
+      # CI would quietly keep billing production while `dbt debug` reports "All checks passed!"
+      # and CI stays green. That is why the workflow carries its own `||` fallback: this default
+      # cannot save an empty value, only an absent one. (Same unset-vs-empty class as the
+      # delta-rs empty-AKID landmine.)
       # ⛔ ONLY the `ci` target is env-driven. The default and `dev` targets stay hardcoded so
       # a stray SNOWFLAKE_CI_WAREHOUSE can never steer the production daily build.
       warehouse: "{{ env_var('SNOWFLAKE_CI_WAREHOUSE', 'COMPUTE_WH') }}"

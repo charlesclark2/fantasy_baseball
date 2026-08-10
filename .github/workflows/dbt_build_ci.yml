@@ -121,8 +121,11 @@ jobs:
       SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
       # E11.24 — consumed by the `ci` target in dbt/profiles.yml (this job runs `--target ci`).
       # ⚠️ The `|| 'COMPUTE_WH'` is REQUIRED, not decorative: an unset GitHub secret interpolates
-      # to an EMPTY STRING, and dbt's env_var() returns a default only for an UNSET var — an
-      # empty one is passed through verbatim as `warehouse: ""`. So the fallback lives here.
+      # to an EMPTY STRING, and dbt's env_var() returns a default only for an UNSET var.
+      # MEASURED: an empty value makes the `warehouse` key VANISH from the connection, Snowflake
+      # falls back to DBT_RW's default warehouse (= COMPUTE_WH), and the repoint silently does
+      # not happen while `dbt debug` and CI both report success. The fallback must live HERE —
+      # profiles.yml's default cannot rescue an empty value, only an absent one.
       # ⛔ NOT on the dbt-compile job: it runs without --target, i.e. on the DEFAULT (production)
       # profile, so this var would be inert there. That job is NOT covered by this change.
       SNOWFLAKE_CI_WAREHOUSE: ${{ secrets.SNOWFLAKE_CI_WAREHOUSE || 'COMPUTE_WH' }}
