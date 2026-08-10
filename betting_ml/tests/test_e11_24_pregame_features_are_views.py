@@ -31,14 +31,21 @@ band. All of that band's tick wake sat on three writers this change deliberately
     merge into ...eb_batter_posteriors_raw     3 waits
     UPDATE ...feature_pregame_lineup_state     3 waits
 
-None of the three is flippable. The EB pair is content-DIVERGENT (``incremental_strategy='merge'``
-never deletes, so Snowflake is a permanently accumulating superset of the parquet — measured +3
-starter / +32 batter rows) and has a live Snowflake-only daily consumer in
-``update_player_posteriors_op``, whose EB reads stay on Snowflake even under ``--s3``.
-``feature_pregame_lineup_state`` is not a lakehouse passthrough at all: Snowflake is the MASTER
-(written by ``scripts/backfill_lineup_state_scd2.py``'s SCD-2 UPDATE) and S3 is the downstream
-mirror, so there is no table→view flip available to it. Test 4 keeps that scope statement honest
-by failing if one of them is quietly flipped without its own analysis and soak.
+⚠️ **SCOPE UPDATE (2026-08-09, #675 landed in the same window).** When this file shipped, none of
+the three was flippable and a fourth test (``NOT_FLIPPABLE`` + its ``@parametrize`` consumer) held
+that line by failing if the EB pair was swept in. **That test has been DELETED, on purpose** — it
+existed to force the EB pair through its own analysis, and #675 is that analysis: it repoints
+``update_player_posteriors``'s history-spanning read to S3 and then flips both EB models to views.
+Keeping the clause would assert the exact opposite of what now ships, and *emptying* the dict
+would be worse — ``@parametrize`` over an empty mapping collects ZERO cases and passes on nothing
+(the NF1.7 (a) vacuous-guard class). ``test_e11_24_eb_reader_repoint.py`` (20 assertions) is its
+successor and covers strictly more.
+
+``feature_pregame_lineup_state`` remains NOT flippable, and for a different reason than the EB
+pair: it is not a lakehouse passthrough at all — Snowflake is the MASTER (written by
+``scripts/backfill_lineup_state_scd2.py``'s SCD-2 UPDATE) and S3 is the downstream mirror, so
+there is no table→view flip available to it. It has no guard here because it has no dual-branch
+dbt model to assert against; porting that write off Snowflake is the next target.
 
 GUARD HYGIENE (the INC-38 / INC-39 / NF-D17 canon)
 --------------------------------------------------
@@ -76,23 +83,25 @@ EXT_COPY_VIEW_MODELS = {
         "dbt/models/feature/feature_pregame_game_features.sql",
 }
 
-# The three writers that carry the tick band's actual wake and are NOT flippable. Each is mapped
-# to the reason, so a future session reads the scope decision rather than re-deriving it.
-NOT_FLIPPABLE = {
-    "eb_starter_posteriors": (
-        "dbt/models/eb_posteriors/eb_starter_posteriors.sql",
-        "incremental_strategy='merge' never deletes, so Snowflake is a permanently accumulating "
-        "superset of the parquet (measured +3 rows / 19 divergent dates on 2026-08-08), and "
-        "update_player_posteriors_op reads it on Snowflake even under --s3",
-    ),
-    "eb_batter_posteriors_raw": (
-        "dbt/models/eb_posteriors/eb_batter_posteriors_raw.sql",
-        "same merge-never-deletes divergence (measured +32 rows / 4 divergent dates on "
-        "2026-08-08) plus the same Snowflake-only daily consumer",
-    ),
-}
-
 SENSOR_OPS = REPO / "pipeline/ops/sensor_ops.py"
+
+
+def test_the_model_registry_is_not_empty() -> None:
+    """0. ANTI-VACUITY. Three ``@parametrize`` tests and one loop below iterate
+    ``EXT_COPY_VIEW_MODELS``; emptying it collects ZERO cases and every one of them passes on
+    nothing (NF1.7 (a) / the #690 "a guard that iterates matches must assert non-vacuity" rule).
+
+    This clause is here because the failure mode is not hypothetical: #675 removed a sibling
+    ``@parametrize`` whose source dict it had made obsolete, and the *tempting* edit — emptying the
+    dict rather than deleting the dict AND its consumer — would have left a green suite guarding
+    nothing. Deleting the consumer is the correct move; this assertion is what makes the *other*
+    move impossible to take silently.
+    """
+    assert EXT_COPY_VIEW_MODELS, (
+        "EXT_COPY_VIEW_MODELS is empty, so every parametrized guard in this file now collects zero "
+        "cases and asserts nothing. If a model genuinely left this story's scope, DELETE its tests "
+        "with it rather than emptying the registry they iterate."
+    )
 
 
 def _strip_sql_comments(sql: str) -> str:
@@ -181,27 +190,6 @@ def test_the_duckdb_branch_still_does_the_real_build(model: str) -> None:
         f"{model}: the DuckDB branch is no longer materialized='incremental'. That branch is the "
         "real build behind the S3 parquet the Snowflake view reads — it must not inherit the "
         "Snowflake-side flip."
-    )
-
-
-@pytest.mark.parametrize("model", sorted(NOT_FLIPPABLE))
-def test_the_reader_gated_writers_were_not_flipped_along_with_them(model: str) -> None:
-    """4. The EB posteriors must NOT be flipped as a side effect of this story.
-
-    They sit in the SAME tick selector and have the SAME ``select * from lakehouse_ext.<model>``
-    Snowflake branch, so they look flippable and are not: ``incremental_strategy='merge'`` never
-    deletes, so the Snowflake table is a permanently accumulating superset of the parquet, and
-    ``update_player_posteriors_op`` reads it on Snowflake even when predict runs ``--s3``. A flip
-    would therefore CHANGE the rows a live daily op consumes. They are the writers that actually
-    carry the tick band's wake (3 waits each on 2026-08-07), which is exactly why the temptation
-    to sweep them into this PR is real — and why they need their own analysis and their own soak.
-    """
-    path, reason = NOT_FLIPPABLE[model]
-    branch = _snowflake_branch(path, model)
-    assert "materialized='view'" not in branch, (
-        f"{model}: the Snowflake branch was flipped to a view, but it is reader-gated — {reason}. "
-        "Flipping it changes the rows a live daily Snowflake consumer reads. Repoint that reader "
-        "to S3 first, then flip it as its own change with its own soak."
     )
 
 

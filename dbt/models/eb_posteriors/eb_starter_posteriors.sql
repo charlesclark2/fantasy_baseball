@@ -545,8 +545,18 @@ from final
 --     (W7A_LAKEHOUSE_S3=1, in env.required) — the PRECONDITION for this flip.
 --   • The remaining Snowflake readers are date-scoped and a view serves them unchanged:
 --     dbt/tests/assert_eb_starter_posteriors_covers_today.sql (WARN-tier, `game_date = current_date()`)
---     and scripts/predict_today.py's _FRESHNESS_QUERY, which is already DEAD in prod
---     (W8B_FRESHNESS_S3=1 routes the probe to _FRESHNESS_QUERY_S3) and survives only as a rollback.
+--     and scripts/predict_today.py's _FRESHNESS_QUERY.
+--     ⚠️ CORRECTED 2026-08-09 — an earlier draft of this comment claimed _FRESHNESS_QUERY was
+--     "already DEAD in prod (W8B_FRESHNESS_S3=1)". IT IS NOT. Measured on MONITOR_WH: that exact
+--     shape executed on COMPUTE_WH on 08-02, 08-05, 08-08 and 08-09 (1×/day, 0 waits). The flag is
+--     NOT in services/dagster/aws/env.required, and .env.example documents it as 0 — i.e. nothing
+--     forces it on, and the observed traffic says it is off (this repo's "documented cutover ≠
+--     actually set on the box" class; CLAUDE.md E11.20-COST). ⇒ treat the SF probe as LIVE.
+--     THE FLIP IS SAFE ANYWAY, and for a reason that does not depend on the flag: the probe is
+--     date-scoped AND ghost-immune. Its probe side `p` is today's CURRENT probables from
+--     stg_statsapi_probable_pitchers; a ghost row here belongs to a SUPERSEDED probable, which is
+--     by construction no longer in `p`, so it can never satisfy that LEFT JOIN. `starter_missing`
+--     is therefore identical against the table and against the view.
 --
 -- ⚠️ NOT CONTENT-NEUTRAL, unlike the target-6 view flips — and that is the POINT. A `merge`
 -- incremental never DELETES, so the table was an ACCUMULATING SUPERSET carrying rows for
