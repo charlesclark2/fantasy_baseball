@@ -6,108 +6,42 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
+import { FAQ_HEADER, FAQ_SECTIONS } from "@/lib/positioning-copy"
+
+/**
+ * E9.60 — the FAQ, brought into alignment with the live home-page positioning.
+ *
+ * ══ WHAT WAS WRONG ═════════════════════════════════════════════════════════════════════════════
+ *
+ * The page answered "What sport(s) does Credence cover?" with "MLB baseball only, for the 2026
+ * season", called the company "a baseball analytics tool", and had no fantasy section at all — the
+ * same two sentences E9.46 had already had to delete from the landing FAQ, still live one route
+ * over. It also named Bovada as "the benchmark we use for edge detection", conflating the de-vigged
+ * consensus we compare against with the book whose price a pick is graded at.
+ *
+ * ⛔ AND IT TOLD VISITORS HOW MUCH TO BET. "What is Kelly % and how much should I bet?" is gone:
+ * stake sizing presumes something to size against, and `best_alpha = 0` says we do not have it
+ * (spec §18.9). ⚠️ The FEATURE is still live behind the paywall — `/ev-tracker` renders raw and
+ * capped Kelly columns and `/settings` carries a Kelly cap — and removing it is a product decision
+ * outside this story's scope. It is flagged in the handoff rather than half-done here.
+ *
+ * ══ THE SHAPE ══════════════════════════════════════════════════════════════════════════════════
+ *
+ * Four sections in the site's one product order (spec §17): About Credence → Fantasy football →
+ * Betting intelligence → Trust and methodology.
+ *
+ * ⛔ Every answer lives in `lib/positioning-copy.ts` and is screened by
+ * `betting_ml/tests/test_e9_60_positioning_copy.py`. An answer needing an anchor carries a `link`
+ * field rather than becoming JSX — the pre-E9.60 page had exactly one JSX answer and it was the one
+ * no denylist could read.
+ *
+ * ⭐ THIS PAGE IS STATIC — no read at request time.
+ */
 
 export const metadata = {
   title: "FAQ — Credence Sports",
+  description: FAQ_HEADER.subhead,
 }
-
-const FAQ_SECTIONS = [
-  {
-    category: "What is Credence Sports?",
-    items: [
-      {
-        q: "What is Bayesian sports analytics?",
-        a: "Bayesian analytics treats predictions as probability distributions rather than single point estimates. Instead of outputting just \"62% home win,\" a Bayesian model also quantifies how confident it is in that estimate — and updates that confidence as new information arrives. At Credence, this means predictions tighten as the season progresses and more data accumulates, and uncertainty is carried through the model visibly rather than hidden behind a single number.",
-      },
-      {
-        q: "What does Credence Sports actually do?",
-        a: "Credence Sports is a baseball analytics tool. We build statistical models that estimate the true probability of game outcomes and compare those estimates against betting market odds to identify where the market may be mispriced. We surface those findings as picks — but we are an analytics tool, not a picks service. You decide what to do with the information.",
-      },
-      {
-        q: "Is this automated betting?",
-        a: "No. Automated bet placement is not possible in the US market. All bets are placed manually by you. Credence provides analysis and signals; every wager is your own decision and your own action.",
-      },
-      {
-        q: "Is sports betting legal?",
-        a: "Sports betting laws vary significantly by state. Some states allow online betting through licensed operators; others do not. Credence Sports provides analytics only — we do not provide legal advice and are not a licensed gambling operator. It is your responsibility to understand and comply with the laws in your jurisdiction.",
-      },
-    ],
-  },
-  {
-    category: "Model & picks",
-    items: [
-      {
-        q: "What does Expected Value (EV) mean and why does it matter?",
-        a: "Expected Value (EV) measures whether a bet is priced in your favor over time. A positive EV bet means our model estimates the true probability of winning is higher than what the sportsbook's odds imply. For example, if a team has a 55% chance of winning but the odds only imply a 48% chance, there is positive EV. Positive EV does not guarantee a win on any single bet — it means the math favors you across many similar bets.",
-      },
-      {
-        q: "What's the difference between Model % and Market %?",
-        a: "Model % is the probability our model assigns to a specific outcome (e.g., the home team wins). Market % is the implied probability derived from the current betting odds after removing the sportsbook's margin (vig). When Model % is meaningfully higher than Market %, our model sees potential value — that's the basis of a pick.",
-      },
-      {
-        q: "What does \"Preliminary\" mean on picks?",
-        a: "Preliminary picks are generated in the morning before confirmed lineups are released. They are based on projected starters and historical roster data. Once the official lineup is posted (usually 1–2 hours before first pitch), picks are recalculated using confirmed players and may change. Treat Preliminary picks as directional signals, not final recommendations.",
-      },
-      {
-        q: "What does Confirmed vs Projected lineup mean?",
-        a: "Confirmed means the official lineup has been submitted to the league and is locked in. Projected means we are using our best estimate of who will start based on historical patterns and available information — but it could change. Picks based on Confirmed lineups are more reliable because the model has the actual player data it needs.",
-      },
-      {
-        q: "What is Kelly % and how much should I bet?",
-        a: "Kelly % is a bankroll management formula that sizes a bet proportional to your edge. A higher Kelly % suggests the model sees a larger edge. We display a fractional Kelly recommendation (typically 1/4 or 1/2 Kelly) to reduce variance. That said, bankroll management is personal — no sizing formula eliminates risk, and you should never bet more than you are comfortable losing.",
-      },
-    ],
-  },
-  {
-    category: "Platform mechanics",
-    items: [
-      {
-        q: "Which sportsbooks does Credence target?",
-        a: "Our models are calibrated and compared against Bovada lines. Bovada is the primary line we display and the benchmark we use for edge detection. If you use a different sportsbook, the displayed odds will differ and the calculated EV may not apply directly to your situation.",
-      },
-      {
-        q: "Why does a pick say \"KC wins\" when I bet on KC and they lost?",
-        a: "Picks are framed from the perspective of the predicted outcome — the team we think is more likely to win. If a pick says \"KC wins\" and KC is the away team, you would bet KC on the moneyline at the odds shown. The pick reflects our model's directional view, not how you place the bet in a sportsbook interface.",
-      },
-      {
-        q: "What happens to a bet when a game is postponed?",
-        a: "Postponed games are automatically voided in your bet log. The stake is returned and the game does not count toward your record. If the game is rescheduled and you want to track a new bet on the rescheduled game, you would log it separately.",
-      },
-      {
-        q: "When are predictions updated each day?",
-        a: "The model runs each morning and produces initial predictions based on probable starters and available data. Picks are then refreshed throughout the day as lineups are confirmed and odds move. The most reliable version of any pick is the one available closest to first pitch, once lineups are confirmed.",
-      },
-    ],
-  },
-  {
-    category: "Trust & coverage",
-    items: [
-      {
-        q: "How is the model built?",
-        a: "We use a combination of gradient-boosted and probabilistic machine learning models trained on several seasons of MLB game data. Inputs include pitching matchups, team offense and defense metrics, ballpark factors, umpire tendencies, weather, and betting market signals. Models are evaluated out-of-sample and are only promoted to production when they demonstrate improvement over the previous version.",
-      },
-      {
-        q: "What sport(s) does Credence cover?",
-        a: "MLB baseball only, for the 2026 season. We are focused on doing one sport well before expanding. Additional sports are on the roadmap but have no committed timeline.",
-      },
-      {
-        q: "How do I report a data issue?",
-        a: (
-          <>
-            If you see incorrect odds, a wrong score, a missing game, or any data that looks wrong, email us at{" "}
-            <a
-              href="mailto:support@credencesports.com"
-              className="text-[#10b981] hover:underline"
-            >
-              support@credencesports.com
-            </a>
-            . Include the game and date and we will investigate.
-          </>
-        ),
-      },
-    ],
-  },
-]
 
 export default function FaqPage() {
   return (
@@ -117,11 +51,10 @@ export default function FaqPage() {
       <main className="flex-1 mx-auto w-full max-w-3xl px-6 py-12">
         <div className="mb-10">
           <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">
-            Credence Sports · A product of Penumbra Partners
+            {FAQ_HEADER.eyebrow}
           </p>
-          <h1 className="text-3xl font-bold text-foreground">
-            Frequently Asked Questions
-          </h1>
+          <h1 className="text-3xl font-bold text-foreground">{FAQ_HEADER.heading}</h1>
+          <p className="mt-3 text-sm text-gray-400 leading-relaxed">{FAQ_HEADER.subhead}</p>
           <p className="mt-2 text-sm text-muted-foreground">
             Can&apos;t find what you&apos;re looking for?{" "}
             <Link href="/contact" className="text-[#10b981] hover:underline">
@@ -133,7 +66,7 @@ export default function FaqPage() {
 
         <div className="space-y-10">
           {FAQ_SECTIONS.map((section) => (
-            <div key={section.category}>
+            <div key={section.category} data-faq-section={section.category}>
               <h2 className="text-xs uppercase tracking-widest text-muted-foreground mb-4">
                 {section.category}
               </h2>
@@ -149,6 +82,27 @@ export default function FaqPage() {
                     </AccordionTrigger>
                     <AccordionContent className="text-sm text-gray-400 leading-relaxed pb-4">
                       {item.a}
+                      {item.link && (
+                        <span className="mt-3 block">
+                          {/* A `mailto:` is not a route, so it stays a plain anchor — `<Link>`
+                              would be wrong and E9.56c's route guard only reads `href="/…"`. */}
+                          {item.link.href.startsWith("/") ? (
+                            <Link
+                              href={item.link.href}
+                              className="text-[#10b981] hover:underline"
+                            >
+                              {item.link.label} →
+                            </Link>
+                          ) : (
+                            <a
+                              href={item.link.href}
+                              className="text-[#10b981] hover:underline"
+                            >
+                              {item.link.label}
+                            </a>
+                          )}
+                        </span>
+                      )}
                     </AccordionContent>
                   </AccordionItem>
                 ))}
@@ -157,20 +111,22 @@ export default function FaqPage() {
           ))}
         </div>
 
-        <div className="mt-12 pt-8 border-t border-[#262626] flex flex-wrap gap-6 text-sm text-muted-foreground">
-          <Link href="/about" className="hover:text-foreground transition-colors">
-            About
-          </Link>
-          <Link href="/contact" className="hover:text-foreground transition-colors">
-            Contact
-          </Link>
-          <Link href="/privacy" className="hover:text-foreground transition-colors">
-            Privacy Policy
-          </Link>
-          <Link href="/terms" className="hover:text-foreground transition-colors">
-            Terms of Service
-          </Link>
-        </div>
+        {/* ⛔ THE PAGE-FOOT LINK ROW WAS REMOVED (operator, 2026-08-09) — About · Track Record ·
+            Contact · Privacy Policy · Terms of Service. All five are in `SiteFooter`, which
+            `app/layout.tsx` renders directly beneath this on every page, so it read as the footer
+            printed twice.
+
+            ⭐ NF-TR1's REQUIREMENT — that a marketing surface keeps the record one click away — is
+            UNCHANGED and still met: the "How can I check your record?" answer carries the trust
+            link in `FAQ_SECTIONS`, which is where a reader actually asking that question finds it,
+            rather than in a row of chrome at the bottom of the page. `test_nf_tr1_claim_copy.py`
+            was re-anchored to resolve it through the data module this page renders, because a
+            source scan for a literal `href` cannot see a data-driven link.
+
+            ⚠️ NOTHING LOSES ROUTE COVERAGE. `test_e9_56c_cta_routes.py`'s static `.tsx` scan still
+            sees all five hrefs — they are literals in `components/site-footer.tsx` — and
+            `route-integrity.spec.ts` crawls this page's RENDERED DOM, which is what covers the
+            data-driven answer links either way. */}
       </main>
     </div>
   )

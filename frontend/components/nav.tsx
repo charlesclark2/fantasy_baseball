@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
 import { SIGNUP_HREF } from "@/lib/access"
 import { canAccess, canAccessFantasyBeta } from "@/lib/entitlements"
-import { SPORTS, surfaceItems, publicNavItems, type NavItem, type SportNav, type SurfaceGroup } from "@/lib/nav-model"
+import { SPORTS, surfaceItems, type NavItem, type SportNav, type SurfaceGroup } from "@/lib/nav-model"
+import { SIGNED_OUT_NAV } from "@/lib/positioning-copy"
 import changelog from "@/data/changelog.json"
 
 const latestWeek = changelog[0]?.week
@@ -42,6 +43,43 @@ const ADMIN_ITEMS = [
   { label: "Admin Dashboard", href: "/admin", key: "admin" },
   { label: "Blog Editor", href: "/admin/blog", key: "blog" },
 ] as const
+
+/**
+ * ⭐⭐ E9.60 — THE MOBILE MENU PANEL. This class string is the fix for a LIVE bug, and every part
+ * of it is load-bearing.
+ *
+ * ══ THE BUG ════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Both panels were plain in-flow `<div>`s inside a `sticky top-0` nav with no height cap. On a
+ * phone the signed-in menu is long (two sports × their surfaces, What's New, Admin, the account
+ * block), so the nav element grew TALLER THAN THE VIEWPORT and the overflow pushed into the page
+ * flow — putting **Sign Out and Settings below the fold of whatever page you were on**. Reaching
+ * Sign Out meant scrolling to the bottom of the entire page, which on a long board is a very long
+ * way, and left the page scrolled somewhere else when the menu closed.
+ *
+ * ══ WHY EACH PIECE ═════════════════════════════════════════════════════════════════════════════
+ *
+ *   `max-h-[calc(100dvh-4.25rem)]`  caps the panel to the viewport MINUS the bar above it, so the
+ *                                   bar + panel together never exceed one screen and nothing can
+ *                                   spill into page flow. 4.25rem is the mobile bar: `py-4` (2rem)
+ *                                   + the `h-9` wordmark (2.25rem).
+ *   `100dvh` not `100vh`            ⚠️ THE iOS-SAFARI CLAUSE. `vh` is the LARGEST viewport, i.e. it
+ *                                   ignores the browser chrome that is actually on screen, so on
+ *                                   iPhone Safari a `100vh` cap is ~60-100px too tall and the last
+ *                                   item stays unreachable — the bug, surviving its own fix.
+ *                                   `dvh` tracks the live viewport.
+ *   `overflow-y-auto`               the panel gets its OWN scroll container. This is the whole
+ *                                   requirement: Sign Out is reached by scrolling INSIDE the menu.
+ *   `overscroll-contain`            stops scroll CHAINING — without it, hitting the end of the
+ *                                   panel hands the gesture to the page, which is exactly the
+ *                                   "page scroll position untouched" half of the acceptance bar.
+ *
+ * ⛔ Do not drop the cap and rely on `overflow-y-auto` alone: a scroll container with no bounded
+ * height simply grows, and the bug returns with no visible change to this line.
+ */
+const MOBILE_MENU_PANEL =
+  "sm:hidden border-t border-[#262626] bg-[#0a0a0a] px-4 py-3 " +
+  "max-h-[calc(100dvh-4.25rem)] overflow-y-auto overscroll-contain"
 
 export function Nav({
   activeLink = null,
@@ -101,7 +139,16 @@ export function Nav({
     }`
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-[#262626] bg-[#0a0a0a]/90 backdrop-blur-md">
+    // `data-primary-nav` is a TEST HANDLE and is load-bearing, not decoration. `SiteFooter` wraps
+    // each of its columns in a `<nav>` for accessibility, so a bare `page.locator("nav")` matches
+    // the footer too — this repo has now been bitten by that three times (the blog clause in
+    // `home-positioning.spec.ts`, the FAQ clause here, and the signed-in sub-nav clause). Worse
+    // than the strict-mode crash is the silent case: if the primary nav's link were the one
+    // missing, a loose locator would find the FOOTER's and pass.
+    <nav
+      data-primary-nav
+      className="sticky top-0 z-50 border-b border-[#262626] bg-[#0a0a0a]/90 backdrop-blur-md"
+    >
       {/* Top bar */}
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
         {/* `shrink-0` so the wordmark can never be squeezed into the links beside it, and a
@@ -118,44 +165,61 @@ export function Nav({
         </Link>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* About — desktop only.
-              ⛔ BLOG IS DELIBERATELY NOT HERE (E9.46, operator decision 3, 2026-08-07). It is a
-              real content surface and the GROWTH-100 engine keeps publishing to it; it simply no
-              longer competes with the two products for primary-nav attention. It stays reachable
-              from the site footer, which `app/layout.tsx` renders on EVERY page, and from the
-              home page's own secondary link row — so this is a demotion, not a removal.
-              `home-positioning.spec.ts` pins both halves: absent from the nav, present in the
-              footer. */}
-          <Link
-            href="/about"
-            className="hidden text-xs text-gray-500 hover:text-gray-300 transition-colors sm:block"
-          >
-            About
-          </Link>
+          {/* ⭐⭐ E9.60 — THE SIGNED-OUT BAR.
 
-          {/* NF3.2 fix: `item.public` (e.g. Track Record) only matters once a visitor is INSIDE a
-              surface's dropdown — but the whole sub-nav below is itself hidden pre-login
-              (`showSubNav`), so a public item was structurally unreachable for a signed-out
-              visitor, the exact opposite of the point of marking it public. Render it here
-              instead — visible on mobile AND desktop, independent of `showSubNav` — ONLY when
-              signed out; a signed-in visitor (entitled or not) already sees it in its normal
-              dropdown slot, so this would be a duplicate link once authenticated.
+              This used to render `publicNavItems()` — every `public: true` item in `nav-model.ts` —
+              plus a hardcoded About link, which is why it had drifted: the list was derived from an
+              ENTITLEMENT flag rather than authored as marketing navigation, so it said whatever the
+              entitlement model happened to say. `SIGNED_OUT_NAV` is authored, in the site's one
+              product order (fantasy first, matching the home page's `VERTICALS` and About), and the
+              `desktop` flag keeps the bar from overflowing on a laptop — the fuller set renders in
+              the mobile menu below, which is also where FAQ becomes reachable from the nav at all
+              (spec §22).
 
-              ⚠️ E9.58: `hidden sm:block`. These used to render at EVERY width, which was fine
-              while a logged-out phone showed nothing else — but with a Sign Up button in the bar
-              (and the logo at h-12) three surface links overflowed: the wordmark overlapped
-              "Rankings" and "Track Record" wrapped onto two lines. They are now in the mobile
-              menu below, alongside About and Blog, so nothing became less reachable — more did. */}
+              ⛔ THERE IS DELIBERATELY NO MLB ENTRY, and the reasoning is load-bearing enough that
+              it lives in full beside the list itself — read the `SIGNED_OUT_NAV` section header in
+              `positioning-copy.ts` BEFORE adding one. Short version: every MLB route refuses an
+              anonymous caller, and the product is intended to become signup-gated rather than
+              public, so there is no MLB destination a signed-out visitor can open under either
+              gate model. MLB reaches a logged-out visitor through the home page's betting section
+              and the footer's Products column instead.
+
+              ⛔ BLOG IS STILL DELIBERATELY ABSENT (E9.46, operator decision 3, 2026-08-07) — a
+              demotion, not a removal: the footer renders it on every page and the home page carries
+              its own secondary link. `home-positioning.spec.ts` pins both halves. */}
+          {/* ⭐ SIZING (E9.61, absorbed into E9.60): these were `text-xs` (12px) in a muted grey —
+              the operator's report was that the top-level links "read too small to be obviously
+              clickable". `text-sm` + `font-medium` + a lighter resting colour fixes the affordance
+              rather than only the size, which is what the complaint was actually about. E9.61 held
+              this back because bumping only the three public links would have left them
+              inconsistent with About; every signed-out link now comes from ONE list, so the whole
+              bar moves together and that objection is gone.
+              ⚠️ `item.short ?? item.label` — see the note on `SignedOutNavLink.short`. A wider type
+              plus an extra link plus long labels is exactly how this bar overflowed at E9.58. */}
           {!showSubNav &&
-            publicNavItems().map((item) => (
+            SIGNED_OUT_NAV.filter((item) => item.desktop).map((item) => (
               <Link
-                key={item.key}
+                key={item.href}
                 href={item.href}
-                className="hidden text-xs text-gray-400 hover:text-gray-200 transition-colors sm:block"
+                data-signed-out-nav={item.product ?? "company"}
+                className="hidden whitespace-nowrap text-sm font-medium text-gray-300 hover:text-white transition-colors sm:block"
               >
-                {item.label}
+                {item.short ?? item.label}
               </Link>
             ))}
+
+          {/* About, for a SIGNED-IN visitor. It used to render unconditionally, so folding it into
+              `SIGNED_OUT_NAV` above would have quietly removed it for everyone with an account —
+              a regression this story was not asked to make. The signed-out copy comes from the list
+              above; this is the same link for the other half of the audience. */}
+          {showSubNav && (
+            <Link
+              href="/about"
+              className="hidden text-xs text-gray-500 hover:text-gray-300 transition-colors sm:block"
+            >
+              About
+            </Link>
+          )}
 
           {/* User actions — desktop only */}
           {authenticated ? (
@@ -246,10 +310,10 @@ export function Nav({
             return (
               <div key={sport.sport} className="group relative">
                 <button
-                  className={`flex items-center gap-1 pb-2.5 text-sm transition-colors whitespace-nowrap ${
+                  className={`flex items-center gap-1 pb-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
                     sportActive
-                      ? "border-b-2 border-[#10b981] font-medium text-white"
-                      : "border-b-2 border-transparent text-gray-500 hover:text-gray-300"
+                      ? "border-b-2 border-[#10b981] font-semibold text-white"
+                      : "border-b-2 border-transparent text-gray-400 hover:text-white"
                   }`}
                 >
                   {sport.label}
@@ -309,13 +373,28 @@ export function Nav({
             )
           })}
 
+          {/* ⭐ TRACK RECORD — TOP-LEVEL (spec §20/§21, operator 2026-08-09). It is the site's
+              central trust asset and the one record readable without an account, so it gets a
+              first-class slot for a signed-in visitor too rather than living only inside the
+              fantasy dropdown (where it also stays, for anyone already in that menu). */}
+          <Link
+            href="/fantasy/track-record"
+            className={
+              activeLink === "fantasy-track-record"
+                ? "border-b-2 border-[#10b981] pb-2.5 text-sm font-semibold text-white transition-colors whitespace-nowrap"
+                : "border-b-2 border-transparent pb-2.5 text-sm font-medium text-gray-400 hover:text-white transition-colors whitespace-nowrap"
+            }
+          >
+            Track Record
+          </Link>
+
           {/* What's New — cross-cutting */}
           <Link
             href="/changelog"
             className={
               activeLink === "changelog"
-                ? "flex items-center gap-1.5 border-b-2 border-[#10b981] pb-2.5 text-sm font-medium text-white transition-colors whitespace-nowrap"
-                : "flex items-center gap-1.5 border-b-2 border-transparent pb-2.5 text-sm text-gray-500 hover:text-gray-300 transition-colors whitespace-nowrap"
+                ? "flex items-center gap-1.5 border-b-2 border-[#10b981] pb-2.5 text-sm font-semibold text-white transition-colors whitespace-nowrap"
+                : "flex items-center gap-1.5 border-b-2 border-transparent pb-2.5 text-sm font-medium text-gray-400 hover:text-white transition-colors whitespace-nowrap"
             }
           >
             What&apos;s New
@@ -328,10 +407,10 @@ export function Nav({
           {isAdmin && (
             <div className="group relative">
               <button
-                className={`flex items-center gap-1 pb-2.5 text-sm transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-1 pb-2.5 text-sm font-medium transition-colors whitespace-nowrap ${
                   isAdminActive
-                    ? "border-b-2 border-[#10b981] font-medium text-white"
-                    : "border-b-2 border-transparent text-gray-500 hover:text-gray-300"
+                    ? "border-b-2 border-[#10b981] font-semibold text-white"
+                    : "border-b-2 border-transparent text-gray-400 hover:text-white"
                 }`}
               >
                 Admin
@@ -355,36 +434,44 @@ export function Nav({
           actually reach: the public surfaces, the two marketing pages that were `hidden sm:block`
           and therefore invisible on a phone, and Sign In (Sign Up stays in the bar as the CTA). */}
       {!showSubNav && mobileOpen && (
-        <div className="border-t border-[#262626] bg-[#0a0a0a] px-4 py-3 sm:hidden">
+        <div className={MOBILE_MENU_PANEL}>
           <div className="flex flex-col gap-0.5">
-            {publicNavItems().map((item) => (
-              <Link
-                key={item.key}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                className="block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium text-gray-300 hover:bg-[#141414] hover:text-white transition-colors"
-              >
-                {item.label}
-              </Link>
-            ))}
+            {/* ⭐ E9.60 — THE FULL SET, GROUPED BY PRODUCT. The phone has the room the desktop bar
+                does not, so this renders every `SIGNED_OUT_NAV` entry rather than the `desktop`
+                subset — which is what finally puts BOTH products and the FAQ in a logged-out
+                visitor's nav (spec §22).
+
+                ⚠️ ON THE COMMENT THIS REPLACES ("written as plain JSX… E9.56c's route guard only
+                sees literal href attributes"): that guard —
+                `test_e9_56c_cta_routes.py::test_every_internal_link_resolves_to_a_real_route` —
+                scans `.tsx` files for literal `href="/…"`, so moving these into a `.ts` data module
+                does take them out of ITS scope. The coverage is not lost, it is relocated and
+                widened: `test_e9_60_positioning_copy.py` resolves every `SIGNED_OUT_NAV` href
+                against the same filesystem route table, and `route-integrity.spec.ts` crawls the
+                RENDERED DOM, which catches data-driven links the static scan never could. */}
+            {SIGNED_OUT_NAV.map((item, i) => {
+              const prevProduct = i > 0 ? SIGNED_OUT_NAV[i - 1].product : undefined
+              return (
+                <div key={item.href} className="flex flex-col">
+                  {i > 0 && item.product !== prevProduct && (
+                    <div className="my-2 border-t border-[#262626]" />
+                  )}
+                  <Link
+                    href={item.href}
+                    onClick={() => setMobileOpen(false)}
+                    data-signed-out-nav={item.product ?? "company"}
+                    className="block whitespace-nowrap rounded-md px-3 py-2.5 text-sm font-medium text-gray-300 hover:bg-[#141414] hover:text-white transition-colors"
+                  >
+                    {item.label}
+                  </Link>
+                </div>
+              )
+            })}
 
             <div className="my-2 border-t border-[#262626]" />
 
-            {/* Written as plain JSX rather than a mapped array on purpose: E9.56c's route guard
-                only sees literal `href="/…"` attributes, so a data-driven list would take these
-                links OUT of the one check that catches a dead button. */}
             {/* Blog is demoted out of the nav on this viewport too (E9.46) — see the desktop
                 comment above. The footer carries it on every page. */}
-            <Link
-              href="/about"
-              onClick={() => setMobileOpen(false)}
-              className="block rounded-md px-3 py-2.5 text-sm font-medium text-gray-400 hover:bg-[#141414] hover:text-white transition-colors"
-            >
-              About
-            </Link>
-
-            <div className="my-2 border-t border-[#262626]" />
-
             <Link
               href="/login"
               onClick={() => setMobileOpen(false)}
@@ -398,7 +485,7 @@ export function Nav({
 
       {/* Mobile slide-down menu — SPORT-FIRST */}
       {showSubNav && mobileOpen && (
-        <div className="border-t border-[#262626] bg-[#0a0a0a] px-4 py-3 sm:hidden">
+        <div className={MOBILE_MENU_PANEL}>
           <div className="flex flex-col gap-0.5">
             {SPORTS.map((sport, sportIdx) => (
               // ⚠️ `flex flex-col` is load-bearing, not decoration. A Next.js <Link> renders an <a>,

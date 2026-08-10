@@ -156,13 +156,53 @@ def test_a_logged_out_visitor_has_a_mobile_menu_at_all():
     `SiteFooter`, which `app/layout.tsx` renders on every page at every width, and that is asserted
     below rather than assumed — dropping an item from the nav is only a demotion if something else
     still reaches it, and otherwise it is a deletion wearing a demotion's name.
+
+    ⚠️ AMENDED AGAIN BY E9.60 (2026-08-09), for the same reason and in the same shape as the E9.46
+    amendment above: the ITEMS this panel renders moved from `publicNavItems()` (fantasy-only — all
+    four `public: true` entries are fantasy surfaces) to `SIGNED_OUT_NAV`, which carries BOTH
+    products plus About and the FAQ. So the literal `href="/about"` and the `publicNavItems()` call
+    are both gone from this panel while the property they stood for got STRICTLY STRONGER — a
+    logged-out phone visitor now reaches more, not less.
+
+    ⭐ THE AMENDMENT IS TO THE ANCHOR, NOT TO THE BAR. The clause still requires the panel to reach
+    About and Sign In; it now resolves About through the data module the panel actually renders.
+    Rewriting the assertion to match the implementation would be the dishonest version of this
+    edit, so the reachability requirement is stated in terms of the destination rather than of the
+    call.
+
+    ⚠️⚠️ AND ONE E9.60 ADDITION HAS BEEN REMOVED AGAIN (operator, 2026-08-09). That amendment also
+    made this clause require an MLB/betting door — which was NEVER an E9.58 requirement. E9.58's
+    property is that a logged-out visitor on a phone can reach About and Sign In at all; the MLB
+    door was a NEW E9.60 claim smuggled into an older suite, so when the operator reversed it this
+    clause failed for a reason that had nothing to do with what it exists to defend.
+
+    ⛔ THE LESSON, worth more than the fix: an amendment may RE-ANCHOR an existing property onto a
+    new implementation, but it must not ADD a new story's requirement to an old story's clause.
+    Doing so couples the two — a later decision about the new claim breaks a suite that was never
+    about it, and the failure reads as an E9.58 regression when nothing E9.58 defends has moved.
+    The MLB-door question now lives entirely in `test_e9_60_positioning_copy.py`, where reversing it
+    was a one-line, correctly-attributed change.
     """
     nav = _code(_FRONTEND / "components/nav.tsx")
     assert "{showSubNav && (\n            <button" not in nav, "the hamburger is signed-in-only again"
     assert "{!showSubNav && mobileOpen && (" in nav, "no signed-out mobile menu panel"
     signed_out_panel = nav.split("{!showSubNav && mobileOpen && (")[1].split("{showSubNav && mobileOpen")[0]
-    for expected in ('href="/about"', 'href="/login"', "publicNavItems()"):
-        assert expected in signed_out_panel, f"the signed-out mobile menu is missing {expected}"
+    assert 'href="/login"' in signed_out_panel, "the signed-out mobile menu is missing href=\"/login\""
+    assert "SIGNED_OUT_NAV" in signed_out_panel, (
+        "the signed-out mobile menu no longer renders the signed-out navigation model, so nothing "
+        "puts the public surfaces in it"
+    )
+
+    # The destinations the panel must reach, resolved from the module it renders. Asserted on the
+    # DATA because the panel is data-driven — a literal check here would only be re-reading the
+    # component, and About's reachability is the property E9.58 was defending.
+    positioning = _code(_FRONTEND / "lib/positioning-copy.ts")
+    nav_model = positioning.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
+    assert "href:" in nav_model, "the signed-out nav slice is empty — this clause would be vacuous"
+    assert '"/about"' in nav_model, (
+        "About is not reachable from the signed-out mobile menu — the E9.58 defect, restored"
+    )
+    # ⛔ NO MLB/betting assertion here — see the docstring. That belongs to E9.60, not E9.58.
 
     # The compensating half of the E9.46 demotion. The footer is viewport-independent (no `sm:`
     # gate), so a logged-out phone visitor still has a route to the blog — which is the property
@@ -181,9 +221,16 @@ def test_the_inline_public_links_do_not_crowd_the_bar_on_a_phone():
     public surface is reachable pre-login). With Sign Up now permanently in the bar, rendering
     three surface links inline at phone width overflows it — which is what the operator saw. The
     inline copy must be `sm`-and-up; the mobile copy lives in the menu, which the test above pins.
+
+    ⚠️ ANCHOR AMENDED BY E9.60 (2026-08-09). The inline set is now `SIGNED_OUT_NAV`'s `desktop`
+    subset rather than `publicNavItems()`, so the old split raised `IndexError` — a failure rather
+    than a false pass, but it reported the crash instead of the check. The requirement is unchanged
+    and now matters MORE, not less: E9.60 put a fifth inline link (the MLB door) in the same bar the
+    operator already watched overflow, which is exactly why the entries carry a `desktop` flag and
+    only a trimmed subset renders inline at all.
     """
     nav = _code(_FRONTEND / "components/nav.tsx")
-    inline = nav.split("publicNavItems().map(")[1].split("))}")[0]
+    inline = nav.split("SIGNED_OUT_NAV.filter((item) => item.desktop).map(")[1].split("))}")[0]
     assert "hidden" in inline and "sm:block" in inline, (
         "the inline public links render at phone width again — with the Sign Up button beside "
         "them the bar overflows (wordmark overlaps the first link, labels wrap mid-phrase)"
