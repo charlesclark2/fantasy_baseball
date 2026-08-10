@@ -203,6 +203,21 @@ export default function AboutPage() {
         <div className="border-t border-[#262626] pt-10">
           <h2 className="text-xl font-bold text-white mb-3">{ABOUT_CTA.heading}</h2>
           <p className="text-sm text-gray-400 leading-relaxed mb-6">{ABOUT_CTA.detail}</p>
+          {/* ⭐⭐ TWO TIERS, NOT ONE WRAPPING ROW (operator report + screenshot, 2026-08-09).
+              Five equal-weight buttons in a `flex-wrap` broke 4 + 1 at desktop width — a lone
+              orphan under a full row, which reads as a layout accident rather than a choice.
+
+              ⚠️ THE FIX IS A RENDER FIX, NOT A COPY ONE: `ABOUT_CTA.buttons` ALREADY carries a
+              `primary` flag, and exactly one entry sets it. The data had always encoded the
+              hierarchy and this component was flattening it — so the tiers below are the copy
+              module's own intent, finally rendered, and no destination is lost.
+
+                tier 1 (buttons)     Create a free account · Read the FAQ
+                tier 2 (text links)  the three places to go and look
+
+              ⛔ Balancing the row by DROPPING a destination was the other option and is worse:
+              "Today's MLB read" is now this page's most prominent MLB door, since the signed-out
+              nav no longer carries one. Demoting it to tier 2 keeps it visible and labelled. */}
           <div className="flex flex-wrap gap-3">
             {/* ⭐ THE SIGNUP AFFORDANCE, RESTORED AND WRITTEN OUT RATHER THAN DATA-DRIVEN.
                 The E9.60 rewrite dropped this page's "Create an account" button, which was a real
@@ -217,19 +232,33 @@ export default function AboutPage() {
             >
               Create a free account
             </Link>
-            {ABOUT_CTA.buttons.map((b) => (
-              <Link
-                key={b.href}
-                href={b.href}
-                className={
-                  b.primary
-                    ? "inline-flex items-center rounded-md border border-[#10b981]/40 px-4 py-2 text-sm font-semibold text-[#10b981] hover:border-[#10b981] transition-colors"
-                    : "inline-flex items-center rounded-md border border-[#262626] px-4 py-2 text-sm text-gray-300 hover:text-white hover:border-[#404040] transition-colors"
-                }
-              >
-                {b.label}
-              </Link>
-            ))}
+            {ABOUT_CTA.buttons
+              .filter((b) => b.primary)
+              .map((b) => (
+                <Link
+                  key={b.href}
+                  href={b.href}
+                  className="inline-flex items-center rounded-md border border-[#10b981]/40 px-4 py-2 text-sm font-semibold text-[#10b981] hover:border-[#10b981] transition-colors"
+                >
+                  {b.label}
+                </Link>
+              ))}
+          </div>
+
+          {/* Tier 2. Text links rather than a second button row: three more outlined boxes would
+              re-create the same visual weight problem one line down. */}
+          <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2">
+            {ABOUT_CTA.buttons
+              .filter((b) => !b.primary)
+              .map((b) => (
+                <Link
+                  key={b.href}
+                  href={b.href}
+                  className="text-sm text-gray-400 hover:text-white transition-colors"
+                >
+                  {b.label} <span aria-hidden="true">→</span>
+                </Link>
+              ))}
           </div>
           <p className="mt-8 text-xs text-muted-foreground">{ABOUT_CTA.footnote}</p>
         </div>

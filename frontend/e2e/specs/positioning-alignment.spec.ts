@@ -305,6 +305,74 @@ test("the FAQ is reachable from the signed-out mobile nav", async ({ page }) => 
   ).toBeVisible()
 })
 
+test("the About CTA is two tiers, not one row that orphans a button", async ({ page }) => {
+  // ⭐ THE REPORTED DEFECT (operator screenshot, 2026-08-09): five equal-weight buttons in a
+  // `flex-wrap` broke 4 + 1 at desktop width — a lone orphan under a full row.
+  //
+  // ⚠️ ASSERTED AS "HOW MANY ROWS DO THESE OCCUPY", by their y-positions, because that is the
+  // actual complaint. A count-of-buttons check would pass on any layout, and a width check cannot
+  // tell a deliberate second tier from an accidental wrap.
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await mockApi(page)
+  await page.goto("/about")
+
+  const cta = page.locator("main div").filter({ hasText: /Questions about how Credence works/ }).last()
+  const buttons = cta.locator("a.rounded-md")
+  const count = await buttons.count()
+  expect(count, "no CTA buttons found — this clause would be vacuous").toBeGreaterThan(0)
+
+  // Group by top edge; each distinct top is a rendered row.
+  const tops = await buttons.evaluateAll((els) =>
+    [...new Set(els.map((e) => Math.round(e.getBoundingClientRect().top)))],
+  )
+  expect(tops.length, "the CTA buttons wrap onto more than one row").toBe(1)
+  expect(count, "the button tier grew back past what fits on one row").toBeLessThanOrEqual(3)
+})
+
+test("the FAQ does not reprint the site footer above the site footer", async ({ page }) => {
+  await mockApi(page)
+  await page.goto("/faq")
+
+  // ⭐ The removed row was About · Track Record · Contact · Privacy Policy · Terms of Service —
+  // every one of them already in `SiteFooter`, rendered directly beneath. Asserted as "these
+  // destinations appear exactly once outside the footer", which is the duplication itself rather
+  // than the particular markup that caused it.
+  // ⚠️ THE NAV IS EXCLUDED AS WELL AS THE FOOTER, and this clause failed on it first: About is a
+  // legitimate `SIGNED_OUT_NAV` entry, so it appears in the top bar on every page and the top bar
+  // is not inside `<footer>`. The property is about the PAGE BODY reprinting site chrome, so both
+  // chrome regions have to be out of scope. (The repo's recurring footer-`<nav>` collision, in a
+  // new costume — here it was the primary nav, not the footer, that the locator over-matched.)
+  //
+  // ⛔ SCOPED TO THE LEGAL PAIR, AND THAT IS DELIBERATE. `/about` and `/contact` are excluded
+  // because a CONTEXTUAL link to either is legitimate and is not what was reported — the FAQ opens
+  // with "Can't find what you're looking for? Contact us", which this clause failed on in its
+  // first cut and which should obviously stay. Privacy and Terms have no contextual reason to
+  // appear in a page body at all: they exist purely as footer chrome, so their presence here IS
+  // the duplication, which makes them the honest discriminator between "the footer was reprinted"
+  // and "the page links somewhere for a reason".
+  for (const href of ["/privacy", "/terms"]) {
+    const inPageBody = await page
+      .locator(`a[href="${href}"]`)
+      .evaluateAll((els) =>
+        els.filter((e) => !e.closest("footer") && !e.closest("[data-primary-nav]")).length,
+      )
+    expect(inPageBody, `/faq reprints the footer link ${href} in its own page body`).toBe(0)
+    // …and the footer still carries it, so this is a de-duplication and not a deletion.
+    await expect(page.locator(`footer a[href="${href}"]`).first()).toBeVisible()
+  }
+
+  // ⛔ NF-TR1 — the record must stay ONE CLICK from this surface. It now lives in the answer a
+  // reader asking that question opens, rather than in the removed chrome row. This is the RENDER
+  // half of the check; `test_nf_tr1_claim_copy.py` proves the binding, and neither implies the
+  // other (its source scan cannot see a link the page fails to render, which is how a first cut
+  // of that guard stayed green with the render disabled).
+  await page.getByRole("button", { name: /where can i see the record/i }).click()
+  await expect(
+    page.locator('main a[href="/fantasy/track-record"]').first(),
+    "the FAQ no longer reaches the track record from any answer",
+  ).toBeVisible()
+})
+
 test("About and FAQ reach each other, and the footer reaches both", async ({ page }) => {
   await mockApi(page)
   await page.goto("/about")
