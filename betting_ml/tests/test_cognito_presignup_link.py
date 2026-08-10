@@ -110,20 +110,47 @@ def test_untrusted_provider_without_verified_email_never_links(mod):
     mod.cognito.admin_link_provider_for_user.assert_not_called()
 
 
-def test_no_matching_native_user_creates_normal_federated_user(mod):
-    # Only the incoming federated identity exists (or nothing) → no link, no error.
+def test_no_pre_existing_user_is_ever_adopted_as_the_link_target(mod):
+    # Only the incoming federated identity exists → there is no account to link INTO.
+    #
+    # ⚠️ RE-ANCHORED BY G100-C0, deliberately. E9.7's assertion here was
+    # `admin_link_provider_for_user.assert_not_called()`, which asserted the IMPLEMENTATION
+    # of the day ("do nothing") rather than the property it was defending ("never attach this
+    # identity to somebody else's account"). G100-C0 pre-provisions a native user for exactly
+    # this case, so "do nothing" is no longer true — but the PROPERTY is unchanged, and it is
+    # what is asserted now: the link target is the account created for THIS person, and no
+    # pre-existing row was adopted. (The "pre-provisioning is off ⇒ no link at all" behaviour
+    # is covered by the kill-switch test in `test_g100_c0_email_otp.py`.)
     mod.cognito.list_users.return_value = {
         "Users": [{"Username": "google_100868166396155863973"}]
     }
+    mod.cognito.admin_create_user.return_value = {"User": {"Username": "freshly-made-uuid"}}
+
     mod.handler(_event(), None)
-    mod.cognito.admin_link_provider_for_user.assert_not_called()
+
+    target = mod.cognito.admin_link_provider_for_user.call_args.kwargs["DestinationUser"][
+        "ProviderAttributeValue"
+    ]
+    assert target == "freshly-made-uuid"
+    assert target != "google_100868166396155863973"
 
 
 def test_never_chains_into_another_federated_user(mod):
-    # A different federated user shares the email — must NOT be a link target.
+    # A different federated user shares the email — must NOT be a link target. This is
+    # E9.7's property verbatim and it is untouched by G100-C0: linking one federated
+    # identity onto another would make a Facebook sign-in resolve to a Google profile.
+    # Only the assertion moved from "nothing happened" to "the target is not that user",
+    # because a native account is now created to link into instead.
     mod.cognito.list_users.return_value = {"Users": [{"Username": "Facebook_999"}]}
+    mod.cognito.admin_create_user.return_value = {"User": {"Username": "freshly-made-uuid"}}
+
     mod.handler(_event(), None)
-    mod.cognito.admin_link_provider_for_user.assert_not_called()
+
+    target = mod.cognito.admin_link_provider_for_user.call_args.kwargs["DestinationUser"][
+        "ProviderAttributeValue"
+    ]
+    assert target == "freshly-made-uuid"
+    assert target != "Facebook_999"
 
 
 def test_fails_open_when_link_raises(mod):

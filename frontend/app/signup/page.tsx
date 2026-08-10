@@ -10,8 +10,13 @@
 // /subscribe is returned to /subscribe with a session rather than dumped on /dashboard having lost
 // the thing they were trying to buy.
 //
-// ⛔ There is deliberately NO email/password form here. See `lib/access.ts`: the Cognito pool has
+// ⛔ There is deliberately NO email/PASSWORD form here. See `lib/access.ts`: the Cognito pool has
 // no email auto-verification, so a self-registered password account can never confirm itself.
+//
+// ✅ G100-C0 — there IS now an email door, and it is a one-time CODE rather than a password,
+// precisely because that dead end is unfixable from this side. An emailed code IS the proof of
+// ownership, so there is no separate verification step left to be missing. Google was the only
+// way in until now, which excluded every email-first visitor; this is the second door.
 
 import { Suspense, useEffect, useState } from "react"
 import Image from "next/image"
@@ -21,8 +26,10 @@ import { Loader2 } from "lucide-react"
 import posthog from "posthog-js"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Separator } from "@/components/ui/separator"
 import { GoogleIcon } from "@/components/google-icon"
 import { Nav } from "@/components/nav"
+import { EmailOtpForm } from "@/components/email-otp-form"
 import { startGoogleSignIn, isHostedUiConfigured, sanitizeInternalPath } from "@/lib/cognito"
 import { REQUEST_ACCESS_MAILTO } from "@/lib/access"
 import { useAuth } from "@/lib/auth-context"
@@ -92,7 +99,7 @@ function SignupInner() {
             </Alert>
           )}
 
-          {googleEnabled ? (
+          {googleEnabled && (
             <>
               <Button
                 type="button"
@@ -108,33 +115,52 @@ function SignupInner() {
                 Continue with Google
               </Button>
 
-              {/* Clickwrap. The acceptance itself is recorded server-side on the callback via the
-                  existing POST /auth/accept-terms (reused, not re-invented — E9.58 scope item 4). */}
-              <p className="mt-4 text-center text-xs text-muted-foreground leading-relaxed">
-                By continuing you agree to our{" "}
-                <Link href="/terms" className="underline underline-offset-4 hover:text-foreground transition-colors">
-                  Terms
-                </Link>{" "}
-                and{" "}
-                <Link href="/privacy" className="underline underline-offset-4 hover:text-foreground transition-colors">
-                  Privacy Policy
-                </Link>
-                .
-              </p>
+              <div className="my-5 flex items-center gap-3">
+                <Separator className="flex-1" />
+                <span className="text-xs text-muted-foreground">or</span>
+                <Separator className="flex-1" />
+              </div>
             </>
-          ) : (
+          )}
+
+          {/* G100-C0 — the email door. Rendered whether or not the Hosted UI is configured:
+              unlike Google it needs no Hosted-UI domain, so on a preview deploy or a local
+              shell this is a WORKING signup path where there previously was only a mailto. */}
+          <EmailOtpForm
+            intent="signup"
+            surface="signup"
+            dest={next ?? "/dashboard"}
+            onUseProvider={googleEnabled ? handleGoogleSignUp : undefined}
+          />
+
+          {!googleEnabled && (
             // Hosted UI unconfigured (NEXT_PUBLIC_COGNITO_HOSTED_UI_DOMAIN unset — a preview
             // deploy or a local shell). "Continue with Google" cannot work there, and a button
             // that silently does nothing is worse than the old mailto. Prod has it set.
-            <>
-              <Button variant="outline" className="w-full" asChild>
-                <a href={REQUEST_ACCESS_MAILTO}>Request access by email</a>
-              </Button>
-              <p className="mt-4 text-center text-xs text-muted-foreground leading-relaxed">
-                Sign-up with Google isn&apos;t available in this environment.
-              </p>
-            </>
+            <p className="mt-4 text-center text-xs text-muted-foreground leading-relaxed">
+              Google sign-up isn&apos;t available in this environment — use the email code above,
+              or{" "}
+              <a href={REQUEST_ACCESS_MAILTO} className="underline underline-offset-4">
+                request access by email
+              </a>
+              .
+            </p>
           )}
+
+          {/* Clickwrap. The acceptance itself is recorded server-side after sign-in via the
+              existing POST /auth/accept-terms — reused by BOTH doors through
+              `completeSignIn`, not re-invented per door (E9.58 scope item 4). */}
+          <p className="mt-4 text-center text-xs text-muted-foreground leading-relaxed">
+            By continuing you agree to our{" "}
+            <Link href="/terms" className="underline underline-offset-4 hover:text-foreground transition-colors">
+              Terms
+            </Link>{" "}
+            and{" "}
+            <Link href="/privacy" className="underline underline-offset-4 hover:text-foreground transition-colors">
+              Privacy Policy
+            </Link>
+            .
+          </p>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             Already have an account?{" "}

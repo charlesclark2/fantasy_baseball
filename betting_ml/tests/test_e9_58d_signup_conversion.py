@@ -53,10 +53,24 @@ def test_every_surface_declares_what_the_user_was_trying_to_do(rel: str, intent:
 
 
 def test_the_callback_emits_a_completion_event_paired_with_the_start():
+    """⚠️ RE-ANCHORED BY G100-C0 — same property, one indirection further.
+
+    The completion capture moved from this page into `lib/post-signin.ts`, because a SECOND
+    self-serve door (email OTP) now has to fire the identical event and a hand-copied second
+    implementation is how one of them ends up not firing it. So the assertion follows the call
+    the way `test_the_google_path_records_terms_acceptance` already followed it into
+    `lib/terms.ts`: the callback must still read the intent and hand it on, and the module it
+    hands it to must still emit the conditional completion. Nothing about the requirement is
+    relaxed — it is checked across both halves of the path it now takes.
+    """
     cb = _code(_APP / "callback/page.tsx")
     assert "consumeSignInContext()" in cb, "the callback cannot see what the user was trying to do"
-    assert "user_signup_completed" in cb, "the funnel still has no finish"
-    assert 'ctx?.intent === "signup"' in cb, (
+    assert "completeSignIn(" in cb, "the callback no longer closes the funnel at all"
+    assert "intent:" in cb, "the callback does not pass the intent on"
+
+    post = _code(_FRONTEND / "lib/post-signin.ts")
+    assert "user_signup_completed" in post, "the funnel still has no finish"
+    assert 'intent === "signup"' in post, (
         "the completion must be conditional on a SIGNUP intent — firing it on every sign-in "
         "would make the conversion rate meaningless"
     )
@@ -64,8 +78,8 @@ def test_the_callback_emits_a_completion_event_paired_with_the_start():
 
 def test_both_ends_of_the_funnel_carry_surface():
     """Conversion has to break down per entry point, or it cannot tell you WHICH door works."""
-    cb = _code(_APP / "callback/page.tsx")
-    completed = cb.split("user_signup_completed")[1][:200]
+    post = _code(_FRONTEND / "lib/post-signin.ts")
+    completed = post.split("user_signup_completed")[1][:200]
     assert "surface" in completed
     for rel, _, _ in _SURFACES:
         code = _code(_FRONTEND / rel)
