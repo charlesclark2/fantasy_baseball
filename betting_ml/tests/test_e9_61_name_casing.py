@@ -459,3 +459,60 @@ def test_the_draft_board_join_reuses_the_adp_crosswalk_rather_than_inventing_one
         "would collide onto a handful of keys, and a unit label is not a name anyone spells"
     )
     assert "log.warning" in body, "a failed FFC read must warn, not fail silently"
+
+
+# ── 7. the UPSTREAM half: stop MANUFACTURING the shouting in the first place ─────────────────────
+#
+# Everything above repairs a name on the way OUT. This clause pins where the damage was introduced.
+# `fct_player_week` had TWO name sources and preferred the wrong one:
+#
+#   st.player_name  <- stg_nfl_weekly_data, which coalesces nflverse's `player_display_name` first
+#                      => "CeeDee Lamb", properly cased, straight from the box score
+#   rw.player_name  <- dim_player_role, whose "canonicalize inputs" block deliberately `upper()`s
+#                      every field so an upstream casing wobble cannot fabricate an SCD-2 change
+#
+# The `upper()` is CORRECT at its source and must stay. Preferring it here is what pushed
+# "CEEDEE LAMB" into fct_player_week -> mart_player_season -> the NF1.5 projection artifacts -> the
+# served board, where a de-shouter then had to guess the casing back (and structurally cannot).
+
+_FCT_PLAYER_WEEK = (
+    Path(__file__).resolve().parents[2]
+    / "quant_sports_intel_models/sports_dbt/models/nfl/marts/fct_player_week.sql"
+)
+
+
+def _sql_without_comments(path: Path) -> str:
+    return "\n".join(l for l in path.read_text().splitlines() if not l.strip().startswith("--"))
+
+
+def test_the_weekly_fact_prefers_the_box_scores_properly_cased_name():
+    """⭐ THE ORIGIN OF EVERY SHOUTING NAME IN THIS REPO, pinned at the line that chose it.
+
+    Comment-stripped, because the explanation written above the fix must not be able to satisfy the
+    guard (INC-38) — and this fix is almost entirely explanation."""
+    body = _sql_without_comments(_FCT_PLAYER_WEEK)
+    assert "coalesce(st.player_name, rw.player_name)" in body, (
+        "fct_player_week is preferring the role dimension's UPPER()'d name again — that is where "
+        "'CEEDEE LAMB' comes from, and no downstream de-shouter can recover the right answer "
+        "('DEVONTA FREEMAN' is Devonta Freeman, 'DEVONTA SMITH' is DeVonta Smith)"
+    )
+    assert "coalesce(rw.player_name, st.player_name)" not in body
+
+
+def test_the_role_name_is_still_the_fallback_rather_than_dropped():
+    """It stays a COALESCE. A bye/DNP week has no box-score row at all, so the role name is the only
+    name there — swapping instead of re-ordering would blank those rows."""
+    body = _sql_without_comments(_FCT_PLAYER_WEEK)
+    assert "rw.player_name" in body, "the role name is no longer available as a fallback"
+
+
+def test_the_scd_canonicalisation_upstream_is_left_alone():
+    """⛔ The `upper()` in `dim_player_role` is NOT the bug and must not be "fixed" — it sits in an
+    explicit canonicalize-inputs block alongside team/position/status, and it exists so an upstream
+    casing wobble cannot fabricate a spurious SCD-2 change record. Removing it would trade a display
+    defect for churn in a point-in-time dimension, which is a much worse trade."""
+    role = _FCT_PLAYER_WEEK.parent / "dim_player_role.sql"
+    assert "upper(trim(d.player_name))" in role.read_text(), (
+        "dim_player_role stopped canonicalising the role name — see this test's docstring before "
+        "assuming that is an improvement"
+    )

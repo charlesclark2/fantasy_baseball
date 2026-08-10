@@ -25,6 +25,8 @@ FANTASY = "quant_sports_intel_models/football/nfl/fantasy"
 NAMING = f"{FANTASY}/player_naming.py"
 BOARD = f"{FANTASY}/export_draft_board_json.py"
 TRACK = f"{FANTASY}/export_track_record_json.py"
+FCT = "quant_sports_intel_models/sports_dbt/models/nfl/marts/fct_player_week.sql"
+ROLE = "quant_sports_intel_models/sports_dbt/models/nfl/marts/dim_player_role.sql"
 SUITE = "betting_ml/tests/test_e9_61_name_casing.py"
 
 # (label, file, old, new, the test that MUST go red)
@@ -233,6 +235,40 @@ CASES: list[tuple[str, str, str, str, str]] = [
         '        if pos not in PROJECTABLE or pos == "DST" or not name:',
         "        if pos not in PROJECTABLE or not name:",
         "test_the_draft_board_join_reuses_the_adp_crosswalk_rather_than_inventing_one",
+    ),
+
+    # ── the UPSTREAM half: where the shouting was manufactured ────────────────────────────────
+
+    (
+        "fct_player_week prefers the role dimension's UPPER()'d name again",
+        FCT,
+        "        coalesce(st.player_name, rw.player_name) as player_name,",
+        "        coalesce(rw.player_name, st.player_name) as player_name,",
+        "test_the_weekly_fact_prefers_the_box_scores_properly_cased_name",
+    ),
+    (
+        "the fix is written as a SWAP, dropping the bye/DNP fallback",
+        FCT,
+        "        coalesce(st.player_name, rw.player_name) as player_name,",
+        "        st.player_name as player_name,",
+        "test_the_role_name_is_still_the_fallback_rather_than_dropped",
+    ),
+    (
+        "someone 'fixes' the SCD canonicalisation upstream instead",
+        ROLE,
+        "        upper(trim(d.player_name))                    as player_name,",
+        "        trim(d.player_name)                           as player_name,",
+        "test_the_scd_canonicalisation_upstream_is_left_alone",
+    ),
+    (
+        # The INC-38 clause: this fix is mostly explanation, so prose must not satisfy the guard.
+        "the fix is reverted but its explanatory comment is left in place",
+        FCT,
+        "        coalesce(st.player_name, rw.player_name) as player_name,\n"
+        "        coalesce(rw.position, st.position)       as position,",
+        "        coalesce(rw.player_name, st.player_name) as player_name,\n"
+        "        coalesce(rw.position, st.position)       as position,",
+        "test_the_weekly_fact_prefers_the_box_scores_properly_cased_name",
     ),
 ]
 
