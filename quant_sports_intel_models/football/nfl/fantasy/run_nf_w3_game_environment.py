@@ -597,6 +597,10 @@ def write_report(out: dict, path: Path) -> None:  # noqa: C901 — a report, not
         p(f"- permutation: {sel['permutation_detail']} · coverage(80) {sel['coverage']}")
         p(f"- MAE (report-only, never selects): {sel['mean_mae_report_only']}")
         p(f"- gate: {gate['checks']}")
+        nsa = out["null_states"].get(f"layer_a::{t}", {})
+        if nsa.get("field_shrink_flag"):
+            f = nsa["field_shrink_flag"]
+            p(f"- ⚠️ **field-shrink remedy is {f['status']}** — {f['note']}")
         p("")
     p("## ⭐ Layer B — the gate: does the environment layer move the PLAYER projection?")
     p("")
@@ -633,6 +637,24 @@ def write_report(out: dict, path: Path) -> None:  # noqa: C901 — a report, not
         p(f"- anchors {sel['anchors']} · shuffle {sel['shuffle_detail']} · "
           f"coverage(80) {sel['coverage']}")
         p(f"- gate: {gate['checks']}")
+        ns = out["null_states"].get(f"layer_b::{pos}", {})
+        if ns.get("pbo_state"):
+            p(f"- ⚠️ **PBO is {ns['pbo_state']}** Registering `pbo_ok` as a Layer-B gate was a "
+              f"MIS-SPECIFICATION; it is left in the gate as pre-registered (⛔ a gate is not "
+              f"dropped after seeing it fail) and reported as undefined rather than failed.")
+        if ns.get("gate_sensitivity"):
+            gs = ns["gate_sensitivity"]
+            p(f"- ⭐ **the null does not rest on that gate** (NF-D15 (g″), measured): waiving "
+              f"`{gs['waived']}` leaves **{gs['still_refusing']}** still refusing ⇒ ships without "
+              f"the waived checks: {gs['ships_without_waived_checks']}.")
+        if ns.get("hand_corrected"):
+            p(f"- 🩹 **hand-corrected classification.** The instrument said "
+              f"`{ns['instrument_verdict']['state']}` — \"{ns['instrument_verdict']['reason']}\" "
+              f"with trigger \"{ns['instrument_verdict']['retest_trigger']}\". That is wrong on "
+              f"its face at {out['n_folds']} folds: the undefined-ness comes from the FIELD SIZE "
+              f"(one pre-registered contrast), not the fold count, and the trigger is negative. "
+              f"Corrected state **{ns['state']}** — {ns['reason']} Re-test trigger: "
+              f"{ns['retest_trigger']}")
         p("")
     p("## Null-state classification")
     p("")
@@ -656,8 +678,75 @@ def _classify(key: str, sel: dict, n_folds: int, n_arms: int, checks: dict) -> d
         metric=key, n_folds=n_folds, n_arms=n_arms, beats_foil=sel["beats_foil"],
         observed_sr=sel["observed_sr"], var_trials_sr=sel["var_trials_sr"],
         fold_wins=sel["fold_wins"], p_one_sided=sel["p_one_sided"], bh_cutoff=GE.FDR_Q,
+        # ⭐ FACTUAL PROVENANCE, not an opt-in to DSR-CONV's gate change: `trial_srs` is built from
+        # the REAL ARMS only — every degenerate is an ANCHOR by pre-registration (MH2.1 (a)) and
+        # was never a trial, so no degenerate contributes to `V` (nor to the trial count). Stating
+        # it removes the classifier's UNVERIFIED caveat; it changes no state.
+        degenerates_excluded_from_v=True,
     )
-    return {"state": v.state, "reason": v.reason, "retest_trigger": v.retest_trigger}
+    return GE.flag_unsafe_field_shrink(
+        {"state": v.state, "reason": v.reason, "retest_trigger": v.retest_trigger}, n_arms)
+
+
+def _classify_layer_b(pos: str, sel: dict, n_folds: int, checks: dict) -> dict:
+    """Layer B's classification, with the instrument's own verdict recorded beside the hand
+    correction (see `GE.classify_layer_b` for why the instrument cannot speak here)."""
+    v = cv_power.classify_null(
+        metric=f"nf_w3_downstream_crps_{pos}", n_folds=n_folds,
+        n_arms=len(GE.LAYER_B_REAL_ARMS), beats_foil=sel["beats_foil"],
+        observed_sr=sel["observed_sr"], var_trials_sr=sel["var_trials_sr"],
+        fold_wins=sel["fold_wins"], p_one_sided=sel["p_one_sided"], bh_cutoff=GE.FDR_Q,
+        degenerates_excluded_from_v=True,
+    )
+    out = GE.classify_layer_b(
+        sel, n_folds=n_folds,
+        instrument_verdict={"state": v.state, "reason": v.reason,
+                            "retest_trigger": v.retest_trigger})
+    # the null must not rest on the structurally-inapplicable PBO clause — measured, not asserted
+    out["gate_sensitivity"] = GE.gate_sensitivity(checks, waived=("pbo_ok",))
+    return out
+
+
+def derive_verdict_layer(out: dict) -> dict:
+    """⭐ Re-derive EVERY decision from the stored per-position/target selections — gates, BH over
+    both declared families, null states, verdicts. No refit, no fold results needed.
+
+    This is the NF-W2e rule taken one step further: not only must a verdict SENTENCE be derived
+    rather than stored, so must the VERDICT — otherwise correcting a classifier defect costs a full
+    re-run, which is exactly the pressure that leaves a known-wrong state in a published record."""
+    n_folds = out["n_folds"]
+    component_p = {t: out["layer_a"][t]["p_one_sided"] for t in out["targets"]}
+    downstream_p = {p: out["layer_b"][p]["p_one_sided"] for p in out.get("layer_b", {})}
+    fdr = fdr_two_families(component_p, downstream_p)
+
+    gates_a = {t: GE.compose_gate(out["layer_a"][t], fdr["binding"].get(t, False))
+               for t in out["targets"]}
+    gates_b = {p: layer_b_gate(out["layer_b"][p], fdr["binding"].get(p, False))
+               for p in out.get("layer_b", {})}
+
+    null_states: dict[str, dict] = {}
+    for t in out["targets"]:
+        if not gates_a[t]["ship"]:
+            null_states[f"layer_a::{t}"] = _classify(
+                f"nf_w3_{t}_crps", out["layer_a"][t], n_folds,
+                len(GE.REAL_ARMS[t]), gates_a[t]["checks"])
+    for p in out.get("layer_b", {}):
+        if not gates_b[p]["ship"]:
+            null_states[f"layer_b::{p}"] = _classify_layer_b(
+                p, out["layer_b"][p], n_folds, gates_b[p]["checks"])
+
+    verdict = {
+        "layer_a": {t: ("SHIP" if gates_a[t]["ship"]
+                        else null_states.get(f"layer_a::{t}", {}).get("state", "NULL"))
+                    for t in out["targets"]},
+        "layer_b": {p: ("SHIP" if gates_b[p]["ship"]
+                        else null_states.get(f"layer_b::{p}", {}).get("state", "NULL"))
+                    for p in out.get("layer_b", {})},
+    }
+    headline = ("A[" + " ".join(f"{t}:{v}" for t, v in verdict["layer_a"].items()) + "] "
+                "B[" + " ".join(f"{p}:{v}" for p, v in verdict["layer_b"].items()) + "]")
+    return {"fdr": fdr, "gates_a": gates_a, "gates_b": gates_b,
+            "null_states": null_states, "verdict": verdict, "headline": headline}
 
 
 # ── Runner ──────────────────────────────────────────────────────────────────────────────────────
@@ -679,8 +768,29 @@ def main(argv=None) -> int:  # noqa: C901 — orchestration
 
     if args.rewrite_report:
         out = json.loads(json_path.read_text())
+        before = dict(out.get("verdict", {}))
+        out.update(derive_verdict_layer(out))
+        moved = {k: {p: (before.get(k, {}).get(p), v) for p, v in out["verdict"][k].items()
+                     if before.get(k, {}).get(p) != v} for k in out["verdict"]}
+        moved = {k: v for k, v in moved.items() if v}
+        if moved:
+            # ⛔ never silent: a re-derivation that MOVES a verdict is a correction, and the record
+            # must carry what it was before (NF-W2e — a known-wrong sentence survives when fixing
+            # it is expensive or invisible).
+            out["verdict_corrected_from"] = before
+            out["verdict_correction_note"] = (
+                "re-derived from the stored per-fold selections without refitting; the prior "
+                "states came from `cv_power.classify_null` called with Layer B's honest "
+                "`n_arms=1`, which drove `pbo_evaluable` false and rendered the cause as a FOLD "
+                "shortage ('8 fold(s) < 4') with a NEGATIVE trigger ('-4 more fold(s)')")
+            log.warning("VERDICT MOVED on re-derivation: %s", json.dumps(moved))
+        out["rewritten_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        json_path.write_text(json.dumps(out, indent=2, default=float))
         write_report(out, _REPORT_DIR / f"nf_w3_game_environment{suffix}.md")
-        log.info("report rewritten from %s (no refit)", json_path.name)
+        log.info("report + verdict layer re-derived from %s (no refit): %s",
+                 json_path.name, out["headline"])
+        print(json.dumps({"verdict": out["verdict"], "headline": out["headline"],
+                          "moved": moved}, indent=2))
         return 0
 
     t_start = time.time()
@@ -700,7 +810,7 @@ def main(argv=None) -> int:  # noqa: C901 — orchestration
     env_forms = {t: layer_a[t]["winner"] for t in GE.TARGETS}
     log.info("Layer-A winners → env forms for Layer B: %s", env_forms)
 
-    layer_b, gates_b, b_folds, n_player_rows = {}, {}, [], 0
+    layer_b, b_folds, n_player_rows = {}, [], 0
     if not args.skip_layer_b:
         player, _player_pit = build_player_matrix((2016, 2025))
         n_player_rows = int(len(player))
@@ -717,38 +827,6 @@ def main(argv=None) -> int:  # noqa: C901 — orchestration
         for pos in WP.POSITIONS:
             layer_b[pos] = select_layer_b(pos, frs, n_folds)
 
-    component_p = {t: layer_a[t]["p_one_sided"] for t in GE.TARGETS}
-    downstream_p = {pos: layer_b[pos]["p_one_sided"] for pos in WP.POSITIONS} if layer_b else {}
-    fdr = fdr_two_families(component_p, downstream_p)
-
-    for t in GE.TARGETS:
-        gates_a[t] = GE.compose_gate(layer_a[t], fdr["binding"].get(t, False))
-    for pos in layer_b:
-        gates_b[pos] = layer_b_gate(layer_b[pos], fdr["binding"].get(pos, False))
-
-    null_states: dict[str, dict] = {}
-    for t in GE.TARGETS:
-        if not gates_a[t]["ship"]:
-            null_states[f"layer_a::{t}"] = _classify(
-                f"nf_w3_{t}_crps", layer_a[t], n_folds, len(GE.REAL_ARMS[t]), gates_a[t]["checks"])
-    for pos in layer_b:
-        if not gates_b[pos]["ship"]:
-            checks = dict(gates_b[pos]["checks"])
-            checks["beats_foil"] = checks.pop("beats_champion")
-            checks["oracle_floors_respected"] = checks.pop("oracle_floor_respected")
-            checks["degenerates_lose"] = True  # Layer B carries no degenerate arm (see the report)
-            null_states[f"layer_b::{pos}"] = _classify(
-                f"nf_w3_downstream_crps_{pos}", layer_b[pos], n_folds,
-                len(GE.LAYER_B_REAL_ARMS), checks)
-
-    verdict = {
-        "layer_a": {t: ("SHIP" if gates_a[t]["ship"]
-                        else null_states.get(f"layer_a::{t}", {}).get("state", "NULL"))
-                    for t in GE.TARGETS},
-        "layer_b": {pos: ("SHIP" if gates_b[pos]["ship"]
-                          else null_states.get(f"layer_b::{pos}", {}).get("state", "NULL"))
-                    for pos in layer_b},
-    }
     out = {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "story": GE.STORY, "smoke": bool(args.smoke), "skip_layer_b": bool(args.skip_layer_b),
@@ -773,20 +851,18 @@ def main(argv=None) -> int:  # noqa: C901 — orchestration
             "era_forbidden_tokens": list(GE.ERA_FORBIDDEN_TOKENS),
             "banned_source_tokens": list(GE.BANNED_SOURCE_TOKENS),
         },
-        "layer_a": layer_a, "gates_a": gates_a,
-        "layer_b": layer_b, "gates_b": gates_b,
-        "fdr": fdr, "null_states": null_states, "verdict": verdict,
+        "layer_a": layer_a, "layer_b": layer_b,
         "fold_results_a": a_folds, "fold_results_b": b_folds,
     }
-    out["headline"] = (
-        "A[" + " ".join(f"{t}:{v}" for t, v in verdict["layer_a"].items()) + "] "
-        "B[" + " ".join(f"{p}:{v}" for p, v in verdict["layer_b"].items()) + "]")
+    # ⭐ every decision comes from ONE derivation, shared with `--rewrite-report`, so a live run and
+    # a re-derivation can never disagree about a verdict (NF-W2e, one level up from the sentence).
+    out.update(derive_verdict_layer(out))
 
     _REPORT_DIR.mkdir(parents=True, exist_ok=True)
     json_path.write_text(json.dumps(out, indent=2, default=float))
     write_report(out, _REPORT_DIR / f"nf_w3_game_environment{suffix}.md")
     log.info("verdict: %s (%.1fs)", out["headline"], out["runtime_seconds"])
-    print(json.dumps({"verdict": verdict, "headline": out["headline"],
+    print(json.dumps({"verdict": out["verdict"], "headline": out["headline"],
                       "runtime_seconds": out["runtime_seconds"]}, indent=2))
     return 0
 

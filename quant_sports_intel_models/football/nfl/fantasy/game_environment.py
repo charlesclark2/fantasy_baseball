@@ -874,6 +874,121 @@ def compose_gate(sel: dict, fdr_pass: bool) -> dict:
     return {"checks": checks, "ship": all(checks.values())}
 
 
+# ── Layer B's own check sets + classifier ───────────────────────────────────────────────────────
+LAYER_B_STATISTICAL_CHECKS: tuple[str, ...] = (
+    "beats_champion", "fold_consistency", "pbo_ok", "dsr_ok", "fdr_ok", "coverage_floor_ok",
+)
+LAYER_B_ANCHOR_CHECKS: tuple[str, ...] = ("permutation_behaves", "oracle_floor_respected")
+
+#: CSCV/PBO resamples a FIELD of configurations; with fewer than two it has nothing to resample.
+PBO_MIN_CONFIGS = 2
+
+
+def pbo_is_evaluable(n_real_arms: int) -> bool:
+    """PBO answers 'did SELECTING this config out of a field cost anything out of sample'. A single
+    PRE-REGISTERED contrast is not a selection — there was no search to overfit — so CSCV is
+    structurally inapplicable and its value is **UNDEFINED, not failed** (MH2's fold-count rule,
+    one axis over: field size instead of fold count)."""
+    return n_real_arms >= PBO_MIN_CONFIGS
+
+
+def classify_layer_b(sel: dict, *, n_folds: int, instrument_verdict: dict | None = None) -> dict:
+    """Layer B's null state, hand-classified — and WHY that is necessary rather than lazy.
+
+    `cv_power.classify_null` takes `n_arms` as BOTH the DSR trial count and the CSCV config count.
+    Layer B fields exactly ONE real arm by pre-registration, so the honest `n_arms=1` drives
+    `pbo_evaluable` false and the instrument returns `UNDEFINED` — rendering the cause as a FOLD
+    shortage ("8 fold(s) < 4") and publishing a NEGATIVE trigger ("-4 more fold(s)"). That is an
+    actively misleading record: it tells a future reader to buy seasons for a null no season count
+    can move. This is the third time in this vertical that `classify_null` has needed a hand
+    correction (NF-W2 → CONSTRAINT_REFUSED, NF-D18 → the 8th state, now the field-size axis), so
+    the instrument's verdict is RECORDED alongside rather than discarded.
+
+    The states, from the same numbers:
+      · the arm loses ON AVERAGE ⇒ **GENUINE ABSENCE** — no `n` and no field size rescues a
+        negative point estimate, and ⛔ no re-test trigger may be published (MH2);
+      · otherwise ⇒ **POWER_LIMITED**, with the shortfall stated in the unit that grows (folds).
+    """
+    out: dict = {"instrument_verdict": instrument_verdict,
+                 "hand_corrected": instrument_verdict is not None
+                 and instrument_verdict.get("state") == "UNDEFINED",
+                 "pbo_state": (
+                     "UNDEFINED — CSCV resamples a FIELD; Layer B fields ONE pre-registered "
+                     "contrast, so there was no search to overfit. Reported as undefined, NOT as "
+                     "a failed deflation gate."),
+                 }
+    if not sel["beats_foil"]:
+        out.update({
+            "state": "GENUINE_ABSENCE",
+            "reason": (f"the arm LOSES to the champion on average "
+                       f"({sel['mean_delta']:+.4f} CRPS over {n_folds} folds, "
+                       f"{sel['fold_wins']}/{n_folds} fold wins) — a negative point estimate is "
+                       f"not rescued by more folds or a smaller field."),
+            "retest_trigger": None,
+        })
+        return out
+    sr = sel.get("observed_sr")
+    folds_needed = None
+    if sr and sr > 0:
+        # sr0 = 0 for a single trial (nothing to deflate), so DSR ≥ 0.95 needs sr·√(n−1) > z(0.95)
+        folds_needed = int(np.ceil((1.6448536269514722 / sr) ** 2)) + 1
+    out.update({
+        "state": "POWER_LIMITED",
+        "reason": (f"the point estimate is positive ({sel['mean_delta']:+.4f} CRPS) but the "
+                   f"interval spans zero (CI95 {sel['ci95']}), fold wins are "
+                   f"{sel['fold_wins']}/{n_folds} against a required "
+                   f"{sel['fold_clause']['required']}, and p={sel['p_one_sided']}. Every "
+                   f"statistical gate except PBO is REACHABLE at this design — the effect is "
+                   f"simply smaller than this design can resolve."),
+        "retest_trigger": (
+            f"~{folds_needed} half-season folds (≈{folds_needed // 2} seasons) for the DSR gate at "
+            f"the observed per-fold Sharpe {sr} — i.e. CALENDAR-bound and far beyond any plausible "
+            f"window; ⛔ this is NOT a near-term re-test."
+            if folds_needed else "unevaluable — no positive per-fold Sharpe to extrapolate from"),
+    })
+    return out
+
+
+def flag_unsafe_field_shrink(verdict: dict, n_declared_arms: int) -> dict:
+    """⚠️ MH2.2: `classify_null`'s "the remedy is a SMALLER field" text is UNSAFE when the field is
+    already the DECLARED minimum — shrinking below a pre-registered family re-commits the exact
+    selection bias DSR exists to deflate, inside a badge that READS LIKE A FIX. The instrument sees
+    only a trial COUNT and cannot tell a DECLARED narrow family from a DISCOVERED one, so the
+    caller must flag it. Reported, never acted on."""
+    import re
+    text = f"{verdict.get('reason', '')} {verdict.get('retest_trigger', '')}"
+    m = re.search(r"field of ≤\s*(\d+)\s*arms", text)
+    suggests_shrink = bool(m) or "SMALLER" in text
+    if not suggests_shrink:
+        return dict(verdict)
+    proposed = int(m.group(1)) if m else None
+    unsafe = proposed is None or proposed < n_declared_arms
+    out = dict(verdict)
+    out["field_shrink_flag"] = {
+        "proposed_field_size": proposed,
+        "declared_family_size": n_declared_arms,
+        "status": "SUSPECT — NOT ADVICE" if unsafe else "admissible",
+        "note": (
+            f"the instrument suggests a smaller field, but this story's family of "
+            f"{n_declared_arms} arms was PRE-REGISTERED as the minimum §0.5 field (≥3 classes + a "
+            f"direct-learned foil). ⛔ Shrinking below it would be a POST-HOC field, which is the "
+            f"selection bias DSR exists to deflate (MH2.2). Treat this remedy as SUSPECT, not as "
+            f"advice: you may PRE-REGISTER a family, you may not DISCOVER one."
+            if unsafe else
+            f"the proposed field ({proposed}) is not below the declared family ({n_declared_arms})"),
+    }
+    return out
+
+
+def gate_sensitivity(checks: dict, waived: tuple[str, ...]) -> dict:
+    """⭐ NF-D15 (g″): prove the null does NOT rest on YOUR gate choice. Waive the named checks and
+    report what still refuses. Purely REPORTED — it changes no verdict, and a check waived here is
+    still a failed check in `checks`."""
+    remaining = [k for k, v in checks.items() if not v and k not in waived]
+    return {"waived": list(waived), "still_refusing": remaining,
+            "ships_without_waived_checks": not remaining}
+
+
 def hand_classify_refusal(checks: dict) -> dict | None:
     """The hand-check `cv_power.classify_null` cannot do (the NF-D18 / MH2.7 instrument gap, which
     has already mis-fired twice in this vertical): when every STATISTICAL gate passes and the null

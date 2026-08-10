@@ -642,7 +642,189 @@ class TestDeployHeld:
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-# 14. Fold axis + power are design quantities, checked in advance
+# 14. Layer B's null state — the instrument cannot speak for a one-arm field
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def _layer_b_sel(mean_delta: float, lo: float, hi: float, wins: int, p: float,
+                 sr: float | None) -> dict:
+    return {"beats_foil": mean_delta > 0, "mean_delta": mean_delta, "ci95": [lo, hi],
+            "fold_wins": wins, "fold_clause": {"required": 6, "passes": wins >= 6},
+            "p_one_sided": p, "observed_sr": sr, "var_trials_sr": None,
+            "pbo": 0.63, "dsr": 0.60}
+
+
+class TestLayerBNullClassification:
+    def test_pbo_needs_at_least_two_configs_to_mean_anything(self):
+        assert GE.PBO_MIN_CONFIGS >= 2
+        assert not GE.pbo_is_evaluable(1), (
+            "CSCV resamples a FIELD; one pre-registered contrast is not a selection")
+        assert GE.pbo_is_evaluable(2)
+
+    def test_a_negative_point_estimate_is_a_GENUINE_ABSENCE_with_NO_retest_trigger(self):
+        """ISOLATING: the only thing that decides this branch is the sign of the point estimate.
+        Fed TE's real numbers (-0.0017, 2/8)."""
+        v = GE.classify_layer_b(_layer_b_sel(-0.0017, -0.0078, 0.0043, 2, 0.7401, -0.24),
+                                n_folds=8)
+        assert v["state"] == "GENUINE_ABSENCE"
+        assert v["retest_trigger"] is None, (
+            "⛔ a negative point estimate must never publish a 'more data' trigger (MH2)")
+
+    def test_a_positive_unresolved_effect_is_POWER_LIMITED_with_the_margin_in_FOLDS(self):
+        """ISOLATING: same shape, positive sign. Fed RB's real numbers."""
+        v = GE.classify_layer_b(_layer_b_sel(0.0027, -0.0053, 0.0107, 5, 0.2273, 0.28), n_folds=8)
+        assert v["state"] == "POWER_LIMITED"
+        assert v["retest_trigger"] and "folds" in v["retest_trigger"]
+        assert "NOT a near-term re-test" in v["retest_trigger"], (
+            "a calendar-bound trigger must say so — MH2's reachable-now rule")
+
+    def test_the_pbo_clause_is_reported_UNDEFINED_not_failed(self):
+        v = GE.classify_layer_b(_layer_b_sel(0.0027, -0.0053, 0.0107, 5, 0.2273, 0.28), n_folds=8)
+        assert v["pbo_state"].startswith("UNDEFINED")
+
+    def test_the_instruments_own_verdict_is_recorded_not_discarded(self):
+        inst = {"state": "UNDEFINED", "reason": "…8 fold(s) < 4…",
+                "retest_trigger": "-4 more fold(s)"}
+        v = GE.classify_layer_b(_layer_b_sel(0.0027, -0.0053, 0.0107, 5, 0.2273, 0.28),
+                                n_folds=8, instrument_verdict=inst)
+        assert v["instrument_verdict"] == inst and v["hand_corrected"] is True
+
+    def test_hand_corrected_is_False_when_the_instrument_did_not_say_UNDEFINED(self):
+        v = GE.classify_layer_b(_layer_b_sel(0.0027, -0.0053, 0.0107, 5, 0.2273, 0.28),
+                                n_folds=8,
+                                instrument_verdict={"state": "POWER_LIMITED", "reason": "",
+                                                    "retest_trigger": None})
+        assert v["hand_corrected"] is False
+
+    def test_red_proof_the_instrument_alone_publishes_a_NEGATIVE_fold_trigger(self):
+        """⭐ The defect the hand correction exists for, reproduced from the instrument itself:
+        at EIGHT folds and a one-arm field it returns UNDEFINED, blames the FOLD COUNT, and
+        prescribes a NEGATIVE number of additional folds — a record that tells a future reader to
+        buy seasons for a null no season count can move."""
+        from betting_ml.utils import cv_power
+        v = cv_power.classify_null(
+            metric="probe", n_folds=8, n_arms=1, beats_foil=True, observed_sr=0.28,
+            var_trials_sr=None, fold_wins=5, p_one_sided=0.2273, bh_cutoff=GE.FDR_Q)
+        assert v.state == "UNDEFINED", "the premise of the hand correction no longer holds"
+        assert "8 fold(s) < 4" in v.reason
+        assert v.retest_trigger and v.retest_trigger.strip().startswith("-")
+        # …and the hand path replaces exactly that with a signed, honest state
+        fixed = GE.classify_layer_b(_layer_b_sel(0.0027, -0.0053, 0.0107, 5, 0.2273, 0.28),
+                                    n_folds=8)
+        assert fixed["state"] == "POWER_LIMITED"
+        assert not str(fixed["retest_trigger"]).strip().startswith("-")
+
+
+class TestGateSensitivityAndFieldShrink:
+    def test_waiving_the_only_failing_check_is_reported_as_shipping_without_it(self):
+        checks = {"a": True, "pbo_ok": False, "b": True}
+        s = GE.gate_sensitivity(checks, waived=("pbo_ok",))
+        assert s["still_refusing"] == [] and s["ships_without_waived_checks"] is True
+
+    def test_a_null_that_survives_the_waiver_names_what_still_refuses(self):
+        checks = {"fold_consistency": False, "pbo_ok": False, "fdr_ok": False, "ok": True}
+        s = GE.gate_sensitivity(checks, waived=("pbo_ok",))
+        assert s["still_refusing"] == ["fold_consistency", "fdr_ok"]
+        assert s["ships_without_waived_checks"] is False
+
+    def test_the_sensitivity_changes_no_verdict(self):
+        """It is REPORTED only — a waived check is still False in `checks`."""
+        checks = {"pbo_ok": False}
+        GE.gate_sensitivity(checks, waived=("pbo_ok",))
+        assert checks["pbo_ok"] is False
+
+    def test_a_shrink_below_the_declared_family_is_flagged_SUSPECT(self):
+        v = GE.flag_unsafe_field_shrink(
+            {"state": "POWER_LIMITED", "reason": "…",
+             "retest_trigger": "+36 folds, OR a field of ≤2 arms at the CURRENT fold count"}, 4)
+        assert v["field_shrink_flag"]["status"].startswith("SUSPECT")
+        assert v["field_shrink_flag"]["proposed_field_size"] == 2
+
+    def test_a_shrink_that_is_not_below_the_declared_family_is_admissible(self):
+        v = GE.flag_unsafe_field_shrink(
+            {"state": "POWER_LIMITED", "reason": "…",
+             "retest_trigger": "a field of ≤4 arms"}, 4)
+        assert v["field_shrink_flag"]["status"] == "admissible"
+
+    def test_no_flag_when_no_shrink_is_suggested(self):
+        """ISOLATING: identical shape with no shrink language — only the shrink clause can fire."""
+        v = GE.flag_unsafe_field_shrink(
+            {"state": "GENUINE_ABSENCE", "reason": "the arm loses on average",
+             "retest_trigger": None}, 4)
+        assert "field_shrink_flag" not in v
+
+
+class TestTheVerdictLayerIsDerivedNotStored:
+    """⭐ NF-W2e one level up: not only the verdict SENTENCE but the VERDICT itself must be
+    re-derivable without a refit, or correcting a classifier defect costs a full re-run — which is
+    exactly the pressure that leaves a known-wrong state in a published record."""
+
+    @staticmethod
+    def _stored() -> dict:
+        sel_a = {
+            "p_one_sided": 0.0018, "beats_foil": True, "mean_delta": 0.0014,
+            "ci95": [0.0006, 0.0022], "fold_wins": 8,
+            "fold_clause": {"passes": True, "required": 6, "attainable": True},
+            "pbo": 0.0, "dsr": 0.88, "observed_sr": 1.523, "var_trials_sr": 1.2,
+            "anchors": {"nihilist_loses": True, "marginal_loses": True, "zero_width_loses": True,
+                        "max_width_loses": True, "winner_beats_permuted": True,
+                        "permuted_lift_not_significant": True,
+                        "oracle_floors_respected_at_matched_n": True},
+            "coverage": {"blocking_shortfall": False},
+        }
+        sel_b = _layer_b_sel(-0.0017, -0.0078, 0.0043, 2, 0.7401, -0.24)
+        sel_b["anchors"] = {"winner_beats_shuffled": False,
+                            "shuffled_lift_not_significant": True,
+                            "respects_realized_oracle": True}
+        sel_b["coverage"] = {"blocking_shortfall": False}
+        return {"n_folds": 8, "targets": list(GE.TARGETS),
+                "layer_a": {t: dict(sel_a) for t in GE.TARGETS},
+                "layer_b": {p: dict(sel_b) for p in WP.POSITIONS}}
+
+    def test_re_deriving_twice_is_idempotent(self):
+        from quant_sports_intel_models.football.nfl.fantasy import (
+            run_nf_w3_game_environment as R,
+        )
+        out = self._stored()
+        first = R.derive_verdict_layer(out)
+        out.update(first)
+        second = R.derive_verdict_layer(out)
+        assert first["verdict"] == second["verdict"], (
+            "a re-derivation that moves a verdict on unchanged inputs is not a derivation")
+
+    def test_it_produces_a_state_for_every_non_shipping_cell(self):
+        from quant_sports_intel_models.football.nfl.fantasy import (
+            run_nf_w3_game_environment as R,
+        )
+        d = R.derive_verdict_layer(self._stored())
+        assert len(d["verdict"]["layer_a"]) == len(GE.TARGETS)
+        assert len(d["verdict"]["layer_b"]) == len(WP.POSITIONS)
+        for k, gate in {**d["gates_a"], **d["gates_b"]}.items():
+            if not gate["ship"]:
+                key = f"layer_a::{k}" if k in GE.TARGETS else f"layer_b::{k}"
+                assert key in d["null_states"], f"{k} refused without a classified state"
+
+    def test_red_proof_the_runner_would_republish_the_instruments_bad_trigger(self):
+        """Mutating the hand correction away restores the nonsensical published record."""
+        mod = _mutated(
+            _RUNNER,
+            "    out = GE.classify_layer_b(\n        sel, n_folds=n_folds,\n"
+            "        instrument_verdict={\"state\": v.state, \"reason\": v.reason,\n"
+            "                            \"retest_trigger\": v.retest_trigger})",
+            "    out = {\"state\": v.state, \"reason\": v.reason,\n"
+            "           \"retest_trigger\": v.retest_trigger}",
+            "nfw3_runner_no_hand")
+        sel = _layer_b_sel(0.0027, -0.0053, 0.0107, 5, 0.2273, 0.28)
+        bad = mod._classify_layer_b("RB", sel, 8, {"pbo_ok": False})
+        assert bad["state"] == "UNDEFINED" and str(bad["retest_trigger"]).strip().startswith("-"), (
+            "the mutation must land — the pre-fix path must republish the negative trigger")
+        from quant_sports_intel_models.football.nfl.fantasy import (
+            run_nf_w3_game_environment as R,
+        )
+        good = R._classify_layer_b("RB", sel, 8, {"pbo_ok": False})
+        assert good["state"] == "POWER_LIMITED"
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 15. Fold axis + power are design quantities, checked in advance
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 class TestFoldAxisAndPower:
     def test_the_fold_axis_is_the_nf_w1_axis_verbatim(self):
