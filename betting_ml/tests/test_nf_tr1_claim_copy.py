@@ -303,12 +303,61 @@ def test_the_marketing_surfaces_link_to_the_track_record():
     invisible to any source scan (the E9.56c dead-`/pricing` class), so the destination is proved
     by navigation instead: `track-record-claim.spec.ts`'s "the trust link reaches a Track Record
     page that actually renders" clicks it and asserts the page comes up. Neither check implies the
-    other and both are required."""
+    other and both are required.
+
+    ⚠️ RE-ANCHORED FOR DATA-DRIVEN SURFACES (2026-08-09). A page whose links come from a copy
+    module renders `href={item.link.href}` — a literal-`href` scan cannot see it, so the check
+    would fail on a page where the property genuinely holds. The FAQ is exactly that: its
+    "How can I check your record?" answer carries the trust link in `FAQ_SECTIONS`.
+
+    ⭐ THIS IS A RE-ANCHOR, NOT A RELAXATION, and the distinction is the whole point. The property
+    asserted is identical — the record is one click from this surface — and it is now proved
+    against the module the page ACTUALLY RENDERS rather than against a literal it happens to
+    contain. It is if anything stricter about placement: the FAQ's link now has to sit in the
+    answer a reader asking that question opens, not in a row of chrome at the page foot, which is
+    where it used to be and which duplicated the site footer verbatim.
+
+    ⛔ THE FALLBACK IS GATED ON THE PAGE ACTUALLY RENDERING THE MODULE. Accepting a binding found
+    in `positioning-copy.ts` for a page that does not render it would make this clause vacuous for
+    every surface at once (NF1.7(a)) — so the page must import AND render the collection."""
+    positioning = _strip_ts_comments((_REPO / "frontend/lib/positioning-copy.ts").read_text())
+
     for path in _MARKETING_SURFACES:
         src = _strip_ts_comments(path.read_text())
-        assert any(b in src for b in _TRUST_LINK_BINDINGS), (
+        if any(b in src for b in _TRUST_LINK_BINDINGS):
+            continue
+
+        # The data-driven route. Both halves are required: the module must carry the link, AND
+        # this page must render the collection that carries it.
+        #
+        # ⚠️ THE BINDING `href={item.link.href}`, NOT THE SUBSTRING `item.link`. The first cut used
+        # the latter and stayed GREEN when the render was disabled (`{item.link && (` → `{false &&
+        # (`), because `item.link.label` elsewhere in the file still satisfied it — "wired but never
+        # invoked" (NF-C0e (b)), inside the very guard meant to catch an unreachable link. Caught by
+        # deliberately breaking the render and noticing this clause did not move.
+        renders_faq = "FAQ_SECTIONS" in src and "href={item.link.href}" in src
+        assert renders_faq, (
             f"{path.name} neither quotes the track record nor links to it — the evidence is now "
             f"unreachable from this surface"
+        )
+        # ⚠️ SCOPED TO THE `FAQ_SECTIONS` SLICE, not the whole module. `TRACK_RECORD_TRUST_LINK`
+        # is ALSO referenced by `SIGNED_OUT_NAV` and `ABOUT_CTA`, so a module-wide check would be
+        # satisfied by the NAV's link while the FAQ answer had lost its own — passing on a
+        # different surface's binding, which is the vacuous form this fallback shipped in first.
+        assert "export const FAQ_SECTIONS" in positioning, (
+            "could not locate FAQ_SECTIONS — this clause would be vacuous"
+        )
+        faq_slice = positioning.split("export const FAQ_SECTIONS", 1)[1]
+        faq_slice = faq_slice.split("\nexport const ", 1)[0]
+        assert "link: {" in faq_slice, (
+            "no linked answers parsed from the FAQ_SECTIONS slice — this clause would be vacuous"
+        )
+        assert (
+            "TRACK_RECORD_TRUST_LINK.href" in faq_slice
+            or '"/fantasy/track-record"' in faq_slice
+        ), (
+            f"{path.name} renders FAQ_SECTIONS, but no answer in it links to the track record — "
+            f"the evidence is unreachable from this surface"
         )
 
 

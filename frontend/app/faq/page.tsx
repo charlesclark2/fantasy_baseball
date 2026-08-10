@@ -111,27 +111,22 @@ export default function FaqPage() {
           ))}
         </div>
 
-        <div className="mt-12 pt-8 border-t border-[#262626] flex flex-wrap gap-6 text-sm text-muted-foreground">
-          <Link href="/about" className="hover:text-foreground transition-colors">
-            About
-          </Link>
-          {/* ⭐ The evidence, one click away. NF-TR1's rule for a marketing surface: link to the
-              record rather than quoting its number. The literal href also keeps this inside
-              `test_e9_56c_cta_routes.py`'s static route scan, which the answers' data-driven
-              `item.link` anchors are outside of. */}
-          <Link href="/fantasy/track-record" className="hover:text-foreground transition-colors">
-            Track Record
-          </Link>
-          <Link href="/contact" className="hover:text-foreground transition-colors">
-            Contact
-          </Link>
-          <Link href="/privacy" className="hover:text-foreground transition-colors">
-            Privacy Policy
-          </Link>
-          <Link href="/terms" className="hover:text-foreground transition-colors">
-            Terms of Service
-          </Link>
-        </div>
+        {/* ⛔ THE PAGE-FOOT LINK ROW WAS REMOVED (operator, 2026-08-09) — About · Track Record ·
+            Contact · Privacy Policy · Terms of Service. All five are in `SiteFooter`, which
+            `app/layout.tsx` renders directly beneath this on every page, so it read as the footer
+            printed twice.
+
+            ⭐ NF-TR1's REQUIREMENT — that a marketing surface keeps the record one click away — is
+            UNCHANGED and still met: the "How can I check your record?" answer carries the trust
+            link in `FAQ_SECTIONS`, which is where a reader actually asking that question finds it,
+            rather than in a row of chrome at the bottom of the page. `test_nf_tr1_claim_copy.py`
+            was re-anchored to resolve it through the data module this page renders, because a
+            source scan for a literal `href` cannot see a data-driven link.
+
+            ⚠️ NOTHING LOSES ROUTE COVERAGE. `test_e9_56c_cta_routes.py`'s static `.tsx` scan still
+            sees all five hrefs — they are literals in `components/site-footer.tsx` — and
+            `route-integrity.spec.ts` crawls this page's RENDERED DOM, which is what covers the
+            data-driven answer links either way. */}
       </main>
     </div>
   )
