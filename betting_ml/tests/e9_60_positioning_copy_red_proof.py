@@ -172,21 +172,44 @@ CASES = [
      "It is the strongest read on the board and the one we would look at first.",
      "test_the_featured_read_is_not_sold_as_the_best_bet", SUITE),
 
-    # ── a signed-out visitor finds a door to BOTH products ────────────────────────────────────
-    ("remove the MLB door from the signed-out nav", COPY,
-     '{ label: "MLB betting intelligence", short: "MLB", href: "/#today", product: "betting", desktop: true },',
-     '{ label: "Projections", short: "P", href: "/fantasy/projections", product: "fantasy", desktop: true },',
-     "test_the_signed_out_nav_carries_both_products", SUITE),
+    # ── every signed-out nav entry opens for the visitor it is drawn for ───────────────────────
+    # ⚠️ THIS CASE CHANGED THE GUARD, NOT JUST THE BREAK. The first cut asserted only
+    # `product: "fantasy"` — which FOUR entries carry, so no single edit can falsify it, and the
+    # break (flipping one entry) correctly stayed GREEN. That is an unfalsifiable clause, i.e. the
+    # NF1.7(a) vacuous-anchor class hiding inside a passing suite. The guard now asserts the free
+    # board's own href, which is both the sharper claim and single-edit breakable. Found by this
+    # harness's vacuity check, which is exactly what it exists for.
+    ("remove the free board's door from the signed-out nav", COPY,
+     '    href: "/fantasy/rankings",',
+     '    href: "/fantasy/projections",',
+     "test_the_signed_out_nav_carries_the_fantasy_product", SUITE),
 
-    ("put the MLB door before the fantasy ones", COPY,
-     '  { label: "Fantasy rankings", short: "Fantasy", href: "/fantasy/rankings", product: "fantasy", desktop: true },',
-     '  { label: "MLB first", short: "MLB", href: "/#mlb-first", product: "betting", desktop: true },',
+    # ⭐ OPERATOR, 2026-08-09 — the label must NAME the sport. The break restores the exact string
+    # that shipped before this change, so it proves the guard catches the real prior state rather
+    # than an invented one.
+    ("go back to the ambiguous bare 'Fantasy' label", COPY,
+     '    short: "Fantasy Football",',
+     '    short: "Fantasy",',
+     "test_the_fantasy_door_names_its_sport", SUITE),
+
+    # ⚠️ The break has to move the COMPANY entries above the product ones, since there is no longer
+    # a betting entry to reorder against.
+    ("put the company pages before the product ones", COPY,
+     '  { label: "About", href: "/about", product: null, desktop: true },\n  { label: "FAQ", href: "/faq", product: null, desktop: false },\n]',
+     ']',
      "test_the_signed_out_nav_is_fantasy_first", SUITE),
 
-    ("point the MLB door at a paid route", COPY,
-     '{ label: "MLB betting intelligence", short: "MLB", href: "/#today", product: "betting", desktop: true },',
-     '{ label: "MLB betting intelligence", short: "MLB", href: "/performance", product: "betting", desktop: true },',
-     "test_the_betting_door_is_a_route_an_anonymous_visitor_can_actually_open", SUITE),
+    ("point a signed-out nav entry at a paid route", COPY,
+     '{ label: "Projections", href: "/fantasy/projections", product: "fantasy", desktop: false },',
+     '{ label: "Projections", href: "/performance", product: "fantasy", desktop: false },',
+     "test_no_signed_out_nav_entry_points_at_a_route_that_refuses_an_anonymous_caller", SUITE),
+
+    # ⭐⭐ THE OPERATOR'S REVERSAL OF THIS STORY'S OWN FIRST CUT, proven catchable. The break is
+    # verbatim the row E9.60 originally shipped — so this case fails the moment someone re-adds it.
+    ("re-add the MLB anchor door to the signed-out nav", COPY,
+     '  { label: "About", href: "/about", product: null, desktop: true },',
+     '  { label: "MLB betting intelligence", short: "MLB", href: "/#today", product: "betting", desktop: true },\n  { label: "About", href: "/about", product: null, desktop: true },',
+     "test_the_signed_out_nav_has_no_mlb_door", SUITE),
 
     ("drop the FAQ from the signed-out nav", COPY,
      '  { label: "FAQ", href: "/faq", product: null, desktop: false },',

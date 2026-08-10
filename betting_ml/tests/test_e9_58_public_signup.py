@@ -165,10 +165,23 @@ def test_a_logged_out_visitor_has_a_mobile_menu_at_all():
     logged-out phone visitor now reaches more, not less.
 
     ⭐ THE AMENDMENT IS TO THE ANCHOR, NOT TO THE BAR. The clause still requires the panel to reach
-    About and Sign In; it now resolves About through the data module the panel actually renders,
-    and additionally requires the MLB door that was missing entirely before E9.60. Rewriting the
-    assertion to match the implementation would be the dishonest version of this edit, so the
-    reachability requirement is stated in terms of the destination rather than of the call.
+    About and Sign In; it now resolves About through the data module the panel actually renders.
+    Rewriting the assertion to match the implementation would be the dishonest version of this
+    edit, so the reachability requirement is stated in terms of the destination rather than of the
+    call.
+
+    ⚠️⚠️ AND ONE E9.60 ADDITION HAS BEEN REMOVED AGAIN (operator, 2026-08-09). That amendment also
+    made this clause require an MLB/betting door — which was NEVER an E9.58 requirement. E9.58's
+    property is that a logged-out visitor on a phone can reach About and Sign In at all; the MLB
+    door was a NEW E9.60 claim smuggled into an older suite, so when the operator reversed it this
+    clause failed for a reason that had nothing to do with what it exists to defend.
+
+    ⛔ THE LESSON, worth more than the fix: an amendment may RE-ANCHOR an existing property onto a
+    new implementation, but it must not ADD a new story's requirement to an old story's clause.
+    Doing so couples the two — a later decision about the new claim breaks a suite that was never
+    about it, and the failure reads as an E9.58 regression when nothing E9.58 defends has moved.
+    The MLB-door question now lives entirely in `test_e9_60_positioning_copy.py`, where reversing it
+    was a one-line, correctly-attributed change.
     """
     nav = _code(_FRONTEND / "components/nav.tsx")
     assert "{showSubNav && (\n            <button" not in nav, "the hamburger is signed-in-only again"
@@ -189,9 +202,7 @@ def test_a_logged_out_visitor_has_a_mobile_menu_at_all():
     assert '"/about"' in nav_model, (
         "About is not reachable from the signed-out mobile menu — the E9.58 defect, restored"
     )
-    assert 'product: "betting"' in nav_model, (
-        "the signed-out menu carries no door to the MLB betting product (E9.60)"
-    )
+    # ⛔ NO MLB/betting assertion here — see the docstring. That belongs to E9.60, not E9.58.
 
     # The compensating half of the E9.46 demotion. The footer is viewport-independent (no `sm:`
     # gate), so a logged-out phone visitor still has a route to the blog — which is the property

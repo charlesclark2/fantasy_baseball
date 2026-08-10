@@ -554,47 +554,120 @@ def test_the_featured_read_is_not_sold_as_the_best_bet(faq_answers):
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-# AC — a signed-out visitor finds a door to BOTH products
+# AC — every signed-out nav entry opens for the visitor it is drawn for
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def test_the_signed_out_nav_carries_both_products(copy_src):
-    """⭐⭐ THE NAVIGATION DEFECT E9.60 FIXES, as a data assertion.
-
-    The nav rendered `publicNavItems()` — every `public: true` item in `nav-model.ts` — and all four
-    of them are FANTASY. So the nav of a two-product company listed exactly one product, and the
-    live MLB betting product had no signed-out door anywhere."""
+def test_the_signed_out_nav_carries_the_fantasy_product(copy_src):
+    """The nav rendered `publicNavItems()` — an ENTITLEMENT flag flattened out of `nav-model.ts` —
+    rather than authored marketing navigation, which is why it had drifted from the product's own
+    positioning. This pins the authored list as the source of the signed-out bar."""
     block = copy_src.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
     assert block.count("href:") >= 5, (
         f"only {block.count('href:')} nav entries extracted — the slice is wrong and every clause "
         f"below is suspect"
     )
-    for product in ('"fantasy"', '"betting"'):
-        assert f"product: {product}" in block, (
-            f"the signed-out nav has no door to the {product} product"
+    # ⭐ THE SPECIFIC DOOR, not merely "some fantasy entry". `/fantasy/rankings` is the free board —
+    # the site's primary free acquisition surface and the destination the whole signed-out bar
+    # exists to lead to.
+    #
+    # ⚠️ ASSERTING `product: "fantasy"` ALONE WOULD BE 4-WAY REDUNDANT and therefore unfalsifiable
+    # by any single edit: four entries carry it, so three could be deleted and the clause would
+    # still pass. The red-proof harness caught exactly that — its break flipped one entry and the
+    # clause stayed GREEN. The product assert is kept below as a companion, but this href is the
+    # one that makes the clause bite.
+    assert '"/fantasy/rankings"' in block, (
+        "the signed-out nav has no door to the free fantasy board"
+    )
+    assert 'product: "fantasy"' in block, "the signed-out nav has no door to the fantasy product"
+
+
+def test_the_fantasy_door_names_its_sport(copy_src):
+    """⭐ OPERATOR, 2026-08-09. The desktop label was the bare word "Fantasy" — but `nav-model.ts`
+    ALREADY declares an MLB→Fantasy surface (E8.1's prospect board), so "fantasy" is ambiguous
+    between two sports inside this product today; it only *looks* unambiguous because the baseball
+    half is `restrict: "admin"` and therefore invisible to everyone but the operator. The label
+    would silently become wrong the day fantasy baseball opens up."""
+    block = copy_src.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
+    entries = [e for e in re.split(r"\},", block) if e.strip()]
+    assert len(entries) >= 5, f"only {len(entries)} nav entries parsed — this clause would be vacuous"
+
+    rankings = [e for e in entries if "/fantasy/rankings" in e]
+    assert rankings, "no fantasy rankings entry found — this clause would be vacuous"
+    # The DESKTOP label is what the bar renders (`item.short ?? item.label`), so that is the string
+    # the requirement is about — asserting on `label` alone would pass while the bar still said
+    # "Fantasy".
+    for entry in rankings:
+        # `item.short ?? item.label` — mirror the render, so the clause reads the same string the
+        # bar does whether or not a `short` is declared.
+        match = re.search(r'short:\s*"([^"]*)"', entry) or re.search(r'label:\s*"([^"]*)"', entry)
+        assert match, f"neither a short nor a label parsed from {entry.strip()!r}"
+        desktop_label = match.group(1)
+        assert "Football" in desktop_label, (
+            f"the fantasy door's desktop label is {desktop_label!r} — it does not name the sport, "
+            f"and a second fantasy sport already exists in nav-model.ts"
         )
 
 
 def test_the_signed_out_nav_is_fantasy_first(copy_src):
-    """Spec §2/§20: the same product order as the home page's `VERTICALS` and About."""
+    """Spec §2/§20: the same product order as the home page's `VERTICALS` and About — the product
+    pages lead, the company pages (About/FAQ) follow.
+
+    ⚠️ THIS USED TO COMPARE FANTASY AGAINST BETTING and was amended when the MLB door was removed
+    (see the clause below). Comparing against the company entries keeps a real ordering claim
+    instead of leaving the file with no order assertion at all — which is what deleting it would
+    have done."""
     block = copy_src.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
-    assert block.index('product: "fantasy"') < block.index('product: "betting"'), (
-        "the signed-out nav leads with betting; the home page and About lead with fantasy"
+    assert "product: null" in block, "no company-level entry — this clause would be vacuous"
+    assert block.index('product: "fantasy"') < block.index("product: null"), (
+        "the signed-out nav leads with the company pages; the product pages should lead"
     )
 
 
-def test_the_betting_door_is_a_route_an_anonymous_visitor_can_actually_open(copy_src):
+def test_no_signed_out_nav_entry_points_at_a_route_that_refuses_an_anonymous_caller(copy_src):
     """⛔ THE TEMPTING WRONG FIX. `/performance`, `/dashboard`, `/picks/*`, `/props` and
-    `/ev-tracker` are all mounted `dependencies=_paid`, so pointing the nav's MLB door at any of
-    them puts a login wall behind a product label — the one surprise a first-touch nav link cannot
-    afford. The public MLB surface is the home page's featured read."""
+    `/ev-tracker` are all mounted `dependencies=_paid` in `app/backend/main.py`, so a nav entry
+    pointing at any of them is a login wall wearing a product label — the one surprise a
+    first-touch nav link cannot afford.
+
+    ⚠️ WIDENED from "the betting door" to EVERY entry when the MLB door was removed. The narrow
+    version keyed on `product: "betting"`, so with no betting row left it would have tripped its
+    own anti-vacuity assert; the widened version is strictly stronger (it now also covers the
+    fantasy and company entries, which the narrow one never checked) and cannot go vacuous."""
     block = copy_src.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
-    betting_rows = [ln for ln in block.split("\n") if 'product: "betting"' in ln]
-    assert betting_rows, "no betting row found — this clause would be vacuous"
-    for row in betting_rows:
+    hrefs = re.findall(r'href:\s*"(/[^"]*)"', block)
+    assert len(hrefs) >= 5, f"only {len(hrefs)} href(s) found — this clause would be vacuous"
+    for href in hrefs:
         for gated in ("/performance", "/dashboard", "/picks", "/props", "/ev-tracker"):
-            assert gated not in row, (
-                f"the signed-out MLB door points at {gated}, which refuses an anonymous caller: "
-                f"{row.strip()!r}"
+            assert not href.startswith(gated), (
+                f"the signed-out nav points at {href}, which refuses an anonymous caller"
             )
+
+
+def test_the_signed_out_nav_has_no_mlb_door(copy_src):
+    """⭐⭐ OPERATOR DECISION, 2026-08-09 — and it REVERSES E9.60's own first cut, which is exactly
+    why it is pinned rather than left to a comment.
+
+    That cut added an MLB entry, reasoning that a two-product company listing one product in its
+    nav is a defect. The reasoning was incomplete on two counts:
+
+      1. There is no anonymous MLB destination, so the entry had to be `/#today` — an ANCHOR, which
+         on the home page is a scroll to a section already on screen. That is a weak nav item, not
+         a product door.
+      2. MLB is intended to become SIGNUP-gated rather than public. Under (1) that changes nothing:
+         an account-gated product still has no entry a signed-out visitor can open.
+
+    ⛔ DO NOT DELETE THIS CLAUSE when the paid gate is relaxed to a signup gate — the absence is
+    correct under BOTH gate models, for the same reason. It is legitimately deletable only if a
+    genuinely anonymous-readable MLB PAGE is built (not an anchor, not a signup wall)."""
+    block = copy_src.split("export const SIGNED_OUT_NAV", 1)[1].split("\n]", 1)[0]
+    assert block.count("href:") >= 5, "the slice is wrong — this clause would be vacuous"
+    assert 'product: "betting"' not in block, (
+        "an MLB/betting door was re-added to the signed-out nav; there is still no MLB destination "
+        "an anonymous visitor can open — read the SIGNED_OUT_NAV section header before changing this"
+    )
+    assert '"/#today"' not in block, (
+        "the signed-out nav points at the home page's featured-pick ANCHOR, which is a scroll "
+        "rather than a product door"
+    )
 
 
 def test_the_faq_is_reachable_from_the_signed_out_nav(copy_src):
