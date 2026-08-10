@@ -103,11 +103,23 @@ so this cannot occur at all.
 |---|---|---|---|
 | `inj_latest` | latest admissible capture ≤ 7 d (**the NF-W2d incumbent**) | 1,343 | 100% |
 | `inj_fresh1d` | latest admissible capture ≤ **1 d** | 475 | 35.4% |
-| `inj_freshest` | only the week's FRESHEST admissible capture instant | 281 | 20.9% |
+| `inj_freshest` | only the row's OWN freshest admissible capture instant | **856** | **63.7%** |
 
 By position (`inj_latest` → `inj_fresh1d`): QB 159→51 · RB 279→104 · TE 298→108 · WR 607→212.
 The ladder is a real freshness-versus-volume trade-off, which is what makes it a test rather than
 a foregone conclusion.
+
+> ⚠️ **CORRECTION (recorded rather than quietly amended).** The `inj_freshest` row first read
+> **281 / 20.9%** here. That figure came from a scratch probe that took the week's freshest
+> capture as a single **week-level minimum age**, which is wrong twice over: rows inside a week
+> have different gamedays (Thu / Sun / Mon), so (a) the reference instant is a PER-ROW quantity,
+> and (b) a week-level minimum can be a capture landing AFTER an earlier row's gameday — i.e. the
+> probe's rule would have been a PIT violation had it been implemented. The harness uses the
+> per-row `_inj_capture_age_days` that `attach_coverage` already computes under the strict
+> pre-gameday bound, giving 856. The corrected number is self-consistent with the carry-over
+> census above (1,343 − 856 = 487 superseded rows = the measured 36.3%), which is what confirms
+> it. Nothing about the registered arms, metric, gates or expectations changes — the ladder is
+> simply less brutal at its top rung than the erroneous probe suggested.
 
 ## The field
 
