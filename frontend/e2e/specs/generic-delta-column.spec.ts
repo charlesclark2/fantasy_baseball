@@ -136,10 +136,22 @@ test.describe("Rankings, with the caller's own league selected", () => {
     await expect(page.locator("table tbody tr").first()).toBeVisible()
     await selectSavedLeague(page)
 
+    // ⚠️ THE COLUMN IS FOUND BY ITS HEADER, NEVER BY POSITION — and this is not tidiness, it is the
+    // bug the red proof caught. The first cut read `td.last()`, which is the delta on a POSITION tab
+    // but is "Pos rank" on the Overall tab (that column only renders there, and it renders AFTER the
+    // delta). So the test compared a delta against a rank, found them different, and passed —
+    // including with the scale deliberately broken. It asserted nothing.
+    const deltaColumn = async () => {
+      const labels = await headers(page).allInnerTexts()
+      const idx = labels.findIndex((h) => h.includes(DELTA_LABEL))
+      expect(idx, "the delta column is not on this tab — the anchor is missing").toBeGreaterThan(-1)
+      return idx
+    }
     const deltaCellFor = async (name: string) => {
+      const idx = await deltaColumn()
       const row = page.locator("table tbody tr", { hasText: name }).first()
       await expect(row).toBeVisible()
-      return (await row.locator("td").last().innerText()).trim()
+      return (await row.locator("td").nth(idx).innerText()).trim()
     }
 
     await page.getByRole("button", { name: "TE", exact: true }).click()
