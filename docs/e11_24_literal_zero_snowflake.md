@@ -3076,3 +3076,52 @@ The same probe returns `starter_missing 0 / starter_total 20` reading `eb_starte
 view**. #675's ghost-immunity argument (the probe side is *today's current probables*, so a
 superseded ghost row can never satisfy the LEFT JOIN, making `starter_missing` identical against the
 table and the view) is now measured on the flipped object, not just reasoned about.
+
+---
+
+# 🎯 TARGET-7 CALLER INVENTORY (2026-08-10) — what stands between here and a suspended warehouse
+
+Target 6 is closed and #675 is flipped, so target 7 ("every `COMPUTE_WH` caller must be gone before
+the warehouse can be dropped") is next and needs a current list. Read on `MONITOR_WH`, 7 days,
+**warehouse-occupying statements only** (the #679 filter).
+
+⚠️ **This is an INVENTORY — an enumeration of callers — NOT a magnitude or trend claim.** The window
+straddles both the 08-06 target-6 flip and the 08-10 #675 flip, so per this story's own per-day rule
+nothing here may be quoted as a delta. It answers "who is left", not "how much".
+
+| caller | execs | waits | what it is |
+|---|---|---|---|
+| `DBT_RW` → schema `BETTING` | 5,430 | **145** | the pipeline's remaining Snowflake materialisations — the bulk, and the real target-7 body of work |
+| `DBT_RW` → no schema | 1,982 | 115 | session/DDL-adjacent traffic |
+| **`DBT_RW` → `CI_BETTING`** | 269 | **74** | **the dbt-Build CI — 21.4% of all COMPUTE_WH waits in the window** |
+| `DBT_RW` → `BETTING_FEATURES` | 134 | 2 | nearly gone (targets 6 + #662/#675 did this) |
+| `CCL1196` (operator Snowsight) | 108 | 22 | behavioural, not code — audit from `MONITOR_WH` |
+| `CREDENCE_API` | **16** | **7** | down to the 3 documented shapes |
+
+## Three things this changes
+
+**1. ⭐ The `CI_WH` item is not housekeeping — CI is 21.4% of the remaining waits.** 74 of 346 waits
+in seven days come from the `CI_BETTING` schema, i.e. `dbt Build CI` running against the production
+warehouse. That is the second-largest identified caller on the board and it does **no serving work
+at all**. The fallback-safe repoint shipped this session covers it; it is **inert until the operator
+creates `CI_WH` and sets `SNOWFLAKE_CI_WAREHOUSE`**, so that DDL is now the cheapest remaining wake
+reduction in the story by a wide margin.
+
+**2. `BETTING_FEATURES` is essentially done — 134 executions and 2 waits.** Targets 6, #662 and #675
+between them have emptied the feature-schema of warehouse-occupying work. What remains is
+concentrated in `BETTING`, which is where target 4 (the three sequential-posterior state writers)
+and the residual mart materialisations live. **Target 4 is now unblocked** (it was gated on 6) and
+is the natural body of work after #682/#693.
+
+**3. `CREDENCE_API` is down to 16 executions / 7 waits and exactly the 3 shapes the story already
+documented** — `DISTINCT model_version` (7), `/pipeline/status` (6), and the `model_registry`
+freshness read (3). The metering repoint plus the `staleTime` fix removed the admin cost panel
+entirely; these three are unchanged. They remain a **target-7 blocker and a request-path latency
+defect** (a CLAUDE.md rule violation), not a cost lever — do not re-litigate them as one, and mind
+the E9.26b landmine when repointing (`lakehouse_query` catches-and-returns `[]`, so the obvious fix
+fails *silently* inside the Lambda).
+
+## Recommended order from here
+
+**#682 → #693** (already sequenced) **→ `CI_WH` DDL** (cheapest, 21.4%, zero serving risk) **→
+target 4** (now unblocked) **→ target 5** (the freshness-gate finding above) **→ target 7**.
