@@ -37,6 +37,7 @@ handoff and is trivially re-checkable by hand.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -140,3 +141,46 @@ def test_every_job_that_runs_pytest_is_gated_on_the_filter():
         f"job(s) {ungated} run pytest without gating on `needs.changes.outputs.backend` — they will "
         f"run on a frontend-only PR no matter what the filter decides"
     )
+
+
+# ── E11.24 — the dbt CI must not bill the warehouse the story is quieting ────────────────
+
+DBT_CI_WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "dbt_build_ci.yml"
+
+
+def test_dbt_ci_prefers_a_dedicated_warehouse_over_the_production_one():
+    """E11.24 — `dbt Build CI` fires on push/PR to `main` whenever `dbt/**` changes, i.e. on
+    exactly the promotion days E11.24 reads its soak baselines from.
+
+    Measured 2026-08-10: the `CI on the prod WH` family is the largest single wait bucket on the
+    census board, and on the #720 promotion day its 39 waits were the ENTIRE apparent eb_*
+    "regression" — a session nearly read them as a serving defect. Pin the indirection so a future
+    sweep over `secrets.SNOWFLAKE_WAREHOUSE` cannot quietly put CI back on COMPUTE_WH.
+
+    The `||` fallback is what makes this safe to ship before the warehouse exists: an unset GitHub
+    secret is the empty string (falsy), so CI keeps today's behaviour until the operator creates
+    the warehouse and sets `SNOWFLAKE_CI_WAREHOUSE`.
+    """
+    assert DBT_CI_WORKFLOW.exists(), "dbt_build_ci.yml is missing."
+    src = DBT_CI_WORKFLOW.read_text()
+    # Strip comments — prose naming the secret must not be able to satisfy this (INC-38).
+    # ⚠️ BOTH forms, and the trailing one is the one that bites: a whole-line strip alone left
+    #   `SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}  # use SNOWFLAKE_CI_WAREHOUSE`
+    # passing — measured, in this guard's own RED-proof. YAML starts a comment at a ` #` that is
+    # not inside the value; no expression here contains a literal '#'.
+    code = "\n".join(
+        ln.split(" #", 1)[0] for ln in src.splitlines() if not ln.lstrip().startswith("#")
+    )
+
+    assignments = re.findall(r"^\s*SNOWFLAKE_WAREHOUSE:\s*(.+)$", code, re.MULTILINE)
+    assert assignments, "no SNOWFLAKE_WAREHOUSE assignment found in dbt_build_ci.yml."
+    for value in assignments:
+        assert "SNOWFLAKE_CI_WAREHOUSE" in value, (
+            "every dbt-CI job must resolve SNOWFLAKE_WAREHOUSE through SNOWFLAKE_CI_WAREHOUSE "
+            f"first (with a fallback), not straight from the production secret. Found: {value!r}"
+        )
+        assert "MONITOR_WH" not in value, (
+            "⛔ dbt CI must NOT share MONITOR_WH — that is the wake census's own read path, so "
+            "CI would become a line in the instrument that measures CI (target 3's "
+            "self-inflicted-wake defect)."
+        )

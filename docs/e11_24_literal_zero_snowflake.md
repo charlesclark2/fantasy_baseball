@@ -2896,3 +2896,49 @@ source, and only the **independence** cross-check exposed it. Cure: `_sql_block(
 `run(cur, f"…` / `run_pivot(cur, f"…` CALL SITE. This is INC-38's prose-cannot-satisfy trap and
 #682's false-RED-proof lesson arriving together — **the discriminator is running the guard on CLEAN
 source, which a red-proof harness by construction never does.**
+
+---
+
+# ⏭️ BACKLOG LANDED — dbt CI OFF THE PRODUCTION WAREHOUSE (code shipped, DDL pending)
+
+**Why it graduated from "nice to have" to load-bearing:** `dbt Build CI` triggers on push/PR to
+`main` whenever `dbt/**` changes — i.e. on **exactly the promotion days E11.24 reads its soak
+baselines from**. On 2026-08-10 that produced 39 provisioning waits on `COMPUTE_WH` and they were
+the *entire* apparent eb_* regression this session opened by chasing. Across the census window the
+`CI on the prod WH` family reads **130/4 · 14/1 · 64/14 · 207/23 · 76/39** — the largest single
+wait bucket on the board.
+
+`.github/workflows/dbt_build_ci.yml` (both jobs) now resolves:
+
+```yaml
+SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_CI_WAREHOUSE || secrets.SNOWFLAKE_WAREHOUSE }}
+```
+
+⭐ **The `||` fallback is the point: this is SAFE TO MERGE BEFORE THE WAREHOUSE EXISTS.** An unset
+GitHub secret is the empty string, which is falsy, so with `SNOWFLAKE_CI_WAREHOUSE` absent CI keeps
+today's behaviour exactly. The operator then creates the warehouse and sets the secret with **no
+code change and no red-CI window** — which removes the ordering hazard that would otherwise make
+this a two-step change where step one turns every dbt-Build job red.
+
+⛔ **NOT `MONITOR_WH`** — that is the census's own read path; sharing it would make CI a line in the
+instrument that measures CI (target 3's self-inflicted-wake defect, in a new costume).
+
+**Operator DDL (once, ACCOUNTADMIN) + the secret:**
+
+```sql
+CREATE WAREHOUSE IF NOT EXISTS CI_WH WITH WAREHOUSE_SIZE='XSMALL'
+  AUTO_SUSPEND=60 AUTO_RESUME=TRUE INITIALLY_SUSPENDED=TRUE;
+GRANT USAGE ON WAREHOUSE CI_WH TO ROLE <the role behind secrets.SNOWFLAKE_ROLE>;
+```
+then `gh secret set SNOWFLAKE_CI_WAREHOUSE --body CI_WH --repo charlesclark2/fantasy_baseball`.
+
+Guard: `test_ci_path_filter_semantics.py::test_dbt_ci_prefers_a_dedicated_warehouse_over_the_production_one`
+— RED-proven on four breaks (revert to the prod secret · point CI at `MONITOR_WH` · and **both**
+comment forms, because prose must not satisfy it).
+
+🪤 **The trailing-comment form was a genuine hole and only the RED-proof found it.** The guard
+stripped whole-line `#` comments but not trailing ones, so
+`SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}  # use SNOWFLAKE_CI_WAREHOUSE` **passed** —
+the exact INC-38 prose-cannot-satisfy defect, inside the strip written to prevent it. **A
+comment-stripping guard must handle BOTH comment forms; testing only the whole-line form proves
+only the whole-line form.**
