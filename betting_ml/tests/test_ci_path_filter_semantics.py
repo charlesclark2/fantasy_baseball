@@ -144,43 +144,70 @@ def test_every_job_that_runs_pytest_is_gated_on_the_filter():
 
 
 # ── E11.24 — the dbt CI must not bill the warehouse the story is quieting ────────────────
+#
+# 🪤 THE DEFECT THIS GUARD EXISTS TO PREVENT, AND ITS FIRST CUT *HAD*: the workflow set
+# `SNOWFLAKE_WAREHOUSE`, which dbt NEVER READS — `dbt/profiles.yml` hardcoded the warehouse in
+# every target. A declaration with no consumer (NF-C0e "wired ≠ invoked"), and a guard asserting
+# only the declaration passes on nothing. So this asserts BOTH ENDS: the `ci` target must be
+# env-driven, AND the job that runs `--target ci` must supply that var non-empty.
 
 DBT_CI_WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "dbt_build_ci.yml"
+DBT_PROFILES = Path(__file__).resolve().parents[2] / "dbt" / "profiles.yml"
+_CI_WH_ENV = "SNOWFLAKE_CI_WAREHOUSE"
 
 
-def test_dbt_ci_prefers_a_dedicated_warehouse_over_the_production_one():
-    """E11.24 — `dbt Build CI` fires on push/PR to `main` whenever `dbt/**` changes, i.e. on
-    exactly the promotion days E11.24 reads its soak baselines from.
+def test_the_ci_target_actually_reads_the_ci_warehouse_env_var():
+    """THE CONSUMER END. dbt resolves its warehouse from profiles.yml, not from the shell, so
+    only an `env_var()` here can move CI off COMPUTE_WH."""
+    outputs = yaml.safe_load(DBT_PROFILES.read_text())["baseball_betting_and_fantasy"]["outputs"]
+    ci_wh = outputs["ci"]["warehouse"]
+    assert _CI_WH_ENV in ci_wh, (
+        f"the `ci` dbt target must resolve its warehouse from {_CI_WH_ENV} — a workflow env var "
+        f"alone is inert, because dbt reads profiles.yml. Found: {ci_wh!r}"
+    )
+    assert "COMPUTE_WH" in ci_wh, (
+        "the env_var() must default to COMPUTE_WH so the change is a no-op until the warehouse "
+        "exists (no red-CI window)."
+    )
 
-    Measured 2026-08-10: the `CI on the prod WH` family is the largest single wait bucket on the
-    census board, and on the #720 promotion day its 39 waits were the ENTIRE apparent eb_*
-    "regression" — a session nearly read them as a serving defect. Pin the indirection so a future
-    sweep over `secrets.SNOWFLAKE_WAREHOUSE` cannot quietly put CI back on COMPUTE_WH.
 
-    The `||` fallback is what makes this safe to ship before the warehouse exists: an unset GitHub
-    secret is the empty string (falsy), so CI keeps today's behaviour until the operator creates
-    the warehouse and sets `SNOWFLAKE_CI_WAREHOUSE`.
-    """
-    assert DBT_CI_WORKFLOW.exists(), "dbt_build_ci.yml is missing."
+def test_only_the_ci_target_is_env_driven():
+    """BLAST-RADIUS. A stray SNOWFLAKE_CI_WAREHOUSE must never be able to steer the production
+    daily build or the dev target onto another warehouse."""
+    outputs = yaml.safe_load(DBT_PROFILES.read_text())["baseball_betting_and_fantasy"]["outputs"]
+    checked = 0
+    for name, cfg in outputs.items():
+        if name == "ci" or "warehouse" not in cfg:
+            continue
+        checked += 1
+        assert "env_var" not in str(cfg["warehouse"]), (
+            f"target {name!r} must keep a hardcoded warehouse; only `ci` is env-driven."
+        )
+    assert checked >= 2, "expected at least the default and `dev` targets to check — guard is vacuous."
+
+
+def test_the_ci_job_supplies_that_env_var_and_never_empty():
+    """THE SUPPLY END, plus the unset-vs-empty trap: an unset GitHub secret interpolates to an
+    EMPTY STRING, and dbt's env_var() returns its default only for an UNSET var — an empty one
+    is passed through verbatim as `warehouse: ""`. So the workflow needs its own `||` fallback.
+    (Same class as the delta-rs empty-AKID landmine.)"""
     src = DBT_CI_WORKFLOW.read_text()
-    # Strip comments — prose naming the secret must not be able to satisfy this (INC-38).
-    # ⚠️ BOTH forms, and the trailing one is the one that bites: a whole-line strip alone left
-    #   `SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}  # use SNOWFLAKE_CI_WAREHOUSE`
-    # passing — measured, in this guard's own RED-proof. YAML starts a comment at a ` #` that is
-    # not inside the value; no expression here contains a literal '#'.
+    # Strip BOTH comment forms — prose naming the var must not satisfy this (INC-38). The
+    # trailing form is the one that bites: a whole-line strip alone left a trailing
+    # `# use SNOWFLAKE_CI_WAREHOUSE` passing, measured in this guard's own RED-proof.
     code = "\n".join(
         ln.split(" #", 1)[0] for ln in src.splitlines() if not ln.lstrip().startswith("#")
     )
-
-    assignments = re.findall(r"^\s*SNOWFLAKE_WAREHOUSE:\s*(.+)$", code, re.MULTILINE)
-    assert assignments, "no SNOWFLAKE_WAREHOUSE assignment found in dbt_build_ci.yml."
+    assignments = re.findall(rf"^\s*{_CI_WH_ENV}:\s*(.+)$", code, re.MULTILINE)
+    assert assignments, (
+        f"the dbt-build-ci job must export {_CI_WH_ENV} — without it the profiles.yml env_var() "
+        "falls back to COMPUTE_WH and the repoint silently never happens."
+    )
     for value in assignments:
-        assert "SNOWFLAKE_CI_WAREHOUSE" in value, (
-            "every dbt-CI job must resolve SNOWFLAKE_WAREHOUSE through SNOWFLAKE_CI_WAREHOUSE "
-            f"first (with a fallback), not straight from the production secret. Found: {value!r}"
+        assert "||" in value, (
+            f"{_CI_WH_ENV} must carry a `||` fallback so it is never the empty string. Found: {value!r}"
         )
         assert "MONITOR_WH" not in value, (
-            "⛔ dbt CI must NOT share MONITOR_WH — that is the wake census's own read path, so "
-            "CI would become a line in the instrument that measures CI (target 3's "
-            "self-inflicted-wake defect)."
+            "⛔ CI must NOT share MONITOR_WH — that is the wake census's own read path, so CI "
+            "would become a line in the instrument that measures CI (target 3's defect)."
         )

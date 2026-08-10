@@ -2908,10 +2908,16 @@ the *entire* apparent eb_* regression this session opened by chasing. Across the
 `CI on the prod WH` family reads **130/4 · 14/1 · 64/14 · 207/23 · 76/39** — the largest single
 wait bucket on the board.
 
-`.github/workflows/dbt_build_ci.yml` (both jobs) now resolves:
+⚠️ **The first cut of this was a NO-OP — see the correction at the end of this doc.** What
+actually ships is a change in **two places**, because dbt reads its warehouse from
+`profiles.yml`, not from the shell:
 
 ```yaml
-SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_CI_WAREHOUSE || secrets.SNOWFLAKE_WAREHOUSE }}
+# dbt/profiles.yml — the `ci` target (the only one changed)
+warehouse: "{{ env_var('SNOWFLAKE_CI_WAREHOUSE', 'COMPUTE_WH') }}"
+
+# .github/workflows/dbt_build_ci.yml — the dbt-build-ci job (the one that runs `--target ci`)
+SNOWFLAKE_CI_WAREHOUSE: ${{ secrets.SNOWFLAKE_CI_WAREHOUSE || 'COMPUTE_WH' }}
 ```
 
 ⭐ **The `||` fallback is the point: this is SAFE TO MERGE BEFORE THE WAREHOUSE EXISTS.** An unset
@@ -3125,3 +3131,85 @@ fails *silently* inside the Lambda).
 
 **#682 → #693** (already sequenced) **→ `CI_WH` DDL** (cheapest, 21.4%, zero serving risk) **→
 target 4** (now unblocked) **→ target 5** (the freshness-gate finding above) **→ target 7**.
+
+
+---
+
+# 🪤 CORRECTION — THE FIRST CI_WH CUT WAS A DECLARATION WITH NO CONSUMER (2026-08-10, same session)
+
+Recorded because the defect is this repo's most-repeated shape and it was committed, CI-green and
+guarded before being caught.
+
+**What shipped first:** `.github/workflows/dbt_build_ci.yml` set
+`SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_CI_WAREHOUSE || secrets.SNOWFLAKE_WAREHOUSE }}` in both
+jobs. **dbt never reads that variable.** `dbt/profiles.yml` hardcoded `warehouse: COMPUTE_WH` in
+every target, so the change could not move a single query no matter what the secret said.
+
+⭐ **NF-C0e's "wired ≠ invoked", and the guard reproduced the same error one level up.** The test
+asserted the workflow *declared* the variable — i.e. it read the value back under the key the code
+wrote, which is the INC-38/NF-C0e vacuous shape. It was green, RED-proven on four breaks, and
+**proved nothing**, because every break it tested was on the declaring side. A guard on a
+declaration cannot detect that the declaration has no consumer.
+
+**What caught it:** answering the operator's plain question — *"where do we ensure the CI job uses
+that warehouse?"* — by going and reading `profiles.yml` instead of restating the diff. The check
+that would have caught it earlier is the mechanical one: **trace the variable to the process that
+reads it, before writing the guard.**
+
+**The corrected change, and why it is scoped this way:**
+
+* `dbt/profiles.yml` — **only** the `ci` target becomes `env_var('SNOWFLAKE_CI_WAREHOUSE',
+  'COMPUTE_WH')`. The default and `dev` targets stay hardcoded so a stray variable can never steer
+  the production daily build. A guard pins that asymmetry.
+* the workflow supplies the var on the **`dbt-build-ci` job only** — the one that passes
+  `--target ci`. ⚠️ **`dbt-compile` runs with NO `--target`, i.e. on the DEFAULT (production)
+  profile, and is therefore NOT covered by this change.** Worth knowing before reading the next
+  census: the `ci_betting` traffic (269 execs / 74 waits) moves; whatever `dbt-compile` costs does
+  not.
+* 🪤 **the `||` fallback in the workflow is load-bearing, not decorative.** An unset GitHub secret
+  interpolates to an **empty string**, and dbt's `env_var()` returns its default only for an
+  **UNSET** variable — an empty one is passed through verbatim, yielding `warehouse: ""`. Same
+  unset-vs-empty class as the delta-rs empty-AKID landmine. So the fallback has to live on the
+  supply side; the `profiles.yml` default alone would not save it.
+
+Guards: four clauses — consumer end, blast radius, supply end, and the empty-string trap — each
+RED-proven on its own break and **verified independent** (each break reddens only its own clause).
+
+## ⏭️ Operator, revised — the order that actually works
+
+1. **Create the warehouse + grant** (safe any time; a suspended warehouse costs nothing):
+   ```sql
+   CREATE WAREHOUSE IF NOT EXISTS CI_WH WITH WAREHOUSE_SIZE='XSMALL'
+     AUTO_SUSPEND=60 AUTO_RESUME=TRUE INITIALLY_SUSPENDED=TRUE;
+   GRANT USAGE ON WAREHOUSE CI_WH TO ROLE ACCOUNTADMIN;
+   ```
+   (CI runs as `DBT_RW` / role `ACCOUNTADMIN` — measured, not assumed. The grant is redundant for
+   ACCOUNTADMIN and is included to match MONITOR_WH's setup and survive a future role change.)
+   ⛔ **Do not reuse `COMPUTE_SMALL_WH`/`COMPUTE_MEDIUM_WH`** — both exist and are idle, but Small
+   is **2 credits/hr against X-Small's 1**, so CI would cost double what it does today.
+2. **Set the secret:** `gh secret set SNOWFLAKE_CI_WAREHOUSE --body CI_WH --repo charlesclark2/fantasy_baseball`
+3. ⚠️ **It takes effect only once the workflow file is on `main`.** `dbt Build CI` triggers on
+   `push`/`pull_request` to `main`, and a `push` run uses **main's** copy of the workflow. `main`
+   does not have it yet — so this lands with the next `dev→main` promotion, i.e. the #682 or #693
+   deploy. Setting the secret before then is harmless and inert.
+4. **Verify by measurement.** After that promotion, confirm the `ci_betting` statements moved:
+   ```sql
+   select warehouse_name, count(*) n
+   from snowflake.account_usage.query_history
+   where start_time >= dateadd(day,-2,current_timestamp()) and query_text ilike '%ci_betting%'
+   group by 1;
+   ```
+   ⭐ **And read the census correctly afterwards:** the `CI on the prod WH` family will show
+   **executions AND waits both → 0**, which this story's own rules say is the *dead-caller* shape.
+   Here it is a **MOVE, not a death** — the discriminator is that the GitHub Actions runs still
+   succeed and the same statements appear under `CI_WH`. Check both, exactly as #637's audit-INSERT
+   removal had to.
+
+## Honest framing — this is a STRUCTURAL prerequisite, not a credit lever
+
+It does not delete compute; it **relocates** it. Total credits move roughly sideways (possibly a
+hair worse — a cold `CI_WH` resume that previously rode an already-warm `COMPUTE_WH`). The value is
+that `COMPUTE_WH`'s quiet windows become genuinely quiet, which is the **precondition for target 7**
+(suspend/drop), and that CI stops contaminating every soak baseline read on a promotion day — which
+cost this session an hour of chasing a phantom eb_* regression. Do **not** book a credit saving for
+it; book it as removing 21.4% of the wakes standing between here and a suspendable warehouse.
