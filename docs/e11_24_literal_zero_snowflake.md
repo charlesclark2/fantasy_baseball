@@ -2396,3 +2396,574 @@ the INC-19 DROP+rebuild obligation on the repo's canonical victim, removes ~690 
 a 756/790-column serving table, and removes an INC-25-class ordering constraint. Land it as a free
 rider on the next flip that needs a soak anyway, and put the session budget on the EB reader
 repoint, which is where the measured wake actually is.
+
+---
+
+# TARGET-6 SOAK — T+3 CLOSE-OUT READ (2026-08-09/10) ✅ CLEAN
+
+Read from the LAPTOP on `MONITOR_WH` (`report_e11_24_wake_census.py --days 10 --warehouse COMPUTE_WH`
++ `check_w11_tail_coverage.py`). `best_alpha=0` — no bet rides on any of this.
+
+## GATE 0 — volume sanity (INC-37): PASSED, no slip
+
+Executions/day vs the 1,536–3,480 band. **No day in the window is an outage day**, so the SLIP RULE
+does not fire and every composition below is trustworthy.
+
+| | 08-03 | 08-04 | 08-05 | **08-06** ⬅ flip | 08-07 | 08-08 | 08-09 |
+|---|---|---|---|---|---|---|---|
+| executions | 1,536 | 1,793 | 3,480 | 2,184 | 1,712 | 3,172 | 3,163 |
+
+Pre-flip reference = 08-03/04/05 (07-29 and 07-31 are the contaminated baselines; 08-06 is the flip
+day itself and is excluded from both sides).
+
+## THE THREE AGREEING SIGNALS — all confirmed
+
+**(1) + (2) executions HOLD while waits → 0** (Table 4b, the per-day × family cut — the only cut a
+verdict may be quoted from):
+
+| family (execs/waits) | 08-03 | 08-04 | 08-05 | 08-06 | 08-07 | 08-08 | 08-09 |
+|---|---|---|---|---|---|---|---|
+| `6a umpire chain` | 34/12 | 41/14 | 71/20 | 46/**0** | 32/**0** | 62/**0** | 65/**0** |
+| `6 lineup/starter CTAS` | 29/6 | 43/6 | 87/8 | 47/**0** | 29/**0** | 75/**0** | 97/**0** |
+
+**(3) the objects ARE views** — read directly from `information_schema.tables` rather than inferred
+from DDL history, which is the stronger form of the same signal (a view that got reverted would show
+here and not there):
+
+| object | type | last_altered |
+|---|---|---|
+| `BETTING.STG_STATSAPI_UMPIRE_GAME_LOG` | **VIEW** | 2026-08-09 15:16 |
+| `BETTING_FEATURES.FEATURE_PREGAME_UMPIRE_FEATURES` | **VIEW** | 2026-08-09 15:16 |
+| `BETTING_FEATURES.FEATURE_PREGAME_STARTER_FEATURES` | **VIEW** | 2026-08-09 15:16 |
+| `BETTING_FEATURES.FEATURE_PREGAME_LINEUP_FEATURES` | **VIEW** | 2026-08-09 15:16 |
+
+(The `DEV_*` schema copies are stale June base tables — that is the `dev` dbt target, not prod.)
+
+## THE MAGNITUDE — and the honest net
+
+**Target 6's own two families: 22.0 → 0.0 provisioning waits/day** (mean of 18/20/28 pre vs 0/0/0
+post). That is the lever, and it is complete.
+
+⚠️ **A SECOND LEVER LANDED INSIDE THIS SOAK WINDOW.** PR #637 (the `lineup_monitor` audit INSERT →
+DynamoDB) merged to `main` at **2026-08-06 14:44 UTC** — the same day as target 6, not the 8/7 quiet
+window its own record anticipated. It is nonetheless **separately attributable**, because the census
+cuts per FAMILY:
+
+| family (execs/waits) | 08-03 | 08-04 | 08-05 | 08-07 | 08-08 | 08-09 |
+|---|---|---|---|---|---|---|
+| `lineup_monitor audit INSERT` | 4/4 | 9/9 | 10/10 | — | — | — |
+
+**7.7 → 0 waits/day.** Here executions AND waits both go to zero, which is normally the *dead-caller*
+shape — but for a DELETE-the-statement lever it is the intended one (the INSERT no longer exists).
+The dead-caller reading is ruled out by a control: the `6 lineup/starter CTAS` family, fired by the
+**same** `lineup_monitor_job` moments later, held its executions at 47/29/75/97 across those days.
+The monitor is still ticking; only its audit write is gone.
+
+**Account-wide, the two levers together:**
+
+| instrument | pre (08-03/04/05) | post (08-07/08/09) | Δ |
+|---|---|---|---|
+| provisioning waits/day | 53.3 | 45.0 | **−15.6%** |
+| … excluding the 00-07 overnight band¹ | 48.7 | 34.0 | **−30.2%** |
+| resumes/day | 34.0 | 30.3 | −11% |
+
+¹ the overnight band is CI + Snowsight + the API Lambda (#679), none of it pipeline work, and it is
+dev-activity-dependent — so the pipeline-band figure is the one that reflects these levers.
+
+⭐ **WHY 30 REMOVED WAITS ONLY BOUGHT ~8:** the `other` family rose from 16.3 to 32.7 waits/day
+(+16.4) across exactly the same boundary. **This is #679's wake-promotion thesis reproduced on an
+independent read** — the wake was not deleted, it was inherited by the next warehouse-occupying
+statement in the chain. Measured directly on the statement itself:
+
+| statement (execs/waits) | 08-02 | 08-03 | 08-04 | 08-05 | **08-06** | 08-07 | 08-08 | 08-09 |
+|---|---|---|---|---|---|---|---|---|
+| `merge … eb_{starter,batter}_posteriors*` | 38/**0** | 32/**0** | 44/**0** | 52/**0** | 48/**14** | 32/**9** | 44/**13** | 38/**10** |
+
+Six days at literally zero waits, then 9–14/day from the exact flip date with executions unchanged.
+**#675 is therefore sized at ~11.5 waits/day and is the single largest waker on the board** — this
+read confirms #679's upward resizing (11–13/day, not the older "9 tick-band waits") on fresh data.
+
+## Serving no-regression — CLEAN, and SF-free
+
+`check_prediction_coverage.py` on the three post-flip slates: **100% coverage, exit 0, and
+`feature_store=15 / intraday_assembly=0 / intraday_fallback=0` on every one** (mean
+`feature_coverage_score` 0.967 / 0.989 / 0.967). No degraded serving anywhere in the soak window.
+
+## W11 tail — OK, and the one BUILD_GAP is the documented cadence, not INC-37
+
+| slate | umpire | weather | public_betting |
+|---|---|---|---|
+| 08-06 | OK 11/11 | OK 11/11 | OK 11/11 |
+| 08-07 | OK 15/15 | OK 15/15 | OK 15/15 |
+| 08-08 | OK 15/15 | OK 15/15 | OK 15/15 |
+| 08-09 | BUILD_GAP 0/15 | BUILD_GAP 0/15 | OK 15/15 |
+
+⚠️ **Do not read 08-09 as an incident.** `ingest_weather` (s7, 12:50 UTC) and `ingest_umpires --date
+today` (s8/s17, 12:0x–16:39) both land **after** the ~12:40 UTC `lakehouse_w11_nightly_op` that
+consumes them, so those two blocks are only ever judged on the PRIOR slate — which is exactly why
+`check_w11_tail_coverage_op` judges them that way. The 08-09 slate is filled by the 08-10 build,
+which had not run at read time (04:34 UTC 08-10). The **discriminator that settles it**: 08-06/07/08
+all read 15/15 today, so nothing is persistently broken — a genuine INC-37 gap would still be 0/15
+on those. And `public_betting`, the one block validly judged same-day, is OK 15/15 on 08-09.
+
+## VERDICT — the target-6 soak is CLOSED and CLEAN
+
+Wake reduction held on all three signals; no serving regression; W11 tail healthy. **Phase 1 (#675 +
+#662) is unblocked.**
+
+## NOT VERIFIED — do not inherit these as settled
+
+* **Wake ↓ is not credit ↓.** Every figure here is a resume/wait COUNT. The bill only moves when the
+  warehouse actually stays suspended for long stretches (E11.20-COST). No credit figure is claimed.
+* **Active-minutes are still measured with the polluted instrument** (109/111/123 → 91/96/126). The
+  #679 `warehouse_size IS NOT NULL` correction was deliberately NOT retrofitted mid-soak to preserve
+  comparability with this soak's own T+0/T+1 readings. **That block is now lifted — apply it, and
+  re-check the weather-poller credit (167→141), before quoting any awake-time number again.**
+* **Wake promotion remains a strong inference, not a controlled experiment** (a clean test needs an
+  un-flip). Its support is unchanged and now doubly measured.
+* **No box run this session.** `ssm:SendCommand` is denied to `baseball-access-user`; every box-side
+  confirmation is an operator step.
+
+---
+
+# PHASE 1 — #675 + #662 PROMOTION PREP (2026-08-09/10)
+
+## The parity gate — CLEAN on four dates
+
+`parity_check_eb_reader_repoint.py --season 2026` on `MONITOR_WH` (soak-safe), with
+`LAKEHOUSE_DELTA_W1=cutover`:
+
+| structure | SF vs S3 | result |
+|---|---|---|
+| batter cold-start priors | 616 vs 616 | ✅ exact |
+| starter cold-start priors | 330 vs 330 | ✅ exact |
+| bullpen cold-start priors | 641 vs 641 | ✅ exact |
+| role map 08-06 / 08-07 | 110/110, 129/129 | ✅ exact |
+| role map 08-08 / 08-09 | 125/125, 27/27 | ✅ exact |
+
+**`only_in_sf` is EMPTY on every structure** — no player loses a cold-start seed. The gate was run on
+the story's two prescribed dates and then again on the two freshest slates, so the result does not
+rest on one lucky pair. Pre-flip baseline for the runtime gate: `EB_STARTER_POSTERIORS` and
+`EB_BATTER_POSTERIORS_RAW` are both `BASE TABLE` (transient), 48,919 / 485,444 rows.
+
+## #675's safety analysis re-derived independently (INC-27: grep the repo, not the DAG)
+
+Confirmed: the only `ref()`s are at `feature_pregame_lineup_features:598` and
+`feature_pregame_starter_features:599`, both **before** those models' `{% else %}` (L868 / L984) —
+i.e. inside the DuckDB branch, so the Snowflake target never resolves them. The `--s3` precondition
+is mechanically enforced, not merely documented: `W7A_LAKEHOUSE_S3` is in **both** `env.required`
+(deploy gate) and `monitor_health.REQUIRED_INTRADAY_FLAGS` (pinned `== "1"`, paged).
+
+**One addition #675 did not list — and it is a WRITER, not a reader.**
+`betting_ml/scripts/eb_priors/compute_starter_posteriors.py` and `compute_lineup_posteriors.py`
+`MERGE INTO baseball_data.betting.eb_{starter,batter}_posteriors*` — the exact objects being flipped.
+A `MERGE INTO` a view would fail. **They are safe: neither is referenced by any op, job, service,
+crontab or workflow** (grepped across `pipeline/`, `services/`, `scripts/`, `.github/`) — they are
+A2.11-superseded standalones. ⚠️ Recorded because a *hand-run* of either after the flip will now
+fail, and the failure would look mysterious. Reader-side analysis is about consumption spanning the
+accumulated history; **the writer side needs its own sweep, and "no reader blocks it" does not
+imply "no writer does."**
+
+## ⚠️ A FALSE PREMISE IN #675, CORRECTED — the "documented ≠ actually set" class, in a comment
+
+`eb_starter_posteriors.sql` claimed `predict_today`'s `_FRESHNESS_QUERY` was *"already DEAD in prod
+(`W8B_FRESHNESS_S3=1` routes the probe to `_FRESHNESS_QUERY_S3`) and survives only as a rollback."*
+
+**It is not dead.** Measured on `MONITOR_WH`: that exact query shape executed on `COMPUTE_WH` on
+**08-02, 08-05, 08-08 and 08-09** (1×/day, 0 waits). `W8B_FRESHNESS_S3` is absent from
+`env.required` and `.env.example` documents it as `0`, so nothing forces it on and the observed
+traffic says it is off. This is `W7B_LAKEHOUSE_S3`'s lesson recurring inside a *code comment*, where
+it is more dangerous than in a doc: a future session reading it would conclude the last SF reader is
+gone and take `enabled=false`.
+
+**The flip is safe regardless, and for a reason that does not depend on the flag** — which is the
+part worth carrying forward. The probe is date-scoped AND **ghost-immune**: its probe side is
+*today's current probables*, and a ghost row by construction belongs to a **superseded** probable
+that is no longer in that set, so a ghost can never satisfy the LEFT JOIN. `starter_missing` is
+identical against the table and against the view. Reasoning corrected; no code change needed.
+
+## The #662 ↔ #675 guard collision — resolved, and deliberately not the tempting way
+
+The two PRs have **zero file overlap**, so git merges them cleanly and *then* the suite goes red.
+Reproduced live here: stacking #675 on #662 turned
+`test_the_reader_gated_writers_were_not_flipped_along_with_them` RED for both EB models — the guard
+doing precisely its job (it exists to stop a sweep-in, and its own docstring names #675 as the
+sanctioned way out).
+
+**Deleted the `NOT_FLIPPABLE` dict AND its `@parametrize` consumer.** Emptying the dict was the
+tempting edit and is the wrong one: `@parametrize` over an empty mapping collects zero cases. That is
+not a hypothetical — measured during the red-proof, an emptied registry makes the file report
+**"1 passed, 3 skipped"**, i.e. three guards silently stop asserting and nothing looks wrong.
+
+⭐ **Hardening added for that exact reason:** `test_the_model_registry_is_not_empty` asserts
+`EXT_COPY_VIEW_MODELS` is non-empty, so the vacuous edit cannot be made silently by the next session
+(#690's "a guard that iterates matches must assert non-vacuity"). RED-proven both ways, with the
+mutation asserted to land before the run (#682's false-RED-proof lesson).
+
+## Gates
+
+* Parity: **CLEAN**, 4 dates, zero `only_in_sf`.
+* Targeted local suites: **28 passed** (`test_e11_24_eb_reader_repoint.py` 20 +
+  `test_e11_24_pregame_features_are_views.py` 8).
+* RED-proofs: emptied registry → red on the new clause; `eb_starter_posteriors` reverted to
+  `incremental`+`merge` → red on exactly 2 clauses (narrow, not wide).
+* CI: **#662 13/13 green · #675 13/13 green**, both brought current with `dev` (no conflicts on any
+  code file; the one `story_prompts.md` conflict was a doc-record block `dev` already supersedes).
+* ⛔ `dbt build --select state:modified+` NOT run — its CI target is `COMPUTE_WH` and it would
+  contaminate the census. ⛔ `check_served_prediction_integrity.py` NOT run, same reason.
+
+---
+
+# PHASES 2 & 3 — SEQUENCING CORRECTED (#682 BEFORE #693)
+
+The story's working assumption was *#693 then #682, each in its own window*. **Verified against the
+PRs themselves, that order is inverted.** Two measured facts:
+
+1. **#693 is STACKED ON #682** — `e11.24-target-3` is a git ancestor of `e11.24-posterior`
+   (confirmed with `git merge-base --is-ancestor`). #693's branch already contains #682's three
+   repointed scripts and its guard suite; #693's own body says *"Merge #682 first and this PR's diff
+   collapses to the 6 files below."*
+2. **The dependency runs #682 → #693, not the reverse.** #682 leaves the
+   `player_sequential_posteriors` freshness entry on `snowflake` — it is one of its three measured
+   *blockers*, because that mirror is exported at lk9 while its writer runs ~40 min later (INC-25).
+   #693 is the ordering fix **and** the entry flip, which must ship together (guard-pinned). So #682
+   alone is safe, and #693-before-#682 would be flipping an entry whose blocker is still in place.
+
+**Classification (the story asked for this rather than an assumption):**
+
+| PR | what it is | gate |
+|---|---|---|
+| **#682** | read-only MONITOR code — no serving artifact, no dbt model, no flag, no env var | **no soak.** But `check_prediction_coverage` is HALT-tier and unconditional ⇒ 🟥 runtime gate (a real box run) |
+| **#693** | a pipeline GRAPH change (adds a fan-out leaf op to two jobs) + the freshness-entry flip | **own window + real-run gate.** Serving-adjacent: it makes the mirror fresh, which moves the served EB as-of prior from 2 days stale to 1 (its own record's side finding). Not a materialization flip, so not a full soak |
+
+## Phase 3's explicit gate — do the repointed guards false-alarm on the S3 read? **No.**
+
+Run from #693's worktree (the repoint is unconditional — no flag — so that checkout *is* the S3
+path), SF-free, on three real slates:
+
+* `check_odds_coverage` — 08-07/08/09 all `[OK]`, `odds_coverage_score=1.0000`, `freeze=0`. It also
+  demonstrates **FINDING 1's fix working**: the window's LAST day is present and correctly
+  classified (08-11 reads `NO_ODDS_YET`, not silently absent) — the un-cast VARCHAR compare would
+  have dropped it.
+* `check_prediction_coverage` (HALT-tier) — 08-07/08/09 all **100%, exit 0**, `feature_store=15`,
+  `intraday_fallback=0`.
+* `check_data_freshness` — **not run live**: it still opens Snowflake lazily for its 5 blocked
+  entries, which would resume `COMPUTE_WH` and dirty the day that will serve as #675's soak baseline.
+  Its verdict parity was already measured by #682's own session on `MONITOR_WH`.
+
+**No false alarm on either fully-repointed guard.** The discrimination that keeps them from crying
+wolf (`NO_ODDS_YET` vs `FREEZE`) is intact.
+
+⚠️ **Carry #682's own measurement-interaction warning into the next census:** post-#682,
+`check_data_freshness`'s first SF statement becomes `MAX(… player_sequential_posteriors)`, which the
+census buckets as `4 player posteriors`. That family will rise ~2/day while `other` falls ~4.5.
+**Reading that as "target 4 regressed" would be wrong** — it is the #679 queue again, one family
+over.
+
+---
+
+# 🚨 DEPLOY LANDMINE — A STANDING `dev→main` PR CAN SHIP AN EARLIER `dev`, AND EVERY STATUS SIGNAL STAYS GREEN (2026-08-10)
+
+Recorded because it happened during this promotion and cost a real deploy cycle.
+
+The repo keeps a **standing `dev→main` PR open** (it is literally titled "Dev" and is recreated as
+soon as `dev` moves ahead). On 2026-08-10 the open one was **#718**. It merged at **05:25:02Z** —
+carrying the `dev` that existed *at that moment*, which did **NOT** include #662/#675. The
+`Orchestration CD` run for it went **`completed/success`**.
+
+**So every signal a human normally reads said the deploy worked:**
+
+| signal | what it said | what was true |
+|---|---|---|
+| PR merged | ✅ merged | ✅ merged — but the *wrong* `dev` |
+| `Orchestration CD` | ✅ `completed/success` | ✅ genuinely succeeded — it deployed the previous content |
+| `gh pr view 718 --json mergeable` | `UNKNOWN/UNKNOWN` | reads UNKNOWN because it is **closed**, not because it is stuck |
+
+⭐ **The `UNKNOWN/UNKNOWN` is the tell, and it is easy to misread as GitHub being slow.** GitHub
+returns `UNKNOWN` for a *merged/closed* PR exactly as it does for a not-yet-computed open one. A
+retry loop — the correct fix for the lazy-computation case — **spins forever** here and looks like a
+GitHub outage. **Check `state` alongside `mergeable`; `MERGED` explains the `UNKNOWN` instantly.**
+
+## THE RULE
+
+⛔ **Never conclude a promotion shipped your change from the PR's merge status or a green CD run.**
+Both are true of a promotion that shipped *someone else's* commit. **Verify the CONTENT on `main`:**
+
+```bash
+git fetch origin
+git show origin/main:<the file your change edits> | grep -c "<the thing you changed>"
+git rev-list --count origin/main..origin/dev      # must be 0 when the promotion is complete
+```
+
+On #718 the first command printed **0** and the second **8**. On the correct promotion (#720,
+merged 05:56:34Z, sha `e348d63e`) they print **1** and **0**. That one grep is the whole difference
+between "deployed" and "deployed nothing", and nothing else in the pipeline reports it.
+
+This is the program's **"verify the published artifact, not the build log"** rule (NF-C0e) applied
+to a *deploy* rather than to a data artifact — and the same shape as the `W7B_LAKEHOUSE_S3`
+documented-but-never-set class: **a state everyone believed, that nobody had read.**
+
+## Sibling: check for an in-flight CD before promoting again
+
+#718's CD had to be `completed` before #720 could be merged safely — two concurrent `deploy.sh` is
+**INC-36**, which took the Dagster daemon down for ~10 minutes. Always:
+
+```bash
+gh run list --repo charlesclark2/fantasy_baseball --workflow "Orchestration CD" --limit 3 \
+  --json status,conclusion,createdAt,headSha \
+  --jq '.[]|"\(.createdAt) \(.status)/\(.conclusion // "-") sha=\(.headSha[0:8])"'
+```
+
+Every row must be `completed` before merging a promotion PR.
+
+---
+
+# PHASE 1 — STEP A: THE #675/#662 FLIP RUNTIME GATE ✅ PASS (2026-08-10, 17:20–18:10 CDT)
+
+Read from the LAPTOP. Snowflake reads on `MONITOR_WH`; the serving checks are SF-free.
+`best_alpha=0` — no bet rides on any of this.
+
+## A1 — all four objects read VIEW ✅
+
+`baseball_data.information_schema.tables`, the same instrument the target-6 close used (stronger
+than inferring from DDL history — a reverted view shows here and not there). Pre-flip baseline was
+`BASE TABLE` on all four (2026-08-09 15:16).
+
+| object | type |
+|---|---|
+| `BETTING.EB_BATTER_POSTERIORS_RAW` | **VIEW** |
+| `BETTING.EB_STARTER_POSTERIORS` | **VIEW** |
+| `BETTING_FEATURES.FEATURE_PREGAME_GAME_FEATURES` | **VIEW** |
+| `BETTING_FEATURES.FEATURE_PREGAME_GAME_FEATURES_RAW` | **VIEW** |
+
+## ⭐ A1b — THE FLIP IS DATED 2026-08-10, AND `last_altered` COULD NOT HAVE TOLD US
+
+`last_altered` is refreshed by **every** `create or replace view`, so post-flip it reports the most
+recent intraday rebuild (here 22:19 UTC), not the transition. The transition is only visible in the
+STATEMENT history, and there it is unambiguous — the `merge` **stops existing**:
+
+| statement (execs/waits) | 08-02 | 08-03 | 08-04 | 08-05 | 08-06 | 08-07 | 08-08 | 08-09 | **08-10** |
+|---|---|---|---|---|---|---|---|---|---|
+| `merge into … eb_starter_posteriors` | 9/0 | 8/0 | 11/0 | 13/0 | 12/7 | 8/4 | 10/5 | 10/6 | **· gone** |
+| `merge into … eb_batter_posteriors*` | 9/0 | 8/0 | 11/0 | 13/0 | 12/7 | 8/5 | 10/6 | 10/6 | **· gone** |
+| `create or replace view … eb_*` | 20/0 | 16/0 | 22/0 | 26/0 | 50/0 | 32/0 | 40/0 | 44/0 | 30/**0** |
+
+Combined merge waits **14 / 9 / 11 / 12 per day (08-06→08-09) → 0**, which reproduces the ~11.5/day
+sizing the target-6 close-out derived independently. The production transition is legible to the
+minute: at UTC hour 10, `drop table if exists "BASEBALL_DATA"."BETTING"."EB_STARTER_POSTERIORS"
+cascade` followed by `create or replace view …`. **Every production eb_* statement on 08-10 waited
+zero.**
+
+⭐ **This is a DELETE-the-statement lever, so it is judged on PRESENCE, not volume** — the same
+shape as #637's audit INSERT, and the reason T+0 can carry a mechanism verdict on a day whose
+volume gate fails (below). A merge either exists in the history or it does not; a small slate
+cannot fake its absence.
+
+## ⚠️ A1c — THE 39 WAITS THAT LOOK LIKE A REGRESSION ARE THE #720 dbt-BUILD CI
+
+A first cut showed eb_*-touching waits jumping 0 → **39** on 08-10 and read as a serving
+regression. It is not. Decomposed by user × UTC hour × schema:
+
+| UTC hr | user | type | n | waits | what |
+|---|---|---|---|---|---|
+| **05** | `DBT_RW` | SELECT | 42 | **39** | `…count(*) as failures…` against **`baseball_data.ci_betting.eb_starter_posteriors`** |
+| 10 | `DBT_RW` | DROP + CREATE_VIEW | 6 | 0 | **the production flip** |
+| 12, 13, 19, 20, 21 | `DBT_RW` | CREATE_VIEW | 24 | 0 | intraday rebuilds, now metadata-only |
+
+All 39 are `dbt test` failure-count queries in the **`ci_betting`** schema at 05:xx UTC — the
+dbt-Build CI fired by the #720 `dev→main` promotion (merged 05:56Z). They are separable on two
+independent axes at once (a different SCHEMA and a different HOUR BAND from production), and the
+census's own family classifier already buckets them as `CI on the prod WH` (76/39 on 08-10).
+**Production waits are zero.** ⏭️ This is the standing argument for the `CI_WH` backlog item: CI is
+now the largest single wait bucket on the board (`CI on the prod WH`: 130/4, 14/1, 64/14, 207/23,
+76/39 across the window).
+
+🪤 **The decomposition query that found it initially returned ZERO ROWS** because it filtered
+`start_time >= '2026-08-10'` — `start_time` is `TIMESTAMP_LTZ`, so the string boundary prunes in
+the SESSION tz and cut everything before **07:00 UTC**, i.e. precisely the 05:xx band where all 39
+waits live. This is the documented LTZ boundary-day landmine, and note the failure DIRECTION: it
+did not produce a wrong number, it produced an **empty result that reads as "nothing to see"**.
+Anchor on `dateadd`/`convert_timezone`, never a date string.
+
+## A2 — serving intact ✅ (SF-free)
+
+* `check_prediction_coverage.py --date 2026-08-10` → **10/10 = 100%, exit 0**,
+  `feature_store=10 / intraday_assembly=0 / intraday_fallback=0`, mean
+  `feature_coverage_score` **0.9165** (min 0.833).
+* `check_intraday_fallback.py --date 2026-08-10` → **morning 10/10** and **post_lineup 5/5** both
+  100% `feature_store`, 0 fallback, 0 chronic. (Used as the laptop-visible proxy for A3's
+  "post_lineup rows exist"; the Dagit op-status half stays an operator step — `ssm:*` is denied to
+  `baseball-access-user`.)
+* `check_w11_tail_coverage.py --date 2026-08-09` → **umpire 15/15 OK, weather 15/15 OK,
+  public_betting 15/15 OK**, `w11_tail_problem_count=0`. This also retires the target-6 close-out's
+  open item — 08-09 read `BUILD_GAP 0/15` there purely because the 08-10 nightly had not yet run,
+  and it healed exactly as predicted.
+
+## STEP B, T+0 — recorded, and deliberately NOT quoted for magnitude
+
+**GATE 0 FAILS on 08-10: 1,259 executions against the 1,536–3,480 band.** Two sufficient reasons,
+neither of them a defect: `account_usage` high-water at read time was 21:21 UTC (~2.6 h of the UTC
+day missing), and the slate is 10 games. Per the slip rule, **no composition figure from 08-10 is
+trustworthy** — magnitude is judged at T+1 (08-11) and T+3 (08-13).
+
+What T+0 *does* establish, because it is structural rather than volumetric: **the merge statements
+no longer exist**, and production eb_* waits are 0. Whole-day bands for the record —
+00-07 **40** (of which the CI 39), 08-13 **16**, 14-23 **9**; the target-6 families stayed dead
+(`6a umpire chain` 29/**0**, `6 lineup/starter CTAS` 25/**0**).
+
+### The predicted wake-promotion has not appeared yet — do not book that either
+
+| family (execs/waits) | 08-06 | 08-07 | 08-08 | 08-09 | 08-10 |
+|---|---|---|---|---|---|
+| `merge eb_*` (REMOVED) | 24/14 | 16/9 | 20/11 | 20/12 | **· gone** |
+| `feature_pregame_team_features` | 6/2 | 6/2 | 21/2 | 21/2 | 6/2 |
+| `feature_pregame_lineup_state` | 67/1 | 45/5 | 54/7 | 60/8 | 44/4 |
+| `feature_pregame_game_features` | 292/4 | 194/0 | 267/4 | 276/2 | 63/0 |
+
+Every successor is flat or DOWN. That is **not** evidence against #679's promotion thesis — the
+day is partial and the slate small, which biases exactly this way. Re-read at T+1/T+3 before
+concluding anything; the prompt's prediction (~2/day inherited by `feature_pregame_team_features`,
+then the `feature_pregame_lineup_state` SCD-2 UPDATE) remains the null to beat.
+
+---
+
+# 🔧 THE #679 AWAKE-TIME CORRECTION, APPLIED — AND IT OVERTURNS THE WEATHER-POLLER CREDIT
+
+The target-6 close-out deferred this ("that block is now lifted — apply it, and re-check the
+weather-poller credit (167→141), before quoting any awake-time number again"). Done.
+
+`scripts/report_e11_24_wake_census.py` Table 2 now counts only minutes containing a
+**warehouse-occupying** statement (`warehouse_size is not null`), and reports the legacy figure
+beside it as `ACTIVE_MIN_RAW` so this soak's own earlier readings stay comparable.
+
+| UTC day | ACTIVE_MIN (billable) | ACTIVE_MIN_RAW (legacy) | inflation |
+|---|---|---|---|
+| 07-27 | 145 | 219 | +51% |
+| **07-28** (lever-2 pre) | **107** | 167 | +56% |
+| **07-30** (lever-2 post) | **119** | 141 | +18% |
+| 08-05 | 88 | 123 | +40% |
+| **08-06** (target-6 flip day) | **69** | **164** | **+138%** |
+| 08-09 | 73 | 126 | +73% |
+
+08-06 is the mechanism in one row: the target-6 flip day is wall-to-wall `create or replace view`,
+every one of which is metadata-only, so the legacy instrument reported 164 awake minutes on a day
+that billed 69.
+
+## ⛔ RETRACTED: "the weather lever cut awake-time 167 → 141, −16%"
+
+On the billable cut that comparison is **107 → 119, i.e. +11%**. The −16% was an artifact of
+cloud-services statements, and the day-total delta was never lever 2's to claim.
+
+**But lever 2 is not refuted — it is re-sized, and the sub-finding is the useful part.** Cut to the
+shape itself (`ref_venues`, the slate/venue read):
+
+| | 07-26 | 07-27 | 07-28 | 07-29 | 07-30 | 07-31 | … | 08-10 |
+|---|---|---|---|---|---|---|---|---|
+| **cloud-services** (n / mins) | 93/18 | 101/18 | 90/17 | 72/14 | **·** | **·** | · | **·** |
+| **occupies warehouse** (n / mins / waits) | 25/13/**7** | 9/5/**1** | 15/8/**5** | 9/5/**2** | 7/2/**0** | 2/1/**0** | | 2/1/**0** |
+
+So the poller's true, billable contribution was **~5–13 awake-minutes and 1–7 provisioning waits a
+day**, and lever 2 took both to **1–2 minutes and 0 waits**. Real, attributable, and roughly an
+order of magnitude smaller than the retracted headline.
+
+⭐ **THE GENERALISABLE FINDING, and it sharpens #679 rather than repeating it: a repeated identical
+POLL is largely RESULT-CACHE-SERVED, and a cached query has `warehouse_size IS NULL` too.** ~85% of
+this poller's executions never touched the warehouse — it asked the same question every hour and
+Snowflake answered from cache. ⇒ **the poller class the raw awake-minute instrument was invented to
+detect is precisely the class it most over-measures**, and a day-total awake-minute delta therefore
+*cannot* credit a poller lever. Cut to the shape. (Sibling of the E11.24 rule that a gate is judged
+on FIRES and a poller on ACTIVE-MINUTES — one level finer: on a poller's **billable** minutes.)
+
+## Guards
+
+`betting_ml/tests/test_e11_24_wake_census_perday.py` gains two clauses that point in **opposite**
+directions, so each has its own isolating fixture (NF-D17 — a fixture that trips more than one
+clause proves none of them):
+
+* Table 2 **must** carry `warehouse_size is not null`;
+* Tables 3 / 4 / 4b **must not** — a provisioning wait already implies the statement occupied the
+  warehouse, so the filter is redundant there and a careless sweep applying it everywhere would
+  silently drop true wakers.
+
+RED-proven with the mutation asserted to land first (#682), and **proven independent**: breaking
+either clause reddens only its own test. 7 passed on clean source.
+
+🪤 **The first cut of the Table-2 guard was VACUOUS and the RED-proof reported it as a PASS.** It
+anchored on the bare title `"2. ACTIVE MINUTES"`, which appears in the module DOCSTRING before it
+appears at the SQL call site, so `str.find` returned the prose — a block the guard can never be
+satisfied by. It was red on its deliberate break (which looked like success) *and* red on clean
+source, and only the **independence** cross-check exposed it. Cure: `_sql_block()` anchors on the
+`run(cur, f"…` / `run_pivot(cur, f"…` CALL SITE. This is INC-38's prose-cannot-satisfy trap and
+#682's false-RED-proof lesson arriving together — **the discriminator is running the guard on CLEAN
+source, which a red-proof harness by construction never does.**
+
+---
+
+# ⏭️ BACKLOG LANDED — dbt CI OFF THE PRODUCTION WAREHOUSE (code shipped, DDL pending)
+
+**Why it graduated from "nice to have" to load-bearing:** `dbt Build CI` triggers on push/PR to
+`main` whenever `dbt/**` changes — i.e. on **exactly the promotion days E11.24 reads its soak
+baselines from**. On 2026-08-10 that produced 39 provisioning waits on `COMPUTE_WH` and they were
+the *entire* apparent eb_* regression this session opened by chasing. Across the census window the
+`CI on the prod WH` family reads **130/4 · 14/1 · 64/14 · 207/23 · 76/39** — the largest single
+wait bucket on the board.
+
+`.github/workflows/dbt_build_ci.yml` (both jobs) now resolves:
+
+```yaml
+SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_CI_WAREHOUSE || secrets.SNOWFLAKE_WAREHOUSE }}
+```
+
+⭐ **The `||` fallback is the point: this is SAFE TO MERGE BEFORE THE WAREHOUSE EXISTS.** An unset
+GitHub secret is the empty string, which is falsy, so with `SNOWFLAKE_CI_WAREHOUSE` absent CI keeps
+today's behaviour exactly. The operator then creates the warehouse and sets the secret with **no
+code change and no red-CI window** — which removes the ordering hazard that would otherwise make
+this a two-step change where step one turns every dbt-Build job red.
+
+⛔ **NOT `MONITOR_WH`** — that is the census's own read path; sharing it would make CI a line in the
+instrument that measures CI (target 3's self-inflicted-wake defect, in a new costume).
+
+**Operator DDL (once, ACCOUNTADMIN) + the secret:**
+
+```sql
+CREATE WAREHOUSE IF NOT EXISTS CI_WH WITH WAREHOUSE_SIZE='XSMALL'
+  AUTO_SUSPEND=60 AUTO_RESUME=TRUE INITIALLY_SUSPENDED=TRUE;
+GRANT USAGE ON WAREHOUSE CI_WH TO ROLE <the role behind secrets.SNOWFLAKE_ROLE>;
+```
+then `gh secret set SNOWFLAKE_CI_WAREHOUSE --body CI_WH --repo charlesclark2/fantasy_baseball`.
+
+Guard: `test_ci_path_filter_semantics.py::test_dbt_ci_prefers_a_dedicated_warehouse_over_the_production_one`
+— RED-proven on four breaks (revert to the prod secret · point CI at `MONITOR_WH` · and **both**
+comment forms, because prose must not satisfy it).
+
+🪤 **The trailing-comment form was a genuine hole and only the RED-proof found it.** The guard
+stripped whole-line `#` comments but not trailing ones, so
+`SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}  # use SNOWFLAKE_CI_WAREHOUSE` **passed** —
+the exact INC-38 prose-cannot-satisfy defect, inside the strip written to prevent it. **A
+comment-stripping guard must handle BOTH comment forms; testing only the whole-line form proves
+only the whole-line form.**
+
+## ✅ The one residual risk of a view flip, measured: reads did NOT get more expensive
+
+#679's own caveat is that *"a view RE-EVALUATES on read — measure ACTIVE-MINUTES after the flip,
+not just resumes; a full-history scan by a non-filtering reader could climb."* STEP B's wait-based
+gates structurally cannot see that, so it needs its own instrument. Warehouse-occupying `SELECT`s
+touching `feature_pregame_game_features*`:
+
+| UTC day | n | avg s | **max s** | avg MB scanned | total s |
+|---|---|---|---|---|---|
+| 08-05 | 27 | 2.29 | 24.86 | 1.0 | 61.7 |
+| 08-08 | 27 | 1.90 | 19.46 | 1.0 | 51.2 |
+| 08-09 (last pre-flip) | 28 | 1.07 | **20.09** | 4.7 | 29.9 |
+| **08-10 (post-flip)** | 25 | **0.90** | **1.41** | **0.0** | 22.5 |
+
+Reads got **cheaper, not dearer** — the ~20 s tail vanished and bytes scanned went to ~0, which is
+what #675 repointing the readers to S3 predicts (what is left on the Snowflake side is small
+metadata/probe traffic). ⚠️ Elapsed-seconds is still the WRONG instrument for a COST claim
+(E11.20-COST) — it is used here to answer a different question, "did a read get more expensive",
+which is exactly what it *is* right for. No cost credit is claimed from this table.
+
+*(Cross-check that the instrument is sane: 08-03 reads as avg 1070 s / max 2404 s, which reproduces
+the independently-recorded 8/3 provisioning-stall outlier — "11 of 33 over 600 s, max 2402.8 s" —
+to the second. The instrument agrees with a fact recorded from a different query months of context
+earlier.)*

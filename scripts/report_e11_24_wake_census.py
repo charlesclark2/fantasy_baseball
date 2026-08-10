@@ -21,10 +21,20 @@ So every table here is cut by band.
 📐 THREE INSTRUMENTS, and the reason each is here (E11.20-COST + the 7/31 re-census):
   1. RESUMES        — `warehouse_events_history`. The bursty-lever signal. 6a is bursty ⇒
                       expect it HERE.
-  2. ACTIVE MINUTES — distinct minutes containing ≥1 query. The 24/7-POLLER signal: a lever
-                      that deletes an evenly-spread poller (weather) deletes awake-TIME while
-                      resumes stay flat. Report both or you under-credit exactly the levers
-                      this story is built on.
+  2. ACTIVE MINUTES — distinct minutes containing ≥1 **warehouse-occupying** query. The
+                      24/7-POLLER signal: a lever that deletes an evenly-spread poller
+                      (weather) deletes awake-TIME while resumes stay flat. Report both or
+                      you under-credit exactly the levers this story is built on.
+     ⭐ `warehouse_size IS NOT NULL` IS REQUIRED (#679, applied 2026-08-10). A statement
+     billed to CLOUD SERVICES can neither RESUME the warehouse nor KEEP it awake — `SHOW`,
+     `ALTER SESSION`, `ALTER EXTERNAL TABLE … REFRESH`, `CALL SYSTEM$…`, and **every
+     `CREATE OR REPLACE VIEW`** — yet unfiltered they were 40–138% of the figure, once
+     ranking a Snowsight browser poll as the account's largest awake-time consumer (a
+     phantom that would send a fix session at nothing). This matters MORE after #675/#662:
+     those flips replace MERGE/CTAS statements with `create or replace view`, so an
+     uncorrected reading would keep counting the very minutes the flip stopped billing for.
+     ⚠️ Do NOT apply it to the WAIT tables — a provisioning wait implies a real occupation,
+     so waits are immune (and filtering them would drop true wakers).
   3. PROVISIONING WAITS — `query_history.queued_provisioning_time > 0`. The ATTRIBUTION
                       instrument: a query only queues on provisioning if it waited for the
                       warehouse to start, so it names the waker directly (3.7% unclassified
@@ -213,14 +223,19 @@ def main() -> int:
 
     run(cur, f"2. ACTIVE MINUTES/day — {wh} (the 24/7-POLLER signal; ref 7/28=167, 7/30=141)", f"""
         select to_char(start_time::timestamp_ntz, 'YYYY-MM-DD') as utc_day,
-               count(distinct date_trunc('minute', start_time)) as active_min,
+               count(distinct iff(warehouse_size is not null,
+                                  date_trunc('minute', start_time), null)) as active_min,
+               count(distinct date_trunc('minute', start_time)) as active_min_raw,
                count(*) as executions
         from snowflake.account_usage.query_history
         where warehouse_name = '{wh}'
           and start_time >= dateadd(day, -{d}, current_timestamp())
         group by 1 order by 1""",
         note="`executions` is the DEAD-JOB cross-check: active-min falling while executions "
-             "hold = a lever; both collapsing = the caller stopped.")
+             "hold = a lever; both collapsing = the caller stopped. "
+             "⭐ ACTIVE_MIN is the BILLABLE cut (warehouse_size IS NOT NULL); ACTIVE_MIN_RAW is "
+             "the legacy polluted figure, kept only so pre-2026-08-10 readings stay comparable — "
+             "quote ACTIVE_MIN.")
 
     run(cur, f"3. PROVISIONING WAITS by day × BAND — {wh}  ⬅ THE HEADLINE", f"""
         select to_char(start_time::timestamp_ntz, 'YYYY-MM-DD') as utc_day,
