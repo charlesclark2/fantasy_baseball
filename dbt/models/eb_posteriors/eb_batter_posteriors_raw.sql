@@ -327,11 +327,25 @@ from final
 -- TYPE-PIN-END
 {% else %}
 
-{{ config(materialized='incremental', unique_key=['game_pk', 'batting_slot', 'batter_id'], incremental_strategy='merge') }}
+-- E11.24 TARGET-6 SUCCESSOR (2026-08-08) — incremental MERGE → VIEW. Same rationale as the
+-- eb_starter_posteriors sibling (read it there in full): this branch is a pure ext-table COPY whose
+-- MERGE re-ran on every intraday lineup tick and RESUMED COMPUTE_WH; a view is metadata-only.
+-- Together the two MERGEs were 6 of the 9 remaining waits on the clean 2026-08-07 tick band.
+--
+-- SAFE ONLY BECAUSE THE READER REPOINT SHIPS WITH IT: update_player_posteriors.py's cold-start
+-- prior read (season-first appearance per batter, spanning the whole accumulated history) now reads
+-- the S3 parquet under --s3. No other Snowflake reader resolves this model — every dbt ref() to it
+-- is in the DuckDB branch of feature_pregame_lineup_features.
+--
+-- ⚠️ NOT CONTENT-NEUTRAL, deliberately: the MERGE never DELETED, so the table accumulated rows for
+-- batters dropped from a later-confirmed lineup (#662 measured +32). The view returns the current
+-- rebuild — it can only drop superseded rows. Parity of what the OP consumes (not a whole-table
+-- fingerprint, which differs by exactly those ghosts) is gated by
+-- scripts/parity_check_eb_reader_repoint.py.
+--
+-- 🧭 PM DESIGN CALL: a VIEW, not `enabled=false` — see the eb_starter_posteriors sibling.
+{{ config(materialized='view') }}
 
 select * from baseball_data.lakehouse_ext.eb_batter_posteriors_raw
-{% if is_incremental() %}
-  where game_date >= (select dateadd('day', -7, max(game_date)) from {{ this }})
-{% endif %}
 
 {% endif %}

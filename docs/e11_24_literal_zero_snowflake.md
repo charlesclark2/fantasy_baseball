@@ -2268,6 +2268,137 @@ Two worth calling out:
 
 ---
 
+# Target-6 successor — the incremental family, scoped 2026-08-08
+
+The 08-07 T+1 read found target 6's wake had **moved one statement downstream** rather than
+vanished, and named five writers: the `eb_starter_posteriors` / `eb_batter_posteriors_raw` MERGEs,
+the `feature_pregame_game_features(_raw)` incrementals, and the `feature_pregame_lineup_state`
+SCD-2 UPDATE. This section is that family's per-writer analysis, its pre-merge baseline, and what
+it changes about the plan.
+
+## The headline: the flippable subset is not the waker
+
+Per-statement, 14-23 UTC tick band, `COMPUTE_WH`, taken on MONITOR_WH 2026-08-08 (`execs/waits`):
+
+| statement | 07-29 | 07-30 | 07-31 | 08-01 | 08-03 | 08-04 | 08-05 | 08-06 | 08-07 |
+|---|---|---|---|---|---|---|---|---|---|
+| `eb_starter_posteriors` MERGE | 24/0 | 24/0 | 159/0 | 33/0 | 24/0 | 40/0 | 32/0 | 8/1 | **24/3** |
+| `eb_batter_posteriors_raw` MERGE | 24/0 | 24/0 | 34/0 | 33/0 | 24/0 | 40/0 | 32/0 | 8/1 | **24/3** |
+| `feature_pregame_lineup_state` UPDATE | 15/0 | 15/0 | 20/0 | 21/0 | 15/0 | 25/0 | 20/0 | 5/1 | **15/3** |
+| `feature_pregame_game_features_raw` | 38/0 | 33/0 | 44/0 | 45/0 | 33/0 | 56/1 | 44/0 | 11/0 | **33/0** |
+| `feature_pregame_game_features` | 54/1 | 33/0 | 44/0 | 45/0 | 33/0 | 55/0 | 44/0 | 11/1 | **33/0** |
+
+Read the 08-07 column — the one clean fully-post-target-6 day. All of the family's tick-band wake
+sits on three writers (3 + 3 + 3), and the two `feature_pregame_game_features*` incrementals took
+**zero**. Statement-level confirmation, same day:
+
+```
+MERGE   merge into baseball_data.betting.eb_starter_posteriors …        3 waits
+MERGE   merge into baseball_data.betting.eb_batter_posteriors_raw …     3 waits
+UPDATE  UPDATE baseball_data.betting_features.feature_pregame_lineup_state …  3 waits
+INSERT  INSERT INTO tmp_starter_ip_signals_incoming …                   1 wait   (4b scd2, other family)
+```
+
+⭐ **Why the wake spreads evenly across three statements rather than landing on one.** On the
+Snowflake target these models have **no `ref()` edges between them** — every `{% else %}` branch
+reads its own `lakehouse_ext` table, so the whole DuckDB dependency graph disappears and dbt runs
+the eight tick nodes in parallel across threads. Whichever compute statement is scheduled first
+buys the resume; over nine ticks that is a race, not a fixed order. The practical consequence is
+the one that matters for sequencing: **removing a subset of the compute statements does not remove
+the wake, it just re-rolls which of the survivors pays it.** This family has to be flipped as a
+unit or not at all — which is the same lesson the T+1 read taught one statement upstream.
+
+⚠️ **Day-sanity caveat (INC-37).** 08-07 totalled 1,446 `COMPUTE_WH` executions, *below* the
+1,536–3,480 baseline band, so the wait **magnitudes** for that day may understate. The
+**composition** — which statements wait and which do not — is far more robust to a volume dip and
+is what the verdict rests on. Re-read at the Sun 08-09 T+3 before quoting the magnitudes.
+08-06's waits are dominated by `ci_betting.*` (the `CI on the prod WH` family) — that was the
+target-6 merge-day release train, not a tick waker.
+
+## Per-writer verdicts
+
+| writer | wakes `COMPUTE_WH`? | SF consumer needing materialization? | verdict |
+|---|---|---|---|
+| `feature_pregame_game_features_raw` | measured **no** (0 waits 08-07) | no | **FLIPPABLE NOW** |
+| `feature_pregame_game_features` | measured **no** (0 waits 08-07) | no | **FLIPPABLE NOW** |
+| `eb_starter_posteriors` | **yes** (3) | content-divergent + live SF-only daily reader | **READER-GATED** |
+| `eb_batter_posteriors_raw` | **yes** (3) | content-divergent + live SF-only daily reader | **READER-GATED** |
+| `feature_pregame_lineup_state` | **yes** (3) | SF is the *master*, not a copy | **NOT FLIPPABLE** |
+
+### Flippable: `feature_pregame_game_features` + `_raw`
+
+Both Snowflake branches are `select * from baseball_data.lakehouse_ext.<self>` — pure ext-table
+copies, all assembly in the DuckDB branch. Content-neutrality was **measured** (MONITOR_WH,
+2026-08-08), not inferred from the shape:
+
+* rows **26,969 = 26,969**, with **zero** `game_date`s differing in count, on both models;
+* columns **756 = 756** and **790 = 790**, with **zero** `data_type` mismatches — so the INC-19
+  NUMBER↔FLOAT surface this model is the canonical victim of has already converged, and a view
+  removes it outright (no stored type left to drift, and no DROP+rebuild obligation);
+* values agree on **every** game inside the 7-day incremental window; **77 of 26,969 game_pks
+  (0.29%)** differ outside it — precisely the drift the model header already anticipates ("the
+  weekly Sunday `dbtf build --full-refresh` net corrects any drift"). A view converges that
+  permanently, toward the same parquet the served `--s3` path already reads.
+
+INC-27 reader sweep by **grep, not the DAG**: every `ref()` to either model is in a DuckDB branch
+(the wrapper and `feature_league_contact_baseline` both read their *own* ext table on Snowflake);
+`app/backend/routers/picks.py` reads through `lakehouse_query` (DuckDB over S3), never Snowflake;
+`predict_today`'s aux reads are dead under `W7B_LAKEHOUSE_S3` / `W7B_INTRADAY_S3`, both enforced in
+`env.required`; the remaining raw-SQL readers are the offline training loaders
+(`betting_ml/utils/data_loader`) and bake-off scripts. None needs materialization.
+
+**Pre-registered control, measured rather than assumed.** A view re-evaluates the external-table
+scan on every read, and `data_loader.load_features` does a `SELECT f.*` over all history. Forcing
+all 756 columns across 13,924 rows (2021+, result cache off): native table **0.17–0.51s**, ext-table
+view **0.73–1.04s** — ~2–4× slower but sub-second absolute. The active-minutes risk is real and
+bounded; it does not change the verdict.
+
+### Reader-gated: the EB posteriors
+
+Same `select * from lakehouse_ext.<self>` shape, so they *look* flippable. Two reasons they are not:
+
+1. **`incremental_strategy='merge'` never deletes**, so the Snowflake table is a permanently
+   accumulating superset of the parquet. Measured 2026-08-08: `eb_starter_posteriors` 48,908 vs
+   48,905 (19 divergent dates, in **both** directions — the history predates the DuckDB rebuild);
+   `eb_batter_posteriors_raw` 484,934 vs 484,902 (4 divergent dates, all recent, SF-heavy). The
+   extra rows are ghosts of superseded lineup snapshots. A flip therefore *changes content*, which
+   is exactly the precondition target 6 relied on and this pair does not satisfy.
+2. **A live Snowflake-only consumer**: `update_player_posteriors_op` runs daily and reads both
+   tables from Snowflake **even under `--s3`** (its `--s3` flag routes only the PA substrate; the
+   EB role reads stay on the warehouse by design). So the content change lands on a daily serving
+   input.
+
+The clean sequencing is therefore: **repoint `update_player_posteriors`'s EB reads to S3 first,
+then flip the pair as its own change with its own soak.** That also removes two SF reads on its own
+merit. Doing it in the other order takes serving risk for no measured benefit.
+
+### Not flippable: `feature_pregame_lineup_state`
+
+Not a lakehouse passthrough in either direction. **Snowflake is the master** — written by
+`scripts/backfill_lineup_state_scd2.py`'s SCD-2 `UPDATE`/MERGE, invoked per tick from
+`lineup_intraday_s3_feature_rebuild` — and S3 is the *downstream* mirror produced by
+`export_w8b_precursors_to_s3`. There is no table→view flip available to it; four dbt models read it
+via `source()`. Its lever is the already-carded `scd2_upsert` Delta port.
+
+## What shipped, and the recommendation
+
+Shipped code-ready (⛔ not deployed): the two `feature_pregame_game_features*` Snowflake branches
+flipped `incremental` → `view`, the now-inert `is_incremental()` window removed, guard
+`betting_ml/tests/test_e11_24_pregame_features_are_views.py` (9 assertions; **7 deliberate source
+breaks each turned exactly the intended one red**, including a clause pinning that the reader-gated
+EB pair was *not* swept into the flip).
+
+**Recommendation: do not spend a soak slot on this flip alone.** It is measured at ~zero wake
+reduction, so shipping it under one-flip-per-soak would consume the slot the real successor needs
+while the tick keeps waking the warehouse — the exact shape of progress-without-movement the T+1
+read just caught. Its benefits are genuine but not cost: it closes the history-drift class, retires
+the INC-19 DROP+rebuild obligation on the repo's canonical victim, removes ~690 writes/10d against
+a 756/790-column serving table, and removes an INC-25-class ordering constraint. Land it as a free
+rider on the next flip that needs a soak anyway, and put the session budget on the EB reader
+repoint, which is where the measured wake actually is.
+
+---
+
 # TARGET-6 SOAK — T+3 CLOSE-OUT READ (2026-08-09/10) ✅ CLEAN
 
 Read from the LAPTOP on `MONITOR_WH` (`report_e11_24_wake_census.py --days 10 --warehouse COMPUTE_WH`
