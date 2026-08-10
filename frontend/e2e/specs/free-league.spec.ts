@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import { captureAnalytics, collectPageErrors, mockApi } from "../support/api-mock"
+import { FIXTURES, captureAnalytics, collectPageErrors, mockApi } from "../support/api-mock"
 import { signIn } from "../support/session"
 import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors } from "../support/assertions"
 
@@ -105,41 +105,72 @@ test.describe("the free personalized league", () => {
     // ⭐⭐ THE ANCHOR MUST BE A QUANTITY THE DELTA'S SIGN DOES NOT PRODUCE.
     //
     // The first cut asserted that every card in `risers` carried a "▲", and the red-proof harness
-    // caught it as a TAUTOLOGY: the list MEMBERSHIP and the arrow both derive from `ovrDelta`, so
-    // inverting the subtraction moves each player into the other list AND flips their arrow —
+    // caught it as a TAUTOLOGY: the list MEMBERSHIP and the arrow both derive from the same delta,
+    // so inverting the subtraction moves each player into the other list AND flips their chip —
     // perfectly self-consistent, and the assertion passes on the exact defect it was written for.
     // (The NF-C0e "reading a value back under the key the code wrote" shape.)
     //
-    // The card's OVERALL RANK PAIR ("#128 → #34") is the independent quantity: both numbers are
-    // read straight off the two boards, so inverting the rank subtraction changes WHICH players
-    // appear in each block but cannot change the numbers on their cards. A "riser" whose rank got
-    // BIGGER is then a visible contradiction.
+    // ⚠️ E9.61 RETIRED THE PREVIOUS ANCHOR, and the reason is worth keeping. It asserted that every
+    // riser's OVERALL RANK improved, which was exact while the list was SELECTED on rank movement
+    // (`ovrDelta > 0` means precisely `genericOvrRank > leagueOvrRank`). The highlights now rank on
+    // VOR DELTA, and value and board position can legitimately disagree — a player can be worth
+    // more above replacement in this league and still sit lower overall, because the players around
+    // him gained more. Keeping that assertion would have failed on correct behaviour, which is the
+    // worse half of a stale test: it does not merely stop catching the bug, it argues against the
+    // fix. (Measured on this fixture: all five top risers slip in overall rank.)
     //
-    // ⚠️ Asserted per card, not on an aggregate. Rank is exact here — there is no averaging to do
-    // and no player who can legitimately buck it: `ovrDelta > 0` means precisely
-    // `genericOvrRank > leagueOvrRank`, so every single riser card must show a decrease.
-    const rankMoves = async (block: typeof risers, label: string) => {
-      const out: { from: number; to: number }[] = []
-      for (const text of await block.locator('[data-testid="ovr-rank-move"]').allTextContents()) {
-        const m = text.match(/#(\d+)\s*→\s*#(\d+)/)
-        if (m) out.push({ from: Number(m[1]), to: Number(m[2]) })
-      }
-      expect(out.length, `no ${label} card rendered an overall-rank pair — the anchor is missing`)
-        .toBeGreaterThan(0)
-      return out
+    // THE REPLACEMENT RE-DERIVES THE CHIP FROM THE SERVED PAYLOADS. The generic side is read out of
+    // the board FIXTURE and the league side off the rendered board table — neither passes through
+    // `computeLeagueDelta`, so inverting its subtraction flips the chip's sign while both inputs
+    // stay put, and the comparison goes red. That is the property the old rank anchor had and a
+    // "risers all show positive" check does not.
+    const genericVor = new Map(
+      (FIXTURES.boardFree() as { name: string; vor: number | null }[]).map((p) => [p.name, p.vor]),
+    )
+
+    /** The chip on the first card of a block, with the player it belongs to. */
+    const topCard = async (block: typeof risers) => {
+      const card = block.first()
+      const name = (await card.getByRole("link").first().innerText()).trim()
+      const chip = await card.getByTestId("value-chip").innerText()
+      return { name, value: Number(chip.replace(/[^0-9.+-]/g, "")) }
     }
 
-    for (const { from, to } of await rankMoves(risers, "riser")) {
+    // Show every row so the mover's own board row is findable, then read HIS league VOR off it.
+    // ⚠️ A Radix `Picker`, not a native <select> — `selectOption` silently does nothing here.
+    await page.getByLabel("Rows per page").first().click()
+    await page.getByRole("option", { name: "All", exact: true }).click()
+
+    for (const [block, label, sign] of [
+      [risers, "riser", 1],
+      [fallers, "faller", -1],
+    ] as const) {
+      const { name, value } = await topCard(block)
+      expect(Number.isFinite(value), `the top ${label} card rendered no value chip`).toBe(true)
+      expect(Math.sign(value), `a ${label}'s value chip has the wrong sign`).toBe(sign)
+
+      const generic = genericVor.get(name)
+      expect(generic, `${name} is not on the generic board fixture — anchor missing`).not.toBe(
+        undefined,
+      )
+      const row = page.locator('[data-testid="my-league-board"] tbody tr', { hasText: name }).first()
+      await expect(row, `${name} has no row on his own league board`).toBeVisible()
+      // columns: # | Player | Pos | Team | Bye | pts | VOR | vs generic
+      const leagueVor = Number((await row.locator("td").nth(6).innerText()).replace(/,/g, ""))
+
+      // ⚠️ TOLERANT ON MAGNITUDE, EXACT ON DIRECTION. Both figures are rendered to one decimal, so
+      // the difference carries two roundings; the SIGN is what an inverted subtraction breaks, and
+      // it is asserted without tolerance.
+      const expected = leagueVor - (generic as number)
       expect(
-        to,
-        `a RISER moved from #${from} to #${to} — a worse rank. The rank delta's sign is inverted.`,
-      ).toBeLessThan(from)
-    }
-    for (const { from, to } of await rankMoves(fallers, "faller")) {
+        Math.sign(expected),
+        `${name} is listed as a ${label} but his own board says the opposite: league VOR ` +
+          `${leagueVor} vs generic ${generic}. The delta's subtraction is inverted.`,
+      ).toBe(sign)
       expect(
-        to,
-        `a FALLER moved from #${from} to #${to} — a better rank. The rank delta's sign is inverted.`,
-      ).toBeGreaterThan(from)
+        Math.abs(expected - value),
+        `${name}'s chip (${value}) does not match his own boards (${expected})`,
+      ).toBeLessThan(0.5)
     }
 
     // The summary counts something, and the count is bounded by what was compared — a delta that

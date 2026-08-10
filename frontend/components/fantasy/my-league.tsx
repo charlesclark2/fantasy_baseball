@@ -51,8 +51,10 @@ import {
   draftedSlotsPerTeam,
 } from "@/lib/league-delta"
 import type { PlayerDelta } from "@/lib/league-delta"
+import { GenericDeltaCell } from "@/components/fantasy/league-delta-ui"
 import {
   EXPECTED_POINTS_LABEL,
+  GENERIC_DELTA_LABEL,
   LEAGUE_DELTA_DEFINITION,
   LEAGUE_DELTA_MECHANISM,
   LEAGUE_DELTA_UNCERTAINTY,
@@ -93,22 +95,27 @@ function signed(n: number | null | undefined, nd = 0): string {
   return `${nd === 0 ? v : v.toFixed(nd)}`
 }
 
-function MoveChip({ delta }: { delta: number | null }) {
+/** The VALUE change, which since E9.61 is also what ORDERS these cards (`HIGHLIGHTS_RANK_BY_VOR`).
+ *
+ *  ⚠️ THE CHIP HAS TO BE THE SORT KEY. It used to be the overall rank move while the list was
+ *  ordered by that same quantity, so the two agreed by construction. Ranking on VOR and continuing
+ *  to lead with rank would have produced a visibly unordered list — card 1 showing "▲ 4" above card
+ *  2 showing "▲ 30" — which reads as a broken sort rather than as a different, better one. */
+function ValueChip({ delta }: { delta: number | null }) {
   if (delta == null) return <span className="text-gray-600">—</span>
-  if (delta === 0) return <span className="text-gray-600">no change</span>
   const up = delta > 0
   return (
     <span
-      className={up ? "font-medium text-[#10b981]" : "font-medium text-[#ef4444]"}
-      data-testid="move-chip"
+      className={`whitespace-nowrap font-medium ${up ? "text-[#10b981]" : "text-[#ef4444]"}`}
+      data-testid="value-chip"
     >
-      {up ? "▲" : "▼"} {Math.abs(delta)}
+      {signed(delta, 1)} value
     </span>
   )
 }
 
-/** One riser/faller card. Leads with the POSITION rank move ("TE7 → TE3") because that is the form
- *  a drafter reasons in; the overall move is the supporting number. */
+/** One riser/faller card. Leads with the VALUE change (the quantity the list is ranked on), with the
+ *  position and overall rank moves beneath it as the concrete "where he actually sits" reading. */
 function MoverCard({ d }: { d: PlayerDelta }) {
   return (
     <li className="rounded border border-[#1f1f1f] bg-[#0a0a0a] p-3" data-testid="mover-card">
@@ -119,7 +126,7 @@ function MoverCard({ d }: { d: PlayerDelta }) {
         >
           {d.name}
         </Link>
-        <MoveChip delta={d.ovrDelta} />
+        <ValueChip delta={d.vorDelta} />
       </div>
       <div className="mt-1 flex items-center gap-2 text-[11px] text-gray-500">
         <PosBadge pos={d.pos} />
@@ -133,14 +140,20 @@ function MoverCard({ d }: { d: PlayerDelta }) {
           second is why it is written this way round:
           (a) "#128 → #34" is concrete in a way "+94 overall" is not — it says where he actually
               sits on the board the reader is about to scroll;
-          (b) these two numbers come from the BOARDS, whereas the arrow above comes from `ovrDelta`.
-              That makes them the independent quantity a test can anchor on: inverting the rank
-              subtraction swaps which players appear here but cannot change these ranks, so a sign
-              error becomes visible as a "riser" whose number got bigger. The first version of the
-              spec asserted on the arrow and was a tautology (see `free-league.spec.ts`). */}
+          (b) these two numbers come from the BOARDS, whereas the chip above comes from `vorDelta`.
+              That makes them the independent quantity a test can anchor on: a sign error in the
+              ranking swaps which players appear here but cannot change these ranks, so it becomes
+              visible as a "riser" whose number got bigger. The first version of the spec asserted
+              on the chip itself and was a tautology (see `free-league.spec.ts`).
+          ⚠️ The value figure is NOT repeated here since E9.61 — it is the chip above, and printing
+          the sort key twice per card is how the two spellings drift apart.
+          ⚠️ AND IT IS LABELLED "board" SINCE E9.61, because value and board position can legitimately
+          disagree once the list is ranked on value: a player can be worth more points above
+          replacement in your league and still sit LOWER overall, if the players around him gained
+          more. Unlabelled, "#2 → #7" under a heading that says "worth more" reads as a
+          contradiction; labelled, it reads as the two different facts it is. */}
       <div className="mt-1 text-[11px] text-gray-600" data-testid="ovr-rank-move">
-        #{d.genericOvrRank ?? "—"} → #{d.leagueOvrRank}
-        {d.vorDelta != null && <> · {signed(d.vorDelta, 1)} value</>}
+        board #{d.genericOvrRank ?? "—"} → #{d.leagueOvrRank}
       </div>
     </li>
   )
@@ -480,7 +493,7 @@ export function MyLeague() {
                       >
                         {signed(s.replacementDelta, 1)}
                       </span>{" "}
-                      <span className="text-gray-600">vs the free board</span>
+                      <span className="text-gray-600">vs our generic board</span>
                     </div>
                     {s.leagueStartable != null && (
                       <div className="mt-1 text-[11px] text-gray-600">
@@ -531,8 +544,11 @@ export function MyLeague() {
                   </th>
                   <th className="px-3 py-2 text-right font-medium">
                     {/* The delta's definition rides ON the column, because this is the cell most
-                        likely to be read as a claim about the market. */}
-                    <InfoTip label="vs free board">{LEAGUE_DELTA_DEFINITION}</InfoTip>
+                        likely to be read as a claim about the market.
+                        ⚠️ E9.61 — the label is the SHARED constant. This column now also exists on
+                        Rankings and the League Board, and one number under three names on adjacent
+                        pages is how a reader concludes they are three different numbers. */}
+                    <InfoTip label={GENERIC_DELTA_LABEL}>{LEAGUE_DELTA_DEFINITION}</InfoTip>
                   </th>
                 </tr>
               </thead>
@@ -564,16 +580,10 @@ export function MyLeague() {
                       {num(p.vor)}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {/* A player absent from the free board has an UNDEFINED move, not a zero —
-                          e.g. a superflex league ranking a QB the free roster shape leaves out.
-                          Rendering 0 there would assert he did not move. */}
-                      {d?.onlyInLeague ? (
-                        <span className="text-gray-600" title="Not ranked on the free board">
-                          new
-                        </span>
-                      ) : (
-                        <MoveChip delta={d?.ovrDelta ?? null} />
-                      )}
+                      {/* Shared with the two browse boards. It handles the "new" case (on your
+                          board, absent from the generic one — an UNDEFINED move, not a zero) in one
+                          place rather than three. This board is always in overall order. */}
+                      <GenericDeltaCell d={d} scale="overall" />
                     </td>
                   </tr>
                 ))}

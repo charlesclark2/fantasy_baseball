@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Download, Search } from "lucide-react"
 import {
+  useFantasyBoard,
   useFantasyManifest,
   useFormatSelection,
   useResolvedBoard,
@@ -23,11 +24,19 @@ import {
 } from "@/lib/fantasy-queries"
 import { useAuth } from "@/lib/auth-context"
 import { canUse } from "@/lib/entitlements"
-import { assignTiers, type Player } from "@/lib/draft-optimizer"
+import { assignTiers, freeSelection, type Player } from "@/lib/draft-optimizer"
 import { fullSeasonRate, rowsAreLocked, trimLockedTail } from "@/lib/fantasy"
+import { computeLeagueDelta, draftablePoolSize } from "@/lib/league-delta"
+import {
+  GenericDeltaBand,
+  GenericDeltaCell,
+  deltaOnScale,
+} from "@/components/fantasy/league-delta-ui"
 import {
   BOARD_LOAD_ERROR_DETAIL,
   EXPECTED_POINTS_LABEL,
+  GENERIC_DELTA_LABEL,
+  LEAGUE_DELTA_DEFINITION,
   FORMAT_LOCK_EXPLANATION,
   FORMAT_LOCK_TITLE,
   FULL_SEASON_RATE_LABEL,
@@ -77,14 +86,59 @@ export function RankingsBoard() {
   const entitled = canUse("personalization", groups)
   const { data: manifest, isLoading: manifestLoading, error: manifestError } = useFantasyManifest()
   // NF-C0b: a saved hand-entered league ranks through the identical Player[] interface.
-  const { data: savedLeagues } = useSavedLeagues()
+  // `isLoading` (not `isPending`) — E9.61: an anonymous visitor's query is DISABLED and therefore
+  // pending forever, so gating the format selection on `isPending` would hang the picker for every
+  // logged-out visitor. See `useFormatSelection`'s `savedLeaguesLoading`.
+  const { data: savedLeagues, isLoading: savedLeaguesLoading } = useSavedLeagues()
   const { configName, size, setConfigName, setSize } = useFormatSelection(
     manifest,
     savedLeagues,
     entitled,
+    savedLeaguesLoading,
   )
-  const { board, isLoading: boardLoading, error: boardError } = useResolvedBoard(configName, size)
+  const {
+    board,
+    isLoading: boardLoading,
+    error: boardError,
+    isCustom,
+    league,
+  } = useResolvedBoard(configName, size)
   const [pos, setPos] = useState("Overall")
+
+  // ── E9.61 — the "vs our generic board" comparison ─────────────────────────────────────────────
+  //
+  // 🔒 EVERY PIECE OF THIS IS CONDITIONAL ON `isCustom`, and that is the gate. Rankings is a PUBLIC
+  // route, so the question is whether this can ever run for a caller with no league of their own —
+  // and it cannot: `isCustom` requires a `custom:<league_id>` selection, `useFormatSelection` only
+  // admits an id present in `savedLeagues`, and `useSavedLeagues` is `enabled: !!accessToken`. See
+  // the gating block in `league-delta-ui.tsx`.
+  //
+  // ⚠️ AND THE FETCH IS CONDITIONAL TOO, not just the render. Passing nulls leaves
+  // `useFantasyBoard` `enabled: false`, so an anonymous visitor on the hot public path issues NO
+  // extra request. Fetching the generic board for everyone and hiding the column would put a second
+  // board read on every landing view — half of G100-D1's saving, given away in a render branch.
+  const freePreset = freeSelection(manifest)
+  const { data: genericBoard } = useFantasyBoard(
+    isCustom ? freePreset?.config ?? null : null,
+    isCustom ? freePreset?.size ?? null : null,
+  )
+  const pool = useMemo(() => draftablePoolSize(league), [league])
+  const delta = useMemo(
+    () =>
+      isCustom
+        ? computeLeagueDelta(genericBoard, board, pool, LOW_PREDICTABILITY_POSITIONS)
+        : null,
+    [isCustom, genericBoard, board, pool],
+  )
+  // Keyed lookup for the column. Built here rather than inside the row loop so it is one pass over
+  // the delta rather than one scan per rendered row.
+  const deltaById = useMemo(
+    () => new Map((delta?.players ?? []).map((d) => [d.id, d])),
+    [delta],
+  )
+  // A position tab ranks WITHIN the position, so the move beside it must be the move within the
+  // position. See `deltaOnScale` — this is the same two-scales trap `adpPositionRanks` exists for.
+  const deltaScale = pos === "Overall" ? ("overall" as const) : ("position" as const)
   const [q, setQ] = useState("")
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState<number>(50)
@@ -224,9 +278,12 @@ export function RankingsBoard() {
       // `full_season_rate` carries the same disclosure the on-page column pair does. A spreadsheet
       // reader has neither tooltip, so the two columns have to arrive TOGETHER or the exported file
       // reintroduces exactly the "why is this number low?" misread the labelling closed.
+      // E9.61 — `vs_generic_board` only exists on a personalized export, for the same reason the
+      // on-screen column does: on a preset it would be a column of zeroes. The name is spelled out
+      // rather than "delta" because a spreadsheet reader has no tooltip to tell them it is not ADP.
       ["rank", "tier", "player", "pos", "team", "bye", "expected_games", "expected_pts",
        "full_season_rate", "pts_p10", "pts_p90", "vor", "pos_rank", "adp", "vs_adp", "rookie",
-       "range_basis"],
+       "range_basis", ...(delta ? ["vs_generic_board"] : [])],
       rows.map((p) => {
         const rank = rankOf(p, pos)
         return [
@@ -238,6 +295,7 @@ export function RankingsBoard() {
           p.rookie ? "yes" : "no",
           // carried so a downloaded board still says which ranges are class-level, not per-player
           p.rookie ? "class-level" : "player",
+          ...(delta ? [deltaOnScale(deltaById.get(p.id), deltaScale)] : []),
         ]
       }),
     )
@@ -338,6 +396,14 @@ export function RankingsBoard() {
             />
           )}
 
+          {/* E9.61 — the summary band. Above the controls so the reader learns the board is THEIRS
+              before they start reading numbers off it. Renders only once the comparison actually
+              resolved: a band that appears before the generic board lands would flash a count that
+              then changes, which reads as the numbers being unstable. */}
+          {!boardLoading && delta && (
+            <GenericDeltaBand delta={delta} leagueName={league?.name} />
+          )}
+
           {!boardLoading && rows.length > 0 && (
             <>
               <div className="mb-3">
@@ -352,8 +418,14 @@ export function RankingsBoard() {
 
               <div className="overflow-x-auto rounded-lg border border-[#262626]">
                 {/* min-width bumped for the added full-season-rate column — the wrapper scrolls
-                    horizontally, so the page body still never scrolls sideways on a phone. */}
-                <table className="w-full min-w-[940px] text-left text-xs">
+                    horizontally, so the page body still never scrolls sideways on a phone.
+                    ⚠️ Both class strings are written out in full: Tailwind scans source text, so a
+                    template-interpolated width would produce no CSS at all. */}
+                <table
+                  className={`w-full text-left text-xs ${
+                    delta ? "min-w-[1040px]" : "min-w-[940px]"
+                  }`}
+                >
                   <thead className="bg-[#0f0f0f] text-gray-500">
                     <tr>
                       <th className="px-3 py-2 font-medium">{pos === "Overall" ? "Rank" : `${pos} #`}</th>
@@ -397,6 +469,13 @@ export function RankingsBoard() {
                             <InfoTip label={ADP_DELTA_LABEL}>{GLOSSARY.adpDelta}</InfoTip>
                           </th>
                         </>
+                      )}
+                      {/* E9.61 — only on a personalized board. On a preset the "generic board" IS
+                          the board being displayed, so the column would be a wall of zeroes. */}
+                      {delta && (
+                        <th className="px-3 py-2 text-right font-medium">
+                          <InfoTip label={GENERIC_DELTA_LABEL}>{LEAGUE_DELTA_DEFINITION}</InfoTip>
+                        </th>
                       )}
                       {pos === "Overall" && <th className="px-3 py-2 text-right font-medium">Pos rank</th>}
                     </tr>
@@ -517,6 +596,11 @@ export function RankingsBoard() {
                                 )}
                               </td>
                             </>
+                          )}
+                          {delta && (
+                            <td className="px-3 py-2 text-right">
+                              <GenericDeltaCell d={deltaById.get(p.id)} scale={deltaScale} />
+                            </td>
                           )}
                           {/* E9.56c — `posRank` is stripped too, so this rendered the bare position
                               ("RB", "WR") with no number, reading as a malformed cell rather than a
