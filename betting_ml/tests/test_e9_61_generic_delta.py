@@ -144,6 +144,66 @@ def test_the_label_names_the_comparison_rather_than_inheriting_the_market_readin
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+# The delta has to still be there on the SECOND visit
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# A column that renders once and is gone after a reload is worse than no column: it reads as the
+# product being unreliable rather than as a feature that is missing. Both clauses below were
+# MEASURED broken on the real build while this story was being written.
+
+
+def _selection_hook() -> str:
+    code = _code("lib/fantasy-queries.ts")
+    return code[code.index("export function useFormatSelection") : code.index("const persist =")]
+
+
+def test_the_initial_selection_waits_for_the_caller_s_own_leagues():
+    """⭐ THE RACE. The hook commits a selection the first time it sees a manifest and then locks
+    itself out (`configName !== null`). Saved leagues are a SECOND request, and the slower one — the
+    manifest is CDN-cached and this is not — so without a deferral a stored `custom:<id>` is matched
+    against an empty list, the caller is put on a preset, and the effect re-runs only to return
+    immediately. The delta simply is not there the second time, with no error.
+
+    ⚠️ ASSERTED ON THE `isLoading` SPELLING TOO, because `isPending` is the plausible wrong one and
+    it fails the other way: a DISABLED query (an anonymous visitor — `enabled: !!accessToken`) is
+    pending forever, so gating on it would hang the format picker on every logged-out page load.
+    """
+    body = _selection_hook()
+    assert re.search(r"if\s*\(savedLeaguesLoading\)\s*return", body), (
+        "the selection commits before the caller's leagues have arrived — a stored custom league "
+        "loses the race and the personalized board silently reverts to a preset"
+    )
+    for component in (c for c, gate in _DELTA_RENDERERS.items() if gate == "isCustom"):
+        code = _code(component)
+        assert re.search(r"isLoading:\s*savedLeaguesLoading", code), (
+            f"{component} does not pass the saved-league loading flag (or uses isPending, which is "
+            "true forever for an anonymous caller's disabled query)"
+        )
+
+
+def test_an_unentitled_caller_s_own_league_is_restored_from_storage():
+    """The positive half of the clause `test_freemium_tier` narrowed at E9.61.
+
+    That guard forbids the unentitled branch honouring a stored PAID PRESET, and used to enforce it
+    by requiring the branch not to read `stored` at all. G100-C1 made one restore legitimate — a free
+    account owns ONE personalized league — so the prohibition is now scoped to presets and THIS is
+    what keeps the permitted case from being 'simplified' away again. Deliberately in E9.61's own
+    file: the requirement is this story's, and a clause failing under another story's name sends the
+    next reader to the wrong spec.
+    """
+    body = _selection_hook()
+    branch = body[body.index("if (!entitled && free)") :]
+    branch = branch[: branch.index("names.includes(free.config)")]
+    assert re.search(r"customIds\.has\(\s*stored\.configName\s*\)", branch), (
+        "an unentitled caller's own saved league is no longer restored — they are returned to the "
+        "generic preset on every reload, and the personalized board they are entitled to is gone"
+    )
+    assert "setConfigName(stored.configName)" in branch, (
+        "the branch tests the stored league but never selects it"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
 # The edge must not be able to ask a per-caller question
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 

@@ -299,6 +299,18 @@ CASES = [
      None,
      "test_an_unentitled_visitor_is_defaulted_onto_a_board_they_can_read", SUITE),
 
+    # ⭐ THE SAME DEFECT IN THE SHAPE IT CAN TAKE SINCE E9.61, and the case that proves the clause
+    # was NARROWED rather than weakened. The branch is now allowed to restore ONE thing — a saved
+    # league of the caller's own (G100-C1 gives a free account one, and discarding it reverted their
+    # personalized board to a preset on every reload). Drop the membership test and that permitted
+    # restore becomes the original defect again: a paid preset written while subscribed survives the
+    # lapse and reopens on a board the API refuses.
+    ("restore ANY stored selection, not only the caller's own league", QUERIES,
+     [("      if (stored.configName && customIds.has(stored.configName)) {",
+       "      if (stored.configName) {")],
+     None,
+     "test_an_unentitled_visitor_is_defaulted_onto_a_board_they_can_read", SUITE),
+
     ("report a refused board as an empty search", RANKINGS,
      [("          {!boardLoading && boardError && (", "          {false && boardError && (")],
      None,

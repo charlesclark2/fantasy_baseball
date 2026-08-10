@@ -32,6 +32,7 @@ LEAGUE_BOARD = REPO / "frontend/components/fantasy/league-board.tsx"
 MY_LEAGUE = REPO / "frontend/components/fantasy/my-league.tsx"
 DRAFT = REPO / "frontend/components/fantasy/draft-optimizer.tsx"
 COPY = REPO / "frontend/lib/fantasy-claim-copy.ts"
+QUERIES = REPO / "frontend/lib/fantasy-queries.ts"
 GUARDRAILS = REPO / "app/backend/services/cost_guardrails.py"
 
 SUITE = "betting_ml/tests/test_e9_61_generic_delta.py"
@@ -89,6 +90,30 @@ CASES = [
      [('export const GENERIC_DELTA_LABEL = "vs our generic board"',
        'export const GENERIC_DELTA_LABEL = "vs generic ADP"')],
      "test_the_label_names_the_comparison_rather_than_inheriting_the_market_reading"),
+
+    # ── the delta has to survive a reload ─────────────────────────────────────────────────────
+    #
+    # The deferral goes, restoring the race the stored custom selection usually loses. MEASURED
+    # broken before the fix: pick your league, reload, and you are back on the generic preset.
+    ("the selection commits before the caller's leagues arrive", QUERIES,
+     [("    if (savedLeaguesLoading) return", "    if (false) return")],
+     "test_the_initial_selection_waits_for_the_caller_s_own_leagues"),
+
+    # The plausible wrong spelling. `isPending` is true FOREVER for a disabled query, so an
+    # anonymous visitor's format picker would never resolve — a break that looks like a synonym.
+    ("the loading flag is spelled isPending", RANKINGS,
+     [("isLoading: savedLeaguesLoading", "isPending: savedLeaguesLoading")],
+     "test_the_initial_selection_waits_for_the_caller_s_own_leagues"),
+
+    # E9.61's own permitted restore is "simplified" back out — the exact regression the narrowed
+    # freemium clause can no longer catch, which is why this one lives here.
+    ("the unentitled branch stops restoring the caller's own league", QUERIES,
+     [("      if (stored.configName && customIds.has(stored.configName)) {\n"
+       "        setConfigName(stored.configName)\n"
+       "        setSize(stored.size ?? DEFAULT_SIZE)\n"
+       "        return\n"
+       "      }\n", "")],
+     "test_an_unentitled_caller_s_own_league_is_restored_from_storage"),
 
     # ── axis two: the edge ────────────────────────────────────────────────────────────────────
     #

@@ -757,6 +757,35 @@ def test_a_locked_preset_is_listed_rather_than_removed():
     )
 
 
+def _guarded_block(text: str, header: str) -> str:
+    """`header` plus its `{…}` body, brace-matched, or "" if the header is absent.
+
+    Brace-matched rather than regex-sliced because the alternative is a marker-based cut, and a
+    break that DELETES the marker then silently changes what is being asserted (see the note in the
+    caller — that is how the first narrowing went vacuous).
+    """
+    at = text.find(header)
+    if at < 0:
+        return ""
+    open_at = text.index("{", at)
+    depth = 0
+    for i in range(open_at, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[at : i + 1]
+    return ""
+
+
+def _block_after(body: str, header: str) -> str:
+    """The `if (...) { … }` block introduced by `header`."""
+    block = _guarded_block(body, header)
+    assert block, f"the {header!r} branch is gone"
+    return block
+
+
 def test_an_unentitled_visitor_is_defaulted_onto_a_board_they_can_read():
     """A first visit that opens on `half_ppr` would fire a request the API refuses, and the surface
     would render its refusal state before the visitor had done anything — a paywall presented as a
@@ -770,21 +799,49 @@ def test_an_unentitled_visitor_is_defaulted_onto_a_board_they_can_read():
     assert re.search(r"if\s*\(!entitled\s*&&\s*free\)", body), (
         "the unentitled branch is gone — an unentitled visitor can be defaulted onto a paid preset"
     )
-    # ⛔ AND THE BRANCH MUST NOT READ `stored` AT ALL. There is one preset this caller can open, so
-    # a stored paid selection — written while subscribed and surviving the lapse in localStorage —
-    # has to be ignored outright rather than consulted.
+    # ⛔ THE BRANCH MUST NOT HONOUR A STORED *PRESET*. A paid selection written while subscribed
+    # survives the lapse in localStorage, and reopening on it lands the caller on a board the API
+    # now refuses.
     #
     # ⚠️ TWO EARLIER SPELLINGS OF THIS CLAUSE WERE VACUOUS AND THE RED PROOF CAUGHT BOTH. First
     # `assert "storedIsFree" in body`, which a break replacing the whole expression with `= true`
     # satisfied because the NAME survived (the import-vs-render shape). Then asserting the
     # comparison itself — which was still vacuous, for a better reason: the ternary it guarded had
-    # IDENTICAL ARMS, so the check genuinely did nothing and no break of it could fail. Asserting an
-    # absence is what finally holds, and it is also what let the dead branch be deleted.
-    branch = body[body.index("if (!entitled && free)"):]
-    branch = branch[: branch.index("return")]
-    assert "stored" not in branch, (
-        "the unentitled branch consults the stored selection — a paid preset written while "
-        "subscribed will survive a lapse and reopen on a board the API now refuses"
+    # IDENTICAL ARMS, so the check genuinely did nothing and no break of it could fail.
+    #
+    # 🩹 NARROWED AT E9.61, from "`stored` must not appear at all" to what that was standing in for.
+    # The absence form was the right SPELLING while the branch had nothing legitimate to restore,
+    # and it stopped being right when G100-C1's quota made one thing legitimate: a free account owns
+    # ONE PERSONALIZED LEAGUE, `/fantasy/leagues` serves it, and `FormatSelector` offers it ungated.
+    # `entitled` here is `canUse("personalization", …)` — false for a free account BY DESIGN, since
+    # it states the PRICING rather than the quota — so a blanket discard swept up the one selection
+    # they are allowed to have, and their league silently reverted to the generic preset on every
+    # reload (measured; fixed in E9.61).
+    #
+    # ⚠️ SO THIS IS A NARROWING TO THE ORIGINAL INTENT, NOT A RELAXATION, and the distinction is the
+    # whole reason it is edited here rather than deleted: the paid-preset protection is unchanged
+    # and still RED-proven. `stored` may be consulted ONLY behind a membership test against the
+    # caller's OWN leagues. E9.61's positive requirement — that the custom selection IS restored —
+    # lives in `test_e9_61_generic_delta.py`, under its own story's name.
+    branch = _block_after(body, "if (!entitled && free)")
+
+    # ⭐ THE ABSENCE ASSERTION IS KEPT AT FULL STRENGTH — it is simply evaluated on the branch with
+    # the ONE permitted read excised. Anything else touching `stored` still fails, exactly as before.
+    #
+    # ⚠️ THIS SPELLING IS THE SECOND ATTEMPT, AND THE RED PROOF IS WHY. The first narrowing sliced
+    # the branch at the free-board fall-through and asked only that a `customIds` test appeared
+    # somewhere. That satisfied itself: `restore ANY stored selection` went red, but the ORIGINAL
+    # case — `honour a stored paid selection`, which rewrites the FALL-THROUGH to read `stored` —
+    # went GREEN. Narrowing a clause is exactly where its old breaks have to be re-run, because the
+    # failure mode is a guard that still catches the new regression and has quietly stopped catching
+    # the old one.
+    permitted = _guarded_block(branch, "if (stored.configName && customIds.has(stored.configName))")
+    rest = branch.replace(permitted, "", 1) if permitted else branch
+
+    assert "stored" not in rest, (
+        "the unentitled branch consults the stored selection outside the one permitted read — a "
+        "paid preset written while subscribed will survive a lapse and reopen on a board the API "
+        "now refuses"
     )
 
 
