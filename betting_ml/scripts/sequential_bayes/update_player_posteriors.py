@@ -84,6 +84,11 @@ from betting_ml.scripts.eb_priors.generate_matchup_signals import (
     _duck_sql_for,
     _fetch_duck,
 )
+# E11.24 TARGET-6 SUCCESSOR (2026-08-08): the EB prior/role reads move to S3 too — see
+# _EB_S3_TABLES below. register_lakehouse_views is the shared Delta-aware registrar (the
+# phase-1.5 cure); calling it directly keeps the EB tables OUT of generate_matchup_signals'
+# own _S3_SOURCE_TABLES, so that script's registration set is unchanged.
+from betting_ml.utils.delta_lakehouse import register_lakehouse_views
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -125,6 +130,85 @@ CREATE TABLE IF NOT EXISTS {_TARGET_TABLE} (
     record_hash        VARCHAR(64)   NOT NULL
 )
 """
+
+# ── E11.24 TARGET-6 SUCCESSOR — the EB prior/role reads on S3 ──────────────────
+# WHY: this script was the LAST daily Snowflake reader whose consumption spans the WHOLE
+# accumulated history of betting.eb_starter_posteriors / eb_batter_posteriors_raw (the
+# season-FIRST-appearance prior below scans every row of the season, not a date window).
+# Those two models are `incremental` + `merge` on the Snowflake target, and their MERGE is
+# what RESUMES COMPUTE_WH on every intraday lineup tick — 6 of the 9 remaining tick-band
+# waits measured on 2026-08-07. They can only flip to metadata-only VIEWS once no Snowflake
+# reader depends on the MATERIALIZED table, so this repoint is the PRECONDITION for that flip.
+#
+# ⚠️ THIS REPOINT IS NOT ITSELF A WAKE REDUCTION. The op keeps a Snowflake connection for the
+# player_sequential_posteriors SCD-2 read/write (_CURRENT_SEQ_SQL + _write_updates), which
+# resumes COMPUTE_WH regardless. The saving is downstream: it UNBLOCKS the view flip.
+#
+# ⚠️ CONTENT CHANGE, DELIBERATE — a `merge` incremental NEVER deletes, so the Snowflake table
+# is an ACCUMULATING SUPERSET of the S3 parquet: it retains rows for lineup/probable snapshots
+# that a later rebuild superseded (a scratched starter, a batter dropped from a confirmed
+# order). The S3 parquet is a FULL rebuild every daily --w8a run (measured 2026-08-08: one
+# run_id, one fit_date across all 485,109 batter rows), so it carries exactly the CURRENT
+# posterior set. Reading S3 therefore drops ghosts rather than adding anything — and a ghost
+# is precisely a row the model no longer produces. scripts/parity_check_eb_reader_repoint.py
+# measures the delta on the values this script actually CONSUMES (not a whole-table
+# fingerprint, which differs by the known ghost rows and would say nothing about the op).
+#
+# ⚠️ ALL THREE EB TABLES MOVE TOGETHER, INCLUDING BULLPEN — NOT scope creep. _load_pitcher_roles
+# UNIONS the starter and bullpen role maps into ONE dict (starter wins a tie). Repointing only
+# the starter side would build that map from two different vintages (fresh rebuild + accumulated
+# superset), so a pitcher's role could depend on which side happened to carry a ghost. A derived
+# map must come from a single vintage. (eb_bullpen_posteriors is NOT flipped to a view in this
+# change — update_team_posteriors.py still reads it from Snowflake.)
+#
+# INC-25 ORDERING — SATISFIED BY CONSTRUCTION, not by luck: in daily_ingestion_job the S3 parquet
+# is written by `lk9 = lakehouse_w8a_feature_layer_op` (--w8a-only), ~110 graph nodes UPSTREAM of
+# `p_player = update_player_posteriors_op`, so the read is of THIS run's build — strictly fresher
+# than the Snowflake table it replaces (which is only rewritten later, by dbt_umpire_feature_rebuild).
+# In statcast_catchup_job neither is rebuilt beforehand, so both are the previous daily's vintage —
+# and the season-FIRST-appearance rows the prior read consumes are April rows, stable in both.
+# W8A_LAKEHOUSE_S3 is in services/dagster/aws/env.required, so the --w8a build cannot silently skip.
+#
+# NO CIRCULARITY: eb_batter_posteriors_raw carries an `eb_woba_sequential` column derived from
+# player_sequential_posteriors (this script's OWN output), but the prior read below takes
+# `eb_woba` / `eb_woba_uncertainty` — the pure EB columns, which do not depend on the sequential
+# chain. Same for the starter side (`eb_xwoba_against`, not `eb_xwoba_against_sequential`).
+_EB_S3_TABLES = [
+    "eb_batter_posteriors_raw",
+    "eb_starter_posteriors",
+    "eb_bullpen_posteriors",
+]
+
+
+def _eb_duck_sql(sql: str) -> str:
+    """Rewrite an EB prior/role query for DuckDB-over-S3.
+
+    Derived from _EB_S3_TABLES so the rewrite cannot drift from the registration set.
+    Two type-boundary fixups, both INC-23 "cast at the use-site" doctrine:
+
+      • `ORDER BY game_date, game_pk` → numeric game_pk. game_pk is NUMBER on Snowflake but
+        VARCHAR in the parquet, so the tie-break inside a (player, season, game_date) group
+        would be LEXICOGRAPHIC. Measured 2026-08-08: every game_pk in all three tables is
+        exactly 6 characters, and the lexicographic and numeric orderings select the SAME
+        season-first row for 0 players in all three tables — so this is HARDENING against a
+        future 7-digit gamePk, not a fix for a live defect.
+
+      • the `game_date = <literal>` role predicate gets an explicit CAST(... AS DATE). The
+        parquet column is a real DATE and DuckDB's implicit cast already matches (verified:
+        22/22 and 30/30 rows on 2026-08-06/07), but an un-cast `=` across a type boundary is
+        the E9.52 silent-empty class — 0 rows, no error, no exception to catch.
+    """
+    s = sql
+    for table in _EB_S3_TABLES:
+        s = s.replace(f"baseball_data.betting.{table}", table)
+    s = s.replace("ORDER BY game_date, game_pk", "ORDER BY game_date, try_cast(game_pk AS BIGINT)")
+    return s
+
+
+def _eb_date_literal(target_date: date) -> str:
+    """The explicitly-cast DATE literal the role predicate binds (see _eb_duck_sql)."""
+    return f"CAST('{target_date.isoformat()}' AS DATE)"
+
 
 # ── SQL ────────────────────────────────────────────────────────────────────────
 
@@ -283,10 +367,13 @@ def _load_game_dates_for_season(conn, season: int, duck=None) -> list[date]:
             else date.fromisoformat(str(r["game_date"])) for r in rows]
 
 
-def _load_eb_priors(conn, season: int) -> dict[str, dict[str, tuple[float, float]]]:
+def _load_eb_priors(conn, season: int, duck=None) -> dict[str, dict[str, tuple[float, float]]]:
     """
     {player_type: {player_id: (mu_0, sigma_0)}} from first-appearance EB rows.
     player_type in {batter, starter, bullpen}.
+
+    E11.24 TARGET-6 SUCCESSOR: with `duck` (--s3) all three EB tables read from the S3
+    lakehouse via DuckDB instead of Snowflake — see _EB_S3_TABLES.
     """
     out: dict[str, dict[str, tuple[float, float]]] = {}
     for ptype, sql in (
@@ -294,7 +381,11 @@ def _load_eb_priors(conn, season: int) -> dict[str, dict[str, tuple[float, float
         ("starter", _STARTER_PRIOR_SQL),
         ("bullpen", _BULLPEN_PRIOR_SQL),
     ):
-        rows = _fetch_dicts(conn, sql, {"season": season})
+        if duck is not None:
+            duck_sql = _eb_duck_sql(sql).replace("%(season)s", str(int(season)))
+            rows = _fetch_duck(duck, duck_sql)
+        else:
+            rows = _fetch_dicts(conn, sql, {"season": season})
         out[ptype] = {
             r["player_id"]: (float(r["mu_0"]), float(r["sigma_0"]))
             for r in rows
@@ -302,12 +393,22 @@ def _load_eb_priors(conn, season: int) -> dict[str, dict[str, tuple[float, float
     return out
 
 
-def _load_pitcher_roles(conn, target_date: date) -> dict[tuple[str, int], str]:
-    """{(pitcher_id, game_pk): 'starter'|'bullpen'} for the date."""
+def _load_pitcher_roles(conn, target_date: date, duck=None) -> dict[tuple[str, int], str]:
+    """{(pitcher_id, game_pk): 'starter'|'bullpen'} for the date.
+
+    E11.24 TARGET-6 SUCCESSOR: with `duck` (--s3) BOTH role reads come from S3. They are
+    unioned into one map, so they must share a vintage — never one side per backend.
+    """
+    def _rows(sql: str) -> list[dict]:
+        if duck is not None:
+            duck_sql = _eb_duck_sql(sql).replace("%(game_date)s", _eb_date_literal(target_date))
+            return _fetch_duck(duck, duck_sql)
+        return _fetch_dicts(conn, sql, {"game_date": target_date.isoformat()})
+
     roles: dict[tuple[str, int], str] = {}
-    for r in _fetch_dicts(conn, _STARTER_ROLE_SQL, {"game_date": target_date.isoformat()}):
+    for r in _rows(_STARTER_ROLE_SQL):
         roles[(r["player_id"], int(r["game_pk"]))] = "starter"
-    for r in _fetch_dicts(conn, _BULLPEN_ROLE_SQL, {"game_date": target_date.isoformat()}):
+    for r in _rows(_BULLPEN_ROLE_SQL):
         # starter takes precedence if (rare) a pitcher is in both for the same game_pk
         roles.setdefault((r["player_id"], int(r["game_pk"])), "bullpen")
     return roles
@@ -525,8 +626,8 @@ def update_for_date(
     duck=None,
 ) -> dict[str, int]:
     """E11.20 phase 1.5: when `duck` is provided (--s3), the PA substrate reads from the
-    S3 lakehouse via DuckDB. The EB role reads + seq-posterior read/write below STILL use
-    the Snowflake `conn`."""
+    S3 lakehouse via DuckDB. E11.24 TARGET-6 SUCCESSOR: so do the EB role reads. The
+    seq-posterior read/write below STILL uses the Snowflake `conn`."""
     season    = target_date.year
     update_ts = datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -537,7 +638,7 @@ def update_for_date(
             print(f"    {target_date}: no PAs found — skipping.")
             return {"players_updated": 0, "obs_processed": 0, "skipped": 0, "closed": 0, "inserted": 0}
 
-        pitcher_roles = _load_pitcher_roles(conn, target_date)
+        pitcher_roles = _load_pitcher_roles(conn, target_date, duck=duck)
         current_seq   = _load_current_seq(conn, season)
         observations  = _collect_observations(pas, pitcher_roles)
 
@@ -572,11 +673,16 @@ def update_for_date(
 
 # ── Runners ────────────────────────────────────────────────────────────────────
 
-def _load_priors_and_prep(season: int, sigma_obs: float, prior_neff_cap: int, dry_run: bool):
-    print(f"\nLoading EB season-opening priors (season={season})...")
+def _load_priors_and_prep(season: int, sigma_obs: float, prior_neff_cap: int, dry_run: bool,
+                          duck=None):
+    """E11.24 TARGET-6 SUCCESSOR: `duck` (--s3) routes the EB prior reads to S3. The Snowflake
+    connection is still opened — _ensure_table's `CREATE TABLE IF NOT EXISTS` is a metadata-only
+    DDL on the SCD-2 target and does not resume the warehouse."""
+    print(f"\nLoading EB season-opening priors (season={season})"
+          f"{' [--s3]' if duck is not None else ''}...")
     conn = get_snowflake_connection()
     try:
-        eb_priors = _load_eb_priors(conn, season)
+        eb_priors = _load_eb_priors(conn, season, duck=duck)
         for ptype in ("batter", "starter", "bullpen"):
             print(f"  {ptype:<7}: {len(eb_priors.get(ptype, {})):,} players")
         if not dry_run:
@@ -591,19 +697,29 @@ def _load_priors_and_prep(season: int, sigma_obs: float, prior_neff_cap: int, dr
 
 
 def _maybe_duck(use_s3: bool):
-    """E11.20 phase 1.5: a registered DuckDB/S3 connection when --s3, else None."""
+    """E11.20 phase 1.5: a registered DuckDB/S3 connection when --s3, else None.
+
+    E11.24 TARGET-6 SUCCESSOR: also registers the three EB posterior tables, so the prior
+    and role reads resolve off S3. register_lakehouse_views is the shared Delta-aware
+    registrar — called directly rather than by extending generate_matchup_signals'
+    _S3_SOURCE_TABLES, so that script's registration set is untouched.
+    """
     if not use_s3:
         return None
-    print("\n[--s3] Reading the PA substrate from the S3 lakehouse via DuckDB...")
+    print("\n[--s3] Reading the PA substrate + EB priors/roles from the S3 lakehouse via DuckDB...")
     duck = _get_duckdb()
     _register_s3_views(duck)
+    register_lakehouse_views(duck, _EB_S3_TABLES)
     return duck
 
 
 def run_single_date(target_date: date, sigma_obs: float, prior_neff_cap: int, dry_run: bool,
                     use_s3: bool = False) -> None:
-    eb_priors = _load_priors_and_prep(target_date.year, sigma_obs, prior_neff_cap, dry_run)
+    # ⚠️ ORDER: the DuckDB connection must exist BEFORE the priors are loaded — _load_priors_and_prep
+    # now reads the EB tables through it. (Pre-E11.24 this call sat after, when only the PA
+    # substrate was on S3.)
     duck = _maybe_duck(use_s3)
+    eb_priors = _load_priors_and_prep(target_date.year, sigma_obs, prior_neff_cap, dry_run, duck=duck)
     print(f"\nUpdating sequential player posteriors for {target_date}...")
     result = update_for_date(target_date, eb_priors, sigma_obs, prior_neff_cap, dry_run, duck=duck)
     print(f"\n  players_updated={result['players_updated']}  obs_processed={result['obs_processed']}  "
@@ -612,8 +728,8 @@ def run_single_date(target_date: date, sigma_obs: float, prior_neff_cap: int, dr
 
 def run_backfill(season: int, sigma_obs: float, prior_neff_cap: int, dry_run: bool,
                  use_s3: bool = False, reset: bool = False) -> None:
-    eb_priors = _load_priors_and_prep(season, sigma_obs, prior_neff_cap, dry_run)
-    duck = _maybe_duck(use_s3)
+    duck = _maybe_duck(use_s3)  # ⚠️ before the prior load — see run_single_date
+    eb_priors = _load_priors_and_prep(season, sigma_obs, prior_neff_cap, dry_run, duck=duck)
 
     print(f"\nFetching game dates for season {season}...")
     conn = get_snowflake_connection()
@@ -664,8 +780,8 @@ def run_catchup(lookback_days: int, sigma_obs: float, prior_neff_cap: int, dry_r
 
     today = current_game_date()
     print(f"update_player_posteriors  CATCHUP  today={today}  lookback={lookback_days}d  dry_run={dry_run}")
-    eb_priors = _load_priors_and_prep(today.year, sigma_obs, prior_neff_cap, dry_run)
-    duck = _maybe_duck(use_s3)
+    duck = _maybe_duck(use_s3)  # ⚠️ before the prior load — see run_single_date
+    eb_priors = _load_priors_and_prep(today.year, sigma_obs, prior_neff_cap, dry_run, duck=duck)
     _catchup.run_catchup(
         label="player-seq-catchup",
         target_table=_TARGET_TABLE,
@@ -701,10 +817,13 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true",
                         help="Compute updates but do not write to Snowflake")
     parser.add_argument("--s3", action="store_true",
-                        help="E11.20 phase 1.5: read the mart_pitch_play_event PA substrate "
-                             "from the S3 lakehouse via DuckDB instead of Snowflake (the EB "
-                             "prior/role reads and the seq-posterior read/write stay on "
-                             "Snowflake). Precondition for dropping the SF mart_pitch_* views.")
+                        help="Read the mart_pitch_play_event PA substrate (E11.20 phase 1.5) AND "
+                             "the eb_batter_posteriors_raw / eb_starter_posteriors / "
+                             "eb_bullpen_posteriors prior+role reads (E11.24 target-6 successor) "
+                             "from the S3 lakehouse via DuckDB instead of Snowflake. Only the "
+                             "player_sequential_posteriors SCD-2 read/write stays on Snowflake. "
+                             "Precondition for dropping the SF mart_pitch_* views and for "
+                             "flipping the two EB models to metadata-only views.")
     args = parser.parse_args()
 
     if args.backfill and not args.season:
