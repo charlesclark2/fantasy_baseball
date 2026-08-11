@@ -2052,3 +2052,75 @@ class TestEspnPayloadIsPrunedBeforeUpload:
         pruned = len(espn_payload_drafted.encode())
         assert pruned < 400_000, f"pruned fixture unexpectedly large: {pruned:,}"
         assert pruned / 10 * 16 < espn.MAX_PASTE_BYTES / 4
+
+
+# ── PERF (2026-08-11): the import page's projections fetch ───────────────────────────────────────
+class TestTheProjectionsFetchIsDeferredAndNeverGuessed:
+    """The ~647 KB projections payload must not be fetched at mount, and its ABSENCE must never be
+    resolved into an optimistic coverage report.
+
+    WHY BOTH CLAUSES LIVE TOGETHER. Deferring the fetch is a performance change; on its own it would
+    have introduced a correctness bug, because `resolveScoring` reads a missing `availableFields` as
+    "every field exists" (`availableFields ? has(field) : true`). A preview arriving before the
+    payload would then print every scoring term as "applied" — including terms we do not project —
+    which is the exact claim `league-import.tsx`'s own docstring says this surface may never make
+    ("this surface cannot promote a term by asserting it").
+
+    ⭐ The second clause is NOT merely protecting the first: the pre-deferral code passed `undefined`
+    on the FAILURE path too, so a 404 or an errored projections fetch already produced a silent
+    all-"applied" report. Deferring made a latent bug reachable, and fixing it closed both.
+    """
+
+    UI = Path(__file__).resolve().parents[2] / "frontend" / "components" / "fantasy" / "league-import.tsx"
+    QUERIES = Path(__file__).resolve().parents[2] / "frontend" / "lib" / "fantasy-queries.ts"
+
+    def test_the_import_page_does_not_fetch_projections_at_mount(self):
+        """`useFantasyProjections` must be called with an explicit gate, not bare.
+
+        A bare `useFantasyProjections()` fires on mount, racing `/fantasy/leagues` and
+        `/fantasy/import/platforms` into a Lambda whose cold init measured ~4 s — and on an idle
+        function each parallel request pays that cost on its OWN container.
+        """
+        ui = self.UI.read_text()
+        assert "useFantasyProjections(" in ui, "wrong file, or the hook was renamed"
+        # The gate is the second argument. A bare call — `useFantasyProjections()` — is the
+        # regression: it restores the mount-time fetch.
+        assert not re.search(r"useFantasyProjections\(\s*\)", ui), (
+            "league-import.tsx calls useFantasyProjections() with no `enabled` gate, so the ~647 KB "
+            "payload is fetched at mount again. Pass the flow-started flag as the second argument."
+        )
+        assert re.search(r"useFantasyProjections\(\s*undefined\s*,\s*flowStarted\s*\)", ui), (
+            "the projections gate is no longer `flowStarted` — if the trigger moved, re-check that "
+            "it still fires before a preview can exist, or the coverage panel will block on a "
+            "647 KB download at the moment the user is waiting to read it"
+        )
+        assert "setFlowStarted(true)" in ui, "nothing ever starts the deferred fetch"
+
+    def test_coverage_is_not_computed_without_the_projection_columns(self):
+        """The resolver must not run until `projections.players` is really present.
+
+        This is the clause that keeps the verdict honest; `availableFields` defaulting to "has
+        everything" is what makes an early or failed fetch produce a wrong, confident answer.
+        """
+        ui = self.UI.read_text()
+        memo = ui.split("const coverage = useMemo(")[1].split("}, [")[0]
+        assert "if (!projections?.players) return null" in memo, (
+            "the coverage useMemo resolves scoring without proving the projection columns loaded. "
+            "resolveScoring treats a missing availableFields as 'every field exists', so this "
+            "prints every term as 'applied' — including ones we do not project."
+        )
+        # The optimistic call shape must be gone, not merely guarded above.
+        assert "availableFields: projections?.players ?" not in memo, (
+            "the conditional/undefined availableFields form is back; pass the real Set only"
+        )
+        # Non-vacuity: we really parsed the memo body, not an empty string.
+        assert "resolveScoring(" in memo, "coverage useMemo body not parsed — guard is vacuous"
+
+    def test_the_shared_hook_keeps_fetching_on_mount_by_default(self):
+        """`enabled` is ADDITIVE. Six other surfaces render this payload as their primary content
+        and must be unaffected — a default of `false` would blank all of them."""
+        src = self.QUERIES.read_text()
+        assert re.search(
+            r"export function useFantasyProjections\(\s*season[^,]*,\s*enabled:\s*boolean\s*=\s*true\s*\)",
+            src,
+        ), "useFantasyProjections' `enabled` parameter must default to true"
