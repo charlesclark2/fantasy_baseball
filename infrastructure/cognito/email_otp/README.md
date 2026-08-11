@@ -211,6 +211,20 @@ check cannot create an account or send mail as a side effect of testing reachabi
 
 ---
 
+## ✅ Verified live 2026-08-10 — all four legs passed
+
+Against the real pool, in order: OTP signup end-to-end (one CONFIRMED user, code delivered,
+tokens minted) · OTP-then-Google resolving to the SAME UUID with `identities` carrying
+`providerName: "Google"` · **Google-then-OTP producing a UUID username rather than
+`google_…`** (the case that was broken before this story) and then successfully sending a
+code · both pre-existing federated-only accounts correctly refused with `next: "google"`.
+
+⭐ **The one-line regression signature:** sign in with Google using a brand-new address and
+read the username. UUID = healthy. `google_…` = pre-provisioning is off or failing, and every
+account created in that window is federated-only and can never use email OTP. Both causes
+(`PRESIGNUP_PREPROVISION=0`, a missing `AdminCreateUser` grant) fail OPEN — a perfectly
+successful sign-in, silently producing the wrong shape.
+
 ## Acceptance test — the only one that counts
 
 CI cannot see Cognito, SES, or the gateway. Run this live, in a **private window**, with an

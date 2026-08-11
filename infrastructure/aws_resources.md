@@ -30,11 +30,14 @@ Naming convention: `credence-{environment}-{service}-{descriptor}`
 | Region | `us-east-1` |
 | Self-signup — native (email/password) | **Disabled, permanently.** No email auto-verification, so `SignUp` creates an account that can never confirm itself or reset its password (E9.57, verified live). Do not open it without first configuring verification. |
 | Self-signup — federated (Google) | **LIVE and public since E9.58** (2026-08-05). |
-| Self-signup — email OTP (passwordless) | **G100-C0.** A 6-digit code emailed via SES, driven by `CUSTOM_AUTH` triggers (`infrastructure/cognito/email_otp/`). Sidesteps the row above entirely: the code IS the proof of email ownership, so there is no verification step left to be missing. Second self-serve door beside Google. |
+| Self-signup — email OTP (passwordless) | **G100-C0 — LIVE, verified end-to-end 2026-08-10.** A 6-digit code emailed via SES, driven by `CUSTOM_AUTH` triggers (`infrastructure/cognito/email_otp/`). Sidesteps the row above entirely: the code IS the proof of email ownership, so there is no verification step left to be missing. Second self-serve door beside Google. |
 | Lambda triggers | **Pre sign-up** → `credence-prod-cognito-presignup-link` · **Define / Create / Verify auth challenge** → `credence-prod-cognito-email-otp` |
 | App-client auth flows | must include `ALLOW_CUSTOM_AUTH` (G100-C0) |
 | Auth session validity | **15 min** — this is the real expiry of an emailed OTP, and the code email says "15 minutes". Leaving it at the 3-minute default makes the email promise something the pool will not honour. |
 | User Groups | `beta_tester`, `subscriber`, `admin` |
+| Hosted UI domain | `us-east-1gg9zmbwqt.auth.us-east-1.amazoncognito.com` |
+| Hosted UI custom domain | None (`CustomDomain: null`) |
+| Allowed callback URLs | `https://www.credencesports.com/callback` **and** `https://credencesports.com/callback` (both verified allowlisted 2026-08-06 — a bogus `redirect_uri` correctly returns `redirect_mismatch`) |
 
 ### ⭐ Canonical identity — one human, one `sub`
 
@@ -65,9 +68,33 @@ re-authenticate with). This is inert today (`ENFORCE_SUBSCRIBER_MFA` defaults to
 the frontend side is already handled (`sessionUsesPasswordlessAuth`). **Resolve it before
 the flip** — the cheap fix is a `passwordless` Cognito group applied at pre-provision time
 and exempted in `_session_is_federated`, since groups already travel in the validated token.
-| Hosted UI domain | `us-east-1gg9zmbwqt.auth.us-east-1.amazoncognito.com` |
-| Hosted UI custom domain | None (`CustomDomain: null`) |
-| Allowed callback URLs | `https://www.credencesports.com/callback` **and** `https://credencesports.com/callback` (both verified allowlisted 2026-08-06 — a bogus `redirect_uri` correctly returns `redirect_mismatch`) |
+
+#### ✅ Verified live 2026-08-10 — all four legs, against the real pool
+
+Recorded because this is the class of claim that rots into "documented but never actually
+true" (cf. `W7B_LAKEHOUSE_S3`). Each line is a measurement, not an intention:
+
+- **OTP signup end-to-end** — `/start` for a never-seen address created ONE user
+  (`CONFIRMED`, UUID username), SES delivered the code, `/verify` minted the token trio.
+- **OTP first → Google second** — signing in with Google on that same address returned the
+  **same UUID**, with `identities` carrying `providerName: "Google"`. One user, two methods.
+- **Google first → OTP second** *(the case that was broken before G100-C0)* — after deleting
+  the user and signing in with Google FIRST, the resulting username was a **UUID, not
+  `google_…`** ⇒ pre-provisioning fired; the subsequent `/start` then returned
+  `next: "otp"` with a delivered code.
+- **Legacy refusal** — both pre-existing federated-only accounts returned `next: "google"`,
+  `session: null`, and sent no mail.
+
+⭐ **The one-line signature to re-check if this is ever suspected of regressing:** sign in
+with Google using a brand-new address and read the username. A **UUID** is healthy; a
+**`google_…`** means pre-provisioning is off or failing, and every account created in that
+window is a federated-only one that can never use email OTP. `PRESIGNUP_PREPROVISION=0` and
+a missing `AdminCreateUser` grant both produce exactly that, and both fail OPEN — i.e.
+silently, with a perfectly successful sign-in. CloudWatch:
+`presignup-link: pre-provision failed`.
+
+⚠️ Population of federated-only (pre-G100-C0) accounts at cutover: **2**, both operator-owned
+(2026-08-06, 2026-08-09). Closed set — it cannot grow while pre-provisioning is on.
 
 JWT issuer URL: `https://cognito-idp.us-east-1.amazonaws.com/us-east-1_gG9zMbwQt`
 
@@ -309,7 +336,7 @@ authorizer sits in front of the Lambda entirely and rejects an unauthenticated r
 Mangum/FastAPI ever sees it (see NF3.2: `fantasy_public.router` shipped correct at the app layer
 but still 401'd until this API Gateway route was added).
 
-#### G100-C0 — the two email-OTP routes — ⛔ NOT YET APPLIED
+#### G100-C0 — the two email-OTP routes — ✅ APPLIED + VERIFIED LIVE 2026-08-10
 
 Passwordless sign-in. Public by necessity, not by preference: a caller signing in has no
 token yet, so an authorizer on these routes makes the feature unreachable for exactly the
