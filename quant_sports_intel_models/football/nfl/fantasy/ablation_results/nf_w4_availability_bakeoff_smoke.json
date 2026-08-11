@@ -1,0 +1,1640 @@
+{
+  "generated_at": "2026-08-11T01:53:22+00:00",
+  "story": "NF-W4",
+  "smoke": true,
+  "skip_layer_b": false,
+  "runtime_seconds": 983.0,
+  "selection_metric": "crps_q39",
+  "t1_selection_metric": "crps_bernoulli_exact",
+  "targets": [
+    "played",
+    "snap_share"
+  ],
+  "n_folds": 2,
+  "fold_labels": [
+    "2025H1",
+    "2025H2"
+  ],
+  "n_rows": 84553,
+  "pit_audit": {
+    "game_groups_checked": 532,
+    "records_checked": 183314,
+    "injury_records_checked": 15401,
+    "rate_records_checked": 83360,
+    "wayback_records_checked": 9501,
+    "groups_dropped": [],
+    "rows_dropped": 0
+  },
+  "avail_forms": {
+    "played": "lgbm_binary",
+    "snap_share": "lgbm_quantile"
+  },
+  "preregistration": {
+    "real_arms": {
+      "played": [
+        "logit_glm",
+        "lgbm_binary",
+        "two_stage",
+        "knn_rate"
+      ],
+      "snap_share": [
+        "frac_logit",
+        "beta_mom",
+        "lgbm_quantile",
+        "knn_quantile"
+      ]
+    },
+    "foils": [
+      "foil_clim",
+      "foil_clim_inj"
+    ],
+    "anchors": {
+      "played": [
+        "nihilist_zero",
+        "marginal_train",
+        "zero_width",
+        "max_width",
+        "permuted_within",
+        "oracle__logit_glm",
+        "oracle__lgbm_binary",
+        "oracle__two_stage",
+        "oracle__knn_rate",
+        "oracle__foil_clim",
+        "oracle__foil_clim_inj",
+        "matched_n__logit_glm",
+        "matched_n__lgbm_binary",
+        "matched_n__two_stage",
+        "matched_n__knn_rate"
+      ],
+      "snap_share": [
+        "nihilist_zero",
+        "marginal_train",
+        "zero_width",
+        "max_width",
+        "permuted_within",
+        "oracle__frac_logit",
+        "oracle__beta_mom",
+        "oracle__lgbm_quantile",
+        "oracle__knn_quantile",
+        "oracle__foil_clim",
+        "oracle__foil_clim_inj",
+        "matched_n__frac_logit",
+        "matched_n__beta_mom",
+        "matched_n__lgbm_quantile",
+        "matched_n__knn_quantile"
+      ]
+    },
+    "eligible": {
+      "played": [
+        "logit_glm",
+        "lgbm_binary",
+        "two_stage",
+        "knn_rate",
+        "foil_clim",
+        "foil_clim_inj"
+      ],
+      "snap_share": [
+        "frac_logit",
+        "beta_mom",
+        "lgbm_quantile",
+        "knn_quantile",
+        "foil_clim",
+        "foil_clim_inj"
+      ]
+    },
+    "layer_b_eligible": [
+      "champion_inj",
+      "champion_avail"
+    ],
+    "layer_b_anchors": [
+      "champion_avail_foil",
+      "champion_avail_shuffled",
+      "champion_avail_oracle"
+    ],
+    "incumbent_of_position": {
+      "QB": "inj_zero_leg",
+      "RB": "inj_both",
+      "WR": "inj_both",
+      "TE": "inj_zero_leg"
+    },
+    "foil_forms": {
+      "played": "foil_clim_inj",
+      "snap_share": "foil_clim_inj"
+    },
+    "test_blocks": [
+      [
+        2022,
+        1
+      ],
+      [
+        2022,
+        2
+      ],
+      [
+        2023,
+        1
+      ],
+      [
+        2023,
+        2
+      ],
+      [
+        2024,
+        1
+      ],
+      [
+        2024,
+        2
+      ],
+      [
+        2025,
+        1
+      ],
+      [
+        2025,
+        2
+      ]
+    ],
+    "purge_weeks": 2,
+    "pbo_max": 0.2,
+    "dsr_min": 0.95,
+    "fdr_q": 0.1,
+    "fdr_families": {
+      "component": [
+        "played",
+        "snap_share"
+      ],
+      "downstream": [
+        "QB",
+        "RB",
+        "WR",
+        "TE"
+      ]
+    },
+    "coverage_floor": 0.8,
+    "eb_kappa_avail": 4.0,
+    "min_cell": 200,
+    "inj_gate_classes_t1": [
+      "out",
+      "doubtful",
+      "questionable",
+      "listed_no_designation"
+    ],
+    "inj_mult_classes_t2": [
+      "questionable",
+      "listed_no_designation"
+    ],
+    "share_mult_clip": [
+      0.25,
+      1.5
+    ],
+    "avail_features": [
+      "game_context__is_home",
+      "game_context__week_index",
+      "game_context__days_since_last_game",
+      "prior_week_box__played_share_l4",
+      "prior_week_box__games_s2d",
+      "prior_week_box__ppr_l1",
+      "prior_week_box__ppr_l4_mean",
+      "prior_week_box__ppr_s2d_mean",
+      "prior_week_box__targets_l4",
+      "prior_week_box__carries_l4",
+      "snap_share__l1",
+      "snap_share__l4_mean",
+      "snap_share__observed_l4",
+      "prior_season_priors__games_prior",
+      "prior_season_priors__ppg_prior",
+      "prior_season_priors__rookie_flag",
+      "injury_report__listed",
+      "injury_report__status_out",
+      "injury_report__status_doubtful",
+      "injury_report__status_questionable",
+      "injury_report__practice_dnp",
+      "injury_report__practice_limited",
+      "injury_report__observed",
+      "injury_rate__listed",
+      "injury_rate__status_out",
+      "injury_rate__status_doubtful",
+      "injury_rate__status_questionable",
+      "injury_rate__practice_dnp",
+      "injury_rate__practice_limited",
+      "injury_rate__observed"
+    ],
+    "avail_proj_features": [
+      "availability_projection__p_played",
+      "availability_projection__snap_share",
+      "availability_projection__expected_avail",
+      "availability_projection__share_sd"
+    ],
+    "oracle_substituted": [
+      "availability_projection__p_played",
+      "availability_projection__snap_share",
+      "availability_projection__expected_avail"
+    ],
+    "banned_feature_tokens": [
+      "spread_line",
+      "total_line",
+      "vegas",
+      "moneyline",
+      "depth_chart",
+      "depth_team",
+      "gameday_inactive",
+      "weather"
+    ],
+    "target_leak_tokens": [
+      "offense_pct",
+      "_t_played",
+      "_t_share",
+      "label",
+      "status"
+    ],
+    "capture_era_folds": [
+      "2025H1",
+      "2025H2"
+    ]
+  },
+  "layer_a": {
+    "played": {
+      "target": "played",
+      "winner": "lgbm_binary",
+      "best_foil": "foil_clim_inj",
+      "selection_metric": "crps_bernoulli_exact",
+      "mean_crps": {
+        "foil_clim": 0.11848,
+        "foil_clim_inj": 0.10619,
+        "nihilist_zero": 0.79123,
+        "marginal_train": 0.1494,
+        "logit_glm": 0.09271,
+        "oracle__logit_glm": 0.08991,
+        "matched_n__logit_glm": 0.09924,
+        "lgbm_binary": 0.08348,
+        "oracle__lgbm_binary": 0.00532,
+        "matched_n__lgbm_binary": 0.10353,
+        "two_stage": 0.08674,
+        "oracle__two_stage": 0.00316,
+        "matched_n__two_stage": 0.10642,
+        "knn_rate": 0.09574,
+        "oracle__knn_rate": 0.11975,
+        "matched_n__knn_rate": 0.12371,
+        "oracle__foil_clim": 0.11815,
+        "oracle__foil_clim_inj": 0.1178,
+        "permuted_within": 0.1526,
+        "zero_width": 0.26339,
+        "max_width": 0.33333
+      },
+      "mean_mae_report_only": {
+        "lgbm_binary": 0.11034,
+        "foil_clim_inj": 0.12703,
+        "nihilist_zero": 0.79123,
+        "marginal_train": 0.209
+      },
+      "deltas_by_fold": [
+        0.022,
+        0.0234
+      ],
+      "mean_delta": 0.0227,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        6.302,
+        22.935,
+        11.578,
+        36.022
+      ],
+      "observed_sr": 22.935,
+      "var_trials_sr": 173.79405,
+      "anchors": {
+        "nihilist_loses": true,
+        "marginal_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": false,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": false
+      },
+      "oracle_detail": {
+        "logit_glm": {
+          "arm": 0.09271,
+          "own_form_oracle": 0.08991,
+          "matched_n": 0.09924,
+          "oracle_beats_matched_n": true
+        },
+        "lgbm_binary": {
+          "arm": 0.08348,
+          "own_form_oracle": 0.00532,
+          "matched_n": 0.10353,
+          "oracle_beats_matched_n": true
+        },
+        "two_stage": {
+          "arm": 0.08674,
+          "own_form_oracle": 0.00316,
+          "matched_n": 0.10642,
+          "oracle_beats_matched_n": true
+        },
+        "knn_rate": {
+          "arm": 0.09574,
+          "own_form_oracle": 0.11975,
+          "matched_n": 0.12371,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.04641,
+        "permuted_lift_p_one_sided": null
+      },
+      "coverage": {
+        "winner_coverage_80": 0.9777,
+        "n_rows": 8688,
+        "binomial_se": 0.0043,
+        "blocking_shortfall": false,
+        "structurally_inactive": true
+      },
+      "class_cell_fallbacks": []
+    },
+    "snap_share": {
+      "target": "snap_share",
+      "winner": "lgbm_quantile",
+      "best_foil": "foil_clim_inj",
+      "selection_metric": "crps_q39",
+      "mean_crps": {
+        "foil_clim": 0.12039,
+        "foil_clim_inj": 0.12018,
+        "nihilist_zero": 0.4703,
+        "zero_width": 0.17088,
+        "max_width": 0.1607,
+        "marginal_train": 0.16737,
+        "frac_logit": 0.09777,
+        "oracle__frac_logit": 0.09713,
+        "matched_n__frac_logit": 0.10247,
+        "beta_mom": 0.09658,
+        "oracle__beta_mom": 0.09555,
+        "matched_n__beta_mom": 0.10086,
+        "lgbm_quantile": 0.08686,
+        "oracle__lgbm_quantile": 0.06428,
+        "matched_n__lgbm_quantile": 0.09376,
+        "knn_quantile": 0.09899,
+        "oracle__knn_quantile": 0.11282,
+        "matched_n__knn_quantile": 0.11465,
+        "oracle__foil_clim": 0.12026,
+        "oracle__foil_clim_inj": 0.12002,
+        "permuted_within": 0.16706
+      },
+      "mean_mae_report_only": {
+        "lgbm_quantile": 0.11738,
+        "foil_clim_inj": 0.16988,
+        "nihilist_zero": 0.4703,
+        "marginal_train": 0.24265
+      },
+      "deltas_by_fold": [
+        0.036,
+        0.03065
+      ],
+      "mean_delta": 0.03332,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        21.462,
+        12.318,
+        8.797,
+        9.242
+      ],
+      "observed_sr": 8.797,
+      "var_trials_sr": 34.6176,
+      "anchors": {
+        "nihilist_loses": true,
+        "marginal_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": false,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "frac_logit": {
+          "arm": 0.09777,
+          "own_form_oracle": 0.09713,
+          "matched_n": 0.10247,
+          "oracle_beats_matched_n": true
+        },
+        "beta_mom": {
+          "arm": 0.09658,
+          "own_form_oracle": 0.09555,
+          "matched_n": 0.10086,
+          "oracle_beats_matched_n": true
+        },
+        "lgbm_quantile": {
+          "arm": 0.08686,
+          "own_form_oracle": 0.06428,
+          "matched_n": 0.09376,
+          "oracle_beats_matched_n": true
+        },
+        "knn_quantile": {
+          "arm": 0.09899,
+          "own_form_oracle": 0.11282,
+          "matched_n": 0.11465,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.04687,
+        "permuted_lift_p_one_sided": null
+      },
+      "coverage": {
+        "winner_coverage_80": 0.7758,
+        "n_rows": 6870,
+        "binomial_se": 0.0048,
+        "blocking_shortfall": true,
+        "structurally_inactive": false
+      },
+      "class_cell_fallbacks": [],
+      "exclusions_total": {
+        "n_rows": 8688,
+        "n_played": 6874,
+        "n_scored": 6870,
+        "n_played_unmeasured_excluded": 4
+      }
+    }
+  },
+  "layer_b": {
+    "QB": {
+      "position": "QB",
+      "winner": "champion_avail",
+      "best_foil": "champion_inj",
+      "incumbent_form": "inj_zero_leg",
+      "mean_crps": {
+        "inj_both": 2.5772,
+        "inj_zero_leg": 2.5819,
+        "avail_both": 2.608,
+        "avail_zero_leg": 2.6072,
+        "avail_foil_both": 2.5849,
+        "avail_foil_zero_leg": 2.5734,
+        "avail_shuffled_both": 2.5805,
+        "avail_shuffled_zero_leg": 2.5822,
+        "avail_oracle_both": 1.8763,
+        "avail_oracle_zero_leg": 1.8788
+      },
+      "deltas_by_fold": [
+        -0.0332,
+        -0.0174
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": -0.0253,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": false,
+      "fold_wins": 0,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; Layer B fields ONE pre-registered contrast, so there was no search to overfit. Declared before the run; deliberately NOT a gate.",
+      "dsr": null,
+      "p_one_sided": null,
+      "observed_sr": -2.267,
+      "var_trials_sr": null,
+      "anchors": {
+        "winner_beats_shuffled": false,
+        "shuffled_lift_not_significant": true,
+        "respects_realized_oracle": true
+      },
+      "oracle_ceiling": {
+        "mean_delta": 0.7031,
+        "ci95": [
+          null,
+          null
+        ],
+        "fold_wins": 2
+      },
+      "foil_avail_anchor": {
+        "mean_delta": 0.0085,
+        "ci95": [
+          null,
+          null
+        ]
+      },
+      "shuffle_detail": {
+        "shuffled_lift_mean": -0.0003,
+        "shuffled_lift_p_one_sided": null
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": -0.0253,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (n=2 capture folds \u2014 a design quantity, never a gate): forward-looking lift sizing quotes the capture era (NF-W2d/W2e)."
+      },
+      "coverage": {
+        "winner_coverage_80": 0.7996,
+        "n_rows": 1372,
+        "binomial_se": 0.0108,
+        "blocking_shortfall": false
+      }
+    },
+    "RB": {
+      "position": "RB",
+      "winner": "champion_avail",
+      "best_foil": "champion_inj",
+      "incumbent_form": "inj_both",
+      "mean_crps": {
+        "inj_both": 2.4076,
+        "inj_zero_leg": 2.4079,
+        "avail_both": 2.4055,
+        "avail_zero_leg": 2.3986,
+        "avail_foil_both": 2.4086,
+        "avail_foil_zero_leg": 2.409,
+        "avail_shuffled_both": 2.4025,
+        "avail_shuffled_zero_leg": 2.4042,
+        "avail_oracle_both": 1.9588,
+        "avail_oracle_zero_leg": 1.9605
+      },
+      "deltas_by_fold": [
+        0.0065,
+        -0.0024
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.0021,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 1,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; Layer B fields ONE pre-registered contrast, so there was no search to overfit. Declared before the run; deliberately NOT a gate.",
+      "dsr": null,
+      "p_one_sided": null,
+      "observed_sr": 0.324,
+      "var_trials_sr": null,
+      "anchors": {
+        "winner_beats_shuffled": false,
+        "shuffled_lift_not_significant": false,
+        "respects_realized_oracle": true
+      },
+      "oracle_ceiling": {
+        "mean_delta": 0.4488,
+        "ci95": [
+          null,
+          null
+        ],
+        "fold_wins": 2
+      },
+      "foil_avail_anchor": {
+        "mean_delta": -0.001,
+        "ci95": [
+          null,
+          null
+        ]
+      },
+      "shuffle_detail": {
+        "shuffled_lift_mean": 0.0051,
+        "shuffled_lift_p_one_sided": null
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0021,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (n=2 capture folds \u2014 a design quantity, never a gate): forward-looking lift sizing quotes the capture era (NF-W2d/W2e)."
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8414,
+        "n_rows": 2144,
+        "binomial_se": 0.0086,
+        "blocking_shortfall": false
+      }
+    },
+    "WR": {
+      "position": "WR",
+      "winner": "champion_avail",
+      "best_foil": "champion_inj",
+      "incumbent_form": "inj_both",
+      "mean_crps": {
+        "inj_both": 2.4885,
+        "inj_zero_leg": 2.4888,
+        "avail_both": 2.4867,
+        "avail_zero_leg": 2.4883,
+        "avail_foil_both": 2.4938,
+        "avail_foil_zero_leg": 2.4947,
+        "avail_shuffled_both": 2.4866,
+        "avail_shuffled_zero_leg": 2.4839,
+        "avail_oracle_both": 2.1816,
+        "avail_oracle_zero_leg": 2.1808
+      },
+      "deltas_by_fold": [
+        -0.0027,
+        0.0063
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.0018,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 1,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; Layer B fields ONE pre-registered contrast, so there was no search to overfit. Declared before the run; deliberately NOT a gate.",
+      "dsr": null,
+      "p_one_sided": null,
+      "observed_sr": 0.282,
+      "var_trials_sr": null,
+      "anchors": {
+        "winner_beats_shuffled": false,
+        "shuffled_lift_not_significant": false,
+        "respects_realized_oracle": true
+      },
+      "oracle_ceiling": {
+        "mean_delta": 0.307,
+        "ci95": [
+          null,
+          null
+        ],
+        "fold_wins": 2
+      },
+      "foil_avail_anchor": {
+        "mean_delta": -0.0052,
+        "ci95": [
+          null,
+          null
+        ]
+      },
+      "shuffle_detail": {
+        "shuffled_lift_mean": 0.0019,
+        "shuffled_lift_p_one_sided": null
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0018,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (n=2 capture folds \u2014 a design quantity, never a gate): forward-looking lift sizing quotes the capture era (NF-W2d/W2e)."
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8576,
+        "n_rows": 3231,
+        "binomial_se": 0.007,
+        "blocking_shortfall": false
+      }
+    },
+    "TE": {
+      "position": "TE",
+      "winner": "champion_avail",
+      "best_foil": "champion_inj",
+      "incumbent_form": "inj_zero_leg",
+      "mean_crps": {
+        "inj_both": 1.8186,
+        "inj_zero_leg": 1.8182,
+        "avail_both": 1.8179,
+        "avail_zero_leg": 1.8179,
+        "avail_foil_both": 1.8218,
+        "avail_foil_zero_leg": 1.8237,
+        "avail_shuffled_both": 1.8188,
+        "avail_shuffled_zero_leg": 1.8215,
+        "avail_oracle_both": 1.682,
+        "avail_oracle_zero_leg": 1.6814
+      },
+      "deltas_by_fold": [
+        0.0052,
+        -0.0047
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.0003,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 1,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; Layer B fields ONE pre-registered contrast, so there was no search to overfit. Declared before the run; deliberately NOT a gate.",
+      "dsr": null,
+      "p_one_sided": null,
+      "observed_sr": 0.037,
+      "var_trials_sr": null,
+      "anchors": {
+        "winner_beats_shuffled": true,
+        "shuffled_lift_not_significant": true,
+        "respects_realized_oracle": true
+      },
+      "oracle_ceiling": {
+        "mean_delta": 0.1368,
+        "ci95": [
+          null,
+          null
+        ],
+        "fold_wins": 2
+      },
+      "foil_avail_anchor": {
+        "mean_delta": -0.0055,
+        "ci95": [
+          null,
+          null
+        ]
+      },
+      "shuffle_detail": {
+        "shuffled_lift_mean": -0.0033,
+        "shuffled_lift_p_one_sided": null
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0003,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (n=2 capture folds \u2014 a design quantity, never a gate): forward-looking lift sizing quotes the capture era (NF-W2d/W2e)."
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8784,
+        "n_rows": 1941,
+        "binomial_se": 0.0091,
+        "blocking_shortfall": false
+      }
+    }
+  },
+  "fold_results_a": {
+    "played": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "foil_clim": {
+            "crps": 0.11697454809398093,
+            "mae_report_only": 0.1457753017641597
+          },
+          "foil_clim_inj": {
+            "crps": 0.10267818582364588,
+            "mae_report_only": 0.12256267409470752
+          },
+          "nihilist_zero": {
+            "crps": 0.7943361188486536,
+            "mae_report_only": 0.7943361188486536
+          },
+          "marginal_train": {
+            "crps": 0.14759594974786608,
+            "mae_report_only": 0.20589600742804084
+          },
+          "logit_glm": {
+            "crps": 0.09071622350052874,
+            "mae_report_only": 0.12256267409470752
+          },
+          "oracle__logit_glm": {
+            "crps": 0.08940656508203493,
+            "mae_report_only": 0.12116991643454039
+          },
+          "matched_n__logit_glm": {
+            "crps": 0.10268045554404759,
+            "mae_report_only": 0.12534818941504178
+          },
+          "lgbm_binary": {
+            "crps": 0.08067416577982595,
+            "mae_report_only": 0.10492107706592387
+          },
+          "oracle__lgbm_binary": {
+            "crps": 0.00767384988574556,
+            "mae_report_only": 0.007195914577530177
+          },
+          "matched_n__lgbm_binary": {
+            "crps": 0.10372704272885983,
+            "mae_report_only": 0.13324048282265552
+          },
+          "two_stage": {
+            "crps": 0.08441827749571036,
+            "mae_report_only": 0.11211699164345404
+          },
+          "oracle__two_stage": {
+            "crps": 0.005005311711395462,
+            "mae_report_only": 0.005571030640668524
+          },
+          "matched_n__two_stage": {
+            "crps": 0.1031860323130056,
+            "mae_report_only": 0.1309192200557103
+          },
+          "knn_rate": {
+            "crps": 0.09243187563197033,
+            "mae_report_only": 0.12534818941504178
+          },
+          "oracle__knn_rate": {
+            "crps": 0.11781672082947221,
+            "mae_report_only": 0.1562209842154132
+          },
+          "matched_n__knn_rate": {
+            "crps": 0.12339522851543235,
+            "mae_report_only": 0.15900649953574744
+          },
+          "oracle__foil_clim": {
+            "crps": 0.11669982362668767,
+            "mae_report_only": 0.15250696378830084
+          },
+          "oracle__foil_clim_inj": {
+            "crps": 0.11674175902841866,
+            "mae_report_only": 0.154363974001857
+          },
+          "permuted_within": {
+            "crps": 0.1517829595163938,
+            "mae_report_only": 0.2149489322191272
+          },
+          "zero_width": {
+            "crps": 0.2549716151595604,
+            "mae_report_only": 0.2549716151595604
+          },
+          "max_width": {
+            "crps": 0.3333333333333333,
+            "mae_report_only": 0.5
+          }
+        },
+        "n_train": 74849,
+        "n_test": 4308
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "foil_clim": {
+            "crps": 0.11999415510371157,
+            "mae_report_only": 0.14726027397260275
+          },
+          "foil_clim_inj": {
+            "crps": 0.1096979005743193,
+            "mae_report_only": 0.13150684931506848
+          },
+          "nihilist_zero": {
+            "crps": 0.7881278538812785,
+            "mae_report_only": 0.7881278538812785
+          },
+          "marginal_train": {
+            "crps": 0.15121153669461174,
+            "mae_report_only": 0.21210045662100457
+          },
+          "logit_glm": {
+            "crps": 0.09471259734578596,
+            "mae_report_only": 0.12762557077625572
+          },
+          "oracle__logit_glm": {
+            "crps": 0.09040700370262174,
+            "mae_report_only": 0.12191780821917808
+          },
+          "matched_n__logit_glm": {
+            "crps": 0.09579286154734744,
+            "mae_report_only": 0.1273972602739726
+          },
+          "lgbm_binary": {
+            "crps": 0.08629391990307286,
+            "mae_report_only": 0.11575342465753424
+          },
+          "oracle__lgbm_binary": {
+            "crps": 0.002967209125152793,
+            "mae_report_only": 0.0006849315068493151
+          },
+          "matched_n__lgbm_binary": {
+            "crps": 0.10333364667128189,
+            "mae_report_only": 0.13150684931506848
+          },
+          "two_stage": {
+            "crps": 0.08906243087768917,
+            "mae_report_only": 0.11963470319634703
+          },
+          "oracle__two_stage": {
+            "crps": 0.001312560373780393,
+            "mae_report_only": 0.00045662100456621003
+          },
+          "matched_n__two_stage": {
+            "crps": 0.10965220800814751,
+            "mae_report_only": 0.13675799086757992
+          },
+          "knn_rate": {
+            "crps": 0.09904127001525997,
+            "mae_report_only": 0.13264840182648402
+          },
+          "oracle__knn_rate": {
+            "crps": 0.12168372399797171,
+            "mae_report_only": 0.16506849315068492
+          },
+          "matched_n__knn_rate": {
+            "crps": 0.12401714611872533,
+            "mae_report_only": 0.16552511415525115
+          },
+          "oracle__foil_clim": {
+            "crps": 0.11960122810457646,
+            "mae_report_only": 0.15091324200913242
+          },
+          "oracle__foil_clim_inj": {
+            "crps": 0.11885647429649367,
+            "mae_report_only": 0.15228310502283104
+          },
+          "permuted_within": {
+            "crps": 0.1534098534775576,
+            "mae_report_only": 0.20662100456621005
+          },
+          "zero_width": {
+            "crps": 0.2718009825436413,
+            "mae_report_only": 0.2718009825436413
+          },
+          "max_width": {
+            "crps": 0.3333333333333333,
+            "mae_report_only": 0.5
+          }
+        },
+        "n_train": 79307,
+        "n_test": 4380
+      }
+    ],
+    "snap_share": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "foil_clim": {
+            "crps": 0.12274835796708876,
+            "mae_report_only": 0.1737826037303219
+          },
+          "foil_clim_inj": {
+            "crps": 0.12246210049456385,
+            "mae_report_only": 0.17285292623034407
+          },
+          "nihilist_zero": {
+            "crps": 0.47056173200702167,
+            "mae_report_only": 0.47056173200702167
+          },
+          "zero_width": {
+            "crps": 0.17383764422667536,
+            "mae_report_only": 0.17383764422667536
+          },
+          "max_width": {
+            "crps": 0.16168969836029579,
+            "mae_report_only": 0.17558019419397392
+          },
+          "marginal_train": {
+            "crps": 0.16876403879911778,
+            "mae_report_only": 0.24516676418958455
+          },
+          "frac_logit": {
+            "crps": 0.09931437741726228,
+            "mae_report_only": 0.1346320976553804
+          },
+          "oracle__frac_logit": {
+            "crps": 0.09819975256245422,
+            "mae_report_only": 0.13353771289647404
+          },
+          "matched_n__frac_logit": {
+            "crps": 0.10686601977602062,
+            "mae_report_only": 0.14106042614847075
+          },
+          "beta_mom": {
+            "crps": 0.09750452969192647,
+            "mae_report_only": 0.13144400774347828
+          },
+          "oracle__beta_mom": {
+            "crps": 0.09651414508246807,
+            "mae_report_only": 0.1308006440148571
+          },
+          "matched_n__beta_mom": {
+            "crps": 0.10467972340078652,
+            "mae_report_only": 0.14225383464191607
+          },
+          "lgbm_quantile": {
+            "crps": 0.08645901298913376,
+            "mae_report_only": 0.116887171399418
+          },
+          "oracle__lgbm_quantile": {
+            "crps": 0.06407937782018891,
+            "mae_report_only": 0.08675503732405389
+          },
+          "matched_n__lgbm_quantile": {
+            "crps": 0.09608188988940049,
+            "mae_report_only": 0.1303824851413962
+          },
+          "knn_quantile": {
+            "crps": 0.09964797330497667,
+            "mae_report_only": 0.13771650087770626
+          },
+          "oracle__knn_quantile": {
+            "crps": 0.11229473160567734,
+            "mae_report_only": 0.15762434172030426
+          },
+          "matched_n__knn_quantile": {
+            "crps": 0.11857520611093607,
+            "mae_report_only": 0.167387361029842
+          },
+          "oracle__foil_clim": {
+            "crps": 0.12250499163883313,
+            "mae_report_only": 0.17376746437098245
+          },
+          "oracle__foil_clim_inj": {
+            "crps": 0.1222574271964059,
+            "mae_report_only": 0.1729250857212507
+          },
+          "permuted_within": {
+            "crps": 0.16947208541305572,
+            "mae_report_only": 0.24754969210530842
+          }
+        },
+        "n_train": 58057,
+        "n_test": 3418
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "foil_clim": {
+            "crps": 0.11804111946942122,
+            "mae_report_only": 0.16797070843621734
+          },
+          "foil_clim_inj": {
+            "crps": 0.11790453773138965,
+            "mae_report_only": 0.16691521447973823
+          },
+          "nihilist_zero": {
+            "crps": 0.4700347624565469,
+            "mae_report_only": 0.4700347624565469
+          },
+          "zero_width": {
+            "crps": 0.16792576984592553,
+            "mae_report_only": 0.1679257698459255
+          },
+          "max_width": {
+            "crps": 0.15970512565019734,
+            "mae_report_only": 0.16972916887008757
+          },
+          "marginal_train": {
+            "crps": 0.16598442745936953,
+            "mae_report_only": 0.2401332560834299
+          },
+          "frac_logit": {
+            "crps": 0.09623345721857035,
+            "mae_report_only": 0.1295652851412635
+          },
+          "oracle__frac_logit": {
+            "crps": 0.09605695666230611,
+            "mae_report_only": 0.12965391397286496
+          },
+          "matched_n__frac_logit": {
+            "crps": 0.09807507028181064,
+            "mae_report_only": 0.13320814165786568
+          },
+          "beta_mom": {
+            "crps": 0.09565672364738133,
+            "mae_report_only": 0.12696988919875793
+          },
+          "oracle__beta_mom": {
+            "crps": 0.09459119074862139,
+            "mae_report_only": 0.12545049734316152
+          },
+          "matched_n__beta_mom": {
+            "crps": 0.09703565063549023,
+            "mae_report_only": 0.12919666492487314
+          },
+          "lgbm_quantile": {
+            "crps": 0.08725881558261063,
+            "mae_report_only": 0.11787042818709698
+          },
+          "oracle__lgbm_quantile": {
+            "crps": 0.06447407399467413,
+            "mae_report_only": 0.08774018226059979
+          },
+          "matched_n__lgbm_quantile": {
+            "crps": 0.09144739093288012,
+            "mae_report_only": 0.12293463602399952
+          },
+          "knn_quantile": {
+            "crps": 0.09833339470615327,
+            "mae_report_only": 0.134481460023175
+          },
+          "oracle__knn_quantile": {
+            "crps": 0.11334492230442404,
+            "mae_report_only": 0.1578360370799536
+          },
+          "matched_n__knn_quantile": {
+            "crps": 0.11072949377172654,
+            "mae_report_only": 0.15548812282734648
+          },
+          "oracle__foil_clim": {
+            "crps": 0.11800757321689988,
+            "mae_report_only": 0.16825374348053765
+          },
+          "oracle__foil_clim_inj": {
+            "crps": 0.11777744002695682,
+            "mae_report_only": 0.16713010114110521
+          },
+          "permuted_within": {
+            "crps": 0.16463990371677492,
+            "mae_report_only": 0.2380287370940931
+          }
+        },
+        "n_train": 61595,
+        "n_test": 3452
+      }
+    ]
+  },
+  "fold_results_b": [
+    {
+      "label": "2025H1",
+      "scores": {
+        "inj_both": {
+          "pooled": 2.3283489297562268,
+          "mae_pooled": 3.111455445108133,
+          "QB": 2.559297548605521,
+          "mae_QB": 3.392854291319088,
+          "RB": 2.3950816246762963,
+          "mae_RB": 3.173334983774265,
+          "WR": 2.470452405734153,
+          "mae_WR": 3.323533983538037,
+          "TE": 1.8578715611211631,
+          "mae_TE": 2.4947172834055458
+        },
+        "inj_zero_leg": {
+          "pooled": 2.329783092907379,
+          "mae_pooled": 3.120725969428262,
+          "QB": 2.567555951803723,
+          "mae_QB": 3.400348128192668,
+          "RB": 2.3956237097747417,
+          "mae_RB": 3.1735578969263583,
+          "WR": 2.4708814938540242,
+          "mae_WR": 3.3428073254782507,
+          "TE": 1.8572203076529892,
+          "mae_TE": 2.4985076698233692
+        },
+        "avail_both": {
+          "pooled": 2.3345213400877856,
+          "mae_pooled": 3.132793832840038,
+          "QB": 2.605685983951144,
+          "mae_QB": 3.468437783314159,
+          "RB": 2.3885440331910894,
+          "mae_RB": 3.1778226948659385,
+          "WR": 2.473173287362507,
+          "mae_WR": 3.352380007148663,
+          "TE": 1.8558313201363892,
+          "mae_TE": 2.4843964242456096
+        },
+        "avail_zero_leg": {
+          "pooled": 2.3295217377227337,
+          "mae_pooled": 3.1337626768693188,
+          "QB": 2.6007426598079353,
+          "mae_QB": 3.4575168018789584,
+          "RB": 2.3796510958957287,
+          "mae_RB": 3.170531639503322,
+          "WR": 2.4700084257894885,
+          "mae_WR": 3.3635605172766216,
+          "TE": 1.8520168741634178,
+          "mae_TE": 2.4856960294426833
+        },
+        "avail_foil_both": {
+          "pooled": 2.3296124123082875,
+          "mae_pooled": 3.124506734086411,
+          "QB": 2.5580195990045347,
+          "mae_QB": 3.3890271522522037,
+          "RB": 2.3912027983302586,
+          "mae_RB": 3.165371970534163,
+          "WR": 2.4761242155195937,
+          "mae_WR": 3.356216113749217,
+          "TE": 1.8592110628305385,
+          "mae_TE": 2.509897548191779
+        },
+        "avail_foil_zero_leg": {
+          "pooled": 2.327604782551007,
+          "mae_pooled": 3.114008272529389,
+          "QB": 2.5521581094988393,
+          "mae_QB": 3.3665815705266007,
+          "RB": 2.3864444902428352,
+          "mae_RB": 3.150286625708037,
+          "WR": 2.4768150469421517,
+          "mae_WR": 3.353931635534878,
+          "TE": 1.8584097852879968,
+          "mae_TE": 2.4990590125835466
+        },
+        "avail_shuffled_both": {
+          "pooled": 2.3306843512058317,
+          "mae_pooled": 3.128115559899419,
+          "QB": 2.5688262293868243,
+          "mae_QB": 3.437813233675141,
+          "RB": 2.3862388155707577,
+          "mae_RB": 3.1685506399316408,
+          "WR": 2.473795494562445,
+          "mae_WR": 3.3494365207794976,
+          "TE": 1.8658211306304828,
+          "mae_TE": 2.499901667400685
+        },
+        "avail_shuffled_zero_leg": {
+          "pooled": 2.3307357642186233,
+          "mae_pooled": 3.1207275792727884,
+          "QB": 2.5751395698777264,
+          "mae_QB": 3.4273020622188635,
+          "RB": 2.3830039907229965,
+          "mae_RB": 3.163146542948688,
+          "WR": 2.472864034537291,
+          "mae_WR": 3.335119183189043,
+          "TE": 1.866772827274896,
+          "mae_TE": 2.5040438233909277
+        },
+        "avail_oracle_both": {
+          "pooled": 1.9707093904296051,
+          "mae_pooled": 2.691497969000243,
+          "QB": 1.85972073912586,
+          "mae_QB": 2.5875041456557204,
+          "RB": 1.932381065232219,
+          "mae_RB": 2.60628567713711,
+          "WR": 2.2186771037077193,
+          "mae_WR": 3.035782681327531,
+          "TE": 1.6769185164336966,
+          "mae_TE": 2.2839629868969475
+        },
+        "avail_oracle_zero_leg": {
+          "pooled": 1.9677719733251395,
+          "mae_pooled": 2.6817675358130053,
+          "QB": 1.866442945062863,
+          "mae_QB": 2.594902639927024,
+          "RB": 1.9268476656299038,
+          "mae_RB": 2.5878938901868387,
+          "WR": 2.2147017807637828,
+          "mae_WR": 3.0198225839802944,
+          "TE": 1.6718540981362702,
+          "mae_TE": 2.2822329439841393
+        }
+      },
+      "oracle_ceiling_by_pos": {
+        "QB": 0.7011,
+        "RB": 0.4627,
+        "WR": 0.2518,
+        "TE": 0.1854
+      }
+    },
+    {
+      "label": "2025H2",
+      "scores": {
+        "inj_both": {
+          "pooled": 2.3374936246534057,
+          "mae_pooled": 3.160818722659512,
+          "QB": 2.595098823004115,
+          "mae_QB": 3.4722062822435773,
+          "RB": 2.420091150164847,
+          "mae_RB": 3.2902096802853746,
+          "WR": 2.506638012503114,
+          "mae_WR": 3.4019269598706123,
+          "TE": 1.7792331490231965,
+          "mae_TE": 2.392243075299494
+        },
+        "inj_zero_leg": {
+          "pooled": 2.3376672498949778,
+          "mae_pooled": 3.1690046757497274,
+          "QB": 2.596186789239417,
+          "mae_QB": 3.4959968584777905,
+          "RB": 2.420162257253797,
+          "mae_RB": 3.2933860838335844,
+          "WR": 2.506639573761595,
+          "mae_WR": 3.4124222710442185,
+          "TE": 1.7791493992751322,
+          "mae_TE": 2.390927195537657
+        },
+        "avail_both": {
+          "pooled": 2.3383640794230414,
+          "mae_pooled": 3.163373268431861,
+          "QB": 2.610307017838942,
+          "mae_QB": 3.436245103155673,
+          "RB": 2.422519803138981,
+          "mae_RB": 3.2995799691133345,
+          "WR": 2.500299819811973,
+          "mae_WR": 3.4129317071079934,
+          "TE": 1.7800581678322314,
+          "mae_TE": 2.400868044009878
+        },
+        "avail_zero_leg": {
+          "pooled": 2.3408302456765777,
+          "mae_pooled": 3.1634174879648778,
+          "QB": 2.6135923350147228,
+          "mae_QB": 3.468796422129692,
+          "RB": 2.417530061720235,
+          "mae_RB": 3.3004061361399666,
+          "WR": 2.5065950273771134,
+          "mae_WR": 3.402511460607881,
+          "TE": 1.783839577467813,
+          "mae_TE": 2.3940813097064875
+        },
+        "avail_foil_both": {
+          "pooled": 2.344546146244414,
+          "mae_pooled": 3.184229460692709,
+          "QB": 2.6117111417795646,
+          "mae_QB": 3.4880749320928204,
+          "RB": 2.4260581826099736,
+          "mae_RB": 3.321562853600758,
+          "WR": 2.511449106139643,
+          "mae_WR": 3.427072362418143,
+          "TE": 1.7843458527390432,
+          "mae_TE": 2.4093765446141027
+        },
+        "avail_foil_zero_leg": {
+          "pooled": 2.3446095436480343,
+          "mae_pooled": 3.1818831205015,
+          "QB": 2.594583644459454,
+          "mae_QB": 3.505162332957438,
+          "RB": 2.4316106251663006,
+          "mae_RB": 3.301826199541929,
+          "WR": 2.512503969194644,
+          "mae_WR": 3.4146032826198263,
+          "TE": 1.7890282378960645,
+          "mae_TE": 2.429196718030441
+        },
+        "avail_shuffled_both": {
+          "pooled": 2.3323451250876643,
+          "mae_pooled": 3.1587428156309194,
+          "QB": 2.5920921408242825,
+          "mae_QB": 3.4858912201681465,
+          "RB": 2.4186736729530116,
+          "mae_RB": 3.2881967592525765,
+          "WR": 2.4994222975251734,
+          "mae_WR": 3.3973866386841807,
+          "TE": 1.7718432578924692,
+          "mae_TE": 2.382865400685671
+        },
+        "avail_shuffled_zero_leg": {
+          "pooled": 2.332900962622734,
+          "mae_pooled": 3.164308065510476,
+          "QB": 2.5892679217026826,
+          "mae_QB": 3.479242626917567,
+          "RB": 2.4254937331293243,
+          "mae_RB": 3.3018044627933523,
+          "WR": 2.49501671651398,
+          "mae_WR": 3.4050625690416414,
+          "TE": 1.7761313535819385,
+          "mae_TE": 2.384775722808944
+        },
+        "avail_oracle_both": {
+          "pooled": 1.9630285248456134,
+          "mae_pooled": 2.6760622214052154,
+          "QB": 1.8928448980010286,
+          "mae_QB": 2.540575097544496,
+          "RB": 1.9852744259758601,
+          "mae_RB": 2.6762247625202997,
+          "WR": 2.1444299844530352,
+          "mae_WR": 2.9700948398253466,
+          "TE": 1.6870238991142184,
+          "mae_TE": 2.284143962187154
+        },
+        "avail_oracle_zero_leg": {
+          "pooled": 1.966704115739539,
+          "mae_pooled": 2.6834657491976324,
+          "QB": 1.8911269438208504,
+          "mae_QB": 2.537058397942837,
+          "RB": 1.9940537867494492,
+          "mae_RB": 2.7027619788658934,
+          "WR": 2.146862719217959,
+          "mae_WR": 2.966853501058686,
+          "TE": 1.6909810374218786,
+          "mae_TE": 2.2958740560796054
+        }
+      },
+      "oracle_ceiling_by_pos": {
+        "QB": 0.7051,
+        "RB": 0.4348,
+        "WR": 0.3622,
+        "TE": 0.0882
+      }
+    }
+  ],
+  "fdr": {
+    "own_family": {
+      "played": false,
+      "snap_share": false,
+      "QB": false,
+      "RB": false,
+      "WR": false,
+      "TE": false
+    },
+    "pooled": {
+      "played": false,
+      "snap_share": false,
+      "QB": false,
+      "RB": false,
+      "WR": false,
+      "TE": false
+    },
+    "binding": {
+      "played": false,
+      "snap_share": false,
+      "QB": false,
+      "RB": false,
+      "WR": false,
+      "TE": false
+    }
+  },
+  "gates_a": {
+    "played": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "snap_share": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": false
+      },
+      "ship": false
+    }
+  },
+  "gates_b": {
+    "QB": {
+      "checks": {
+        "beats_champion": false,
+        "fold_consistency": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "permutation_behaves": false,
+        "oracle_floor_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "RB": {
+      "checks": {
+        "beats_champion": true,
+        "fold_consistency": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "permutation_behaves": false,
+        "oracle_floor_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "WR": {
+      "checks": {
+        "beats_champion": true,
+        "fold_consistency": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "permutation_behaves": false,
+        "oracle_floor_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "TE": {
+      "checks": {
+        "beats_champion": true,
+        "fold_consistency": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "permutation_behaves": true,
+        "oracle_floor_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    }
+  },
+  "null_states": {
+    "layer_a::played": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w4_played_crps`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_a::snap_share": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w4_snap_share_crps`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_b::QB": {
+      "instrument_verdict": {
+        "state": "UNDEFINED",
+        "reason": "`nf_w4_downstream_crps_QB`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+        "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+      },
+      "hand_corrected": true,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; Layer B fields ONE pre-registered contrast, so there was no search to overfit. Reported as undefined, NOT as a failed deflation gate.",
+      "state": "GENUINE_ABSENCE",
+      "reason": "the arm LOSES to the champion on average (-0.0253 CRPS over 2 folds, 0/2 fold wins) \u2014 a negative point estimate is not rescued by more folds or a smaller field.",
+      "retest_trigger": null
+    },
+    "layer_b::RB": {
+      "instrument_verdict": {
+        "state": "UNDEFINED",
+        "reason": "`nf_w4_downstream_crps_RB`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+        "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+      },
+      "hand_corrected": true,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; Layer B fields ONE pre-registered contrast, so there was no search to overfit. Reported as undefined, NOT as a failed deflation gate.",
+      "state": "POWER_LIMITED",
+      "reason": "the point estimate is positive (+0.0021 CRPS) but the interval spans zero (CI95 [None, None]), fold wins are 1/2 against a required None, and p=None. Every statistical gate except PBO is REACHABLE at this design \u2014 the effect is simply smaller than this design can resolve.",
+      "retest_trigger": "~27 half-season folds (\u224813 seasons) for the DSR gate at the observed per-fold Sharpe 0.324 \u2014 i.e. CALENDAR-bound and far beyond any plausible window; \u26d4 this is NOT a near-term re-test."
+    },
+    "layer_b::WR": {
+      "instrument_verdict": {
+        "state": "UNDEFINED",
+        "reason": "`nf_w4_downstream_crps_WR`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+        "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+      },
+      "hand_corrected": true,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; Layer B fields ONE pre-registered contrast, so there was no search to overfit. Reported as undefined, NOT as a failed deflation gate.",
+      "state": "POWER_LIMITED",
+      "reason": "the point estimate is positive (+0.0018 CRPS) but the interval spans zero (CI95 [None, None]), fold wins are 1/2 against a required None, and p=None. Every statistical gate except PBO is REACHABLE at this design \u2014 the effect is simply smaller than this design can resolve.",
+      "retest_trigger": "~36 half-season folds (\u224818 seasons) for the DSR gate at the observed per-fold Sharpe 0.282 \u2014 i.e. CALENDAR-bound and far beyond any plausible window; \u26d4 this is NOT a near-term re-test."
+    },
+    "layer_b::TE": {
+      "instrument_verdict": {
+        "state": "UNDEFINED",
+        "reason": "`nf_w4_downstream_crps_TE`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+        "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+      },
+      "hand_corrected": true,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; Layer B fields ONE pre-registered contrast, so there was no search to overfit. Reported as undefined, NOT as a failed deflation gate.",
+      "state": "POWER_LIMITED",
+      "reason": "the point estimate is positive (+0.0003 CRPS) but the interval spans zero (CI95 [None, None]), fold wins are 1/2 against a required None, and p=None. Every statistical gate except PBO is REACHABLE at this design \u2014 the effect is simply smaller than this design can resolve.",
+      "retest_trigger": "~1978 half-season folds (\u2248989 seasons) for the DSR gate at the observed per-fold Sharpe 0.037 \u2014 i.e. CALENDAR-bound and far beyond any plausible window; \u26d4 this is NOT a near-term re-test."
+    }
+  },
+  "verdict": {
+    "layer_a": {
+      "played": "UNDEFINED",
+      "snap_share": "UNDEFINED"
+    },
+    "layer_b": {
+      "QB": "GENUINE_ABSENCE",
+      "RB": "POWER_LIMITED",
+      "WR": "POWER_LIMITED",
+      "TE": "POWER_LIMITED"
+    }
+  },
+  "headline": "A[played:UNDEFINED snap_share:UNDEFINED] B[QB:GENUINE_ABSENCE RB:POWER_LIMITED WR:POWER_LIMITED TE:POWER_LIMITED]",
+  "rewritten_at": "2026-08-11T01:53:43+00:00"
+}
