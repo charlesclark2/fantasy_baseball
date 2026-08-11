@@ -7,6 +7,23 @@ PEM) instead of a filesystem path. Falls back to file-based key for local develo
 No connection pooling — Lambda creates a new connection per invocation.
 Role in use must be read-only for all SELECT endpoints. Only POST /bets is permitted
 INSERT access, and only to baseball_data.betting_ml.user_bets.
+
+⏱️ EVERY HEAVY IMPORT IN HERE IS LAZY, AND THAT IS A COLD-START PROPERTY OF THE WHOLE API, NOT A
+STYLE CHOICE (PERF, 2026-08-11). `snowflake.connector` imports `snowflake.connector.options`, which
+imports **pandas** (and through it **pyarrow**) unconditionally — its optional-dependency probe. This
+module is imported at MODULE SCOPE by `routers/{admin,finances,pipeline}.py`, and `main.py` imports
+every router to register it, so `import app.backend.main` pulled pandas + pyarrow into the init of
+EVERY Lambda cold start. Measured on the deployed function: init averaged 3,976 ms (p50 4,023 ms,
+max 5,130 ms) against a warm p50 of 88 ms, and `routers.admin` alone was 595 ms of a 1,383 ms local
+import — 466 ms of it this module. Nothing on a user request path has ever needed Snowflake (the
+repo rule is that Snowflake is never on a request path); the three routers that use it are
+admin/ops surfaces, so they are the right place to pay for it, on first use.
+
+⛔ DO NOT MOVE THESE BACK TO MODULE SCOPE, and do not add a new module-scope import of
+`snowflake.connector` (or pandas/pyarrow) anywhere `main.py` can reach at import time — it silently
+adds seconds to every cold start for every caller, with no error and no failing test to notice it.
+Guarded by `betting_ml/tests/test_api_cold_start_imports.py`, which imports `app.backend.main` in a
+subprocess and fails if pandas/pyarrow/snowflake.connector landed in `sys.modules`.
 """
 
 from __future__ import annotations
@@ -14,11 +31,10 @@ from __future__ import annotations
 import base64
 import logging
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import snowflake.connector
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
+if TYPE_CHECKING:  # import-free at runtime; keeps the annotation resolvable for type checkers
+    import snowflake.connector
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +47,11 @@ _FALLBACK_KEY_PATH = os.environ.get(
 
 
 def _load_private_key_bytes() -> bytes:
+    # Lazy — see the module docstring. `cryptography` is cheap next to pandas, but it is only ever
+    # needed on the connection path, so it rides along rather than being loaded for every caller.
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives import serialization
+
     key_val = os.environ.get("SNOWFLAKE_PRIVATE_KEY", "").strip()
     if key_val:
         if not key_val.startswith("-----"):
@@ -76,6 +97,8 @@ def get_snowflake_connection(
     Pass `warehouse` for ACCOUNT_USAGE cost/metering reads (see MONITORING_WAREHOUSE) so a
     cost query can never resume the warehouse it is reporting on.
     """
+    import snowflake.connector  # lazy — see the module docstring
+
     pkb = _load_private_key_bytes()
     kwargs: dict[str, Any] = dict(
         account=os.environ.get("SNOWFLAKE_ACCOUNT", "IHUPICS-DP59975"),
@@ -93,6 +116,8 @@ def get_snowflake_connection(
 def execute_query(query: str, params: dict | None = None,
                   warehouse: str | None = None) -> list[dict]:
     """Run a query, return all rows as dicts, and close the connection."""
+    import snowflake.connector  # lazy — see the module docstring
+
     conn = get_snowflake_connection(warehouse=warehouse)
     try:
         cur = conn.cursor(snowflake.connector.DictCursor)

@@ -137,7 +137,21 @@ export function useFantasyBoard(
   })
 }
 
-export function useFantasyProjections(season: number = FANTASY_SEASON) {
+/**
+ * The public projections payload.
+ *
+ * ⏱️ `enabled` DEFAULTS TO TRUE, and the parameter is additive on purpose (PERF, 2026-08-11): six
+ * surfaces render this payload as their primary content and must keep fetching it on mount. The one
+ * caller that passes `false` is `league-import`, where the payload is not content at all — it is
+ * consulted only to check which stat columns exist, and only once a preview exists. At ~647 KB
+ * through the API Lambda that fetch is the single largest thing the import page pulls, and it was
+ * racing two other authenticated reads at mount on a function whose cold init is ~4 s.
+ *
+ * ⚠️ DO NOT gate this on entitlement. This endpoint is entitlement-INDEPENDENT by design (the
+ * NF-EPIC 1 split moved the paid half to `/fantasy/nfl/projections-full`), and `enabled` here is a
+ * scheduling hint only — it must never become a second, client-side gate. See `lib/fantasy.ts`.
+ */
+export function useFantasyProjections(season: number = FANTASY_SEASON, enabled: boolean = true) {
   const { accessToken, groups } = useAuth()
   const entitled = canAccess("fantasy", groups)
   return useQuery<ProjectionPayload>({
@@ -145,6 +159,7 @@ export function useFantasyProjections(season: number = FANTASY_SEASON) {
     // cached locked projections.
     queryKey: ["nfl-fantasy-projections", season, entitled],
     queryFn: () => getFantasyProjections(accessToken, season),
+    enabled,
     staleTime: Infinity,
     // The projections blob 404s until the operator's first NF3 export — surface that as an
     // honest empty state immediately instead of burning retries on a known-missing object.
