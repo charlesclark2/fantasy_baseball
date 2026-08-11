@@ -5,13 +5,11 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Loader2 } from "lucide-react"
-import posthog from "posthog-js"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { completeGoogleSignIn, consumePostSignInRedirect, consumeSignInContext } from "@/lib/cognito"
 import { useAuth } from "@/lib/auth-context"
-import { apiFetch } from "@/lib/api"
-import { acceptTermsWithRetry } from "@/lib/terms"
+import { completeSignIn } from "@/lib/post-signin"
 
 function CallbackInner() {
   const router = useRouter()
@@ -48,37 +46,17 @@ function CallbackInner() {
         // own it cannot answer the only question worth asking here: of the people who clicked
         // Sign Up, how many came back with a session? The intent is carried across the redirect
         // by the surface that knows it (see consumeSignInContext).
+        //
+        // G100-C0 — the four post-sign-in obligations (both funnel captures, verify-email, and
+        // the E9.58b ToS record) moved verbatim into `completeSignIn` so the new email-OTP door
+        // performs the identical set rather than a hand-copied subset of it.
         const ctx = consumeSignInContext()
-        posthog.capture("user_signed_in", {
+        completeSignIn({
+          accessToken,
           method: "google",
           intent: ctx?.intent ?? "unknown",
           surface: ctx?.surface ?? "unknown",
         })
-        if (ctx?.intent === "signup") {
-          // Pairs 1:1 with `user_signup_started` → conversion is completed/started, and both
-          // carry `surface`, so it breaks down per entry point (subscribe vs signup).
-          // ⚠️ SCOPE: this means "someone who clicked a SIGN-UP button completed the round-trip
-          // and has a session" — NOT "a new Cognito account was created". Someone who already
-          // had an account and clicked Sign Up counts here. That is the right denominator for a
-          // funnel question and the wrong one for counting new accounts; for the latter, the
-          // audit script's Cognito creation dates are the source of truth, not this event.
-          posthog.capture("user_signup_completed", {
-            method: "google",
-            surface: ctx.surface,
-          })
-        }
-        // Parity with password login: verify the federated user's email server-side.
-        apiFetch("/auth/verify-email", { method: "POST" }, accessToken).catch(() => {})
-        // E9.58 — record ToS acceptance for the Google path. Google is now the ONLY self-serve
-        // signup route, so without this a public account could be created having accepted nothing;
-        // the password path already did it at the set-password step. `if_not_exists` server-side,
-        // so a repeat sign-in never overwrites the original timestamp.
-        //
-        // E9.58b — retried, and no longer merely hoped for. This is the FIRST attempt, not the
-        // guarantee: if both tries fail the user is not stopped here (they have a valid session
-        // and stopping them would turn a Dynamo blip into a broken signup), they are stopped by
-        // `TermsGate` on the next authed render, which cannot be dismissed until the write lands.
-        acceptTermsWithRetry(accessToken).catch(() => {})
         // E9.58 — return the visitor to whatever they were trying to reach (e.g. /subscribe),
         // not unconditionally to /dashboard, which silently dropped their buying intent.
         router.replace(consumePostSignInRedirect() ?? "/dashboard")

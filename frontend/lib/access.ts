@@ -10,6 +10,14 @@
 // entry point simply was not wired into the funnel: it existed only as one button on /login, a
 // page a stranger with no account has no reason to open. So E9.58 is a wiring job, not a build.
 //
+// ✅ G100-C0 — THERE IS NOW AN EMAIL DOOR, AND IT IS A ONE-TIME CODE, NOT A PASSWORD.
+// The paragraph below still stands exactly as written: a password form here remains a dead end,
+// and nothing about the pool changed. What changed is that a code sidesteps the dead end instead
+// of trying to fix it — an emailed OTP IS the proof of email ownership, so there is no separate
+// verification step left to be missing. See `components/email-otp-form.tsx` and
+// `infrastructure/cognito/email_otp/`. If you are here because someone asked for "email signup",
+// that is the thing to point them at — not `sign_up`.
+//
 // ⛔ NATIVE EMAIL/PASSWORD REGISTRATION IS A DELIBERATE DEAD END — DO NOT "FIX" IT.
 // The Cognito pool has no email auto-verification (by design, per `infrastructure/aws_resources.md`):
 // `sign_up` succeeds and creates an account that can NEVER confirm itself, because

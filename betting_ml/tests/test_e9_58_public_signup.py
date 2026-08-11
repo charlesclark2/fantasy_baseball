@@ -447,8 +447,17 @@ def test_the_google_path_records_terms_acceptance():
     """
     # E9.58b moved the call behind `acceptTermsWithRetry` (retry + a blocking gate if it still
     # fails), so this follows the call rather than pinning the literal path at this one site.
+    #
+    # ⚠️ RE-ANCHORED BY G100-C0 — the chain gained one hop and the test follows it. The call now
+    # sits in `lib/post-signin.ts`, shared with the email-OTP door, precisely so a second signup
+    # route cannot quietly skip the acceptance record. The requirement is unchanged: the Google
+    # path must reach `/auth/accept-terms`. It is now verified along all three links of the chain
+    # rather than the first two.
     callback = _code(_APP / "callback/page.tsx")
-    assert "acceptTermsWithRetry(" in callback, "the signup path no longer records acceptance"
+    assert "completeSignIn(" in callback, "the signup path no longer records acceptance"
+    assert "acceptTermsWithRetry(" in _code(_FRONTEND / "lib/post-signin.ts"), (
+        "the module the callback delegates to no longer records acceptance"
+    )
     assert '"/auth/accept-terms"' in _code(_FRONTEND / "lib/terms.ts"), (
         "the helper the callback delegates to no longer calls the endpoint"
     )

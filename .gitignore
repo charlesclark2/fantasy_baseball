@@ -105,6 +105,7 @@ dbt/state/
 vapid_private.pem
 *.pem
 infrastructure/cognito/presignup_link/.build/
+infrastructure/cognito/email_otp/.build/
 
 # NFL-fantasy re-fetchable network/response caches — every `*_cache/` dir under the fantasy artifacts
 # is reproducible from its source API (FFC ADP, FantasyPros ECR, ESPN/Sleeper ranks, Sleeper injuries,
