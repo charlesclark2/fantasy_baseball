@@ -31,7 +31,7 @@ from app.backend.dependencies import (
     require_personalized_league_access,
 )
 from app.backend.models.fantasy import League, LeagueSave
-from app.backend.services import dynamo, entitlement
+from app.backend.services import dynamo, entitlement, league_scoring, projection_fields
 
 logger = logging.getLogger(__name__)
 
@@ -141,15 +141,81 @@ def nfl_manifest(season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100))
     return entitlement.open_manifest_payload(data)
 
 
+#: In-process memo of the FULL projections blob, for the server-side league scorer below.
+#: Same shape and reasoning as `fantasy_public._featured_memo`: the artifact is rewritten at most
+#: once per publish, and without it every `/nfl/my-teams` call would pull 1.3 MB out of S3.
+#: ⚠️ Lazy by construction — a module-scope fetch is a live S3 GET paid by every importing test and
+#: by every Lambda cold start.
+_FULL_PROJECTIONS_TTL_SECONDS = 900
+_full_projections_memo: dict[int, tuple[float, dict]] = {}
+
+
+def _full_projections(season: int) -> dict | None:
+    """The COMPLETE projections payload (stat line included), memoized per season.
+
+    ⛔ NEVER returned to a caller as-is except on `/nfl/projections/full`, which is entitlement-
+    gated. Every other consumer either reduces it (`public_projections_payload`) or consumes only
+    the SCORED OUTPUT (`/nfl/my-teams`), which is what lets a free league be personalized without
+    the substrate ever leaving the server.
+    """
+    import time
+
+    now = time.time()
+    hit = _full_projections_memo.get(season)
+    if hit is not None and now - hit[0] < _FULL_PROJECTIONS_TTL_SECONDS:
+        return hit[1]
+    data = _load_json(f"{season}/projections.json")
+    if data is None:
+        # Deliberately NOT memoized — caching a miss would hold every league board down for the
+        # full TTL after a publish blip (the `_featured_memo` rule).
+        return None
+    _full_projections_memo[season] = (now, data)
+    return data
+
+
 @board_router.get("/nfl/projections")
 def nfl_projections(season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):
-    """NF3 — the format-INDEPENDENT NFL season projection (raw stat line + the 80% PPR
-    interval + uncertainty type / confidence). The browse Projections surface reads this;
-    the format-SCORED numbers come from /nfl/board.
+    """NF3 — the format-INDEPENDENT NFL season projection, PUBLIC HALF ONLY.
 
     FREE — `Capability.GENERIC_BOARD`; see `nfl_manifest` for why there is no caller parameter.
+
+    🔒 NF-EPIC 1 (PM Option C, 2026-08-10) — THE RAW STAT LINE AND THE TWO PAID SCORINGS ARE
+    STRIPPED HERE. Until this change the anonymous payload carried `fpStd`, `fpHalf` and the full
+    stat line, gated only by which component declined to draw them; a `curl` recovered all three.
+    `projection_fields.public_projections_payload` removes them from every row, and the PAID set is
+    derived from the scorer's own `STAT_FIELD` map so a new scorable stat is withheld automatically
+    rather than shipping public by default.
+
+    ⭐ STILL BYTE-IDENTICAL FOR EVERY CALLER — no `Request`, no entitlement read. A subscriber gets
+    this same reduced blob and fetches the paid half from `/nfl/projections/full`. That is what
+    keeps G100-D1's CDN cache legal: the edge stores one copy for everybody precisely because the
+    bytes do not vary by caller.
     """
     data = _load_json(f"{season}/projections.json")
+    if data is None:
+        raise HTTPException(status_code=404, detail="Fantasy projections not found")
+    return entitlement.open_projections_payload(
+        projection_fields.public_projections_payload(data)
+    )
+
+
+@router.get("/nfl/projections-full")
+def nfl_projections_full(season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100)):
+    """The COMPLETE projection — the raw stat line plus `fpStd`/`fpHalf`. PAID.
+
+    🔒 On `router`, so it inherits the blanket `require_fantasy_access`: this is the substrate the
+    PM ruled is "the crown jewel", and the only surface that serves it. A free account never needs
+    it — their one personalized league is scored on the server (`/nfl/my-teams`), so their browser
+    receives a board it could not have computed and never sees the inputs.
+
+    ⚠️ NEVER add this path to the CDN allowlist (`frontend/app/api/public/[...path]/route.ts`) or
+    to `cost_guardrails._PUBLIC_CACHE_RULES`. It is caller-gated, so a shared cache entry would hand
+    the paid substrate to anonymous visitors — the precise breach `cache_control_for` exists to
+    prevent. It is safe today for a structural reason rather than a remembered one: every request
+    carries an `Authorization` header, and `cache_control_for` answers `private, no-store`
+    unconditionally when it sees one.
+    """
+    data = _full_projections(season)
     if data is None:
         raise HTTPException(status_code=404, detail="Fantasy projections not found")
     return entitlement.open_projections_payload(data)
@@ -427,6 +493,116 @@ def nfl_my_teams(
         "quota": quota,
         "saved_total": len(nfl_records),
         "withheld_by_quota": max(0, len(nfl_records) - len(served)),
+        # 🔒 NF-EPIC 1 — the ROSTER rows, scored SERVER-SIDE (additive key, NF-C0).
+        #
+        # This surface used to score in the browser off the raw stat line. That substrate is paid
+        # now, so the join happens here and the client receives only the OUTPUT.
+        #
+        # ⚠️ ROSTER ROWS ONLY, NOT THE BOARDS — and the bound is the reason. A full board is ~858
+        # rows; at a subscriber's quota of 25 leagues that is ~6 MB, straight through Lambda's
+        # proxy-response cap. A roster is ~20 rows per league. The one full board a page actually
+        # needs comes from `/nfl/league-board`, one league at a time.
+        "rosters": _scored_rosters(served, season),
+    }
+
+
+def _scored_rosters(records: list[dict], season: int) -> dict[str, list[dict]]:
+    """`{league_id: [{roster, board}]}` — each league's linked roster joined to its OWN scored board.
+
+    A league with no linked team yields `[]`, which is a real state (hand-entered, or imported
+    without picking a team) and distinct from a league whose roster matched nothing.
+
+    Per-league failures are contained (E9.49): one unscoreable config costs only its own entry
+    rather than blanking every league the user has.
+
+    ⭐⭐ BEST-EFFORT, AND THIS IS THE LOAD-BEARING PART OF THE FUNCTION.
+    `/fantasy/nfl/my-teams` was a pure DynamoDB read before NF-EPIC 1 — it could not fail on S3.
+    Adding the scored roster made it read the projections blob, and the first cut let that read
+    RAISE: `_load_json` answers 503 when `CACHE_BUCKET` is unset and 502 on a read error, so an
+    absent or unreadable projections artifact took the WHOLE endpoint down and the user's saved
+    leagues disappeared with it. Someone's league list vanishing because a PROJECTION file is
+    missing is the wrong failure by a wide margin — the list is the core of this response and the
+    roster join is an enhancement on top of it.
+
+    So the scoring is contained here and degrades to `{}`. The client already reads `rosters`
+    with `?? {}` (it is an additive key the deployed frontend does not know about), so an
+    unscoreable slate renders as "no roster linked" rather than as an error — and `leagues`,
+    `quota`, `saved_total` and `withheld_by_quota` are all unaffected.
+
+    ⚠️ `/fantasy/nfl/league-board` deliberately does NOT do this: there the board IS the response,
+    so an unreadable projection must surface as a real failure the page can report ("we couldn't
+    score your league"), not as a silently empty board. Same read, opposite correct behaviour,
+    because the two endpoints promise different things.
+    """
+    try:
+        projections = _full_projections(season)
+    except Exception:  # noqa: BLE001
+        logger.warning("could not load projections for %s; serving leagues without rosters", season)
+        projections = None
+    players = (projections or {}).get("players") or []
+    out: dict[str, list[dict]] = {}
+    for record in records:
+        league_id = str(record.get("league_id") or "")
+        roster = record.get("imported_roster") or []
+        if not league_id or not roster or not players:
+            out[league_id] = []
+            continue
+        try:
+            board = league_scoring.build_board(players, record, projection_fields.STAT_FIELD)
+            out[league_id] = league_scoring.match_roster_to_board(roster, board["players"])
+        except Exception:  # noqa: BLE001
+            logger.warning("could not score roster for league %s", league_id)
+            out[league_id] = []
+    return out
+
+
+@personal_router.get("/nfl/league-board")
+def nfl_league_board(
+    request: Request,
+    league_id: str = Query(..., description="a saved league id belonging to the caller"),
+    season: int = Query(default=_DEFAULT_SEASON, ge=2000, le=2100),
+    user_id: str = Depends(require_personalized_league_access),
+):
+    """ONE saved league's fully-scored board — the server-side replacement for `buildBoard`.
+
+    🔒 NF-EPIC 1 (PM Option C). This is what makes "the stat line is paid" and "a free account keeps
+    one personalized league" coexist: the substrate stays on the server and the caller receives a
+    board they could not have computed. `league_scoring` mirrors `fantasy_engine`, so this board
+    agrees with the shipped preset boards (see that module's header — the browser port and the
+    Python engine already disagreed by up to 0.05 on interval bounds; this follows the engine).
+
+    ⭐ THE QUOTA IS ENFORCED HERE TOO, not just on `/nfl/my-teams`. A league the caller owns but
+    which sits OUTSIDE their quota is refused — otherwise a lapsed subscriber could keep pulling
+    personalized boards one league at a time by id, which is the exact retention-by-having-once-paid
+    hole `leagues_within_quota` exists to close. Ownership alone is not sufficient.
+
+    404 (not 403) for a league that is not the caller's: an id they do not own should be
+    indistinguishable from one that does not exist.
+    """
+    records = [
+        r for r in dynamo.list_fantasy_leagues(user_id) if str(r.get("sport") or "nfl") == "nfl"
+    ]
+    quota = entitlement.personalized_league_quota(entitlement.resolve_entitlement(request))
+    served = entitlement.leagues_within_quota(records, quota)
+
+    record = next((r for r in served if str(r.get("league_id") or "") == league_id), None)
+    if record is None:
+        raise HTTPException(status_code=404, detail="League not found")
+
+    projections = _full_projections(season)
+    if projections is None:
+        raise HTTPException(status_code=404, detail="Fantasy projections not found")
+
+    board = league_scoring.build_board(
+        projections.get("players") or [], record, projection_fields.STAT_FIELD
+    )
+    return {
+        "season": season,
+        "league": _league_response(record),
+        "board": board,
+        "roster": league_scoring.match_roster_to_board(
+            record.get("imported_roster") or [], board["players"]
+        ),
     }
 
 
