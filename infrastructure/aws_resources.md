@@ -144,7 +144,47 @@ DAGSTER_CLOUD_API_TOKEN=<token from .env>
 # OWNER_USER_ID: the owner's Cognito sub (find in Cognito console → User Pool → ctcb57@gmail.com → sub attribute)
 # Without this, the finances endpoint falls back to dynamodb:Scan (add that permission or just set this var)
 OWNER_USER_ID=<Cognito sub for ctcb57@gmail.com>
+
+# E9.62 — Vercel metered spend on the finances page (GET /v1/billing/charges, FOCUS v1.3 JSONL).
+# OPTIONAL: without it the page still shows the $20/mo Pro seat floor from 2026-08 and adds a
+# note saying metered spend is unavailable — it never errors. Provision it to get real usage.
+VERCEL_API_TOKEN=<Vercel account token — see "Vercel billing token" below>
+VERCEL_TEAM_ID=<team_xxx; OMIT the var entirely for a personal (non-team) account>
 ```
+
+### Vercel billing token (E9.62, admin finances)
+
+`GET https://api.vercel.com/v1/billing/charges` needs a bearer token whose account holds one of
+Owner / Member / Developer / Security / Billing on the team being queried. Create it at
+**vercel.com → Account Settings → Tokens** (scope it to the team; give it an expiry and note the
+renewal date — an expired token degrades to the seat floor silently apart from the page's note).
+
+⚠️ `update-function-configuration` **REPLACES the whole Variables map** — read the current
+environment first and re-send it, or every other setting on the function is wiped:
+
+```bash
+aws lambda get-function-configuration --function-name credence-prod-lambda-api \
+  --region us-east-1 --query 'Environment.Variables' > /tmp/lambda-env.json
+
+python3 - <<'PY'
+import json
+env = json.load(open('/tmp/lambda-env.json'))
+env['VERCEL_API_TOKEN'] = '<paste token>'
+env['VERCEL_TEAM_ID']   = '<team_xxx>'   # omit this line for a personal account
+json.dump({'Variables': env}, open('/tmp/lambda-env-new.json','w'))
+PY
+
+aws lambda update-function-configuration --function-name credence-prod-lambda-api \
+  --region us-east-1 --environment file:///tmp/lambda-env-new.json
+
+# The call returns with LastUpdateStatus=InProgress — poll before testing, or you read the OLD env.
+aws lambda get-function-configuration --function-name credence-prod-lambda-api --region us-east-1 \
+  --query '{vercel:Environment.Variables.VERCEL_TEAM_ID,status:LastUpdateStatus}'
+```
+
+⭐ Read the flag, don't infer it (G100-D1): to check whether the token is live, query
+`Environment.Variables.VERCEL_API_TOKEN` — the finances page looks identical with the token
+absent (seat floor + note) and with the token present but reporting no overage.
 
 ### Snowflake Role Grants Required
 
