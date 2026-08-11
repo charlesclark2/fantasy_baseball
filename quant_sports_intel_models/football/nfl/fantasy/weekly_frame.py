@@ -184,6 +184,18 @@ ALLOWED_FEATURE_CONTRACT: tuple[FeatureSpec, ...] = (
         "pre-season", "all-time", PIT_RETROSPECTIVE, True, "none needed",
         "age, experience, draft capital, athletic measurables — the NF1 season-model prior surface.",
     ),
+    FeatureSpec(
+        "availability_projection", "derived in-fold from certified families (no new source)", 0,
+        "free/public (derived)",
+        "computable at the projection timestamp — a model output over already-certified inputs",
+        "2016+", PIT_PROSPECTIVE_SHADOW, True, "climatology form",
+        "NF-W4: the availability-mixture projections (P(played), conditional snap share, their "
+        "product, and the share spread) injected into the champion's feature matrix. DERIVED "
+        "family: consumes ONLY certified columns (prior_week_box / snap_share / injury_report / "
+        "injury_rate / game_context / prior_season_priors), fit strictly in-fold, so its as-of "
+        "rule is inherited from its inputs and no new PIT record class exists. Inherits the "
+        "injury families' SPLIT FIDELITY (2025 = capture-based) ⇒ prospective_shadow.",
+    ),
 )
 
 # ── DEFERRED — what NF-W1 may NOT fit on, and exactly why ────────────────────────────────────────
