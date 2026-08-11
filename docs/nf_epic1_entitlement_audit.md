@@ -349,11 +349,38 @@ Answering the question the PM asked to be answered plainly — *is any paid valu
 backend change is what closes it, and this repo has no CD for the API Lambda, so the code being
 merged is not the same event as the leak being closed.
 
-⏭️ **Operator steps, in order** — full commands in the handoff:
-1. `./infrastructure/lambda/deploy.sh` (the leak is open until this runs).
-2. Re-run the leak repro anonymously and confirm no `fpStd` / `fpHalf` / stat line.
-3. Confirm the public blob is still byte-identical and the paid one is `private, no-store`.
-4. PM live walk: anonymous + signed-in free account.
+### ✅ Verified live in production, 2026-08-11 (post-`deploy.sh`)
+
+| Check | Result |
+|---|---|
+| Paid fields in the anonymous payload (`fpStd`, `fpHalf`, `rec`, `recYds`, `tgt`, `passYds`, `rushYds`, …) | **`[]` — none** |
+| Free wedge intact | `fpPpr` 261.4, `fpP10` 99.8, `fpP90` 341.3, `fpSd` 59.2, `adp`, `g` ✅ |
+| `contrib` still public (PM Q3) | ✅ present |
+| Row count unchanged | 858 players — nothing dropped, only narrowed |
+| Public blob cacheability | `public, s-maxage=900, stale-while-revalidate=3600` + `Vary: Authorization` ✅ |
+| `/fantasy/nfl/projections-full` anonymously | `401` at the **gateway** (`{"message":"Unauthorized"}` — the authorizer's own body, not FastAPI's `detail`), byte-identical to the known-good gated `/fantasy/nfl/my-teams`, so the route is registered and correctly inherits the JWT authorizer |
+| `/fantasy/nfl/league-board` anonymously | `401` at the gateway ✅ |
+| Free preset board unaffected | `200`, 858 rows, full `pts`/`vor`/`ovrRank` ✅ |
+| PM live walk | anonymous + signed-in free ✅ |
+
+⭐ **Side effect worth keeping:** the public payload fell from **1,321,917 → 647,535 bytes (−51%)**.
+That is the single most-fetched anonymous artifact and it is CDN-cached, so the split roughly halves
+the bytes behind G100-D1's biggest cost lever.
+
+### ⏭️ The one arm still unverified live
+
+**A real SUBSCRIBER has not exercised `/fantasy/nfl/projections-full`.** The walk above was anonymous
+and free, which is the right shape for a leak audit but structurally cannot reach the paid half.
+
+⚠️ This matters because the failure would be **silent** — the NF-C0 class. If the paid fetch were
+broken for an entitled caller, the player page would draw `LockChip`s and the Projections picker
+would sit on full-PPR, i.e. it would look exactly like a correctly-gated free view rather than like
+an error. Nothing would log.
+
+The client logic is covered by the E2E entitled specs against the mock, and the gateway evidence
+above says the route is reachable with a token — but neither is a live subscriber walk. **Check on
+a subscriber account: the player page shows Standard and Half-PPR totals and the raw stat line, and
+the Projections reference-scoring picker offers all three.**
 
 ---
 
