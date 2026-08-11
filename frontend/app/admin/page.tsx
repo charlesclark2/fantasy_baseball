@@ -63,6 +63,10 @@ interface MonthlyFinances {
   snowflake_cost: number | null
   aws_cost: number | null
   ses_cost: number | null
+  // E9.62 — optional on purpose. `frontend/` auto-deploys on merge but the API Lambda ships
+  // only via infrastructure/lambda/deploy.sh, so this page goes live BEFORE the field exists
+  // in the response. Undefined must render as "—", never as "$undefined" or a crash.
+  vercel_cost?: number
   total_cost: number
   betting_pl: number
   subscription_revenue: number
@@ -72,6 +76,9 @@ interface MonthlyFinances {
 interface FinancesData {
   months: MonthlyFinances[]
   fixed_breakdown: Record<string, number>
+  // E9.62 — per-month fixed costs. Optional for the same deploy-skew reason; the panel falls
+  // back to the flat `fixed_breakdown` an older backend still sends.
+  fixed_breakdown_by_month?: Record<string, Record<string, number>>
   aws_breakdown: Record<string, number>
   notes: string[]
 }
@@ -581,27 +588,88 @@ export default function AdminPage() {
             </div>
           )}
 
-          {showFixedBreakdown && finances?.fixed_breakdown && (
-            <div className="mb-5 rounded-lg border border-[#1e1e1e] bg-[#0a0a0a] p-4">
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-500">
-                Fixed Monthly Costs
-              </p>
-              <ul className="space-y-1.5">
-                {Object.entries(finances.fixed_breakdown).map(([name, cost]) => (
-                  <li key={name} className="flex justify-between text-sm">
-                    <span className="text-gray-400">{name}</span>
-                    <span className="text-white">${cost.toFixed(2)}</span>
-                  </li>
-                ))}
-                <li className="flex justify-between border-t border-[#262626] pt-2 text-sm font-medium">
-                  <span className="text-gray-300">Total Fixed</span>
-                  <span className="text-white">
-                    ${Object.values(finances.fixed_breakdown).reduce((a, b) => a + b, 0).toFixed(2)}/mo
-                  </span>
-                </li>
-              </ul>
-            </div>
-          )}
+          {showFixedBreakdown && finances && (() => {
+            // E9.62 — fixed costs are per-month (a plan upgrade can cover only some months).
+            // Prefer the per-month map; fall back to the flat dict when the backend predates
+            // this change (deploy skew: this page ships before the Lambda does).
+            const byMonth = finances.fixed_breakdown_by_month ?? {}
+            const perMonthCols = Object.keys(byMonth).sort()
+            const flat = finances.fixed_breakdown ?? {}
+            if (perMonthCols.length === 0 && Object.keys(flat).length === 0) return null
+
+            // Union of item names across months — an item present in only some months still
+            // gets a row (rendered "—" where it doesn't apply).
+            const items = perMonthCols.length
+              ? Array.from(new Set(perMonthCols.flatMap((m) => Object.keys(byMonth[m] ?? {}))))
+              : Object.keys(flat)
+
+            return (
+              <div className="mb-5 overflow-x-auto rounded-lg border border-[#1e1e1e] bg-[#0a0a0a] p-4">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                  Fixed Monthly Costs {perMonthCols.length > 0 && "(by month)"}
+                </p>
+                {perMonthCols.length === 0 ? (
+                  <ul className="space-y-1.5">
+                    {items.map((name) => (
+                      <li key={name} className="flex justify-between text-sm">
+                        <span className="text-gray-400">{name}</span>
+                        <span className="text-white">${(flat[name] ?? 0).toFixed(2)}</span>
+                      </li>
+                    ))}
+                    <li className="flex justify-between border-t border-[#262626] pt-2 text-sm font-medium">
+                      <span className="text-gray-300">Total Fixed</span>
+                      <span className="text-white">
+                        ${Object.values(flat).reduce((a, b) => a + b, 0).toFixed(2)}/mo
+                      </span>
+                    </li>
+                  </ul>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[#262626]">
+                        <th className="pb-2 pr-4 text-left text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                          Item
+                        </th>
+                        {perMonthCols.map((m) => (
+                          <th key={m} className="pb-2 pr-4 text-right text-[11px] font-semibold uppercase tracking-widest text-gray-500 whitespace-nowrap last:pr-0">
+                            {m}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#1a1a1a]">
+                      {items.map((name) => (
+                        <tr key={name}>
+                          <td className="py-1.5 pr-4 text-gray-400 whitespace-nowrap">{name}</td>
+                          {perMonthCols.map((m) => {
+                            const cost = byMonth[m]?.[name]
+                            return (
+                              <td key={m} className="py-1.5 pr-4 text-right text-white whitespace-nowrap last:pr-0">
+                                {cost === undefined ? "—" : `$${cost.toFixed(2)}`}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                      <tr className="border-t border-[#262626] font-medium">
+                        <td className="pt-2 pr-4 text-gray-300 whitespace-nowrap">Total Fixed</td>
+                        {perMonthCols.map((m) => (
+                          <td key={m} className="pt-2 pr-4 text-right text-white whitespace-nowrap last:pr-0">
+                            ${Object.values(byMonth[m] ?? {}).reduce((a, b) => a + b, 0).toFixed(2)}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+                <p className="mt-2 text-[10px] text-gray-600">
+                  A plan change applies only to the months it covers (an upgraded price replaces the
+                  base, it is not added to it). Domain registration is not listed here — it is billed
+                  through Route 53 and already appears in the AWS &ldquo;Other AWS&rdquo; line.
+                </p>
+              </div>
+            )
+          })()}
 
           {financesLoading ? (
             <div className="space-y-3">
@@ -617,7 +685,7 @@ export default function AdminPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#262626]">
-                      {["Month", "Fixed", "Snowflake", "AWS", "SES", "Total Cost", "Betting P&L", "Subs", "Net"].map((h) => (
+                      {["Month", "Fixed", "Snowflake", "AWS", "SES", "Vercel", "Total Cost", "Betting P&L", "Subs", "Net"].map((h) => (
                         <th key={h} className="pb-3 pr-4 text-left text-xs font-semibold uppercase tracking-widest text-gray-500 last:pr-0 whitespace-nowrap">
                           {h}
                         </th>
@@ -632,6 +700,9 @@ export default function AdminPage() {
                         <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.snowflake_cost)}</td>
                         <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.aws_cost)}</td>
                         <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.ses_cost)}</td>
+                        {/* `?? null` — an un-deployed backend omits the field entirely, and fmt()
+                            only special-cases null, so raw undefined would print "$undefined". */}
+                        <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.vercel_cost ?? null)}</td>
                         <td className="py-3 pr-4 text-xs font-medium text-white whitespace-nowrap">${m.total_cost.toFixed(2)}</td>
                         <td className="py-3 pr-4 text-xs whitespace-nowrap">
                           <PLCell value={m.betting_pl} />
@@ -647,12 +718,13 @@ export default function AdminPage() {
                       const totals = finances.months.reduce(
                         (acc, m) => ({
                           fixed: acc.fixed + m.fixed_cost,
+                          vercel: acc.vercel + (m.vercel_cost ?? 0),
                           total_cost: acc.total_cost + m.total_cost,
                           betting_pl: acc.betting_pl + m.betting_pl,
                           subs: acc.subs + m.subscription_revenue,
                           net: acc.net + m.net,
                         }),
-                        { fixed: 0, total_cost: 0, betting_pl: 0, subs: 0, net: 0 }
+                        { fixed: 0, vercel: 0, total_cost: 0, betting_pl: 0, subs: 0, net: 0 }
                       )
                       return (
                         <tr className="border-t-2 border-[#333] bg-[#0f0f0f]">
@@ -661,6 +733,7 @@ export default function AdminPage() {
                           <td className="py-3 pr-4 text-xs text-gray-500 whitespace-nowrap">—</td>
                           <td className="py-3 pr-4 text-xs text-gray-500 whitespace-nowrap">—</td>
                           <td className="py-3 pr-4 text-xs text-gray-500 whitespace-nowrap">—</td>
+                          <td className="py-3 pr-4 text-xs font-medium text-gray-300 whitespace-nowrap">${totals.vercel.toFixed(2)}</td>
                           <td className="py-3 pr-4 text-xs font-bold text-white whitespace-nowrap">${totals.total_cost.toFixed(2)}</td>
                           <td className="py-3 pr-4 text-xs font-bold whitespace-nowrap">
                             <PLCell value={totals.betting_pl} />

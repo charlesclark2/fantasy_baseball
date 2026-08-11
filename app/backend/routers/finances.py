@@ -9,19 +9,31 @@ Variable cost sources:
   - AWS:       Cost Explorer ce:GetCostAndUsage grouped by SERVICE (requires the
                ce:GetCostAndUsage IAM permission on the Lambda role). Broken into
                line items: EC2, S3, Lambda, API Gateway, DynamoDB, SES, Other AWS.
+  - Vercel:    GET /v1/billing/charges (FOCUS v1.3 JSONL) with a $20/mo Pro seat FLOOR
+               from the upgrade month (see _vercel_costs_by_month / _vercel_cost_for_month).
 
 Post-INC-16 (Railway cancelled, Dagster self-hosted on EC2) there is no separate
 Railway/Dagster cost line — that spend now shows up inside the AWS EC2 line item.
 
 Fixed costs and subscription revenue are hardcoded / placeholders updated in this file.
+
+⚠️ RESPONSE SHAPE (E9.62, NF-C0/E9.41). This backend ships ONLY via
+`infrastructure/lambda/deploy.sh` while `frontend/` auto-deploys on merge, so the two halves
+are ALWAYS skewed in one direction or the other. Every field added here is therefore ADDITIVE:
+`fixed_breakdown` (a flat dict) stays populated with the CURRENT month's view so an older
+client keeps rendering, and the per-month truth arrives alongside it in
+`fixed_breakdown_by_month`. Never remove or rename a field an already-deployed client reads.
 """
 
 from __future__ import annotations
 
 import datetime
+import json
 import logging
 import os
 import time
+import urllib.parse
+import urllib.request
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
@@ -47,17 +59,45 @@ _OWNER_USER_ID_OVERRIDE = os.getenv("OWNER_USER_ID")
 _FINANCES_START = datetime.date(2026, 5, 1)
 
 # ── Fixed monthly costs (USD) — update here when prices change ────────────────
-
-_FIXED_LINE_ITEMS: dict[str, float] = {
-    "Domain": round(15 / 12, 2),   # $15/year → $1.25/month
-    "Zoho": 8.0,
-    "The Odds API": 59.0,
-    "Claude Code": 100.0,
-    "FanGraphs": 15.0,
+#
+# Each line item is a monthly `base` price plus optional per-month `overrides` keyed
+# "YYYY-MM". An override REPLACES the base for that month — it is NOT added to it. That
+# distinction is the whole point of the model: the Odds API plan was upgraded for Jul+Aug
+# 2026, so those months cost $119 INSTEAD OF $59, not $178.
+#
+# ⛔ There is deliberately NO "Domain" line. The $15/yr registration is billed through AWS
+# Route 53, so it already lands in the Cost Explorer "Other AWS" line item below; a fixed
+# $1.25/mo entry here would DOUBLE-COUNT it (removed E9.62, operator-confirmed 2026-08-04).
+_FIXED_LINE_ITEM_SPEC: dict[str, dict] = {
+    "Zoho": {"base": 8.0},
+    "The Odds API": {"base": 59.0, "overrides": {"2026-07": 119.0, "2026-08": 119.0}},
+    "Claude Code": {"base": 100.0, "overrides": {"2026-07": 200.0, "2026-08": 200.0}},
+    "FanGraphs": {"base": 15.0},
 }
-_FIXED_TOTAL: float = round(sum(_FIXED_LINE_ITEMS.values()), 2)
 
 _SNOWFLAKE_CREDIT_PRICE: float = 2.0  # $/credit
+
+# ── Vercel (variable, with a fixed seat floor) ────────────────────────────────
+#
+# The Pro seat is charged EVERY month regardless of usage; only the metered spend beyond
+# the included credit is genuinely variable (~$0 at current traffic). So the honest monthly
+# figure is max(metered, seat floor) — ⛔ never report $0 for a month the seat was paid.
+# Before the Pro upgrade the account was on Hobby, which is free, hence $0 for those months.
+_VERCEL_PRO_START = "2026-08"     # first month the Pro seat was billed
+_VERCEL_SEAT_FLOOR = 20.0         # $/month, charged regardless of usage
+_VERCEL_BILLING_URL = "https://api.vercel.com/v1/billing/charges"
+# Operator-provisioned Vercel account/team token (see infrastructure/aws_resources.md).
+# Absent → the seat floor still applies and a note explains that metered spend is missing.
+_VERCEL_TOKEN_ENV = "VERCEL_API_TOKEN"
+_VERCEL_TEAM_ID_ENV = "VERCEL_TEAM_ID"   # optional; omit for a personal account
+# INC-32: a finite timeout is mandatory. An un-timed-out call on a request path burns the
+# whole API Gateway window (29s cap) and returns an undiagnosable 502.
+_VERCEL_TIMEOUT = 8.0
+# The billing API caps a query at a 1-year range; never ask for more than this.
+_VERCEL_MAX_RANGE_DAYS = 364
+
+_vercel_cost_cache: tuple[float, dict[str, float]] | None = None  # (expires_at, data)
+_VERCEL_CACHE_TTL = 6 * 3600  # billing data is daily-grained; 6h mirrors the SF cache
 
 # ACCOUNT_USAGE refreshes every ~3hrs; cache per Lambda instance to avoid charging
 # Cloud Services compute on every page load. Resets on cold start (acceptable).
@@ -86,10 +126,14 @@ _AWS_INFRA_LABELS = ("EC2", "S3", "Lambda", "API Gateway", "DynamoDB", _AWS_OTHE
 class MonthlyFinances(BaseModel):
     month: str               # "2026-06"
     month_label: str         # "Jun 2026"
-    fixed_cost: float
+    fixed_cost: float        # varies by month — see _fixed_cost_for_month
     snowflake_cost: float | None
     aws_cost: float | None   # AWS infra total (EC2+S3+Lambda+API GW+DynamoDB+Other), ex-SES
     ses_cost: float | None
+    # E9.62. Not Optional: unlike AWS/Snowflake there is always a defensible number — the
+    # seat floor from the Pro-upgrade month, $0 (free Hobby plan) before it — so "we could
+    # not reach the API" is carried by notes[], never by a null that reads as "$0 spent".
+    vercel_cost: float
     total_cost: float
     betting_pl: float
     subscription_revenue: float
@@ -98,9 +142,35 @@ class MonthlyFinances(BaseModel):
 
 class FinancesResponse(BaseModel):
     months: list[MonthlyFinances]
+    # ⚠️ KEPT for an un-deployed client (NF-C0): the CURRENT month's per-item view. Fixed
+    # costs are per-month as of E9.62, so this is one slice of fixed_breakdown_by_month —
+    # populated, never removed, because the deployed admin page reads it.
     fixed_breakdown: dict[str, float]
+    # The per-month truth: {"2026-07": {"Claude Code": 200.0, …}, …}. Any field absent from
+    # this model is silently dropped on serialize (E9.41), so new fields go HERE, not just
+    # in the writer.
+    fixed_breakdown_by_month: dict[str, dict[str, float]]
     aws_breakdown: dict[str, float]  # window totals per AWS line item (EC2, S3, …, SES, Other AWS)
     notes: list[str]
+
+
+# ── Fixed costs, per month ────────────────────────────────────────────────────
+
+def _fixed_breakdown_for_month(month_key: str) -> dict[str, float]:
+    """Per-line-item fixed costs for one "YYYY-MM", applying that month's overrides.
+
+    An override REPLACES the base price for the month (not additive) — the Odds API's
+    Jul/Aug upgrade is $119 instead of $59, so summing base+override would be wrong.
+    """
+    return {
+        name: float(spec.get("overrides", {}).get(month_key, spec["base"]))
+        for name, spec in _FIXED_LINE_ITEM_SPEC.items()
+    }
+
+
+def _fixed_cost_for_month(month_key: str) -> float:
+    """Total fixed cost for one "YYYY-MM"."""
+    return round(sum(_fixed_breakdown_for_month(month_key).values()), 2)
 
 
 # ── Data fetchers ─────────────────────────────────────────────────────────────
@@ -205,6 +275,80 @@ def _aws_costs_by_month() -> dict[str, dict[str, float]]:
         return {}
 
 
+def _vercel_costs_by_month() -> dict[str, float]:
+    """Metered Vercel $ spend per month from the billing API.
+
+    GET /v1/billing/charges returns FOCUS v1.3 records as newline-delimited JSON (one
+    charge per line), each carrying `BilledCost` in USD and a `ChargePeriodStart`. We sum
+    BilledCost per calendar month across every ChargeCategory (Usage, Purchase, Credit,
+    Tax, Adjustment) because the invoiced total is what we actually pay — credits arrive
+    as negative amounts and net themselves out.
+
+    Returns {} when the token is absent or the call fails; the caller then falls back to
+    the seat floor and surfaces a note. This never raises — a billing-API outage must not
+    take down the whole finances page (mirrors the Snowflake/Cost-Explorer fetchers).
+    """
+    global _vercel_cost_cache
+    now = time.time()
+    if _vercel_cost_cache is not None and now < _vercel_cost_cache[0]:
+        return _vercel_cost_cache[1]
+
+    token = os.getenv(_VERCEL_TOKEN_ENV)
+    if not token:
+        logger.warning("Vercel billing skipped — %s not set on the Lambda", _VERCEL_TOKEN_ENV)
+        return {}
+
+    try:
+        today = datetime.date.today()
+        # `to` is exclusive; clamp `from` so the window can never exceed the API's 1-year cap
+        # as _FINANCES_START recedes into the past.
+        start = max(_FINANCES_START, today - datetime.timedelta(days=_VERCEL_MAX_RANGE_DAYS))
+        end = today + datetime.timedelta(days=1)
+        params = {"from": f"{start.isoformat()}T00:00:00Z", "to": f"{end.isoformat()}T00:00:00Z"}
+        team_id = os.getenv(_VERCEL_TEAM_ID_ENV)
+        if team_id:
+            params["teamId"] = team_id
+
+        req = urllib.request.Request(  # nosec B310 — literal https URL, params are urlencoded
+            f"{_VERCEL_BILLING_URL}?{urllib.parse.urlencode(params)}",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/jsonl"},
+        )
+        with urllib.request.urlopen(req, timeout=_VERCEL_TIMEOUT) as resp:
+            body = resp.read().decode("utf-8", errors="replace")
+
+        result: dict[str, float] = {}
+        for line in body.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            record = json.loads(line)
+            period = str(record.get("ChargePeriodStart") or "")
+            if len(period) < 7:
+                continue
+            key = period[:7]  # "2026-08-01T00:00:00Z" → "2026-08"
+            result[key] = round(result.get(key, 0.0) + float(record.get("BilledCost") or 0.0), 2)
+
+        _vercel_cost_cache = (now + _VERCEL_CACHE_TTL, result)
+        return result
+    except Exception:
+        logger.warning("Vercel billing query failed — check %s validity/scope", _VERCEL_TOKEN_ENV)
+        return {}
+
+
+def _vercel_cost_for_month(month_key: str, metered: dict[str, float]) -> float:
+    """Monthly Vercel cost: the seat floor from the Pro-upgrade month, plus any overage.
+
+    The $20 seat is charged whether or not the site gets traffic, so a month on Pro can
+    never cost less than that — reporting the API's $0 (or a missing reading) verbatim
+    would under-state the bill. Months before the upgrade were on the free Hobby plan.
+    """
+    # "YYYY-MM" strings are zero-padded, so lexicographic order IS chronological order.
+    amount = metered.get(month_key, 0.0)
+    if month_key >= _VERCEL_PRO_START:
+        amount = max(amount, _VERCEL_SEAT_FLOOR)
+    return round(amount, 2)
+
+
 def _owner_user_id() -> str | None:
     if _OWNER_USER_ID_OVERRIDE:
         return _OWNER_USER_ID_OVERRIDE
@@ -267,6 +411,7 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
     """6-month rolling infrastructure cost + betting P&L profitability view."""
     sf_costs = _snowflake_costs_by_month()
     aws_costs = _aws_costs_by_month()
+    vercel_metered = _vercel_costs_by_month()
     owner_id = _owner_user_id()
     pl_by_month = _betting_pl_by_month(owner_id) if owner_id else {}
 
@@ -275,11 +420,18 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
         notes.append("Snowflake costs unavailable — role needs IMPORTED PRIVILEGES on SNOWFLAKE database")
     if not aws_costs:
         notes.append("AWS costs unavailable — add ce:GetCostAndUsage to Lambda IAM role")
+    if not vercel_metered:
+        notes.append(
+            f"Vercel metered spend unavailable ({_VERCEL_TOKEN_ENV} missing or the billing API "
+            f"call failed) — showing the ${_VERCEL_SEAT_FLOOR:.0f}/mo Pro seat floor from "
+            f"{_VERCEL_PRO_START}; any usage above the included credit is not counted"
+        )
 
     today = datetime.date.today()
     current_month = datetime.date(today.year, today.month, 1)
     months: list[MonthlyFinances] = []
     aws_breakdown: dict[str, float] = {}  # window totals per line item
+    fixed_breakdown_by_month: dict[str, dict[str, float]] = {}
     month_date = _FINANCES_START
     while month_date <= current_month:
         key = month_date.strftime("%Y-%m")
@@ -296,8 +448,12 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
             aws = None
             ses = None
 
-        variable = (sf or 0.0) + (aws or 0.0) + (ses or 0.0)
-        total = round(_FIXED_TOTAL + variable, 2)
+        vercel = _vercel_cost_for_month(key, vercel_metered)
+        fixed_breakdown_by_month[key] = _fixed_breakdown_for_month(key)
+        fixed = _fixed_cost_for_month(key)
+
+        variable = (sf or 0.0) + (aws or 0.0) + (ses or 0.0) + vercel
+        total = round(fixed + variable, 2)
         pl = pl_by_month.get(key, 0.0)
         subs = 0.0  # placeholder — wire when subscription billing is live
         net = round(pl + subs - total, 2)
@@ -305,10 +461,11 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
         months.append(MonthlyFinances(
             month=key,
             month_label=label,
-            fixed_cost=_FIXED_TOTAL,
+            fixed_cost=fixed,
             snowflake_cost=sf,
             aws_cost=aws,
             ses_cost=ses,
+            vercel_cost=vercel,
             total_cost=total,
             betting_pl=pl,
             subscription_revenue=subs,
@@ -321,9 +478,15 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
         else:
             month_date = datetime.date(month_date.year, month_date.month + 1, 1)
 
+    # NF-C0: `fixed_breakdown` is the CURRENT month's slice, kept populated so an admin page
+    # deployed before this change still renders a sensible panel instead of blanking.
+    current_key = current_month.strftime("%Y-%m")
     return FinancesResponse(
         months=months,
-        fixed_breakdown=_FIXED_LINE_ITEMS,
+        fixed_breakdown=fixed_breakdown_by_month.get(
+            current_key, _fixed_breakdown_for_month(current_key)
+        ),
+        fixed_breakdown_by_month=fixed_breakdown_by_month,
         aws_breakdown=aws_breakdown,
         notes=notes,
     )
