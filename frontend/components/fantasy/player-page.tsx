@@ -33,6 +33,7 @@ import { canUse } from "@/lib/entitlements"
 import {
   useFantasyManifest,
   useFantasyProjections,
+  useFullProjections,
   useFormatSelection,
   useResolvedBoard,
   useSavedLeagues,
@@ -223,7 +224,26 @@ function PlayerView({ playerId }: { playerId: string }) {
     setPhotoFailed(false)
   }, [playerId])
 
-  const { data: projPayload, isLoading: projLoading, error: projError } = useFantasyProjections()
+  const {
+    data: publicProjPayload,
+    isLoading: projLoading,
+    error: projError,
+  } = useFantasyProjections()
+
+  // 🔒 NF-EPIC 1 — THE PAID HALF ARRIVES SEPARATELY NOW.
+  //
+  // `fpStd`, `fpHalf` and the raw stat line left the public payload on 2026-08-10: they were gated
+  // only by the components below declining to draw them, and a `curl` recovered all three. An
+  // entitled caller fetches them from `/fantasy/nfl/projections-full`; everyone else simply does
+  // not have them, which is what turns the padlocks on this page from a render choice into a fact
+  // about the response.
+  //
+  // ⭐ A WHOLESALE SWAP, NOT A FIELD MERGE. The full payload is the same shape with more fields, so
+  // substituting it leaves every reader below (`proj`, the percentile pools, the stat-line section)
+  // untouched. For an unentitled caller the paid fields are simply `undefined` — and `percentileRank`
+  // is null-safe by construction, so the pools degrade to `null` rather than throwing.
+  const { data: fullProjPayload } = useFullProjections()
+  const projPayload = fullProjPayload ?? publicProjPayload
   const { data: manifest } = useFantasyManifest()
   const { data: savedLeagues } = useSavedLeagues()
   const { configName, size, setConfigName, setSize } = useFormatSelection(

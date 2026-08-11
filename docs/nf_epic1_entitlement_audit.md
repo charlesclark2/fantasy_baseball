@@ -3,6 +3,27 @@
 **Date:** 2026-08-10 · **Branch:** `nf-epic1` · **Spec:** `nf_delivery_epic.md` §5 (E9.56 / E9.8-P2 / E9.57)
 `best_alpha = 0`. Nothing here changes a model or a bet.
 
+> ## ⭐ RESOLVED — PM chose **Option C**, and it shipped (2026-08-10)
+>
+> The audit below found one open leak (§4): `fpStd`, `fpHalf` and the raw stat line reached
+> anonymous callers, gated only by which component drew them. **The PM ruled the raw stat line
+> PAID** — it is the re-scorable projection substrate, not the shop-window summary — and chose
+> **Option C: split the payload and score the free personalized league server-side.**
+>
+> Shipped in this branch:
+> - `/fantasy/nfl/projections` no longer carries any scorable stat, `fpStd` or `fpHalf`. The paid
+>   set is **derived from the scorer's own `STAT_FIELD` map**, so a new scorable stat is withheld
+>   automatically instead of shipping public by default.
+> - The paid half moved to `/fantasy/nfl/projections-full`, behind `require_fantasy_access`.
+> - A free account keeps G100-C1's one personalized league: it is scored **on the server**
+>   (`/fantasy/nfl/league-board`, `/fantasy/nfl/my-teams`), so the browser receives a board it could
+>   not have computed and never sees the substrate.
+> - The public blob is still **byte-identical for every caller**, so G100-D1's CDN cache survives.
+> - `contrib` stays public (PM Q3): attribution is show-our-work transparency.
+>
+> **§4's "the leak cannot be closed by redaction" conclusion was too pessimistic, and §8 records
+> exactly why.** The acceptance-criteria reconciliation the audit asked for is §7.
+
 ---
 
 ## Verdict
@@ -225,7 +246,118 @@ speculative today, and the fix belongs with the field that motivates it.
 
 ---
 
-## 6. E9.8-P2
+## 7. The acceptance-criteria amendment (PM-approved, 2026-08-10)
+
+§5 was written before the freemium build and carries this line:
+
+> Browser dev tools cannot recover gated values.
+
+Read literally against the *pre-freemium* product — where the whole current-season board was
+paid — that line was satisfiable. The 8 Aug freemium decision made the generic board free **and
+deliberately scrapeable**, so the sentence stopped describing the product on that date. It was not
+failed; it was superseded, and the audit found it still being carried as if it were live.
+
+**The standard we actually hold, and now meet:**
+
+> **No PAID value is recoverable without paying.** The generic board — rankings, our PPR
+> projection, the 80% ranges, market ADP, `contrib`, the player pages — is free to everyone
+> including anonymous callers, by design, and is scrapeable. That is the acquisition wedge and an
+> accepted cost. What must never be obtainable free is the PAID substrate: the raw stat line, the
+> two paid reference scorings, the 13 paid preset boards, and personalization.
+
+⚠️ **Recorded, not papered over.** Three things stay true in the record: the pre-freemium line was
+correct when written; the freemium build superseded it on 8 Aug; and between 8 Aug and 10 Aug the
+product did NOT meet either standard, because the stat line was paid in the UI and free on the
+wire. Option C closed that gap — it did not retroactively make the interim period fine.
+
+**§5 checklist items that are now decided rather than open:**
+
+| §5 item | Disposition |
+|---|---|
+| `overall_values_visible = top 10` / `per_position = top 3` | ⛔ **Retired 8 Aug.** The free board carries all 858 rows unredacted. Do not restore without a pricing decision. |
+| `player_detail_unlocks = 3` | ⛔ **Never built, and correctly so.** Player pages are free. |
+| `draft_optimizer_runs = 1` | ⛔ **Never built.** The optimizer is gated by capability, not by a run counter. |
+| "Locked marker schema" | 🗄️ Retired with the E9.56 redaction; the code is kept, unused, as the withdraw-the-board mechanism. |
+| "Server-side board filtering" | ✅ Met differently: 13 of 14 preset boards 403, and the paid substrate is a separate authenticated payload. |
+
+---
+
+## 8. Why §4's "cannot be closed by redaction" was too pessimistic
+
+The audit concluded the leak was structural. That was right about the *constraints* and wrong about
+the *conclusion*, and the correction is worth recording because the reasoning error is reusable.
+
+§4 established three true facts — the totals are derivable from the stat line; the client scorer
+needs the stat line; a caller-dependent payload forfeits the CDN — and then treated them as jointly
+binding. They are not. **All three are constraints on WHERE THE ARITHMETIC HAPPENS, and only one
+placement was considered.** Once scoring moves to the server:
+
+- the stat line never needs to reach a free browser, so fact 2 dissolves;
+- the totals cannot be derived from a stat line the caller does not have, so fact 1 dissolves;
+- and the PUBLIC blob stays byte-identical for every caller (the paid half is a *different URL*,
+  not a different body on the same URL), so fact 3 never applied to the split at all.
+
+The mistake was assuming the paid half had to travel on the same URL. It is the same shape as this
+repo's "documented ≠ actually served" family: an inherited assumption about the delivery mechanism
+was carried as if it were a property of the data.
+
+⚠️ **The one fact from §4 that still stands, and it is the important one:** account creation is
+free, instant and self-serve, so a gate at "signed in" is not a gate. That is why the stat line is
+withheld from *free signed-in accounts* too, not merely from anonymous ones — and it is why
+Option B (withdraw the free league) and Option C (score it server-side) were the only two real
+options.
+
+---
+
+## 9. Known residual — bounded, not zero
+
+Recording this because "no leak" would be an overclaim, and an overclaim is what makes the next
+audit distrust this one.
+
+**A free account can still probe the substrate through its own league.** The server scores any
+league config the caller saves, so a determined user could save a league whose scoring is a single
+stat at weight 1.0, read the resulting `pts` column, and recover that stat for every player — then
+repeat per stat. It is a real path and it is deliberately bounded rather than closed:
+
+| Bound | Effect |
+|---|---|
+| **Free quota = 1 league** (`FREE_PERSONALIZED_LEAGUE_QUOTA`) | Only one config at a time; each additional stat requires an edit + refetch. |
+| **~50 scorable stats** | ~50 sequential edit-and-read cycles for one full stat line. |
+| **G100-D1 per-IP rate limiter** | Caps the cycle rate from one address. |
+| **Board rounding** (`round(x, 1)`) | Recovers a 1-decimal approximation, not the stored value. |
+| **Identity required** | Every request carries a Cognito `sub`, so the activity is attributable — unlike the previous `curl`, which was anonymous. |
+
+⇒ the honest statement is **"the substrate is no longer served to a free caller, and reconstructing
+it is now slow, rate-limited and attributable"**, not "reconstruction is impossible". Closing it
+completely would mean validating saved configs against a plausibility rule, which would refuse real
+leagues — a worse trade for a path that costs ~50 authenticated round trips to walk.
+
+---
+
+## 10. E9.8-P2
+
+*(§6 below is the original pre-decision verdict, kept for the record.)*
+
+**Cleared on the enforcement leg.** The PM's Q4 ruling: Stripe ships in parallel, and Option C is a
+pre-launch fast-follow that must land before traffic is driven to `/subscribe`. Option C is in this
+branch.
+
+Answering the question the PM asked to be answered plainly — *is any paid value (stat line /
+`fpStd` / `fpHalf`) recoverable by an anonymous or free caller?*
+
+**No — pending the live re-verification below, which cannot run until `deploy.sh` does.** The
+backend change is what closes it, and this repo has no CD for the API Lambda, so the code being
+merged is not the same event as the leak being closed.
+
+⏭️ **Operator steps, in order** — full commands in the handoff:
+1. `./infrastructure/lambda/deploy.sh` (the leak is open until this runs).
+2. Re-run the leak repro anonymously and confirm no `fpStd` / `fpHalf` / stat line.
+3. Confirm the public blob is still byte-identical and the paid one is `private, no-store`.
+4. PM live walk: anonymous + signed-in free account.
+
+---
+
+## 6. E9.8-P2 *(original, pre-decision — superseded by §10)*
 
 **Unblocked on the enforcement leg, conditional on one PM sign-off.**
 

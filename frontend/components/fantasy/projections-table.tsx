@@ -13,7 +13,7 @@ import Link from "next/link"
 import { Search } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { canUse } from "@/lib/entitlements"
-import { useFantasyProjections, FANTASY_SEASON } from "@/lib/fantasy-queries"
+import { useFantasyProjections, useFullProjections, FANTASY_SEASON } from "@/lib/fantasy-queries"
 import { fullSeasonRate, trimLockedTail } from "@/lib/fantasy"
 import {
   EXPECTED_POINTS_LABEL,
@@ -72,7 +72,13 @@ export function ProjectionsTable() {
   // is free, half-PPR and standard are the membership, matching the board's own format split.
   const { groups } = useAuth()
   const entitled = canUse("personalization", groups)
-  const { data, isLoading, error } = useFantasyProjections()
+  const { data: publicData, isLoading, error } = useFantasyProjections()
+  // 🔒 NF-EPIC 1 — the two paid reference scorings (`fpHalf`/`fpStd`) left the public payload on
+  // 2026-08-10. `effScoring` below already pins an unentitled caller to full PPR, so this swap is
+  // what makes that pinning REAL rather than a presentation choice: without the paid half fetched,
+  // those columns simply do not exist in the data.
+  const { data: fullData } = useFullProjections()
+  const data = fullData ?? publicData
   const [pos, setPos] = useState("All")
   const [scoring, setScoring] = useState<Scoring>(FREE_SCORING)
   const [q, setQ] = useState("")

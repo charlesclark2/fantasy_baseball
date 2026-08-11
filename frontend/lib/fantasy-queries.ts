@@ -18,13 +18,20 @@ import {
   getFantasyBoard,
   getFantasyManifest,
   getFantasyProjections,
+  getFullProjections,
+  getLeagueBoard,
   getMyTeams as getMyTeamsPayload,
   listSavedLeagues,
   updateSavedLeague,
 } from "@/lib/fantasy"
-import type { LeagueSaveInput, MyTeamsPayload, ProjectionPayload, SavedLeague } from "@/lib/fantasy"
+import type {
+  LeagueBoardPayload,
+  LeagueSaveInput,
+  MyTeamsPayload,
+  ProjectionPayload,
+  SavedLeague,
+} from "@/lib/fantasy"
 import type { LeagueConfig } from "@/lib/league-config"
-import { buildBoard, matchRosterToBoard } from "@/lib/league-scoring"
 import type { BuiltBoard, RosterMatch } from "@/lib/league-scoring"
 import type { Manifest, Player } from "@/lib/draft-optimizer"
 import { freeSelection } from "@/lib/draft-optimizer"
@@ -213,12 +220,72 @@ export function useDeleteLeague() {
  * Returns `null` (not an error) until the projections payload is available, so callers fall back to
  * the preset path rather than rendering a wrong board.
  */
+/**
+ * The PAID half of the projection — the raw stat line plus `fpStd`/`fpHalf`.
+ *
+ * 🔒 NF-EPIC 1 (2026-08-10). These fields left the public payload; they are served only to an
+ * entitled caller from `/fantasy/nfl/projections-full`. Surfaces that render them
+ * (`player-page`, `projections-table`) merge this over the public rows.
+ *
+ * ⚠️ `enabled` IS THE ENTITLEMENT, deliberately — an unentitled caller must not fire a request that
+ * 403s by design on every page load. The server is the real gate; this only avoids the noise.
+ */
+export function useFullProjections(season: number = FANTASY_SEASON) {
+  const { accessToken, groups } = useAuth()
+  const entitled = canAccess("fantasy", groups)
+  return useQuery<ProjectionPayload>({
+    queryKey: ["nfl-fantasy-projections-full", season],
+    queryFn: () => getFullProjections(accessToken as string, season),
+    enabled: !!accessToken && entitled,
+    staleTime: Infinity,
+    retry: false,
+  })
+}
+
+/**
+ * ⭐ NF-EPIC 1 — a saved league's board, now scored SERVER-SIDE.
+ *
+ * This used to be `buildBoard(projections.players, config)` in the browser. That is no longer
+ * possible for anyone: the raw stat line the scorer multiplies by each league's weights is paid and
+ * no longer in the public payload. Scoring moved to the server, and this hook fetches the OUTPUT.
+ *
+ * ⭐ THAT IS WHAT KEEPS G100-C1's FREE PERSONALIZED LEAGUE ALIVE. Withholding the substrate would
+ * otherwise have withdrawn the free league (the PM's rejected Option B); computing the board where
+ * the substrate already lives keeps both.
+ *
+ * ⚠️ IDENTITY, NOT ENTITLEMENT, in `enabled` — a free account has a quota of one and must reach its
+ * own league. The server enforces both ownership and the quota.
+ */
+export function useLeagueBoard(leagueId: string | null, season: number = FANTASY_SEASON) {
+  const { accessToken } = useAuth()
+  return useQuery<LeagueBoardPayload>({
+    queryKey: ["nfl-fantasy-league-board", leagueId, season],
+    queryFn: () => getLeagueBoard(accessToken, leagueId as string, season),
+    enabled: !!accessToken && !!leagueId,
+    staleTime: 60_000,
+    retry: false,
+  })
+}
+
+/**
+ * A saved league's board in the shape the surfaces already consume.
+ *
+ * Kept as `BuiltBoard | null` so `useResolvedBoard` and every downstream component read a custom
+ * league exactly as they always have — the change is WHERE the arithmetic happened, not what the
+ * caller receives. `coverage` is carried through from the server's own resolver.
+ */
 export function useCustomBoard(config: LeagueConfig | null): BuiltBoard | null {
-  const { data: projections } = useFantasyProjections()
+  const leagueId = (config as SavedLeague | null)?.league_id ?? null
+  const { data } = useLeagueBoard(leagueId)
   return useMemo(() => {
-    if (!config || !projections?.players?.length) return null
-    return buildBoard(projections.players, config)
-  }, [config, projections])
+    if (!config || !data?.board?.players?.length) return null
+    return {
+      players: data.board.players,
+      replacement: data.board.replacement ?? {},
+      started: data.board.started ?? {},
+      coverage: data.board.coverage as BuiltBoard["coverage"],
+    }
+  }, [config, data])
 }
 
 // ── NF-C6: My Teams (cross-league browse) ────────────────────────────────────────────────────────
@@ -235,17 +302,21 @@ export interface MyTeamEntry {
 }
 
 /**
- * Every saved league this user has, each scored + joined to its linked roster.
+ * Every saved league this user has, joined to its linked roster.
  *
- * Reads `/fantasy/nfl/my-teams` (broader `require_fantasy_access` gate than `useSavedLeagues`'s
- * beta-only `/fantasy/leagues` — see that endpoint's docstring) for the configs + roster snapshots,
- * then scores each one CLIENT-SIDE with the SAME `buildBoard` every other fantasy surface uses — no
- * second scorer, per the NF1.5b/NF3.3 reuse rule (`fantasy_engine` cannot be imported into the API
- * Lambda; see `models/fantasy.py`).
+ * 🔒 NF-EPIC 1 — THE SCORING MOVED TO THE SERVER. This used to call `buildBoard` per league in the
+ * browser, off the raw stat line in the projections payload. That substrate is paid now, so
+ * `/fantasy/nfl/my-teams` returns each league's roster ALREADY joined to its own scored board and
+ * this hook simply reads it.
+ *
+ * ⚠️ `board` IS NULL HERE ON PURPOSE, and it is not an omission. The endpoint deliberately returns
+ * roster rows only: a full board is ~858 rows, and at a subscriber's quota of 25 leagues that is
+ * ~6 MB — straight through Lambda's proxy-response cap. This surface renders rosters and never
+ * touched `board`. A page that needs one league's FULL board calls `useCustomBoard` /
+ * `useLeagueBoard`, which fetches exactly one.
  */
 export function useMyTeams() {
   const { accessToken } = useAuth()
-  const { data: projections } = useFantasyProjections()
   const query = useQuery<MyTeamsPayload>({
     queryKey: ["nfl-fantasy-my-teams"],
     // ⭐ G100-C1 — identity, not entitlement (see `useSavedLeagues`). `/fantasy/nfl/my-teams` now
@@ -260,15 +331,15 @@ export function useMyTeams() {
   const teams = useMemo<MyTeamEntry[] | null>(() => {
     const leagues = query.data?.leagues
     if (!leagues) return null
-    if (!projections?.players?.length) return null
-    return leagues.map((league) => {
-      const board = buildBoard(projections.players, league)
-      const roster = league.imported_roster?.length
-        ? matchRosterToBoard(league.imported_roster, board.players)
-        : []
-      return { league, board, roster }
-    })
-  }, [query.data, projections])
+    // `?? {}` — the deployed API does not send `rosters` until `deploy.sh` runs (NF-C0 skew). An
+    // empty map renders "no roster linked", which is an honest state, rather than `undefined`.
+    const rosters = query.data?.rosters ?? {}
+    return leagues.map((league) => ({
+      league,
+      board: null,
+      roster: rosters[league.league_id] ?? [],
+    }))
+  }, [query.data])
 
   return { ...query, teams }
 }

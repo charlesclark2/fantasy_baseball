@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import type { Page, Request, Route } from "@playwright/test"
+import { buildBoard, matchRosterToBoard } from "@/lib/league-scoring"
 import { buildEnv } from "./env"
 
 /**
@@ -162,6 +163,15 @@ function payloadFor(pathname: string, entitlement: Entitlement): unknown | undef
   if (pathname === "/fantasy/nfl/projections") {
     return locked ? FIXTURES.projectionsLocked() : FIXTURES.projectionsEntitled()
   }
+  // 🔒 NF-EPIC 1 — the PAID half of the projection (raw stat line + fpStd/fpHalf).
+  //
+  // ⚠️ ENTITLED ONLY, and modelling the refusal is the point: falling through to `undefined` makes
+  // the harness answer 501/unmatched for a free caller, which is what a spec asserting "a free
+  // account cannot obtain the stat line" needs. Serving it to everyone would let that spec pass
+  // against a server no caller can reach — the shape this harness's own comments warn about.
+  if (pathname === "/fantasy/nfl/projections-full") {
+    return entitlement === "entitled" ? FIXTURES.projectionsEntitled() : undefined
+  }
   if (pathname === "/subscription/public-pricing") return FIXTURES.publicPricing()
   // ⚠️ THESE TWO USED TO IGNORE `entitlement` ENTIRELY and always serve the locked capture, which
   // was correct while the locked payload was the only anonymous shape. Post-freemium that would
@@ -284,15 +294,52 @@ function personalPayloadFor(
   pathname: string,
   leagues: NonNullable<MockOptions["leagues"]>,
 ): unknown | undefined {
+  // 🔒 NF-EPIC 1 — the league board is scored SERVER-SIDE now (the raw stat line it is scored from
+  // became paid). The harness computes it with the SAME `buildBoard` the browser used to run, off
+  // the entitled projections fixture, so the delta this screen exists to show stays REAL. Returning
+  // the generic board here instead would make every riser/faller assertion pass against a board
+  // that never moved — the vacuous-fixture shape this file already guards against elsewhere.
+  if (pathname === "/fantasy/nfl/league-board") {
+    const league = FIXTURES.myTeams().leagues[0]
+    if (!league || leagues === "none") return undefined
+    const built = buildBoard(FIXTURES.projectionsEntitled().players, league)
+    return {
+      season: 2026,
+      league,
+      board: {
+        players: built.players,
+        replacement: built.replacement,
+        started: built.started,
+        coverage: built.coverage,
+      },
+      roster: matchRosterToBoard(league.imported_roster ?? [], built.players),
+    }
+  }
   if (pathname !== "/fantasy/nfl/my-teams" && pathname !== "/fantasy/leagues") return undefined
 
   const base = FIXTURES.myTeams()
   const one = base.leagues[0]
+  // NF-EPIC 1 — `/fantasy/nfl/my-teams` now carries each league's roster ALREADY joined to its own
+  // server-scored board. Computed here for the same reason as the board above: a hardcoded empty
+  // map would make "my roster renders" pass on nothing.
+  // `any` is honest here rather than lazy: `fixture()` returns parsed JSON, so the league shape is
+  // untyped at this boundary and inventing a local interface would be a second, driftable spelling
+  // of `SavedLeague`.
+  const rostersFor = (ls: any[]) =>
+    Object.fromEntries(
+      ls.map((l: any) => [
+        l.league_id,
+        matchRosterToBoard(
+          l.imported_roster ?? [],
+          buildBoard(FIXTURES.projectionsEntitled().players, l).players,
+        ),
+      ]),
+    )
 
   if (leagues === "none") {
     return pathname === "/fantasy/leagues"
       ? []
-      : { ...base, leagues: [], saved_total: 0, withheld_by_quota: 0 }
+      : { ...base, leagues: [], saved_total: 0, withheld_by_quota: 0, rosters: {} }
   }
 
   if (leagues === "overQuota") {
@@ -306,10 +353,12 @@ function personalPayloadFor(
     ]
     return pathname === "/fantasy/leagues"
       ? all
-      : { ...base, leagues: [one], saved_total: 3, withheld_by_quota: 2 }
+      : { ...base, leagues: [one], saved_total: 3, withheld_by_quota: 2, rosters: rostersFor([one]) }
   }
 
-  return pathname === "/fantasy/leagues" ? [one] : base
+  return pathname === "/fantasy/leagues"
+    ? [one]
+    : { ...base, rosters: rostersFor(base.leagues) }
 }
 
 /**
