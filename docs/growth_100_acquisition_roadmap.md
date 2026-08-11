@@ -360,6 +360,63 @@ multiple auth identities
 
 Auth is required for personalization/saving, not for browsing generic rankings.
 
+**✅ SHIPPED 2026-08-10 — PR #722.** Email OTP (a 6-digit code via SES), not a magic link: a
+link authenticates whatever opens it, which on mobile is routinely a webview inside the mail
+client rather than the tab the person started in. Not username/password either — that path is
+permanently closed on this pool (no email auto-verification, so a self-registered password
+account can never confirm itself or reset its password). A code sidesteps that dead end rather
+than trying to fix it: the code arriving in the mailbox **is** the ownership proof.
+
+The architecture rule above is enforced in Cognito itself, not in a mapping layer beside it.
+The canonical `user_id` is the NATIVE Cognito `sub`; federated identities are LINKED INTO it.
+E9.7 already did that in one arrival order; G100-C0 closed the other by pre-provisioning a
+native user for a brand-new federated sign-in, so Google-then-OTP and OTP-then-Google both
+resolve to one account. PM ratified all five open calls (2026-08-10) — see
+`infrastructure/cognito/email_otp/README.md`.
+
+⚠️ **Not retroactive, by decision.** An account created before that deploy is federated-only;
+its `sub` owns the person's data and cannot be moved, so OTP is REFUSED for those addresses
+with "continue with Google" rather than minting a second, empty account. ⛔ No destructive
+per-account migration without the PM naming specific accounts and confirming each is empty.
+Population count is an operator step (`cognito-idp:ListUsers` is denied to the session IAM
+user); if it is materially large, a one-time in-app notice is a fast-follow, not a blocker.
+
+## G100-C0-MFA — Passwordless subscribers must not be locked out by MFA enforcement
+
+**Priority:** P0 (blocking, not in the Week-1 funnel)
+**Sequence:** before the E9.8 go-live, independent of the rest of GROWTH-100
+**Owner:** the E9.8 / entitlement backend track
+**Status:** 🔴 OPEN. Carded 2026-08-10 out of G100-C0's PM review.
+
+**This story is a hard blocking precondition on flipping `ENFORCE_SUBSCRIBER_MFA=1`.** That
+flip must not fire until this lands AND is live-verified.
+
+The defect, stated plainly: `auth.require_subscriber_mfa` exempts a session only when
+`_session_is_federated` recognises it, and that keys off `amr` plus the federated USERNAME
+SHAPE (`google_…`). A linked or pre-provisioned user's username is a plain UUID, so the check
+fails — and it fails CLOSED, exactly as E9.8's own spec instructed ("if none is reliable,
+FAIL-CLOSED"). That instruction was correct when the only alternative was a password session.
+G100-C0 changed the population it lands on: with enforcement on, a `subscriber` who signs in
+by email OTP is 403'd and told to enroll TOTP they **cannot** enroll, because the only way off
+that screen (`reauthenticatePassword`) asks for a password they have never had. A locked-out
+paying customer with no self-service recovery.
+
+Inert today — `ENFORCE_SUBSCRIBER_MFA` defaults to `0`, and the frontend half is already
+correct (`sessionUsesPasswordlessAuth()`). This is why it did not block PR #722.
+
+**Ratified approach (PM, 2026-08-10):** apply a `passwordless` Cognito group at
+pre-provision / OTP-account-creation time and exempt that group in `_session_is_federated`.
+Groups already travel in the API-Gateway-validated token, so the signal is server-verifiable
+and needs no pool schema change — unlike the client-side `credence_auth_method` marker, which
+is client-controlled and must never gate a security decision.
+
+🟥 **Why this is its own story and not a scoped item: it needs a live runtime gate the G100-C0
+session could not run.** Before trusting the exemption, verify against the real pool what a
+CUSTOM_AUTH session's token actually carries — `amr`, and whether the group claim is present
+on it. ⛔ No blind fix: a wrong exemption here is an MFA BYPASS on a paying account, which is
+the failure this guard exists to prevent, and it would pass CI exactly as happily as the
+correct version. CI mocks all IO and cannot see Cognito.
+
 ## G100-C1 — One Free Personalized League
 
 **Priority:** P0  
