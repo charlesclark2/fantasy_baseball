@@ -246,20 +246,25 @@ test.describe("the free personalized league", () => {
   test("a configured league is never described as 'no league' when scoring fails", async ({
     page,
   }) => {
-    // ⭐ THREE FACTS, NOT TWO. `useMyTeams` cannot produce a scored board without the PROJECTIONS
-    // blob, so its `teams` stays null until both reads land. Keying the empty state on that would
-    // tell someone who configured a league last week to go and set one up — every time the
-    // projections read is slow, 404s before the first export, or fails. That is the silent-empty
-    // class (E9.56b) landing on the one screen this whole story exists for.
+    // ⭐ THREE FACTS, NOT TWO. The page cannot show a scored board until the board read lands, so
+    // "my league is here but unscored" is a state of its own. Keying the empty state on it would
+    // tell someone who configured a league last week to go and set one up — every time the read is
+    // slow, 404s before the first export, or fails. That is the silent-empty class (E9.56b) landing
+    // on the one screen this whole story exists for.
     //
-    // Failing the projections read is the deterministic form of the race: my-teams succeeds, the
-    // board cannot be built, and the page must say so.
+    // ⚠️ NF-EPIC 1 RE-ANCHORED WHICH READ IS FAILED, NOT WHAT THIS TEST ASSERTS. Scoring used to
+    // happen in the browser off the PROJECTIONS blob, so failing that read was the deterministic
+    // form of "the board cannot be built". Scoring moved to the server when the raw stat line
+    // became paid, so the board now arrives from `/fantasy/nfl/league-board` and failing
+    // projections no longer prevents it — the page would render fine and this spec would assert
+    // against a state it can no longer produce. Failing the read the board ACTUALLY depends on
+    // keeps the property intact; the property itself is unchanged.
     await signIn(page, SIGNED_IN_FREE)
     const errors = collectPageErrors(page)
     await mockApi(page, {
       entitlement: "free",
       leagues: "one",
-      fail: ["/fantasy/nfl/projections"],
+      fail: ["/fantasy/nfl/league-board"],
     })
     await page.goto("/fantasy/my-league")
 
