@@ -17,6 +17,7 @@ import { signupHref } from "@/lib/access"
 import { apiFetch } from "@/lib/api"
 import { Nav } from "@/components/nav"
 import { GoogleIcon } from "@/components/google-icon"
+import { EmailOtpForm } from "@/components/email-otp-form"
 import type { CognitoUser } from "amazon-cognito-identity-js"
 
 function LoginInner() {
@@ -37,8 +38,15 @@ function LoginInner() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // New-password-required step
-  const [step, setStep] = useState<"login" | "new-password" | "mfa">("login")
+  // New-password-required step. G100-C0 adds "otp" — the passwordless email door.
+  //
+  // ⭐ THE PASSWORD FORM STAYS THE DEFAULT ON THIS PAGE, deliberately. /login is the
+  // RETURNING-user surface, and every returning user today has either a password or
+  // Google; making them hunt for the form they have always used to widen a funnel they
+  // are not in would be a regression dressed as an improvement. The new door is offered,
+  // not imposed. /signup — the surface a person with NO account actually lands on — leads
+  // with it instead.
+  const [step, setStep] = useState<"login" | "new-password" | "mfa" | "otp">("login")
   const [newPassword, setNewPassword] = useState("")
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
@@ -181,7 +189,16 @@ function LoginInner() {
               className="h-7 w-auto mx-auto mb-2"
               priority
             />
-            {step === "login" ? (
+            {step === "otp" ? (
+              <>
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                  Sign in with email
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  We&apos;ll email you a one-time code — no password needed
+                </p>
+              </>
+            ) : step === "login" ? (
               <>
                 <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                   Welcome back
@@ -252,7 +269,23 @@ function LoginInner() {
             </>
           )}
 
-          {step === "login" ? (
+          {step === "otp" ? (
+            <>
+              <EmailOtpForm
+                intent="signin"
+                surface="login"
+                dest={dest}
+                onUseProvider={googleEnabled ? handleGoogleSignIn : undefined}
+              />
+              <button
+                type="button"
+                onClick={() => { setStep("login"); setError(null) }}
+                className="mt-4 w-full text-center text-sm text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors"
+              >
+                Sign in with a password instead
+              </button>
+            </>
+          ) : step === "login" ? (
             <form onSubmit={handleSubmit} className="space-y-4" noValidate>
               <div className="space-y-1.5">
                 <Label htmlFor="email">Email</Label>
@@ -308,6 +341,19 @@ function LoginInner() {
                   "Sign In"
                 )}
               </Button>
+
+              {/* G100-C0 — the way in for someone who has an account but no password: a
+                  Google-first user, or anyone who simply never set one. Before this the
+                  page's only answer to "I don't have a password" was the forgot-password
+                  flow, which cannot help an account that never had one. */}
+              <button
+                type="button"
+                onClick={() => { setStep("otp"); setError(null) }}
+                disabled={isLoading}
+                className="w-full text-center text-sm text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors disabled:opacity-50"
+              >
+                Email me a sign-in code instead
+              </button>
             </form>
           ) : step === "mfa" ? (
             <form onSubmit={handleMfaCode} className="space-y-4" noValidate>

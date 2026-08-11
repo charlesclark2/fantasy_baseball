@@ -226,7 +226,7 @@ export function consumeSignInContext(): SignInContext | null {
   }
 }
 
-type OAuthTokens = {
+export type OAuthTokens = {
   id_token: string
   access_token: string
   refresh_token: string
@@ -273,11 +273,22 @@ export async function completeGoogleSignIn(
   return hydrateSessionFromTokens(tokens)
 }
 
-// Persist the Hosted-UI tokens into the amazon-cognito-identity-js localStorage
-// layout via setSignInUserSession(), so getCurrentCognitoUser() +
-// getSession()/refreshSession() (the AuthContext silent-refresh machinery) work
-// for a federated user exactly as they do for a password user.
-function hydrateSessionFromTokens(tokens: OAuthTokens): {
+// Persist a token trio into the amazon-cognito-identity-js localStorage layout via
+// setSignInUserSession(), so getCurrentCognitoUser() + getSession()/refreshSession()
+// (the AuthContext silent-refresh machinery) work for a federated user exactly as
+// they do for a password user.
+//
+// G100-C0 — EXPORTED and given an explicit `method`, because email-OTP tokens arrive
+// the same way Google's do: minted by Cognito, handed to us over HTTPS, with no
+// CognitoUser object to attach them to. Sharing this one function is what makes the
+// OTP session indistinguishable from every other session everywhere downstream —
+// silent refresh, the proactive renewal timer, the 401 retry, and sign-out. A second
+// hand-rolled hydration would be a second thing to keep in step with the SDK's
+// storage layout, and the first one to rot.
+export function hydrateSessionFromTokens(
+  tokens: OAuthTokens,
+  method: AuthMethod = "google",
+): {
   accessToken: string
   idToken: string
 } {
@@ -295,9 +306,11 @@ function hydrateSessionFromTokens(tokens: OAuthTokens): {
   const user = new CognitoUser({ Username: username, Pool: getPool() })
   user.setSignInUserSession(session) // writes tokens to localStorage (cacheTokens)
 
-  // Mark this session as federated so MFA (E9.19) skips the TOTP path — Google
-  // already MFA'd the user; the Cognito software-token challenge never applies here.
-  setSessionAuthMethod("google")
+  // Mark how this session authenticated so MFA (E9.19) can skip the TOTP path when it
+  // does not apply — Google already MFA'd the user, and an emailed one-time code is
+  // itself the possession factor. The Cognito software-token challenge belongs to the
+  // password `InitiateAuth` path and only that path.
+  setSessionAuthMethod(method)
 
   return {
     accessToken: accessToken.getJwtToken(),
@@ -343,7 +356,23 @@ function withValidUser(): Promise<CognitoUser> {
 // the truth: a Google Hosted-UI login is already MFA'd by Google (no TOTP), a password
 // InitiateAuth login is the one TOTP protects. We stamp it at each sign-in entry point.
 const AUTH_METHOD_KEY = "credence_auth_method"
-export type AuthMethod = "password" | "google"
+export type AuthMethod = "password" | "google" | "email_otp"
+
+// G100-C0 — the methods that never involve a password, and therefore never involve TOTP.
+//
+// ⭐ THIS IS A PREDICATE, NOT A LIST OF `=== "google"` COMPARISONS SCATTERED AROUND. E9.19's
+// actual property is "a session that did not authenticate with a password is not prompted for
+// the factor that protects passwords" — it was written as `=== "google"` only because Google
+// was the sole passwordless method at the time. Adding a second one by bolting `|| === "otp"`
+// onto each call site is how one of them gets missed, and the miss is invisible: an OTP user
+// who has no password would be sent to enroll TOTP, and the only way back out
+// (`reauthenticatePassword`) asks for a password they have never had. Naming the property once
+// makes "did we cover every site?" a question with an answer.
+const PASSWORDLESS_METHODS: readonly AuthMethod[] = ["google", "email_otp"]
+
+export function sessionUsesPasswordlessAuth(): boolean {
+  return PASSWORDLESS_METHODS.includes(getSessionAuthMethod())
+}
 
 export function setSessionAuthMethod(method: AuthMethod): void {
   try {
@@ -355,9 +384,14 @@ export function setSessionAuthMethod(method: AuthMethod): void {
 
 // Absent marker (pre-E9.19 sessions) ⇒ treat as "password": the safe default for the
 // beta's username/password majority, and self-corrects on the user's next sign-in.
+// An UNRECOGNISED value falls to "password" for the same reason — the strict direction,
+// since over-prompting for TOTP is an annoyance and under-prompting is a bypass.
 export function getSessionAuthMethod(): AuthMethod {
   try {
-    return window.localStorage.getItem(AUTH_METHOD_KEY) === "google" ? "google" : "password"
+    const raw = window.localStorage.getItem(AUTH_METHOD_KEY)
+    if (raw === "google") return "google"
+    if (raw === "email_otp") return "email_otp"
+    return "password"
   } catch {
     return "password"
   }
@@ -374,7 +408,10 @@ export function clearSessionAuthMethod(): void {
 export type MfaStatus = {
   // TOTP is active on this (native) account.
   enabled: boolean
-  // True ⇒ this session signed in via Google (MFA inherited from the IdP); TOTP N/A.
+  // True ⇒ this session authenticated without a password (Google, or a G100-C0 emailed
+  // one-time code), so the TOTP path does not apply. The name predates the second case
+  // and is kept because the Settings UI already reads it; what it MEANS is "TOTP is not
+  // applicable to this session", which is exactly what both cases are.
   federated: boolean
 }
 
@@ -383,7 +420,7 @@ export type MfaStatus = {
 // the password TOTP path, so we short-circuit before calling GetUserData.
 export function getMfaStatus(): Promise<MfaStatus> {
   return new Promise((resolve, reject) => {
-    if (getSessionAuthMethod() === "google") {
+    if (sessionUsesPasswordlessAuth()) {
       resolve({ enabled: false, federated: true })
       return
     }

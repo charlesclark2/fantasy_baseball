@@ -1,5 +1,18 @@
 [
   {
+    "week": "2026-08-10",
+    "items": [
+      {
+        "tag": "added",
+        "text": "You can now sign in with just your email address. Enter it on the sign-up or sign-in page, we email you a six-digit code, you type it in, and you're in — no password to choose and none to forget. Until now the only way to get an account was a Google one, which is fine if you have one and a closed door if you don't. Worth explaining why it's a code rather than a password, because the obvious answer was tried and doesn't work: our sign-in system can't send its own confirmation emails, so a password account created here could never confirm itself or reset its password later. It would look like it worked and then strand you the first time you needed to get back in. A code has no such gap — the code arriving in your inbox IS the proof the address is yours, so there's nothing left to confirm afterwards. The code lasts fifteen minutes, works once, and you get three tries before it asks you to request a fresh one. Signing in with Google still works exactly as before, and if you already have a password you can keep using it: the sign-in page still leads with the password form and offers the code underneath."
+      },
+      {
+        "tag": "fixed",
+        "text": "One account per person, whichever way you sign in. This is the part of the email sign-in work that took the most care, because getting it wrong is invisible rather than broken: if signing in by email had created a SECOND account for someone who already signs in with Google, that second account would work perfectly — it would just be empty. No error, nothing to report, and your leagues and bets simply not there. So the rule is now enforced at the source: whichever method you use first creates your account, and every other method you use afterwards resolves to that same one. Previously that only worked in one direction — an email account could pick up a Google sign-in later, but not the reverse — which nobody could notice while Google was the only way in. Now both directions hold. There is one honest exception, and it's the reason you may see a message rather than a code: if you signed in with Google BEFORE this change, your account has no email half to attach a code to, and the only way to make one would be to start you a second, empty account. We won't do that, so we tell you to continue with Google instead and put the button right there. It's the same account, with everything in it."
+      }
+    ]
+  },
+  {
     "week": "2026-08-03",
     "items": [
       {

@@ -4,7 +4,7 @@ import React, { useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { canAccess, canAccessFantasyBeta, canConfigureLeague } from "@/lib/entitlements"
-import { getMfaStatus, getSessionAuthMethod, subscriberMfaRequired } from "@/lib/cognito"
+import { getMfaStatus, sessionUsesPasswordlessAuth, subscriberMfaRequired } from "@/lib/cognito"
 import { TermsGate } from "@/components/terms-gate"
 
 // E9.58 — carry the page the visitor was actually trying to reach through the sign-in wall.
@@ -21,6 +21,11 @@ function loginHref(pathname: string | null): string {
 // launch: a `subscriber` who signed in with a password and hasn't enrolled TOTP is
 // bounced to Settings to enroll. Google sessions are exempt (IdP MFA) — keyed off the
 // session's auth METHOD, not a per-sub flag (post-E9.7 a linked user has both).
+//
+// G100-C0 — the exemption now reads "this session used no password" rather than "this session
+// used Google". An email-OTP user has NO password at all, so bouncing them to enroll TOTP would
+// strand them: the only way back off that screen (`reauthenticatePassword`) asks for a credential
+// they have never had. Same property, correctly stated.
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { accessToken, groups, loading } = useAuth()
   const router = useRouter()
@@ -33,7 +38,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading || accessToken === null) return
     if (!subscriberMfaRequired(groups)) return
-    if (getSessionAuthMethod() === "google") return
+    if (sessionUsesPasswordlessAuth()) return
     let cancelled = false
     getMfaStatus()
       .then((status) => {

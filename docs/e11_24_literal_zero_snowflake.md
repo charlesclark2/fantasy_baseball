@@ -3251,3 +3251,42 @@ ACCOUNTADMIN`** (the role CI actually runs as — measured). Secret set. ⏭️ 
 `dev→main` PR, and note **`dbt-build-ci` runs on `pull_request` only** (`dbt-compile` runs on both,
 on the production target, and is deliberately not covered) — so the verification happens **on the
 PR, before the merge**.
+
+## ✅ CI_WH IS LIVE AND PROVEN — traffic moved (2026-08-10, promotion `dfdcb8c9`)
+
+Promoted 2026-08-11 00:31 UTC (19:31 CDT). Verified in the order the deploy landmine requires —
+**content on `main`, never the merge status**: all three greps (`profiles.yml` env_var, the workflow
+`||`, the census billable filter) return 1, and `git rev-list --count origin/main..origin/dev` = 0.
+`Orchestration CD` → **completed/success**.
+
+**The proof that traffic actually moved** — the only one that counts, since `dbt debug` and a green
+CI both report success against a warehouse that does not exist:
+
+| warehouse | CI statements (6 h) | waits | window (UTC) |
+|---|---|---|---|
+| **`CI_WH`** | **8** | **0** | 23:35 → 23:42 |
+| `COMPUTE_WH` | **0** | 0 | — |
+
+The window matches the two `pull_request` dbt-Build CI runs exactly. ⭐ **And it confirms the
+sequencing finding: `dbt-build-ci` is `if: github.event_name == 'pull_request'`, so the repoint was
+exercised on the `dev→main` PR *before* its merge — the test preceded the deploy.** The `push` run
+that follows a merge is `dbt-compile` only, on the production target, and is deliberately not
+covered.
+
+**Post-deploy serving — clean, and better than the pre-deploy reading** (SF-free, same slate):
+
+| | 17:30 CDT (pre) | 19:40 CDT (post-deploy) |
+|---|---|---|
+| coverage / exit | 10/10 100%, exit 0 | 10/10 100%, exit 0 |
+| `feature_coverage_score` | 0.9165 (min 0.833) | **1.000 (min 1.0)** |
+| morning / post_lineup `feature_store` | 10/10 · **5/5** | 10/10 · **10/10** |
+| `intraday_fallback` | 0 | 0 |
+
+(The improvement is the slate maturing — more lineups posted — not the deploy; recorded so the next
+reader does not attribute it to either.)
+
+⚠️ **Merged outside the ~22:30–06:45 CDT quiet window**, mid-slate. It came through clean (CD green,
+no INC-36 concurrency — the prior CD had been `completed` since 05:56 UTC, and the box returned
+healthy on both post-deploy serving checks). Recorded as a fact, not a precedent: the content shipped
+was uniquely low-risk (docs, a laptop instrument, guards, and a dbt target that production does not
+use — zero serving or pipeline code), which is not true of the #682/#693 promotions still to come.

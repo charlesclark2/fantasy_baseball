@@ -28,7 +28,7 @@ if _SENTRY_DSN:
         traces_sample_rate=0.1,
     )
 
-from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, fantasy, fantasy_import, fantasy_mlb_league, fantasy_public, feedback, finances, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
+from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, email_otp, fantasy, fantasy_import, fantasy_mlb_league, fantasy_public, feedback, finances, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
 from app.backend.routers.auth import require_subscriber_mfa
 from app.backend.services import cost_guardrails
 
@@ -99,6 +99,12 @@ app.include_router(performance.router, dependencies=_paid)
 app.include_router(alerts.router, dependencies=_paid)
 app.include_router(bets.router, dependencies=_paid)
 app.include_router(auth.router)
+# G100-C0 — passwordless email sign-in. PUBLIC by design and public in the FastAPI layer
+# (no auth dependency: a caller signing in has no token yet, by definition). As always that
+# is NOT sufficient — the API Gateway JWT authorizer sits in front of the Lambda, so both
+# routes need an explicit `--authorization-type NONE` route or the whole feature 401s while
+# every test passes (NF3.2). Steps in infrastructure/aws_resources.md.
+app.include_router(email_otp.router)
 app.include_router(admin.router)
 app.include_router(finances.router, dependencies=_paid)
 app.include_router(pipeline.router)

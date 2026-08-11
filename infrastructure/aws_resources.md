@@ -29,8 +29,42 @@ Naming convention: `credence-{environment}-{service}-{descriptor}`
 | App Client Secret | None (browser-based flow) |
 | Region | `us-east-1` |
 | Self-signup — native (email/password) | **Disabled, permanently.** No email auto-verification, so `SignUp` creates an account that can never confirm itself or reset its password (E9.57, verified live). Do not open it without first configuring verification. |
-| Self-signup — federated (Google) | **LIVE and public since E9.58** (2026-08-05). This is the ONLY self-serve signup path; `/signup`, `/login` and `/subscribe` all use it. |
+| Self-signup — federated (Google) | **LIVE and public since E9.58** (2026-08-05). |
+| Self-signup — email OTP (passwordless) | **G100-C0.** A 6-digit code emailed via SES, driven by `CUSTOM_AUTH` triggers (`infrastructure/cognito/email_otp/`). Sidesteps the row above entirely: the code IS the proof of email ownership, so there is no verification step left to be missing. Second self-serve door beside Google. |
+| Lambda triggers | **Pre sign-up** → `credence-prod-cognito-presignup-link` · **Define / Create / Verify auth challenge** → `credence-prod-cognito-email-otp` |
+| App-client auth flows | must include `ALLOW_CUSTOM_AUTH` (G100-C0) |
+| Auth session validity | **15 min** — this is the real expiry of an emailed OTP, and the code email says "15 minutes". Leaving it at the 3-minute default makes the email promise something the pool will not honour. |
 | User Groups | `beta_tester`, `subscriber`, `admin` |
+
+### ⭐ Canonical identity — one human, one `sub`
+
+Every store keys on the **native** Cognito user's `sub` (bets, leagues, portfolio, alerts,
+and the groups that carry entitlement). Federated identities are LINKED INTO that native
+user by the Pre sign-up trigger, so Google and email OTP resolve to the same account.
+
+G100-C0 closed the half that was missing: E9.7 linked Google into a native user only **when
+one already existed**, so a Google-FIRST person had no native counterpart — invisible while
+Google was the only door, and a duplicate-account bug the moment a second door could also
+create accounts. The trigger now **pre-provisions** a native user for a brand-new federated
+sign-in and links into that, so the invariant holds in both arrival orders.
+
+⚠️ **It is not retroactive.** Accounts created before that deploy are federated-only; their
+`sub` owns their data and cannot be moved to a native user. `POST /auth/email-otp/start`
+answers `next: "google"` for those addresses rather than minting a second account. ⛔ Do
+**not** apply the E9.7 README's "delete the duplicate `Google_<sub>`" cleanup to one — that
+recipe assumed the data lived on the native side; here it is the reverse and deleting takes
+the person's bets and leagues with it.
+
+⚠️ **PRECONDITION ON FLIPPING `ENFORCE_SUBSCRIBER_MFA=1`** (the E9.8 go-live step). The
+server-side guard `auth.require_subscriber_mfa` exempts a session only when
+`_session_is_federated` recognises it, which keys off `amr` and the **federated username
+shape** — and a pre-provisioned/linked user's username is a plain UUID, not `google_…`. It
+fails CLOSED, so with enforcement on, a `subscriber` who signs in by Google-linked or email
+OTP could be 403'd and told to enable TOTP they cannot enroll (they have no password to
+re-authenticate with). This is inert today (`ENFORCE_SUBSCRIBER_MFA` defaults to `0`) and
+the frontend side is already handled (`sessionUsesPasswordlessAuth`). **Resolve it before
+the flip** — the cheap fix is a `passwordless` Cognito group applied at pre-provision time
+and exempted in `_session_is_federated`, since groups already travel in the validated token.
 | Hosted UI domain | `us-east-1gg9zmbwqt.auth.us-east-1.amazoncognito.com` |
 | Hosted UI custom domain | None (`CustomDomain: null`) |
 | Allowed callback URLs | `https://www.credencesports.com/callback` **and** `https://credencesports.com/callback` (both verified allowlisted 2026-08-06 — a bogus `redirect_uri` correctly returns `redirect_mismatch`) |
@@ -274,6 +308,37 @@ future public route. A router with no `Depends()` in FastAPI is NOT sufficient b
 authorizer sits in front of the Lambda entirely and rejects an unauthenticated request before
 Mangum/FastAPI ever sees it (see NF3.2: `fantasy_public.router` shipped correct at the app layer
 but still 401'd until this API Gateway route was added).
+
+#### G100-C0 — the two email-OTP routes — ⛔ NOT YET APPLIED
+
+Passwordless sign-in. Public by necessity, not by preference: a caller signing in has no
+token yet, so an authorizer on these routes makes the feature unreachable for exactly the
+people it exists for.
+
+```bash
+for RK in "POST /auth/email-otp/start" "POST /auth/email-otp/verify"; do
+  aws apigatewayv2 create-route \
+    --api-id 8dhmehjak7 --region us-east-1 \
+    --route-key "$RK" \
+    --target "integrations/p093jnh" \
+    --authorization-type NONE
+done
+```
+
+Prove it from outside — deliberately with an INVALID address, so the reachability check
+cannot create an account or send mail as a side effect:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+  https://api.credencesports.com/auth/email-otp/start \
+  -H 'Content-Type: application/json' -d '{"email":"not-an-email"}'
+# 400 = reachable (FastAPI validated it).  401 = the authorizer is still in front.
+```
+
+⭐ **These carry no entitlement decision**, so the `jwt_verify` argument that makes the
+other `NONE` routes safe does not apply: they read no Bearer token at all. What guards them
+instead is the throttle in `routers/email_otp.py` (3 sends per address, 10 per IP), which
+exists precisely because a `NONE` route that sends email is otherwise a mail-bomb primitive.
 
 #### E9.46 — `GET /fantasy/nfl/featured-player` (the home page's fantasy card) — ⛔ NOT YET APPLIED
 

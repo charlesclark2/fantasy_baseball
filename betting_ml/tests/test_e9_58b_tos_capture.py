@@ -175,9 +175,18 @@ def test_the_gate_only_blocks_when_the_status_is_known():
 
 
 def test_signup_still_attempts_the_write_up_front():
-    """The gate is the guarantee; the callback write is what makes it almost never fire."""
-    callback = _code(_FRONTEND / "app/callback/page.tsx")
-    assert "acceptTermsWithRetry" in callback
+    """The gate is the guarantee; the up-front write is what makes it almost never fire.
+
+    ⚠️ RE-ANCHORED BY G100-C0 — the call moved into `lib/post-signin.ts`, shared by both
+    self-serve doors (Google and email OTP), precisely so a second signup route could not
+    ship without recording acceptance. The requirement is unchanged and is now checked
+    across both links: the door delegates, and the module it delegates to writes.
+    """
+    for rel in ("app/callback/page.tsx", "components/email-otp-form.tsx"):
+        assert "completeSignIn(" in _code(_FRONTEND / rel), (
+            f"{rel} creates accounts without attempting the acceptance write"
+        )
+    assert "acceptTermsWithRetry" in _code(_FRONTEND / "lib/post-signin.ts")
 
 
 def test_the_guard_can_actually_fail():

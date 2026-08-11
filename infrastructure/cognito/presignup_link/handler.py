@@ -1,5 +1,5 @@
-"""Cognito PreSignUp trigger — auto-link a federated (Google) sign-in to an existing
-native account with the SAME verified email, so one person = one Cognito identity.
+"""Cognito PreSignUp trigger — make every human resolve to exactly ONE native Cognito
+user, whichever auth method they arrive with.
 
 Why this exists (E9.7):
     The app keys ALL per-user data (bets, portfolio, alerts) by the Cognito `sub`
@@ -18,17 +18,59 @@ How it works:
     then authenticates the sign-in AS the native user (same sub) and does NOT
     create a duplicate. Native username/password sign-ups pass through untouched.
 
+─────────────────────────────────────────────────────────────────────────────────
+G100-C0 — PRE-PROVISION, so the invariant holds in BOTH arrival orders
+─────────────────────────────────────────────────────────────────────────────────
+E9.7 linked Google into a native user only WHEN ONE ALREADY EXISTED. That covers
+"native account first, Google second" and silently does nothing the other way
+round: a Google-FIRST person ends up as a bare federated profile with no native
+counterpart. That was invisible while Google was the only self-serve method — and
+it becomes the duplicate-account bug the moment a second method (G100-C0's email
+OTP) can also create an account, because OTP needs a NATIVE user to authenticate
+and would have to mint a second one for the same human.
+
+⭐ THE ORDER OF ARRIVAL MUST NOT DECIDE THE ARCHITECTURE. So on a brand-new
+federated sign-in with no native counterpart we CREATE the native user first
+(suppressed invite, permanent random password so the account lands CONFIRMED
+rather than FORCE_CHANGE_PASSWORD) and link Google into that. From here on:
+
+    Google first, OTP later  →  OTP finds the native user      →  one sub ✅
+    OTP first, Google later  →  this trigger links into it     →  one sub ✅
+
+so "one Credence user_id ↔ many auth identities" is enforced by Cognito itself,
+with no app-level alias map and no change to any storage key (every user's
+canonical id is still their own `sub`).
+
+⚠️ THIS DOES NOT RETROACTIVELY FIX ANYONE. A federated profile that already exists
+has no native counterpart and cannot grow one: its `sub` — which owns that
+person's data — belongs to the federated profile, and linking a provider identity
+that is ALREADY an independent profile is exactly the case this repo's own README
+resolves by DELETING that profile. So pre-existing Google-only accounts are
+handled by refusing OTP for them with an honest "continue with Google" (see
+`app/backend/services/identity.py`), never by minting a duplicate.
+
+⚠️ FAIL-OPEN IS LOAD-BEARING HERE, more than anywhere else in the repo: this
+trigger sits in front of the ONLY public signup path. Every new failure mode below
+returns the event unchanged, which degrades to exactly the pre-G100-C0 behaviour
+(a plain federated account) rather than to a broken signup. `PRESIGNUP_PREPROVISION=0`
+is the operator's instant kill switch — no redeploy, no code change.
+
 Deploy: see README.md in this directory (function + role + trigger + IAM + the
     one-time cleanup for accounts that already have a duplicate Google user).
 
 IAM (execution role) — on the pool ARN:
     cognito-idp:ListUsers
     cognito-idp:AdminLinkProviderForUser
+    cognito-idp:AdminCreateUser        (G100-C0 pre-provision)
+    cognito-idp:AdminSetUserPassword   (G100-C0 pre-provision)
 """
 
 from __future__ import annotations
 
 import logging
+import os
+import secrets
+import string
 
 import boto3
 
@@ -117,10 +159,20 @@ def handler(event, context):  # noqa: ANN001, ARG001 (Lambda signature)
 
     target = _pick_link_target(resp.get("Users", []), incoming_username)
     if not target:
-        # No native account with this email → a genuinely new Google user. Let Cognito
-        # create the federated account normally (E9.8 promotes it from the default group).
-        logger.info("presignup-link: no native user for %s — new federated account", email)
-        return event
+        # G100-C0 — no native counterpart yet. PRE-PROVISION one so this person has a
+        # native `sub` that a later email-OTP sign-in can authenticate against, instead
+        # of the OTP path being forced to mint a second account for the same human.
+        if not preprovision_enabled():
+            logger.info(
+                "presignup-link: no native user for %s and pre-provisioning is OFF "
+                "— plain federated account (pre-G100-C0 behaviour)", email,
+            )
+            return event
+        target = _preprovision_native_user(user_pool_id, email)
+        if not target:
+            # Fail OPEN: creation failed → let Cognito make the ordinary federated user.
+            # Strictly no worse than the pre-G100-C0 behaviour.
+            return event
 
     # Resolve the username prefix ("google") to the IdP's configured name ("Google").
     source_provider = _PROVIDER_CANONICAL.get(provider_name.lower(), provider_name)
@@ -149,6 +201,103 @@ def handler(event, context):  # noqa: ANN001, ARG001 (Lambda signature)
         )
 
     return event
+
+
+def preprovision_enabled() -> bool:
+    """Whether to create a native user for a brand-new federated sign-in (G100-C0).
+
+    Read at CALL time, not import time, so `aws lambda update-function-configuration`
+    takes effect on the warm fleet immediately — the same reasoning as
+    `cost_guardrails.degrade_mode_enabled`.
+
+    ⭐ DEFAULT ON, and the env var is a KILL SWITCH rather than an enabler. A
+    default-OFF flag would put this repo's documented-but-never-set landmine
+    (`W7B_LAKEHOUSE_S3`) in front of the only public signup path: the docs would
+    describe one-account-per-human while production quietly kept minting split
+    accounts, and nothing would say so. Default-on means the deployed behaviour and
+    the documented behaviour agree unless someone deliberately disagrees with them,
+    and the operator still gets a no-redeploy rollback.
+    """
+    return os.getenv("PRESIGNUP_PREPROVISION", "1").strip().lower() not in ("0", "false", "no")
+
+
+# Long enough that it is unguessable, and deliberately spanning every character class so
+# it satisfies any Cognito password policy the pool might have. NOBODY EVER LEARNS THIS
+# VALUE — not the user, not us. It exists only to move the account out of
+# FORCE_CHANGE_PASSWORD (where CUSTOM_AUTH cannot run) into CONFIRMED. The person's real
+# credential is their Google identity or an emailed OTP; if they ever want a password they
+# get one through the ordinary forgot-password flow, which proves email ownership first.
+_GENERATED_PASSWORD_LENGTH = 32
+
+
+def _random_password() -> str:
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+"
+    # Guarantee one of each required class up front, then fill and shuffle, so this can
+    # never fail the policy by chance (a pure random draw can legitimately omit a class,
+    # and that failure would surface as a broken signup for one unlucky user).
+    required = [
+        secrets.choice(string.ascii_uppercase),
+        secrets.choice(string.ascii_lowercase),
+        secrets.choice(string.digits),
+        secrets.choice("!@#$%^&*()-_=+"),
+    ]
+    rest = [secrets.choice(alphabet) for _ in range(_GENERATED_PASSWORD_LENGTH - len(required))]
+    chars = required + rest
+    secrets.SystemRandom().shuffle(chars)
+    return "".join(chars)
+
+
+def _preprovision_native_user(user_pool_id: str, email: str) -> str | None:
+    """Create the native Cognito user that a federated identity will be linked into.
+
+    Returns the created user's Username, or None on any failure (caller fails open).
+
+    ⚠️ RETURN THE RESPONSE'S Username, NEVER THE EMAIL WE PASSED IN. This pool uses
+    email as a username ATTRIBUTE, so Cognito assigns a generated UUID as the actual
+    Username (prod native users look like "14187448-c091-705c-1199-63858b12c986").
+    admin_link_provider_for_user's DestinationUser must be that UUID; passing the email
+    would target a user that does not exist under that name.
+
+    `email_verified=true` is correct here for the same reason the link gate above trusts
+    these providers: Google verifies ownership of the address before it will release the
+    email claim at all. An untrusted IdP never reaches this line — the verification gate
+    returns earlier.
+    """
+    try:
+        resp = cognito.admin_create_user(
+            UserPoolId=user_pool_id,
+            Username=email,
+            # SUPPRESS or Cognito emails this person a "your temporary password is…"
+            # invite for an account they never asked for and can never use.
+            MessageAction="SUPPRESS",
+            UserAttributes=[
+                {"Name": "email", "Value": email},
+                {"Name": "email_verified", "Value": "true"},
+            ],
+        )
+        username = (resp.get("User") or {}).get("Username")
+        if not username:
+            logger.warning("presignup-link: admin_create_user returned no Username for %s", email)
+            return None
+
+        # Permanent password ⇒ status CONFIRMED. Without this the account sits in
+        # FORCE_CHANGE_PASSWORD, where the email-OTP CUSTOM_AUTH flow cannot run — the
+        # account would exist and still not be usable by the method it was created for.
+        cognito.admin_set_user_password(
+            UserPoolId=user_pool_id,
+            Username=username,
+            Password=_random_password(),
+            Permanent=True,
+        )
+        logger.info("presignup-link: pre-provisioned native user %s for %s", username, email)
+        return username
+    except Exception:
+        # Includes the benign race where a concurrent sign-in created it first
+        # (UsernameExistsException). Failing open costs that person a split account —
+        # bad — but raising costs them their sign-in entirely, which is worse, and the
+        # split case is recoverable by hand while a signup outage is not.
+        logger.warning("presignup-link: pre-provision failed for %s", email, exc_info=True)
+        return None
 
 
 def _pick_link_target(users: list[dict], incoming_username: str) -> str | None:
