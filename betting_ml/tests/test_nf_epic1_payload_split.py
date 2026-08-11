@@ -20,6 +20,7 @@ import re
 from pathlib import Path
 
 import anyio
+from fastapi import HTTPException
 import pytest
 
 from app.backend.services import projection_fields
@@ -301,6 +302,50 @@ def test_the_paid_projection_has_no_public_cache_rule():
     from app.backend.services import cost_guardrails
 
     assert cost_guardrails.public_cache_control("/fantasy/nfl/projections-full") is None
+
+
+def test_my_teams_still_serves_leagues_when_the_projection_cannot_be_read(monkeypatch):
+    """⭐ A REGRESSION THIS STORY CAUSED AND THIS GUARD EXISTS TO KEEP CLOSED.
+
+    `/fantasy/nfl/my-teams` was a pure DynamoDB read until NF-EPIC 1 added the server-scored
+    roster. The first cut let the projections read RAISE — `_load_json` answers 503 with no
+    `CACHE_BUCKET` and 502 on a read error — so an absent projections artifact took the whole
+    endpoint down and the user's SAVED LEAGUES vanished with it. A league list disappearing
+    because a PROJECTION file is missing is the wrong failure: the list is the core of this
+    response, the roster join is an enhancement on top of it.
+
+    ⚠️ Asserts the OBSERVABLE contract (the leagues are still served), not that some internal
+    try/except exists — a guard on the mechanism would pass on a rewrite that reintroduced the
+    outage through a different path.
+    """
+    from app.backend.routers import fantasy
+
+    monkeypatch.setattr(
+        fantasy,
+        "_full_projections",
+        lambda season: (_ for _ in ()).throw(HTTPException(status_code=503, detail="no bucket")),
+    )
+    records = [{"league_id": "L1", "sport": "nfl", "name": "Dynasty",
+                "imported_roster": [{"name": "Ja'Marr Chase", "position": "WR"}]}]
+    rosters = fantasy._scored_rosters(records, 2026)
+    assert rosters == {"L1": []}, "an unreadable projection must degrade, never raise"
+
+
+def test_the_league_board_does_not_swallow_an_unreadable_projection():
+    """The mirror image, and it is deliberate: on `/nfl/league-board` the board IS the response.
+
+    Degrading to an empty board there would render a page that looks like "your league has no
+    players" instead of "we couldn't score your league" — the silent-empty class. Same read,
+    opposite correct behaviour, so the two are pinned separately.
+    """
+    import inspect
+
+    from app.backend.routers import fantasy
+
+    source = inspect.getsource(fantasy.nfl_league_board)
+    assert "try:" not in source, (
+        "the league-board handler must let an unreadable projection surface as a failure"
+    )
 
 
 def test_the_paid_projection_is_not_in_the_degrade_floor():

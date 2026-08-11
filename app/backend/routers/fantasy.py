@@ -514,8 +514,31 @@ def _scored_rosters(records: list[dict], season: int) -> dict[str, list[dict]]:
 
     Per-league failures are contained (E9.49): one unscoreable config costs only its own entry
     rather than blanking every league the user has.
+
+    ⭐⭐ BEST-EFFORT, AND THIS IS THE LOAD-BEARING PART OF THE FUNCTION.
+    `/fantasy/nfl/my-teams` was a pure DynamoDB read before NF-EPIC 1 — it could not fail on S3.
+    Adding the scored roster made it read the projections blob, and the first cut let that read
+    RAISE: `_load_json` answers 503 when `CACHE_BUCKET` is unset and 502 on a read error, so an
+    absent or unreadable projections artifact took the WHOLE endpoint down and the user's saved
+    leagues disappeared with it. Someone's league list vanishing because a PROJECTION file is
+    missing is the wrong failure by a wide margin — the list is the core of this response and the
+    roster join is an enhancement on top of it.
+
+    So the scoring is contained here and degrades to `{}`. The client already reads `rosters`
+    with `?? {}` (it is an additive key the deployed frontend does not know about), so an
+    unscoreable slate renders as "no roster linked" rather than as an error — and `leagues`,
+    `quota`, `saved_total` and `withheld_by_quota` are all unaffected.
+
+    ⚠️ `/fantasy/nfl/league-board` deliberately does NOT do this: there the board IS the response,
+    so an unreadable projection must surface as a real failure the page can report ("we couldn't
+    score your league"), not as a silently empty board. Same read, opposite correct behaviour,
+    because the two endpoints promise different things.
     """
-    projections = _full_projections(season)
+    try:
+        projections = _full_projections(season)
+    except Exception:  # noqa: BLE001
+        logger.warning("could not load projections for %s; serving leagues without rosters", season)
+        projections = None
     players = (projections or {}).get("players") or []
     out: dict[str, list[dict]] = {}
     for record in records:
