@@ -100,7 +100,27 @@ export function LeagueImport() {
   const search = useSearchParams()
   const saveLeague = useSaveLeague()
   const { data: savedLeagues } = useSavedLeagues()
-  const { data: projections } = useFantasyProjections()
+
+  // ── PERF (2026-08-11): the projections payload is fetched WHEN THE USER STARTS, not at mount ──
+  //
+  // This page pulled ~647 KB of projections on mount, concurrently with `/fantasy/leagues` and
+  // `/fantasy/import/platforms` — three authenticated reads racing each other into an API Lambda
+  // whose cold init measured ~4 s (p50 4,023 ms, warm p50 88 ms). On an idle function each parallel
+  // request lands on its OWN cold container, so the fan-out multiplies the cold-start cost rather
+  // than sharing it. And none of those bytes are needed at mount: the payload's only use here is
+  // `availableFields` below, which is consulted once a PREVIEW exists — several interactions later.
+  //
+  // ⭐ FIRST ACTION, NOT FIRST NEED. Gating on `preview` would be leaner still and is the wrong
+  // trade: the coverage report would then block on a 647 KB download at exactly the moment the user
+  // is waiting to read it. `run()` fires on the first network action (fetch leagues / connect /
+  // preview), so the download overlaps the platform round-trip AND the human time spent picking a
+  // league — by the time a preview lands it is normally already cached.
+  const [flowStarted, setFlowStarted] = useState(false)
+  const {
+    data: projections,
+    isPending: projectionsPending,
+    isError: projectionsFailed,
+  } = useFantasyProjections(undefined, flowStarted)
 
   // ── G100-C1 (live fix): THE QUOTA, ENFORCED ON THIS PATH TOO ──────────────────────────────────
   //
@@ -184,10 +204,23 @@ export function LeagueImport() {
   // ── the honest coverage report for the PREVIEWED config ────────────────────────────────────
   // Computed exactly as the manual editor computes it, against the projection columns actually
   // present — so the two surfaces cannot disagree about what a given league setting will do.
+  //
+  // ⚠️ IT WAITS FOR THE PROJECTION COLUMNS — IT DOES NOT GUESS THEM. `resolveScoring` treats a
+  // MISSING `availableFields` as "every field exists" (`availableFields ? has(field) : true`), so
+  // computing this before the payload lands would print the OPTIMISTIC verdict: every term reading
+  // "applied", including ones we do not project. That is precisely the claim this surface exists to
+  // never make ("this surface cannot promote a term by asserting it"), so a null here — rendered as
+  // an explicit checking/unavailable state below — is the only honest answer while the fields are
+  // unknown.
+  //
+  // ⭐ THIS ALSO CLOSES A PRE-EXISTING HOLE, not just one the deferral would have opened: the old
+  // code passed `undefined` on the FAILURE path too, so if the projections fetch ever 404'd or
+  // errored the page silently showed an all-"applied" report. Same wrong claim, no deferral needed.
   const coverage = useMemo(() => {
     if (!preview) return null
+    if (!projections?.players) return null
     return resolveScoring(preview.config.scoring, {
-      availableFields: projections?.players ? availableFields(projections.players) : undefined,
+      availableFields: availableFields(projections.players),
       capturedRules: Object.keys(preview.config.captured_rules ?? {}),
     }).report
   }, [preview, projections])
@@ -196,6 +229,12 @@ export function LeagueImport() {
     (coverage?.terms ?? []).filter((t) => t.verdict === v)
 
   async function run<T>(key: string, fn: () => Promise<T>): Promise<T | null> {
+    // PERF — every network action on this page goes through `run`, which makes it the one place
+    // that reliably means "the user has begun an import". Kicking the projections fetch off here
+    // (rather than at mount) keeps it off the initial page load while still giving it a long head
+    // start on the preview that needs it. Covers the ESPN paste path too, which never touches the
+    // league list, so a trigger keyed on `leagues` would have missed it.
+    setFlowStarted(true)
     setBusy(key)
     setError(null)
     try {
@@ -912,6 +951,31 @@ export function LeagueImport() {
                   <li key={i}>• {w}</li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* ── PERF: the coverage report's two NON-ANSWERS, said out loud ──────────────────
+              `coverage` is null until the projection columns are known, because the resolver reads a
+              missing column set as "we have everything" and would print an all-"applied" report (see
+              the useMemo). Rendering nothing here would be its own quiet lie — the panel would just
+              be absent, which reads as "this league has no unsupported settings". So the two states
+              are named: still loading, and could-not-check. */}
+          {!coverage && projectionsPending && (
+            <div className="mt-4 flex items-center gap-2 text-xs text-gray-400">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Checking which of your scoring rules we can apply…
+            </div>
+          )}
+          {!coverage && !projectionsPending && (
+            <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-400">
+                <AlertTriangle className="h-3.5 w-3.5" /> We could not check your scoring coverage
+              </div>
+              <p className="mt-2 text-xs text-gray-300">
+                {projectionsFailed
+                  ? "The projections did not load, so we cannot tell you which of your league's scoring rules we apply and which we only record. Your settings above are correct and safe to save — reload the page to see the coverage breakdown."
+                  : "The projections are not published yet, so the coverage breakdown is unavailable. Your settings above are correct and safe to save."}
+              </p>
             </div>
           )}
 
