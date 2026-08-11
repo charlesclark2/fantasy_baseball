@@ -379,6 +379,62 @@ export function getFantasyProjections(
   return apiFetch(`/fantasy/nfl/projections?season=${season}`, {}, token)
 }
 
+// ── NF-EPIC 1: the PAID half of the projection ───────────────────────────────────────────────────
+//
+// 🔒 The raw stat line and the two reference scorings (`fpStd`/`fpHalf`) left the public payload on
+// 2026-08-10 (PM Option C). They were gated only by which component drew them, and a `curl`
+// recovered all three; the stat line is the re-scorable substrate, so it is now served ONLY here,
+// behind `require_fantasy_access`.
+//
+// ⚠️ ALWAYS TOKENED, NEVER THROUGH THE CDN ARM. Every other fetcher above falls back to
+// `cdnFetch` when there is no token; this one must not, and the asymmetry is the point — the edge
+// route strips `Authorization` by design, so a request for paid data through it would be an
+// anonymous one, and a 403 (or worse, a paid body) would be pinned into a public cache entry.
+export function getFullProjections(
+  token: string,
+  season: number,
+): Promise<ProjectionPayload> {
+  return apiFetch(`/fantasy/nfl/projections-full?season=${season}`, {}, token)
+}
+
+// ── NF-EPIC 1: a saved league's board, scored SERVER-SIDE ────────────────────────────────────────
+//
+// ⭐ THIS IS WHAT LETS A FREE ACCOUNT KEEP ITS ONE PERSONALIZED LEAGUE (G100-C1) NOW THAT THE STAT
+// LINE IS PAID. The board used to be built in the browser by `buildBoard` off the raw stat line;
+// with that substrate withheld, the same board is computed on the server and only the OUTPUT is
+// sent. The caller receives a board they could not have derived.
+//
+// The server scorer mirrors `fantasy_engine` (the engine behind the shipped preset boards), so a
+// custom league now agrees with a preset where the browser port previously differed by up to 0.05
+// on an interval bound — see `app/backend/services/league_scoring.py`.
+export interface LeagueBoardPayload {
+  season: number
+  league: SavedLeague
+  board: {
+    players: Player[]
+    replacement: Record<string, number>
+    started: Record<string, number>
+    coverage: unknown
+  }
+  roster: RosterMatchRow[]
+}
+
+/** One roster slot joined to its scored board row. `board` is null on an honest miss (a spelling
+ *  divergence, a DST rendered as a team abbreviation, an unresolved platform id). */
+export interface RosterMatchRow {
+  roster: ImportedPlayer
+  board: Player | null
+}
+
+export function getLeagueBoard(
+  token: string | null,
+  leagueId: string,
+  season: number,
+): Promise<LeagueBoardPayload> {
+  const qs = `league_id=${encodeURIComponent(leagueId)}&season=${season}`
+  return apiFetch(`/fantasy/nfl/league-board?${qs}`, {}, token)
+}
+
 // ── NF-C0b: saved league settings ────────────────────────────────────────────────────────────────
 // The manual customization FLOOR. A platform import (NF-C0) is the convenience path and will never
 // reach every league (private leagues, long-tail platforms, a fragile ESPN endpoint), so a user can
@@ -470,6 +526,18 @@ export interface MyTeamsPayload {
   saved_total?: number
   /** `saved_total − served`. Non-zero means leagues exist that we are not personalizing. */
   withheld_by_quota?: number
+  // ── NF-EPIC 1, ADDITIVE ─────────────────────────────────────────────────────────────────────
+  /** `{league_id: rosterRows}` — each league's linked roster joined to its OWN scored board,
+   *  computed SERVER-SIDE now that the stat line the browser used to score with is paid.
+   *
+   *  ⚠️ ROSTER ROWS ONLY, never the full boards: at a subscriber's quota of 25 leagues, 25 boards
+   *  is ~6 MB and straight through Lambda's proxy-response cap. The one board a page needs comes
+   *  from `getLeagueBoard`, one league at a time.
+   *
+   *  OPTIONAL for the usual reason (NF-C0/E8.6): the deployed API does not send it until
+   *  `deploy.sh` runs, so every read uses `?? default` and the skew window renders an honest empty
+   *  state rather than `undefined`. */
+  rosters?: Record<string, RosterMatchRow[]>
 }
 
 export function getMyTeams(token: string | null, season: number): Promise<MyTeamsPayload> {

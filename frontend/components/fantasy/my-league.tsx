@@ -38,6 +38,7 @@ import {
   useFantasyBoard,
   useFantasyManifest,
   useFantasyProjections,
+  useLeagueBoard,
   useMyTeams,
 } from "@/lib/fantasy-queries"
 import { freeSelection } from "@/lib/draft-optimizer"
@@ -186,7 +187,19 @@ export function MyLeague() {
   // a member browsing several.
   const entry = teams?.[0] ?? null
   const league = entry?.league ?? null
-  const leagueBoard = entry?.board?.players ?? null
+
+  // 🔒 NF-EPIC 1 — THE BOARD IS SCORED ON THE SERVER NOW. It used to arrive pre-built on `entry`,
+  // computed in the browser from the projections payload's raw stat line; that substrate is paid,
+  // so this fetches the scored OUTPUT for this one league instead. `/fantasy/nfl/my-teams` returns
+  // roster rows only (25 full boards would exceed Lambda's response cap), so the full board a
+  // single-league page needs is its own request.
+  const leagueBoardQuery = useLeagueBoard(league?.league_id ?? null)
+  const leagueBoard = leagueBoardQuery.data?.board?.players ?? null
+
+  // ⚠️ THE FAILURE SIGNAL MOVED WITH THE SCORING. `loading` below stays true while a saved league
+  // has no board yet, so without folding this query's error in, a failed board read would spin
+  // forever instead of reaching the honest "could not build your board" state further down.
+  const boardUnavailable = leagueBoardQuery.isError
 
   // ⭐ "HAS A LEAGUE" MUST COME FROM THE PAYLOAD, NOT FROM THE SCORED BOARD, and this is the one
   // distinction on the page that a user would actually be hurt by.
@@ -268,7 +281,9 @@ export function MyLeague() {
   // where it is written, so a `loading` declared below it would be a temporal-dead-zone
   // ReferenceError rather than a stale read.
   const loading =
-    teamsLoading || genericLoading || (hasSavedLeague && !leagueBoard && !projectionsFailed)
+    teamsLoading ||
+    genericLoading ||
+    (hasSavedLeague && !leagueBoard && !projectionsFailed && !boardUnavailable)
   const withheld = payload?.withheld_by_quota ?? 0
 
   // ── THE ACTIVATION EVENT ──────────────────────────────────────────────────────────────────────
@@ -361,7 +376,7 @@ export function MyLeague() {
           reach the projections" are three different things, and only the first two are covered
           above. Without this branch a failed projections read leaves `loading` true forever and
           the page spins — which reads as a hang rather than as an outage we know about. */}
-      {hasSavedLeague && !leagueBoard && projectionsFailed && (
+      {hasSavedLeague && !leagueBoard && (projectionsFailed || boardUnavailable) && (
         <EmptyBlock
           title="We couldn't score your league just now"
           detail="Your league settings are safe — the projections this board is built from didn't load. Refresh in a moment, or check back shortly."
