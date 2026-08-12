@@ -4,6 +4,7 @@ import sys
 
 from dagster import In, Nothing, OpExecutionContext, Out, SkipReason, op
 
+from betting_ml.monitoring.alert_text import exc_digest  # INC-42 — page the TAIL, not the head
 from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 from pipeline.ops._dbt_exec import _run_dbt
 
@@ -190,7 +191,10 @@ def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
         try:
             _run_script(context, "run_w1_lakehouse.py", [_flag])
         except Exception as exc:  # noqa: BLE001 — ALERT-loud-but-continue, per leg
-            _legs_failed.append((_flag, str(exc)[:300]))
+            # INC-42 — ⛔ NOT `str(exc)[:300]`. `_run_script` raises with the child's ENTIRE
+            # traceback, whose payload (the exception type + message) is at the TAIL, so a head
+            # slice keeps the frames and drops the diagnosis — every cause paged identically.
+            _legs_failed.append((_flag, exc_digest(exc)))
             context.log.warning(f"⚠️ {_flag} ({_what}) FAILED — continuing to the next leg: {exc}")
 
     try:
@@ -208,7 +212,7 @@ def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
         else:
             _run_script(context, "refresh_w1_external_tables.py")
     except Exception as exc:  # ALERT-loud-but-continue — never crash the schedule capture op
-        _legs_failed.append(("refresh_w1_external_tables", str(exc)[:300]))
+        _legs_failed.append(("refresh_w1_external_tables", exc_digest(exc)))  # INC-42 (tail, not head)
         context.log.warning(f"⚠️ external-table refresh FAILED: {exc}")
 
     # INC-41 — ALERT-TIER MUST ACTUALLY PAGE (the E11.30 finding, still live in this op).

@@ -249,7 +249,7 @@ class TestGetFinances:
         assert row.aws_cost == 12.5
         assert row.ses_cost == 1.5
         # total = fixed(this month) + snowflake + aws_infra + ses + vercel
-        expected_vercel = fin._vercel_cost_for_month(month, {})
+        expected_vercel, _ = fin._vercel_cost_for_month(month, {})
         assert row.total_cost == round(
             fin._fixed_cost_for_month(month) + 20.0 + 12.5 + 1.5 + expected_vercel, 2
         )
@@ -386,30 +386,39 @@ class TestAdditiveResponseShape:
         assert "vercel_cost" in payload["months"][0]
 
 
+def _vmonth(total, seat=0.0, usage=0.0, overage=0.0, services=None):
+    return fin.VercelMonth(total, seat, usage, overage, services or {})
+
+
 class TestVercelCostModel:
     """Part B — seat floor + metered overage."""
 
     def test_months_before_the_pro_upgrade_are_free(self):
         # Hobby was free; a seat floor before the upgrade would invent a cost we never paid.
         for month in ("2026-05", "2026-06", "2026-07"):
-            assert fin._vercel_cost_for_month(month, {}) == 0.0, month
+            assert fin._vercel_cost_for_month(month, {}) == (0.0, False), month
 
     def test_the_seat_floor_applies_from_the_upgrade_month(self):
         # ⛔ never $0 for a month the seat was paid — including when the API reports nothing.
         for month in ("2026-08", "2026-09", "2027-03"):
-            assert fin._vercel_cost_for_month(month, {}) == 20.0, month
+            assert fin._vercel_cost_for_month(month, {}) == (20.0, True), month
 
     def test_a_zero_reading_from_the_api_does_not_beat_the_floor(self):
-        assert fin._vercel_cost_for_month("2026-08", {"2026-08": 0.0}) == 20.0
+        assert fin._vercel_cost_for_month("2026-08", {"2026-08": _vmonth(0.0)}) == (20.0, True)
 
     def test_metered_spend_above_the_floor_wins(self):
-        assert fin._vercel_cost_for_month("2026-09", {"2026-09": 34.75}) == 34.75
+        assert fin._vercel_cost_for_month("2026-09", {"2026-09": _vmonth(34.75)}) == (34.75, False)
 
     def test_metered_spend_below_the_floor_is_lifted_to_it(self):
-        assert fin._vercel_cost_for_month("2026-08", {"2026-08": 12.0}) == 20.0
+        assert fin._vercel_cost_for_month("2026-08", {"2026-08": _vmonth(12.0)}) == (20.0, True)
+
+    def test_a_real_reading_is_never_labelled_floored(self):
+        # E9.62b — the whole point: "$20 measured" and "$20 invented" must not look alike.
+        cost, floored = fin._vercel_cost_for_month("2026-08", {"2026-08": _vmonth(21.96)})
+        assert (cost, floored) == (21.96, False)
 
     def test_vercel_is_in_the_monthly_total(self):
-        resp = _finances_response(_vercel_costs_by_month={"2026-08": 41.0})
+        resp = _finances_response(_vercel_costs_by_month={"2026-08": _vmonth(41.0)})
         aug = next((m for m in resp.months if m.month == "2026-08"), None)
         if aug is None:
             return  # window has not reached Aug 2026 yet
@@ -440,27 +449,114 @@ class TestVercelFetcher:
     def teardown_method(self):
         fin._vercel_cost_cache = None
 
+    @staticmethod
+    def _line(service, effective, billed, period="2026-08-01T00:00:00Z"):
+        import json as _json
+        return _json.dumps({"ServiceName": service, "EffectiveCost": effective,
+                            "BilledCost": billed, "ChargePeriodStart": period})
+
     def test_jsonl_charges_are_summed_per_calendar_month(self):
-        # FOCUS v1.3: one charge per line, BilledCost in USD, ChargePeriodStart ISO-8601.
         body = "\n".join([
-            '{"BilledCost": 20.0, "ChargePeriodStart": "2026-08-01T00:00:00Z", "ServiceName": "Pro seat"}',
-            '{"BilledCost": 1.25, "ChargePeriodStart": "2026-08-14T00:00:00Z", "ServiceName": "Edge Requests"}',
-            '{"BilledCost": 3.50, "ChargePeriodStart": "2026-09-02T00:00:00Z", "ServiceName": "Bandwidth"}',
+            self._line("Pro", 20.0, 0.0),
+            self._line("Edge Requests", 1.25, 0.0, "2026-08-14T00:00:00Z"),
+            self._line("Bandwidth", 3.50, 0.0, "2026-09-02T00:00:00Z"),
             "",  # trailing newline must not blow up the parse
         ])
         with patch.dict("os.environ", {"VERCEL_API_TOKEN": "tok"}, clear=False), \
              patch("urllib.request.urlopen", return_value=self._fake_response(body)):
             costs = fin._vercel_costs_by_month()
-        assert costs == {"2026-08": 21.25, "2026-09": 3.5}
+        assert costs["2026-08"].total == 21.25
+        assert costs["2026-09"].total == 3.5
 
-    def test_credits_net_out_against_charges(self):
+    def test_effective_cost_is_the_source_not_billed_cost(self):
+        """⭐ E9.62b, the defect this story exists to fix.
+
+        BilledCost is identically 0 while consumption sits inside the plan allowance
+        (measured: all 17,304 of August's charge lines billed 0.00), so summing it reports
+        $0 for a month that genuinely cost $21.96. These two fields disagree by design.
+        """
         body = "\n".join([
-            '{"BilledCost": 20.0, "ChargePeriodStart": "2026-08-01T00:00:00Z", "ChargeCategory": "Purchase"}',
-            '{"BilledCost": -5.0, "ChargePeriodStart": "2026-08-03T00:00:00Z", "ChargeCategory": "Credit"}',
+            self._line("Pro", 18.06, 0.0),
+            self._line("Build CPU Minutes", 3.75, 0.0),
         ])
         with patch.dict("os.environ", {"VERCEL_API_TOKEN": "tok"}, clear=False), \
              patch("urllib.request.urlopen", return_value=self._fake_response(body)):
-            assert fin._vercel_costs_by_month() == {"2026-08": 15.0}
+            aug = fin._vercel_costs_by_month()["2026-08"]
+        assert aug.total == 21.81      # EffectiveCost
+        assert aug.total != 0.0        # what summing BilledCost would have produced
+
+    def test_the_seat_is_split_out_from_the_drawdown(self):
+        body = "\n".join([
+            self._line("Pro", 18.06, 0.0),
+            self._line("Build CPU Minutes", 3.75, 0.0),
+            self._line("Edge Requests", 0.15, 0.0),
+        ])
+        with patch.dict("os.environ", {"VERCEL_API_TOKEN": "tok"}, clear=False), \
+             patch("urllib.request.urlopen", return_value=self._fake_response(body)):
+            aug = fin._vercel_costs_by_month()["2026-08"]
+        assert aug.seat == 18.06
+        assert aug.usage == 3.90       # ex-seat — the figure the usage dashboard shows
+        assert aug.total == round(aug.seat + aug.usage, 2)
+
+    def test_an_unrecognised_service_counts_as_usage_not_seat(self):
+        # Fails toward a VISIBLE drawdown rather than silently vanishing from it.
+        body = self._line("Some Brand New Product", 5.0, 0.0)
+        with patch.dict("os.environ", {"VERCEL_API_TOKEN": "tok"}, clear=False), \
+             patch("urllib.request.urlopen", return_value=self._fake_response(body)):
+            aug = fin._vercel_costs_by_month()["2026-08"]
+        assert (aug.usage, aug.seat) == (5.0, 0.0)
+
+    def test_overage_is_zero_until_an_allowance_is_exceeded(self):
+        # The live API returns float noise (~1e-10) on a month with no overage at all;
+        # rounding is what makes $0.00 mean "nothing exceeded" rather than "nearly zero".
+        body = "\n".join([
+            self._line("Fluid Active CPU", 0.021, 6.66e-11),
+            self._line("Fast Origin Transfer", 0.0048, 8.0e-11),
+        ])
+        with patch.dict("os.environ", {"VERCEL_API_TOKEN": "tok"}, clear=False), \
+             patch("urllib.request.urlopen", return_value=self._fake_response(body)):
+            assert fin._vercel_costs_by_month()["2026-08"].overage == 0.0
+
+    def test_overage_is_reported_once_an_allowance_is_exceeded(self):
+        body = self._line("Build CPU Minutes", 41.0, 21.0)
+        with patch.dict("os.environ", {"VERCEL_API_TOKEN": "tok"}, clear=False), \
+             patch("urllib.request.urlopen", return_value=self._fake_response(body)):
+            assert fin._vercel_costs_by_month()["2026-08"].overage == 21.0
+
+    def test_the_seats_billed_cost_never_counts_as_overage(self):
+        # The plan line carries a non-zero BilledCost (measured 2.13) that is the SEAT
+        # being invoiced, not consumption exceeding an allowance.
+        body = self._line("Pro", 18.06, 2.13)
+        with patch.dict("os.environ", {"VERCEL_API_TOKEN": "tok"}, clear=False), \
+             patch("urllib.request.urlopen", return_value=self._fake_response(body)):
+            assert fin._vercel_costs_by_month()["2026-08"].overage == 0.0
+
+    def test_it_reproduces_the_measured_august_slate(self):
+        """The real 2026-08-12 reading, end to end. Ties the code to observed reality."""
+        rows = [
+            ("Pro", 18.064516129032253, 2.128773805583363),
+            ("Build CPU Minutes", 3.752, 0.0),
+            ("Observability Events", 0.06242280000000001, 0.0),
+            ("Web Analytics Events", 0.029100000000000008, 0.0),
+            ("Fluid Active CPU", 0.021052657777777775, 6.666666697852097e-11),
+            ("ISR Writes", 0.010908000000000001, 0.0),
+            ("Fluid Provisioned Memory", 0.008933352106666667, 1.7466666733302084e-10),
+            ("Fast Origin Transfer", 0.004854320970000002, 8.000000000737652e-11),
+            ("Function Invocations", 0.004344000000000001, 0.0),
+            ("ISR Reads", 0.0042528, 0.0),
+            ("Edge Requests - Additional CPU Duration", 0.000827666666666667, 6.666666670429406e-11),
+        ]
+        body = "\n".join(self._line(s, e, b) for s, e, b in rows)
+        with patch.dict("os.environ", {"VERCEL_API_TOKEN": "tok"}, clear=False), \
+             patch("urllib.request.urlopen", return_value=self._fake_response(body)):
+            aug = fin._vercel_costs_by_month()["2026-08"]
+        assert aug.total == 21.96      # the API's 21.963211726553375
+        assert aug.seat == 18.06       # $20 x 28/31, prorated from the Aug-4 upgrade
+        assert aug.usage == 3.90       # the "$3.90" shown on the Vercel usage page
+        assert aug.overage == 0.0      # nothing has exceeded its allowance
+        assert max(aug.services, key=aug.services.get) == "Build CPU Minutes"
+        # And the displayed cost is a MEASUREMENT, not the floor.
+        assert fin._vercel_cost_for_month("2026-08", {"2026-08": aug}) == (21.96, False)
 
     def test_request_is_authorized_and_time_bounded(self):
         captured = {}
@@ -516,6 +612,40 @@ class TestVercelFetcher:
         with patch.dict("os.environ", {"VERCEL_API_TOKEN": "tok"}, clear=False), \
              patch("urllib.request.urlopen", return_value=self._fake_response("not json")):
             assert fin._vercel_costs_by_month() == {}
+
+    def test_headroom_fields_reach_the_served_payload(self):
+        import datetime
+        current = datetime.date.today().strftime("%Y-%m")
+        month = _vmonth(21.96, seat=18.06, usage=3.90, overage=0.0,
+                        services={"Build CPU Minutes": 3.75, "ISR Reads": 0.15})
+        resp = _finances_response(_vercel_costs_by_month={current: month})
+        row = next(m for m in resp.months if m.month == current)
+        assert (row.vercel_usage, row.vercel_overage, row.vercel_floored) == (3.90, 0.0, False)
+        # E9.41 — declared on the model, so it survives serialization.
+        payload = resp.model_dump()
+        assert payload["vercel_breakdown"]["Build CPU Minutes"] == 3.75
+        for field in ("vercel_usage", "vercel_overage", "vercel_floored"):
+            assert field in payload["months"][0], field
+
+    def test_no_overage_note_while_inside_the_allowance(self):
+        # The chronic healthy state. An alarm that fires every month gets muted.
+        import datetime
+        current = datetime.date.today().strftime("%Y-%m")
+        resp = _finances_response(
+            _vercel_costs_by_month={current: _vmonth(21.96, seat=18.06, usage=3.90, overage=0.0)}
+        )
+        assert not any("EXCEEDED" in n for n in resp.notes)
+
+    def test_an_overage_raises_a_note_naming_the_services(self):
+        import datetime
+        current = datetime.date.today().strftime("%Y-%m")
+        resp = _finances_response(_vercel_costs_by_month={
+            current: _vmonth(61.0, seat=20.0, usage=41.0, overage=21.0,
+                             services={"Build CPU Minutes": 38.0, "ISR Reads": 3.0})
+        })
+        note = next((n for n in resp.notes if "EXCEEDED" in n), None)
+        assert note is not None
+        assert "21.00" in note and "Build CPU Minutes" in note
 
     def test_unavailable_vercel_still_serves_the_floor_with_a_note(self):
         # The graceful-degrade contract: the page renders, the seat is still counted, and the
