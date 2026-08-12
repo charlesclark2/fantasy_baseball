@@ -3,8 +3,10 @@
 **Date:** 2026-08-11 (alert), diagnosed 2026-08-12 02:55–03:30 UTC
 **Severity:** P3 — contained. **No prediction loss.** Served game-state (`stg_statsapi_games`) went
 stale for at most one intraday tick.
-**Status:** system healthy; **root cause NOT yet confirmed** — the DuckDB error text is only on the
-box and is the one missing piece (see *What is still open*).
+**Status:** root cause **CONFIRMED 2026-08-12** — `RequestTimeTooSkewed`: the box's clock drifted
+past S3's SigV4 ~15-minute tolerance, so every DuckDB-over-S3 read 403'd while boto3 (which
+auto-corrects for skew) kept working. System currently healthy. Remaining action is operator-side
+NTP + a detection gap.
 
 ---
 
@@ -15,9 +17,10 @@ box and is the one missing piece (see *What is still open*).
 it refuses to COPY unwrapped when it cannot bind the plan.
 
 The failure was **transient**. It is **not** a SQL defect at a use-site, and it is **not** caused by
-the E11.24 view flips. There is **nothing to fix by casting** — the same SQL binds cleanly against
-the same S3 today. The open question is *which* transient condition broke the bind, and the answer
-is one line of the box error text.
+the E11.24 view flips. There is **nothing to fix by casting**. The bind failed because the S3 GET it
+issues was **rejected for clock skew** (`RequestTimeTooSkewed`, HTTP 403) — an infrastructure fault
+on the box, surfacing through the INC-23 guard because that guard is simply the first thing in the
+build that touches S3.
 
 ⚠️ **The premise in the alert overstates the blast radius.** "The lineup monitor sees no newly
 confirmed lineups → post_lineup stops for the rest of the slate (3 games unscored, 6.5h, no page)"
@@ -91,53 +94,106 @@ Full w3pre pass completed in one sweep, and the sibling `--w7b-only` leg immedia
 
 ---
 
-## Leading hypothesis (corroborated, NOT confirmed)
+## ✅ ROOT CAUSE — CONFIRMED 2026-08-12: the box's clock drifted past S3's SigV4 tolerance
 
-**A concurrent raw-partition DELETE landing inside the bind's list→open window ⇒ HTTP 404 at
-DESCRIBE.**
-
-`read_parquet(..., union_by_name=true)` (all four w3pre models use it) **lists** the glob, then
-**opens every file's footer** to compute the union schema. If a key is deleted between the list and
-the open, the bind raises.
-
-**Reproduced fingerprint** (bind over a list containing one absent key):
+Retrieved from the Dagster Postgres event log (runs `bc60b651…` and `28432dfb…`, both of which the
+run list reports as **SUCCESS**):
 
 ```
-HTTPException: HTTP Error: HTTP GET error reading
-'s3://baseball-betting-ml-artifacts/baseball/lakehouse_raw/mlb_events_raw/dt=.../part-<uuid>.parquet'
-in region 'us-east-2' (HTTP 404 Not Found)
+_duckdb.HTTPException: HTTP Error: HTTP GET error reading
+'https://baseball-betting-ml-artifacts.s3.us-east-2.amazonaws.com/baseball/lakehouse_raw/
+ mlb_odds_raw/dt%3D2026-08-05/part-4f973f642fb5.parquet' in region 'us-east-2' (HTTP 403 Forbidden)
+
+RequestTimeTooSkewed: The difference between the request time and the current time is too large.
 ```
 
-**Who deletes, and how wide is the window:**
+**AWS SigV4 signatures carry a timestamp, and S3 rejects any request signed more than ~15 minutes
+from its own clock with `RequestTimeTooSkewed` (HTTP 403).** The host clock on the Dagster box
+drifted past that bound. The objects named in the errors (`dt=2026-08-05`, `dt=2026-08-01`) are
+irrelevant — they are simply whichever file the bind happened to open first. Nothing is wrong with
+the data, the SQL, or the partitions.
 
-| raw source | write mode | deletes? | files | bind time |
-|---|---|---|---|---|
-| `monthly_schedule` | `overwrite_partition` **+ `prune_same_month_partitions`** | **YES — every capture** | 5 | 0.4 s |
-| `mlb_odds_raw` | append (1 part / 30 min) | no | 1,820 | 21.8 s |
-| `derivative_odds_raw` | append (1 part / 30 min) | no | 1,206 | 23.0 s |
-| `mlb_events_raw` | append | no | 39 | 0.6 s |
+### ⚠️ The hypothesis in the previous revision of this doc is REFUTED
 
-`monthly_schedule` is the **only** raw source under active deletion —
-`ingest_statsapi.py:481` (`write_raw_rows_s3(..., mode="overwrite_partition")` → `_delete_partition`)
-and `:484` (`prune_same_month_partitions("monthly_schedule", today_dt)`), fired by
-`intraday_schedule_capture_*` (`*/30 14-23` + `0,30 0-3` UTC) and by the daily
-`ingest_statsapi_schedule` op. Corroborating: `dt=2026-08-11` is **already gone** from
-`lakehouse_raw/monthly_schedule/` (pruned); only `2026-05-31, 06-30, 07-31, 08-12, __nullts__`
-remain.
+The earlier leading hypothesis — a concurrent raw-partition DELETE inside the `union_by_name`
+list→open window producing an HTTP **404** — was wrong. It was circumstantially corroborated
+(`monthly_schedule` really is the only raw source under active deletion; the bind windows really
+are 20+ s) and it was labelled unconfirmed, but the measured error is a **403 on authentication**,
+not a 404 on a missing key. The delete-race mechanism plays no part in this incident, and the
+`monthly_schedule` write ordering needs no change. Recorded here rather than deleted, because the
+corroboration looked strong and the next reader should know it did not survive contact with the
+error text.
 
-That collides with `stg_statsapi_games` — the **last** model in the w3pre loop and the
-serving-critical one (game universe → the lineup monitor's Preview gate → the alert's symptom).
-The odds sources are append-only, so they have no delete race despite the much wider window.
+### Why it presented as intermittent, and only in the DuckDB reads
 
-**Competing candidates the error text discriminates in one line:**
+This is the discriminating detail, and it explains every observation:
 
-| error text contains | verdict |
-|---|---|
-| `HTTP 404 Not Found` on a `lakehouse_raw/**/part-*.parquet` key | ✅ concurrent-delete race — **confirmed** |
-| `HTTP 503` / `500` / `SlowDown` / timeout | transient S3 throttle — retry is the cure, writer is innocent |
-| `Binder Error` / `Could not convert` / type mismatch | genuine schema conflict — but then it would still be failing today, so this is very unlikely |
+| client | skew handling | observed |
+|---|---|---|
+| **botocore/boto3** | auto-corrects: on a skew error it reads S3's `Date` header, caches the offset and retries | the odds/derivative captures kept writing **every 30 min, unbroken** through the incident |
+| **DuckDB `httpfs`** | no correction — signs with the local clock and hard-fails | the w3pre binds HALTed |
 
----
+So the writers stayed perfectly healthy while the readers died — which is exactly the pattern in
+the S3 listings (an unbroken `mlb_odds_raw` part file at every 30-minute mark on 08-11) and is why
+this looked like a reader-side or data-side defect. It self-healed when the clock came back inside
+tolerance. ⚠️ **delta-rs / `object_store` (the Rust S3 client used by `scripts/utils/delta_lake.py`)
+is in the same category as DuckDB, not boto3** — a future skew episode should be expected to break
+Delta reads/writes too.
+
+### The immediate fix is operator-side (no code can substitute)
+
+Diagnose and correct NTP on the box; see the handoff commands. Contributing factor worth checking:
+the box is an `r6g.large` (2 vCPU) and INC-37 already documents that a pinned CPU starves the
+Dagster daemon — sustained CPU saturation degrades timekeeping too, so check CloudWatch CPU around
+the failure window.
+
+### Detection gap — CLOSED (follow-up PR, branch `inc42-clock-skew`)
+
+There was **no clock/NTP check anywhere in the repo** (verified by grep). `healthcheck.sh` runs
+every 5 minutes on the host and already owns paging, a fail-threshold and a cooldown — it probed
+containers and HTTP endpoints, never the clock. A drift that breaks every DuckDB-over-S3 read while
+leaving boto3 healthy was invisible to every existing monitor.
+
+Added as check (3) in `services/dagster/aws/healthcheck.sh`: it reads the `Date` header from
+`s3.us-east-2.amazonaws.com` — **S3's own clock is the one that decides whether a signature is
+accepted**, so this measures the quantity that actually matters rather than a local NTP daemon's
+estimate of itself. No credentials needed. Pages at `CLOCK_SKEW_MAX_S` (default **300 s**), leaving
+runway below the ~900 s hard bound; an unreadable or unparseable header reports **UNEVALUABLE and
+pages**, never healthy (NF1.7(a)).
+
+Three traps found while building it, each of which would have made the probe useless:
+
+- ⛔ **no `-f`** — it suppresses output on ≥400, discarding the header the moment S3 answers 403.
+- ⛔ **no `-L`** — the root endpoint answers **307** to `aws.amazon.com`; following it would measure
+  a different host's clock. (Found by dumping the real response, not assumed.)
+- ⛔ **no awk `IGNORECASE`** — a GNU-awk extension. The first cut used it and **returned an empty
+  string when tested live**; under BSD/mawk it matches nothing, so the probe would report
+  UNEVALUABLE every 5 minutes and the monitor would get muted. `tolower($0) ~ /^date:/` is portable.
+
+Guard: `betting_ml/tests/test_inc42_clock_skew_probe.py` — 8 clauses, each pinned in its own test so
+one deleted clause fails exactly one test (NF-D17). All 7 deliberate mutations proven red: `-f`,
+`-L`, `IGNORECASE`, a silently-passing unevaluable branch, a threshold at the hard bound, a dropped
+absolute value, and deleting the stanza. ⚠️ Note on the harness: the stanza-deletion mutation first
+*looked* green because the runner counted only `FAILED` and pytest reports a failing fixture as
+`ERROR` — the guard was fine, the red-proof's reporting was not.
+
+⏭️ **Unverified on the box:** GNU `date -u -d "Wed, 12 Aug 2026 06:04:37 GMT"` (docker was
+unavailable locally to prove it). The format is RFC 1123 and coreutils parses it, but confirm with
+the one-liner in the handoff. It fails safe either way — an unparseable header pages UNEVALUABLE.
+
+## Remediation runbook (operator, on the box)
+
+```bash
+date -u; chronyc tracking; chronyc sources -v; systemctl status chronyd
+curl -sS -o /dev/null -D - https://s3.us-east-2.amazonaws.com | grep -i '^date:'   # the clock that matters
+sudo systemctl enable --now chronyd && sudo chronyc makestep && chronyc tracking
+grep -n '169.254.169.123' /etc/chrony.conf   # the Amazon Time Sync Service should be configured
+```
+
+Contributing factor worth ruling in/out: the box is an `r6g.large` (2 vCPU) and INC-37 already
+documents that sustained CPU saturation starves the Dagster daemon — it degrades timekeeping too.
+Check CloudWatch CPU around the failure window.
+
 
 ## ⭐ ROOT CAUSE OF THE MISDIAGNOSIS — the page structurally could not carry the error (FIXED)
 
@@ -181,15 +237,16 @@ Guard: `betting_ml/tests/test_inc42_alert_carries_the_real_error.py` — the loa
 truncation that is short *and* useless). RED-proven both ways: reverting `intraday_ops.py` to
 `str(exc)[:300]` fails the source guard; reverting `exc_digest` to a head slice fails 3 of 6.
 
-## What is still open (the one thing that needs the box)
+## Retrieval note (how the error was finally obtained)
 
-The DuckDB error text from the **2026-08-11** failure. It is in the Dagster **Postgres event log**
-(the op logs the full `exc` via `context.log.warning`), which survives container recreation, unlike
-stdout. ⚠️ It cannot be found by run status — the job reports SUCCESS; grep `intraday_schedule_job`
-runs from 08-11 for `FAILED — continuing to the next leg`. `ssm:*` is denied for
-`baseball-access-user`, so this is an **operator** step.
+⚠️ The failing run **cannot be found by run status** — the op catches each leg, so
+`intraday_schedule_job` reports SUCCESS. It was recovered by grepping the Dagster **Postgres event
+log** (which survives container recreation, unlike stdout) for `FAILED — continuing to the next
+leg`. `ssm:*` is denied for `baseball-access-user`, so this was an operator step.
 
-Once the fix above deploys, the next occurrence pages with the real error and needs no box dig.
+Once the `exc_digest` fix above deploys, the next occurrence pages `RequestTimeTooSkewed` directly
+and needs no box dig at all — the fix is validated by this incident: the one string that mattered
+sat at the very tail of the message, exactly where `[:300]` was discarding it.
 
 ---
 
