@@ -382,17 +382,80 @@ Wed Aug 12 23:38:17 UTC 2026
 ⇒ the clock family is now **exhausted**: host offset 2.9 µs, container == host, and #745 added a
 5-minute skew probe against S3's own `Date` header. Nothing about a wrong clock is left to test.
 
-**Still open — CloudWatch CPU** on the box for 2026-08-11 23:00 and 2026-08-12 01:00 UTC. The
-contention hypothesis predicts a spike at both; a flat trace would weaken it substantially.
-⚠️ `baseball-access-user` is **denied `cloudwatch:GetMetricStatistics`** (the same class as its SSM
-denial), so this is an operator step — run it with operator credentials or from the console:
+**Done — CloudWatch CPU + memory, 2026-08-11 22:30 → 08-12 02:00 UTC.** ⚠️ Run it in **`us-east-1`**
+(the box's region — `aws_resources.md` line 895); `us-east-2` is the *S3 lakehouse bucket's* region
+and would return an **empty `Datapoints` list, not an error**, which reads exactly like "flat CPU,
+lead weakened". `baseball-access-user` is denied `cloudwatch:GetMetricStatistics`, so use operator
+credentials:
 
 ```bash
-aws cloudwatch get-metric-statistics --region us-east-2 --namespace AWS/EC2 \
+aws cloudwatch get-metric-statistics --region us-east-1 --namespace AWS/EC2 \
   --metric-name CPUUtilization --dimensions Name=InstanceId,Value=i-07594af1679f81c38 \
   --start-time 2026-08-11T22:30:00Z --end-time 2026-08-12T02:00:00Z \
-  --period 300 --statistics Average,Maximum \
+  --period 300 --statistics Average Maximum \
   --query 'sort_by(Datapoints,&Timestamp)[].[Timestamp,Average,Maximum]' --output text
+```
+
+### ✅ CONFIRMED: `:00` really is the busiest minute of the hour
+
+Previously this was *inferred from reading `capture.crontab`*. It is now measured, and it reproduces
+on all four hour-boundaries in the window:
+
+| bucket | mean 5-min avg CPU | mean 5-min peak CPU |
+|---|---|---|
+| `:00` (n=3) | **68.5 %** | **88.5 %** |
+| `:30` (n=4) | 54.3 % | 65.6 % |
+
+**+14.2 pp average, +22.9 pp peak**, on a box with **2 vCPU**. Peak touches **91.25 %** at 23:00 —
+the highest reading in the window, and the bucket containing the 23:00:37 failure.
+
+### ✗ REFUTED: memory pressure is not the trigger
+
+The two **failing** buckets hold among the *lowest* memory in the window (`mem_used_percent` max
+**28.6 %** at 23:00, **26.4 %** at 01:00), while the **non-failing** 00:00 holds the *highest*
+(**50.5 %**). Memory moves opposite to the failures ⇒ ruled out. (8th candidate refuted.)
+
+### ⚠️ NOT confirmed: contention MAGNITUDE does not predict which `:00` fired
+
+`00:00` did **not** fail, yet it had the **highest 5-min average CPU of the whole window (70.4 %)**
+and a peak (87.1 %) indistinguishable from the failing 01:00 (86.99 %). So "more contention ⇒
+failure" is **not supported**. This is consistent with the race already stated — contention as
+*necessary-not-sufficient*, with the trigger being timing inside the burst rather than its size —
+but the data does not establish that, it merely fails to contradict it.
+
+### ⚠️ An apparent discriminator that CANNOT be used yet — reverse causation
+
+The two failing hours stayed above 40 % CPU for **20 minutes**; the non-failing 00:00 for **10**:
+
+| hour | +0 | +5 | +10 | +15 | +20 | minutes > 40 % |
+|---|---|---|---|---|---|---|
+| 23:00 ✗failed | 67.4 | 58.8 | 57.1 | 48.1 | 40.0 | **20** |
+| 00:00 ✓ok | 70.4 | 56.1 | **8.9** | 8.9 | 10.8 | **10** |
+| 01:00 ✗failed | 67.7 | 59.7 | 57.8 | 47.3 | 12.4 | **20** |
+
+Tempting — but **equally explicable in reverse**: the failing w3pre leg was *itself running* through
+those minutes, and a bind stretched past the 900 s SigV4 tolerance would itself keep the box busy.
+So the sustained load may be the failure's **consequence**, not its cause. ⛔ Do not record this as
+support for the lead until the direction is settled.
+
+**The cheap discriminator** — the failing legs' own start/end times, from the Postgres event log
+(the runs report SUCCESS, so status cannot find them). If a failing leg ran 23:00:37 → ~23:20, the
+sustained load is its own effect and this table says nothing about cause:
+
+```bash
+docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T dagster-codeloc python -c "
+from dagster import DagsterInstance; import datetime as dt
+i = DagsterInstance.get()
+iso = lambda t: dt.datetime.fromtimestamp(t, dt.UTC).isoformat() if t else None
+for rec in i.get_run_records(limit=400):
+    r = rec.dagster_run
+    if r.job_name != 'intraday_schedule_job': continue
+    logs = i.all_logs(r.run_id)
+    hits = [e for e in logs if 'RequestTimeTooSkewed' in (getattr(e, 'user_message', '') or '')]
+    if not hits: continue
+    print(r.run_id[:8], 'start', iso(rec.start_time), 'end', iso(rec.end_time),
+          'error_logged', iso(hits[0].timestamp))
+"
 ```
 
 ## Status of the record
@@ -406,6 +469,9 @@ aws cloudwatch get-metric-statistics --region us-east-2 --namespace AWS/EC2 \
 | The failures predate the current clock state | **refuted** — 2026-08-11 23:00 / 08-12 01:00 UTC |
 | DuckDB signs at secret-creation time | **refuted** — a 16-h-old secret signed an accepted request |
 | The container's clock differs from the host's | **refuted** — both `date -u` agree to the second (2026-08-12 23:38:17 UTC) ⇒ the clock family is exhausted |
+| Memory pressure is the trigger | **refuted** — memory moves *opposite* to the failures (28.6/26.4 % at the failing minutes vs 50.5 % at the non-failing one) |
+| `:00` is the busiest minute (the lead's premise) | **CONFIRMED by measurement** — `:00` runs +14.2 pp avg / +22.9 pp peak over `:30`, peaking 91.25 % on 2 vCPU |
+| Contention MAGNITUDE selects which `:00` fails | **not supported** — the non-failing 00:00 had the window's *highest* average CPU (70.4 %) |
 | A long bind under `:00` contention, on a glob growing 48 files/day | **open — the standing lead** |
 | …its exposure | **REMOVED 2026-08-12** — 1,859 files → 98, bind 21.8 s → 1.57 s (compaction shipped) |
 
