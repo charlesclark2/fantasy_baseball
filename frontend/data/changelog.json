@@ -3,6 +3,10 @@
     "week": "2026-08-10",
     "items": [
       {
+        "tag": "fixed",
+        "text": "The draft optimizer's pick recommendations had a ranking bug, and on the live 2026 board it was affecting every position. The score behind each recommendation adds a scarcity bonus on top of a player's value — the idea being that when there is a steep drop-off after a player, you should grab him before the tier runs out. The bonus was being handed to whichever player happened to sit directly above the drop-off, no matter how good he actually was. Because the size of a gap says nothing about the quality of the player standing next to it, a worse player could out-score a better one at the same position. The clearest example: at kicker, the board's 31st-ranked kicker sat on the near side of a 29-point cliff and was recommended over the best kicker available — who was 19 points better — landing him at 66th overall and inside the first six rounds of a 12-team draft. Across the whole board there were 445 pairs where the optimizer ranked a worse player above a better one at the same position. The scarcity bonus now belongs to the position rather than to an individual: it goes to the best player still available there, which is the one you would actually draft. Deciding WHETHER to address a position now is what the drop-off is evidence for; deciding WHICH player to take at it was always just a matter of who is best. Within a position, recommendations are now ordered by value with no exceptions, and a thin position still gets filled late in a draft when everyone left is below replacement level."
+      },
+      {
         "tag": "added",
         "text": "You can now sign in with just your email — we send a six-digit code, so there's no password to set or forget. Google sign-in still works as before."
       }

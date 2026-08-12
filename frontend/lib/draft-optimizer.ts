@@ -416,7 +416,38 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     const dropoff = Math.max(0, vor - (nextVor[p.id] ?? 0))
     const level = needLevel(open, p.pos)
     const needW = level === 2 ? NEED_W_DEDICATED : level === 1 ? NEED_W_FLEX : 0
-    const needBonus = needW * dropoff
+    // ⭐ THE SCARCITY BONUS BELONGS TO THE POSITION, SO ONLY ITS BEST AVAILABLE PLAYER EARNS IT.
+    // Awarding each player his OWN `dropoff` inverts a position, because `dropoff` is a pure GAP —
+    // `max(0, vor - nextVor)` — that says nothing about what the candidate is worth. Whoever happens
+    // to sit on the near side of a cliff collects the whole cliff, however bad he is.
+    //
+    // Measured on the live 2026 full_ppr/12 board (2026-08-12): the kicker pool cliffs 29.1 VOR
+    // between the projected starters (~119 pts) and the deep backups (~90 pts). Andre Szmyt sat on
+    // that edge at vor -10.8 and scored -10.8 + 29.1 = 18.3, beating Jake Bates — the BEST kicker on
+    // the board, vor +8.1 — who scored 8.1 + 1.5 = 9.6. That put K31 at #66 overall and drafted him
+    // in ROUND 6 of a 12-team snake.
+    //
+    // ⚠️ WHY IT SURVIVED TO HERE: MVP-3 shipped K/DST as null-VOR placeholders, which `recommend`
+    // skips outright, so no sub-replacement tail was ever a candidate. NF1.6 gave K/DST a real BASE
+    // projection and made the whole 42-deep kicker pool live — including the ~30 rows below
+    // replacement the gap term was never designed for. The guard suite still fixtures K/DST as
+    // null-VOR only (`test_null_vor_rows_never_recommended`), i.e. it tests the pre-NF1.6 world.
+    //
+    // ⛔ THE OBVIOUS PATCH — `vor > 0 ? needW * dropoff : 0` — IS WRONG TWICE, and both were caught
+    // by measurement rather than by eye. (1) It does not remove the inversion, it MOVES it: with the
+    // cliff one row higher the K just above it still outranks the best K (fixture: vor 3.9 beats vor
+    // 8.2). (2) It BREAKS need-filling, which is a real requirement — late in a draft every player
+    // left at a needed position is below replacement, and the roster still has to be filled;
+    // `test_mock_snake_draft_replay` fails with "team 8 never drafted a TE".
+    //
+    // VONA answers "should I address this position NOW?", not "which player at it should I take?" —
+    // that second question is always answered by VOR alone. So the urgency is computed once per
+    // position, at the player you would actually draft (`idxInPos === 0`, the top of the same
+    // pts-descending order used for tiers). Ordering within a position is then VOR-monotone BY
+    // CONSTRUCTION — a worse player can no longer outrank a better one — while the best available at
+    // a needed position keeps the full bonus even when he is below replacement, so a thin position
+    // still gets filled.
+    const needBonus = idxInPos[p.id] === 0 ? needW * dropoff : 0
 
     const held = myCounts[p.pos] ?? 0
     const capacity =

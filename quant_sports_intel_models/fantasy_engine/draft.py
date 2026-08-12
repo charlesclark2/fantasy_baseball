@@ -265,6 +265,9 @@ def recommend(
         pos_players.setdefault(pos, []).append(row)
     pos_tier: dict[str, dict[str, int]] = {}
     pos_next_vor: dict[str, dict[str, float]] = {}
+    #: player_id of the BEST AVAILABLE player at each position — the only one that earns the scarcity
+    #: bonus (see the note at `need_bonus` below). Keyed off the same pts-descending order as tiers.
+    pos_best: dict[str, str] = {}
     my_counts: dict[str, int] = {}
     for p in my_positions:
         my_counts[p] = my_counts.get(p, 0) + 1
@@ -273,6 +276,8 @@ def recommend(
         tiers = assign_tiers([_fnum(r.get("league_points")) for r in rows], k=tier_k)
         pos_tier[pos] = {}
         pos_next_vor[pos] = {}
+        if rows:
+            pos_best[pos] = str(rows[0].get("player_id"))
         for i, r in enumerate(rows):
             pid = str(r.get("player_id"))
             pos_tier[pos][pid] = tiers[i]
@@ -293,7 +298,30 @@ def recommend(
         dropoff = max(0.0, vor - next_vor)
         level = open_slots.need_level(pos)
         need_w = NEED_W_DEDICATED if level == 2 else (NEED_W_FLEX if level == 1 else 0.0)
-        need_bonus = need_w * dropoff
+        # ⭐ THE SCARCITY BONUS BELONGS TO THE POSITION, SO ONLY ITS BEST AVAILABLE PLAYER EARNS IT.
+        # Awarding each player his OWN `dropoff` inverts a position: `dropoff` is a pure GAP that says
+        # nothing about what the candidate is worth, so whoever sits on the near side of a cliff
+        # collects the whole cliff, however bad he is.
+        #
+        # Measured on the live 2026 full_ppr/12 board (2026-08-12): the kicker pool cliffs 29.1 VOR
+        # between projected starters and deep backups, so K31 (vor -10.8) scored 18.3 and beat the
+        # BEST kicker (vor +8.1, score 9.6) — landing K31 at #66 overall, a round-6 pick.
+        #
+        # ⚠️ It survived because MVP-3 shipped K/DST as null-VOR placeholders (skipped above); NF1.6
+        # gave them real projections and made a ~30-row sub-replacement tail live for the first time.
+        #
+        # ⛔ The obvious patch (`need_w * dropoff if vor > 0 else 0`) is wrong twice: it MOVES the
+        # inversion rather than removing it (the row above the cliff still wins when the cliff sits
+        # one place higher), and it BREAKS need-filling — late in a draft everything left at a needed
+        # position is below replacement and the roster must still be filled
+        # (`test_mock_snake_draft_replay`: "team 8 never drafted a TE").
+        #
+        # VONA answers "should I address this position NOW?", never "which player at it?" — that is
+        # always VOR. So urgency is computed once per position, at the player you would actually
+        # draft. Ordering inside a position is then VOR-monotone BY CONSTRUCTION, while the best
+        # available at a needed position keeps the full bonus even below replacement.
+        # ⚠️ LOCK-STEP: mirrored in `frontend/lib/draft-optimizer.ts` (the shipping engine).
+        need_bonus = need_w * dropoff if pos_best.get(pos) == pid else 0.0
         # surplus damping: this pick fills NO open starter slot (level 0) → it's bench depth. Discount it
         # vs a need-filler, and punish it HARDER once I already hold everything I could ever start at the
         # position (so a 2nd QB / 2nd TE stops out-ranking RB/WR depth once my starters are set).

@@ -193,6 +193,122 @@ def test_rationale_is_populated():
     assert all(r.rationale for r in recs)
 
 
+# ── the scarcity bonus may never invert a position (draft-optimizer pre-launch check, 2026-08-12) ──
+#
+# ⛔ ANCHORED IN ITS OWN CLAUSE. These two tests fail ONLY for the property below — the scarcity
+# (VONA) bonus must never rank a WORSE player above a BETTER one at the same position. Nothing here
+# is bolted onto the K/DST tests above (the E9.60 coupling trap): those assert the PRE-NF1.6
+# contract, that a null-VOR placeholder never surfaces, which is a different claim about a different
+# input and must keep failing for its own reason.
+#
+# ⚠️ WHY THE EXISTING SUITE COULD NOT CATCH THIS. Every K/DST fixture above carries `vor: None`, so
+# `recommend` skips it before any scoring happens — i.e. the suite tests the world MVP-3 shipped,
+# where K/DST were placeholders. NF1.6 gave them a real BASE projection and made a deep
+# sub-replacement tail live for the first time. `_kicker_pool` below is therefore shaped like the
+# REAL live board (measured 2026-08-12 on 2026 full_ppr/12): a handful of startable kickers just
+# above replacement, then a ~29-point cliff into a long tail far below it.
+
+
+def _kicker_pool() -> list[dict]:
+    """A kicker pool with the live board's defining feature: a cliff into a sub-replacement tail.
+
+    Points are chosen so `vor = league_points - replacement_points` reproduces the measured shape —
+    K1..K5 barely above replacement (+8.1 … +3.9), then a 29-point gap down to a tail at -10.8 and
+    below. The player perched on the near side of that cliff is the one the uncapped bonus promoted.
+    """
+    repl = 129.5
+    pts = [137.7, 136.1, 135.5, 134.7, 133.4]          # startable, just above replacement
+    pts += [118.8]                                      # ← the cliff-sitter: 29.1 above the next row
+    pts += [89.7, 89.0, 88.2, 87.1, 86.6, 85.9]         # the deep sub-replacement tail
+    return [
+        {
+            "player_id": f"K-{i:03d}",
+            "player_name": f"K Player {i}",
+            "position": "K",
+            "team_id": f"T{i:02d}",
+            "is_rookie": False,
+            "league_points": p,
+            "replacement_points": repl,
+            "vor": round(p - repl, 1),
+            "positional_rank": i + 1,
+            "overall_rank": 500 + i,
+        }
+        for i, p in enumerate(pts)
+    ]
+
+
+def test_scarcity_bonus_never_promotes_a_below_replacement_player_over_a_better_one():
+    """The engine's top K must be the BEST K, not the one sitting above the biggest cliff.
+
+    Measured on the live 2026 full_ppr/12 board before the fix: Andre Szmyt (K31, vor -10.8) scored
+    -10.8 + 29.1 = 18.3 and beat Jake Bates (K1, vor +8.1) on 8.1 + 1.5 = 9.6 — putting the 31st-best
+    kicker at #66 overall and drafting him in round 6 of a 12-team snake.
+    """
+    cfg = presets.full_ppr()
+    board = _board(cfg) + _kicker_pool()
+    recs = draft.recommend(board, config=cfg, normalize=NORM, top_n=len(board))
+
+    ks = [r for r in recs if r.position == "K"]
+    assert ks, "fixture must put kickers in front of the engine, or this guard proves nothing"
+
+    best_by_vor = max(ks, key=lambda r: r.vor)
+    assert ks[0].player_id == best_by_vor.player_id, (
+        f"engine ranked {ks[0].player_name} (vor {ks[0].vor}) above the best kicker "
+        f"{best_by_vor.player_name} (vor {best_by_vor.vor}) — the scarcity bonus inverted the position"
+    )
+    assert ks[0].vor > 0, "the top-ranked kicker must be above replacement"
+
+
+def test_only_the_best_available_at_a_position_earns_the_scarcity_bonus():
+    """The mechanism itself: at most ONE player per position carries a non-zero `need_bonus`.
+
+    Separate from the ordering test above on purpose — ordering could be restored by an unrelated
+    change (a penalty, a re-sort) while the bonus stayed per-player, and then the ordering test alone
+    would pass over a defect that is still there.
+    """
+    cfg = presets.full_ppr()
+    board = _board(cfg) + _kicker_pool()
+    recs = draft.recommend(board, config=cfg, normalize=NORM, top_n=len(board))
+
+    bonused: dict[str, list[str]] = {}
+    for r in recs:
+        if r.need_bonus:
+            bonused.setdefault(r.position, []).append(f"{r.player_name}(vor {r.vor})")
+    assert bonused, "no position earned a bonus — the fixture cannot prove the rule holds"
+
+    for pos, names in bonused.items():
+        assert len(names) == 1, f"{pos}: {len(names)} players carried a scarcity bonus: {names}"
+        # …and it must be the position's BEST available, not merely a single arbitrary one.
+        at_pos = [r for r in recs if r.position == pos]
+        top = max(at_pos, key=lambda r: r.vor)
+        assert names[0].startswith(top.player_name), (
+            f"{pos}: the bonus went to {names[0]}, not to the best available {top.player_name}"
+        )
+
+
+def test_a_thin_position_still_gets_filled_when_everything_left_is_below_replacement():
+    """Need-filling must survive the fix — the requirement `test_mock_snake_draft_replay` encodes.
+
+    Late in a draft every remaining player at a needed position is below replacement. The best of
+    them must still carry the full scarcity bonus, or a mandatory starter slot is never filled. This
+    is the clause the naive `vor > 0` patch broke, pinned here in its own right so a future
+    simplification cannot quietly reintroduce it.
+    """
+    cfg = presets.full_ppr()
+    # Only the sub-replacement tail of the kicker pool is left — nothing here has vor > 0.
+    tail = [r for r in _kicker_pool() if r["vor"] < 0]
+    assert tail and all(r["vor"] < 0 for r in tail), "fixture must be entirely below replacement"
+    recs = draft.recommend(_board(cfg) + tail, config=cfg, normalize=NORM, top_n=len(_board(cfg)) + len(tail))
+
+    ks = [r for r in recs if r.position == "K"]
+    assert ks, "kickers must reach the engine"
+    best = max(ks, key=lambda r: r.vor)
+    assert best.need_bonus > 0, (
+        "the best available kicker earned no scarcity bonus despite an open K starter slot — "
+        "a thin position would never be filled"
+    )
+
+
 # ── snake arithmetic ──────────────────────────────────────────────────────────────────────────────
 def test_snake_order_math():
     # 12-team, slot 3: R1 pick 3, R2 pick 22 (reversed: 12-3+1=10 → 12+10), R3 pick 27
