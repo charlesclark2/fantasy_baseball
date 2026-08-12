@@ -145,12 +145,11 @@ is what produced the wrong conclusion in the previous revision. ⚠️ **delta-r
 is in the same category as DuckDB, not boto3** — a future skew episode should be expected to break
 Delta reads/writes too.
 
-### The immediate fix is operator-side (no code can substitute)
+### ⚠️ This section previously prescribed an NTP fix — that was wrong
 
-Diagnose and correct NTP on the box; see the handoff commands. Contributing factor worth checking:
-the box is an `r6g.large` (2 vCPU) and INC-37 already documents that a pinned CPU starves the
-Dagster daemon — sustained CPU saturation degrades timekeeping too, so check CloudWatch CPU around
-the failure window.
+An earlier revision concluded the box clock had drifted and sent the operator to `chronyc makestep`.
+The clock was measured immediately afterwards and is healthy (see *The host clock is NOT the
+cause*), so that step was a no-op. The correct reading of this asymmetry is below.
 
 ### Detection gap — CLOSED (follow-up PR, branch `inc42-clock-skew`)
 
@@ -209,27 +208,88 @@ is ~2.1 s/day, so reaching 900 s of skew unaided would take well over a year.
 ⇒ **The host clock was accurate. S3 rejected a signature whose timestamp was stale, which is a
 different fault.** The `chronyc makestep` in the original runbook was a no-op and is not the fix.
 
-## Root cause: OPEN — what remains, and how to settle it
+## Root cause: two candidates REFUTED by measurement, one strong lead remains
 
-1. **DuckDB signs with a stale timestamp on a long-lived connection/secret.** If the signing time is
-   captured at secret creation rather than per request, any S3 GET issued >15 min into a long build
-   fails on a perfectly correct clock. This fits every observation, including why a short
-   `--w3pre-only` run passes while the same code inside a 40-minute job does not.
-   **Under test** (laptop, DuckDB 1.5.3 — the same version `uv.lock` pins for the box): one
-   connection + secret, probed at +0/+8/+16/+24/+35 min. Laptop credentials are long-lived IAM user
-   keys, so credential expiry is excluded by construction and this isolates the timestamp question.
-2. **Instance-role credential refresh.** The box authenticates via the EC2 instance role (IMDS
-   temporary credentials); DuckDB's `credential_chain` resolves them once at secret creation. This
-   usually surfaces as `ExpiredToken`, not `RequestTimeTooSkewed`, so it ranks below (1) — but the
-   laptop cannot test it, since the laptop has no instance role.
-3. **The failures are older than the current clock state.** Not yet excluded, because **the failing
-   runs' timestamps were never retrieved** — the run IDs alone do not date them. chronyd logged
-   `Can't synchronise: no majority` on **2026-08-01 12:13**, so a genuine (brief) clock excursion in
-   an older window remains possible. This is the cheapest thing to settle and should be done first.
+### ✗ (3) "the failures are older than the current clock state" — REFUTED
 
-## Diagnostics (operator, on the box)
+The failing runs are **recent**, not historical:
 
-Date the failures — this is the discriminator between (1)/(2) and (3), and it decides everything:
+| run | started (UTC) |
+|---|---|
+| `28432dfb` | **2026-08-11 23:00:37** |
+| `bc60b651` | **2026-08-12 01:00:30** |
+
+Both sit well inside the window over which chrony reports a 2.9 µs RMS offset, so they cannot be
+explained by the 2026-08-01 `Can't synchronise: no majority` episode.
+
+### ✗ (1) "DuckDB captures the signing timestamp at secret creation" — REFUTED
+
+Laptop, DuckDB 1.5.3 (the version `uv.lock` pins), one connection + one secret, re-probed over time.
+⚠️ The run is only partly valid: the laptop **suspended** mid-experiment (wall clock 06:22 → 22:34
+while `time.monotonic()` advanced just 35 min), so the +16 and +24 probes failed on
+`Could not resolve hostname` — DNS after wake, not a signing fault. Those two points carry no
+information.
+
+The **final probe is informative, and is a stronger test than the one designed**: a secret and
+connection that were **35 monotonic-minutes and ~16 wall-clock hours old** still produced a
+signature S3 accepted (`OK, 2,881 rows`). ⇒ **DuckDB signs each request against the current clock**;
+a stale secret does not yield a stale signature.
+
+### ⭐ The remaining lead: a long bind under peak contention, on a glob that grows without bound
+
+Two patterns in the failures, neither of which is a coincidence:
+
+**(a) Both failed on `mlb_odds_raw` — the largest glob**, and it is the first model in the w3pre
+loop (`stg_oddsapi_odds`). Measured bind cost on an *idle* laptop: **21.8 s across 1,820 files**,
+versus 0.4–0.6 s for the small sources.
+
+**(b) Both fired at `:00` past the hour, and `:00` is the peak-contention minute.** From
+`capture.crontab`, at `:30` only the two odds captures run; at `:00` three more jobs start —
+`weather-capture`, and `backfill_multisport_props_to_s3.py --mode live` (`0 13-23,0-4`, so **23:00
+and 01:00 are both inside that window**), which runs **inside `dagster-codeloc` itself** — the same
+container as the failing subprocess — pulling 8 markets × 2 regions. All of this on an `r6g.large`
+with **2 vCPU**, the box INC-37 already documents as starving under load. `00:00` is in the same
+window and did *not* fail, so this is a race, not a determinism.
+
+⭐ **And the exposure is growing on a clock.** `mlb_odds_raw` is written **append-only** — one part
+file per 30-minute capture, **48/day, with no compaction and no retention**:
+
+| | |
+|---|---|
+| partitions | **97** (`dt=2026-04-23` … `dt=2026-08-12`) |
+| files/day | **48** (measured: 07-20 = 48, 08-10 = 48, 08-11 = 48) |
+| total files | ~**1,820** |
+| onset | `dt=2026-07-05` holds **1** file — the S3-native flip (CLAUDE.md dates it 2026-07-05) |
+
+38 days × 48 ≈ 1,824, which matches the observed count. So the bind's cost — and the number of
+signed S3 requests in flight during it — **has been rising linearly since 2026-07-05 and will keep
+rising**. That is a coherent explanation for why this class of failure is appearing *now*.
+
+The precise mechanism linking a long, heavily-contended bind to a signature aged past 900 s is
+**not yet established** (a retry that reuses the original `Authorization` header is the usual shape,
+but that is a hypothesis, not a measurement — and this incident has already burned two).
+
+### ⭐ Recommended fix — mechanism-independent
+
+**Compact / retain `lakehouse_raw/mlb_odds_raw/`.** It removes the exposure regardless of which
+signing mechanism is at fault, and it fixes an unbounded-growth problem that is a defect in its own
+right: every consumer of that glob pays the 48-files-per-day tax forever. The repo already owns
+this pattern (`prune_same_month_partitions` for `monthly_schedule`; INC-20 latest-per-month
+retention). Cutting 1,820 files to a few dozen takes the bind from 21.8 s to ~1 s.
+
+Cheap complementary mitigation: **de-conflict the schedule** — move
+`backfill_multisport_props_to_s3.py --mode live` off `:00` (e.g. `20 13-23,0-4`), so the heaviest
+in-container job stops colliding with the intraday w3pre bind.
+
+⚠️ Both are proposals, not shipped. Neither should be presented as "the fix" until the mechanism is
+confirmed — but the compaction is worth doing on its own merits either way.
+
+## Diagnostics
+
+**Done — dating the failures (2026-08-12).** This was the discriminator, and it excluded candidate
+(3): the two failures are `28432dfb` at 2026-08-11 23:00:37 UTC and `bc60b651` at
+2026-08-12 01:00:30 UTC. ⚠️ Note they are **not findable by run status** — the intraday op catches
+each leg, so the runs report SUCCESS; the query greps the Postgres event log instead:
 
 ```bash
 docker compose -f services/dagster/aws/docker-compose.yml exec -T dagster-codeloc python -c "
@@ -240,13 +300,33 @@ for rec in i.get_run_records(limit=400):
     if r.job_name!='intraday_schedule_job': continue
     if any('RequestTimeTooSkewed' in (getattr(e,'user_message','') or '') for e in i.all_logs(r.run_id)):
         ts=rec.start_time or rec.create_timestamp.timestamp()
-        print(dt.datetime.utcfromtimestamp(ts).isoformat(), r.run_id[:8])
+        print(dt.datetime.fromtimestamp(ts, dt.UTC).isoformat(), r.run_id[:8])
 "
 ```
 
-Rule out a container-vs-host clock difference (cheap, and it is the one thing the host reading
-above cannot cover):
+**Still open, both cheap.** Rule out a container-vs-host clock difference — the one thing the host
+chrony reading structurally cannot cover:
 
 ```bash
 date -u; docker compose -f services/dagster/aws/docker-compose.yml exec -T dagster-codeloc date -u
 ```
+
+And check CloudWatch CPU on the box for 2026-08-11 23:00 and 2026-08-12 01:00 UTC. The contention
+hypothesis predicts a spike at both; a flat CPU trace would weaken it substantially.
+
+## Status of the record
+
+| claim | state |
+|---|---|
+| E11.24 #662/#675 flip caused it | **refuted** — not a rollback trigger |
+| An INC-23 use-site cast is needed | **refuted** — binds clean on laptop *and* box |
+| A concurrent raw-partition DELETE → 404 race | **refuted** — the error is a 403 |
+| The box clock drifted | **refuted** — chrony RMS offset 2.9 µs |
+| The failures predate the current clock state | **refuted** — 2026-08-11 23:00 / 08-12 01:00 UTC |
+| DuckDB signs at secret-creation time | **refuted** — a 16-h-old secret signed an accepted request |
+| A long bind under `:00` contention, on a glob growing 48 files/day | **open — the standing lead** |
+
+Three of my own conclusions on this incident were retracted after measurement. They are left in the
+record rather than deleted, because each looked well-corroborated at the time and the pattern —
+inferring a mechanism from a suggestive correlation instead of measuring it — is the transferable
+lesson.
