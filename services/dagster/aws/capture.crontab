@@ -138,6 +138,28 @@ SHELL=/bin/bash
 # bump to 50 GB (aws_resources.md) as belt-and-suspenders.
 47 9 * * 0 docker system prune -f >> /home/ec2-user/docker-prune-cron.log 2>&1; docker builder prune -af >> /home/ec2-user/docker-prune-cron.log 2>&1
 
+# ── Weekly-equivalent lakehouse_raw compaction (INC-42, 2026-08-12) ──────────
+# The odds capture (the */30 line at the top) appends ONE part-<uuid>.parquet per fire, so
+# lakehouse_raw/mlb_odds_raw grew by 48 FILES/DAY with no compaction and no retention. DuckDB
+# binds `read_parquet(**/*.parquet, union_by_name=true)` by listing the glob and opening every
+# footer, so bind cost tracks the FILE COUNT: measured 1,859 files → 21.8s to bind, vs 0.4-0.6s
+# for the small w3pre sources. That bind is INC-42's standing lead (both RequestTimeTooSkewed
+# failures were on this source, both at :00) and an unbounded-growth defect in its own right.
+# After the first full pass: 1,859 files → 98, and the same bind measured 1.57s.
+# ⛔ ROW-PRESERVING, NOT RETENTION — nothing is deleted. The odds snapshot TRAJECTORY is the
+# signal (mart_odds_line_movement / mart_bookmaker_disagreement), so dropping old snapshots would
+# destroy data the program uses; this only collapses many files into one.
+# Steady state is ~1 partition/run (48 files → 1), a few seconds. Idempotent: an already-compacted
+# partition is a no-op, and an interrupted run is finished on the next pass.
+# 08:40 UTC = 03:40 CDT: inside the INC-36 quiet window, outside the 13:00-04:00 props window, and
+# at :40 it dodges the :00/:30 capture ticks and the hourly weather run (the INC-42 contention
+# minutes). --min-age-days 2 keeps the LIVE partition permanently out of scope, so it can never
+# race the capture writing dt=<today>.
+# TIER: maintenance / log-only. A failure never pages and never gates anything — it just defers
+# compaction to tomorrow's run, and the guards mean a failed run cannot cost data (originals are
+# deleted only after the compacted object is re-read from S3 and verified).
+40 8 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/compact_lakehouse_raw.py --source mlb_odds_raw --apply >> /home/ec2-user/capture-cron.log 2>&1
+
 # ── OPTIONAL (interim, until P4): refresh SERVED odds prices ──────────────────
 # P3 restores the RAW odds feed (above) → mlb_odds_raw is current. But DISPLAYED
 # prices read mart_odds_outcomes, which only refreshes when the odds marts rebuild
