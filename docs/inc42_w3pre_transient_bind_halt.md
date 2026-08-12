@@ -438,6 +438,68 @@ those minutes, and a bind stretched past the 900 s SigV4 tolerance would itself 
 So the sustained load may be the failure's **consequence**, not its cause. ⛔ Do not record this as
 support for the lead until the direction is settled.
 
+### ✅ SETTLED — it is the consequence. And the run timings reframe the whole incident.
+
+The event log (2026-08-12), which is the only place these runs are visible at all:
+
+| run | started | error logged | ended | start → error | run length |
+|---|---|---|---|---|---|
+| `28432dfb` | 23:00:37.73 | 23:18:02.43 | 23:19:04.78 | **1044.70 s** | 1107.05 s (18.45 m) |
+| `bc60b651` | 01:00:30.14 | 01:18:06.24 | 01:19:07.37 | **1056.10 s** | 1117.23 s (18.62 m) |
+
+**Reverse causation confirmed.** The runs span 23:00:37→23:19:04 and 01:00:30→01:19:07, which is
+*exactly* the 20-minute CPU elevation in the table above — and 00:00's CPU collapse to 8.9 % at
++10 min is simply **its run finishing**. The CPU trace is the failing job's own footprint, so it
+carries no information about cause. The caution was right; the table stays unusable as support.
+
+⭐ **The discriminator is RUN DURATION, not contention.** 00:00 finished in under 10 minutes and
+never reached the wall. 23:00 and 01:00 ran 18.5 minutes and crossed it.
+
+⭐⭐ **And "a race" is now the wrong word — this is a deterministic threshold.** The two failures
+fired at **1044.70 s** and **1056.10 s** after their runs began: **11.4 s apart, 1.08 % of the
+interval**, across two independent runs two hours apart. A race does not reproduce to 1 %. Both sit
+**past the 900 s SigV4 tolerance** (excess 144.7 s and 156.1 s). ⛔ The earlier "00:00 is in the same
+window and did not fail ⇒ a race, not a determinism" was a wrong inference from an incomplete
+observation — 00:00 did not fail because it *finished first*.
+
+For scale: the same glob bound in **21.8 s** on an idle laptop. The box leg ran **47.9×** that long
+before erroring.
+
+### 🔎 The leading hypothesis — and an honest correction to candidate (6)
+
+**H: DuckDB computes a request's signature once per QUERY/SCAN rather than per REQUEST, so any S3
+request issued more than 900 s into a single long-running query is rejected.**
+
+⚠️ **This reopens candidate (6) in a variant my experiment never tested.** I refuted "DuckDB signs at
+SECRET-creation time" using a 16-hour-old secret and a **new** query — and that refutation stands
+*as stated*. But I framed it as "DuckDB signs each request against the current clock", which is
+broader than what was measured: nothing in that experiment examined a **single query that runs for
+17 minutes**. The scope of the claim outran the scope of the evidence.
+
+H fits every observation, including the ones that killed the other candidates:
+
+| observation | fits H? |
+|---|---|
+| error at 1044.7 s / 1056.1 s, both just past 900 s | ✅ and it *predicts* the clustering |
+| 11.4 s agreement across two independent runs | ✅ deterministic, not stochastic |
+| only ever `mlb_odds_raw` | ✅ the only glob big enough to push the leg past 900 s |
+| appears *now*, not in June | ✅ 48 files/day is what made 900 s reachable |
+| host + container clocks perfect | ✅ H needs no clock error at all |
+| boto3 paths unaffected | ✅ botocore re-signs per request |
+| 00:00 in the same contention window survived | ✅ it finished in <10 min |
+
+**Unexplained by H:** the ~145–156 s of *excess* over 900 s. That is either the leg's setup before
+its first signed request, or a retry budget consumed after the first rejection. Not measured — do
+not assert it.
+
+⇒ **The lead, restated with what is now measured:** *duration* is the trigger, `:00` contention is
+only the amplifier that pushed the leg past the threshold, and the unbounded file growth is what
+made the threshold reachable at all. That is a sharper claim than "a long bind under contention",
+and it is the one the evidence supports.
+
+⚠️ **Prod can no longer reproduce it** — compaction took the bind to 1.57 s, so no leg gets near
+900 s. Testing H now requires a synthetic long-running query (below).
+
 **The cheap discriminator** — the failing legs' own start/end times, from the Postgres event log
 (the runs report SUCCESS, so status cannot find them). If a failing leg ran 23:00:37 → ~23:20, the
 sustained load is its own effect and this table says nothing about cause:
@@ -472,12 +534,42 @@ for rec in i.get_run_records(limit=400):
 | Memory pressure is the trigger | **refuted** — memory moves *opposite* to the failures (28.6/26.4 % at the failing minutes vs 50.5 % at the non-failing one) |
 | `:00` is the busiest minute (the lead's premise) | **CONFIRMED by measurement** — `:00` runs +14.2 pp avg / +22.9 pp peak over `:30`, peaking 91.25 % on 2 vCPU |
 | Contention MAGNITUDE selects which `:00` fails | **not supported** — the non-failing 00:00 had the window's *highest* average CPU (70.4 %) |
+| The 20-min CPU elevation is a *cause* | **refuted** — it is the failing run's own footprint (23:00:37→23:19:04, 01:00:30→01:19:07) |
+| "It is a race" | **withdrawn** — two runs erred 11.4 s apart (1.08 %); this is a **deterministic duration threshold**, and 00:00 survived by finishing first |
+| ⭐ A query running >900 s reuses one signature (H) | **OPEN — the leading hypothesis.** Fits every observation; a variant of (6) that my experiment never tested |
 | A long bind under `:00` contention, on a glob growing 48 files/day | **open — the standing lead** |
 | …its exposure | **REMOVED 2026-08-12** — 1,859 files → 98, bind 21.8 s → 1.57 s (compaction shipped) |
 
 ⚠️ Removing the exposure is not the same as confirming the mechanism. If `RequestTimeTooSkewed`
 recurs on a 98-file glob, the contention lead is refuted too and the hunt moves to the signing path
 itself.
+
+### ⏭️ The test that would settle H — LAPTOP, operator (>2 min, read-only)
+
+H predicts failure for **any** single query whose execution spans 900 s against S3, *regardless of
+file count*. Refuting it takes one query that runs longer than that and keeps streaming data pages:
+
+```bash
+AWS_DEFAULT_REGION=us-east-2 uv run python -c "
+import duckdb, time
+c = duckdb.connect()
+c.execute(\"install httpfs; load httpfs; set s3_region='us-east-2'\")
+c.execute(\"CREATE SECRET (TYPE S3, PROVIDER credential_chain, REGION 'us-east-2')\")
+g = 's3://baseball-betting-ml-artifacts/baseball/lakehouse/mart_pitch_play_event/**/*.parquet'
+t = time.time()
+n = c.execute(f'''
+    select count(*) from read_parquet('{g}', file_row_number=true)
+    where length(md5(repeat(file_row_number::varchar, 500))) > 0
+''').fetchone()[0]
+print(f'{n:,} rows in {time.time()-t:.1f}s')
+"
+```
+
+**Read it as:** completes past ~900 s ⇒ **H refuted**, and the hunt moves to what else is special
+about the w3pre leg. Fails with `RequestTimeTooSkewed` at ~900 s ⇒ **H confirmed**, and the durable
+cure is a duration cap (or a re-signing fix) on every long S3 scan, not just this glob.
+⚠️ Calibrate first: if it finishes in well under ~16 minutes, raise `repeat(..., 500)` and re-run —
+a run that never crosses 900 s tests nothing (it would be a vacuous pass).
 
 Three of my own conclusions on this incident were retracted after measurement. They are left in the
 record rather than deleted, because each looked well-corroborated at the time and the pattern —
