@@ -34,6 +34,7 @@ import os
 import time
 import urllib.parse
 import urllib.request
+from typing import NamedTuple
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
@@ -79,12 +80,23 @@ _SNOWFLAKE_CREDIT_PRICE: float = 2.0  # $/credit
 
 # ── Vercel (variable, with a fixed seat floor) ────────────────────────────────
 #
-# The Pro seat is charged EVERY month regardless of usage; only the metered spend beyond
-# the included credit is genuinely variable (~$0 at current traffic). So the honest monthly
-# figure is max(metered, seat floor) — ⛔ never report $0 for a month the seat was paid.
-# Before the Pro upgrade the account was on Hobby, which is free, hence $0 for those months.
+# ⭐ READ `EffectiveCost`, NOT `BilledCost` (E9.62b, measured against the live API 2026-08-12).
+# FOCUS defines BilledCost as the amount that hits the INVOICE, so while consumption sits
+# inside the plan's included allowance it is identically ZERO — every one of August's 17,304
+# charge lines billed 0.00. That makes BilledCost a BINARY "have we crossed?" flag and
+# structurally useless for "how close are we?". `EffectiveCost` is the amortized attributed
+# cost and is what the Vercel usage dashboard shows. Measured on 2026-08:
+#     Pro (the seat)   EffectiveCost 18.0645  = $20 × 28/31, prorated from the Aug-4 upgrade
+#     everything else  EffectiveCost  3.8987  = the "$3.90" the usage page displayed
+#     total                          21.9632
+# So the two fields answer two different questions and we keep BOTH: EffectiveCost is the
+# month's cost and the drawdown, BilledCost (ex-seat) is the overage alarm.
 _VERCEL_PRO_START = "2026-08"     # first month the Pro seat was billed
 _VERCEL_SEAT_FLOOR = 20.0         # $/month, charged regardless of usage
+# Service names that are the PLAN/SEAT rather than metered consumption. Anything not listed
+# here counts as usage — deliberately the safe direction: an unrecognised plan name inflates
+# the visible drawdown rather than silently vanishing from it.
+_VERCEL_PLAN_SERVICES = frozenset({"pro", "enterprise", "hobby", "additional team seats"})
 _VERCEL_BILLING_URL = "https://api.vercel.com/v1/billing/charges"
 # Operator-provisioned Vercel account/team token (see infrastructure/aws_resources.md).
 # Absent → the seat floor still applies and a note explains that metered spend is missing.
@@ -134,6 +146,11 @@ class MonthlyFinances(BaseModel):
     # seat floor from the Pro-upgrade month, $0 (free Hobby plan) before it — so "we could
     # not reach the API" is carried by notes[], never by a null that reads as "$0 spent".
     vercel_cost: float
+    # E9.62b — the floor used to hide its own input: "$20 measured" and "$20 because we had
+    # nothing" rendered identically. These make it legible.
+    vercel_floored: bool     # True → vercel_cost is the SEAT FLOOR, not a measurement
+    vercel_usage: float      # allowance DRAWDOWN this month (EffectiveCost ex-seat)
+    vercel_overage: float    # $0.00 until an included allowance is EXCEEDED (BilledCost ex-seat)
     total_cost: float
     betting_pl: float
     subscription_revenue: float
@@ -151,6 +168,10 @@ class FinancesResponse(BaseModel):
     # in the writer.
     fixed_breakdown_by_month: dict[str, dict[str, float]]
     aws_breakdown: dict[str, float]  # window totals per AWS line item (EC2, S3, …, SES, Other AWS)
+    # E9.62b — window totals per Vercel service, ex-seat, by EffectiveCost. This is what
+    # answers "what is actually consuming the allowance" (measured 2026-08: Build CPU
+    # Minutes $3.75 of a $3.90 drawdown — i.e. builds, not traffic).
+    vercel_breakdown: dict[str, float]
     notes: list[str]
 
 
@@ -275,14 +296,23 @@ def _aws_costs_by_month() -> dict[str, dict[str, float]]:
         return {}
 
 
-def _vercel_costs_by_month() -> dict[str, float]:
-    """Metered Vercel $ spend per month from the billing API.
+class VercelMonth(NamedTuple):
+    """One calendar month of Vercel charges, split so each number answers one question."""
 
-    GET /v1/billing/charges returns FOCUS v1.3 records as newline-delimited JSON (one
-    charge per line), each carrying `BilledCost` in USD and a `ChargePeriodStart`. We sum
-    BilledCost per calendar month across every ChargeCategory (Usage, Purchase, Credit,
-    Tax, Adjustment) because the invoiced total is what we actually pay — credits arrive
-    as negative amounts and net themselves out.
+    total: float                  # EffectiveCost, all services → the month's cost
+    seat: float                   # EffectiveCost of the plan/seat lines (prorated by Vercel)
+    usage: float                  # EffectiveCost ex-seat → the allowance DRAWDOWN
+    overage: float                # BilledCost ex-seat → $0 until an allowance is EXCEEDED
+    services: dict[str, float]    # EffectiveCost per service, ex-seat (what is driving usage)
+
+
+def _vercel_costs_by_month() -> dict[str, VercelMonth]:
+    """Vercel charges per month from the billing API.
+
+    GET /v1/billing/charges returns FOCUS v1.3 records as newline-delimited JSON, one
+    charge per line. Each carries `EffectiveCost` (amortized attributed cost — what the
+    usage dashboard shows) and `BilledCost` (what reaches the invoice), both USD, plus a
+    `ChargePeriodStart` and a `ServiceName`.
 
     Returns {} when the token is absent or the call fails; the caller then falls back to
     the seat floor and surfaces a note. This never raises — a billing-API outage must not
@@ -316,7 +346,7 @@ def _vercel_costs_by_month() -> dict[str, float]:
         with urllib.request.urlopen(req, timeout=_VERCEL_TIMEOUT) as resp:
             body = resp.read().decode("utf-8", errors="replace")
 
-        result: dict[str, float] = {}
+        acc: dict[str, dict] = {}
         for line in body.splitlines():
             line = line.strip()
             if not line:
@@ -326,8 +356,34 @@ def _vercel_costs_by_month() -> dict[str, float]:
             if len(period) < 7:
                 continue
             key = period[:7]  # "2026-08-01T00:00:00Z" → "2026-08"
-            result[key] = round(result.get(key, 0.0) + float(record.get("BilledCost") or 0.0), 2)
+            bucket = acc.setdefault(
+                key, {"total": 0.0, "seat": 0.0, "usage": 0.0, "overage": 0.0, "services": {}}
+            )
+            service = str(record.get("ServiceName") or "Unknown")
+            effective = float(record.get("EffectiveCost") or 0.0)
+            billed = float(record.get("BilledCost") or 0.0)
 
+            bucket["total"] += effective
+            if service.strip().lower() in _VERCEL_PLAN_SERVICES:
+                bucket["seat"] += effective
+            else:
+                bucket["usage"] += effective
+                bucket["overage"] += billed
+                bucket["services"][service] = bucket["services"].get(service, 0.0) + effective
+
+        result = {
+            key: VercelMonth(
+                total=round(b["total"], 2),
+                seat=round(b["seat"], 2),
+                usage=round(b["usage"], 2),
+                # The API returns float noise around zero (measured 3.9e-10 on a month with
+                # no overage at all); rounding to cents is what makes "$0.00" mean "nothing
+                # exceeded" instead of a number that merely looks tiny.
+                overage=round(b["overage"], 2),
+                services={s: round(v, 2) for s, v in b["services"].items() if round(v, 2) > 0},
+            )
+            for key, b in acc.items()
+        }
         _vercel_cost_cache = (now + _VERCEL_CACHE_TTL, result)
         return result
     except Exception:
@@ -335,18 +391,25 @@ def _vercel_costs_by_month() -> dict[str, float]:
         return {}
 
 
-def _vercel_cost_for_month(month_key: str, metered: dict[str, float]) -> float:
-    """Monthly Vercel cost: the seat floor from the Pro-upgrade month, plus any overage.
+def _vercel_cost_for_month(month_key: str, metered: dict[str, VercelMonth]) -> tuple[float, bool]:
+    """Monthly Vercel cost, and whether the seat FLOOR had to supply it.
 
-    The $20 seat is charged whether or not the site gets traffic, so a month on Pro can
-    never cost less than that — reporting the API's $0 (or a missing reading) verbatim
+    Returns (cost, floored). The $20 seat is charged whether or not the site gets traffic,
+    so a month on Pro can never cost less than that — reporting a missing reading verbatim
     would under-state the bill. Months before the upgrade were on the free Hobby plan.
+
+    ⭐ The floor is now a SAFETY NET, not the usual answer: `EffectiveCost` already contains
+    the seat (Vercel prorates it), so a healthy reading lands above $20 on its own and
+    `floored` is False. `floored=True` means the reading was short — a partial month, or a
+    reading we could not get — and the caller MUST say so rather than pass off a synthetic
+    $20 as a measurement (the previous cut showed exactly that, indistinguishable).
     """
     # "YYYY-MM" strings are zero-padded, so lexicographic order IS chronological order.
-    amount = metered.get(month_key, 0.0)
-    if month_key >= _VERCEL_PRO_START:
-        amount = max(amount, _VERCEL_SEAT_FLOOR)
-    return round(amount, 2)
+    month = metered.get(month_key)
+    amount = month.total if month is not None else 0.0
+    if month_key >= _VERCEL_PRO_START and amount < _VERCEL_SEAT_FLOOR:
+        return _VERCEL_SEAT_FLOOR, True
+    return round(amount, 2), False
 
 
 def _owner_user_id() -> str | None:
@@ -429,8 +492,20 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
 
     today = datetime.date.today()
     current_month = datetime.date(today.year, today.month, 1)
+    current_key = current_month.strftime("%Y-%m")
+    this_month = vercel_metered.get(current_key)
+    if this_month is not None and this_month.overage > 0:
+        # BilledCost only leaves zero once an included allowance is EXCEEDED, so any
+        # non-zero here is the crossing itself — name the services so it is actionable.
+        worst = sorted(this_month.services.items(), key=lambda kv: -kv[1])[:3]
+        notes.append(
+            f"Vercel usage EXCEEDED the plan allowance this month — ${this_month.overage:.2f} "
+            f"billed above it. Largest consumers: "
+            + ", ".join(f"{s} ${v:.2f}" for s, v in worst)
+        )
     months: list[MonthlyFinances] = []
     aws_breakdown: dict[str, float] = {}  # window totals per line item
+    vercel_breakdown: dict[str, float] = {}  # window totals per Vercel service, ex-seat
     fixed_breakdown_by_month: dict[str, dict[str, float]] = {}
     month_date = _FINANCES_START
     while month_date <= current_month:
@@ -448,7 +523,10 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
             aws = None
             ses = None
 
-        vercel = _vercel_cost_for_month(key, vercel_metered)
+        vercel, vercel_floored = _vercel_cost_for_month(key, vercel_metered)
+        vm = vercel_metered.get(key)
+        for svc, amount in (vm.services if vm else {}).items():
+            vercel_breakdown[svc] = round(vercel_breakdown.get(svc, 0.0) + amount, 2)
         fixed_breakdown_by_month[key] = _fixed_breakdown_for_month(key)
         fixed = _fixed_cost_for_month(key)
 
@@ -466,6 +544,9 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
             aws_cost=aws,
             ses_cost=ses,
             vercel_cost=vercel,
+            vercel_floored=vercel_floored,
+            vercel_usage=vm.usage if vm else 0.0,
+            vercel_overage=vm.overage if vm else 0.0,
             total_cost=total,
             betting_pl=pl,
             subscription_revenue=subs,
@@ -480,7 +561,6 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
 
     # NF-C0: `fixed_breakdown` is the CURRENT month's slice, kept populated so an admin page
     # deployed before this change still renders a sensible panel instead of blanking.
-    current_key = current_month.strftime("%Y-%m")
     return FinancesResponse(
         months=months,
         fixed_breakdown=fixed_breakdown_by_month.get(
@@ -488,5 +568,6 @@ def get_finances(_: str = Depends(get_admin_user)) -> FinancesResponse:
         ),
         fixed_breakdown_by_month=fixed_breakdown_by_month,
         aws_breakdown=aws_breakdown,
+        vercel_breakdown=vercel_breakdown,
         notes=notes,
     )
