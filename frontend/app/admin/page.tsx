@@ -67,6 +67,10 @@ interface MonthlyFinances {
   // only via infrastructure/lambda/deploy.sh, so this page goes live BEFORE the field exists
   // in the response. Undefined must render as "—", never as "$undefined" or a crash.
   vercel_cost?: number
+  // E9.62b — all optional for the same deploy-skew reason as vercel_cost above.
+  vercel_floored?: boolean   // true → vercel_cost is the seat FLOOR, not a measurement
+  vercel_usage?: number      // allowance drawdown (EffectiveCost ex-seat)
+  vercel_overage?: number    // $0 until an included allowance is exceeded
   total_cost: number
   betting_pl: number
   subscription_revenue: number
@@ -80,6 +84,8 @@ interface FinancesData {
   // back to the flat `fixed_breakdown` an older backend still sends.
   fixed_breakdown_by_month?: Record<string, Record<string, number>>
   aws_breakdown: Record<string, number>
+  // E9.62b — window totals per Vercel service, ex-seat. Optional (deploy skew).
+  vercel_breakdown?: Record<string, number>
   notes: string[]
 }
 
@@ -171,6 +177,7 @@ export default function AdminPage() {
   const [refreshState, setRefreshState] = useState<"idle" | "loading" | "done" | "error">("idle")
   const [showFixedBreakdown, setShowFixedBreakdown] = useState(false)
   const [showAwsBreakdown, setShowAwsBreakdown] = useState(false)
+  const [showVercelBreakdown, setShowVercelBreakdown] = useState(false)
   const [showResolved, setShowResolved] = useState(false)
 
   const { data: pipelineStatus, isLoading: statusLoading } = useQuery<PipelineStatus>({
@@ -557,6 +564,13 @@ export default function AdminPage() {
                 Fixed breakdown
                 {showFixedBreakdown ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
               </button>
+              <button
+                onClick={() => setShowVercelBreakdown((v) => !v)}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Vercel usage
+                {showVercelBreakdown ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </button>
             </div>
           </div>
 
@@ -587,6 +601,62 @@ export default function AdminPage() {
               </p>
             </div>
           )}
+
+          {showVercelBreakdown && finances && (() => {
+            // E9.62b — "how close are we to exceeding the plan allowance?"
+            // drawdown = EffectiveCost ex-seat (what Vercel's usage page shows);
+            // overage  = BilledCost ex-seat, which stays $0 until an allowance is CROSSED.
+            const svc = finances.vercel_breakdown ?? {}
+            const latest = [...finances.months].reverse()
+                .find((m) => m.vercel_usage !== undefined || m.vercel_overage !== undefined)
+            if (Object.keys(svc).length === 0 && !latest) return null
+            const drawdown = latest?.vercel_usage ?? 0
+            const overage = latest?.vercel_overage ?? 0
+            return (
+              <div className="mb-5 rounded-lg border border-[#1e1e1e] bg-[#0a0a0a] p-4">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-gray-500">
+                  Vercel Usage — {latest?.month_label ?? "current month"}
+                </p>
+                <div className="mb-3 flex flex-wrap gap-6">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-gray-600">Allowance drawdown</p>
+                    <p className="text-lg font-semibold text-white">${drawdown.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-gray-600">Billed above allowance</p>
+                    <p className={`text-lg font-semibold ${overage > 0 ? "text-[#ef4444]" : "text-[#10b981]"}`}>
+                      ${overage.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+                <p className="mb-3 text-[10px] text-gray-600">
+                  {overage > 0
+                    ? "Usage has passed an included allowance — the amount above is on the invoice."
+                    : "$0.00 billed above the allowance means nothing has been exceeded yet. The drawdown is what is being consumed against it."}
+                </p>
+                {Object.keys(svc).length > 0 && (
+                  <ul className="space-y-1.5">
+                    {Object.entries(svc).sort((a, b) => b[1] - a[1]).map(([name, cost]) => (
+                      <li key={name} className="flex justify-between text-sm">
+                        <span className="text-gray-400">{name}</span>
+                        <span className="text-white">${cost.toFixed(2)}</span>
+                      </li>
+                    ))}
+                    <li className="flex justify-between border-t border-[#262626] pt-2 text-sm font-medium">
+                      <span className="text-gray-300">Total consumed (window, ex-seat)</span>
+                      <span className="text-white">
+                        ${Object.values(svc).reduce((a, b) => a + b, 0).toFixed(2)}
+                      </span>
+                    </li>
+                  </ul>
+                )}
+                <p className="mt-2 text-[10px] text-gray-600">
+                  Consumption is measured as Vercel&rsquo;s <code>EffectiveCost</code> excluding the plan seat, so
+                  it matches the usage dashboard. The seat itself is billed whether or not the site gets traffic.
+                </p>
+              </div>
+            )
+          })()}
 
           {showFixedBreakdown && finances && (() => {
             // E9.62 — fixed costs are per-month (a plan upgrade can cover only some months).
@@ -702,7 +772,16 @@ export default function AdminPage() {
                         <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.ses_cost)}</td>
                         {/* `?? null` — an un-deployed backend omits the field entirely, and fmt()
                             only special-cases null, so raw undefined would print "$undefined". */}
-                        <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">{fmt(m.vercel_cost ?? null)}</td>
+                        <td className="py-3 pr-4 text-xs text-gray-400 whitespace-nowrap">
+                          {fmt(m.vercel_cost ?? null)}
+                          {/* E9.62b — a floored value is the $20 seat standing in for a reading we
+                              could not take. Marking it stops a synthetic number reading as measured. */}
+                          {m.vercel_floored && (
+                            <span className="ml-1 text-[#f59e0b]" title="Seat floor — not a measured amount">
+                              †
+                            </span>
+                          )}
+                        </td>
                         <td className="py-3 pr-4 text-xs font-medium text-white whitespace-nowrap">${m.total_cost.toFixed(2)}</td>
                         <td className="py-3 pr-4 text-xs whitespace-nowrap">
                           <PLCell value={m.betting_pl} />
@@ -748,6 +827,12 @@ export default function AdminPage() {
                   </tbody>
                 </table>
               </div>
+              {finances.months.some((m) => m.vercel_floored) && (
+                <p className="mt-4 text-[11px] text-gray-600">
+                  <span className="text-[#f59e0b]">†</span> Vercel seat floor — the $20/mo Pro seat standing in
+                  because the billing API reported less than the seat for that month. Not a measured amount.
+                </p>
+              )}
               {finances.notes.length > 0 && (
                 <ul className="mt-4 space-y-1">
                   {finances.notes.map((note, i) => (
