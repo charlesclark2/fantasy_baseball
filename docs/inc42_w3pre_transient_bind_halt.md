@@ -139,12 +139,57 @@ The odds sources are append-only, so they have no delete race despite the much w
 
 ---
 
+## ⭐ ROOT CAUSE OF THE MISDIAGNOSIS — the page structurally could not carry the error (FIXED)
+
+Confirmed on the box 2026-08-12: `--w3pre-only --dry-run` binds all four models there too, and
+**every recent `intraday_schedule_job` run reports SUCCESS** — the op catches each leg
+(ALERT-loud-but-continue), so the job never fails and the failing run cannot be found by status.
+
+The page itself is why this stalled. `intraday_ops` recorded each failed leg as `str(exc)[:300]`,
+but `_run_script` raises
+
+```python
+Exception(f"{os.path.basename(script)} failed (exit {result.returncode})\n{result.stderr}")
+```
+
+— the exception carries the child's **entire traceback**, and a Python traceback puts its payload
+(the exception type and message) at the **TAIL**. A head slice keeps
+`Traceback (most recent call last):` plus the first frames and discards the diagnosis.
+
+**Measured:**
+
+| quantity | value |
+|---|---|
+| `_string_timestamp_wrap` boilerplate preamble | **420 chars** |
+| index of its `Underlying DuckDB binder error:` marker | **388** |
+| chars of the real DuckDB error surviving `[:300]` | **0** |
+
+The 300-char page ended mid-sentence inside the *generic* hint — "Most common cause: a date
+function or interval arithmetic applied to a column" — so the alert's own hedged boilerplate read
+as the diagnosis, which is exactly how this incident came to be framed as an INC-23 use-site cast.
+That is the **INC-40 lesson verbatim** ("an alert's own SUGGESTED-CAUSE banner is diagnostic
+anchoring"), and it means a transient S3 404, a throttle and a genuine binder error all produced a
+**byte-identical page** — the same non-discriminating-output class as the `curl -f`/301
+healthcheck. A truncation that yields the same text for every cause is not a short diagnosis; it is
+no diagnosis.
+
+**FIX (shipped in this PR):** `betting_ml/monitoring/alert_text.exc_digest` keeps the head (script
++ exit code) *and* the tail (the exception), naming how much was elided. Both call sites in
+`intraday_ops.py` use it; the pure logic lives in `betting_ml/` per the E11.23 fast-gate rule.
+Guard: `betting_ml/tests/test_inc42_alert_carries_the_real_error.py` — the load-bearing case is
+`test_two_different_causes_do_not_page_identically` (a length assertion alone would pass on a
+truncation that is short *and* useless). RED-proven both ways: reverting `intraday_ops.py` to
+`str(exc)[:300]` fails the source guard; reverting `exc_digest` to a head slice fails 3 of 6.
+
 ## What is still open (the one thing that needs the box)
 
-The DuckDB error text. `_string_timestamp_wrap` embeds it in the raised `RuntimeError`
-(`… Underlying DuckDB binder error: {exc}`), so it exists — the alert's traceback was truncated
-before it. `ssm:*` is denied for `baseball-access-user`, so this is an **operator** step. See the
-handoff commands.
+The DuckDB error text from the **2026-08-11** failure. It is in the Dagster **Postgres event log**
+(the op logs the full `exc` via `context.log.warning`), which survives container recreation, unlike
+stdout. ⚠️ It cannot be found by run status — the job reports SUCCESS; grep `intraday_schedule_job`
+runs from 08-11 for `FAILED — continuing to the next leg`. `ssm:*` is denied for
+`baseball-access-user`, so this is an **operator** step.
+
+Once the fix above deploys, the next occurrence pages with the real error and needs no box dig.
 
 ---
 
