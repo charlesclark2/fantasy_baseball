@@ -337,6 +337,12 @@ was untouched (47 captures still present). `catcher_framing_raw`'s only reader
 holds 208 rows, exactly 2× its weekly neighbours — but that was **luck, not design**: it is not on
 the allowlist and its readers had not been vetted at the time.
 
+**Deployed and confirmed on the box (2026-08-12 23:38 UTC).** `main` carries the script, the cron
+line and #747's correction; `dev` and `main` are level. Both a dry-run **and a real `--apply`** on
+the box report `partitions_eligible=95, partitions_done=0` — i.e. **idempotency verified in
+production**: a second `--apply` over 95 already-compacted partitions is a genuine no-op, writing
+and deleting nothing. That is the property the daily cron depends on.
+
 **Fix:** an autouse fixture in the test module replaces `make_s3_client` with a raising stub, so no
 test in it can reach AWS. A removed guard still fails the test — `main()` hits the stub — which is
 the RED the proof wants, without a network call. **The lesson generalises: a test that drives a
@@ -364,15 +370,30 @@ for rec in i.get_run_records(limit=400):
 "
 ```
 
-**Still open, both cheap.** Rule out a container-vs-host clock difference — the one thing the host
-chrony reading structurally cannot cover:
+**Done — container vs host clock (2026-08-12 23:38 UTC): REFUTED.** The one thing the host chrony
+reading structurally could not cover. Both report the *same second*:
 
-```bash
-date -u; docker compose -f services/dagster/aws/docker-compose.yml exec -T dagster-codeloc date -u
+```
+$ date -u;  docker compose … exec -T dagster-codeloc date -u
+Wed Aug 12 23:38:17 UTC 2026
+Wed Aug 12 23:38:17 UTC 2026
 ```
 
-And check CloudWatch CPU on the box for 2026-08-11 23:00 and 2026-08-12 01:00 UTC. The contention
-hypothesis predicts a spike at both; a flat CPU trace would weaken it substantially.
+⇒ the clock family is now **exhausted**: host offset 2.9 µs, container == host, and #745 added a
+5-minute skew probe against S3's own `Date` header. Nothing about a wrong clock is left to test.
+
+**Still open — CloudWatch CPU** on the box for 2026-08-11 23:00 and 2026-08-12 01:00 UTC. The
+contention hypothesis predicts a spike at both; a flat trace would weaken it substantially.
+⚠️ `baseball-access-user` is **denied `cloudwatch:GetMetricStatistics`** (the same class as its SSM
+denial), so this is an operator step — run it with operator credentials or from the console:
+
+```bash
+aws cloudwatch get-metric-statistics --region us-east-2 --namespace AWS/EC2 \
+  --metric-name CPUUtilization --dimensions Name=InstanceId,Value=i-07594af1679f81c38 \
+  --start-time 2026-08-11T22:30:00Z --end-time 2026-08-12T02:00:00Z \
+  --period 300 --statistics Average,Maximum \
+  --query 'sort_by(Datapoints,&Timestamp)[].[Timestamp,Average,Maximum]' --output text
+```
 
 ## Status of the record
 
@@ -384,6 +405,7 @@ hypothesis predicts a spike at both; a flat CPU trace would weaken it substantia
 | The box clock drifted | **refuted** — chrony RMS offset 2.9 µs |
 | The failures predate the current clock state | **refuted** — 2026-08-11 23:00 / 08-12 01:00 UTC |
 | DuckDB signs at secret-creation time | **refuted** — a 16-h-old secret signed an accepted request |
+| The container's clock differs from the host's | **refuted** — both `date -u` agree to the second (2026-08-12 23:38:17 UTC) ⇒ the clock family is exhausted |
 | A long bind under `:00` contention, on a glob growing 48 files/day | **open — the standing lead** |
 | …its exposure | **REMOVED 2026-08-12** — 1,859 files → 98, bind 21.8 s → 1.57 s (compaction shipped) |
 
