@@ -199,6 +199,10 @@ class Recommendation:
     bye_conflict: int
     vor_p10: float | None
     vor_p90: float | None
+    #: The reserve constraint binds and this player fills an open starter slot — every remaining pick
+    #: is spoken for, so passing on all of these strands a mandatory slot empty. False when there is
+    #: slack. ⚠️ LOCK-STEP: mirrored as `mustFill` in `frontend/lib/draft-optimizer.ts`.
+    must_fill: bool
     rationale: str
 
 
@@ -255,6 +259,29 @@ def recommend(
             continue
         available.append(row)
     open_slots = open_starter_slots(my_positions, req, normalize=normalize)
+
+    # ── THE RESERVE CONSTRAINT: a mandatory starter slot may never be left unfilled ───────────────
+    #
+    # An empty starter slot scores ZERO, so once my remaining picks are all needed to fill my open
+    # starter slots, bench depth is not a trade-off any more — it is strictly dominated, and every
+    # remaining pick MUST fill a slot. Without it the optimizer walks a user into an illegal roster:
+    # measured on the live 2026 full_ppr/12 board, with every above-replacement RB gone and both RB
+    # slots open, the best available RB ranked #86 of 834 and a surplus-penalized BACKUP QB (vor
+    # 25.2, kept 10% by SURPLUS_CAP) out-scored it; the draft ended 7/9 starters filled.
+    #
+    # ⭐ EXACT, NOT A HEURISTIC — binds iff taking a non-filler PROVABLY strands a slot, so it cannot
+    # distort normal drafting: inert with slack, total without. Deliberately NO safety margin — "grab
+    # a filler a round early" is a preference; "do not end the draft with an empty starter slot" is a
+    # correctness property, and only that is enforced here.
+    #
+    # Everything is DERIVED (roster size from the config, picks made from `my_player_ids`), so the
+    # signature is unchanged and no caller has to be taught to pass draft state.
+    # ⚠️ It RANKS, never FILTERS — if no filler exists at all the caller still gets its best options.
+    # ⚠️ LOCK-STEP: mirrored in `frontend/lib/draft-optimizer.ts` (the shipping engine).
+    total_slots = sum(s.count for s in config.roster)
+    picks_remaining = total_slots - len(list(my_player_ids or []))
+    open_starter_count = sum(open_slots.dedicated.values()) + len(open_slots.flex)
+    must_fill_now = open_starter_count > 0 and picks_remaining <= open_starter_count
 
     # per-position available lists (points-descending) → tiers + next-available lookup
     pos_players: dict[str, list[dict]] = {}
@@ -336,6 +363,8 @@ def recommend(
         bye_conflict = my_byes.get((pos, int(bye)), 0) if bye is not None else 0
         bye_pen = BYE_PEN_FRAC * min(bye_conflict, BYE_CLUSTER_CAP) * vor if (bye_conflict and vor > 0) else 0.0
         score = vor + need_bonus - surplus_pen - bye_pen
+        # True only while the reserve constraint binds AND this player fills an open starter slot.
+        must_fill = must_fill_now and level > 0
 
         tier = pos_tier[pos].get(pid, 1)
         rows_pos = pos_players[pos]
@@ -363,16 +392,26 @@ def recommend(
             bye_conflict=int(bye_conflict),
             vor_p10=(round(_fnum(row.get("vor_p10")), 1) if row.get("vor_p10") is not None else None),
             vor_p90=(round(_fnum(row.get("vor_p90")), 1) if row.get("vor_p90") is not None else None),
+            must_fill=must_fill,
             rationale=_rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen,
-                                 bye, bye_conflict),
+                                 bye, bye_conflict, must_fill, picks_remaining, open_starter_count),
         ))
 
-    recs.sort(key=lambda r: r.score, reverse=True)
+    # A required filler outranks every non-filler; within each group, score decides. `must_fill` is
+    # False for ALL candidates unless the reserve constraint binds ⇒ with slack this is the old sort.
+    recs.sort(key=lambda r: (r.must_fill, r.score), reverse=True)
     return recs[:top_n]
 
 
-def _rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen, bye=None, bye_conflict=0) -> str:
+def _rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen, bye=None, bye_conflict=0,
+               must_fill=False, picks_remaining=0, open_starter_count=0) -> str:
     parts: list[str] = []
+    # Leads the sentence when it applies: this is no longer a value judgement the user can weigh, so
+    # saying WHY the tool stopped offering better-scoring bench players is the honest thing to show.
+    if must_fill:
+        picks = f"{picks_remaining} pick{'' if picks_remaining == 1 else 's'} left"
+        slots = f"{open_starter_count} starter slot{'' if open_starter_count == 1 else 's'} still open"
+        parts.append(f"MUST fill a starter — {picks}, {slots}")
     if level == 2:
         parts.append(f"fills your open {pos} starter")
     elif level == 1:

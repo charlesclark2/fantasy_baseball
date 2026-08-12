@@ -209,12 +209,17 @@ def test_rationale_is_populated():
 # above replacement, then a ~29-point cliff into a long tail far below it.
 
 
-def _kicker_pool() -> list[dict]:
+def _kicker_pool(pos: str = "K") -> list[dict]:
     """A kicker pool with the live board's defining feature: a cliff into a sub-replacement tail.
 
     Points are chosen so `vor = league_points - replacement_points` reproduces the measured shape —
     K1..K5 barely above replacement (+8.1 … +3.9), then a 29-point gap down to a tail at -10.8 and
     below. The player perched on the near side of that cliff is the one the uncapped bonus promoted.
+
+    `pos` exists so the same measured shape can stand in for D/ST, whose live pool has the same
+    character (a few startable units, then a long tail). `_board` carries NO K/DST rows at all, so a
+    test that needs those slots to be FILLABLE must add them — otherwise "the slot is still open" is
+    a property of the fixture, not of the engine.
     """
     repl = 129.5
     pts = [137.7, 136.1, 135.5, 134.7, 133.4]          # startable, just above replacement
@@ -222,9 +227,9 @@ def _kicker_pool() -> list[dict]:
     pts += [89.7, 89.0, 88.2, 87.1, 86.6, 85.9]         # the deep sub-replacement tail
     return [
         {
-            "player_id": f"K-{i:03d}",
-            "player_name": f"K Player {i}",
-            "position": "K",
+            "player_id": f"{pos}-{i:03d}",
+            "player_name": f"{pos} Player {i}",
+            "position": pos,
             "team_id": f"T{i:02d}",
             "is_rookie": False,
             "league_points": p,
@@ -235,6 +240,11 @@ def _kicker_pool() -> list[dict]:
         }
         for i, p in enumerate(pts)
     ]
+
+
+def _full_board(cfg) -> list[dict]:
+    """The skill board plus K and D/ST — every starter slot in `cfg` is actually fillable."""
+    return _board(cfg) + _kicker_pool("K") + _kicker_pool("DST")
 
 
 def test_scarcity_bonus_never_promotes_a_below_replacement_player_over_a_better_one():
@@ -307,6 +317,110 @@ def test_a_thin_position_still_gets_filled_when_everything_left_is_below_replace
         "the best available kicker earned no scarcity bonus despite an open K starter slot — "
         "a thin position would never be filled"
     )
+
+
+# ── the reserve constraint: a mandatory starter slot may never be left unfilled ───────────────────
+#
+# ⛔ ANCHORED IN ITS OWN CLAUSE — these fail only for the reserve property, never for the scarcity
+# ordering above (the E9.60 coupling trap). Operator call 2026-08-12: leaving a mandatory starter
+# slot empty is not a trade-off the tool may offer, so this is a correctness bar, not a preference.
+
+
+def _roster_size(cfg) -> int:
+    return sum(s.count for s in cfg.roster)
+
+
+def _num(v, default: float = 0.0) -> float:
+    """`vor` off a board row as a plain float (rows carry numpy scalars / None)."""
+    return default if v is None else float(v)
+
+
+def test_the_reserve_constraint_is_inert_while_there_is_slack():
+    """With picks to spare it must change NOTHING — every `must_fill` False, pure-score order kept.
+
+    This is the half that keeps the constraint honest: a rule that quietly re-ranked normal drafting
+    would be a preference smuggled in as a correctness fix. Written FIRST for that reason.
+    """
+    cfg = presets.full_ppr()
+    board = _board(cfg)
+    recs = draft.recommend(board, config=cfg, my_player_ids=[], normalize=NORM, top_n=40)
+    assert all(not r.must_fill for r in recs), "the constraint bound on an EMPTY roster (maximum slack)"
+    assert [r.score for r in recs] == sorted((r.score for r in recs), reverse=True)
+
+
+def test_a_mandatory_starter_slot_is_never_left_unfilled():
+    """Drive a full draft to the last pick and assert every starter slot ends up filled.
+
+    The live failure this pins: with every above-replacement RB gone, a surplus-penalized BACKUP QB
+    out-scored the best remaining RB, so the optimizer spent the closing picks on bench depth and
+    finished 7/9. Here the whole roster is drafted by taking the engine's own top pick every time —
+    if it ever prefers depth while a slot is stranded, the final assert fails.
+    """
+    cfg = presets.full_ppr()
+    board = _full_board(cfg)
+    by_id = {r["player_id"]: r for r in board}
+    req = draft.RosterRequirements.from_config(cfg)
+    total = _roster_size(cfg)
+
+    # Everyone above replacement at RB is taken by rivals — the exact live state.
+    drafted = [r["player_id"] for r in board if NORM(r["position"]) == "RB" and _num(r.get("vor")) > 0]
+    mine: list[str] = []
+    for _ in range(total):
+        recs = draft.recommend(
+            board, config=cfg, drafted_ids=drafted, my_player_ids=mine, normalize=NORM, top_n=1
+        )
+        if not recs:
+            break
+        drafted.append(recs[0].player_id)
+        mine.append(recs[0].player_id)
+
+    open_at_end = draft.open_starter_slots(
+        [NORM(by_id[p]["position"]) for p in mine], req, normalize=NORM
+    )
+    stranded = dict(open_at_end.dedicated), len(open_at_end.flex)
+    assert not open_at_end.dedicated and not open_at_end.flex, (
+        f"the draft ended with starter slots unfilled: dedicated={stranded[0]}, flex={stranded[1]}"
+    )
+
+
+def test_when_the_reserve_binds_every_filler_outranks_every_non_filler():
+    """The mechanism, stated directly and separately from the outcome above.
+
+    The end-to-end test could pass by luck (a filler happening to score highest anyway); this asserts
+    the ORDERING the constraint imposes, so it fails even when the outcome is accidentally fine.
+    """
+    cfg = presets.full_ppr()
+    board = _full_board(cfg)
+    req = draft.RosterRequirements.from_config(cfg)
+    total = _roster_size(cfg)
+
+    # A roster one pick from full with exactly one starter slot (TE) still open: every TE above
+    # replacement is gone, so the filler is a weak one and bench depth would otherwise out-score it.
+    by_pos: dict[str, list[dict]] = {}
+    for r in board:
+        by_pos.setdefault(NORM(r["position"]), []).append(r)
+    for rows in by_pos.values():
+        rows.sort(key=lambda r: -_num(r.get("vor")))
+
+    mine = [by_pos["QB"][0]["player_id"]]
+    mine += [r["player_id"] for r in by_pos["RB"][:2]]
+    mine += [r["player_id"] for r in by_pos["WR"][:3]]          # 2 WR starters + the FLEX
+    mine += [r["player_id"] for r in by_pos["QB"][1:total - len(mine) - 1 + 1]]  # bench out to full-1
+    mine = mine[: total - 1]
+    drafted = list(mine) + [r["player_id"] for r in by_pos["TE"] if _num(r.get("vor")) > 0]
+
+    recs = draft.recommend(
+        board, config=cfg, drafted_ids=drafted, my_player_ids=mine, normalize=NORM, top_n=200
+    )
+    fillers = [r for r in recs if r.must_fill]
+    others = [r for r in recs if not r.must_fill]
+    assert fillers, "the reserve constraint did not bind with 1 pick left and a starter slot open"
+    assert others, "fixture must also offer non-fillers, or the ordering claim is vacuous"
+    assert max(recs.index(f) for f in fillers) < min(recs.index(o) for o in others), (
+        "a non-filler outranked a required filler while the reserve constraint was binding"
+    )
+    # …and the recommendation must SAY why it stopped offering the better-scoring bench players.
+    assert "MUST fill a starter" in recs[0].rationale
 
 
 # ── snake arithmetic ──────────────────────────────────────────────────────────────────────────────
