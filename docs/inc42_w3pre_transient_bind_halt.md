@@ -281,8 +281,68 @@ Cheap complementary mitigation: **de-conflict the schedule** — move
 `backfill_multisport_props_to_s3.py --mode live` off `:00` (e.g. `20 13-23,0-4`), so the heaviest
 in-container job stops colliding with the intraday w3pre bind.
 
-⚠️ Both are proposals, not shipped. Neither should be presented as "the fix" until the mechanism is
-confirmed — but the compaction is worth doing on its own merits either way.
+⚠️ Neither should be presented as "the fix" until the mechanism is confirmed — but the compaction
+is worth doing on its own merits either way.
+
+### ✅ SHIPPED (2026-08-12) — compaction, and what it measured
+
+`scripts/compact_lakehouse_raw.py` + a daily `40 8 * * *` UTC line in `capture.crontab`.
+
+| | before | after |
+|---|---|---|
+| files in the glob | **1,859** | **98** |
+| `describe select * from read_parquet(**/*.parquet, union_by_name=true)` | **21.8 s** | **1.57 s** |
+| rows | — | **preserved** (see below) |
+
+⛔ **Row-preserving, NOT retention.** Nothing is deleted. The odds snapshot *trajectory* is the
+signal (`mart_odds_line_movement`, `mart_bookmaker_disagreement`), so dropping old snapshots would
+destroy data the program uses. Compaction only collapses many files into one.
+
+**Row preservation, verified two ways.** (1) The script re-reads each compacted object *from S3* and
+checks row count, column set and per-column non-null counts *before* deleting a single original — a
+verification failure deletes the new object and raises, leaving the partition as found. (2)
+Independently afterwards: partitions `dt <= 2026-07-27` now hold **263,336** rows against the
+**263,060** `parity_check_w3pre` recorded on 2026-07-27 — *above*, not below, by the captures that
+landed later that day. The live partition kept all 47 of its captures, and the real
+`stg_oddsapi_odds` flatten reads **6,681,590** rows with a fresh `max(ingestion_ts)`.
+
+**Why the write order is promote-then-delete, and why that was measured rather than reasoned.**
+Mutating a glob-backed store beside live readers admits two orders: promote-then-delete opens a
+window where rows are visible **twice**; delete-then-promote opens one where they are visible
+**zero** times. Which is safe is a property of the *readers*, so all three were read:
+`stg_oddsapi_odds` qualifies `row_number()=1` per
+`(load_id, event_id, bookmaker_key, market_key, outcome_name)`; `mart_bookmaker_disagreement`
+group-bys + qualifies (and filters its historical path to commence years 2021–2025, excluding every
+partition in scope); the freshness sensor reads `MAX(ingestion_ts)` / `ORDER BY … LIMIT 1`. All
+three are duplicate-idempotent and none is missing-row-idempotent ⇒ the dup window is a no-op and
+the empty window would silently drop a day of odds. That argument is **per-source**, so
+`COMPACTABLE_SOURCES` is an allowlist and an unvetted source is refused rather than compacted by
+analogy. `scripts/tests/test_compact_lakehouse_raw.py` pins the claim against the real reader files
+(23 tests; 9 deliberate source breaks each verified to go RED).
+
+### ⚠️ A self-inflicted production mutation while building this (2026-08-12)
+
+The RED-proof harness for those guards **executed two real `--apply` runs against production S3**.
+Two tests drive `main(..., "--apply")` to prove a *refusal* (an unvetted source; `--min-age-days 0`),
+relying on `main()` returning before it builds an S3 client. That holds for the shipped source — but
+a RED-proof deletes exactly those refusals, so with the guard removed each test ran a real
+compaction: `mlb_odds_raw` at `--min-age-days 0` (including the live partition) and one
+`catcher_framing_raw` partition.
+
+**No data was lost** — `compact_partition` was unmutated, so every partition went through the
+verified promote-then-delete, and the row checks above are the confirmation. The live-partition race
+was harmless because the script deletes only the keys it read, so the capture that landed mid-run
+was untouched (47 captures still present). `catcher_framing_raw`'s only reader
+(`mart_catcher_framing`) also dedups (`row_number() … where rn = 1`) and its compacted partition
+holds 208 rows, exactly 2× its weekly neighbours — but that was **luck, not design**: it is not on
+the allowlist and its readers had not been vetted at the time.
+
+**Fix:** an autouse fixture in the test module replaces `make_s3_client` with a raising stub, so no
+test in it can reach AWS. A removed guard still fails the test — `main()` hits the stub — which is
+the RED the proof wants, without a network call. **The lesson generalises: a test that drives a
+destructive CLI to prove a refusal is one deleted `if` away from performing the action, and a
+RED-proof is precisely the thing that deletes it. Stub the destructive dependency at the module
+boundary, not at the entry point being tested.**
 
 ## Diagnostics
 
@@ -325,6 +385,11 @@ hypothesis predicts a spike at both; a flat CPU trace would weaken it substantia
 | The failures predate the current clock state | **refuted** — 2026-08-11 23:00 / 08-12 01:00 UTC |
 | DuckDB signs at secret-creation time | **refuted** — a 16-h-old secret signed an accepted request |
 | A long bind under `:00` contention, on a glob growing 48 files/day | **open — the standing lead** |
+| …its exposure | **REMOVED 2026-08-12** — 1,859 files → 98, bind 21.8 s → 1.57 s (compaction shipped) |
+
+⚠️ Removing the exposure is not the same as confirming the mechanism. If `RequestTimeTooSkewed`
+recurs on a 98-file glob, the contention lead is refuted too and the hunt moves to the signing path
+itself.
 
 Three of my own conclusions on this incident were retracted after measurement. They are left in the
 record rather than deleted, because each looked well-corroborated at the time and the pattern —
