@@ -3,10 +3,10 @@
 **Date:** 2026-08-11 (alert), diagnosed 2026-08-12 02:55–03:30 UTC
 **Severity:** P3 — contained. **No prediction loss.** Served game-state (`stg_statsapi_games`) went
 stale for at most one intraday tick.
-**Status:** root cause **CONFIRMED 2026-08-12** — `RequestTimeTooSkewed`: the box's clock drifted
-past S3's SigV4 ~15-minute tolerance, so every DuckDB-over-S3 read 403'd while boto3 (which
-auto-corrects for skew) kept working. System currently healthy. Remaining action is operator-side
-NTP + a detection gap.
+**Status:** S3 rejected the request with `RequestTimeTooSkewed`, so the **signature DuckDB sent
+carried a stale timestamp** — but the **host clock is EXONERATED** (chrony RMS offset 2.9 µs; see
+§ *The host clock is not the cause*). A skewed signature and a skewed clock are not the same thing.
+**Root cause is NOT established**; the mechanism is under investigation. System currently healthy.
 
 ---
 
@@ -18,9 +18,10 @@ it refuses to COPY unwrapped when it cannot bind the plan.
 
 The failure was **transient**. It is **not** a SQL defect at a use-site, and it is **not** caused by
 the E11.24 view flips. There is **nothing to fix by casting**. The bind failed because the S3 GET it
-issues was **rejected for clock skew** (`RequestTimeTooSkewed`, HTTP 403) — an infrastructure fault
-on the box, surfacing through the INC-23 guard because that guard is simply the first thing in the
-build that touches S3.
+issues was **rejected for a stale signature timestamp** (`RequestTimeTooSkewed`, HTTP 403). It
+surfaces through the INC-23 guard only because that guard is the first thing in the build to touch
+S3. ⚠️ **The host clock has since been measured and is exonerated** — so the remaining question is
+why DuckDB signed with an out-of-bounds timestamp on a correct clock.
 
 ⚠️ **The premise in the alert overstates the blast radius.** "The lineup monitor sees no newly
 confirmed lineups → post_lineup stops for the rest of the slate (3 games unscored, 6.5h, no page)"
@@ -94,7 +95,7 @@ Full w3pre pass completed in one sweep, and the sibling `--w7b-only` leg immedia
 
 ---
 
-## ✅ ROOT CAUSE — CONFIRMED 2026-08-12: the box's clock drifted past S3's SigV4 tolerance
+## The error S3 actually returned (confirmed 2026-08-12)
 
 Retrieved from the Dagster Postgres event log (runs `bc60b651…` and `28432dfb…`, both of which the
 run list reports as **SUCCESS**):
@@ -108,10 +109,12 @@ RequestTimeTooSkewed: The difference between the request time and the current ti
 ```
 
 **AWS SigV4 signatures carry a timestamp, and S3 rejects any request signed more than ~15 minutes
-from its own clock with `RequestTimeTooSkewed` (HTTP 403).** The host clock on the Dagster box
-drifted past that bound. The objects named in the errors (`dt=2026-08-05`, `dt=2026-08-01`) are
-irrelevant — they are simply whichever file the bind happened to open first. Nothing is wrong with
-the data, the SQL, or the partitions.
+from its own clock with `RequestTimeTooSkewed` (HTTP 403).** The objects named in the errors
+(`dt=2026-08-05`, `dt=2026-08-01`) are irrelevant — they are simply whichever file the bind happened
+to open first. Nothing is wrong with the data, the SQL, or the partitions.
+
+⚠️ **This says the SIGNATURE's timestamp was out of bounds. It does NOT, on its own, say the host
+clock was wrong** — and the clock evidence below says it was not.
 
 ### ⚠️ The hypothesis in the previous revision of this doc is REFUTED
 
@@ -135,8 +138,10 @@ This is the discriminating detail, and it explains every observation:
 
 So the writers stayed perfectly healthy while the readers died — which is exactly the pattern in
 the S3 listings (an unbroken `mlb_odds_raw` part file at every 30-minute mark on 08-11) and is why
-this looked like a reader-side or data-side defect. It self-healed when the clock came back inside
-tolerance. ⚠️ **delta-rs / `object_store` (the Rust S3 client used by `scripts/utils/delta_lake.py`)
+this looked like a reader-side or data-side defect. ⚠️ This asymmetry holds for a stale *signature*
+just as it does for a wrong *clock*: botocore re-signs per request and self-corrects, DuckDB does
+not. It therefore does **not** discriminate between the two, and reading it as proof of clock drift
+is what produced the wrong conclusion in the previous revision. ⚠️ **delta-rs / `object_store` (the Rust S3 client used by `scripts/utils/delta_lake.py`)
 is in the same category as DuckDB, not boto3** — a future skew episode should be expected to break
 Delta reads/writes too.
 
@@ -177,121 +182,71 @@ absolute value, and deleting the stanza. ⚠️ Note on the harness: the stanza-
 *looked* green because the runner counted only `FAILED` and pytest reports a failing fixture as
 `ERROR` — the guard was fine, the red-proof's reporting was not.
 
-⏭️ **Unverified on the box:** GNU `date -u -d "Wed, 12 Aug 2026 06:04:37 GMT"` (docker was
-unavailable locally to prove it). The format is RFC 1123 and coreutils parses it, but confirm with
-the one-liner in the handoff. It fails safe either way — an unparseable header pages UNEVALUABLE.
+✅ **Verified on the box 2026-08-12:** GNU `date -u -d` parsed the live S3 header and returned
+`1786515532`. The one open item on the probe is closed.
 
-## Remediation runbook (operator, on the box)
+⭐ **Its value here was the opposite of what it was built for, and worth recording.** The probe was
+added to catch clock drift; on this incident it reads **GREEN**, and that is precisely what redirects
+the investigation — it separates "the clock is wrong" from "the signature is stale" in five minutes
+rather than a day. A monitor that cheaply **exonerates** a suspect is doing real work; the first
+revision of this doc concluded "the clock drifted" for want of exactly that reading.
+
+## The host clock is NOT the cause (measured on the box, 2026-08-12 06:18 UTC)
+
+```
+System time     : 0.000000891 seconds slow of NTP time
+RMS offset      : 0.000002901 seconds          <-- 2.9 microseconds
+Reference ID    : A9FEA97B (169.254.169.123)   <-- Amazon Time Sync, reach 377
+chronyd.service : active (running) since 2026-06-30    <-- never restarted
+host `date -u` 06:18:44   vs   S3 `Date:` 06:18:51     <-- 7 s, i.e. command sequencing
+```
+
+⭐ **The decisive figure is `RMS offset = 2.9 µs`, a LONG-TERM average.** A ≥900 s excursion anywhere
+in the recent past would leave that number enormous, and because chronyd has not restarted since
+30 June, its statistics were never reset. Natural drift cannot do it either: `Frequency 24.554 ppm`
+is ~2.1 s/day, so reaching 900 s of skew unaided would take well over a year.
+
+⇒ **The host clock was accurate. S3 rejected a signature whose timestamp was stale, which is a
+different fault.** The `chronyc makestep` in the original runbook was a no-op and is not the fix.
+
+## Root cause: OPEN — what remains, and how to settle it
+
+1. **DuckDB signs with a stale timestamp on a long-lived connection/secret.** If the signing time is
+   captured at secret creation rather than per request, any S3 GET issued >15 min into a long build
+   fails on a perfectly correct clock. This fits every observation, including why a short
+   `--w3pre-only` run passes while the same code inside a 40-minute job does not.
+   **Under test** (laptop, DuckDB 1.5.3 — the same version `uv.lock` pins for the box): one
+   connection + secret, probed at +0/+8/+16/+24/+35 min. Laptop credentials are long-lived IAM user
+   keys, so credential expiry is excluded by construction and this isolates the timestamp question.
+2. **Instance-role credential refresh.** The box authenticates via the EC2 instance role (IMDS
+   temporary credentials); DuckDB's `credential_chain` resolves them once at secret creation. This
+   usually surfaces as `ExpiredToken`, not `RequestTimeTooSkewed`, so it ranks below (1) — but the
+   laptop cannot test it, since the laptop has no instance role.
+3. **The failures are older than the current clock state.** Not yet excluded, because **the failing
+   runs' timestamps were never retrieved** — the run IDs alone do not date them. chronyd logged
+   `Can't synchronise: no majority` on **2026-08-01 12:13**, so a genuine (brief) clock excursion in
+   an older window remains possible. This is the cheapest thing to settle and should be done first.
+
+## Diagnostics (operator, on the box)
+
+Date the failures — this is the discriminator between (1)/(2) and (3), and it decides everything:
 
 ```bash
-date -u; chronyc tracking; chronyc sources -v; systemctl status chronyd
-curl -sS -o /dev/null -D - https://s3.us-east-2.amazonaws.com | grep -i '^date:'   # the clock that matters
-sudo systemctl enable --now chronyd && sudo chronyc makestep && chronyc tracking
-grep -n '169.254.169.123' /etc/chrony.conf   # the Amazon Time Sync Service should be configured
+docker compose -f services/dagster/aws/docker-compose.yml exec -T dagster-codeloc python -c "
+from dagster import DagsterInstance; import datetime as dt
+i=DagsterInstance.get()
+for rec in i.get_run_records(limit=400):
+    r=rec.dagster_run
+    if r.job_name!='intraday_schedule_job': continue
+    if any('RequestTimeTooSkewed' in (getattr(e,'user_message','') or '') for e in i.all_logs(r.run_id)):
+        ts=rec.start_time or rec.create_timestamp.timestamp()
+        print(dt.datetime.utcfromtimestamp(ts).isoformat(), r.run_id[:8])
+"
 ```
 
-Contributing factor worth ruling in/out: the box is an `r6g.large` (2 vCPU) and INC-37 already
-documents that sustained CPU saturation starves the Dagster daemon — it degrades timekeeping too.
-Check CloudWatch CPU around the failure window.
+Rule out a container-vs-host clock difference (cheap, and it is the one thing the host reading
+above cannot cover):
 
-
-## ⭐ ROOT CAUSE OF THE MISDIAGNOSIS — the page structurally could not carry the error (FIXED)
-
-Confirmed on the box 2026-08-12: `--w3pre-only --dry-run` binds all four models there too, and
-**every recent `intraday_schedule_job` run reports SUCCESS** — the op catches each leg
-(ALERT-loud-but-continue), so the job never fails and the failing run cannot be found by status.
-
-The page itself is why this stalled. `intraday_ops` recorded each failed leg as `str(exc)[:300]`,
-but `_run_script` raises
-
-```python
-Exception(f"{os.path.basename(script)} failed (exit {result.returncode})\n{result.stderr}")
+```bash
+date -u; docker compose -f services/dagster/aws/docker-compose.yml exec -T dagster-codeloc date -u
 ```
-
-— the exception carries the child's **entire traceback**, and a Python traceback puts its payload
-(the exception type and message) at the **TAIL**. A head slice keeps
-`Traceback (most recent call last):` plus the first frames and discards the diagnosis.
-
-**Measured:**
-
-| quantity | value |
-|---|---|
-| `_string_timestamp_wrap` boilerplate preamble | **420 chars** |
-| index of its `Underlying DuckDB binder error:` marker | **388** |
-| chars of the real DuckDB error surviving `[:300]` | **0** |
-
-The 300-char page ended mid-sentence inside the *generic* hint — "Most common cause: a date
-function or interval arithmetic applied to a column" — so the alert's own hedged boilerplate read
-as the diagnosis, which is exactly how this incident came to be framed as an INC-23 use-site cast.
-That is the **INC-40 lesson verbatim** ("an alert's own SUGGESTED-CAUSE banner is diagnostic
-anchoring"), and it means a transient S3 404, a throttle and a genuine binder error all produced a
-**byte-identical page** — the same non-discriminating-output class as the `curl -f`/301
-healthcheck. A truncation that yields the same text for every cause is not a short diagnosis; it is
-no diagnosis.
-
-**FIX (shipped in this PR):** `betting_ml/monitoring/alert_text.exc_digest` keeps the head (script
-+ exit code) *and* the tail (the exception), naming how much was elided. Both call sites in
-`intraday_ops.py` use it; the pure logic lives in `betting_ml/` per the E11.23 fast-gate rule.
-Guard: `betting_ml/tests/test_inc42_alert_carries_the_real_error.py` — the load-bearing case is
-`test_two_different_causes_do_not_page_identically` (a length assertion alone would pass on a
-truncation that is short *and* useless). RED-proven both ways: reverting `intraday_ops.py` to
-`str(exc)[:300]` fails the source guard; reverting `exc_digest` to a head slice fails 3 of 6.
-
-## Retrieval note (how the error was finally obtained)
-
-⚠️ The failing run **cannot be found by run status** — the op catches each leg, so
-`intraday_schedule_job` reports SUCCESS. It was recovered by grepping the Dagster **Postgres event
-log** (which survives container recreation, unlike stdout) for `FAILED — continuing to the next
-leg`. `ssm:*` is denied for `baseball-access-user`, so this was an operator step.
-
-Once the `exc_digest` fix above deploys, the next occurrence pages `RequestTimeTooSkewed` directly
-and needs no box dig at all — the fix is validated by this incident: the one string that mattered
-sat at the very tail of the message, exactly where `[:300]` was discarding it.
-
----
-
-## Recommended fix (contingent on the error confirming the 404 race)
-
-⛔ **No use-site cast is warranted** — there is no bad expression to cast. Do not "fix" the SQL.
-
-**Option 1 — reader-side bounded retry (recommended).** Retry the DESCRIBE (and the COPY) once or
-twice, with a short backoff, **only** on a transient S3 read signature (404/5xx on a
-`lakehouse_raw/` key). The glob is re-listed on retry, so a benign concurrent-writer race resolves
-itself. This preserves the INC-23 contract exactly: a genuine binder error fails every attempt and
-still HALTs. It is source-agnostic, so it also covers the S3-throttle candidate.
-
-**Option 2 — writer-side ordering: put-then-delete.** Write the new `part-<uuid>.parquet` **first**,
-then delete the previously-listed keys. Filenames are uuid-unique so there is never a collision, and
-it additionally closes a real data-loss window (today a crash between `_delete_partition` and
-`put_object` leaves the partition **empty**).
-⚠️ **Do not apply this blanket-wide.** During the window both old and new files exist, so any
-staging model that does **not** dedup would transiently double-count — a *silent wrong answer*,
-strictly worse than a loud HALT (the E9.52 class). It is safe for `monthly_schedule` specifically,
-because `stg_statsapi_games` collapses to one row per `game_pk`; it is **not** obviously safe for
-the other `overwrite_partition` callers (`export_odds_raw_to_s3.py`, `export_w11_raw_to_s3.py`).
-
-Suggested: **Option 1 now**; Option 2 scoped to `monthly_schedule` only, if at all.
-
-🟥 **Runtime gate applies.** CI mocks all IO, so neither option is verifiable in CI — the merge bar
-is a real box run of the intraday tick.
-
----
-
-## Cheap standing detector (offered, not built)
-
-The intraday tick rebuilds `stg_statsapi_games` (w3pre leg) and `stg_statsapi_lineups_wide` (w7b
-leg) within ~60 s of each other. **A divergence between those two objects' in-parquet build times is
-exactly the signature of one leg failing while the other succeeds.** Today they sit at 03:07:38 vs
-03:08:40 — healthy. This is a natural registry entry for INC-41's `artifact_freshness` monitor
-(⛔ read the timestamp from inside the parquet, never `LastModified`, per INC-41).
-
----
-
-## Why this recurs and why it stayed invisible
-
-- The bind is a **read** racing a **writer** on a shared prefix; nothing in the code coordinates them.
-- It is **data-independent**, so it never reproduces after the fact — the classic "green on re-run"
-  that reads as a fluke.
-- CI mocks all IO, so no gate can see it (🟥 runtime-gate class).
-- It was **loud** only because E11.30 wired `send_alert` into this op and INC-41 split the legs.
-  Both fixes did their job here; this incident is what "contained" looks like.
