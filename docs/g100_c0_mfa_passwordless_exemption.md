@@ -1,7 +1,64 @@
 # G100-C0-MFA — passwordless subscribers, and the flip that would have locked them out
 
-**Status:** code landed; ⛔ **NOT yet live-verified.** The live gate below is the acceptance
-test, and until it passes `ENFORCE_SUBSCRIBER_MFA=1` must not be flipped.
+**Status:** ✅ **VERIFIED LIVE 2026-08-13** against the real pool, both directions, with
+`ENFORCE_SUBSCRIBER_MFA=1` genuinely on for the test window and restored afterwards.
+⇒ E9.8-P2 is cleared to flip the flag. Measurements below; the runbook that produced them
+follows, and is the re-verification procedure if this is ever suspected of regressing.
+
+---
+
+## ✅ What was measured (2026-08-13, live pool, `guard_version: g100-c0-mfa/1`)
+
+**The acceptance pair — one account, one session type, the group as the only variable.**
+`charlie@credencesports.com` (`347864d8-…`, created by the email-OTP door), in `subscriber`,
+no TOTP, `mfa_enforced: true` on both readings:
+
+| state | guard verdict | `GET /picks/today` |
+|---|---|---|
+| **with** `passwordless` | `totp_exempt: true`, `totp_exempt_reason: "passwordless_group"` | **200**, picks render |
+| **without** it | `totp_exempt: false` | **403** "Two-factor authentication is required" |
+
+Using one account for both halves is stronger than the two-account version this doc originally
+prescribed: same username shape, same absent `amr`, same everything — so the flip is
+attributable to the group and to nothing else. The genuine password account
+(`legb-probe@…`, password set by hand, no TOTP) independently read
+`would_be_blocked_if_subscriber: true`, which is the population that pair stands in for.
+
+**⭐ There is no `amr`, on any door.** Password, Google, and a freshly-minted CUSTOM_AUTH
+token straight out of `/verify` all return `amr: []`. The ACCESS token — which is what the
+frontend sends — carries exactly:
+
+```
+auth_time, client_id, cognito:groups, event_id, exp, iat, iss, jti,
+origin_jti, scope, sub, token_use, username
+```
+
+No `amr`, no `identities`. Consequences, all of them load-bearing:
+
+1. `_amr_names_a_federated_idp` **cannot fire in production**. The pre-existing federated
+   exemption rested entirely on the `google_…` username shape, i.e. only legacy
+   federated-only accounts — which is exactly the lockout this story predicted, now with a
+   measured mechanism rather than a hypothesis.
+2. The `passwordless` group was not the cheapest signal available. It was the **only** one.
+3. A **linked** Google user's session is indistinguishable from their password session (UUID
+   username, no `amr`, no `identities`), so they WILL be challenged at flip time. Safe — they
+   have a password and can enroll — but "Google sessions are exempt" is no longer true in
+   general, and the PM should know it.
+
+**⭐ `cognito:groups` really is bracketed, including for a single group.** Observed
+`"[admin fantasy_comp]"`, `"[passwordless]"`, `"[subscriber]"`, `"[subscriber passwordless]"`,
+and **absent entirely** (`null`, no key) for a user in no groups. The pre-fix comma split
+would have matched nothing in *every* one of those cases, not just the multi-group one — so
+with enforcement on, the guard would have gated **nobody**. The 403 above is the live proof
+that it now does: the guard read `"[subscriber]"`, matched, and refused.
+
+**Both creation paths write the group.** The OTP door was verified end-to-end (signup →
+`is_passwordless: true`, and `admin-list-groups-for-user` returned `["passwordless"]` on the
+same `sub`). The pre-provision door was verified by invoking the deployed trigger directly
+with a synthetic `PreSignUp_ExternalProvider` event — real IAM role, real pool, group applied.
+⚠️ Recorded honestly: that half is **"pre-provision group write verified by direct
+invocation"**, not a full Google-first sign-in, which was last verified end-to-end at G100-C0
+(2026-08-10). No fresh Google address was available to re-run it.
 
 ---
 
@@ -281,11 +338,14 @@ aws cognito-idp admin-add-user-to-group --user-pool-id us-east-1_gG9zMbwQt \
 1. **The group describes the ACCOUNT, not the SESSION.** Someone who later gives themselves a
    password through forgot-password keeps the exemption until the group is removed. Bounded —
    the reset proves control of the same mailbox the exemption is predicated on — but real.
-   ⭐ **The fast-follow, and the exact condition for it:** if leg 2/3 shows that a password
-   session carries a distinctive `amr` and an OTP session does not, tighten `_totp_exemption`
-   to `passwordless_group AND amr does not indicate a password`. That is a one-line change
-   **only once the claim has been observed** — writing it on a guess is the blind fix this
-   story forbids, and guessing wrong re-creates the lockout it was written to prevent.
+   ⛔ **The tightening this doc originally proposed is impossible, and that is now measured,
+   not suspected.** The plan was `passwordless_group AND amr does not indicate a password`,
+   pending the live reading. The reading came back empty: **no door carries an `amr`**, so
+   there is no per-session signal to add. The only honest candidates left are (a) REMOVE the
+   group when someone sets a password — the password-reset flow is client-driven against
+   Cognito today, so this needs a backend hop or a trigger — or (b) mint a claim from a
+   PreTokenGeneration trigger. Neither is needed to ship. ⛔ Do not re-propose the `amr`
+   version; it was checked.
 2. **An OTP sign-in by someone who DOES have a password is still challenged.** Any native user
    can use the OTP door, so an OTP session is not proof of passwordlessness. Such a person is
    asked for TOTP they can actually enroll (they have a password to re-authenticate with), so

@@ -386,22 +386,28 @@ user); if it is materially large, a one-time in-app notice is a fast-follow, not
 **Priority:** P0 (blocking, not in the Week-1 funnel)
 **Sequence:** before the E9.8 go-live, independent of the rest of GROWTH-100
 **Owner:** the E9.8 / entitlement backend track
-**Status:** 🟡 CODE LANDED 2026-08-12, ⛔ **NOT live-verified — the flip stays blocked.**
-Carded 2026-08-10 out of G100-C0's PM review.
+**Status:** ✅ **DONE — verified live 2026-08-13. `ENFORCE_SUBSCRIBER_MFA=1` is cleared to
+flip**, which was the last gate before Stripe. Carded 2026-08-10 out of G100-C0's PM review.
 
-The ratified fix is built: a `passwordless` group applied at both creation points (the OTP
-path and the PreSignUp pre-provision, and deliberately NOT when Google links into an existing
-native user, which may have a real password) and exempted in `_totp_exemption`. Operator
-runbook, the two-sided acceptance test and the backfill: `docs/g100_c0_mfa_passwordless_exemption.md`.
-The live gate needs operator hands — Cognito group creation, one IAM addition, both deploys
-(neither the API Lambda nor the trigger has CD), then the test. **Until it passes, `ENFORCE_SUBSCRIBER_MFA=1`
-must not fire**, exactly as this card said before.
+The ratified fix shipped: a `passwordless` group applied at both creation points (the OTP path
+and the PreSignUp pre-provision, and deliberately NOT when Google links into an existing native
+user, which may have a real password) and exempted in `_totp_exemption`. Verified against the
+real pool with enforcement genuinely on — same account, same session type, group as the only
+variable: **200** with it, **403** without. Measurements, runbook and re-verification
+procedure: `docs/g100_c0_mfa_passwordless_exemption.md`.
 
-⭐ Found while fixing it, and it blocks the same flip from the other side: the guard parsed
-`cognito:groups` by splitting on `,` while this gateway delivers `[subscriber]`, so with
-enforcement ON it would have gated **nobody** — enforcement that reads as enabled and enforces
-nothing. Fixed and RED-proven; it is also why leg B of the acceptance test could not have
-passed before.
+⭐ A SECOND blocker was found on the way, facing the opposite direction: the guard parsed
+`cognito:groups` by splitting on `,` while this gateway delivers `[subscriber]` — bracketed
+even for a single group — so with enforcement ON it would have gated **nobody**. Enforcement
+that reads as enabled and enforces nothing. The live 403 is the proof it now bites.
+
+⚠️ **Two facts for the PM, both measured:** (1) the access token carries NO `amr`, so a
+**linked** Google user (UUID username) is NOT recognised as federated and WILL be challenged
+at flip time — safe, since they have a password, but "Google sessions are exempt" is no longer
+true in general; (2) the group describes the ACCOUNT, not the session, so someone who later
+sets a password via forgot-password keeps the exemption until it is removed. Bounded, stated,
+not closed — and the `amr`-based tightening that would have closed it is impossible on a token
+that has no `amr`.
 
 **This story is a hard blocking precondition on flipping `ENFORCE_SUBSCRIBER_MFA=1`.** That
 flip must not fire until this lands AND is live-verified.

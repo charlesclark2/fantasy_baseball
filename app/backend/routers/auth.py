@@ -188,11 +188,21 @@ def _session_is_federated(claims: dict, authorization: str | None) -> bool:
 def parse_amr(claims: dict) -> list[str]:
     """`amr` as a list, in every shape it arrives in (native list, JSON-string, bare string).
 
-    Exposed (and surfaced by `GET /auth/session-diagnostics`) because what a Cognito
-    CUSTOM_AUTH session actually carries here is an OPEN EMPTY MEASUREMENT, not something to
-    reason about: G100-C0's build session could not see one, which is why the passwordless
-    exemption is a group rather than an `amr` pattern. Read it live before anyone writes a
-    rule that depends on it.
+    ⭐ MEASURED 2026-08-13 AGAINST THE LIVE POOL, AND THE ANSWER IS "THERE IS NO `amr`."
+    All three doors — password, Google, and a freshly-minted email-OTP (CUSTOM_AUTH) token
+    straight out of `/verify` — deliver an ACCESS token whose claims are exactly:
+
+        auth_time, client_id, cognito:groups, event_id, exp, iat, iss, jti,
+        origin_jti, scope, sub, token_use, username
+
+    No `amr`. No `identities`. The frontend sends the ACCESS token (`auth-context.tsx`
+    resolves `at`), so that list is everything this guard will ever see.
+
+    ⇒ `_amr_names_a_federated_idp` CANNOT FIRE IN PRODUCTION. It is kept because it costs
+    nothing and an ID-token path would carry `amr`, but do not read it as a live signal, and
+    ⛔ do not build a new rule on `amr` without re-measuring — on this token there is nothing
+    to key on. This is also why the passwordless exemption had to be a GROUP: it was not the
+    cheapest available signal, it was the ONLY one.
     """
     raw = claims.get("amr")
     if isinstance(raw, list):
@@ -250,10 +260,14 @@ def _totp_exemption(claims: dict, groups: set[str]) -> str | None:
     ⚠️ KNOWN AND DELIBERATE: the group describes the ACCOUNT, not the session. A person who
     later gives themselves a password through forgot-password keeps the exemption until the
     group is removed. That is bounded — the reset itself proves control of the same mailbox
-    the exemption is predicated on — and the alternative (guessing at a per-session claim
-    shape) is exactly the blind fix this story forbids. Tightening it to a per-session signal
-    is a one-line change IF the live token dump shows password sessions carry a distinctive
-    `amr`; `GET /auth/session-diagnostics` exists to answer that question with a measurement.
+    the exemption is predicated on.
+
+    ⛔ AND THE OBVIOUS TIGHTENING IS NOT AVAILABLE. The plan was "exempt on the group AND on
+    `amr` not indicating a password", pending a live reading. That reading came back on
+    2026-08-13: the access token carries NO `amr` on ANY door (see `parse_amr`), so there is
+    no per-session signal to add. The only real ways to close it are to REMOVE the group when
+    someone sets a password, or to mint a claim from a PreTokenGeneration trigger. Neither is
+    needed to ship; both are the honest candidates. Do not re-propose the `amr` version.
     """
     if _amr_names_a_federated_idp(claims):
         return "amr_federated"
