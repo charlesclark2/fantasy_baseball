@@ -19,6 +19,7 @@ from pipeline.ops.daily_ingestion_ops import (
     finalize_prior_slate_game_detail_op,
     generate_pick_narratives_op,
     predict_today_morning,
+    reexport_player_seq_posteriors_op,
     update_archetype_posteriors_op,
     update_matchup_cell_posteriors_op,
     update_player_posteriors_op,
@@ -119,6 +120,14 @@ def statcast_catchup_job():
     # Story A2.11 — bullpen EB posteriors (dbt) before the sequential team update.
     eb = dbt_build_bullpen_posteriors_op(start=s2b)
     pp = update_player_posteriors_op(start=eb)
+    # 🩸 INC-25 ORDERING FIX (E11.24, 2026-08-09) — THE SECOND CALLER. This job runs the same
+    # player-posterior writer as daily_ingestion_job, so wiring the re-mirror only there would
+    # leave a late-Statcast catch-up advancing Snowflake while the S3 parquet froze until the
+    # next morning: the INC-38 "the flag must be on EVERY caller" lesson, applied to an export.
+    # Fan-out leaf, exactly as in the daily job — never threaded into the pp → pt chain, so a
+    # mirror failure cannot block the catch-up re-score. The writer set is pinned by
+    # betting_ml/tests/test_e11_24_player_seq_reexport_ordering.py.
+    reexport_player_seq_posteriors_op(start=pp)
     pt = update_team_posteriors_op(start=pp)
     pm = update_matchup_cell_posteriors_op(start=pt)
     # INC-2 (2026-06-22): refresh the archetype posteriors daily here too (previously
