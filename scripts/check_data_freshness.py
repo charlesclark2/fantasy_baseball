@@ -14,8 +14,8 @@ Snowflake auth env vars (same pattern as other scripts):
     SNOWFLAKE_PRIVATE_KEY_PATH  (preferred)  or  SNOWFLAKE_PASSWORD
     SNOWFLAKE_ROLE              (optional)
 
-DATA SOURCE — PARTIALLY repointed to S3 by E11.24 target 3 (2026-08-08). READ THIS BEFORE
-"FINISHING THE JOB":
+DATA SOURCE — PARTIALLY repointed to S3 by E11.24 target 3 (2026-08-08), extended by the
+INC-25 player-seq export-ordering fix (2026-08-09). READ THIS BEFORE "FINISHING THE JOB":
     Every entry carries an explicit ``source`` ("snowflake" | "s3"). The Snowflake connection
     is opened LAZILY and only if at least one entry (or the game-day probe) still needs it —
     so the day the last entry flips, this script becomes Snowflake-free with no further edit.
@@ -27,20 +27,39 @@ DATA SOURCE — PARTIALLY repointed to S3 by E11.24 target 3 (2026-08-08). READ 
     runs. Repointing it does not delete that wake, it PROMOTES the next statement (the first
     remaining Snowflake ``MAX()``) to pay it. This script stops waking COMPUTE_WH only when
     ALL of its reads are off Snowflake — it is, as story_prompts puts it, "a DIVIDEND of
-    target 6, not a precursor". The two flips below are made because each is individually
-    CORRECT, not because either buys credit.
+    target 6, not a precursor". The three flips below (``_is_game_day``,
+    ``mart_player_archetype_posteriors``, ``player_sequential_posteriors``) are made because
+    each is individually CORRECT, not because any of them buys credit.
 
     MEASURED 2026-08-08 (laptop; Snowflake side on MONITOR_WH so the target-6 COMPUTE_WH soak
     was untouched) — max(ts_col) on each side, which is exactly what this check reads:
 
       table                             SF max            S3 max            → source
       mart_player_archetype_posteriors  2026-07-05 (!)    2026-08-07        → S3   (see below)
-      player_sequential_posteriors      08-08 13:02:18    08-07 13:02:08    → SF   (mirror lags 24h)
+      player_sequential_posteriors      08-08 13:02:18    08-07 13:02:08    → S3   (UNBLOCKED 08-09)
       team_sequential_posteriors        08-08 13:02:31    08-08 13:02:31    → SF   (identical)
       eb_bullpen_team_posteriors        2026-08-08        2026-08-08        → SF   (identical)
       eb_park_factors_raw               2026-05-27        2026-05-27        → SF   (identical)
       player_profiles_raw               08-02 10:00:31    2026-06-28 (!)    → SF   (mirror 41d stale)
       matchup_cell_sequential_posteriors 08-08 13:03:15   <NO S3 TABLE>     → SF   (no mirror)
+
+    ⭐ ``player_sequential_posteriors`` — UNBLOCKED 2026-08-09 (the INC-25 export-ordering fix).
+    Target 3 recorded this entry as blocked by a STRUCTURAL 24h lag and estimated "~12h of
+    headroom on a 36h threshold". Re-measured at 03:45 UTC the same night, the mirror was
+    **38.72h** stale — the threshold was already BREACHED, so the entry was worse than recorded,
+    not better. The reason the defect looked survivable is a reading-time artifact worth
+    keeping: this script has TWO callers (the INC-38 every-caller lesson, on the READ side) —
+    the in-job ``check_data_freshness`` op at s15 AND a host cron at ``30 12,17 * * *`` UTC
+    (services/dagster/aws/capture.crontab). At s15 the writer has not run yet either, so
+    Snowflake and S3 return the SAME value and the lag is INVISIBLE; the 17:30 cron sees
+    Snowflake at ~4.5h and the mirror at ~28.5h, and anything past ~01:00 UTC breaches outright.
+    ⇒ measure a mirror's lag at the reader's WORST moment, not at an arbitrary one.
+    THE FIX (not a reader repoint): ``reexport_player_seq_posteriors_op`` re-mirrors the table
+    DOWNSTREAM of ``update_player_posteriors_op``, in BOTH jobs that run that writer
+    (daily_ingestion_job and statcast_catchup_job), as a fan-out leaf that pages on failure and
+    can never block the chain. Pinned by test_e11_24_player_seq_reexport_ordering.py.
+    ⚠️ THE FLIP AND THE FIX MUST DEPLOY TOGETHER — this entry reading S3 while the box still runs
+    the un-reordered graph is a guaranteed daily false STALE.
 
     WHY EACH REMAINING ENTRY IS BLOCKED (a precursor, not an oversight):
       • ``matchup_cell_sequential_posteriors`` — there is NO ``lakehouse/matchup_cell_
@@ -48,12 +67,6 @@ DATA SOURCE — PARTIALLY repointed to S3 by E11.24 target 3 (2026-08-08). READ 
       • ``player_profiles_raw`` — the S3 mirror is 41 days behind the live Snowflake table
         (weekly ingest; the mirror is not keeping up). Repointing TODAY would report
         "STALE 990h > 192h" on a feed that is healthy — a false FAIL.
-      • ``player_sequential_posteriors`` — STRUCTURAL 24h lag: the mirror is written by
-        ``lakehouse_w8a_feature_layer_op`` (lk9, top of the daily job) while
-        ``update_player_posteriors_op`` writes Snowflake much later (line ~246 of
-        daily_ingestion_job). Against a 36h threshold that leaves only ~12h of headroom, so
-        any slow day flips the monitor STALE. This is the INC-25 build-ordering shape; fixing
-        it means re-exporting AFTER the writer, not repointing the reader.
       • ``team_sequential_posteriors`` / ``eb_bullpen_team_posteriors`` /
         ``eb_park_factors_raw`` — parity is EXACT today, so these are the safe next flips.
         They are deliberately left on Snowflake anyway because flipping them buys ZERO wake
@@ -177,15 +190,18 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "non_blocking": True,
         "source": "s3",
     },
-    # SOURCE = Snowflake. BLOCKED: the S3 mirror lags 24h by construction (written at lk9, top of
-    # the daily job; the Snowflake writer runs much later) — only ~12h of headroom on a 36h
-    # threshold. See the DATA SOURCE block.
+    # SOURCE = S3. UNBLOCKED 2026-08-09 by the INC-25 export-ordering fix: the mirror is now
+    # re-exported by `reexport_player_seq_posteriors_op`, a fan-out leaf DOWNSTREAM of
+    # `update_player_posteriors_op` in BOTH jobs that run that writer (daily_ingestion_job and
+    # statcast_catchup_job), so it no longer trails Snowflake by a writer cycle. Before the fix
+    # the mirror measured 38.72h stale against this 36h threshold — an outright BREACH, not the
+    # "~12h of headroom" a single reading had suggested. See the DATA SOURCE block.
     "baseball_data.betting.player_sequential_posteriors": {
         "ts_col": "update_ts",
         "max_stale_hours": 36,
         "game_day_only": False,
         "non_blocking": True,
-        "source": "snowflake",
+        "source": "s3",
     },
     # SOURCE = Snowflake. Parity EXACT on S3 (measured 2026-08-08) — a safe future flip, held
     # back only because flipping it alone buys zero wake credit. See the DATA SOURCE block.

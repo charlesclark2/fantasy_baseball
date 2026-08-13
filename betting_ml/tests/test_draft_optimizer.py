@@ -237,6 +237,9 @@ def _kicker_pool(pos: str = "K") -> list[dict]:
             "vor": round(p - repl, 1),
             "positional_rank": i + 1,
             "overall_rank": 500 + i,
+            # The exporter stamps this on every K/DST row (NF1.6) — the projection is a streaming
+            # TIER, not a confident rank. The engine reads it to defer these positions.
+            "low_pred": True,
         }
         for i, p in enumerate(pts)
     ]
@@ -421,6 +424,69 @@ def test_when_the_reserve_binds_every_filler_outranks_every_non_filler():
     )
     # …and the recommendation must SAY why it stopped offering the better-scoring bench players.
     assert "MUST fill a starter" in recs[0].rationale
+
+
+# ── low-predictability positions (K/DST) are deferred until the roster requires them ──────────────
+#
+# ⛔ ANCHORED IN ITS OWN CLAUSE — these fail only for the deferral property. Operator report
+# 2026-08-12: a D/ST recommended in an early round is a credibility non-starter, and it reproduced —
+# ROUND 6's six-slot panel on the live board came back five-sixths K/DST with DEN D/ST at #1.
+
+
+def test_a_low_predictability_position_is_never_recommended_while_real_candidates_remain():
+    """No K/DST anywhere above a real candidate on an open board.
+
+    Not a scoring bug: the whole above-replacement VOR range is 8.1 at K and 10.4 at D/ST against a
+    median 80% interval of 118.7 / 87.3 points on ONE player (signal-to-noise 0.07 / 0.12, vs
+    0.55-0.61 at RB/WR/TE), so the rank an early pick would be buying is inside its own noise. The
+    exporter says exactly that by stamping `low_pred`.
+    """
+    cfg = presets.full_ppr()
+    recs = draft.recommend(_full_board(cfg), config=cfg, my_player_ids=[], normalize=NORM, top_n=400)
+    deferred = [i for i, r in enumerate(recs) if r.deferred]
+    real = [i for i, r in enumerate(recs) if not r.deferred]
+    assert deferred and real, "fixture must contain BOTH kinds, or the ordering claim is vacuous"
+    assert {r.position for r in recs if r.deferred} == {"K", "DST"}
+    assert min(deferred) > max(real), (
+        f"a low-predictability player ranked above a real candidate: "
+        f"{recs[min(deferred)].player_name} at #{min(deferred) + 1} of {len(recs)}"
+    )
+    # The reported top-6 panel — what the operator actually saw — must be entirely real players.
+    assert not any(r.deferred for r in recs[:6])
+
+
+def test_a_deferred_position_is_surfaced_once_the_roster_requires_it():
+    """The composition with the reserve constraint: deferred early, REQUIRED at the end.
+
+    Absolute deferral is only safe because these two rules compose — when K/DST are the only thing a
+    roster can still accept the bench is full, so `picks_remaining == open_starter_count` and the
+    reserve constraint necessarily binds. This pins that, so a future change to either rule cannot
+    quietly leave a deferred position permanently unreachable.
+    """
+    cfg = presets.full_ppr()
+    board = _full_board(cfg)
+    by_pos: dict[str, list[dict]] = {}
+    for r in board:
+        by_pos.setdefault(NORM(r["position"]), []).append(r)
+    for rows in by_pos.values():
+        rows.sort(key=lambda r: -_num(r.get("vor")))
+
+    # A roster one pick from full with ONLY the K starter slot still open.
+    mine = [by_pos["QB"][0]["player_id"]]
+    mine += [r["player_id"] for r in by_pos["RB"][:2]]
+    mine += [r["player_id"] for r in by_pos["WR"][:3]]        # 2 WR starters + the FLEX
+    mine += [by_pos["TE"][0]["player_id"], by_pos["DST"][0]["player_id"]]
+    mine += [r["player_id"] for r in by_pos["RB"][2:8]]       # bench
+    mine = mine[: _roster_size(cfg) - 1]
+
+    recs = draft.recommend(
+        board, config=cfg, drafted_ids=list(mine), my_player_ids=mine, normalize=NORM, top_n=20
+    )
+    assert recs[0].position == "K", (
+        f"with 1 pick left and only the K slot open, the top recommendation was "
+        f"{recs[0].player_name} ({recs[0].position}) — a deferred position must resurface here"
+    )
+    assert recs[0].deferred and recs[0].must_fill, "it is surfaced BY the reserve constraint"
 
 
 # ── snake arithmetic ──────────────────────────────────────────────────────────────────────────────

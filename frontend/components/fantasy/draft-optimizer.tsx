@@ -21,6 +21,7 @@ import {
   openStarterSlots,
   picksUntilNext,
   slotOnClock,
+  sortAvailable,
   type Player,
   type LeagueConfigMeta,
   type RosterSlotDef,
@@ -271,15 +272,13 @@ export function DraftOptimizer() {
     const filtered = rows.filter(
       (p) => (posFilter === "ALL" || p.pos === posFilter) && (!q || p.name.toLowerCase().includes(q))
     )
-    const sign = sortDir === "asc" ? 1 : -1
-    // null pts/vor (K/DST) always sort to the bottom regardless of direction
-    const val = (p: Player) => (sortCol === "ovrRank" ? p.ovrRank : (sortCol === "pts" ? p.pts : p.vor))
-    return [...filtered].sort((a, b) => {
-      const av = val(a), bv = val(b)
-      if (av == null && bv == null) return 0
-      if (av == null) return 1
-      if (bv == null) return -1
-      return (av - bv) * sign
+    // The ordering lives in the engine module beside `recommend`, so best-available and the
+    // recommendations cannot disagree about K/DST. `deferLowPred` is off only when the user has
+    // explicitly asked for one of those positions with the filter tabs.
+    return sortAvailable(filtered, {
+      sortCol,
+      sortDir,
+      deferLowPred: posFilter !== "K" && posFilter !== "DST",
     })
   }, [board, draftedIds, search, posFilter, sortCol, sortDir])
 
@@ -582,7 +581,9 @@ export function DraftOptimizer() {
               <p className="mb-2 text-[11px] text-gray-600">
                 <strong className="text-gray-500">VOR</strong> = Value Over Replacement (points above the
                 last startable player at the position). K &amp; D/ST are projected too, but only as
-                streaming tiers — their value over replacement is small by nature, so they sit late.
+                streaming tiers — the spread between the best and a replacement-level one is small
+                next to how far either can swing, so they sit below every skill player here. Use the
+                K and DST tabs to see them.
               </p>
               <div className="max-h-[520px] overflow-y-auto">
                 <table className="w-full text-sm">
@@ -606,7 +607,21 @@ export function DraftOptimizer() {
                   <tbody>
                     {available.slice(0, 250).map((p) => (
                       <tr key={p.id} className="border-t border-[#171717] hover:bg-[#141414]">
-                        <td className="py-1.5 pl-1 text-xs text-gray-600">{p.ovrRank}</td>
+                        <td
+                          className="py-1.5 pl-1 text-xs text-gray-600"
+                          title={
+                            p.lowPred
+                              ? "No overall rank — K and D/ST projections are streaming tiers, not a rank comparable to skill players"
+                              : undefined
+                          }
+                        >
+                          {/* ⭐ `ovrRank` is a CROSS-POSITION rank built from VOR, and VOR is exactly
+                              what is not comparable at K/DST — showing "56" here is what put a D/ST
+                              level with WRs. Their POSITION rank (DST4, K2) is already beside the
+                              name, so nothing is lost. It also keeps the column monotonic once these
+                              rows are deferred, instead of jumping backwards at the boundary. */}
+                          {p.lowPred ? "—" : p.ovrRank}
+                        </td>
                         <td className="py-1.5">
                           <div className="flex items-center gap-2">
                             <PosBadge pos={p.pos} small />
@@ -760,7 +775,9 @@ function RosterPanel({
       )}
       {hasKdst && (
         <p className="mt-3 text-[11px] leading-snug text-gray-600">
-          K &amp; DST aren&apos;t projected (offensive skill only) — draft them late; they won&apos;t appear on the board.
+          K &amp; DST are projected, but only as streaming tiers rather than precise ranks — so they
+          sit below the skill players on the board (use the K and DST tabs), and the optimizer holds
+          them back until your roster needs them. Expect them in your last picks.
         </p>
       )}
     </div>
