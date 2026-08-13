@@ -386,7 +386,22 @@ user); if it is materially large, a one-time in-app notice is a fast-follow, not
 **Priority:** P0 (blocking, not in the Week-1 funnel)
 **Sequence:** before the E9.8 go-live, independent of the rest of GROWTH-100
 **Owner:** the E9.8 / entitlement backend track
-**Status:** 🔴 OPEN. Carded 2026-08-10 out of G100-C0's PM review.
+**Status:** 🟡 CODE LANDED 2026-08-12, ⛔ **NOT live-verified — the flip stays blocked.**
+Carded 2026-08-10 out of G100-C0's PM review.
+
+The ratified fix is built: a `passwordless` group applied at both creation points (the OTP
+path and the PreSignUp pre-provision, and deliberately NOT when Google links into an existing
+native user, which may have a real password) and exempted in `_totp_exemption`. Operator
+runbook, the two-sided acceptance test and the backfill: `docs/g100_c0_mfa_passwordless_exemption.md`.
+The live gate needs operator hands — Cognito group creation, one IAM addition, both deploys
+(neither the API Lambda nor the trigger has CD), then the test. **Until it passes, `ENFORCE_SUBSCRIBER_MFA=1`
+must not fire**, exactly as this card said before.
+
+⭐ Found while fixing it, and it blocks the same flip from the other side: the guard parsed
+`cognito:groups` by splitting on `,` while this gateway delivers `[subscriber]`, so with
+enforcement ON it would have gated **nobody** — enforcement that reads as enabled and enforces
+nothing. Fixed and RED-proven; it is also why leg B of the acceptance test could not have
+passed before.
 
 **This story is a hard blocking precondition on flipping `ENFORCE_SUBSCRIBER_MFA=1`.** That
 flip must not fire until this lands AND is live-verified.

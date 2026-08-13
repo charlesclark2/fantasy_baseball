@@ -34,7 +34,7 @@ Naming convention: `credence-{environment}-{service}-{descriptor}`
 | Lambda triggers | **Pre sign-up** → `credence-prod-cognito-presignup-link` · **Define / Create / Verify auth challenge** → `credence-prod-cognito-email-otp` |
 | App-client auth flows | must include `ALLOW_CUSTOM_AUTH` (G100-C0) |
 | Auth session validity | **15 min** — this is the real expiry of an emailed OTP, and the code email says "15 minutes". Leaving it at the 3-minute default makes the email promise something the pool will not honour. |
-| User Groups | `beta_tester`, `subscriber`, `admin` |
+| User Groups | `beta_tester`, `subscriber`, `admin`, `passwordless` (G100-C0-MFA — see below; membership means "no user-chosen password" and NOTHING else, because it exempts the account from subscriber TOTP) |
 | Hosted UI domain | `us-east-1gg9zmbwqt.auth.us-east-1.amazoncognito.com` |
 | Hosted UI custom domain | None (`CustomDomain: null`) |
 | Allowed callback URLs | `https://www.credencesports.com/callback` **and** `https://credencesports.com/callback` (both verified allowlisted 2026-08-06 — a bogus `redirect_uri` correctly returns `redirect_mismatch`) |
@@ -65,9 +65,22 @@ shape** — and a pre-provisioned/linked user's username is a plain UUID, not `g
 fails CLOSED, so with enforcement on, a `subscriber` who signs in by Google-linked or email
 OTP could be 403'd and told to enable TOTP they cannot enroll (they have no password to
 re-authenticate with). This is inert today (`ENFORCE_SUBSCRIBER_MFA` defaults to `0`) and
-the frontend side is already handled (`sessionUsesPasswordlessAuth`). **Resolve it before
-the flip** — the cheap fix is a `passwordless` Cognito group applied at pre-provision time
-and exempted in `_session_is_federated`, since groups already travel in the validated token.
+the frontend side is already handled (`sessionUsesPasswordlessAuth`).
+
+🔧 **G100-C0-MFA — the code fix has LANDED, the live gate has NOT been run.** A `passwordless`
+group is applied at both creation points and exempted in the guard. **The flip stays blocked
+until the two-sided live gate passes**, because CI mocks all IO and a wrong exemption here is
+an MFA bypass on a paying account that passes CI exactly as happily as the correct version.
+Full runbook — group creation, the PreSignUp IAM addition, the backfill, and the acceptance
+test — is `docs/g100_c0_mfa_passwordless_exemption.md`. The instrument is
+`GET /auth/session-diagnostics` (authenticated, self-only): it reports the claims as the
+Lambda receives them post-authorizer plus the verdict the guard would reach, so both legs can
+be answered *before* the flag is flipped and without a real subscriber. ⚠️ It also carries a
+`guard_version` marker — the API Lambda has no CD, so a merged PR is not a deployed build.
+
+⭐ Found while fixing it: `require_subscriber_mfa` split `cognito:groups` on `,` only, while
+this gateway delivers `[subscriber]` — so with enforcement on it would have gated **nobody**.
+Both readings now share `dependencies.parse_groups_claim`.
 
 #### ✅ Verified live 2026-08-10 — all four legs, against the real pool
 

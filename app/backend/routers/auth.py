@@ -8,6 +8,11 @@ is otherwise frontend-only (a client redirect, trivially bypassed by hitting the
 directly). It rejects `subscriber`-group API calls whose Cognito account lacks a TOTP
 (SOFTWARE_TOKEN_MFA) factor, EXEMPTING sessions that authenticated via a federated IdP
 (Google) — those inherit MFA from the IdP and never enroll TOTP.
+
+G100-C0-MFA extends that exemption to `passwordless`-group accounts and adds
+`GET /auth/session-diagnostics`, the live instrument that makes the exemption verifiable
+against the real pool rather than assumed. Read `_totp_exemption` first — it is the only
+place in this file where getting a claim shape wrong is an MFA BYPASS rather than a bug.
 """
 
 from __future__ import annotations
@@ -23,7 +28,12 @@ from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from app.backend.dependencies import _claims_from_event, get_optional_user_id, get_user_id
+from app.backend.dependencies import (
+    _claims_from_event,
+    get_optional_user_id,
+    get_user_id,
+    parse_groups_claim,
+)
 from app.backend.services import cognito as cognito_svc
 from app.backend.services.dynamo import record_tos_acceptance
 
@@ -141,6 +151,20 @@ _MFA_CACHE: dict[str, tuple[float, bool]] = {}
 _MFA_CACHE_TTL_S = 120.0
 
 
+def _groups_from_claims(claims: dict) -> set[str]:
+    """The caller's Cognito groups, from the API-Gateway-VALIDATED claims only.
+
+    ⛔ Deliberately NOT `dependencies._groups_from_request`, which unions in an UNVERIFIED
+    bearer decode. That union is right for an entitlement read (it only ever grants access to
+    someone who already holds a signed token) and wrong here, because these groups now drive
+    an MFA EXEMPTION: on an `--authorization-type NONE` route there is no upstream validation,
+    so a forged `{"cognito:groups":["subscriber","passwordless"]}` reaches the Lambda intact
+    (measured — `services/jwt_verify.py`). Reading only the authorizer context means an
+    exemption can never be self-asserted; the worst a forged token achieves is being gated.
+    """
+    return parse_groups_claim(claims.get("cognito:groups"))
+
+
 def _session_is_federated(claims: dict, authorization: str | None) -> bool:
     """Trustworthy, server-side determination that this token's session authenticated
     via a federated IdP (Google).
@@ -158,26 +182,86 @@ def _session_is_federated(claims: dict, authorization: str | None) -> bool:
     Google-linked user re-verifying TOTP is a minor annoyance; a bypass on a paying
     account is not.
     """
-    # amr — a list (sometimes delivered as a JSON string by API Gateway).
-    amr_raw = claims.get("amr")
-    amr: list[str] = []
-    if isinstance(amr_raw, list):
-        amr = [str(x) for x in amr_raw]
-    elif isinstance(amr_raw, str):
+    return _amr_names_a_federated_idp(claims) or _username_is_federated(claims)
+
+
+def parse_amr(claims: dict) -> list[str]:
+    """`amr` as a list, in every shape it arrives in (native list, JSON-string, bare string).
+
+    Exposed (and surfaced by `GET /auth/session-diagnostics`) because what a Cognito
+    CUSTOM_AUTH session actually carries here is an OPEN EMPTY MEASUREMENT, not something to
+    reason about: G100-C0's build session could not see one, which is why the passwordless
+    exemption is a group rather than an `amr` pattern. Read it live before anyone writes a
+    rule that depends on it.
+    """
+    raw = claims.get("amr")
+    if isinstance(raw, list):
+        return [str(x) for x in raw]
+    if isinstance(raw, str):
         try:
-            parsed = json.loads(amr_raw)
-            amr = [str(x) for x in parsed] if isinstance(parsed, list) else [amr_raw]
+            parsed = json.loads(raw)
+            return [str(x) for x in parsed] if isinstance(parsed, list) else [raw]
         except Exception:
-            amr = [amr_raw]
-    if any(re.search(r"google|federated|signinwithapple|facebook", a, re.IGNORECASE) for a in amr):
-        return True
+            return [raw]
+    return []
 
-    # Federated username shape.
+
+def _amr_names_a_federated_idp(claims: dict) -> bool:
+    return any(
+        re.search(r"google|federated|signinwithapple|facebook", a, re.IGNORECASE)
+        for a in parse_amr(claims)
+    )
+
+
+def _username_is_federated(claims: dict) -> bool:
+    """A bare federated profile's username is `<Provider>_<id>` with no '@'.
+
+    ⚠️ This signal covers FEWER accounts than it looks like it does, and that gap is the whole
+    of G100-C0-MFA: since pre-provisioning shipped, a Google-first user is linked into a NATIVE
+    user whose username is a plain UUID, so this returns False for exactly the people who
+    signed in with Google most recently.
+    """
     username = str(claims.get("username") or claims.get("cognito:username") or "")
-    if "@" not in username and _FEDERATED_USERNAME_RE.match(username):
-        return True
+    return "@" not in username and bool(_FEDERATED_USERNAME_RE.match(username))
 
-    return False
+
+def _totp_exemption(claims: dict, groups: set[str]) -> str | None:
+    """Why TOTP does not apply to THIS session, or None if it does.
+
+    Returns a short reason string rather than a bool so the decision is legible in the logs
+    and in `GET /auth/session-diagnostics` — at flip time the operator needs to know not just
+    that someone was exempted but WHICH signal did it, because an exemption firing for an
+    unexpected reason is precisely how this guard turns into an MFA bypass.
+
+    ⭐ G100-C0-MFA adds the third reason, and it is the one that makes the flip safe. The two
+    federated signals both fail for a passwordless account: a pre-provisioned or linked user's
+    username is a plain UUID (not `google_…`), and `amr` is not something we may assume the
+    shape of. Failing closed there was correct while the only alternative to a federated
+    session was a PASSWORD session — an annoying re-verification. It stopped being correct
+    when G100-C0 created a population with NO password: for them a 403 points at an enrollment
+    screen whose only exit (`reauthenticatePassword`) asks for a credential they have never
+    had, i.e. a locked-out paying customer with no self-service recovery.
+
+    The `passwordless` group is the signal because it is written by US at account creation,
+    travels inside the API-Gateway-validated token, and needs no pool schema change — unlike
+    the client's `credence_auth_method` marker, which is client-controlled and must never gate
+    a security decision.
+
+    ⚠️ KNOWN AND DELIBERATE: the group describes the ACCOUNT, not the session. A person who
+    later gives themselves a password through forgot-password keeps the exemption until the
+    group is removed. That is bounded — the reset itself proves control of the same mailbox
+    the exemption is predicated on — and the alternative (guessing at a per-session claim
+    shape) is exactly the blind fix this story forbids. Tightening it to a per-session signal
+    is a one-line change IF the live token dump shows password sessions carry a distinctive
+    `amr`; `GET /auth/session-diagnostics` exists to answer that question with a measurement.
+    """
+    if _amr_names_a_federated_idp(claims):
+        return "amr_federated"
+    if _username_is_federated(claims):
+        return "federated_username"
+    if cognito_svc.GROUP_PASSWORDLESS in groups:
+        return "passwordless_group"
+    return None
 
 
 def _has_totp(sub: str) -> bool:
@@ -208,16 +292,23 @@ def require_subscriber_mfa(
         return user_id
 
     claims = _claims_from_event(request)
-    # Groups from the authorizer context (comma-joined) — cheap, no Cognito call.
-    raw_groups = claims.get("cognito:groups") or ""
-    groups = [g.strip() for g in raw_groups.split(",") if g.strip()] if isinstance(raw_groups, str) else list(raw_groups)
+    # Groups from the authorizer context — cheap, no Cognito call. ⚠️ Parsed by the shared
+    # helper: this used to split on ',' ONLY, but the HTTP API v2 authorizer flattens the
+    # claim to `[subscriber]` / `[fantasy_comp subscriber]`, so the comma split matched
+    # nothing and the guard would have passed EVERY subscriber straight through the day it
+    # was switched on — enforcement that reads as enabled and enforces nothing.
+    groups = _groups_from_claims(claims)
     if cognito_svc.GROUP_SUBSCRIBER not in groups:
         return user_id  # only paying subscribers are gated
     if not user_id:
         return user_id  # can't identify the caller → not a resolvable subscriber call
 
-    # Exempt genuine federated (Google) sessions — they inherit IdP MFA.
-    if _session_is_federated(claims, request.headers.get("Authorization")):
+    # Exempt sessions TOTP cannot apply to: a federated (Google) session inherits IdP MFA,
+    # and a `passwordless` account has no password to re-authenticate with, so the enrollment
+    # flow it would be sent to is a dead end (G100-C0-MFA).
+    exemption = _totp_exemption(claims, groups)
+    if exemption:
+        logger.info("require_subscriber_mfa: exempt sub=%s reason=%s", user_id, exemption)
         return user_id
 
     try:
@@ -229,4 +320,106 @@ def require_subscriber_mfa(
     raise HTTPException(
         status_code=403,
         detail="Two-factor authentication is required for your account. Enable it in Settings.",
+    )
+
+
+# ── The live instrument (G100-C0-MFA) ────────────────────────────────────────
+# ⭐ THIS ENDPOINT EXISTS BECAUSE THE FIX IT SUPPORTS MUST NOT BE MADE BLIND. The
+# passwordless exemption above is an MFA exemption on a paying account: get the claim shape
+# wrong and it is a BYPASS, and CI — which mocks all IO and cannot see Cognito — passes just
+# as happily either way. G100-C0 shipped without this fix precisely because nobody could see
+# what a CUSTOM_AUTH session's token actually carries.
+#
+# So this reports, for the CALLER'S OWN session and nobody else's, exactly what the Lambda
+# sees after the API Gateway authorizer has validated the token, plus the verdict the guard
+# WOULD reach. That makes the acceptance test a measurement instead of an assumption, and it
+# makes it runnable BEFORE `ENFORCE_SUBSCRIBER_MFA` is flipped and WITHOUT a real subscriber
+# (`would_be_blocked_if_subscriber` answers the question hypothetically).
+#
+# Disclosure: everything here is derived from the token the caller already holds and could
+# decode themselves, plus two booleans about their own account. The one genuinely new fact is
+# `mfa_enforced`, and that is deliberate — it is how the operator confirms the flag is live on
+# the Lambda they are actually hitting rather than inferring it from a status code, which is
+# the failure this repo has already paid for once (G100-D1: "read the flag, don't infer it").
+
+_GUARD_VERSION = "g100-c0-mfa/1"
+
+
+class SessionDiagnostics(BaseModel):
+    #: Bumped whenever this guard's logic changes ⇒ proves `deploy.sh` actually shipped the
+    #: build being tested. A green CI and a merged PR do not put code on the Lambda.
+    guard_version: str
+    #: False ⇒ the API Gateway authorizer did not run for this route, so the claims below came
+    #: from nothing trustworthy and no exemption may be read from them.
+    authorizer_context_present: bool
+    sub: str
+    username: str | None = None
+    #: Parsed groups, as the guard sees them.
+    groups: list[str]
+    #: The claim VERBATIM, so the delimiter style ("[a b]" vs "a,b") is visible rather than
+    #: inferred — the exact detail that made the previous parse a no-op.
+    groups_claim_raw: str | None = None
+    groups_claim_type: str
+    #: ⭐ The open empirical question this endpoint was built to answer: what `amr` a
+    #: CUSTOM_AUTH (email-OTP) session and a linked-Google session actually carry.
+    amr: list[str]
+    amr_claim_raw: str | None = None
+    amr_claim_type: str
+    #: Present on any LINKED account, including on its password logins — which is why it is
+    #: reported and never acted on (the E9.19 trap).
+    identities_present: bool
+    #: Claim NAMES only, never their values.
+    claim_keys: list[str]
+    mfa_enforced: bool
+    is_subscriber: bool
+    is_passwordless: bool
+    totp_exempt: bool
+    totp_exempt_reason: str | None = None
+    #: None ⇒ the Cognito read failed; the guard treats that as not-enrolled (fails closed).
+    totp_enrolled: bool | None = None
+    would_be_blocked_if_subscriber: bool
+
+
+@router.get("/session-diagnostics", response_model=SessionDiagnostics)
+def session_diagnostics(
+    request: Request, user_id: str = Depends(get_user_id)
+) -> SessionDiagnostics:
+    """What this session looks like to the server-side MFA guard. Self-only."""
+    claims = _claims_from_event(request)
+    groups = _groups_from_claims(claims)
+    exemption = _totp_exemption(claims, groups)
+
+    raw_groups = claims.get("cognito:groups")
+    raw_amr = claims.get("amr")
+
+    enrolled: bool | None
+    try:
+        enrolled = _has_totp(user_id)
+    except Exception:
+        logger.warning("session_diagnostics: MFA read failed for %s", user_id)
+        enrolled = None
+
+    return SessionDiagnostics(
+        guard_version=_GUARD_VERSION,
+        authorizer_context_present=bool(claims),
+        sub=user_id,
+        username=str(claims.get("username") or claims.get("cognito:username") or "") or None,
+        groups=sorted(groups),
+        groups_claim_raw=None if raw_groups is None else str(raw_groups),
+        groups_claim_type=type(raw_groups).__name__,
+        amr=parse_amr(claims),
+        amr_claim_raw=None if raw_amr is None else str(raw_amr),
+        amr_claim_type=type(raw_amr).__name__,
+        identities_present=bool(claims.get("identities")),
+        claim_keys=sorted(str(k) for k in claims),
+        mfa_enforced=_mfa_enforced(),
+        is_subscriber=cognito_svc.GROUP_SUBSCRIBER in groups,
+        is_passwordless=cognito_svc.GROUP_PASSWORDLESS in groups,
+        totp_exempt=exemption is not None,
+        totp_exempt_reason=exemption,
+        totp_enrolled=enrolled,
+        # The two-sided answer, without needing a real subscription or the flag flipped:
+        # exempt ⇒ never blocked; not exempt and not enrolled (incl. an unreadable read,
+        # which fails closed) ⇒ blocked.
+        would_be_blocked_if_subscriber=exemption is None and enrolled is not True,
     )
