@@ -376,6 +376,57 @@ export interface RecommendArgs {
 
 // Rank the still-available board players for MY next pick. Returns up to topN, sorted by score, each
 // with a plain-language rationale. Deterministic + fast (a couple of passes over ≤~700 rows).
+// ── the BEST-AVAILABLE board ordering ────────────────────────────────────────────────────────────
+
+export type BoardSortCol = "ovrRank" | "pts" | "vor"
+
+export interface SortAvailableOpts {
+  sortCol: BoardSortCol
+  sortDir: "asc" | "desc"
+  /** Whether low-predictability rows (K/DST) are held below every real candidate.
+   *
+   *  ⚠️ MUST be false when the user has explicitly filtered to K or D/ST — they asked for those
+   *  rows, and burying them inside their own filtered view would be perverse. Everywhere else (the
+   *  mixed "ALL" view) it must be true; see the note below. */
+  deferLowPred: boolean
+}
+
+/**
+ * Order the "Available players" board — the cheat sheet a user reads when they DON'T take the
+ * recommendation.
+ *
+ * ⭐ THIS EXISTS AS A SHARED FUNCTION BECAUSE THE RULE HAS TO HOLD ON BOTH SURFACES. `recommend`
+ * defers K/DST (their VOR is not comparable across positions — the whole above-replacement range is
+ * 8.1 at K and 10.4 at D/ST against a median 80% interval of 118.7 / 87.3 on a single player). But
+ * the board was sorted INLINE in the component by raw `ovrRank`/`pts`/`vor`, so the same D/ST that
+ * had just been pushed out of the recommendations reappeared at the top of best-available — reported
+ * live 2026-08-13 with PIT D/ST at #56, level with WRs on VOR 6. Fixing one surface and not the
+ * other leaves the user exactly one click from the advice we decided not to give.
+ *
+ * ⚠️ WHY THE OLD INLINE SORT LOOKED FINE. Its comment read "null pts/vor (K/DST) always sort to the
+ * bottom regardless of direction" — TRUE when MVP-3 shipped K/DST as null-VOR placeholders, and
+ * silently false from NF1.6 on, when they gained real numbers and started interleaving. The same
+ * stale pre-NF1.6 assumption that produced the recommendation bug, in a second place.
+ */
+export function sortAvailable(rows: Player[], opts: SortAvailableOpts): Player[] {
+  const { sortCol, sortDir, deferLowPred } = opts
+  const sign = sortDir === "asc" ? 1 : -1
+  const val = (p: Player) => (sortCol === "ovrRank" ? p.ovrRank : sortCol === "pts" ? p.pts : p.vor)
+  return [...rows].sort((a, b) => {
+    // The deferral outranks the chosen column, so it holds under EVERY sort the header offers —
+    // including an explicit VOR-descending click, which is precisely the ordering that surfaced the
+    // D/ST in the first place.
+    if (deferLowPred && (a.lowPred === true) !== (b.lowPred === true)) return a.lowPred === true ? 1 : -1
+    const av = val(a),
+      bv = val(b)
+    // A genuinely unprojected gap-fill row (null pts/vor) still sinks regardless of direction.
+    if (av == null && bv == null) return 0
+    if (av == null) return 1
+    if (bv == null) return -1
+    return (av - bv) * sign
+  })
+}
+
 export function recommend(args: RecommendArgs): Recommendation[] {
   const { board, config, draftedIds, myPlayerIds, topN = 8, tierK = 1.0 } = args
   const req = rosterRequirements(config.roster)
