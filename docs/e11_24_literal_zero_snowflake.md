@@ -2825,6 +2825,88 @@ day is partial and the slate small, which biases exactly this way. Re-read at T+
 concluding anything; the prompt's prediction (~2/day inherited by `feature_pregame_team_features`,
 then the `feature_pregame_lineup_state` SCD-2 UPDATE) remains the null to beat.
 
+## STEP B, T+1/T+2 (read 2026-08-13 00:2x UTC) — ✅ #675 HOLDS
+
+**The PRESENCE read, which is the verdict.** `merge into eb_batter_posteriors` and
+`merge into eb_starter_posteriors`:
+
+| | 08-03 → 08-09 | 08-10 (T+0) | 08-11 (T+1) | 08-12 (T+2) |
+|---|---|---|---|---|
+| `merge eb_batter_posteriors` | 8–13 execs/day | **absent** | **absent** | **absent** |
+| `merge eb_starter_posteriors` | 8–13 execs/day | **absent** | **absent** | **absent** |
+| waits those two carried | **14 / 9 / 11 / 12** (08-06…09) | — | — | — |
+
+Gone on the flip day and gone for three consecutive days. The pre-flip waits reproduce STEP A's
+recorded 14/9/11/12 exactly. ⭐ PRESENCE is immune to the volume confound that makes T+0/T+1
+untrustworthy for magnitude — a statement that does not exist cannot be faked by a quiet slate,
+which is precisely why the story specified it.
+
+`ACTIVE_MIN` (billable cut): 08-10 **64**, 08-11 **47**, 08-12 **72**, against 7/28 = 167 /
+7/30 = 141.
+
+⚠️ **T+1 (08-11) is CONTAMINATED by INC-42** — the intraday w3pre leg failed twice that day and
+the box ran 18.5-minute legs. Magnitude still belongs at T+3 (08-13). Nothing here quotes it.
+
+### The predicted wake-promotion DID appear — but not on the predicted successor
+
+`8 model-health/pred_log` waits went **1 → 8 / 7 / 7** starting *exactly* on 08-10, executions
+unchanged (88 / 70 / 88, all normal). Consequently **resumes did not fall**: 32–35/day pre-flip
+vs 35 / 25 / 41 post. So #679's promotion thesis is supported in kind — the wake moved rather than
+vanished — but on a **different family** from the prompt's prediction
+(`feature_pregame_team_features`, then the `feature_pregame_lineup_state` SCD-2 UPDATE), which
+stayed flat. ⚠️ This is a FAMILY-level reading; the prompt's prediction is STATEMENT-level, so do
+not treat "model-health inherited it" as established until the statement-level cut is run at T+3.
+
+### Two other findings from the same read
+
+⚠️ **`4b scd2 signal writers` on 08-12: 94 execs / 10 waits** against a stable 72–76 / 0–2 on every
+other day in the window. New that day, and **unexplained** — 08-12 carried two box redeploys, but
+that is a hypothesis, not a measurement. Re-read at T+3.
+
+⚠️ **`CI on the prod WH` is a genuine waker**, not a rounding error: **39 waits on 08-10** (the
+largest single family that day), 23 on 08-07, 14 on 08-06. The backlog item "point dbt CI off
+COMPUTE_WH" is worth more than backlog status.
+
+## 🔁 GATE-0 v2 — RE-DERIVED BUILD-DAY-AWARE (2026-08-12)
+
+Gate-0 v1 was a fixed band on TOTAL executions (1,536–3,480). It **failed 08-12** (1,434) on a day
+whose every per-family count was normal — the second such false fire after 08-10 (1,259). It is
+confounded twice:
+
+1. **BUILD-DAY BIMODALITY.** `other` runs ~1,043–1,182 on non-build days and ~2,615–2,889 on build
+   days: one band spanning two populations, with the low one straddling the floor.
+2. ⭐ **THE LEVERS THEMSELVES LOWER IT.** Every E11.24 lever DELETES statements, so total
+   executions fall as the story succeeds. A floor derived pre-flip gets *harder* to clear the
+   better the work goes — **a gate that fires because the fix worked is not a gate.**
+
+**v2 splits the two jobs v1 was conflating.** It CLASSIFIES the day from a derived indicator, and
+gates on a HEARTBEAT; volume is reported as context and is never the verdict.
+
+- **The indicator is derived and self-validating.** `2 weather slate` is absent entirely on
+  non-build days; `4b signals consumer` independently reads ~33 vs 2. Over 08-03…12 the two agreed
+  on exactly the same four days (08-05, 08-08, 08-09, 08-11) — that agreement *is* the evidence the
+  partition is real, so a **disagreement yields UNKNOWN / UNVERIFIED, never a pass** (NF1.7(a)).
+- **The gate is a ONE-SIDED FLOOR at half the peer median.** The first cut used a two-sided
+  min/max over 2–5 peers and FAILED 08-04 on a single extra invocation (`player=10` vs a `(11,11)`
+  range) — the alert-fatigue mode that gets a monitor muted. An outage *suppresses* invocations
+  wholesale; it does not shave one off, and a count above the peers is a catch-up. `0.5` is a
+  design quantity ("at least half the expected daily invocations"), not a level tuned until the
+  days we like pass.
+- ⭐ **LEAVE-ONE-OUT.** The reference for judging day D excludes D. The first cut let D seed its own
+  range, so a day whose heartbeat had collapsed to 3 simply became the new minimum and passed.
+  Caught by its own unit test, not by inspection.
+- **Heartbeat families carry no lever.** `4 matchup posteriors`, `4 player posteriors` — a family a
+  lever moves on purpose cannot also be the normality signal (pinned by a parametrized test).
+- **Contaminated days** (07-29, 07-31, **08-11**) are excluded from the reference but still
+  reported, so the INC-42 freeze day's depressed counts cannot become the new normal.
+
+Result on the live window: **all ten days PASS**, 08-11 flagged contaminated-and-excluded, and
+08-12 passes *while its volume band is visibly violated* (1,437 against 1,504–2,184) — the design
+intent, made legible. `scripts/tests/test_e11_24_gate0.py` (15 tests) is built on the real measured
+counts; ⚠️ its first fixture did NOT reproduce the measured totals and silently tested a fictional
+dataset (its 08-10 total came out 1,082 against a measured 1,504, which inverted the volume-band
+assertion) — a fixture derived from real data must reproduce the real totals.
+
 ---
 
 # 🔧 THE #679 AWAKE-TIME CORRECTION, APPLIED — AND IT OVERTURNS THE WEATHER-POLLER CREDIT
