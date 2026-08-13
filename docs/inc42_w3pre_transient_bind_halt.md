@@ -536,7 +536,7 @@ for rec in i.get_run_records(limit=400):
 | Contention MAGNITUDE selects which `:00` fails | **not supported** — the non-failing 00:00 had the window's *highest* average CPU (70.4 %) |
 | The 20-min CPU elevation is a *cause* | **refuted** — it is the failing run's own footprint (23:00:37→23:19:04, 01:00:30→01:19:07) |
 | "It is a race" | **withdrawn** — two runs erred 11.4 s apart (1.08 %); this is a **deterministic duration threshold**, and 00:00 survived by finishing first |
-| ⭐ A query running >900 s reuses one signature (H) | **OPEN — the leading hypothesis.** Fits every observation; a variant of (6) that my experiment never tested |
+| ⭐ A query running >900 s reuses one signature (H) | **OPEN and UNTESTED.** Best fit to the evidence, never subjected to a refuting experiment — the test projected ~4.1 h and was called off. ⛔ Do not carry forward as established |
 | A long bind under `:00` contention, on a glob growing 48 files/day | **open — the standing lead** |
 | …its exposure | **REMOVED 2026-08-12** — 1,859 files → 98, bind 21.8 s → 1.57 s (compaction shipped) |
 
@@ -544,7 +544,25 @@ for rec in i.get_run_records(limit=400):
 recurs on a 98-file glob, the contention lead is refuted too and the hunt moves to the signing path
 itself.
 
-### ⏭️ The test that would settle H — LAPTOP, operator (>2 min, read-only)
+### ⏸️ NOT RUN — H is UNTESTED, not supported (operator decision, 2026-08-12)
+
+⛔ **Nothing below was executed.** At `N=3000` DuckDB projected **~4.1 hours**, not the 25–30 minutes
+estimated here, and the operator called it off. That is the right call on cost: the exposure is
+already removed, serving was never affected, and H answers *why it happened*, not *whether it
+recurs*.
+
+⚠️ **So H's status is UNTESTED — it is the hypothesis that best fits the evidence, and it has never
+been subjected to an experiment that could refute it.** Do not carry it forward as established.
+Everything on the numbered list above (the 900 s clustering, the 11.4 s reproducibility, the
+duration threshold) stands on its own measurements; H is the *explanation* proposed for them.
+
+📏 **Calibration correction for anyone who revisits this:** the 25–30 min figure came from
+extrapolating a superlinear curve through **two** points (3.5 µs/row at N=200, 28.6 µs/row at
+N=800) assuming exponent ≈1.5. The real curve is far steeper — at N=3000 each row builds a ~45 KB
+string and allocation dominates. **Take a third point at a large N before quoting a runtime**, and
+prefer a smaller N with a longer scan over a large N with a short one.
+
+### ⏭️ The test that would settle H — LAPTOP, operator (>2 min, read-only) — NOT RUN
 
 H predicts failure for **any** single query whose execution spans 900 s against S3, *regardless of
 file count*. Refuting it takes one query that runs longer than that and keeps streaming data pages:
