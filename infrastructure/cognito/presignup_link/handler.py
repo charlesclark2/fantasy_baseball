@@ -63,6 +63,7 @@ IAM (execution role) — on the pool ARN:
     cognito-idp:AdminLinkProviderForUser
     cognito-idp:AdminCreateUser        (G100-C0 pre-provision)
     cognito-idp:AdminSetUserPassword   (G100-C0 pre-provision)
+    cognito-idp:AdminAddUserToGroup    (G100-C0-MFA passwordless marking)
 """
 
 from __future__ import annotations
@@ -289,6 +290,7 @@ def _preprovision_native_user(user_pool_id: str, email: str) -> str | None:
             Password=_random_password(),
             Permanent=True,
         )
+        _mark_passwordless(user_pool_id, username)
         logger.info("presignup-link: pre-provisioned native user %s for %s", username, email)
         return username
     except Exception:
@@ -298,6 +300,35 @@ def _preprovision_native_user(user_pool_id: str, email: str) -> str | None:
         # split case is recoverable by hand while a signup outage is not.
         logger.warning("presignup-link: pre-provision failed for %s", email, exc_info=True)
         return None
+
+
+# ⭐ G100-C0-MFA — the group that means "this account has never had a user-chosen password".
+# MUST stay byte-identical to `app.backend.services.cognito.GROUP_PASSWORDLESS`; a trigger
+# Lambda is a separate deployment artifact and cannot import it, so the agreement is pinned by
+# `test_g100_c0_mfa_passwordless.py::TestBothCreationPathsMarkTheAccountPasswordless`.
+# The pre-provisioned user below is created with a random password nobody is ever told, so the
+# person's only credentials are Google and an emailed code — neither of which can satisfy the
+# TOTP-enrollment flow. Without this group, `ENFORCE_SUBSCRIBER_MFA=1` 403s them with no way out.
+_PASSWORDLESS_GROUP = "passwordless"
+
+
+def _mark_passwordless(user_pool_id: str, username: str) -> None:
+    """Best-effort, LOUD group assignment. Same fail-open discipline as everything else on
+    this trigger — a group-write error must not cost the person their sign-in — but a silent
+    miss is a future lockout, so it logs the exact repair command."""
+    try:
+        cognito.admin_add_user_to_group(
+            UserPoolId=user_pool_id, Username=username, GroupName=_PASSWORDLESS_GROUP
+        )
+    except Exception:
+        logger.warning(
+            "[ALERT] presignup-link: passwordless-group assignment FAILED for %s — this "
+            "account cannot enroll TOTP and will be 403'd if it subscribes while "
+            "ENFORCE_SUBSCRIBER_MFA=1. Repair: aws cognito-idp admin-add-user-to-group "
+            "--user-pool-id %s --username %s --group-name %s --region us-east-1",
+            username, user_pool_id, username, _PASSWORDLESS_GROUP,
+            exc_info=True,
+        )
 
 
 def _pick_link_target(users: list[dict], incoming_username: str) -> str | None:

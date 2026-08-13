@@ -33,6 +33,19 @@ GROUP_SUBSCRIBER = "subscriber"
 GROUP_CHURNED = "churned"
 GROUP_ADMIN = "admin"
 
+# ⭐ G100-C0-MFA — accounts whose ONLY credential is possession of their email address.
+# Applied at the two points where we create a native user with a random password NOBODY
+# is ever told (the email-OTP path in `services/identity.py::create_native_user`, and the
+# PreSignUp trigger's pre-provision for a Google-first sign-in). Those people cannot enroll
+# TOTP: the enrollment UI's only escape hatch re-authenticates with a password they have
+# never had, so `ENFORCE_SUBSCRIBER_MFA=1` would 403 a paying customer into a dead end.
+#
+# ⚠️ THIS IS AN MFA EXEMPTION, so membership must mean exactly one thing: "this account has
+# never had a user-chosen password". Never add it to grant, describe or convenience anything
+# else — a group that also means something else is a group somebody widens, and widening it
+# silently turns MFA off for whoever is inside.
+GROUP_PASSWORDLESS = "passwordless"
+
 # Fantasy comp allow-list (E9.45) — a group DISTINCT from `subscriber` that grants
 # fantasy access to operator/comp accounts WITHOUT counting them as paid subscribers.
 # Keeping it separate from `subscriber` is deliberate: it keeps E9.8's founding-100
@@ -81,6 +94,43 @@ def add_user_to_group(sub: str, group: str) -> None:
     except ClientError:
         logger.exception("admin_add_user_to_group failed (sub=%s group=%s)", sub, group)
         raise
+
+
+def mark_passwordless(
+    username: str, *, client=None, user_pool_id: str | None = None
+) -> bool:
+    """Put a just-created native user in the `passwordless` group. Returns success.
+
+    ⭐ BEST-EFFORT ON PURPOSE, AND LOUD. This runs inside account creation, which sits on
+    the only public signup paths — raising here would turn a group-write hiccup into a
+    failed sign-in, and the repo's whole discipline on that path is to fail OPEN
+    (`presignup_link/handler.py`). But a MISSING group is a future lockout the day
+    `ENFORCE_SUBSCRIBER_MFA` flips, so the failure gets a greppable `[ALERT]` line naming
+    the exact repair command rather than a shrug.
+
+    ⚠️ `username` must be the pool's generated UUID from the create response, not the
+    email — this pool uses email as a username ATTRIBUTE (see identity.create_native_user).
+
+    `client` lets the caller reuse the client it already built for the account creation.
+    That is not just tidiness: creating a second one here would make this call invisible to
+    a caller's test fixture that patched only its OWN client factory, and the first thing
+    an unpatched boto3 client does is reach for the network inside a suite that mocks all IO.
+    """
+    pool = user_pool_id or _USER_POOL_ID
+    try:
+        (client or _client()).admin_add_user_to_group(
+            UserPoolId=pool, Username=username, GroupName=GROUP_PASSWORDLESS
+        )
+        return True
+    except Exception:
+        logger.error(
+            "[ALERT] passwordless-group assignment FAILED for %s — this account cannot "
+            "enroll TOTP and will be 403'd if it ever subscribes while "
+            "ENFORCE_SUBSCRIBER_MFA=1. Repair: aws cognito-idp admin-add-user-to-group "
+            "--user-pool-id %s --username %s --group-name %s --region %s",
+            username, pool, username, GROUP_PASSWORDLESS, _AWS_REGION,
+        )
+        return False
 
 
 def remove_user_from_group(sub: str, group: str) -> None:

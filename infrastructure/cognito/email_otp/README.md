@@ -130,6 +130,13 @@ at the 3-minute default the email tells the user something the system will not h
 G100-C0's PreSignUp change creates a native user for a brand-new federated sign-in, so that
 role needs two more actions:
 
+⭐ `AdminAddUserToGroup` is G100-C0-MFA's addition: both creation paths put the new user in
+the `passwordless` group, which is what stops `ENFORCE_SUBSCRIBER_MFA=1` from 403-ing a
+passwordless subscriber into an enrollment screen they cannot complete. The group must EXIST
+first (`aws cognito-idp create-group --group-name passwordless …`) — writing to a group that
+does not exist raises, and the marking fails open with an `[ALERT]` log rather than blocking
+the sign-in. Full runbook: `docs/g100_c0_mfa_passwordless_exemption.md`.
+
 ```bash
 POOL_ARN=$(aws cognito-idp describe-user-pool --user-pool-id us-east-1_gG9zMbwQt \
   --region us-east-1 --query 'UserPool.Arn' --output text)
@@ -137,7 +144,8 @@ cat > /tmp/presignup-policy.json <<JSON
 { "Version": "2012-10-17", "Statement": [
   { "Effect": "Allow",
     "Action": ["cognito-idp:ListUsers", "cognito-idp:AdminLinkProviderForUser",
-               "cognito-idp:AdminCreateUser", "cognito-idp:AdminSetUserPassword"],
+               "cognito-idp:AdminCreateUser", "cognito-idp:AdminSetUserPassword",
+               "cognito-idp:AdminAddUserToGroup"],
     "Resource": "${POOL_ARN}" } ] }
 JSON
 
