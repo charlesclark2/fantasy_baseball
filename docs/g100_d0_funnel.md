@@ -310,6 +310,33 @@ cd /Users/charlesclark/Documents/machine_learning/baseball_betting/g100-d0 && \
 Re-running is safe: an insight whose name already exists on the dashboard is **updated**, not
 duplicated (`--apply` matches on name). Add `--host https://eu.posthog.com` for an EU project.
 
+### Re-running it after G100-D0-R1 (tile captions only)
+
+R1 changed what `user_signup_completed` means, so the **R1 tile's caption** is stale on an
+already-provisioned dashboard until this is re-run. It rewrites *descriptions*; no query, no data,
+no chart is touched, and nothing is duplicated.
+
+⚠️ **The key needs the same two scopes as first provisioning** (`dashboard:write`, `insight:write`)
+— which is a key you were told to **delete** after the first run, so issue a fresh one and delete it
+again afterwards. Review first:
+
+```bash
+cd /Users/charlesclark/Documents/machine_learning/baseball_betting/dev && \
+  uv run python scripts/provision_posthog_funnel_dashboard.py --dry-run
+```
+
+Then apply (substitute the real key and the numeric project id — `--dry-run` needs neither):
+
+```bash
+cd /Users/charlesclark/Documents/machine_learning/baseball_betting/dev && \
+  POSTHOG_PERSONAL_API_KEY='phx_…' \
+  POSTHOG_PROJECT_ID='12345' \
+  uv run python scripts/provision_posthog_funnel_dashboard.py --apply
+```
+
+Both are **LAPTOP** commands. ⏭️ It is genuinely optional: skipping it leaves a caption describing
+the pre-R1 rule on one tile, and changes no number anywhere.
+
 ---
 
 ## 7. Operator: the runtime verify (post-merge)
@@ -325,11 +352,12 @@ funnel on production once, with PostHog's **Activity → Live events** view open
 2. Navigate to `/fantasy/rankings`. → a second `landing_view` (`surface: fantasy_rankings`) **still
    carrying `acquisition_source: verify`** — this is the first-touch super property working. If it
    reads `direct` or `credencesports.com`, attribution is broken.
-3. ⭐ **Sign in with a genuinely new Google account through the `/login` door — the SIGN IN button,
-   not Sign Up.** → `user_signin_started`, then `user_signup_completed` carrying
-   **`signal: "server"`** and `intent: "signin"`. That pair is the whole of G100-D0-R1: the door
-   said sign-in, the account was new, and the funnel counted it. **If `signal` reads
-   `intent_fallback`, `deploy.sh` has not run** and the Lambda is still answering 204.
+3. ⭐ **Sign in with a genuinely new account through the `/login` door — the SIGN IN button, not
+   Sign Up** (§7a below is how to get one without a new Google account). → `user_signin_started`,
+   then `user_signup_completed` carrying **`signal: "server"`** and `intent: "signin"`. That pair
+   is the whole of G100-D0-R1: the door said sign-in, the account was new, and the funnel counted
+   it. **If `signal` reads `intent_fallback`, `deploy.sh` has not run** and the Lambda is still
+   answering 204.
    Confirm in PostHog that the anonymous events from steps 1–2 are now on the **same person** as
    the identified one — that is the stitch, and it is the single thing that would silently
    double-count every visitor if it failed.
@@ -345,6 +373,100 @@ funnel on production once, with PostHog's **Activity → Live events** view open
    completing gives you `subscription_started` on the success screen once access lands.
 
 Then confirm the dashboard populates and that step 5's reload did not move the activation count.
+
+## 7a. Verifying R1 without a genuinely new Google account
+
+Step 3 needs an account that **has never signed in before**, and you cannot mint a Google account on
+demand. Three routes, cheapest first. ⛔ **Do not combine A and C in one sitting** — `created` is
+**exactly-once by construction**, so whichever route touches the account first consumes it and the
+other silently reports `created: false`, which looks exactly like a broken fix.
+
+### A. A Gmail `+alias` through the EMAIL door — the cheapest real signup
+
+`+tags` are deliberately **not** canonicalised (`identity.py::normalize_email` documents why:
+folding them would resolve one person's OTP onto another person's account), so
+`youraddress+r1@gmail.com` is a **distinct Cognito user** while the code still lands in the
+existing inbox. `POST /auth/email-otp/start` on an unrecognised address calls
+`identity_svc.create_native_user` — i.e. this genuinely creates an account.
+
+1. `www.credencesports.com/login` in a **fresh private window** → **"Email me a sign-in code
+   instead"** (the SIGN IN door — that is the whole point).
+2. Enter `youraddress+r1@gmail.com`, submit, read the code from your normal inbox, verify.
+3. Expect `user_signup_completed` with `signal: "server"`, `intent: "signin"`,
+   `method: "email_otp"`, `surface: "login"`.
+4. Sign out, sign back in with the same alias → `user_signed_in` fires, `user_signup_completed`
+   must **not**.
+
+⚠️ **This proves the email door, not the Google door.** They share `lib/post-signin.ts` and the
+Google page's delegation to it is pinned by
+`betting_ml/tests/test_g100_d0_r1_signup_authoritative.py`, so the risk is small — but if you want
+Google specifically, use C. ⚠️ If the code never arrives, suspect **SES sandbox** (an unverified
+recipient), not the fix.
+
+### B. Read the deployed contract directly — 30 seconds, no account, no walk
+
+The only thing that can silently fail on deploy is the response shape, and you can read it. **Read
+the flag, never infer it from a status code** (G100-D1's lesson). Grab your access token from
+DevTools → Application → Local Storage →
+`CognitoIdentityServiceProvider.<appClientId>.<user>.accessToken`, then (**LAPTOP**):
+
+```bash
+curl -sS -X POST https://api.credencesports.com/auth/accept-terms \
+  -H "Authorization: Bearer $CREDENCE_ACCESS_TOKEN"
+```
+
+- `{"created":false}` ⇒ **deployed and authoritative** on an account that already accepted. This is
+  the whole of the false-positive half of the fix, measured.
+- `` (empty, HTTP 204) ⇒ **`deploy.sh` has NOT run.** The client is in the skew fallback and every
+  event is carrying `signal: "intent_fallback"`.
+
+⛔ It cannot demonstrate `created: true` — see the exactly-once warning above.
+
+### C. Make your OWN account new again — the only route that exercises GOOGLE
+
+Clear your `tos_accepted_at` and sign in: the next write becomes the account's first, so `created`
+is `true` on an ordinary Google sign-in at the `/login` door. Reversible, and the one honest way to
+watch the positive branch on the real Google path.
+
+⚠️ **Sign OUT first.** With an open session, `TermsGate` collects the acceptance on the next authed
+render — and it emits **nothing on purpose** (§3, residual 1). Accepting through that modal
+consumes `created` invisibly and the walk reads as a failure of a working fix.
+
+⚠️ It also **rewrites your acceptance timestamp to today**, which is why step 1 saves the original
+and step 4 puts it back.
+
+All four are **LAPTOP**; `credence-prod-dynamo-users` is in **us-east-1** (not the lakehouse's
+us-east-2).
+
+```bash
+# 1. Find your row and SAVE the original timestamp — you are restoring it in step 4.
+aws dynamodb scan --table-name credence-prod-dynamo-users --region us-east-1 \
+  --filter-expression "email = :e" \
+  --expression-attribute-values '{":e":{"S":"YOUR_EMAIL@example.com"}}' \
+  --query 'Items[].{user_id:user_id.S,tos_accepted_at:tos_accepted_at.S}' --output table
+```
+
+```bash
+# 2. Sign OUT in the browser, then clear the attribute.
+aws dynamodb update-item --table-name credence-prod-dynamo-users --region us-east-1 \
+  --key '{"user_id":{"S":"YOUR_COGNITO_SUB"}}' \
+  --update-expression "REMOVE tos_accepted_at"
+```
+
+3. Sign in at `www.credencesports.com/login` with **Continue with Google**. Expect
+   `user_signup_completed` — `signal: "server"`, `intent: "signin"`, `method: "google"`.
+
+```bash
+# 4. Restore the ORIGINAL timestamp (the sign-in just wrote today's over it).
+aws dynamodb update-item --table-name credence-prod-dynamo-users --region us-east-1 \
+  --key '{"user_id":{"S":"YOUR_COGNITO_SUB"}}' \
+  --update-expression "SET tos_accepted_at = :t" \
+  --expression-attribute-values '{":t":{"S":"THE_ORIGINAL_TIMESTAMP"}}'
+```
+
+⏳ In every route, **do not read a zero within ~5 minutes** — see the ingest-lag note below.
+
+---
 
 ### ✅ Walked and verified — 2026-08-09
 
