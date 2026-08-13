@@ -88,9 +88,27 @@ its reads leave, which is why `story_prompts` calls it "a DIVIDEND of target 6, 
   documents three times (`mlb_odds_raw` 07-05, `monthly_schedule` 07-23, `derivative_odds_raw`
   07-29). Those three were *removed* because their data left Snowflake entirely; this one is
   *repointed*, because the data is alive and current on S3 — repointing restores the monitor where
-  removing it would delete coverage. The 48h threshold was re-checked before flipping (S3 cadence
-  is unbroken daily; at the 12:00/12:30/17:30 UTC run times the lag is 12.5–36.5h, ≥11.5h of
-  headroom) so the restored monitor does not simply cry wolf for a new reason.
+  removing it would delete coverage.
+
+  ⚠️ **THRESHOLD CORRECTED 48h → 72h (2026-08-13), and the original figure was wrong.** This PR
+  first claimed "at the 12:00/12:30/17:30 UTC run times the lag is 12.5–36.5h, ≥11.5h of headroom."
+  A live run of the repointed script against real S3 — the runtime gate, which CI structurally
+  cannot perform — refuted it:
+
+  | measured | value |
+  |---|---|
+  | `max(run_timestamp)` | **2026-08-12 13:11 UTC** (the writer is healthy) |
+  | `max(as_of_date)` | **2026-08-11** — an EVENT date, so D−1 by construction |
+  | this check's cron | **12:30 + 17:30 UTC** (`30 12,17` in `capture.crontab`) |
+
+  ⇒ at **17:30** (after the 13:11 write) as_of = D−1 → **41.5h**; at **12:30** (before it) as_of =
+  D−2 → **60.5h**. The healthy band is **41.5–60.5h**, so a 48h threshold reads STALE at *every*
+  12:30 run — the repoint would have swapped a false `STALE ~800h` for a new daily false STALE.
+  ⭐ The original figure assumed the write lands BEFORE the 12:30 check; measured, it lands **41
+  minutes after**. The verdict turned on a race nobody had timed. 72h clears the structural worst
+  case with ~11.5h of real margin and still catches a two-day writer outage (≥84h).
+  ⛔ Do not lower it without re-measuring `run_timestamp` against the cron times — the number is a
+  property of that race, not of the data.
 
 **The five that stayed, measured 2026-08-08 (`max(ts_col)`, each side):**
 

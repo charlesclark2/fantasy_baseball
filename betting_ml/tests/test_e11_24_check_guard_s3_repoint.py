@@ -312,6 +312,46 @@ def test_the_archetype_entry_reads_s3_because_its_snowflake_table_is_frozen():
     assert fresh.entry_source(cfg) == "s3"
 
 
+# ── The threshold is a property of a RACE, and was measured, not assumed ──────────────────
+# MEASURED 2026-08-13 against real S3 (the runtime gate; CI mocks all IO and cannot see this):
+#   max(run_timestamp) = 2026-08-12 13:11 UTC   ·   max(as_of_date) = 2026-08-11 (an EVENT date)
+# This check's cron is `30 12,17` UTC, so the 12:30 run lands BEFORE the day's 13:11 write and the
+# 17:30 run lands after it.
+_ARCHETYPE_WRITE_UTC_HOUR = 13 + 11 / 60          # 13:11, measured
+_ARCHETYPE_CRON_HOURS_UTC = (12.5, 17.5)          # `30 12,17` in capture.crontab
+
+
+def _archetype_lag_hours(cron_hour: float) -> float:
+    """Healthy-store lag at a given cron hour: as_of is D-1 after the write, D-2 before it."""
+    days_back = 1 if cron_hour >= _ARCHETYPE_WRITE_UTC_HOUR else 2
+    return days_back * 24 + cron_hour
+
+
+def test_the_archetype_threshold_clears_the_structural_worst_case():
+    """⭐ 48h would read STALE at EVERY 12:30 run — the repoint would have swapped a false
+    `STALE ~800h` for a new daily false STALE. The original 48h assumed the write lands BEFORE
+    the 12:30 check; measured, it lands 41 minutes after."""
+    cfg = fresh.FRESHNESS_THRESHOLDS[
+        "baseball_data.betting.mart_player_archetype_posteriors"]
+    worst = max(_archetype_lag_hours(h) for h in _ARCHETYPE_CRON_HOURS_UTC)
+    assert worst == pytest.approx(60.5)            # the 12:30 run, as_of = D-2
+    assert cfg["max_stale_hours"] > worst, (
+        f"max_stale_hours={cfg['max_stale_hours']}h is below the healthy-store worst case "
+        f"({worst}h), so this entry cries wolf on every 12:30 run"
+    )
+
+
+def test_the_archetype_threshold_still_catches_a_real_writer_outage():
+    """A floor that clears the race must not become a threshold nothing can trip."""
+    cfg = fresh.FRESHNESS_THRESHOLDS[
+        "baseball_data.betting.mart_player_archetype_posteriors"]
+    two_day_outage = max(_archetype_lag_hours(h) for h in _ARCHETYPE_CRON_HOURS_UTC) + 24
+    assert cfg["max_stale_hours"] < two_day_outage, (
+        f"max_stale_hours={cfg['max_stale_hours']}h would not flag a writer that stopped for a "
+        f"full extra day ({two_day_outage}h)"
+    )
+
+
 def test_every_entry_declares_a_source_explicitly():
     """No silent defaults in the registry: a reader must be able to tell, per entry, which
     store it is trusting — that ambiguity is what let the archetype freeze hide."""

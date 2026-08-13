@@ -158,7 +158,21 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
     # Full rationale in the DATA SOURCE block at the top of this module.
     "baseball_data.betting.mart_player_archetype_posteriors": {
         "ts_col": "as_of_date",   # DATE = last game_date included — event-date; see note above
-        "max_stale_hours": 48,
+        # ⭐ 72, NOT 48 — DERIVED FROM A LIVE READ (2026-08-13), which overturned the figure this
+        # PR was originally written with. `as_of_date` is an EVENT date, and the writer sets it to
+        # D−1 (today's games are unplayed), so a HEALTHY store never reads less than ~41h:
+        #   · measured: `run_timestamp` 2026-08-12 13:11 UTC, `max(as_of_date)` 2026-08-11
+        #   · this check runs 12:30 + 17:30 UTC (`30 12,17` in capture.crontab)
+        #   · 17:30, i.e. AFTER the 13:11 write → as_of = D−1 → **41.5 h**
+        #   · 12:30, i.e. BEFORE it            → as_of = D−2 → **60.5 h**
+        # So the healthy band is 41.5–60.5 h and a 48 h threshold is STALE at every 12:30 run.
+        # The original "12.5–36.5 h, ≥11.5 h of headroom" assumed the write lands BEFORE the 12:30
+        # check; measured, it lands 41 min after — the verdict turned on a race nobody had timed.
+        # 72 h clears the structural worst case (60.5) with ~11.5 h of real margin, and still
+        # catches what this entry is for: a writer that stops for two days reads ≥84 h.
+        # ⛔ Do not lower this without re-measuring `run_timestamp` vs the cron times — the number
+        # is a property of that RACE, not of the data.
+        "max_stale_hours": 72,
         "game_day_only": True,    # E11.12 fix: was False; event-date col → only check on game days
         "non_blocking": True,
         "source": "s3",
