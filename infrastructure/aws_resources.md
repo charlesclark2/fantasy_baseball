@@ -67,20 +67,27 @@ OTP could be 403'd and told to enable TOTP they cannot enroll (they have no pass
 re-authenticate with). This is inert today (`ENFORCE_SUBSCRIBER_MFA` defaults to `0`) and
 the frontend side is already handled (`sessionUsesPasswordlessAuth`).
 
-🔧 **G100-C0-MFA — the code fix has LANDED, the live gate has NOT been run.** A `passwordless`
-group is applied at both creation points and exempted in the guard. **The flip stays blocked
-until the two-sided live gate passes**, because CI mocks all IO and a wrong exemption here is
-an MFA bypass on a paying account that passes CI exactly as happily as the correct version.
-Full runbook — group creation, the PreSignUp IAM addition, the backfill, and the acceptance
-test — is `docs/g100_c0_mfa_passwordless_exemption.md`. The instrument is
-`GET /auth/session-diagnostics` (authenticated, self-only): it reports the claims as the
-Lambda receives them post-authorizer plus the verdict the guard would reach, so both legs can
-be answered *before* the flag is flipped and without a real subscriber. ⚠️ It also carries a
-`guard_version` marker — the API Lambda has no CD, so a merged PR is not a deployed build.
+✅ **RESOLVED — G100-C0-MFA, VERIFIED LIVE 2026-08-13. The flip is cleared.** A `passwordless`
+group is applied at both creation points and exempted in the guard. Verified with
+`ENFORCE_SUBSCRIBER_MFA=1` genuinely on: the SAME account, SAME session type, with the group
+as the only variable, got **200** with it and **403** without it. Instrument + runbook +
+re-verification procedure: `docs/g100_c0_mfa_passwordless_exemption.md`
+(`GET /auth/session-diagnostics`, authenticated and self-only, carries a `guard_version`
+marker — the API Lambda has no CD, so a merged PR is not a deployed build).
 
-⭐ Found while fixing it: `require_subscriber_mfa` split `cognito:groups` on `,` only, while
-this gateway delivers `[subscriber]` — so with enforcement on it would have gated **nobody**.
-Both readings now share `dependencies.parse_groups_claim`.
+⭐⭐ **TWO measured facts about this pool's ACCESS token that any future auth work must start
+from — both overturn a natural assumption:**
+- **There is no `amr`, and no `identities`.** Password, Google and email-OTP sessions all
+  deliver exactly `auth_time, client_id, cognito:groups, event_id, exp, iat, iss, jti,
+  origin_jti, scope, sub, token_use, username`. So the `amr` half of the federated exemption
+  is dead code in production, and a **linked** Google session is indistinguishable from a
+  password session ⇒ it gets challenged at flip time. Don't build a rule on `amr` without
+  re-measuring.
+- **`cognito:groups` is bracketed even for ONE group** (`"[subscriber]"`), and ABSENT entirely
+  for a user in no groups. `require_subscriber_mfa` split on `,` only, so with enforcement on
+  it would have gated **nobody** — enforcement that reads as enabled and enforces nothing.
+  Fixed; both readings now share `dependencies.parse_groups_claim`, and the live 403 above is
+  the proof it now bites. ⇒ ⛔ never hand-parse this claim.
 
 #### ✅ Verified live 2026-08-10 — all four legs, against the real pool
 
