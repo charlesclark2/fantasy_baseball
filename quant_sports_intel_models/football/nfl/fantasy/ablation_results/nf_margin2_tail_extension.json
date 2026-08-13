@@ -1,0 +1,5037 @@
+{
+  "generated_at": "2026-08-13T03:21:59+00:00",
+  "story": "NF-MARGIN2",
+  "smoke": false,
+  "runtime_seconds": 850.3,
+  "selection_metric": "crps_q199",
+  "n_folds": 8,
+  "fold_labels": [
+    "2022H1",
+    "2022H2",
+    "2023H1",
+    "2023H2",
+    "2024H1",
+    "2024H2",
+    "2025H1",
+    "2025H2"
+  ],
+  "n_rows": 34552,
+  "pit_audit": {
+    "game_groups_checked": 532,
+    "records_checked": 183314,
+    "injury_records_checked": 15401,
+    "rate_records_checked": 83360,
+    "wayback_records_checked": 9501,
+    "groups_dropped": [],
+    "rows_dropped": 0
+  },
+  "preregistration": {
+    "real_arms": [
+      "tail_ext"
+    ],
+    "foils": [
+      "incumbent"
+    ],
+    "anchors": [
+      "zero_width",
+      "max_width",
+      "over_ext",
+      "permuted_tail",
+      "pooled_tail",
+      "oracle__tail_ext",
+      "matched_n__tail_ext"
+    ],
+    "eligible": [
+      "tail_ext",
+      "incumbent"
+    ],
+    "primary_metric": "crps_q199",
+    "pit_instrument": "randomized_pit_levels on the 199-level bank (the 39-level PIT is structurally blind to a beyond-grid-only arm)",
+    "eval_levels": {
+      "n": 199,
+      "lo": 0.005,
+      "hi": 0.995
+    },
+    "over_scale": 3.0,
+    "min_tail_n": 10,
+    "nominal_tail": 0.025,
+    "cal_split": {
+      "target_fraction": 0.2,
+      "min_rows": 6000,
+      "purge_weeks": 2
+    },
+    "test_blocks": [
+      [
+        2022,
+        1
+      ],
+      [
+        2022,
+        2
+      ],
+      [
+        2023,
+        1
+      ],
+      [
+        2023,
+        2
+      ],
+      [
+        2024,
+        1
+      ],
+      [
+        2024,
+        2
+      ],
+      [
+        2025,
+        1
+      ],
+      [
+        2025,
+        2
+      ]
+    ],
+    "pbo": "UNDEFINED by design (1-arm family \u2014 GE.pbo_is_evaluable)",
+    "dsr_min": 0.95,
+    "fdr_q": 0.1,
+    "fdr_family": [
+      "margin2_tail_QB",
+      "margin2_tail_RB",
+      "margin2_tail_WR",
+      "margin2_tail_TE"
+    ],
+    "coverage_floor": 0.8,
+    "declared_inactive_clauses": [
+      "winkler_80",
+      "coverage_50",
+      "coverage_80",
+      "coverage_95"
+    ],
+    "team_total_samples": 512,
+    "capture_era_folds": [
+      "2025H1",
+      "2025H2"
+    ],
+    "seed": 20260813
+  },
+  "selections": {
+    "QB": {
+      "position": "QB",
+      "winner": "tail_ext",
+      "best_foil": "incumbent",
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "tail_ext": 2.41015,
+        "incumbent": 2.41416,
+        "zero_width": 3.24795,
+        "max_width": 3.25964,
+        "over_ext": 2.40996,
+        "permuted_tail": 2.40973,
+        "pooled_tail": 2.41012,
+        "oracle__tail_ext": 2.41007,
+        "matched_n__tail_ext": 2.41016
+      },
+      "deltas_by_fold": [
+        0.00315,
+        0.00414,
+        0.00308,
+        0.00422,
+        0.00318,
+        0.00578,
+        0.0045,
+        0.00402
+      ],
+      "fold_labels": [
+        "2022H1",
+        "2022H2",
+        "2023H1",
+        "2023H2",
+        "2024H1",
+        "2024H2",
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.00401,
+      "ci95": [
+        0.00325,
+        0.00477
+      ],
+      "beats_foil": true,
+      "fold_wins": 8,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; NF-MARGIN2 fields ONE pre-registered contrast, so there was no search to overfit. Declared before the run; deliberately NOT a gate.",
+      "dsr": 1.0,
+      "p_one_sided": 0.0,
+      "observed_sr": 4.434,
+      "var_trials_sr": null,
+      "anchors": {
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "max_width_satisfies_floor": true,
+        "over_ext_loses": false,
+        "winner_beats_permuted": false,
+        "permuted_not_significantly_better": false,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floor_respected_at_matched_n": true
+      },
+      "oracle_detail": {
+        "arm": 2.41015,
+        "own_form_oracle": 2.41007,
+        "matched_n": 2.41016,
+        "oracle_beats_matched_n": true
+      },
+      "permutation_detail": {
+        "permuted_better_mean": 0.00042,
+        "permuted_better_p_one_sided": 0.0488
+      },
+      "attribution": {
+        "marginal_share": {
+          "mean_delta": 0.00443,
+          "ci95": [
+            0.0032,
+            0.00565
+          ],
+          "fold_wins": 8,
+          "p_one_sided": 0.0
+        },
+        "alignment_share": {
+          "mean_delta": -0.00042,
+          "ci95": [
+            -0.00093,
+            0.0001
+          ],
+          "fold_wins": 2,
+          "p_one_sided": 0.9512
+        },
+        "conditioning_margin": {
+          "mean_delta": -3e-05,
+          "ci95": [
+            -9e-05,
+            3e-05
+          ],
+          "fold_wins": 2,
+          "p_one_sided": 0.877
+        },
+        "note": "marginal_share = incumbent \u2212 permuted_tail (the shuffle-surviving channel; EXPECTED positive \u2014 NF-D16 (2)); alignment_share = permuted_tail \u2212 tail_ext; conditioning_margin = pooled_tail \u2212 tail_ext (per-position conditioning's earn in the tail; informs the serving object)."
+      },
+      "calibration": {
+        "tail_mass_delta_vs_incumbent": 0.07274,
+        "dev_incumbent": 0.08298,
+        "dev_winner": 0.01024,
+        "incumbent_pit": {
+          "n": 5485,
+          "decile_freq": [
+            0.12543,
+            0.09298,
+            0.10246,
+            0.09189,
+            0.09426,
+            0.0959,
+            0.09608,
+            0.09061,
+            0.09006,
+            0.12033
+          ],
+          "max_decile_dev": 0.02543,
+          "p_below_grid": 0.05871,
+          "p_above_grid": 0.0536,
+          "mean_z": -0.0153,
+          "var_z": 1.5269,
+          "p_below_eval": 0.03993,
+          "p_above_eval": 0.05305
+        },
+        "winner_pit": {
+          "n": 5485,
+          "decile_freq": [
+            0.11522,
+            0.09845,
+            0.10064,
+            0.09754,
+            0.09827,
+            0.09644,
+            0.09262,
+            0.09043,
+            0.09079,
+            0.1196
+          ],
+          "max_decile_dev": 0.0196,
+          "p_below_grid": 0.04175,
+          "p_above_grid": 0.05251,
+          "mean_z": -0.0009,
+          "var_z": 1.1879,
+          "p_below_eval": 0.00766,
+          "p_above_eval": 0.01258
+        }
+      },
+      "construction_facts": {
+        "winkler_80_delta": 0.0,
+        "coverage_80_delta": 0.0,
+        "coverage_95_delta": 0.0,
+        "note": "IDENTICALLY ZERO BY CONSTRUCTION (within-grid identity asserted every fold) \u2014 these clauses are structurally INACTIVE for a tail-only arm and are recorded as facts, never counted as passing gates (NF-D20 (g\u2057))."
+      },
+      "coverage": {
+        "coverage_80": 0.825,
+        "n_rows": 5485,
+        "binomial_se": 0.0054,
+        "blocking_shortfall": false,
+        "structurally_inactive": true,
+        "inactive_note": "identical to the incumbent's by construction \u2014 passing the floor is NOT evidence (NF-D20 (g\u2057))."
+      },
+      "coverage_map": {
+        "coverage_80": {
+          "tail_ext": 0.825,
+          "incumbent": 0.825,
+          "over_ext": 0.825,
+          "max_width": 0.9441
+        },
+        "coverage_95": {
+          "tail_ext": 0.911,
+          "incumbent": 0.911,
+          "over_ext": 0.911,
+          "max_width": 0.9809
+        },
+        "coverage_99": {
+          "tail_ext": 0.9798,
+          "incumbent": 0.911,
+          "over_ext": 0.9996,
+          "max_width": 0.9809
+        }
+      },
+      "tail_fingerprint": {
+        "incumbent_cov95_equals_cov99": true,
+        "winner_cov99_exceeds_cov95": true,
+        "note": "the flat-tail fingerprint (cov95 \u2261 cov99) must hold for the incumbent and BREAK for the winner \u2014 a construction sanity read, report-only."
+      },
+      "thin_tail_cells": {
+        "n_fold_positions_thin_hi": 0,
+        "n_fold_positions_thin_lo": 0
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0043,
+        "legacy_mean_delta": 0.0039,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      }
+    },
+    "RB": {
+      "position": "RB",
+      "winner": "tail_ext",
+      "best_foil": "incumbent",
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "tail_ext": 2.35729,
+        "incumbent": 2.36012,
+        "zero_width": 3.23657,
+        "max_width": 3.32154,
+        "over_ext": 2.35805,
+        "permuted_tail": 2.35729,
+        "pooled_tail": 2.35738,
+        "oracle__tail_ext": 2.35731,
+        "matched_n__tail_ext": 2.35735
+      },
+      "deltas_by_fold": [
+        0.0036,
+        0.00197,
+        0.00212,
+        0.00201,
+        0.00377,
+        0.00223,
+        0.00387,
+        0.00306
+      ],
+      "fold_labels": [
+        "2022H1",
+        "2022H2",
+        "2023H1",
+        "2023H2",
+        "2024H1",
+        "2024H2",
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.00283,
+      "ci95": [
+        0.00213,
+        0.00353
+      ],
+      "beats_foil": true,
+      "fold_wins": 8,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; NF-MARGIN2 fields ONE pre-registered contrast, so there was no search to overfit. Declared before the run; deliberately NOT a gate.",
+      "dsr": 1.0,
+      "p_one_sided": 0.0,
+      "observed_sr": 3.388,
+      "var_trials_sr": null,
+      "anchors": {
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "max_width_satisfies_floor": true,
+        "over_ext_loses": true,
+        "winner_beats_permuted": true,
+        "permuted_not_significantly_better": true,
+        "no_arm_beats_own_oracle": false,
+        "oracle_floor_respected_at_matched_n": true
+      },
+      "oracle_detail": {
+        "arm": 2.35729,
+        "own_form_oracle": 2.35731,
+        "matched_n": 2.35735,
+        "oracle_beats_matched_n": true
+      },
+      "permutation_detail": {
+        "permuted_better_mean": -0.0,
+        "permuted_better_p_one_sided": 0.5116
+      },
+      "attribution": {
+        "marginal_share": {
+          "mean_delta": 0.00283,
+          "ci95": [
+            0.00193,
+            0.00372
+          ],
+          "fold_wins": 8,
+          "p_one_sided": 0.0001
+        },
+        "alignment_share": {
+          "mean_delta": 0.0,
+          "ci95": [
+            -0.00021,
+            0.00022
+          ],
+          "fold_wins": 4,
+          "p_one_sided": 0.4884
+        },
+        "conditioning_margin": {
+          "mean_delta": 8e-05,
+          "ci95": [
+            4e-05,
+            0.00013
+          ],
+          "fold_wins": 8,
+          "p_one_sided": 0.0023
+        },
+        "note": "marginal_share = incumbent \u2212 permuted_tail (the shuffle-surviving channel; EXPECTED positive \u2014 NF-D16 (2)); alignment_share = permuted_tail \u2212 tail_ext; conditioning_margin = pooled_tail \u2212 tail_ext (per-position conditioning's earn in the tail; informs the serving object)."
+      },
+      "calibration": {
+        "tail_mass_delta_vs_incumbent": 0.0575,
+        "dev_incumbent": 0.06112,
+        "dev_winner": 0.00362,
+        "incumbent_pit": {
+          "n": 8591,
+          "decile_freq": [
+            0.11035,
+            0.10336,
+            0.09824,
+            0.09952,
+            0.09603,
+            0.09696,
+            0.09487,
+            0.09615,
+            0.0958,
+            0.10872
+          ],
+          "max_decile_dev": 0.01035,
+          "p_below_grid": 0.04156,
+          "p_above_grid": 0.04516,
+          "mean_z": -0.0023,
+          "var_z": 1.337,
+          "p_below_eval": 0.02677,
+          "p_above_eval": 0.04435
+        },
+        "winner_pit": {
+          "n": 8591,
+          "decile_freq": [
+            0.10243,
+            0.10977,
+            0.09487,
+            0.09906,
+            0.09591,
+            0.09778,
+            0.09917,
+            0.09696,
+            0.0958,
+            0.10825
+          ],
+          "max_decile_dev": 0.00977,
+          "p_below_grid": 0.02689,
+          "p_above_grid": 0.044,
+          "mean_z": 0.0053,
+          "var_z": 1.069,
+          "p_below_eval": 0.00559,
+          "p_above_eval": 0.00803
+        }
+      },
+      "construction_facts": {
+        "winkler_80_delta": 0.0,
+        "coverage_80_delta": 0.0,
+        "coverage_95_delta": 0.0,
+        "note": "IDENTICALLY ZERO BY CONSTRUCTION (within-grid identity asserted every fold) \u2014 these clauses are structurally INACTIVE for a tail-only arm and are recorded as facts, never counted as passing gates (NF-D20 (g\u2057))."
+      },
+      "coverage": {
+        "coverage_80": 0.845,
+        "n_rows": 8591,
+        "binomial_se": 0.0043,
+        "blocking_shortfall": false,
+        "structurally_inactive": true,
+        "inactive_note": "identical to the incumbent's by construction \u2014 passing the floor is NOT evidence (NF-D20 (g\u2057))."
+      },
+      "coverage_map": {
+        "coverage_80": {
+          "tail_ext": 0.8452,
+          "incumbent": 0.8452,
+          "over_ext": 0.8452,
+          "max_width": 0.9847
+        },
+        "coverage_95": {
+          "tail_ext": 0.9335,
+          "incumbent": 0.9335,
+          "over_ext": 0.9335,
+          "max_width": 0.9958
+        },
+        "coverage_99": {
+          "tail_ext": 0.9864,
+          "incumbent": 0.9335,
+          "over_ext": 0.9994,
+          "max_width": 0.9958
+        }
+      },
+      "tail_fingerprint": {
+        "incumbent_cov95_equals_cov99": true,
+        "winner_cov99_exceeds_cov95": true,
+        "note": "the flat-tail fingerprint (cov95 \u2261 cov99) must hold for the incumbent and BREAK for the winner \u2014 a construction sanity read, report-only."
+      },
+      "thin_tail_cells": {
+        "n_fold_positions_thin_hi": 0,
+        "n_fold_positions_thin_lo": 0
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0035,
+        "legacy_mean_delta": 0.0026,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      }
+    },
+    "WR": {
+      "position": "WR",
+      "winner": "tail_ext",
+      "best_foil": "incumbent",
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "tail_ext": 2.51102,
+        "incumbent": 2.51426,
+        "zero_width": 3.46621,
+        "max_width": 3.56004,
+        "over_ext": 2.51159,
+        "permuted_tail": 2.51083,
+        "pooled_tail": 2.51105,
+        "oracle__tail_ext": 2.51092,
+        "matched_n__tail_ext": 2.51104
+      },
+      "deltas_by_fold": [
+        0.00256,
+        0.00369,
+        0.00309,
+        0.00318,
+        0.00335,
+        0.0046,
+        0.00316,
+        0.00229
+      ],
+      "fold_labels": [
+        "2022H1",
+        "2022H2",
+        "2023H1",
+        "2023H2",
+        "2024H1",
+        "2024H2",
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.00324,
+      "ci95": [
+        0.00265,
+        0.00383
+      ],
+      "beats_foil": true,
+      "fold_wins": 8,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; NF-MARGIN2 fields ONE pre-registered contrast, so there was no search to overfit. Declared before the run; deliberately NOT a gate.",
+      "dsr": 1.0,
+      "p_one_sided": 0.0,
+      "observed_sr": 4.619,
+      "var_trials_sr": null,
+      "anchors": {
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "max_width_satisfies_floor": true,
+        "over_ext_loses": true,
+        "winner_beats_permuted": false,
+        "permuted_not_significantly_better": false,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floor_respected_at_matched_n": true
+      },
+      "oracle_detail": {
+        "arm": 2.51102,
+        "own_form_oracle": 2.51092,
+        "matched_n": 2.51104,
+        "oracle_beats_matched_n": true
+      },
+      "permutation_detail": {
+        "permuted_better_mean": 0.00019,
+        "permuted_better_p_one_sided": 0.0241
+      },
+      "attribution": {
+        "marginal_share": {
+          "mean_delta": 0.00343,
+          "ci95": [
+            0.00268,
+            0.00418
+          ],
+          "fold_wins": 8,
+          "p_one_sided": 0.0
+        },
+        "alignment_share": {
+          "mean_delta": -0.00019,
+          "ci95": [
+            -0.00037,
+            -0.0
+          ],
+          "fold_wins": 2,
+          "p_one_sided": 0.9759
+        },
+        "conditioning_margin": {
+          "mean_delta": 3e-05,
+          "ci95": [
+            -3e-05,
+            9e-05
+          ],
+          "fold_wins": 5,
+          "p_one_sided": 0.1412
+        },
+        "note": "marginal_share = incumbent \u2212 permuted_tail (the shuffle-surviving channel; EXPECTED positive \u2014 NF-D16 (2)); alignment_share = permuted_tail \u2212 tail_ext; conditioning_margin = pooled_tail \u2212 tail_ext (per-position conditioning's earn in the tail; informs the serving object)."
+      },
+      "calibration": {
+        "tail_mass_delta_vs_incumbent": 0.05214,
+        "dev_incumbent": 0.05736,
+        "dev_winner": 0.00522,
+        "incumbent_pit": {
+          "n": 12827,
+          "decile_freq": [
+            0.11671,
+            0.10236,
+            0.10517,
+            0.09652,
+            0.09729,
+            0.09488,
+            0.10018,
+            0.09418,
+            0.08724,
+            0.10548
+          ],
+          "max_decile_dev": 0.01671,
+          "p_below_grid": 0.04155,
+          "p_above_grid": 0.04678,
+          "mean_z": -0.0232,
+          "var_z": 1.3319,
+          "p_below_eval": 0.0216,
+          "p_above_eval": 0.04576
+        },
+        "winner_pit": {
+          "n": 12827,
+          "decile_freq": [
+            0.10798,
+            0.10299,
+            0.10844,
+            0.10088,
+            0.09675,
+            0.09496,
+            0.10065,
+            0.0962,
+            0.08716,
+            0.104
+          ],
+          "max_decile_dev": 0.01284,
+          "p_below_grid": 0.02331,
+          "p_above_grid": 0.04568,
+          "mean_z": -0.0165,
+          "var_z": 1.0703,
+          "p_below_eval": 0.00437,
+          "p_above_eval": 0.00959
+        }
+      },
+      "construction_facts": {
+        "winkler_80_delta": 0.0,
+        "coverage_80_delta": 0.0,
+        "coverage_95_delta": 0.0,
+        "note": "IDENTICALLY ZERO BY CONSTRUCTION (within-grid identity asserted every fold) \u2014 these clauses are structurally INACTIVE for a tail-only arm and are recorded as facts, never counted as passing gates (NF-D20 (g\u2057))."
+      },
+      "coverage": {
+        "coverage_80": 0.8541,
+        "n_rows": 12827,
+        "binomial_se": 0.0035,
+        "blocking_shortfall": false,
+        "structurally_inactive": true,
+        "inactive_note": "identical to the incumbent's by construction \u2014 passing the floor is NOT evidence (NF-D20 (g\u2057))."
+      },
+      "coverage_map": {
+        "coverage_80": {
+          "tail_ext": 0.854,
+          "incumbent": 0.854,
+          "over_ext": 0.854,
+          "max_width": 0.9891
+        },
+        "coverage_95": {
+          "tail_ext": 0.9371,
+          "incumbent": 0.9371,
+          "over_ext": 0.9371,
+          "max_width": 0.9978
+        },
+        "coverage_99": {
+          "tail_ext": 0.986,
+          "incumbent": 0.9371,
+          "over_ext": 0.9995,
+          "max_width": 0.9978
+        }
+      },
+      "tail_fingerprint": {
+        "incumbent_cov95_equals_cov99": true,
+        "winner_cov99_exceeds_cov95": true,
+        "note": "the flat-tail fingerprint (cov95 \u2261 cov99) must hold for the incumbent and BREAK for the winner \u2014 a construction sanity read, report-only."
+      },
+      "thin_tail_cells": {
+        "n_fold_positions_thin_hi": 0,
+        "n_fold_positions_thin_lo": 0
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0027,
+        "legacy_mean_delta": 0.0034,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      }
+    },
+    "TE": {
+      "position": "TE",
+      "winner": "tail_ext",
+      "best_foil": "incumbent",
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "tail_ext": 1.72813,
+        "incumbent": 1.72963,
+        "zero_width": 2.36975,
+        "max_width": 2.48597,
+        "over_ext": 1.72937,
+        "permuted_tail": 1.72846,
+        "pooled_tail": 1.72805,
+        "oracle__tail_ext": 1.72779,
+        "matched_n__tail_ext": 1.72794
+      },
+      "deltas_by_fold": [
+        0.00113,
+        0.00177,
+        0.00101,
+        0.00142,
+        0.00182,
+        0.00166,
+        0.00173,
+        0.00152
+      ],
+      "fold_labels": [
+        "2022H1",
+        "2022H2",
+        "2023H1",
+        "2023H2",
+        "2024H1",
+        "2024H2",
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.00151,
+      "ci95": [
+        0.00126,
+        0.00176
+      ],
+      "beats_foil": true,
+      "fold_wins": 8,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; NF-MARGIN2 fields ONE pre-registered contrast, so there was no search to overfit. Declared before the run; deliberately NOT a gate.",
+      "dsr": 1.0,
+      "p_one_sided": 0.0,
+      "observed_sr": 5.009,
+      "var_trials_sr": null,
+      "anchors": {
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "max_width_satisfies_floor": true,
+        "over_ext_loses": true,
+        "winner_beats_permuted": true,
+        "permuted_not_significantly_better": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floor_respected_at_matched_n": true
+      },
+      "oracle_detail": {
+        "arm": 1.72813,
+        "own_form_oracle": 1.72779,
+        "matched_n": 1.72794,
+        "oracle_beats_matched_n": true
+      },
+      "permutation_detail": {
+        "permuted_better_mean": -0.00034,
+        "permuted_better_p_one_sided": 0.999
+      },
+      "attribution": {
+        "marginal_share": {
+          "mean_delta": 0.00117,
+          "ci95": [
+            0.00082,
+            0.00153
+          ],
+          "fold_wins": 8,
+          "p_one_sided": 0.0001
+        },
+        "alignment_share": {
+          "mean_delta": 0.00034,
+          "ci95": [
+            0.00017,
+            0.0005
+          ],
+          "fold_wins": 8,
+          "p_one_sided": 0.001
+        },
+        "conditioning_margin": {
+          "mean_delta": -8e-05,
+          "ci95": [
+            -0.00021,
+            5e-05
+          ],
+          "fold_wins": 2,
+          "p_one_sided": 0.9057
+        },
+        "note": "marginal_share = incumbent \u2212 permuted_tail (the shuffle-surviving channel; EXPECTED positive \u2014 NF-D16 (2)); alignment_share = permuted_tail \u2212 tail_ext; conditioning_margin = pooled_tail \u2212 tail_ext (per-position conditioning's earn in the tail; informs the serving object)."
+      },
+      "calibration": {
+        "tail_mass_delta_vs_incumbent": 0.03053,
+        "dev_incumbent": 0.03694,
+        "dev_winner": 0.00641,
+        "incumbent_pit": {
+          "n": 7649,
+          "decile_freq": [
+            0.10616,
+            0.09988,
+            0.1042,
+            0.10093,
+            0.10014,
+            0.1008,
+            0.09779,
+            0.09256,
+            0.09635,
+            0.10119
+          ],
+          "max_decile_dev": 0.00744,
+          "p_below_grid": 0.02863,
+          "p_above_grid": 0.03909,
+          "mean_z": 0.0049,
+          "var_z": 1.1789,
+          "p_below_eval": 0.00837,
+          "p_above_eval": 0.03857
+        },
+        "winner_pit": {
+          "n": 7649,
+          "decile_freq": [
+            0.09361,
+            0.10302,
+            0.11152,
+            0.09936,
+            0.1025,
+            0.09661,
+            0.1021,
+            0.09413,
+            0.09688,
+            0.10027
+          ],
+          "max_decile_dev": 0.01152,
+          "p_below_grid": 0.01334,
+          "p_above_grid": 0.03844,
+          "mean_z": 0.0108,
+          "var_z": 0.9817,
+          "p_below_eval": 0.00196,
+          "p_above_eval": 0.00837
+        }
+      },
+      "construction_facts": {
+        "winkler_80_delta": 0.0,
+        "coverage_80_delta": 0.0,
+        "coverage_95_delta": 0.0,
+        "note": "IDENTICALLY ZERO BY CONSTRUCTION (within-grid identity asserted every fold) \u2014 these clauses are structurally INACTIVE for a tail-only arm and are recorded as facts, never counted as passing gates (NF-D20 (g\u2057))."
+      },
+      "coverage": {
+        "coverage_80": 0.8821,
+        "n_rows": 7649,
+        "binomial_se": 0.0046,
+        "blocking_shortfall": false,
+        "structurally_inactive": true,
+        "inactive_note": "identical to the incumbent's by construction \u2014 passing the floor is NOT evidence (NF-D20 (g\u2057))."
+      },
+      "coverage_map": {
+        "coverage_80": {
+          "tail_ext": 0.8821,
+          "incumbent": 0.8821,
+          "over_ext": 0.8821,
+          "max_width": 0.9865
+        },
+        "coverage_95": {
+          "tail_ext": 0.9577,
+          "incumbent": 0.9577,
+          "over_ext": 0.9577,
+          "max_width": 0.9988
+        },
+        "coverage_99": {
+          "tail_ext": 0.9905,
+          "incumbent": 0.9577,
+          "over_ext": 0.9987,
+          "max_width": 0.9988
+        }
+      },
+      "tail_fingerprint": {
+        "incumbent_cov95_equals_cov99": true,
+        "winner_cov99_exceeds_cov95": true,
+        "note": "the flat-tail fingerprint (cov95 \u2261 cov99) must hold for the incumbent and BREAK for the winner \u2014 a construction sanity read, report-only."
+      },
+      "thin_tail_cells": {
+        "n_fold_positions_thin_hi": 0,
+        "n_fold_positions_thin_lo": 1
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0016,
+        "legacy_mean_delta": 0.0015,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      }
+    }
+  },
+  "team_total_pooled": {
+    "tail_ext": {
+      "n": 2174,
+      "coverage_80": 0.7052,
+      "share_below_q10": 0.1385,
+      "share_above_q90": 0.1564,
+      "binomial_se": 0.0086
+    },
+    "incumbent": {
+      "n": 2174,
+      "coverage_80": 0.6794,
+      "share_below_q10": 0.1403,
+      "share_above_q90": 0.1803,
+      "binomial_se": 0.0086
+    }
+  },
+  "reproduction_anchor": {
+    "expected": 0.6794,
+    "measured": 0.6794,
+    "reproduced": true,
+    "note": "REPORT-ONLY: same CRN base + folds + marginals as NF-MARGIN1 \u21d2 the incumbent row should reproduce; valid only on the full 8-fold run."
+  },
+  "fold_results": [
+    {
+      "label": "2022H1",
+      "scores": {
+        "QB": {
+          "tail_ext": {
+            "crps_q199": 2.2388346128616283,
+            "winkler_80": 14.891706932534179,
+            "n": 674,
+            "coverage_50": 0.7210682492581603,
+            "coverage_80": 0.8649851632047477,
+            "coverage_95": 0.9317507418397626,
+            "coverage_99": 0.9851632047477745
+          },
+          "incumbent": {
+            "crps_q199": 2.241987377801271,
+            "winkler_80": 14.891706932534179,
+            "n": 674,
+            "coverage_50": 0.7210682492581603,
+            "coverage_80": 0.8649851632047477,
+            "coverage_95": 0.9317507418397626,
+            "coverage_99": 0.9317507418397626
+          },
+          "zero_width": {
+            "crps_q199": 3.014753766952721,
+            "winkler_80": 30.14753766952721,
+            "n": 674,
+            "coverage_50": 0.5207715133531158,
+            "coverage_80": 0.5207715133531158,
+            "coverage_95": 0.5207715133531158,
+            "coverage_99": 0.5207715133531158
+          },
+          "max_width": {
+            "crps_q199": 3.147752872652362,
+            "winkler_80": 27.960144868406786,
+            "n": 674,
+            "coverage_50": 0.9124629080118695,
+            "coverage_80": 0.9688427299703264,
+            "coverage_95": 0.9896142433234422,
+            "coverage_99": 0.9896142433234422
+          },
+          "over_ext": {
+            "crps_q199": 2.239508627698016,
+            "winkler_80": 14.891706932534179,
+            "n": 674,
+            "coverage_50": 0.7210682492581603,
+            "coverage_80": 0.8649851632047477,
+            "coverage_95": 0.9317507418397626,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.2390924860166264,
+            "winkler_80": 14.891706932534179,
+            "n": 674,
+            "coverage_50": 0.7210682492581603,
+            "coverage_80": 0.8649851632047477,
+            "coverage_95": 0.9317507418397626,
+            "coverage_99": 1.0
+          },
+          "pooled_tail": {
+            "crps_q199": 2.2388794068897266,
+            "winkler_80": 14.891706932534179,
+            "n": 674,
+            "coverage_50": 0.7210682492581603,
+            "coverage_80": 0.8649851632047477,
+            "coverage_95": 0.9317507418397626,
+            "coverage_99": 0.983679525222552
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.2388540532169805,
+            "winkler_80": 14.891706932534179,
+            "n": 674,
+            "coverage_50": 0.7210682492581603,
+            "coverage_80": 0.8649851632047477,
+            "coverage_95": 0.9317507418397626,
+            "coverage_99": 0.9821958456973294
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.2388131981237294,
+            "winkler_80": 14.891706932534179,
+            "n": 674,
+            "coverage_50": 0.7210682492581603,
+            "coverage_80": 0.8649851632047477,
+            "coverage_95": 0.9317507418397626,
+            "coverage_99": 0.9866468842729971
+          }
+        },
+        "RB": {
+          "tail_ext": {
+            "crps_q199": 2.479727333093119,
+            "winkler_80": 16.28453167023326,
+            "n": 1126,
+            "coverage_50": 0.61101243339254,
+            "coverage_80": 0.8206039076376554,
+            "coverage_95": 0.9209591474245116,
+            "coverage_99": 0.9804618117229129
+          },
+          "incumbent": {
+            "crps_q199": 2.4833298644650563,
+            "winkler_80": 16.28453167023326,
+            "n": 1126,
+            "coverage_50": 0.61101243339254,
+            "coverage_80": 0.8206039076376554,
+            "coverage_95": 0.9209591474245116,
+            "coverage_99": 0.9209591474245116
+          },
+          "zero_width": {
+            "crps_q199": 3.3934713732834507,
+            "winkler_80": 33.93471373283451,
+            "n": 1126,
+            "coverage_50": 0.2912966252220249,
+            "coverage_80": 0.2912966252220249,
+            "coverage_95": 0.2912966252220249,
+            "coverage_99": 0.2912966252220249
+          },
+          "max_width": {
+            "crps_q199": 3.37127469398464,
+            "winkler_80": 30.624643668893707,
+            "n": 1126,
+            "coverage_50": 0.8916518650088809,
+            "coverage_80": 0.9840142095914742,
+            "coverage_95": 0.9946714031971581,
+            "coverage_99": 0.9946714031971581
+          },
+          "over_ext": {
+            "crps_q199": 2.4800622119418585,
+            "winkler_80": 16.28453167023326,
+            "n": 1126,
+            "coverage_50": 0.61101243339254,
+            "coverage_80": 0.8206039076376554,
+            "coverage_95": 0.9209591474245116,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.479433868702134,
+            "winkler_80": 16.28453167023326,
+            "n": 1126,
+            "coverage_50": 0.61101243339254,
+            "coverage_80": 0.8206039076376554,
+            "coverage_95": 0.9209591474245116,
+            "coverage_99": 0.9964476021314387
+          },
+          "pooled_tail": {
+            "crps_q199": 2.479801819913895,
+            "winkler_80": 16.28453167023326,
+            "n": 1126,
+            "coverage_50": 0.61101243339254,
+            "coverage_80": 0.8206039076376554,
+            "coverage_95": 0.9209591474245116,
+            "coverage_99": 0.9840142095914742
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.4798677989137374,
+            "winkler_80": 16.28453167023326,
+            "n": 1126,
+            "coverage_50": 0.61101243339254,
+            "coverage_80": 0.8206039076376554,
+            "coverage_95": 0.9209591474245116,
+            "coverage_99": 0.9840142095914742
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.4797270322237783,
+            "winkler_80": 16.28453167023326,
+            "n": 1126,
+            "coverage_50": 0.61101243339254,
+            "coverage_80": 0.8206039076376554,
+            "coverage_95": 0.9209591474245116,
+            "coverage_99": 0.9804618117229129
+          }
+        },
+        "WR": {
+          "tail_ext": {
+            "crps_q199": 2.526415151933205,
+            "winkler_80": 15.974589013813953,
+            "n": 1636,
+            "coverage_50": 0.6454767726161369,
+            "coverage_80": 0.8594132029339854,
+            "coverage_95": 0.9364303178484108,
+            "coverage_99": 0.9883863080684596
+          },
+          "incumbent": {
+            "crps_q199": 2.528979554342946,
+            "winkler_80": 15.974589013813953,
+            "n": 1636,
+            "coverage_50": 0.6454767726161369,
+            "coverage_80": 0.8594132029339854,
+            "coverage_95": 0.9364303178484108,
+            "coverage_99": 0.9364303178484108
+          },
+          "zero_width": {
+            "crps_q199": 3.5344637131587207,
+            "winkler_80": 35.344637131587206,
+            "n": 1636,
+            "coverage_50": 0.29706601466992666,
+            "coverage_80": 0.29706601466992666,
+            "coverage_95": 0.29706601466992666,
+            "coverage_99": 0.29706601466992666
+          },
+          "max_width": {
+            "crps_q199": 3.5866844112818033,
+            "winkler_80": 32.23388630665542,
+            "n": 1636,
+            "coverage_50": 0.9235941320293398,
+            "coverage_80": 0.9963325183374083,
+            "coverage_95": 0.9987775061124694,
+            "coverage_99": 0.9987775061124694
+          },
+          "over_ext": {
+            "crps_q199": 2.5274977545094313,
+            "winkler_80": 15.974589013813953,
+            "n": 1636,
+            "coverage_50": 0.6454767726161369,
+            "coverage_80": 0.8594132029339854,
+            "coverage_95": 0.9364303178484108,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.526541148112281,
+            "winkler_80": 15.974589013813953,
+            "n": 1636,
+            "coverage_50": 0.6454767726161369,
+            "coverage_80": 0.8594132029339854,
+            "coverage_95": 0.9364303178484108,
+            "coverage_99": 0.9975550122249389
+          },
+          "pooled_tail": {
+            "crps_q199": 2.5263704043556845,
+            "winkler_80": 15.974589013813953,
+            "n": 1636,
+            "coverage_50": 0.6454767726161369,
+            "coverage_80": 0.8594132029339854,
+            "coverage_95": 0.9364303178484108,
+            "coverage_99": 0.9883863080684596
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.5264597830315547,
+            "winkler_80": 15.974589013813953,
+            "n": 1636,
+            "coverage_50": 0.6454767726161369,
+            "coverage_80": 0.8594132029339854,
+            "coverage_95": 0.9364303178484108,
+            "coverage_99": 0.9865525672371638
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.5265665236924666,
+            "winkler_80": 15.974589013813953,
+            "n": 1636,
+            "coverage_50": 0.6454767726161369,
+            "coverage_80": 0.8594132029339854,
+            "coverage_95": 0.9364303178484108,
+            "coverage_99": 0.9841075794621027
+          }
+        },
+        "TE": {
+          "tail_ext": {
+            "crps_q199": 1.7770450067878947,
+            "winkler_80": 11.812231188491186,
+            "n": 951,
+            "coverage_50": 0.7066246056782335,
+            "coverage_80": 0.8801261829652997,
+            "coverage_95": 0.9589905362776026,
+            "coverage_99": 0.9894847528916929
+          },
+          "incumbent": {
+            "crps_q199": 1.7781774865648812,
+            "winkler_80": 11.812231188491186,
+            "n": 951,
+            "coverage_50": 0.7066246056782335,
+            "coverage_80": 0.8801261829652997,
+            "coverage_95": 0.9589905362776026,
+            "coverage_99": 0.9589905362776026
+          },
+          "zero_width": {
+            "crps_q199": 2.437446937877226,
+            "winkler_80": 24.37446937877226,
+            "n": 951,
+            "coverage_50": 0.36067297581493163,
+            "coverage_80": 0.36067297581493163,
+            "coverage_95": 0.36067297581493163,
+            "coverage_99": 0.36067297581493163
+          },
+          "max_width": {
+            "crps_q199": 2.605480133064685,
+            "winkler_80": 23.454358227065477,
+            "n": 951,
+            "coverage_50": 0.9200841219768665,
+            "coverage_80": 0.982124079915878,
+            "coverage_95": 0.9989484752891693,
+            "coverage_99": 0.9989484752891693
+          },
+          "over_ext": {
+            "crps_q199": 1.7786975508122,
+            "winkler_80": 11.812231188491186,
+            "n": 951,
+            "coverage_50": 0.7066246056782335,
+            "coverage_80": 0.8801261829652997,
+            "coverage_95": 0.9589905362776026,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 1.7774715623235142,
+            "winkler_80": 11.812231188491186,
+            "n": 951,
+            "coverage_50": 0.7066246056782335,
+            "coverage_80": 0.8801261829652997,
+            "coverage_95": 0.9589905362776026,
+            "coverage_99": 0.9978969505783386
+          },
+          "pooled_tail": {
+            "crps_q199": 1.7769493035421624,
+            "winkler_80": 11.812231188491186,
+            "n": 951,
+            "coverage_50": 0.7066246056782335,
+            "coverage_80": 0.8801261829652997,
+            "coverage_95": 0.9589905362776026,
+            "coverage_99": 0.9915878023133544
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 1.7767577675918724,
+            "winkler_80": 11.812231188491186,
+            "n": 951,
+            "coverage_50": 0.7066246056782335,
+            "coverage_80": 0.8801261829652997,
+            "coverage_95": 0.9589905362776026,
+            "coverage_99": 0.9852786540483701
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 1.7770171850958711,
+            "winkler_80": 11.812231188491186,
+            "n": 951,
+            "coverage_50": 0.7066246056782335,
+            "coverage_80": 0.8801261829652997,
+            "coverage_95": 0.9589905362776026,
+            "coverage_99": 0.9894847528916929
+          }
+        }
+      },
+      "cal_note": {
+        "n_train": 48973,
+        "n_core": 37724,
+        "n_cal": 10271,
+        "cal_gw_min": 80,
+        "cal_gw_max": 100
+      },
+      "team_total": {
+        "tail_ext": {
+          "n": 272,
+          "inside": 203,
+          "below_q10": 36,
+          "above_q90": 33
+        },
+        "incumbent": {
+          "n": 272,
+          "inside": 197,
+          "below_q10": 36,
+          "above_q90": 39
+        }
+      },
+      "params_digest": {
+        "QB": {
+          "tail": {
+            "beta_hi": 4.8263,
+            "beta_lo": 1.6546,
+            "n_hi": 101,
+            "n_lo": 67,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 10.66,
+            "beta_lo": 5.1763,
+            "n_hi": 351,
+            "n_lo": 314,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.6368,
+            "beta_lo": 1.4906,
+            "n_hi": 537,
+            "n_lo": 251,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 1639,
+            "n_test": 674,
+            "n_matched": 674,
+            "matched_equals_arm": false
+          }
+        },
+        "RB": {
+          "tail": {
+            "beta_hi": 5.0398,
+            "beta_lo": 1.0131,
+            "n_hi": 145,
+            "n_lo": 74,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 8.0078,
+            "beta_lo": 2.7944,
+            "n_hi": 424,
+            "n_lo": 353,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.6368,
+            "beta_lo": 1.4906,
+            "n_hi": 537,
+            "n_lo": 251,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 2681,
+            "n_test": 1126,
+            "n_matched": 1126,
+            "matched_equals_arm": false
+          }
+        },
+        "WR": {
+          "tail": {
+            "beta_hi": 4.4242,
+            "beta_lo": 1.7084,
+            "n_hi": 209,
+            "n_lo": 89,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.4876,
+            "beta_lo": 3.8598,
+            "n_hi": 633,
+            "n_lo": 354,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.6368,
+            "beta_lo": 1.4906,
+            "n_hi": 537,
+            "n_lo": 251,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3763,
+            "n_test": 1636,
+            "n_matched": 1636,
+            "matched_equals_arm": false
+          }
+        },
+        "TE": {
+          "tail": {
+            "beta_hi": 4.2329,
+            "beta_lo": 1.7268,
+            "n_hi": 82,
+            "n_lo": 21,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 5.9269,
+            "beta_lo": 3.6806,
+            "n_hi": 307,
+            "n_lo": 78,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.6368,
+            "beta_lo": 1.4906,
+            "n_hi": 537,
+            "n_lo": 251,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 2188,
+            "n_test": 951,
+            "n_matched": 951,
+            "matched_equals_arm": false
+          }
+        }
+      },
+      "exclusions": {
+        "n_groups_excluded": 0,
+        "n_rows_excluded": 0,
+        "n_groups": 272,
+        "n_rows_scored": 4387,
+        "n_rows_total": 4387
+      },
+      "runtime_seconds": 101.9
+    },
+    {
+      "label": "2022H2",
+      "scores": {
+        "QB": {
+          "tail_ext": {
+            "crps_q199": 2.356541882004472,
+            "winkler_80": 16.781952537286667,
+            "n": 685,
+            "coverage_50": 0.6992700729927007,
+            "coverage_80": 0.8321167883211679,
+            "coverage_95": 0.9153284671532846,
+            "coverage_99": 0.9766423357664233
+          },
+          "incumbent": {
+            "crps_q199": 2.3606834488197737,
+            "winkler_80": 16.781952537286667,
+            "n": 685,
+            "coverage_50": 0.6992700729927007,
+            "coverage_80": 0.8321167883211679,
+            "coverage_95": 0.9153284671532846,
+            "coverage_99": 0.9153284671532846
+          },
+          "zero_width": {
+            "crps_q199": 3.1157127527349315,
+            "winkler_80": 31.157127527349314,
+            "n": 685,
+            "coverage_50": 0.47883211678832116,
+            "coverage_80": 0.47883211678832116,
+            "coverage_95": 0.47883211678832116,
+            "coverage_99": 0.47883211678832116
+          },
+          "max_width": {
+            "crps_q199": 3.239125147669896,
+            "winkler_80": 30.569379520316893,
+            "n": 685,
+            "coverage_50": 0.8656934306569343,
+            "coverage_80": 0.9386861313868613,
+            "coverage_95": 0.9824817518248176,
+            "coverage_99": 0.9824817518248176
+          },
+          "over_ext": {
+            "crps_q199": 2.3559715624032167,
+            "winkler_80": 16.781952537286667,
+            "n": 685,
+            "coverage_50": 0.6992700729927007,
+            "coverage_80": 0.8321167883211679,
+            "coverage_95": 0.9153284671532846,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.3558840788690314,
+            "winkler_80": 16.781952537286667,
+            "n": 685,
+            "coverage_50": 0.6992700729927007,
+            "coverage_80": 0.8321167883211679,
+            "coverage_95": 0.9153284671532846,
+            "coverage_99": 0.997080291970803
+          },
+          "pooled_tail": {
+            "crps_q199": 2.356609192826198,
+            "winkler_80": 16.781952537286667,
+            "n": 685,
+            "coverage_50": 0.6992700729927007,
+            "coverage_80": 0.8321167883211679,
+            "coverage_95": 0.9153284671532846,
+            "coverage_99": 0.9737226277372263
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.3563162381908804,
+            "winkler_80": 16.781952537286667,
+            "n": 685,
+            "coverage_50": 0.6992700729927007,
+            "coverage_80": 0.8321167883211679,
+            "coverage_95": 0.9153284671532846,
+            "coverage_99": 0.981021897810219
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.3566587732701136,
+            "winkler_80": 16.781952537286667,
+            "n": 685,
+            "coverage_50": 0.6992700729927007,
+            "coverage_80": 0.8321167883211679,
+            "coverage_95": 0.9153284671532846,
+            "coverage_99": 0.9737226277372263
+          }
+        },
+        "RB": {
+          "tail_ext": {
+            "crps_q199": 2.357821014305459,
+            "winkler_80": 15.125521419351392,
+            "n": 1111,
+            "coverage_50": 0.6201620162016201,
+            "coverage_80": 0.8379837983798379,
+            "coverage_95": 0.9351935193519352,
+            "coverage_99": 0.9864986498649865
+          },
+          "incumbent": {
+            "crps_q199": 2.359795020686426,
+            "winkler_80": 15.125521419351392,
+            "n": 1111,
+            "coverage_50": 0.6201620162016201,
+            "coverage_80": 0.8379837983798379,
+            "coverage_95": 0.9351935193519352,
+            "coverage_99": 0.9351935193519352
+          },
+          "zero_width": {
+            "crps_q199": 3.2489458792079877,
+            "winkler_80": 32.48945879207989,
+            "n": 1111,
+            "coverage_50": 0.25742574257425743,
+            "coverage_80": 0.25742574257425743,
+            "coverage_95": 0.25742574257425743,
+            "coverage_99": 0.25742574257425743
+          },
+          "max_width": {
+            "crps_q199": 3.329088673140425,
+            "winkler_80": 30.24526435546597,
+            "n": 1111,
+            "coverage_50": 0.8865886588658866,
+            "coverage_80": 0.9801980198019802,
+            "coverage_95": 0.9945994599459946,
+            "coverage_99": 0.9945994599459946
+          },
+          "over_ext": {
+            "crps_q199": 2.3591541564270173,
+            "winkler_80": 15.125521419351392,
+            "n": 1111,
+            "coverage_50": 0.6201620162016201,
+            "coverage_80": 0.8379837983798379,
+            "coverage_95": 0.9351935193519352,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.358020921353977,
+            "winkler_80": 15.125521419351392,
+            "n": 1111,
+            "coverage_50": 0.6201620162016201,
+            "coverage_80": 0.8379837983798379,
+            "coverage_95": 0.9351935193519352,
+            "coverage_99": 0.9981998199819982
+          },
+          "pooled_tail": {
+            "crps_q199": 2.357844672153635,
+            "winkler_80": 15.125521419351392,
+            "n": 1111,
+            "coverage_50": 0.6201620162016201,
+            "coverage_80": 0.8379837983798379,
+            "coverage_95": 0.9351935193519352,
+            "coverage_99": 0.9873987398739874
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.35791145473568,
+            "winkler_80": 15.125521419351392,
+            "n": 1111,
+            "coverage_50": 0.6201620162016201,
+            "coverage_80": 0.8379837983798379,
+            "coverage_95": 0.9351935193519352,
+            "coverage_99": 0.9873987398739874
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.357860482002345,
+            "winkler_80": 15.125521419351392,
+            "n": 1111,
+            "coverage_50": 0.6201620162016201,
+            "coverage_80": 0.8379837983798379,
+            "coverage_95": 0.9351935193519352,
+            "coverage_99": 0.9873987398739874
+          }
+        },
+        "WR": {
+          "tail_ext": {
+            "crps_q199": 2.538654436367923,
+            "winkler_80": 16.634244414794807,
+            "n": 1551,
+            "coverage_50": 0.6576402321083172,
+            "coverage_80": 0.8471953578336557,
+            "coverage_95": 0.9310122501611864,
+            "coverage_99": 0.9825918762088974
+          },
+          "incumbent": {
+            "crps_q199": 2.5423447660156238,
+            "winkler_80": 16.634244414794807,
+            "n": 1551,
+            "coverage_50": 0.6576402321083172,
+            "coverage_80": 0.8471953578336557,
+            "coverage_95": 0.9310122501611864,
+            "coverage_99": 0.9310122501611864
+          },
+          "zero_width": {
+            "crps_q199": 3.4675203336057683,
+            "winkler_80": 34.675203336057685,
+            "n": 1551,
+            "coverage_50": 0.29142488716956805,
+            "coverage_80": 0.29142488716956805,
+            "coverage_95": 0.29142488716956805,
+            "coverage_99": 0.29142488716956805
+          },
+          "max_width": {
+            "crps_q199": 3.583313572854261,
+            "winkler_80": 31.676092982250793,
+            "n": 1551,
+            "coverage_50": 0.9161831076724694,
+            "coverage_80": 0.9864603481624759,
+            "coverage_95": 0.9987105093488072,
+            "coverage_99": 0.9987105093488072
+          },
+          "over_ext": {
+            "crps_q199": 2.538645322002812,
+            "winkler_80": 16.634244414794807,
+            "n": 1551,
+            "coverage_50": 0.6576402321083172,
+            "coverage_80": 0.8471953578336557,
+            "coverage_95": 0.9310122501611864,
+            "coverage_99": 0.9993552546744036
+          },
+          "permuted_tail": {
+            "crps_q199": 2.5381754986819467,
+            "winkler_80": 16.634244414794807,
+            "n": 1551,
+            "coverage_50": 0.6576402321083172,
+            "coverage_80": 0.8471953578336557,
+            "coverage_95": 0.9310122501611864,
+            "coverage_99": 0.9974210186976145
+          },
+          "pooled_tail": {
+            "crps_q199": 2.538644033879367,
+            "winkler_80": 16.634244414794807,
+            "n": 1551,
+            "coverage_50": 0.6576402321083172,
+            "coverage_80": 0.8471953578336557,
+            "coverage_95": 0.9310122501611864,
+            "coverage_99": 0.9813023855577047
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.5385063871447526,
+            "winkler_80": 16.634244414794807,
+            "n": 1551,
+            "coverage_50": 0.6576402321083172,
+            "coverage_80": 0.8471953578336557,
+            "coverage_95": 0.9310122501611864,
+            "coverage_99": 0.9864603481624759
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.5386549249881054,
+            "winkler_80": 16.634244414794807,
+            "n": 1551,
+            "coverage_50": 0.6576402321083172,
+            "coverage_80": 0.8471953578336557,
+            "coverage_95": 0.9310122501611864,
+            "coverage_99": 0.9825918762088974
+          }
+        },
+        "TE": {
+          "tail_ext": {
+            "crps_q199": 1.7512044865912462,
+            "winkler_80": 11.772373226694068,
+            "n": 952,
+            "coverage_50": 0.7090336134453782,
+            "coverage_80": 0.8792016806722689,
+            "coverage_95": 0.9569327731092437,
+            "coverage_99": 0.9884453781512605
+          },
+          "incumbent": {
+            "crps_q199": 1.7529712492805476,
+            "winkler_80": 11.772373226694068,
+            "n": 952,
+            "coverage_50": 0.7090336134453782,
+            "coverage_80": 0.8792016806722689,
+            "coverage_95": 0.9569327731092437,
+            "coverage_99": 0.9569327731092437
+          },
+          "zero_width": {
+            "crps_q199": 2.380838001473347,
+            "winkler_80": 23.80838001473347,
+            "n": 952,
+            "coverage_50": 0.3760504201680672,
+            "coverage_80": 0.3760504201680672,
+            "coverage_95": 0.3760504201680672,
+            "coverage_99": 0.3760504201680672
+          },
+          "max_width": {
+            "crps_q199": 2.4980863671045213,
+            "winkler_80": 22.50927487529702,
+            "n": 952,
+            "coverage_50": 0.9180672268907563,
+            "coverage_80": 0.9852941176470589,
+            "coverage_95": 1.0,
+            "coverage_99": 1.0
+          },
+          "over_ext": {
+            "crps_q199": 1.7521626529293322,
+            "winkler_80": 11.772373226694068,
+            "n": 952,
+            "coverage_50": 0.7090336134453782,
+            "coverage_80": 0.8792016806722689,
+            "coverage_95": 0.9569327731092437,
+            "coverage_99": 0.9989495798319328
+          },
+          "permuted_tail": {
+            "crps_q199": 1.751324781201305,
+            "winkler_80": 11.772373226694068,
+            "n": 952,
+            "coverage_50": 0.7090336134453782,
+            "coverage_80": 0.8792016806722689,
+            "coverage_95": 0.9569327731092437,
+            "coverage_99": 0.9957983193277311
+          },
+          "pooled_tail": {
+            "crps_q199": 1.7509833175376115,
+            "winkler_80": 11.772373226694068,
+            "n": 952,
+            "coverage_50": 0.7090336134453782,
+            "coverage_80": 0.8792016806722689,
+            "coverage_95": 0.9569327731092437,
+            "coverage_99": 0.9884453781512605
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 1.7505784570335616,
+            "winkler_80": 11.772373226694068,
+            "n": 952,
+            "coverage_50": 0.7090336134453782,
+            "coverage_80": 0.8792016806722689,
+            "coverage_95": 0.9569327731092437,
+            "coverage_99": 0.9863445378151261
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 1.7508549944728968,
+            "winkler_80": 11.772373226694068,
+            "n": 952,
+            "coverage_50": 0.7090336134453782,
+            "coverage_80": 0.8792016806722689,
+            "coverage_95": 0.9569327731092437,
+            "coverage_99": 0.9852941176470589
+          }
+        }
+      },
+      "cal_note": {
+        "n_train": 53487,
+        "n_core": 41302,
+        "n_cal": 11174,
+        "cal_gw_min": 87,
+        "cal_gw_max": 109
+      },
+      "team_total": {
+        "tail_ext": {
+          "n": 270,
+          "inside": 201,
+          "below_q10": 30,
+          "above_q90": 39
+        },
+        "incumbent": {
+          "n": 270,
+          "inside": 187,
+          "below_q10": 30,
+          "above_q90": 53
+        }
+      },
+      "params_digest": {
+        "QB": {
+          "tail": {
+            "beta_hi": 4.5355,
+            "beta_lo": 1.667,
+            "n_hi": 91,
+            "n_lo": 61,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 10.2423,
+            "beta_lo": 5.3907,
+            "n_hi": 345,
+            "n_lo": 296,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4501,
+            "beta_lo": 1.5004,
+            "n_hi": 536,
+            "n_lo": 258,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 1777,
+            "n_test": 685,
+            "n_matched": 685,
+            "matched_equals_arm": false
+          }
+        },
+        "RB": {
+          "tail": {
+            "beta_hi": 4.8225,
+            "beta_lo": 1.1984,
+            "n_hi": 146,
+            "n_lo": 84,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.8944,
+            "beta_lo": 3.1124,
+            "n_hi": 472,
+            "n_lo": 373,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4501,
+            "beta_lo": 1.5004,
+            "n_hi": 536,
+            "n_lo": 258,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 2878,
+            "n_test": 1111,
+            "n_matched": 1111,
+            "matched_equals_arm": false
+          }
+        },
+        "WR": {
+          "tail": {
+            "beta_hi": 4.3937,
+            "beta_lo": 1.5846,
+            "n_hi": 212,
+            "n_lo": 90,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.5523,
+            "beta_lo": 3.8669,
+            "n_hi": 681,
+            "n_lo": 376,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4501,
+            "beta_lo": 1.5004,
+            "n_hi": 536,
+            "n_lo": 258,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 4145,
+            "n_test": 1551,
+            "n_matched": 1551,
+            "matched_equals_arm": false
+          }
+        },
+        "TE": {
+          "tail": {
+            "beta_hi": 3.8734,
+            "beta_lo": 1.8323,
+            "n_hi": 87,
+            "n_lo": 23,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 5.7566,
+            "beta_lo": 3.4993,
+            "n_hi": 310,
+            "n_lo": 92,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4501,
+            "beta_lo": 1.5004,
+            "n_hi": 536,
+            "n_lo": 258,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 2374,
+            "n_test": 952,
+            "n_matched": 952,
+            "matched_equals_arm": false
+          }
+        }
+      },
+      "exclusions": {
+        "n_groups_excluded": 0,
+        "n_rows_excluded": 0,
+        "n_groups": 270,
+        "n_rows_scored": 4299,
+        "n_rows_total": 4299
+      },
+      "runtime_seconds": 103.6
+    },
+    {
+      "label": "2023H1",
+      "scores": {
+        "QB": {
+          "tail_ext": {
+            "crps_q199": 2.305122684049894,
+            "winkler_80": 15.567133261970975,
+            "n": 683,
+            "coverage_50": 0.6837481698389458,
+            "coverage_80": 0.8257686676427526,
+            "coverage_95": 0.9150805270863837,
+            "coverage_99": 0.986822840409956
+          },
+          "incumbent": {
+            "crps_q199": 2.308201572893128,
+            "winkler_80": 15.567133261970975,
+            "n": 683,
+            "coverage_50": 0.6837481698389458,
+            "coverage_80": 0.8257686676427526,
+            "coverage_95": 0.9150805270863837,
+            "coverage_99": 0.9150805270863837
+          },
+          "zero_width": {
+            "crps_q199": 3.1335455585624956,
+            "winkler_80": 31.335455585624956,
+            "n": 683,
+            "coverage_50": 0.48755490483162517,
+            "coverage_80": 0.48755490483162517,
+            "coverage_95": 0.48755490483162517,
+            "coverage_99": 0.48755490483162517
+          },
+          "max_width": {
+            "crps_q199": 3.181134604252623,
+            "winkler_80": 29.580560288210194,
+            "n": 683,
+            "coverage_50": 0.8784773060029283,
+            "coverage_80": 0.9414348462664714,
+            "coverage_95": 0.9765739385065886,
+            "coverage_99": 0.9765739385065886
+          },
+          "over_ext": {
+            "crps_q199": 2.305869693886785,
+            "winkler_80": 15.567133261970975,
+            "n": 683,
+            "coverage_50": 0.6837481698389458,
+            "coverage_80": 0.8257686676427526,
+            "coverage_95": 0.9150805270863837,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.305359760903827,
+            "winkler_80": 15.567133261970975,
+            "n": 683,
+            "coverage_50": 0.6837481698389458,
+            "coverage_80": 0.8257686676427526,
+            "coverage_95": 0.9150805270863837,
+            "coverage_99": 0.9970717423133236
+          },
+          "pooled_tail": {
+            "crps_q199": 2.305108133071448,
+            "winkler_80": 15.567133261970975,
+            "n": 683,
+            "coverage_50": 0.6837481698389458,
+            "coverage_80": 0.8257686676427526,
+            "coverage_95": 0.9150805270863837,
+            "coverage_99": 0.9853587115666179
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.3051900550087505,
+            "winkler_80": 15.567133261970975,
+            "n": 683,
+            "coverage_50": 0.6837481698389458,
+            "coverage_80": 0.8257686676427526,
+            "coverage_95": 0.9150805270863837,
+            "coverage_99": 0.9809663250366032
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.305129873923752,
+            "winkler_80": 15.567133261970975,
+            "n": 683,
+            "coverage_50": 0.6837481698389458,
+            "coverage_80": 0.8257686676427526,
+            "coverage_95": 0.9150805270863837,
+            "coverage_99": 0.9853587115666179
+          }
+        },
+        "RB": {
+          "tail_ext": {
+            "crps_q199": 2.336042130395712,
+            "winkler_80": 15.40443193119762,
+            "n": 1057,
+            "coverage_50": 0.618732261116367,
+            "coverage_80": 0.8637653736991485,
+            "coverage_95": 0.9441816461684012,
+            "coverage_99": 0.9877010406811731
+          },
+          "incumbent": {
+            "crps_q199": 2.338160745877302,
+            "winkler_80": 15.40443193119762,
+            "n": 1057,
+            "coverage_50": 0.618732261116367,
+            "coverage_80": 0.8637653736991485,
+            "coverage_95": 0.9441816461684012,
+            "coverage_99": 0.9441816461684012
+          },
+          "zero_width": {
+            "crps_q199": 3.2049591883552533,
+            "winkler_80": 32.04959188355254,
+            "n": 1057,
+            "coverage_50": 0.261116367076632,
+            "coverage_80": 0.261116367076632,
+            "coverage_95": 0.261116367076632,
+            "coverage_99": 0.261116367076632
+          },
+          "max_width": {
+            "crps_q199": 3.3727020431653476,
+            "winkler_80": 30.86529406705867,
+            "n": 1057,
+            "coverage_50": 0.8987701040681173,
+            "coverage_80": 0.9905392620624409,
+            "coverage_95": 0.9943235572374646,
+            "coverage_99": 0.9943235572374646
+          },
+          "over_ext": {
+            "crps_q199": 2.336865282692169,
+            "winkler_80": 15.40443193119762,
+            "n": 1057,
+            "coverage_50": 0.618732261116367,
+            "coverage_80": 0.8637653736991485,
+            "coverage_95": 0.9441816461684012,
+            "coverage_99": 0.9990539262062441
+          },
+          "permuted_tail": {
+            "crps_q199": 2.3361254428051934,
+            "winkler_80": 15.40443193119762,
+            "n": 1057,
+            "coverage_50": 0.618732261116367,
+            "coverage_80": 0.8637653736991485,
+            "coverage_95": 0.9441816461684012,
+            "coverage_99": 0.9962157048249763
+          },
+          "pooled_tail": {
+            "crps_q199": 2.3361837182185514,
+            "winkler_80": 15.40443193119762,
+            "n": 1057,
+            "coverage_50": 0.618732261116367,
+            "coverage_80": 0.8637653736991485,
+            "coverage_95": 0.9441816461684012,
+            "coverage_99": 0.9867549668874173
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.335934921306911,
+            "winkler_80": 15.40443193119762,
+            "n": 1057,
+            "coverage_50": 0.618732261116367,
+            "coverage_80": 0.8637653736991485,
+            "coverage_95": 0.9441816461684012,
+            "coverage_99": 0.988647114474929
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.335989735267251,
+            "winkler_80": 15.40443193119762,
+            "n": 1057,
+            "coverage_50": 0.618732261116367,
+            "coverage_80": 0.8637653736991485,
+            "coverage_95": 0.9441816461684012,
+            "coverage_99": 0.9877010406811731
+          }
+        },
+        "WR": {
+          "tail_ext": {
+            "crps_q199": 2.5378516883292375,
+            "winkler_80": 16.543269319491273,
+            "n": 1590,
+            "coverage_50": 0.6597484276729559,
+            "coverage_80": 0.8528301886792453,
+            "coverage_95": 0.9339622641509434,
+            "coverage_99": 0.9842767295597484
+          },
+          "incumbent": {
+            "crps_q199": 2.540944162168333,
+            "winkler_80": 16.543269319491273,
+            "n": 1590,
+            "coverage_50": 0.6597484276729559,
+            "coverage_80": 0.8528301886792453,
+            "coverage_95": 0.9339622641509434,
+            "coverage_99": 0.9339622641509434
+          },
+          "zero_width": {
+            "crps_q199": 3.4942327049787942,
+            "winkler_80": 34.942327049787934,
+            "n": 1590,
+            "coverage_50": 0.259748427672956,
+            "coverage_80": 0.259748427672956,
+            "coverage_95": 0.259748427672956,
+            "coverage_99": 0.259748427672956
+          },
+          "max_width": {
+            "crps_q199": 3.6404233818358698,
+            "winkler_80": 32.3852330013721,
+            "n": 1590,
+            "coverage_50": 0.9289308176100629,
+            "coverage_80": 0.9893081761006289,
+            "coverage_95": 0.9949685534591195,
+            "coverage_99": 0.9949685534591195
+          },
+          "over_ext": {
+            "crps_q199": 2.537980380354183,
+            "winkler_80": 16.543269319491273,
+            "n": 1590,
+            "coverage_50": 0.6597484276729559,
+            "coverage_80": 0.8528301886792453,
+            "coverage_95": 0.9339622641509434,
+            "coverage_99": 0.9987421383647799
+          },
+          "permuted_tail": {
+            "crps_q199": 2.5375752949196286,
+            "winkler_80": 16.543269319491273,
+            "n": 1590,
+            "coverage_50": 0.6597484276729559,
+            "coverage_80": 0.8528301886792453,
+            "coverage_95": 0.9339622641509434,
+            "coverage_99": 0.9943396226415094
+          },
+          "pooled_tail": {
+            "crps_q199": 2.5378165784347564,
+            "winkler_80": 16.543269319491273,
+            "n": 1590,
+            "coverage_50": 0.6597484276729559,
+            "coverage_80": 0.8528301886792453,
+            "coverage_95": 0.9339622641509434,
+            "coverage_99": 0.9836477987421384
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.537550823093148,
+            "winkler_80": 16.543269319491273,
+            "n": 1590,
+            "coverage_50": 0.6597484276729559,
+            "coverage_80": 0.8528301886792453,
+            "coverage_95": 0.9339622641509434,
+            "coverage_99": 0.9855345911949686
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.5379033181948865,
+            "winkler_80": 16.543269319491273,
+            "n": 1590,
+            "coverage_50": 0.6597484276729559,
+            "coverage_80": 0.8528301886792453,
+            "coverage_95": 0.9339622641509434,
+            "coverage_99": 0.9867924528301887
+          }
+        },
+        "TE": {
+          "tail_ext": {
+            "crps_q199": 1.6802878892658624,
+            "winkler_80": 10.952560483726126,
+            "n": 934,
+            "coverage_50": 0.7119914346895075,
+            "coverage_80": 0.8843683083511777,
+            "coverage_95": 0.9646680942184154,
+            "coverage_99": 0.9935760171306209
+          },
+          "incumbent": {
+            "crps_q199": 1.6812984792984735,
+            "winkler_80": 10.952560483726126,
+            "n": 934,
+            "coverage_50": 0.7119914346895075,
+            "coverage_80": 0.8843683083511777,
+            "coverage_95": 0.9646680942184154,
+            "coverage_99": 0.9646680942184154
+          },
+          "zero_width": {
+            "crps_q199": 2.288575595711558,
+            "winkler_80": 22.885755957115585,
+            "n": 934,
+            "coverage_50": 0.40471092077087795,
+            "coverage_80": 0.40471092077087795,
+            "coverage_95": 0.40471092077087795,
+            "coverage_99": 0.40471092077087795
+          },
+          "max_width": {
+            "crps_q199": 2.4896553144062397,
+            "winkler_80": 22.490622511470548,
+            "n": 934,
+            "coverage_50": 0.9164882226980728,
+            "coverage_80": 0.9882226980728052,
+            "coverage_95": 0.9978586723768736,
+            "coverage_99": 0.9978586723768736
+          },
+          "over_ext": {
+            "crps_q199": 1.6821272777675298,
+            "winkler_80": 10.952560483726126,
+            "n": 934,
+            "coverage_50": 0.7119914346895075,
+            "coverage_80": 0.8843683083511777,
+            "coverage_95": 0.9646680942184154,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 1.6807653591290481,
+            "winkler_80": 10.952560483726126,
+            "n": 934,
+            "coverage_50": 0.7119914346895075,
+            "coverage_80": 0.8843683083511777,
+            "coverage_95": 0.9646680942184154,
+            "coverage_99": 0.9967880085653105
+          },
+          "pooled_tail": {
+            "crps_q199": 1.6802441520344347,
+            "winkler_80": 10.952560483726126,
+            "n": 934,
+            "coverage_50": 0.7119914346895075,
+            "coverage_80": 0.8843683083511777,
+            "coverage_95": 0.9646680942184154,
+            "coverage_99": 0.9925053533190579
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 1.679929077604845,
+            "winkler_80": 10.952560483726126,
+            "n": 934,
+            "coverage_50": 0.7119914346895075,
+            "coverage_80": 0.8843683083511777,
+            "coverage_95": 0.9646680942184154,
+            "coverage_99": 0.9892933618843683
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 1.6798964851525262,
+            "winkler_80": 10.952560483726126,
+            "n": 934,
+            "coverage_50": 0.7119914346895075,
+            "coverage_80": 0.8843683083511777,
+            "coverage_95": 0.9646680942184154,
+            "coverage_99": 0.9892933618843683
+          }
+        }
+      },
+      "cal_note": {
+        "n_train": 57690,
+        "n_core": 45188,
+        "n_cal": 11605,
+        "cal_gw_min": 95,
+        "cal_gw_max": 118
+      },
+      "team_total": {
+        "tail_ext": {
+          "n": 272,
+          "inside": 187,
+          "below_q10": 41,
+          "above_q90": 44
+        },
+        "incumbent": {
+          "n": 272,
+          "inside": 181,
+          "below_q10": 41,
+          "above_q90": 50
+        }
+      },
+      "params_digest": {
+        "QB": {
+          "tail": {
+            "beta_hi": 4.1241,
+            "beta_lo": 1.6917,
+            "n_hi": 90,
+            "n_lo": 61,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 9.0891,
+            "beta_lo": 4.8596,
+            "n_hi": 376,
+            "n_lo": 304,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4122,
+            "beta_lo": 1.4945,
+            "n_hi": 548,
+            "n_lo": 245,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 1837,
+            "n_test": 683,
+            "n_matched": 683,
+            "matched_equals_arm": false
+          }
+        },
+        "RB": {
+          "tail": {
+            "beta_hi": 4.9185,
+            "beta_lo": 1.162,
+            "n_hi": 142,
+            "n_lo": 85,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 8.0656,
+            "beta_lo": 3.0048,
+            "n_hi": 461,
+            "n_lo": 394,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4122,
+            "beta_lo": 1.4945,
+            "n_hi": 548,
+            "n_lo": 245,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3010,
+            "n_test": 1057,
+            "n_matched": 1057,
+            "matched_equals_arm": false
+          }
+        },
+        "WR": {
+          "tail": {
+            "beta_hi": 4.322,
+            "beta_lo": 1.6714,
+            "n_hi": 230,
+            "n_lo": 84,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.4101,
+            "beta_lo": 3.6562,
+            "n_hi": 694,
+            "n_lo": 346,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4122,
+            "beta_lo": 1.4945,
+            "n_hi": 548,
+            "n_lo": 245,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 4266,
+            "n_test": 1590,
+            "n_matched": 1590,
+            "matched_equals_arm": false
+          }
+        },
+        "TE": {
+          "tail": {
+            "beta_hi": 4.1193,
+            "beta_lo": 1.5871,
+            "n_hi": 86,
+            "n_lo": 15,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 6.1075,
+            "beta_lo": 3.3475,
+            "n_hi": 277,
+            "n_lo": 78,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4122,
+            "beta_lo": 1.4945,
+            "n_hi": 548,
+            "n_lo": 245,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 2492,
+            "n_test": 934,
+            "n_matched": 934,
+            "matched_equals_arm": false
+          }
+        }
+      },
+      "exclusions": {
+        "n_groups_excluded": 0,
+        "n_rows_excluded": 0,
+        "n_groups": 272,
+        "n_rows_scored": 4264,
+        "n_rows_total": 4264
+      },
+      "runtime_seconds": 107.2
+    },
+    {
+      "label": "2023H2",
+      "scores": {
+        "QB": {
+          "tail_ext": {
+            "crps_q199": 2.3995388421812454,
+            "winkler_80": 16.255990871203217,
+            "n": 710,
+            "coverage_50": 0.6676056338028169,
+            "coverage_80": 0.8154929577464789,
+            "coverage_95": 0.8971830985915493,
+            "coverage_99": 0.9845070422535211
+          },
+          "incumbent": {
+            "crps_q199": 2.403759551137581,
+            "winkler_80": 16.255990871203217,
+            "n": 710,
+            "coverage_50": 0.6676056338028169,
+            "coverage_80": 0.8154929577464789,
+            "coverage_95": 0.8971830985915493,
+            "coverage_99": 0.8971830985915493
+          },
+          "zero_width": {
+            "crps_q199": 3.2303423613194715,
+            "winkler_80": 32.30342361319471,
+            "n": 710,
+            "coverage_50": 0.4788732394366197,
+            "coverage_80": 0.4788732394366197,
+            "coverage_95": 0.4788732394366197,
+            "coverage_99": 0.4788732394366197
+          },
+          "max_width": {
+            "crps_q199": 3.1870360390379355,
+            "winkler_80": 28.78712627097035,
+            "n": 710,
+            "coverage_50": 0.8633802816901408,
+            "coverage_80": 0.9408450704225352,
+            "coverage_95": 0.9746478873239437,
+            "coverage_99": 0.9746478873239437
+          },
+          "over_ext": {
+            "crps_q199": 2.3995962633581507,
+            "winkler_80": 16.255990871203217,
+            "n": 710,
+            "coverage_50": 0.6676056338028169,
+            "coverage_80": 0.8154929577464789,
+            "coverage_95": 0.8971830985915493,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.3992696762593733,
+            "winkler_80": 16.255990871203217,
+            "n": 710,
+            "coverage_50": 0.6676056338028169,
+            "coverage_80": 0.8154929577464789,
+            "coverage_95": 0.8971830985915493,
+            "coverage_99": 1.0
+          },
+          "pooled_tail": {
+            "crps_q199": 2.3994039470593598,
+            "winkler_80": 16.255990871203217,
+            "n": 710,
+            "coverage_50": 0.6676056338028169,
+            "coverage_80": 0.8154929577464789,
+            "coverage_95": 0.8971830985915493,
+            "coverage_99": 0.9845070422535211
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.3997307454963597,
+            "winkler_80": 16.255990871203217,
+            "n": 710,
+            "coverage_50": 0.6676056338028169,
+            "coverage_80": 0.8154929577464789,
+            "coverage_95": 0.8971830985915493,
+            "coverage_99": 0.9802816901408451
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.399781866644597,
+            "winkler_80": 16.255990871203217,
+            "n": 710,
+            "coverage_50": 0.6676056338028169,
+            "coverage_80": 0.8154929577464789,
+            "coverage_95": 0.8971830985915493,
+            "coverage_99": 0.9802816901408451
+          }
+        },
+        "RB": {
+          "tail_ext": {
+            "crps_q199": 2.2639199100067215,
+            "winkler_80": 14.504142234624027,
+            "n": 1051,
+            "coverage_50": 0.6365366317792579,
+            "coverage_80": 0.8610846812559467,
+            "coverage_95": 0.9400570884871551,
+            "coverage_99": 0.994291151284491
+          },
+          "incumbent": {
+            "crps_q199": 2.2659290042769404,
+            "winkler_80": 14.504142234624027,
+            "n": 1051,
+            "coverage_50": 0.6365366317792579,
+            "coverage_80": 0.8610846812559467,
+            "coverage_95": 0.9400570884871551,
+            "coverage_99": 0.9400570884871551
+          },
+          "zero_width": {
+            "crps_q199": 3.1072076605483114,
+            "winkler_80": 31.07207660548311,
+            "n": 1051,
+            "coverage_50": 0.27783063748810655,
+            "coverage_80": 0.27783063748810655,
+            "coverage_95": 0.27783063748810655,
+            "coverage_99": 0.27783063748810655
+          },
+          "max_width": {
+            "crps_q199": 3.2895135708643513,
+            "winkler_80": 30.31539318097039,
+            "n": 1051,
+            "coverage_50": 0.9191246431969553,
+            "coverage_80": 0.9876308277830638,
+            "coverage_95": 0.9961941008563273,
+            "coverage_99": 0.9961941008563273
+          },
+          "over_ext": {
+            "crps_q199": 2.2656031704416733,
+            "winkler_80": 14.504142234624027,
+            "n": 1051,
+            "coverage_50": 0.6365366317792579,
+            "coverage_80": 0.8610846812559467,
+            "coverage_95": 0.9400570884871551,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.264379285935441,
+            "winkler_80": 14.504142234624027,
+            "n": 1051,
+            "coverage_50": 0.6365366317792579,
+            "coverage_80": 0.8610846812559467,
+            "coverage_95": 0.9400570884871551,
+            "coverage_99": 0.9980970504281637
+          },
+          "pooled_tail": {
+            "crps_q199": 2.2639804999800877,
+            "winkler_80": 14.504142234624027,
+            "n": 1051,
+            "coverage_50": 0.6365366317792579,
+            "coverage_80": 0.8610846812559467,
+            "coverage_95": 0.9400570884871551,
+            "coverage_99": 0.994291151284491
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.264003777444549,
+            "winkler_80": 14.504142234624027,
+            "n": 1051,
+            "coverage_50": 0.6365366317792579,
+            "coverage_80": 0.8610846812559467,
+            "coverage_95": 0.9400570884871551,
+            "coverage_99": 0.9885823025689819
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.263948532193438,
+            "winkler_80": 14.504142234624027,
+            "n": 1051,
+            "coverage_50": 0.6365366317792579,
+            "coverage_80": 0.8610846812559467,
+            "coverage_95": 0.9400570884871551,
+            "coverage_99": 0.9952426260704091
+          }
+        },
+        "WR": {
+          "tail_ext": {
+            "crps_q199": 2.5055773079126737,
+            "winkler_80": 16.303211168286253,
+            "n": 1634,
+            "coverage_50": 0.6634026927784578,
+            "coverage_80": 0.8592411260709915,
+            "coverage_95": 0.9375764993880049,
+            "coverage_99": 0.9871481028151775
+          },
+          "incumbent": {
+            "crps_q199": 2.508761029100737,
+            "winkler_80": 16.303211168286253,
+            "n": 1634,
+            "coverage_50": 0.6634026927784578,
+            "coverage_80": 0.8592411260709915,
+            "coverage_95": 0.9375764993880049,
+            "coverage_99": 0.9375764993880049
+          },
+          "zero_width": {
+            "crps_q199": 3.4788059511034133,
+            "winkler_80": 34.788059511034135,
+            "n": 1634,
+            "coverage_50": 0.2686658506731946,
+            "coverage_80": 0.2686658506731946,
+            "coverage_95": 0.2686658506731946,
+            "coverage_99": 0.2686658506731946
+          },
+          "max_width": {
+            "crps_q199": 3.540182879812023,
+            "winkler_80": 31.43351018488625,
+            "n": 1634,
+            "coverage_50": 0.923500611995104,
+            "coverage_80": 0.9895960832313342,
+            "coverage_95": 0.9987760097919217,
+            "coverage_99": 0.9987760097919217
+          },
+          "over_ext": {
+            "crps_q199": 2.50619538088941,
+            "winkler_80": 16.303211168286253,
+            "n": 1634,
+            "coverage_50": 0.6634026927784578,
+            "coverage_80": 0.8592411260709915,
+            "coverage_95": 0.9375764993880049,
+            "coverage_99": 0.9993880048959608
+          },
+          "permuted_tail": {
+            "crps_q199": 2.5053766551219727,
+            "winkler_80": 16.303211168286253,
+            "n": 1634,
+            "coverage_50": 0.6634026927784578,
+            "coverage_80": 0.8592411260709915,
+            "coverage_95": 0.9375764993880049,
+            "coverage_99": 0.9981640146878825
+          },
+          "pooled_tail": {
+            "crps_q199": 2.5055821968902316,
+            "winkler_80": 16.303211168286253,
+            "n": 1634,
+            "coverage_50": 0.6634026927784578,
+            "coverage_80": 0.8592411260709915,
+            "coverage_95": 0.9375764993880049,
+            "coverage_99": 0.9847001223990208
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.505563371773773,
+            "winkler_80": 16.303211168286253,
+            "n": 1634,
+            "coverage_50": 0.6634026927784578,
+            "coverage_80": 0.8592411260709915,
+            "coverage_95": 0.9375764993880049,
+            "coverage_99": 0.9871481028151775
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.5055078344189186,
+            "winkler_80": 16.303211168286253,
+            "n": 1634,
+            "coverage_50": 0.6634026927784578,
+            "coverage_80": 0.8592411260709915,
+            "coverage_95": 0.9375764993880049,
+            "coverage_99": 0.9877600979192166
+          }
+        },
+        "TE": {
+          "tail_ext": {
+            "crps_q199": 1.6547697888693358,
+            "winkler_80": 10.906032946240835,
+            "n": 942,
+            "coverage_50": 0.7006369426751592,
+            "coverage_80": 0.8800424628450106,
+            "coverage_95": 0.9554140127388535,
+            "coverage_99": 0.9957537154989384
+          },
+          "incumbent": {
+            "crps_q199": 1.6561901508991428,
+            "winkler_80": 10.906032946240835,
+            "n": 942,
+            "coverage_50": 0.7006369426751592,
+            "coverage_80": 0.8800424628450106,
+            "coverage_95": 0.9554140127388535,
+            "coverage_99": 0.9554140127388535
+          },
+          "zero_width": {
+            "crps_q199": 2.288824662467294,
+            "winkler_80": 22.888246624672938,
+            "n": 942,
+            "coverage_50": 0.3842887473460722,
+            "coverage_80": 0.3842887473460722,
+            "coverage_95": 0.3842887473460722,
+            "coverage_99": 0.3842887473460722
+          },
+          "max_width": {
+            "crps_q199": 2.324160371756351,
+            "winkler_80": 20.68326398800118,
+            "n": 942,
+            "coverage_50": 0.9193205944798302,
+            "coverage_80": 0.9893842887473461,
+            "coverage_95": 1.0,
+            "coverage_99": 1.0
+          },
+          "over_ext": {
+            "crps_q199": 1.6568395742608857,
+            "winkler_80": 10.906032946240835,
+            "n": 942,
+            "coverage_50": 0.7006369426751592,
+            "coverage_80": 0.8800424628450106,
+            "coverage_95": 0.9554140127388535,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 1.65525032549806,
+            "winkler_80": 10.906032946240835,
+            "n": 942,
+            "coverage_50": 0.7006369426751592,
+            "coverage_80": 0.8800424628450106,
+            "coverage_95": 0.9554140127388535,
+            "coverage_99": 0.9978768577494692
+          },
+          "pooled_tail": {
+            "crps_q199": 1.6548220670289695,
+            "winkler_80": 10.906032946240835,
+            "n": 942,
+            "coverage_50": 0.7006369426751592,
+            "coverage_80": 0.8800424628450106,
+            "coverage_95": 0.9554140127388535,
+            "coverage_99": 0.9968152866242038
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 1.6546321889245552,
+            "winkler_80": 10.906032946240835,
+            "n": 942,
+            "coverage_50": 0.7006369426751592,
+            "coverage_80": 0.8800424628450106,
+            "coverage_95": 0.9554140127388535,
+            "coverage_99": 0.9883227176220807
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 1.6544706599077605,
+            "winkler_80": 10.906032946240835,
+            "n": 942,
+            "coverage_50": 0.7006369426751592,
+            "coverage_80": 0.8800424628450106,
+            "coverage_95": 0.9554140127388535,
+            "coverage_99": 0.9925690021231423
+          }
+        }
+      },
+      "cal_note": {
+        "n_train": 62012,
+        "n_core": 48468,
+        "n_cal": 12529,
+        "cal_gw_min": 102,
+        "cal_gw_max": 127
+      },
+      "team_total": {
+        "tail_ext": {
+          "n": 272,
+          "inside": 192,
+          "below_q10": 34,
+          "above_q90": 46
+        },
+        "incumbent": {
+          "n": 272,
+          "inside": 184,
+          "below_q10": 36,
+          "above_q90": 52
+        }
+      },
+      "params_digest": {
+        "QB": {
+          "tail": {
+            "beta_hi": 4.0981,
+            "beta_lo": 1.5461,
+            "n_hi": 97,
+            "n_lo": 60,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 9.4381,
+            "beta_lo": 4.5035,
+            "n_hi": 386,
+            "n_lo": 300,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4808,
+            "beta_lo": 1.5248,
+            "n_hi": 571,
+            "n_lo": 250,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 1975,
+            "n_test": 710,
+            "n_matched": 710,
+            "matched_equals_arm": false
+          }
+        },
+        "RB": {
+          "tail": {
+            "beta_hi": 4.601,
+            "beta_lo": 1.1651,
+            "n_hi": 149,
+            "n_lo": 78,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.4473,
+            "beta_lo": 2.9907,
+            "n_hi": 472,
+            "n_lo": 428,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4808,
+            "beta_lo": 1.5248,
+            "n_hi": 571,
+            "n_lo": 250,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3199,
+            "n_test": 1051,
+            "n_matched": 1051,
+            "matched_equals_arm": false
+          }
+        },
+        "WR": {
+          "tail": {
+            "beta_hi": 4.606,
+            "beta_lo": 1.844,
+            "n_hi": 235,
+            "n_lo": 95,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.7975,
+            "beta_lo": 3.8351,
+            "n_hi": 710,
+            "n_lo": 407,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4808,
+            "beta_lo": 1.5248,
+            "n_hi": 571,
+            "n_lo": 250,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 4613,
+            "n_test": 1634,
+            "n_matched": 1634,
+            "matched_equals_arm": false
+          }
+        },
+        "TE": {
+          "tail": {
+            "beta_hi": 4.3674,
+            "beta_lo": 1.3171,
+            "n_hi": 90,
+            "n_lo": 17,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 5.4757,
+            "beta_lo": 2.965,
+            "n_hi": 322,
+            "n_lo": 79,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4808,
+            "beta_lo": 1.5248,
+            "n_hi": 571,
+            "n_lo": 250,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 2742,
+            "n_test": 942,
+            "n_matched": 942,
+            "matched_equals_arm": false
+          }
+        }
+      },
+      "exclusions": {
+        "n_groups_excluded": 0,
+        "n_rows_excluded": 0,
+        "n_groups": 272,
+        "n_rows_scored": 4337,
+        "n_rows_total": 4337
+      },
+      "runtime_seconds": 106.0
+    },
+    {
+      "label": "2024H1",
+      "scores": {
+        "QB": {
+          "tail_ext": {
+            "crps_q199": 2.3145092601279993,
+            "winkler_80": 15.749924652511833,
+            "n": 685,
+            "coverage_50": 0.6934306569343066,
+            "coverage_80": 0.8291970802919708,
+            "coverage_95": 0.9255474452554745,
+            "coverage_99": 0.9751824817518249
+          },
+          "incumbent": {
+            "crps_q199": 2.3176913870301687,
+            "winkler_80": 15.749924652511833,
+            "n": 685,
+            "coverage_50": 0.6934306569343066,
+            "coverage_80": 0.8291970802919708,
+            "coverage_95": 0.9255474452554745,
+            "coverage_99": 0.9255474452554745
+          },
+          "zero_width": {
+            "crps_q199": 3.117713988411464,
+            "winkler_80": 31.177139884114638,
+            "n": 685,
+            "coverage_50": 0.47737226277372263,
+            "coverage_80": 0.47737226277372263,
+            "coverage_95": 0.47737226277372263,
+            "coverage_99": 0.47737226277372263
+          },
+          "max_width": {
+            "crps_q199": 3.324342085726719,
+            "winkler_80": 30.63123108981109,
+            "n": 685,
+            "coverage_50": 0.8890510948905109,
+            "coverage_80": 0.9401459854014599,
+            "coverage_95": 0.9795620437956204,
+            "coverage_99": 0.9795620437956204
+          },
+          "over_ext": {
+            "crps_q199": 2.314531571062057,
+            "winkler_80": 15.749924652511833,
+            "n": 685,
+            "coverage_50": 0.6934306569343066,
+            "coverage_80": 0.8291970802919708,
+            "coverage_95": 0.9255474452554745,
+            "coverage_99": 0.9985401459854014
+          },
+          "permuted_tail": {
+            "crps_q199": 2.314332498835875,
+            "winkler_80": 15.749924652511833,
+            "n": 685,
+            "coverage_50": 0.6934306569343066,
+            "coverage_80": 0.8291970802919708,
+            "coverage_95": 0.9255474452554745,
+            "coverage_99": 0.9985401459854014
+          },
+          "pooled_tail": {
+            "crps_q199": 2.3144239876826482,
+            "winkler_80": 15.749924652511833,
+            "n": 685,
+            "coverage_50": 0.6934306569343066,
+            "coverage_80": 0.8291970802919708,
+            "coverage_95": 0.9255474452554745,
+            "coverage_99": 0.9781021897810219
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.314285032469729,
+            "winkler_80": 15.749924652511833,
+            "n": 685,
+            "coverage_50": 0.6934306569343066,
+            "coverage_80": 0.8291970802919708,
+            "coverage_95": 0.9255474452554745,
+            "coverage_99": 0.981021897810219
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.3145257732943083,
+            "winkler_80": 15.749924652511833,
+            "n": 685,
+            "coverage_50": 0.6934306569343066,
+            "coverage_80": 0.8291970802919708,
+            "coverage_95": 0.9255474452554745,
+            "coverage_99": 0.9751824817518249
+          }
+        },
+        "RB": {
+          "tail_ext": {
+            "crps_q199": 2.396890892115704,
+            "winkler_80": 15.580797515664175,
+            "n": 1077,
+            "coverage_50": 0.6202414113277623,
+            "coverage_80": 0.8430826369545033,
+            "coverage_95": 0.9303621169916435,
+            "coverage_99": 0.9870009285051068
+          },
+          "incumbent": {
+            "crps_q199": 2.4006576333429765,
+            "winkler_80": 15.580797515664175,
+            "n": 1077,
+            "coverage_50": 0.6202414113277623,
+            "coverage_80": 0.8430826369545033,
+            "coverage_95": 0.9303621169916435,
+            "coverage_99": 0.9303621169916435
+          },
+          "zero_width": {
+            "crps_q199": 3.2940211994081205,
+            "winkler_80": 32.94021199408122,
+            "n": 1077,
+            "coverage_50": 0.28319405756731664,
+            "coverage_80": 0.28319405756731664,
+            "coverage_95": 0.28319405756731664,
+            "coverage_99": 0.28319405756731664
+          },
+          "max_width": {
+            "crps_q199": 3.3450515845589464,
+            "winkler_80": 30.105302441610522,
+            "n": 1077,
+            "coverage_50": 0.8978644382544104,
+            "coverage_80": 0.9860724233983287,
+            "coverage_95": 0.9953574744661096,
+            "coverage_99": 0.9953574744661096
+          },
+          "over_ext": {
+            "crps_q199": 2.397481824712127,
+            "winkler_80": 15.580797515664175,
+            "n": 1077,
+            "coverage_50": 0.6202414113277623,
+            "coverage_80": 0.8430826369545033,
+            "coverage_95": 0.9303621169916435,
+            "coverage_99": 0.9990714948932219
+          },
+          "permuted_tail": {
+            "crps_q199": 2.3967772763224295,
+            "winkler_80": 15.580797515664175,
+            "n": 1077,
+            "coverage_50": 0.6202414113277623,
+            "coverage_80": 0.8430826369545033,
+            "coverage_95": 0.9303621169916435,
+            "coverage_99": 0.9972144846796658
+          },
+          "pooled_tail": {
+            "crps_q199": 2.3970865090604825,
+            "winkler_80": 15.580797515664175,
+            "n": 1077,
+            "coverage_50": 0.6202414113277623,
+            "coverage_80": 0.8430826369545033,
+            "coverage_95": 0.9303621169916435,
+            "coverage_99": 0.9888579387186629
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.396895519574286,
+            "winkler_80": 15.580797515664175,
+            "n": 1077,
+            "coverage_50": 0.6202414113277623,
+            "coverage_80": 0.8430826369545033,
+            "coverage_95": 0.9303621169916435,
+            "coverage_99": 0.9870009285051068
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.397055446506304,
+            "winkler_80": 15.580797515664175,
+            "n": 1077,
+            "coverage_50": 0.6202414113277623,
+            "coverage_80": 0.8430826369545033,
+            "coverage_95": 0.9303621169916435,
+            "coverage_99": 0.9860724233983287
+          }
+        },
+        "WR": {
+          "tail_ext": {
+            "crps_q199": 2.561449041541945,
+            "winkler_80": 16.436995637044586,
+            "n": 1622,
+            "coverage_50": 0.6368680641183724,
+            "coverage_80": 0.8446362515413071,
+            "coverage_95": 0.9327990135635018,
+            "coverage_99": 0.9864364981504316
+          },
+          "incumbent": {
+            "crps_q199": 2.564798225455856,
+            "winkler_80": 16.436995637044586,
+            "n": 1622,
+            "coverage_50": 0.6368680641183724,
+            "coverage_80": 0.8446362515413071,
+            "coverage_95": 0.9327990135635018,
+            "coverage_99": 0.9327990135635018
+          },
+          "zero_width": {
+            "crps_q199": 3.5540297757555646,
+            "winkler_80": 35.54029775755565,
+            "n": 1622,
+            "coverage_50": 0.2879161528976572,
+            "coverage_80": 0.2879161528976572,
+            "coverage_95": 0.2879161528976572,
+            "coverage_99": 0.2879161528976572
+          },
+          "max_width": {
+            "crps_q199": 3.5871036966555976,
+            "winkler_80": 31.45668227553882,
+            "n": 1622,
+            "coverage_50": 0.9118372379778051,
+            "coverage_80": 0.9907521578298397,
+            "coverage_95": 0.9969173859432799,
+            "coverage_99": 0.9969173859432799
+          },
+          "over_ext": {
+            "crps_q199": 2.5620709941749458,
+            "winkler_80": 16.436995637044586,
+            "n": 1622,
+            "coverage_50": 0.6368680641183724,
+            "coverage_80": 0.8446362515413071,
+            "coverage_95": 0.9327990135635018,
+            "coverage_99": 0.9993834771886559
+          },
+          "permuted_tail": {
+            "crps_q199": 2.5612227474984364,
+            "winkler_80": 16.436995637044586,
+            "n": 1622,
+            "coverage_50": 0.6368680641183724,
+            "coverage_80": 0.8446362515413071,
+            "coverage_95": 0.9327990135635018,
+            "coverage_99": 0.9975339087546239
+          },
+          "pooled_tail": {
+            "crps_q199": 2.561476138450711,
+            "winkler_80": 16.436995637044586,
+            "n": 1622,
+            "coverage_50": 0.6368680641183724,
+            "coverage_80": 0.8446362515413071,
+            "coverage_95": 0.9327990135635018,
+            "coverage_99": 0.9845869297163995
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.561281746982686,
+            "winkler_80": 16.436995637044586,
+            "n": 1622,
+            "coverage_50": 0.6368680641183724,
+            "coverage_80": 0.8446362515413071,
+            "coverage_95": 0.9327990135635018,
+            "coverage_99": 0.9852034525277436
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.561445330399329,
+            "winkler_80": 16.436995637044586,
+            "n": 1622,
+            "coverage_50": 0.6368680641183724,
+            "coverage_80": 0.8446362515413071,
+            "coverage_95": 0.9327990135635018,
+            "coverage_99": 0.9852034525277436
+          }
+        },
+        "TE": {
+          "tail_ext": {
+            "crps_q199": 1.6672115094078142,
+            "winkler_80": 10.692002713443005,
+            "n": 981,
+            "coverage_50": 0.7176350662589195,
+            "coverage_80": 0.8939857288481141,
+            "coverage_95": 0.9602446483180428,
+            "coverage_99": 0.9857288481141692
+          },
+          "incumbent": {
+            "crps_q199": 1.6690303210132402,
+            "winkler_80": 10.692002713443005,
+            "n": 981,
+            "coverage_50": 0.7176350662589195,
+            "coverage_80": 0.8939857288481141,
+            "coverage_95": 0.9602446483180428,
+            "coverage_99": 0.9602446483180428
+          },
+          "zero_width": {
+            "crps_q199": 2.3106299878380554,
+            "winkler_80": 23.106299878380554,
+            "n": 981,
+            "coverage_50": 0.40672782874617736,
+            "coverage_80": 0.40672782874617736,
+            "coverage_95": 0.40672782874617736,
+            "coverage_99": 0.40672782874617736
+          },
+          "max_width": {
+            "crps_q199": 2.4087358794103535,
+            "winkler_80": 21.455953724673947,
+            "n": 981,
+            "coverage_50": 0.926605504587156,
+            "coverage_80": 0.9918450560652395,
+            "coverage_95": 1.0,
+            "coverage_99": 1.0
+          },
+          "over_ext": {
+            "crps_q199": 1.6678616158628772,
+            "winkler_80": 10.692002713443005,
+            "n": 981,
+            "coverage_50": 0.7176350662589195,
+            "coverage_80": 0.8939857288481141,
+            "coverage_95": 0.9602446483180428,
+            "coverage_99": 0.9949031600407747
+          },
+          "permuted_tail": {
+            "crps_q199": 1.667810380779363,
+            "winkler_80": 10.692002713443005,
+            "n": 981,
+            "coverage_50": 0.7176350662589195,
+            "coverage_80": 0.8939857288481141,
+            "coverage_95": 0.9602446483180428,
+            "coverage_99": 0.9989806320081549
+          },
+          "pooled_tail": {
+            "crps_q199": 1.6674054940096454,
+            "winkler_80": 10.692002713443005,
+            "n": 981,
+            "coverage_50": 0.7176350662589195,
+            "coverage_80": 0.8939857288481141,
+            "coverage_95": 0.9602446483180428,
+            "coverage_99": 0.9928644240570846
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 1.6671997868331394,
+            "winkler_80": 10.692002713443005,
+            "n": 981,
+            "coverage_50": 0.7176350662589195,
+            "coverage_80": 0.8939857288481141,
+            "coverage_95": 0.9602446483180428,
+            "coverage_99": 0.9857288481141692
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 1.66727249783986,
+            "winkler_80": 10.692002713443005,
+            "n": 981,
+            "coverage_50": 0.7176350662589195,
+            "coverage_80": 0.8939857288481141,
+            "coverage_95": 0.9602446483180428,
+            "coverage_99": 0.9857288481141692
+          }
+        }
+      },
+      "cal_note": {
+        "n_train": 66275,
+        "n_core": 51555,
+        "n_cal": 13688,
+        "cal_gw_min": 108,
+        "cal_gw_max": 136
+      },
+      "team_total": {
+        "tail_ext": {
+          "n": 276,
+          "inside": 204,
+          "below_q10": 34,
+          "above_q90": 38
+        },
+        "incumbent": {
+          "n": 276,
+          "inside": 197,
+          "below_q10": 34,
+          "above_q90": 45
+        }
+      },
+      "params_digest": {
+        "QB": {
+          "tail": {
+            "beta_hi": 4.2453,
+            "beta_lo": 1.3501,
+            "n_hi": 113,
+            "n_lo": 79,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 9.5336,
+            "beta_lo": 4.6678,
+            "n_hi": 443,
+            "n_lo": 359,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4755,
+            "beta_lo": 1.451,
+            "n_hi": 599,
+            "n_lo": 269,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 2176,
+            "n_test": 685,
+            "n_matched": 685,
+            "matched_equals_arm": false
+          }
+        },
+        "RB": {
+          "tail": {
+            "beta_hi": 5.0574,
+            "beta_lo": 1.0543,
+            "n_hi": 130,
+            "n_lo": 79,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.9608,
+            "beta_lo": 2.8667,
+            "n_hi": 504,
+            "n_lo": 472,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4755,
+            "beta_lo": 1.451,
+            "n_hi": 599,
+            "n_lo": 269,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3438,
+            "n_test": 1077,
+            "n_matched": 1077,
+            "matched_equals_arm": false
+          }
+        },
+        "WR": {
+          "tail": {
+            "beta_hi": 4.6476,
+            "beta_lo": 1.889,
+            "n_hi": 239,
+            "n_lo": 102,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.9639,
+            "beta_lo": 3.8072,
+            "n_hi": 766,
+            "n_lo": 466,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4755,
+            "beta_lo": 1.451,
+            "n_hi": 599,
+            "n_lo": 269,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 5059,
+            "n_test": 1622,
+            "n_matched": 1622,
+            "matched_equals_arm": false
+          }
+        },
+        "TE": {
+          "tail": {
+            "beta_hi": 3.6997,
+            "beta_lo": 0.0,
+            "n_hi": 117,
+            "n_lo": 9,
+            "thin_hi": false,
+            "thin_lo": true
+          },
+          "permuted_tail": {
+            "beta_hi": 5.8882,
+            "beta_lo": 3.1062,
+            "n_hi": 374,
+            "n_lo": 89,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.4755,
+            "beta_lo": 1.451,
+            "n_hi": 599,
+            "n_lo": 269,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3015,
+            "n_test": 981,
+            "n_matched": 981,
+            "matched_equals_arm": false
+          }
+        }
+      },
+      "exclusions": {
+        "n_groups_excluded": 0,
+        "n_rows_excluded": 0,
+        "n_groups": 276,
+        "n_rows_scored": 4365,
+        "n_rows_total": 4365
+      },
+      "runtime_seconds": 105.4
+    },
+    {
+      "label": "2024H2",
+      "scores": {
+        "QB": {
+          "tail_ext": {
+            "crps_q199": 2.599937948825327,
+            "winkler_80": 18.044998500348683,
+            "n": 676,
+            "coverage_50": 0.6612426035502958,
+            "coverage_80": 0.8106508875739645,
+            "coverage_95": 0.900887573964497,
+            "coverage_99": 0.9733727810650887
+          },
+          "incumbent": {
+            "crps_q199": 2.605718989950875,
+            "winkler_80": 18.044998500348683,
+            "n": 676,
+            "coverage_50": 0.6612426035502958,
+            "coverage_80": 0.8106508875739645,
+            "coverage_95": 0.900887573964497,
+            "coverage_99": 0.900887573964497
+          },
+          "zero_width": {
+            "crps_q199": 3.4752157490409528,
+            "winkler_80": 34.75215749040952,
+            "n": 676,
+            "coverage_50": 0.48520710059171596,
+            "coverage_80": 0.48520710059171596,
+            "coverage_95": 0.48520710059171596,
+            "coverage_99": 0.48520710059171596
+          },
+          "max_width": {
+            "crps_q199": 3.2764328895778365,
+            "winkler_80": 28.509936611720295,
+            "n": 676,
+            "coverage_50": 0.8520710059171598,
+            "coverage_80": 0.9467455621301775,
+            "coverage_95": 0.9896449704142012,
+            "coverage_99": 0.9896449704142012
+          },
+          "over_ext": {
+            "crps_q199": 2.5982484084193618,
+            "winkler_80": 18.044998500348683,
+            "n": 676,
+            "coverage_50": 0.6612426035502958,
+            "coverage_80": 0.8106508875739645,
+            "coverage_95": 0.900887573964497,
+            "coverage_99": 0.9985207100591716
+          },
+          "permuted_tail": {
+            "crps_q199": 2.598391035241655,
+            "winkler_80": 18.044998500348683,
+            "n": 676,
+            "coverage_50": 0.6612426035502958,
+            "coverage_80": 0.8106508875739645,
+            "coverage_95": 0.900887573964497,
+            "coverage_99": 0.9985207100591716
+          },
+          "pooled_tail": {
+            "crps_q199": 2.5998304967343975,
+            "winkler_80": 18.044998500348683,
+            "n": 676,
+            "coverage_50": 0.6612426035502958,
+            "coverage_80": 0.8106508875739645,
+            "coverage_95": 0.900887573964497,
+            "coverage_99": 0.9733727810650887
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.5996481809545378,
+            "winkler_80": 18.044998500348683,
+            "n": 676,
+            "coverage_50": 0.6612426035502958,
+            "coverage_80": 0.8106508875739645,
+            "coverage_95": 0.900887573964497,
+            "coverage_99": 0.977810650887574
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.59960315369534,
+            "winkler_80": 18.044998500348683,
+            "n": 676,
+            "coverage_50": 0.6612426035502958,
+            "coverage_80": 0.8106508875739645,
+            "coverage_95": 0.900887573964497,
+            "coverage_99": 0.9792899408284024
+          }
+        },
+        "RB": {
+          "tail_ext": {
+            "crps_q199": 2.299535476680794,
+            "winkler_80": 14.781499103412296,
+            "n": 1025,
+            "coverage_50": 0.6234146341463415,
+            "coverage_80": 0.8507317073170731,
+            "coverage_95": 0.937560975609756,
+            "coverage_99": 0.9863414634146341
+          },
+          "incumbent": {
+            "crps_q199": 2.3017651510577495,
+            "winkler_80": 14.781499103412296,
+            "n": 1025,
+            "coverage_50": 0.6234146341463415,
+            "coverage_80": 0.8507317073170731,
+            "coverage_95": 0.937560975609756,
+            "coverage_99": 0.937560975609756
+          },
+          "zero_width": {
+            "crps_q199": 3.180406284023451,
+            "winkler_80": 31.804062840234508,
+            "n": 1025,
+            "coverage_50": 0.25951219512195123,
+            "coverage_80": 0.25951219512195123,
+            "coverage_95": 0.25951219512195123,
+            "coverage_99": 0.25951219512195123
+          },
+          "max_width": {
+            "crps_q199": 3.2966814433284553,
+            "winkler_80": 29.756446297246665,
+            "n": 1025,
+            "coverage_50": 0.9141463414634147,
+            "coverage_80": 0.9853658536585366,
+            "coverage_95": 0.9980487804878049,
+            "coverage_99": 0.9980487804878049
+          },
+          "over_ext": {
+            "crps_q199": 2.3006390820792078,
+            "winkler_80": 14.781499103412296,
+            "n": 1025,
+            "coverage_50": 0.6234146341463415,
+            "coverage_80": 0.8507317073170731,
+            "coverage_95": 0.937560975609756,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.29966778721448,
+            "winkler_80": 14.781499103412296,
+            "n": 1025,
+            "coverage_50": 0.6234146341463415,
+            "coverage_80": 0.8507317073170731,
+            "coverage_95": 0.937560975609756,
+            "coverage_99": 0.9970731707317073
+          },
+          "pooled_tail": {
+            "crps_q199": 2.2995743308555756,
+            "winkler_80": 14.781499103412296,
+            "n": 1025,
+            "coverage_50": 0.6234146341463415,
+            "coverage_80": 0.8507317073170731,
+            "coverage_95": 0.937560975609756,
+            "coverage_99": 0.9892682926829268
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.2995572917007454,
+            "winkler_80": 14.781499103412296,
+            "n": 1025,
+            "coverage_50": 0.6234146341463415,
+            "coverage_80": 0.8507317073170731,
+            "coverage_95": 0.937560975609756,
+            "coverage_99": 0.984390243902439
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.299519133888566,
+            "winkler_80": 14.781499103412296,
+            "n": 1025,
+            "coverage_50": 0.6234146341463415,
+            "coverage_80": 0.8507317073170731,
+            "coverage_95": 0.937560975609756,
+            "coverage_99": 0.9863414634146341
+          }
+        },
+        "WR": {
+          "tail_ext": {
+            "crps_q199": 2.535044380456388,
+            "winkler_80": 16.853747250559195,
+            "n": 1563,
+            "coverage_50": 0.6634676903390915,
+            "coverage_80": 0.855406269993602,
+            "coverage_95": 0.9328214971209213,
+            "coverage_99": 0.982725527831094
+          },
+          "incumbent": {
+            "crps_q199": 2.5396433812182844,
+            "winkler_80": 16.853747250559195,
+            "n": 1563,
+            "coverage_50": 0.6634676903390915,
+            "coverage_80": 0.855406269993602,
+            "coverage_95": 0.9328214971209213,
+            "coverage_99": 0.9328214971209213
+          },
+          "zero_width": {
+            "crps_q199": 3.4751385078116113,
+            "winkler_80": 34.75138507811611,
+            "n": 1563,
+            "coverage_50": 0.29558541266794625,
+            "coverage_80": 0.29558541266794625,
+            "coverage_95": 0.29558541266794625,
+            "coverage_99": 0.29558541266794625
+          },
+          "max_width": {
+            "crps_q199": 3.5410950833926935,
+            "winkler_80": 31.575649846457548,
+            "n": 1563,
+            "coverage_50": 0.9206653870761357,
+            "coverage_80": 0.9884836852207294,
+            "coverage_95": 0.9987204094689699,
+            "coverage_99": 0.9987204094689699
+          },
+          "over_ext": {
+            "crps_q199": 2.5348948350524743,
+            "winkler_80": 16.853747250559195,
+            "n": 1563,
+            "coverage_50": 0.6634676903390915,
+            "coverage_80": 0.855406269993602,
+            "coverage_95": 0.9328214971209213,
+            "coverage_99": 0.999360204734485
+          },
+          "permuted_tail": {
+            "crps_q199": 2.534583759161998,
+            "winkler_80": 16.853747250559195,
+            "n": 1563,
+            "coverage_50": 0.6634676903390915,
+            "coverage_80": 0.855406269993602,
+            "coverage_95": 0.9328214971209213,
+            "coverage_99": 0.9929622520793346
+          },
+          "pooled_tail": {
+            "crps_q199": 2.535216721175517,
+            "winkler_80": 16.853747250559195,
+            "n": 1563,
+            "coverage_50": 0.6634676903390915,
+            "coverage_80": 0.855406269993602,
+            "coverage_95": 0.9328214971209213,
+            "coverage_99": 0.982085732565579
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.5348495452093234,
+            "winkler_80": 16.853747250559195,
+            "n": 1563,
+            "coverage_50": 0.6634676903390915,
+            "coverage_80": 0.855406269993602,
+            "coverage_95": 0.9328214971209213,
+            "coverage_99": 0.9852847088931542
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.5351346974171296,
+            "winkler_80": 16.853747250559195,
+            "n": 1563,
+            "coverage_50": 0.6634676903390915,
+            "coverage_80": 0.855406269993602,
+            "coverage_95": 0.9328214971209213,
+            "coverage_99": 0.9833653230966091
+          }
+        },
+        "TE": {
+          "tail_ext": {
+            "crps_q199": 1.7249159134508203,
+            "winkler_80": 11.478133848700596,
+            "n": 948,
+            "coverage_50": 0.7183544303797469,
+            "coverage_80": 0.8839662447257384,
+            "coverage_95": 0.9567510548523207,
+            "coverage_99": 0.9947257383966245
+          },
+          "incumbent": {
+            "crps_q199": 1.726578336322444,
+            "winkler_80": 11.478133848700596,
+            "n": 948,
+            "coverage_50": 0.7183544303797469,
+            "coverage_80": 0.8839662447257384,
+            "coverage_95": 0.9567510548523207,
+            "coverage_99": 0.9567510548523207
+          },
+          "zero_width": {
+            "crps_q199": 2.362241874957777,
+            "winkler_80": 23.622418749577772,
+            "n": 948,
+            "coverage_50": 0.3829113924050633,
+            "coverage_80": 0.3829113924050633,
+            "coverage_95": 0.3829113924050633,
+            "coverage_99": 0.3829113924050633
+          },
+          "max_width": {
+            "crps_q199": 2.451685967022299,
+            "winkler_80": 21.904288783335776,
+            "n": 948,
+            "coverage_50": 0.9166666666666666,
+            "coverage_80": 0.9873417721518988,
+            "coverage_95": 0.9989451476793249,
+            "coverage_99": 0.9989451476793249
+          },
+          "over_ext": {
+            "crps_q199": 1.726287668233027,
+            "winkler_80": 11.478133848700596,
+            "n": 948,
+            "coverage_50": 0.7183544303797469,
+            "coverage_80": 0.8839662447257384,
+            "coverage_95": 0.9567510548523207,
+            "coverage_99": 0.9989451476793249
+          },
+          "permuted_tail": {
+            "crps_q199": 1.7251841092884073,
+            "winkler_80": 11.478133848700596,
+            "n": 948,
+            "coverage_50": 0.7183544303797469,
+            "coverage_80": 0.8839662447257384,
+            "coverage_95": 0.9567510548523207,
+            "coverage_99": 0.9978902953586498
+          },
+          "pooled_tail": {
+            "crps_q199": 1.7247739426227893,
+            "winkler_80": 11.478133848700596,
+            "n": 948,
+            "coverage_50": 0.7183544303797469,
+            "coverage_80": 0.8839662447257384,
+            "coverage_95": 0.9567510548523207,
+            "coverage_99": 0.9968354430379747
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 1.7245568033706675,
+            "winkler_80": 11.478133848700596,
+            "n": 948,
+            "coverage_50": 0.7183544303797469,
+            "coverage_80": 0.8839662447257384,
+            "coverage_95": 0.9567510548523207,
+            "coverage_99": 0.9915611814345991
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 1.725139991797034,
+            "winkler_80": 11.478133848700596,
+            "n": 948,
+            "coverage_50": 0.7183544303797469,
+            "coverage_80": 0.8839662447257384,
+            "coverage_95": 0.9567510548523207,
+            "coverage_99": 0.990506329113924
+          }
+        }
+      },
+      "cal_note": {
+        "n_train": 70680,
+        "n_core": 55279,
+        "n_cal": 14421,
+        "cal_gw_min": 116,
+        "cal_gw_max": 145
+      },
+      "team_total": {
+        "tail_ext": {
+          "n": 268,
+          "inside": 176,
+          "below_q10": 35,
+          "above_q90": 57
+        },
+        "incumbent": {
+          "n": 268,
+          "inside": 171,
+          "below_q10": 35,
+          "above_q90": 62
+        }
+      },
+      "params_digest": {
+        "QB": {
+          "tail": {
+            "beta_hi": 4.5056,
+            "beta_lo": 1.3501,
+            "n_hi": 116,
+            "n_lo": 99,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 9.5055,
+            "beta_lo": 4.3135,
+            "n_hi": 432,
+            "n_lo": 364,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.6594,
+            "beta_lo": 1.4321,
+            "n_hi": 611,
+            "n_lo": 306,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 2323,
+            "n_test": 676,
+            "n_matched": 676,
+            "matched_equals_arm": false
+          }
+        },
+        "RB": {
+          "tail": {
+            "beta_hi": 4.8181,
+            "beta_lo": 1.1152,
+            "n_hi": 142,
+            "n_lo": 74,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.455,
+            "beta_lo": 2.8817,
+            "n_hi": 547,
+            "n_lo": 453,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.6594,
+            "beta_lo": 1.4321,
+            "n_hi": 611,
+            "n_lo": 306,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3568,
+            "n_test": 1025,
+            "n_matched": 1025,
+            "matched_equals_arm": false
+          }
+        },
+        "WR": {
+          "tail": {
+            "beta_hi": 5.0952,
+            "beta_lo": 1.6886,
+            "n_hi": 238,
+            "n_lo": 114,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.4003,
+            "beta_lo": 3.3805,
+            "n_hi": 786,
+            "n_lo": 515,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.6594,
+            "beta_lo": 1.4321,
+            "n_hi": 611,
+            "n_lo": 306,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 5358,
+            "n_test": 1563,
+            "n_matched": 1563,
+            "matched_equals_arm": false
+          }
+        },
+        "TE": {
+          "tail": {
+            "beta_hi": 3.7166,
+            "beta_lo": 1.5542,
+            "n_hi": 115,
+            "n_lo": 19,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 6.2299,
+            "beta_lo": 2.9609,
+            "n_hi": 380,
+            "n_lo": 103,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.6594,
+            "beta_lo": 1.4321,
+            "n_hi": 611,
+            "n_lo": 306,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3172,
+            "n_test": 948,
+            "n_matched": 948,
+            "matched_equals_arm": false
+          }
+        }
+      },
+      "exclusions": {
+        "n_groups_excluded": 0,
+        "n_rows_excluded": 0,
+        "n_groups": 268,
+        "n_rows_scored": 4212,
+        "n_rows_total": 4212
+      },
+      "runtime_seconds": 107.0
+    },
+    {
+      "label": "2025H1",
+      "scores": {
+        "QB": {
+          "tail_ext": {
+            "crps_q199": 2.518577207920426,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 0.9850968703427719
+          },
+          "incumbent": {
+            "crps_q199": 2.523076643486869,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 0.9031296572280179
+          },
+          "zero_width": {
+            "crps_q199": 3.400348128192668,
+            "winkler_80": 34.00348128192668,
+            "n": 671,
+            "coverage_50": 0.4783904619970194,
+            "coverage_80": 0.4783904619970194,
+            "coverage_95": 0.4783904619970194,
+            "coverage_99": 0.4783904619970194
+          },
+          "max_width": {
+            "crps_q199": 3.3940555033828548,
+            "winkler_80": 30.29001042701261,
+            "n": 671,
+            "coverage_50": 0.8763040238450075,
+            "coverage_80": 0.9359165424739195,
+            "coverage_95": 0.9731743666169895,
+            "coverage_99": 0.9731743666169895
+          },
+          "over_ext": {
+            "crps_q199": 2.5186757829035,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.518379946064473,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 1.0
+          },
+          "pooled_tail": {
+            "crps_q199": 2.518550948528645,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 0.9850968703427719
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.518671548006639,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 0.9791356184798807
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.5187003230012937,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 0.9850968703427719
+          }
+        },
+        "RB": {
+          "tail_ext": {
+            "crps_q199": 2.349653020358409,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9849340866290018
+          },
+          "incumbent": {
+            "crps_q199": 2.353521882282144,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9265536723163842
+          },
+          "zero_width": {
+            "crps_q199": 3.173334983774265,
+            "winkler_80": 31.73334983774265,
+            "n": 1062,
+            "coverage_50": 0.2909604519774011,
+            "coverage_80": 0.2909604519774011,
+            "coverage_95": 0.2909604519774011,
+            "coverage_99": 0.2909604519774011
+          },
+          "max_width": {
+            "crps_q199": 3.307312970450244,
+            "winkler_80": 29.701334049946883,
+            "n": 1062,
+            "coverage_50": 0.9048964218455744,
+            "coverage_80": 0.9830508474576272,
+            "coverage_95": 0.9962335216572504,
+            "coverage_99": 0.9962335216572504
+          },
+          "over_ext": {
+            "crps_q199": 2.349768527743543,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9990583804143126
+          },
+          "permuted_tail": {
+            "crps_q199": 2.3494139878663782,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9971751412429378
+          },
+          "pooled_tail": {
+            "crps_q199": 2.3497488545616405,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9858757062146892
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.349668525674646,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9858757062146892
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.34999385619713,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9764595103578154
+          }
+        },
+        "WR": {
+          "tail_ext": {
+            "crps_q199": 2.423768775926755,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 0.9875699192044748
+          },
+          "incumbent": {
+            "crps_q199": 2.4269317048915666,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 0.9459291485394655
+          },
+          "zero_width": {
+            "crps_q199": 3.3235339835380375,
+            "winkler_80": 33.23533983538038,
+            "n": 1609,
+            "coverage_50": 0.3014294592914854,
+            "coverage_80": 0.3014294592914854,
+            "coverage_95": 0.3014294592914854,
+            "coverage_99": 0.3014294592914854
+          },
+          "max_width": {
+            "crps_q199": 3.5217482639420394,
+            "winkler_80": 31.64274613903608,
+            "n": 1609,
+            "coverage_50": 0.9167184586699814,
+            "coverage_80": 0.9857054070851461,
+            "coverage_95": 0.9968924798011187,
+            "coverage_99": 0.9968924798011187
+          },
+          "over_ext": {
+            "crps_q199": 2.4247625072067907,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.4237199870380834,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 0.9968924798011187
+          },
+          "pooled_tail": {
+            "crps_q199": 2.4238751102263625,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 0.983219390926041
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.423662593178477,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 0.9912989434431324
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.423737320561424,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 0.9888129272840274
+          }
+        },
+        "TE": {
+          "tail_ext": {
+            "crps_q199": 1.8231706120099398,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9855072463768116
+          },
+          "incumbent": {
+            "crps_q199": 1.8249032651503219,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9523809523809523
+          },
+          "zero_width": {
+            "crps_q199": 2.4985076698233692,
+            "winkler_80": 24.985076698233698,
+            "n": 966,
+            "coverage_50": 0.39026915113871635,
+            "coverage_80": 0.39026915113871635,
+            "coverage_95": 0.39026915113871635,
+            "coverage_99": 0.39026915113871635
+          },
+          "max_width": {
+            "crps_q199": 2.585839605493672,
+            "winkler_80": 23.228435338502603,
+            "n": 966,
+            "coverage_50": 0.9213250517598344,
+            "coverage_80": 0.984472049689441,
+            "coverage_95": 0.9968944099378882,
+            "coverage_99": 0.9968944099378882
+          },
+          "over_ext": {
+            "crps_q199": 1.823724827450128,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9989648033126294
+          },
+          "permuted_tail": {
+            "crps_q199": 1.823175138828037,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9937888198757764
+          },
+          "pooled_tail": {
+            "crps_q199": 1.8228739933368214,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9906832298136646
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 1.8225950530663964,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9886128364389234
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 1.8226698161421366,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9865424430641822
+          }
+        }
+      },
+      "cal_note": {
+        "n_train": 74849,
+        "n_core": 58687,
+        "n_cal": 15161,
+        "cal_gw_min": 123,
+        "cal_gw_max": 154
+      },
+      "team_total": {
+        "tail_ext": {
+          "n": 270,
+          "inside": 196,
+          "below_q10": 33,
+          "above_q90": 41
+        },
+        "incumbent": {
+          "n": 270,
+          "inside": 188,
+          "below_q10": 34,
+          "above_q90": 48
+        }
+      },
+      "params_digest": {
+        "QB": {
+          "tail": {
+            "beta_hi": 4.4913,
+            "beta_lo": 1.4556,
+            "n_hi": 120,
+            "n_lo": 94,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 9.262,
+            "beta_lo": 4.7349,
+            "n_hi": 475,
+            "n_lo": 393,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.5459,
+            "beta_lo": 1.366,
+            "n_hi": 679,
+            "n_lo": 285,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 2427,
+            "n_test": 671,
+            "n_matched": 671,
+            "matched_equals_arm": false
+          }
+        },
+        "RB": {
+          "tail": {
+            "beta_hi": 4.6968,
+            "beta_lo": 0.8699,
+            "n_hi": 159,
+            "n_lo": 77,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.706,
+            "beta_lo": 3.0061,
+            "n_hi": 594,
+            "n_lo": 508,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.5459,
+            "beta_lo": 1.366,
+            "n_hi": 679,
+            "n_lo": 285,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3711,
+            "n_test": 1062,
+            "n_matched": 1062,
+            "matched_equals_arm": false
+          }
+        },
+        "WR": {
+          "tail": {
+            "beta_hi": 4.9738,
+            "beta_lo": 1.6402,
+            "n_hi": 274,
+            "n_lo": 95,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.49,
+            "beta_lo": 3.5402,
+            "n_hi": 883,
+            "n_lo": 491,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.5459,
+            "beta_lo": 1.366,
+            "n_hi": 679,
+            "n_lo": 285,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 5663,
+            "n_test": 1609,
+            "n_matched": 1609,
+            "matched_equals_arm": false
+          }
+        },
+        "TE": {
+          "tail": {
+            "beta_hi": 3.4769,
+            "beta_lo": 1.5618,
+            "n_hi": 126,
+            "n_lo": 19,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 5.7258,
+            "beta_lo": 3.0796,
+            "n_hi": 454,
+            "n_lo": 104,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.5459,
+            "beta_lo": 1.366,
+            "n_hi": 679,
+            "n_lo": 285,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3360,
+            "n_test": 966,
+            "n_matched": 966,
+            "matched_equals_arm": false
+          }
+        }
+      },
+      "exclusions": {
+        "n_groups_excluded": 0,
+        "n_rows_excluded": 0,
+        "n_groups": 270,
+        "n_rows_scored": 4308,
+        "n_rows_total": 4308
+      },
+      "runtime_seconds": 106.8
+    },
+    {
+      "label": "2025H2",
+      "scores": {
+        "QB": {
+          "tail_ext": {
+            "crps_q199": 2.548155577374086,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 0.9714693295292439
+          },
+          "incumbent": {
+            "crps_q199": 2.552178015445147,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 0.8987161198288159
+          },
+          "zero_width": {
+            "crps_q199": 3.4959968584777905,
+            "winkler_80": 34.959968584777904,
+            "n": 701,
+            "coverage_50": 0.4764621968616263,
+            "coverage_80": 0.4764621968616263,
+            "coverage_95": 0.4764621968616263,
+            "coverage_99": 0.4764621968616263
+          },
+          "max_width": {
+            "crps_q199": 3.3272288185964043,
+            "winkler_80": 29.532629992167855,
+            "n": 701,
+            "coverage_50": 0.8758915834522111,
+            "coverage_80": 0.9400855920114123,
+            "coverage_95": 0.9814550641940085,
+            "coverage_99": 0.9814550641940085
+          },
+          "over_ext": {
+            "crps_q199": 2.547312535438658,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.547169660938657,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 0.9971469329529244
+          },
+          "pooled_tail": {
+            "crps_q199": 2.5481544479635776,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 0.9728958630527818
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.547834044651106,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 0.9757489300998573
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.5480663152748955,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 0.9686162624821684
+          }
+        },
+        "RB": {
+          "tail_ext": {
+            "crps_q199": 2.374738204169611,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.9842883548983364
+          },
+          "incumbent": {
+            "crps_q199": 2.377801613104619,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.933456561922366
+          },
+          "zero_width": {
+            "crps_q199": 3.2902096802853746,
+            "winkler_80": 32.90209680285375,
+            "n": 1082,
+            "coverage_50": 0.2948243992606285,
+            "coverage_80": 0.2948243992606285,
+            "coverage_95": 0.2948243992606285,
+            "coverage_99": 0.2948243992606285
+          },
+          "max_width": {
+            "crps_q199": 3.2606885169667343,
+            "winkler_80": 29.311790232824602,
+            "n": 1082,
+            "coverage_50": 0.8974121996303143,
+            "coverage_80": 0.9805914972273567,
+            "coverage_95": 0.9972273567467652,
+            "coverage_99": 0.9972273567467652
+          },
+          "over_ext": {
+            "crps_q199": 2.374795868124404,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.9981515711645101
+          },
+          "permuted_tail": {
+            "crps_q199": 2.3745316865839774,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.9944547134935305
+          },
+          "pooled_tail": {
+            "crps_q199": 2.3747816091021203,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.9870609981515711
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.374622917604442,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.9870609981515711
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.3747142360983435,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.9842883548983364
+          }
+        },
+        "WR": {
+          "tail_ext": {
+            "crps_q199": 2.4593901399707536,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 0.9889025893958077
+          },
+          "incumbent": {
+            "crps_q199": 2.4616818683333332,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 0.9463625154130703
+          },
+          "zero_width": {
+            "crps_q199": 3.4019269598706123,
+            "winkler_80": 34.019269598706124,
+            "n": 1622,
+            "coverage_50": 0.2971639950678175,
+            "coverage_80": 0.2971639950678175,
+            "coverage_95": 0.2971639950678175,
+            "coverage_99": 0.2971639950678175
+          },
+          "max_width": {
+            "crps_q199": 3.4798018866093186,
+            "winkler_80": 30.89477857472368,
+            "n": 1622,
+            "coverage_50": 0.9198520345252774,
+            "coverage_80": 0.9864364981504316,
+            "coverage_95": 0.998766954377312,
+            "coverage_99": 0.998766954377312
+          },
+          "over_ext": {
+            "crps_q199": 2.4606692086772433,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.459449616344723,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 0.9963008631319359
+          },
+          "pooled_tail": {
+            "crps_q199": 2.4594130982944535,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 0.9845869297163995
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.459498250523019,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 0.9882860665844636
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.459373343994715,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 0.9889025893958077
+          }
+        },
+        "TE": {
+          "tail_ext": {
+            "crps_q199": 1.7464032934662541,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.9907692307692307
+          },
+          "incumbent": {
+            "crps_q199": 1.7479201485630087,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.9558974358974359
+          },
+          "zero_width": {
+            "crps_q199": 2.3909271955376576,
+            "winkler_80": 23.909271955376575,
+            "n": 975,
+            "coverage_50": 0.36205128205128206,
+            "coverage_80": 0.36205128205128206,
+            "coverage_95": 0.36205128205128206,
+            "coverage_99": 0.36205128205128206
+          },
+          "max_width": {
+            "crps_q199": 2.5240967594483226,
+            "winkler_80": 22.930437706996866,
+            "n": 975,
+            "coverage_50": 0.9148717948717948,
+            "coverage_80": 0.9835897435897436,
+            "coverage_95": 0.997948717948718,
+            "coverage_99": 0.997948717948718
+          },
+          "over_ext": {
+            "crps_q199": 1.747268578953885,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.997948717948718
+          },
+          "permuted_tail": {
+            "crps_q199": 1.7467139100040114,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.9948717948717949
+          },
+          "pooled_tail": {
+            "crps_q199": 1.746324175244927,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.9928205128205129
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 1.7460646300141316,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.9887179487179487
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 1.7461825455714717,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.9856410256410256
+          }
+        }
+      },
+      "cal_note": {
+        "n_train": 79307,
+        "n_core": 62512,
+        "n_cal": 15910,
+        "cal_gw_min": 131,
+        "cal_gw_max": 163
+      },
+      "team_total": {
+        "tail_ext": {
+          "n": 274,
+          "inside": 174,
+          "below_q10": 58,
+          "above_q90": 42
+        },
+        "incumbent": {
+          "n": 274,
+          "inside": 172,
+          "below_q10": 59,
+          "above_q90": 43
+        }
+      },
+      "params_digest": {
+        "QB": {
+          "tail": {
+            "beta_hi": 4.4346,
+            "beta_lo": 1.2919,
+            "n_hi": 150,
+            "n_lo": 97,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 9.4732,
+            "beta_lo": 4.7525,
+            "n_hi": 510,
+            "n_lo": 391,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.3756,
+            "beta_lo": 1.3392,
+            "n_hi": 768,
+            "n_lo": 292,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 2532,
+            "n_test": 701,
+            "n_matched": 701,
+            "matched_equals_arm": false
+          }
+        },
+        "RB": {
+          "tail": {
+            "beta_hi": 4.4888,
+            "beta_lo": 0.9426,
+            "n_hi": 178,
+            "n_lo": 84,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.8303,
+            "beta_lo": 3.1007,
+            "n_hi": 642,
+            "n_lo": 566,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.3756,
+            "beta_lo": 1.3392,
+            "n_hi": 768,
+            "n_lo": 292,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3895,
+            "n_test": 1082,
+            "n_matched": 1082,
+            "matched_equals_arm": false
+          }
+        },
+        "WR": {
+          "tail": {
+            "beta_hi": 4.6847,
+            "beta_lo": 1.7595,
+            "n_hi": 296,
+            "n_lo": 95,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.5702,
+            "beta_lo": 3.3856,
+            "n_hi": 926,
+            "n_lo": 474,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.3756,
+            "beta_lo": 1.3392,
+            "n_hi": 768,
+            "n_lo": 292,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 5934,
+            "n_test": 1622,
+            "n_matched": 1622,
+            "matched_equals_arm": false
+          }
+        },
+        "TE": {
+          "tail": {
+            "beta_hi": 3.5388,
+            "beta_lo": 1.2127,
+            "n_hi": 144,
+            "n_lo": 16,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 5.8637,
+            "beta_lo": 3.0093,
+            "n_hi": 515,
+            "n_lo": 106,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.3756,
+            "beta_lo": 1.3392,
+            "n_hi": 768,
+            "n_lo": 292,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3549,
+            "n_test": 975,
+            "n_matched": 975,
+            "matched_equals_arm": false
+          }
+        }
+      },
+      "exclusions": {
+        "n_groups_excluded": 0,
+        "n_rows_excluded": 0,
+        "n_groups": 274,
+        "n_rows_scored": 4380,
+        "n_rows_total": 4380
+      },
+      "runtime_seconds": 106.4
+    }
+  ],
+  "fdr": {
+    "family": {
+      "margin2_tail_QB": true,
+      "margin2_tail_RB": true,
+      "margin2_tail_WR": true,
+      "margin2_tail_TE": true
+    },
+    "pvals": {
+      "margin2_tail_QB": 0.0,
+      "margin2_tail_RB": 0.0,
+      "margin2_tail_WR": 0.0,
+      "margin2_tail_TE": 0.0
+    },
+    "note": "ONE pre-registered family (own-family IS the pooled correction)"
+  },
+  "gates": {
+    "QB": {
+      "checks": {
+        "beats_champion": true,
+        "fold_consistency": true,
+        "dsr_ok": true,
+        "fdr_ok": true,
+        "coverage_floor_ok": true,
+        "degenerates_lose": false,
+        "permutation_not_better": false,
+        "oracle_floor_respected": true,
+        "tail_mass_toward_nominal": true
+      },
+      "ship": false
+    },
+    "RB": {
+      "checks": {
+        "beats_champion": true,
+        "fold_consistency": true,
+        "dsr_ok": true,
+        "fdr_ok": true,
+        "coverage_floor_ok": true,
+        "degenerates_lose": true,
+        "permutation_not_better": true,
+        "oracle_floor_respected": true,
+        "tail_mass_toward_nominal": true
+      },
+      "ship": true
+    },
+    "WR": {
+      "checks": {
+        "beats_champion": true,
+        "fold_consistency": true,
+        "dsr_ok": true,
+        "fdr_ok": true,
+        "coverage_floor_ok": true,
+        "degenerates_lose": true,
+        "permutation_not_better": false,
+        "oracle_floor_respected": true,
+        "tail_mass_toward_nominal": true
+      },
+      "ship": false
+    },
+    "TE": {
+      "checks": {
+        "beats_champion": true,
+        "fold_consistency": true,
+        "dsr_ok": true,
+        "fdr_ok": true,
+        "coverage_floor_ok": true,
+        "degenerates_lose": true,
+        "permutation_not_better": true,
+        "oracle_floor_respected": true,
+        "tail_mass_toward_nominal": true
+      },
+      "ship": true
+    }
+  },
+  "null_states": {
+    "QB": {
+      "state": "CONSTRAINT_REFUSED",
+      "reason": "hand-classified (the NF-D18/MH2.7 classify_null gap): every statistical gate passed and the null rests entirely on anchor/calibration clauses ['degenerates_lose', 'permutation_not_better']. More data cannot change this verdict.",
+      "retest_trigger": null,
+      "failing_anchor_checks": [
+        "degenerates_lose",
+        "permutation_not_better"
+      ]
+    },
+    "WR": {
+      "state": "CONSTRAINT_REFUSED",
+      "reason": "hand-classified (the NF-D18/MH2.7 classify_null gap): every statistical gate passed and the null rests entirely on anchor/calibration clauses ['permutation_not_better']. More data cannot change this verdict.",
+      "retest_trigger": null,
+      "failing_anchor_checks": [
+        "permutation_not_better"
+      ]
+    }
+  },
+  "verdict": {
+    "QB": "CONSTRAINT_REFUSED",
+    "RB": "SHIP",
+    "WR": "CONSTRAINT_REFUSED",
+    "TE": "SHIP"
+  },
+  "headline": "QB[CONSTRAINT_REFUSED] RB[SHIP] WR[CONSTRAINT_REFUSED] TE[SHIP]"
+}
