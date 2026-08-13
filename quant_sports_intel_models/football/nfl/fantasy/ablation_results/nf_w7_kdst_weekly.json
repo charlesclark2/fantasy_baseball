@@ -1,0 +1,5125 @@
+{
+  "generated_at": "2026-08-13T19:56:35+00:00",
+  "story": "NF-W7",
+  "smoke": false,
+  "skip_layer_b": false,
+  "runtime_seconds": 1300.0,
+  "selection_metric": "crps_q199",
+  "legs": [
+    "fg_att",
+    "xp_att",
+    "def_sacks",
+    "def_int",
+    "def_fumble_rec",
+    "fg_make",
+    "fg_band",
+    "dst_td",
+    "def_safety",
+    "def_blocked_kick",
+    "pa_bucket",
+    "ya_bucket"
+  ],
+  "n_folds": 8,
+  "fold_labels": [
+    "2022H1",
+    "2022H2",
+    "2023H1",
+    "2023H2",
+    "2024H1",
+    "2024H2",
+    "2025H1",
+    "2025H2"
+  ],
+  "n_rows": {
+    "dst": 5278,
+    "kicker": 5318,
+    "attempt": 10277
+  },
+  "pit_audits": {
+    "dst": {
+      "weeks_checked": 175,
+      "records_checked": 5278,
+      "weeks_dropped": [],
+      "rows_dropped": 0
+    },
+    "kicker": {
+      "weeks_checked": 175,
+      "records_checked": 5318,
+      "weeks_dropped": [],
+      "rows_dropped": 0
+    },
+    "attempt": {
+      "weeks_checked": 175,
+      "records_checked": 10277,
+      "weeks_dropped": [],
+      "rows_dropped": 0
+    }
+  },
+  "winners": {
+    "fg_att": "pois_glm",
+    "xp_att": "pois_glm",
+    "def_sacks": "negbin_glm",
+    "def_int": "negbin_glm",
+    "def_fumble_rec": "negbin_glm",
+    "fg_make": "logit_distance_glm",
+    "fg_band": "mnlogit",
+    "dst_td": "eb_pois",
+    "def_safety": "hurdle_pois",
+    "def_blocked_kick": "eb_pois",
+    "pa_bucket": "ordered_logit",
+    "ya_bucket": "gauss_integrated"
+  },
+  "preregistration": {
+    "real_arms": {
+      "fg_att": [
+        "pois_glm",
+        "negbin_glm",
+        "lgbm_quantile"
+      ],
+      "xp_att": [
+        "pois_glm",
+        "negbin_glm",
+        "lgbm_quantile"
+      ],
+      "def_sacks": [
+        "pois_glm",
+        "negbin_glm",
+        "lgbm_quantile"
+      ],
+      "def_int": [
+        "pois_glm",
+        "negbin_glm",
+        "lgbm_quantile"
+      ],
+      "def_fumble_rec": [
+        "pois_glm",
+        "negbin_glm",
+        "lgbm_quantile"
+      ],
+      "dst_td": [
+        "eb_pois",
+        "hurdle_pois"
+      ],
+      "def_safety": [
+        "eb_pois",
+        "hurdle_pois"
+      ],
+      "def_blocked_kick": [
+        "eb_pois",
+        "hurdle_pois"
+      ],
+      "fg_make": [
+        "eb_kicker_curve",
+        "logit_distance_glm",
+        "lgbm_classifier"
+      ],
+      "fg_band": [
+        "mnlogit",
+        "eb_dirichlet_kicker",
+        "lgbm_multiclass"
+      ],
+      "pa_bucket": [
+        "ordered_logit",
+        "mnlogit",
+        "negbin_integrated"
+      ],
+      "ya_bucket": [
+        "ordered_logit",
+        "mnlogit",
+        "gauss_integrated"
+      ]
+    },
+    "foils": {
+      "fg_att": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ],
+      "xp_att": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ],
+      "def_sacks": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ],
+      "def_int": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ],
+      "def_fumble_rec": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ],
+      "dst_td": [
+        "foil_climatology",
+        "foil_league_rate"
+      ],
+      "def_safety": [
+        "foil_climatology",
+        "foil_league_rate"
+      ],
+      "def_blocked_kick": [
+        "foil_climatology",
+        "foil_league_rate"
+      ],
+      "fg_make": [
+        "foil_league_curve",
+        "foil_constant_rate"
+      ],
+      "fg_band": [
+        "foil_league_mix"
+      ],
+      "pa_bucket": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ],
+      "ya_bucket": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ]
+    },
+    "leg_metrics": {
+      "fg_att": "crps_q199",
+      "xp_att": "crps_q199",
+      "def_sacks": "crps_q199",
+      "def_int": "crps_q199",
+      "def_fumble_rec": "crps_q199",
+      "dst_td": "crps_q199",
+      "def_safety": "crps_q199",
+      "def_blocked_kick": "crps_q199",
+      "fg_make": "log_loss",
+      "fg_band": "log_loss_multiclass",
+      "pa_bucket": "rps",
+      "ya_bucket": "rps"
+    },
+    "layer_b_eligible": [
+      "assembled",
+      "foil_climatology",
+      "foil_board_eb",
+      "foil_direct"
+    ],
+    "layer_b_anchors": [
+      "nihilist_zero",
+      "zero_width",
+      "max_width",
+      "permuted_direct",
+      "oracle__assembled",
+      "matched_n__assembled",
+      "oracle__foil_climatology",
+      "oracle__foil_board_eb",
+      "oracle__foil_direct"
+    ],
+    "test_blocks": [
+      [
+        2022,
+        1
+      ],
+      [
+        2022,
+        2
+      ],
+      [
+        2023,
+        1
+      ],
+      [
+        2023,
+        2
+      ],
+      [
+        2024,
+        1
+      ],
+      [
+        2024,
+        2
+      ],
+      [
+        2025,
+        1
+      ],
+      [
+        2025,
+        2
+      ]
+    ],
+    "purge_weeks": 2,
+    "pbo_max": 0.2,
+    "dsr_min": 0.95,
+    "fdr_q": 0.1,
+    "fdr_families": {
+      "component": [
+        "fg_att",
+        "xp_att",
+        "def_sacks",
+        "def_int",
+        "def_fumble_rec",
+        "fg_make",
+        "fg_band",
+        "dst_td",
+        "def_safety",
+        "def_blocked_kick",
+        "pa_bucket",
+        "ya_bucket"
+      ],
+      "downstream": [
+        "k_points",
+        "dst_points"
+      ]
+    },
+    "coverage_floor": 0.8,
+    "features_k": [
+      "game_context__is_home",
+      "game_context__div_game",
+      "game_context__week_index",
+      "game_context__days_since_last_game",
+      "game_context__roofed_stadium",
+      "prior_week_box__fg_att_l4",
+      "prior_week_box__fg_att_l8",
+      "prior_week_box__fg_att_ewm",
+      "prior_week_box__fg_att_s2d",
+      "prior_week_box__fg_att_prior_season",
+      "prior_week_box__pat_att_l4",
+      "prior_week_box__pat_att_l8",
+      "prior_week_box__fg_makerate_prior",
+      "prior_week_box__share50_prior",
+      "prior_week_box__kicker_games_prior_season",
+      "team_environment__points_l4",
+      "team_environment__points_l8",
+      "team_environment__points_prior_season",
+      "team_environment__drives_l4",
+      "team_environment__rz_trips_l4",
+      "team_environment__rz_tdrate_l4",
+      "team_environment__fgrange_trips_l4",
+      "team_environment__team_fg_att_l4",
+      "team_environment__epa_per_play_l4",
+      "team_environment__games_prior_season",
+      "opponent_matchup__def_points_allowed_l4",
+      "opponent_matchup__def_rz_tdrate_allowed_l4",
+      "opponent_matchup__def_fgatt_faced_l4",
+      "opponent_matchup__def_epa_allowed_l4",
+      "opponent_matchup__def_drives_faced_l4"
+    ],
+    "features_d": [
+      "game_context__is_home",
+      "game_context__div_game",
+      "game_context__week_index",
+      "game_context__days_since_last_game",
+      "team_environment__sacks_l4",
+      "team_environment__sacks_l8",
+      "team_environment__sacks_ewm",
+      "team_environment__qb_hits_l4",
+      "team_environment__tfl_l4",
+      "team_environment__int_l4",
+      "team_environment__int_l8",
+      "team_environment__fr_l4",
+      "team_environment__takeaways_l8",
+      "team_environment__dsttd_l16",
+      "team_environment__safety_l16",
+      "team_environment__block_l16",
+      "team_environment__pa_l4",
+      "team_environment__pa_l8",
+      "team_environment__pa_s2d",
+      "team_environment__pa_prior_season",
+      "team_environment__ya_l4",
+      "team_environment__ya_l8",
+      "team_environment__games_prior_season",
+      "opponent_matchup__opp_points_l4",
+      "opponent_matchup__opp_points_l8",
+      "opponent_matchup__opp_points_prior_season",
+      "opponent_matchup__opp_sacks_taken_l4",
+      "opponent_matchup__opp_sacks_taken_l8",
+      "opponent_matchup__opp_giveaways_l4",
+      "opponent_matchup__opp_giveaways_l8",
+      "opponent_matchup__opp_off_yards_l4",
+      "opponent_matchup__opp_pass_yards_l4"
+    ],
+    "features_make": [
+      "game_context__kick_distance",
+      "game_context__roofed_stadium",
+      "prior_week_box__kicker_prior_makerate_eb",
+      "prior_week_box__kicker_prior_att"
+    ],
+    "features_band": [
+      "game_context__roofed_stadium",
+      "prior_week_box__kicker_prior_share50_eb",
+      "prior_week_box__kicker_prior_share40_eb",
+      "prior_week_box__kicker_prior_att"
+    ],
+    "assembly_draws": 4000,
+    "eb_kappa_games": 8.0,
+    "pa_edges": [
+      0,
+      1,
+      7,
+      14,
+      18,
+      21,
+      28,
+      35,
+      46
+    ],
+    "ya_edges": [
+      0,
+      100,
+      200,
+      300,
+      350,
+      400,
+      450,
+      500,
+      550
+    ],
+    "pa_tier_points": [
+      5.0,
+      4.0,
+      3.0,
+      1.0,
+      0.0,
+      0.0,
+      -1.0,
+      -3.0,
+      -5.0
+    ],
+    "band_points": [
+      3.0,
+      4.0,
+      5.0
+    ],
+    "era_forbidden_tokens": [
+      "pressure",
+      "coverage",
+      "route",
+      "ngs_air_yards"
+    ],
+    "banned_source_tokens": [
+      "spread_line",
+      "total_line",
+      "vegas_wp",
+      "vegas_home_wp",
+      "vegas_wpa",
+      "vegas_home_wpa",
+      "temp",
+      "wind",
+      "moneyline",
+      "depth_team",
+      "depth_chart"
+    ]
+  },
+  "layer_a": {
+    "fg_att": {
+      "leg": "fg_att",
+      "metric": "crps_q199",
+      "winner": "pois_glm",
+      "best_foil": "foil_climatology",
+      "mean_scores": {
+        "pois_glm": 0.7175,
+        "oracle__pois_glm": 0.6663,
+        "negbin_glm": 0.7175,
+        "oracle__negbin_glm": 0.6663,
+        "lgbm_quantile": 0.755,
+        "oracle__lgbm_quantile": 0.4567,
+        "foil_climatology": 0.7182,
+        "oracle__foil_climatology": 0.7141,
+        "foil_entity_eb": 0.7237,
+        "oracle__foil_entity_eb": 0.7229,
+        "matched_n__pois_glm": 0.7845,
+        "matched_n__negbin_glm": 0.785,
+        "matched_n__lgbm_quantile": 0.7878,
+        "permuted_control": 0.7612,
+        "nihilist_zero": 1.9849,
+        "zero_width": 0.9884,
+        "max_width": 1.1805
+      },
+      "deltas_by_fold": [
+        -0.0031,
+        0.001,
+        0.0064,
+        0.0,
+        -0.0051,
+        0.0049,
+        -0.0029,
+        0.0046
+      ],
+      "mean_delta": 0.0007,
+      "ci95": [
+        -0.0028,
+        0.0043
+      ],
+      "beats_foil": true,
+      "fold_wins": 5,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": false
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.112,
+      "contender_spread_pct": 0.87,
+      "flips": [
+        {
+          "config": "pois_glm",
+          "IS-half wins": 31,
+          "share": 0.443,
+          "full-sample IS80": 0.717,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "foil_climatology",
+          "IS-half wins": 24,
+          "share": 0.343,
+          "full-sample IS80": 0.718,
+          "\u0394 vs best %": 0.1
+        },
+        {
+          "config": "negbin_glm",
+          "IS-half wins": 15,
+          "share": 0.214,
+          "full-sample IS80": 0.717,
+          "\u0394 vs best %": 0.0
+        }
+      ],
+      "dsr": 0.0,
+      "p_one_sided": 0.3233,
+      "trial_srs": [
+        0.169,
+        0.167,
+        -6.077
+      ],
+      "observed_sr": 0.169,
+      "var_trials_sr": 12.99826,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 1.9849,
+          "zero_width": 0.9884,
+          "max_width": 1.1805
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "pois_glm": {
+          "arm": 0.7175,
+          "own_form_oracle": 0.6663,
+          "matched_n": 0.7845
+        },
+        "negbin_glm": {
+          "arm": 0.7175,
+          "own_form_oracle": 0.6663,
+          "matched_n": 0.785
+        },
+        "lgbm_quantile": {
+          "arm": 0.755,
+          "own_form_oracle": 0.4567,
+          "matched_n": 0.7878
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.043,
+        "permuted_lift_p_one_sided": 1.0
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": -0.0029,
+        "2025H2": 0.0046
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.04391143911439113,
+          "n": 271
+        },
+        {
+          "max_decile_dev": 0.03584905660377359,
+          "n": 265
+        },
+        {
+          "max_decile_dev": 0.046616541353383445,
+          "n": 266
+        },
+        {
+          "max_decile_dev": 0.022794117647058826,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.027536231884057974,
+          "n": 276
+        },
+        {
+          "max_decile_dev": 0.02537313432835822,
+          "n": 268
+        },
+        {
+          "max_decile_dev": 0.05185185185185184,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.03065693430656935,
+          "n": 274
+        }
+      ]
+    },
+    "xp_att": {
+      "leg": "xp_att",
+      "metric": "crps_q199",
+      "winner": "pois_glm",
+      "best_foil": "foil_entity_eb",
+      "mean_scores": {
+        "pois_glm": 0.7604,
+        "oracle__pois_glm": 0.7134,
+        "negbin_glm": 0.7604,
+        "oracle__negbin_glm": 0.7134,
+        "lgbm_quantile": 0.803,
+        "oracle__lgbm_quantile": 0.4838,
+        "foil_climatology": 0.802,
+        "oracle__foil_climatology": 0.7967,
+        "foil_entity_eb": 0.7801,
+        "oracle__foil_entity_eb": 0.7792,
+        "matched_n__pois_glm": 0.8384,
+        "matched_n__negbin_glm": 0.839,
+        "matched_n__lgbm_quantile": 0.8397,
+        "permuted_control": 0.8418,
+        "nihilist_zero": 2.2259,
+        "zero_width": 1.1089,
+        "max_width": 1.2919
+      },
+      "deltas_by_fold": [
+        0.0374,
+        0.0277,
+        0.0198,
+        0.0084,
+        0.0204,
+        0.0049,
+        0.0109,
+        0.0288
+      ],
+      "mean_delta": 0.0198,
+      "ci95": [
+        0.0104,
+        0.0292
+      ],
+      "beats_foil": true,
+      "fold_wins": 8,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.0,
+      "contender_spread_pct": 5.48,
+      "flips": [
+        {
+          "config": "pois_glm",
+          "IS-half wins": 58,
+          "share": 0.829,
+          "full-sample IS80": 0.76,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "negbin_glm",
+          "IS-half wins": 12,
+          "share": 0.171,
+          "full-sample IS80": 0.76,
+          "\u0394 vs best %": 0.0
+        }
+      ],
+      "dsr": 0.5313,
+      "p_one_sided": 0.0008,
+      "trial_srs": [
+        1.757,
+        1.76,
+        -1.738
+      ],
+      "observed_sr": 1.757,
+      "var_trials_sr": 4.07397,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 2.2259,
+          "zero_width": 1.1089,
+          "max_width": 1.2919
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "pois_glm": {
+          "arm": 0.7604,
+          "own_form_oracle": 0.7134,
+          "matched_n": 0.8384
+        },
+        "negbin_glm": {
+          "arm": 0.7604,
+          "own_form_oracle": 0.7134,
+          "matched_n": 0.839
+        },
+        "lgbm_quantile": {
+          "arm": 0.803,
+          "own_form_oracle": 0.4838,
+          "matched_n": 0.8397
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0617,
+        "permuted_lift_p_one_sided": 0.9999
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0109,
+        "2025H2": 0.0288
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.04095940959409595,
+          "n": 271
+        },
+        {
+          "max_decile_dev": 0.03584905660377358,
+          "n": 265
+        },
+        {
+          "max_decile_dev": 0.02481203007518798,
+          "n": 266
+        },
+        {
+          "max_decile_dev": 0.037500000000000006,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.04855072463768115,
+          "n": 276
+        },
+        {
+          "max_decile_dev": 0.055223880597014934,
+          "n": 268
+        },
+        {
+          "max_decile_dev": 0.022222222222222227,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.04233576642335765,
+          "n": 274
+        }
+      ]
+    },
+    "def_sacks": {
+      "leg": "def_sacks",
+      "metric": "crps_q199",
+      "winner": "negbin_glm",
+      "best_foil": "foil_climatology",
+      "mean_scores": {
+        "pois_glm": 0.9565,
+        "oracle__pois_glm": 0.8807,
+        "negbin_glm": 0.9532,
+        "oracle__negbin_glm": 0.8803,
+        "lgbm_quantile": 0.9984,
+        "oracle__lgbm_quantile": 0.5963,
+        "foil_climatology": 0.9791,
+        "oracle__foil_climatology": 0.9749,
+        "foil_entity_eb": 0.987,
+        "oracle__foil_entity_eb": 0.9863,
+        "matched_n__pois_glm": 1.7955,
+        "matched_n__negbin_glm": 1.7943,
+        "matched_n__lgbm_quantile": 1.0394,
+        "permuted_control": 1.0226,
+        "nihilist_zero": 2.4249,
+        "zero_width": 1.3735,
+        "max_width": 1.4611
+      },
+      "deltas_by_fold": [
+        0.0167,
+        0.0244,
+        0.0585,
+        0.0308,
+        0.0106,
+        0.0127,
+        0.0217,
+        0.0319
+      ],
+      "mean_delta": 0.0259,
+      "ci95": [
+        0.0131,
+        0.0387
+      ],
+      "beats_foil": true,
+      "fold_wins": 8,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.0,
+      "contender_spread_pct": 3.54,
+      "flips": [
+        {
+          "config": "negbin_glm",
+          "IS-half wins": 70,
+          "share": 1.0,
+          "full-sample IS80": 0.953,
+          "\u0394 vs best %": 0.0
+        }
+      ],
+      "dsr": 0.7118,
+      "p_one_sided": 0.001,
+      "trial_srs": [
+        1.423,
+        1.697,
+        -1.478
+      ],
+      "observed_sr": 1.697,
+      "var_trials_sr": 3.09506,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 2.4249,
+          "zero_width": 1.3735,
+          "max_width": 1.4611
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "pois_glm": {
+          "arm": 0.9565,
+          "own_form_oracle": 0.8807,
+          "matched_n": 1.7955
+        },
+        "negbin_glm": {
+          "arm": 0.9532,
+          "own_form_oracle": 0.8803,
+          "matched_n": 1.7943
+        },
+        "lgbm_quantile": {
+          "arm": 0.9984,
+          "own_form_oracle": 0.5963,
+          "matched_n": 1.0394
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0434,
+        "permuted_lift_p_one_sided": 1.0
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0217,
+        "2025H2": 0.0319
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.02647058823529412,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.029629629629629617,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.03382352941176471,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.02647058823529412,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.04202898550724638,
+          "n": 276
+        },
+        {
+          "max_decile_dev": 0.023134328358208944,
+          "n": 268
+        },
+        {
+          "max_decile_dev": 0.044444444444444425,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.027737226277372268,
+          "n": 274
+        }
+      ]
+    },
+    "def_int": {
+      "leg": "def_int",
+      "metric": "crps_q199",
+      "winner": "negbin_glm",
+      "best_foil": "foil_climatology",
+      "mean_scores": {
+        "pois_glm": 0.4489,
+        "oracle__pois_glm": 0.4081,
+        "negbin_glm": 0.4487,
+        "oracle__negbin_glm": 0.4081,
+        "lgbm_quantile": 0.486,
+        "oracle__lgbm_quantile": 0.2996,
+        "foil_climatology": 0.4498,
+        "oracle__foil_climatology": 0.448,
+        "foil_entity_eb": 0.4521,
+        "oracle__foil_entity_eb": 0.4518,
+        "matched_n__pois_glm": 1.8216,
+        "matched_n__negbin_glm": 1.8225,
+        "matched_n__lgbm_quantile": 0.4982,
+        "permuted_control": 0.4886,
+        "nihilist_zero": 0.7429,
+        "zero_width": 0.7191,
+        "max_width": 0.9591
+      },
+      "deltas_by_fold": [
+        0.0043,
+        -0.0097,
+        -0.0082,
+        -0.0036,
+        0.0071,
+        0.0079,
+        0.0092,
+        0.0021
+      ],
+      "mean_delta": 0.0011,
+      "ci95": [
+        -0.0051,
+        0.0073
+      ],
+      "beats_foil": true,
+      "fold_wins": 5,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": false
+      },
+      "pbo": 0.2143,
+      "os_gap_pct": 0.492,
+      "contender_spread_pct": 0.77,
+      "flips": [
+        {
+          "config": "negbin_glm",
+          "IS-half wins": 42,
+          "share": 0.6,
+          "full-sample IS80": 0.449,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "foil_climatology",
+          "IS-half wins": 19,
+          "share": 0.271,
+          "full-sample IS80": 0.45,
+          "\u0394 vs best %": 0.25
+        },
+        {
+          "config": "foil_entity_eb",
+          "IS-half wins": 7,
+          "share": 0.1,
+          "full-sample IS80": 0.452,
+          "\u0394 vs best %": 0.77
+        },
+        {
+          "config": "pois_glm",
+          "IS-half wins": 2,
+          "share": 0.029,
+          "full-sample IS80": 0.449,
+          "\u0394 vs best %": 0.06
+        }
+      ],
+      "dsr": 0.0,
+      "p_one_sided": 0.3389,
+      "trial_srs": [
+        0.117,
+        0.153,
+        -6.528
+      ],
+      "observed_sr": 0.153,
+      "var_trials_sr": 14.79822,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 0.7429,
+          "zero_width": 0.7191,
+          "max_width": 0.9591
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "pois_glm": {
+          "arm": 0.4489,
+          "own_form_oracle": 0.4081,
+          "matched_n": 1.8216
+        },
+        "negbin_glm": {
+          "arm": 0.4487,
+          "own_form_oracle": 0.4081,
+          "matched_n": 1.8225
+        },
+        "lgbm_quantile": {
+          "arm": 0.486,
+          "own_form_oracle": 0.2996,
+          "matched_n": 0.4982
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0388,
+        "permuted_lift_p_one_sided": 1.0
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0092,
+        "2025H2": 0.0021
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.024999999999999994,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.048148148148148134,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.032352941176470584,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.0411764705882353,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.015942028985507242,
+          "n": 276
+        },
+        {
+          "max_decile_dev": 0.019402985074626858,
+          "n": 268
+        },
+        {
+          "max_decile_dev": 0.04444444444444445,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.0416058394160584,
+          "n": 274
+        }
+      ]
+    },
+    "def_fumble_rec": {
+      "leg": "def_fumble_rec",
+      "metric": "crps_q199",
+      "winner": "negbin_glm",
+      "best_foil": "foil_climatology",
+      "mean_scores": {
+        "pois_glm": 0.3396,
+        "oracle__pois_glm": 0.3086,
+        "negbin_glm": 0.3396,
+        "oracle__negbin_glm": 0.3085,
+        "lgbm_quantile": 0.3674,
+        "oracle__lgbm_quantile": 0.2362,
+        "foil_climatology": 0.3394,
+        "oracle__foil_climatology": 0.337,
+        "foil_entity_eb": 0.3433,
+        "oracle__foil_entity_eb": 0.343,
+        "matched_n__pois_glm": 1.7082,
+        "matched_n__negbin_glm": 1.7098,
+        "matched_n__lgbm_quantile": 0.388,
+        "permuted_control": 0.3713,
+        "nihilist_zero": 0.5092,
+        "zero_width": 0.5092,
+        "max_width": 0.6408
+      },
+      "deltas_by_fold": [
+        -0.0001,
+        -0.0039,
+        -0.0003,
+        0.0012,
+        0.0015,
+        0.0027,
+        -0.0059,
+        0.0029
+      ],
+      "mean_delta": -0.0002,
+      "ci95": [
+        -0.0028,
+        0.0024
+      ],
+      "beats_foil": false,
+      "fold_wins": 4,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": false
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.24,
+      "contender_spread_pct": 1.15,
+      "flips": [
+        {
+          "config": "foil_climatology",
+          "IS-half wins": 42,
+          "share": 0.6,
+          "full-sample IS80": 0.339,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "negbin_glm",
+          "IS-half wins": 20,
+          "share": 0.286,
+          "full-sample IS80": 0.34,
+          "\u0394 vs best %": 0.06
+        },
+        {
+          "config": "pois_glm",
+          "IS-half wins": 8,
+          "share": 0.114,
+          "full-sample IS80": 0.34,
+          "\u0394 vs best %": 0.06
+        }
+      ],
+      "dsr": 0.0,
+      "p_one_sided": 0.5752,
+      "trial_srs": [
+        -0.071,
+        -0.07,
+        -4.215
+      ],
+      "observed_sr": -0.07,
+      "var_trials_sr": 5.72613,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 0.5092,
+          "zero_width": 0.5092,
+          "max_width": 0.6408
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "pois_glm": {
+          "arm": 0.3396,
+          "own_form_oracle": 0.3086,
+          "matched_n": 1.7082
+        },
+        "negbin_glm": {
+          "arm": 0.3396,
+          "own_form_oracle": 0.3085,
+          "matched_n": 1.7098
+        },
+        "lgbm_quantile": {
+          "arm": 0.3674,
+          "own_form_oracle": 0.2362,
+          "matched_n": 0.388
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0319,
+        "permuted_lift_p_one_sided": 1.0
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": -0.0059,
+        "2025H2": 0.0029
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.043382352941176455,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.02962962962962963,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.02647058823529412,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.0411764705882353,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.052173913043478265,
+          "n": 276
+        },
+        {
+          "max_decile_dev": 0.030597014925373117,
+          "n": 268
+        },
+        {
+          "max_decile_dev": 0.048148148148148134,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.0416058394160584,
+          "n": 274
+        }
+      ]
+    },
+    "fg_make": {
+      "leg": "fg_make",
+      "metric": "log_loss",
+      "winner": "logit_distance_glm",
+      "best_foil": "foil_league_curve",
+      "mean_scores": {
+        "eb_kicker_curve": 0.3656,
+        "oracle__eb_kicker_curve": 0.3637,
+        "logit_distance_glm": 0.3636,
+        "oracle__logit_distance_glm": 0.3595,
+        "lgbm_classifier": 0.3769,
+        "oracle__lgbm_classifier": 0.1539,
+        "foil_league_curve": 0.3673,
+        "oracle__foil_league_curve": 0.3603,
+        "foil_constant_rate": 0.4206,
+        "oracle__foil_constant_rate": 0.4195,
+        "matched_n__eb_kicker_curve": 0.3656,
+        "matched_n__logit_distance_glm": 0.3689,
+        "matched_n__lgbm_classifier": 0.4637,
+        "permuted_control": 0.3659,
+        "all_event": 1.0275,
+        "uniform": 0.6931
+      },
+      "deltas_by_fold": [
+        0.0067,
+        0.01,
+        0.0029,
+        0.0033,
+        0.0006,
+        -0.0015,
+        0.0033,
+        0.0043
+      ],
+      "mean_delta": 0.0037,
+      "ci95": [
+        0.0008,
+        0.0066
+      ],
+      "beats_foil": true,
+      "fold_wins": 7,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.0,
+      "contender_spread_pct": 3.68,
+      "flips": [
+        {
+          "config": "logit_distance_glm",
+          "IS-half wins": 68,
+          "share": 0.971,
+          "full-sample IS80": 0.364,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "eb_kicker_curve",
+          "IS-half wins": 2,
+          "share": 0.029,
+          "full-sample IS80": 0.366,
+          "\u0394 vs best %": 0.55
+        }
+      ],
+      "dsr": 0.3131,
+      "p_one_sided": 0.0101,
+      "trial_srs": [
+        0.609,
+        1.056,
+        -1.667
+      ],
+      "observed_sr": 1.056,
+      "var_trials_sr": 2.13354,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "all_event": 1.0275,
+          "uniform": 0.6931
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "eb_kicker_curve": {
+          "arm": 0.3656,
+          "own_form_oracle": 0.3637,
+          "matched_n": 0.3656
+        },
+        "logit_distance_glm": {
+          "arm": 0.3636,
+          "own_form_oracle": 0.3595,
+          "matched_n": 0.3689
+        },
+        "lgbm_classifier": {
+          "arm": 0.3769,
+          "own_form_oracle": 0.1539,
+          "matched_n": 0.4637
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": 0.0013,
+        "permuted_lift_p_one_sided": 0.0511
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0033,
+        "2025H2": 0.0043
+      },
+      "pit_flatness_report_only": []
+    },
+    "fg_band": {
+      "leg": "fg_band",
+      "metric": "log_loss_multiclass",
+      "winner": "mnlogit",
+      "best_foil": "foil_league_mix",
+      "mean_scores": {
+        "mnlogit": 1.039,
+        "oracle__mnlogit": 1.0258,
+        "eb_dirichlet_kicker": 1.0652,
+        "oracle__eb_dirichlet_kicker": 1.0629,
+        "lgbm_multiclass": 1.0749,
+        "oracle__lgbm_multiclass": 0.7004,
+        "foil_league_mix": 1.0528,
+        "oracle__foil_league_mix": 1.0406,
+        "matched_n__mnlogit": 1.0531,
+        "matched_n__eb_dirichlet_kicker": 1.0637,
+        "matched_n__lgbm_multiclass": 1.2343,
+        "permuted_control": 1.044,
+        "point_mass_modal": 7.0057,
+        "uniform": 1.0986
+      },
+      "deltas_by_fold": [
+        0.0096,
+        0.0207,
+        0.0029,
+        0.0069,
+        0.0309,
+        0.0123,
+        0.023,
+        0.0038
+      ],
+      "mean_delta": 0.0138,
+      "ci95": [
+        0.0053,
+        0.0222
+      ],
+      "beats_foil": true,
+      "fold_wins": 8,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.0,
+      "contender_spread_pct": 3.45,
+      "flips": [
+        {
+          "config": "mnlogit",
+          "IS-half wins": 70,
+          "share": 1.0,
+          "full-sample IS80": 1.039,
+          "\u0394 vs best %": 0.0
+        }
+      ],
+      "dsr": 0.3847,
+      "p_one_sided": 0.0031,
+      "trial_srs": [
+        1.366,
+        -2.0,
+        -0.865
+      ],
+      "observed_sr": 1.366,
+      "var_trials_sr": 2.93213,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "uniform": 1.0986,
+          "point_mass_modal": 7.0057
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": false,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "mnlogit": {
+          "arm": 1.039,
+          "own_form_oracle": 1.0258,
+          "matched_n": 1.0531
+        },
+        "eb_dirichlet_kicker": {
+          "arm": 1.0652,
+          "own_form_oracle": 1.0629,
+          "matched_n": 1.0637
+        },
+        "lgbm_multiclass": {
+          "arm": 1.0749,
+          "own_form_oracle": 0.7004,
+          "matched_n": 1.2343
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": 0.0088,
+        "permuted_lift_p_one_sided": 0.0044
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.023,
+        "2025H2": 0.0038
+      },
+      "pit_flatness_report_only": []
+    },
+    "dst_td": {
+      "leg": "dst_td",
+      "metric": "crps_q199",
+      "winner": "eb_pois",
+      "best_foil": "foil_climatology",
+      "mean_scores": {
+        "eb_pois": 0.0919,
+        "oracle__eb_pois": 0.0919,
+        "hurdle_pois": 0.0921,
+        "oracle__hurdle_pois": 0.0779,
+        "foil_climatology": 0.09,
+        "oracle__foil_climatology": 0.0897,
+        "foil_league_rate": 0.09,
+        "oracle__foil_league_rate": 0.0898,
+        "matched_n__eb_pois": 0.0919,
+        "matched_n__hurdle_pois": 0.137,
+        "permuted_control": 0.0919,
+        "nihilist_zero": 0.0979,
+        "zero_width": 0.0979,
+        "max_width": 0.1095
+      },
+      "deltas_by_fold": [
+        -0.0032,
+        -0.0014,
+        -0.0043,
+        -0.0002,
+        -0.0045,
+        0.0004,
+        -0.0016,
+        -0.0004
+      ],
+      "mean_delta": -0.0019,
+      "ci95": [
+        -0.0035,
+        -0.0003
+      ],
+      "beats_foil": false,
+      "fold_wins": 1,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": false
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.002,
+      "contender_spread_pct": 2.35,
+      "flips": [
+        {
+          "config": "foil_climatology",
+          "IS-half wins": 50,
+          "share": 0.714,
+          "full-sample IS80": 0.09,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "foil_league_rate",
+          "IS-half wins": 20,
+          "share": 0.286,
+          "full-sample IS80": 0.09,
+          "\u0394 vs best %": 0.01
+        }
+      ],
+      "dsr": 0.0004,
+      "p_one_sided": 0.9874,
+      "trial_srs": [
+        -1.002,
+        -1.487
+      ],
+      "observed_sr": -1.002,
+      "var_trials_sr": 0.1178,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 0.0979,
+          "zero_width": 0.0979,
+          "max_width": 0.1095
+        },
+        "winner_beats_permuted": false,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "eb_pois": {
+          "arm": 0.0919,
+          "own_form_oracle": 0.0919,
+          "matched_n": 0.0919
+        },
+        "hurdle_pois": {
+          "arm": 0.0921,
+          "own_form_oracle": 0.0779,
+          "matched_n": 0.137
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0019,
+        "permuted_lift_p_one_sided": 0.9874
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": -0.0016,
+        "2025H2": -0.0004
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.028676470588235276,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.018518518518518517,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.047058823529411764,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.036029411764705865,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.03768115942028985,
+          "n": 276
+        },
+        {
+          "max_decile_dev": 0.023134328358208944,
+          "n": 268
+        },
+        {
+          "max_decile_dev": 0.05555555555555555,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.027737226277372268,
+          "n": 274
+        }
+      ]
+    },
+    "def_safety": {
+      "leg": "def_safety",
+      "metric": "crps_q199",
+      "winner": "hurdle_pois",
+      "best_foil": "foil_climatology",
+      "mean_scores": {
+        "eb_pois": 0.0263,
+        "oracle__eb_pois": 0.0263,
+        "hurdle_pois": 0.0261,
+        "oracle__hurdle_pois": 0.0194,
+        "foil_climatology": 0.0256,
+        "oracle__foil_climatology": 0.0256,
+        "foil_league_rate": 0.0256,
+        "oracle__foil_league_rate": 0.0256,
+        "matched_n__eb_pois": 0.0263,
+        "matched_n__hurdle_pois": 0.0532,
+        "permuted_control": 0.0263,
+        "nihilist_zero": 0.0262,
+        "zero_width": 0.0262,
+        "max_width": 0.0272
+      },
+      "deltas_by_fold": [
+        -0.0005,
+        -0.0013,
+        -0.0004,
+        0.0003,
+        -0.0004,
+        -0.0004,
+        -0.0008,
+        -0.0004
+      ],
+      "mean_delta": -0.0005,
+      "ci95": [
+        -0.0008,
+        -0.0001
+      ],
+      "beats_foil": false,
+      "fold_wins": 1,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": false
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.0,
+      "contender_spread_pct": 2.59,
+      "flips": [
+        {
+          "config": "foil_climatology",
+          "IS-half wins": 70,
+          "share": 1.0,
+          "full-sample IS80": 0.026,
+          "\u0394 vs best %": 0.0
+        }
+      ],
+      "dsr": 0.0041,
+      "p_one_sided": 0.9912,
+      "trial_srs": [
+        -1.523,
+        -1.093
+      ],
+      "observed_sr": -1.093,
+      "var_trials_sr": 0.09227,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 0.0262,
+          "zero_width": 0.0262,
+          "max_width": 0.0272
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "eb_pois": {
+          "arm": 0.0263,
+          "own_form_oracle": 0.0263,
+          "matched_n": 0.0263
+        },
+        "hurdle_pois": {
+          "arm": 0.0261,
+          "own_form_oracle": 0.0194,
+          "matched_n": 0.0532
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0007,
+        "permuted_lift_p_one_sided": 0.9982
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": -0.0008,
+        "2025H2": -0.0004
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.036029411764705865,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.03333333333333334,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.024999999999999994,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.032352941176470584,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.027536231884057974,
+          "n": 276
+        },
+        {
+          "max_decile_dev": 0.03432835820895522,
+          "n": 268
+        },
+        {
+          "max_decile_dev": 0.025925925925925908,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.031386861313868614,
+          "n": 274
+        }
+      ]
+    },
+    "def_blocked_kick": {
+      "leg": "def_blocked_kick",
+      "metric": "crps_q199",
+      "winner": "eb_pois",
+      "best_foil": "foil_climatology",
+      "mean_scores": {
+        "eb_pois": 0.0714,
+        "oracle__eb_pois": 0.0713,
+        "hurdle_pois": 0.0717,
+        "oracle__hurdle_pois": 0.061,
+        "foil_climatology": 0.0699,
+        "oracle__foil_climatology": 0.0697,
+        "foil_league_rate": 0.0699,
+        "oracle__foil_league_rate": 0.0697,
+        "matched_n__eb_pois": 0.0715,
+        "matched_n__hurdle_pois": 0.1079,
+        "permuted_control": 0.0714,
+        "nihilist_zero": 0.075,
+        "zero_width": 0.075,
+        "max_width": 0.0803
+      },
+      "deltas_by_fold": [
+        -0.0044,
+        -0.0022,
+        0.0001,
+        -0.0016,
+        -0.0027,
+        -0.0018,
+        0.0016,
+        -0.0011
+      ],
+      "mean_delta": -0.0015,
+      "ci95": [
+        -0.003,
+        -0.0
+      ],
+      "beats_foil": false,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": false
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.0,
+      "contender_spread_pct": 2.55,
+      "flips": [
+        {
+          "config": "foil_climatology",
+          "IS-half wins": 70,
+          "share": 1.0,
+          "full-sample IS80": 0.07,
+          "\u0394 vs best %": 0.0
+        }
+      ],
+      "dsr": 0.0064,
+      "p_one_sided": 0.9756,
+      "trial_srs": [
+        -0.842,
+        -1.687
+      ],
+      "observed_sr": -0.842,
+      "var_trials_sr": 0.35747,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 0.075,
+          "zero_width": 0.075,
+          "max_width": 0.0803
+        },
+        "winner_beats_permuted": false,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "eb_pois": {
+          "arm": 0.0714,
+          "own_form_oracle": 0.0713,
+          "matched_n": 0.0715
+        },
+        "hurdle_pois": {
+          "arm": 0.0717,
+          "own_form_oracle": 0.061,
+          "matched_n": 0.1079
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0015,
+        "permuted_lift_p_one_sided": 0.9756
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0016,
+        "2025H2": -0.0011
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.043382352941176455,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.033333333333333326,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.036029411764705865,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.02647058823529412,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.026811594202898553,
+          "n": 276
+        },
+        {
+          "max_decile_dev": 0.03805970149253732,
+          "n": 268
+        },
+        {
+          "max_decile_dev": 0.037037037037037035,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.04233576642335765,
+          "n": 274
+        }
+      ]
+    },
+    "pa_bucket": {
+      "leg": "pa_bucket",
+      "metric": "rps",
+      "winner": "ordered_logit",
+      "best_foil": "foil_entity_eb",
+      "mean_scores": {
+        "ordered_logit": 0.1171,
+        "oracle__ordered_logit": 0.108,
+        "mnlogit": 0.1176,
+        "oracle__mnlogit": 0.0943,
+        "negbin_integrated": 0.1172,
+        "oracle__negbin_integrated": 0.1094,
+        "foil_climatology": 0.1232,
+        "oracle__foil_climatology": 0.1224,
+        "foil_entity_eb": 0.1223,
+        "oracle__foil_entity_eb": 0.1202,
+        "matched_n__ordered_logit": 0.1478,
+        "matched_n__mnlogit": 0.1511,
+        "matched_n__negbin_integrated": 0.1413,
+        "permuted_control": 0.124,
+        "point_mass_modal": 0.1785,
+        "uniform": 0.1368
+      },
+      "deltas_by_fold": [
+        0.0004,
+        0.0087,
+        0.0033,
+        0.0052,
+        0.004,
+        0.0079,
+        0.0056,
+        0.0064
+      ],
+      "mean_delta": 0.0052,
+      "ci95": [
+        0.003,
+        0.0074
+      ],
+      "beats_foil": true,
+      "fold_wins": 8,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.168,
+      "contender_spread_pct": 4.45,
+      "flips": [
+        {
+          "config": "ordered_logit",
+          "IS-half wins": 40,
+          "share": 0.571,
+          "full-sample IS80": 0.117,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "negbin_integrated",
+          "IS-half wins": 30,
+          "share": 0.429,
+          "full-sample IS80": 0.117,
+          "\u0394 vs best %": 0.13
+        }
+      ],
+      "dsr": 0.9956,
+      "p_one_sided": 0.0004,
+      "trial_srs": [
+        1.977,
+        1.998,
+        2.313
+      ],
+      "observed_sr": 1.977,
+      "var_trials_sr": 0.03552,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "uniform": 0.1368,
+          "point_mass_modal": 0.1785
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "ordered_logit": {
+          "arm": 0.1171,
+          "own_form_oracle": 0.108,
+          "matched_n": 0.1478
+        },
+        "mnlogit": {
+          "arm": 0.1176,
+          "own_form_oracle": 0.0943,
+          "matched_n": 0.1511
+        },
+        "negbin_integrated": {
+          "arm": 0.1172,
+          "own_form_oracle": 0.1094,
+          "matched_n": 0.1413
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0017,
+        "permuted_lift_p_one_sided": 0.9876
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0056,
+        "2025H2": 0.0064
+      },
+      "pit_flatness_report_only": []
+    },
+    "ya_bucket": {
+      "leg": "ya_bucket",
+      "metric": "rps",
+      "winner": "gauss_integrated",
+      "best_foil": "foil_entity_eb",
+      "mean_scores": {
+        "ordered_logit": 0.0933,
+        "oracle__ordered_logit": 0.0849,
+        "mnlogit": 0.0938,
+        "oracle__mnlogit": 0.073,
+        "gauss_integrated": 0.0933,
+        "oracle__gauss_integrated": 0.0859,
+        "foil_climatology": 0.0995,
+        "oracle__foil_climatology": 0.0982,
+        "foil_entity_eb": 0.0984,
+        "oracle__foil_entity_eb": 0.0962,
+        "matched_n__ordered_logit": 0.1152,
+        "matched_n__mnlogit": 0.124,
+        "matched_n__gauss_integrated": 0.1168,
+        "permuted_control": 0.0992,
+        "point_mass_modal": 0.1824,
+        "uniform": 0.1269
+      },
+      "deltas_by_fold": [
+        0.0006,
+        0.0062,
+        0.0033,
+        0.0062,
+        0.0055,
+        0.0048,
+        0.0052,
+        0.0091
+      ],
+      "mean_delta": 0.0051,
+      "ci95": [
+        0.0031,
+        0.0071
+      ],
+      "beats_foil": true,
+      "fold_wins": 8,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.03,
+      "contender_spread_pct": 5.48,
+      "flips": [
+        {
+          "config": "gauss_integrated",
+          "IS-half wins": 49,
+          "share": 0.7,
+          "full-sample IS80": 0.093,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "ordered_logit",
+          "IS-half wins": 21,
+          "share": 0.3,
+          "full-sample IS80": 0.093,
+          "\u0394 vs best %": 0.04
+        }
+      ],
+      "dsr": 0.9971,
+      "p_one_sided": 0.0003,
+      "trial_srs": [
+        2.087,
+        2.035,
+        2.095
+      ],
+      "observed_sr": 2.095,
+      "var_trials_sr": 0.00109,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "uniform": 0.1269,
+          "point_mass_modal": 0.1824
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "ordered_logit": {
+          "arm": 0.0933,
+          "own_form_oracle": 0.0849,
+          "matched_n": 0.1152
+        },
+        "mnlogit": {
+          "arm": 0.0938,
+          "own_form_oracle": 0.073,
+          "matched_n": 0.124
+        },
+        "gauss_integrated": {
+          "arm": 0.0933,
+          "own_form_oracle": 0.0859,
+          "matched_n": 0.1168
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0009,
+        "permuted_lift_p_one_sided": 0.8767
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0052,
+        "2025H2": 0.0091
+      },
+      "pit_flatness_report_only": []
+    }
+  },
+  "layer_b": {
+    "k_points": {
+      "target": "k_points",
+      "winner": "assembled",
+      "best_foil": "foil_climatology",
+      "mean_crps": {
+        "assembled": 2.5745,
+        "foil_climatology": 2.6006,
+        "foil_board_eb": 2.6051,
+        "foil_direct": 2.6467,
+        "nihilist_zero": 8.2696,
+        "permuted_direct": 2.6844,
+        "oracle__assembled": 2.4162,
+        "matched_n__assembled": 2.76,
+        "oracle__foil_climatology": 2.5838,
+        "oracle__foil_board_eb": 2.6,
+        "oracle__foil_direct": 1.6111,
+        "zero_width": 3.6794,
+        "max_width": 3.8519
+      },
+      "deltas_by_fold": [
+        -0.0065,
+        0.0326,
+        0.0011,
+        0.0197,
+        0.0155,
+        0.0494,
+        0.0197,
+        0.0773
+      ],
+      "mean_delta": 0.0261,
+      "ci95": [
+        0.0036,
+        0.0487
+      ],
+      "beats_foil": true,
+      "fold_wins": 7,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.0,
+      "contender_spread_pct": 2.81,
+      "flips": [
+        {
+          "config": "assembled",
+          "IS-half wins": 70,
+          "share": 1.0,
+          "full-sample IS80": 2.574,
+          "\u0394 vs best %": 0.0
+        }
+      ],
+      "dsr": 0.9991,
+      "p_one_sided": 0.0145,
+      "observed_sr": 0.968,
+      "var_trials_sr": null,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 8.2696,
+          "zero_width": 3.6794,
+          "max_width": 3.8519
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0838,
+        "permuted_lift_p_one_sided": 0.9998
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8668,
+        "n_rows": 2162,
+        "binomial_se": 0.0086,
+        "blocking_shortfall": false
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.04391143911439113,
+          "n": 271
+        },
+        {
+          "max_decile_dev": 0.04716981132075472,
+          "n": 265
+        },
+        {
+          "max_decile_dev": 0.05112781954887219,
+          "n": 266
+        },
+        {
+          "max_decile_dev": 0.02647058823529412,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.030434782608695643,
+          "n": 276
+        },
+        {
+          "max_decile_dev": 0.03805970149253732,
+          "n": 268
+        },
+        {
+          "max_decile_dev": 0.040740740740740744,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.031386861313868614,
+          "n": 274
+        }
+      ],
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0197,
+        "2025H2": 0.0773
+      }
+    },
+    "dst_points": {
+      "target": "dst_points",
+      "winner": "assembled",
+      "best_foil": "foil_direct",
+      "mean_crps": {
+        "assembled": 2.6975,
+        "foil_climatology": 2.739,
+        "foil_board_eb": 2.745,
+        "foil_direct": 2.7313,
+        "nihilist_zero": 6.2188,
+        "permuted_direct": 2.8281,
+        "oracle__assembled": 2.5058,
+        "matched_n__assembled": 9.0771,
+        "oracle__foil_climatology": 2.7252,
+        "oracle__foil_board_eb": 2.7301,
+        "oracle__foil_direct": 1.687,
+        "zero_width": 3.8158,
+        "max_width": 4.0852
+      },
+      "deltas_by_fold": [
+        0.0343,
+        0.0465,
+        0.0055,
+        0.0455,
+        -0.0249,
+        0.0463,
+        0.0608,
+        0.0565
+      ],
+      "mean_delta": 0.0338,
+      "ci95": [
+        0.0094,
+        0.0582
+      ],
+      "beats_foil": true,
+      "fold_wins": 7,
+      "fold_clause": {
+        "required": 6,
+        "attainable": true,
+        "passes": true
+      },
+      "pbo": 0.0,
+      "os_gap_pct": 0.0,
+      "contender_spread_pct": 1.76,
+      "flips": [
+        {
+          "config": "assembled",
+          "IS-half wins": 70,
+          "share": 1.0,
+          "full-sample IS80": 2.697,
+          "\u0394 vs best %": 0.0
+        }
+      ],
+      "dsr": 0.961,
+      "p_one_sided": 0.0067,
+      "observed_sr": 1.16,
+      "var_trials_sr": null,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 6.2188,
+          "zero_width": 3.8158,
+          "max_width": 4.0852
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0969,
+        "permuted_lift_p_one_sided": 0.9998
+      },
+      "coverage": {
+        "winner_coverage_80": 0.7603,
+        "n_rows": 2174,
+        "binomial_se": 0.0086,
+        "blocking_shortfall": true
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.032352941176470584,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.033333333333333326,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.07647058823529412,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.09117647058823528,
+          "n": 272
+        },
+        {
+          "max_decile_dev": 0.06666666666666665,
+          "n": 276
+        },
+        {
+          "max_decile_dev": 0.09029850746268656,
+          "n": 268
+        },
+        {
+          "max_decile_dev": 0.07037037037037036,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.04233576642335765,
+          "n": 274
+        }
+      ],
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0608,
+        "2025H2": 0.0565
+      }
+    }
+  },
+  "fold_results_a": {
+    "fg_att": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "pois_glm": 0.6947334458269205,
+          "oracle__pois_glm": 0.6570509373435443,
+          "negbin_glm": 0.6947786905004729,
+          "oracle__negbin_glm": 0.6569839974781658,
+          "lgbm_quantile": 0.723533840831601,
+          "oracle__lgbm_quantile": 0.44055729565535856,
+          "foil_climatology": 0.6916130467837341,
+          "oracle__foil_climatology": 0.6904198575905357,
+          "foil_entity_eb": 0.7070898774314377,
+          "oracle__foil_entity_eb": 0.7069385673756234,
+          "matched_n__pois_glm": 0.7432754176787999,
+          "matched_n__negbin_glm": 0.7436149381594318,
+          "matched_n__lgbm_quantile": 0.7791499712650728,
+          "permuted_control": 0.7366116521066175,
+          "nihilist_zero": 1.8929889298892988,
+          "zero_width": 0.9630996309963099,
+          "max_width": 1.171799959205622
+        },
+        "n_train": 3092,
+        "n_test": 271
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "pois_glm": 0.6945730539489902,
+          "oracle__pois_glm": 0.6456433108940931,
+          "negbin_glm": 0.6945643310894093,
+          "oracle__negbin_glm": 0.6456380013273917,
+          "lgbm_quantile": 0.7245251250840357,
+          "oracle__lgbm_quantile": 0.4366247028595626,
+          "foil_climatology": 0.6955636673935717,
+          "oracle__foil_climatology": 0.6924358775007112,
+          "foil_entity_eb": 0.6983847539584717,
+          "oracle__foil_entity_eb": 0.6976632217692235,
+          "matched_n__pois_glm": 0.7135177775670807,
+          "matched_n__negbin_glm": 0.7131830852375082,
+          "matched_n__lgbm_quantile": 0.7482013252601631,
+          "permuted_control": 0.7475528717182254,
+          "nihilist_zero": 1.9886792452830189,
+          "zero_width": 0.9773584905660377,
+          "max_width": 1.1775794064662937
+        },
+        "n_train": 3371,
+        "n_test": 265
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "pois_glm": 0.7117297011372653,
+          "oracle__pois_glm": 0.6546010125817056,
+          "negbin_glm": 0.7117901537764009,
+          "oracle__negbin_glm": 0.6547693353987984,
+          "lgbm_quantile": 0.7570487344874328,
+          "oracle__lgbm_quantile": 0.45806480681921113,
+          "foil_climatology": 0.7181286129897609,
+          "oracle__foil_climatology": 0.7104237541088904,
+          "foil_entity_eb": 0.7177199909321041,
+          "oracle__foil_entity_eb": 0.7149952771375675,
+          "matched_n__pois_glm": 0.7826283674009143,
+          "matched_n__negbin_glm": 0.7827409604413043,
+          "matched_n__lgbm_quantile": 0.7971451237908546,
+          "permuted_control": 0.7570138539445004,
+          "nihilist_zero": 2.037593984962406,
+          "zero_width": 1.0075187969924813,
+          "max_width": 1.1922065213284467
+        },
+        "n_train": 3631,
+        "n_test": 266
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "pois_glm": 0.7374615725687259,
+          "oracle__pois_glm": 0.6943278894472361,
+          "negbin_glm": 0.7374650827667751,
+          "oracle__negbin_glm": 0.6942543600354715,
+          "lgbm_quantile": 0.769803275101201,
+          "oracle__lgbm_quantile": 0.47686184214248306,
+          "foil_climatology": 0.7375014779781259,
+          "oracle__foil_climatology": 0.7361474061483889,
+          "foil_entity_eb": 0.7479587274608336,
+          "oracle__foil_entity_eb": 0.747979049660065,
+          "matched_n__pois_glm": 0.7918149571386344,
+          "matched_n__negbin_glm": 0.7921694871415903,
+          "matched_n__lgbm_quantile": 0.8154501864921152,
+          "permuted_control": 0.7867828316640824,
+          "nihilist_zero": 1.8639705882352942,
+          "zero_width": 1.0551470588235294,
+          "max_width": 1.1822797812592374
+        },
+        "n_train": 3898,
+        "n_test": 272
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "pois_glm": 0.7167604325977714,
+          "oracle__pois_glm": 0.6571138300196636,
+          "negbin_glm": 0.7167373097370914,
+          "oracle__negbin_glm": 0.6571782827179377,
+          "lgbm_quantile": 0.7599280408939099,
+          "oracle__lgbm_quantile": 0.4368231363925378,
+          "foil_climatology": 0.7116409584152646,
+          "oracle__foil_climatology": 0.706262016604763,
+          "foil_entity_eb": 0.7138760833151263,
+          "oracle__foil_entity_eb": 0.7125329546282135,
+          "matched_n__pois_glm": 0.8117149151554875,
+          "matched_n__negbin_glm": 0.8134314689388974,
+          "matched_n__lgbm_quantile": 0.7799962784044461,
+          "permuted_control": 0.7523415345212313,
+          "nihilist_zero": 2.036231884057971,
+          "zero_width": 0.9637681159420289,
+          "max_width": 1.1840817129123886
+        },
+        "n_train": 4166,
+        "n_test": 276
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "pois_glm": 0.742184054601365,
+          "oracle__pois_glm": 0.6863284707117678,
+          "negbin_glm": 0.7421795544888623,
+          "oracle__negbin_glm": 0.6862182179554489,
+          "lgbm_quantile": 0.7875532738582066,
+          "oracle__lgbm_quantile": 0.47261100550340074,
+          "foil_climatology": 0.7470388659716494,
+          "oracle__foil_climatology": 0.7415019462986574,
+          "foil_entity_eb": 0.7523979974499362,
+          "oracle__foil_entity_eb": 0.7501803795094877,
+          "matched_n__pois_glm": 0.7732522688067203,
+          "matched_n__negbin_glm": 0.7732138303457586,
+          "matched_n__lgbm_quantile": 0.8235823441113859,
+          "permuted_control": 0.7961269997031657,
+          "nihilist_zero": 2.0597014925373136,
+          "zero_width": 1.007462686567164,
+          "max_width": 1.1949413185329631
+        },
+        "n_train": 4444,
+        "n_test": 268
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "pois_glm": 0.6799726409826913,
+          "oracle__pois_glm": 0.6282328308207705,
+          "negbin_glm": 0.680035175879397,
+          "oracle__negbin_glm": 0.6284262050995719,
+          "lgbm_quantile": 0.7132362309827778,
+          "oracle__lgbm_quantile": 0.43766431413583673,
+          "foil_climatology": 0.6770593709287177,
+          "oracle__foil_climatology": 0.6704358645077239,
+          "foil_entity_eb": 0.6820370370370371,
+          "oracle__foil_entity_eb": 0.6823832123580867,
+          "matched_n__pois_glm": 0.8138686022706123,
+          "matched_n__negbin_glm": 0.8149865996649917,
+          "matched_n__lgbm_quantile": 0.732750550165388,
+          "permuted_control": 0.7107924151175656,
+          "nihilist_zero": 2.0185185185185186,
+          "zero_width": 0.8925925925925926,
+          "max_width": 1.1499571933742787
+        },
+        "n_train": 4710,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "pois_glm": 0.7624689139126288,
+          "oracle__pois_glm": 0.7069051461688002,
+          "negbin_glm": 0.7624168286688919,
+          "oracle__negbin_glm": 0.7069821736419322,
+          "lgbm_quantile": 0.8040912140425994,
+          "oracle__lgbm_quantile": 0.49430936577539963,
+          "foil_climatology": 0.7671144041374757,
+          "oracle__foil_climatology": 0.7650692697061953,
+          "foil_entity_eb": 0.7701547885412464,
+          "oracle__foil_entity_eb": 0.7701529545537908,
+          "matched_n__pois_glm": 0.8457367127608847,
+          "matched_n__negbin_glm": 0.8465972196750176,
+          "matched_n__lgbm_quantile": 0.8265018002689715,
+          "permuted_control": 0.8025199546456587,
+          "nihilist_zero": 1.9817518248175183,
+          "zero_width": 1.0401459854014599,
+          "max_width": 1.1907904485933318
+        },
+        "n_train": 4990,
+        "n_test": 274
+      }
+    ],
+    "xp_att": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "pois_glm": 0.7365716034044762,
+          "oracle__pois_glm": 0.7005188303139313,
+          "negbin_glm": 0.7366459604294535,
+          "oracle__negbin_glm": 0.700473771069369,
+          "lgbm_quantile": 0.7843003766860666,
+          "oracle__lgbm_quantile": 0.4880051540491609,
+          "foil_climatology": 0.7663144059782306,
+          "oracle__foil_climatology": 0.7568942683899202,
+          "foil_entity_eb": 0.7739915444380575,
+          "oracle__foil_entity_eb": 0.7732524244840439,
+          "matched_n__pois_glm": 0.8445648908750394,
+          "matched_n__negbin_glm": 0.8448263457508947,
+          "matched_n__lgbm_quantile": 0.8143755274215699,
+          "permuted_control": 0.7993562627705728,
+          "nihilist_zero": 2.1660516605166054,
+          "zero_width": 1.03690036900369,
+          "max_width": 1.2998095421758236
+        },
+        "n_train": 3092,
+        "n_test": 271
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "pois_glm": 0.7050230397269366,
+          "oracle__pois_glm": 0.6377379349578078,
+          "negbin_glm": 0.7050141272399736,
+          "oracle__negbin_glm": 0.6378291457286431,
+          "lgbm_quantile": 0.7543029785640829,
+          "oracle__lgbm_quantile": 0.4404666119774052,
+          "foil_climatology": 0.7638475395847161,
+          "oracle__foil_climatology": 0.7556422869062293,
+          "foil_entity_eb": 0.7327198255428085,
+          "oracle__foil_entity_eb": 0.7310569830283494,
+          "matched_n__pois_glm": 0.773902152270788,
+          "matched_n__negbin_glm": 0.7744558642267944,
+          "matched_n__lgbm_quantile": 0.8189639760500593,
+          "permuted_control": 0.8123242517614355,
+          "nihilist_zero": 2.158490566037736,
+          "zero_width": 1.0641509433962264,
+          "max_width": 1.2901962643405704
+        },
+        "n_train": 3371,
+        "n_test": 265
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "pois_glm": 0.7771759171798844,
+          "oracle__pois_glm": 0.736707409226584,
+          "negbin_glm": 0.7772250349491819,
+          "oracle__negbin_glm": 0.7367108096875356,
+          "lgbm_quantile": 0.8392659313092239,
+          "oracle__lgbm_quantile": 0.49453054178882966,
+          "foil_climatology": 0.8318075339101523,
+          "oracle__foil_climatology": 0.8180134318207579,
+          "foil_entity_eb": 0.7969722673517966,
+          "oracle__foil_entity_eb": 0.7937525975743379,
+          "matched_n__pois_glm": 0.9170982733214947,
+          "matched_n__negbin_glm": 0.9172176672837873,
+          "matched_n__lgbm_quantile": 0.8715029222885092,
+          "permuted_control": 0.8741010097132381,
+          "nihilist_zero": 2.082706766917293,
+          "zero_width": 1.1278195488721805,
+          "max_width": 1.3131201118373823
+        },
+        "n_train": 3631,
+        "n_test": 266
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "pois_glm": 0.7874887304167898,
+          "oracle__pois_glm": 0.7352634496009458,
+          "negbin_glm": 0.7874920558675731,
+          "oracle__negbin_glm": 0.7358195388708246,
+          "lgbm_quantile": 0.8260555926456741,
+          "oracle__lgbm_quantile": 0.4959955875063174,
+          "foil_climatology": 0.8189454626071534,
+          "oracle__foil_climatology": 0.8161189255099025,
+          "foil_entity_eb": 0.7958655409399941,
+          "oracle__foil_entity_eb": 0.796210833579663,
+          "matched_n__pois_glm": 0.8303050177357375,
+          "matched_n__negbin_glm": 0.8305926692284954,
+          "matched_n__lgbm_quantile": 0.8677206901955564,
+          "permuted_control": 0.8652793283533394,
+          "nihilist_zero": 2.202205882352941,
+          "zero_width": 1.1213235294117647,
+          "max_width": 1.301353088974283
+        },
+        "n_train": 3898,
+        "n_test": 272
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "pois_glm": 0.721891522831549,
+          "oracle__pois_glm": 0.6870389993445488,
+          "negbin_glm": 0.7218461874590342,
+          "oracle__negbin_glm": 0.6869807370184254,
+          "lgbm_quantile": 0.7543979792698501,
+          "oracle__lgbm_quantile": 0.4650741390042258,
+          "foil_climatology": 0.7564394435947855,
+          "oracle__foil_climatology": 0.7537519117325759,
+          "foil_entity_eb": 0.7422846114631126,
+          "oracle__foil_entity_eb": 0.7434261889155924,
+          "matched_n__pois_glm": 0.8207382929138447,
+          "matched_n__negbin_glm": 0.8222385478115214,
+          "matched_n__lgbm_quantile": 0.7883233518251427,
+          "permuted_control": 0.7882459423673241,
+          "nihilist_zero": 2.2246376811594204,
+          "zero_width": 1.0434782608695652,
+          "max_width": 1.269828126137936
+        },
+        "n_train": 4166,
+        "n_test": 276
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "pois_glm": 0.8101113777844445,
+          "oracle__pois_glm": 0.7640142878571964,
+          "negbin_glm": 0.8100566264156603,
+          "oracle__negbin_glm": 0.7638967224180605,
+          "lgbm_quantile": 0.8416609605866756,
+          "oracle__lgbm_quantile": 0.5013315895924286,
+          "foil_climatology": 0.8612240306007651,
+          "oracle__foil_climatology": 0.8598393272331809,
+          "foil_entity_eb": 0.8149928748218705,
+          "oracle__foil_entity_eb": 0.8141873546838672,
+          "matched_n__pois_glm": 0.8535725268131703,
+          "matched_n__negbin_glm": 0.8540922898072452,
+          "matched_n__lgbm_quantile": 0.8702075638271168,
+          "permuted_control": 0.9135363993321819,
+          "nihilist_zero": 2.3358208955223883,
+          "zero_width": 1.2014925373134329,
+          "max_width": 1.3022275556888923
+        },
+        "n_train": 4444,
+        "n_test": 268
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "pois_glm": 0.7868797692164525,
+          "oracle__pois_glm": 0.7323858179787828,
+          "negbin_glm": 0.7869231341894657,
+          "oracle__negbin_glm": 0.7324883677647497,
+          "lgbm_quantile": 0.8329168398945369,
+          "oracle__lgbm_quantile": 0.5062634766342512,
+          "foil_climatology": 0.8187604690117254,
+          "oracle__foil_climatology": 0.8159034245300577,
+          "foil_entity_eb": 0.7977318071840684,
+          "oracle__foil_entity_eb": 0.7960308952168249,
+          "matched_n__pois_glm": 0.8633619951609902,
+          "matched_n__negbin_glm": 0.8646367020286618,
+          "matched_n__lgbm_quantile": 0.8613981929838248,
+          "permuted_control": 0.8492172212710491,
+          "nihilist_zero": 2.3814814814814813,
+          "zero_width": 1.1666666666666667,
+          "max_width": 1.2790991997022145
+        },
+        "n_train": 4710,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "pois_glm": 0.7578181051241609,
+          "oracle__pois_glm": 0.7133200674907383,
+          "negbin_glm": 0.7579340131313501,
+          "oracle__negbin_glm": 0.7133637163921799,
+          "lgbm_quantile": 0.7911006632001064,
+          "oracle__lgbm_quantile": 0.4790983901499583,
+          "foil_climatology": 0.7988005722040861,
+          "oracle__foil_climatology": 0.7977643307779775,
+          "foil_entity_eb": 0.7866263800755603,
+          "oracle__foil_entity_eb": 0.7859481715145069,
+          "matched_n__pois_glm": 0.8037890180831163,
+          "matched_n__negbin_glm": 0.8039384880607416,
+          "matched_n__lgbm_quantile": 0.8247583064577415,
+          "permuted_control": 0.832721347525457,
+          "nihilist_zero": 2.2554744525547443,
+          "zero_width": 1.1094890510948905,
+          "max_width": 1.2799068334372594
+        },
+        "n_train": 4990,
+        "n_test": 274
+      }
+    ],
+    "def_sacks": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "pois_glm": 0.9097452335205439,
+          "oracle__pois_glm": 0.8505594147206622,
+          "negbin_glm": 0.9079629766479457,
+          "oracle__negbin_glm": 0.8508097472657404,
+          "lgbm_quantile": 0.9483647229710792,
+          "oracle__lgbm_quantile": 0.5815116371197592,
+          "foil_climatology": 0.9246822347029264,
+          "oracle__foil_climatology": 0.9234624224061484,
+          "foil_entity_eb": 0.9264449083653563,
+          "oracle__foil_entity_eb": 0.9265657330771504,
+          "matched_n__pois_glm": 1.1470654744309787,
+          "matched_n__negbin_glm": 1.1447219553650605,
+          "matched_n__lgbm_quantile": 0.9872921688527398,
+          "permuted_control": 0.96230941588439,
+          "nihilist_zero": 2.389705882352941,
+          "zero_width": 1.286764705882353,
+          "max_width": 1.4174105823233818
+        },
+        "n_train": 3040,
+        "n_test": 272
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "pois_glm": 0.9592365531360508,
+          "oracle__pois_glm": 0.9090059557044482,
+          "negbin_glm": 0.9570960357342267,
+          "oracle__negbin_glm": 0.907139586823004,
+          "lgbm_quantile": 1.0162742345477773,
+          "oracle__lgbm_quantile": 0.5909837006832347,
+          "foil_climatology": 0.9815121905825425,
+          "oracle__foil_climatology": 0.9788051833240277,
+          "foil_entity_eb": 1.0005481109249954,
+          "oracle__foil_entity_eb": 1.000644891122278,
+          "matched_n__pois_glm": 1.0150990135864508,
+          "matched_n__negbin_glm": 1.0125788200260561,
+          "matched_n__lgbm_quantile": 1.0522525558433977,
+          "permuted_control": 1.0480519947035312,
+          "nihilist_zero": 2.3740740740740742,
+          "zero_width": 1.374074074074074,
+          "max_width": 1.4468946584775726
+        },
+        "n_train": 3320,
+        "n_test": 270
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "pois_glm": 0.9998680904522613,
+          "oracle__pois_glm": 0.9062825155187705,
+          "negbin_glm": 0.9979138338752587,
+          "oracle__negbin_glm": 0.906721844516701,
+          "lgbm_quantile": 1.0457694595881004,
+          "oracle__lgbm_quantile": 0.6152188033015996,
+          "foil_climatology": 1.0563863434821166,
+          "oracle__foil_climatology": 1.0407888856044933,
+          "foil_entity_eb": 1.0478270026603607,
+          "oracle__foil_entity_eb": 1.0438673145137454,
+          "matched_n__pois_glm": 4.356389668932899,
+          "matched_n__negbin_glm": 4.3534287245048775,
+          "matched_n__lgbm_quantile": 1.0979865180689246,
+          "permuted_control": 1.098963729710437,
+          "nihilist_zero": 2.625,
+          "zero_width": 1.4852941176470589,
+          "max_width": 1.492947088383092
+        },
+        "n_train": 3584,
+        "n_test": 272
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "pois_glm": 0.9526446571090749,
+          "oracle__pois_glm": 0.8623477682530298,
+          "negbin_glm": 0.9492307123854569,
+          "oracle__negbin_glm": 0.8621373411173515,
+          "lgbm_quantile": 1.0038069517500872,
+          "oracle__lgbm_quantile": 0.5776892479666662,
+          "foil_climatology": 0.9800175509902452,
+          "oracle__foil_climatology": 0.9718644841856341,
+          "foil_entity_eb": 1.0062256133609224,
+          "oracle__foil_entity_eb": 1.0050123780668045,
+          "matched_n__pois_glm": 1.0061550399054096,
+          "matched_n__negbin_glm": 1.0037732781554833,
+          "matched_n__lgbm_quantile": 1.029252245625896,
+          "permuted_control": 1.0168223386369153,
+          "nihilist_zero": 2.5183823529411766,
+          "zero_width": 1.4080882352941178,
+          "max_width": 1.4617096511971623
+        },
+        "n_train": 3858,
+        "n_test": 272
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "pois_glm": 0.9689245138737166,
+          "oracle__pois_glm": 0.8898246668123225,
+          "negbin_glm": 0.9640186439443594,
+          "oracle__negbin_glm": 0.8899422838831841,
+          "lgbm_quantile": 0.9972646053071095,
+          "oracle__lgbm_quantile": 0.614415287558127,
+          "foil_climatology": 0.974607821717282,
+          "oracle__foil_climatology": 0.9731332386570535,
+          "foil_entity_eb": 0.9841692156434346,
+          "oracle__foil_entity_eb": 0.9852991406306897,
+          "matched_n__pois_glm": 3.7560838613356635,
+          "matched_n__negbin_glm": 3.7769548831112076,
+          "matched_n__lgbm_quantile": 1.0498064871534711,
+          "permuted_control": 1.0133192901618102,
+          "nihilist_zero": 2.4528985507246377,
+          "zero_width": 1.3514492753623188,
+          "max_width": 1.4594090015293861
+        },
+        "n_train": 4126,
+        "n_test": 276
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "pois_glm": 0.960493324833121,
+          "oracle__pois_glm": 0.8861115277881947,
+          "negbin_glm": 0.9558490212255307,
+          "oracle__negbin_glm": 0.8857627690692268,
+          "lgbm_quantile": 0.9880805323716311,
+          "oracle__lgbm_quantile": 0.5856101401049233,
+          "foil_climatology": 0.9685922148053703,
+          "oracle__foil_climatology": 0.9670690017250431,
+          "foil_entity_eb": 0.9861615915397883,
+          "oracle__foil_entity_eb": 0.9858437710942773,
+          "matched_n__pois_glm": 0.9834478361959048,
+          "matched_n__negbin_glm": 0.9823603090077254,
+          "matched_n__lgbm_quantile": 1.0130825183945793,
+          "permuted_control": 1.0003110499605874,
+          "nihilist_zero": 2.33955223880597,
+          "zero_width": 1.3619402985074627,
+          "max_width": 1.4635655891397283
+        },
+        "n_train": 4404,
+        "n_test": 268
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "pois_glm": 0.9503331472175693,
+          "oracle__pois_glm": 0.8491107388795831,
+          "negbin_glm": 0.9471719709659407,
+          "oracle__negbin_glm": 0.8488213288665549,
+          "lgbm_quantile": 0.9898263133931624,
+          "oracle__lgbm_quantile": 0.5812272582454157,
+          "foil_climatology": 0.968888888888889,
+          "oracle__foil_climatology": 0.9677891680625349,
+          "foil_entity_eb": 0.9574632421366088,
+          "oracle__foil_entity_eb": 0.9572914572864321,
+          "matched_n__pois_glm": 1.0408038339847385,
+          "matched_n__negbin_glm": 1.022426949562628,
+          "matched_n__lgbm_quantile": 1.0439296345231452,
+          "permuted_control": 1.0150736267760279,
+          "nihilist_zero": 2.403703703703704,
+          "zero_width": 1.3592592592592592,
+          "max_width": 1.468959612879211
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "pois_glm": 0.951014378461651,
+          "oracle__pois_glm": 0.8923759307486336,
+          "negbin_glm": 0.9466118915746615,
+          "oracle__negbin_glm": 0.8910996588783333,
+          "lgbm_quantile": 0.9977669250385529,
+          "oracle__lgbm_quantile": 0.6234124095820993,
+          "foil_climatology": 0.9784704544620915,
+          "oracle__foil_climatology": 0.9762725048600668,
+          "foil_entity_eb": 0.9867782342368779,
+          "oracle__foil_entity_eb": 0.9861106628030664,
+          "matched_n__pois_glm": 1.0590936433994793,
+          "matched_n__negbin_glm": 1.058121813446796,
+          "matched_n__lgbm_quantile": 1.0415374186647548,
+          "permuted_control": 1.0257489412792826,
+          "nihilist_zero": 2.295620437956204,
+          "zero_width": 1.3613138686131387,
+          "max_width": 1.4776480944870338
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "def_int": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "pois_glm": 0.4503548994974874,
+          "oracle__pois_glm": 0.4153040939994088,
+          "negbin_glm": 0.4500166272539166,
+          "oracle__negbin_glm": 0.415233520543896,
+          "lgbm_quantile": 0.49039994962410477,
+          "oracle__lgbm_quantile": 0.30342234090417763,
+          "foil_climatology": 0.45430461129175287,
+          "oracle__foil_climatology": 0.45337985515814366,
+          "foil_entity_eb": 0.46233483594442804,
+          "oracle__foil_entity_eb": 0.4616483151049365,
+          "matched_n__pois_glm": 0.5737464898019509,
+          "matched_n__negbin_glm": 0.5738020987289388,
+          "matched_n__lgbm_quantile": 0.5021093812293922,
+          "permuted_control": 0.48816303075038336,
+          "nihilist_zero": 0.7536764705882353,
+          "zero_width": 0.7169117647058824,
+          "max_width": 0.9527379544782737
+        },
+        "n_train": 3040,
+        "n_test": 272
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "pois_glm": 0.4855771449841802,
+          "oracle__pois_glm": 0.4175938954029406,
+          "negbin_glm": 0.4852348780941746,
+          "oracle__negbin_glm": 0.4174455611390284,
+          "lgbm_quantile": 0.5200527844033976,
+          "oracle__lgbm_quantile": 0.3018097253960106,
+          "foil_climatology": 0.4755816117625163,
+          "oracle__foil_climatology": 0.4745029034059185,
+          "foil_entity_eb": 0.4775976177182208,
+          "oracle__foil_entity_eb": 0.4777424157826168,
+          "matched_n__pois_glm": 0.540248464544947,
+          "matched_n__negbin_glm": 0.5417599106644333,
+          "matched_n__lgbm_quantile": 0.541959436616808,
+          "permuted_control": 0.5193655331508898,
+          "nihilist_zero": 0.7888888888888889,
+          "zero_width": 0.7592592592592593,
+          "max_width": 0.9852782430671878
+        },
+        "n_train": 3320,
+        "n_test": 270
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "pois_glm": 0.45854123558971327,
+          "oracle__pois_glm": 0.4194468666863731,
+          "negbin_glm": 0.45874630505468517,
+          "oracle__negbin_glm": 0.4195283402305646,
+          "lgbm_quantile": 0.49020655215568615,
+          "oracle__lgbm_quantile": 0.3086912782476378,
+          "foil_climatology": 0.4505320721253326,
+          "oracle__foil_climatology": 0.44977206621342003,
+          "foil_entity_eb": 0.4547141959798995,
+          "oracle__foil_entity_eb": 0.4548237511084836,
+          "matched_n__pois_glm": 3.971513634348211,
+          "matched_n__negbin_glm": 3.9724375554241798,
+          "matched_n__lgbm_quantile": 0.5097586316566809,
+          "permuted_control": 0.4955327919985391,
+          "nihilist_zero": 0.7867647058823529,
+          "zero_width": 0.6838235294117647,
+          "max_width": 0.9593038723026899
+        },
+        "n_train": 3584,
+        "n_test": 272
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "pois_glm": 0.4797999187112031,
+          "oracle__pois_glm": 0.4245506946497192,
+          "negbin_glm": 0.4790269361513449,
+          "oracle__negbin_glm": 0.4244117647058823,
+          "lgbm_quantile": 0.5164759127716074,
+          "oracle__lgbm_quantile": 0.32214363167506166,
+          "foil_climatology": 0.4753990540939994,
+          "oracle__foil_climatology": 0.475366738102276,
+          "foil_entity_eb": 0.47691656813479166,
+          "oracle__foil_entity_eb": 0.47688479160508424,
+          "matched_n__pois_glm": 0.5695702778598877,
+          "matched_n__negbin_glm": 0.5714288353532367,
+          "matched_n__lgbm_quantile": 0.5359251443606304,
+          "permuted_control": 0.5109377241971399,
+          "nihilist_zero": 0.7941176470588235,
+          "zero_width": 0.7352941176470589,
+          "max_width": 0.9796630209872894
+        },
+        "n_train": 3858,
+        "n_test": 272
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "pois_glm": 0.42998743718592963,
+          "oracle__pois_glm": 0.3953581312358896,
+          "negbin_glm": 0.42958014711237347,
+          "oracle__negbin_glm": 0.3951937222343602,
+          "lgbm_quantile": 0.4723647204815844,
+          "oracle__lgbm_quantile": 0.27850723895180535,
+          "foil_climatology": 0.4366433617362173,
+          "oracle__foil_climatology": 0.43404049231665576,
+          "foil_entity_eb": 0.4370344476003205,
+          "oracle__foil_entity_eb": 0.43623133784866364,
+          "matched_n__pois_glm": 3.934747833369747,
+          "matched_n__negbin_glm": 3.93488820916175,
+          "matched_n__lgbm_quantile": 0.4909995944331711,
+          "permuted_control": 0.472625418194031,
+          "nihilist_zero": 0.7065217391304348,
+          "zero_width": 0.7210144927536232,
+          "max_width": 0.9500509795353579
+        },
+        "n_train": 4126,
+        "n_test": 276
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "pois_glm": 0.44656228905722645,
+          "oracle__pois_glm": 0.42507781444536114,
+          "negbin_glm": 0.44606821420535514,
+          "oracle__negbin_glm": 0.42507406435160877,
+          "lgbm_quantile": 0.4890004320127488,
+          "oracle__lgbm_quantile": 0.3052730602059071,
+          "foil_climatology": 0.4539510987774694,
+          "oracle__foil_climatology": 0.45098838595964896,
+          "foil_entity_eb": 0.46582445811145284,
+          "oracle__foil_entity_eb": 0.4654771994299857,
+          "matched_n__pois_glm": 0.48139334733368333,
+          "matched_n__negbin_glm": 0.48161910297757454,
+          "matched_n__lgbm_quantile": 0.4920781933335553,
+          "permuted_control": 0.4947924295531292,
+          "nihilist_zero": 0.7164179104477612,
+          "zero_width": 0.746268656716418,
+          "max_width": 0.9606682667066679
+        },
+        "n_train": 4404,
+        "n_test": 268
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "pois_glm": 0.4189687325516471,
+          "oracle__pois_glm": 0.38673385445747255,
+          "negbin_glm": 0.4182064023822818,
+          "oracle__negbin_glm": 0.3866720640238228,
+          "lgbm_quantile": 0.45491965389959355,
+          "oracle__lgbm_quantile": 0.28574753377863726,
+          "foil_climatology": 0.42742974129908806,
+          "oracle__foil_climatology": 0.4236873348222595,
+          "foil_entity_eb": 0.42824008933556673,
+          "oracle__foil_entity_eb": 0.42757621440536014,
+          "matched_n__pois_glm": 4.055650846826726,
+          "matched_n__negbin_glm": 4.057124511446119,
+          "matched_n__lgbm_quantile": 0.44990688967093617,
+          "permuted_control": 0.46501800310199837,
+          "nihilist_zero": 0.6777777777777778,
+          "zero_width": 0.7222222222222222,
+          "max_width": 0.9460524846454496
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "pois_glm": 0.42177016469207357,
+          "oracle__pois_glm": 0.3810248321901478,
+          "negbin_glm": 0.4224283827898617,
+          "oracle__negbin_glm": 0.38104555624839526,
+          "lgbm_quantile": 0.45489903221250344,
+          "oracle__lgbm_quantile": 0.29088788695326445,
+          "foil_climatology": 0.4245380185599531,
+          "oracle__foil_climatology": 0.4221323423687782,
+          "foil_entity_eb": 0.41414352785826947,
+          "oracle__foil_entity_eb": 0.41428969665847487,
+          "matched_n__pois_glm": 0.44601089388548587,
+          "matched_n__negbin_glm": 0.4469432931078751,
+          "matched_n__lgbm_quantile": 0.4627224846457898,
+          "permuted_control": 0.4622237015305556,
+          "nihilist_zero": 0.718978102189781,
+          "zero_width": 0.6678832116788321,
+          "max_width": 0.9393515020357259
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "def_fumble_rec": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "pois_glm": 0.3373983890038428,
+          "oracle__pois_glm": 0.3177865430091635,
+          "negbin_glm": 0.33747044043748153,
+          "oracle__negbin_glm": 0.3179190067986994,
+          "lgbm_quantile": 0.369219561535017,
+          "oracle__lgbm_quantile": 0.24317984187846478,
+          "foil_climatology": 0.33740023647650014,
+          "oracle__foil_climatology": 0.3362104197457877,
+          "foil_entity_eb": 0.3443053502808159,
+          "oracle__foil_entity_eb": 0.34408753325450786,
+          "matched_n__pois_glm": 3.89218943984629,
+          "matched_n__negbin_glm": 3.892678096364174,
+          "matched_n__lgbm_quantile": 0.3863892055200111,
+          "permuted_control": 0.36843028749520657,
+          "nihilist_zero": 0.5294117647058824,
+          "zero_width": 0.5294117647058824,
+          "max_width": 0.644110257168194
+        },
+        "n_train": 3040,
+        "n_test": 272
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "pois_glm": 0.3459119672436256,
+          "oracle__pois_glm": 0.3178507351572678,
+          "negbin_glm": 0.3457038898194677,
+          "oracle__negbin_glm": 0.31791717848501777,
+          "lgbm_quantile": 0.3732226820791057,
+          "oracle__lgbm_quantile": 0.23601883347014252,
+          "foil_climatology": 0.3418444072212916,
+          "oracle__foil_climatology": 0.34038046715056763,
+          "foil_entity_eb": 0.345176623860041,
+          "oracle__foil_entity_eb": 0.3451472175693281,
+          "matched_n__pois_glm": 0.4170666294435139,
+          "matched_n__negbin_glm": 0.41934468639493766,
+          "matched_n__lgbm_quantile": 0.39970130054724445,
+          "permuted_control": 0.36916839658040396,
+          "nihilist_zero": 0.5481481481481482,
+          "zero_width": 0.5481481481481482,
+          "max_width": 0.6419858552019356
+        },
+        "n_train": 3320,
+        "n_test": 270
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "pois_glm": 0.3740348802837718,
+          "oracle__pois_glm": 0.3428421519361513,
+          "negbin_glm": 0.3741436964232929,
+          "oracle__negbin_glm": 0.3425426766183861,
+          "lgbm_quantile": 0.3950335909011476,
+          "oracle__lgbm_quantile": 0.26117368903221916,
+          "foil_climatology": 0.37384865503990544,
+          "oracle__foil_climatology": 0.3721221992314514,
+          "foil_entity_eb": 0.3795094960094591,
+          "oracle__foil_entity_eb": 0.37885622967780075,
+          "matched_n__pois_glm": 3.9565369125036955,
+          "matched_n__negbin_glm": 3.9589452778598884,
+          "matched_n__lgbm_quantile": 0.42810672181424386,
+          "permuted_control": 0.4013188182146661,
+          "nihilist_zero": 0.5882352941176471,
+          "zero_width": 0.5882352941176471,
+          "max_width": 0.6490363582618978
+        },
+        "n_train": 3584,
+        "n_test": 272
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "pois_glm": 0.373208321016849,
+          "oracle__pois_glm": 0.3204130948861957,
+          "negbin_glm": 0.3730544265444871,
+          "oracle__negbin_glm": 0.32043341708542716,
+          "lgbm_quantile": 0.4076909202455648,
+          "oracle__lgbm_quantile": 0.25274502147677297,
+          "foil_climatology": 0.3742691398167307,
+          "oracle__foil_climatology": 0.37069313479160515,
+          "foil_entity_eb": 0.37814273573751106,
+          "oracle__foil_entity_eb": 0.37809673366834173,
+          "matched_n__pois_glm": 0.41922627845107896,
+          "matched_n__negbin_glm": 0.42162115725687266,
+          "matched_n__lgbm_quantile": 0.42690217740434233,
+          "permuted_control": 0.4165533230051658,
+          "nihilist_zero": 0.5183823529411765,
+          "zero_width": 0.5183823529411765,
+          "max_width": 0.6463811705586757
+        },
+        "n_train": 3858,
+        "n_test": 272
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "pois_glm": 0.3167183744811012,
+          "oracle__pois_glm": 0.3052144781880417,
+          "negbin_glm": 0.3168117762726677,
+          "oracle__negbin_glm": 0.30528821644454157,
+          "lgbm_quantile": 0.3480609238731904,
+          "oracle__lgbm_quantile": 0.2231814972946952,
+          "foil_climatology": 0.31834025198456045,
+          "oracle__foil_climatology": 0.31714623843856965,
+          "foil_entity_eb": 0.32283537251474764,
+          "oracle__foil_entity_eb": 0.32275981356055644,
+          "matched_n__pois_glm": 3.889754023741898,
+          "matched_n__negbin_glm": 3.8942413152720117,
+          "matched_n__lgbm_quantile": 0.3654396872130981,
+          "permuted_control": 0.34749699775597415,
+          "nihilist_zero": 0.5036231884057971,
+          "zero_width": 0.5036231884057971,
+          "max_width": 0.6416058553637753
+        },
+        "n_train": 4126,
+        "n_test": 276
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "pois_glm": 0.327285494637366,
+          "oracle__pois_glm": 0.2920921773044326,
+          "negbin_glm": 0.32725736893422347,
+          "oracle__negbin_glm": 0.2920078001950049,
+          "lgbm_quantile": 0.3453103827730228,
+          "oracle__lgbm_quantile": 0.22194795132650177,
+          "foil_climatology": 0.32993999849996253,
+          "oracle__foil_climatology": 0.32839769369234234,
+          "foil_entity_eb": 0.32461730293257335,
+          "oracle__foil_entity_eb": 0.3244277356933924,
+          "matched_n__pois_glm": 0.3515832895822396,
+          "matched_n__negbin_glm": 0.3523974349358734,
+          "matched_n__lgbm_quantile": 0.36245004159327243,
+          "permuted_control": 0.3604746129217058,
+          "nihilist_zero": 0.48134328358208955,
+          "zero_width": 0.48134328358208955,
+          "max_width": 0.640273756843921
+        },
+        "n_train": 4404,
+        "n_test": 268
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "pois_glm": 0.33496203238414296,
+          "oracle__pois_glm": 0.2889791550344314,
+          "negbin_glm": 0.33517941559650105,
+          "oracle__negbin_glm": 0.28897394379303926,
+          "lgbm_quantile": 0.36377822008094585,
+          "oracle__lgbm_quantile": 0.23140811839579348,
+          "foil_climatology": 0.32930206588498045,
+          "oracle__foil_climatology": 0.32295303368695333,
+          "foil_entity_eb": 0.3341487064954402,
+          "oracle__foil_entity_eb": 0.3332717290154476,
+          "matched_n__pois_glm": 0.39101544760841245,
+          "matched_n__negbin_glm": 0.39171952354364414,
+          "matched_n__lgbm_quantile": 0.38411578427316245,
+          "permuted_control": 0.37100511567751066,
+          "nihilist_zero": 0.4444444444444444,
+          "zero_width": 0.4444444444444444,
+          "max_width": 0.6341373534338358
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "pois_glm": 0.30738803506584017,
+          "oracle__pois_glm": 0.28333437259289146,
+          "negbin_glm": 0.3072697428749588,
+          "oracle__negbin_glm": 0.2832283681179621,
+          "lgbm_quantile": 0.336694587958516,
+          "oracle__lgbm_quantile": 0.2200042741561729,
+          "foil_climatology": 0.31020173862010786,
+          "oracle__foil_climatology": 0.30781045006052166,
+          "foil_entity_eb": 0.3175389722334299,
+          "oracle__foil_entity_eb": 0.31758720610351027,
+          "matched_n__pois_glm": 0.34787165755786226,
+          "matched_n__negbin_glm": 0.3477596009243297,
+          "matched_n__lgbm_quantile": 0.35116299983056726,
+          "permuted_control": 0.3360525582168916,
+          "nihilist_zero": 0.45985401459854014,
+          "zero_width": 0.45985401459854014,
+          "max_width": 0.6287308806807762
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "fg_make": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "eb_kicker_curve": 0.38707877463458124,
+          "oracle__eb_kicker_curve": 0.38572931698299484,
+          "logit_distance_glm": 0.38346714918744956,
+          "oracle__logit_distance_glm": 0.38158349022777915,
+          "lgbm_classifier": 0.3952993101924779,
+          "oracle__lgbm_classifier": 0.17480112460093758,
+          "foil_league_curve": 0.39012408632518575,
+          "oracle__foil_league_curve": 0.38593798996120304,
+          "foil_constant_rate": 0.4341686254793162,
+          "oracle__foil_constant_rate": 0.43411173402748815,
+          "matched_n__eb_kicker_curve": 0.3874245804051422,
+          "matched_n__logit_distance_glm": 0.38950635481378976,
+          "matched_n__lgbm_classifier": 0.5003909213670262,
+          "permuted_control": 0.38506085265709583,
+          "all_event": 1.0831032799671092,
+          "uniform": 0.6931471805599453
+        },
+        "n_train": 5829,
+        "n_test": 517
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "eb_kicker_curve": 0.357927820239155,
+          "oracle__eb_kicker_curve": 0.35584618100793797,
+          "logit_distance_glm": 0.3505367923432477,
+          "oracle__logit_distance_glm": 0.34219514800081197,
+          "lgbm_classifier": 0.35844703260900374,
+          "oracle__lgbm_classifier": 0.13537687044137137,
+          "foil_league_curve": 0.36053142396677146,
+          "oracle__foil_league_curve": 0.354415181705652,
+          "foil_constant_rate": 0.4114684160770958,
+          "oracle__foil_constant_rate": 0.4105856995932199,
+          "matched_n__eb_kicker_curve": 0.3563819719504915,
+          "matched_n__logit_distance_glm": 0.355275521552185,
+          "matched_n__lgbm_classifier": 0.41045174326770256,
+          "permuted_control": 0.35894101402953776,
+          "all_event": 0.9894901750759452,
+          "uniform": 0.6931471805599453
+        },
+        "n_train": 6376,
+        "n_test": 545
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "eb_kicker_curve": 0.34990966118379596,
+          "oracle__eb_kicker_curve": 0.3469910446442618,
+          "logit_distance_glm": 0.3463101351259548,
+          "oracle__logit_distance_glm": 0.34632302705796203,
+          "lgbm_classifier": 0.36329524487883486,
+          "oracle__lgbm_classifier": 0.14923893026386179,
+          "foil_league_curve": 0.349169614446274,
+          "oracle__foil_league_curve": 0.33983893237006507,
+          "foil_constant_rate": 0.4083302543907039,
+          "oracle__foil_constant_rate": 0.40732420757192433,
+          "matched_n__eb_kicker_curve": 0.3498115592246446,
+          "matched_n__logit_distance_glm": 0.3543493869984955,
+          "matched_n__lgbm_classifier": 0.45529124519492414,
+          "permuted_control": 0.34891726861122935,
+          "all_event": 0.9769549799252268,
+          "uniform": 0.6931471805599453
+        },
+        "n_train": 6893,
+        "n_test": 552
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "eb_kicker_curve": 0.3381953449709915,
+          "oracle__eb_kicker_curve": 0.3375078172392029,
+          "logit_distance_glm": 0.3366518864515687,
+          "oracle__logit_distance_glm": 0.33580030274690725,
+          "lgbm_classifier": 0.34895004155567344,
+          "oracle__lgbm_classifier": 0.13246933862744392,
+          "foil_league_curve": 0.33996448433291765,
+          "oracle__foil_league_curve": 0.33730434394578285,
+          "foil_constant_rate": 0.40563936380425136,
+          "oracle__foil_constant_rate": 0.4045344445731546,
+          "matched_n__eb_kicker_curve": 0.3374973634372164,
+          "matched_n__logit_distance_glm": 0.3371454637203527,
+          "matched_n__lgbm_classifier": 0.412568170356919,
+          "permuted_control": 0.3413339446285031,
+          "all_event": 0.9663146524675347,
+          "uniform": 0.6931471805599454
+        },
+        "n_train": 7459,
+        "n_test": 508
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "eb_kicker_curve": 0.35234904509840403,
+          "oracle__eb_kicker_curve": 0.34907223628649836,
+          "logit_distance_glm": 0.35280375743666736,
+          "oracle__logit_distance_glm": 0.3435687779836506,
+          "lgbm_classifier": 0.36400787475878965,
+          "oracle__lgbm_classifier": 0.14254086073959873,
+          "foil_league_curve": 0.3534352585773136,
+          "oracle__foil_league_curve": 0.346486882943251,
+          "foil_constant_rate": 0.4094460220155064,
+          "oracle__foil_constant_rate": 0.40875001093169194,
+          "matched_n__eb_kicker_curve": 0.35076817438947977,
+          "matched_n__logit_distance_glm": 0.361366995764396,
+          "matched_n__lgbm_classifier": 0.42581838492341234,
+          "permuted_control": 0.35343422273837966,
+          "all_event": 0.9824221385074454,
+          "uniform": 0.6931471805599454
+        },
+        "n_train": 7951,
+        "n_test": 563
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "eb_kicker_curve": 0.4142209263268349,
+          "oracle__eb_kicker_curve": 0.41490438112948314,
+          "logit_distance_glm": 0.4123599470783378,
+          "oracle__logit_distance_glm": 0.4081938515917189,
+          "lgbm_classifier": 0.42171121367347625,
+          "oracle__lgbm_classifier": 0.19144639894823948,
+          "foil_league_curve": 0.4108897864000496,
+          "oracle__foil_league_curve": 0.4016770783236671,
+          "foil_constant_rate": 0.46957318075349913,
+          "oracle__foil_constant_rate": 0.46763692160229825,
+          "matched_n__eb_kicker_curve": 0.4232532643057589,
+          "matched_n__logit_distance_glm": 0.4236077176624418,
+          "matched_n__lgbm_classifier": 0.5859933758381464,
+          "permuted_control": 0.41069033833185076,
+          "all_event": 1.2271997182820584,
+          "uniform": 0.6931471805599453
+        },
+        "n_train": 8525,
+        "n_test": 552
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "eb_kicker_curve": 0.39239646355388547,
+          "oracle__eb_kicker_curve": 0.39137981452304743,
+          "logit_distance_glm": 0.3950383386484858,
+          "oracle__logit_distance_glm": 0.3915547607238494,
+          "lgbm_classifier": 0.41278796060083534,
+          "oracle__lgbm_classifier": 0.17925178875392214,
+          "foil_league_curve": 0.39837257589698366,
+          "oracle__foil_league_curve": 0.39092152446840095,
+          "foil_constant_rate": 0.44220217272777174,
+          "oracle__foil_constant_rate": 0.44209597941052164,
+          "matched_n__eb_kicker_curve": 0.39153482147259133,
+          "matched_n__logit_distance_glm": 0.4007682146003943,
+          "matched_n__lgbm_classifier": 0.45742503662479755,
+          "permuted_control": 0.3960225882785372,
+          "all_event": 1.116219620555735,
+          "uniform": 0.6931471805599453
+        },
+        "n_train": 9068,
+        "n_test": 545
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "eb_kicker_curve": 0.3324323129138966,
+          "oracle__eb_kicker_curve": 0.3284377060691728,
+          "logit_distance_glm": 0.3314087814757037,
+          "oracle__logit_distance_glm": 0.32660316389331767,
+          "lgbm_classifier": 0.3509995912412565,
+          "oracle__lgbm_classifier": 0.12605594938784462,
+          "foil_league_curve": 0.33567957679838645,
+          "oracle__foil_league_curve": 0.32587407116228795,
+          "foil_constant_rate": 0.38408938920141467,
+          "oracle__foil_constant_rate": 0.380782212566206,
+          "matched_n__eb_kicker_curve": 0.3282182214634709,
+          "matched_n__logit_distance_glm": 0.3292829683837864,
+          "matched_n__lgbm_classifier": 0.4613006421612583,
+          "permuted_control": 0.333127723776343,
+          "all_event": 0.8786544224822948,
+          "uniform": 0.6931471805599453
+        },
+        "n_train": 9629,
+        "n_test": 543
+      }
+    ],
+    "fg_band": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "mnlogit": 1.035252098312822,
+          "oracle__mnlogit": 1.0315088146514164,
+          "eb_dirichlet_kicker": 1.0660896312417372,
+          "oracle__eb_dirichlet_kicker": 1.0636226170419012,
+          "lgbm_multiclass": 1.0613639520416969,
+          "oracle__lgbm_multiclass": 0.6619190859959788,
+          "foil_league_mix": 1.0448025830755945,
+          "oracle__foil_league_mix": 1.03614309865083,
+          "matched_n__mnlogit": 1.0485344804766281,
+          "matched_n__eb_dirichlet_kicker": 1.0661674895766842,
+          "matched_n__lgbm_multiclass": 1.2175451731720046,
+          "permuted_control": 1.039428911101865,
+          "point_mass_modal": 6.974563422877451,
+          "uniform": 1.0986122886681096
+        },
+        "n_train": 5829,
+        "n_test": 517
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "mnlogit": 1.0179173632614527,
+          "oracle__mnlogit": 1.0048257215964378,
+          "eb_dirichlet_kicker": 1.049909796024643,
+          "oracle__eb_dirichlet_kicker": 1.0502460788614698,
+          "lgbm_multiclass": 1.0283913063700583,
+          "oracle__lgbm_multiclass": 0.6966001043343213,
+          "foil_league_mix": 1.0386637864480461,
+          "oracle__foil_league_mix": 1.0310424189888148,
+          "matched_n__mnlogit": 1.026025524097944,
+          "matched_n__eb_dirichlet_kicker": 1.0500416446724057,
+          "matched_n__lgbm_multiclass": 1.1476073907387956,
+          "permuted_control": 1.025900877726551,
+          "point_mass_modal": 6.844383377338098,
+          "uniform": 1.09861228866811
+        },
+        "n_train": 6376,
+        "n_test": 545
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "mnlogit": 1.0456067290687676,
+          "oracle__mnlogit": 1.0215017539562077,
+          "eb_dirichlet_kicker": 1.0549724269526977,
+          "oracle__eb_dirichlet_kicker": 1.0479651500211191,
+          "lgbm_multiclass": 1.104497867383719,
+          "oracle__lgbm_multiclass": 0.688776687983812,
+          "foil_league_mix": 1.0485048724948591,
+          "oracle__foil_league_mix": 1.0303364026223345,
+          "matched_n__mnlogit": 1.0717083433369805,
+          "matched_n__eb_dirichlet_kicker": 1.0512499050630912,
+          "matched_n__lgbm_multiclass": 1.2536822255565387,
+          "permuted_control": 1.0469606154969002,
+          "point_mass_modal": 6.732560587121894,
+          "uniform": 1.0986122886681098
+        },
+        "n_train": 6893,
+        "n_test": 552
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "mnlogit": 1.004247747144744,
+          "oracle__mnlogit": 0.992736463328774,
+          "eb_dirichlet_kicker": 1.0156088044682905,
+          "oracle__eb_dirichlet_kicker": 1.015284274312793,
+          "lgbm_multiclass": 1.0632239490045619,
+          "oracle__lgbm_multiclass": 0.6651554801446258,
+          "foil_league_mix": 1.0111921496295948,
+          "oracle__foil_league_mix": 1.0072211225953647,
+          "matched_n__mnlogit": 1.0231018328804429,
+          "matched_n__eb_dirichlet_kicker": 1.0148854850024225,
+          "matched_n__lgbm_multiclass": 1.1914960537867252,
+          "permuted_control": 1.0073644167654063,
+          "point_mass_modal": 6.41823131432786,
+          "uniform": 1.0986122886681096
+        },
+        "n_train": 7459,
+        "n_test": 508
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "mnlogit": 1.0420396363553266,
+          "oracle__mnlogit": 1.026788187840131,
+          "eb_dirichlet_kicker": 1.0868912555625556,
+          "oracle__eb_dirichlet_kicker": 1.086075680568175,
+          "lgbm_multiclass": 1.0643078683488711,
+          "oracle__lgbm_multiclass": 0.7026260073057556,
+          "foil_league_mix": 1.072950169760106,
+          "oracle__foil_league_mix": 1.0554770205214008,
+          "matched_n__mnlogit": 1.049171481647074,
+          "matched_n__eb_dirichlet_kicker": 1.0864941262201082,
+          "matched_n__lgbm_multiclass": 1.2126845653240992,
+          "permuted_control": 1.054284928535156,
+          "point_mass_modal": 7.263574158359324,
+          "uniform": 1.0986122886681096
+        },
+        "n_train": 7951,
+        "n_test": 563
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "mnlogit": 1.0539184099248378,
+          "oracle__mnlogit": 1.0416873287744908,
+          "eb_dirichlet_kicker": 1.087081367297111,
+          "oracle__eb_dirichlet_kicker": 1.0822892804905033,
+          "lgbm_multiclass": 1.105844109660669,
+          "oracle__lgbm_multiclass": 0.7257580319154376,
+          "foil_league_mix": 1.0662612594328396,
+          "oracle__foil_league_mix": 1.0492314156012637,
+          "matched_n__mnlogit": 1.0621368951379266,
+          "matched_n__eb_dirichlet_kicker": 1.0825130805960055,
+          "matched_n__lgbm_multiclass": 1.3265771230333425,
+          "permuted_control": 1.0552607750052632,
+          "point_mass_modal": 7.107982069675272,
+          "uniform": 1.0986122886681098
+        },
+        "n_train": 8525,
+        "n_test": 552
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "mnlogit": 1.0607069854414672,
+          "oracle__mnlogit": 1.0508735870199608,
+          "eb_dirichlet_kicker": 1.0960997490334496,
+          "oracle__eb_dirichlet_kicker": 1.0940920547582746,
+          "lgbm_multiclass": 1.0918281100808966,
+          "oracle__lgbm_multiclass": 0.7258543505922705,
+          "foil_league_mix": 1.0837034618044699,
+          "oracle__foil_league_mix": 1.064547861419238,
+          "matched_n__mnlogit": 1.0759359722453012,
+          "matched_n__eb_dirichlet_kicker": 1.0942643850325542,
+          "matched_n__lgbm_multiclass": 1.2830083852019112,
+          "permuted_control": 1.0669832962625423,
+          "point_mass_modal": 7.478122393758478,
+          "uniform": 1.09861228866811
+        },
+        "n_train": 9068,
+        "n_test": 545
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "mnlogit": 1.052480178295573,
+          "oracle__mnlogit": 1.0363292552035905,
+          "eb_dirichlet_kicker": 1.0647204212114436,
+          "oracle__eb_dirichlet_kicker": 1.0634128383576462,
+          "lgbm_multiclass": 1.0796798845849112,
+          "oracle__lgbm_multiclass": 0.7366877402178318,
+          "foil_league_mix": 1.0562731322684995,
+          "oracle__foil_league_mix": 1.0504036246252482,
+          "matched_n__mnlogit": 1.0683539884187505,
+          "matched_n__eb_dirichlet_kicker": 1.0642337863449618,
+          "matched_n__lgbm_multiclass": 1.2415876456351458,
+          "permuted_control": 1.055665646684438,
+          "point_mass_modal": 7.225793894034563,
+          "uniform": 1.0986122886681098
+        },
+        "n_train": 9629,
+        "n_test": 543
+      }
+    ],
+    "dst_td": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "eb_pois": 0.08790016257759387,
+          "oracle__eb_pois": 0.08800232781554833,
+          "hurdle_pois": 0.08948695684303871,
+          "oracle__hurdle_pois": 0.0748703074194502,
+          "foil_climatology": 0.08474209281702633,
+          "oracle__foil_climatology": 0.08452596807567248,
+          "foil_league_rate": 0.08474209281702633,
+          "oracle__foil_league_rate": 0.08452483003251553,
+          "matched_n__eb_pois": 0.08818411912503694,
+          "matched_n__hurdle_pois": 0.10994679278746675,
+          "permuted_control": 0.08790016257759387,
+          "nihilist_zero": 0.09191176470588236,
+          "zero_width": 0.09191176470588236,
+          "max_width": 0.1052460833579663
+        },
+        "n_train": 3040,
+        "n_test": 272
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "eb_pois": 0.094749302065885,
+          "oracle__eb_pois": 0.09482374837148705,
+          "hurdle_pois": 0.0944853899125256,
+          "oracle__hurdle_pois": 0.07719411874185744,
+          "foil_climatology": 0.0933314721756933,
+          "oracle__foil_climatology": 0.09298876791364229,
+          "foil_league_rate": 0.0933314721756933,
+          "oracle__foil_league_rate": 0.09328122091941186,
+          "matched_n__eb_pois": 0.0947210124697562,
+          "matched_n__hurdle_pois": 0.10529387679136423,
+          "permuted_control": 0.094749302065885,
+          "nihilist_zero": 0.1,
+          "zero_width": 0.1,
+          "max_width": 0.11170854271356787
+        },
+        "n_train": 3320,
+        "n_test": 270
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "eb_pois": 0.10445407182973694,
+          "oracle__eb_pois": 0.10451429943836832,
+          "hurdle_pois": 0.10372044043748152,
+          "oracle__hurdle_pois": 0.08580549807862843,
+          "foil_climatology": 0.10014040792196278,
+          "oracle__foil_climatology": 0.10014289092521433,
+          "foil_league_rate": 0.10013154005320724,
+          "oracle__foil_league_rate": 0.10013154005320724,
+          "matched_n__eb_pois": 0.10449397723913686,
+          "matched_n__hurdle_pois": 0.13184340821755838,
+          "permuted_control": 0.10445407182973694,
+          "nihilist_zero": 0.11029411764705882,
+          "zero_width": 0.11029411764705882,
+          "max_width": 0.11902896837126896
+        },
+        "n_train": 3584,
+        "n_test": 272
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "eb_pois": 0.09599172332249484,
+          "oracle__eb_pois": 0.09596105527638192,
+          "hurdle_pois": 0.09627863582618978,
+          "oracle__hurdle_pois": 0.07481543748152528,
+          "foil_climatology": 0.09578997930830624,
+          "oracle__foil_climatology": 0.09573086757315992,
+          "foil_league_rate": 0.09578997930830624,
+          "oracle__foil_league_rate": 0.09578997930830624,
+          "matched_n__eb_pois": 0.09607984776825304,
+          "matched_n__hurdle_pois": 0.10763246378953593,
+          "permuted_control": 0.09599172332249484,
+          "nihilist_zero": 0.10661764705882353,
+          "zero_width": 0.10661764705882353,
+          "max_width": 0.11699600945906001
+        },
+        "n_train": 3858,
+        "n_test": 272
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "eb_pois": 0.08818731337848665,
+          "oracle__eb_pois": 0.08816273395965334,
+          "hurdle_pois": 0.08483504478916322,
+          "oracle__hurdle_pois": 0.07291220595732285,
+          "foil_climatology": 0.08366761342946619,
+          "oracle__foil_climatology": 0.08341863302017331,
+          "foil_league_rate": 0.08366761342946619,
+          "oracle__foil_league_rate": 0.08341125919452334,
+          "matched_n__eb_pois": 0.08809118054038309,
+          "matched_n__hurdle_pois": 0.20002312286068022,
+          "permuted_control": 0.08818731337848665,
+          "nihilist_zero": 0.09057971014492754,
+          "zero_width": 0.09057971014492754,
+          "max_width": 0.10418177845750493
+        },
+        "n_train": 4126,
+        "n_test": 276
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "eb_pois": 0.07791138528463212,
+          "oracle__eb_pois": 0.07763819095477388,
+          "hurdle_pois": 0.07968067951698794,
+          "oracle__hurdle_pois": 0.06775931898297458,
+          "foil_climatology": 0.07832970824270609,
+          "oracle__foil_climatology": 0.07733068326708169,
+          "foil_league_rate": 0.07832970824270609,
+          "oracle__foil_league_rate": 0.07743193579839495,
+          "matched_n__eb_pois": 0.07767306682667068,
+          "matched_n__hurdle_pois": 0.07984549613740344,
+          "permuted_control": 0.07791138528463212,
+          "nihilist_zero": 0.08208955223880597,
+          "zero_width": 0.08208955223880597,
+          "max_width": 0.09739818495462386
+        },
+        "n_train": 4404,
+        "n_test": 268
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "eb_pois": 0.08676493579006143,
+          "oracle__eb_pois": 0.08686860227061233,
+          "hurdle_pois": 0.0875428996836032,
+          "oracle__hurdle_pois": 0.07616880699795271,
+          "foil_climatology": 0.08517960171226503,
+          "oracle__foil_climatology": 0.08509398846082263,
+          "foil_league_rate": 0.08529127117066818,
+          "oracle__foil_league_rate": 0.08509398846082263,
+          "matched_n__eb_pois": 0.08684589614740369,
+          "matched_n__hurdle_pois": 0.23325851479620321,
+          "permuted_control": 0.08676493579006143,
+          "nihilist_zero": 0.09259259259259259,
+          "zero_width": 0.09259259259259259,
+          "max_width": 0.10370556486134379
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "eb_pois": 0.09924146278839453,
+          "oracle__eb_pois": 0.09920441624179291,
+          "hurdle_pois": 0.10092267908887505,
+          "oracle__hurdle_pois": 0.09332520265561384,
+          "foil_climatology": 0.09883981953563437,
+          "oracle__foil_climatology": 0.09876473425521769,
+          "foil_league_rate": 0.09883981953563437,
+          "oracle__foil_league_rate": 0.09878113193705755,
+          "matched_n__eb_pois": 0.0994527381432711,
+          "matched_n__hurdle_pois": 0.12824780838499067,
+          "permuted_control": 0.09924146278839453,
+          "nihilist_zero": 0.10948905109489052,
+          "zero_width": 0.10948905109489052,
+          "max_width": 0.1173755639511426
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "def_safety": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "eb_pois": 0.03323289240319244,
+          "oracle__eb_pois": 0.033235294117647064,
+          "hurdle_pois": 0.03270673219036359,
+          "oracle__hurdle_pois": 0.02506318356488324,
+          "foil_climatology": 0.03217927874667455,
+          "oracle__foil_climatology": 0.03215227608631393,
+          "foil_league_rate": 0.03217927874667455,
+          "oracle__foil_league_rate": 0.032148241206030145,
+          "matched_n__eb_pois": 0.033381983446644996,
+          "matched_n__hurdle_pois": 0.035137267218445165,
+          "permuted_control": 0.03323289240319244,
+          "nihilist_zero": 0.03308823529411765,
+          "zero_width": 0.03308823529411765,
+          "max_width": 0.03368681643511677
+        },
+        "n_train": 3040,
+        "n_test": 272
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "eb_pois": 0.014845710031639682,
+          "oracle__eb_pois": 0.014820026056206958,
+          "hurdle_pois": 0.01623487809417458,
+          "oracle__hurdle_pois": 0.011273404057323655,
+          "foil_climatology": 0.014976735529499349,
+          "oracle__foil_climatology": 0.014667783361250698,
+          "foil_league_rate": 0.014976735529499349,
+          "oracle__foil_league_rate": 0.014667783361250698,
+          "matched_n__eb_pois": 0.014861529871580126,
+          "matched_n__hurdle_pois": 0.01831900241950493,
+          "permuted_control": 0.014845710031639682,
+          "nihilist_zero": 0.014814814814814815,
+          "zero_width": 0.014814814814814815,
+          "max_width": 0.017087288293318445
+        },
+        "n_train": 3320,
+        "n_test": 270
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "eb_pois": 0.03248558971327225,
+          "oracle__eb_pois": 0.0325310375406444,
+          "hurdle_pois": 0.03254267661838605,
+          "oracle__hurdle_pois": 0.021308934377771215,
+          "foil_climatology": 0.03217927874667455,
+          "oracle__foil_climatology": 0.03215227608631393,
+          "foil_league_rate": 0.03217927874667455,
+          "oracle__foil_league_rate": 0.032148241206030145,
+          "matched_n__eb_pois": 0.03259144989654154,
+          "matched_n__hurdle_pois": 0.032959651197162286,
+          "permuted_control": 0.03248558971327225,
+          "nihilist_zero": 0.03308823529411765,
+          "zero_width": 0.03308823529411765,
+          "max_width": 0.03368681643511677
+        },
+        "n_train": 3584,
+        "n_test": 272
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "eb_pois": 0.029173994974874374,
+          "oracle__eb_pois": 0.029173994974874374,
+          "hurdle_pois": 0.028400642920484782,
+          "oracle__hurdle_pois": 0.018885419745787762,
+          "foil_climatology": 0.028687555424179723,
+          "oracle__foil_climatology": 0.028687555424179723,
+          "foil_league_rate": 0.028687555424179723,
+          "oracle__foil_league_rate": 0.028687555424179723,
+          "matched_n__eb_pois": 0.029173994974874374,
+          "matched_n__hurdle_pois": 0.034123004729530004,
+          "permuted_control": 0.029173994974874374,
+          "nihilist_zero": 0.029411764705882353,
+          "zero_width": 0.029411764705882353,
+          "max_width": 0.03019509311262194
+        },
+        "n_train": 3858,
+        "n_test": 272
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "eb_pois": 0.03998780132546792,
+          "oracle__eb_pois": 0.039955028767023525,
+          "hurdle_pois": 0.03923494283009249,
+          "oracle__hurdle_pois": 0.030565872842473245,
+          "foil_climatology": 0.038788143616633894,
+          "oracle__foil_climatology": 0.03872086883693832,
+          "foil_league_rate": 0.038788143616633894,
+          "oracle__foil_league_rate": 0.03871313087175006,
+          "matched_n__eb_pois": 0.040019481465297504,
+          "matched_n__hurdle_pois": 0.18134076177991407,
+          "permuted_control": 0.03998780132546792,
+          "nihilist_zero": 0.03985507246376811,
+          "zero_width": 0.03985507246376811,
+          "max_width": 0.04011361153594057
+        },
+        "n_train": 4126,
+        "n_test": 276
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "eb_pois": 0.015828208205205134,
+          "oracle__eb_pois": 0.01581320783019576,
+          "hurdle_pois": 0.015286694667366688,
+          "oracle__hurdle_pois": 0.01044663616590415,
+          "foil_climatology": 0.014929123228080701,
+          "oracle__foil_climatology": 0.014776119402985077,
+          "foil_league_rate": 0.014929123228080701,
+          "oracle__foil_league_rate": 0.014776119402985077,
+          "matched_n__eb_pois": 0.015784519612990325,
+          "matched_n__hurdle_pois": 0.01716849171229281,
+          "permuted_control": 0.015828208205205134,
+          "nihilist_zero": 0.014925373134328358,
+          "zero_width": 0.014925373134328358,
+          "max_width": 0.016436660916522915
+        },
+        "n_train": 4404,
+        "n_test": 268
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "eb_pois": 0.022483714870649547,
+          "oracle__eb_pois": 0.02242080774241579,
+          "hurdle_pois": 0.022632979713381726,
+          "oracle__hurdle_pois": 0.020131769960915688,
+          "foil_climatology": 0.02185929648241206,
+          "oracle__foil_climatology": 0.02183986599664992,
+          "foil_league_rate": 0.02185929648241206,
+          "oracle__foil_league_rate": 0.02183137911781128,
+          "matched_n__eb_pois": 0.022453378001116697,
+          "matched_n__hurdle_pois": 0.08316582914572865,
+          "permuted_control": 0.022483714870649547,
+          "nihilist_zero": 0.022222222222222223,
+          "zero_width": 0.022222222222222223,
+          "max_width": 0.02336683417085427
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "eb_pois": 0.022420863441294066,
+          "oracle__eb_pois": 0.022469464108865495,
+          "hurdle_pois": 0.021915416498551152,
+          "oracle__hurdle_pois": 0.017271210064923156,
+          "foil_climatology": 0.021551186589883725,
+          "oracle__foil_climatology": 0.021528782599127022,
+          "foil_league_rate": 0.021551186589883725,
+          "oracle__foil_league_rate": 0.021520008803139784,
+          "matched_n__eb_pois": 0.02240582474415875,
+          "matched_n__hurdle_pois": 0.023775813373436525,
+          "permuted_control": 0.022420863441294066,
+          "nihilist_zero": 0.021897810218978103,
+          "zero_width": 0.021897810218978103,
+          "max_width": 0.023058724278325938
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "def_blocked_kick": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "eb_pois": 0.08914702187407626,
+          "oracle__eb_pois": 0.08891276234111736,
+          "hurdle_pois": 0.08538630653266333,
+          "oracle__hurdle_pois": 0.07063719331953887,
+          "foil_climatology": 0.08477313035767071,
+          "oracle__foil_climatology": 0.08452596807567248,
+          "foil_league_rate": 0.08477313035767071,
+          "oracle__foil_league_rate": 0.08452483003251553,
+          "matched_n__eb_pois": 0.08916900679869938,
+          "matched_n__hurdle_pois": 0.1533189846290275,
+          "permuted_control": 0.08914702187407626,
+          "nihilist_zero": 0.09191176470588236,
+          "zero_width": 0.09191176470588236,
+          "max_width": 0.0948086018326929
+        },
+        "n_train": 3040,
+        "n_test": 272
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "eb_pois": 0.07749581239530988,
+          "oracle__eb_pois": 0.07735622557230597,
+          "hurdle_pois": 0.07744183882374837,
+          "oracle__hurdle_pois": 0.07055797506048762,
+          "foil_climatology": 0.07529313232830821,
+          "oracle__foil_climatology": 0.07522084496556858,
+          "foil_league_rate": 0.07529313232830821,
+          "oracle__foil_league_rate": 0.07522799181090639,
+          "matched_n__eb_pois": 0.07746603387306905,
+          "matched_n__hurdle_pois": 0.08359985110738881,
+          "permuted_control": 0.07749581239530988,
+          "nihilist_zero": 0.08148148148148149,
+          "zero_width": 0.08148148148148149,
+          "max_width": 0.0858458961474037
+        },
+        "n_train": 3320,
+        "n_test": 270
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "eb_pois": 0.05570628879692581,
+          "oracle__eb_pois": 0.05551101093703814,
+          "hurdle_pois": 0.059574527046999705,
+          "oracle__hurdle_pois": 0.04400550546851907,
+          "foil_climatology": 0.055823233816139524,
+          "oracle__foil_climatology": 0.055637008572273126,
+          "foil_league_rate": 0.055823233816139524,
+          "oracle__foil_league_rate": 0.055637008572273126,
+          "matched_n__eb_pois": 0.05585482559858115,
+          "matched_n__hurdle_pois": 0.07821293969849247,
+          "permuted_control": 0.05570628879692581,
+          "nihilist_zero": 0.058823529411764705,
+          "zero_width": 0.058823529411764705,
+          "max_width": 0.06637599763523501
+        },
+        "n_train": 3584,
+        "n_test": 272
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "eb_pois": 0.05115263819095478,
+          "oracle__eb_pois": 0.05102904227017441,
+          "hurdle_pois": 0.051715932604197455,
+          "oracle__hurdle_pois": 0.040516738102276094,
+          "foil_climatology": 0.049504877327815555,
+          "oracle__foil_climatology": 0.049069612769731014,
+          "foil_league_rate": 0.049504877327815555,
+          "oracle__foil_league_rate": 0.049061483890038435,
+          "matched_n__eb_pois": 0.051157441619864026,
+          "matched_n__hurdle_pois": 0.06451836387821461,
+          "permuted_control": 0.05115263819095478,
+          "nihilist_zero": 0.051470588235294115,
+          "zero_width": 0.051470588235294115,
+          "max_width": 0.06005764114691103
+        },
+        "n_train": 3858,
+        "n_test": 272
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "eb_pois": 0.07957541329837595,
+          "oracle__eb_pois": 0.07948947636734396,
+          "hurdle_pois": 0.07834808098463332,
+          "oracle__hurdle_pois": 0.07047247105090672,
+          "foil_climatology": 0.07688442211055277,
+          "oracle__foil_climatology": 0.07676716917922949,
+          "foil_league_rate": 0.07688442211055277,
+          "oracle__foil_league_rate": 0.07680067001675042,
+          "matched_n__eb_pois": 0.07978643216080403,
+          "matched_n__hurdle_pois": 0.09372423712766734,
+          "permuted_control": 0.07957541329837595,
+          "nihilist_zero": 0.08333333333333333,
+          "zero_width": 0.08333333333333333,
+          "max_width": 0.08743718592964825
+        },
+        "n_train": 4126,
+        "n_test": 276
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "eb_pois": 0.06853483837095928,
+          "oracle__eb_pois": 0.06855658891472288,
+          "hurdle_pois": 0.06910804020100503,
+          "oracle__hurdle_pois": 0.06032138303457587,
+          "foil_climatology": 0.06672166804170104,
+          "oracle__foil_climatology": 0.0667008887722193,
+          "foil_league_rate": 0.06672166804170104,
+          "oracle__foil_league_rate": 0.06669316732918325,
+          "matched_n__eb_pois": 0.0685187129678242,
+          "matched_n__hurdle_pois": 0.07731924548113703,
+          "permuted_control": 0.06853483837095928,
+          "nihilist_zero": 0.0708955223880597,
+          "zero_width": 0.0708955223880597,
+          "max_width": 0.0767494187354684
+        },
+        "n_train": 4404,
+        "n_test": 268
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "eb_pois": 0.08375767727526522,
+          "oracle__eb_pois": 0.08363986599664991,
+          "hurdle_pois": 0.08601600595570445,
+          "oracle__hurdle_pois": 0.07594919039642657,
+          "foil_climatology": 0.08536199516099013,
+          "oracle__foil_climatology": 0.08509398846082263,
+          "foil_league_rate": 0.08536199516099013,
+          "oracle__foil_league_rate": 0.08509398846082263,
+          "matched_n__eb_pois": 0.08387772194304857,
+          "matched_n__hurdle_pois": 0.23493467336683416,
+          "permuted_control": 0.08375767727526522,
+          "nihilist_zero": 0.09259259259259259,
+          "zero_width": 0.09259259259259259,
+          "max_width": 0.09539363484087103
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "eb_pois": 0.06597916590250523,
+          "oracle__eb_pois": 0.06601327806917802,
+          "hurdle_pois": 0.06591479294281627,
+          "oracle__hurdle_pois": 0.055178263580677116,
+          "foil_climatology": 0.0648626343395811,
+          "oracle__foil_climatology": 0.06485603198474124,
+          "foil_league_rate": 0.0648626343395811,
+          "oracle__foil_league_rate": 0.06485603198474124,
+          "matched_n__eb_pois": 0.06609544070718557,
+          "matched_n__hurdle_pois": 0.07763012140996957,
+          "permuted_control": 0.06597916590250523,
+          "nihilist_zero": 0.06934306569343066,
+          "zero_width": 0.06934306569343066,
+          "max_width": 0.0754153981586766
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "pa_bucket": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "ordered_logit": 0.1168091974164202,
+          "oracle__ordered_logit": 0.10658462019422375,
+          "mnlogit": 0.11718336774516531,
+          "oracle__mnlogit": 0.09297869655303215,
+          "negbin_integrated": 0.11527405970526525,
+          "oracle__negbin_integrated": 0.10788257166066177,
+          "foil_climatology": 0.11864745457241935,
+          "oracle__foil_climatology": 0.11709626405709342,
+          "foil_entity_eb": 0.11723760946217739,
+          "oracle__foil_entity_eb": 0.11335572363170748,
+          "matched_n__ordered_logit": 0.18103885217079285,
+          "matched_n__mnlogit": 0.14014893511905738,
+          "matched_n__negbin_integrated": 0.16414533801525946,
+          "permuted_control": 0.12105738161476945,
+          "point_mass_modal": 0.17187368751912474,
+          "uniform": 0.13252314814814814
+        },
+        "n_train": 3040,
+        "n_test": 272
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "ordered_logit": 0.11397405122144932,
+          "oracle__ordered_logit": 0.10585487753678156,
+          "mnlogit": 0.11507575979936001,
+          "oracle__mnlogit": 0.09241967606287146,
+          "negbin_integrated": 0.11418149651782361,
+          "oracle__negbin_integrated": 0.1069966716525071,
+          "foil_climatology": 0.12269595030053279,
+          "oracle__foil_climatology": 0.12155864197530863,
+          "foil_entity_eb": 0.12265525647593076,
+          "oracle__foil_entity_eb": 0.12043038414204361,
+          "matched_n__ordered_logit": 0.13285534655462092,
+          "matched_n__mnlogit": 0.13904393255866188,
+          "matched_n__negbin_integrated": 0.1306076783472477,
+          "permuted_control": 0.12199803834510853,
+          "point_mass_modal": 0.18194306205672103,
+          "uniform": 0.1348251028806584
+        },
+        "n_train": 3320,
+        "n_test": 270
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "ordered_logit": 0.12241023061834981,
+          "oracle__ordered_logit": 0.11105798271943694,
+          "mnlogit": 0.1224810767936621,
+          "oracle__mnlogit": 0.09791727154480818,
+          "negbin_integrated": 0.12244815740167247,
+          "oracle__negbin_integrated": 0.11232274079226295,
+          "foil_climatology": 0.12687335352079065,
+          "oracle__foil_climatology": 0.12544604238754326,
+          "foil_entity_eb": 0.12574981281585948,
+          "oracle__foil_entity_eb": 0.12340951076885176,
+          "matched_n__ordered_logit": 0.1740945788840249,
+          "matched_n__mnlogit": 0.15547676769929897,
+          "matched_n__negbin_integrated": 0.14900027359343698,
+          "permuted_control": 0.12727369085494727,
+          "point_mass_modal": 0.18933680608623504,
+          "uniform": 0.1370166122004357
+        },
+        "n_train": 3584,
+        "n_test": 272
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "ordered_logit": 0.12185402925611578,
+          "oracle__ordered_logit": 0.11181241649960083,
+          "mnlogit": 0.12282074323514147,
+          "oracle__mnlogit": 0.09957991859151646,
+          "negbin_integrated": 0.12272285939639058,
+          "oracle__negbin_integrated": 0.11380055105351129,
+          "foil_climatology": 0.1276297359365217,
+          "oracle__foil_climatology": 0.12683316663062283,
+          "foil_entity_eb": 0.1271013792067994,
+          "oracle__foil_entity_eb": 0.1256874814599332,
+          "matched_n__ordered_logit": 0.13387133432025147,
+          "matched_n__mnlogit": 0.13909475587103806,
+          "matched_n__negbin_integrated": 0.13446792386136266,
+          "permuted_control": 0.12824239828807385,
+          "point_mass_modal": 0.18887726564491153,
+          "uniform": 0.138599537037037
+        },
+        "n_train": 3858,
+        "n_test": 272
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "ordered_logit": 0.11352385065398021,
+          "oracle__ordered_logit": 0.10558118138233945,
+          "mnlogit": 0.1129590866584967,
+          "oracle__mnlogit": 0.09383476324188827,
+          "negbin_integrated": 0.11379131122797981,
+          "oracle__negbin_integrated": 0.10656340709773848,
+          "foil_climatology": 0.11726107657115883,
+          "oracle__foil_climatology": 0.11699222856724469,
+          "foil_entity_eb": 0.11757209034876163,
+          "oracle__foil_entity_eb": 0.11496461559551671,
+          "matched_n__ordered_logit": 0.17162775662502927,
+          "matched_n__mnlogit": 0.1957591105901441,
+          "matched_n__negbin_integrated": 0.16636608662106184,
+          "permuted_control": 0.11700112077131458,
+          "point_mass_modal": 0.16938277809857405,
+          "uniform": 0.1336553945249597
+        },
+        "n_train": 4126,
+        "n_test": 276
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "ordered_logit": 0.11834039841435864,
+          "oracle__ordered_logit": 0.11129895477914312,
+          "mnlogit": 0.11962914118911955,
+          "oracle__mnlogit": 0.09416095893281962,
+          "negbin_integrated": 0.11871112743890458,
+          "oracle__negbin_integrated": 0.112283012732063,
+          "foil_climatology": 0.12645950843462034,
+          "oracle__foil_climatology": 0.12624262085096905,
+          "foil_entity_eb": 0.1262476231638685,
+          "oracle__foil_entity_eb": 0.1244830616671521,
+          "matched_n__ordered_logit": 0.12603232865588362,
+          "matched_n__mnlogit": 0.14026745135290467,
+          "matched_n__negbin_integrated": 0.12665790379423442,
+          "permuted_control": 0.12858818751059833,
+          "point_mass_modal": 0.18096882557891578,
+          "uniform": 0.14037451630735212
+        },
+        "n_train": 4404,
+        "n_test": 268
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "ordered_logit": 0.11558041737989568,
+          "oracle__ordered_logit": 0.10904065956380335,
+          "mnlogit": 0.11659311928922964,
+          "oracle__mnlogit": 0.09599734801875517,
+          "negbin_integrated": 0.11618745481878993,
+          "oracle__negbin_integrated": 0.11090323183319307,
+          "foil_climatology": 0.12280838921860478,
+          "oracle__foil_climatology": 0.12224965706447187,
+          "foil_entity_eb": 0.12121493138716899,
+          "oracle__foil_entity_eb": 0.1196213209783112,
+          "matched_n__ordered_logit": 0.13820381777826551,
+          "matched_n__mnlogit": 0.16042440437675914,
+          "matched_n__negbin_integrated": 0.13372005668718032,
+          "permuted_control": 0.12375814060556273,
+          "point_mass_modal": 0.1694432157591951,
+          "uniform": 0.13940329218106992
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "ordered_logit": 0.11419332534300089,
+          "oracle__ordered_logit": 0.10268206522884006,
+          "mnlogit": 0.11445049614353359,
+          "oracle__mnlogit": 0.0874159996886731,
+          "negbin_integrated": 0.11458230913867615,
+          "oracle__negbin_integrated": 0.10464941940764029,
+          "foil_climatology": 0.12317487739594575,
+          "oracle__foil_climatology": 0.12312689807661568,
+          "foil_entity_eb": 0.12061017552826975,
+          "oracle__foil_entity_eb": 0.11930620073037344,
+          "matched_n__ordered_logit": 0.12506512188656027,
+          "matched_n__mnlogit": 0.13828603397814965,
+          "matched_n__negbin_integrated": 0.12555735408807944,
+          "permuted_control": 0.12432491417846721,
+          "point_mass_modal": 0.17654978742784375,
+          "uniform": 0.1377568261692349
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "ya_bucket": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "ordered_logit": 0.09208122345599368,
+          "oracle__ordered_logit": 0.08330160074413806,
+          "mnlogit": 0.09171437989513809,
+          "oracle__mnlogit": 0.0738130351590839,
+          "gauss_integrated": 0.09185743606148478,
+          "oracle__gauss_integrated": 0.08360637257991421,
+          "foil_climatology": 0.0946373248648057,
+          "oracle__foil_climatology": 0.0939071286024679,
+          "foil_entity_eb": 0.09249295435056053,
+          "oracle__foil_entity_eb": 0.09138690841673669,
+          "matched_n__ordered_logit": 0.12557131494836687,
+          "matched_n__mnlogit": 0.12683243212419945,
+          "matched_n__gauss_integrated": 0.1405415018735768,
+          "permuted_control": 0.09757213187928114,
+          "point_mass_modal": 0.18887674543185995,
+          "uniform": 0.12246391612200433
+        },
+        "n_train": 3040,
+        "n_test": 272
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "ordered_logit": 0.08923096533018658,
+          "oracle__ordered_logit": 0.08143088469269515,
+          "mnlogit": 0.08995784234365796,
+          "oracle__mnlogit": 0.06684017634184186,
+          "gauss_integrated": 0.08917951338257471,
+          "oracle__gauss_integrated": 0.08273901616686873,
+          "foil_climatology": 0.09643561276565431,
+          "oracle__foil_climatology": 0.0947908093610518,
+          "foil_entity_eb": 0.09533105756208281,
+          "oracle__foil_entity_eb": 0.0925510845058947,
+          "matched_n__ordered_logit": 0.09971511344471526,
+          "matched_n__mnlogit": 0.10327845406595926,
+          "matched_n__gauss_integrated": 0.09718300772726715,
+          "permuted_control": 0.09630607868673159,
+          "point_mass_modal": 0.18518330558259224,
+          "uniform": 0.12448559670781892
+        },
+        "n_train": 3320,
+        "n_test": 270
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "ordered_logit": 0.10131088088886774,
+          "oracle__ordered_logit": 0.08949347929267064,
+          "mnlogit": 0.10201570178235841,
+          "oracle__mnlogit": 0.07781415805557695,
+          "gauss_integrated": 0.10129768416979976,
+          "oracle__gauss_integrated": 0.0904824221007978,
+          "foil_climatology": 0.105123805541809,
+          "oracle__foil_climatology": 0.10316588721885814,
+          "foil_entity_eb": 0.10459061996243069,
+          "oracle__foil_entity_eb": 0.10225725398307797,
+          "matched_n__ordered_logit": 0.12801349380574376,
+          "matched_n__mnlogit": 0.13390877367864887,
+          "matched_n__gauss_integrated": 0.14149773040084063,
+          "permuted_control": 0.10472071662924223,
+          "point_mass_modal": 0.18336215995295554,
+          "uniform": 0.13032747821350757
+        },
+        "n_train": 3584,
+        "n_test": 272
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "ordered_logit": 0.08979934727865117,
+          "oracle__ordered_logit": 0.08011782861529693,
+          "mnlogit": 0.09092930299217065,
+          "oracle__mnlogit": 0.07076879172686176,
+          "gauss_integrated": 0.08986315322653028,
+          "oracle__gauss_integrated": 0.08086585219327622,
+          "foil_climatology": 0.09842616155765993,
+          "oracle__foil_climatology": 0.09681485189153977,
+          "foil_entity_eb": 0.09611289307899058,
+          "oracle__foil_entity_eb": 0.0948880599642904,
+          "matched_n__ordered_logit": 0.10557084614559861,
+          "matched_n__mnlogit": 0.11913655744596163,
+          "matched_n__gauss_integrated": 0.10176721700882771,
+          "permuted_control": 0.09772016329368981,
+          "point_mass_modal": 0.1773879154674997,
+          "uniform": 0.12659994553376902
+        },
+        "n_train": 3858,
+        "n_test": 272
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "ordered_logit": 0.09019508946089241,
+          "oracle__ordered_logit": 0.0825727946755285,
+          "mnlogit": 0.09042076835331121,
+          "oracle__mnlogit": 0.06934432111682154,
+          "gauss_integrated": 0.09051054659326307,
+          "oracle__gauss_integrated": 0.08386599951929853,
+          "foil_climatology": 0.09751671242729065,
+          "oracle__foil_climatology": 0.09677752838805513,
+          "foil_entity_eb": 0.09596818185226466,
+          "oracle__foil_entity_eb": 0.09437420603484677,
+          "matched_n__ordered_logit": 0.13708668201279595,
+          "matched_n__mnlogit": 0.13414144315251358,
+          "matched_n__gauss_integrated": 0.13315497239654137,
+          "permuted_control": 0.09588983635872857,
+          "point_mass_modal": 0.18251626723693445,
+          "uniform": 0.1252516103059581
+        },
+        "n_train": 4126,
+        "n_test": 276
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "ordered_logit": 0.10120940215903841,
+          "oracle__ordered_logit": 0.09442518308897345,
+          "mnlogit": 0.10173965207868271,
+          "oracle__mnlogit": 0.08135420522536745,
+          "gauss_integrated": 0.10111713417333312,
+          "oracle__gauss_integrated": 0.0953938843794806,
+          "foil_climatology": 0.10507988174668143,
+          "oracle__foil_climatology": 0.10490922254399644,
+          "foil_entity_eb": 0.10595540475087407,
+          "oracle__foil_entity_eb": 0.10389534667737226,
+          "matched_n__ordered_logit": 0.10630739754530476,
+          "matched_n__mnlogit": 0.11634656648663586,
+          "matched_n__gauss_integrated": 0.10572191704661546,
+          "permuted_control": 0.10657056493411605,
+          "point_mass_modal": 0.19682641327382802,
+          "uniform": 0.12886954118297397
+        },
+        "n_train": 4404,
+        "n_test": 268
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "ordered_logit": 0.09028724016972693,
+          "oracle__ordered_logit": 0.08473117666216673,
+          "mnlogit": 0.09115366743065478,
+          "oracle__mnlogit": 0.0714994383474364,
+          "gauss_integrated": 0.0903601268630806,
+          "oracle__gauss_integrated": 0.08565738708688168,
+          "foil_climatology": 0.09603005751304727,
+          "oracle__foil_climatology": 0.09452160493827161,
+          "foil_entity_eb": 0.09552152520008188,
+          "oracle__foil_entity_eb": 0.09242969832810655,
+          "matched_n__ordered_logit": 0.11222293323501546,
+          "matched_n__mnlogit": 0.14192578403401837,
+          "matched_n__gauss_integrated": 0.11014195504429303,
+          "permuted_control": 0.09386651967832667,
+          "point_mass_modal": 0.17268343243342926,
+          "uniform": 0.12608024691358022
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "ordered_logit": 0.09220233811041423,
+          "oracle__ordered_logit": 0.08348973700949945,
+          "mnlogit": 0.0925114752478355,
+          "oracle__mnlogit": 0.07264708954860549,
+          "gauss_integrated": 0.09182654844848573,
+          "oracle__gauss_integrated": 0.08423717568112946,
+          "foil_climatology": 0.10311562785564113,
+          "oracle__foil_climatology": 0.10033166391390058,
+          "foil_entity_eb": 0.10089735984387746,
+          "oracle__foil_entity_eb": 0.0974867286955372,
+          "matched_n__ordered_logit": 0.10682545095412398,
+          "matched_n__mnlogit": 0.11675135506914648,
+          "matched_n__gauss_integrated": 0.1047888791291042,
+          "permuted_control": 0.10118234839545305,
+          "point_mass_modal": 0.17244355294532818,
+          "uniform": 0.13142065423087318
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ]
+  },
+  "fold_results_b": {
+    "k_points": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "assembled": 2.394723937028315,
+          "foil_climatology": 2.388220252554284,
+          "foil_board_eb": 2.387432894336044,
+          "foil_direct": 2.4256826372482303,
+          "nihilist_zero": 7.85239852398524,
+          "permuted_direct": 2.4922844366384656,
+          "oracle__assembled": 2.2834745062953146,
+          "matched_n__assembled": 2.599360678855532,
+          "oracle__foil_climatology": 2.382780822933858,
+          "oracle__foil_board_eb": 2.4134955179855373,
+          "oracle__foil_direct": 1.4968847041557616,
+          "zero_width": 3.4428044280442807,
+          "max_width": 3.730738378238054
+        }
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "assembled": 2.5167356736512754,
+          "foil_climatology": 2.549385417654309,
+          "foil_board_eb": 2.5727390797005683,
+          "foil_direct": 2.5978325225432335,
+          "nihilist_zero": 8.162264150943397,
+          "permuted_direct": 2.6654764606485473,
+          "oracle__assembled": 2.3421903432255613,
+          "matched_n__assembled": 2.575223904427799,
+          "oracle__foil_climatology": 2.5396343225561773,
+          "oracle__foil_board_eb": 2.5721335402052077,
+          "oracle__foil_direct": 1.5760116413077863,
+          "zero_width": 3.6452830188679246,
+          "max_width": 3.804773300464588
+        }
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "assembled": 2.5380461149733633,
+          "foil_climatology": 2.539107567914762,
+          "foil_board_eb": 2.531144637064706,
+          "foil_direct": 2.6076478317411724,
+          "nihilist_zero": 8.364661654135338,
+          "permuted_direct": 2.577343656280972,
+          "oracle__assembled": 2.3582494842634225,
+          "matched_n__assembled": 2.657975610193826,
+          "oracle__foil_climatology": 2.519176446140477,
+          "oracle__foil_board_eb": 2.5445868518987664,
+          "oracle__foil_direct": 1.5987249560553756,
+          "zero_width": 3.6052631578947367,
+          "max_width": 3.7843231193561793
+        }
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "assembled": 2.5765679278746676,
+          "foil_climatology": 2.5963013597398756,
+          "foil_board_eb": 2.581287200468974,
+          "foil_direct": 2.635865354284391,
+          "nihilist_zero": 7.768382352941177,
+          "permuted_direct": 2.65601307944393,
+          "oracle__assembled": 2.4488987843629917,
+          "matched_n__assembled": 2.6619057280889744,
+          "oracle__foil_climatology": 2.593674349689625,
+          "oracle__foil_board_eb": 2.6043955124073284,
+          "oracle__foil_direct": 1.640277510371733,
+          "zero_width": 3.6433823529411766,
+          "max_width": 3.8360146319834465
+        }
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "assembled": 2.770127375100138,
+          "foil_climatology": 2.7856427062850484,
+          "foil_board_eb": 2.7889455555606717,
+          "foil_direct": 2.8992197916664137,
+          "nihilist_zero": 8.568840579710145,
+          "permuted_direct": 2.9140680682545113,
+          "oracle__assembled": 2.5315364157745246,
+          "matched_n__assembled": 3.0467474938096277,
+          "oracle__foil_climatology": 2.7567702643653047,
+          "oracle__foil_board_eb": 2.770127097441439,
+          "oracle__foil_direct": 1.6770092120645073,
+          "zero_width": 4.010869565217392,
+          "max_width": 3.890793095914355
+        }
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "assembled": 2.551955418885472,
+          "foil_climatology": 2.60137628440711,
+          "foil_board_eb": 2.6092287482672094,
+          "foil_direct": 2.600086293917021,
+          "nihilist_zero": 8.406716417910447,
+          "permuted_direct": 2.714698383497124,
+          "oracle__assembled": 2.4186420113627842,
+          "matched_n__assembled": 2.637783016762919,
+          "oracle__foil_climatology": 2.5816496437410934,
+          "oracle__foil_board_eb": 2.5769415557720468,
+          "oracle__foil_direct": 1.5782939150232618,
+          "zero_width": 3.6007462686567164,
+          "max_width": 3.9086439660991523
+        }
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "assembled": 2.549880334077796,
+          "foil_climatology": 2.5695514610087473,
+          "foil_board_eb": 2.598210734696564,
+          "foil_direct": 2.6074089694138847,
+          "nihilist_zero": 8.544444444444444,
+          "permuted_direct": 2.6008608272782348,
+          "oracle__assembled": 2.4043323357528386,
+          "matched_n__assembled": 2.867738614368137,
+          "oracle__foil_climatology": 2.541745226130653,
+          "oracle__foil_board_eb": 2.565422165641237,
+          "oracle__foil_direct": 1.596688361334631,
+          "zero_width": 3.588888888888889,
+          "max_width": 3.898976363297972
+        }
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "assembled": 2.6977910510582106,
+          "foil_climatology": 2.77509155265378,
+          "foil_board_eb": 2.771852743988747,
+          "foil_direct": 2.7999923774663094,
+          "nihilist_zero": 8.489051094890511,
+          "permuted_direct": 2.8541473702075675,
+          "oracle__assembled": 2.5426238977735394,
+          "matched_n__assembled": 3.032921224736823,
+          "oracle__foil_climatology": 2.754850434655027,
+          "oracle__foil_board_eb": 2.7532197102599,
+          "oracle__foil_direct": 1.724532651247908,
+          "zero_width": 3.897810218978102,
+          "max_width": 3.960911968602136
+        }
+      }
+    ],
+    "dst_points": [
+      {
+        "label": "2022H1",
+        "scores": {
+          "assembled": 2.5483686419228495,
+          "foil_climatology": 2.5945360109370377,
+          "foil_board_eb": 2.5836633585553583,
+          "foil_direct": 2.5826644809698442,
+          "nihilist_zero": 6.238970588235294,
+          "permuted_direct": 2.654508975881377,
+          "oracle__assembled": 2.401007212533255,
+          "matched_n__assembled": 10.543108283143658,
+          "oracle__foil_climatology": 2.5830240097546557,
+          "oracle__foil_board_eb": 2.6095869765156143,
+          "oracle__foil_direct": 1.6484061212014571,
+          "zero_width": 3.5698529411764706,
+          "max_width": 4.050766435116761
+        }
+      },
+      {
+        "label": "2022H2",
+        "scores": {
+          "assembled": 2.551064146659222,
+          "foil_climatology": 2.615611715987344,
+          "foil_board_eb": 2.615854138418696,
+          "foil_direct": 2.597582943385973,
+          "nihilist_zero": 6.407407407407407,
+          "permuted_direct": 2.7577709178621497,
+          "oracle__assembled": 2.406189819467709,
+          "matched_n__assembled": 2.8081839921831375,
+          "oracle__foil_climatology": 2.598173199329983,
+          "oracle__foil_board_eb": 2.607549261397454,
+          "oracle__foil_direct": 1.5657206353313688,
+          "zero_width": 3.651851851851852,
+          "max_width": 4.04315284757119
+        }
+      },
+      {
+        "label": "2023H1",
+        "scores": {
+          "assembled": 2.979250368570795,
+          "foil_climatology": 2.9423852645580846,
+          "foil_board_eb": 2.987083065970458,
+          "foil_direct": 2.984746320677763,
+          "nihilist_zero": 6.716911764705882,
+          "permuted_direct": 3.0800595179101844,
+          "oracle__assembled": 2.729346000221697,
+          "matched_n__assembled": 20.68478971696719,
+          "oracle__foil_climatology": 2.926799098433343,
+          "oracle__foil_board_eb": 2.981407641827972,
+          "oracle__foil_direct": 1.7970305908395015,
+          "zero_width": 4.106617647058823,
+          "max_width": 4.182772110552764
+        }
+      },
+      {
+        "label": "2023H2",
+        "scores": {
+          "assembled": 2.7673902194797515,
+          "foil_climatology": 2.8123502069169377,
+          "foil_board_eb": 2.8428612395551873,
+          "foil_direct": 2.8129147998788406,
+          "nihilist_zero": 6.551470588235294,
+          "permuted_direct": 2.8958151506435077,
+          "oracle__assembled": 2.494792469701448,
+          "matched_n__assembled": 2.9041763606636124,
+          "oracle__foil_climatology": 2.801094346733668,
+          "oracle__foil_board_eb": 2.768111219247359,
+          "oracle__foil_direct": 1.670287377963911,
+          "zero_width": 3.9779411764705883,
+          "max_width": 4.095619568430387
+        }
+      },
+      {
+        "label": "2024H1",
+        "scores": {
+          "assembled": 2.636339169579783,
+          "foil_climatology": 2.6131301434709786,
+          "foil_board_eb": 2.6088996826271074,
+          "foil_direct": 2.6114102135230737,
+          "nihilist_zero": 6.032608695652174,
+          "permuted_direct": 2.638684661823246,
+          "oracle__assembled": 2.422477049195251,
+          "matched_n__assembled": 20.015193663061687,
+          "oracle__foil_climatology": 2.605376793387226,
+          "oracle__foil_board_eb": 2.586451970818849,
+          "oracle__foil_direct": 1.6162938432945464,
+          "zero_width": 3.648550724637681,
+          "max_width": 4.025948219357658
+        }
+      },
+      {
+        "label": "2024H2",
+        "scores": {
+          "assembled": 2.7795666597914943,
+          "foil_climatology": 2.8615111752793823,
+          "foil_board_eb": 2.8585193254844756,
+          "foil_direct": 2.8258190267452354,
+          "nihilist_zero": 5.951492537313433,
+          "permuted_direct": 2.978103308608065,
+          "oracle__assembled": 2.63893553120078,
+          "matched_n__assembled": 2.8983300907522693,
+          "oracle__foil_climatology": 2.8431212030300754,
+          "oracle__foil_board_eb": 2.8453161589845544,
+          "oracle__foil_direct": 1.8052969292117995,
+          "zero_width": 3.951492537313433,
+          "max_width": 4.1471199654991375
+        }
+      },
+      {
+        "label": "2025H1",
+        "scores": {
+          "assembled": 2.769070152614926,
+          "foil_climatology": 2.815846715056765,
+          "foil_board_eb": 2.8049241035821413,
+          "foil_direct": 2.8298671786186462,
+          "nihilist_zero": 5.844444444444444,
+          "permuted_direct": 2.9274171529702153,
+          "oracle__assembled": 2.55153427414852,
+          "matched_n__assembled": 10.045911122278058,
+          "oracle__foil_climatology": 2.7962529406290706,
+          "oracle__foil_board_eb": 2.805440684785403,
+          "oracle__foil_direct": 1.7113419245760897,
+          "zero_width": 3.9851851851851854,
+          "max_width": 4.099234170854271
+        }
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "assembled": 2.5486233650001835,
+          "foil_climatology": 2.6567158548215533,
+          "foil_board_eb": 2.6583118397285834,
+          "foil_direct": 2.605074995431373,
+          "nihilist_zero": 6.007299270072993,
+          "permuted_direct": 2.6927385619994535,
+          "oracle__assembled": 2.40188948391593,
+          "matched_n__assembled": 2.7171662152000877,
+          "oracle__foil_climatology": 2.6477098540145985,
+          "oracle__foil_board_eb": 2.6366780717462985,
+          "oracle__foil_direct": 1.6815645883190722,
+          "zero_width": 3.6350364963503647,
+          "max_width": 4.036969447602979
+        }
+      }
+    ]
+  },
+  "fdr": {
+    "own_family": {
+      "fg_att": false,
+      "xp_att": true,
+      "def_sacks": true,
+      "def_int": false,
+      "def_fumble_rec": false,
+      "fg_make": true,
+      "fg_band": true,
+      "dst_td": false,
+      "def_safety": false,
+      "def_blocked_kick": false,
+      "pa_bucket": true,
+      "ya_bucket": true,
+      "k_points": true,
+      "dst_points": true
+    },
+    "pooled": {
+      "fg_att": false,
+      "xp_att": true,
+      "def_sacks": true,
+      "def_int": false,
+      "def_fumble_rec": false,
+      "fg_make": true,
+      "fg_band": true,
+      "dst_td": false,
+      "def_safety": false,
+      "def_blocked_kick": false,
+      "pa_bucket": true,
+      "ya_bucket": true,
+      "k_points": true,
+      "dst_points": true
+    },
+    "binding": {
+      "fg_att": false,
+      "xp_att": true,
+      "def_sacks": true,
+      "def_int": false,
+      "def_fumble_rec": false,
+      "fg_make": true,
+      "fg_band": true,
+      "dst_td": false,
+      "def_safety": false,
+      "def_blocked_kick": false,
+      "pa_bucket": true,
+      "ya_bucket": true,
+      "k_points": true,
+      "dst_points": true
+    }
+  },
+  "gates_a": {
+    "fg_att": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": true,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "xp_att": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": true,
+        "pbo_ok": true,
+        "dsr_ok": false,
+        "fdr_ok": true,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "def_sacks": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": true,
+        "pbo_ok": true,
+        "dsr_ok": false,
+        "fdr_ok": true,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "def_int": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "def_fumble_rec": {
+      "checks": {
+        "beats_foil": false,
+        "fold_consistency": false,
+        "pbo_ok": true,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "fg_make": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": true,
+        "pbo_ok": true,
+        "dsr_ok": false,
+        "fdr_ok": true,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "fg_band": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": true,
+        "pbo_ok": true,
+        "dsr_ok": false,
+        "fdr_ok": true,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "dst_td": {
+      "checks": {
+        "beats_foil": false,
+        "fold_consistency": false,
+        "pbo_ok": true,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "def_safety": {
+      "checks": {
+        "beats_foil": false,
+        "fold_consistency": false,
+        "pbo_ok": true,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "def_blocked_kick": {
+      "checks": {
+        "beats_foil": false,
+        "fold_consistency": false,
+        "pbo_ok": true,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "pa_bucket": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": true,
+        "pbo_ok": true,
+        "dsr_ok": true,
+        "fdr_ok": true,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": true
+    },
+    "ya_bucket": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": true,
+        "pbo_ok": true,
+        "dsr_ok": true,
+        "fdr_ok": true,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": true
+    }
+  },
+  "gates_b": {
+    "k_points": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": true,
+        "pbo_ok": true,
+        "dsr_ok": true,
+        "fdr_ok": true,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": true
+    },
+    "dst_points": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": true,
+        "pbo_ok": true,
+        "dsr_ok": true,
+        "fdr_ok": true,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": false
+      },
+      "ship": false
+    }
+  },
+  "null_states": {
+    "layer_a::fg_att": {
+      "state": "DSR_UNREACHABLE",
+      "reason": "`nf_w7_fg_att`: the winner's per-fold Sharpe 0.169 sits at or BELOW the 3-arm field's deflated benchmark SR0 3.075, so DSR is unreachable at ANY fold count \u2014 `n` scales a positive gap, it cannot create one. The remedy is a SMALLER, pre-registered field, not more seasons. `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+      "retest_trigger": "NOT rescuable by field size either \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)",
+      "field_shrink_flag": {
+        "proposed_field_size": null,
+        "declared_family_size": 3,
+        "status": "SUSPECT \u2014 NOT ADVICE",
+        "note": "the instrument suggests a smaller field, but this story's family of 3 arms was PRE-REGISTERED as the minimum \u00a70.5 field (\u22653 classes + a direct-learned foil). \u26d4 Shrinking below it would be a POST-HOC field, which is the selection bias DSR exists to deflate (MH2.2). Treat this remedy as SUSPECT, not as advice: you may PRE-REGISTER a family, you may not DISCOVER one."
+      }
+    },
+    "layer_a::xp_att": {
+      "state": "POWER_LIMITED",
+      "reason": "`nf_w7_xp_att`: the effect is positive and every gate is REACHABLE, but this design cannot resolve it \u2014 DSR alone needs 5403 folds against 8 (the BH-FDR requirement is separate and may be larger). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+      "retest_trigger": "+5395 folds for the DSR gate \u2014 field size alone cannot rescue it at this dispersion"
+    },
+    "layer_a::def_sacks": {
+      "state": "POWER_LIMITED",
+      "reason": "`nf_w7_def_sacks`: the effect is positive and every gate is REACHABLE, but this design cannot resolve it \u2014 DSR alone needs 172 folds against 8 (the BH-FDR requirement is separate and may be larger). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+      "retest_trigger": "+164 folds for the DSR gate \u2014 field size alone cannot rescue it at this dispersion"
+    },
+    "layer_a::def_int": {
+      "state": "DSR_UNREACHABLE",
+      "reason": "`nf_w7_def_int`: the winner's per-fold Sharpe 0.153 sits at or BELOW the 3-arm field's deflated benchmark SR0 3.281, so DSR is unreachable at ANY fold count \u2014 `n` scales a positive gap, it cannot create one. The remedy is a SMALLER, pre-registered field, not more seasons. `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+      "retest_trigger": "NOT rescuable by field size either \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)",
+      "field_shrink_flag": {
+        "proposed_field_size": null,
+        "declared_family_size": 3,
+        "status": "SUSPECT \u2014 NOT ADVICE",
+        "note": "the instrument suggests a smaller field, but this story's family of 3 arms was PRE-REGISTERED as the minimum \u00a70.5 field (\u22653 classes + a direct-learned foil). \u26d4 Shrinking below it would be a POST-HOC field, which is the selection bias DSR exists to deflate (MH2.2). Treat this remedy as SUSPECT, not as advice: you may PRE-REGISTER a family, you may not DISCOVER one."
+      }
+    },
+    "layer_a::def_fumble_rec": {
+      "state": "GENUINE_ABSENCE",
+      "reason": "`nf_w7_def_fumble_rec`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+      "retest_trigger": null
+    },
+    "layer_a::fg_make": {
+      "state": "DSR_UNREACHABLE",
+      "reason": "`nf_w7_fg_make`: the winner's per-fold Sharpe 1.056 sits at or BELOW the 3-arm field's deflated benchmark SR0 1.246, so DSR is unreachable at ANY fold count \u2014 `n` scales a positive gap, it cannot create one. The remedy is a SMALLER, pre-registered field, not more seasons. `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+      "retest_trigger": "NOT rescuable by field size either \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)",
+      "field_shrink_flag": {
+        "proposed_field_size": null,
+        "declared_family_size": 3,
+        "status": "SUSPECT \u2014 NOT ADVICE",
+        "note": "the instrument suggests a smaller field, but this story's family of 3 arms was PRE-REGISTERED as the minimum \u00a70.5 field (\u22653 classes + a direct-learned foil). \u26d4 Shrinking below it would be a POST-HOC field, which is the selection bias DSR exists to deflate (MH2.2). Treat this remedy as SUSPECT, not as advice: you may PRE-REGISTER a family, you may not DISCOVER one."
+      }
+    },
+    "layer_a::fg_band": {
+      "state": "DSR_UNREACHABLE",
+      "reason": "`nf_w7_fg_band`: the winner's per-fold Sharpe 1.366 sits at or BELOW the 3-arm field's deflated benchmark SR0 1.460, so DSR is unreachable at ANY fold count \u2014 `n` scales a positive gap, it cannot create one. The remedy is a SMALLER, pre-registered field, not more seasons. `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+      "retest_trigger": "NOT rescuable by field size either \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)",
+      "field_shrink_flag": {
+        "proposed_field_size": null,
+        "declared_family_size": 3,
+        "status": "SUSPECT \u2014 NOT ADVICE",
+        "note": "the instrument suggests a smaller field, but this story's family of 3 arms was PRE-REGISTERED as the minimum \u00a70.5 field (\u22653 classes + a direct-learned foil). \u26d4 Shrinking below it would be a POST-HOC field, which is the selection bias DSR exists to deflate (MH2.2). Treat this remedy as SUSPECT, not as advice: you may PRE-REGISTER a family, you may not DISCOVER one."
+      }
+    },
+    "layer_a::dst_td": {
+      "state": "GENUINE_ABSENCE",
+      "reason": "`nf_w7_dst_td`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+      "retest_trigger": null
+    },
+    "layer_a::def_safety": {
+      "state": "GENUINE_ABSENCE",
+      "reason": "`nf_w7_def_safety`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+      "retest_trigger": null
+    },
+    "layer_a::def_blocked_kick": {
+      "state": "GENUINE_ABSENCE",
+      "reason": "`nf_w7_def_blocked_kick`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+      "retest_trigger": null
+    },
+    "layer_b::dst_points": {
+      "instrument_verdict": {
+        "state": "UNDEFINED",
+        "reason": "`nf_w7_downstream_dst_points`: 8 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+        "retest_trigger": "-4 more fold(s) \u2014 i.e. a window of 7 seasons"
+      },
+      "hand_corrected": true,
+      "pbo_state": "EVALUABLE \u2014 PBO is computed over the 4-config eligible field (assembled + 3 foils); the DSR trial field is the single pre-registered arm (sr0=0, a plain PSR), declared in the pre-registration \u00a77.",
+      "state": "CONSTRAINT_REFUSED",
+      "reason": "every statistical gate is GREEN \u2014 the assembled arm beats the best foil by +0.0338 CRPS (CI95 [0.0094, 0.0582] excludes zero), fold wins 7 against a required 6, p=0.0067, PBO/DSR/FDR all pass \u2014 and the ship is refused by the pre-registered coverage(80) FLOOR alone: 0.7603 against 0.80 at n=2174 (\u22484.6 binomial SE below nominal \u2014 decisive under-coverage, not sampling noise). The mechanism is the DECLARED independence-simplification check firing: component banks drawn independently under-disperse the assembled sum wherever the components co-move.",
+      "retest_trigger": "NONE \u2014 a constraint refusal is not rescuable by data (NF-D18): more folds make the refusal MORE certain. The remedy is a DIFFERENT MECHANISM (a successor modeling cross-component dependence \u2014 e.g. a joint/copula draw over the component legs) or a PM decision; \u26d4 never a post-hoc floor change (a floor re-set after seeing the result is the E2.1-r inversion \u2014 NF1.8).",
+      "gate_sensitivity": {
+        "waived": [],
+        "still_refusing": [
+          "coverage_floor_ok"
+        ],
+        "ships_without_waived_checks": false
+      }
+    }
+  },
+  "verdict": {
+    "layer_a": {
+      "fg_att": "DSR_UNREACHABLE",
+      "xp_att": "POWER_LIMITED",
+      "def_sacks": "POWER_LIMITED",
+      "def_int": "DSR_UNREACHABLE",
+      "def_fumble_rec": "GENUINE_ABSENCE",
+      "fg_make": "DSR_UNREACHABLE",
+      "fg_band": "DSR_UNREACHABLE",
+      "dst_td": "GENUINE_ABSENCE",
+      "def_safety": "GENUINE_ABSENCE",
+      "def_blocked_kick": "GENUINE_ABSENCE",
+      "pa_bucket": "SHIP",
+      "ya_bucket": "SHIP"
+    },
+    "layer_b": {
+      "k_points": "SHIP",
+      "dst_points": "CONSTRAINT_REFUSED"
+    }
+  },
+  "headline": "A[fg_att:DSR_UNREACHABLE xp_att:POWER_LIMITED def_sacks:POWER_LIMITED def_int:DSR_UNREACHABLE def_fumble_rec:GENUINE_ABSENCE fg_make:DSR_UNREACHABLE fg_band:DSR_UNREACHABLE dst_td:GENUINE_ABSENCE def_safety:GENUINE_ABSENCE def_blocked_kick:GENUINE_ABSENCE pa_bucket:SHIP ya_bucket:SHIP] B[k_points:SHIP dst_points:CONSTRAINT_REFUSED]",
+  "verdict_corrected_from": {
+    "layer_a": {
+      "fg_att": "DSR_UNREACHABLE",
+      "xp_att": "POWER_LIMITED",
+      "def_sacks": "POWER_LIMITED",
+      "def_int": "DSR_UNREACHABLE",
+      "def_fumble_rec": "GENUINE_ABSENCE",
+      "fg_make": "DSR_UNREACHABLE",
+      "fg_band": "DSR_UNREACHABLE",
+      "dst_td": "GENUINE_ABSENCE",
+      "def_safety": "GENUINE_ABSENCE",
+      "def_blocked_kick": "GENUINE_ABSENCE",
+      "pa_bucket": "SHIP",
+      "ya_bucket": "SHIP"
+    },
+    "layer_b": {
+      "k_points": "SHIP",
+      "dst_points": "POWER_LIMITED"
+    }
+  },
+  "rewritten_at": "2026-08-13T21:07:56+00:00"
+}

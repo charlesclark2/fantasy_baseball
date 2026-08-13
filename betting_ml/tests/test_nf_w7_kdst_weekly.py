@@ -400,3 +400,95 @@ class TestClassifierWrapper:
         assert m and m.group(1).startswith("EVALUABLE"), (
             "the Layer-B classifier wrapper must override GE's single-arm PBO prose — this "
             "story's eligible field has 4 configs")
+
+    def test_runner_wires_the_coverage_constraint_refusal(self):
+        src = _RUNNER.read_text()
+        assert "coverage_constraint_refusal" in src, (
+            "the runner must route Layer-B nulls through KW.coverage_constraint_refusal — "
+            "without it a coverage-floor refusal is mislabeled POWER_LIMITED with a fold-count "
+            "trigger no fold count can honor (NF-D18)")
+
+
+# ── Coverage-floor refusal is CONSTRAINT_REFUSED, never POWER_LIMITED (NF-D18) ──────────────────
+def _lb_sel(**over):
+    """A Layer-B selection where every gate is green EXCEPT what the test overrides — the
+    NF-D17 isolating-fixture rule: each clause must be the ONLY thing separating fire from
+    no-fire."""
+    sel = {
+        "beats_foil": True,
+        "mean_delta": 0.0338,
+        "ci95": (0.0094, 0.0582),
+        "fold_wins": 7,
+        "fold_clause": {"passes": True, "required": 6},
+        "p_one_sided": 0.0067,
+        "observed_sr": 1.16,
+        "coverage": {"winner_coverage_80": 0.7603, "n_rows": 2174,
+                     "binomial_se": 0.0086, "blocking_shortfall": True},
+    }
+    sel.update(over)
+    return sel
+
+
+def _lb_checks(**over):
+    checks = {"beats_foil": True, "fold_consistency": True, "pbo_ok": True, "dsr_ok": True,
+              "fdr_ok": True, "degenerates_lose": True, "permutation_behaves": True,
+              "oracle_floors_respected": True, "coverage_floor_ok": False}
+    checks.update(over)
+    return checks
+
+
+_LB_BASE = {"state": "POWER_LIMITED", "reason": "base", "retest_trigger": "+N folds",
+            "hand_corrected": False}
+
+
+class TestCoverageConstraintRefusal:
+    def test_fires_when_the_floor_is_the_only_refusing_clause(self):
+        out = KW.coverage_constraint_refusal(_lb_sel(), _lb_checks(), dict(_LB_BASE))
+        assert out["state"] == "CONSTRAINT_REFUSED"
+        assert out["hand_corrected"] is True
+        assert "0.7603" in out["reason"] and "excludes zero" in out["reason"]
+        # ⛔ NF-D18/MH2 (g″): no data trigger may be published for a constraint refusal
+        assert "fold" not in out["retest_trigger"].split("NONE")[0]
+        assert out["retest_trigger"].startswith("NONE")
+
+    @pytest.mark.parametrize("bad_check", [
+        "fold_consistency", "pbo_ok", "dsr_ok", "fdr_ok",
+        "degenerates_lose", "permutation_behaves", "oracle_floors_respected",
+    ])
+    def test_any_other_red_clause_leaves_the_base_classification(self, bad_check):
+        """Isolating fixture per clause (NF-D17): with a second clause red, the null is NOT a
+        pure constraint refusal and the base state must stand."""
+        checks = _lb_checks(**{bad_check: False})
+        out = KW.coverage_constraint_refusal(_lb_sel(), checks, dict(_LB_BASE))
+        assert out["state"] == "POWER_LIMITED", bad_check
+
+    def test_a_losing_arm_is_never_promoted(self):
+        out = KW.coverage_constraint_refusal(
+            _lb_sel(beats_foil=False, mean_delta=-0.01),
+            _lb_checks(beats_foil=False), dict(_LB_BASE))
+        assert out["state"] == "POWER_LIMITED"
+
+    def test_a_non_blocking_shortfall_does_not_fire(self):
+        """A floor that PASSES (or a thin-sample non-blocking read) must never be re-labeled —
+        the branch keys on the measured blocking_shortfall, not on the coverage number."""
+        sel = _lb_sel(coverage={"winner_coverage_80": 0.7900, "n_rows": 200,
+                                "binomial_se": 0.028, "blocking_shortfall": False})
+        out = KW.coverage_constraint_refusal(sel, _lb_checks(coverage_floor_ok=True),
+                                             dict(_LB_BASE))
+        assert out["state"] == "POWER_LIMITED"
+
+    def test_red_proof_the_fire_case_depends_on_the_others_green_clause(self):
+        """RED-proof with the mutation PROVEN to land (E11.24 #682): deleting the others-green
+        requirement from the source must make the parametrized no-fire cases fire."""
+        module_src = Path(KW.__file__).read_text()
+        needle = 'others_green = all(v for k, v in checks.items() if k != "coverage_floor_ok")'
+        assert needle in module_src  # the mutation site exists — non-vacuity
+        mutated = module_src.replace(needle, "others_green = True", 1)
+        assert mutated != module_src  # the mutation LANDED
+        ns: dict = {}
+        exec(compile(mutated, "kdst_weekly_mutated", "exec"), ns)  # noqa: S102 — red-proof
+        out = ns["coverage_constraint_refusal"](
+            _lb_sel(), _lb_checks(dsr_ok=False), dict(_LB_BASE))
+        assert out["state"] == "CONSTRAINT_REFUSED", (
+            "the mutated source no longer requires other clauses green, so this must fire — "
+            "if it does not, the guard above passes for the wrong reason")
