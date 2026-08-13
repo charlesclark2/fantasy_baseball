@@ -41,6 +41,28 @@ TIER (pipeline failure-handling contract):
     CURRENT slate, promoting it to HALT once validated. Forward-date issues are always
     non-fatal (they are dominated by NO_ODDS_YET).
 
+DATA SOURCE — Snowflake-FREE since E11.24 target 3 (2026-08-08):
+    This check reads the three marts DIRECTLY from the S3 lakehouse parquet via DuckDB.
+    It is NOT a change of underlying artifact: on the Snowflake target all three
+    (`mart_game_spine`, `mart_odds_outcomes`, `mart_game_odds_bridge`) are already thin
+    VIEWS over `lakehouse_ext` external tables over THIS SAME parquet — so the repoint
+    removes a warehouse hop, not a source. It ran at 100% wake (~1.1 COMPUTE_WH resumes
+    per day: essentially every execution RESUMED the warehouse), which is what E11.24
+    is retiring.
+
+    ⚠️⚠️ INC-23 / E9.52 LANDMINE — the `::date` casts below are LOAD-BEARING, not tidy-up.
+    `mart_game_spine.game_date` and `mart_game_odds_bridge.game_date` are stored as ISO
+    **VARCHAR** in the parquet (the cure for Snowflake misreading binary parquet timestamps),
+    while `mart_odds_outcomes.commence_date` is a real DATE. An un-cast
+    `game_date <= '2026-08-08'` is therefore a STRING compare against
+    `'2026-08-08 00:00:00'` — lexicographically GREATER, so the window's last day is
+    silently dropped with NO error. Measured on the live parquet 2026-08-08 over
+    `2026-08-06..2026-08-08`: un-cast returned **26** spine rows / 26 bridge rows where the
+    cast form returns **41** / 41. That is a 15-game hole in a FREEZE detector — it would
+    have made the guard read a partially-empty window as normal. Every predicate on those
+    two columns casts explicitly; `test_e11_24_check_guard_s3_repoint.py` pins it with a
+    seeded VARCHAR fixture and goes RED if a cast is removed.
+
 Usage:
     uv run python scripts/check_odds_coverage.py --env prod
     uv run python scripts/check_odds_coverage.py --env prod --strict
@@ -59,7 +81,6 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-from betting_ml.utils.data_loader import get_snowflake_connection
 from betting_ml.utils.game_day import current_game_date
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
@@ -70,10 +91,66 @@ log = logging.getLogger(__name__)
 # a hard floor catches the catastrophic 0-attach (FREEZE) and gross partials.
 _MIN_COVERAGE = 0.50
 
+_TABLES = ("mart_game_spine", "mart_odds_outcomes", "mart_game_odds_bridge")
 
-def _mart_schema(env: str) -> str:
-    """Served mart schema (the odds/spine marts are VIEWS over lakehouse_ext here)."""
-    return "baseball_data.betting" if env == "prod" else "baseball_data.dev_betting"
+# ⚠️ Every `game_date` predicate CASTS — see the INC-23/E9.52 note in the module docstring.
+_COVERAGE_SQL = """
+    with spine as (
+        select game_date::date as d, count(*) as spine_games
+        from mart_game_spine
+        where game_type = 'R'
+          and game_date::date >= $anchor::date and game_date::date <= $end::date
+        group by 1
+    ),
+    outcomes as (
+        select commence_date::date as d, count(distinct event_id) as odds_events
+        from mart_odds_outcomes
+        where commence_date::date >= $anchor::date and commence_date::date <= $end::date
+        group by 1
+    ),
+    bridge as (
+        select game_date::date as d,
+               count(*) as bridge_games,
+               sum(case when has_odds then 1 else 0 end) as bridge_with_odds
+        from mart_game_odds_bridge
+        where game_date::date >= $anchor::date and game_date::date <= $end::date
+        group by 1
+    )
+    select coalesce(s.d, o.d, b.d) as d,
+           coalesce(s.spine_games, 0)      as spine_games,
+           coalesce(o.odds_events, 0)      as odds_events,
+           coalesce(b.bridge_games, 0)     as bridge_games,
+           coalesce(b.bridge_with_odds, 0) as bridge_with_odds
+    from spine s
+    full outer join outcomes o on s.d = o.d
+    full outer join bridge   b on coalesce(s.d, o.d) = b.d
+    order by 1
+"""
+
+
+def fetch_coverage_rows(anchor: date, end: date, conn=None) -> list[dict]:
+    """Per-date (spine_games, odds_events, bridge_games, bridge_with_odds) over [anchor, end].
+
+    ``conn`` is an OPTIONAL pre-registered DuckDB connection — the seam the guard tests use to
+    run this EXACT SQL against seeded VARCHAR-dated fixtures (so the ::date casts are proven,
+    not asserted). Production passes nothing and gets the S3 lakehouse.
+    """
+    owned = conn is None
+    if owned:
+        from betting_ml.utils.delta_lakehouse import register_lakehouse_views
+        from betting_ml.utils.lakehouse_monitor import duck
+
+        conn = duck()
+        register_lakehouse_views(conn, _TABLES)
+    try:
+        cur = conn.execute(
+            _COVERAGE_SQL, {"anchor": anchor.isoformat(), "end": end.isoformat()}
+        )
+        cols = [c[0].lower() for c in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+    finally:
+        if owned:
+            conn.close()
 
 
 def _classify(spine_games: int, odds_events: int, bridge_with_odds: int) -> str:
@@ -104,47 +181,17 @@ def main() -> int:
 
     anchor = date.fromisoformat(args.date) if args.date else current_game_date()
     end = anchor + timedelta(days=max(0, args.horizon))
-    mart = _mart_schema(args.env)
     log.info(f"[{args.env.upper()}] odds-coverage check — anchor {anchor}, "
              f"window {anchor}..{end}, min_coverage {_MIN_COVERAGE:.0%}, strict={args.strict}")
+    # E11.24 target 3: --env no longer selects a SCHEMA. The Snowflake read had a
+    # prod (`betting`) / dev (`dev_betting`) split; the S3 lakehouse is a SINGLE copy, so
+    # both values now read the same PROD parquet. Say so rather than let a `--env dev`
+    # invocation imply it is looking at dev data (the "documented ≠ actual" class).
+    if args.env != "prod":
+        log.warning("--env %s: the S3 lakehouse has no dev copy — reading the PROD parquet "
+                    "(read-only guard, so this is safe; it is NOT dev data).", args.env)
 
-    conn = get_snowflake_connection()
-    try:
-        cur = conn.cursor()
-        cur.execute(f"""
-            with spine as (
-                select game_date::date as d, count(*) as spine_games
-                from {mart}.mart_game_spine
-                where game_type = 'R' and game_date >= '{anchor}' and game_date <= '{end}'
-                group by 1
-            ),
-            outcomes as (
-                select commence_date::date as d, count(distinct event_id) as odds_events
-                from {mart}.mart_odds_outcomes
-                where commence_date >= '{anchor}' and commence_date <= '{end}'
-                group by 1
-            ),
-            bridge as (
-                select game_date::date as d,
-                       count(*) as bridge_games,
-                       sum(case when has_odds then 1 else 0 end) as bridge_with_odds
-                from {mart}.mart_game_odds_bridge
-                where game_date >= '{anchor}' and game_date <= '{end}'
-                group by 1
-            )
-            select coalesce(s.d, o.d, b.d) as d,
-                   coalesce(s.spine_games, 0)      as spine_games,
-                   coalesce(o.odds_events, 0)      as odds_events,
-                   coalesce(b.bridge_games, 0)     as bridge_games,
-                   coalesce(b.bridge_with_odds, 0) as bridge_with_odds
-            from spine s
-            full outer join outcomes o on s.d = o.d
-            full outer join bridge   b on coalesce(s.d, o.d) = b.d
-            order by 1
-        """)
-        rows = [dict(zip([c[0].lower() for c in cur.description], r)) for r in cur.fetchall()]
-    finally:
-        conn.close()
+    rows = fetch_coverage_rows(anchor, end)
 
     by_date = {str(r["d"]): r for r in rows}
     anchor_iso = anchor.isoformat()

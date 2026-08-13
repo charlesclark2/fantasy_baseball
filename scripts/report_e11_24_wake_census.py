@@ -54,6 +54,7 @@ Use 7/28 and 7/30 as pre-flip references. `account_usage` lags ~45 min (query_hi
 from __future__ import annotations
 
 import argparse
+import math
 
 # UTC hour bands. 1b (statcast catch-up re-fire) and 6a (lineup-monitor tick) are separable
 # because they live in disjoint bands; see the attribution correction in the E11.24 doc.
@@ -135,6 +136,148 @@ FAMILY_CASE = """
 """
 
 
+# ── GATE-0 v2: build-day-aware structural normality (re-derived 2026-08-12) ──────────────
+# WHY v2. Gate-0 v1 was a fixed band on TOTAL executions ("a normal day sits in 1,536–3,480").
+# On the 08-12 soak read it FAILED (1,434) on a day whose every per-family count was normal, and
+# it is confounded TWICE:
+#   1. BUILD-DAY BIMODALITY. `other` runs ~1,043–1,182 on non-build days and ~2,615–2,889 on
+#      build days, so one band is really two populations and the low one straddles the floor.
+#   2. ⭐ THE LEVERS THEMSELVES LOWER IT. Every E11.24 lever DELETES statements, so total
+#      executions fall as the story succeeds — a floor derived pre-flip gets harder to clear the
+#      better the work goes. A gate that fires because the fix worked is not a gate.
+#
+# v2 therefore splits the two jobs a gate-0 was doing:
+#   · CLASSIFY the day (build vs non-build) from a DERIVED indicator, not the calendar;
+#   · PASS/FAIL on a HEARTBEAT — families that fire once per daily run and that no pending lever
+#     targets — which is immune to both confounds. Volume is reported as CONTEXT, never as the
+#     verdict.
+#
+# THE INDICATOR IS DERIVED, AND SELF-VALIDATING. `2 weather slate` is absent entirely on
+# non-build days; `4b signals consumer` independently reads ~33 on build days vs 2 otherwise.
+# Over 2026-08-03..12 the two agreed on exactly the same four days (08-05, 08-08, 08-09, 08-11).
+# That agreement IS the evidence the partition is real — so when they DISAGREE the day is
+# UNKNOWN and the verdict is UNVERIFIED, never a pass (NF1.7(a): a check that could not be
+# evaluated is not a check that passed).
+BUILD_INDICATOR = "2 weather slate"          # absent on non-build days
+BUILD_CROSSCHECK = "4b signals consumer"     # ~33 on build days, 2 otherwise
+BUILD_CROSSCHECK_MIN = 10
+
+# Fire once per daily run; NOT targeted by any pending lever, so a change here is a real
+# pipeline anomaly rather than a lever landing. ⛔ Do NOT add a family a lever touches — the
+# whole point is that a working lever must not trip the normality gate.
+HEARTBEAT_FAMILIES = ("4 matchup posteriors", "4 player posteriors")
+
+# "at least half the expected daily invocations". A DESIGN quantity (an outage suppresses runs
+# wholesale; it does not shave one off), NOT a level tuned until the days we like pass.
+HEARTBEAT_FLOOR_FRAC = 0.5
+
+# Days excluded from the reference: their own incidents perturbed the pipeline.
+CONTAMINATED_DAYS = ("2026-07-29", "2026-07-31", "2026-08-11")  # 08-11 = the INC-42 freeze
+
+
+def classify_gate0(rows, *, contaminated=CONTAMINATED_DAYS):
+    """PURE. [(day, family, execs)] → per-day {class, executions, heartbeat, verdict}.
+
+    verdict is one of PASS / FAIL / UNVERIFIED. UNVERIFIED whenever the day cannot be
+    classified or a heartbeat family is ABSENT — an absent heartbeat is the signature of the
+    outage this gate exists to catch, so it must never read as healthy.
+    """
+    days = sorted({r[0] for r in rows})
+    by_day = {d: {r[1]: r[2] for r in rows if r[0] == d} for d in days}
+    total = {d: sum(by_day[d].values()) for d in days}
+
+    def day_class(d):
+        fams = by_day[d]
+        ind = fams.get(BUILD_INDICATOR, 0) > 0
+        cross = fams.get(BUILD_CROSSCHECK, 0) >= BUILD_CROSSCHECK_MIN
+        if ind != cross:
+            return "UNKNOWN"
+        return "BUILD" if ind else "NON-BUILD"
+
+    classes = {d: day_class(d) for d in days}
+
+    # ⭐ LEAVE-ONE-OUT. The reference for judging day D is built from every OTHER uncontaminated
+    # day of D's class — never from D itself. The first cut included D, which made the check
+    # partly self-satisfying: a day whose heartbeat had collapsed to 3 simply became the new
+    # minimum and passed. (Caught by its own unit test, not by inspection. Same family as "a
+    # guard both sides filter into satisfaction".)
+    ref_days = [d for d in days if str(d) not in contaminated and classes[d] != "UNKNOWN"]
+
+    def reference(cls, exclude):
+        cds = [d for d in ref_days if classes[d] == cls and d != exclude]
+        if not cds:
+            return None, {}
+        vol = (min(total[d] for d in cds), max(total[d] for d in cds))
+        rng = {}
+        for fam in HEARTBEAT_FAMILIES:
+            vals = sorted(by_day[d][fam] for d in cds if fam in by_day[d])
+            if vals:
+                rng[fam] = vals[len(vals) // 2]      # peer MEDIAN
+        return vol, rng
+
+    out = []
+    for d in days:
+        cls, hb, notes = classes[d], {}, []
+        verdict = "PASS"
+        if cls == "UNKNOWN":
+            verdict = "UNVERIFIED"
+            notes.append(f"{BUILD_INDICATOR} and {BUILD_CROSSCHECK} disagree — cannot classify")
+        vol, ranges = reference(cls, d)
+        for fam in HEARTBEAT_FAMILIES:
+            got = by_day[d].get(fam)
+            hb[fam] = got
+            if got is None:
+                verdict = "UNVERIFIED"          # absent ≠ healthy
+                notes.append(f"{fam} ABSENT")
+                continue
+            med = ranges.get(fam)
+            if med is None:
+                verdict = "UNVERIFIED"          # no peers to compare against ≠ healthy
+                notes.append(f"{fam}: no uncontaminated {cls} peer day to compare against")
+                continue
+            # ⭐ ONE-SIDED FLOOR, not a two-sided range. The gate's job is "did the daily
+            # pipeline RUN", and an outage suppresses invocations — it does not add them, so a
+            # count ABOVE the peers is a catch-up, never an outage. A two-sided min/max over
+            # 2-5 peers also has no tolerance at all: the first cut FAILED 08-04 on a single
+            # extra invocation (player 10 vs a (11,11) range), which is the alert-fatigue mode
+            # that gets a monitor ignored. HEARTBEAT_FLOOR_FRAC is a DESIGN quantity — "at
+            # least half the expected daily invocations" — not a threshold tuned until the
+            # days we like pass.
+            floor = math.ceil(HEARTBEAT_FLOOR_FRAC * med)
+            if got < floor:
+                if verdict != "UNVERIFIED":
+                    verdict = "FAIL"
+                notes.append(f"{fam}={got} below floor {floor} (peer median {med})")
+        out.append({
+            "day": d, "class": cls, "executions": total[d], "heartbeat": hb,
+            "volume_band": vol, "verdict": verdict,
+            "contaminated": str(d) in contaminated, "notes": notes,
+        })
+    return out
+
+
+def render_gate0(rows):
+    print(f"\n{'=' * 100}\n0. GATE-0 v2 — structural normality (build-day aware)\n{'=' * 100}")
+    print("  ⭐ The VERDICT is the HEARTBEAT, not the volume. Executions fall as levers land, so a\n"
+          "     fixed volume floor fires because the work SUCCEEDED — it is reported as context only.\n"
+          "  ⛔ UNVERIFIED is not a pass: an absent heartbeat family is the outage signature itself.\n")
+    hdr = f"{'UTC_DAY':12}{'CLASS':11}{'EXECS':>7}  {'VOL BAND (context)':>20}  "
+    hdr += "".join(f"{f.split()[-1][:9]:>10}" for f in HEARTBEAT_FAMILIES) + "  VERDICT"
+    print(hdr)
+    for r in rows:
+        band = f"{r['volume_band'][0]}-{r['volume_band'][1]}" if r["volume_band"] else "n/a"
+        line = f"{str(r['day']):12}{r['class']:11}{r['executions']:>7}  {band:>20}  "
+        line += "".join(f"{('-' if r['heartbeat'][f] is None else r['heartbeat'][f]):>10}"
+                        for f in HEARTBEAT_FAMILIES)
+        line += f"  {r['verdict']}"
+        if r["contaminated"]:
+            line += "  (contaminated — excluded from the reference)"
+        if r["notes"]:
+            line += "  ⚠️ " + "; ".join(r["notes"])
+        print(line)
+    return rows
+
+
 def pivot_family_by_day(rows):
     """PURE. [(family, utc_day, execs, waits)] → (families, days, {(fam, day): 'execs/waits'}).
 
@@ -209,6 +352,21 @@ def main() -> int:
     # per-day cut below scans query_history UNFILTERED by wait (it needs the executions
     # denominator), which is the heaviest read here. Fail loudly rather than hang.
     cur.execute("alter session set STATEMENT_TIMEOUT_IN_SECONDS=600")
+
+    # GATE-0 v2 runs FIRST: every table below is uninterpretable on a structurally abnormal day
+    # (the 1b lesson — an outage collapses every volume metric and fakes a lever's success).
+    cur.execute(f"""
+        select to_char(convert_timezone('UTC', start_time)::timestamp_ntz, 'YYYY-MM-DD') as utc_day,
+               {FAMILY_CASE} as family,
+               count(*) as execs
+        from (
+          select start_time, left(regexp_replace(query_text, '\\\\s+', ' '), 400) as q
+          from snowflake.account_usage.query_history
+          where warehouse_name = '{wh}'
+            and start_time >= dateadd(day, -{d}, current_timestamp())
+        )
+        group by 1, 2""")
+    render_gate0(classify_gate0(cur.fetchall()))
 
     run(cur, f"1. RESUMES/day — {wh} (the BURSTY-lever signal; 6a should land here)", f"""
         select to_char(timestamp::timestamp_ntz, 'YYYY-MM-DD') as utc_day,
