@@ -203,6 +203,9 @@ class Recommendation:
     #: is spoken for, so passing on all of these strands a mandatory slot empty. False when there is
     #: slack. ⚠️ LOCK-STEP: mirrored as `mustFill` in `frontend/lib/draft-optimizer.ts`.
     must_fill: bool
+    #: A LOW-PREDICTABILITY position (K/DST — the exporter's own `low_pred`), held back until the
+    #: roster actually requires it. See the note on the sort. ⚠️ LOCK-STEP: `deferred` in the TS.
+    deferred: bool
     rationale: str
 
 
@@ -365,6 +368,10 @@ def recommend(
         score = vor + need_bonus - surplus_pen - bye_pen
         # True only while the reserve constraint binds AND this player fills an open starter slot.
         must_fill = must_fill_now and level > 0
+        # ⭐ K/DST are held back until the roster requires them. Read from the exporter's own
+        # `low_pred` rather than a position list — the flag exists so a consumer never has to know
+        # which positions are soft, and a hardcoded ("K","DST") would silently miss a future one.
+        deferred = bool(row.get("low_pred"))
 
         tier = pos_tier[pos].get(pid, 1)
         rows_pos = pos_players[pos]
@@ -393,13 +400,36 @@ def recommend(
             vor_p10=(round(_fnum(row.get("vor_p10")), 1) if row.get("vor_p10") is not None else None),
             vor_p90=(round(_fnum(row.get("vor_p90")), 1) if row.get("vor_p90") is not None else None),
             must_fill=must_fill,
+            deferred=deferred,
             rationale=_rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen,
                                  bye, bye_conflict, must_fill, picks_remaining, open_starter_count),
         ))
 
-    # A required filler outranks every non-filler; within each group, score decides. `must_fill` is
-    # False for ALL candidates unless the reserve constraint binds ⇒ with slack this is the old sort.
-    recs.sort(key=lambda r: (r.must_fill, r.score), reverse=True)
+    # ── the ordering, in three keys ───────────────────────────────────────────────────────────────
+    #
+    # 1. `must_fill` — a required filler outranks everything (the reserve constraint).
+    # 2. `deferred`  — a LOW-PREDICTABILITY position (K/DST) sits below every real candidate.
+    # 3. `score`.
+    #
+    # ⭐ WHY (2) EXISTS. Recommending a D/ST in an early round destroys trust in every other
+    # recommendation on the page, and it was happening: on the live 2026 full_ppr/12 board ROUND 6's
+    # six-slot panel came back FIVE-SIXTHS K/DST with DEN D/ST ranked #1.
+    #
+    # Not a scoring bug — VOR read as comparable across positions where it is not. The whole
+    # above-replacement VOR range is 8.1 at K and 10.4 at D/ST against a MEDIAN 80% interval of 118.7
+    # and 87.3 on a single player (signal-to-noise 0.07 / 0.12, vs 0.55-0.61 at RB/WR/TE), so DST1
+    # over DST12 is not a distinction this projection can support — which is what the exporter says
+    # by stamping `low_pred`.
+    #
+    # ⛔ NOT a score penalty: a fudge big enough to sink K/DST would be reverse-engineered from the
+    # answer and would corrupt `score`, which the UI shows. Deferral changes only the ORDER.
+    #
+    # ⚠️ The two rules COMPOSE, and that is what makes absolute deferral safe: whenever K/DST are the
+    # only thing a roster can still accept, the bench is full ⇒ picks_remaining == open_starter_count
+    # ⇒ the reserve constraint is NECESSARILY binding ⇒ `must_fill` lifts them back to the top.
+    # Structural, not luck. Never early, always by the end.
+    # ⚠️ LOCK-STEP: mirrored in `frontend/lib/draft-optimizer.ts` (the shipping engine).
+    recs.sort(key=lambda r: (r.must_fill, not r.deferred, r.score), reverse=True)
     return recs[:top_n]
 
 
