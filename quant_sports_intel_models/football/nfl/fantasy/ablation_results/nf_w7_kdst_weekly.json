@@ -5068,9 +5068,9 @@
       },
       "hand_corrected": true,
       "pbo_state": "EVALUABLE \u2014 PBO is computed over the 4-config eligible field (assembled + 3 foils); the DSR trial field is the single pre-registered arm (sr0=0, a plain PSR), declared in the pre-registration \u00a77.",
-      "state": "POWER_LIMITED",
-      "reason": "the point estimate is positive (+0.0338 CRPS) but the interval spans zero (CI95 [0.0094, 0.0582]), fold wins are 7/8 against a required 6, and p=0.0067. Every statistical gate except PBO is REACHABLE at this design \u2014 the effect is simply smaller than this design can resolve.",
-      "retest_trigger": "~4 half-season folds (\u22482 seasons) for the DSR gate at the observed per-fold Sharpe 1.16 \u2014 i.e. CALENDAR-bound and far beyond any plausible window; \u26d4 this is NOT a near-term re-test.",
+      "state": "CONSTRAINT_REFUSED",
+      "reason": "every statistical gate is GREEN \u2014 the assembled arm beats the best foil by +0.0338 CRPS (CI95 [0.0094, 0.0582] excludes zero), fold wins 7 against a required 6, p=0.0067, PBO/DSR/FDR all pass \u2014 and the ship is refused by the pre-registered coverage(80) FLOOR alone: 0.7603 against 0.80 at n=2174 (\u22484.6 binomial SE below nominal \u2014 decisive under-coverage, not sampling noise). The mechanism is the DECLARED independence-simplification check firing: component banks drawn independently under-disperse the assembled sum wherever the components co-move.",
+      "retest_trigger": "NONE \u2014 a constraint refusal is not rescuable by data (NF-D18): more folds make the refusal MORE certain. The remedy is a DIFFERENT MECHANISM (a successor modeling cross-component dependence \u2014 e.g. a joint/copula draw over the component legs) or a PM decision; \u26d4 never a post-hoc floor change (a floor re-set after seeing the result is the E2.1-r inversion \u2014 NF1.8).",
       "gate_sensitivity": {
         "waived": [],
         "still_refusing": [
@@ -5097,8 +5097,29 @@
     },
     "layer_b": {
       "k_points": "SHIP",
+      "dst_points": "CONSTRAINT_REFUSED"
+    }
+  },
+  "headline": "A[fg_att:DSR_UNREACHABLE xp_att:POWER_LIMITED def_sacks:POWER_LIMITED def_int:DSR_UNREACHABLE def_fumble_rec:GENUINE_ABSENCE fg_make:DSR_UNREACHABLE fg_band:DSR_UNREACHABLE dst_td:GENUINE_ABSENCE def_safety:GENUINE_ABSENCE def_blocked_kick:GENUINE_ABSENCE pa_bucket:SHIP ya_bucket:SHIP] B[k_points:SHIP dst_points:CONSTRAINT_REFUSED]",
+  "verdict_corrected_from": {
+    "layer_a": {
+      "fg_att": "DSR_UNREACHABLE",
+      "xp_att": "POWER_LIMITED",
+      "def_sacks": "POWER_LIMITED",
+      "def_int": "DSR_UNREACHABLE",
+      "def_fumble_rec": "GENUINE_ABSENCE",
+      "fg_make": "DSR_UNREACHABLE",
+      "fg_band": "DSR_UNREACHABLE",
+      "dst_td": "GENUINE_ABSENCE",
+      "def_safety": "GENUINE_ABSENCE",
+      "def_blocked_kick": "GENUINE_ABSENCE",
+      "pa_bucket": "SHIP",
+      "ya_bucket": "SHIP"
+    },
+    "layer_b": {
+      "k_points": "SHIP",
       "dst_points": "POWER_LIMITED"
     }
   },
-  "headline": "A[fg_att:DSR_UNREACHABLE xp_att:POWER_LIMITED def_sacks:POWER_LIMITED def_int:DSR_UNREACHABLE def_fumble_rec:GENUINE_ABSENCE fg_make:DSR_UNREACHABLE fg_band:DSR_UNREACHABLE dst_td:GENUINE_ABSENCE def_safety:GENUINE_ABSENCE def_blocked_kick:GENUINE_ABSENCE pa_bucket:SHIP ya_bucket:SHIP] B[k_points:SHIP dst_points:POWER_LIMITED]"
+  "rewritten_at": "2026-08-13T21:07:56+00:00"
 }

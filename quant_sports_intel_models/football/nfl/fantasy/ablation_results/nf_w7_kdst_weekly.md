@@ -10,7 +10,7 @@
 
 ## ⭐ Headline
 
-- **Layer B (the gate — does the component chain beat the climatology null, the board-EB read and the direct-points foil?)** — k_points: **SHIP** · dst_points: **POWER_LIMITED**
+- **Layer B (the gate — does the component chain beat the climatology null, the board-EB read and the direct-points foil?)** — k_points: **SHIP** · dst_points: **CONSTRAINT_REFUSED**
 - **Layer A (components)** — fg_att: **DSR_UNREACHABLE** · xp_att: **POWER_LIMITED** · def_sacks: **POWER_LIMITED** · def_int: **DSR_UNREACHABLE** · def_fumble_rec: **GENUINE_ABSENCE** · fg_make: **DSR_UNREACHABLE** · fg_band: **DSR_UNREACHABLE** · dst_td: **GENUINE_ABSENCE** · def_safety: **GENUINE_ABSENCE** · def_blocked_kick: **GENUINE_ABSENCE** · pa_bucket: **SHIP** · ya_bucket: **SHIP**
 
 ## ⭐ Layer B — the assembled fantasy-point distributions
@@ -42,7 +42,7 @@
 - capture-era (2025) fold deltas, report-only (NF-W2d): {'2025H1': 0.0197, '2025H2': 0.0773}
 - gate: {'beats_foil': True, 'fold_consistency': True, 'pbo_ok': True, 'dsr_ok': True, 'fdr_ok': True, 'degenerates_lose': True, 'permutation_behaves': True, 'oracle_floors_respected': True, 'coverage_floor_ok': True}
 
-### `dst_points` — **POWER_LIMITED**
+### `dst_points` — **CONSTRAINT_REFUSED**
 
 `assembled` BEATS `foil_direct` by +0.0338 CRPS (CI95 [+0.0094, +0.0582] excludes zero)
 
@@ -68,7 +68,7 @@
 - randomized-PIT flatness by fold (report-only): [{'max_decile_dev': 0.032352941176470584, 'n': 272}, {'max_decile_dev': 0.033333333333333326, 'n': 270}, {'max_decile_dev': 0.07647058823529412, 'n': 272}, {'max_decile_dev': 0.09117647058823528, 'n': 272}, {'max_decile_dev': 0.06666666666666665, 'n': 276}, {'max_decile_dev': 0.09029850746268656, 'n': 268}, {'max_decile_dev': 0.07037037037037036, 'n': 270}, {'max_decile_dev': 0.04233576642335765, 'n': 274}]
 - capture-era (2025) fold deltas, report-only (NF-W2d): {'2025H1': 0.0608, '2025H2': 0.0565}
 - gate: {'beats_foil': True, 'fold_consistency': True, 'pbo_ok': True, 'dsr_ok': True, 'fdr_ok': True, 'degenerates_lose': True, 'permutation_behaves': True, 'oracle_floors_respected': True, 'coverage_floor_ok': False}
-- null state: **POWER_LIMITED** — the point estimate is positive (+0.0338 CRPS) but the interval spans zero (CI95 [0.0094, 0.0582]), fold wins are 7/8 against a required 6, and p=0.0067. Every statistical gate except PBO is REACHABLE at this design — the effect is simply smaller than this design can resolve. Re-test: ~4 half-season folds (≈2 seasons) for the DSR gate at the observed per-fold Sharpe 1.16 — i.e. CALENDAR-bound and far beyond any plausible window; ⛔ this is NOT a near-term re-test.
+- null state: **CONSTRAINT_REFUSED** — every statistical gate is GREEN — the assembled arm beats the best foil by +0.0338 CRPS (CI95 [0.0094, 0.0582] excludes zero), fold wins 7 against a required 6, p=0.0067, PBO/DSR/FDR all pass — and the ship is refused by the pre-registered coverage(80) FLOOR alone: 0.7603 against 0.80 at n=2174 (≈4.6 binomial SE below nominal — decisive under-coverage, not sampling noise). The mechanism is the DECLARED independence-simplification check firing: component banks drawn independently under-disperse the assembled sum wherever the components co-move. Re-test: NONE — a constraint refusal is not rescuable by data (NF-D18): more folds make the refusal MORE certain. The remedy is a DIFFERENT MECHANISM (a successor modeling cross-component dependence — e.g. a joint/copula draw over the component legs) or a PM decision; ⛔ never a post-hoc floor change (a floor re-set after seeing the result is the E2.1-r inversion — NF1.8).
 - 🩹 hand-corrected from the instrument verdict {'state': 'UNDEFINED', 'reason': '`nf_w7_downstream_dst_points`: 8 fold(s) < 4 — CSCV/PBO is UNDEFINED, so the §0.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.', 'retest_trigger': '-4 more fold(s) — i.e. a window of 7 seasons'} (the known classify_null n_arms=1 mis-render).
 
 ## Layer A — the component legs
@@ -518,9 +518,9 @@
     },
     "hand_corrected": true,
     "pbo_state": "EVALUABLE \u2014 PBO is computed over the 4-config eligible field (assembled + 3 foils); the DSR trial field is the single pre-registered arm (sr0=0, a plain PSR), declared in the pre-registration \u00a77.",
-    "state": "POWER_LIMITED",
-    "reason": "the point estimate is positive (+0.0338 CRPS) but the interval spans zero (CI95 [0.0094, 0.0582]), fold wins are 7/8 against a required 6, and p=0.0067. Every statistical gate except PBO is REACHABLE at this design \u2014 the effect is simply smaller than this design can resolve.",
-    "retest_trigger": "~4 half-season folds (\u22482 seasons) for the DSR gate at the observed per-fold Sharpe 1.16 \u2014 i.e. CALENDAR-bound and far beyond any plausible window; \u26d4 this is NOT a near-term re-test.",
+    "state": "CONSTRAINT_REFUSED",
+    "reason": "every statistical gate is GREEN \u2014 the assembled arm beats the best foil by +0.0338 CRPS (CI95 [0.0094, 0.0582] excludes zero), fold wins 7 against a required 6, p=0.0067, PBO/DSR/FDR all pass \u2014 and the ship is refused by the pre-registered coverage(80) FLOOR alone: 0.7603 against 0.80 at n=2174 (\u22484.6 binomial SE below nominal \u2014 decisive under-coverage, not sampling noise). The mechanism is the DECLARED independence-simplification check firing: component banks drawn independently under-disperse the assembled sum wherever the components co-move.",
+    "retest_trigger": "NONE \u2014 a constraint refusal is not rescuable by data (NF-D18): more folds make the refusal MORE certain. The remedy is a DIFFERENT MECHANISM (a successor modeling cross-component dependence \u2014 e.g. a joint/copula draw over the component legs) or a PM decision; \u26d4 never a post-hoc floor change (a floor re-set after seeing the result is the E2.1-r inversion \u2014 NF1.8).",
     "gate_sensitivity": {
       "waived": [],
       "still_refusing": [

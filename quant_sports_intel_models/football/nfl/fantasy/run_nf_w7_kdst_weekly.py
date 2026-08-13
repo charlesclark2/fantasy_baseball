@@ -828,6 +828,10 @@ def _classify_layer_b(target: str, sel: dict, n_folds: int, checks: dict) -> dic
         sel, n_folds=n_folds,
         instrument_verdict={"state": v.state, "reason": v.reason,
                             "retest_trigger": v.retest_trigger})
+    # NF-D18: a null whose ONLY refusing clause is the pre-registered coverage floor is a
+    # CONSTRAINT refusal — no fold count moves a decisive under-coverage (the independence-
+    # simplification check firing). Leaves any other shape untouched.
+    out = KW.coverage_constraint_refusal(sel, checks, out)
     # ⚠️ unlike NF-W3's Layer B, THIS eligible field has 4 configs (arm + 3 foils), so PBO IS
     # computed and gated; only the DSR trial field is the single pre-registered arm (sr0=0).
     out["pbo_state"] = (

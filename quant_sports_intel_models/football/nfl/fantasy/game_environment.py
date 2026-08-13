@@ -932,14 +932,22 @@ def classify_layer_b(sel: dict, *, n_folds: int, instrument_verdict: dict | None
     if sr and sr > 0:
         # sr0 = 0 for a single trial (nothing to deflate), so DSR ≥ 0.95 needs sr·√(n−1) > z(0.95)
         folds_needed = int(np.ceil((1.6448536269514722 / sr) ** 2)) + 1
+    # ⭐ NF-W2e's word-vs-parenthetical rule applies to the classifier's reason too: the CI
+    # relationship is DERIVED, never asserted ("spans zero" hardcoded here once described an
+    # interval that excluded zero — caught at the NF-W7 record).
+    lo, hi = (sel["ci95"] or (None, None))[:2]
+    ci_word = ("spans zero" if lo is not None and hi is not None and lo <= 0.0 <= hi
+               else "excludes zero" if lo is not None and hi is not None
+               else "is unevaluable")
     out.update({
         "state": "POWER_LIMITED",
-        "reason": (f"the point estimate is positive ({sel['mean_delta']:+.4f} CRPS) but the "
-                   f"interval spans zero (CI95 {sel['ci95']}), fold wins are "
+        "reason": (f"the point estimate is positive ({sel['mean_delta']:+.4f} CRPS) and the "
+                   f"interval {ci_word} (CI95 {sel['ci95']}), fold wins are "
                    f"{sel['fold_wins']}/{n_folds} against a required "
                    f"{sel['fold_clause']['required']}, and p={sel['p_one_sided']}. Every "
-                   f"statistical gate except PBO is REACHABLE at this design — the effect is "
-                   f"simply smaller than this design can resolve."),
+                   f"EVALUABLE statistical gate is REACHABLE at this design (see `pbo_state` for "
+                   f"whether PBO is one of them) — the effect is simply smaller than this design "
+                   f"can resolve."),
         "retest_trigger": (
             f"~{folds_needed} half-season folds (≈{folds_needed // 2} seasons) for the DSR gate at "
             f"the observed per-fold Sharpe {sr} — i.e. CALENDAR-bound and far beyond any plausible "
