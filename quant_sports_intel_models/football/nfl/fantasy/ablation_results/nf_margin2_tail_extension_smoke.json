@@ -1,0 +1,2038 @@
+{
+  "generated_at": "2026-08-13T02:52:25+00:00",
+  "story": "NF-MARGIN2",
+  "smoke": true,
+  "runtime_seconds": 268.0,
+  "selection_metric": "crps_q199",
+  "n_folds": 2,
+  "fold_labels": [
+    "2025H1",
+    "2025H2"
+  ],
+  "n_rows": 8688,
+  "pit_audit": {
+    "game_groups_checked": 532,
+    "records_checked": 183314,
+    "injury_records_checked": 15401,
+    "rate_records_checked": 83360,
+    "wayback_records_checked": 9501,
+    "groups_dropped": [],
+    "rows_dropped": 0
+  },
+  "preregistration": {
+    "real_arms": [
+      "tail_ext"
+    ],
+    "foils": [
+      "incumbent"
+    ],
+    "anchors": [
+      "zero_width",
+      "max_width",
+      "over_ext",
+      "permuted_tail",
+      "pooled_tail",
+      "oracle__tail_ext",
+      "matched_n__tail_ext"
+    ],
+    "eligible": [
+      "tail_ext",
+      "incumbent"
+    ],
+    "primary_metric": "crps_q199",
+    "pit_instrument": "randomized_pit_levels on the 199-level bank (the 39-level PIT is structurally blind to a beyond-grid-only arm)",
+    "eval_levels": {
+      "n": 199,
+      "lo": 0.005,
+      "hi": 0.995
+    },
+    "over_scale": 3.0,
+    "min_tail_n": 10,
+    "nominal_tail": 0.025,
+    "cal_split": {
+      "target_fraction": 0.2,
+      "min_rows": 6000,
+      "purge_weeks": 2
+    },
+    "test_blocks": [
+      [
+        2022,
+        1
+      ],
+      [
+        2022,
+        2
+      ],
+      [
+        2023,
+        1
+      ],
+      [
+        2023,
+        2
+      ],
+      [
+        2024,
+        1
+      ],
+      [
+        2024,
+        2
+      ],
+      [
+        2025,
+        1
+      ],
+      [
+        2025,
+        2
+      ]
+    ],
+    "pbo": "UNDEFINED by design (1-arm family \u2014 GE.pbo_is_evaluable)",
+    "dsr_min": 0.95,
+    "fdr_q": 0.1,
+    "fdr_family": [
+      "margin2_tail_QB",
+      "margin2_tail_RB",
+      "margin2_tail_WR",
+      "margin2_tail_TE"
+    ],
+    "coverage_floor": 0.8,
+    "declared_inactive_clauses": [
+      "winkler_80",
+      "coverage_50",
+      "coverage_80",
+      "coverage_95"
+    ],
+    "team_total_samples": 512,
+    "capture_era_folds": [
+      "2025H1",
+      "2025H2"
+    ],
+    "seed": 20260813
+  },
+  "selections": {
+    "QB": {
+      "position": "QB",
+      "winner": "tail_ext",
+      "best_foil": "incumbent",
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "tail_ext": 2.53337,
+        "incumbent": 2.53763,
+        "zero_width": 3.44817,
+        "max_width": 3.36064,
+        "over_ext": 2.53299,
+        "permuted_tail": 2.53277,
+        "pooled_tail": 2.53335,
+        "oracle__tail_ext": 2.53325,
+        "matched_n__tail_ext": 2.53338
+      },
+      "deltas_by_fold": [
+        0.0045,
+        0.00402
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.00426,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; NF-MARGIN2 fields ONE pre-registered contrast, so there was no search to overfit. Declared before the run; deliberately NOT a gate.",
+      "dsr": null,
+      "p_one_sided": null,
+      "observed_sr": 12.633,
+      "var_trials_sr": null,
+      "anchors": {
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "max_width_satisfies_floor": true,
+        "over_ext_loses": false,
+        "winner_beats_permuted": false,
+        "permuted_not_significantly_better": false,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floor_respected_at_matched_n": true
+      },
+      "oracle_detail": {
+        "arm": 2.53337,
+        "own_form_oracle": 2.53325,
+        "matched_n": 2.53338,
+        "oracle_beats_matched_n": true
+      },
+      "permutation_detail": {
+        "permuted_better_mean": 0.00059,
+        "permuted_better_p_one_sided": null
+      },
+      "attribution": {
+        "marginal_share": {
+          "mean_delta": 0.00485,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "p_one_sided": null
+        },
+        "alignment_share": {
+          "mean_delta": -0.00059,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "p_one_sided": null
+        },
+        "conditioning_margin": {
+          "mean_delta": -1e-05,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "p_one_sided": null
+        },
+        "note": "marginal_share = incumbent \u2212 permuted_tail (the shuffle-surviving channel; EXPECTED positive \u2014 NF-D16 (2)); alignment_share = permuted_tail \u2212 tail_ext; conditioning_margin = pooled_tail \u2212 tail_ext (per-position conditioning's earn in the tail; informs the serving object)."
+      },
+      "calibration": {
+        "tail_mass_delta_vs_incumbent": 0.08163,
+        "dev_incumbent": 0.0935,
+        "dev_winner": 0.01187,
+        "incumbent_pit": {
+          "n": 1372,
+          "decile_freq": [
+            0.13484,
+            0.09111,
+            0.09257,
+            0.09548,
+            0.08892,
+            0.09694,
+            0.10204,
+            0.09038,
+            0.08528,
+            0.12245
+          ],
+          "max_decile_dev": 0.03484,
+          "p_below_grid": 0.06706,
+          "p_above_grid": 0.05321,
+          "mean_z": -0.0379,
+          "var_z": 1.6029,
+          "p_below_eval": 0.05102,
+          "p_above_eval": 0.05248
+        },
+        "winner_pit": {
+          "n": 1372,
+          "decile_freq": [
+            0.12464,
+            0.09985,
+            0.1035,
+            0.10058,
+            0.09402,
+            0.08965,
+            0.09548,
+            0.09184,
+            0.0809,
+            0.11953
+          ],
+          "max_decile_dev": 0.02464,
+          "p_below_grid": 0.05248,
+          "p_above_grid": 0.05175,
+          "mean_z": -0.0377,
+          "var_z": 1.2309,
+          "p_below_eval": 0.00875,
+          "p_above_eval": 0.01312
+        }
+      },
+      "construction_facts": {
+        "winkler_80_delta": 0.0,
+        "coverage_80_delta": 0.0,
+        "coverage_95_delta": 0.0,
+        "note": "IDENTICALLY ZERO BY CONSTRUCTION (within-grid identity asserted every fold) \u2014 these clauses are structurally INACTIVE for a tail-only arm and are recorded as facts, never counted as passing gates (NF-D20 (g\u2057))."
+      },
+      "coverage": {
+        "coverage_80": 0.8112,
+        "n_rows": 1372,
+        "binomial_se": 0.0108,
+        "blocking_shortfall": false,
+        "structurally_inactive": true,
+        "inactive_note": "identical to the incumbent's by construction \u2014 passing the floor is NOT evidence (NF-D20 (g\u2057))."
+      },
+      "coverage_map": {
+        "coverage_80": {
+          "tail_ext": 0.8111,
+          "incumbent": 0.8111,
+          "over_ext": 0.8111,
+          "max_width": 0.938
+        },
+        "coverage_95": {
+          "tail_ext": 0.9009,
+          "incumbent": 0.9009,
+          "over_ext": 0.9009,
+          "max_width": 0.9773
+        },
+        "coverage_99": {
+          "tail_ext": 0.9783,
+          "incumbent": 0.9009,
+          "over_ext": 1.0,
+          "max_width": 0.9773
+        }
+      },
+      "tail_fingerprint": {
+        "incumbent_cov95_equals_cov99": true,
+        "winner_cov99_exceeds_cov95": true,
+        "note": "the flat-tail fingerprint (cov95 \u2261 cov99) must hold for the incumbent and BREAK for the winner \u2014 a construction sanity read, report-only."
+      },
+      "thin_tail_cells": {
+        "n_fold_positions_thin_hi": 0,
+        "n_fold_positions_thin_lo": 0
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0043,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      }
+    },
+    "RB": {
+      "position": "RB",
+      "winner": "tail_ext",
+      "best_foil": "incumbent",
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "tail_ext": 2.3622,
+        "incumbent": 2.36566,
+        "zero_width": 3.23177,
+        "max_width": 3.284,
+        "over_ext": 2.36228,
+        "permuted_tail": 2.36197,
+        "pooled_tail": 2.36227,
+        "oracle__tail_ext": 2.36215,
+        "matched_n__tail_ext": 2.36235
+      },
+      "deltas_by_fold": [
+        0.00387,
+        0.00306
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.00347,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; NF-MARGIN2 fields ONE pre-registered contrast, so there was no search to overfit. Declared before the run; deliberately NOT a gate.",
+      "dsr": null,
+      "p_one_sided": null,
+      "observed_sr": 6.086,
+      "var_trials_sr": null,
+      "anchors": {
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "max_width_satisfies_floor": true,
+        "over_ext_loses": true,
+        "winner_beats_permuted": false,
+        "permuted_not_significantly_better": false,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floor_respected_at_matched_n": true
+      },
+      "oracle_detail": {
+        "arm": 2.3622,
+        "own_form_oracle": 2.36215,
+        "matched_n": 2.36235,
+        "oracle_beats_matched_n": true
+      },
+      "permutation_detail": {
+        "permuted_better_mean": 0.00022,
+        "permuted_better_p_one_sided": null
+      },
+      "attribution": {
+        "marginal_share": {
+          "mean_delta": 0.00369,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "p_one_sided": null
+        },
+        "alignment_share": {
+          "mean_delta": -0.00022,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "p_one_sided": null
+        },
+        "conditioning_margin": {
+          "mean_delta": 7e-05,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "p_one_sided": null
+        },
+        "note": "marginal_share = incumbent \u2212 permuted_tail (the shuffle-surviving channel; EXPECTED positive \u2014 NF-D16 (2)); alignment_share = permuted_tail \u2212 tail_ext; conditioning_margin = pooled_tail \u2212 tail_ext (per-position conditioning's earn in the tail; informs the serving object)."
+      },
+      "calibration": {
+        "tail_mass_delta_vs_incumbent": 0.05831,
+        "dev_incumbent": 0.0637,
+        "dev_winner": 0.00539,
+        "incumbent_pit": {
+          "n": 2144,
+          "decile_freq": [
+            0.10868,
+            0.10728,
+            0.09981,
+            0.09888,
+            0.09562,
+            0.09049,
+            0.10541,
+            0.09655,
+            0.08116,
+            0.11614
+          ],
+          "max_decile_dev": 0.01884,
+          "p_below_grid": 0.03871,
+          "p_above_grid": 0.04991,
+          "mean_z": 0.0097,
+          "var_z": 1.363,
+          "p_below_eval": 0.02519,
+          "p_above_eval": 0.04851
+        },
+        "winner_pit": {
+          "n": 2144,
+          "decile_freq": [
+            0.09608,
+            0.10774,
+            0.10215,
+            0.10448,
+            0.09795,
+            0.09375,
+            0.10634,
+            0.09282,
+            0.08256,
+            0.11614
+          ],
+          "max_decile_dev": 0.01744,
+          "p_below_grid": 0.02612,
+          "p_above_grid": 0.04851,
+          "mean_z": 0.0155,
+          "var_z": 1.0757,
+          "p_below_eval": 0.00606,
+          "p_above_eval": 0.00933
+        }
+      },
+      "construction_facts": {
+        "winkler_80_delta": 0.0,
+        "coverage_80_delta": 0.0,
+        "coverage_95_delta": 0.0,
+        "note": "IDENTICALLY ZERO BY CONSTRUCTION (within-grid identity asserted every fold) \u2014 these clauses are structurally INACTIVE for a tail-only arm and are recorded as facts, never counted as passing gates (NF-D20 (g\u2057))."
+      },
+      "coverage": {
+        "coverage_80": 0.8424,
+        "n_rows": 2144,
+        "binomial_se": 0.0086,
+        "blocking_shortfall": false,
+        "structurally_inactive": true,
+        "inactive_note": "identical to the incumbent's by construction \u2014 passing the floor is NOT evidence (NF-D20 (g\u2057))."
+      },
+      "coverage_map": {
+        "coverage_80": {
+          "tail_ext": 0.8423,
+          "incumbent": 0.8423,
+          "over_ext": 0.8423,
+          "max_width": 0.9818
+        },
+        "coverage_95": {
+          "tail_ext": 0.93,
+          "incumbent": 0.93,
+          "over_ext": 0.93,
+          "max_width": 0.9967
+        },
+        "coverage_99": {
+          "tail_ext": 0.9846,
+          "incumbent": 0.93,
+          "over_ext": 0.9986,
+          "max_width": 0.9967
+        }
+      },
+      "tail_fingerprint": {
+        "incumbent_cov95_equals_cov99": true,
+        "winner_cov99_exceeds_cov95": true,
+        "note": "the flat-tail fingerprint (cov95 \u2261 cov99) must hold for the incumbent and BREAK for the winner \u2014 a construction sanity read, report-only."
+      },
+      "thin_tail_cells": {
+        "n_fold_positions_thin_hi": 0,
+        "n_fold_positions_thin_lo": 0
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0035,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      }
+    },
+    "WR": {
+      "position": "WR",
+      "winner": "tail_ext",
+      "best_foil": "incumbent",
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "tail_ext": 2.44158,
+        "incumbent": 2.44431,
+        "zero_width": 3.36273,
+        "max_width": 3.50078,
+        "over_ext": 2.44272,
+        "permuted_tail": 2.44158,
+        "pooled_tail": 2.44164,
+        "oracle__tail_ext": 2.44158,
+        "matched_n__tail_ext": 2.44156
+      },
+      "deltas_by_fold": [
+        0.00316,
+        0.00229
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.00273,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; NF-MARGIN2 fields ONE pre-registered contrast, so there was no search to overfit. Declared before the run; deliberately NOT a gate.",
+      "dsr": null,
+      "p_one_sided": null,
+      "observed_sr": 4.427,
+      "var_trials_sr": null,
+      "anchors": {
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "max_width_satisfies_floor": true,
+        "over_ext_loses": true,
+        "winner_beats_permuted": true,
+        "permuted_not_significantly_better": true,
+        "no_arm_beats_own_oracle": false,
+        "oracle_floor_respected_at_matched_n": false
+      },
+      "oracle_detail": {
+        "arm": 2.44158,
+        "own_form_oracle": 2.44158,
+        "matched_n": 2.44156,
+        "oracle_beats_matched_n": false
+      },
+      "permutation_detail": {
+        "permuted_better_mean": -1e-05,
+        "permuted_better_p_one_sided": null
+      },
+      "attribution": {
+        "marginal_share": {
+          "mean_delta": 0.00272,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "p_one_sided": null
+        },
+        "alignment_share": {
+          "mean_delta": 1e-05,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 1,
+          "p_one_sided": null
+        },
+        "conditioning_margin": {
+          "mean_delta": 6e-05,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "p_one_sided": null
+        },
+        "note": "marginal_share = incumbent \u2212 permuted_tail (the shuffle-surviving channel; EXPECTED positive \u2014 NF-D16 (2)); alignment_share = permuted_tail \u2212 tail_ext; conditioning_margin = pooled_tail \u2212 tail_ext (per-position conditioning's earn in the tail; informs the serving object)."
+      },
+      "calibration": {
+        "tail_mass_delta_vs_incumbent": 0.04756,
+        "dev_incumbent": 0.05128,
+        "dev_winner": 0.00372,
+        "incumbent_pit": {
+          "n": 3231,
+          "decile_freq": [
+            0.1204,
+            0.10647,
+            0.10678,
+            0.09811,
+            0.09347,
+            0.09873,
+            0.09409,
+            0.08728,
+            0.09006,
+            0.10461
+          ],
+          "max_decile_dev": 0.0204,
+          "p_below_grid": 0.04178,
+          "p_above_grid": 0.03931,
+          "mean_z": -0.0506,
+          "var_z": 1.3033,
+          "p_below_eval": 0.02228,
+          "p_above_eval": 0.039
+        },
+        "winner_pit": {
+          "n": 3231,
+          "decile_freq": [
+            0.10585,
+            0.11266,
+            0.10802,
+            0.09873,
+            0.09533,
+            0.09904,
+            0.09687,
+            0.08976,
+            0.09254,
+            0.10121
+          ],
+          "max_decile_dev": 0.01266,
+          "p_below_grid": 0.02043,
+          "p_above_grid": 0.03869,
+          "mean_z": -0.0343,
+          "var_z": 1.0422,
+          "p_below_eval": 0.00402,
+          "p_above_eval": 0.00774
+        }
+      },
+      "construction_facts": {
+        "winkler_80_delta": 0.0,
+        "coverage_80_delta": 0.0,
+        "coverage_95_delta": 0.0,
+        "note": "IDENTICALLY ZERO BY CONSTRUCTION (within-grid identity asserted every fold) \u2014 these clauses are structurally INACTIVE for a tail-only arm and are recorded as facts, never counted as passing gates (NF-D20 (g\u2057))."
+      },
+      "coverage": {
+        "coverage_80": 0.8567,
+        "n_rows": 3231,
+        "binomial_se": 0.007,
+        "blocking_shortfall": false,
+        "structurally_inactive": true,
+        "inactive_note": "identical to the incumbent's by construction \u2014 passing the floor is NOT evidence (NF-D20 (g\u2057))."
+      },
+      "coverage_map": {
+        "coverage_80": {
+          "tail_ext": 0.8567,
+          "incumbent": 0.8567,
+          "over_ext": 0.8567,
+          "max_width": 0.9861
+        },
+        "coverage_95": {
+          "tail_ext": 0.9461,
+          "incumbent": 0.9461,
+          "over_ext": 0.9461,
+          "max_width": 0.9978
+        },
+        "coverage_99": {
+          "tail_ext": 0.9882,
+          "incumbent": 0.9461,
+          "over_ext": 1.0,
+          "max_width": 0.9978
+        }
+      },
+      "tail_fingerprint": {
+        "incumbent_cov95_equals_cov99": true,
+        "winner_cov99_exceeds_cov95": true,
+        "note": "the flat-tail fingerprint (cov95 \u2261 cov99) must hold for the incumbent and BREAK for the winner \u2014 a construction sanity read, report-only."
+      },
+      "thin_tail_cells": {
+        "n_fold_positions_thin_hi": 0,
+        "n_fold_positions_thin_lo": 0
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0027,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      }
+    },
+    "TE": {
+      "position": "TE",
+      "winner": "tail_ext",
+      "best_foil": "incumbent",
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "tail_ext": 1.78479,
+        "incumbent": 1.78641,
+        "zero_width": 2.44472,
+        "max_width": 2.55497,
+        "over_ext": 1.7855,
+        "permuted_tail": 1.78494,
+        "pooled_tail": 1.7846,
+        "oracle__tail_ext": 1.78433,
+        "matched_n__tail_ext": 1.78443
+      },
+      "deltas_by_fold": [
+        0.00173,
+        0.00152
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.00162,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; NF-MARGIN2 fields ONE pre-registered contrast, so there was no search to overfit. Declared before the run; deliberately NOT a gate.",
+      "dsr": null,
+      "p_one_sided": null,
+      "observed_sr": 10.648,
+      "var_trials_sr": null,
+      "anchors": {
+        "zero_width_loses": true,
+        "max_width_loses": true,
+        "max_width_satisfies_floor": true,
+        "over_ext_loses": true,
+        "winner_beats_permuted": true,
+        "permuted_not_significantly_better": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floor_respected_at_matched_n": true
+      },
+      "oracle_detail": {
+        "arm": 1.78479,
+        "own_form_oracle": 1.78433,
+        "matched_n": 1.78443,
+        "oracle_beats_matched_n": true
+      },
+      "permutation_detail": {
+        "permuted_better_mean": -0.00016,
+        "permuted_better_p_one_sided": null
+      },
+      "attribution": {
+        "marginal_share": {
+          "mean_delta": 0.00147,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "p_one_sided": null
+        },
+        "alignment_share": {
+          "mean_delta": 0.00016,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "p_one_sided": null
+        },
+        "conditioning_margin": {
+          "mean_delta": -0.00019,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "p_one_sided": null
+        },
+        "note": "marginal_share = incumbent \u2212 permuted_tail (the shuffle-surviving channel; EXPECTED positive \u2014 NF-D16 (2)); alignment_share = permuted_tail \u2212 tail_ext; conditioning_margin = pooled_tail \u2212 tail_ext (per-position conditioning's earn in the tail; informs the serving object)."
+      },
+      "calibration": {
+        "tail_mass_delta_vs_incumbent": 0.02915,
+        "dev_incumbent": 0.03894,
+        "dev_winner": 0.00979,
+        "incumbent_pit": {
+          "n": 1941,
+          "decile_freq": [
+            0.09583,
+            0.08964,
+            0.11695,
+            0.09686,
+            0.09737,
+            0.09892,
+            0.10252,
+            0.09325,
+            0.10407,
+            0.10459
+          ],
+          "max_decile_dev": 0.01695,
+          "p_below_grid": 0.02576,
+          "p_above_grid": 0.04328,
+          "mean_z": 0.0462,
+          "var_z": 1.168,
+          "p_below_eval": 0.00618,
+          "p_above_eval": 0.04276
+        },
+        "winner_pit": {
+          "n": 1941,
+          "decile_freq": [
+            0.0984,
+            0.10201,
+            0.10922,
+            0.09789,
+            0.09943,
+            0.09377,
+            0.09737,
+            0.0948,
+            0.10355,
+            0.10355
+          ],
+          "max_decile_dev": 0.00922,
+          "p_below_grid": 0.0103,
+          "p_above_grid": 0.04276,
+          "mean_z": 0.0214,
+          "var_z": 1.0133,
+          "p_below_eval": 0.00103,
+          "p_above_eval": 0.01082
+        }
+      },
+      "construction_facts": {
+        "winkler_80_delta": 0.0,
+        "coverage_80_delta": 0.0,
+        "coverage_95_delta": 0.0,
+        "note": "IDENTICALLY ZERO BY CONSTRUCTION (within-grid identity asserted every fold) \u2014 these clauses are structurally INACTIVE for a tail-only arm and are recorded as facts, never counted as passing gates (NF-D20 (g\u2057))."
+      },
+      "coverage": {
+        "coverage_80": 0.8774,
+        "n_rows": 1941,
+        "binomial_se": 0.0091,
+        "blocking_shortfall": false,
+        "structurally_inactive": true,
+        "inactive_note": "identical to the incumbent's by construction \u2014 passing the floor is NOT evidence (NF-D20 (g\u2057))."
+      },
+      "coverage_map": {
+        "coverage_80": {
+          "tail_ext": 0.8774,
+          "incumbent": 0.8774,
+          "over_ext": 0.8774,
+          "max_width": 0.984
+        },
+        "coverage_95": {
+          "tail_ext": 0.9541,
+          "incumbent": 0.9541,
+          "over_ext": 0.9541,
+          "max_width": 0.9974
+        },
+        "coverage_99": {
+          "tail_ext": 0.9881,
+          "incumbent": 0.9541,
+          "over_ext": 0.9985,
+          "max_width": 0.9974
+        }
+      },
+      "tail_fingerprint": {
+        "incumbent_cov95_equals_cov99": true,
+        "winner_cov99_exceeds_cov95": true,
+        "note": "the flat-tail fingerprint (cov95 \u2261 cov99) must hold for the incumbent and BREAK for the winner \u2014 a construction sanity read, report-only."
+      },
+      "thin_tail_cells": {
+        "n_fold_positions_thin_hi": 0,
+        "n_fold_positions_thin_lo": 0
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0016,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      }
+    }
+  },
+  "team_total_pooled": {
+    "tail_ext": {
+      "n": 544,
+      "coverage_80": 0.6801,
+      "share_below_q10": 0.1673,
+      "share_above_q90": 0.1526,
+      "binomial_se": 0.0171
+    },
+    "incumbent": {
+      "n": 544,
+      "coverage_80": 0.6618,
+      "share_below_q10": 0.171,
+      "share_above_q90": 0.1673,
+      "binomial_se": 0.0171
+    }
+  },
+  "reproduction_anchor": {
+    "expected": 0.6794,
+    "measured": 0.6618,
+    "reproduced": false,
+    "note": "REPORT-ONLY: same CRN base + folds + marginals as NF-MARGIN1 \u21d2 the incumbent row should reproduce; valid only on the full 8-fold run."
+  },
+  "fold_results": [
+    {
+      "label": "2025H1",
+      "scores": {
+        "QB": {
+          "tail_ext": {
+            "crps_q199": 2.518577207920426,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 0.9850968703427719
+          },
+          "incumbent": {
+            "crps_q199": 2.523076643486869,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 0.9031296572280179
+          },
+          "zero_width": {
+            "crps_q199": 3.400348128192668,
+            "winkler_80": 34.00348128192668,
+            "n": 671,
+            "coverage_50": 0.4783904619970194,
+            "coverage_80": 0.4783904619970194,
+            "coverage_95": 0.4783904619970194,
+            "coverage_99": 0.4783904619970194
+          },
+          "max_width": {
+            "crps_q199": 3.3940555033828548,
+            "winkler_80": 30.29001042701261,
+            "n": 671,
+            "coverage_50": 0.8763040238450075,
+            "coverage_80": 0.9359165424739195,
+            "coverage_95": 0.9731743666169895,
+            "coverage_99": 0.9731743666169895
+          },
+          "over_ext": {
+            "crps_q199": 2.5186757829035,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.518379946064473,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 1.0
+          },
+          "pooled_tail": {
+            "crps_q199": 2.518550948528645,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 0.9850968703427719
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.518671548006639,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 0.9791356184798807
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.5187003230012937,
+            "winkler_80": 17.156800031799357,
+            "n": 671,
+            "coverage_50": 0.6900149031296572,
+            "coverage_80": 0.8047690014903129,
+            "coverage_95": 0.9031296572280179,
+            "coverage_99": 0.9850968703427719
+          }
+        },
+        "RB": {
+          "tail_ext": {
+            "crps_q199": 2.349653020358409,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9849340866290018
+          },
+          "incumbent": {
+            "crps_q199": 2.353521882282144,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9265536723163842
+          },
+          "zero_width": {
+            "crps_q199": 3.173334983774265,
+            "winkler_80": 31.73334983774265,
+            "n": 1062,
+            "coverage_50": 0.2909604519774011,
+            "coverage_80": 0.2909604519774011,
+            "coverage_95": 0.2909604519774011,
+            "coverage_99": 0.2909604519774011
+          },
+          "max_width": {
+            "crps_q199": 3.307312970450244,
+            "winkler_80": 29.701334049946883,
+            "n": 1062,
+            "coverage_50": 0.9048964218455744,
+            "coverage_80": 0.9830508474576272,
+            "coverage_95": 0.9962335216572504,
+            "coverage_99": 0.9962335216572504
+          },
+          "over_ext": {
+            "crps_q199": 2.349768527743543,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9990583804143126
+          },
+          "permuted_tail": {
+            "crps_q199": 2.3494139878663782,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9971751412429378
+          },
+          "pooled_tail": {
+            "crps_q199": 2.3497488545616405,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9858757062146892
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.349668525674646,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9858757062146892
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.34999385619713,
+            "winkler_80": 15.81280711419019,
+            "n": 1062,
+            "coverage_50": 0.6619585687382298,
+            "coverage_80": 0.8380414312617702,
+            "coverage_95": 0.9265536723163842,
+            "coverage_99": 0.9764595103578154
+          }
+        },
+        "WR": {
+          "tail_ext": {
+            "crps_q199": 2.423768775926755,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 0.9875699192044748
+          },
+          "incumbent": {
+            "crps_q199": 2.4269317048915666,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 0.9459291485394655
+          },
+          "zero_width": {
+            "crps_q199": 3.3235339835380375,
+            "winkler_80": 33.23533983538038,
+            "n": 1609,
+            "coverage_50": 0.3014294592914854,
+            "coverage_80": 0.3014294592914854,
+            "coverage_95": 0.3014294592914854,
+            "coverage_99": 0.3014294592914854
+          },
+          "max_width": {
+            "crps_q199": 3.5217482639420394,
+            "winkler_80": 31.64274613903608,
+            "n": 1609,
+            "coverage_50": 0.9167184586699814,
+            "coverage_80": 0.9857054070851461,
+            "coverage_95": 0.9968924798011187,
+            "coverage_99": 0.9968924798011187
+          },
+          "over_ext": {
+            "crps_q199": 2.4247625072067907,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.4237199870380834,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 0.9968924798011187
+          },
+          "pooled_tail": {
+            "crps_q199": 2.4238751102263625,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 0.983219390926041
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.423662593178477,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 0.9912989434431324
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.423737320561424,
+            "winkler_80": 15.66789088775682,
+            "n": 1609,
+            "coverage_50": 0.6519577377252952,
+            "coverage_80": 0.8626476072094469,
+            "coverage_95": 0.9459291485394655,
+            "coverage_99": 0.9888129272840274
+          }
+        },
+        "TE": {
+          "tail_ext": {
+            "crps_q199": 1.8231706120099398,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9855072463768116
+          },
+          "incumbent": {
+            "crps_q199": 1.8249032651503219,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9523809523809523
+          },
+          "zero_width": {
+            "crps_q199": 2.4985076698233692,
+            "winkler_80": 24.985076698233698,
+            "n": 966,
+            "coverage_50": 0.39026915113871635,
+            "coverage_80": 0.39026915113871635,
+            "coverage_95": 0.39026915113871635,
+            "coverage_99": 0.39026915113871635
+          },
+          "max_width": {
+            "crps_q199": 2.585839605493672,
+            "winkler_80": 23.228435338502603,
+            "n": 966,
+            "coverage_50": 0.9213250517598344,
+            "coverage_80": 0.984472049689441,
+            "coverage_95": 0.9968944099378882,
+            "coverage_99": 0.9968944099378882
+          },
+          "over_ext": {
+            "crps_q199": 1.823724827450128,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9989648033126294
+          },
+          "permuted_tail": {
+            "crps_q199": 1.823175138828037,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9937888198757764
+          },
+          "pooled_tail": {
+            "crps_q199": 1.8228739933368214,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9906832298136646
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 1.8225950530663964,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9886128364389234
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 1.8226698161421366,
+            "winkler_80": 12.262610315979611,
+            "n": 966,
+            "coverage_50": 0.7111801242236024,
+            "coverage_80": 0.8788819875776398,
+            "coverage_95": 0.9523809523809523,
+            "coverage_99": 0.9865424430641822
+          }
+        }
+      },
+      "cal_note": {
+        "n_train": 74849,
+        "n_core": 58687,
+        "n_cal": 15161,
+        "cal_gw_min": 123,
+        "cal_gw_max": 154
+      },
+      "team_total": {
+        "tail_ext": {
+          "n": 270,
+          "inside": 196,
+          "below_q10": 33,
+          "above_q90": 41
+        },
+        "incumbent": {
+          "n": 270,
+          "inside": 188,
+          "below_q10": 34,
+          "above_q90": 48
+        }
+      },
+      "params_digest": {
+        "QB": {
+          "tail": {
+            "beta_hi": 4.4913,
+            "beta_lo": 1.4556,
+            "n_hi": 120,
+            "n_lo": 94,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 9.262,
+            "beta_lo": 4.7349,
+            "n_hi": 475,
+            "n_lo": 393,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.5459,
+            "beta_lo": 1.366,
+            "n_hi": 679,
+            "n_lo": 285,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 2427,
+            "n_test": 671,
+            "n_matched": 671,
+            "matched_equals_arm": false
+          }
+        },
+        "RB": {
+          "tail": {
+            "beta_hi": 4.6968,
+            "beta_lo": 0.8699,
+            "n_hi": 159,
+            "n_lo": 77,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.706,
+            "beta_lo": 3.0061,
+            "n_hi": 594,
+            "n_lo": 508,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.5459,
+            "beta_lo": 1.366,
+            "n_hi": 679,
+            "n_lo": 285,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3711,
+            "n_test": 1062,
+            "n_matched": 1062,
+            "matched_equals_arm": false
+          }
+        },
+        "WR": {
+          "tail": {
+            "beta_hi": 4.9738,
+            "beta_lo": 1.6402,
+            "n_hi": 274,
+            "n_lo": 95,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.49,
+            "beta_lo": 3.5402,
+            "n_hi": 883,
+            "n_lo": 491,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.5459,
+            "beta_lo": 1.366,
+            "n_hi": 679,
+            "n_lo": 285,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 5663,
+            "n_test": 1609,
+            "n_matched": 1609,
+            "matched_equals_arm": false
+          }
+        },
+        "TE": {
+          "tail": {
+            "beta_hi": 3.4769,
+            "beta_lo": 1.5618,
+            "n_hi": 126,
+            "n_lo": 19,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 5.7258,
+            "beta_lo": 3.0796,
+            "n_hi": 454,
+            "n_lo": 104,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.5459,
+            "beta_lo": 1.366,
+            "n_hi": 679,
+            "n_lo": 285,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3360,
+            "n_test": 966,
+            "n_matched": 966,
+            "matched_equals_arm": false
+          }
+        }
+      },
+      "exclusions": {
+        "n_groups_excluded": 0,
+        "n_rows_excluded": 0,
+        "n_groups": 270,
+        "n_rows_scored": 4308,
+        "n_rows_total": 4308
+      },
+      "runtime_seconds": 111.6
+    },
+    {
+      "label": "2025H2",
+      "scores": {
+        "QB": {
+          "tail_ext": {
+            "crps_q199": 2.548155577374086,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 0.9714693295292439
+          },
+          "incumbent": {
+            "crps_q199": 2.552178015445147,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 0.8987161198288159
+          },
+          "zero_width": {
+            "crps_q199": 3.4959968584777905,
+            "winkler_80": 34.959968584777904,
+            "n": 701,
+            "coverage_50": 0.4764621968616263,
+            "coverage_80": 0.4764621968616263,
+            "coverage_95": 0.4764621968616263,
+            "coverage_99": 0.4764621968616263
+          },
+          "max_width": {
+            "crps_q199": 3.3272288185964043,
+            "winkler_80": 29.532629992167855,
+            "n": 701,
+            "coverage_50": 0.8758915834522111,
+            "coverage_80": 0.9400855920114123,
+            "coverage_95": 0.9814550641940085,
+            "coverage_99": 0.9814550641940085
+          },
+          "over_ext": {
+            "crps_q199": 2.547312535438658,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.547169660938657,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 0.9971469329529244
+          },
+          "pooled_tail": {
+            "crps_q199": 2.5481544479635776,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 0.9728958630527818
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.547834044651106,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 0.9757489300998573
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.5480663152748955,
+            "winkler_80": 16.962288877459553,
+            "n": 701,
+            "coverage_50": 0.6747503566333809,
+            "coverage_80": 0.8174037089871612,
+            "coverage_95": 0.8987161198288159,
+            "coverage_99": 0.9686162624821684
+          }
+        },
+        "RB": {
+          "tail_ext": {
+            "crps_q199": 2.374738204169611,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.9842883548983364
+          },
+          "incumbent": {
+            "crps_q199": 2.377801613104619,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.933456561922366
+          },
+          "zero_width": {
+            "crps_q199": 3.2902096802853746,
+            "winkler_80": 32.90209680285375,
+            "n": 1082,
+            "coverage_50": 0.2948243992606285,
+            "coverage_80": 0.2948243992606285,
+            "coverage_95": 0.2948243992606285,
+            "coverage_99": 0.2948243992606285
+          },
+          "max_width": {
+            "crps_q199": 3.2606885169667343,
+            "winkler_80": 29.311790232824602,
+            "n": 1082,
+            "coverage_50": 0.8974121996303143,
+            "coverage_80": 0.9805914972273567,
+            "coverage_95": 0.9972273567467652,
+            "coverage_99": 0.9972273567467652
+          },
+          "over_ext": {
+            "crps_q199": 2.374795868124404,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.9981515711645101
+          },
+          "permuted_tail": {
+            "crps_q199": 2.3745316865839774,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.9944547134935305
+          },
+          "pooled_tail": {
+            "crps_q199": 2.3747816091021203,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.9870609981515711
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.374622917604442,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.9870609981515711
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.3747142360983435,
+            "winkler_80": 15.367605356380478,
+            "n": 1082,
+            "coverage_50": 0.6201478743068392,
+            "coverage_80": 0.8465804066543438,
+            "coverage_95": 0.933456561922366,
+            "coverage_99": 0.9842883548983364
+          }
+        },
+        "WR": {
+          "tail_ext": {
+            "crps_q199": 2.4593901399707536,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 0.9889025893958077
+          },
+          "incumbent": {
+            "crps_q199": 2.4616818683333332,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 0.9463625154130703
+          },
+          "zero_width": {
+            "crps_q199": 3.4019269598706123,
+            "winkler_80": 34.019269598706124,
+            "n": 1622,
+            "coverage_50": 0.2971639950678175,
+            "coverage_80": 0.2971639950678175,
+            "coverage_95": 0.2971639950678175,
+            "coverage_99": 0.2971639950678175
+          },
+          "max_width": {
+            "crps_q199": 3.4798018866093186,
+            "winkler_80": 30.89477857472368,
+            "n": 1622,
+            "coverage_50": 0.9198520345252774,
+            "coverage_80": 0.9864364981504316,
+            "coverage_95": 0.998766954377312,
+            "coverage_99": 0.998766954377312
+          },
+          "over_ext": {
+            "crps_q199": 2.4606692086772433,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 1.0
+          },
+          "permuted_tail": {
+            "crps_q199": 2.459449616344723,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 0.9963008631319359
+          },
+          "pooled_tail": {
+            "crps_q199": 2.4594130982944535,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 0.9845869297163995
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 2.459498250523019,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 0.9882860665844636
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 2.459373343994715,
+            "winkler_80": 15.686780286727284,
+            "n": 1622,
+            "coverage_50": 0.6424167694204685,
+            "coverage_80": 0.8508014796547472,
+            "coverage_95": 0.9463625154130703,
+            "coverage_99": 0.9889025893958077
+          }
+        },
+        "TE": {
+          "tail_ext": {
+            "crps_q199": 1.7464032934662541,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.9907692307692307
+          },
+          "incumbent": {
+            "crps_q199": 1.7479201485630087,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.9558974358974359
+          },
+          "zero_width": {
+            "crps_q199": 2.3909271955376576,
+            "winkler_80": 23.909271955376575,
+            "n": 975,
+            "coverage_50": 0.36205128205128206,
+            "coverage_80": 0.36205128205128206,
+            "coverage_95": 0.36205128205128206,
+            "coverage_99": 0.36205128205128206
+          },
+          "max_width": {
+            "crps_q199": 2.5240967594483226,
+            "winkler_80": 22.930437706996866,
+            "n": 975,
+            "coverage_50": 0.9148717948717948,
+            "coverage_80": 0.9835897435897436,
+            "coverage_95": 0.997948717948718,
+            "coverage_99": 0.997948717948718
+          },
+          "over_ext": {
+            "crps_q199": 1.747268578953885,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.997948717948718
+          },
+          "permuted_tail": {
+            "crps_q199": 1.7467139100040114,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.9948717948717949
+          },
+          "pooled_tail": {
+            "crps_q199": 1.746324175244927,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.9928205128205129
+          },
+          "oracle__tail_ext": {
+            "crps_q199": 1.7460646300141316,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.9887179487179487
+          },
+          "matched_n__tail_ext": {
+            "crps_q199": 1.7461825455714717,
+            "winkler_80": 11.509449472121394,
+            "n": 975,
+            "coverage_50": 0.6882051282051282,
+            "coverage_80": 0.8758974358974358,
+            "coverage_95": 0.9558974358974359,
+            "coverage_99": 0.9856410256410256
+          }
+        }
+      },
+      "cal_note": {
+        "n_train": 79307,
+        "n_core": 62512,
+        "n_cal": 15910,
+        "cal_gw_min": 131,
+        "cal_gw_max": 163
+      },
+      "team_total": {
+        "tail_ext": {
+          "n": 274,
+          "inside": 174,
+          "below_q10": 58,
+          "above_q90": 42
+        },
+        "incumbent": {
+          "n": 274,
+          "inside": 172,
+          "below_q10": 59,
+          "above_q90": 43
+        }
+      },
+      "params_digest": {
+        "QB": {
+          "tail": {
+            "beta_hi": 4.4346,
+            "beta_lo": 1.2919,
+            "n_hi": 150,
+            "n_lo": 97,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 9.4732,
+            "beta_lo": 4.7525,
+            "n_hi": 510,
+            "n_lo": 391,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.3756,
+            "beta_lo": 1.3392,
+            "n_hi": 768,
+            "n_lo": 292,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 2532,
+            "n_test": 701,
+            "n_matched": 701,
+            "matched_equals_arm": false
+          }
+        },
+        "RB": {
+          "tail": {
+            "beta_hi": 4.4888,
+            "beta_lo": 0.9426,
+            "n_hi": 178,
+            "n_lo": 84,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.8303,
+            "beta_lo": 3.1007,
+            "n_hi": 642,
+            "n_lo": 566,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.3756,
+            "beta_lo": 1.3392,
+            "n_hi": 768,
+            "n_lo": 292,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3895,
+            "n_test": 1082,
+            "n_matched": 1082,
+            "matched_equals_arm": false
+          }
+        },
+        "WR": {
+          "tail": {
+            "beta_hi": 4.6847,
+            "beta_lo": 1.7595,
+            "n_hi": 296,
+            "n_lo": 95,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 7.5702,
+            "beta_lo": 3.3856,
+            "n_hi": 926,
+            "n_lo": 474,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.3756,
+            "beta_lo": 1.3392,
+            "n_hi": 768,
+            "n_lo": 292,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 5934,
+            "n_test": 1622,
+            "n_matched": 1622,
+            "matched_equals_arm": false
+          }
+        },
+        "TE": {
+          "tail": {
+            "beta_hi": 3.5388,
+            "beta_lo": 1.2127,
+            "n_hi": 144,
+            "n_lo": 16,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "permuted_tail": {
+            "beta_hi": 5.8637,
+            "beta_lo": 3.0093,
+            "n_hi": 515,
+            "n_lo": 106,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "pooled_tail": {
+            "beta_hi": 4.3756,
+            "beta_lo": 1.3392,
+            "n_hi": 768,
+            "n_lo": 292,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "matched_note": {
+            "n_cal": 3549,
+            "n_test": 975,
+            "n_matched": 975,
+            "matched_equals_arm": false
+          }
+        }
+      },
+      "exclusions": {
+        "n_groups_excluded": 0,
+        "n_rows_excluded": 0,
+        "n_groups": 274,
+        "n_rows_scored": 4380,
+        "n_rows_total": 4380
+      },
+      "runtime_seconds": 106.7
+    }
+  ],
+  "fdr": {
+    "family": {
+      "margin2_tail_QB": false,
+      "margin2_tail_RB": false,
+      "margin2_tail_WR": false,
+      "margin2_tail_TE": false
+    },
+    "pvals": {
+      "margin2_tail_QB": null,
+      "margin2_tail_RB": null,
+      "margin2_tail_WR": null,
+      "margin2_tail_TE": null
+    },
+    "note": "ONE pre-registered family (own-family IS the pooled correction)"
+  },
+  "gates": {
+    "QB": {
+      "checks": {
+        "beats_champion": true,
+        "fold_consistency": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "coverage_floor_ok": true,
+        "degenerates_lose": false,
+        "permutation_not_better": false,
+        "oracle_floor_respected": true,
+        "tail_mass_toward_nominal": true
+      },
+      "ship": false
+    },
+    "RB": {
+      "checks": {
+        "beats_champion": true,
+        "fold_consistency": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "coverage_floor_ok": true,
+        "degenerates_lose": true,
+        "permutation_not_better": false,
+        "oracle_floor_respected": true,
+        "tail_mass_toward_nominal": true
+      },
+      "ship": false
+    },
+    "WR": {
+      "checks": {
+        "beats_champion": true,
+        "fold_consistency": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "coverage_floor_ok": true,
+        "degenerates_lose": true,
+        "permutation_not_better": true,
+        "oracle_floor_respected": false,
+        "tail_mass_toward_nominal": true
+      },
+      "ship": false
+    },
+    "TE": {
+      "checks": {
+        "beats_champion": true,
+        "fold_consistency": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "coverage_floor_ok": true,
+        "degenerates_lose": true,
+        "permutation_not_better": true,
+        "oracle_floor_respected": true,
+        "tail_mass_toward_nominal": true
+      },
+      "ship": false
+    }
+  },
+  "null_states": {
+    "QB": {
+      "instrument_verdict": {
+        "state": "UNDEFINED",
+        "reason": "`nf_margin2_QB_crps`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+        "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+      },
+      "hand_corrected": true,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; Layer B fields ONE pre-registered contrast, so there was no search to overfit. Reported as undefined, NOT as a failed deflation gate.",
+      "state": "POWER_LIMITED",
+      "reason": "the point estimate is positive (+0.0043 CRPS) but the interval spans zero (CI95 [None, None]), fold wins are 2/2 against a required None, and p=None. Every statistical gate except PBO is REACHABLE at this design \u2014 the effect is simply smaller than this design can resolve.",
+      "retest_trigger": "~2 half-season folds (\u22481 seasons) for the DSR gate at the observed per-fold Sharpe 12.633 \u2014 i.e. CALENDAR-bound and far beyond any plausible window; \u26d4 this is NOT a near-term re-test."
+    },
+    "RB": {
+      "instrument_verdict": {
+        "state": "UNDEFINED",
+        "reason": "`nf_margin2_RB_crps`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+        "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+      },
+      "hand_corrected": true,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; Layer B fields ONE pre-registered contrast, so there was no search to overfit. Reported as undefined, NOT as a failed deflation gate.",
+      "state": "POWER_LIMITED",
+      "reason": "the point estimate is positive (+0.0035 CRPS) but the interval spans zero (CI95 [None, None]), fold wins are 2/2 against a required None, and p=None. Every statistical gate except PBO is REACHABLE at this design \u2014 the effect is simply smaller than this design can resolve.",
+      "retest_trigger": "~2 half-season folds (\u22481 seasons) for the DSR gate at the observed per-fold Sharpe 6.086 \u2014 i.e. CALENDAR-bound and far beyond any plausible window; \u26d4 this is NOT a near-term re-test."
+    },
+    "WR": {
+      "instrument_verdict": {
+        "state": "UNDEFINED",
+        "reason": "`nf_margin2_WR_crps`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+        "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+      },
+      "hand_corrected": true,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; Layer B fields ONE pre-registered contrast, so there was no search to overfit. Reported as undefined, NOT as a failed deflation gate.",
+      "state": "POWER_LIMITED",
+      "reason": "the point estimate is positive (+0.0027 CRPS) but the interval spans zero (CI95 [None, None]), fold wins are 2/2 against a required None, and p=None. Every statistical gate except PBO is REACHABLE at this design \u2014 the effect is simply smaller than this design can resolve.",
+      "retest_trigger": "~2 half-season folds (\u22481 seasons) for the DSR gate at the observed per-fold Sharpe 4.427 \u2014 i.e. CALENDAR-bound and far beyond any plausible window; \u26d4 this is NOT a near-term re-test."
+    },
+    "TE": {
+      "instrument_verdict": {
+        "state": "UNDEFINED",
+        "reason": "`nf_margin2_TE_crps`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+        "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+      },
+      "hand_corrected": true,
+      "pbo_state": "UNDEFINED \u2014 CSCV resamples a FIELD; Layer B fields ONE pre-registered contrast, so there was no search to overfit. Reported as undefined, NOT as a failed deflation gate.",
+      "state": "POWER_LIMITED",
+      "reason": "the point estimate is positive (+0.0016 CRPS) but the interval spans zero (CI95 [None, None]), fold wins are 2/2 against a required None, and p=None. Every statistical gate except PBO is REACHABLE at this design \u2014 the effect is simply smaller than this design can resolve.",
+      "retest_trigger": "~2 half-season folds (\u22481 seasons) for the DSR gate at the observed per-fold Sharpe 10.648 \u2014 i.e. CALENDAR-bound and far beyond any plausible window; \u26d4 this is NOT a near-term re-test."
+    }
+  },
+  "verdict": {
+    "QB": "POWER_LIMITED",
+    "RB": "POWER_LIMITED",
+    "WR": "POWER_LIMITED",
+    "TE": "POWER_LIMITED"
+  },
+  "headline": "QB[POWER_LIMITED] RB[POWER_LIMITED] WR[POWER_LIMITED] TE[POWER_LIMITED]"
+}

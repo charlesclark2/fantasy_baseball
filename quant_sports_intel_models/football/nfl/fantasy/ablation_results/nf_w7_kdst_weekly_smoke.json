@@ -1,0 +1,2735 @@
+{
+  "generated_at": "2026-08-13T05:59:42+00:00",
+  "story": "NF-W7",
+  "smoke": true,
+  "skip_layer_b": false,
+  "runtime_seconds": 306.9,
+  "selection_metric": "crps_q199",
+  "legs": [
+    "fg_att",
+    "xp_att",
+    "def_sacks",
+    "def_int",
+    "def_fumble_rec",
+    "fg_make",
+    "fg_band",
+    "dst_td",
+    "def_safety",
+    "def_blocked_kick",
+    "pa_bucket",
+    "ya_bucket"
+  ],
+  "n_folds": 2,
+  "fold_labels": [
+    "2025H1",
+    "2025H2"
+  ],
+  "n_rows": {
+    "dst": 5278,
+    "kicker": 5318,
+    "attempt": 10277
+  },
+  "pit_audits": {
+    "dst": {
+      "weeks_checked": 175,
+      "records_checked": 5278,
+      "weeks_dropped": [],
+      "rows_dropped": 0
+    },
+    "kicker": {
+      "weeks_checked": 175,
+      "records_checked": 5318,
+      "weeks_dropped": [],
+      "rows_dropped": 0
+    },
+    "attempt": {
+      "weeks_checked": 175,
+      "records_checked": 10277,
+      "weeks_dropped": [],
+      "rows_dropped": 0
+    }
+  },
+  "winners": {
+    "fg_att": "pois_glm",
+    "xp_att": "pois_glm",
+    "def_sacks": "negbin_glm",
+    "def_int": "negbin_glm",
+    "def_fumble_rec": "pois_glm",
+    "fg_make": "eb_kicker_curve",
+    "fg_band": "mnlogit",
+    "dst_td": "eb_pois",
+    "def_safety": "hurdle_pois",
+    "def_blocked_kick": "eb_pois",
+    "pa_bucket": "ordered_logit",
+    "ya_bucket": "gauss_integrated"
+  },
+  "preregistration": {
+    "real_arms": {
+      "fg_att": [
+        "pois_glm",
+        "negbin_glm",
+        "lgbm_quantile"
+      ],
+      "xp_att": [
+        "pois_glm",
+        "negbin_glm",
+        "lgbm_quantile"
+      ],
+      "def_sacks": [
+        "pois_glm",
+        "negbin_glm",
+        "lgbm_quantile"
+      ],
+      "def_int": [
+        "pois_glm",
+        "negbin_glm",
+        "lgbm_quantile"
+      ],
+      "def_fumble_rec": [
+        "pois_glm",
+        "negbin_glm",
+        "lgbm_quantile"
+      ],
+      "dst_td": [
+        "eb_pois",
+        "hurdle_pois"
+      ],
+      "def_safety": [
+        "eb_pois",
+        "hurdle_pois"
+      ],
+      "def_blocked_kick": [
+        "eb_pois",
+        "hurdle_pois"
+      ],
+      "fg_make": [
+        "eb_kicker_curve",
+        "logit_distance_glm",
+        "lgbm_classifier"
+      ],
+      "fg_band": [
+        "mnlogit",
+        "eb_dirichlet_kicker",
+        "lgbm_multiclass"
+      ],
+      "pa_bucket": [
+        "ordered_logit",
+        "mnlogit",
+        "negbin_integrated"
+      ],
+      "ya_bucket": [
+        "ordered_logit",
+        "mnlogit",
+        "gauss_integrated"
+      ]
+    },
+    "foils": {
+      "fg_att": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ],
+      "xp_att": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ],
+      "def_sacks": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ],
+      "def_int": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ],
+      "def_fumble_rec": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ],
+      "dst_td": [
+        "foil_climatology",
+        "foil_league_rate"
+      ],
+      "def_safety": [
+        "foil_climatology",
+        "foil_league_rate"
+      ],
+      "def_blocked_kick": [
+        "foil_climatology",
+        "foil_league_rate"
+      ],
+      "fg_make": [
+        "foil_league_curve",
+        "foil_constant_rate"
+      ],
+      "fg_band": [
+        "foil_league_mix"
+      ],
+      "pa_bucket": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ],
+      "ya_bucket": [
+        "foil_climatology",
+        "foil_entity_eb"
+      ]
+    },
+    "leg_metrics": {
+      "fg_att": "crps_q199",
+      "xp_att": "crps_q199",
+      "def_sacks": "crps_q199",
+      "def_int": "crps_q199",
+      "def_fumble_rec": "crps_q199",
+      "dst_td": "crps_q199",
+      "def_safety": "crps_q199",
+      "def_blocked_kick": "crps_q199",
+      "fg_make": "log_loss",
+      "fg_band": "log_loss_multiclass",
+      "pa_bucket": "rps",
+      "ya_bucket": "rps"
+    },
+    "layer_b_eligible": [
+      "assembled",
+      "foil_climatology",
+      "foil_board_eb",
+      "foil_direct"
+    ],
+    "layer_b_anchors": [
+      "nihilist_zero",
+      "zero_width",
+      "max_width",
+      "permuted_direct",
+      "oracle__assembled",
+      "matched_n__assembled",
+      "oracle__foil_climatology",
+      "oracle__foil_board_eb",
+      "oracle__foil_direct"
+    ],
+    "test_blocks": [
+      [
+        2022,
+        1
+      ],
+      [
+        2022,
+        2
+      ],
+      [
+        2023,
+        1
+      ],
+      [
+        2023,
+        2
+      ],
+      [
+        2024,
+        1
+      ],
+      [
+        2024,
+        2
+      ],
+      [
+        2025,
+        1
+      ],
+      [
+        2025,
+        2
+      ]
+    ],
+    "purge_weeks": 2,
+    "pbo_max": 0.2,
+    "dsr_min": 0.95,
+    "fdr_q": 0.1,
+    "fdr_families": {
+      "component": [
+        "fg_att",
+        "xp_att",
+        "def_sacks",
+        "def_int",
+        "def_fumble_rec",
+        "fg_make",
+        "fg_band",
+        "dst_td",
+        "def_safety",
+        "def_blocked_kick",
+        "pa_bucket",
+        "ya_bucket"
+      ],
+      "downstream": [
+        "k_points",
+        "dst_points"
+      ]
+    },
+    "coverage_floor": 0.8,
+    "features_k": [
+      "game_context__is_home",
+      "game_context__div_game",
+      "game_context__week_index",
+      "game_context__days_since_last_game",
+      "game_context__roofed_stadium",
+      "prior_week_box__fg_att_l4",
+      "prior_week_box__fg_att_l8",
+      "prior_week_box__fg_att_ewm",
+      "prior_week_box__fg_att_s2d",
+      "prior_week_box__fg_att_prior_season",
+      "prior_week_box__pat_att_l4",
+      "prior_week_box__pat_att_l8",
+      "prior_week_box__fg_makerate_prior",
+      "prior_week_box__share50_prior",
+      "prior_week_box__kicker_games_prior_season",
+      "team_environment__points_l4",
+      "team_environment__points_l8",
+      "team_environment__points_prior_season",
+      "team_environment__drives_l4",
+      "team_environment__rz_trips_l4",
+      "team_environment__rz_tdrate_l4",
+      "team_environment__fgrange_trips_l4",
+      "team_environment__team_fg_att_l4",
+      "team_environment__epa_per_play_l4",
+      "team_environment__games_prior_season",
+      "opponent_matchup__def_points_allowed_l4",
+      "opponent_matchup__def_rz_tdrate_allowed_l4",
+      "opponent_matchup__def_fgatt_faced_l4",
+      "opponent_matchup__def_epa_allowed_l4",
+      "opponent_matchup__def_drives_faced_l4"
+    ],
+    "features_d": [
+      "game_context__is_home",
+      "game_context__div_game",
+      "game_context__week_index",
+      "game_context__days_since_last_game",
+      "team_environment__sacks_l4",
+      "team_environment__sacks_l8",
+      "team_environment__sacks_ewm",
+      "team_environment__qb_hits_l4",
+      "team_environment__tfl_l4",
+      "team_environment__int_l4",
+      "team_environment__int_l8",
+      "team_environment__fr_l4",
+      "team_environment__takeaways_l8",
+      "team_environment__dsttd_l16",
+      "team_environment__safety_l16",
+      "team_environment__block_l16",
+      "team_environment__pa_l4",
+      "team_environment__pa_l8",
+      "team_environment__pa_s2d",
+      "team_environment__pa_prior_season",
+      "team_environment__ya_l4",
+      "team_environment__ya_l8",
+      "team_environment__games_prior_season",
+      "opponent_matchup__opp_points_l4",
+      "opponent_matchup__opp_points_l8",
+      "opponent_matchup__opp_points_prior_season",
+      "opponent_matchup__opp_sacks_taken_l4",
+      "opponent_matchup__opp_sacks_taken_l8",
+      "opponent_matchup__opp_giveaways_l4",
+      "opponent_matchup__opp_giveaways_l8",
+      "opponent_matchup__opp_off_yards_l4",
+      "opponent_matchup__opp_pass_yards_l4"
+    ],
+    "features_make": [
+      "game_context__kick_distance",
+      "game_context__roofed_stadium",
+      "prior_week_box__kicker_prior_makerate_eb",
+      "prior_week_box__kicker_prior_att"
+    ],
+    "features_band": [
+      "game_context__roofed_stadium",
+      "prior_week_box__kicker_prior_share50_eb",
+      "prior_week_box__kicker_prior_share40_eb",
+      "prior_week_box__kicker_prior_att"
+    ],
+    "assembly_draws": 4000,
+    "eb_kappa_games": 8.0,
+    "pa_edges": [
+      0,
+      1,
+      7,
+      14,
+      18,
+      21,
+      28,
+      35,
+      46
+    ],
+    "ya_edges": [
+      0,
+      100,
+      200,
+      300,
+      350,
+      400,
+      450,
+      500,
+      550
+    ],
+    "pa_tier_points": [
+      5.0,
+      4.0,
+      3.0,
+      1.0,
+      0.0,
+      0.0,
+      -1.0,
+      -3.0,
+      -5.0
+    ],
+    "band_points": [
+      3.0,
+      4.0,
+      5.0
+    ],
+    "era_forbidden_tokens": [
+      "pressure",
+      "coverage",
+      "route",
+      "ngs_air_yards"
+    ],
+    "banned_source_tokens": [
+      "spread_line",
+      "total_line",
+      "vegas_wp",
+      "vegas_home_wp",
+      "vegas_wpa",
+      "vegas_home_wpa",
+      "temp",
+      "wind",
+      "moneyline",
+      "depth_team",
+      "depth_chart"
+    ]
+  },
+  "layer_a": {
+    "fg_att": {
+      "leg": "fg_att",
+      "metric": "crps_q199",
+      "winner": "pois_glm",
+      "best_foil": "foil_climatology",
+      "mean_scores": {
+        "pois_glm": 0.7212,
+        "oracle__pois_glm": 0.6676,
+        "negbin_glm": 0.7212,
+        "oracle__negbin_glm": 0.6677,
+        "lgbm_quantile": 0.7587,
+        "oracle__lgbm_quantile": 0.466,
+        "foil_climatology": 0.7221,
+        "oracle__foil_climatology": 0.7178,
+        "foil_entity_eb": 0.7261,
+        "oracle__foil_entity_eb": 0.7263,
+        "matched_n__pois_glm": 0.8298,
+        "matched_n__negbin_glm": 0.8308,
+        "matched_n__lgbm_quantile": 0.7796,
+        "permuted_control": 0.7567,
+        "nihilist_zero": 2.0001,
+        "zero_width": 0.9664,
+        "max_width": 1.1704
+      },
+      "deltas_by_fold": [
+        -0.0029,
+        0.0046
+      ],
+      "mean_delta": 0.0009,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 1,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        0.162,
+        0.159,
+        -64.663
+      ],
+      "observed_sr": 0.162,
+      "var_trials_sr": 1400.70522,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 2.0001,
+          "zero_width": 0.9664,
+          "max_width": 1.1704
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": false
+      },
+      "oracle_detail": {
+        "pois_glm": {
+          "arm": 0.7212,
+          "own_form_oracle": 0.6676,
+          "matched_n": 0.8298
+        },
+        "negbin_glm": {
+          "arm": 0.7212,
+          "own_form_oracle": 0.6677,
+          "matched_n": 0.8308
+        },
+        "lgbm_quantile": {
+          "arm": 0.7587,
+          "own_form_oracle": 0.466,
+          "matched_n": 0.7796
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0346,
+        "permuted_lift_p_one_sided": null
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": -0.0029,
+        "2025H2": 0.0046
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.05185185185185184,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.03065693430656935,
+          "n": 274
+        }
+      ]
+    },
+    "xp_att": {
+      "leg": "xp_att",
+      "metric": "crps_q199",
+      "winner": "pois_glm",
+      "best_foil": "foil_entity_eb",
+      "mean_scores": {
+        "pois_glm": 0.7723,
+        "oracle__pois_glm": 0.7229,
+        "negbin_glm": 0.7724,
+        "oracle__negbin_glm": 0.7229,
+        "lgbm_quantile": 0.812,
+        "oracle__lgbm_quantile": 0.4927,
+        "foil_climatology": 0.8088,
+        "oracle__foil_climatology": 0.8068,
+        "foil_entity_eb": 0.7922,
+        "oracle__foil_entity_eb": 0.791,
+        "matched_n__pois_glm": 0.8336,
+        "matched_n__negbin_glm": 0.8343,
+        "matched_n__lgbm_quantile": 0.8431,
+        "permuted_control": 0.841,
+        "nihilist_zero": 2.3185,
+        "zero_width": 1.1381,
+        "max_width": 1.2795
+      },
+      "deltas_by_fold": [
+        0.0109,
+        0.0288
+      ],
+      "mean_delta": 0.0198,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        1.562,
+        1.562,
+        -0.913
+      ],
+      "observed_sr": 1.562,
+      "var_trials_sr": 2.04182,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 2.3185,
+          "zero_width": 1.1381,
+          "max_width": 1.2795
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "pois_glm": {
+          "arm": 0.7723,
+          "own_form_oracle": 0.7229,
+          "matched_n": 0.8336
+        },
+        "negbin_glm": {
+          "arm": 0.7724,
+          "own_form_oracle": 0.7229,
+          "matched_n": 0.8343
+        },
+        "lgbm_quantile": {
+          "arm": 0.812,
+          "own_form_oracle": 0.4927,
+          "matched_n": 0.8431
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0488,
+        "permuted_lift_p_one_sided": null
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0109,
+        "2025H2": 0.0288
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.022222222222222227,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.04233576642335765,
+          "n": 274
+        }
+      ]
+    },
+    "def_sacks": {
+      "leg": "def_sacks",
+      "metric": "crps_q199",
+      "winner": "negbin_glm",
+      "best_foil": "foil_entity_eb",
+      "mean_scores": {
+        "pois_glm": 0.9507,
+        "oracle__pois_glm": 0.8707,
+        "negbin_glm": 0.9469,
+        "oracle__negbin_glm": 0.87,
+        "lgbm_quantile": 0.9938,
+        "oracle__lgbm_quantile": 0.6023,
+        "foil_climatology": 0.9737,
+        "oracle__foil_climatology": 0.972,
+        "foil_entity_eb": 0.9721,
+        "oracle__foil_entity_eb": 0.9717,
+        "matched_n__pois_glm": 1.0499,
+        "matched_n__negbin_glm": 1.0403,
+        "matched_n__lgbm_quantile": 1.0427,
+        "permuted_control": 1.0204,
+        "nihilist_zero": 2.3497,
+        "zero_width": 1.3603,
+        "max_width": 1.4733
+      },
+      "deltas_by_fold": [
+        0.0103,
+        0.0402
+      ],
+      "mean_delta": 0.0252,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        1.059,
+        1.194,
+        -1.434
+      ],
+      "observed_sr": 1.194,
+      "var_trials_sr": 2.19067,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 2.3497,
+          "zero_width": 1.3603,
+          "max_width": 1.4733
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "pois_glm": {
+          "arm": 0.9507,
+          "own_form_oracle": 0.8707,
+          "matched_n": 1.0499
+        },
+        "negbin_glm": {
+          "arm": 0.9469,
+          "own_form_oracle": 0.87,
+          "matched_n": 1.0403
+        },
+        "lgbm_quantile": {
+          "arm": 0.9938,
+          "own_form_oracle": 0.6023,
+          "matched_n": 1.0427
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0483,
+        "permuted_lift_p_one_sided": null
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0103,
+        "2025H2": 0.0402
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.044444444444444425,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.027737226277372268,
+          "n": 274
+        }
+      ]
+    },
+    "def_int": {
+      "leg": "def_int",
+      "metric": "crps_q199",
+      "winner": "negbin_glm",
+      "best_foil": "foil_entity_eb",
+      "mean_scores": {
+        "pois_glm": 0.4204,
+        "oracle__pois_glm": 0.3839,
+        "negbin_glm": 0.4203,
+        "oracle__negbin_glm": 0.3839,
+        "lgbm_quantile": 0.4549,
+        "oracle__lgbm_quantile": 0.2883,
+        "foil_climatology": 0.426,
+        "oracle__foil_climatology": 0.4229,
+        "foil_entity_eb": 0.4212,
+        "oracle__foil_entity_eb": 0.4209,
+        "matched_n__pois_glm": 2.2508,
+        "matched_n__negbin_glm": 2.252,
+        "matched_n__lgbm_quantile": 0.4563,
+        "permuted_control": 0.4636,
+        "nihilist_zero": 0.6984,
+        "zero_width": 0.6951,
+        "max_width": 0.9427
+      },
+      "deltas_by_fold": [
+        0.01,
+        -0.0083
+      ],
+      "mean_delta": 0.0009,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 1,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        0.069,
+        0.068,
+        -3.388
+      ],
+      "observed_sr": 0.068,
+      "var_trials_sr": 3.98079,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 0.6984,
+          "zero_width": 0.6951,
+          "max_width": 0.9427
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "pois_glm": {
+          "arm": 0.4204,
+          "own_form_oracle": 0.3839,
+          "matched_n": 2.2508
+        },
+        "negbin_glm": {
+          "arm": 0.4203,
+          "own_form_oracle": 0.3839,
+          "matched_n": 2.252
+        },
+        "lgbm_quantile": {
+          "arm": 0.4549,
+          "own_form_oracle": 0.2883,
+          "matched_n": 0.4563
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0424,
+        "permuted_lift_p_one_sided": null
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.01,
+        "2025H2": -0.0083
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.04444444444444445,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.0416058394160584,
+          "n": 274
+        }
+      ]
+    },
+    "def_fumble_rec": {
+      "leg": "def_fumble_rec",
+      "metric": "crps_q199",
+      "winner": "pois_glm",
+      "best_foil": "foil_climatology",
+      "mean_scores": {
+        "pois_glm": 0.3212,
+        "oracle__pois_glm": 0.2862,
+        "negbin_glm": 0.3212,
+        "oracle__negbin_glm": 0.2861,
+        "lgbm_quantile": 0.3502,
+        "oracle__lgbm_quantile": 0.2257,
+        "foil_climatology": 0.3198,
+        "oracle__foil_climatology": 0.3154,
+        "foil_entity_eb": 0.3258,
+        "oracle__foil_entity_eb": 0.3254,
+        "matched_n__pois_glm": 0.3694,
+        "matched_n__negbin_glm": 0.3697,
+        "matched_n__lgbm_quantile": 0.3676,
+        "permuted_control": 0.3535,
+        "nihilist_zero": 0.4521,
+        "zero_width": 0.4521,
+        "max_width": 0.6314
+      },
+      "deltas_by_fold": [
+        -0.0057,
+        0.0028
+      ],
+      "mean_delta": -0.0014,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": false,
+      "fold_wins": 1,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        -0.238,
+        -0.236,
+        -5.4
+      ],
+      "observed_sr": -0.238,
+      "var_trials_sr": 8.8864,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 0.4521,
+          "zero_width": 0.4521,
+          "max_width": 0.6314
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "pois_glm": {
+          "arm": 0.3212,
+          "own_form_oracle": 0.2862,
+          "matched_n": 0.3694
+        },
+        "negbin_glm": {
+          "arm": 0.3212,
+          "own_form_oracle": 0.2861,
+          "matched_n": 0.3697
+        },
+        "lgbm_quantile": {
+          "arm": 0.3502,
+          "own_form_oracle": 0.2257,
+          "matched_n": 0.3676
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0338,
+        "permuted_lift_p_one_sided": null
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": -0.0057,
+        "2025H2": 0.0028
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.048148148148148134,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.0416058394160584,
+          "n": 274
+        }
+      ]
+    },
+    "fg_make": {
+      "leg": "fg_make",
+      "metric": "log_loss",
+      "winner": "eb_kicker_curve",
+      "best_foil": "foil_league_curve",
+      "mean_scores": {
+        "eb_kicker_curve": 0.3624,
+        "oracle__eb_kicker_curve": 0.3599,
+        "logit_distance_glm": 0.3632,
+        "oracle__logit_distance_glm": 0.3591,
+        "lgbm_classifier": 0.3819,
+        "oracle__lgbm_classifier": 0.1527,
+        "foil_league_curve": 0.367,
+        "oracle__foil_league_curve": 0.3584,
+        "foil_constant_rate": 0.4131,
+        "oracle__foil_constant_rate": 0.4114,
+        "matched_n__eb_kicker_curve": 0.3599,
+        "matched_n__logit_distance_glm": 0.365,
+        "matched_n__lgbm_classifier": 0.4594,
+        "permuted_control": 0.3646,
+        "all_event": 0.9974,
+        "uniform": 0.6931
+      },
+      "deltas_by_fold": [
+        0.006,
+        0.0032
+      ],
+      "mean_delta": 0.0046,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        2.39,
+        5.742,
+        -23.243
+      ],
+      "observed_sr": 2.39,
+      "var_trials_sr": 251.39686,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "all_event": 0.9974,
+          "uniform": 0.6931
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": false,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "eb_kicker_curve": {
+          "arm": 0.3624,
+          "own_form_oracle": 0.3599,
+          "matched_n": 0.3599
+        },
+        "logit_distance_glm": {
+          "arm": 0.3632,
+          "own_form_oracle": 0.3591,
+          "matched_n": 0.365
+        },
+        "lgbm_classifier": {
+          "arm": 0.3819,
+          "own_form_oracle": 0.1527,
+          "matched_n": 0.4594
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": 0.0025,
+        "permuted_lift_p_one_sided": null
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.006,
+        "2025H2": 0.0032
+      },
+      "pit_flatness_report_only": []
+    },
+    "fg_band": {
+      "leg": "fg_band",
+      "metric": "log_loss_multiclass",
+      "winner": "mnlogit",
+      "best_foil": "foil_league_mix",
+      "mean_scores": {
+        "mnlogit": 1.0566,
+        "oracle__mnlogit": 1.0436,
+        "eb_dirichlet_kicker": 1.0804,
+        "oracle__eb_dirichlet_kicker": 1.0788,
+        "lgbm_multiclass": 1.0858,
+        "oracle__lgbm_multiclass": 0.7313,
+        "foil_league_mix": 1.07,
+        "oracle__foil_league_mix": 1.0575,
+        "matched_n__mnlogit": 1.0721,
+        "matched_n__eb_dirichlet_kicker": 1.0792,
+        "matched_n__lgbm_multiclass": 1.2623,
+        "permuted_control": 1.0613,
+        "point_mass_modal": 7.352,
+        "uniform": 1.0986
+      },
+      "deltas_by_fold": [
+        0.023,
+        0.0038
+      ],
+      "mean_delta": 0.0134,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        0.986,
+        -3.732,
+        -1.459
+      ],
+      "observed_sr": 0.986,
+      "var_trials_sr": 5.56895,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "uniform": 1.0986,
+          "point_mass_modal": 7.352
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": false,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "mnlogit": {
+          "arm": 1.0566,
+          "own_form_oracle": 1.0436,
+          "matched_n": 1.0721
+        },
+        "eb_dirichlet_kicker": {
+          "arm": 1.0804,
+          "own_form_oracle": 1.0788,
+          "matched_n": 1.0792
+        },
+        "lgbm_multiclass": {
+          "arm": 1.0858,
+          "own_form_oracle": 0.7313,
+          "matched_n": 1.2623
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": 0.0087,
+        "permuted_lift_p_one_sided": null
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.023,
+        "2025H2": 0.0038
+      },
+      "pit_flatness_report_only": []
+    },
+    "dst_td": {
+      "leg": "dst_td",
+      "metric": "crps_q199",
+      "winner": "eb_pois",
+      "best_foil": "foil_climatology",
+      "mean_scores": {
+        "eb_pois": 0.093,
+        "oracle__eb_pois": 0.093,
+        "hurdle_pois": 0.0942,
+        "oracle__hurdle_pois": 0.0847,
+        "foil_climatology": 0.092,
+        "oracle__foil_climatology": 0.0919,
+        "foil_league_rate": 0.0921,
+        "oracle__foil_league_rate": 0.0919,
+        "matched_n__eb_pois": 0.0931,
+        "matched_n__hurdle_pois": 0.1808,
+        "permuted_control": 0.093,
+        "nihilist_zero": 0.101,
+        "zero_width": 0.101,
+        "max_width": 0.1105
+      },
+      "deltas_by_fold": [
+        -0.0016,
+        -0.0004
+      ],
+      "mean_delta": -0.001,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": false,
+      "fold_wins": 0,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        -1.187,
+        -11.211
+      ],
+      "observed_sr": -1.187,
+      "var_trials_sr": 50.23748,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 0.101,
+          "zero_width": 0.101,
+          "max_width": 0.1105
+        },
+        "winner_beats_permuted": false,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": false,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "eb_pois": {
+          "arm": 0.093,
+          "own_form_oracle": 0.093,
+          "matched_n": 0.0931
+        },
+        "hurdle_pois": {
+          "arm": 0.0942,
+          "own_form_oracle": 0.0847,
+          "matched_n": 0.1808
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.001,
+        "permuted_lift_p_one_sided": null
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": -0.0016,
+        "2025H2": -0.0004
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.05555555555555555,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.027737226277372268,
+          "n": 274
+        }
+      ]
+    },
+    "def_safety": {
+      "leg": "def_safety",
+      "metric": "crps_q199",
+      "winner": "hurdle_pois",
+      "best_foil": "foil_climatology",
+      "mean_scores": {
+        "eb_pois": 0.0225,
+        "oracle__eb_pois": 0.0224,
+        "hurdle_pois": 0.0223,
+        "oracle__hurdle_pois": 0.0187,
+        "foil_climatology": 0.0217,
+        "oracle__foil_climatology": 0.0217,
+        "foil_league_rate": 0.0217,
+        "oracle__foil_league_rate": 0.0217,
+        "matched_n__eb_pois": 0.0224,
+        "matched_n__hurdle_pois": 0.0535,
+        "permuted_control": 0.0225,
+        "nihilist_zero": 0.0221,
+        "zero_width": 0.0221,
+        "max_width": 0.0232
+      },
+      "deltas_by_fold": [
+        -0.0008,
+        -0.0004
+      ],
+      "mean_delta": -0.0006,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": false,
+      "fold_wins": 0,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        -4.308,
+        -1.965
+      ],
+      "observed_sr": -1.965,
+      "var_trials_sr": 2.74369,
+      "anchors": {
+        "degenerates_lose": false,
+        "degenerate_detail": {
+          "nihilist_zero": 0.0221,
+          "zero_width": 0.0221,
+          "max_width": 0.0232
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "eb_pois": {
+          "arm": 0.0225,
+          "own_form_oracle": 0.0224,
+          "matched_n": 0.0224
+        },
+        "hurdle_pois": {
+          "arm": 0.0223,
+          "own_form_oracle": 0.0187,
+          "matched_n": 0.0535
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0007,
+        "permuted_lift_p_one_sided": null
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": -0.0008,
+        "2025H2": -0.0004
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.025925925925925908,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.031386861313868614,
+          "n": 274
+        }
+      ]
+    },
+    "def_blocked_kick": {
+      "leg": "def_blocked_kick",
+      "metric": "crps_q199",
+      "winner": "eb_pois",
+      "best_foil": "foil_climatology",
+      "mean_scores": {
+        "eb_pois": 0.0749,
+        "oracle__eb_pois": 0.0748,
+        "hurdle_pois": 0.076,
+        "oracle__hurdle_pois": 0.0656,
+        "foil_climatology": 0.0751,
+        "oracle__foil_climatology": 0.075,
+        "foil_league_rate": 0.0751,
+        "oracle__foil_league_rate": 0.075,
+        "matched_n__eb_pois": 0.075,
+        "matched_n__hurdle_pois": 0.1563,
+        "permuted_control": 0.0749,
+        "nihilist_zero": 0.081,
+        "zero_width": 0.081,
+        "max_width": 0.0854
+      },
+      "deltas_by_fold": [
+        0.0016,
+        -0.0011
+      ],
+      "mean_delta": 0.0002,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 1,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        0.127,
+        -3.03
+      ],
+      "observed_sr": 0.127,
+      "var_trials_sr": 4.98304,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 0.081,
+          "zero_width": 0.081,
+          "max_width": 0.0854
+        },
+        "winner_beats_permuted": false,
+        "permuted_lift_not_significant": false,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "eb_pois": {
+          "arm": 0.0749,
+          "own_form_oracle": 0.0748,
+          "matched_n": 0.075
+        },
+        "hurdle_pois": {
+          "arm": 0.076,
+          "own_form_oracle": 0.0656,
+          "matched_n": 0.1563
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": 0.0002,
+        "permuted_lift_p_one_sided": null
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0016,
+        "2025H2": -0.0011
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.037037037037037035,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.04233576642335765,
+          "n": 274
+        }
+      ]
+    },
+    "pa_bucket": {
+      "leg": "pa_bucket",
+      "metric": "rps",
+      "winner": "ordered_logit",
+      "best_foil": "foil_entity_eb",
+      "mean_scores": {
+        "ordered_logit": 0.1149,
+        "oracle__ordered_logit": 0.1059,
+        "mnlogit": 0.1155,
+        "oracle__mnlogit": 0.0917,
+        "negbin_integrated": 0.1154,
+        "oracle__negbin_integrated": 0.1078,
+        "foil_climatology": 0.123,
+        "oracle__foil_climatology": 0.1227,
+        "foil_entity_eb": 0.1209,
+        "oracle__foil_entity_eb": 0.1195,
+        "matched_n__ordered_logit": 0.1316,
+        "matched_n__mnlogit": 0.1494,
+        "matched_n__negbin_integrated": 0.1296,
+        "permuted_control": 0.124,
+        "point_mass_modal": 0.173,
+        "uniform": 0.1386
+      },
+      "deltas_by_fold": [
+        0.0056,
+        0.0064
+      ],
+      "mean_delta": 0.006,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        10.893,
+        4.957,
+        7.814
+      ],
+      "observed_sr": 10.893,
+      "var_trials_sr": 8.81075,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "uniform": 0.1386,
+          "point_mass_modal": 0.173
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "ordered_logit": {
+          "arm": 0.1149,
+          "own_form_oracle": 0.1059,
+          "matched_n": 0.1316
+        },
+        "mnlogit": {
+          "arm": 0.1155,
+          "own_form_oracle": 0.0917,
+          "matched_n": 0.1494
+        },
+        "negbin_integrated": {
+          "arm": 0.1154,
+          "own_form_oracle": 0.1078,
+          "matched_n": 0.1296
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0031,
+        "permuted_lift_p_one_sided": null
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0056,
+        "2025H2": 0.0064
+      },
+      "pit_flatness_report_only": []
+    },
+    "ya_bucket": {
+      "leg": "ya_bucket",
+      "metric": "rps",
+      "winner": "gauss_integrated",
+      "best_foil": "foil_entity_eb",
+      "mean_scores": {
+        "ordered_logit": 0.0912,
+        "oracle__ordered_logit": 0.0841,
+        "mnlogit": 0.0918,
+        "oracle__mnlogit": 0.0721,
+        "gauss_integrated": 0.0911,
+        "oracle__gauss_integrated": 0.0849,
+        "foil_climatology": 0.0996,
+        "oracle__foil_climatology": 0.0974,
+        "foil_entity_eb": 0.0982,
+        "oracle__foil_entity_eb": 0.095,
+        "matched_n__ordered_logit": 0.1095,
+        "matched_n__mnlogit": 0.1293,
+        "matched_n__gauss_integrated": 0.1075,
+        "permuted_control": 0.0975,
+        "point_mass_modal": 0.1726,
+        "uniform": 0.1288
+      },
+      "deltas_by_fold": [
+        0.0052,
+        0.0091
+      ],
+      "mean_delta": 0.0071,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "trial_srs": [
+        2.846,
+        2.244,
+        2.574
+      ],
+      "observed_sr": 2.574,
+      "var_trials_sr": 0.09077,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "uniform": 0.1288,
+          "point_mass_modal": 0.1726
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": false,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "oracle_detail": {
+        "ordered_logit": {
+          "arm": 0.0912,
+          "own_form_oracle": 0.0841,
+          "matched_n": 0.1095
+        },
+        "mnlogit": {
+          "arm": 0.0918,
+          "own_form_oracle": 0.0721,
+          "matched_n": 0.1293
+        },
+        "gauss_integrated": {
+          "arm": 0.0911,
+          "own_form_oracle": 0.0849,
+          "matched_n": 0.1075
+        }
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": 0.0007,
+        "permuted_lift_p_one_sided": null
+      },
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0052,
+        "2025H2": 0.0091
+      },
+      "pit_flatness_report_only": []
+    }
+  },
+  "layer_b": {
+    "k_points": {
+      "target": "k_points",
+      "winner": "assembled",
+      "best_foil": "foil_climatology",
+      "mean_crps": {
+        "assembled": 2.6313,
+        "foil_climatology": 2.6723,
+        "foil_board_eb": 2.685,
+        "foil_direct": 2.7037,
+        "nihilist_zero": 8.5167,
+        "permuted_direct": 2.7275,
+        "oracle__assembled": 2.4743,
+        "matched_n__assembled": 2.9461,
+        "oracle__foil_climatology": 2.6483,
+        "oracle__foil_board_eb": 2.6593,
+        "oracle__foil_direct": 1.6606,
+        "zero_width": 3.7433,
+        "max_width": 3.9299
+      },
+      "deltas_by_fold": [
+        0.0116,
+        0.0704
+      ],
+      "mean_delta": 0.041,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "observed_sr": 0.987,
+      "var_trials_sr": null,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 8.5167,
+          "zero_width": 3.7433,
+          "max_width": 3.9299
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0552,
+        "permuted_lift_p_one_sided": null
+      },
+      "coverage": {
+        "winner_coverage_80": 0.8548,
+        "n_rows": 544,
+        "binomial_se": 0.0171,
+        "blocking_shortfall": false
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.03333333333333334,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.027737226277372268,
+          "n": 274
+        }
+      ],
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0116,
+        "2025H2": 0.0704
+      }
+    },
+    "dst_points": {
+      "target": "dst_points",
+      "winner": "assembled",
+      "best_foil": "foil_direct",
+      "mean_crps": {
+        "assembled": 2.6587,
+        "foil_climatology": 2.7363,
+        "foil_board_eb": 2.7316,
+        "foil_direct": 2.7175,
+        "nihilist_zero": 5.9259,
+        "permuted_direct": 2.8101,
+        "oracle__assembled": 2.4766,
+        "matched_n__assembled": 6.3807,
+        "oracle__foil_climatology": 2.722,
+        "oracle__foil_board_eb": 2.7211,
+        "oracle__foil_direct": 1.6965,
+        "zero_width": 3.8101,
+        "max_width": 4.0681
+      },
+      "deltas_by_fold": [
+        0.0608,
+        0.0567
+      ],
+      "mean_delta": 0.0588,
+      "ci95": [
+        null,
+        null
+      ],
+      "beats_foil": true,
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": [],
+      "dsr": null,
+      "p_one_sided": null,
+      "observed_sr": 20.101,
+      "var_trials_sr": null,
+      "anchors": {
+        "degenerates_lose": true,
+        "degenerate_detail": {
+          "nihilist_zero": 5.9259,
+          "zero_width": 3.8101,
+          "max_width": 4.0681
+        },
+        "winner_beats_permuted": true,
+        "permuted_lift_not_significant": true,
+        "no_arm_beats_own_oracle": true,
+        "oracle_floors_respected_at_matched_n": true,
+        "foils_respect_own_oracle": true
+      },
+      "permutation_detail": {
+        "permuted_lift_vs_foil_mean": -0.0926,
+        "permuted_lift_p_one_sided": null
+      },
+      "coverage": {
+        "winner_coverage_80": 0.761,
+        "n_rows": 544,
+        "binomial_se": 0.0171,
+        "blocking_shortfall": false
+      },
+      "pit_flatness_report_only": [
+        {
+          "max_decile_dev": 0.07037037037037036,
+          "n": 270
+        },
+        {
+          "max_decile_dev": 0.04233576642335765,
+          "n": 274
+        }
+      ],
+      "capture_era_deltas_report_only": {
+        "2025H1": 0.0608,
+        "2025H2": 0.0567
+      }
+    }
+  },
+  "fold_results_a": {
+    "fg_att": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "pois_glm": 0.6799726409826913,
+          "oracle__pois_glm": 0.6282328308207705,
+          "negbin_glm": 0.680035175879397,
+          "oracle__negbin_glm": 0.6284262050995719,
+          "lgbm_quantile": 0.7132362309827778,
+          "oracle__lgbm_quantile": 0.43766431413583673,
+          "foil_climatology": 0.6770593709287177,
+          "oracle__foil_climatology": 0.6704358645077239,
+          "foil_entity_eb": 0.6820370370370371,
+          "oracle__foil_entity_eb": 0.6823832123580867,
+          "matched_n__pois_glm": 0.8138686022706123,
+          "matched_n__negbin_glm": 0.8149865996649917,
+          "matched_n__lgbm_quantile": 0.732750550165388,
+          "permuted_control": 0.7107924151175656,
+          "nihilist_zero": 2.0185185185185186,
+          "zero_width": 0.8925925925925926,
+          "max_width": 1.1499571933742787
+        },
+        "n_train": 4710,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "pois_glm": 0.7624689139126288,
+          "oracle__pois_glm": 0.7069051461688002,
+          "negbin_glm": 0.7624168286688919,
+          "oracle__negbin_glm": 0.7069821736419322,
+          "lgbm_quantile": 0.8040912140425994,
+          "oracle__lgbm_quantile": 0.49430936577539963,
+          "foil_climatology": 0.7671144041374757,
+          "oracle__foil_climatology": 0.7650692697061953,
+          "foil_entity_eb": 0.7701547885412464,
+          "oracle__foil_entity_eb": 0.7701529545537908,
+          "matched_n__pois_glm": 0.8457367127608847,
+          "matched_n__negbin_glm": 0.8465972196750176,
+          "matched_n__lgbm_quantile": 0.8265018002689715,
+          "permuted_control": 0.8025199546456587,
+          "nihilist_zero": 1.9817518248175183,
+          "zero_width": 1.0401459854014599,
+          "max_width": 1.1907904485933318
+        },
+        "n_train": 4990,
+        "n_test": 274
+      }
+    ],
+    "xp_att": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "pois_glm": 0.7868797692164525,
+          "oracle__pois_glm": 0.7323858179787828,
+          "negbin_glm": 0.7869231341894657,
+          "oracle__negbin_glm": 0.7324883677647497,
+          "lgbm_quantile": 0.8329168398945369,
+          "oracle__lgbm_quantile": 0.5062634766342512,
+          "foil_climatology": 0.8187604690117254,
+          "oracle__foil_climatology": 0.8159034245300577,
+          "foil_entity_eb": 0.7977318071840684,
+          "oracle__foil_entity_eb": 0.7960308952168249,
+          "matched_n__pois_glm": 0.8633619951609902,
+          "matched_n__negbin_glm": 0.8646367020286618,
+          "matched_n__lgbm_quantile": 0.8613981929838248,
+          "permuted_control": 0.8492172212710491,
+          "nihilist_zero": 2.3814814814814813,
+          "zero_width": 1.1666666666666667,
+          "max_width": 1.2790991997022145
+        },
+        "n_train": 4710,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "pois_glm": 0.7578181051241609,
+          "oracle__pois_glm": 0.7133200674907383,
+          "negbin_glm": 0.7579340131313501,
+          "oracle__negbin_glm": 0.7133637163921799,
+          "lgbm_quantile": 0.7911006632001064,
+          "oracle__lgbm_quantile": 0.4790983901499583,
+          "foil_climatology": 0.7988005722040861,
+          "oracle__foil_climatology": 0.7977643307779775,
+          "foil_entity_eb": 0.7866263800755603,
+          "oracle__foil_entity_eb": 0.7859481715145069,
+          "matched_n__pois_glm": 0.8037890180831163,
+          "matched_n__negbin_glm": 0.8039384880607416,
+          "matched_n__lgbm_quantile": 0.8247583064577415,
+          "permuted_control": 0.832721347525457,
+          "nihilist_zero": 2.2554744525547443,
+          "zero_width": 1.1094890510948905,
+          "max_width": 1.2799068334372594
+        },
+        "n_train": 4990,
+        "n_test": 274
+      }
+    ],
+    "def_sacks": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "pois_glm": 0.9503331472175693,
+          "oracle__pois_glm": 0.8491107388795831,
+          "negbin_glm": 0.9471719709659407,
+          "oracle__negbin_glm": 0.8488213288665549,
+          "lgbm_quantile": 0.9898263133931624,
+          "oracle__lgbm_quantile": 0.5812272582454157,
+          "foil_climatology": 0.968888888888889,
+          "oracle__foil_climatology": 0.9677891680625349,
+          "foil_entity_eb": 0.9574632421366088,
+          "oracle__foil_entity_eb": 0.9572914572864321,
+          "matched_n__pois_glm": 1.0408038339847385,
+          "matched_n__negbin_glm": 1.022426949562628,
+          "matched_n__lgbm_quantile": 1.0439296345231452,
+          "permuted_control": 1.0150736267760279,
+          "nihilist_zero": 2.403703703703704,
+          "zero_width": 1.3592592592592592,
+          "max_width": 1.468959612879211
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "pois_glm": 0.951014378461651,
+          "oracle__pois_glm": 0.8923759307486336,
+          "negbin_glm": 0.9466118915746615,
+          "oracle__negbin_glm": 0.8910996588783333,
+          "lgbm_quantile": 0.9977669250385529,
+          "oracle__lgbm_quantile": 0.6234124095820993,
+          "foil_climatology": 0.9784704544620915,
+          "oracle__foil_climatology": 0.9762725048600668,
+          "foil_entity_eb": 0.9867782342368779,
+          "oracle__foil_entity_eb": 0.9861106628030664,
+          "matched_n__pois_glm": 1.0590936433994793,
+          "matched_n__negbin_glm": 1.058121813446796,
+          "matched_n__lgbm_quantile": 1.0415374186647548,
+          "permuted_control": 1.0257489412792826,
+          "nihilist_zero": 2.295620437956204,
+          "zero_width": 1.3613138686131387,
+          "max_width": 1.4776480944870338
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "def_int": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "pois_glm": 0.4189687325516471,
+          "oracle__pois_glm": 0.38673385445747255,
+          "negbin_glm": 0.4182064023822818,
+          "oracle__negbin_glm": 0.3866720640238228,
+          "lgbm_quantile": 0.45491965389959355,
+          "oracle__lgbm_quantile": 0.28574753377863726,
+          "foil_climatology": 0.42742974129908806,
+          "oracle__foil_climatology": 0.4236873348222595,
+          "foil_entity_eb": 0.42824008933556673,
+          "oracle__foil_entity_eb": 0.42757621440536014,
+          "matched_n__pois_glm": 4.055650846826726,
+          "matched_n__negbin_glm": 4.057124511446119,
+          "matched_n__lgbm_quantile": 0.44990688967093617,
+          "permuted_control": 0.46501800310199837,
+          "nihilist_zero": 0.6777777777777778,
+          "zero_width": 0.7222222222222222,
+          "max_width": 0.9460524846454496
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "pois_glm": 0.42177016469207357,
+          "oracle__pois_glm": 0.3810248321901478,
+          "negbin_glm": 0.4224283827898617,
+          "oracle__negbin_glm": 0.38104555624839526,
+          "lgbm_quantile": 0.45489903221250344,
+          "oracle__lgbm_quantile": 0.29088788695326445,
+          "foil_climatology": 0.4245380185599531,
+          "oracle__foil_climatology": 0.4221323423687782,
+          "foil_entity_eb": 0.41414352785826947,
+          "oracle__foil_entity_eb": 0.41428969665847487,
+          "matched_n__pois_glm": 0.44601089388548587,
+          "matched_n__negbin_glm": 0.4469432931078751,
+          "matched_n__lgbm_quantile": 0.4627224846457898,
+          "permuted_control": 0.4622237015305556,
+          "nihilist_zero": 0.718978102189781,
+          "zero_width": 0.6678832116788321,
+          "max_width": 0.9393515020357259
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "def_fumble_rec": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "pois_glm": 0.33496203238414296,
+          "oracle__pois_glm": 0.2889791550344314,
+          "negbin_glm": 0.33517941559650105,
+          "oracle__negbin_glm": 0.28897394379303926,
+          "lgbm_quantile": 0.36377822008094585,
+          "oracle__lgbm_quantile": 0.23140811839579348,
+          "foil_climatology": 0.32930206588498045,
+          "oracle__foil_climatology": 0.32295303368695333,
+          "foil_entity_eb": 0.3341487064954402,
+          "oracle__foil_entity_eb": 0.3332717290154476,
+          "matched_n__pois_glm": 0.39101544760841245,
+          "matched_n__negbin_glm": 0.39171952354364414,
+          "matched_n__lgbm_quantile": 0.38411578427316245,
+          "permuted_control": 0.37100511567751066,
+          "nihilist_zero": 0.4444444444444444,
+          "zero_width": 0.4444444444444444,
+          "max_width": 0.6341373534338358
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "pois_glm": 0.30738803506584017,
+          "oracle__pois_glm": 0.28333437259289146,
+          "negbin_glm": 0.3072697428749588,
+          "oracle__negbin_glm": 0.2832283681179621,
+          "lgbm_quantile": 0.336694587958516,
+          "oracle__lgbm_quantile": 0.2200042741561729,
+          "foil_climatology": 0.31020173862010786,
+          "oracle__foil_climatology": 0.30781045006052166,
+          "foil_entity_eb": 0.3175389722334299,
+          "oracle__foil_entity_eb": 0.31758720610351027,
+          "matched_n__pois_glm": 0.34787165755786226,
+          "matched_n__negbin_glm": 0.3477596009243297,
+          "matched_n__lgbm_quantile": 0.35116299983056726,
+          "permuted_control": 0.3360525582168916,
+          "nihilist_zero": 0.45985401459854014,
+          "zero_width": 0.45985401459854014,
+          "max_width": 0.6287308806807762
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "fg_make": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "eb_kicker_curve": 0.39239646355388547,
+          "oracle__eb_kicker_curve": 0.39137981452304743,
+          "logit_distance_glm": 0.3950383386484858,
+          "oracle__logit_distance_glm": 0.3915547607238494,
+          "lgbm_classifier": 0.41278796060083534,
+          "oracle__lgbm_classifier": 0.17925178875392214,
+          "foil_league_curve": 0.39837257589698366,
+          "oracle__foil_league_curve": 0.39092152446840095,
+          "foil_constant_rate": 0.44220217272777174,
+          "oracle__foil_constant_rate": 0.44209597941052164,
+          "matched_n__eb_kicker_curve": 0.39153482147259133,
+          "matched_n__logit_distance_glm": 0.4007682146003943,
+          "matched_n__lgbm_classifier": 0.45742503662479755,
+          "permuted_control": 0.3960225882785372,
+          "all_event": 1.116219620555735,
+          "uniform": 0.6931471805599453
+        },
+        "n_train": 9068,
+        "n_test": 545
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "eb_kicker_curve": 0.3324323129138966,
+          "oracle__eb_kicker_curve": 0.3284377060691728,
+          "logit_distance_glm": 0.3314087814757037,
+          "oracle__logit_distance_glm": 0.32660316389331767,
+          "lgbm_classifier": 0.3509995912412565,
+          "oracle__lgbm_classifier": 0.12605594938784462,
+          "foil_league_curve": 0.33567957679838645,
+          "oracle__foil_league_curve": 0.32587407116228795,
+          "foil_constant_rate": 0.38408938920141467,
+          "oracle__foil_constant_rate": 0.380782212566206,
+          "matched_n__eb_kicker_curve": 0.3282182214634709,
+          "matched_n__logit_distance_glm": 0.3292829683837864,
+          "matched_n__lgbm_classifier": 0.4613006421612583,
+          "permuted_control": 0.333127723776343,
+          "all_event": 0.8786544224822948,
+          "uniform": 0.6931471805599453
+        },
+        "n_train": 9629,
+        "n_test": 543
+      }
+    ],
+    "fg_band": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "mnlogit": 1.0607069854414672,
+          "oracle__mnlogit": 1.0508735870199608,
+          "eb_dirichlet_kicker": 1.0960997490334496,
+          "oracle__eb_dirichlet_kicker": 1.0940920547582746,
+          "lgbm_multiclass": 1.0918281100808966,
+          "oracle__lgbm_multiclass": 0.7258543505922705,
+          "foil_league_mix": 1.0837034618044699,
+          "oracle__foil_league_mix": 1.064547861419238,
+          "matched_n__mnlogit": 1.0759359722453012,
+          "matched_n__eb_dirichlet_kicker": 1.0942643850325542,
+          "matched_n__lgbm_multiclass": 1.2830083852019112,
+          "permuted_control": 1.0669832962625423,
+          "point_mass_modal": 7.478122393758478,
+          "uniform": 1.09861228866811
+        },
+        "n_train": 9068,
+        "n_test": 545
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "mnlogit": 1.052480178295573,
+          "oracle__mnlogit": 1.0363292552035905,
+          "eb_dirichlet_kicker": 1.0647204212114436,
+          "oracle__eb_dirichlet_kicker": 1.0634128383576462,
+          "lgbm_multiclass": 1.0796798845849112,
+          "oracle__lgbm_multiclass": 0.7366877402178318,
+          "foil_league_mix": 1.0562731322684995,
+          "oracle__foil_league_mix": 1.0504036246252482,
+          "matched_n__mnlogit": 1.0683539884187505,
+          "matched_n__eb_dirichlet_kicker": 1.0642337863449618,
+          "matched_n__lgbm_multiclass": 1.2415876456351458,
+          "permuted_control": 1.055665646684438,
+          "point_mass_modal": 7.225793894034563,
+          "uniform": 1.0986122886681098
+        },
+        "n_train": 9629,
+        "n_test": 543
+      }
+    ],
+    "dst_td": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "eb_pois": 0.08676493579006143,
+          "oracle__eb_pois": 0.08686860227061233,
+          "hurdle_pois": 0.0875428996836032,
+          "oracle__hurdle_pois": 0.07616880699795271,
+          "foil_climatology": 0.08517960171226503,
+          "oracle__foil_climatology": 0.08509398846082263,
+          "foil_league_rate": 0.08529127117066818,
+          "oracle__foil_league_rate": 0.08509398846082263,
+          "matched_n__eb_pois": 0.08684589614740369,
+          "matched_n__hurdle_pois": 0.23325851479620321,
+          "permuted_control": 0.08676493579006143,
+          "nihilist_zero": 0.09259259259259259,
+          "zero_width": 0.09259259259259259,
+          "max_width": 0.10370556486134379
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "eb_pois": 0.09924146278839453,
+          "oracle__eb_pois": 0.09920441624179291,
+          "hurdle_pois": 0.10092267908887505,
+          "oracle__hurdle_pois": 0.09332520265561384,
+          "foil_climatology": 0.09883981953563437,
+          "oracle__foil_climatology": 0.09876473425521769,
+          "foil_league_rate": 0.09883981953563437,
+          "oracle__foil_league_rate": 0.09878113193705755,
+          "matched_n__eb_pois": 0.0994527381432711,
+          "matched_n__hurdle_pois": 0.12824780838499067,
+          "permuted_control": 0.09924146278839453,
+          "nihilist_zero": 0.10948905109489052,
+          "zero_width": 0.10948905109489052,
+          "max_width": 0.1173755639511426
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "def_safety": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "eb_pois": 0.022483714870649547,
+          "oracle__eb_pois": 0.02242080774241579,
+          "hurdle_pois": 0.022632979713381726,
+          "oracle__hurdle_pois": 0.020131769960915688,
+          "foil_climatology": 0.02185929648241206,
+          "oracle__foil_climatology": 0.02183986599664992,
+          "foil_league_rate": 0.02185929648241206,
+          "oracle__foil_league_rate": 0.02183137911781128,
+          "matched_n__eb_pois": 0.022453378001116697,
+          "matched_n__hurdle_pois": 0.08316582914572865,
+          "permuted_control": 0.022483714870649547,
+          "nihilist_zero": 0.022222222222222223,
+          "zero_width": 0.022222222222222223,
+          "max_width": 0.02336683417085427
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "eb_pois": 0.022420863441294066,
+          "oracle__eb_pois": 0.022469464108865495,
+          "hurdle_pois": 0.021915416498551152,
+          "oracle__hurdle_pois": 0.017271210064923156,
+          "foil_climatology": 0.021551186589883725,
+          "oracle__foil_climatology": 0.021528782599127022,
+          "foil_league_rate": 0.021551186589883725,
+          "oracle__foil_league_rate": 0.021520008803139784,
+          "matched_n__eb_pois": 0.02240582474415875,
+          "matched_n__hurdle_pois": 0.023775813373436525,
+          "permuted_control": 0.022420863441294066,
+          "nihilist_zero": 0.021897810218978103,
+          "zero_width": 0.021897810218978103,
+          "max_width": 0.023058724278325938
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "def_blocked_kick": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "eb_pois": 0.08375767727526522,
+          "oracle__eb_pois": 0.08363986599664991,
+          "hurdle_pois": 0.08601600595570445,
+          "oracle__hurdle_pois": 0.07594919039642657,
+          "foil_climatology": 0.08536199516099013,
+          "oracle__foil_climatology": 0.08509398846082263,
+          "foil_league_rate": 0.08536199516099013,
+          "oracle__foil_league_rate": 0.08509398846082263,
+          "matched_n__eb_pois": 0.08387772194304857,
+          "matched_n__hurdle_pois": 0.23493467336683416,
+          "permuted_control": 0.08375767727526522,
+          "nihilist_zero": 0.09259259259259259,
+          "zero_width": 0.09259259259259259,
+          "max_width": 0.09539363484087103
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "eb_pois": 0.06597916590250523,
+          "oracle__eb_pois": 0.06601327806917802,
+          "hurdle_pois": 0.06591479294281627,
+          "oracle__hurdle_pois": 0.055178263580677116,
+          "foil_climatology": 0.0648626343395811,
+          "oracle__foil_climatology": 0.06485603198474124,
+          "foil_league_rate": 0.0648626343395811,
+          "oracle__foil_league_rate": 0.06485603198474124,
+          "matched_n__eb_pois": 0.06609544070718557,
+          "matched_n__hurdle_pois": 0.07763012140996957,
+          "permuted_control": 0.06597916590250523,
+          "nihilist_zero": 0.06934306569343066,
+          "zero_width": 0.06934306569343066,
+          "max_width": 0.0754153981586766
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "pa_bucket": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "ordered_logit": 0.11558041737989568,
+          "oracle__ordered_logit": 0.10904065956380335,
+          "mnlogit": 0.11659311928922964,
+          "oracle__mnlogit": 0.09599734801875517,
+          "negbin_integrated": 0.11618745481878993,
+          "oracle__negbin_integrated": 0.11090323183319307,
+          "foil_climatology": 0.12280838921860478,
+          "oracle__foil_climatology": 0.12224965706447187,
+          "foil_entity_eb": 0.12121493138716899,
+          "oracle__foil_entity_eb": 0.1196213209783112,
+          "matched_n__ordered_logit": 0.13820381777826551,
+          "matched_n__mnlogit": 0.16042440437675914,
+          "matched_n__negbin_integrated": 0.13372005668718032,
+          "permuted_control": 0.12375814060556273,
+          "point_mass_modal": 0.1694432157591951,
+          "uniform": 0.13940329218106992
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "ordered_logit": 0.11419332534300089,
+          "oracle__ordered_logit": 0.10268206522884006,
+          "mnlogit": 0.11445049614353359,
+          "oracle__mnlogit": 0.0874159996886731,
+          "negbin_integrated": 0.11458230913867615,
+          "oracle__negbin_integrated": 0.10464941940764029,
+          "foil_climatology": 0.12317487739594575,
+          "oracle__foil_climatology": 0.12312689807661568,
+          "foil_entity_eb": 0.12061017552826975,
+          "oracle__foil_entity_eb": 0.11930620073037344,
+          "matched_n__ordered_logit": 0.12506512188656027,
+          "matched_n__mnlogit": 0.13828603397814965,
+          "matched_n__negbin_integrated": 0.12555735408807944,
+          "permuted_control": 0.12432491417846721,
+          "point_mass_modal": 0.17654978742784375,
+          "uniform": 0.1377568261692349
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ],
+    "ya_bucket": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "ordered_logit": 0.09028724016972693,
+          "oracle__ordered_logit": 0.08473117666216673,
+          "mnlogit": 0.09115366743065478,
+          "oracle__mnlogit": 0.0714994383474364,
+          "gauss_integrated": 0.0903601268630806,
+          "oracle__gauss_integrated": 0.08565738708688168,
+          "foil_climatology": 0.09603005751304727,
+          "oracle__foil_climatology": 0.09452160493827161,
+          "foil_entity_eb": 0.09552152520008188,
+          "oracle__foil_entity_eb": 0.09242969832810655,
+          "matched_n__ordered_logit": 0.11222293323501546,
+          "matched_n__mnlogit": 0.14192578403401837,
+          "matched_n__gauss_integrated": 0.11014195504429303,
+          "permuted_control": 0.09386651967832667,
+          "point_mass_modal": 0.17268343243342926,
+          "uniform": 0.12608024691358022
+        },
+        "n_train": 4670,
+        "n_test": 270
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "ordered_logit": 0.09220233811041423,
+          "oracle__ordered_logit": 0.08348973700949945,
+          "mnlogit": 0.0925114752478355,
+          "oracle__mnlogit": 0.07264708954860549,
+          "gauss_integrated": 0.09182654844848573,
+          "oracle__gauss_integrated": 0.08423717568112946,
+          "foil_climatology": 0.10311562785564113,
+          "oracle__foil_climatology": 0.10033166391390058,
+          "foil_entity_eb": 0.10089735984387746,
+          "oracle__foil_entity_eb": 0.0974867286955372,
+          "matched_n__ordered_logit": 0.10682545095412398,
+          "matched_n__mnlogit": 0.11675135506914648,
+          "matched_n__gauss_integrated": 0.1047888791291042,
+          "permuted_control": 0.10118234839545305,
+          "point_mass_modal": 0.17244355294532818,
+          "uniform": 0.13142065423087318
+        },
+        "n_train": 4950,
+        "n_test": 274
+      }
+    ]
+  },
+  "fold_results_b": {
+    "k_points": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "assembled": 2.5579288777219427,
+          "foil_climatology": 2.5695514610087473,
+          "foil_board_eb": 2.598210734696564,
+          "foil_direct": 2.6074089694138847,
+          "nihilist_zero": 8.544444444444444,
+          "permuted_direct": 2.6008608272782348,
+          "oracle__assembled": 2.4010485985482966,
+          "matched_n__assembled": 2.8674603526893727,
+          "oracle__foil_climatology": 2.541745226130653,
+          "oracle__foil_board_eb": 2.565422165641237,
+          "oracle__foil_direct": 1.596688361334631,
+          "zero_width": 3.588888888888889,
+          "max_width": 3.898976363297972
+        }
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "assembled": 2.704645767156953,
+          "foil_climatology": 2.77509155265378,
+          "foil_board_eb": 2.771852743988747,
+          "foil_direct": 2.7999923774663094,
+          "nihilist_zero": 8.489051094890511,
+          "permuted_direct": 2.8541473702075675,
+          "oracle__assembled": 2.5474560640795216,
+          "matched_n__assembled": 3.0248040907090195,
+          "oracle__foil_climatology": 2.754850434655027,
+          "oracle__foil_board_eb": 2.7532197102599,
+          "oracle__foil_direct": 1.724532651247908,
+          "zero_width": 3.897810218978102,
+          "max_width": 3.960911968602136
+        }
+      }
+    ],
+    "dst_points": [
+      {
+        "label": "2025H1",
+        "scores": {
+          "assembled": 2.769044105713754,
+          "foil_climatology": 2.815846715056765,
+          "foil_board_eb": 2.8049241035821413,
+          "foil_direct": 2.8298671786186462,
+          "nihilist_zero": 5.844444444444444,
+          "permuted_direct": 2.9274171529702153,
+          "oracle__assembled": 2.5517229759910665,
+          "matched_n__assembled": 10.045323864693842,
+          "oracle__foil_climatology": 2.7962529406290706,
+          "oracle__foil_board_eb": 2.805440684785403,
+          "oracle__foil_direct": 1.7113419245760897,
+          "zero_width": 3.9851851851851854,
+          "max_width": 4.099234170854271
+        }
+      },
+      {
+        "label": "2025H2",
+        "scores": {
+          "assembled": 2.5483857187396834,
+          "foil_climatology": 2.6567158548215533,
+          "foil_board_eb": 2.6583118397285834,
+          "foil_direct": 2.605074995431373,
+          "nihilist_zero": 6.007299270072993,
+          "permuted_direct": 2.6927385619994535,
+          "oracle__assembled": 2.4015180235117195,
+          "matched_n__assembled": 2.7160467079925175,
+          "oracle__foil_climatology": 2.6477098540145985,
+          "oracle__foil_board_eb": 2.6366780717462985,
+          "oracle__foil_direct": 1.6815645883190722,
+          "zero_width": 3.6350364963503647,
+          "max_width": 4.036969447602979
+        }
+      }
+    ]
+  },
+  "fdr": {
+    "own_family": {
+      "fg_att": false,
+      "xp_att": false,
+      "def_sacks": false,
+      "def_int": false,
+      "def_fumble_rec": false,
+      "fg_make": false,
+      "fg_band": false,
+      "dst_td": false,
+      "def_safety": false,
+      "def_blocked_kick": false,
+      "pa_bucket": false,
+      "ya_bucket": false,
+      "k_points": false,
+      "dst_points": false
+    },
+    "pooled": {
+      "fg_att": false,
+      "xp_att": false,
+      "def_sacks": false,
+      "def_int": false,
+      "def_fumble_rec": false,
+      "fg_make": false,
+      "fg_band": false,
+      "dst_td": false,
+      "def_safety": false,
+      "def_blocked_kick": false,
+      "pa_bucket": false,
+      "ya_bucket": false,
+      "k_points": false,
+      "dst_points": false
+    },
+    "binding": {
+      "fg_att": false,
+      "xp_att": false,
+      "def_sacks": false,
+      "def_int": false,
+      "def_fumble_rec": false,
+      "fg_make": false,
+      "fg_band": false,
+      "dst_td": false,
+      "def_safety": false,
+      "def_blocked_kick": false,
+      "pa_bucket": false,
+      "ya_bucket": false,
+      "k_points": false,
+      "dst_points": false
+    }
+  },
+  "gates_a": {
+    "fg_att": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "xp_att": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "def_sacks": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "def_int": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "def_fumble_rec": {
+      "checks": {
+        "beats_foil": false,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "fg_make": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "fg_band": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "dst_td": {
+      "checks": {
+        "beats_foil": false,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "def_safety": {
+      "checks": {
+        "beats_foil": false,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": false,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "def_blocked_kick": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "pa_bucket": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    },
+    "ya_bucket": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": false,
+        "oracle_floors_respected": true
+      },
+      "ship": false
+    }
+  },
+  "gates_b": {
+    "k_points": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    },
+    "dst_points": {
+      "checks": {
+        "beats_foil": true,
+        "fold_consistency": false,
+        "pbo_ok": false,
+        "dsr_ok": false,
+        "fdr_ok": false,
+        "degenerates_lose": true,
+        "permutation_behaves": true,
+        "oracle_floors_respected": true,
+        "coverage_floor_ok": true
+      },
+      "ship": false
+    }
+  },
+  "null_states": {
+    "layer_a::fg_att": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w7_fg_att`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_a::xp_att": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w7_xp_att`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_a::def_sacks": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w7_def_sacks`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_a::def_int": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w7_def_int`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_a::def_fumble_rec": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w7_def_fumble_rec`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_a::fg_make": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w7_fg_make`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_a::fg_band": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w7_fg_band`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_a::dst_td": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w7_dst_td`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_a::def_safety": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w7_def_safety`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_a::def_blocked_kick": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w7_def_blocked_kick`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_a::pa_bucket": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w7_pa_bucket`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_a::ya_bucket": {
+      "state": "UNDEFINED",
+      "reason": "`nf_w7_ya_bucket`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+      "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+    },
+    "layer_b::k_points": {
+      "instrument_verdict": {
+        "state": "UNDEFINED",
+        "reason": "`nf_w7_downstream_k_points`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+        "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+      },
+      "hand_corrected": true,
+      "pbo_state": "EVALUABLE \u2014 PBO is computed over the 4-config eligible field (assembled + 3 foils); the DSR trial field is the single pre-registered arm (sr0=0, a plain PSR), declared in the pre-registration \u00a77.",
+      "state": "POWER_LIMITED",
+      "reason": "the point estimate is positive (+0.0410 CRPS) but the interval spans zero (CI95 [None, None]), fold wins are 2/2 against a required None, and p=None. Every statistical gate except PBO is REACHABLE at this design \u2014 the effect is simply smaller than this design can resolve.",
+      "retest_trigger": "~4 half-season folds (\u22482 seasons) for the DSR gate at the observed per-fold Sharpe 0.987 \u2014 i.e. CALENDAR-bound and far beyond any plausible window; \u26d4 this is NOT a near-term re-test.",
+      "gate_sensitivity": {
+        "waived": [],
+        "still_refusing": [
+          "fold_consistency",
+          "pbo_ok",
+          "dsr_ok",
+          "fdr_ok"
+        ],
+        "ships_without_waived_checks": false
+      }
+    },
+    "layer_b::dst_points": {
+      "instrument_verdict": {
+        "state": "UNDEFINED",
+        "reason": "`nf_w7_downstream_dst_points`: 2 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+        "retest_trigger": "2 more fold(s) \u2014 i.e. a window of 7 seasons"
+      },
+      "hand_corrected": true,
+      "pbo_state": "EVALUABLE \u2014 PBO is computed over the 4-config eligible field (assembled + 3 foils); the DSR trial field is the single pre-registered arm (sr0=0, a plain PSR), declared in the pre-registration \u00a77.",
+      "state": "POWER_LIMITED",
+      "reason": "the point estimate is positive (+0.0588 CRPS) but the interval spans zero (CI95 [None, None]), fold wins are 2/2 against a required None, and p=None. Every statistical gate except PBO is REACHABLE at this design \u2014 the effect is simply smaller than this design can resolve.",
+      "retest_trigger": "~2 half-season folds (\u22481 seasons) for the DSR gate at the observed per-fold Sharpe 20.101 \u2014 i.e. CALENDAR-bound and far beyond any plausible window; \u26d4 this is NOT a near-term re-test.",
+      "gate_sensitivity": {
+        "waived": [],
+        "still_refusing": [
+          "fold_consistency",
+          "pbo_ok",
+          "dsr_ok",
+          "fdr_ok"
+        ],
+        "ships_without_waived_checks": false
+      }
+    }
+  },
+  "verdict": {
+    "layer_a": {
+      "fg_att": "UNDEFINED",
+      "xp_att": "UNDEFINED",
+      "def_sacks": "UNDEFINED",
+      "def_int": "UNDEFINED",
+      "def_fumble_rec": "UNDEFINED",
+      "fg_make": "UNDEFINED",
+      "fg_band": "UNDEFINED",
+      "dst_td": "UNDEFINED",
+      "def_safety": "UNDEFINED",
+      "def_blocked_kick": "UNDEFINED",
+      "pa_bucket": "UNDEFINED",
+      "ya_bucket": "UNDEFINED"
+    },
+    "layer_b": {
+      "k_points": "POWER_LIMITED",
+      "dst_points": "POWER_LIMITED"
+    }
+  },
+  "headline": "A[fg_att:UNDEFINED xp_att:UNDEFINED def_sacks:UNDEFINED def_int:UNDEFINED def_fumble_rec:UNDEFINED fg_make:UNDEFINED fg_band:UNDEFINED dst_td:UNDEFINED def_safety:UNDEFINED def_blocked_kick:UNDEFINED pa_bucket:UNDEFINED ya_bucket:UNDEFINED] B[k_points:POWER_LIMITED dst_points:POWER_LIMITED]"
+}

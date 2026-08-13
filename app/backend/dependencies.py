@@ -64,6 +64,30 @@ def _groups_from_bearer(authorization: str | None) -> list[str]:
     return []
 
 
+def parse_groups_claim(raw) -> set[str]:
+    """Parse a `cognito:groups` claim value in EVERY delivery shape we have seen.
+
+    ⚠️ THE DELIMITER IS THE BUG. The API Gateway HTTP API (v2) JWT authorizer flattens a
+    multi-valued claim into a BRACKETED, SPACE-separated string (`[fantasy_comp subscriber]`)
+    — not the comma-separated form the shape suggests — while a raw token payload carries a
+    clean JSON array. A comma-only split therefore yields `["[subscriber]"]`, which matches
+    NOTHING, and every caller of it silently behaves as though the user were in no groups at
+    all. That is invisible in tests written with the comma form, because such a test restates
+    the parser's own assumption instead of testing it (NF-C0e).
+
+    Central so a fix lands once rather than in each of the four places that read this claim.
+    """
+    if isinstance(raw, (list, tuple, set)):
+        return {str(g).strip() for g in raw if str(g).strip()}
+    if isinstance(raw, str) and raw.strip():
+        return {
+            part.strip()
+            for part in raw.strip().strip("[]").replace(",", " ").split()
+            if part.strip()
+        }
+    return set()
+
+
 def _claims_from_event(request: Request) -> dict:
     """Return the JWT claims dict from the API Gateway authorizer context, or {}."""
     event = request.scope.get("aws.event", {})
@@ -129,14 +153,8 @@ def _groups_from_request(request: Request) -> list[str]:
         return jwt_verify.verified_groups(request.headers.get("Authorization"))
 
     groups: set[str] = set(_groups_from_bearer(request.headers.get("Authorization")))
-    raw = claims.get("cognito:groups")
-    if isinstance(raw, list):
-        groups.update(str(g).strip() for g in raw if str(g).strip())
-    elif isinstance(raw, str) and raw.strip():
-        # Handle both "[a b]" (HTTP API v2) and "a,b" delimiter styles.
-        for part in raw.strip().strip("[]").replace(",", " ").split():
-            if part.strip():
-                groups.add(part.strip())
+    # Handles both "[a b]" (HTTP API v2) and "a,b" delimiter styles.
+    groups |= parse_groups_claim(claims.get("cognito:groups"))
     return list(groups)
 
 

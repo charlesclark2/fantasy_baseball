@@ -34,7 +34,7 @@ Naming convention: `credence-{environment}-{service}-{descriptor}`
 | Lambda triggers | **Pre sign-up** → `credence-prod-cognito-presignup-link` · **Define / Create / Verify auth challenge** → `credence-prod-cognito-email-otp` |
 | App-client auth flows | must include `ALLOW_CUSTOM_AUTH` (G100-C0) |
 | Auth session validity | **15 min** — this is the real expiry of an emailed OTP, and the code email says "15 minutes". Leaving it at the 3-minute default makes the email promise something the pool will not honour. |
-| User Groups | `beta_tester`, `subscriber`, `admin` |
+| User Groups | `beta_tester`, `subscriber`, `admin`, `passwordless` (G100-C0-MFA — see below; membership means "no user-chosen password" and NOTHING else, because it exempts the account from subscriber TOTP) |
 | Hosted UI domain | `us-east-1gg9zmbwqt.auth.us-east-1.amazoncognito.com` |
 | Hosted UI custom domain | None (`CustomDomain: null`) |
 | Allowed callback URLs | `https://www.credencesports.com/callback` **and** `https://credencesports.com/callback` (both verified allowlisted 2026-08-06 — a bogus `redirect_uri` correctly returns `redirect_mismatch`) |
@@ -65,9 +65,29 @@ shape** — and a pre-provisioned/linked user's username is a plain UUID, not `g
 fails CLOSED, so with enforcement on, a `subscriber` who signs in by Google-linked or email
 OTP could be 403'd and told to enable TOTP they cannot enroll (they have no password to
 re-authenticate with). This is inert today (`ENFORCE_SUBSCRIBER_MFA` defaults to `0`) and
-the frontend side is already handled (`sessionUsesPasswordlessAuth`). **Resolve it before
-the flip** — the cheap fix is a `passwordless` Cognito group applied at pre-provision time
-and exempted in `_session_is_federated`, since groups already travel in the validated token.
+the frontend side is already handled (`sessionUsesPasswordlessAuth`).
+
+✅ **RESOLVED — G100-C0-MFA, VERIFIED LIVE 2026-08-13. The flip is cleared.** A `passwordless`
+group is applied at both creation points and exempted in the guard. Verified with
+`ENFORCE_SUBSCRIBER_MFA=1` genuinely on: the SAME account, SAME session type, with the group
+as the only variable, got **200** with it and **403** without it. Instrument + runbook +
+re-verification procedure: `docs/g100_c0_mfa_passwordless_exemption.md`
+(`GET /auth/session-diagnostics`, authenticated and self-only, carries a `guard_version`
+marker — the API Lambda has no CD, so a merged PR is not a deployed build).
+
+⭐⭐ **TWO measured facts about this pool's ACCESS token that any future auth work must start
+from — both overturn a natural assumption:**
+- **There is no `amr`, and no `identities`.** Password, Google and email-OTP sessions all
+  deliver exactly `auth_time, client_id, cognito:groups, event_id, exp, iat, iss, jti,
+  origin_jti, scope, sub, token_use, username`. So the `amr` half of the federated exemption
+  is dead code in production, and a **linked** Google session is indistinguishable from a
+  password session ⇒ it gets challenged at flip time. Don't build a rule on `amr` without
+  re-measuring.
+- **`cognito:groups` is bracketed even for ONE group** (`"[subscriber]"`), and ABSENT entirely
+  for a user in no groups. `require_subscriber_mfa` split on `,` only, so with enforcement on
+  it would have gated **nobody** — enforcement that reads as enabled and enforces nothing.
+  Fixed; both readings now share `dependencies.parse_groups_claim`, and the live 403 above is
+  the proof it now bites. ⇒ ⛔ never hand-parse this claim.
 
 #### ✅ Verified live 2026-08-10 — all four legs, against the real pool
 

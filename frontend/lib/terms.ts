@@ -38,16 +38,48 @@ export async function getTermsStatus(accessToken: string | null): Promise<TermsS
   return { known: true, accepted: acceptedAt !== null, acceptedAt }
 }
 
-/** Record acceptance. Throws on failure — the caller must NOT swallow it. */
-export async function acceptTerms(accessToken: string | null): Promise<void> {
-  await apiFetch("/auth/accept-terms", { method: "POST" }, accessToken)
+/**
+ * G100-D0-R1 — what the acceptance write told us about whether this account is NEW.
+ *
+ * The same ABSENT-vs-NULL distinction `TermsStatus` draws above, for the same reason: the API
+ * Lambda ships only via `deploy.sh` while this code auto-deploys, so a new client WILL run
+ * against a backend whose `/auth/accept-terms` answers 204 with no body. That is `known: false`
+ * — "the server did not tell us" — and it must never be collapsed into `created: false`, which
+ * means "the server told us this account already existed". Collapsing them would take the
+ * signup funnel's second step to a flat ZERO for the length of the skew window, and a zero on a
+ * conversion chart reads as a conversion collapse rather than as a missing deploy.
+ */
+export type TermsAcceptance =
+  /** The backend told us. `created` is authoritative. */
+  | { known: true; created: boolean }
+  /** The backend did NOT tell us (old Lambda, or a body we could not read). */
+  | { known: false }
+
+/**
+ * Record acceptance. Throws on failure — the caller must NOT swallow it.
+ *
+ * ⚠️ `created` is read as a BOOLEAN ONLY when it is genuinely a boolean. Anything else — the
+ * key missing (old backend, 204 ⇒ `apiFetch` returns null), a body that is not an object — is
+ * reported as `known: false`, never as `created: false`, so an unknown can only ever
+ * UNDER-count a signup. An analytics number that silently over-reports its own success metric
+ * is much worse than one that misses some, because nothing downstream will question it.
+ */
+export async function acceptTerms(accessToken: string | null): Promise<TermsAcceptance> {
+  const res = (await apiFetch("/auth/accept-terms", { method: "POST" }, accessToken)) as
+    | Record<string, unknown>
+    | null
+  if (!res || typeof res.created !== "boolean") return { known: false }
+  return { known: true, created: res.created }
 }
 
 /** One retry, because a single Dynamo/network blip should not escalate into a blocking modal. */
-export async function acceptTermsWithRetry(accessToken: string | null): Promise<void> {
+export async function acceptTermsWithRetry(accessToken: string | null): Promise<TermsAcceptance> {
   try {
-    await acceptTerms(accessToken)
+    return await acceptTerms(accessToken)
   } catch {
-    await acceptTerms(accessToken)
+    // ⚠️ The retry can only ever report `created: false`, because the FIRST attempt may well
+    // have landed the write before its response was lost. That is the safe direction (a missed
+    // signup, not an invented one) and it is why the retry is bounded at one.
+    return await acceptTerms(accessToken)
   }
 }

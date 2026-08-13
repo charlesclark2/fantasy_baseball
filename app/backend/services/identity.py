@@ -59,6 +59,8 @@ from enum import Enum
 import boto3
 from botocore.exceptions import ClientError
 
+from app.backend.services import cognito as cognito_svc
+
 logger = logging.getLogger(__name__)
 
 _AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
@@ -242,5 +244,14 @@ def create_native_user(email: str, *, user_pool_id: str | None = None) -> str:
     client.admin_set_user_password(
         UserPoolId=pool, Username=username, Password=_random_password(), Permanent=True
     )
+
+    # G100-C0-MFA — record, in the one place a later API call can actually SEE it, that this
+    # account has no user-chosen password. Cognito groups ride inside the API-Gateway-validated
+    # token, so `require_subscriber_mfa` can exempt this person from TOTP without trusting
+    # anything the client says. Without it, the day `ENFORCE_SUBSCRIBER_MFA=1` flips, an OTP
+    # subscriber is 403'd into an enrollment screen whose only exit asks for the password this
+    # function deliberately never gave them.
+    cognito_svc.mark_passwordless(username, client=client, user_pool_id=pool)
+
     logger.info("identity: created native user %s", username)
     return username

@@ -28,9 +28,13 @@ Four reasons, in order of weight:
    numerator and denominator of every metric is a reviewable diff, which is the actual thing an
    in-app panel would have bought. A dashboard clicked together in a UI is not.
 
-**Consequence for deploys:** this story ships **no backend change**, so
-`./infrastructure/lambda/deploy.sh` is **not required**. Instrumentation is frontend only and rides
-the normal Vercel deploy on merge to `main`.
+**Consequence for deploys:** D0 itself shipped **no backend change** — instrumentation was frontend
+only and rode the normal Vercel deploy on merge to `main`.
+
+⚠️ **G100-D0-R1 CHANGED THAT.** The R1 fix in §3 makes `/auth/accept-terms` return `{created: bool}`,
+so **`./infrastructure/lambda/deploy.sh` IS required** for the funnel to read its authoritative
+signal. Until it runs, the frontend falls back to the pre-R1 rule (see R1's residual 2) — degraded,
+not broken.
 
 ---
 
@@ -43,7 +47,7 @@ they drift apart. ⛔ Do not rename one without the others.
 | # | Event | Fired where | New in D0? |
 |---|---|---|---|
 | 1 | `landing_view` | `<LandingView/>` on the four acquisition surfaces | ✅ new |
-| 2 | `user_signup_completed` | `/callback`, when the round-trip began with signup intent | E9.58 |
+| 2 | `user_signup_completed` | `lib/post-signin.ts`, when the server reports this sign-in CREATED the account | E9.58, re-keyed by **R1** |
 | 3 | `league_config_completed` | manual editor **and** import, `method` separates them | G100-C1 |
 | 4 | `custom_board_viewed` | `/fantasy/my-league`, when the board actually renders — **ACTIVATION** | G100-C1 |
 | 5 | `checkout_started` | `/subscribe`, immediately before the redirect to Stripe | ✅ new |
@@ -116,38 +120,54 @@ clears cookies is two visitors. It is a de-duplicated *session identity*, and it
 available anonymous unit — but it is an over-count of humans, so R1 is a **floor** on the true
 visitor→signup rate.
 
-⚠️ **`user_signup_completed` is not `account_created`.** It means *"clicked a Sign-Up affordance,
-completed the OAuth round-trip, and now has a session"* — which **includes a returning user who
-happened to click Sign Up**. That is the right denominator for a funnel *step* and the wrong number
-for counting new accounts. **New-account counts come from Cognito user creation dates**, not from
-this event. If the two disagree, Cognito is right.
+✅ **`user_signup_completed` MEANS "THIS SIGN-IN CREATED THE ACCOUNT" — fixed by G100-D0-R1.** It
+is emitted from [`lib/post-signin.ts`](../frontend/lib/post-signin.ts) when `POST
+/auth/accept-terms` answers `{created: true}`, which the backend derives from its own
+`if_not_exists` write. **The door is now irrelevant**: a first-timer entering through `/login`
+counts, and a returning user clicking *Sign Up* does not.
 
-⛔ **AND IT MISSES A NEW USER WHO ENTERS THROUGH `/login` ENTIRELY — R1 UNDER-COUNTS.** The event
-keys on *which button was clicked*, not on whether an account was created: `/signup` stashes
-`intent: "signup"` before the Cognito redirect and `/callback` fires this event only on that branch
-([`app/callback/page.tsx`](../frontend/app/callback/page.tsx)). But **Google federation
-auto-provisions an account at either door** — so a first-time visitor who clicks *Sign In* gets a
-real, new Cognito account and emits `user_signin_started` / `user_signed_in intent=signin` and **no
-signup event at all**. Because R1's funnel is *ordered*, those users are then discarded from it
-outright: they appear neither as signups nor as drop-offs.
+<details>
+<summary><strong>What it used to mean, and why the old rule was wrong in BOTH directions</strong>
+(kept because the failure mode generalises)</summary>
 
-This is not hypothetical and it is not rare. In the first 48h of production data, **every one of
-16 auth events used the `/login` door**; the `/signup` door was first exercised by the deliberate
-verification walk. Read R1 as **a floor that is blind to the `/login` door**, and until it is fixed,
-reconcile against Cognito creation dates before drawing any conclusion about signup conversion.
+The event keyed on *which button was clicked*: `/signup` stashed `intent: "signup"` before the
+Cognito redirect and `/callback` fired the event only on that branch. But **Google federation
+auto-provisions an account at either door**, so:
 
-**The fix is known but unbuilt** (deliberately out of D0's scope — it changes an event's meaning,
-which is a contract change, not a measurement change). Two candidates:
+- a first-time visitor who clicked *Sign In* got a real, new Cognito account and emitted
+  `user_signin_started` / `user_signed_in intent=signin` and **no signup event at all**. Because
+  R1's funnel is *ordered*, those users were discarded from it outright — neither signups nor
+  drop-offs. Not hypothetical and not rare: in the first 48h of production data **every one of 16
+  auth events used the `/login` door**; `/signup` was first exercised by the verification walk in
+  §7. Every reading of R1 taken before this fix is blind to that door.
+- a **returning** user who clicked *Sign Up* emitted a signup that never happened.
 
-- *Server-side, authoritative:* `acceptTerms` writes with `if_not_exists`, so the backend already
-  knows whether this was the first acceptance. Returning `{created: bool}` would make the signal
-  exact — but it is an API response-shape change, so it needs `deploy.sh` and must be **additive**
-  (NF-C0).
-- *Client-side, no deploy:* a federated Cognito ID token carries an `identities` claim with
-  `dateCreated`; if that timestamp is seconds old, this sign-in **is** the account creation,
-  whichever door was used. ⚠️ **Unverified** — the claim's presence and shape have not been checked
-  against a real token from our pool, and getting it wrong double-counts signups, which is worse
-  than the current under-count.
+The rejected alternative was a client-side read of the federated ID token's `identities[].dateCreated`.
+It needs no deploy and it is **dead on arrival**: G100-C0-MFA measured this pool's tokens on
+2026-08-13 and the ACCESS token the frontend holds carries no `identities` claim at all
+(`app/backend/routers/auth.py::parse_amr`). Getting it wrong double-counts signups, which is worse
+than the under-count it would replace.
+</details>
+
+**Two residuals, both floors, neither fixable from the client:**
+
+1. ⚠️ **It is a FIRST-ToS-ACCEPTANCE signal, which stands in for account creation rather than being
+   it.** Exact for every account created since E9.58b began writing acceptance on every sign-in
+   (2026-08-06); an operator-invited account predating that has no record, so its next sign-in
+   reports `created: true` late. That population is bounded, one-time and shrinking.
+   [`TermsGate`](../frontend/components/terms-gate.tsx) — the surface where that population is
+   *most* concentrated — deliberately emits nothing at all for exactly this reason.
+2. ⚠️ **It reads `intent` again during a backend deploy skew.** The frontend auto-deploys on merge
+   to `main`; the API Lambda ships only via `./infrastructure/lambda/deploy.sh`. In that window an
+   old Lambda answers `204` with no body, the client sees the field ABSENT (never `created: false`),
+   and falls back to the pre-R1 intent rule — the old, already-understood under-count rather than a
+   flat zero, because a zero on step 2 reads as a conversion collapse. **Every event carries
+   `signal`**: `"server"` (authoritative) or `"intent_fallback"` (skew window), so a funnel read
+   during a deploy is diagnosable rather than merely suspicious. If you see `intent_fallback` after
+   the deploy, the deploy did not happen.
+
+**New-account counts still come from Cognito creation dates.** If the two disagree, Cognito is
+right — the event remains a funnel *step*, not an account ledger.
 
 ### R2 — signup → ACTIVATION
 
@@ -290,6 +310,33 @@ cd /Users/charlesclark/Documents/machine_learning/baseball_betting/g100-d0 && \
 Re-running is safe: an insight whose name already exists on the dashboard is **updated**, not
 duplicated (`--apply` matches on name). Add `--host https://eu.posthog.com` for an EU project.
 
+### Re-running it after G100-D0-R1 (tile captions only)
+
+R1 changed what `user_signup_completed` means, so the **R1 tile's caption** is stale on an
+already-provisioned dashboard until this is re-run. It rewrites *descriptions*; no query, no data,
+no chart is touched, and nothing is duplicated.
+
+⚠️ **The key needs the same two scopes as first provisioning** (`dashboard:write`, `insight:write`)
+— which is a key you were told to **delete** after the first run, so issue a fresh one and delete it
+again afterwards. Review first:
+
+```bash
+cd /Users/charlesclark/Documents/machine_learning/baseball_betting/dev && \
+  uv run python scripts/provision_posthog_funnel_dashboard.py --dry-run
+```
+
+Then apply (substitute the real key and the numeric project id — `--dry-run` needs neither):
+
+```bash
+cd /Users/charlesclark/Documents/machine_learning/baseball_betting/dev && \
+  POSTHOG_PERSONAL_API_KEY='phx_…' \
+  POSTHOG_PROJECT_ID='12345' \
+  uv run python scripts/provision_posthog_funnel_dashboard.py --apply
+```
+
+Both are **LAPTOP** commands. ⏭️ It is genuinely optional: skipping it leaves a caption describing
+the pre-R1 rule on one tile, and changes no number anywhere.
+
 ---
 
 ## 7. Operator: the runtime verify (post-merge)
@@ -305,10 +352,18 @@ funnel on production once, with PostHog's **Activity → Live events** view open
 2. Navigate to `/fantasy/rankings`. → a second `landing_view` (`surface: fantasy_rankings`) **still
    carrying `acquisition_source: verify`** — this is the first-touch super property working. If it
    reads `direct` or `credencesports.com`, attribution is broken.
-3. Sign up with a **genuinely new** Google account. → `user_signup_started`, then
-   `user_signup_completed`. Confirm in PostHog that the anonymous events from steps 1–2 are now on
-   the **same person** as the identified one — that is the stitch, and it is the single thing that
-   would silently double-count every visitor if it failed.
+3. ⭐ **Sign in with a genuinely new account through the `/login` door — the SIGN IN button, not
+   Sign Up** (§7a below is how to get one without a new Google account). → `user_signin_started`,
+   then `user_signup_completed` carrying **`signal: "server"`** and `intent: "signin"`. That pair
+   is the whole of G100-D0-R1: the door said sign-in, the account was new, and the funnel counted
+   it. **If `signal` reads `intent_fallback`, `deploy.sh` has not run** and the Lambda is still
+   answering 204.
+   Confirm in PostHog that the anonymous events from steps 1–2 are now on the **same person** as
+   the identified one — that is the stitch, and it is the single thing that would silently
+   double-count every visitor if it failed.
+   Then **sign out and back in with that same account**: `user_signed_in` fires, and
+   `user_signup_completed` must **not** — the second half of the fix, and the half a walk usually
+   skips.
 4. Configure a league (either door). → ⭐ **`league_config_completed`, with `method`.** This is the
    clause with no production evidence; this step is the whole reason the walk is worth doing.
 5. Open `/fantasy/my-league` and let the board render. → `custom_board_viewed`, exactly once.
@@ -318,6 +373,100 @@ funnel on production once, with PostHog's **Activity → Live events** view open
    completing gives you `subscription_started` on the success screen once access lands.
 
 Then confirm the dashboard populates and that step 5's reload did not move the activation count.
+
+## 7a. Verifying R1 without a genuinely new Google account
+
+Step 3 needs an account that **has never signed in before**, and you cannot mint a Google account on
+demand. Three routes, cheapest first. ⛔ **Do not combine A and C in one sitting** — `created` is
+**exactly-once by construction**, so whichever route touches the account first consumes it and the
+other silently reports `created: false`, which looks exactly like a broken fix.
+
+### A. A Gmail `+alias` through the EMAIL door — the cheapest real signup
+
+`+tags` are deliberately **not** canonicalised (`identity.py::normalize_email` documents why:
+folding them would resolve one person's OTP onto another person's account), so
+`youraddress+r1@gmail.com` is a **distinct Cognito user** while the code still lands in the
+existing inbox. `POST /auth/email-otp/start` on an unrecognised address calls
+`identity_svc.create_native_user` — i.e. this genuinely creates an account.
+
+1. `www.credencesports.com/login` in a **fresh private window** → **"Email me a sign-in code
+   instead"** (the SIGN IN door — that is the whole point).
+2. Enter `youraddress+r1@gmail.com`, submit, read the code from your normal inbox, verify.
+3. Expect `user_signup_completed` with `signal: "server"`, `intent: "signin"`,
+   `method: "email_otp"`, `surface: "login"`.
+4. Sign out, sign back in with the same alias → `user_signed_in` fires, `user_signup_completed`
+   must **not**.
+
+⚠️ **This proves the email door, not the Google door.** They share `lib/post-signin.ts` and the
+Google page's delegation to it is pinned by
+`betting_ml/tests/test_g100_d0_r1_signup_authoritative.py`, so the risk is small — but if you want
+Google specifically, use C. ⚠️ If the code never arrives, suspect **SES sandbox** (an unverified
+recipient), not the fix.
+
+### B. Read the deployed contract directly — 30 seconds, no account, no walk
+
+The only thing that can silently fail on deploy is the response shape, and you can read it. **Read
+the flag, never infer it from a status code** (G100-D1's lesson). Grab your access token from
+DevTools → Application → Local Storage →
+`CognitoIdentityServiceProvider.<appClientId>.<user>.accessToken`, then (**LAPTOP**):
+
+```bash
+curl -sS -X POST https://api.credencesports.com/auth/accept-terms \
+  -H "Authorization: Bearer $CREDENCE_ACCESS_TOKEN"
+```
+
+- `{"created":false}` ⇒ **deployed and authoritative** on an account that already accepted. This is
+  the whole of the false-positive half of the fix, measured.
+- `` (empty, HTTP 204) ⇒ **`deploy.sh` has NOT run.** The client is in the skew fallback and every
+  event is carrying `signal: "intent_fallback"`.
+
+⛔ It cannot demonstrate `created: true` — see the exactly-once warning above.
+
+### C. Make your OWN account new again — the only route that exercises GOOGLE
+
+Clear your `tos_accepted_at` and sign in: the next write becomes the account's first, so `created`
+is `true` on an ordinary Google sign-in at the `/login` door. Reversible, and the one honest way to
+watch the positive branch on the real Google path.
+
+⚠️ **Sign OUT first.** With an open session, `TermsGate` collects the acceptance on the next authed
+render — and it emits **nothing on purpose** (§3, residual 1). Accepting through that modal
+consumes `created` invisibly and the walk reads as a failure of a working fix.
+
+⚠️ It also **rewrites your acceptance timestamp to today**, which is why step 1 saves the original
+and step 4 puts it back.
+
+All four are **LAPTOP**; `credence-prod-dynamo-users` is in **us-east-1** (not the lakehouse's
+us-east-2).
+
+```bash
+# 1. Find your row and SAVE the original timestamp — you are restoring it in step 4.
+aws dynamodb scan --table-name credence-prod-dynamo-users --region us-east-1 \
+  --filter-expression "email = :e" \
+  --expression-attribute-values '{":e":{"S":"YOUR_EMAIL@example.com"}}' \
+  --query 'Items[].{user_id:user_id.S,tos_accepted_at:tos_accepted_at.S}' --output table
+```
+
+```bash
+# 2. Sign OUT in the browser, then clear the attribute.
+aws dynamodb update-item --table-name credence-prod-dynamo-users --region us-east-1 \
+  --key '{"user_id":{"S":"YOUR_COGNITO_SUB"}}' \
+  --update-expression "REMOVE tos_accepted_at"
+```
+
+3. Sign in at `www.credencesports.com/login` with **Continue with Google**. Expect
+   `user_signup_completed` — `signal: "server"`, `intent: "signin"`, `method: "google"`.
+
+```bash
+# 4. Restore the ORIGINAL timestamp (the sign-in just wrote today's over it).
+aws dynamodb update-item --table-name credence-prod-dynamo-users --region us-east-1 \
+  --key '{"user_id":{"S":"YOUR_COGNITO_SUB"}}' \
+  --update-expression "SET tos_accepted_at = :t" \
+  --expression-attribute-values '{":t":{"S":"THE_ORIGINAL_TIMESTAMP"}}'
+```
+
+⏳ In every route, **do not read a zero within ~5 minutes** — see the ingest-lag note below.
+
+---
 
 ### ✅ Walked and verified — 2026-08-09
 
