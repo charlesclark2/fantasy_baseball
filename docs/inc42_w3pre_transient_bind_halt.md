@@ -549,27 +549,55 @@ itself.
 H predicts failure for **any** single query whose execution spans 900 s against S3, *regardless of
 file count*. Refuting it takes one query that runs longer than that and keeps streaming data pages:
 
+⚠️⚠️ **The obvious version of this test is VACUOUS in three separate ways — each makes it pass
+regardless of H.** All three were found while calibrating, not by inspection:
+
+1. **The dataset must not be Delta-backed.** The first draft used `mart_pitch_play_event`, which
+   E11.20 moved to Delta — `read_parquet('lakehouse/<t>/**/*.parquet')` returns *"No files found"*
+   (the legacy-path landmine, one more time). Use **`stg_batter_pitches`**: 1,062 MB, **331 files**,
+   7,946,728 rows, plain parquet, not in `DELTA_W1_TABLES`.
+2. ⭐ **The expensive expression must read a REAL DATA COLUMN.** The first draft filtered on
+   `file_row_number` — a *generated* column — so DuckDB need never read a single data page: the
+   query would burn CPU for 20 minutes while issuing **no late S3 requests at all**, and H would
+   go untested. The whole point is that a GET is issued *after* 900 s.
+3. ⭐ **`threads=1` is required.** At default parallelism DuckDB fetches many files concurrently and
+   front-loads the reads; the late-request condition may never occur. Serialising the scan spreads
+   the GETs across the full runtime.
+
+   (A fourth, found the same way: `select count(*) from (select md5(…) …)` has its projection
+   **pruned** by the optimizer — the expression never runs. It must feed an aggregate or a filter.)
+
+**Calibrated on the real data** (threads=1, cold): baseline scan of 150k rows 58.6 s; expression
+cost **3.5 µs/row at N=200** and **28.6 µs/row at N=800** — superlinear, so `N=3000` projects to
+roughly **25–30 minutes** over 7.95 M rows, comfortably past 900 s while still reading files.
+
 ```bash
 AWS_DEFAULT_REGION=us-east-2 uv run python -c "
 import duckdb, time
 c = duckdb.connect()
 c.execute(\"install httpfs; load httpfs; set s3_region='us-east-2'\")
+c.execute('set threads=1')          # (3) spread the GETs across the whole run
 c.execute(\"CREATE SECRET (TYPE S3, PROVIDER credential_chain, REGION 'us-east-2')\")
-g = 's3://baseball-betting-ml-artifacts/baseball/lakehouse/mart_pitch_play_event/**/*.parquet'
+g = 's3://baseball-betting-ml-artifacts/baseball/lakehouse/stg_batter_pitches/**/*.parquet'
 t = time.time()
-n = c.execute(f'''
-    select count(*) from read_parquet('{g}', file_row_number=true)
-    where length(md5(repeat(file_row_number::varchar, 500))) > 0
-''').fetchone()[0]
-print(f'{n:,} rows in {time.time()-t:.1f}s')
+try:
+    r = c.execute(f'''
+        select count(*), max(md5(repeat(player_name, 3000)))
+        from read_parquet('{g}')
+    ''').fetchone()
+    print(f'COMPLETED: {r[0]:,} rows in {time.time()-t:.1f}s')
+except Exception as e:
+    print(f'FAILED after {time.time()-t:.1f}s: {type(e).__name__}: {e}')
 "
 ```
 
-**Read it as:** completes past ~900 s ⇒ **H refuted**, and the hunt moves to what else is special
-about the w3pre leg. Fails with `RequestTimeTooSkewed` at ~900 s ⇒ **H confirmed**, and the durable
-cure is a duration cap (or a re-signing fix) on every long S3 scan, not just this glob.
-⚠️ Calibrate first: if it finishes in well under ~16 minutes, raise `repeat(..., 500)` and re-run —
-a run that never crosses 900 s tests nothing (it would be a vacuous pass).
+**Read it as** — and the elapsed time is the measurement, not the pass/fail:
+
+| outcome | verdict |
+|---|---|
+| `FAILED` with `RequestTimeTooSkewed` at **~900 s** | **H CONFIRMED.** The cure is a duration cap or a re-signing fix on *every* long S3 scan, not just this glob |
+| `COMPLETED` in **> 900 s** | **H REFUTED.** The hunt moves to what else is specific to the w3pre leg |
+| `COMPLETED` in **< 900 s** | ⛔ **tests nothing** — raise `3000` and re-run. A run that never crosses the threshold is a vacuous pass |
 
 Three of my own conclusions on this incident were retracted after measurement. They are left in the
 record rather than deleted, because each looked well-corroborated at the time and the pattern —
