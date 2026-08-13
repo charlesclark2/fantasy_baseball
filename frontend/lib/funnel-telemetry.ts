@@ -44,10 +44,14 @@
  *      "only once" is a weaker version of a guarantee the query already provides exactly. The
  *      once-per-mount refs that DO exist (my-league.tsx) are there to stop one view being counted
  *      many times, which is a different problem.
- *   2. `user_signup_completed` IS NOT `account_created`. It means "clicked Sign Up, completed the
- *      OAuth round-trip and has a session" — which INCLUDES a returning user who happened to click
- *      Sign Up. Right denominator for the funnel STEP, wrong number for counting new accounts.
- *      New-account counts come from COGNITO creation dates. Stated on the dashboard, not just here.
+ *   2. `user_signup_completed` MEANS "THIS SIGN-IN CREATED THE ACCOUNT" (G100-D0-R1). It used to
+ *      mean "clicked Sign Up and came back with a session", which was wrong in both directions
+ *      because Google federation auto-provisions at EITHER door: a first-timer entering through
+ *      /login emitted nothing at all (and an ordered funnel then discarded them), while a
+ *      returning user who clicked Sign Up emitted a signup that never happened. It is now keyed
+ *      on the server's `created` answer from `/auth/accept-terms`, so the door does not matter.
+ *      ⚠️ STILL NOT AN ACCOUNT COUNT: it is a first-ToS-acceptance proxy, it is a floor across a
+ *      backend deploy skew, and COGNITO creation dates remain the truth. Stated on the dashboard.
  *   3. `league_config_completed` fires ONLY on a CREATE (both doors — manual editor and import —
  *      separated by `method`). A re-import that refreshes a roster deliberately does not re-count.
  *
@@ -75,7 +79,9 @@ export const FUNNEL_EVENTS = {
   LANDING_VIEW: "landing_view",
   /** Clicked a Sign-Up affordance (E9.58). The step BEFORE the OAuth round-trip. */
   SIGNUP_STARTED: "user_signup_started",
-  /** Came back from Cognito with a session, having started with signup intent (E9.58). */
+  /** This sign-in CREATED the account, whichever door it came through (E9.58, re-keyed to the
+   *  server's answer by G100-D0-R1). Carries `signal` — "server", or "intent_fallback" during a
+   *  backend deploy skew. */
   SIGNUP_COMPLETED: "user_signup_completed",
   /** Saved a league for the first time — manual editor or import (G100-C1). CREATE only. */
   LEAGUE_CONFIG_COMPLETED: "league_config_completed",

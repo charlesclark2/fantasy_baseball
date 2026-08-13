@@ -141,8 +141,8 @@ RATES: tuple[Rate, ...] = (
             "NUMERATOR: distinct persons with >=1 user_signup_completed. "
             "DENOMINATOR: distinct persons with >=1 landing_view. "
             "A visitor is a PostHog PERSON, not a human, so this is a FLOOR. "
-            "WARNING: user_signup_completed is NOT account_created — it includes a returning user "
-            "who clicked Sign Up. New-account truth is COGNITO."
+            "user_signup_completed = the SERVER said this sign-in created the account, at either "
+            "door (G100-D0-R1); a floor while signal=intent_fallback. Truth is COGNITO."
         ),
     ),
     Rate(

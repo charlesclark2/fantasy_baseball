@@ -105,12 +105,45 @@ def verify_email(user_id: str = Depends(get_user_id)) -> None:
 _TOS_VERSION = "2026-06-14"
 
 
-@router.post("/accept-terms", status_code=204)
-def accept_terms(user_id: str = Depends(get_user_id)) -> None:
-    """Record ToS acceptance for the calling user.
+class TermsAcceptanceResult(BaseModel):
+    """⭐ G100-D0-R1 — the authoritative answer to "did this sign-in create an account?".
+
+    ⚠️ NF-C0 ADDITIVITY. This endpoint used to return 204 with NO body, so there is no key to
+    remove or rename and an older deployed client — which discards the response entirely — is
+    unaffected (`apiFetch` returns `null` for a 204 and the parsed object for a 200; neither
+    caller inspected it before). The frontend reads this as ABSENT-vs-PRESENT rather than
+    truthy-vs-falsy, exactly as `lib/terms.ts` already does for `tos_accepted_at`: the API
+    Lambda ships only via `infrastructure/lambda/deploy.sh` while the frontend auto-deploys on
+    merge to main, so there is always a window where a new client talks to a backend that has
+    never heard of this field, and ABSENT must not be read as `created: false`.
+    """
+
+    #: True iff THIS call recorded the account's first acceptance — see record_tos_acceptance
+    #: for why that is exactly-once even under a concurrent double-call.
+    created: bool
+
+
+@router.post("/accept-terms", response_model=TermsAcceptanceResult)
+def accept_terms(user_id: str = Depends(get_user_id)) -> TermsAcceptanceResult:
+    """Record ToS acceptance for the calling user, and report whether it was the first.
 
     Writes tos_accepted_at (if_not_exists, so the ORIGINAL timestamp is never overwritten)
     and tos_version to credence-prod-dynamo-users. Idempotent — safe to call repeatedly.
+
+    ⭐ G100-D0-R1 — `created` IS THE SIGNUP SIGNAL, AND THE SERVER IS THE ONLY THING THAT CAN
+    KNOW IT. `user_signup_completed` used to key on which BUTTON the visitor clicked, which the
+    client stashes across the Cognito redirect. But Google federation auto-provisions an account
+    at either door, so a first-time visitor who clicks *Sign In* got a real new account and
+    emitted no signup event at all — and R1's ordered funnel discarded them outright (in the
+    first 48h of production data, all 16 auth events used the /login door). This makes the
+    signal a property of the ACCOUNT rather than of the affordance.
+
+    ⚠️ "FIRST ACCEPTANCE" ≠ "ACCOUNT CREATED" — the residual, stated so nobody re-derives it:
+    an account created BEFORE E9.58b started writing acceptance on every sign-in has no record,
+    so its next acceptance reports `created: true` late. That population is bounded (operator-
+    invited accounts predating 2026-08-06), one-time, and shrinking. The direction is the safe
+    one for everything except that historical set, and Cognito creation dates remain the count
+    of truth for new accounts (docs/g100_d0_funnel.md §3).
 
     🚨 E9.58b — THIS MUST NOT SWALLOW ITS FAILURE, and used to.
     It was written as a fire-and-forget call on the first-login set-password path, where a
@@ -122,12 +155,13 @@ def accept_terms(user_id: str = Depends(get_user_id)) -> None:
     The caller is expected to retry and, failing that, to block the user until it lands.
     """
     try:
-        record_tos_acceptance(user_id, _TOS_VERSION)
+        created = record_tos_acceptance(user_id, _TOS_VERSION)
     except Exception as exc:
         logger.exception("accept_terms: failed to record acceptance for %s", user_id)
         raise HTTPException(
             status_code=503, detail="Could not record your acceptance. Please try again."
         ) from exc
+    return TermsAcceptanceResult(created=created)
 
 
 # ── Server-side subscriber-MFA enforcement (E9.8) ────────────────────────────

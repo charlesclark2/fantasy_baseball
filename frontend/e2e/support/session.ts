@@ -100,3 +100,38 @@ export async function signIn(page: Page, options: SessionOptions = {}): Promise<
     [prefix, email, accessToken, idToken] as const,
   )
 }
+
+/**
+ * G100-D0-R1 — the token trio a Cognito `/oauth2/token` exchange hands back.
+ *
+ * ⭐ WHY THIS IS NOT A SECOND JWT BUILDER. `signup-attribution.spec.ts` drives the REAL
+ * `/callback` page, which calls `completeGoogleSignIn` → `hydrateSessionFromTokens`; that decodes
+ * the id token's payload for the username and writes the trio into the SDK's storage layout. So
+ * the tokens have to be structurally real in exactly the way `signIn` above already needs them to
+ * be. Sharing the builder is what stops the two drifting into disagreement about a claim shape.
+ *
+ * ⛔ Unsigned, and that proves nothing about authorization — see the header. Signature
+ * verification is a SERVER concern and is asserted against the real ASGI app.
+ */
+export function fakeOAuthTokens(options: SessionOptions = {}): {
+  id_token: string
+  access_token: string
+  refresh_token: string
+} {
+  const email = options.email ?? "new-user@example.com"
+  const groups = options.groups ?? []
+  const sub = options.sub ?? "e2e-callback-user-1"
+  const clientId = buildEnv("NEXT_PUBLIC_COGNITO_APP_CLIENT_ID")
+  const now = Math.floor(Date.now() / 1000)
+  return {
+    id_token: token(
+      { sub, token_use: "id", email, email_verified: true, "cognito:groups": groups, aud: clientId },
+      now,
+    ),
+    access_token: token(
+      { sub, token_use: "access", username: email, "cognito:groups": groups, client_id: clientId },
+      now,
+    ),
+    refresh_token: "e2e-refresh-token",
+  }
+}

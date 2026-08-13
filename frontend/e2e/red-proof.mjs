@@ -1099,6 +1099,47 @@ const CASES = [
     to: "  const comparable = allComparable.filter((d) => d.draftable)",
     grep: "no kicker or defense can lead the list",
   },
+  // ── G100-D0-R1: the signup event counts ACCOUNTS, not buttons ────────────────────────────────
+  {
+    id: "signup-keyed-on-the-button-again",
+    shipped: "G100-D0 (live) — R1 under-counted every signup that entered through /login",
+    // ⭐ THE DEFECT THIS STORY EXISTS TO FIX, and it was live in production: every self-serve door
+    // auto-provisions, so a first-timer clicking SIGN IN got a real new account and emitted no
+    // signup event at all. Because R1's funnel is ORDERED, those people were then discarded from
+    // it entirely — neither signups nor drop-offs. Measured: all 16 auth events in production's
+    // first 48h used the /login door.
+    detail: "Restores the pre-R1 rule — emit on the stashed intent instead of the server's answer.",
+    file: "lib/post-signin.ts",
+    from: "  if (acceptance.known) {\n    if (acceptance.created) {",
+    to: '  if (acceptance.known) {\n    if (intent === "signup") {',
+    grep: "SIGN IN door is counted as a signup",
+  },
+  {
+    id: "intent-overrides-the-server",
+    shipped: "G100-D0 (live) — the other half: a returning user who clicked Sign Up was counted",
+    // Fixing one direction and not the other leaves the funnel wrong. This is the shape a
+    // "helpful" fallback naturally has — honour the intent whenever it says signup — and it
+    // silently restores a false positive on top of an authoritative `created: false`.
+    detail: "Lets the intent fallback run even when the server DID answer.",
+    file: "lib/post-signin.ts",
+    from: "  if (acceptance.known) {",
+    to: "  if (false) {",
+    grep: "RETURNING user who clicks Sign Up",
+  },
+  {
+    id: "absent-created-read-as-false",
+    shipped: "the NF-C0 / E8.6 deploy-skew class (the API Lambda has no CD)",
+    // ⭐ ABSENT ≠ FALSE, the same distinction `lib/terms.ts` already draws for `tos_accepted_at`.
+    // Collapsing them takes step 2 of the funnel to a flat ZERO for the whole skew window, and a
+    // zero on a conversion chart reads as a conversion collapse rather than as a missing deploy.
+    detail: "Coerces an absent `created` to false, so an un-deployed Lambda zeroes the funnel.",
+    file: "lib/terms.ts",
+    from:
+      'if (!res || typeof res.created !== "boolean") return { known: false }\n' +
+      "  return { known: true, created: res.created }",
+    to: "return { known: true, created: Boolean(res && res.created) }",
+    grep: "un-deployed backend degrades",
+  },
 ]
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
