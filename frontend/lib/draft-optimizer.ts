@@ -357,6 +357,9 @@ export interface Recommendation {
    *  every remaining pick is now spoken for, so passing on all of these strands a slot empty. False
    *  for every candidate whenever there is slack. */
   mustFill: boolean
+  /** A low-predictability position (K/DST — the exporter's own `lowPred`), held back until the
+   *  roster actually requires it. See the note on the sort. */
+  deferred: boolean
   rationale: string
 }
 
@@ -500,6 +503,10 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     // True only while the reserve constraint binds AND this player fills an open starter slot.
     // Everyone is `false` when there is slack, so the sort below is a no-op in the normal case.
     const mustFill = mustFillNow && level > 0
+    // ⭐ K/DST ARE HELD BACK UNTIL THE ROSTER REQUIRES THEM. Read from the exporter's own `lowPred`
+    // rather than a position list here — the flag's contract is that a consumer "never has to know
+    // which positions are soft", and a hardcoded ["K","DST"] would silently miss a future one.
+    const deferred = p.lowPred === true
 
     recs.push({
       player: p,
@@ -511,14 +518,43 @@ export function recommend(args: RecommendArgs): Recommendation[] {
       isLastInTier: isLast,
       byeConflict,
       mustFill,
+      deferred,
       rationale: rationale(p.pos, level, needBonus, dropoff, isLast, tierOf[p.id] ?? 1, surplusPen, p.bye, byeConflict, mustFill, picksRemaining, openStarterCount),
     })
   }
 
-  // A required filler outranks every non-filler; within each group, score decides. `mustFill` is
-  // false for ALL candidates unless the reserve constraint binds, so with slack this is exactly the
-  // old pure-score sort.
-  recs.sort((a, b) => (a.mustFill !== b.mustFill ? (a.mustFill ? -1 : 1) : b.score - a.score))
+  // ── the ordering, in three keys ────────────────────────────────────────────────────────────────
+  //
+  // 1. `mustFill` — a required filler outranks everything (the reserve constraint).
+  // 2. `deferred` — a LOW-PREDICTABILITY position (K/DST) sits below every real candidate.
+  // 3. `score`.
+  //
+  // ⭐ WHY (2) EXISTS. Recommending a D/ST in an early round destroys trust in every other
+  // recommendation on the page, and it was happening: measured on the live 2026 full_ppr/12 board,
+  // ROUND 6's six-slot panel came back FIVE-SIXTHS K/DST with DEN D/ST ranked #1 at score 12.2.
+  //
+  // It is not a scoring bug — it is VOR being read as comparable across positions where it is not.
+  // The whole above-replacement VOR range is 8.1 at K and 10.4 at D/ST, against a MEDIAN 80%
+  // interval of 118.7 and 87.3 points on a single player: a signal-to-noise of 0.07 and 0.12, versus
+  // 0.55-0.61 at RB/WR/TE. Buying DST1 over DST12 is a ~10-point edge drawn from a distribution ~9x
+  // wider than the edge, so it is not a distinction this projection can support — which is exactly
+  // what the exporter states by stamping `lowPred` on those rows (and what `predNote` tells the user
+  // in words: "use these as streaming TIERS, not precise ranks").
+  //
+  // ⛔ NOT A SCORE PENALTY, deliberately. A fudge factor large enough to sink K/DST would be a
+  // number reverse-engineered from the answer, and it would corrupt `score` — which the UI shows and
+  // the rationale explains. Deferral leaves every number honest and changes only the ORDER.
+  //
+  // ⚠️ THE TWO RULES COMPOSE, AND THE COMPOSITION IS WHAT MAKES ABSOLUTE DEFERRAL SAFE. Deferral has
+  // no end-of-draft failure mode, because whenever K/DST are the only things a roster can still
+  // accept, the bench is full ⇒ `picksRemaining == openStarterCount` ⇒ the reserve constraint is
+  // NECESSARILY binding ⇒ `mustFill` lifts them straight back to the top. That is structural, not
+  // luck. So: never early, always by the end — the operator's rule (2026-08-12) in two keys.
+  recs.sort((a, b) => {
+    if (a.mustFill !== b.mustFill) return a.mustFill ? -1 : 1
+    if (a.deferred !== b.deferred) return a.deferred ? 1 : -1
+    return b.score - a.score
+  })
   return recs.slice(0, topN)
 }
 
