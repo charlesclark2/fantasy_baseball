@@ -60,6 +60,15 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
     setError(null)
     setBusy(true)
     try {
+      // ⭐ G100-D0-R1 — THIS CALLER DELIBERATELY DISCARDS `created`, AND THAT IS THE SAFE
+      // DIRECTION. `created` is a first-ToS-acceptance signal, which stands in for "account
+      // created" only for accounts made since E9.58b started writing acceptance on every
+      // sign-in. The population that reaches THIS modal is precisely the one where that
+      // equivalence is weakest — accounts predating that record, plus anyone whose sign-in
+      // write failed — so emitting `user_signup_completed` here would report a years-old
+      // account as a fresh signup. Missing the rare case where a new account's up-front write
+      // failed and its gate acceptance lands here is an under-count, and an under-count is the
+      // direction this funnel is documented to fail in (docs/g100_d0_funnel.md §3).
       await acceptTerms(accessToken)
       // Only now is the record on file. Re-read rather than assuming, so the modal clears on
       // the backend's word rather than on ours.

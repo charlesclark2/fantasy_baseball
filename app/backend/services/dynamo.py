@@ -178,17 +178,45 @@ def upsert_user(user_id: str, email: str | None) -> None:
     )
 
 
-def record_tos_acceptance(user_id: str, tos_version: str) -> None:
-    """Record first-time ToS acceptance. Preserves the original tos_accepted_at if
-    already set (if_not_exists) so re-runs don't overwrite the canonical timestamp.
-    tos_version is always updated so we track the latest version agreed to."""
+def record_tos_acceptance(user_id: str, tos_version: str) -> bool:
+    """Record first-time ToS acceptance. Returns True iff THIS call was the first one.
+
+    Preserves the original tos_accepted_at if already set (if_not_exists) so re-runs don't
+    overwrite the canonical timestamp. tos_version is always updated so we track the latest
+    version agreed to.
+
+    ⭐ G100-D0-R1 — WHY THE RETURN VALUE EXISTS, AND WHY `ALL_OLD` RATHER THAN A READ.
+    The signup funnel needs to know whether a sign-in CREATED an account, and the client
+    cannot know: Google federation auto-provisions at either door, so a first-time visitor
+    who clicks *Sign In* gets a brand-new account and looks byte-identical to a returning
+    one. This write is the only thing in the request path that already knows — `if_not_exists`
+    makes the FIRST acceptance distinguishable from every later one.
+
+    `ReturnValues="ALL_OLD"` returns the item AS IT WAS BEFORE this update, in the SAME atomic
+    operation. That is what makes the answer exactly-once under concurrency: two simultaneous
+    calls are serialised by DynamoDB, so precisely one of them sees no prior `tos_accepted_at`.
+    A read-then-write (or a follow-up get_item) would let both callers report `created` and
+    double-count the signup — which is worse than the under-count this replaces, because
+    nothing downstream would ever question a number that is too high.
+
+    ⚠️ IT MEANS "FIRST ACCEPTANCE", WHICH IS A PROXY FOR "ACCOUNT CREATED", NOT A SYNONYM.
+    It is exact for every account created since E9.58b (acceptance is written on every
+    sign-in, so the first one lands on the account's first session). It can be late by one
+    session for an account that predates that record — see the caller in routers/auth.py and
+    docs/g100_d0_funnel.md §3 for the bound, which is one-time and historical.
+    """
     now = _now_iso()
-    _users_table().update_item(
+    resp = _users_table().update_item(
         Key={"user_id": user_id},
         UpdateExpression="SET #ta = if_not_exists(#ta, :now), #tv = :ver",
         ExpressionAttributeNames={"#ta": "tos_accepted_at", "#tv": "tos_version"},
         ExpressionAttributeValues={":now": now, ":ver": tos_version},
+        ReturnValues="ALL_OLD",
     )
+    # No `Attributes` at all ⇒ the item did not exist ⇒ this is the first acceptance. An item
+    # that existed WITHOUT the attribute (a profile created by some other write) is equally a
+    # first acceptance, so the test is on the attribute, never on the item.
+    return (resp.get("Attributes") or {}).get("tos_accepted_at") is None
 
 
 def get_user_profile(user_id: str) -> dict:

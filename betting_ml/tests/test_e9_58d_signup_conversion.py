@@ -53,15 +53,23 @@ def test_every_surface_declares_what_the_user_was_trying_to_do(rel: str, intent:
 
 
 def test_the_callback_emits_a_completion_event_paired_with_the_start():
-    """⚠️ RE-ANCHORED BY G100-C0 — same property, one indirection further.
+    """⚠️ RE-ANCHORED TWICE — the PROPERTY is unchanged, its implementation has moved twice.
 
-    The completion capture moved from this page into `lib/post-signin.ts`, because a SECOND
-    self-serve door (email OTP) now has to fire the identical event and a hand-copied second
-    implementation is how one of them ends up not firing it. So the assertion follows the call
-    the way `test_the_google_path_records_terms_acceptance` already followed it into
-    `lib/terms.ts`: the callback must still read the intent and hand it on, and the module it
-    hands it to must still emit the conditional completion. Nothing about the requirement is
-    relaxed — it is checked across both halves of the path it now takes.
+    G100-C0 moved the completion capture out of this page into `lib/post-signin.ts`, because a
+    SECOND self-serve door (email OTP) has to fire the identical event and a hand-copied second
+    implementation is how one of them ends up not firing it.
+
+    ⭐ G100-D0-R1 then changed WHAT THE CONDITION IS. The property E9.58d defends is that the
+    completion is CONDITIONAL — an event fired on every sign-in makes the conversion rate
+    meaningless. E9.58d's condition was the client's stashed intent, which was the only thing a
+    client could know and was wrong in both directions (Google federation auto-provisions at
+    either door). The condition is now the server's `created` answer. So this asserts the
+    conditionality and that the intent still reaches the module — not the specific predicate,
+    which `test_g100_d0_r1_signup_authoritative.py` owns.
+
+    ⛔ The old assertion (`'intent === "signup"' in post`) would still PASS today, on the
+    deploy-skew fallback branch — i.e. it would keep describing a retired rule while reading as
+    a live guarantee. That is why it is replaced rather than left alone.
     """
     cb = _code(_APP / "callback/page.tsx")
     assert "consumeSignInContext()" in cb, "the callback cannot see what the user was trying to do"
@@ -70,9 +78,11 @@ def test_the_callback_emits_a_completion_event_paired_with_the_start():
 
     post = _code(_FRONTEND / "lib/post-signin.ts")
     assert "user_signup_completed" in post, "the funnel still has no finish"
-    assert 'intent === "signup"' in post, (
-        "the completion must be conditional on a SIGNUP intent — firing it on every sign-in "
-        "would make the conversion rate meaningless"
+    assert "intent" in post, "the intent no longer reaches the module that closes the funnel"
+    decide = post.split("function reportSignupCompletion(")[1]
+    assert "acceptance.created" in decide.split("user_signup_completed")[0], (
+        "the completion is no longer conditional on this sign-in having created an account — "
+        "firing it on every sign-in would make the conversion rate meaningless"
     )
 
 

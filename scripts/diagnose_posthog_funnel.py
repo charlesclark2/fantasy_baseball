@@ -147,38 +147,62 @@ def main(argv: list[str] | None = None) -> int:
 
     # ── 1b. WHICH AUTH DOOR was used, and what the round-trip carried. ────────────────────────
     #
-    # ⭐ THE DECISIVE CHECK WHEN STEP 2 IS ZERO, and the two causes it separates are completely
-    # different problems:
+    # ⭐ THE DECISIVE CHECK WHEN STEP 2 IS ZERO.
     #
-    #   · `user_signup_started` never fired  ⇒ nobody clicked a SIGN-UP affordance. They used the
-    #     sign-in door (or password login). `user_signup_completed` is correctly silent; the walk
-    #     simply did not exercise signup.
-    #   · `user_signup_started` fired but `user_signup_completed` did not, and `user_signed_in`
-    #     carries `intent: "unknown"`  ⇒ THE SIGN-IN CONTEXT WAS LOST ACROSS THE COGNITO REDIRECT.
-    #     That is a real defect and it breaks signup measurement for EVERY user, not just this walk.
+    # ⚠️ G100-D0-R1 RE-KEYED `user_signup_completed` ONTO THE SERVER'S ANSWER, so the readings
+    # below are NOT the pre-R1 ones and two of them have inverted:
     #
-    # The `intent` / `surface` / `method` properties are what tell those apart, so they are printed
-    # rather than summarised — a count here would collapse the exact distinction being drawn.
+    #   · `user_signup_started` never fired is NO LONGER an explanation for a silent step 2. Every
+    #     door auto-provisions, so a NEW account arriving through /login must still complete. A
+    #     window with sign-ins and no completion means either everyone who signed in already had an
+    #     account (the ordinary steady state) or the signal is not arriving.
+    #   · `user_signup_started` fired with no completion is NO LONGER a defect on its own — it is
+    #     the correct output for a RETURNING user who clicked Sign Up, which is exactly half of
+    #     what R1 fixed. It is only suspicious when the walker knows the account was new.
+    #   · `signal` is the discriminator that replaced `intent`: "server" is authoritative,
+    #     "intent_fallback" means an OLD Lambda answered `/auth/accept-terms` with 204 and the
+    #     client reverted to the pre-R1 button rule ⇒ run `infrastructure/lambda/deploy.sh`.
+    #   · `user_signed_in` carrying `intent: "unknown"` still means the sign-in context was LOST
+    #     across the Cognito redirect. Post-R1 that no longer breaks step 2 (the server answer does
+    #     not depend on it), but it does blind the per-door breakdown.
+    #
+    # The properties are printed rather than summarised — a count would collapse the distinctions.
     print(f"\n══ AUTH DOOR ══")
     auth = q(
         f"select timestamp, event, properties.intent, properties.surface, properties.method, "
-        f"person_id from events where {window} and event in "
+        f"properties.signal, person_id from events where {window} and event in "
         f"('user_signup_started', 'user_signup_completed', 'user_signin_started', 'user_signed_in') "
         f"order by timestamp desc limit 30"
     )
     if not auth:
         print("  no auth events at all in the window — nobody signed in or up.")
-    for ts, event, intent, surface, method, person_id in auth:
+    for ts, event, intent, surface, method, signal, person_id in auth:
         print(f"  {ts}  {event:<24} intent={intent or '—'} surface={surface or '—'} "
-              f"method={method or '—'}  {person_id}")
+              f"method={method or '—'} signal={signal or '—'}  {person_id}")
     started = [r for r in auth if r[1] == "user_signup_started"]
     completed = [r for r in auth if r[1] == "user_signup_completed"]
-    if not started and not completed:
+    signed_in = [r for r in auth if r[1] == "user_signed_in"]
+    fallback = [r for r in completed if r[5] == "intent_fallback"]
+
+    if fallback:
         print(
-            "\n  ⇒ NO SIGN-UP INTENT was recorded. `user_signup_completed` fires only when the "
-            "round-trip\n     began at a SIGN-UP affordance, so a sign-in (or a password login) "
-            "correctly produces\n     nothing. The funnel is telling the truth about a walk that "
-            "never signed up."
+            f"\n  ⚠️ {len(fallback)} of {len(completed)} completions carry signal=intent_fallback. "
+            "The API Lambda is\n     still answering /auth/accept-terms with 204, so the client is "
+            "using the PRE-R1 button\n     rule — new accounts entering through /login are being "
+            "missed. Run infrastructure/lambda/deploy.sh."
+        )
+
+    if signed_in and not completed and not at_live_edge:
+        print(
+            "\n  ⇒ SIGN-INS BUT NO SIGN-UPS. Post-R1 this means every one of them was a RETURNING "
+            "account\n     (the ordinary steady state), NOT that the walk skipped the signup door. "
+            "If you know an\n     account in this window was brand new, that is a real defect — "
+            "check `signal` above."
+        )
+    elif not started and not completed:
+        print(
+            "\n  ⇒ NO AUTH ACTIVITY OF EITHER KIND in this window. Nothing to read; the funnel is "
+            "not\n     asserting anything about signup."
         )
     elif started and not completed and at_live_edge:
         # ⭐ THE EXACT FALSE ALARM THIS SCRIPT ONCE RAISED. A signup round-trip takes ~18s of
@@ -193,11 +217,11 @@ def main(argv: list[str] | None = None) -> int:
         )
     elif started and not completed:
         print(
-            "\n  ⛔ SIGN-UP STARTED BUT NEVER COMPLETED. If `user_signed_in` above reads "
-            "intent=unknown,\n     the context was LOST across the Cognito redirect — a real defect "
-            "that silently zeroes\n     step 2 for every user. If it reads intent=signup, the "
-            "round-trip itself failed.\n     If there is NO `user_signed_in` at all, the walker "
-            "abandoned at Google's account picker."
+            "\n  ⇒ SIGN-UP STARTED, NO COMPLETION. ⚠️ POST-R1 THIS IS NOT A DEFECT BY ITSELF: it is "
+            "the\n     correct output for a RETURNING user who clicked Sign Up (half of what R1 "
+            "fixed).\n     A defect only if the account was genuinely new — then check `signal` "
+            "above, and if\n     there is no `user_signed_in` at all the walker abandoned at "
+            "Google's account picker."
         )
 
     # ── 2. THE STITCH. One walker should be ONE person across the whole spine. ─────────────────

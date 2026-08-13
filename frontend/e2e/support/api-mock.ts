@@ -143,6 +143,21 @@ export type MockOptions = {
    * from "fires on page load", which is the defect this event is most likely to have.
    */
   subscription?: "none" | "active"
+  /**
+   * ⭐ G100-D0-R1 — what `POST /auth/accept-terms` answers, which is now the SIGNUP SIGNAL.
+   *
+   *   "created"  — this sign-in recorded the account's FIRST acceptance ⇒ a new account, at
+   *                whichever door. `user_signup_completed` must fire.
+   *   "existing" — THE DEFAULT, because it is the ordinary steady state (every sign-in after the
+   *                first). `user_signup_completed` must NOT fire, even when the visitor clicked
+   *                Sign Up — that is the false positive R1 removed, and a harness that could not
+   *                produce this mode could not test it.
+   *   "skew"     — the pre-R1 Lambda: `204`, no body. Neither `created: true` nor `created: false`
+   *                but ABSENT, which the client must read as "the server did not tell us" and NOT
+   *                as a negative answer. The API ships only via deploy.sh while the frontend
+   *                auto-deploys, so this state is guaranteed to happen at least once in prod.
+   */
+  termsAcceptance?: "created" | "existing" | "skew"
 }
 
 export type ApiMock = {
@@ -428,6 +443,29 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
     // response a real round trip: the editor writes `result.league_id` into its own state and
     // re-reads the config from the response, so a canned body would silently discard what the user
     // typed and the spec would be asserting against a league nobody configured.
+    // ⭐ G100-D0-R1 — the post-sign-in writes. Both are `POST`s with no fixture, so without this
+    // they would 501 and land in `unmatched`; `/auth/accept-terms` additionally carries the signal
+    // the whole signup funnel now keys on, and its THREE modes are not interchangeable (see
+    // `MockOptions.termsAcceptance`).
+    if (apiPath === "/auth/verify-email") {
+      await route.fulfill({ status: 204, body: "" })
+      return
+    }
+    if (apiPath === "/auth/accept-terms") {
+      const mode = options.termsAcceptance ?? "existing"
+      if (mode === "skew") {
+        // The pre-R1 Lambda, verbatim: 204, no body, no `created` key anywhere.
+        await route.fulfill({ status: 204, body: "" })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ created: mode === "created" }),
+      })
+      return
+    }
+
     const written = writeResponseFor(apiPath, route.request().method(), route.request().postData())
     if (written !== undefined) {
       await route.fulfill({
