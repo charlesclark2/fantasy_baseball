@@ -337,6 +337,12 @@ was untouched (47 captures still present). `catcher_framing_raw`'s only reader
 holds 208 rows, exactly 2× its weekly neighbours — but that was **luck, not design**: it is not on
 the allowlist and its readers had not been vetted at the time.
 
+**Deployed and confirmed on the box (2026-08-12 23:38 UTC).** `main` carries the script, the cron
+line and #747's correction; `dev` and `main` are level. Both a dry-run **and a real `--apply`** on
+the box report `partitions_eligible=95, partitions_done=0` — i.e. **idempotency verified in
+production**: a second `--apply` over 95 already-compacted partitions is a genuine no-op, writing
+and deleting nothing. That is the property the daily cron depends on.
+
 **Fix:** an autouse fixture in the test module replaces `make_s3_client` with a raising stub, so no
 test in it can reach AWS. A removed guard still fails the test — `main()` hits the stub — which is
 the RED the proof wants, without a network call. **The lesson generalises: a test that drives a
@@ -364,15 +370,155 @@ for rec in i.get_run_records(limit=400):
 "
 ```
 
-**Still open, both cheap.** Rule out a container-vs-host clock difference — the one thing the host
-chrony reading structurally cannot cover:
+**Done — container vs host clock (2026-08-12 23:38 UTC): REFUTED.** The one thing the host chrony
+reading structurally could not cover. Both report the *same second*:
 
-```bash
-date -u; docker compose -f services/dagster/aws/docker-compose.yml exec -T dagster-codeloc date -u
+```
+$ date -u;  docker compose … exec -T dagster-codeloc date -u
+Wed Aug 12 23:38:17 UTC 2026
+Wed Aug 12 23:38:17 UTC 2026
 ```
 
-And check CloudWatch CPU on the box for 2026-08-11 23:00 and 2026-08-12 01:00 UTC. The contention
-hypothesis predicts a spike at both; a flat CPU trace would weaken it substantially.
+⇒ the clock family is now **exhausted**: host offset 2.9 µs, container == host, and #745 added a
+5-minute skew probe against S3's own `Date` header. Nothing about a wrong clock is left to test.
+
+**Done — CloudWatch CPU + memory, 2026-08-11 22:30 → 08-12 02:00 UTC.** ⚠️ Run it in **`us-east-1`**
+(the box's region — `aws_resources.md` line 895); `us-east-2` is the *S3 lakehouse bucket's* region
+and would return an **empty `Datapoints` list, not an error**, which reads exactly like "flat CPU,
+lead weakened". `baseball-access-user` is denied `cloudwatch:GetMetricStatistics`, so use operator
+credentials:
+
+```bash
+aws cloudwatch get-metric-statistics --region us-east-1 --namespace AWS/EC2 \
+  --metric-name CPUUtilization --dimensions Name=InstanceId,Value=i-07594af1679f81c38 \
+  --start-time 2026-08-11T22:30:00Z --end-time 2026-08-12T02:00:00Z \
+  --period 300 --statistics Average Maximum \
+  --query 'sort_by(Datapoints,&Timestamp)[].[Timestamp,Average,Maximum]' --output text
+```
+
+### ✅ CONFIRMED: `:00` really is the busiest minute of the hour
+
+Previously this was *inferred from reading `capture.crontab`*. It is now measured, and it reproduces
+on all four hour-boundaries in the window:
+
+| bucket | mean 5-min avg CPU | mean 5-min peak CPU |
+|---|---|---|
+| `:00` (n=3) | **68.5 %** | **88.5 %** |
+| `:30` (n=4) | 54.3 % | 65.6 % |
+
+**+14.2 pp average, +22.9 pp peak**, on a box with **2 vCPU**. Peak touches **91.25 %** at 23:00 —
+the highest reading in the window, and the bucket containing the 23:00:37 failure.
+
+### ✗ REFUTED: memory pressure is not the trigger
+
+The two **failing** buckets hold among the *lowest* memory in the window (`mem_used_percent` max
+**28.6 %** at 23:00, **26.4 %** at 01:00), while the **non-failing** 00:00 holds the *highest*
+(**50.5 %**). Memory moves opposite to the failures ⇒ ruled out. (8th candidate refuted.)
+
+### ⚠️ NOT confirmed: contention MAGNITUDE does not predict which `:00` fired
+
+`00:00` did **not** fail, yet it had the **highest 5-min average CPU of the whole window (70.4 %)**
+and a peak (87.1 %) indistinguishable from the failing 01:00 (86.99 %). So "more contention ⇒
+failure" is **not supported**. This is consistent with the race already stated — contention as
+*necessary-not-sufficient*, with the trigger being timing inside the burst rather than its size —
+but the data does not establish that, it merely fails to contradict it.
+
+### ⚠️ An apparent discriminator that CANNOT be used yet — reverse causation
+
+The two failing hours stayed above 40 % CPU for **20 minutes**; the non-failing 00:00 for **10**:
+
+| hour | +0 | +5 | +10 | +15 | +20 | minutes > 40 % |
+|---|---|---|---|---|---|---|
+| 23:00 ✗failed | 67.4 | 58.8 | 57.1 | 48.1 | 40.0 | **20** |
+| 00:00 ✓ok | 70.4 | 56.1 | **8.9** | 8.9 | 10.8 | **10** |
+| 01:00 ✗failed | 67.7 | 59.7 | 57.8 | 47.3 | 12.4 | **20** |
+
+Tempting — but **equally explicable in reverse**: the failing w3pre leg was *itself running* through
+those minutes, and a bind stretched past the 900 s SigV4 tolerance would itself keep the box busy.
+So the sustained load may be the failure's **consequence**, not its cause. ⛔ Do not record this as
+support for the lead until the direction is settled.
+
+### ✅ SETTLED — it is the consequence. And the run timings reframe the whole incident.
+
+The event log (2026-08-12), which is the only place these runs are visible at all:
+
+| run | started | error logged | ended | start → error | run length |
+|---|---|---|---|---|---|
+| `28432dfb` | 23:00:37.73 | 23:18:02.43 | 23:19:04.78 | **1044.70 s** | 1107.05 s (18.45 m) |
+| `bc60b651` | 01:00:30.14 | 01:18:06.24 | 01:19:07.37 | **1056.10 s** | 1117.23 s (18.62 m) |
+
+**Reverse causation confirmed.** The runs span 23:00:37→23:19:04 and 01:00:30→01:19:07, which is
+*exactly* the 20-minute CPU elevation in the table above — and 00:00's CPU collapse to 8.9 % at
++10 min is simply **its run finishing**. The CPU trace is the failing job's own footprint, so it
+carries no information about cause. The caution was right; the table stays unusable as support.
+
+⭐ **The discriminator is RUN DURATION, not contention.** 00:00 finished in under 10 minutes and
+never reached the wall. 23:00 and 01:00 ran 18.5 minutes and crossed it.
+
+⭐⭐ **And "a race" is now the wrong word — this is a deterministic threshold.** The two failures
+fired at **1044.70 s** and **1056.10 s** after their runs began: **11.4 s apart, 1.08 % of the
+interval**, across two independent runs two hours apart. A race does not reproduce to 1 %. Both sit
+**past the 900 s SigV4 tolerance** (excess 144.7 s and 156.1 s). ⛔ The earlier "00:00 is in the same
+window and did not fail ⇒ a race, not a determinism" was a wrong inference from an incomplete
+observation — 00:00 did not fail because it *finished first*.
+
+For scale: the same glob bound in **21.8 s** on an idle laptop. The box leg ran **47.9×** that long
+before erroring.
+
+### 🔎 The leading hypothesis — and an honest correction to candidate (6)
+
+**H: DuckDB computes a request's signature once per QUERY/SCAN rather than per REQUEST, so any S3
+request issued more than 900 s into a single long-running query is rejected.**
+
+⚠️ **This reopens candidate (6) in a variant my experiment never tested.** I refuted "DuckDB signs at
+SECRET-creation time" using a 16-hour-old secret and a **new** query — and that refutation stands
+*as stated*. But I framed it as "DuckDB signs each request against the current clock", which is
+broader than what was measured: nothing in that experiment examined a **single query that runs for
+17 minutes**. The scope of the claim outran the scope of the evidence.
+
+H fits every observation, including the ones that killed the other candidates:
+
+| observation | fits H? |
+|---|---|
+| error at 1044.7 s / 1056.1 s, both just past 900 s | ✅ and it *predicts* the clustering |
+| 11.4 s agreement across two independent runs | ✅ deterministic, not stochastic |
+| only ever `mlb_odds_raw` | ✅ the only glob big enough to push the leg past 900 s |
+| appears *now*, not in June | ✅ 48 files/day is what made 900 s reachable |
+| host + container clocks perfect | ✅ H needs no clock error at all |
+| boto3 paths unaffected | ✅ botocore re-signs per request |
+| 00:00 in the same contention window survived | ✅ it finished in <10 min |
+
+**Unexplained by H:** the ~145–156 s of *excess* over 900 s. That is either the leg's setup before
+its first signed request, or a retry budget consumed after the first rejection. Not measured — do
+not assert it.
+
+⇒ **The lead, restated with what is now measured:** *duration* is the trigger, `:00` contention is
+only the amplifier that pushed the leg past the threshold, and the unbounded file growth is what
+made the threshold reachable at all. That is a sharper claim than "a long bind under contention",
+and it is the one the evidence supports.
+
+⚠️ **Prod can no longer reproduce it** — compaction took the bind to 1.57 s, so no leg gets near
+900 s. Testing H now requires a synthetic long-running query (below).
+
+**The cheap discriminator** — the failing legs' own start/end times, from the Postgres event log
+(the runs report SUCCESS, so status cannot find them). If a failing leg ran 23:00:37 → ~23:20, the
+sustained load is its own effect and this table says nothing about cause:
+
+```bash
+docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T dagster-codeloc python -c "
+from dagster import DagsterInstance; import datetime as dt
+i = DagsterInstance.get()
+iso = lambda t: dt.datetime.fromtimestamp(t, dt.UTC).isoformat() if t else None
+for rec in i.get_run_records(limit=400):
+    r = rec.dagster_run
+    if r.job_name != 'intraday_schedule_job': continue
+    logs = i.all_logs(r.run_id)
+    hits = [e for e in logs if 'RequestTimeTooSkewed' in (getattr(e, 'user_message', '') or '')]
+    if not hits: continue
+    print(r.run_id[:8], 'start', iso(rec.start_time), 'end', iso(rec.end_time),
+          'error_logged', iso(hits[0].timestamp))
+"
+```
 
 ## Status of the record
 
@@ -384,12 +530,92 @@ hypothesis predicts a spike at both; a flat CPU trace would weaken it substantia
 | The box clock drifted | **refuted** — chrony RMS offset 2.9 µs |
 | The failures predate the current clock state | **refuted** — 2026-08-11 23:00 / 08-12 01:00 UTC |
 | DuckDB signs at secret-creation time | **refuted** — a 16-h-old secret signed an accepted request |
+| The container's clock differs from the host's | **refuted** — both `date -u` agree to the second (2026-08-12 23:38:17 UTC) ⇒ the clock family is exhausted |
+| Memory pressure is the trigger | **refuted** — memory moves *opposite* to the failures (28.6/26.4 % at the failing minutes vs 50.5 % at the non-failing one) |
+| `:00` is the busiest minute (the lead's premise) | **CONFIRMED by measurement** — `:00` runs +14.2 pp avg / +22.9 pp peak over `:30`, peaking 91.25 % on 2 vCPU |
+| Contention MAGNITUDE selects which `:00` fails | **not supported** — the non-failing 00:00 had the window's *highest* average CPU (70.4 %) |
+| The 20-min CPU elevation is a *cause* | **refuted** — it is the failing run's own footprint (23:00:37→23:19:04, 01:00:30→01:19:07) |
+| "It is a race" | **withdrawn** — two runs erred 11.4 s apart (1.08 %); this is a **deterministic duration threshold**, and 00:00 survived by finishing first |
+| ⭐ A query running >900 s reuses one signature (H) | **OPEN and UNTESTED.** Best fit to the evidence, never subjected to a refuting experiment — the test projected ~4.1 h and was called off. ⛔ Do not carry forward as established |
 | A long bind under `:00` contention, on a glob growing 48 files/day | **open — the standing lead** |
 | …its exposure | **REMOVED 2026-08-12** — 1,859 files → 98, bind 21.8 s → 1.57 s (compaction shipped) |
 
 ⚠️ Removing the exposure is not the same as confirming the mechanism. If `RequestTimeTooSkewed`
 recurs on a 98-file glob, the contention lead is refuted too and the hunt moves to the signing path
 itself.
+
+### ⏸️ NOT RUN — H is UNTESTED, not supported (operator decision, 2026-08-12)
+
+⛔ **Nothing below was executed.** At `N=3000` DuckDB projected **~4.1 hours**, not the 25–30 minutes
+estimated here, and the operator called it off. That is the right call on cost: the exposure is
+already removed, serving was never affected, and H answers *why it happened*, not *whether it
+recurs*.
+
+⚠️ **So H's status is UNTESTED — it is the hypothesis that best fits the evidence, and it has never
+been subjected to an experiment that could refute it.** Do not carry it forward as established.
+Everything on the numbered list above (the 900 s clustering, the 11.4 s reproducibility, the
+duration threshold) stands on its own measurements; H is the *explanation* proposed for them.
+
+📏 **Calibration correction for anyone who revisits this:** the 25–30 min figure came from
+extrapolating a superlinear curve through **two** points (3.5 µs/row at N=200, 28.6 µs/row at
+N=800) assuming exponent ≈1.5. The real curve is far steeper — at N=3000 each row builds a ~45 KB
+string and allocation dominates. **Take a third point at a large N before quoting a runtime**, and
+prefer a smaller N with a longer scan over a large N with a short one.
+
+### ⏭️ The test that would settle H — LAPTOP, operator (>2 min, read-only) — NOT RUN
+
+H predicts failure for **any** single query whose execution spans 900 s against S3, *regardless of
+file count*. Refuting it takes one query that runs longer than that and keeps streaming data pages:
+
+⚠️⚠️ **The obvious version of this test is VACUOUS in three separate ways — each makes it pass
+regardless of H.** All three were found while calibrating, not by inspection:
+
+1. **The dataset must not be Delta-backed.** The first draft used `mart_pitch_play_event`, which
+   E11.20 moved to Delta — `read_parquet('lakehouse/<t>/**/*.parquet')` returns *"No files found"*
+   (the legacy-path landmine, one more time). Use **`stg_batter_pitches`**: 1,062 MB, **331 files**,
+   7,946,728 rows, plain parquet, not in `DELTA_W1_TABLES`.
+2. ⭐ **The expensive expression must read a REAL DATA COLUMN.** The first draft filtered on
+   `file_row_number` — a *generated* column — so DuckDB need never read a single data page: the
+   query would burn CPU for 20 minutes while issuing **no late S3 requests at all**, and H would
+   go untested. The whole point is that a GET is issued *after* 900 s.
+3. ⭐ **`threads=1` is required.** At default parallelism DuckDB fetches many files concurrently and
+   front-loads the reads; the late-request condition may never occur. Serialising the scan spreads
+   the GETs across the full runtime.
+
+   (A fourth, found the same way: `select count(*) from (select md5(…) …)` has its projection
+   **pruned** by the optimizer — the expression never runs. It must feed an aggregate or a filter.)
+
+**Calibrated on the real data** (threads=1, cold): baseline scan of 150k rows 58.6 s; expression
+cost **3.5 µs/row at N=200** and **28.6 µs/row at N=800** — superlinear, so `N=3000` projects to
+roughly **25–30 minutes** over 7.95 M rows, comfortably past 900 s while still reading files.
+
+```bash
+AWS_DEFAULT_REGION=us-east-2 uv run python -c "
+import duckdb, time
+c = duckdb.connect()
+c.execute(\"install httpfs; load httpfs; set s3_region='us-east-2'\")
+c.execute('set threads=1')          # (3) spread the GETs across the whole run
+c.execute(\"CREATE SECRET (TYPE S3, PROVIDER credential_chain, REGION 'us-east-2')\")
+g = 's3://baseball-betting-ml-artifacts/baseball/lakehouse/stg_batter_pitches/**/*.parquet'
+t = time.time()
+try:
+    r = c.execute(f'''
+        select count(*), max(md5(repeat(player_name, 3000)))
+        from read_parquet('{g}')
+    ''').fetchone()
+    print(f'COMPLETED: {r[0]:,} rows in {time.time()-t:.1f}s')
+except Exception as e:
+    print(f'FAILED after {time.time()-t:.1f}s: {type(e).__name__}: {e}')
+"
+```
+
+**Read it as** — and the elapsed time is the measurement, not the pass/fail:
+
+| outcome | verdict |
+|---|---|
+| `FAILED` with `RequestTimeTooSkewed` at **~900 s** | **H CONFIRMED.** The cure is a duration cap or a re-signing fix on *every* long S3 scan, not just this glob |
+| `COMPLETED` in **> 900 s** | **H REFUTED.** The hunt moves to what else is specific to the w3pre leg |
+| `COMPLETED` in **< 900 s** | ⛔ **tests nothing** — raise `3000` and re-run. A run that never crosses the threshold is a vacuous pass |
 
 Three of my own conclusions on this incident were retracted after measurement. They are left in the
 record rather than deleted, because each looked well-corroborated at the time and the pattern —

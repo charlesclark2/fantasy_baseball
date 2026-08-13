@@ -199,6 +199,13 @@ class Recommendation:
     bye_conflict: int
     vor_p10: float | None
     vor_p90: float | None
+    #: The reserve constraint binds and this player fills an open starter slot — every remaining pick
+    #: is spoken for, so passing on all of these strands a mandatory slot empty. False when there is
+    #: slack. ⚠️ LOCK-STEP: mirrored as `mustFill` in `frontend/lib/draft-optimizer.ts`.
+    must_fill: bool
+    #: A LOW-PREDICTABILITY position (K/DST — the exporter's own `low_pred`), held back until the
+    #: roster actually requires it. See the note on the sort. ⚠️ LOCK-STEP: `deferred` in the TS.
+    deferred: bool
     rationale: str
 
 
@@ -256,6 +263,29 @@ def recommend(
         available.append(row)
     open_slots = open_starter_slots(my_positions, req, normalize=normalize)
 
+    # ── THE RESERVE CONSTRAINT: a mandatory starter slot may never be left unfilled ───────────────
+    #
+    # An empty starter slot scores ZERO, so once my remaining picks are all needed to fill my open
+    # starter slots, bench depth is not a trade-off any more — it is strictly dominated, and every
+    # remaining pick MUST fill a slot. Without it the optimizer walks a user into an illegal roster:
+    # measured on the live 2026 full_ppr/12 board, with every above-replacement RB gone and both RB
+    # slots open, the best available RB ranked #86 of 834 and a surplus-penalized BACKUP QB (vor
+    # 25.2, kept 10% by SURPLUS_CAP) out-scored it; the draft ended 7/9 starters filled.
+    #
+    # ⭐ EXACT, NOT A HEURISTIC — binds iff taking a non-filler PROVABLY strands a slot, so it cannot
+    # distort normal drafting: inert with slack, total without. Deliberately NO safety margin — "grab
+    # a filler a round early" is a preference; "do not end the draft with an empty starter slot" is a
+    # correctness property, and only that is enforced here.
+    #
+    # Everything is DERIVED (roster size from the config, picks made from `my_player_ids`), so the
+    # signature is unchanged and no caller has to be taught to pass draft state.
+    # ⚠️ It RANKS, never FILTERS — if no filler exists at all the caller still gets its best options.
+    # ⚠️ LOCK-STEP: mirrored in `frontend/lib/draft-optimizer.ts` (the shipping engine).
+    total_slots = sum(s.count for s in config.roster)
+    picks_remaining = total_slots - len(list(my_player_ids or []))
+    open_starter_count = sum(open_slots.dedicated.values()) + len(open_slots.flex)
+    must_fill_now = open_starter_count > 0 and picks_remaining <= open_starter_count
+
     # per-position available lists (points-descending) → tiers + next-available lookup
     pos_players: dict[str, list[dict]] = {}
     for row in available:
@@ -265,6 +295,9 @@ def recommend(
         pos_players.setdefault(pos, []).append(row)
     pos_tier: dict[str, dict[str, int]] = {}
     pos_next_vor: dict[str, dict[str, float]] = {}
+    #: player_id of the BEST AVAILABLE player at each position — the only one that earns the scarcity
+    #: bonus (see the note at `need_bonus` below). Keyed off the same pts-descending order as tiers.
+    pos_best: dict[str, str] = {}
     my_counts: dict[str, int] = {}
     for p in my_positions:
         my_counts[p] = my_counts.get(p, 0) + 1
@@ -273,6 +306,8 @@ def recommend(
         tiers = assign_tiers([_fnum(r.get("league_points")) for r in rows], k=tier_k)
         pos_tier[pos] = {}
         pos_next_vor[pos] = {}
+        if rows:
+            pos_best[pos] = str(rows[0].get("player_id"))
         for i, r in enumerate(rows):
             pid = str(r.get("player_id"))
             pos_tier[pos][pid] = tiers[i]
@@ -293,7 +328,30 @@ def recommend(
         dropoff = max(0.0, vor - next_vor)
         level = open_slots.need_level(pos)
         need_w = NEED_W_DEDICATED if level == 2 else (NEED_W_FLEX if level == 1 else 0.0)
-        need_bonus = need_w * dropoff
+        # ⭐ THE SCARCITY BONUS BELONGS TO THE POSITION, SO ONLY ITS BEST AVAILABLE PLAYER EARNS IT.
+        # Awarding each player his OWN `dropoff` inverts a position: `dropoff` is a pure GAP that says
+        # nothing about what the candidate is worth, so whoever sits on the near side of a cliff
+        # collects the whole cliff, however bad he is.
+        #
+        # Measured on the live 2026 full_ppr/12 board (2026-08-12): the kicker pool cliffs 29.1 VOR
+        # between projected starters and deep backups, so K31 (vor -10.8) scored 18.3 and beat the
+        # BEST kicker (vor +8.1, score 9.6) — landing K31 at #66 overall, a round-6 pick.
+        #
+        # ⚠️ It survived because MVP-3 shipped K/DST as null-VOR placeholders (skipped above); NF1.6
+        # gave them real projections and made a ~30-row sub-replacement tail live for the first time.
+        #
+        # ⛔ The obvious patch (`need_w * dropoff if vor > 0 else 0`) is wrong twice: it MOVES the
+        # inversion rather than removing it (the row above the cliff still wins when the cliff sits
+        # one place higher), and it BREAKS need-filling — late in a draft everything left at a needed
+        # position is below replacement and the roster must still be filled
+        # (`test_mock_snake_draft_replay`: "team 8 never drafted a TE").
+        #
+        # VONA answers "should I address this position NOW?", never "which player at it?" — that is
+        # always VOR. So urgency is computed once per position, at the player you would actually
+        # draft. Ordering inside a position is then VOR-monotone BY CONSTRUCTION, while the best
+        # available at a needed position keeps the full bonus even below replacement.
+        # ⚠️ LOCK-STEP: mirrored in `frontend/lib/draft-optimizer.ts` (the shipping engine).
+        need_bonus = need_w * dropoff if pos_best.get(pos) == pid else 0.0
         # surplus damping: this pick fills NO open starter slot (level 0) → it's bench depth. Discount it
         # vs a need-filler, and punish it HARDER once I already hold everything I could ever start at the
         # position (so a 2nd QB / 2nd TE stops out-ranking RB/WR depth once my starters are set).
@@ -308,6 +366,12 @@ def recommend(
         bye_conflict = my_byes.get((pos, int(bye)), 0) if bye is not None else 0
         bye_pen = BYE_PEN_FRAC * min(bye_conflict, BYE_CLUSTER_CAP) * vor if (bye_conflict and vor > 0) else 0.0
         score = vor + need_bonus - surplus_pen - bye_pen
+        # True only while the reserve constraint binds AND this player fills an open starter slot.
+        must_fill = must_fill_now and level > 0
+        # ⭐ K/DST are held back until the roster requires them. Read from the exporter's own
+        # `low_pred` rather than a position list — the flag exists so a consumer never has to know
+        # which positions are soft, and a hardcoded ("K","DST") would silently miss a future one.
+        deferred = bool(row.get("low_pred"))
 
         tier = pos_tier[pos].get(pid, 1)
         rows_pos = pos_players[pos]
@@ -335,16 +399,49 @@ def recommend(
             bye_conflict=int(bye_conflict),
             vor_p10=(round(_fnum(row.get("vor_p10")), 1) if row.get("vor_p10") is not None else None),
             vor_p90=(round(_fnum(row.get("vor_p90")), 1) if row.get("vor_p90") is not None else None),
+            must_fill=must_fill,
+            deferred=deferred,
             rationale=_rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen,
-                                 bye, bye_conflict),
+                                 bye, bye_conflict, must_fill, picks_remaining, open_starter_count),
         ))
 
-    recs.sort(key=lambda r: r.score, reverse=True)
+    # ── the ordering, in three keys ───────────────────────────────────────────────────────────────
+    #
+    # 1. `must_fill` — a required filler outranks everything (the reserve constraint).
+    # 2. `deferred`  — a LOW-PREDICTABILITY position (K/DST) sits below every real candidate.
+    # 3. `score`.
+    #
+    # ⭐ WHY (2) EXISTS. Recommending a D/ST in an early round destroys trust in every other
+    # recommendation on the page, and it was happening: on the live 2026 full_ppr/12 board ROUND 6's
+    # six-slot panel came back FIVE-SIXTHS K/DST with DEN D/ST ranked #1.
+    #
+    # Not a scoring bug — VOR read as comparable across positions where it is not. The whole
+    # above-replacement VOR range is 8.1 at K and 10.4 at D/ST against a MEDIAN 80% interval of 118.7
+    # and 87.3 on a single player (signal-to-noise 0.07 / 0.12, vs 0.55-0.61 at RB/WR/TE), so DST1
+    # over DST12 is not a distinction this projection can support — which is what the exporter says
+    # by stamping `low_pred`.
+    #
+    # ⛔ NOT a score penalty: a fudge big enough to sink K/DST would be reverse-engineered from the
+    # answer and would corrupt `score`, which the UI shows. Deferral changes only the ORDER.
+    #
+    # ⚠️ The two rules COMPOSE, and that is what makes absolute deferral safe: whenever K/DST are the
+    # only thing a roster can still accept, the bench is full ⇒ picks_remaining == open_starter_count
+    # ⇒ the reserve constraint is NECESSARILY binding ⇒ `must_fill` lifts them back to the top.
+    # Structural, not luck. Never early, always by the end.
+    # ⚠️ LOCK-STEP: mirrored in `frontend/lib/draft-optimizer.ts` (the shipping engine).
+    recs.sort(key=lambda r: (r.must_fill, not r.deferred, r.score), reverse=True)
     return recs[:top_n]
 
 
-def _rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen, bye=None, bye_conflict=0) -> str:
+def _rationale(pos, level, need_bonus, dropoff, last_in_tier, tier, surplus_pen, bye=None, bye_conflict=0,
+               must_fill=False, picks_remaining=0, open_starter_count=0) -> str:
     parts: list[str] = []
+    # Leads the sentence when it applies: this is no longer a value judgement the user can weigh, so
+    # saying WHY the tool stopped offering better-scoring bench players is the honest thing to show.
+    if must_fill:
+        picks = f"{picks_remaining} pick{'' if picks_remaining == 1 else 's'} left"
+        slots = f"{open_starter_count} starter slot{'' if open_starter_count == 1 else 's'} still open"
+        parts.append(f"MUST fill a starter — {picks}, {slots}")
     if level == 2:
         parts.append(f"fills your open {pos} starter")
     elif level == 1:

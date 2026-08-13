@@ -1772,6 +1772,87 @@ def update_player_posteriors_op(context):
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def reexport_player_seq_posteriors_op(context):
+    """INC-25 ORDERING FIX — re-mirror player_sequential_posteriors to S3 AFTER its writer.
+
+    THE DEFECT. ``lakehouse_w8a_feature_layer_op`` mirrors this table at graph position lk9,
+    near the TOP of the daily job, while ``update_player_posteriors_op`` writes Snowflake ~40
+    minutes later. Nothing re-exported it afterwards, so the S3 parquet was ALWAYS exactly one
+    writer-cycle behind — the INC-25 "a consumer reads a mirror built upstream of its own
+    refresh" shape, with no consumer loud enough to notice.
+
+    MEASURED 2026-08-09 03:45 UTC (laptop; the Snowflake side on MONITOR_WH so the target-6
+    COMPUTE_WH soak was untouched):
+
+        source   max(update_ts)                 max(game_date)   rows      lag
+        SF       2026-08-08 13:02:18.671140     2026-08-07       400,193   14.72 h
+        S3       2026-08-07 13:02:08.375345     2026-08-06       399,759   38.72 h
+        delta    exactly +24.00 h               one slate        +434      —
+
+    The +434 rows are precisely the 08-08 writer batch. 38.72h is ALREADY PAST the 36h
+    freshness threshold, so the mirror is not "12h of headroom" (as E11.24 target 3 estimated
+    from a single reading) — it BREACHES on any evening read. That is why target 3 could not
+    flip this entry to S3, and why fixing the export order is the precursor rather than
+    repointing the reader.
+
+    WHY IT BREACHES ON SOME READS AND NOT OTHERS — ``check_data_freshness.py`` has TWO callers
+    (the INC-38 every-caller lesson, on the READ side): the in-job ``check_data_freshness`` at
+    s15 AND a host cron at ``30 12,17 * * *`` UTC (capture.crontab). At s15 the Snowflake table
+    has not been advanced yet either, so both sources read the SAME value and the lag is
+    invisible; the 17:30 cron reads Snowflake at ~4.5h and the mirror at ~28.5h, and any run
+    after ~01:00 UTC is past 36h outright.
+
+    TIER — ALERT-loud-but-continue, and a FAN-OUT LEAF. Nothing takes this op's output, so it is
+    structurally incapable of withholding a slate even if it raised; it does not raise anyway.
+    A stale mirror degrades a monitor and tomorrow's DuckDB EB build — it is never a reason to
+    stop the sequential chain or the prediction path behind it.
+
+    NOT GATED on W8A_LAKEHOUSE_S3. The export is a plain ``SELECT *`` → S3 with no dependency on
+    the W8a DuckDB build, and the mirror's currency is wanted whether or not that build runs.
+    Adding a flag would also mean a box ``.env`` edit that fails the next deploy until the
+    operator makes it (the E11.24 ``env.required`` footgun) for no safety gained.
+
+    THE lk9 EXPORT STAYS. It is what guarantees the mirror exists BEFORE the ``--w8a`` DuckDB
+    build reads it; this op is additive. The cost of keeping both is one extra ``SELECT *`` of a
+    ~400k-row table on a warehouse the writer immediately above has already resumed — added
+    active-time, NOT an added wake (E11.24 #679: wake is a queue). Retiring the lk9 copy is a
+    possible follow-up, not part of this change: at lk9 the two schemes carry byte-identical
+    content, but only lk9 picks up an out-of-band write (a hand-run backfill) made between
+    writer runs.
+
+    INC-32 — FINITE TIMEOUT, and "it is a leaf" does NOT make one unnecessary. Both jobs use
+    ``in_process_executor``, which runs steps ONE AT A TIME in topological order, so a hung leaf
+    stalls every step scheduled after it — including predict. A wall-clock cap turns a wedged
+    Snowflake fetch or S3 upload into this op's own ALERT instead of a stalled slate. 900s is
+    generous against a ~400k-row single-table export (the lk9 copy of the same table runs in
+    well under a minute).
+    """
+    try:
+        _run_script(context, "export_w8a_precursors_to_s3.py",
+                    ["--table", "player_sequential_posteriors"], timeout=900)
+        context.log.info(
+            "[player-seq-mirror] re-exported player_sequential_posteriors to S3 after the "
+            "writer — the mirror now carries this run's chain advance."
+        )
+    except Exception as exc:  # noqa: BLE001 — ALERT tier; a mirror must never stop the chain.
+        msg = (
+            "reexport_player_seq_posteriors_op failed; the S3 player_sequential_posteriors "
+            "mirror is now one writer-cycle STALE. Consequences: check_data_freshness reads "
+            "that mirror and will report STALE (>36h) on its next off-cycle run, and the "
+            "next --w8a DuckDB build seeds eb_starter_posteriors / eb_batter_posteriors_raw "
+            "from a seq chain missing this run's advance. Neither withholds a slate. "
+            f"Error: {exc}"
+        )
+        context.log.warning("[ALERT] " + msg)
+        try:
+            from pipeline.utils.alerting import send_alert
+            send_alert("player_sequential_posteriors S3 mirror re-export failed", msg,
+                       severity="ERROR", dedup_key="player_seq_mirror_reexport")
+        except Exception as alert_exc:  # noqa: BLE001 — a failed page must not fail the op
+            context.log.warning(f"[player-seq-mirror] send_alert failed (non-fatal): {alert_exc}")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def update_team_posteriors_op(context):
     # 2026-07-22: --catchup (was --date yesterday) — self-healing ordered advance; see the note on
     # update_player_posteriors_op + catchup.py. Directly fixes the team-seq 7/21 permanent-skip.

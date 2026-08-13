@@ -353,6 +353,13 @@ export interface Recommendation {
   tier: number
   isLastInTier: boolean
   byeConflict: number
+  /** The reserve constraint is binding and this player fills one of the open starter slots — i.e.
+   *  every remaining pick is now spoken for, so passing on all of these strands a slot empty. False
+   *  for every candidate whenever there is slack. */
+  mustFill: boolean
+  /** A low-predictability position (K/DST — the exporter's own `lowPred`), held back until the
+   *  roster actually requires it. See the note on the sort. */
+  deferred: boolean
   rationale: string
 }
 
@@ -369,6 +376,57 @@ export interface RecommendArgs {
 
 // Rank the still-available board players for MY next pick. Returns up to topN, sorted by score, each
 // with a plain-language rationale. Deterministic + fast (a couple of passes over ≤~700 rows).
+// ── the BEST-AVAILABLE board ordering ────────────────────────────────────────────────────────────
+
+export type BoardSortCol = "ovrRank" | "pts" | "vor"
+
+export interface SortAvailableOpts {
+  sortCol: BoardSortCol
+  sortDir: "asc" | "desc"
+  /** Whether low-predictability rows (K/DST) are held below every real candidate.
+   *
+   *  ⚠️ MUST be false when the user has explicitly filtered to K or D/ST — they asked for those
+   *  rows, and burying them inside their own filtered view would be perverse. Everywhere else (the
+   *  mixed "ALL" view) it must be true; see the note below. */
+  deferLowPred: boolean
+}
+
+/**
+ * Order the "Available players" board — the cheat sheet a user reads when they DON'T take the
+ * recommendation.
+ *
+ * ⭐ THIS EXISTS AS A SHARED FUNCTION BECAUSE THE RULE HAS TO HOLD ON BOTH SURFACES. `recommend`
+ * defers K/DST (their VOR is not comparable across positions — the whole above-replacement range is
+ * 8.1 at K and 10.4 at D/ST against a median 80% interval of 118.7 / 87.3 on a single player). But
+ * the board was sorted INLINE in the component by raw `ovrRank`/`pts`/`vor`, so the same D/ST that
+ * had just been pushed out of the recommendations reappeared at the top of best-available — reported
+ * live 2026-08-13 with PIT D/ST at #56, level with WRs on VOR 6. Fixing one surface and not the
+ * other leaves the user exactly one click from the advice we decided not to give.
+ *
+ * ⚠️ WHY THE OLD INLINE SORT LOOKED FINE. Its comment read "null pts/vor (K/DST) always sort to the
+ * bottom regardless of direction" — TRUE when MVP-3 shipped K/DST as null-VOR placeholders, and
+ * silently false from NF1.6 on, when they gained real numbers and started interleaving. The same
+ * stale pre-NF1.6 assumption that produced the recommendation bug, in a second place.
+ */
+export function sortAvailable(rows: Player[], opts: SortAvailableOpts): Player[] {
+  const { sortCol, sortDir, deferLowPred } = opts
+  const sign = sortDir === "asc" ? 1 : -1
+  const val = (p: Player) => (sortCol === "ovrRank" ? p.ovrRank : sortCol === "pts" ? p.pts : p.vor)
+  return [...rows].sort((a, b) => {
+    // The deferral outranks the chosen column, so it holds under EVERY sort the header offers —
+    // including an explicit VOR-descending click, which is precisely the ordering that surfaced the
+    // D/ST in the first place.
+    if (deferLowPred && (a.lowPred === true) !== (b.lowPred === true)) return a.lowPred === true ? 1 : -1
+    const av = val(a),
+      bv = val(b)
+    // A genuinely unprojected gap-fill row (null pts/vor) still sinks regardless of direction.
+    if (av == null && bv == null) return 0
+    if (av == null) return 1
+    if (bv == null) return -1
+    return (av - bv) * sign
+  })
+}
+
 export function recommend(args: RecommendArgs): Recommendation[] {
   const { board, config, draftedIds, myPlayerIds, topN = 8, tierK = 1.0 } = args
   const req = rosterRequirements(config.roster)
@@ -389,6 +447,33 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     available.push(p)
   }
   const open = openStarterSlots(myPositions, req)
+
+  // ── THE RESERVE CONSTRAINT: a mandatory starter slot may never be left unfilled ────────────────
+  //
+  // An empty starter slot scores ZERO on Sunday, so once my remaining picks are all needed to fill
+  // my open starter slots, bench depth is not a trade-off any more — it is strictly dominated, and
+  // every remaining pick MUST fill a slot. Without this the optimizer walks a user into an illegal
+  // roster: measured on the live 2026 full_ppr/12 board, with every above-replacement RB gone and
+  // both RB slots open, the best available RB ranked #86 of 834 and a surplus-penalized BACKUP QB
+  // (vor 25.2, kept 10% of its value by `SURPLUS_CAP`) out-scored it. The draft ended 7/9.
+  //
+  // ⭐ EXACT, NOT A HEURISTIC — it binds if and only if taking a non-filler PROVABLY strands a slot,
+  // so it cannot distort normal drafting. With slack it is inert; with none it is total. Deliberately
+  // NO safety margin: any reserve > 0 would start overriding real value judgements on a guess, and
+  // "grab a filler a round early" is a preference, while "do not end the draft with an empty starter
+  // slot" is a correctness property. That is the only one enforced here.
+  //
+  // Everything it needs is DERIVED (roster size from the config, picks made from `myPlayerIds`), so
+  // `recommend`'s signature is unchanged — no caller has to be taught to pass draft state, which is
+  // exactly how a constraint like this ends up enforced on some surfaces and not others.
+  //
+  // ⚠️ It RANKS, never FILTERS. If no filler exists at all (a position exhausted), the caller still
+  // gets its best available options rather than an empty list.
+  const totalSlots = config.roster.reduce((a, s) => a + s.count, 0)
+  const picksRemaining = totalSlots - myPlayerIds.length
+  const openStarterCount =
+    Object.values(open.dedicated).reduce((a, n) => a + n, 0) + open.flex.length
+  const mustFillNow = openStarterCount > 0 && picksRemaining <= openStarterCount
 
   const myCounts: Record<string, number> = {}
   for (const p of myPositions) myCounts[p] = (myCounts[p] ?? 0) + 1
@@ -416,7 +501,38 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     const dropoff = Math.max(0, vor - (nextVor[p.id] ?? 0))
     const level = needLevel(open, p.pos)
     const needW = level === 2 ? NEED_W_DEDICATED : level === 1 ? NEED_W_FLEX : 0
-    const needBonus = needW * dropoff
+    // ⭐ THE SCARCITY BONUS BELONGS TO THE POSITION, SO ONLY ITS BEST AVAILABLE PLAYER EARNS IT.
+    // Awarding each player his OWN `dropoff` inverts a position, because `dropoff` is a pure GAP —
+    // `max(0, vor - nextVor)` — that says nothing about what the candidate is worth. Whoever happens
+    // to sit on the near side of a cliff collects the whole cliff, however bad he is.
+    //
+    // Measured on the live 2026 full_ppr/12 board (2026-08-12): the kicker pool cliffs 29.1 VOR
+    // between the projected starters (~119 pts) and the deep backups (~90 pts). Andre Szmyt sat on
+    // that edge at vor -10.8 and scored -10.8 + 29.1 = 18.3, beating Jake Bates — the BEST kicker on
+    // the board, vor +8.1 — who scored 8.1 + 1.5 = 9.6. That put K31 at #66 overall and drafted him
+    // in ROUND 6 of a 12-team snake.
+    //
+    // ⚠️ WHY IT SURVIVED TO HERE: MVP-3 shipped K/DST as null-VOR placeholders, which `recommend`
+    // skips outright, so no sub-replacement tail was ever a candidate. NF1.6 gave K/DST a real BASE
+    // projection and made the whole 42-deep kicker pool live — including the ~30 rows below
+    // replacement the gap term was never designed for. The guard suite still fixtures K/DST as
+    // null-VOR only (`test_null_vor_rows_never_recommended`), i.e. it tests the pre-NF1.6 world.
+    //
+    // ⛔ THE OBVIOUS PATCH — `vor > 0 ? needW * dropoff : 0` — IS WRONG TWICE, and both were caught
+    // by measurement rather than by eye. (1) It does not remove the inversion, it MOVES it: with the
+    // cliff one row higher the K just above it still outranks the best K (fixture: vor 3.9 beats vor
+    // 8.2). (2) It BREAKS need-filling, which is a real requirement — late in a draft every player
+    // left at a needed position is below replacement, and the roster still has to be filled;
+    // `test_mock_snake_draft_replay` fails with "team 8 never drafted a TE".
+    //
+    // VONA answers "should I address this position NOW?", not "which player at it should I take?" —
+    // that second question is always answered by VOR alone. So the urgency is computed once per
+    // position, at the player you would actually draft (`idxInPos === 0`, the top of the same
+    // pts-descending order used for tiers). Ordering within a position is then VOR-monotone BY
+    // CONSTRUCTION — a worse player can no longer outrank a better one — while the best available at
+    // a needed position keeps the full bonus even when he is below replacement, so a thin position
+    // still gets filled.
+    const needBonus = idxInPos[p.id] === 0 ? needW * dropoff : 0
 
     const held = myCounts[p.pos] ?? 0
     const capacity =
@@ -435,6 +551,14 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     const i = idxInPos[p.id]
     const isLast = i === rows.length - 1 || tierOf[rows[i + 1].id] !== tierOf[p.id]
 
+    // True only while the reserve constraint binds AND this player fills an open starter slot.
+    // Everyone is `false` when there is slack, so the sort below is a no-op in the normal case.
+    const mustFill = mustFillNow && level > 0
+    // ⭐ K/DST ARE HELD BACK UNTIL THE ROSTER REQUIRES THEM. Read from the exporter's own `lowPred`
+    // rather than a position list here — the flag's contract is that a consumer "never has to know
+    // which positions are soft", and a hardcoded ["K","DST"] would silently miss a future one.
+    const deferred = p.lowPred === true
+
     recs.push({
       player: p,
       score: Math.round(score * 10) / 10,
@@ -444,11 +568,44 @@ export function recommend(args: RecommendArgs): Recommendation[] {
       tier: tierOf[p.id] ?? 1,
       isLastInTier: isLast,
       byeConflict,
-      rationale: rationale(p.pos, level, needBonus, dropoff, isLast, tierOf[p.id] ?? 1, surplusPen, p.bye, byeConflict),
+      mustFill,
+      deferred,
+      rationale: rationale(p.pos, level, needBonus, dropoff, isLast, tierOf[p.id] ?? 1, surplusPen, p.bye, byeConflict, mustFill, picksRemaining, openStarterCount),
     })
   }
 
-  recs.sort((a, b) => b.score - a.score)
+  // ── the ordering, in three keys ────────────────────────────────────────────────────────────────
+  //
+  // 1. `mustFill` — a required filler outranks everything (the reserve constraint).
+  // 2. `deferred` — a LOW-PREDICTABILITY position (K/DST) sits below every real candidate.
+  // 3. `score`.
+  //
+  // ⭐ WHY (2) EXISTS. Recommending a D/ST in an early round destroys trust in every other
+  // recommendation on the page, and it was happening: measured on the live 2026 full_ppr/12 board,
+  // ROUND 6's six-slot panel came back FIVE-SIXTHS K/DST with DEN D/ST ranked #1 at score 12.2.
+  //
+  // It is not a scoring bug — it is VOR being read as comparable across positions where it is not.
+  // The whole above-replacement VOR range is 8.1 at K and 10.4 at D/ST, against a MEDIAN 80%
+  // interval of 118.7 and 87.3 points on a single player: a signal-to-noise of 0.07 and 0.12, versus
+  // 0.55-0.61 at RB/WR/TE. Buying DST1 over DST12 is a ~10-point edge drawn from a distribution ~9x
+  // wider than the edge, so it is not a distinction this projection can support — which is exactly
+  // what the exporter states by stamping `lowPred` on those rows (and what `predNote` tells the user
+  // in words: "use these as streaming TIERS, not precise ranks").
+  //
+  // ⛔ NOT A SCORE PENALTY, deliberately. A fudge factor large enough to sink K/DST would be a
+  // number reverse-engineered from the answer, and it would corrupt `score` — which the UI shows and
+  // the rationale explains. Deferral leaves every number honest and changes only the ORDER.
+  //
+  // ⚠️ THE TWO RULES COMPOSE, AND THE COMPOSITION IS WHAT MAKES ABSOLUTE DEFERRAL SAFE. Deferral has
+  // no end-of-draft failure mode, because whenever K/DST are the only things a roster can still
+  // accept, the bench is full ⇒ `picksRemaining == openStarterCount` ⇒ the reserve constraint is
+  // NECESSARILY binding ⇒ `mustFill` lifts them straight back to the top. That is structural, not
+  // luck. So: never early, always by the end — the operator's rule (2026-08-12) in two keys.
+  recs.sort((a, b) => {
+    if (a.mustFill !== b.mustFill) return a.mustFill ? -1 : 1
+    if (a.deferred !== b.deferred) return a.deferred ? 1 : -1
+    return b.score - a.score
+  })
   return recs.slice(0, topN)
 }
 
@@ -461,9 +618,19 @@ function rationale(
   tier: number,
   surplusPen: number,
   bye: number | null,
-  byeConflict: number
+  byeConflict: number,
+  mustFill = false,
+  picksRemaining = 0,
+  openStarterCount = 0
 ): string {
   const parts: string[] = []
+  // Leads the sentence when it applies: this is no longer a value judgement the user can weigh, so
+  // saying WHY the tool stopped offering better-scoring bench players is the honest thing to show.
+  if (mustFill) {
+    const picks = `${picksRemaining} pick${picksRemaining === 1 ? "" : "s"} left`
+    const slots = `${openStarterCount} starter slot${openStarterCount === 1 ? "" : "s"} still open`
+    parts.push(`⚠ Must fill a starter — ${picks}, ${slots}`)
+  }
   if (level === 2) parts.push(`Fills your open ${pos} starter`)
   else if (level === 1) parts.push(`Fills an open FLEX (${pos}-eligible)`)
   if (lastInTier && dropoff > 0) parts.push(`Last of Tier ${tier} — ${Math.round(dropoff)} VOR cliff to the next ${pos}`)
