@@ -1179,3 +1179,48 @@ def compose_gate(sel: dict, fdr_pass: bool, *, coverage: bool = False) -> dict:
     if coverage:
         checks["coverage_floor_ok"] = not sel["coverage"]["blocking_shortfall"]
     return {"checks": checks, "ship": all(checks.values())}
+
+
+def coverage_constraint_refusal(sel: dict, checks: dict, base: dict) -> dict:
+    """NF-D18: a Layer-B null whose ONLY refusing clause is the pre-registered coverage(80)
+    FLOOR is a **CONSTRAINT_REFUSED**, not POWER_LIMITED — more folds shrink the binomial SE and
+    make the refusal MORE certain, so no fold count and no field size changes the verdict.
+    `GE.classify_layer_b`'s POWER_LIMITED branch was written for the NF-W3 shape (arm wins but the
+    CI spans zero) and, applied here, publishes both a self-contradicting reason ("spans zero"
+    about an interval that excludes zero) and a fold-count trigger for a shortfall data cannot
+    move — the exact misleading-trigger direction NF-D18/MH2 (g″) forbid.
+
+    Applies ONLY when every other gate clause is green AND the floor's shortfall is blocking
+    (measured, not thin-sample): otherwise the base classification stands untouched.
+    """
+    cov = sel.get("coverage") or {}
+    others_green = all(v for k, v in checks.items() if k != "coverage_floor_ok")
+    if not (sel.get("beats_foil") and others_green
+            and checks.get("coverage_floor_ok") is False and cov.get("blocking_shortfall")):
+        return base
+    se = cov.get("binomial_se")
+    shortfall_se = ((COVERAGE_FLOOR - cov["winner_coverage_80"]) / se) if se else None
+    out = dict(base)
+    out.update({
+        "state": "CONSTRAINT_REFUSED",
+        "hand_corrected": True,
+        "reason": (
+            f"every statistical gate is GREEN — the assembled arm beats the best foil by "
+            f"{sel['mean_delta']:+.4f} CRPS (CI95 {sel['ci95']} excludes zero), fold wins "
+            f"{sel['fold_wins']} against a required {sel['fold_clause']['required']}, "
+            f"p={sel['p_one_sided']}, PBO/DSR/FDR all pass — and the ship is refused by the "
+            f"pre-registered coverage(80) FLOOR alone: {cov['winner_coverage_80']:.4f} against "
+            f"0.80 at n={cov.get('n_rows')}"
+            + (f" (≈{shortfall_se:.1f} binomial SE below nominal — decisive under-coverage, not "
+               f"sampling noise)" if shortfall_se is not None else "")
+            + ". The mechanism is the DECLARED independence-simplification check firing: "
+              "component banks drawn independently under-disperse the assembled sum wherever the "
+              "components co-move."),
+        "retest_trigger": (
+            "NONE — a constraint refusal is not rescuable by data (NF-D18): more folds make the "
+            "refusal MORE certain. The remedy is a DIFFERENT MECHANISM (a successor modeling "
+            "cross-component dependence — e.g. a joint/copula draw over the component legs) or a "
+            "PM decision; ⛔ never a post-hoc floor change (a floor re-set after seeing the result "
+            "is the E2.1-r inversion — NF1.8)."),
+    })
+    return out
