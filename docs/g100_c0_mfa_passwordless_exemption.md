@@ -305,6 +305,33 @@ do not infer it from a status code.
 
 ### 5. Backfill the accounts created before this shipped
 
+> ✅ **RUN 2026-08-13 — RESULT: no accounts require it.** A full census of the pool (11 users)
+> found **exactly one `subscriber`**, and it is a legacy `google_…` federated-only account,
+> which the ORIGINAL username-shape clause already exempts. Every other account is
+> `beta_tester` / `admin` / ungrouped, and `require_subscriber_mfa` returns early for anyone
+> not in `subscriber` — so the group is currently a no-op for every human on the pool, and
+> adding it to accounts that don't need it would only widen an MFA exemption.
+>
+> ⭐ **The check to re-run at go-live** (new signups will have appeared by then). The lockout
+> signature is one question — *is anyone in `subscriber` with a UUID username and no
+> `passwordless` group?* — and it should return nothing:
+>
+> ```bash
+> aws cognito-idp list-users-in-group --user-pool-id us-east-1_gG9zMbwQt \
+>   --group-name subscriber --query 'Users[].Username' --output text \
+> | tr '\t' '\n' | while read -r U; do
+>   case "$U" in google_*|Google_*) continue ;; esac   # legacy federated: exempt by username
+>   G=$(aws cognito-idp admin-list-groups-for-user --user-pool-id us-east-1_gG9zMbwQt \
+>       --username "$U" --query 'Groups[].GroupName' --output text)
+>   case "$G" in *passwordless*) ;; *) echo "AT RISK: $U (groups=${G:-none})" ;; esac
+> done
+> ```
+>
+> Anything it prints is an account that must be confirmed as password-capable (can enroll
+> TOTP) or given the group before the flip. Silence means nobody can be locked out.
+>
+> The procedure below is kept for that re-run.
+
 Every passwordless account created between G100-C0's deploy (2026-08-10) and this one has no
 group and would be locked out. Small, closed set — but list and confirm each **by hand**:
 over-applying the group is an MFA exemption for a password account.
