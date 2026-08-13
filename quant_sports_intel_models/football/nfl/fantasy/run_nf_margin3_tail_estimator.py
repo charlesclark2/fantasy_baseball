@@ -506,7 +506,11 @@ def write_report(out: dict, path: Path) -> None:  # noqa: C901 — a report, not
     p(pd.DataFrame([{"label": k, **v} for k, v in tt.items()]).to_markdown(index=False))
     p("")
     for ra in out["reproduction_anchors"]["team_total"]:
-        word = ("REPRODUCED" if ra["reproduced"]
+        # ⚠️ an anchor that is UNEVALUABLE (smoke pooling ≠ the 8-fold record) must say so —
+        # never print a false "NOT reproduced" alarm (NF1.7 (a), facing the report).
+        word = ("n/a on a partial run (anchors are valid only on the full 8-fold pooling)"
+                if not ra["evaluable"] else
+                "REPRODUCED" if ra["reproduced"]
                 else "⚠️ NOT reproduced (investigate before trusting cross-story comparability)")
         p(f"Reproduction anchor (report-only): {ra['label']} team-total coverage(80) measured "
           f"{ra['measured']} vs NF-MARGIN2's {ra['expected']} — {word} (tol "
@@ -625,6 +629,7 @@ def _reproduction_anchors(out: dict) -> dict:
     for lab, expected in M2_TEAM_TOTAL.items():
         measured = out["team_total_pooled"].get(lab, {}).get("coverage_80")
         tt.append({"label": lab, "expected": expected, "measured": measured,
+                   "evaluable": bool(full_run),
                    "reproduced": bool(full_run and measured is not None
                                       and abs(measured - expected) <= M2_TEAM_TOTAL_TOL)})
     crps = []
