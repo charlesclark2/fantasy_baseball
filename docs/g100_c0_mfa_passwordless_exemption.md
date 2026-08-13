@@ -200,19 +200,29 @@ account in `subscriber`, flip the flag, exercise both, flip it back.
 # ① make a passwordless test account a subscriber
 aws cognito-idp admin-add-user-to-group --user-pool-id us-east-1_gG9zMbwQt \
   --username "$UUID" --group-name subscriber
-
-# ② turn enforcement on  ⚠️ update-function-configuration REPLACES the whole Variables map —
-#    read the current one and pass it back with the flag added, or you will wipe the API's env.
-aws lambda get-function-configuration --function-name credence-prod-lambda-api \
-  --query 'Environment.Variables' --output json > /tmp/api-env.json   # KEEP THIS FILE
 ```
 
-Add `"ENFORCE_SUBSCRIBER_MFA": "1"` to `/tmp/api-env.json`, then:
+⚠️⚠️ **THEN SIGN THAT ACCOUNT OUT AND BACK IN.** `cognito:groups` is stamped into the token
+at ISSUANCE — a group added to a live session does not appear until new tokens are minted. Skip
+this and `session-diagnostics` reports `is_subscriber: false` on an account you just made a
+subscriber, which reads exactly like the group write having failed. The same applies to every
+account you touch in the backfill (§5): the exemption does not reach an already-open session.
 
 ```bash
+# ② turn enforcement on  ⚠️ update-function-configuration REPLACES the whole Variables map —
+#    read the current one and pass it back with the flag added, or you wipe the API's env.
+aws lambda get-function-configuration --function-name credence-prod-lambda-api \
+  --query 'Environment.Variables' --output json > /tmp/api-env-before.json   # ⭐ KEEP THIS
+jq '{Variables: (. + {ENFORCE_SUBSCRIBER_MFA: "1"})}' /tmp/api-env-before.json > /tmp/api-env-on.json
+jq '{Variables: .}'                                  /tmp/api-env-before.json > /tmp/api-env-restore.json
+
 aws lambda update-function-configuration --function-name credence-prod-lambda-api \
-  --environment "Variables=$(jq -c . /tmp/api-env.json)"
+  --environment file:///tmp/api-env-on.json
 ```
+
+⚠️ `--environment` takes `file://` JSON of the form `{"Variables": {...}}`. The shorthand
+(`Variables={K=v,…}`) cannot carry an arbitrary JSON map, and a malformed one is how you lose
+the function's whole environment.
 
 Then, signed in as each account, call a paid endpoint (e.g.
 `GET https://api.credencesports.com/picks/today`) with the access token:
@@ -220,9 +230,17 @@ Then, signed in as each account, call a paid endpoint (e.g.
 - passwordless subscriber → **200** (and `session-diagnostics` shows `mfa_enforced: true`)
 - password subscriber without TOTP → **403** "Two-factor authentication is required"
 
-Finally restore: remove the flag (re-apply the saved `/tmp/api-env.json` **without** it),
-remove the test account from `subscriber`, and re-run `session-diagnostics` to confirm
-`mfa_enforced` is back to `false`.
+Finally restore:
+
+```bash
+aws lambda update-function-configuration --function-name credence-prod-lambda-api \
+  --environment file:///tmp/api-env-restore.json
+aws cognito-idp admin-remove-user-from-group --user-pool-id us-east-1_gG9zMbwQt \
+  --username "$UUID" --group-name subscriber
+```
+
+and re-run `session-diagnostics` to confirm `mfa_enforced` is back to `false` — read the flag,
+do not infer it from a status code.
 
 > ⚠️ Pick the window deliberately. `ENFORCE_SUBSCRIBER_MFA=1` is account-wide for the whole
 > API; while it is on, ANY real subscriber without TOTP is 403'd. Today there are none (Stripe
@@ -236,9 +254,14 @@ over-applying the group is an MFA exemption for a password account.
 
 ```bash
 aws cognito-idp list-users --user-pool-id us-east-1_gG9zMbwQt \
-  --query 'Users[?UserCreateDate>=`2026-08-10`].{U:Username,Created:UserCreateDate,Status:UserStatus}' \
+  --query 'sort_by(Users, &to_string(UserCreateDate))[].{U:Username,Created:UserCreateDate,Status:UserStatus}' \
   --output table
 ```
+
+⛔ Do NOT filter with `Users[?UserCreateDate>=\`2026-08-10\`]`. JMESPath's `>=` is defined for
+NUMBERS only; against a timestamp it evaluates to null, the filter drops every row, and you get
+an empty table that reads as "nothing to backfill" — a false clean on the one step whose whole
+job is finding accounts. Sort and read the dates yourself.
 
 For each one you can confirm never chose a password (an OTP signup, or a Google-first
 pre-provision — both have UUID usernames and appear in the email-OTP / presignup CloudWatch
