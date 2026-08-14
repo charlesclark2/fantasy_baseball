@@ -270,6 +270,18 @@ than from a copy in `e2e/fixtures/`, deliberately: a second copy would drift fro
 is tested against, and the value of this path is that the browser pastes the same bytes the adapter
 was proven on.
 
+⚠️ **`fantasy-import-platforms.json` IS HAND-AUTHORED, NOT A CAPTURE — a pre-existing violation of
+this section's own rule, found while writing E9.64b and recorded rather than quietly patched.**
+`/fantasy/import/platforms` requires auth, so it is not in `capture-fixtures.mjs`'s `TARGETS`; it
+was written by hand at G100-C1 (2026-08-08). Measured, it has already drifted from the server in two
+ways: Yahoo carries no `attribution` / `attribution_url` (added to `list_platforms` on 2026-08-01,
+i.e. **before** the file was written), and every `help` string differs from the one `PLATFORMS`
+actually serves. `api-mock.ts` supplies the attribution so `fantasy-import-yahoo.spec.ts` asserts
+Yahoo's contractual attribution against what the server sends rather than what the fixture guessed.
+⏭️ The durable fix is to generate this file from the shipping `list_platforms` the way
+`build-import-previews.py` generates the previews; it is left as a separate change because the
+`help` strings would move and `free-league.spec.ts` reads this file too.
+
 One fixture is still generated rather than captured —
 `fantasy-nfl-projections-2026-entitled.synthetic.json`. There is no public unlocked form of the
 current season to capture (every past season's `projections.json` 404s), and the entitled payload

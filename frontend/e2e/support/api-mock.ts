@@ -655,7 +655,16 @@ function importPlatformsFor(yahoo: NonNullable<MockOptions["yahoo"]>): unknown {
           ...p,
           configured: yahoo !== "unavailable",
           connected: yahoo === "connected",
-          // The backend attaches Yahoo's required attribution only once the platform is real.
+          // ⚠️ UNCONDITIONAL, matching `list_platforms`, which attaches attribution for ANY oauth
+          // platform independently of `configured`.
+          //
+          // Supplied here because `fantasy-import-platforms.json` does not carry it. ⚠️ THAT FILE
+          // IS HAND-AUTHORED, NOT A CAPTURE — `/fantasy/import/platforms` requires auth, so it is
+          // not in `capture-fixtures.mjs`'s TARGETS and was written by hand at G100-C1. Measured, it
+          // has drifted from the server in two ways: Yahoo carries no `attribution`/`attribution_url`
+          // (added to `list_platforms` on 2026-08-01, before this file was written) and every
+          // `help` string differs from the one `PLATFORMS` actually serves. It is the README's own
+          // ⛔ "do not hand-write a fixture" rule, pre-dating this story — see `e2e/README.md`.
           attribution: "Yahoo Fantasy",
           attribution_url: "https://football.fantasysports.yahoo.com/",
         }
