@@ -141,21 +141,36 @@ coverage. This list is the honest half of the table above.
    `null` on all four committed previews and nothing renders that panel. This is recorded rather
    than worked around: see the red-proof section for the vacuous guard it produced when it was not.
 
-5. ⚠️ **`pruneEspnPayload`'s DENYLIST is not exercised anywhere, by anything.** The client rewrites
-   the user's paste before sending it — it must, or a 12-team league lands at ~99% of the server's
-   4 MB cap and a 14-team league is refused outright — but **none of the three committed captures
-   contains the fields it strips** (`stats` / `draftRanksByRankType` / `ownership` / `outlooks` /
-   `ratings` / `notificationSettings`: measured, zero occurrences in all three), because they were
-   already stripped before being committed. So the pruner has nothing to remove on this fixture and
-   the ~37% it shrinks the payload by is **whitespace**. `fantasy-import-espn.spec.ts` therefore
-   asserts the pruner's *contract* (posted == pasted minus exactly the unread fields) rather than a
-   size ratio, which would be a guard that cannot fail for the reason it names. ⚠️ The function's
-   existing coverage (`test_nf_c0_platform_import.py::TestEspnPayloadIsPrunedBeforeUpload`) is
-   **source-INSPECTION** — it reads `fantasy-import.ts` as text and checks each field name appears,
-   and proves the parse invariant by re-pruning in PYTHON — so until E9.64b **nothing had ever
-   executed the TypeScript**; the frontend has no unit runner. The E2E is now the only thing that
-   runs it, and on a fixture with nothing to prune. ⇒ a re-capture that preserves the bulk fields
-   would materially improve this, and is the right moment to write the denylist assertion properly.
+5. 🟡 **PARTLY CLOSED at ESPN-PRUNER — `pruneEspnPayload`'s DENYLIST is scaffolded and asserted, but
+   still BLOCKED on an operator capture.** The client rewrites the user's paste before sending it —
+   it must, or a 12-team league lands at ~99% of the server's 4 MB cap and a 14-team league is
+   refused outright — but **none of the three committed captures contains the fields it strips**
+   (`stats` / `draftRanksByRankType` / `ownership` / `outlooks` / `ratings` /
+   `notificationSettings`: measured, zero occurrences in all three), because they were already
+   stripped before being committed. That is the NF-C0e shape — a fixture that is the transform's own
+   OUTPUT cannot test the transform — so `fantasy-import-espn.spec.ts` asserts the pruner's
+   *contract* rather than a size ratio, which would be a guard that cannot fail for the reason it
+   names. What changed:
+   - **`fantasy-import-espn-pruner.spec.ts` now holds the real assertions** — under the 4 MB cap,
+     exactly the unread fields removed, the identity/roster/settings the parser reads preserved, and
+     the silent `catch { return text }` path caught (the returned text MUST differ from the input).
+     They are gated on two operator-supplied un-pruned captures and **SKIP, loudly, until those
+     land**; a registry test that always runs prints `proven on real un-pruned bytes for N/2 sizes`
+     into the run output, so a green run still tells you the claim is owed.
+   - **A non-vacuity guard runs in the FAST GATE** — `test_espn_pruner_raw_capture.py` refuses a
+     "raw" capture that is in fact pruned, which is the exact way this gap would silently reopen.
+     It also pins the TypeScript's re-spelling of `MAX_PASTE_BYTES` to the server's real constant.
+   - **Real-size paste behaviour is MEASURED, not assumed.** ⭐ 3,313,231 B pasted into the real
+     React `<textarea>`, pruned, and POSTed in **533 ms** (the pure function: **7 ms**). The page
+     does not hang. The largest payload ever put through that control before this was 207 KB.
+     ⚠️ That probe uses a SYNTHETIC of the right SIZE, and size does not depend on the field names
+     being right — so it is scoped to latency and to catching the walk BREAKING (a renamed key, a
+     wrong path), never to whether our belief about ESPN's shape is CORRECT. That half is exactly
+     what the operator captures are for.
+   ⏭️ **THE ONE OPEN ITEM: capture a real un-pruned drafted 12-team and 14-team ESPN response**
+   (procedure in `e2e/support/espn-raw-captures.ts`). ⛔ It must not be fabricated by re-inflating a
+   pruned capture — that would encode our assumption about the very shape under test and make all
+   ten gated tests pass while proving nothing.
 6. **Rankings and Projections have no sortable columns.** Their order is the board's own rank, so
    there is no sort control to test — recorded so a future reader does not go looking for the test.
    The Draft Optimizer's Pts/VOR headers are the only user-driven sort in the product, and they are
@@ -338,7 +353,7 @@ pre-existing cases that had silently stopped proving anything. A falsifiability 
 is decorative, which is the defect it exists to catch, one level up.
 
 `.github/workflows/frontend_red_proof.yml` runs the whole board **weekly** (Mondays 07:00 UTC) plus
-on demand via `workflow_dispatch`. It **gates nothing** — 107 sequential production builds take
+on demand via `workflow_dispatch`. It **gates nothing** — 108 sequential production builds take
 ~90 minutes, so it cannot sit on a PR, and `frontend_e2e.yml` remains the per-change gate. But it
 **fails the job** on any drift, deliberately: a scheduled run that always exits 0 is the same
 decorative thing one level up. The visible red (and GitHub's failed-scheduled-run notification) is
