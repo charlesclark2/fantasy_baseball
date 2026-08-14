@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import { collectPageErrors, mockApi } from "../support/api-mock"
+import { collectPageErrors, mockApi, type MockOptions } from "../support/api-mock"
 import { signIn } from "../support/session"
 import { expectNoNaN, expectNoPageErrors } from "../support/assertions"
 
@@ -34,10 +34,10 @@ const DELTA_LABEL = "vs our generic board"
 const SAVED_LEAGUE = /Sunday Money/
 
 /** Open a browse board as a signed-in free account holding one saved league. */
-async function open(page: Page, path: string, groups: string[] = []) {
+async function open(page: Page, path: string, groups: string[] = [], extra: MockOptions = {}) {
   await signIn(page, { groups })
   const errors = collectPageErrors(page)
-  const mock = await mockApi(page, { entitlement: "free", leagues: "one" })
+  const mock = await mockApi(page, { entitlement: "free", leagues: "one", ...extra })
   await page.goto(path)
   return { errors, mock }
 }
@@ -180,7 +180,20 @@ test.describe("Rankings, with the caller's own league selected", () => {
     // manifest and locked itself out, so a `custom:` value restored from storage lost the race
     // against the saved-league request and the caller was put back on the generic preset. The
     // column this whole story adds simply vanished on the second visit.
-    const { errors } = await open(page, "/fantasy/rankings")
+    //
+    // ⭐ E9.64 — THE SAVED-LEAGUE READ IS HELD BACK ON PURPOSE, and without it this test could not
+    // be trusted in either direction. Against a local server the manifest and the saved-league read
+    // land within a few milliseconds of each other, so a build with the deferral REMOVED lost the
+    // race only sometimes: the red proof for this case returned RED on one run and MISMATCH on the
+    // next, from identical code. A falsifiability harness that answers differently run to run is
+    // worse than one that fails, because a single green reads as proof.
+    //
+    // The delay makes the manifest win every time, which is precisely the ordering the deferral
+    // exists to survive. It cannot mask a regression: the guard's whole job is to WAIT for this
+    // read, so a correct build passes at any delay and a broken one now fails at every one.
+    const { errors } = await open(page, "/fantasy/rankings", [], {
+      delay: { paths: ["/fantasy/leagues"], ms: 400 },
+    })
     await expect(page.locator("table tbody tr").first()).toBeVisible()
     await selectSavedLeague(page)
 

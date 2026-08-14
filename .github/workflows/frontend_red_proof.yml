@@ -1,0 +1,122 @@
+name: Frontend red proof (scheduled)
+
+# E9.64b — RUN THE FALSIFIABILITY HARNESS ON A SCHEDULE.
+#
+# ══ WHY THIS WORKFLOW EXISTS ═══════════════════════════════════════════════════════════════════
+#
+# `e2e/red-proof.mjs` re-introduces a real defect one at a time and requires the named spec to go
+# red. It is the only instrument in the repo that can tell coverage from the APPEARANCE of coverage,
+# and until now **nothing ran it**: it was a manual command whose only trigger was a session
+# remembering to type it.
+#
+# That is not hypothetical. E9.64's first full run reported SIX pre-existing cases whose verdict no
+# longer matched their declaration — anchors that had drifted, and breaks whose data-flow had been
+# retired underneath them. Every one had been silently proving nothing for some time, and each read
+# as coverage in the meantime, which is the precise failure the harness exists to prevent. A
+# harness nobody runs is decorative.
+#
+# ══ WHY IT IS NOT A GATE, AND WHY IT STILL FAILS LOUDLY ════════════════════════════════════════
+#
+# It rebuilds the app once per case (106 builds, ~90 min), so it cannot sit on a PR — it would be
+# slower than the story it was reviewing. It is therefore SCHEDULED and gates nothing: no PR
+# trigger, no required check, and `frontend_e2e.yml` remains the per-change gate.
+#
+# But it DOES fail the job on drift, deliberately. A scheduled run that always exits 0 is the same
+# decorative thing one level up — the point is a visible red on the Actions page (and the
+# notification GitHub sends the actor on a failed scheduled run) when the board's shape moves off
+# the recorded 106 / 100 / 6. `continue-on-error` here would defeat the entire story.
+#
+# ⚠️ READING A FAILURE. Two different things fail this job and they need different responses:
+#   · a case reporting MISMATCH / STALE / FLAKY — a guard has stopped proving what it claims. Fix
+#     the case (⛔ never delete it); `e2e/README.md` records what each verdict means and how the six
+#     E9.64 repairs were done.
+#   · BOARD DRIFT with every case green — somebody added or removed a case without updating
+#     `RECORDED_BOARD`. Update it, in the commit that changed the case count.
+#
+# ⛔ Do NOT "fix" a drift by editing the recorded numbers to match the output. That converts the one
+# instrument that can detect a decorative guard into a decorative guard.
+
+on:
+  schedule:
+    # 07:00 UTC Mondays — weekly, not nightly. The board only moves when someone edits a spec or a
+    # component, and the cost is ~90 minutes of runner time; a nightly run would spend seven times
+    # that to learn the same thing on six unchanged days. Monday morning means a drift introduced
+    # during the week is on the board before the next week's work starts on top of it.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      case:
+        description: "Optional case-id substring — runs just the matching cases (skips the board check)"
+        required: false
+        type: string
+
+# One at a time. Each case rewrites a source file and restores it from HEAD on exit, so two
+# concurrent runs in the same checkout would race; and a queued weekly run carries no information a
+# fresh one does not.
+concurrency:
+  group: frontend-red-proof
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: frontend
+
+jobs:
+  red-proof:
+    name: Red proof (106 cases, ~90 min)
+    runs-on: ubuntu-latest
+    # Generous: 106 sequential production builds. Measured locally at well under this, but a shared
+    # runner is slower and a timeout here would read as a drift rather than as a timeout.
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install browser system dependencies
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # ⚠️ The script REFUSES to start on a dirty case file, because it restores from HEAD on exit
+      # and would destroy uncommitted work. A CI checkout is clean, so this never fires here — it is
+      # the local-developer guard. Do not add `--force` to silence a future failure: on a runner a
+      # dirty tree would mean something wrote to the checkout, which is worth stopping for.
+      # ⚠️ The dispatch input goes through the ENVIRONMENT, not through `${{ }}` interpolation into
+      # the shell. An expression is substituted into the script BEFORE bash sees it, so an input
+      # containing shell metacharacters would execute — the standard GitHub Actions script-injection
+      # shape. `$CASE` is expanded by bash as a single word and cannot.
+      - name: Run the red proof
+        env:
+          CASE: ${{ inputs.case }}
+        run: node e2e/red-proof.mjs $CASE
+
+      # The summary is the artifact worth keeping — it names which case moved and in which
+      # direction, which is what a repair starts from. Uploaded on failure too (especially then).
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 30
+          if-no-files-found: ignore

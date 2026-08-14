@@ -1,5 +1,11 @@
 import { expect, test, type Page } from "@playwright/test"
-import { FIXTURES, captureAnalytics, collectPageErrors, mockApi } from "../support/api-mock"
+import {
+  FIXTURES,
+  captureAnalytics,
+  collectPageErrors,
+  leagueBoardPlayers,
+  mockApi,
+} from "../support/api-mock"
 import { signIn } from "../support/session"
 import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors } from "../support/assertions"
 
@@ -30,6 +36,16 @@ import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors } from "../suppor
  */
 
 const SIGNED_IN_FREE = { groups: [] as string[] }
+
+/**
+ * The three `freeSignedIn` nav items (`lib/nav-model.ts`) — offered to a signed-in free account,
+ * withheld from a logged-out visitor.
+ *
+ * ONE list, read by both halves of that contract, because they are two statements about the same
+ * membership: an item added to the menu but not to the negative test would be asserted reachable
+ * and never asserted withheld. Same reason the app keeps one ordering function rather than two.
+ */
+const LEAGUE_NAV_HREFS = ["/fantasy/my-league", "/fantasy/import", "/fantasy/league-settings"] as const
 
 /** Every spec here needs the same three things: a session, the API, and no third-party traffic. */
 async function openMyLeague(
@@ -180,6 +196,68 @@ test.describe("the free personalized league", () => {
     expect(compared, "nothing was compared against the free board").toBeGreaterThan(100)
     expect(moved, "no player moved in a superflex, half-PPR, TE-premium league").toBeGreaterThan(0)
     expect(moved).toBeLessThanOrEqual(compared)
+  })
+
+  test("the board column's overall move agrees with the two boards' own ranks", async ({ page }) => {
+    // ⭐ THE HALF E9.61 LEFT UNCOVERED, and it took a red proof to notice. The movers test above was
+    // correctly re-anchored onto VOR when the highlights moved to ranking on value — but the board's
+    // "vs our generic board" COLUMN still renders `ovrDelta` (`GenericDeltaCell scale="overall"`),
+    // and after that re-anchor nothing read it. So `delta-sign-inverted` — inverting the OVERALL
+    // subtraction, which flips every arrow in that column — broke the app and the suite stayed
+    // green. Fixing the case meant writing the assertion it had been naming.
+    //
+    // The derivation is deliberately the same shape as the VOR one and NEITHER SIDE PASSES THROUGH
+    // `computeLeagueDelta`: the generic rank is read off the board FIXTURE, the league rank off the
+    // served league board, and the chip off the DOM. An inverted subtraction moves the chip while
+    // both inputs stay put.
+    //
+    // ⭐ AND IT IS EXACT, unlike the VOR check. Ranks are integers rendered whole, so there is no
+    // rounding to absorb — the magnitude is asserted as an equality, not a tolerance.
+    await openMyLeague(page)
+    await expect(page.getByTestId("league-delta")).toBeVisible()
+
+    const genericRank = new Map(
+      (FIXTURES.boardFree() as { id: string; ovrRank: number }[]).map((p) => [p.id, p.ovrRank]),
+    )
+
+    // The biggest mover that exists on BOTH boards: a large gap cannot render as "no change", so a
+    // chip that fails to parse below is an anchor problem stated as one rather than a silent skip.
+    const subject = leagueBoardPlayers()
+      .filter((p) => genericRank.has(p.id))
+      .map((p) => ({ ...p, expected: (genericRank.get(p.id) as number) - p.ovrRank }))
+      .sort((a, b) => Math.abs(b.expected) - Math.abs(a.expected))[0]
+    expect(subject, "no player is on both boards — the fixtures no longer overlap").toBeTruthy()
+
+    await page.getByLabel("Rows per page").first().click()
+    await page.getByRole("option", { name: "All", exact: true }).click()
+
+    const row = page
+      .locator('[data-testid="my-league-board"] tbody tr')
+      .filter({ has: page.locator(`a[href="/fantasy/player/${subject.id}"]`) })
+    await expect(row, `${subject.name} has no row on his own league board`).toHaveCount(1)
+
+    // columns: # | Player | Pos | Team | Bye | pts | VOR | vs generic
+    const chip = (await row.locator("td").nth(7).innerText()).trim()
+    const magnitude = Number(chip.replace(/[^0-9]/g, ""))
+    expect(
+      Number.isFinite(magnitude) && magnitude > 0,
+      `${subject.name} moved ${subject.expected} places but his column reads "${chip}" — ` +
+        "the board's biggest mover is rendering as un-comparable",
+    ).toBe(true)
+
+    const up = chip.includes("▲")
+    expect(
+      up ? 1 : -1,
+      `${subject.name} is #${subject.ovrRank} on his league board and ` +
+        `#${genericRank.get(subject.id)} on the generic one — he moved ` +
+        `${subject.expected > 0 ? "UP" : "DOWN"}, and the column says the opposite. ` +
+        "The overall subtraction is inverted.",
+    ).toBe(Math.sign(subject.expected))
+    expect(
+      magnitude,
+      `${subject.name}'s move reads ${magnitude} but his two ranks are ` +
+        `${genericRank.get(subject.id)} and ${subject.ovrRank}`,
+    ).toBe(Math.abs(subject.expected))
   })
 
   test("the activation event reaches the wire, once, under the name the funnel reads", async ({
@@ -349,11 +427,17 @@ test.describe("the free personalized league", () => {
     await mockApi(page, { entitlement: "free", leagues: "one" })
     await page.goto("/fantasy/rankings")
 
-    for (const href of ["/fantasy/my-league", "/fantasy/import", "/fantasy/league-settings"]) {
-      expect(
-        await page.locator(`a[href="${href}"]`).count(),
+    for (const href of LEAGUE_NAV_HREFS) {
+      // ⏳ AUTO-RETRYING, and it has to be. `page.goto` resolves on `load`; the nav gates these
+      // items on `isSignedIn = !!accessToken`, which `AuthContext` restores in an EFFECT that runs
+      // after that. A single-shot `await locator.count()` therefore reads whatever happened to be
+      // painted at one instant — it wins on a fast machine and loses on a loaded CI runner, which
+      // is exactly what it did (2026-08-13: one commit, two runs minutes apart, one red one green,
+      // with only a markdown file changed between them).
+      await expect(
+        page.locator(`a[href="${href}"]`),
         `${href} is unreachable for a signed-in free account`,
-      ).toBeGreaterThan(0)
+      ).not.toHaveCount(0)
     }
   })
 
@@ -364,11 +448,36 @@ test.describe("the free personalized league", () => {
     await mockApi(page, { entitlement: "free" })
     await page.goto("/fantasy/rankings")
 
-    for (const href of ["/fantasy/my-league", "/fantasy/import", "/fantasy/league-settings"]) {
-      expect(
-        await page.locator(`a[href="${href}"]`).count(),
+    // ⚠️⚠️ READ THIS BEFORE TRUSTING THE ASSERTIONS BELOW — THEY ARE WEAKER THAN THEY LOOK, AND
+    // THE COMMENT THEY USED TO CARRY NAMED THE WRONG MECHANISM.
+    //
+    // The requirement is real and is met. But it is NOT met by `freeSignedIn && isSignedIn`, which
+    // is what a reader naturally assumes from the sibling test. It is met one level up, by
+    // `showSubNav = authenticated || isSignedIn` (`components/nav.tsx:93`), which withholds the
+    // ENTIRE sport sub-nav from an anonymous visitor. MEASURED: a logged-out nav renders one
+    // unlabelled button and the links `/`, `/fantasy/rankings`, `/fantasy/track-record`, `/about`,
+    // `/login`, `/signup`; a signed-in one renders `NFL`/`MLB` dropdowns and all 20+ surface items.
+    //
+    // ⇒ THIS SPEC IS OVER-DETERMINED. `lockedVisibleItems` can be broken in EITHER direction —
+    // items dropped, or `freeSignedIn` promoted to public — and these assertions stay green,
+    // because the menu that would carry them is not in the DOM at all. Both breaks are registered
+    // in `e2e/red-proof.mjs` as DECLARED-GREEN cases so that fact is recorded rather than
+    // rediscovered; if either ever flips to RED, the nav's structure moved and this note is stale.
+    //
+    // The anchor below therefore claims only what it can: the logged-out nav MOUNTED. That is the
+    // one failure this spec can genuinely catch (a blank or crashed page silently satisfying three
+    // `toHaveCount(0)`s), and it is worth catching — it is the shape the repo has been bitten by
+    // repeatedly, where a test reads as coverage so nobody looks again.
+    await expect(
+      page.locator('nav a[href="/signup"]'),
+      "the logged-out nav never mounted — the absences below would be vacuous",
+    ).not.toHaveCount(0)
+
+    for (const href of LEAGUE_NAV_HREFS) {
+      await expect(
+        page.locator(`a[href="${href}"]`),
         `${href} was offered to a logged-out visitor, who cannot use it`,
-      ).toBe(0)
+      ).toHaveCount(0)
     }
   })
 })

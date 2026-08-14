@@ -468,10 +468,24 @@ const CASES = [
   {
     id: "home-blog-back-in-primary-nav",
     shipped: "E9.46 — the pre-story nav, where the blog sat beside the products",
+    // 🔧 E9.64 — RE-ANCHORED, and the reason is the more interesting half of the repair.
+    //
+    // This used to rewrite the hardcoded About `<Link>` in `nav.tsx` to point at /blog. It went
+    // STALE on the indentation when E9.60 wrapped that link in `{showSubNav && (` — but re-pointing
+    // the whitespace would have produced a case that ran and proved NOTHING, which is strictly
+    // worse: `showSubNav` is `authenticated || isSignedIn`, and the spec this names drives an
+    // ANONYMOUS visitor, so that link does not render for them however its href is written.
+    //
+    // ⭐ The list that actually renders the primary nav for a stranger is `SIGNED_OUT_NAV`, so that
+    // is where a blog link would have to come back. Same lesson as E9.64's item-5 fix one file over:
+    // an assertion about what an anonymous visitor is offered has to be anchored on the AUTHORED
+    // LIST they are served, not on markup that is gated away from them.
     detail: "Restores the blog as a primary-nav link (operator decision 3 reverses this).",
-    file: "components/nav.tsx",
-    from: '            href="/about"\n            className="hidden text-xs text-gray-500 hover:text-gray-300 transition-colors sm:block"',
-    to: '            href="/blog"\n            className="hidden text-xs text-gray-500 hover:text-gray-300 transition-colors sm:block"',
+    file: "lib/positioning-copy.ts",
+    from: '  { label: "About", href: "/about", product: null, desktop: true },',
+    to:
+      '  { label: "Blog", href: "/blog", product: null, desktop: true },\n' +
+      '  { label: "About", href: "/about", product: null, desktop: true },',
     grep: "out of the primary nav",
   },
   {
@@ -715,13 +729,24 @@ const CASES = [
     // ⭐ THE DEFECT THIS SURFACE IS MOST LIKELY TO SHIP. Rank is an INVERTED scale — smaller is
     // better — so `league - generic` is the spelling that reads naturally and is wrong. Every
     // riser then renders a down arrow and vice versa, on a page that is otherwise completely
-    // normal: no error, no blank, no NaN, and the numbers are all real. Only an assertion tying
-    // the ARROW to the LIST it is in can see it.
-    detail: "Inverts `ovrDelta`, so risers render as fallers.",
+    // normal: no error, no blank, no NaN, and the numbers are all real.
+    //
+    // 🔧 E9.64 — RE-POINTED AT A NEW ASSERTION, because the one it named had stopped being able to
+    // see it and that is a finding rather than a chore. This case used to grep the movers test,
+    // which was exact while the highlights were SELECTED on rank movement. E9.61 correctly
+    // re-anchored that test onto VOR when the ranking moved — and in doing so left the OVERALL move
+    // unread by anything, even though the board's "vs our generic board" COLUMN still renders it
+    // (`GenericDeltaCell scale="overall"`). So the break went in, every arrow in that column
+    // flipped, and the suite stayed green. `vor-delta-subtraction-inverted` covers the VOR side;
+    // this now covers the rank side, against a test written for it.
+    //
+    // ⚠️ THE SHAPE TO REMEMBER: re-anchoring a test onto a new quantity can silently ORPHAN the old
+    // one. When a spec's anchor moves, check what the previous anchor was the only reader of.
+    detail: "Inverts `ovrDelta`, so every arrow in the board's move column points the wrong way.",
     file: "lib/league-delta.ts",
     from: "      ovrDelta: g ? g.ovrRank - p.ovrRank : null,",
     to: "      ovrDelta: g ? p.ovrRank - g.ovrRank : null,",
-    grep: "sign points the way the column says",
+    grep: "agrees with the two boards' own ranks",
   },
   {
     id: "activation-fires-on-mount",
@@ -731,8 +756,11 @@ const CASES = [
     // at the wrong thing entirely. Firing on mount rather than on the board rendering is the
     // natural way to write it.
     detail: "Fires `custom_board_viewed` even with no league configured.",
+    // 🔧 E9.64 — re-anchored: the guard grew a `loading` clause (the telemetry fix that stopped it
+    // firing before the generic board landed, shipping a null `players_moved`). The break is
+    // unchanged in intent — strip the guard down to the ref and it fires on mount.
     file: "components/fantasy/my-league.tsx",
-    from: "    if (fired.current || !league || ranked.length === 0) return",
+    from: "    if (fired.current || loading || !league || ranked.length === 0) return",
     to: "    if (fired.current) return",
     grep: "does NOT fire on an empty state",
   },
@@ -744,14 +772,14 @@ const CASES = [
     // metric by however much they browsed.
     detail: "Drops the once-per-mount guard on the activation capture.",
     file: "components/fantasy/my-league.tsx",
-    from: "    if (fired.current || !league || ranked.length === 0) return\n    fired.current = true",
-    to: "    if (!league || ranked.length === 0) return",
+    from: "    if (fired.current || loading || !league || ranked.length === 0) return\n    fired.current = true",
+    to: "    if (loading || !league || ranked.length === 0) return",
     grep: "under the name the funnel reads",
     // ⭐ DECLARED GREEN, and it is a FINDING rather than a gap — defence in depth, measured.
     //
     // Once-per-mount is delivered TWICE over here, independently: by the `fired` ref, and by the
-    // effect's dependency list (`[league, ranked.length, delta]`), none of which changes when the
-    // user browses — a position-tab click re-renders the component but re-runs no effect. So
+    // effect's dependency list (`[league, ranked.length, delta, loading]`), none of which changes
+    // when the user browses — a position-tab click re-renders the component but re-runs no effect. So
     // removing the ref alone changes no observable behaviour, and no SINGLE-line break can falsify
     // the clause. The spec exercises the property anyway (it clicks a tab and re-counts), so a
     // future edit that makes those deps unstable is caught by the test even though this case
@@ -846,14 +874,25 @@ const CASES = [
   {
     id: "configured-league-reads-as-no-league",
     shipped: "pre-emptive: telling a user with a saved league to go and set one up",
-    // `useMyTeams` cannot score a board without the PROJECTIONS blob, so its `teams` stays null
-    // until both reads land — collapsing "you have no league" and "we cannot score yours yet" into
-    // one state. Keying the empty state on the scored board is the natural way to write it, and it
-    // fires whenever the projections read is slow, 404s before the first export, or fails.
+    // The page cannot show a scored board until the board read lands, so "my league is here but
+    // unscored" is a state of its own. Keying the empty state on it is the natural way to write it,
+    // and it fires whenever that read is slow, 404s before the first export, or fails.
+    //
+    // 🔧 E9.64 — THE BREAK WAS REPLACED BECAUSE IT HAD GONE INERT, and this is the durable half.
+    // It used to swap `!hasSavedLeague` for `!league`, which was a real defect while scoring
+    // happened in the BROWSER: `useMyTeams` could not build a board without the projections blob,
+    // so `teams` — and therefore `league` — stayed null exactly when the read failed. NF-EPIC 1
+    // moved scoring server-side, `league` now comes off `/fantasy/nfl/my-teams` (which this spec
+    // does not fail), and the substitution stopped changing anything at all: the case ran, the
+    // suite stayed green, and it read as a decorative assertion when the assertion was fine.
+    //
+    // ⚠️ The lesson is that a red-proof case is only as durable as the DATA-FLOW it assumes. When a
+    // read moves, re-check every case whose break depends on that read failing. The break now names
+    // the scored board directly, which is what "keyed on the scored board" means today.
     detail: "Keys the empty state on the scored board rather than on the saved-league payload.",
     file: "components/fantasy/my-league.tsx",
     from: "      {!teamsLoading && !hasSavedLeague && (",
-    to: "      {!teamsLoading && !league && (",
+    to: "      {!teamsLoading && !leagueBoard && (",
     grep: "never described as 'no league' when scoring fails",
   },
 
@@ -1099,6 +1138,270 @@ const CASES = [
     to: "  const comparable = allComparable.filter((d) => d.draftable)",
     grep: "no kicker or defense can lead the list",
   },
+  // ── the free tier's nav gate, both directions + the anchor that keeps the negative honest ────
+  {
+    id: "logged-out-nav-does-not-mount",
+    shipped: "not a shipped defect — this proves the negative spec's ANCHOR can actually fail",
+    // ⭐ THE CASE THAT TESTS THE TEST, and the only break that reaches this anchor. Removing the
+    // logged-out nav's Sign Up affordance stands in for "the nav did not render": the three
+    // `toHaveCount(0)`s below it are still trivially satisfied, so a RED here can only have come
+    // from the anchor. Without this case the anchor would be an unfalsifiable line of ceremony —
+    // which is the exact shape it was added to remove.
+    detail: "Drops the Sign Up affordance from the logged-out nav, so the anchor has nothing.",
+    file: "components/nav.tsx",
+    from: "<Link href={SIGNUP_HREF}>Sign Up</Link>",
+    to: "<span>Sign Up</span>",
+    grep: "logged-out visitor is not offered",
+  },
+  {
+    id: "league-nav-offered-to-a-logged-out-visitor",
+    shipped: "the shape `public: true` would have had — a menu that lies about what it opens",
+    // ⭐ DECLARED GREEN, AND THAT IS THE FINDING. Pinning it here is what keeps it one.
+    //
+    // "a logged-out visitor is not offered the league surfaces" reads like a guard on
+    // `freeSignedIn && isSignedIn`. It is not. MEASURED while de-flaking its sibling: the anonymous
+    // nav renders ONE unlabelled button and six links, with no `NFL`/`MLB` dropdown at all, because
+    // `showSubNav = authenticated || isSignedIn` (nav.tsx:93) withholds the entire sport sub-nav
+    // one level ABOVE the item filter. So promoting `freeSignedIn` to public puts the items in a
+    // menu that is not in the DOM, and the spec cannot see it.
+    //
+    // The requirement still holds — anonymous visitors genuinely are not offered these — it is just
+    // over-determined, and the spec's own comment now says so rather than implying a guard it does
+    // not provide. If this ever flips to RED the nav's structure moved and both notes are stale.
+    expect: "GREEN",
+    detail: "Treats `freeSignedIn` as public; invisible here because the whole sub-nav is withheld.",
+    file: "components/nav.tsx",
+    from: "surfaceItems(g).filter((i) => i.public || (i.freeSignedIn && isSignedIn))",
+    to: "surfaceItems(g).filter((i) => i.public || i.freeSignedIn)",
+    grep: "logged-out visitor is not offered",
+  },
+  {
+    id: "logged-out-nav-renders-nothing-at-all",
+    shipped: "not a shipped defect — this measures the REACH of the negative spec's anchor",
+    // ⭐ ALSO DECLARED GREEN, for the same structural reason, and it bounds what the anchor claims.
+    //
+    // The intent was: empty the locked menu, leaving the three `toHaveCount(0)`s trivially
+    // satisfied so ONLY the render anchor can fail. It stays green because the anchor is
+    // `nav a[href="/signup"]` — logged-out nav CHROME, which this filter never touches.
+    //
+    // That is deliberate rather than a weaker choice: for an anonymous visitor no anchor inside the
+    // sport menu exists to reach for. The anchor therefore proves the nav MOUNTED (the blank-page
+    // vacuity this spec really was exposed to) and nothing more, which is exactly what the spec now
+    // claims. Over-claiming it would repeat the mistake one level up.
+    expect: "GREEN",
+    detail: "Empties the locked menu; the anchor is nav chrome, so it is untouched by design.",
+    file: "components/nav.tsx",
+    from: "surfaceItems(g).filter((i) => i.public || (i.freeSignedIn && isSignedIn))",
+    to: "surfaceItems(g).filter(() => false)",
+    grep: "logged-out visitor is not offered",
+  },
+  // ══ E9.64 — FANTASY INTERACTIVITY ═════════════════════════════════════════════════════════
+  //
+  // The gate cases come FIRST because one of them is the whole reason this story touched the nav:
+  // G100-D0-R1 item 5 found that "a logged-out visitor is not offered the league surfaces" could not
+  // fail, and registered TWO declared-GREEN cases above saying so. The case below is the falsifiable
+  // replacement — it breaks the list that actually renders for an anonymous visitor.
+  {
+    id: "nav-offers-a-gated-league-surface",
+    shipped: "G100-D0-R1 item 5 — pre-emptive: the future in which the protection silently vanishes",
+    // ⭐⭐ THE CASE THE OLD ANCHOR COULD NOT EXPRESS. R1's two cases break `surfaceItems(...)` inside
+    // `nav.tsx` and are DECLARED GREEN, correctly: an anonymous visitor never reaches that filter,
+    // because `showSubNav` withholds the entire sport sub-nav. The protection was real and
+    // incidental, so a future story that rendered the sport menu logged-out would remove it with no
+    // test anywhere going red.
+    //
+    // Since E9.60 the list that ACTUALLY renders for a stranger is `SIGNED_OUT_NAV` — authored, and
+    // therefore falsifiable. Putting a gated league surface in it is exactly the defect: a link
+    // whose only behaviour is a bounce to /login, offered to someone with no account.
+    detail: "Adds My League to the authored signed-out nav, so a stranger is offered a wall.",
+    file: "lib/positioning-copy.ts",
+    from: '  { label: "About", href: "/about", product: null, desktop: true },',
+    to:
+      '  { label: "My League", href: "/fantasy/my-league", product: "fantasy", desktop: true },\n' +
+      '  { label: "About", href: "/about", product: null, desktop: true },',
+    grep: "no entitlement-gated fantasy surface is offered",
+  },
+  {
+    id: "league-surface-open-to-strangers",
+    shipped: "pre-emptive: a per-caller surface losing its guard",
+    // The other half of the same property — not OFFERED is not the same as not REACHABLE, and a
+    // bookmark or a shared link never sees the nav. Everything on My League is computed from the
+    // caller's own saved league, so an un-guarded render is a page that cannot work rather than a
+    // page that leaks: `/fantasy/leagues` answers 401 and the screen renders its empty state
+    // forever. Aliasing the import produces the real defect in one contiguous edit (the same shape
+    // `free-board-re-gated` uses, and for the same reason — swapping the JSX tag leaves the closing
+    // tag behind and the build fails instead of the spec).
+    detail: "Drops FantasyLeagueGuard from My League, so a stranger is not bounced to sign in.",
+    file: "app/fantasy/my-league/page.tsx",
+    from: 'import { FantasyLeagueGuard } from "@/components/auth-guard"',
+    to: 'import { FantasyPublicGuard as FantasyLeagueGuard } from "@/components/auth-guard"',
+    grep: "refuses a stranger who follows a direct link",
+  },
+  {
+    id: "free-account-bounced-to-login-not-upsell",
+    shipped: "pre-emptive: sending a signed-in account to sign in again",
+    // ⭐ THE REFUSAL THAT COSTS MONEY IF IT INVERTS. This account HAS an account; what it lacks is a
+    // membership. /login is a dead end that asks them to do something they have already done, and
+    // it is one line away from correct — the guard has both destinations right there. Mirrors the
+    // server's 401-vs-403 split, and nothing anywhere asserted it before E9.64.
+    detail: "Sends an unentitled signed-in caller to /login instead of to the upsell.",
+    file: "components/auth-guard.tsx",
+    from: 'if (!canAccess("fantasy", groups)) { router.push("/subscribe"); return }',
+    to: 'if (!canAccess("fantasy", groups)) { router.push(loginHref(pathname)); return }',
+    grep: "upsells a free account",
+  },
+  {
+    id: "sign-in-bounce-drops-the-destination",
+    shipped: "E9.58 — every guard bounce used to be a bare `/login`",
+    // ⚠️ THIS ONE ACTUALLY SHIPPED. A stranger who followed a link to a walled surface, created an
+    // account and came back was deposited on /dashboard with no trace of where they had been
+    // heading — the signup completes and the journey does not.
+    detail: "Drops `?next=` from the guard bounce.",
+    file: "components/auth-guard.tsx",
+    from:
+      'return pathname && pathname !== "/login" ? `/login?next=${encodeURIComponent(pathname)}` : "/login"',
+    to: 'return "/login"',
+    grep: "refuses a stranger who follows a direct link",
+  },
+
+  // ── the free board, actually used ───────────────────────────────────────────────────────────
+  {
+    id: "position-filter-does-not-filter",
+    shipped: "pre-emptive: a filter that repaints and narrows nothing",
+    detail: "Stops scoping the board to the selected position.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: 'const scoped = projected.filter((p) => (pos === "Overall" ? true : p.pos === pos))',
+    to: "const scoped = projected",
+    grep: "leaves only that position",
+  },
+  {
+    id: "empty-search-renders-a-blank-table",
+    shipped: "the silent-empty class — E9.56b's shape, reached through a control",
+    // A zero-row table with no message is indistinguishable from a broken board, and it is the
+    // state a visitor reaches by typing a name we do not carry. ⚠️ Its mirror — a REFUSED paid
+    // board falling through to this same message — is `refusal-reads-as-an-empty-search` above;
+    // the two share a zero-row table and are different facts, so both are pinned or one can be
+    // "fixed" into the other.
+    detail: "Removes the no-results message, leaving an empty table and no explanation.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: "          {!boardLoading && !boardError && rows.length === 0 && (",
+    to: "          {false && !boardError && rows.length === 0 && (",
+    grep: "a search that matches nothing says so",
+  },
+  {
+    id: "paging-does-not-advance",
+    shipped: "pre-emptive: a Next button that repaints page one",
+    detail: "Ignores the page offset, so every page renders the first slice.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: "    () => (pageSize === ALL_ROWS ? rows : rows.slice(page * pageSize, page * pageSize + pageSize)),",
+    to: "    () => (pageSize === ALL_ROWS ? rows : rows.slice(0, pageSize)),",
+    grep: "paging advances through the board",
+  },
+  {
+    id: "player-cell-links-to-one-shared-player",
+    shipped: "pre-emptive: every row opening the same player's page",
+    // ⭐ THE DEFECT EVERY "THE PLAYER PAGE RENDERS" ASSERTION PASSES. The click lands on a real,
+    // perfectly-rendering page; it is simply about somebody else. Only following the link and
+    // comparing the destination against the row that was clicked can see it — which is why the
+    // spec clicks the THIRD row rather than the first (a break that binds the first row's id would
+    // be invisible to a first-row click).
+    detail: "Binds every row's link to the first row on the page.",
+    file: "components/fantasy/rankings-board.tsx",
+    from: "                              href={`/fantasy/player/${p.id}`}",
+    to: "                              href={`/fantasy/player/${paged[0]?.id ?? p.id}`}",
+    grep: "links to the page for THAT player",
+  },
+
+  // ── the draft optimizer ─────────────────────────────────────────────────────────────────────
+  {
+    id: "drafted-player-stays-on-the-board",
+    shipped: "pre-emptive: a player who can be drafted twice",
+    // ⭐ In a live draft this is discovered by the room, not by us. Nothing errors, nothing blanks
+    // and the board looks perfect — the tool just quietly stops tracking what is gone.
+    detail: "Stops removing drafted players from the available board.",
+    file: "components/fantasy/draft-optimizer.tsx",
+    from: "    const rows = (board ?? []).filter((p) => !draftedIds.has(p.id))",
+    to: "    const rows = board ?? []",
+    grep: "takes him off the board",
+  },
+  {
+    id: "sort-direction-never-reverses",
+    shipped: "pre-emptive: a column header that sorts once and then does nothing",
+    // Deliberately the DIRECTION half only. The first click still works, so any "clicking Pts sorts
+    // by points" assertion stays green — the control looks live and is half dead, which is the
+    // failure a single-click test cannot see.
+    detail: "Pins the sort direction to descending, so a second click is inert.",
+    file: "components/fantasy/draft-optimizer.tsx",
+    from: 'if (sortCol === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"))',
+    to: 'if (sortCol === col) setSortDir("desc")',
+    grep: "clicking again reverses it",
+  },
+  {
+    id: "draft-does-not-survive-a-reload",
+    shipped: "pre-emptive: two hours of tracked picks lost to a refresh",
+    // The reason the state is persisted at all. A draft runs in a tab that gets reloaded,
+    // backgrounded and killed; this is the only test in the suite that reloads anything.
+    detail: "Ignores the stored draft on restore, so every reload starts an empty draft.",
+    file: "components/fantasy/draft-optimizer.tsx",
+    from: "      if (raw) {\n        const s = JSON.parse(raw) as DraftState",
+    to: "      if (raw && false) {\n        const s = JSON.parse(raw) as DraftState",
+    grep: "mid-draft reload keeps the picks",
+  },
+
+  // ── My Teams: each roster under its OWN format ──────────────────────────────────────────────
+  {
+    id: "every-roster-scored-on-one-board",
+    shipped: "pre-emptive: the cards relabelled, the scoring shared",
+    // ⭐⭐ THE FAILURE MY TEAMS EXISTS TO NOT HAVE, and the one with no visible symptom: every card
+    // renders, no NaN, nothing throws, and every number on the second league is wrong. A user
+    // cannot detect it without doing the arithmetic themselves — which is exactly what the spec
+    // does, from the projections payload's own reception count.
+    detail: "Serves the first league's roster to every card, so both are scored on one board.",
+    file: "lib/fantasy-queries.ts",
+    from: "      roster: rosters[league.league_id] ?? [],",
+    to: "      roster: rosters[Object.keys(rosters)[0]] ?? [],",
+    grep: "different points in two leagues",
+  },
+  {
+    id: "unresolvable-roster-row-dropped",
+    shipped: "pre-emptive: data loss on the user's own roster",
+    // A rostered player we cannot match to a projection is the tempting thing to filter away — the
+    // table gets tidier and the user silently sees 14 of their 15 players, with no statement that
+    // anything is missing.
+    detail: "Hides rostered players that did not match a projection.",
+    file: "components/fantasy/my-teams.tsx",
+    from: "  const bench = roster.filter((r) => !r.roster.starter)",
+    to: "  const bench = roster.filter((r) => !r.roster.starter && r.board)",
+    grep: "unresolvable name is counted rather than hidden",
+  },
+
+  // ── league import: the review queue ─────────────────────────────────────────────────────────
+  {
+    id: "import-warnings-suppressed",
+    shipped: "pre-emptive: an import that quietly loses a rule",
+    // ⭐⭐ The component's own comment names this as the failure the whole surface guards. A league
+    // whose scoring we silently dropped produces a board that is confidently wrong all season, on
+    // the user's own settings, and this screen is the only place it is ever mentioned.
+    detail: "Stops rendering the platform rules we could not represent.",
+    file: "components/fantasy/league-import.tsx",
+    from: "          {preview.warnings.length > 0 && (",
+    to: "          {false && (",
+    grep: "word for word, before saving",
+  },
+  {
+    id: "coverage-claims-everything-applies",
+    shipped: "pre-emptive: an unchecked coverage report presented as a clean one",
+    // ⚠️ THE OPTIMISTIC RENDER IS THE NATURAL ONE TO WRITE. The resolver reads an absent column set
+    // as "we have everything", so a panel that simply renders whatever it has states a FALSE fact
+    // about the user's league on any upstream outage — and "the panel is absent" reads to a user as
+    // "this league has no unsupported settings". Both non-answers have to be named out loud.
+    detail: "Removes the could-not-check panel when the projections read fails.",
+    file: "components/fantasy/league-import.tsx",
+    from: "          {!coverage && !projectionsPending && (",
+    to: "          {false && !projectionsPending && (",
+    grep: "coverage check that could not run says so",
+  },
+
   // ── G100-D0-R1: the signup event counts ACCOUNTS, not buttons ────────────────────────────────
   {
     id: "signup-keyed-on-the-button-again",
@@ -1140,7 +1443,177 @@ const CASES = [
     to: "return { known: true, created: Boolean(res && res.created) }",
     grep: "un-deployed backend degrades",
   },
+
+  // ── E9.64b: the two REAL import paths — ESPN paste, and Yahoo OAuth ─────────────────────────
+  {
+    id: "espn-league-named-as-sleeper",
+    shipped: "LIVE UNTIL E9.64b — every ESPN import read back as a Sleeper league",
+    // ⭐⭐ A REAL DEFECT, FOUND BY WRITING THIS STORY'S SPEC. The review screen named the platform
+    // with a TWO-WAY test on a THREE-WAY field, so the paste flow — on the platform with the
+    // largest share of leagues — told the user their ESPN league came from Sleeper, on the one
+    // screen whose entire job is to let them check what we understood. Both branches are strings,
+    // so `tsc` was happy; nothing had ever opened this screen on a non-Sleeper preview.
+    detail: "Restores the two-way platform test on a three-way field.",
+    file: "components/fantasy/league-import.tsx",
+    from: "                  {platformLabel(preview.platform)}\n                  {preview.season",
+    to: '                  {preview.platform === "yahoo" ? "Yahoo" : "Sleeper"}\n                  {preview.season',
+    grep: "read back correctly from its own real payload",
+  },
+  {
+    id: "espn-yardage-scored-as-captured",
+    shipped: "NF-C0e — every ESPN league scored ZERO passing/rushing/receiving yardage",
+    // ⭐⭐ THE OUTAGE, RENDERED. `espn.py` wrote Sleeper's `pass_yd` where the engine reads the
+    // canonical `pass_yds`; an unrecognised key passes through verbatim and reports CAPTURED, which
+    // is a legitimate verdict for a rule we genuinely do not project — so nothing errored and the
+    // panel truthfully said so while nobody read it. Broken here from the CONSUMER side (the
+    // canonical map itself), which produces the identical rendered state: the term moves out of
+    // APPLIED and into "Saved with your league, but NOT applied".
+    detail: "Drops the canonical `pass_yds` key from STAT_FIELD, exactly as the outage did.",
+    file: "lib/league-config.ts",
+    from: 'pass_yds: "passYds"',
+    to: 'pass_yd: "passYds"',
+    grep: "scoring is APPLIED, not silently captured",
+  },
+  {
+    id: "espn-read-url-built-locally",
+    shipped: "pre-emptive: the settings link assembled client-side instead of by the server",
+    // `POST /espn/read-url` exists so the SERVER owns this string — it format-checks the league id
+    // and builds ESPN's path. A locally-built link renders perfectly, works today, and breaks
+    // silently the day ESPN's path moves. The E9.58 shape: internally consistent everywhere, and
+    // pointing somewhere that does not answer.
+    detail: "Ignores the server's URL and constructs one in the browser.",
+    file: "components/fantasy/league-import.tsx",
+    from: "    if (res?.url) setEspnLink(res.url)",
+    to: '    setEspnLink(`https://fantasy.espn.com/football/league?leagueId=${espnLeagueId.trim()}`)',
+    grep: "the SERVER's, not one the page assembled",
+  },
+  {
+    id: "import-error-replaced-with-a-generic-string",
+    shipped: "pre-emptive: the server's actionable message swapped for 'something went wrong'",
+    // `errorText`'s own docstring names this: the API's `detail` is written to be READ by a user
+    // ("that doesn't look like the JSON from ESPN — open the link we generated…"), and substituting
+    // a generic string throws away the only sentence that says what to DO. On the paste flow that
+    // is the difference between a recoverable typo and a dead end.
+    detail: "Discards the server's detail on every error.",
+    file: "components/fantasy/league-import.tsx",
+    from: 'if (!/^API error \\d+$/.test(message)) return message || "Something went wrong."',
+    to: 'if (!/^API error \\d+$/.test(message)) return "Something went wrong."',
+    grep: "says WHY, at the control",
+  },
+  {
+    id: "could-not-read-box-always-rendered",
+    shipped: "pre-emptive: telling every user we failed to read their league",
+    // ⭐ THE OTHER SIDE OF `import-warnings-suppressed`, and it needed a second real payload to be
+    // reachable at all: one committed ESPN capture parses with ZERO warnings. A component that
+    // rendered the header unconditionally passes the suppression case while alarming most users
+    // about a league we read perfectly.
+    detail: "Renders the 'what we could not read' header even with nothing to report.",
+    file: "components/fantasy/league-import.tsx",
+    from: "          {preview.warnings.length > 0 && (",
+    to: "          {true && (",
+    grep: "read CLEANLY shows no",
+  },
+  {
+    id: "captured-rule-shown-as-its-espn-number",
+    shipped: "pre-emptive: a disclosure the reader cannot act on",
+    // ESPN NUMBERS its scoring rules, so a captured term renders as "15" or "129@dst" without the
+    // server's label. Technically honest and completely useless: the user cannot tell WHICH of
+    // their settings we dropped, which is the entire point of the disclosure.
+    detail: "Stops reading the server's `unmapped_labels`.",
+    file: "components/fantasy/league-import.tsx",
+    from: "                                {preview.unmapped_labels?.[t.key] ?? t.key}",
+    to: "                                {t.key}",
+    grep: "ESPN number is made readable",
+  },
+  {
+    id: "yahoo-connect-offered-before-approval",
+    shipped: "pre-emptive: a button that 503s, on a platform Yahoo has not approved",
+    // `list_platforms`' docstring names this exact trade: `available` and `configured` are reported
+    // separately so the UI can say "coming, pending registration" instead of hiding the option or
+    // offering a control the server refuses. Production is in this state TODAY.
+    detail: "Offers the connect button regardless of the runtime `configured` flag.",
+    file: "components/fantasy/league-import.tsx",
+    from: "            {!platform?.configured ? (",
+    to: "            {false ? (",
+    grep: "offers NO button to press",
+  },
+  {
+    id: "yahoo-authorize-url-rebuilt-locally",
+    shipped: "pre-emptive: the OAuth URL assembled client-side, dropping the signed `state`",
+    // ⭐ The signed `state` is the ONLY thing binding a returning Yahoo grant to the account that
+    // started the flow — the callback is unauthenticated by necessity, since it is entered by a
+    // browser redirect carrying no bearer token. A client that rebuilds this URL either fails the
+    // round trip or grafts a Yahoo account onto the wrong Credence one.
+    detail: "Navigates to a locally-assembled authorize URL instead of the server's.",
+    file: "components/fantasy/league-import.tsx",
+    from: "    if (res?.authorize_url) window.location.href = res.authorize_url",
+    to: '    window.location.href = "https://api.login.yahoo.com/oauth2/request_auth?client_id=local"',
+    grep: "authorize URL the SERVER supplied",
+  },
+  {
+    id: "yahoo-return-states-collapsed",
+    shipped: "pre-emptive: one banner for connected, cancelled and failed",
+    // Three distinct facts. A single "you're connected" for all of them is wrong twice over: a user
+    // who CANCELLED is told they granted access, and a user whose sign-in FAILED never learns that
+    // nothing was saved before they walk away believing we hold a grant.
+    detail: "Shows the connected banner for every return flag.",
+    file: "components/fantasy/league-import.tsx",
+    from: '      {yahooFlag === "connected" && (',
+    to: "      {yahooFlag && (",
+    grep: "says what actually happened",
+  },
+  {
+    id: "yahoo-owner-team-not-preselected",
+    shipped: "pre-emptive: throwing away the one thing OAuth tells us that a paste cannot",
+    // Yahoo's response carries `is_current_login`, so the preview knows which team is the caller's —
+    // which is what lets My Teams score a roster without the user picking one. Discarding it is not
+    // a crash: the screen renders perfectly and quietly saves a league with no team linked.
+    detail: "Ignores `is_owner` when adopting a preview.",
+    file: "components/fantasy/league-import.tsx",
+    from: "    setSelectedTeamKey(res.teams.find((t) => t.is_owner)?.team_key ?? null)",
+    to: "    setSelectedTeamKey(null)",
+    grep: "pre-selects the user's team",
+  },
+  {
+    id: "yahoo-attribution-dropped",
+    shipped: "pre-emptive: a CONTRACTUAL requirement, invisible to every other instrument",
+    // 🚩 Yahoo's API terms require attribution wherever their data is shown. It renders in one
+    // branch nothing had ever entered, and losing it is a compliance failure that looks — to `tsc`,
+    // to `next build`, and to every other spec here — like a perfectly clean page.
+    detail: "Removes the Yahoo attribution from a screen showing Yahoo data.",
+    file: "components/fantasy/league-import.tsx",
+    from: '          {preview.platform === "yahoo" && (',
+    to: "          {false && (",
+    grep: "required attribution is rendered",
+  },
 ]
+
+/**
+ * ⭐ E9.64b — THE RECORDED BOARD, and the reason this script is now SCHEDULED.
+ *
+ * ══ THE FAILURE THIS EXISTS TO CATCH ══════════════════════════════════════════════════════════
+ *
+ * E9.64's first full run found SIX pre-existing cases whose verdict no longer matched their
+ * declaration — anchors that had drifted, and breaks whose data-flow had been retired underneath
+ * them. None was introduced by that story; they had simply gone dead at some point and nobody was
+ * looking, because **nothing ran this script**. It was a manual command, so its only trigger was a
+ * session remembering to type it, and a red-proof harness nobody runs is decorative — which is the
+ * exact defect it exists to prevent, one level up.
+ *
+ * So the board's shape is RECORDED here and the run FAILS when the shape moves. That turns
+ * "somebody should re-run the red proof" into a scheduled job with a verdict.
+ *
+ * ⚠️ WHAT A DRIFT MEANS, AND WHAT IT DOES NOT. This number changing is not automatically a bug —
+ * adding a guard SHOULD add a case. The rule is that the two move TOGETHER, in the same commit: a
+ * new case comes with an updated total, so the only way this fires unexpectedly is a case that
+ * stopped behaving as declared. ⛔ Do not "fix" a drift by editing these numbers to match the
+ * output; read the summary first — a case that flipped from RED to MISMATCH is a guard that has
+ * quietly become decorative, and it is the finding.
+ *
+ * Measured 2026-08-14 (E9.64b): 106 cases, 100 RED, 6 declared NOT-OBSERVABLE, exit 0.
+ * Previously (E9.64): 95 / 89 / 6.
+ */
+const RECORDED_BOARD = { total: 106, red: 100, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
@@ -1259,4 +1732,33 @@ if (bad.length) {
     `\n${bad.length} case(s) did not match their declared expectation. The suite is not proving what it claims.`,
   )
   process.exitCode = 1
+}
+
+// ── the recorded board ──────────────────────────────────────────────────────────────────────────
+//
+// Only meaningful for a FULL run: a filtered invocation is a debugging tool and its counts describe
+// whatever the operator asked for, not the board. Reporting drift there would train everyone to
+// ignore this line, which is how a monitor gets muted.
+if (!filter) {
+  const observed = {
+    total: results.length,
+    red: results.filter((r) => r.verdict === "RED").length,
+    notObservable: results.filter((r) => r.verdict === "NOT-OBSERVABLE").length,
+  }
+  const drifted = Object.keys(RECORDED_BOARD).filter((k) => observed[k] !== RECORDED_BOARD[k])
+  const shape = (b) => `${b.total} cases, ${b.red} RED, ${b.notObservable} NOT-OBSERVABLE`
+  if (drifted.length) {
+    console.log(
+      `\n⚠️  BOARD DRIFT — recorded: ${shape(RECORDED_BOARD)}\n` +
+        `                observed: ${shape(observed)}\n` +
+        `                moved:    ${drifted.join(", ")}\n\n` +
+        "If you ADDED or REMOVED a case, update RECORDED_BOARD in the same commit — the two are\n" +
+        "meant to move together. If you did not, a case has stopped behaving as declared: read the\n" +
+        "summary above and repair the case. ⛔ Never edit RECORDED_BOARD to match a drift you did\n" +
+        "not cause — that is how a guard becomes decorative.",
+    )
+    process.exitCode = 1
+  } else {
+    console.log(`\nboard matches the record — ${shape(observed)}`)
+  }
 }
