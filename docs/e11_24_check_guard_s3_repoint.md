@@ -300,3 +300,93 @@ race). 🟥 CI mocks all IO, so CI-green is necessary-not-sufficient: the gate i
 `check_data_freshness.py` showing `eb_bullpen_team_posteriors` and `eb_park_factors_raw` reading
 `[s3] OK` (not STALE, not NO DATA) on a live slate, with every other entry's verdict unchanged.
 Rollback = `git revert` the merge; the change is monitor-only and touches no serving artifact.
+
+---
+
+# DECISION 1 (PM-approved) — does the team_seq mirror trail reach SERVED features? **YES, and here is the number**
+
+Measured 2026-08-14, laptop, read-only; Snowflake side on **MONITOR_WH**. No deploy, no soak slot.
+Method is #693's: replay the served model's EXACT resolution against both stores and diff — measured
+directly, not inferred.
+
+## Method
+
+`feature_pregame_game_features_raw`'s `team_seq_metric` CTE resolves per `(game_pk, side, metric)`:
+the EXACT `game_pk` row for a completed game, else — for a **scheduled** game — the team's latest
+**strictly-prior** `game_date` row (E9.53 per-metric carry-forward). That resolution was replayed
+verbatim in DuckDB against (a) the S3 mirror and (b) current Snowflake, then both were diffed
+against the values actually **served** in the S3 feature parquet for the live 2026-08-14 slate
+(14 games → 28 sides → 84 metric cells).
+
+## Result — the mechanism is CONFIRMED, and the impact is confined to ONE metric
+
+| | served vs MIRROR | served vs FRESH SF | as-of gap | max abs Δ |
+|---|---|---|---|---|
+| `off_xwoba` | 28/28 match | **28/28 match** | 0 days | 0.000000 |
+| `win_prob` | 28/28 match | **28/28 match** | 0 days | 0.000000 |
+| `bullpen_xwoba` | 28/28 match | **13/28 match** | **1 day on 15 cells** | **0.002112** |
+
+⭐ **The served values match the MIRROR on 28/28 cells for all three metrics.** That is the
+load-bearing line: it proves by measurement — not by reading the graph — that the served feature is
+built off the mirror, so the mirror's state IS what is served. The mechanism is not a hypothesis.
+
+**Blast radius: 15 of 84 served team_sequential cells (17.9%)**, each exactly **one day / one game**
+stale. Why only `bullpen_xwoba`: `update_team_posteriors.py` has a per-metric catch-up frontier
+(E9.53), and the 13:03:04 writer batch the mirror missed happened to advance only that metric —
+`off_xwoba` and `win_prob` were already current in the 10:16 batch the mirror does hold.
+
+## Magnitude — small, and stated in the unit that matters
+
+The 15 divergent cells, against a `bullpen_xwoba` whose slate mean is **0.3117** and whose
+**cross-team SD is 0.0156**:
+
+```
+abs Δ:   0.002112 (max)  …  0.000848 (median)  …  0.000112 (min)
+as % of the value:  0.706%  …  0.282%  …  0.035%
+max Δ in cross-team SD units:  0.135 SD
+```
+
+⇒ **real, but sub-1% and ~1/7th of a cross-team SD at its worst.** `best_alpha = 0`, so the
+betting impact is exactly zero; this is a correctness fact about an unconditional-core
+discriminative input, recorded with a number rather than an adjective.
+
+## Scope — history is structurally unaffected, but the LIVE slate is the moment that matters
+
+The carry-forward branch only fires when `is_scheduled`; a completed game resolves on its EXACT
+`game_pk` row. Verified: 0 scheduled sides across 2026-08-10..08-13. So no historical slate carries
+this, and the record self-heals once games complete.
+
+⚠️ **That is not as reassuring as it sounds.** The live slate is precisely the pregame window
+`predict_today` scores in, so the stale value is the one used **at decision time**; it self-heals
+only in the record, after the decision. Same shape as #693's EB side finding.
+
+## PM's systematic add — the family sweep. The class is BOUNDED at 3, and does NOT sprawl
+
+| mirror | writer position | in the class? |
+|---|---|---|
+| `player_sequential_posteriors` | `p_player` (l.247), re-export l.256 | ✅ **FIXED** by #693 |
+| `team_sequential_posteriors` | `p_team` (l.257), mirrored at lk10 (l.136) | 🚨 **OPEN** — this finding |
+| `matchup_cell_sequential_posteriors` | `p_matchup` (l.258) | ⚠️ **no S3 mirror exists at all** |
+| `feature_pregame_lineup_state` | intraday tick; SF is MASTER, S3 downstream | ❌ not the shape |
+| the **9 scd2 signal writers** (`env_state`, `defense_quality`, `matchup`, +6) | fan into `export_w9_signals_to_s3_op` → `rebuild_sub_model_signals_consumer_op` (l.209–219) | ❌ **already immune** |
+
+⭐ **The 9 signal writers the PM flagged are already correctly ordered — by INC-25's own original P0
+cure.** Generators fan in to the export, which fans into the consumer rebuild, exactly so the
+consumer cannot read a slate-stale pivot. So the mirror-lag class is **3 members, not a sprawling
+family**: one fixed, one open, one that does not yet have a mirror.
+
+⭐ **The actionable generalization is about the THIRD:** `matchup_cell_sequential_posteriors` is
+blocker (3) — its export has to be *built*. **Build it wired downstream of `p_matchup` from day
+one, or it ships with this defect pre-installed** and becomes the class's fourth member the day it
+lands. That is the INC-38 enumerate-the-family discipline applied forward rather than after the
+rediscovery.
+
+## What this implies for DECISION 2's timing (PM's call, reporting back as asked)
+
+Strictly this is the PM's option **(c)** — the trail *does* reach served features, so the reexport
+op is a serving-correctness item, not merely a freshness precursor. But the magnitude (0.135 SD at
+worst, sub-1%, `best_alpha = 0`) does not justify **splitting it out standalone**. That points at
+the PM's own stated preference within (c): **bundle it** with the `player_profiles_raw` writer fix
+and the `matchup_cell` export, so one soak buys the correctness fix, the wake deletion, and a
+matchup_cell export that is born correctly ordered. Recommend (c)-via-bundle unless the other two
+blockers are genuinely far off.
