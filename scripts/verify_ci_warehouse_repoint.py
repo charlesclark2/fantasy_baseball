@@ -22,9 +22,17 @@ that description.
 So the assertion here is deliberately TWO-SIDED and insists on OCCUPATION, not mere attribution:
 
     (1) CI_WH carried at least one BILLABLE statement   (`warehouse_size IS NOT NULL`)
-    (2) DBT_RW ran NOTHING on COMPUTE_WH in the window
+    (2) NO CI statement ran on COMPUTE_WH               (`schema_name = 'CI_BETTING'` there)
 
 (1) alone is the part the prior proof lacked. (2) alone is satisfiable by an empty run.
+
+⚠️ (2) IS SCOPED TO THE `CI_BETTING` SCHEMA, DELIBERATELY. The naive form — "DBT_RW ran nothing on
+COMPUTE_WH" — is unusable: measured 2026-08-14, the box pipeline puts `DBT_RW` on `COMPUTE_WH` in
+**19 of 24 hours**, so that clause would report NOT PROVEN on a perfectly working repoint in almost
+any window. `ci_betting` is the schema the CI target builds into, it is what the pre-repoint CI
+bursts carried (08-06/07/10 on COMPUTE_WH), and the box pipeline never writes it — 0 `ci_betting`
+executions on COMPUTE_WH across all 19 of those hours. So this clause is BOTH discriminating and
+confound-free, where the broad one is neither. The broad count is still reported, as context.
 
 HOW TO USE
 ----------
@@ -107,7 +115,9 @@ def main() -> int:
         prod = _rows(
             cur,
             f"""
-            select iff(warehouse_size is null, 'metadata_only', 'BILLABLE') as kind,
+            select iff(schema_name = 'CI_BETTING', 'CI (ci_betting) — DISQUALIFYING',
+                       'box pipeline (other schema) — context only') as who,
+                   iff(warehouse_size is null, 'metadata_only', 'BILLABLE') as kind,
                    count(*) as execs,
                    sum(iff(queued_provisioning_time > 0, 1, 0)) as waits,
                    to_char(min({_UTC}), 'YYYY-MM-DD HH24:MI') as first_utc
@@ -115,7 +125,7 @@ def main() -> int:
             where {_PREFILTER} and {_WINDOW}
               and warehouse_name = '{args.prod_warehouse}'
               and user_name = 'DBT_RW'
-            group by 1 order by 1
+            group by 1, 2 order by 1, 2
             """,
             mins,
         )
@@ -143,11 +153,14 @@ def main() -> int:
             print("    " + " | ".join("" if v is None else str(v) for v in r))
 
     show(f"{args.ci_warehouse}:", ci)
-    show(f"{args.prod_warehouse} (DBT_RW only):", prod)
+    show(f"{args.prod_warehouse} (DBT_RW):", prod)
 
     ci_billable = sum(r[1] for r in ci if r[0] == "BILLABLE")
     ci_any = sum(r[1] for r in ci)
-    prod_any = sum(r[1] for r in prod)
+    # Only ci_betting rows disqualify — the box pipeline's own COMPUTE_WH traffic is expected
+    # (19 of 24 hours) and must not be read as a failed repoint.
+    prod_ci = sum(r[2] for r in prod if r[0].startswith("CI "))
+    prod_box = sum(r[2] for r in prod if not r[0].startswith("CI "))
 
     print()
     if ci_any == 0:
@@ -166,13 +179,17 @@ def main() -> int:
         print("       cannot distinguish a working repoint from a broken one. Re-dispatch with a")
         print("       selector that materializes something (default `ref_teams` issues an INSERT).")
 
-    if prod_any == 0:
-        print(f"✅ (2) DBT_RW ran nothing on {args.prod_warehouse} in the window.")
+    if prod_ci == 0:
+        print(f"✅ (2) No CI (`ci_betting`) statement ran on {args.prod_warehouse}.")
+        if prod_box:
+            print(f"       ({prod_box} box-pipeline statement(s) there — EXPECTED, not a failure: the box")
+            print("        uses COMPUTE_WH in 19 of 24 hours. Only ci_betting disqualifies.)")
     else:
         ok = False
-        print(f"❌ (2) DBT_RW ran {prod_any} statement(s) on {args.prod_warehouse} — the repoint did not hold,")
-        print("       or a non-CI dbt job (the box pipeline) overlapped the window. Check the timestamps above")
-        print("       against the workflow run before concluding.")
+        print(f"❌ (2) {prod_ci} CI (`ci_betting`) statement(s) ran on {args.prod_warehouse} — the repoint")
+        print("       did NOT hold. Most likely the SNOWFLAKE_CI_WAREHOUSE secret is EMPTY (not unset):")
+        print("       an empty value makes the `warehouse` key vanish and Snowflake falls back to")
+        print("       DBT_RW's default warehouse, silently, with dbt debug green.")
 
     print("\n" + ("VERDICT: CI_WH REPOINT PROVEN UNDER LOAD" if ok else "VERDICT: NOT PROVEN"))
     return 0 if ok else 1

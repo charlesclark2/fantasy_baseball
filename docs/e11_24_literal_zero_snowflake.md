@@ -3495,7 +3495,18 @@ comparability with recorded readings, and no reading is currently wrong.
    runs on the production profile, so excluding it makes the window **discriminating**: in a
    dispatch window, *any* `DBT_RW` statement on `COMPUTE_WH` means the repoint did not hold.
 3. **`scripts/verify_ci_warehouse_repoint.py`** — the two-sided assertion, on `MONITOR_WH`:
-   (1) `CI_WH` carried ≥1 **BILLABLE** statement, and (2) `DBT_RW` ran **nothing** on `COMPUTE_WH`.
+   (1) `CI_WH` carried ≥1 **BILLABLE** statement, and (2) **no CI (`ci_betting`) statement** ran on
+   `COMPUTE_WH`. ⚠️ **Clause (2) is scoped to the schema deliberately, and the first cut of this
+   script got it wrong.** The obvious form — "`DBT_RW` ran nothing on `COMPUTE_WH`" — is unusable:
+   measured 2026-08-14, the box pipeline puts `DBT_RW` on `COMPUTE_WH` in **19 of 24 hours**
+   (2,007 statements in a 5-hour sample), so that clause reports NOT PROVEN on a *working* repoint
+   in almost any window — a check that fails regardless is exactly as useless as one that passes
+   regardless, and it would have been read as "the repoint broke." `ci_betting` is what the CI
+   target builds into, it is what the pre-repoint CI bursts carried, and the box **never** writes it
+   (0 `ci_betting` execs on `COMPUTE_WH` across all 19 hours) ⇒ discriminating AND confound-free.
+   Two-sided control: on a heavy box-traffic window clause (2) correctly stays green, and pointed at
+   the 08-10 05:53 UTC pre-repoint burst it correctly fires on 71 `ci_betting` statements while
+   ignoring 8,904 box ones.
    An empty window exits **2 = UNVERIFIED**, never a pass (NF1.7 (a)). Positive control: pointed at
    the 08-10 window it correctly reports **NOT PROVEN — all metadata-only**, i.e. the instrument
    detects the exact known-bad state that was recorded as a pass.
