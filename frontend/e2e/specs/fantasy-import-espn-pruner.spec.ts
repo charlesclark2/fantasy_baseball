@@ -288,15 +288,20 @@ for (const capture of ESPN_RAW_CAPTURES) {
       }
     })
 
-    test("pasting the raw payload sends the server something it will accept", async ({ page }) => {
+    test("pasting the raw payload posts a body that fits under the cap", async ({ page }) => {
       test.setTimeout(90_000)
       const raw = readRawCapture(capture)
       const { mock, errors } = await openEspnPanel(page)
 
       await pasteRaw(page, raw)
 
-      // The harness records what left the browser BEFORE it decides how to answer, so this asserts
-      // on the real POST body regardless of whether a preview fixture exists for this league.
+      // ⚠️ SCOPED TO WHAT LEFT THE BROWSER, deliberately — this does NOT assert the review screen
+      // renders. The harness resolves a preview by the paste's own `(id, seasonId)` and these
+      // captures are not in `ESPN_REAL_PASTES`, so the mock answers its honest 422. Rendering the
+      // review for them would mean generating preview fixtures from the shipping adapter
+      // (`build-import-previews.py`), which cannot be done until the captures land. The size claim
+      // is the one that matters here and it is fully reachable: the harness records what was POSTed
+      // BEFORE it decides how to answer.
       await expect
         .poll(() => mock.espnPastes.length, {
           timeout: PASTE_SETTLE_MS,
