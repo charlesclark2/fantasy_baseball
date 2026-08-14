@@ -26,11 +26,23 @@ on:
     paths:
       - "frontend/**"
       - ".github/workflows/frontend_e2e.yml"
+      # ⭐ E9.64b — a CROSS-TREE dependency, and the path gate has to know about it.
+      # `fantasy-import-espn.spec.ts` pastes these REAL captures directly (rather than a copy under
+      # `e2e/fixtures/`, which would drift from the one the Python parser is tested against), and
+      # `build-import-previews.py` derives the committed previews from them. Without this line a PR
+      # that refreshed a capture would change what the browser pastes and never run this suite.
+      - "betting_ml/tests/fixtures/espn_league_*.json"
   push:
     branches: [main]
     paths:
       - "frontend/**"
       - ".github/workflows/frontend_e2e.yml"
+      # ⭐ E9.64b — a CROSS-TREE dependency, and the path gate has to know about it.
+      # `fantasy-import-espn.spec.ts` pastes these REAL captures directly (rather than a copy under
+      # `e2e/fixtures/`, which would drift from the one the Python parser is tested against), and
+      # `build-import-previews.py` derives the committed previews from them. Without this line a PR
+      # that refreshed a capture would change what the browser pastes and never run this suite.
+      - "betting_ml/tests/fixtures/espn_league_*.json"
   workflow_dispatch:
 
 # Supersede a PR run when its branch moves on. PR-only: the `main` run records what shipped.

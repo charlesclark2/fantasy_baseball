@@ -8,7 +8,8 @@ opening a browser.
 This suite is the automated form of the "verify in incognito" step every app story already lists
 manually. E9.63 built it deliberately **minimal** — the launch-critical funnel, nothing else — and
 the coverage phases add specs to *this* harness rather than rebuilding it: **E9.64 (Fantasy
-interactivity) has landed**; E9.65 (MLB betting) is still to come.
+interactivity) and E9.64b (the two real league-import paths) have landed**; E9.65 (MLB betting) is
+still to come.
 
 ## Running it
 
@@ -61,6 +62,13 @@ hermetic gate.
 | `specs/fantasy-my-teams.spec.ts` | Each roster scored under **its own** league's format — pinned as arithmetic, not as a vibe — plus starters/bench separated, an unresolvable name counted rather than dropped, and the two states a real account is in (no leagues; a league with no team linked) | The failure is not a crash: it is scoring every roster on ONE board and relabelling the cards. It renders perfectly, has no `NaN`, throws nothing, and is wrong in a way the user cannot detect without doing the arithmetic themselves |
 | `specs/fantasy-league-import.spec.ts` | The **review queue**: the league's settings are read back before saving, the rules we could **not** represent are shown verbatim, a coverage check that could not run **says so** (and does not block the save), and a save reports what it did | `free-league.spec.ts` stops at the league list. Step 2 is the only place a user can learn we did not understand their league — the component's own comment: *"an import that quietly loses a rule is the failure this whole surface guards."* The optimistic coverage render is the natural one to write, because the resolver reads an absent column set as "we have everything" |
 
+### E9.64b — the two REAL import paths
+
+| File | What it guards | The defect it is written from |
+|---|---|---|
+| `specs/fantasy-import-espn.spec.ts` | The **ESPN paste**, driven with **real bytes**: the settings link is the SERVER's (not one the page assembled), a real `?view=mSettings` response is pasted and the league is read back **from that payload's own values**, ⭐ the canonical yardage terms land in the **APPLIED** coverage card, ESPN's numbered rules are made **readable**, a cleanly-read league shows **no** "could not read" box, a drafted league brings its teams/rosters and **claims no live refresh**, the client's rewrite of the paste **does not corrupt it**, a refused paste says **why** and leaves the flow usable, and a save reports what it did | **NF-C0e** — `espn.py` mapped ESPN's yardage stat ids onto Sleeper's `pass_yd`/`rush_yd`/`rec_yd`, one character off the canonical keys, so **every ESPN league scored zero yardage from the day import shipped**. Nothing errored: an unrecognised key passes through verbatim and reports CAPTURED, a legitimate verdict for a rule we genuinely do not project. It survived 56 tests over one live-verified league. ⭐ Hence **two independently-sourced real payloads** (12-team full-PPR and 10-team half-PPR, disjoint rule families) carrying every settings assertion twice — a fixture derived from the first payload cannot disconfirm a wrong key-map |
+| `specs/fantasy-import-yahoo.spec.ts` | The **Yahoo OAuth** flow, in all three platform states: the un-approved platform is **listed, marked coming soon, and offers no button to press**; the connect click leaves for **the authorize URL the server supplied**, verbatim including the signed `state`; the three `?yahoo=` return states say **different** things; a connected account lists → previews → reviews → saves; ⭐ Yahoo's `is_owner` **pre-selects the user's team and only theirs**; 🚩 Yahoo's **required attribution** renders; and disconnect **does not overstate** what it revoked | **E9.58**, whose worst defect was an OAuth host that was internally consistent in every file, type-checked, rendered a real button, fired a real click — and did not resolve. Plus the "a button that 500s" trade `list_platforms`' own docstring describes: `available` and `configured` are reported separately so an unapproved platform can say *"coming soon"* rather than being hidden (which a Yahoo user reads as "not supported") or offered (which sends them into a 503). The attribution is a **contractual** requirement living in a branch nothing had ever entered |
+
 ⭐ **The item-5 fix, and why the anchor had to move.** `free-league.spec.ts`'s "a logged-out visitor
 is not offered the league surfaces" is honest about being over-determined, and `red-proof.mjs`
 carries **two declared-GREEN cases** recording that `lockedVisibleItems` can be broken in either
@@ -91,7 +99,7 @@ click or type into; entitlement columns are the states in which the surface is r
 | Player page | `/fantasy/player/[id]` | public | format tiles, definition popovers, history panel | `freemium-board` (locked totals, withheld stat line), `expected-points-label` (tap) |
 | Track Record | `/fantasy/track-record` | public | season + position tables, popovers | `track-record-claim`, `expected-points-label` |
 | My League | `/fantasy/my-league` | signed-in | position tabs, paging, delta highlights | `free-league` |
-| Import League | `/fantasy/import` | signed-in | platform pick, identifier entry, league list, **review**, team pick, save | `free-league` (quota boundary), `fantasy-league-import` (review + save) |
+| Import League | `/fantasy/import` | signed-in | platform pick, identifier entry, league list, **review**, team pick, save; **ESPN**: league id → link → paste; **Yahoo**: connect → return → list → disconnect | `free-league` (quota boundary), `fantasy-league-import` (review + save, Sleeper), `fantasy-import-espn` (the whole paste path, ×2 real leagues), `fantasy-import-yahoo` (all three platform states) |
 | League Settings | `/fantasy/league-settings` | signed-in | scoring + roster editor, New league, save | `funnel-telemetry` (create vs update), `free-league` (quota) |
 | League Board | `/fantasy/league-board` | entitled | format picker, own-league delta column | `generic-delta-column` |
 | Draft Optimizer | `/fantasy/draft` | entitled | setup pickers, start, draft / undo / reset, sort, position tabs, search, persistence | `fantasy-draft-optimizer` |
@@ -103,32 +111,66 @@ click or type into; entitlement columns are the states in which the surface is r
 Each of these is a case a spec **structurally cannot see**, recorded here so it is not mistaken for
 coverage. This list is the honest half of the table above.
 
-1. **Yahoo import is not driven.** The flow leaves for Yahoo's consent screen; a hermetic run cannot
-   complete an OAuth round trip, and faking the callback would exercise our own stub. Only the
-   `?yahoo=` return flag is in-app, and it reports a status rather than doing work.
-2. **ESPN paste import is not driven.** It needs a real ESPN settings blob from a private league —
-   there is nothing anonymous to capture, and a hand-authored one would encode our assumption about
-   the very payload shape under test (the README's own rule). ⚠️ **The paste platform is ESPN**;
-   E9.64's story prompt says "CBS paste" and no CBS integration exists.
-3. **Mark-as-drafted is not an NFL surface.** It lives on the MLB prospect board
-   (`/fantasy/mlb/prospects`), which is `restrict: "admin"` while in development. The three MLB
-   fantasy surfaces are out of Phase 1 scope for that reason; they are asserted as *absent* for an
-   anonymous visitor by `fantasy-entitlement-gates`, and nothing else.
-4. **Rankings and Projections have no sortable columns.** Their order is the board's own rank, so
+1. ✅ **CLOSED at E9.64b — Yahoo import is now driven, except for the consent screen itself.**
+   Five of the flow's six steps are in our app and all five are covered
+   (`fantasy-import-yahoo.spec.ts`). Only Yahoo's own consent page is unreachable, and faking the
+   callback would exercise our own stub — so it stays out. ⚠️⚠️ **BUT THE YAHOO PAYLOAD IS NOT
+   REAL, AND CANNOT BE YET.** Yahoo gates all Fantasy API access behind a developer-application
+   review that has not cleared (`docs/nf_c0_yahoo_oauth_setup.md`: submitted 2026-08-01, still
+   pending, SSM parameters unwritten), so there is no account anywhere that can produce a real
+   response — the "≥2 independently-sourced real payloads" bar this suite meets for ESPN is
+   **structurally unmeetable for Yahoo today and is NOT met**. What is real is the response SHAPE:
+   the fixture is the output of the shipping `yahoo.import_league` adapter. ⏭️ **RE-GENERATE FROM A
+   REAL LEAGUE THE DAY APPROVAL LANDS** (`uv run python frontend/e2e/fixtures/build-import-previews.py`)
+   — that is the single open item on this path.
+2. ✅ **CLOSED at E9.64b — ESPN paste import is driven with REAL bytes.** The blocker was thought to
+   be "there is nothing to capture", but three verbatim `?view=mSettings` responses from real
+   private leagues were already committed for the Python adapter suite
+   (`betting_ml/tests/fixtures/espn_league_*`). `fantasy-import-espn.spec.ts` pastes those exact
+   bytes and the previews are generated from them by the shipping parser, so no assumption about the
+   payload is encoded anywhere. ⚠️ **The paste platform is ESPN**; E9.64's story prompt said "CBS
+   paste" and no CBS integration exists — the catalog is corrected at `story_prompts.md`.
+3. **Mark-as-drafted is not an NFL surface** (unchanged, and the catalog is now corrected too). It
+   lives on the MLB prospect board (`/fantasy/mlb/prospects`), which is `restrict: "admin"` while in
+   development. The three MLB fantasy surfaces are out of Phase 1 scope for that reason; they are
+   asserted as *absent* for an anonymous visitor by `fantasy-entitlement-gates`, and nothing else.
+4. ⚠️ **The review screen's DRAFT panel is unreachable for both import paths.** `espn.py` never
+   constructs a `DraftState` (ESPN's import carries rosters off `teams`, never picks), and the Yahoo
+   preview fixture is built with `include_draft=False` because a draft read is a third Yahoo
+   resource and would be more synthetic surface with no assertion behind it. So `preview.draft` is
+   `null` on all four committed previews and nothing renders that panel. This is recorded rather
+   than worked around: see the red-proof section for the vacuous guard it produced when it was not.
+
+5. ⚠️ **`pruneEspnPayload`'s DENYLIST is not exercised anywhere, by anything.** The client rewrites
+   the user's paste before sending it — it must, or a 12-team league lands at ~99% of the server's
+   4 MB cap and a 14-team league is refused outright — but **none of the three committed captures
+   contains the fields it strips** (`stats` / `draftRanksByRankType` / `ownership` / `outlooks` /
+   `ratings` / `notificationSettings`: measured, zero occurrences in all three), because they were
+   already stripped before being committed. So the pruner has nothing to remove on this fixture and
+   the ~37% it shrinks the payload by is **whitespace**. `fantasy-import-espn.spec.ts` therefore
+   asserts the pruner's *contract* (posted == pasted minus exactly the unread fields) rather than a
+   size ratio, which would be a guard that cannot fail for the reason it names. ⚠️ The function's
+   existing coverage (`test_nf_c0_platform_import.py::TestEspnPayloadIsPrunedBeforeUpload`) is
+   **source-INSPECTION** — it reads `fantasy-import.ts` as text and checks each field name appears,
+   and proves the parse invariant by re-pruning in PYTHON — so until E9.64b **nothing had ever
+   executed the TypeScript**; the frontend has no unit runner. The E2E is now the only thing that
+   runs it, and on a fixture with nothing to prune. ⇒ a re-capture that preserves the bulk fields
+   would materially improve this, and is the right moment to write the denylist assertion properly.
+6. **Rankings and Projections have no sortable columns.** Their order is the board's own rank, so
    there is no sort control to test — recorded so a future reader does not go looking for the test.
    The Draft Optimizer's Pts/VOR headers are the only user-driven sort in the product, and they are
    covered.
-5. **A draft is never played to completion.** The "Draft complete" summary needs
+7. **A draft is never played to completion.** The "Draft complete" summary needs
    `slots × teams` picks (192 on the default preset); driving that is a slow test of arithmetic that
    is already unit-covered. Only the opening picks are driven.
-6. **Live draft sync** (`/fantasy/import/live/…`) is not driven — it needs a draft actually running
+8. **Live draft sync** (`/fantasy/import/live/…`) is not driven — it needs a draft actually running
    on the platform.
-7. **No spec here proves authorization.** `session.ts` seeds unsigned tokens and the API is mocked,
+9. **No spec here proves authorization.** `session.ts` seeds unsigned tokens and the API is mocked,
    so every entitlement assertion is about what the client RENDERS. Who may read what is enforced
    server-side and asserted against the real ASGI app in `test_freemium_tier.py` /
    `test_g100_c1_free_league.py`. A browser test that appeared to check entitlement would be the
    most convincing vacuous guard in the repo.
-8. **The subscriber side of the format picker** stays where `freemium-board.spec.ts` already puts
+10. **The subscriber side of the format picker** stays where `freemium-board.spec.ts` already puts
    it — server-side, for the reason recorded there.
 
 ### ⚠️ A whole-page text scan needs an explicit wait, and the laptop will not tell you
@@ -206,6 +248,40 @@ both following the same rule — derive everything that can be real, name what c
   either of those instead renders the disclosure nowhere while looking entirely reasonable; the
   comment on `importPreviewFor` records it because it cost two wrong guesses.
 
+**E9.64b adds five GENERATED fixtures for the two real import paths**, built by
+`fixtures/build-import-previews.py` and pinned to the shipping adapters by
+`betting_ml/tests/test_e9_64b_import_e2e_fixtures.py` (which fails the build if a fixture drifts
+from what `espn.py` / `yahoo.py` produce today — a capture goes stale silently, and that test is
+what turns "the adapter grew a field" into a red build instead of a suite passing against a shape
+no caller receives). The two sides are **not** equally real, and the difference matters:
+
+- `fantasy-import-espn-preview-{998005-2026,642070-2026,642070-2025}.json` — ⭐ **fully real.** The
+  INPUTS are three verbatim `?view=mSettings` responses from real private leagues, already committed
+  for the Python adapter suite; the OUTPUTS are what the shipping `espn.parse_settings_payload`
+  makes of them. Nothing is authored. Two are **different leagues on different accounts** with
+  disjoint scoring families — pinned as an assertion, because the moment they converge the second
+  has stopped buying coverage, which is the whole NF-C0e lesson.
+- `fantasy-import-yahoo-{preview,leagues}.json` — ⚠️ **the SHAPE is the shipping adapter's; the
+  PAYLOAD is not real and cannot be** until Yahoo approves the developer application. See declared
+  limitation 1.
+
+⚠️ The ESPN specs paste the real captures **across the tree** (`betting_ml/tests/fixtures/`) rather
+than from a copy in `e2e/fixtures/`, deliberately: a second copy would drift from the one the parser
+is tested against, and the value of this path is that the browser pastes the same bytes the adapter
+was proven on.
+
+⚠️ **`fantasy-import-platforms.json` IS HAND-AUTHORED, NOT A CAPTURE — a pre-existing violation of
+this section's own rule, found while writing E9.64b and recorded rather than quietly patched.**
+`/fantasy/import/platforms` requires auth, so it is not in `capture-fixtures.mjs`'s `TARGETS`; it
+was written by hand at G100-C1 (2026-08-08). Measured, it has already drifted from the server in two
+ways: Yahoo carries no `attribution` / `attribution_url` (added to `list_platforms` on 2026-08-01,
+i.e. **before** the file was written), and every `help` string differs from the one `PLATFORMS`
+actually serves. `api-mock.ts` supplies the attribution so `fantasy-import-yahoo.spec.ts` asserts
+Yahoo's contractual attribution against what the server sends rather than what the fixture guessed.
+⏭️ The durable fix is to generate this file from the shipping `list_platforms` the way
+`build-import-previews.py` generates the previews; it is left as a separate change because the
+`help` strings would move and `free-league.spec.ts` reads this file too.
+
 One fixture is still generated rather than captured —
 `fantasy-nfl-projections-2026-entitled.synthetic.json`. There is no public unlocked form of the
 current season to capture (every past season's `projections.json` 404s), and the entitled payload
@@ -254,6 +330,33 @@ the pool id lowercased with the underscore removed).
 rebuilds, and requires the named spec to fail. A green suite proves nothing on its own; a test that
 *cannot* fail reads as coverage and stops anyone looking again.
 
+### ⏰ It is SCHEDULED now (E9.64b), and that is the point
+
+Until E9.64b **nothing ran this script.** It was a manual command whose only trigger was a session
+remembering to type it — which is precisely how E9.64's first full run came to find **six**
+pre-existing cases that had silently stopped proving anything. A falsifiability harness nobody runs
+is decorative, which is the defect it exists to catch, one level up.
+
+`.github/workflows/frontend_red_proof.yml` runs the whole board **weekly** (Mondays 07:00 UTC) plus
+on demand via `workflow_dispatch`. It **gates nothing** — 107 sequential production builds take
+~90 minutes, so it cannot sit on a PR, and `frontend_e2e.yml` remains the per-change gate. But it
+**fails the job** on any drift, deliberately: a scheduled run that always exits 0 is the same
+decorative thing one level up. The visible red (and GitHub's failed-scheduled-run notification) is
+the signal.
+
+`red-proof.mjs` carries the board's recorded shape in `RECORDED_BOARD` and compares every full run
+against it. Two different things fail, needing different responses:
+
+- **a case reporting `MISMATCH` / `STALE`** — a guard stopped proving what it claims. Repair the
+  case (⛔ never delete it); the six E9.64 repairs below are the worked examples.
+- **`BOARD DRIFT` with every case green** — a case was added or removed without updating
+  `RECORDED_BOARD`. Update it, **in the same commit** that changed the case count; the two are meant
+  to move together, which is what makes an unexpected drift informative.
+
+⛔ **Never edit `RECORDED_BOARD` to match a drift you did not cause.** That converts the one
+instrument in the repo that can distinguish coverage from the appearance of coverage into another
+piece of decoration.
+
 Result as of 2026-08-06:
 
 ```
@@ -287,11 +390,46 @@ RED  import-warnings-suppressed               ⭐ an import that quietly loses a
 RED  coverage-claims-everything-applies       an unchecked coverage report shown as a clean one
 ```
 
+**E9.64b added 11 more, one per load-bearing claim across the two import paths, and every one is
+RED:**
+
+```
+RED  espn-league-named-as-sleeper              ⭐ LIVE until E9.64b — every ESPN import read back
+                                                 as a SLEEPER league on the review screen
+RED  espn-yardage-scored-as-captured           ⭐ NF-C0e, rendered: yardage moves out of APPLIED
+RED  espn-read-url-built-locally               the settings link assembled client-side
+RED  import-error-replaced-with-a-generic-string  the server's actionable message discarded
+RED  could-not-read-box-always-rendered        telling every user we failed to read their league
+RED  captured-rule-shown-as-its-espn-number    a disclosure the reader cannot act on
+RED  yahoo-connect-offered-before-approval     a button that 503s on an unapproved platform
+RED  yahoo-authorize-url-rebuilt-locally       the OAuth URL rebuilt, dropping the signed `state`
+RED  yahoo-return-states-collapsed             one banner for connected, cancelled and failed
+RED  yahoo-owner-team-not-preselected          discarding the one thing OAuth tells us
+RED  yahoo-attribution-dropped                 🚩 a CONTRACTUAL requirement, invisible elsewhere
+```
+
+One of those eleven — `espn-league-named-as-sleeper` — is a **defect that was live in production**
+and is fixed in the same story: found by opening the review screen on a non-Sleeper preview for the
+first time.
+
+⭐ **A TWELFTH CASE WAS WRITTEN AND THEN REMOVED, AND THAT IS THE MOST USEFUL THING IN THIS SECTION.**
+`espn-claims-a-live-draft-refresh` broke the review screen's *"draft state is read live from
+Sleeper each time"* copy, which for ESPN is both the wrong platform and a promise nothing can keep.
+It came back **MISMATCH** — because `espn.py` never constructs a `DraftState` at all (ESPN's import
+carries rosters, never picks), so `preview.draft` is `null` on every real capture and the panel is
+unreachable for that platform *by construction*. The spec's assertion had been written behind an
+`if (preview.draft?.pick_count > 0)` and was therefore **silently skipping**: a guard that cannot
+fail, written in the story whose subject is guards that cannot fail. The red proof is the only
+instrument that found it. The component fix is kept (the copy is correct, and honest if ESPN ever
+gains draft parsing) but it is **latent, not a live user-visible defect**, and the spec now asserts
+`preview.draft` is null so the day that changes, someone is told to assert it properly.
+
 ### ⭐ Six PRE-EXISTING cases had stopped proving anything — repaired (E9.64)
 
-**Whole-board state after this story: 95 cases, 89 RED and 6 declared NOT-OBSERVABLE, exit 0.** No
-STALE, no MISMATCH, no non-deterministic case. That is the number to re-measure against, and a
-future run reporting anything else is a regression in the harness even when the app suite is green.
+**Whole-board state: 107 cases, 101 RED and 6 declared NOT-OBSERVABLE, exit 0** (E9.64b; it was
+95 / 89 / 6 at E9.64). No STALE, no MISMATCH, no non-deterministic case. That shape is recorded in
+`RECORDED_BOARD` and checked on every full run, so a future run reporting anything else fails the
+scheduled job — a regression in the harness even when the app suite is green.
 
 The first full run on 2026-08-14 reported six cases whose verdict did not match their declaration.
 None was introduced by E9.64; all six are **fixed here**, because a red-proof case that cannot fail

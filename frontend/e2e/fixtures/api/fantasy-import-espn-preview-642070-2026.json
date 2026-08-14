@@ -1,0 +1,154 @@
+{
+  "config": {
+    "captured_rules": {
+      "draft_type": "SNAKE",
+      "keeper_count": 0,
+      "matchup_period_count": 13,
+      "player_rank_type": "PPR",
+      "playoff_team_count": 4,
+      "scoring_type": "H2H_POINTS"
+    },
+    "description": "Imported from ESPN \u2014 Dubbya Bee League",
+    "format_version": "1.0",
+    "n_teams": 10,
+    "name": "Dubbya Bee League",
+    "ppr": "half",
+    "roster": [
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "QB"
+        ],
+        "name": "QB"
+      },
+      {
+        "bench": false,
+        "count": 2,
+        "eligible": [
+          "RB"
+        ],
+        "name": "RB"
+      },
+      {
+        "bench": false,
+        "count": 2,
+        "eligible": [
+          "WR"
+        ],
+        "name": "WR"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "TE"
+        ],
+        "name": "TE"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "DST"
+        ],
+        "name": "DST"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "K"
+        ],
+        "name": "K"
+      },
+      {
+        "bench": true,
+        "count": 7,
+        "eligible": [],
+        "name": "BN"
+      },
+      {
+        "bench": true,
+        "count": 2,
+        "eligible": [],
+        "name": "IR"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "RB",
+          "WR",
+          "TE"
+        ],
+        "name": "FLEX"
+      }
+    ],
+    "scoring": {
+      "per_stat": {
+        "103": 6.0,
+        "93": 6.0,
+        "def_blocked_kick": 2.0,
+        "def_fumble_rec": 2.0,
+        "def_int": 2.0,
+        "def_sacks": 1.0,
+        "def_safety": 2.0,
+        "def_td": 6.0,
+        "dst_pa_g_0": 5.0,
+        "dst_pa_g_14_17": 1.0,
+        "dst_pa_g_1_6": 4.0,
+        "dst_pa_g_28_34": -1.0,
+        "dst_pa_g_35_45": -3.0,
+        "dst_pa_g_46p": -5.0,
+        "dst_pa_g_7_13": 3.0,
+        "dst_ya_g_0_99": 5.0,
+        "dst_ya_g_100_199": 3.0,
+        "dst_ya_g_200_299": 2.0,
+        "dst_ya_g_350_399": -1.0,
+        "dst_ya_g_400_449": -3.0,
+        "dst_ya_g_450_499": -5.0,
+        "dst_ya_g_500_549": -6.0,
+        "dst_ya_g_550p": -7.0,
+        "fg_made_0_19": 3.0,
+        "fg_made_20_29": 3.0,
+        "fg_made_30_39": 3.0,
+        "fg_made_40_49": 4.0,
+        "fg_made_50_59": 5.0,
+        "fg_made_60p": 5.0,
+        "fg_missed": -1.0,
+        "fumble_rec_td": 6.0,
+        "fumbles_lost": -2.0,
+        "pass_int": -2.0,
+        "pass_td": 4.0,
+        "pass_yds": 0.04,
+        "pat_made": 1.0,
+        "rec": 0.5,
+        "rec_td": 6.0,
+        "rec_yds": 0.1,
+        "rush_td": 6.0,
+        "rush_yds": 0.1,
+        "st_player_td": 6.0,
+        "st_td": 6.0,
+        "two_pt": 2.0
+      },
+      "position_bonuses": {}
+    },
+    "sport": "nfl",
+    "superflex": false
+  },
+  "draft": null,
+  "platform": "espn",
+  "season": "2026",
+  "source_league_id": "642070",
+  "teams": [],
+  "unmapped_labels": {
+    "103": "Interception returned for touchdown by an individual defender",
+    "93": "Blocked-kick return touchdown by an individual defender"
+  },
+  "unmapped_scoring_keys": [
+    "103",
+    "93"
+  ],
+  "warnings": []
+}

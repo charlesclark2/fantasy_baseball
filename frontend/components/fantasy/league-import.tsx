@@ -73,6 +73,27 @@ const VERDICT_STYLE: Record<string, string> = {
   captured: "text-amber-400 bg-amber-500/10 border-amber-500/30",
 }
 
+/** Fallback names, used only when the server's catalog has not loaded or does not know a platform.
+ *
+ *  ⚠️ E9.64b — THE REVIEW SCREEN USED TO NAME THE PLATFORM AS
+ *  `preview.platform === "yahoo" ? "Yahoo" : "Sleeper"`, so every ESPN import — the paste flow, on
+ *  the platform with the largest user base — read back "Sleeper" on the one screen whose entire job
+ *  is to let the user check what we understood. A two-way test on a three-way field: the kind of
+ *  thing `tsc` cannot see (both branches are strings) and no assertion had ever opened the screen on
+ *  a non-Sleeper preview. `unknown` platforms fall through to their own id rather than to another
+ *  platform's NAME — being unhelpful is recoverable, being confidently wrong is not. */
+const PLATFORM_FALLBACK_LABEL: Record<string, string> = {
+  sleeper: "Sleeper",
+  yahoo: "Yahoo",
+  espn: "ESPN",
+}
+
+/** Platforms whose draft state we RE-READ on every load. ESPN is not one of them: its draft state
+ *  arrives inside the blob the user pasted, and there is no route by which we could refresh it
+ *  (`/fantasy/import/live/{id}` refuses any platform but these two). Claiming a live read for ESPN
+ *  would be the exact overstatement the "never stored, so it cannot go stale" line exists to avoid. */
+const LIVE_DRAFT_PLATFORMS = new Set(["sleeper", "yahoo"])
+
 const VERDICT_COPY: Record<string, string> = {
   applied: "Applied to your board exactly.",
   derived: "Folded onto the resolution our projection has.",
@@ -200,6 +221,12 @@ export function LeagueImport() {
   }, [yahooFlag, refreshPlatforms])
 
   const platform = platforms?.find((p) => p.id === platformId) ?? null
+
+  /** What to CALL a platform. Prefers the server's own catalog label (so a platform added to
+   *  `PLATFORMS` is named correctly here without a frontend change) and falls back to the local map,
+   *  then to the raw id. See `PLATFORM_FALLBACK_LABEL` for the defect this replaced. */
+  const platformLabel = (id: string): string =>
+    platforms?.find((p) => p.id === id)?.label ?? PLATFORM_FALLBACK_LABEL[id] ?? id
 
   // ── the honest coverage report for the PREVIEWED config ────────────────────────────────────
   // Computed exactly as the manual editor computes it, against the projection columns actually
@@ -843,7 +870,7 @@ export function LeagueImport() {
                 <div className="mt-0.5 text-xs text-gray-500">
                   {preview.config.n_teams}-team · {preview.config.ppr.replace(/_/g, " ")}
                   {preview.config.superflex ? " · superflex" : ""} ·{" "}
-                  {preview.platform === "yahoo" ? "Yahoo" : "Sleeper"}
+                  {platformLabel(preview.platform)}
                   {preview.season ? ` ${preview.season}` : ""}
                 </div>
               </div>
@@ -995,6 +1022,12 @@ export function LeagueImport() {
                   return (
                     <div
                       key={verdict}
+                      // ⭐ E9.64b — the hook the NF-C0e assertion needs. "the yardage terms are
+                      // APPLIED" and "some card somewhere mentions pass_yds" are different claims,
+                      // and only the first one is worth anything: under the outage the very same
+                      // key rendered, in the CAPTURED card, under the amber "saved but NOT applied"
+                      // copy. A page-wide text scan cannot tell those two apart.
+                      data-testid={`coverage-${verdict}`}
                       className={`rounded-lg border p-3 ${VERDICT_STYLE[verdict]}`}
                     >
                       <div className="text-xs font-semibold capitalize">
@@ -1037,10 +1070,13 @@ export function LeagueImport() {
                     {preview.draft.rounds ? ` · ${preview.draft.rounds} rounds` : ""}
                   </p>
                   {/* ⚠️ read fresh every time this page loads — never stored with the league. A
-                      stale "already drafted" list looks exactly like a correct one. */}
+                      stale "already drafted" list looks exactly like a correct one. ESPN is the
+                      exception and must say so: its picks came out of the blob the user pasted, and
+                      nothing can refresh them but another paste. */}
                   <p className="mt-1 text-[11px] text-gray-600">
-                    Draft state is read live from {preview.platform === "yahoo" ? "Yahoo" : "Sleeper"}{" "}
-                    each time, never saved, so it cannot go stale.
+                    {LIVE_DRAFT_PLATFORMS.has(preview.platform)
+                      ? `Draft state is read live from ${platformLabel(preview.platform)} each time, never saved, so it cannot go stale.`
+                      : `These picks are the ones in the settings you pasted, and are never saved. Paste again to refresh them.`}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     {preview.draft.picks.slice(-14).map((p) => (
