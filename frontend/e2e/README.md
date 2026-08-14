@@ -141,21 +141,84 @@ coverage. This list is the honest half of the table above.
    `null` on all four committed previews and nothing renders that panel. This is recorded rather
    than worked around: see the red-proof section for the vacuous guard it produced when it was not.
 
-5. ⚠️ **`pruneEspnPayload`'s DENYLIST is not exercised anywhere, by anything.** The client rewrites
-   the user's paste before sending it — it must, or a 12-team league lands at ~99% of the server's
-   4 MB cap and a 14-team league is refused outright — but **none of the three committed captures
-   contains the fields it strips** (`stats` / `draftRanksByRankType` / `ownership` / `outlooks` /
-   `ratings` / `notificationSettings`: measured, zero occurrences in all three), because they were
-   already stripped before being committed. So the pruner has nothing to remove on this fixture and
-   the ~37% it shrinks the payload by is **whitespace**. `fantasy-import-espn.spec.ts` therefore
-   asserts the pruner's *contract* (posted == pasted minus exactly the unread fields) rather than a
-   size ratio, which would be a guard that cannot fail for the reason it names. ⚠️ The function's
-   existing coverage (`test_nf_c0_platform_import.py::TestEspnPayloadIsPrunedBeforeUpload`) is
-   **source-INSPECTION** — it reads `fantasy-import.ts` as text and checks each field name appears,
-   and proves the parse invariant by re-pruning in PYTHON — so until E9.64b **nothing had ever
-   executed the TypeScript**; the frontend has no unit runner. The E2E is now the only thing that
-   runs it, and on a fixture with nothing to prune. ⇒ a re-capture that preserves the bulk fields
-   would materially improve this, and is the right moment to write the denylist assertion properly.
+5. ✅ **CLOSED at ESPN-PRUNER — `pruneEspnPayload`'s DENYLIST is now exercised against a real
+   un-pruned capture** (`espn_league_raw_unpruned.json`, league 642070 / 2025, 834 KB, drafted).
+   The client rewrites the user's paste before sending it, and **none of the three previously
+   committed captures contained the fields it strips**
+   (`stats` / `draftRanksByRankType` / `ownership` / `outlooks` / `ratings` /
+   `notificationSettings`: measured, zero occurrences in all three), because they were already
+   stripped before being committed. That is the NF-C0e shape — a fixture that is the transform's own
+   OUTPUT cannot test the transform — so `fantasy-import-espn.spec.ts` asserts the pruner's
+   *contract* rather than a size ratio, which would be a guard that cannot fail for the reason it
+   names. What changed:
+   - **`fantasy-import-espn-pruner.spec.ts` now holds the real assertions** — under the 4 MB cap,
+     exactly the unread fields removed, the identity/roster/settings the parser reads preserved, and
+     the silent `catch { return text }` path caught (the returned text MUST differ from the input).
+     They are gated on two operator-supplied un-pruned captures and **SKIP, loudly, until those
+     land**; a registry test that always runs prints `proven on real un-pruned bytes for N/2 sizes`
+     into the run output, so a green run still tells you the claim is owed.
+   - **A non-vacuity guard runs in the FAST GATE** — `test_espn_pruner_raw_capture.py` refuses a
+     "raw" capture that is in fact pruned, which is the exact way this gap would silently reopen.
+     It also pins the TypeScript's re-spelling of `MAX_PASTE_BYTES` to the server's real constant.
+   - **Real-size paste behaviour is MEASURED, not assumed.** ⭐ 3,313,231 B pasted into the real
+     React `<textarea>`, pruned, and POSTed in **533 ms** (the pure function: **7 ms**). The page
+     does not hang. The largest payload ever put through that control before this was 207 KB.
+     ⚠️ That probe uses a SYNTHETIC of the right SIZE, and size does not depend on the field names
+     being right — so it is scoped to latency and to catching the walk BREAKING (a renamed key, a
+     wrong path), never to whether our belief about ESPN's shape is CORRECT. That half is exactly
+     what the operator captures are for.
+   ⭐⭐ **THE FINDING THE CAPTURE PRODUCED, and it overturns the pruner's stated reason to exist.**
+   The docstring claimed "3.3 MB un-pruned ⇒ 82% of the cap at 10 teams, ~99% at 12, REFUSED at 14".
+   MEASURED on the real capture: **834 KB = 20.9% of the cap → 131 KB pruned**, a **6.4× reduction**
+   (not 22×), with the 12- and 14-team scalings at **24.1%** and **28.1%** — *nothing measured comes
+   near the cap*. So pruning is **not today load-bearing for import to work**; it is a 6.4× payload
+   reduction, which is worth keeping on its own terms. 🔎 NOT SETTLED: the capture is a COMPLETED
+   season with 5 `player.stats` splits per player and **zero** `outlooks`; an in-season response may
+   be far larger, which is exactly where a missing 4× would live. An in-season capture would settle
+   it. The suite REPORTS headroom rather than asserting a threshold, so a future capture that
+   disagrees is a correction, not a red build.
+   ⭐ **And the pruner is independently corroborated:** pruning the raw capture yields 131,311 B
+   against the separately-committed pruned artifact's 130,112 B — same league, identical player
+   keyset and roster counts. `test_espn_pruner_raw_capture.py` also now proves the real invariant
+   (raw and pruned parse to the SAME league) rather than the idempotence PROXY that stood in for it.
+   ⏭️ **Optional, not blocking:** a second independently-sourced capture, ideally IN-SEASON.
+   - ⚠️ **THE SEASON MATTERS; THE LEAGUE SIZE DOES NOT.** The removable bulk lives in the **roster
+     entries**, so an UNDRAFTED league returns its full team list with zero entries on every team
+     and none of the removable fields — a faithful capture that is useless here. Measured on the
+     first real attempt: a 2026 pre-draft 12-team league came back at **48 KB** with `"stats"`
+     occurring **zero** times. A usable capture is **megabytes**. So a drafted 10-team league is
+     worth far more than an undrafted 12-team one, and the shape-carrying registry entry declares
+     `teams: null` to say so — pinning it to a size would reject a good capture for a reason
+     unrelated to what it proves.
+   - **Why one is enough for the SHAPE claim, and what it does not cover.** The denylist question is
+     "do these fields exist where we think, in ESPN's output" — a claim about field names, not about
+     league size, so one real capture settles it at every size. What one capture cannot disconfirm
+     is that ESPN returns a materially different field set for a *larger* league; that is unverified
+     and stated rather than assumed.
+   - **The size legs are answered by SIZE-EXTENSION, not left pending.** Waiting on a drafted league
+     of each size would leave those legs permanently "pending" — a limitation that reads as a
+     considered decision and stops anyone re-checking it. Instead each size leg replicates whole
+     teams out of whichever real capture exists: every byte is genuine ESPN output, so it carries
+     the SIZE claim at that scale honestly and adds **zero** independent shape evidence. The
+     registry test reports the two counts **separately** (`SHAPE proven on N independently-captured
+     real payload(s); SIZE additionally covered at M size-extended league size(s)`) precisely so the
+     second cannot be laundered into the first; a Python guard fails if every entry is ever flipped
+     to size-extended; and if the base capture already IS a leg's size, the resolver labels it
+     `captured` rather than extended (under-stating evidence is as dishonest as over-stating it).
+   - **An undrafted capture and a pruned one are diagnosed apart.** Both present as "no bulk
+     fields" and need opposite fixes (different *season* vs re-capture without the transform), so
+     the roster check runs FIRST and names the real cause. An earlier cut reported the undrafted
+     case as "it is a pruned artifact" — false, and it sends the reader at the wrong fix (INC-40:
+     a suggested cause is diagnostic anchoring; it must be right or absent).
+   - ⭐ **A genuinely real 14-team payload needs no credential.** A league whose owner has set it
+     PUBLIC is readable unauthenticated from the same host (`docs/nf_c0_espn_access_probe.md` §1(b)
+     — that path was rejected as a *product* path because it cannot reach private leagues, which is
+     no objection to using it as a *fixture*). Drop a public 14-team league id into the read URL and
+     the file slot takes it; a real capture always wins over extension.
+   - **The "12-team ≈99% of cap / 14-team REFUSED" figures are now MEASURED and reported**, not
+     inherited. They had been quoted in three places since NF-C0e and were themselves extrapolated
+     from a single 10-team measurement. The cap test prints the real headroom; a capture that
+     disagrees is a docstring to correct, not a test to fail.
 6. **Rankings and Projections have no sortable columns.** Their order is the board's own rank, so
    there is no sort control to test — recorded so a future reader does not go looking for the test.
    The Draft Optimizer's Pts/VOR headers are the only user-driven sort in the product, and they are
@@ -338,7 +401,7 @@ pre-existing cases that had silently stopped proving anything. A falsifiability 
 is decorative, which is the defect it exists to catch, one level up.
 
 `.github/workflows/frontend_red_proof.yml` runs the whole board **weekly** (Mondays 07:00 UTC) plus
-on demand via `workflow_dispatch`. It **gates nothing** — 107 sequential production builds take
+on demand via `workflow_dispatch`. It **gates nothing** — 108 sequential production builds take
 ~90 minutes, so it cannot sit on a PR, and `frontend_e2e.yml` remains the per-change gate. But it
 **fails the job** on any drift, deliberately: a scheduled run that always exits 0 is the same
 decorative thing one level up. The visible red (and GitHub's failed-scheduled-run notification) is

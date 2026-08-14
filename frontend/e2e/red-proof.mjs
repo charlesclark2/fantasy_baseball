@@ -1488,6 +1488,28 @@ const CASES = [
     grep: "the SERVER's, not one the page assembled",
   },
   {
+    id: "espn-prune-walk-stops-walking",
+    shipped: "pre-emptive: pruneEspnPayload silently stops removing the bulk",
+    // ⭐⭐ THE DEFECT WITH NO SYMPTOM. `pruneEspnPayload` is the only reason a real ESPN league fits
+    // under the server's 4 MB paste cap — un-pruned a real drafted response is ~3.3 MB for TEN
+    // teams, a 12-team league lands at ~99% of the cap and a 14-team league is REFUSED. And it is
+    // wrapped in `catch { return text }`, so on any shape it does not expect it hands the ORIGINAL
+    // back. Nothing errors, nothing renders differently, and the import simply starts failing for
+    // size on the two commonest league sizes.
+    //
+    // Renaming the key it walks is the NF-C0e class exactly: a plausible identifier, a walk that
+    // finds nothing, and a function that reports success. ⚠️ Note what this case CANNOT reach: the
+    // spec it fails is the SYNTHETIC size probe, which is built from the same belief about ESPN's
+    // shape the pruner encodes — so it catches the walk BREAKING, never the belief being WRONG.
+    // That half needs the operator-supplied un-pruned captures (see `espn-raw-captures.ts`); until
+    // they land, the ten tests guarding it skip and say so in the run output.
+    detail: "The player walk iterates a key that does not exist, so no bulk is ever removed.",
+    file: "lib/fantasy-import.ts",
+    from: "    for (const t of doc.teams ?? []) {",
+    to: "    for (const t of doc.teamsById ?? []) {",
+    grep: "pruner survives a real-size",
+  },
+  {
     id: "import-error-replaced-with-a-generic-string",
     shipped: "pre-emptive: the server's actionable message swapped for 'something went wrong'",
     // `errorText`'s own docstring names this: the API's `detail` is written to be READ by a user
@@ -1610,10 +1632,10 @@ const CASES = [
  * output; read the summary first — a case that flipped from RED to MISMATCH is a guard that has
  * quietly become decorative, and it is the finding.
  *
- * Measured 2026-08-14 (E9.64b): 106 cases, 100 RED, 6 declared NOT-OBSERVABLE, exit 0.
- * Previously (E9.64): 95 / 89 / 6.
+ * Measured 2026-08-14 (ESPN-PRUNER): 107 cases, 101 RED, 6 declared NOT-OBSERVABLE, exit 0.
+ * Previously (E9.64b): 106 / 100 / 6. Previously (E9.64): 95 / 89 / 6.
  */
-const RECORDED_BOARD = { total: 106, red: 100, notObservable: 6 }
+const RECORDED_BOARD = { total: 107, red: 101, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
