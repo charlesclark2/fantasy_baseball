@@ -1181,7 +1181,9 @@ def compose_gate(sel: dict, fdr_pass: bool, *, coverage: bool = False) -> dict:
     return {"checks": checks, "ship": all(checks.values())}
 
 
-def coverage_constraint_refusal(sel: dict, checks: dict, base: dict) -> dict:
+def coverage_constraint_refusal(sel: dict, checks: dict, base: dict, *,
+                                mechanism: str | None = None,
+                                remedy: str | None = None) -> dict:
     """NF-D18: a Layer-B null whose ONLY refusing clause is the pre-registered coverage(80)
     FLOOR is a **CONSTRAINT_REFUSED**, not POWER_LIMITED — more folds shrink the binomial SE and
     make the refusal MORE certain, so no fold count and no field size changes the verdict.
@@ -1192,6 +1194,9 @@ def coverage_constraint_refusal(sel: dict, checks: dict, base: dict) -> dict:
 
     Applies ONLY when every other gate clause is green AND the floor's shortfall is blocking
     (measured, not thin-sample): otherwise the base classification stands untouched.
+
+    `mechanism`/`remedy` let a SUCCESSOR story (NF-W7b) state ITS mechanism — the defaults are
+    NF-W7's independence-simplification prose, which would be FALSE of a joint-draw arm.
     """
     cov = sel.get("coverage") or {}
     others_green = all(v for k, v in checks.items() if k != "coverage_floor_ok")
@@ -1213,14 +1218,15 @@ def coverage_constraint_refusal(sel: dict, checks: dict, base: dict) -> dict:
             f"0.80 at n={cov.get('n_rows')}"
             + (f" (≈{shortfall_se:.1f} binomial SE below nominal — decisive under-coverage, not "
                f"sampling noise)" if shortfall_se is not None else "")
-            + ". The mechanism is the DECLARED independence-simplification check firing: "
-              "component banks drawn independently under-disperse the assembled sum wherever the "
-              "components co-move."),
-        "retest_trigger": (
+            + (mechanism if mechanism is not None else
+               ". The mechanism is the DECLARED independence-simplification check firing: "
+               "component banks drawn independently under-disperse the assembled sum wherever "
+               "the components co-move.")),
+        "retest_trigger": (remedy if remedy is not None else (
             "NONE — a constraint refusal is not rescuable by data (NF-D18): more folds make the "
             "refusal MORE certain. The remedy is a DIFFERENT MECHANISM (a successor modeling "
             "cross-component dependence — e.g. a joint/copula draw over the component legs) or a "
             "PM decision; ⛔ never a post-hoc floor change (a floor re-set after seeing the result "
-            "is the E2.1-r inversion — NF1.8)."),
+            "is the E2.1-r inversion — NF1.8).")),
     })
     return out
