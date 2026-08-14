@@ -64,7 +64,7 @@ def _declared_raw_captures() -> list[dict]:
     assert block, "the raw-capture registry declaration moved — update this parser"
     entries = []
     for chunk in re.finditer(
-        r'file:\s*"([^"]+)".*?teams:\s*(\d+).*?source:\s*(SIZE_EXTENDED|"[a-z-]+")',
+        r'file:\s*"([^"]+)".*?teams:\s*(\d+|null).*?source:\s*(SIZE_EXTENDED|"[a-z-]+")',
         block.group(0),
         re.DOTALL,
     ):
@@ -72,7 +72,7 @@ def _declared_raw_captures() -> list[dict]:
         entries.append(
             {
                 "file": chunk.group(1),
-                "teams": int(chunk.group(2)),
+                "teams": None if chunk.group(2) == "null" else int(chunk.group(2)),
                 # `SIZE_EXTENDED` is the exported constant whose value is "size-extended".
                 "source": "size-extended" if source == "SIZE_EXTENDED" else source.strip('"'),
             }
@@ -123,6 +123,22 @@ class TestTheRawCaptureRegistry:
         pruner runs. Those are the sizes worth testing, so the registry has to name them."""
         assert {c["teams"] for c in _declared_raw_captures()} >= {12, 14}
 
+    def test_the_shape_carrying_entry_does_not_demand_a_league_size(self):
+        """⭐ The denylist claim is about ESPN's FIELD NAMES, not about league size, so the entry
+        that requires a real capture must accept ANY drafted league (`teams: null`).
+
+        Pinning it to a size would reject a perfectly good capture for a reason unrelated to what it
+        proves — and that is not hypothetical: the first capture attempt was a 12-team league that
+        had not drafted (useless here), while a 10-team league that HAD drafted was available and
+        would have carried the claim completely.
+        """
+        captured = [c for c in _declared_raw_captures() if c["source"] == "captured"]
+        assert captured, "no entry demands a real capture"
+        assert all(c["teams"] is None for c in captured), (
+            "the shape-carrying capture is pinned to a league size; it must accept any DRAFTED "
+            "league, because the denylist claim does not depend on size"
+        )
+
     def test_at_least_one_size_demands_a_real_capture(self):
         """⭐ THE SHAPE CLAIM CANNOT BE SIZE-EXTENDED INTO EXISTENCE.
 
@@ -139,7 +155,7 @@ class TestTheRawCaptureRegistry:
         )
 
     @pytest.mark.parametrize(
-        "capture", _declared_raw_captures(), ids=lambda c: f"{c['teams']}-team"
+        "capture", _declared_raw_captures(), ids=lambda c: c["file"]
     )
     def test_a_committed_raw_capture_is_genuinely_un_pruned(self, capture: dict):
         """⭐ THE NON-VACUITY GUARD, and the reason this file exists in the fast gate.
@@ -168,23 +184,41 @@ class TestTheRawCaptureRegistry:
             )
 
         text = path.read_text()
-        counts = {f: text.count(f'"{f}"') for f in REMOVED_FIELDS}
-        for field in BULK_DRIVER_FIELDS:
-            assert counts[field] > 0, (
-                f"{capture['file']} contains no {field!r} key, so it is NOT an un-pruned capture — "
-                "it is a pruned artifact. Every pruner assertion would pass on it while proving "
-                f"nothing. Re-capture it verbatim from the ESPN read URL. Observed: {counts}"
-            )
-
-        # It also has to be the thing it claims to be: a real league of the declared size, with
-        # rosters (the bulk lives in the roster entries, so an undrafted league carries almost none
-        # of it and would understate the payload the pruner has to survive).
         doc = json.loads(text)
         teams = doc.get("teams") or []
-        assert len(teams) == capture["teams"], (
-            f"{capture['file']} carries {len(teams)} teams, not the declared {capture['teams']}"
+        counts = {f: text.count(f'"{f}"') for f in REMOVED_FIELDS}
+
+        # ⚠️ ORDER IS LOAD-BEARING — DIAGNOSE THE UNDRAFTED CASE FIRST.
+        #
+        # An UNDRAFTED league and a PRUNED artifact both present as "no bulk fields", and they need
+        # opposite fixes: re-capture a different SEASON vs re-capture without the transform. The
+        # first real capture attempt hit exactly this — a 2026 pre-draft league, 48 KB, `stats`
+        # occurring zero times, 12 teams with 0 roster entries each — and an earlier version of this
+        # guard reported it as "it is a pruned artifact", which is false and sends the reader at the
+        # wrong fix. An alert's suggested cause is diagnostic anchoring (INC-40), so it has to be
+        # right or absent, never merely plausible.
+        entry_counts = [len((t.get("roster") or {}).get("entries") or []) for t in teams]
+        assert any(entry_counts), (
+            f"{capture['file']} has {len(teams)} teams and NO roster entries on any of them "
+            f"(drafted={((doc.get('draftDetail') or {}).get('drafted'))!r}, "
+            f"{path.stat().st_size} bytes) — this is a faithful capture of a league that has NOT "
+            "DRAFTED. The removable bulk lives in the roster entries, so a pre-draft league carries "
+            "none of it. Re-capture a season this league has already drafted; nothing about the "
+            "capture procedure was wrong."
         )
-        assert any((t.get("roster") or {}).get("entries") for t in teams), (
-            f"{capture['file']} has no roster entries — capture a DRAFTED season, or the payload "
-            "is missing the bulk this whole guard is about"
-        )
+
+        for field in BULK_DRIVER_FIELDS:
+            assert counts[field] > 0, (
+                f"{capture['file']} has populated rosters but no {field!r} key, so the bulk was "
+                "stripped in transit — it is a pruned artifact, and every pruner assertion would "
+                f"pass on it while proving nothing. Re-capture verbatim from the ESPN read URL "
+                f"without routing it through the app or a JSON viewer. Observed: {counts}"
+            )
+
+        # A sized entry must be the size it claims. The shape-carrying entry declares `teams: null`
+        # — any drafted league proves the denylist, so demanding a size there would reject a good
+        # capture for a reason unrelated to what it proves.
+        if capture["teams"] is not None:
+            assert len(teams) == capture["teams"], (
+                f"{capture['file']} carries {len(teams)} teams, not the declared {capture['teams']}"
+            )

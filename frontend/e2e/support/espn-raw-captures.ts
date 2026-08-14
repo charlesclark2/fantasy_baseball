@@ -86,8 +86,15 @@ export interface EspnRawCapture {
   id: string
   /** File under `ESPN_RAW_CAPTURE_DIR`. Preferred whenever it exists. */
   file: string
-  /** League size this capture is here to represent. */
-  teams: number
+  /**
+   * League size this entry represents, or `null` for "whatever the capture happens to be".
+   *
+   * ⭐ `null` is the SHAPE-carrying entry, and the null is load-bearing. The denylist question is
+   * "do these fields exist where we think, in ESPN's output" — a claim about FIELD NAMES, which is
+   * independent of league size. Demanding a particular size there would reject a perfectly good
+   * capture for a reason that has nothing to do with what it proves.
+   */
+  teams: number | null
   /** Why this particular size is the one worth testing. */
   why: string
   /**
@@ -101,24 +108,26 @@ export interface EspnRawCapture {
 /**
  * ⚖️ `"size-extended"` — REAL BYTES, REPLICATED TO REACH A LARGER LEAGUE SIZE.
  *
- * The operator has access to a 12-team ESPN league and not a 14-team one, and no amount of waiting
- * changes that. Rather than leave the 14-team leg permanently "pending" — a limitation that reads as
- * a considered decision and stops anyone re-checking it — the 14-team payload is built by
- * REPLICATING WHOLE TEAMS out of the real 12-team capture.
+ * A DRAFTED league of a given size is not something we can conjure — the operator is in the leagues
+ * they are in. Rather than leave a size leg permanently "pending" (a limitation that reads as a
+ * considered decision and stops anyone re-checking it), a size leg with no capture of its own is
+ * built by REPLICATING WHOLE TEAMS out of whichever real capture we do have.
  *
  * ⭐ WHAT THIS IS WORTH, STATED PRECISELY, because the distinction is the entire point of this file:
  *
- *   · It carries the SIZE claim at 14-team scale honestly. Every byte is genuine ESPN output, the
+ *   · It carries the SIZE claim at that scale honestly. Every byte is genuine ESPN output, the
  *     per-team payload is a real roster of real players, and byte volume is exactly the axis a
- *     replica preserves. "Does a 14-team-sized payload prune under the cap?" is fully answered.
- *   · It carries NO INDEPENDENT SHAPE EVIDENCE WHATSOEVER. It is the same league's fields twice
- *     over, so it cannot disconfirm anything the 12-team capture already agrees with — including the
+ *     replica preserves. "Does a payload this big prune to something that fits?" is fully answered.
+ *   · It carries NO INDEPENDENT SHAPE EVIDENCE WHATSOEVER. It is the same league's fields more than
+ *     once, so it cannot disconfirm anything the base capture already agrees with — including the
  *     possibility (unverified, and worth stating) that ESPN returns a materially different field set
  *     for a larger league. Two copies of one payload are one payload (NF-C0e: a fixture derived from
  *     the first payload cannot disconfirm it).
  *
- * ⇒ the shape claim rests on the ONE real capture; this extends only its size. A real 14-team
- * capture always wins when the file is present, and the tests say which they ran on.
+ * ⇒ the shape claim rests on the ONE real capture; this extends only its size. A real capture at a
+ * given size always wins when its file is present — and if the base capture ALREADY is that size,
+ * the resolver labels it `captured`, not extended (under-stating evidence is as dishonest as
+ * over-stating it).
  *
  * ⭐ IF YOU WANT A GENUINELY REAL SECOND PAYLOAD: it does NOT need a league you are in. A league
  * whose owner has set it PUBLIC is readable UNAUTHENTICATED from the same host
@@ -132,6 +141,14 @@ export const SIZE_EXTENDED = "size-extended" as const
 
 /**
  * ⏭️ OPERATOR-SUPPLIED. Nothing in this repo can produce these files.
+ *
+ * ⚠️⚠️ **THE SEASON MATTERS AND THE LEAGUE SIZE DOES NOT.** The removable bulk lives in the ROSTER
+ * ENTRIES, so a league that has not DRAFTED returns its full team list with **zero entries on every
+ * team** and none of the fields the pruner removes — a completely faithful capture that is useless
+ * here. MEASURED on the first real attempt: a 2026 pre-draft 12-team league came back at **48 KB**
+ * with `"stats"` occurring **zero** times. A usable capture is MEGABYTES. Conversely the SIZE of
+ * the league is irrelevant to the shape claim (see `EspnRawCapture.teams`), so a drafted 10-team
+ * league is worth far more here than an undrafted 12-team one. ⇒ pick the season first.
  *
  * A raw capture requires a real, authenticated, DRAFTED ESPN league — the bulk lives in the roster
  * entries, so an undrafted league has almost none of it. There is no anonymous source: ESPN
@@ -155,8 +172,13 @@ export const SIZE_EXTENDED = "size-extended" as const
  *   3. Select all of the response text and save it VERBATIM to the filename below. ⚠️ Save the raw
  *      response — do not let a JSON viewer/formatter re-serialise it, and do not run it through the
  *      app (the app prunes on the way out, which would recreate the problem).
- *   4. Sanity-check before committing: `grep -c '"stats"' <file>` must be well above zero. If it is
- *      zero the capture was pruned somewhere in transit and is not usable.
+ *   4. Sanity-check before committing — ⚠️ `grep -o … | wc -l`, NOT `grep -c`, which counts matching
+ *      LINES and an ESPN response is ONE line, so a perfect capture prints 1 either way:
+ *        grep -o '"stats"' <file> | wc -l      # expect thousands
+ *      Zero means the league was not DRAFTED in that season (the bulk lives in the roster entries,
+ *      so an undrafted league returns teams with 0 entries and none of it), or the capture was
+ *      pruned in transit. Check `"drafted":true` and non-empty `roster.entries` before anything
+ *      else — the file size alone is the giveaway: expect MEGABYTES, not tens of KB.
  *   5. Commit under `betting_ml/tests/fixtures/`.
  *
  * 🔒 These captures contain league and team names and ESPN player/member ids. They contain NO
@@ -166,12 +188,25 @@ export const SIZE_EXTENDED = "size-extended" as const
  */
 export const ESPN_RAW_CAPTURES: readonly EspnRawCapture[] = [
   {
+    id: "captured",
+    file: "espn_league_raw_unpruned.json",
+    teams: null,
+    why: "the ONE real payload — it carries the denylist (shape) claim for every league size",
+    // ⭐ THE ONE THAT CARRIES THE SHAPE CLAIM. Nothing substitutes for it.
+    //
+    // ⚠️ ANY DRAFTED LEAGUE WILL DO — the size does not matter, but the DRAFT does. The removable
+    // bulk lives in the ROSTER ENTRIES, so an undrafted league returns 12 teams with 0 entries each
+    // and none of the fields the pruner removes. (Measured, on the first real capture attempt: a
+    // 2026 pre-draft league came back at 48 KB with `stats` occurring ZERO times — a faithful
+    // capture of a league with nothing in it.)
+    source: "captured",
+  },
+  {
     id: "12-team",
     file: "espn_league_raw_unpruned_12team.json",
     teams: 12,
     why: "un-pruned it lands at ~99% of the 4 MB cap — imports today only by a hair, and only if the pruner works",
-    // ⭐ THE ONE THAT CARRIES THE SHAPE CLAIM. Nothing substitutes for it.
-    source: "captured",
+    source: SIZE_EXTENDED,
   },
   {
     id: "14-team",
@@ -198,7 +233,7 @@ export function readRawCapture(capture: EspnRawCapture): string {
 }
 
 /** Where a resolved payload's bytes came from, and therefore what a result on it is worth. */
-export type Provenance = "captured" | "size-extended from the 12-team capture"
+export type Provenance = "captured" | `size-extended from the ${number}-team capture`
 
 export interface ResolvedCapture {
   text: string
@@ -258,10 +293,20 @@ export function resolveCapture(capture: EspnRawCapture): ResolvedCapture | null 
   if (capture.source !== SIZE_EXTENDED) return null
 
   const base = ESPN_RAW_CAPTURES.find((c) => c.source === "captured" && rawCaptureExists(c))
-  if (!base) return null
+  if (!base || capture.teams == null) return null
+
+  // If the real capture is ALREADY this size, it IS this size's evidence — do not run it through
+  // the extender and do not label it extended. Mislabelling a genuine capture as derived
+  // under-states the evidence, which is the same dishonesty as over-stating it, facing the other
+  // way (and it would make a real 12-team capture look like a replica of itself).
+  const baseText = readRawCapture(base)
+  const baseTeams = (JSON.parse(baseText).teams ?? []).length
+  if (baseTeams === capture.teams) {
+    return { text: baseText, provenance: "captured", isIndependentEvidence: true }
+  }
   return {
-    text: extendToTeamCount(readRawCapture(base), capture.teams),
-    provenance: "size-extended from the 12-team capture",
+    text: extendToTeamCount(baseText, capture.teams),
+    provenance: `size-extended from the ${baseTeams}-team capture`,
     isIndependentEvidence: false,
   }
 }

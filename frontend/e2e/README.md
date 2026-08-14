@@ -167,24 +167,38 @@ coverage. This list is the honest half of the table above.
      being right — so it is scoped to latency and to catching the walk BREAKING (a renamed key, a
      wrong path), never to whether our belief about ESPN's shape is CORRECT. That half is exactly
      what the operator captures are for.
-   ⏭️ **THE ONE OPEN ITEM: capture ONE real un-pruned drafted ESPN response** — a 12-team league
+   ⏭️ **THE ONE OPEN ITEM: capture ONE real un-pruned response from a league that has DRAFTED**
    (procedure in `e2e/support/espn-raw-captures.ts`). ⛔ It must not be fabricated by re-inflating a
    pruned capture — that would encode our assumption about the very shape under test and make every
    gated test pass while proving nothing.
+   - ⚠️ **THE SEASON MATTERS; THE LEAGUE SIZE DOES NOT.** The removable bulk lives in the **roster
+     entries**, so an UNDRAFTED league returns its full team list with zero entries on every team
+     and none of the removable fields — a faithful capture that is useless here. Measured on the
+     first real attempt: a 2026 pre-draft 12-team league came back at **48 KB** with `"stats"`
+     occurring **zero** times. A usable capture is **megabytes**. So a drafted 10-team league is
+     worth far more than an undrafted 12-team one, and the shape-carrying registry entry declares
+     `teams: null` to say so — pinning it to a size would reject a good capture for a reason
+     unrelated to what it proves.
    - **Why one is enough for the SHAPE claim, and what it does not cover.** The denylist question is
      "do these fields exist where we think, in ESPN's output" — a claim about field names, not about
      league size, so one real capture settles it at every size. What one capture cannot disconfirm
      is that ESPN returns a materially different field set for a *larger* league; that is unverified
      and stated rather than assumed.
-   - **The 14-team leg is answered by SIZE-EXTENSION, not left pending.** No account we have access
-     to is in a 14-team ESPN league, so waiting would leave that leg permanently "pending" — a
-     limitation that reads as a considered decision and stops anyone re-checking it. Instead the
-     14-team payload replicates whole teams out of the real 12-team capture: every byte is genuine
-     ESPN output, so it carries the SIZE claim at that scale honestly and adds **zero** independent
-     shape evidence. The registry test reports the two counts **separately** (`SHAPE proven on N
-     independently-captured real payload(s); SIZE additionally covered at M size-extended league
-     size(s)`) precisely so the second cannot be laundered into the first, and a Python guard fails
-     if every declared size is ever flipped to size-extended.
+   - **The size legs are answered by SIZE-EXTENSION, not left pending.** Waiting on a drafted league
+     of each size would leave those legs permanently "pending" — a limitation that reads as a
+     considered decision and stops anyone re-checking it. Instead each size leg replicates whole
+     teams out of whichever real capture exists: every byte is genuine ESPN output, so it carries
+     the SIZE claim at that scale honestly and adds **zero** independent shape evidence. The
+     registry test reports the two counts **separately** (`SHAPE proven on N independently-captured
+     real payload(s); SIZE additionally covered at M size-extended league size(s)`) precisely so the
+     second cannot be laundered into the first; a Python guard fails if every entry is ever flipped
+     to size-extended; and if the base capture already IS a leg's size, the resolver labels it
+     `captured` rather than extended (under-stating evidence is as dishonest as over-stating it).
+   - **An undrafted capture and a pruned one are diagnosed apart.** Both present as "no bulk
+     fields" and need opposite fixes (different *season* vs re-capture without the transform), so
+     the roster check runs FIRST and names the real cause. An earlier cut reported the undrafted
+     case as "it is a pruned artifact" — false, and it sends the reader at the wrong fix (INC-40:
+     a suggested cause is diagnostic anchoring; it must be right or absent).
    - ⭐ **A genuinely real 14-team payload needs no credential.** A league whose owner has set it
      PUBLIC is readable unauthenticated from the same host (`docs/nf_c0_espn_access_probe.md` §1(b)
      — that path was rejected as a *product* path because it cannot reach private leagues, which is

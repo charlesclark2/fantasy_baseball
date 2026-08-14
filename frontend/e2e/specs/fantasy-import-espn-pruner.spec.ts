@@ -207,23 +207,44 @@ for (const capture of ESPN_RAW_CAPTURES) {
         description: `${payloadBytes(raw)} bytes; removable keys: ${report}`,
       })
 
+      // ⚠️ ORDER IS LOAD-BEARING — DIAGNOSE THE UNDRAFTED CASE FIRST. An UNDRAFTED league and a
+      // PRUNED artifact both present as "no bulk fields" and need OPPOSITE fixes (re-capture a
+      // different SEASON vs re-capture without the transform). The first real capture attempt was
+      // exactly this: a pre-draft league, 48 KB, `stats` occurring zero times, every team with 0
+      // roster entries — and reporting that as "a pruned artifact" sends the reader at the wrong
+      // fix. A suggested cause is diagnostic anchoring (INC-40); it must be right or absent.
+      const doc = JSON.parse(raw)
+      const entryCounts = (doc.teams ?? []).map(
+        (t: any) => (t?.roster?.entries ?? []).length as number,
+      )
+      expect(
+        entryCounts.some((n: number) => n > 0),
+        `the ${capture.id} payload (${provenance}) has ${entryCounts.length} teams and NO roster ` +
+          `entries on any of them (drafted=${doc?.draftDetail?.drafted}) — a faithful capture of a ` +
+          `league that has NOT DRAFTED. The removable bulk lives in the roster entries, so a ` +
+          `pre-draft league carries none of it. Re-capture a season the league has already drafted.`,
+      ).toBe(true)
+
       for (const field of ESPN_BULK_DRIVER_FIELDS) {
         expect(
           counts[field],
-          `the ${capture.id} payload (${provenance}) contains no "${field}" key, so it is NOT ` +
-            `un-pruned — it is a pruned artifact, and every pruner assertion in this file would ` +
-            `pass on it while proving nothing. Re-capture verbatim from the ESPN read URL (see ` +
-            `espn-raw-captures.ts) rather than deriving it from a committed fixture. ` +
-            `Observed: ${report}`,
+          `the ${capture.id} payload (${provenance}) has populated rosters but no "${field}" key, ` +
+            `so the bulk was stripped in transit — it is a pruned artifact, and every pruner ` +
+            `assertion in this file would pass on it while proving nothing. Re-capture verbatim ` +
+            `from the ESPN read URL (see espn-raw-captures.ts) without routing it through the app ` +
+            `or a JSON viewer. Observed: ${report}`,
         ).toBeGreaterThan(0)
       }
 
-      // The payload has to be the SIZE it claims, whether captured or extended — a 14-team result
+      // A SIZED leg has to be the size it claims, whether captured or extended — a 14-team result
       // read off a 12-team document would be the quietest possible way for this leg to say nothing.
-      expect(
-        (JSON.parse(raw).teams ?? []).length,
-        `the ${capture.id} payload carries the wrong number of teams`,
-      ).toBe(capture.teams)
+      // The shape-carrying entry declares no size (see `EspnRawCapture.teams`).
+      if (capture.teams != null) {
+        expect(
+          entryCounts.length,
+          `the ${capture.id} payload carries the wrong number of teams`,
+        ).toBe(capture.teams)
+      }
     })
 
     test("pruning brings the payload under the server's paste cap", () => {
