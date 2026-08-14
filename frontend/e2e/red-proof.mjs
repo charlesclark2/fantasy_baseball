@@ -468,10 +468,24 @@ const CASES = [
   {
     id: "home-blog-back-in-primary-nav",
     shipped: "E9.46 — the pre-story nav, where the blog sat beside the products",
+    // 🔧 E9.64 — RE-ANCHORED, and the reason is the more interesting half of the repair.
+    //
+    // This used to rewrite the hardcoded About `<Link>` in `nav.tsx` to point at /blog. It went
+    // STALE on the indentation when E9.60 wrapped that link in `{showSubNav && (` — but re-pointing
+    // the whitespace would have produced a case that ran and proved NOTHING, which is strictly
+    // worse: `showSubNav` is `authenticated || isSignedIn`, and the spec this names drives an
+    // ANONYMOUS visitor, so that link does not render for them however its href is written.
+    //
+    // ⭐ The list that actually renders the primary nav for a stranger is `SIGNED_OUT_NAV`, so that
+    // is where a blog link would have to come back. Same lesson as E9.64's item-5 fix one file over:
+    // an assertion about what an anonymous visitor is offered has to be anchored on the AUTHORED
+    // LIST they are served, not on markup that is gated away from them.
     detail: "Restores the blog as a primary-nav link (operator decision 3 reverses this).",
-    file: "components/nav.tsx",
-    from: '            href="/about"\n            className="hidden text-xs text-gray-500 hover:text-gray-300 transition-colors sm:block"',
-    to: '            href="/blog"\n            className="hidden text-xs text-gray-500 hover:text-gray-300 transition-colors sm:block"',
+    file: "lib/positioning-copy.ts",
+    from: '  { label: "About", href: "/about", product: null, desktop: true },',
+    to:
+      '  { label: "Blog", href: "/blog", product: null, desktop: true },\n' +
+      '  { label: "About", href: "/about", product: null, desktop: true },',
     grep: "out of the primary nav",
   },
   {
@@ -715,13 +729,24 @@ const CASES = [
     // ⭐ THE DEFECT THIS SURFACE IS MOST LIKELY TO SHIP. Rank is an INVERTED scale — smaller is
     // better — so `league - generic` is the spelling that reads naturally and is wrong. Every
     // riser then renders a down arrow and vice versa, on a page that is otherwise completely
-    // normal: no error, no blank, no NaN, and the numbers are all real. Only an assertion tying
-    // the ARROW to the LIST it is in can see it.
-    detail: "Inverts `ovrDelta`, so risers render as fallers.",
+    // normal: no error, no blank, no NaN, and the numbers are all real.
+    //
+    // 🔧 E9.64 — RE-POINTED AT A NEW ASSERTION, because the one it named had stopped being able to
+    // see it and that is a finding rather than a chore. This case used to grep the movers test,
+    // which was exact while the highlights were SELECTED on rank movement. E9.61 correctly
+    // re-anchored that test onto VOR when the ranking moved — and in doing so left the OVERALL move
+    // unread by anything, even though the board's "vs our generic board" COLUMN still renders it
+    // (`GenericDeltaCell scale="overall"`). So the break went in, every arrow in that column
+    // flipped, and the suite stayed green. `vor-delta-subtraction-inverted` covers the VOR side;
+    // this now covers the rank side, against a test written for it.
+    //
+    // ⚠️ THE SHAPE TO REMEMBER: re-anchoring a test onto a new quantity can silently ORPHAN the old
+    // one. When a spec's anchor moves, check what the previous anchor was the only reader of.
+    detail: "Inverts `ovrDelta`, so every arrow in the board's move column points the wrong way.",
     file: "lib/league-delta.ts",
     from: "      ovrDelta: g ? g.ovrRank - p.ovrRank : null,",
     to: "      ovrDelta: g ? p.ovrRank - g.ovrRank : null,",
-    grep: "sign points the way the column says",
+    grep: "agrees with the two boards' own ranks",
   },
   {
     id: "activation-fires-on-mount",
@@ -731,8 +756,11 @@ const CASES = [
     // at the wrong thing entirely. Firing on mount rather than on the board rendering is the
     // natural way to write it.
     detail: "Fires `custom_board_viewed` even with no league configured.",
+    // 🔧 E9.64 — re-anchored: the guard grew a `loading` clause (the telemetry fix that stopped it
+    // firing before the generic board landed, shipping a null `players_moved`). The break is
+    // unchanged in intent — strip the guard down to the ref and it fires on mount.
     file: "components/fantasy/my-league.tsx",
-    from: "    if (fired.current || !league || ranked.length === 0) return",
+    from: "    if (fired.current || loading || !league || ranked.length === 0) return",
     to: "    if (fired.current) return",
     grep: "does NOT fire on an empty state",
   },
@@ -744,14 +772,14 @@ const CASES = [
     // metric by however much they browsed.
     detail: "Drops the once-per-mount guard on the activation capture.",
     file: "components/fantasy/my-league.tsx",
-    from: "    if (fired.current || !league || ranked.length === 0) return\n    fired.current = true",
-    to: "    if (!league || ranked.length === 0) return",
+    from: "    if (fired.current || loading || !league || ranked.length === 0) return\n    fired.current = true",
+    to: "    if (loading || !league || ranked.length === 0) return",
     grep: "under the name the funnel reads",
     // ⭐ DECLARED GREEN, and it is a FINDING rather than a gap — defence in depth, measured.
     //
     // Once-per-mount is delivered TWICE over here, independently: by the `fired` ref, and by the
-    // effect's dependency list (`[league, ranked.length, delta]`), none of which changes when the
-    // user browses — a position-tab click re-renders the component but re-runs no effect. So
+    // effect's dependency list (`[league, ranked.length, delta, loading]`), none of which changes
+    // when the user browses — a position-tab click re-renders the component but re-runs no effect. So
     // removing the ref alone changes no observable behaviour, and no SINGLE-line break can falsify
     // the clause. The spec exercises the property anyway (it clicks a tab and re-counts), so a
     // future edit that makes those deps unstable is caught by the test even though this case
@@ -846,14 +874,25 @@ const CASES = [
   {
     id: "configured-league-reads-as-no-league",
     shipped: "pre-emptive: telling a user with a saved league to go and set one up",
-    // `useMyTeams` cannot score a board without the PROJECTIONS blob, so its `teams` stays null
-    // until both reads land — collapsing "you have no league" and "we cannot score yours yet" into
-    // one state. Keying the empty state on the scored board is the natural way to write it, and it
-    // fires whenever the projections read is slow, 404s before the first export, or fails.
+    // The page cannot show a scored board until the board read lands, so "my league is here but
+    // unscored" is a state of its own. Keying the empty state on it is the natural way to write it,
+    // and it fires whenever that read is slow, 404s before the first export, or fails.
+    //
+    // 🔧 E9.64 — THE BREAK WAS REPLACED BECAUSE IT HAD GONE INERT, and this is the durable half.
+    // It used to swap `!hasSavedLeague` for `!league`, which was a real defect while scoring
+    // happened in the BROWSER: `useMyTeams` could not build a board without the projections blob,
+    // so `teams` — and therefore `league` — stayed null exactly when the read failed. NF-EPIC 1
+    // moved scoring server-side, `league` now comes off `/fantasy/nfl/my-teams` (which this spec
+    // does not fail), and the substitution stopped changing anything at all: the case ran, the
+    // suite stayed green, and it read as a decorative assertion when the assertion was fine.
+    //
+    // ⚠️ The lesson is that a red-proof case is only as durable as the DATA-FLOW it assumes. When a
+    // read moves, re-check every case whose break depends on that read failing. The break now names
+    // the scored board directly, which is what "keyed on the scored board" means today.
     detail: "Keys the empty state on the scored board rather than on the saved-league payload.",
     file: "components/fantasy/my-league.tsx",
     from: "      {!teamsLoading && !hasSavedLeague && (",
-    to: "      {!teamsLoading && !league && (",
+    to: "      {!teamsLoading && !leagueBoard && (",
     grep: "never described as 'no league' when scoring fails",
   },
 

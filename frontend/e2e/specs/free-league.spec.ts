@@ -1,5 +1,11 @@
 import { expect, test, type Page } from "@playwright/test"
-import { FIXTURES, captureAnalytics, collectPageErrors, mockApi } from "../support/api-mock"
+import {
+  FIXTURES,
+  captureAnalytics,
+  collectPageErrors,
+  leagueBoardPlayers,
+  mockApi,
+} from "../support/api-mock"
 import { signIn } from "../support/session"
 import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors } from "../support/assertions"
 
@@ -190,6 +196,68 @@ test.describe("the free personalized league", () => {
     expect(compared, "nothing was compared against the free board").toBeGreaterThan(100)
     expect(moved, "no player moved in a superflex, half-PPR, TE-premium league").toBeGreaterThan(0)
     expect(moved).toBeLessThanOrEqual(compared)
+  })
+
+  test("the board column's overall move agrees with the two boards' own ranks", async ({ page }) => {
+    // ⭐ THE HALF E9.61 LEFT UNCOVERED, and it took a red proof to notice. The movers test above was
+    // correctly re-anchored onto VOR when the highlights moved to ranking on value — but the board's
+    // "vs our generic board" COLUMN still renders `ovrDelta` (`GenericDeltaCell scale="overall"`),
+    // and after that re-anchor nothing read it. So `delta-sign-inverted` — inverting the OVERALL
+    // subtraction, which flips every arrow in that column — broke the app and the suite stayed
+    // green. Fixing the case meant writing the assertion it had been naming.
+    //
+    // The derivation is deliberately the same shape as the VOR one and NEITHER SIDE PASSES THROUGH
+    // `computeLeagueDelta`: the generic rank is read off the board FIXTURE, the league rank off the
+    // served league board, and the chip off the DOM. An inverted subtraction moves the chip while
+    // both inputs stay put.
+    //
+    // ⭐ AND IT IS EXACT, unlike the VOR check. Ranks are integers rendered whole, so there is no
+    // rounding to absorb — the magnitude is asserted as an equality, not a tolerance.
+    await openMyLeague(page)
+    await expect(page.getByTestId("league-delta")).toBeVisible()
+
+    const genericRank = new Map(
+      (FIXTURES.boardFree() as { id: string; ovrRank: number }[]).map((p) => [p.id, p.ovrRank]),
+    )
+
+    // The biggest mover that exists on BOTH boards: a large gap cannot render as "no change", so a
+    // chip that fails to parse below is an anchor problem stated as one rather than a silent skip.
+    const subject = leagueBoardPlayers()
+      .filter((p) => genericRank.has(p.id))
+      .map((p) => ({ ...p, expected: (genericRank.get(p.id) as number) - p.ovrRank }))
+      .sort((a, b) => Math.abs(b.expected) - Math.abs(a.expected))[0]
+    expect(subject, "no player is on both boards — the fixtures no longer overlap").toBeTruthy()
+
+    await page.getByLabel("Rows per page").first().click()
+    await page.getByRole("option", { name: "All", exact: true }).click()
+
+    const row = page
+      .locator('[data-testid="my-league-board"] tbody tr')
+      .filter({ has: page.locator(`a[href="/fantasy/player/${subject.id}"]`) })
+    await expect(row, `${subject.name} has no row on his own league board`).toHaveCount(1)
+
+    // columns: # | Player | Pos | Team | Bye | pts | VOR | vs generic
+    const chip = (await row.locator("td").nth(7).innerText()).trim()
+    const magnitude = Number(chip.replace(/[^0-9]/g, ""))
+    expect(
+      Number.isFinite(magnitude) && magnitude > 0,
+      `${subject.name} moved ${subject.expected} places but his column reads "${chip}" — ` +
+        "the board's biggest mover is rendering as un-comparable",
+    ).toBe(true)
+
+    const up = chip.includes("▲")
+    expect(
+      up ? 1 : -1,
+      `${subject.name} is #${subject.ovrRank} on his league board and ` +
+        `#${genericRank.get(subject.id)} on the generic one — he moved ` +
+        `${subject.expected > 0 ? "UP" : "DOWN"}, and the column says the opposite. ` +
+        "The overall subtraction is inverted.",
+    ).toBe(Math.sign(subject.expected))
+    expect(
+      magnitude,
+      `${subject.name}'s move reads ${magnitude} but his two ranks are ` +
+        `${genericRank.get(subject.id)} and ${subject.ovrRank}`,
+    ).toBe(Math.abs(subject.expected))
   })
 
   test("the activation event reaches the wire, once, under the name the funnel reads", async ({

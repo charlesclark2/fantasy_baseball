@@ -163,6 +163,27 @@ export type MockOptions = {
    *                auto-deploys, so this state is guaranteed to happen at least once in prod.
    */
   termsAcceptance?: "created" | "existing" | "skew"
+  /**
+   * ⭐ E9.64 — hold these API paths back by `ms` before answering, to make a RACE deterministic.
+   *
+   * ⚠️ THIS IS NOT A LATENCY KNOB, and using it as one would be a mistake. It exists because a
+   * red-proof case for a race is worthless unless the race resolves the same way every run.
+   * `custom-selection-lost-to-the-load-race` breaks `useFormatSelection`'s `savedLeaguesLoading`
+   * deferral — the guard that stops it committing a format before it knows whether the caller has a
+   * saved league. Against a local server both reads land within a few ms of each other, so the
+   * broken build lost the race SOMETIMES: two consecutive runs of identical code gave RED and then
+   * MISMATCH, which is the worst possible verdict from a falsifiability harness (a single green run
+   * reads as proof).
+   *
+   * Delaying `/fantasy/leagues` makes the manifest reliably win. That does not weaken the healthy
+   * path — the deferral's whole job is to WAIT for that read, so the fixed build passes at any
+   * delay, and the case now separates the two builds every time.
+   *
+   * ⛔ Do not reach for this to "give the page time to settle". Auto-retrying assertions do that
+   * job; a delay bakes a timing assumption into the harness. It is for ORDERING two reads whose
+   * relative order is the property under test.
+   */
+  delay?: { paths: string[]; ms: number }
 }
 
 export type ApiMock = {
@@ -356,6 +377,22 @@ export function linkedRosterSubject(): { name: string; rec: number } {
   return { name: wr.name, rec: wr.rec }
 }
 
+/**
+ * The ONE saved league's server-scored board, exactly as `/fantasy/nfl/league-board` serves it.
+ *
+ * ⚠️ EXPORTED FOR THE SAME REASON AS `linkedRosterSubject` — one spelling. `free-league.spec.ts`
+ * re-derives the overall-rank move from the two boards' OWN `ovrRank` values, and a second local
+ * `buildBoard(...)` call there would be a copy of this that can drift; the spec would then compare
+ * the rendered chip against a board the app was never served.
+ */
+export function leagueBoardPlayers(): { id: string; name: string; ovrRank: number }[] {
+  return leagueBoardBuild().players as { id: string; name: string; ovrRank: number }[]
+}
+
+function leagueBoardBuild() {
+  return buildBoard(FIXTURES.projectionsEntitled().players, FIXTURES.myTeams().leagues[0])
+}
+
 function linkedRoster(): unknown[] {
   const entry = (p: any, starter: boolean) => ({
     player_key: `e2e-${p.id}`,
@@ -522,7 +559,7 @@ function personalPayloadFor(
   if (pathname === "/fantasy/nfl/league-board") {
     const league = FIXTURES.myTeams().leagues[0]
     if (!league || leagues === "none") return undefined
-    const built = buildBoard(FIXTURES.projectionsEntitled().players, league)
+    const built = leagueBoardBuild()
     return {
       season: 2026,
       league,
@@ -650,6 +687,12 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
   /** Answer one intercepted call, given the canonical API path it resolves to. */
   const fulfil = async (route: Route, apiPath: string, search: string) => {
     mock.requested.push(apiPath + search)
+
+    // Held BEFORE anything is answered, so the delay applies whichever branch below serves this
+    // path — including the failure branch. See `MockOptions.delay`.
+    if (options.delay?.paths.some((p) => apiPath.startsWith(p))) {
+      await new Promise((r) => setTimeout(r, options.delay!.ms))
+    }
 
     // ⭐ G100-D0 — SAVING a league, which is a WRITE and therefore invisible to `payloadFor`'s
     // (path, entitlement) map.

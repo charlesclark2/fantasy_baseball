@@ -287,27 +287,68 @@ RED  import-warnings-suppressed               ⭐ an import that quietly loses a
 RED  coverage-claims-everything-applies       an unchecked coverage report shown as a clean one
 ```
 
-### ⚠️ Six PRE-EXISTING cases do not match their declared expectation
+### ⭐ Six PRE-EXISTING cases had stopped proving anything — repaired (E9.64)
 
-A full run on 2026-08-14 reports six, and **none of them is E9.64's** — recorded here so the next
-reader does not re-derive it. They are listed in the order the summary prints them:
+**Whole-board state after this story: 95 cases, 89 RED and 6 declared NOT-OBSERVABLE, exit 0.** No
+STALE, no MISMATCH, no non-deterministic case. That is the number to re-measure against, and a
+future run reporting anything else is a regression in the harness even when the app suite is green.
 
-- **STALE** ×3 — `home-blog-back-in-primary-nav`, `activation-fires-on-mount`,
-  `activation-fires-per-render`. STALE means the anchor text is no longer in the source, so the case
-  proved **nothing** rather than failing loudly (the shape the E9.46 `home-pick-is-a-tout` note
-  already warns about). Their files were not touched by E9.64.
-- **MISMATCH** ×2 — `delta-sign-inverted`, `configured-league-reads-as-no-league`. Both were
-  **reproduced at the pre-E9.64 commit**, so they are pre-existing: the break goes in and the suite
-  stays green, i.e. the assertions those cases name are currently decorative.
-- **FLAKY** ×1 — `custom-selection-lost-to-the-load-race`. ⭐ Measured, not inferred: **two
-  consecutive runs of identical code gave RED and then MISMATCH**. That is not a regression and not
-  a broken assertion — it is a non-deterministic case, which makes sense given what it breaks (a
-  LOAD RACE, `if (savedLeaguesLoading) return`). ⚠️ A flaky red-proof case is worse than a failing
-  one, because a single green run reads as proof; treat a lone verdict from it as provisional.
+The first full run on 2026-08-14 reported six cases whose verdict did not match their declaration.
+None was introduced by E9.64; all six are **fixed here**, because a red-proof case that cannot fail
+is exactly the defect this harness exists to catch, one level up. Each needed a *different* repair,
+and the reasons are more useful than the fixes:
 
-⛔ Do not "fix" any of these by deleting the case. A STALE case needs its anchor re-pointed at the
-code as it is now; a MISMATCH needs either a break that actually changes behaviour or an assertion
-that can see the one it has.
+| case | was | why it had stopped proving anything |
+|---|---|---|
+| `home-blog-back-in-primary-nav` | STALE | anchor drifted **and the link is gated away from the visitor the spec drives** |
+| `activation-fires-on-mount` | STALE | the guard grew a `loading` clause |
+| `activation-fires-per-render` | STALE | same guard, same clause (declared GREEN either way) |
+| `configured-league-reads-as-no-league` | MISMATCH | the break's data-flow assumption was retired by NF-EPIC 1 |
+| `delta-sign-inverted` | MISMATCH | a correct re-anchor **orphaned** the only assertion that read it |
+| `custom-selection-lost-to-the-load-race` | FLAKY | a race the harness left to chance |
+
+Four of them carry a lesson worth more than the repair:
+
+1. ⭐ **A STALE case can hide a case that would be VACUOUS once un-staled.**
+   `home-blog-back-in-primary-nav` rewrote the hardcoded About `<Link>` in `nav.tsx` to point at
+   `/blog`; it went stale on the indentation when E9.60 wrapped that link in `{showSubNav && (`.
+   Re-pointing the whitespace would have produced a case that ran and proved **nothing** —
+   `showSubNav` is `authenticated || isSignedIn`, and the spec drives an **anonymous** visitor, so
+   that link does not render for them however its href is written. The list that actually renders
+   their nav is `SIGNED_OUT_NAV`, which is where the break now goes. ⇒ **when you un-stale an
+   anchor, re-derive whether the broken line is on the path the spec walks — do not just fix the
+   string.** (Same lesson as E9.64's item-5 fix, one file over.)
+2. ⭐ **A break is only as durable as the DATA-FLOW it assumes.**
+   `configured-league-reads-as-no-league` swapped `!hasSavedLeague` for `!league`, which was a real
+   defect while scoring happened in the browser: `useMyTeams` could not build a board without the
+   projections blob, so `league` was null exactly when the read failed. NF-EPIC 1 moved scoring
+   server-side, `league` now comes off `/fantasy/nfl/my-teams` — which this spec does not fail — and
+   the substitution stopped changing anything. The assertion was fine; the *break* had died. ⇒
+   **when a read moves, re-check every case whose break depends on that read failing.**
+3. ⭐ **Re-anchoring a test onto a new quantity can silently ORPHAN the old one.**
+   `delta-sign-inverted` inverts `ovrDelta`. E9.61 correctly re-anchored the movers test onto VOR
+   when the highlights moved to ranking on value — and in doing so left the **overall** move unread
+   by anything, even though the board's "vs our generic board" column still renders it
+   (`GenericDeltaCell scale="overall"`). So the break flipped every arrow in that column and the
+   suite stayed green. Fixing the case meant **writing the assertion it had been naming**: `the
+   board column's overall move agrees with the two boards' own ranks`, derived the same way as the
+   VOR check (generic rank off the board fixture, league rank off the served league board, chip off
+   the DOM — neither input passing through `computeLeagueDelta`), and *exact* rather than tolerant,
+   because ranks are integers. ⇒ **when a spec's anchor moves, check what the previous anchor was
+   the only reader of.**
+4. ⭐ **A red-proof case for a RACE must force the race.**
+   `custom-selection-lost-to-the-load-race` gave **RED then MISMATCH on two consecutive runs of
+   identical code** — the worst verdict a falsifiability harness can return, because a single green
+   reads as proof. Both reads land within a few ms against a local server, so the broken build lost
+   the race only sometimes. `MockOptions.delay` now holds `/fantasy/leagues` back 400 ms, which
+   makes the manifest win every time. It cannot mask a regression: the deferral's whole job is to
+   *wait* for that read, so a correct build passes at any delay. **Measured RED on three consecutive
+   runs** after the change. ⛔ `delay` is for ORDERING two reads whose relative order is the property
+   under test — not a latency knob, and never a substitute for an auto-retrying assertion.
+
+⛔ Do not "fix" a future one of these by deleting the case. A STALE case needs its anchor re-pointed
+*and* re-checked for reachability; a MISMATCH needs either a break that actually changes behaviour or
+an assertion that can see the one it has.
 
 The red proof also **found two real weaknesses in this suite** while it was being written, which is
 the argument for keeping it:
