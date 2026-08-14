@@ -352,6 +352,106 @@ W6_INTRADAY_MARTS = ["mart_game_odds_bridge"]
 W6_ODDS_CURRENT_RAW_DAYS = 12
 
 
+# ---------------------------------------------------------------------------
+# INC-43 — A DuckDB ERROR WHOSE MESSAGE IS NOT VALID UTF-8 DESTROYS ITS OWN
+# DIAGNOSTIC. The Python client converts the C++ exception string to `str`; if
+# that string carries raw bytes (an httpfs response body, a parquet fragment),
+# the conversion raises `UnicodeDecodeError` and the REAL DuckDB error never
+# surfaces — the operator gets `'utf-8' codec can't decode byte 0xfc in
+# position 15639` and nothing else.
+#
+# INC-37 (2026-08-01) carded this and a fix landed at ONE call site
+# (`_build_marts`'s COPY, below). INC-43 (2026-08-13) then hit a DIFFERENT,
+# UNWRAPPED site — the `CREATE OR REPLACE VIEW stg_batter_pitches` at the top
+# of the mart build — and the whole daily slate went down with an
+# undiagnosable message. There are 67 `conn.execute` sites in this file; a
+# per-site guard is the wrong shape.
+#
+# ⇒ The cure is installed ONCE, on the CONNECTION (see `run()`), so every
+# statement and every fetch is covered. `UnicodeDecodeError.object` carries the
+# FULL undecodable byte string, so the original diagnostic is fully
+# recoverable — this loses nothing.
+#
+# ⛔ This is NOT `errors="ignore"`. Nothing is decoded leniently on a path that
+# FEEDS anything; the lenient decode happens only on an error message that is
+# already being raised, and it is reported IN FULL — never head-truncated
+# (INC-42: head-truncating a traceback drops the diagnosis).
+# ---------------------------------------------------------------------------
+
+
+class NonUtf8DuckDBError(RuntimeError):
+    """A DuckDB error whose message was not valid UTF-8, salvaged lossily.
+
+    Carries the recovered text so the underlying failure (an S3 403, a parquet
+    bind error, an httpfs timeout) is readable instead of destroyed.
+    """
+
+
+def _salvage_non_utf8_duckdb_error(
+    exc: UnicodeDecodeError, sql: str | None, op: str
+) -> NonUtf8DuckDBError:
+    """Recover the DuckDB message the `str` conversion threw away."""
+    raw = getattr(exc, "object", None)
+    if isinstance(raw, (bytes, bytearray)) and len(raw) > 0:
+        salvaged = bytes(raw).decode("utf-8", errors="replace")
+        detail = f"Salvaged with errors='replace' ({len(raw)} bytes): {salvaged}"
+    else:
+        # NF1.7(a): say plainly that nothing was recovered — an empty salvage must
+        # not be reported as though a message had been recovered.
+        detail = "<the exception carried no bytes — nothing to salvage>"
+    # The statement is echoed in full: these are short (the failing INC-43 one
+    # was 350 bytes) and knowing WHICH statement is half the diagnosis.
+    stmt = "<unknown statement>" if sql is None else sql.strip()
+    return NonUtf8DuckDBError(
+        f"DuckDB raised an error whose message is not valid UTF-8, so the client's "
+        f"str conversion destroyed it (INC-37/INC-43 class). Raised from `{op}`. "
+        f"{detail}\n--- statement ---\n{stmt}"
+    )
+
+
+class _DiagnosticDuckDBConn:
+    """Transparent proxy over a DuckDB connection that salvages non-UTF-8 errors.
+
+    Only `execute`/`close`/`register`/`unregister` are used against the connection
+    in this module; everything else passes through untouched via `__getattr__`.
+    `execute` returns `self` (DuckDB returns the connection, enabling
+    `conn.execute(q).fetchone()`) so a LAZY error surfacing at fetch time — which
+    is where an S3 scan actually fails — is salvaged too.
+    """
+
+    # Fetch entry points that materialize a scan, i.e. where an httpfs/parquet
+    # error surfaces after `execute` has already returned.
+    _FETCH_METHODS = frozenset({
+        "fetchone", "fetchall", "fetchmany", "fetchdf", "fetch_df", "fetchnumpy",
+        "fetch_arrow_table", "df", "arrow", "pl", "torch", "tf",
+    })
+
+    def __init__(self, conn):
+        object.__setattr__(self, "_conn", conn)
+        object.__setattr__(self, "_last_sql", None)
+
+    def __getattr__(self, name):
+        attr = getattr(self._conn, name)
+        if name in self._FETCH_METHODS and callable(attr):
+            def _salvaging_fetch(*args, **kwargs):
+                try:
+                    return attr(*args, **kwargs)
+                except UnicodeDecodeError as exc:
+                    raise _salvage_non_utf8_duckdb_error(
+                        exc, self._last_sql, name
+                    ) from exc
+            return _salvaging_fetch
+        return attr
+
+    def execute(self, sql, *args, **kwargs):
+        object.__setattr__(self, "_last_sql", sql)
+        try:
+            self._conn.execute(sql, *args, **kwargs)
+        except UnicodeDecodeError as exc:
+            raise _salvage_non_utf8_duckdb_error(exc, sql, "execute") from exc
+        return self
+
+
 def find_model(model_name: str) -> Path:
     for subdir in ("staging", "mart", "marts"):
         p = MODELS_DIR / subdir / f"{model_name}.sql"
@@ -381,7 +481,12 @@ def extract_duckdb_sql(model_name: str) -> str:
       B) mart_pitch_* — only {{ config() }} is inside the conditional;
          the WITH … SELECT block lives outside it.
     """
-    text = find_model(model_name).read_text()
+    # INC-43: pin the encoding. A bare read_text() uses the LOCALE default, which is
+    # not guaranteed to be UTF-8 on the box; the model files are UTF-8 by contract
+    # (test_inc43_model_sql_encoding.py enforces it), so read them as UTF-8 always.
+    # ⛔ never errors="ignore"/"replace" here — a mangled byte would silently corrupt
+    # the SQL that gets executed (NF-W2c: archived bytes are bytes).
+    text = find_model(model_name).read_text(encoding="utf-8")
 
     if model_name.startswith("stg_"):
         # Layout A: the entire SELECT lives inside the duckdb branch (stg_batter_pitches,
@@ -689,7 +794,7 @@ def _build_marts(conn, models: list[str], dry_run: bool) -> None:
                 # INC-41: stage-then-promote — a failed COPY must never leave a truncated parquet
                 # at the SERVED key (see _copy_to_s3_atomically).
                 _copy_to_s3_atomically(conn, body, loc, model)
-            except UnicodeDecodeError as e:
+            except (UnicodeDecodeError, NonUtf8DuckDBError) as e:
                 # INC-37 (2026-08-01) — A DuckDB ERROR WHOSE MESSAGE IS NOT VALID UTF-8
                 # DESTROYS ITS OWN DIAGNOSTIC. The Python client decodes the C++ exception
                 # string; if that string carries raw bytes, `execute` raises UnicodeDecodeError
@@ -698,14 +803,25 @@ def _build_marts(conn, models: list[str], dry_run: bool) -> None:
                 # DuckDB message, nothing actionable, in the middle of a P1 remediation.
                 # Salvage the message lossily and name the model, so the next occurrence is a
                 # one-line answer instead of an investigation.
-                raw = getattr(e, "object", b"")
-                salvaged = (raw.decode("utf-8", errors="replace") if isinstance(raw, (bytes, bytearray))
-                            else "<no bytes on the exception>")
+                #
+                # INC-43: the connection-level proxy now salvages FIRST and re-raises
+                # NonUtf8DuckDBError, so that is the type seen here in practice — but a raw
+                # UnicodeDecodeError is still caught, because this block must not depend on
+                # the proxy being installed (a decode can also come from non-proxied code in
+                # _copy_to_s3_atomically, e.g. boto3). This site adds what the proxy cannot
+                # know: the MODEL and the DESTINATION.
+                if isinstance(e, UnicodeDecodeError):
+                    raw = getattr(e, "object", b"")
+                    salvaged = (raw.decode("utf-8", errors="replace")
+                                if isinstance(raw, (bytes, bytearray))
+                                else "<no bytes on the exception>")
+                    detail = f"Salvaged with errors='replace': {salvaged!r}."
+                else:
+                    detail = str(e)
                 raise RuntimeError(
                     f"{model}: DuckDB raised an error whose message is not valid UTF-8 "
-                    f"(INC-37 class — the original diagnostic was destroyed by the decode). "
-                    f"Salvaged with errors='replace': {salvaged!r}. "
-                    f"Destination was {loc}."
+                    f"(INC-37/INC-43 class — the original diagnostic was destroyed by the "
+                    f"decode). {detail} Destination was {loc}."
                 ) from e
             except Exception as e:  # noqa: BLE001 — re-raise with the model name attached
                 # A bare DuckDB error names neither the model nor the destination; in a
@@ -1019,7 +1135,7 @@ def _build_w1_marts(conn, dry_run: bool, delta_full: bool = False,
 
 def _raw_source_for(model: str) -> str:
     """The lakehouse_raw source a W3pre stg model reads (parsed from its read_parquet)."""
-    text = find_model(model).read_text()
+    text = find_model(model).read_text(encoding="utf-8")  # INC-43: pin, never locale
     m = re.search(r'lakehouse_raw_loc\([\'"](\w+)[\'"]\)', text)
     return m.group(1) if m else model
 
@@ -2019,7 +2135,7 @@ def _contact_quality_columns() -> list[str]:
     DuckDB build of feature_league_contact_baseline / feature_pregame_game_features can never drift
     from the Snowflake macro's list (the macro's whole point — a single source of truth)."""
     macro = REPO_ROOT / "dbt" / "macros" / "season_normalize_contact.sql"
-    text = macro.read_text()
+    text = macro.read_text(encoding="utf-8")  # INC-43: pin, never locale
     m = re.search(r"macro\s+contact_quality_columns\(\).*?return\(\[(.*?)\]\)", text, re.DOTALL)
     if not m:
         raise RuntimeError("could not parse contact_quality_columns() from season_normalize_contact.sql")
@@ -2373,7 +2489,11 @@ def run(
 ) -> None:
     import duckdb
 
-    conn = duckdb.connect()
+    # INC-43: wrap ONCE here so all 67 execute sites (and their fetches) salvage a
+    # non-UTF-8 DuckDB error instead of surfacing a bare UnicodeDecodeError. See
+    # _DiagnosticDuckDBConn — a per-call-site guard was tried at INC-37 and the
+    # next occurrence landed on a site it did not cover.
+    conn = _DiagnosticDuckDBConn(duckdb.connect())
 
     # E11.1-W3pre: enable larger-than-memory operators. The stg_statsapi_games flatten explodes
     # monthly_schedule's ~1,700 month-blobs (one row per snapshot of a month) into a multi-hundred-

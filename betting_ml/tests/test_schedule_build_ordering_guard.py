@@ -223,9 +223,16 @@ class TestSpineStalenessActuallyPages:
     def test_build_marts_does_not_destroy_a_non_utf8_error(self):
         """INC-37: a DuckDB error whose message isn't valid UTF-8 surfaced as a bare
         UnicodeDecodeError with no model name and no DuckDB text — the real diagnostic was gone."""
-        src = LAKEHOUSE.read_text()
+        import re as _re
+
+        src = LAKEHOUSE.read_text(encoding="utf-8")
         body = src.split("def _build_marts")[1].split("\ndef ")[0]
-        assert "except UnicodeDecodeError" in body, (
+        # INC-43 re-anchor (2026-08-13): the connection-level proxy now salvages first and
+        # re-raises NonUtf8DuckDBError, so the clause here reads
+        # `except (UnicodeDecodeError, NonUtf8DuckDBError)`. The PROPERTY this test defends
+        # is unchanged — _build_marts must still catch the non-UTF-8 case and re-raise with
+        # the model named — so match either form rather than the old exact spelling.
+        assert _re.search(r"except\s+\(?[^)\n]*UnicodeDecodeError", body), (
             "INC-37: _build_marts must catch UnicodeDecodeError around the COPY and re-raise "
             "with the message salvaged + the model named"
         )
