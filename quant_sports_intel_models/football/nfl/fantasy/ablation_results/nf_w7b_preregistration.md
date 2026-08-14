@@ -138,5 +138,12 @@ substrate.
 
 ### §7-addendum — smoke movability result (recorded before the full run)
 
-_To be appended by the smoke run: pooled cov(80) for `assembled_indep`, the four joint arms and
-`assembled_comonotone` on the 2 smoke folds, and the `dependence_moves_coverage` boolean._
+Smoke run 2026-08-14 (2 folds 2025H1+2025H2, n=544, runtime 106.4s; artifacts
+`nf_w7b_dst_joint_smoke.{json,md}`). Pooled cov(80): `assembled_indep` **0.7629** ·
+`joint_rankcorr` 0.8125 · `joint_factor` 0.8107 · `joint_raw` 0.8217 · `joint_double` 0.8548 ·
+`assembled_comonotone` **0.9467**. **`dependence_moves_coverage` = TRUE** (comonotone > indep by
++0.184) — the knob provably moves the gated statistic; the arm-movability requirement of §5 is
+met and the coverage gate stands as registered. (`incumbent_refusal_reproduces` read False at
+smoke-n only because 3·SE(544) = 0.051 exceeds the 0.037 shortfall — the blocking read is the
+full-run n≈2,174 check, exactly why the clause is registered there.) No constant changed after
+this smoke; the smoke's leaderboard carries no verdict by design.
