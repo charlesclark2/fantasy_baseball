@@ -22,10 +22,35 @@ on:
       - 'dbt/dbt_project.yml'
       - 'dbt/profiles.yml'
 
+  # E11.24 (2026-08-14) — an ON-DEMAND door for PROVING the CI_WH repoint under real load.
+  # WHY IT EXISTS: `dbt-build-ci` runs on `pull_request` only, and a promotion PR that changes
+  # no MODEL selects nothing under `state:modified+`. The 2026-08-10 repoint was recorded as
+  # "traffic moved" on exactly such a run — measured 2026-08-14, all 12 of its CI_WH statements
+  # were `warehouse_size IS NULL` (cloud-services only, 0 bytes scanned), i.e. CI_WH has never
+  # carried a billable statement and was never resumed. A run that builds nothing produces the
+  # same "0 statements on COMPUTE_WH" whether or not the repoint works — a non-discriminating
+  # proof. This trigger lets the operator run a real build on demand and settle it.
+  workflow_dispatch:
+    inputs:
+      select:
+        description: >-
+          dbt selector to build on --target ci (leave as-is to prove the CI_WH repoint).
+          `ref_teams` is a 32-row seed: it issues a real INSERT, so it OCCUPIES the warehouse —
+          which a view-only selection would not, and occupation is the whole point.
+        required: false
+        default: 'ref_teams'
+
 jobs:
   dbt-compile:
     name: dbt Compilation Check
     runs-on: ubuntu-latest
+    # ⛔ Deliberately NOT run on workflow_dispatch. This job runs with NO --target, i.e. on the
+    # PRODUCTION profile (COMPUTE_WH), so skipping it makes a verification dispatch touch CI_WH
+    # and NOTHING ELSE. The query_history assertion then has an unambiguous failure signal: ANY
+    # DBT_RW statement on COMPUTE_WH in the window means the repoint did not hold. (Measured
+    # 2026-08-14 on the 08-11 00:31 push run, this job is 9 statements, all metadata-only,
+    # 0 billable, 0 waits — so this is about keeping the window clean, not about cost.)
+    if: github.event_name != 'workflow_dispatch'
     env:
       # PINNED (2026-07-20): was `latest`, which let the baseline-producing compile job
       # (push to main) and the PR build job run DIFFERENT fusion binaries (cache keyed on
@@ -102,7 +127,10 @@ jobs:
   dbt-build-ci:
     name: dbt Build (CI — state:modified+)
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    # workflow_dispatch is the CI_WH verification door (see the trigger comment above). It must
+    # enter through THIS job and no other, because this is the only job that passes `--target ci`
+    # — the target the repoint lives on.
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     permissions:
       actions: read
       contents: read
@@ -188,8 +216,23 @@ jobs:
             --profiles-dir dbt
 
       - name: Build modified models in CI schemas
+        env:
+          # Passed through the ENVIRONMENT, never interpolated into the script body — a
+          # `${{ inputs.select }}` inside `run:` is a shell-injection sink. Empty on
+          # pull_request (the `inputs` context is unpopulated there), so the `-n` test below
+          # leaves the PR path byte-identical.
+          VERIFY_SELECT: ${{ inputs.select }}
         run: |
-          if [ -f dbt/state/manifest.json ]; then
+          if [ -n "$VERIFY_SELECT" ]; then
+            # E11.24 verification path (workflow_dispatch only). No --state/--defer: the point
+            # is to build something REAL, not to diff against a baseline.
+            echo "::notice title=CI_WH verification run::Building '$VERIFY_SELECT' on --target ci. Now assert in query_history that a BILLABLE statement (warehouse_size IS NOT NULL) ran on CI_WH and that DBT_RW ran nothing on COMPUTE_WH."
+            dbtf build \
+              --target ci \
+              --project-dir dbt \
+              --profiles-dir dbt \
+              --select "$VERIFY_SELECT"
+          elif [ -f dbt/state/manifest.json ]; then
             dbtf build \
               --target ci \
               --project-dir dbt \

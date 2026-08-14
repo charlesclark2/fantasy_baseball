@@ -211,3 +211,89 @@ def test_the_ci_job_supplies_that_env_var_and_never_empty():
             "⛔ CI must NOT share MONITOR_WH — that is the wake census's own read path, so CI "
             "would become a line in the instrument that measures CI (target 3's defect)."
         )
+
+
+# ── E11.24 (2026-08-14) — the workflow_dispatch verification door ────────────────────────
+#
+# 🪤 THE DEFECT THIS BLOCK EXISTS TO PREVENT. `dbt-build-ci` is the ONLY job that passes
+# `--target ci`, i.e. the only place the CI_WH repoint applies. A `workflow_dispatch` trigger was
+# added so the repoint could be PROVEN under real load (measured 2026-08-14: CI_WH had carried 12
+# statements ever, ALL `warehouse_size IS NULL` — cloud-services only — because the run that was
+# recorded as proof selected zero models; a build that builds nothing puts zero statements on
+# COMPUTE_WH whether or not the repoint works). The hazard the door introduces is that a future
+# dbt invocation reachable from it could run on the DEFAULT (production) profile and quietly bill
+# COMPUTE_WH again — the exact thing the repoint removed.
+
+
+def _dbt_ci_jobs() -> dict:
+    return yaml.safe_load(DBT_CI_WORKFLOW.read_text())["jobs"]
+
+
+def _run_bodies(job: dict) -> list[str]:
+    return [str(s.get("run", "")) for s in (job.get("steps") or []) if isinstance(s, dict) and s.get("run")]
+
+
+def test_no_dbt_invocation_reachable_from_dispatch_runs_off_the_ci_target():
+    """THE BLAST RADIUS OF THE NEW DOOR. A job is admissible either because it explicitly
+    excludes workflow_dispatch, or because every `dbtf` call it makes carries `--target ci`.
+    Anything else can reach Snowflake on the production profile from a manual button.
+
+    Walks the jobs rather than naming them, so a job added later inherits the requirement.
+    """
+    offenders, dbt_jobs = [], 0
+    for name, job in _dbt_ci_jobs().items():
+        bodies = [b for b in _run_bodies(job) if "dbtf " in b]
+        if not bodies:
+            continue
+        dbt_jobs += 1
+        if "!= 'workflow_dispatch'" in str(job.get("if", "")):
+            continue  # cannot be reached from the dispatch door at all
+        for body in bodies:
+            # Join shell line-continuations FIRST — every dbtf call here is written multi-line,
+            # so matching per physical line would see `dbtf build \` alone and report every
+            # correctly-targeted call as an offender (measured while writing this guard).
+            flat = re.sub(r"\\\n\s*", " ", body)
+            for call in re.findall(r"dbtf\s+(?:build|run|test|compile|run-operation)[^\n]*", flat):
+                # EXACTLY ONE --target, and it must be `ci`. A mere `"--target ci" in call`
+                # substring test is satisfiable by `--target ci --target dev`, where dbt takes
+                # the LAST one — i.e. the obvious form of this guard cannot detect an override.
+                # (Found by RED-proving this guard: that break flipped nothing.)
+                targets = re.findall(r"--target\s+(\S+)", call)
+                if targets != ["ci"]:
+                    offenders.append((name, f"targets={targets} :: " + " ".join(call.split())[:60]))
+
+    assert dbt_jobs >= 2, f"expected both dbt jobs to be walked, saw {dbt_jobs} — guard is vacuous."
+    assert not offenders, (
+        "these dbt invocations are reachable from workflow_dispatch without `--target ci`, so a "
+        f"manual run would bill the PRODUCTION warehouse: {offenders}"
+    )
+
+
+def test_the_compile_job_cannot_run_on_dispatch_so_the_proof_window_is_unambiguous():
+    """`dbt-compile` runs with NO `--target`, i.e. on the production profile. Excluding it from
+    workflow_dispatch is what makes the query_history assertion DISCRIMINATING: in a dispatch
+    window, ANY DBT_RW statement on COMPUTE_WH means the repoint did not hold. Without this, a
+    COMPUTE_WH statement would be ambiguous between "the repoint failed" and "that was compile."
+    """
+    compile_if = str(_dbt_ci_jobs()["dbt-compile"].get("if", ""))
+    assert "workflow_dispatch" in compile_if and "!=" in compile_if, (
+        "dbt-compile must be excluded from workflow_dispatch (it runs on the production profile), "
+        f"or a verification dispatch cannot produce a clean COMPUTE_WH-free window. Found: {compile_if!r}"
+    )
+
+
+def test_the_dispatch_input_is_never_interpolated_into_a_shell_body():
+    """A `${{ inputs.* }}` expanded inside a `run:` body is a shell-injection sink — GitHub
+    substitutes the raw text before bash ever sees it. It must arrive via `env:` and be read as
+    "$VAR". (Dispatch requires write access, so this is defence in depth, not the last line.)"""
+    bodies, checked = [], 0
+    for name, job in _dbt_ci_jobs().items():
+        for body in _run_bodies(job):
+            checked += 1
+            if "${{ inputs." in body or "${{inputs." in body:
+                bodies.append(name)
+    assert checked >= 5, f"only {checked} run-bodies walked — guard is vacuous."
+    assert not bodies, (
+        f"job(s) {bodies} interpolate a workflow_dispatch input directly into a shell body; pass "
+        "it through `env:` and quote it instead."
+    )
