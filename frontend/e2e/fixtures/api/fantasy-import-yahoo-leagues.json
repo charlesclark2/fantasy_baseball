@@ -1,0 +1,12 @@
+{
+  "leagues": [
+    {
+      "league_id": "461.l.1000",
+      "name": "Test Yahoo League",
+      "season": "2025",
+      "sport": "nfl",
+      "status": "in_season",
+      "total_rosters": 10
+    }
+  ]
+}
