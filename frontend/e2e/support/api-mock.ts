@@ -127,8 +127,13 @@ export type MockOptions = {
    *   "one"      — the free tier, in use.
    *   "overQuota"— a LAPSED SUBSCRIBER: three saved, one served. `withheld_by_quota` is non-zero,
    *                which is the only way to exercise the "nothing was deleted" notice.
+   *   "linked"   — ⭐ E9.64: TWO leagues, both with a linked team and a real roster. The mode My
+   *                Teams needs, because the captured league is `source_team_key: null` with a null
+   *                roster — an honest state, and the ONLY one the other three modes can produce, so
+   *                every roster table on that surface was structurally unreachable. See
+   *                `linkedLeaguePair` for why the two differ in exactly one scoring rule.
    */
-  leagues?: "none" | "one" | "overQuota"
+  leagues?: "none" | "one" | "overQuota" | "linked"
   /**
    * ⭐ G100-D0 — what `/subscription/status` reports for this caller.
    *
@@ -158,6 +163,27 @@ export type MockOptions = {
    *                auto-deploys, so this state is guaranteed to happen at least once in prod.
    */
   termsAcceptance?: "created" | "existing" | "skew"
+  /**
+   * ⭐ E9.64 — hold these API paths back by `ms` before answering, to make a RACE deterministic.
+   *
+   * ⚠️ THIS IS NOT A LATENCY KNOB, and using it as one would be a mistake. It exists because a
+   * red-proof case for a race is worthless unless the race resolves the same way every run.
+   * `custom-selection-lost-to-the-load-race` breaks `useFormatSelection`'s `savedLeaguesLoading`
+   * deferral — the guard that stops it committing a format before it knows whether the caller has a
+   * saved league. Against a local server both reads land within a few ms of each other, so the
+   * broken build lost the race SOMETIMES: two consecutive runs of identical code gave RED and then
+   * MISMATCH, which is the worst possible verdict from a falsifiability harness (a single green run
+   * reads as proof).
+   *
+   * Delaying `/fantasy/leagues` makes the manifest reliably win. That does not weaken the healthy
+   * path — the deferral's whole job is to WAIT for that read, so the fixed build passes at any
+   * delay, and the case now separates the two builds every time.
+   *
+   * ⛔ Do not reach for this to "give the page time to settle". Auto-retrying assertions do that
+   * job; a delay bakes a timing assumption into the harness. It is for ORDERING two reads whose
+   * relative order is the property under test.
+   */
+  delay?: { paths: string[]; ms: number }
 }
 
 export type ApiMock = {
@@ -297,6 +323,222 @@ function billingPayloadFor(
 }
 
 /**
+ * ⭐ E9.64 — the LINKED pair My Teams is built to show, and the one shape no other mode can produce.
+ *
+ * ══ WHY A PAIR, AND WHY THEY DIFFER IN EXACTLY ONE RULE ═══════════════════════════════════════
+ *
+ * NF-C6's whole claim is "each roster scored under ITS OWN league's format". A single league cannot
+ * test that at all, and two leagues differing in many ways would let any number of wrong
+ * implementations pass — including the one that matters, where the surface scores every roster on
+ * ONE board and relabels it. So these two are byte-identical except for what a reception is worth
+ * (`per_stat.rec`: the captured 0.5, and 0), carrying the SAME roster of the SAME players.
+ *
+ * That makes the difference between the two cards ARITHMETIC rather than a vibe: for a non-TE it is
+ * exactly `0.5 × receptions`, which `fantasy-my-teams.spec.ts` computes from the projections
+ * fixture's own `rec` and checks. A surface that scored both rosters on one board renders identical
+ * numbers and fails; one that merely scored them "differently" fails too, because the size of the
+ * difference is pinned. ⚠️ The TE bonus (`position_bonuses.TE.rec: 0.5`) makes a TE's effective
+ * reception worth 1.0, so the spec must choose a non-TE — the roster below is built to give it one.
+ *
+ * ⛔ NOTHING HERE IS HAND-WRITTEN. The league is the real capture with two fields changed, and every
+ * rostered player is read out of the real projections payload — which is the point: a hand-authored
+ * roster would encode this session's assumption about the name/position join
+ * (`matchRosterToBoard` keys on a normalized `name|pos`), i.e. the very thing under test.
+ */
+
+/** A rostered name that is deliberately NOT on the board — the "we could not resolve this" row. */
+export const E2E_UNMATCHED_ROSTER_NAME = "Notta Realplayer"
+
+/** The first player at `pos`, in served order, with a non-zero reception count where asked. */
+function boardPlayerAt(pos: string, needsReceptions: boolean): any {
+  const players = FIXTURES.projectionsEntitled().players as any[]
+  const hit = players.find(
+    (p) => p.pos === pos && (!needsReceptions || (p.rec ?? 0) > 0) && !!p.name,
+  )
+  // A missing position is a FIXTURE change, not a test failure to be shrugged off: every assertion
+  // downstream would silently describe a roster that is one player short.
+  if (!hit) throw new Error(`e2e: the projections fixture has no ${pos} with the required stat line`)
+  return hit
+}
+
+/**
+ * The rostered player the cross-league arithmetic is checked on.
+ *
+ * ⚠️ EXPORTED SO THERE IS ONE SPELLING OF THE SELECTOR. `fantasy-my-teams.spec.ts` needs both his
+ * NAME (to find his rows) and his projected RECEPTIONS (to predict the gap between the two leagues);
+ * re-deriving him there with a copy of this predicate would silently start describing a different
+ * player the moment either copy moved, and the spec would then assert a correct gap about the wrong
+ * man. ⭐ NON-TE deliberately: `position_bonuses.TE.rec` makes a tight end's reception worth 1.0
+ * rather than 0.5, so a TE subject would put the expected gap out by exactly a factor of two — and
+ * that reads as a scoring bug in the app rather than in the test.
+ */
+export function linkedRosterSubject(): { name: string; rec: number } {
+  const wr = boardPlayerAt("WR", true)
+  return { name: wr.name, rec: wr.rec }
+}
+
+/**
+ * The ONE saved league's server-scored board, exactly as `/fantasy/nfl/league-board` serves it.
+ *
+ * ⚠️ EXPORTED FOR THE SAME REASON AS `linkedRosterSubject` — one spelling. `free-league.spec.ts`
+ * re-derives the overall-rank move from the two boards' OWN `ovrRank` values, and a second local
+ * `buildBoard(...)` call there would be a copy of this that can drift; the spec would then compare
+ * the rendered chip against a board the app was never served.
+ */
+export function leagueBoardPlayers(): { id: string; name: string; ovrRank: number }[] {
+  return leagueBoardBuild().players as { id: string; name: string; ovrRank: number }[]
+}
+
+function leagueBoardBuild() {
+  return buildBoard(FIXTURES.projectionsEntitled().players, FIXTURES.myTeams().leagues[0])
+}
+
+function linkedRoster(): unknown[] {
+  const entry = (p: any, starter: boolean) => ({
+    player_key: `e2e-${p.id}`,
+    name: p.name,
+    position: p.pos,
+    team: p.team,
+    starter,
+  })
+  return [
+    // ⭐ The WR is the one the arithmetic check uses — non-TE, so no position bonus is in play.
+    entry(boardPlayerAt("WR", true), true),
+    entry(boardPlayerAt("RB", true), true),
+    entry(boardPlayerAt("QB", false), true),
+    // A bench player, so BOTH roster tables render — `RosterTable` returns null on an empty list,
+    // and a roster of starters only would leave the bench branch unexercised.
+    entry(boardPlayerAt("TE", true), false),
+    // Unresolvable, so the "N of M matched" note has something to count. A roster where everything
+    // matches cannot tell "the note is correct" from "the note never renders".
+    {
+      player_key: "e2e-unmatched",
+      name: E2E_UNMATCHED_ROSTER_NAME,
+      position: "WR",
+      team: "FA",
+      starter: false,
+    },
+  ]
+}
+
+/** The captured league, linked, plus its reception-free twin. Ids are stable for spec locators. */
+export const E2E_LINKED_LEAGUES = {
+  half: { id: "e2e-league-1", name: "Sunday Money" },
+  standard: { id: "e2e-league-standard", name: "Standard Money" },
+} as const
+
+function linkedLeaguePair(): any[] {
+  const base = FIXTURES.myTeams().leagues[0]
+  const roster = linkedRoster()
+  const half = {
+    ...base,
+    league_id: E2E_LINKED_LEAGUES.half.id,
+    name: E2E_LINKED_LEAGUES.half.name,
+    source_team_key: "e2e-team-1",
+    source_team_name: "Credence FC",
+    imported_roster: roster,
+    roster_synced_at: "2026-08-10T12:00:00Z",
+  }
+  return [
+    half,
+    {
+      ...half,
+      league_id: E2E_LINKED_LEAGUES.standard.id,
+      name: E2E_LINKED_LEAGUES.standard.name,
+      ppr: "standard",
+      scoring: { ...base.scoring, per_stat: { ...base.scoring.per_stat, rec: 0 } },
+    },
+  ]
+}
+
+/**
+ * ⭐ E9.64 — THE IMPORT PREVIEW: step 2 of the importer, "Review what we read".
+ *
+ * ══ WHY THIS IS SYNTHESISED AND WHY THAT IS THE RIGHT CALL HERE ═══════════════════════════════
+ *
+ * The README's rule is ⛔ do not hand-write a fixture, because a hand-written one encodes the
+ * assumption under test. There is no capture to take: `/fantasy/import/sleeper/preview` requires an
+ * authenticated caller AND a real Sleeper league, so nothing anonymous can produce one — the same
+ * position `build-entitled-fixture.mjs` and the track-record claim builder were in, and this follows
+ * their precedent: derive everything that CAN be real, and say plainly what cannot.
+ *
+ *   · `config` IS the real captured league (`fantasy-nfl-my-teams.json`) — its scoring, its roster
+ *     shape, its team count. That is the part the review screen reads out, so it is the part that
+ *     had to be real.
+ *   · `teams` are built from the real board, so the roster names resolve through the same
+ *     `name|pos` join the app uses.
+ *   · `warnings` / `unmapped_scoring_keys` are SYNTHETIC, and unavoidably so: a warning list has to
+ *     be NON-EMPTY for "the things we could not read are shown before you save" to mean anything,
+ *     and no anonymous capture can supply one. ⚠️ That is not a hole in the assertion, because the
+ *     property under test is that whatever the SERVER sends is rendered VERBATIM — the component's
+ *     own comment ("an import that quietly loses a rule is the failure this whole surface guards").
+ *     The wording being ours is exactly why the spec can check it word for word.
+ */
+export const E2E_IMPORT_WARNING =
+  "Your league scores a bonus for a 40+ yard reception that we record but do not project."
+
+/** A scoring key we carry through under the platform's own name without projecting it. */
+export const E2E_IMPORT_UNMAPPED_KEY = "rec_40p_bonus"
+
+/** Two teams off the real board. Neither is flagged `is_owner` — Sleeper cannot tell us which team
+ *  is the caller's, which is precisely why the review screen makes the user pick one (NF-C6). */
+function previewTeams(): unknown[] {
+  const players = FIXTURES.projectionsEntitled().players as any[]
+  const take = (from: number, count: number) =>
+    players.slice(from, from + count).map((p) => ({
+      player_key: `e2e-${p.id}`,
+      name: p.name,
+      position: p.pos,
+      team: p.team,
+      starter: true,
+    }))
+  return [
+    { team_key: "e2e-team-1", name: "Credence FC", owner: "e2e-tester", is_owner: false, players: take(0, 4) },
+    { team_key: "e2e-team-2", name: "Rivals United", owner: "someone-else", is_owner: false, players: take(4, 4) },
+  ]
+}
+
+function importPreviewFor(sourceLeagueId: string): unknown {
+  const base = FIXTURES.myTeams().leagues[0] as any
+  // The league CONFIG only — never the saved-league envelope. A preview describes what the platform
+  // says, and carrying `league_id` through here would let a spec pass while the importer treated an
+  // un-saved preview as an already-saved league.
+  const { name, n_teams, ppr, superflex, scoring, roster, sport, format_version } = base
+  return {
+    platform: "sleeper",
+    source_league_id: sourceLeagueId,
+    season: "2026",
+    config: {
+      name,
+      n_teams,
+      ppr,
+      superflex,
+      // ⚠️ A CAPTURED TERM IS AN ORDINARY `per_stat` RULE WITH NO PROJECTION BEHIND IT — that is the
+      // whole mechanism, and it took two wrong guesses to land on. `resolveScoring` builds its term
+      // list from `per_stat` ALONE and grades each key `applied` or `captured` by whether
+      // `STAT_FIELD` knows it; `capturedRules` is carried on the report but never becomes a term,
+      // and `unmapped_scoring_keys` only supplies display LABELS. So a mock that set either of
+      // those instead (both read as the obvious place) would render the disclosure nowhere while
+      // looking entirely reasonable — and a spec asserting on it would be asserting on a screen the
+      // user never sees. `captured_rules` is kept alongside because that is where a SAVED league
+      // stores the same fact.
+      scoring: {
+        ...scoring,
+        per_stat: { ...scoring.per_stat, [E2E_IMPORT_UNMAPPED_KEY]: 1.5 },
+      },
+      roster,
+      sport,
+      format_version,
+      captured_rules: { [E2E_IMPORT_UNMAPPED_KEY]: 1.5 },
+    },
+    teams: previewTeams(),
+    draft: null,
+    warnings: [E2E_IMPORT_WARNING],
+    unmapped_scoring_keys: [E2E_IMPORT_UNMAPPED_KEY],
+  }
+}
+
+/**
  * G100-C1 — the PER-CALLER saved-league reads.
  *
  * ⚠️ Kept OUT of `payloadFor` on purpose. That function is a pure map from (path, entitlement) to a
@@ -317,7 +559,7 @@ function personalPayloadFor(
   if (pathname === "/fantasy/nfl/league-board") {
     const league = FIXTURES.myTeams().leagues[0]
     if (!league || leagues === "none") return undefined
-    const built = buildBoard(FIXTURES.projectionsEntitled().players, league)
+    const built = leagueBoardBuild()
     return {
       season: 2026,
       league,
@@ -355,6 +597,22 @@ function personalPayloadFor(
     return pathname === "/fantasy/leagues"
       ? []
       : { ...base, leagues: [], saved_total: 0, withheld_by_quota: 0, rosters: {} }
+  }
+
+  // ⭐ E9.64 — both leagues are the caller's own and both are served; there is no quota story here,
+  // so `saved_total` matches and `withheld_by_quota` stays 0 (a lapsed-member notice on this mode
+  // would be a second, unrelated behaviour leaking into every My Teams assertion).
+  if (leagues === "linked") {
+    const pair = linkedLeaguePair()
+    return pathname === "/fantasy/leagues"
+      ? pair
+      : {
+          ...base,
+          leagues: pair,
+          saved_total: pair.length,
+          withheld_by_quota: 0,
+          rosters: rostersFor(pair),
+        }
   }
 
   if (leagues === "overQuota") {
@@ -430,6 +688,12 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
   const fulfil = async (route: Route, apiPath: string, search: string) => {
     mock.requested.push(apiPath + search)
 
+    // Held BEFORE anything is answered, so the delay applies whichever branch below serves this
+    // path — including the failure branch. See `MockOptions.delay`.
+    if (options.delay?.paths.some((p) => apiPath.startsWith(p))) {
+      await new Promise((r) => setTimeout(r, options.delay!.ms))
+    }
+
     // ⭐ G100-D0 — SAVING a league, which is a WRITE and therefore invisible to `payloadFor`'s
     // (path, entitlement) map.
     //
@@ -462,6 +726,23 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({ created: mode === "created" }),
+      })
+      return
+    }
+
+    // ⭐ E9.64 — the review queue. A POST whose answer depends on the league the user clicked, so it
+    // cannot live in `payloadFor`'s (path, entitlement) map.
+    if (apiPath === "/fantasy/import/sleeper/preview") {
+      let leagueId = ""
+      try {
+        leagueId = JSON.parse(route.request().postData() ?? "{}").league_id ?? ""
+      } catch {
+        leagueId = ""
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(importPreviewFor(leagueId)),
       })
       return
     }

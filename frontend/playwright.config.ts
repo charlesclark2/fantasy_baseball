@@ -74,7 +74,14 @@ export default defineConfig({
     // truncate on a phone in ways `tsc` and `next build` cannot see, and this is the page a cold
     // visitor from a shared link lands on. `home-mobile.spec.ts` is scoped to what only a small
     // viewport can tell you; the rest of the home suite stays desktop-only rather than doubling.
-      testMatch: /(signup-funnel|expected-points-label|home-mobile)\.spec\.ts/,
+    // ⭐ E9.64 joins for a FOURTH reason, and it is a coverage reason rather than a layout one.
+    // `SIGNED_OUT_NAV` renders in two different SUBSETS: the desktop bar draws only its `desktop`
+    // entries, while the phone menu draws the FULL list once the hamburger is opened. So a
+    // desktop-only run of the anonymous-nav assertion never sees the majority of the authored list
+    // — including every entry that exists precisely because the bar had no room for it. The spec
+    // reads its own project name and asserts the exact count each viewport is supposed to draw, so
+    // "the menu opened" stays an answered question rather than a silent no-op.
+      testMatch: /(signup-funnel|expected-points-label|home-mobile|fantasy-entitlement-gates)\.spec\.ts/,
     },
   ],
 
