@@ -150,13 +150,30 @@ export function espnReadUrl(
   )
 }
 
-/** Fields ESPN ships that the import NEVER reads. Measured on a real drafted 10-team league:
- *  the response is **3.3 MB, of which 96% is these** — per-player season/projection stat blocks,
- *  draft ranks, ownership percentages, and per-member notification preferences.
+/** Fields ESPN ships that the import NEVER reads — per-player season/projection stat blocks, draft
+ *  ranks, ownership percentages, and per-member notification preferences.
  *
- *  ⚠️ WHY THIS EXISTS: without it a real payload is 82% of the server's 4 MB paste cap, a **12-team
- *  league lands at ~99%, and a 14-team league is REFUSED outright** — the most common league sizes,
- *  failing on payload size alone. Pruning takes the same league to ~147 KB (4.5%).
+ *  ⚠️⚠️ THE SIZE FIGURES THAT USED TO BE HERE ARE NOT REPRODUCED, AND THE CORRECTION MATTERS.
+ *  This block claimed "3.3 MB, of which 96% is these ⇒ 82% of the cap at 10 teams, ~99% at 12, and
+ *  REFUSED at 14". ESPN-PRUNER captured a real un-pruned drafted 10-team response
+ *  (`betting_ml/tests/fixtures/espn_league_raw_unpruned.json`, league 642070 / 2025) and MEASURED:
+ *
+ *      raw 834,185 B = 20.9% of the 4 MB cap   (claimed: 3.3 MB / 82%)
+ *      pruned 131,311 B = 3.3% of the cap      ⇒ a 6.4× reduction, not 22×
+ *      scaled to 12 teams: 24.1% of the cap    (claimed: ~99%)
+ *      scaled to 14 teams: 28.1% of the cap    (claimed: REFUSED)
+ *
+ *  ⇒ **no league size measured here comes close to the cap un-pruned.** So this function is NOT
+ *  today load-bearing for import to WORK; it is a 6.4× payload reduction, which is worth keeping on
+ *  its own terms and is why it stays.
+ *
+ *  🔎 NOT SETTLED, and worth saying rather than quietly rewriting history: the capture is a
+ *  COMPLETED season carrying only 5 `player.stats` splits per player and ZERO `outlooks`. An
+ *  IN-SEASON league plausibly carries per-week splits and outlooks, which is exactly where a 4×
+ *  would live — so the original figure may have described an in-season response rather than being
+ *  wrong. ⏭️ An in-season capture is what would settle it; until then treat the cap headroom as
+ *  MEASURED-ONLY-OFF-SEASON. The suite reports the headroom on every run rather than asserting a
+ *  threshold, precisely so a future capture that disagrees is a correction and not a red build.
  *
  *  🚫 DENYLIST, NOT AN ALLOWLIST, DELIBERATELY. Keeping only the fields today's parser reads would
  *  shrink it further, but the API and this app deploy INDEPENDENTLY (see the `leagues` note above),

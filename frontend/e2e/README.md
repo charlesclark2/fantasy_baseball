@@ -141,10 +141,10 @@ coverage. This list is the honest half of the table above.
    `null` on all four committed previews and nothing renders that panel. This is recorded rather
    than worked around: see the red-proof section for the vacuous guard it produced when it was not.
 
-5. 🟡 **PARTLY CLOSED at ESPN-PRUNER — `pruneEspnPayload`'s DENYLIST is scaffolded and asserted, but
-   still BLOCKED on an operator capture.** The client rewrites the user's paste before sending it —
-   it must, or a 12-team league lands at ~99% of the server's 4 MB cap and a 14-team league is
-   refused outright — but **none of the three committed captures contains the fields it strips**
+5. ✅ **CLOSED at ESPN-PRUNER — `pruneEspnPayload`'s DENYLIST is now exercised against a real
+   un-pruned capture** (`espn_league_raw_unpruned.json`, league 642070 / 2025, 834 KB, drafted).
+   The client rewrites the user's paste before sending it, and **none of the three previously
+   committed captures contained the fields it strips**
    (`stats` / `draftRanksByRankType` / `ownership` / `outlooks` / `ratings` /
    `notificationSettings`: measured, zero occurrences in all three), because they were already
    stripped before being committed. That is the NF-C0e shape — a fixture that is the transform's own
@@ -167,10 +167,21 @@ coverage. This list is the honest half of the table above.
      being right — so it is scoped to latency and to catching the walk BREAKING (a renamed key, a
      wrong path), never to whether our belief about ESPN's shape is CORRECT. That half is exactly
      what the operator captures are for.
-   ⏭️ **THE ONE OPEN ITEM: capture ONE real un-pruned response from a league that has DRAFTED**
-   (procedure in `e2e/support/espn-raw-captures.ts`). ⛔ It must not be fabricated by re-inflating a
-   pruned capture — that would encode our assumption about the very shape under test and make every
-   gated test pass while proving nothing.
+   ⭐⭐ **THE FINDING THE CAPTURE PRODUCED, and it overturns the pruner's stated reason to exist.**
+   The docstring claimed "3.3 MB un-pruned ⇒ 82% of the cap at 10 teams, ~99% at 12, REFUSED at 14".
+   MEASURED on the real capture: **834 KB = 20.9% of the cap → 131 KB pruned**, a **6.4× reduction**
+   (not 22×), with the 12- and 14-team scalings at **24.1%** and **28.1%** — *nothing measured comes
+   near the cap*. So pruning is **not today load-bearing for import to work**; it is a 6.4× payload
+   reduction, which is worth keeping on its own terms. 🔎 NOT SETTLED: the capture is a COMPLETED
+   season with 5 `player.stats` splits per player and **zero** `outlooks`; an in-season response may
+   be far larger, which is exactly where a missing 4× would live. An in-season capture would settle
+   it. The suite REPORTS headroom rather than asserting a threshold, so a future capture that
+   disagrees is a correction, not a red build.
+   ⭐ **And the pruner is independently corroborated:** pruning the raw capture yields 131,311 B
+   against the separately-committed pruned artifact's 130,112 B — same league, identical player
+   keyset and roster counts. `test_espn_pruner_raw_capture.py` also now proves the real invariant
+   (raw and pruned parse to the SAME league) rather than the idempotence PROXY that stood in for it.
+   ⏭️ **Optional, not blocking:** a second independently-sourced capture, ideally IN-SEASON.
    - ⚠️ **THE SEASON MATTERS; THE LEAGUE SIZE DOES NOT.** The removable bulk lives in the **roster
      entries**, so an UNDRAFTED league returns its full team list with zero entries on every team
      and none of the removable fields — a faithful capture that is useless here. Measured on the

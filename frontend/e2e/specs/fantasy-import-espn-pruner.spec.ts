@@ -19,10 +19,15 @@ import {
  *
  * ══ THE GAP THIS CLOSES ════════════════════════════════════════════════════════════════════════
  *
- * `pruneEspnPayload` is the single thing keeping a real ESPN league under the server's 4 MB paste
- * cap. Un-pruned, a real drafted response is ~3.3 MB for TEN teams; a 12-team league lands at ~99%
- * of the cap and a 14-team league is REFUSED outright — the two commonest sizes, on the platform
- * with the largest share of fantasy users, sitting at the top of the paid funnel.
+ * `pruneEspnPayload` rewrites every ESPN paste on its way to the server, on the platform with the
+ * largest share of fantasy users, at the top of the paid funnel.
+ *
+ * ⚠️ ITS STATED JUSTIFICATION DID NOT SURVIVE MEASUREMENT — see `fantasy-import.ts`. The claim was
+ * "3.3 MB un-pruned ⇒ a 12-team league at ~99% of the 4 MB cap and a 14-team REFUSED". The real
+ * captured response is 834 KB (20.9% of the cap) → 131 KB pruned: a 6.4× reduction, with no
+ * measured league size near the cap. That makes this a payload reduction rather than a
+ * load-bearing gate — still worth keeping, and still worth testing, but not for the reason
+ * recorded. (The capture is a COMPLETED season; an in-season response is unmeasured.)
  *
  * Nothing had ever tested that it PRUNES. E9.64b was the first thing in the repo to execute the
  * function at all, and it ran on a payload with nothing to prune: all three committed captures were
@@ -52,10 +57,10 @@ import {
  *      This does NOT depend on the field names being right, only on byte volume. So it can be
  *      answered two ways that are both honest, and are labelled distinctly wherever they appear:
  *        · SIZE-EXTENDED — real teams REPLICATED out of the real capture to reach a league size we
- *          cannot obtain (the operator has a 12-team ESPN league, not a 14-team one). Every byte is
- *          genuine ESPN output. Adds real size evidence, and ZERO independent shape evidence.
- *        · SYNTHETIC — a generated document of ~3.3 MB, used only for latency and for catching the
- *          walk BREAKING. Never for a claim about ESPN.
+ *          have no DRAFTED league for (the captured league is 10-team). Every byte is genuine ESPN
+ *          output. Adds real size evidence, and ZERO independent shape evidence.
+ *        · SYNTHETIC — a generated document at the STRESS size below, used only for latency and for
+ *          catching the walk BREAKING. Never for a claim about ESPN.
  *
  * ⛔ Do not "unblock" (1) by generating a raw payload, or by promoting a size-extended one. Two
  * copies of one payload are one payload. `espn-raw-captures.ts` documents the capture procedure,
@@ -63,8 +68,17 @@ import {
  * independent second payload is wanted.
  */
 
-/** ~3.3 MB — the measured size of a real drafted TEN-team response before pruning. */
-const REAL_WORLD_PASTE_BYTES = 3_300_000
+/**
+ * The STRESS size for the latency probe: 3.3 MB.
+ *
+ * ⚠️ THIS IS NOT A MEASUREMENT, and it used to be labelled as one ("the measured size of a real
+ * drafted ten-team response"). The real captured response is 834 KB; 3.3 MB is the figure the
+ * pruner's docstring claimed, and measuring it is what disproved it. It is KEPT as the probe size
+ * deliberately — it is ~4× the largest real payload we have seen, so it bounds the control's
+ * behaviour well beyond anything a user is known to produce, and it is the size an in-season
+ * response would have to reach for the original claim to have been right.
+ */
+const STRESS_PASTE_BYTES = 3_300_000
 
 /** How long the pure function may take on a real-size payload before it is a user-visible stall. */
 const PRUNE_BUDGET_MS = 5_000
@@ -461,8 +475,8 @@ function syntheticPayloadOfSize(targetBytes: number): string {
 
 test.describe("real-size paste behaviour (SIZE ONLY — see the header)", () => {
   test("the pruner survives a real-size payload without stalling", () => {
-    const payload = syntheticPayloadOfSize(REAL_WORLD_PASTE_BYTES)
-    expect(payloadBytes(payload)).toBeGreaterThanOrEqual(REAL_WORLD_PASTE_BYTES)
+    const payload = syntheticPayloadOfSize(STRESS_PASTE_BYTES)
+    expect(payloadBytes(payload)).toBeGreaterThanOrEqual(STRESS_PASTE_BYTES)
 
     const started = Date.now()
     const pruned = pruneEspnPayload(payload)
@@ -500,7 +514,7 @@ test.describe("real-size paste behaviour (SIZE ONLY — see the header)", () => 
 
   test("a real-size paste does not hang the import control", async ({ page }) => {
     test.setTimeout(90_000)
-    const payload = syntheticPayloadOfSize(REAL_WORLD_PASTE_BYTES)
+    const payload = syntheticPayloadOfSize(STRESS_PASTE_BYTES)
     const { mock, errors } = await openEspnPanel(page)
 
     const started = Date.now()

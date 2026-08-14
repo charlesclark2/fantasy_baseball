@@ -222,3 +222,49 @@ class TestTheRawCaptureRegistry:
             assert len(teams) == capture["teams"], (
                 f"{capture['file']} carries {len(teams)} teams, not the declared {capture['teams']}"
             )
+
+
+class TestPruningDoesNotChangeWhatGetsImported:
+    """⭐ THE INVARIANT THAT ACTUALLY MATTERS, now provable against REAL bytes.
+
+    `test_nf_c0_platform_import.py::test_pruning_does_not_change_what_gets_imported` proves this by
+    re-pruning an ALREADY-PRUNED payload — i.e. it proves IDEMPOTENCE, and says so, because "the
+    3.3 MB original is far too large to commit". That premise no longer holds: the real un-pruned
+    response is 834 KB and is committed, so the real claim is now directly testable.
+
+    Idempotence and equivalence are different claims. A pruner that deleted the wrong subtree would
+    be perfectly idempotent (pruning twice changes nothing after the first pass) while destroying
+    the league — which is the exact NF-C0e wrong-key shape this whole story exists to close.
+    """
+
+    def test_the_raw_and_pruned_payloads_import_as_the_same_league(self):
+        path = FIXTURES / "espn_league_raw_unpruned.json"
+        if not path.exists():
+            pytest.skip("⏭️ OPERATOR CAPTURE OUTSTANDING: espn_league_raw_unpruned.json")
+
+        from app.backend.services.platform_import import espn
+
+        raw = path.read_text()
+        doc = json.loads(raw)
+
+        # ⛔ A SECOND SPELLING of the pruner, not an import of it — a test that applies the code's
+        # own transform and compares to itself cannot catch a wrong key (NF-C0e).
+        for m in doc.get("members") or []:
+            m.pop("notificationSettings", None)
+        for t in doc.get("teams") or []:
+            for e in (t.get("roster") or {}).get("entries") or []:
+                pool = e.get("playerPoolEntry") or {}
+                pool.pop("ratings", None)
+                for f in ("stats", "draftRanksByRankType", "ownership", "outlooks"):
+                    (pool.get("player") or {}).pop(f, None)
+        pruned = json.dumps(doc)
+
+        # Non-vacuity: if pruning changed nothing, the comparison below proves nothing.
+        assert len(pruned) < len(raw) * 0.5, (
+            "pruning barely shrank the payload, so this equivalence check is near-vacuous"
+        )
+
+        assert (
+            espn.parse_settings_payload(pruned).to_dict()
+            == espn.parse_settings_payload(raw).to_dict()
+        ), "the pruned payload imports as a DIFFERENT league than the raw one"

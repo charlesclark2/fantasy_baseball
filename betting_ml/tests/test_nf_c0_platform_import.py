@@ -1983,12 +1983,15 @@ class TestEspnDraftedRealLeague:
 
 
 class TestEspnPayloadIsPrunedBeforeUpload:
-    """A real drafted payload is 3.3 MB, of which ~96% is data the import never reads.
+    """The client drops per-player bulk the import never reads before uploading a paste.
 
-    Measured against the server's 4 MB cap that is 82% for a 10-team league, **~99% for a 12-team
-    league and OVER THE CAP for 14-team** — i.e. the most common league sizes failing on size
-    alone, with a message about the paste being too large. The client therefore drops the unread
-    bulk before upload (3.3 MB → ~147 KB).
+    ⚠️ THE SIZE FIGURES PREVIOUSLY QUOTED HERE ARE NOT REPRODUCED. This said "3.3 MB, 82% of the cap
+    at 10 teams, ~99% at 12, OVER THE CAP at 14". ESPN-PRUNER captured a real un-pruned drafted
+    10-team response and measured **834 KB (20.9% of the cap) → 131 KB pruned**, i.e. a 6.4×
+    reduction, with 12- and 14-team scalings at 24.1% and 28.1% — nowhere near the cap. So pruning
+    is NOT today load-bearing for import to work; it is a 6.4× reduction worth keeping on its own
+    terms. The capture is a COMPLETED season (5 stat splits per player, zero `outlooks`); an
+    in-season response may be far larger, which is unmeasured. See `fantasy-import.ts`.
     """
 
     CLIENT = Path(__file__).resolve().parents[2] / "frontend" / "lib" / "fantasy-import.ts"
@@ -2028,7 +2031,13 @@ class TestEspnPayloadIsPrunedBeforeUpload:
     def test_pruning_does_not_change_what_gets_imported(self, espn_payload_drafted):
         """⭐ THE INVARIANT THAT MATTERS. The committed fixture IS the pruned shape; parsing it must
         produce the same league the untrimmed response would. Proven here by re-pruning an already
-        pruned payload — idempotence — since the 3.3 MB original is far too large to commit."""
+        pruned payload — IDEMPOTENCE, which is a proxy: a pruner deleting the WRONG subtree is
+        perfectly idempotent while destroying the league.
+
+        ⭐ The real claim is now tested directly against a committed un-pruned capture (834 KB, not
+        the 3.3 MB this docstring used to cite as too large to commit) — see
+        `test_espn_pruner_raw_capture.py::TestPruningDoesNotChangeWhatGetsImported`. This stays as
+        the idempotence half."""
         from app.backend.services.platform_import import espn
 
         doc = json.loads(espn_payload_drafted)

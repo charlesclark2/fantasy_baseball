@@ -16,12 +16,14 @@
 //
 // ══ WHAT IS AT STAKE ═══════════════════════════════════════════════════════════════════════════
 //
-// `pruneEspnPayload` is what keeps a real league under the server's 4 MB paste cap. Un-pruned, a
-// real drafted response is ~3.3 MB for TEN teams; a 12-team league lands at ~99% of the cap and a
-// 14-team league is REFUSED outright — the two commonest sizes on the platform with the largest
-// share of fantasy users. And its failure mode is silent: it is wrapped in `catch { return text }`,
-// so on any shape it does not expect it hands back the ORIGINAL and the paste simply gets too big.
-// From the DOM a corrupted or no-op prune looks exactly like a working one.
+// `pruneEspnPayload` rewrites every ESPN paste on its way to the server. Its failure mode is
+// silent: it is wrapped in `catch { return text }`, so on any shape it does not expect it hands
+// back the ORIGINAL, and from the DOM a corrupted or no-op prune looks exactly like a working one.
+//
+// ⚠️ ITS STATED JUSTIFICATION DID NOT SURVIVE MEASUREMENT (see `fantasy-import.ts`): the claim was
+// "3.3 MB un-pruned ⇒ ~99% of the 4 MB cap at 12 teams, REFUSED at 14". The real captured response
+// is 834 KB (20.9% of the cap) → 131 KB pruned — a 6.4× reduction with no measured size near the
+// cap. Worth keeping as a payload reduction; not the load-bearing gate it was recorded as.
 //
 // ⇒ these captures are the only thing that can tell a working pruner from a silent no-op.
 
@@ -69,8 +71,8 @@ export const ESPN_REMOVED_FIELDS = [
 
 /**
  * The three that make up the BULK, and therefore the ones whose presence makes a capture genuinely
- * un-pruned. The pruner's own docstring measures the removed set at 96% of a 3.3 MB response, and
- * it is these per-player blocks that carry it.
+ * un-pruned — on the real capture they are 84% of the payload (834 KB → 131 KB pruned), and it is
+ * these per-player blocks that carry it.
  *
  * ⭐ WHY A SUBSET AND NOT ALL SIX: whether `outlooks` / `ratings` / `notificationSettings` appear at
  * all is a fact about what ESPN returns for a given league and view set, not about our pruner. A
@@ -205,14 +207,14 @@ export const ESPN_RAW_CAPTURES: readonly EspnRawCapture[] = [
     id: "12-team",
     file: "espn_league_raw_unpruned_12team.json",
     teams: 12,
-    why: "un-pruned it lands at ~99% of the 4 MB cap — imports today only by a hair, and only if the pruner works",
+    why: "the commonest league size — measured at 24.1% of the cap un-pruned, not the ~99% long claimed",
     source: SIZE_EXTENDED,
   },
   {
     id: "14-team",
     file: "espn_league_raw_unpruned_14team.json",
     teams: 14,
-    why: "un-pruned it is REFUSED outright — the pruner is the only reason this size can import at all",
+    why: "the largest common size — measured at 28.1% of the cap un-pruned, NOT refused as long claimed",
     // A real capture is preferred and used whenever the file exists; otherwise extended from the
     // 12-team capture, for the SIZE claim only. See `SIZE_EXTENDED`.
     source: SIZE_EXTENDED,
