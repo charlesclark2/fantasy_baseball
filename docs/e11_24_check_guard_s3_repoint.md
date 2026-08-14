@@ -151,3 +151,152 @@ must show each guard producing the same verdict on a live slate — especially
 * `betting_ml/tests/test_e11_24_check_guard_s3_repoint.py` — 24 guards, all RED-proven.
 * `betting_ml/tests/test_odds_coverage_guard.py` — injection point moved to `fetch_coverage_rows`;
   every assertion unchanged.
+
+---
+
+# 2026-08-14 — the "cheap config-flip": TWO of three entries move, the third is REFUTED
+
+Branch `e11.24-aug-14`. Read from the LAPTOP; the Snowflake side on **`MONITOR_WH`** so nothing
+here touches the `COMPUTE_WH` census. `best_alpha = 0`.
+
+## Gate — STEP D has settled, so stacking was allowed
+
+The story's own precondition (one flip per soak) was to confirm #693's player-seq re-export left
+its predicted transitional `[s3] STALE 37h`. Measured 2026-08-14 15:03 UTC, SF-free:
+
+```
+player_sequential_posteriors   s3   update_ts   2026-08-14 13:02:42    2.09h / 36h    OK
+```
+
+The S3 mirror carries **today's 13:02 writer batch**, which is the direct evidence that
+`reexport_player_seq_posteriors_op` is running downstream of `update_player_posteriors_op` as
+designed — stronger than the acceptance criterion (`[s3] OK`) asked for.
+
+## ⛔ TWO PREMISES IN THE STORY CARD ARE WRONG, AND ONE OF THEM IS THE HEADLINE
+
+**1. This is not a `table→view` flip, and could not have been.** The three targets are
+`check_data_freshness.py` FRESHNESS ENTRIES, not dbt materializations. Two of the three are not
+dbt models at all — `eb_park_factors_raw` is MERGE-written by `fit_park_priors.py:188` and
+`team_sequential_posteriors` by `update_team_posteriors.py`'s SCD-2 write — so a table→view flip
+is structurally impossible for them, which is the card's own "a merge target can't be a view"
+warning turned on itself. The change that *was* available is a per-entry `source` flip, which is
+genuinely config-only and carries no serving artifact at all.
+
+⇒ the card's inherited #675/#693 diligence (ghost rows in a merge-incremental, history-spanning
+readers, writer greps) mostly **does not apply**: a freshness monitor reads `MAX(ts_col)` and
+serves nothing. The diligence that *does* apply is the INC-25 one — whether the S3 mirror this
+monitor would now trust is guaranteed to keep up with its writer.
+
+**2. "A real resume reducer, not just a wake-move" is FALSE, and this file already said so.**
+`needs_snowflake()` is True while ANY entry is Snowflake-resident. Both remaining blockers were
+re-confirmed live today:
+
+```
+player_profiles_raw                 s3 max 2026-06-28   1133h / 192h   STALE   (mirror ~47d behind)
+matchup_cell_sequential_posteriors  s3 read FAILED: no files match the lakehouse prefix
+```
+
+So `run()` still opens a Snowflake connection on every fire and still pays the resume. **This
+flip deletes ZERO resumes** — wake is a QUEUE (#679); it shortens the queue. That is exactly what
+this module's own `DATA SOURCE` block already recorded ("flipping them buys ZERO wake credit
+while the blockers remain … flip them in the SAME change that clears the blockers"), and the card
+reversed that documented decision without new evidence. The flip was still made, because each
+flipped entry is **individually correct** — not because it buys credit.
+
+## The parity re-measurement — 2 exact, 1 refuted
+
+`MAX(ts_col)` **and row count**, both sides, both directions (#693: a net row-count is not a diff):
+
+| entry | SF | S3 | verdict |
+|---|---|---|---|
+| `eb_bullpen_team_posteriors` | 2026-08-14 / 48,932 | 2026-08-14 / 48,932 | **EXACT** → flipped |
+| `eb_park_factors_raw` | 2026-05-27 / 362 | 2026-05-27 / 362 | **EXACT** → flipped |
+| `team_sequential_posteriors` | 08-14 **13:03:04** / **83,636** | 08-14 **10:16:26** / **83,619** | **trails 2.78h, 17 rows** → HELD |
+
+### Why the two that moved are safe STRUCTURALLY, not by a lucky reading
+
+This is the distinction that made the set separable, and it is the reason a single "parity is
+exact" reading was not accepted as sufficient for any of the three:
+
+* **`eb_bullpen_team_posteriors`** — since the W8a ownership transfer (2026-06-29) the S3 parquet
+  is **built** by `run_w1_lakehouse --w8a` and the Snowflake table is a MERGE copy *from*
+  `lakehouse_ext` over that same parquet. **S3 leads Snowflake by construction** and can never be
+  the staler side, so the monitor cannot regress by reading it.
+* **`eb_park_factors_raw`** — an ANNUAL hand-run fit (last 2026-05-27) read against a **180-day**
+  threshold. Measured lag at flip time 1,911h of an allowed 4,320h: the mirror could freeze for a
+  further ~100 days before the verdict changed. The margin is a design quantity, not a reading.
+
+Both are additionally the **right side to watch**: `mart_eb_park_factors`' DuckDB branch reads
+`read_parquet(lakehouse_loc("eb_park_factors_raw"))` and eb_bullpen's S3 parquet *is* the built
+artifact, so the monitor now watches what the served path actually reads rather than a warehouse
+copy of it — the same argument target 3 made for `check_prediction_coverage`.
+
+## 🚨 `team_sequential_posteriors` — the finding, and why it is NOT flipped
+
+**It carries the identical INC-25 defect PR #693 fixed for its sibling, and #693 did not sweep it
+up.** In `pipeline/jobs/daily_ingestion_job.py`:
+
+```
+line 136   lk10    = lakehouse_w8b_aggregator_op(start=lk9)     ← mirrors team_seq to S3
+line 256   reexport_player_seq_posteriors_op(start=p_player)    ← #693's fix, player_seq ONLY
+line 257   p_team  = update_team_posteriors_op(start=p_player)  ← the team_seq WRITER, ~40min later
+```
+
+The mirror is written near the top of the graph, the writer runs later, and nothing re-mirrors
+afterwards — so within any run the S3 copy is one writer-cycle behind. The 08-08 "parity EXACT"
+reading that the card inherited was taken at exactly the moment this module's docstring warns is
+structurally blind ("at s15 the writer has not run yet either, so Snowflake and S3 return the
+SAME value and the lag is INVISIBLE").
+
+⛔ **It was deliberately not flipped on a margin argument.** The reasoned worst case (~23.5–26h
+against a 36h threshold) looks survivable — and that is precisely the arithmetic that was WRONG
+for player_seq, where target 3 recorded "~12h of headroom" and the true figure was a **38.72h
+breach**. Twice-burned on the same table family, the precondition is the one already written here
+for player_seq: **the re-export ordering fix and the source flip land together.**
+
+The fix is a `reexport_team_seq_posteriors_op` modelled exactly on
+`reexport_player_seq_posteriors_op` (fan-out leaf so it can never block `p_matchup`/predict, ALERT
+tier with a real `send_alert`, finite subprocess timeout per INC-32, wired into **both** jobs that
+run the writer per INC-38). That is a pipeline-graph change with its own runtime gate, not a
+config flip — which is why it is not bundled into this change.
+
+### ⚠️ And it may not only be a monitoring question
+
+`feature_pregame_game_features_raw`'s **DuckDB (served) branch** reads this same mirror. If the
+mirror is a writer-cycle behind, the served sequential-posterior block may carry that staleness —
+the same shape #693 recorded as its own side finding ("the served EB as-of seq prior is one game
+stale"). That is a **serving** question, needs its own measurement, and must not be folded into a
+monitor change. Not chased here; flagged.
+
+## Guards — `betting_ml/tests/test_e11_24_check_guard_s3_repoint.py` (+7, 40 total)
+
+All five deliberate breaks were **RED-proven**, with the harness asserting the mutation actually
+landed on disk before invoking pytest (E11.24 #682: a RED-proof that can silently no-op reports a
+false "the guard caught it"):
+
+| break | goes red |
+|---|---|
+| revert `eb_bullpen` to snowflake | `test_the_structurally_safe_entries_read_s3` |
+| revert `eb_park_factors` to snowflake | `test_the_structurally_safe_entries_read_s3` |
+| **sweep `team_seq` into the flip** | `test_team_seq_is_held_back_from_the_flip` **+ the coupling test** |
+| `eb_bullpen` threshold 48→24h | `test_the_eb_bullpen_threshold_clears_its_structural_worst_case` |
+| `eb_bullpen` threshold 48→200h | `test_the_eb_bullpen_threshold_still_catches_a_real_build_outage` |
+
+⭐ The third break is the load-bearing one. `test_flipping_team_seq_to_s3_requires_its_mirror_to_be_
+reordered_first` is **vacuous by design today** (its antecedent — the entry being s3 — is false),
+which is the NF1.7(a) trap; it is paired with `test_team_seq_is_held_back_from_the_flip` as an
+explicit non-vacuity anchor, and break 3 proves the coupling clause really does fire the moment
+the antecedent becomes true. Neither test can be passing on nothing.
+
+`test_the_flip_buys_no_wake_credit_while_any_blocker_remains` pins the honest reading against
+re-narration, and names the three remaining blockers so a future census can tell a REMAINING
+blocker from a REGRESSION.
+
+## Deploy + runtime gate (operator)
+
+`dev→main` **is** the deploy (`orchestration_cd.yml` `COPY . .`) — no `deploy.sh`, no env var.
+⭐ Promote in the **03:35–03:55 UTC** quiet window (**not** the 03:30 tick — INC-36 deploy-drain
+race). 🟥 CI mocks all IO, so CI-green is necessary-not-sufficient: the gate is a real box run of
+`check_data_freshness.py` showing `eb_bullpen_team_posteriors` and `eb_park_factors_raw` reading
+`[s3] OK` (not STALE, not NO DATA) on a live slate, with every other entry's verdict unchanged.
+Rollback = `git revert` the merge; the change is monitor-only and touches no serving artifact.

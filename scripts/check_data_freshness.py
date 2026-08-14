@@ -43,6 +43,35 @@ INC-25 player-seq export-ordering fix (2026-08-09). READ THIS BEFORE "FINISHING 
       player_profiles_raw               08-02 10:00:31    2026-06-28 (!)    → SF   (mirror 41d stale)
       matchup_cell_sequential_posteriors 08-08 13:03:15   <NO S3 TABLE>     → SF   (no mirror)
 
+    ⭐ RE-MEASURED 2026-08-14 15:03 UTC (laptop; SF side on MONITOR_WH). Two of the three
+    "safe next flips" above are flipped here; the THIRD IS NOT, because the 08-08 reading that
+    called it identical was taken at the one moment this very docstring warns is blind:
+
+      table                        SF max / rows           S3 max / rows          verdict
+      eb_bullpen_team_posteriors   2026-08-14  / 48,932    2026-08-14  / 48,932   EXACT   → S3
+      eb_park_factors_raw          2026-05-27  / 362       2026-05-27  / 362      EXACT   → S3
+      team_sequential_posteriors   08-14 13:03:04 / 83,636 08-14 10:16:26 / 83,619 TRAILS  → SF
+
+    🚨 ``team_sequential_posteriors`` IS NOT PARITY-EXACT — it has the SAME INC-25 ordering
+    defect that #693 fixed for its sibling ``player_sequential_posteriors``, and that fix did
+    not sweep it up. In ``daily_ingestion_job``: ``lakehouse_w8b_aggregator_op`` (lk10) mirrors
+    this table to S3 near the TOP of the graph, while its writer ``update_team_posteriors_op``
+    (``p_team``) runs ~40 min LATER — so within any single run the mirror is one writer-cycle
+    behind. Measured live above: **2.78 h and 17 rows behind Snowflake.**
+    ⛔ DO NOT FLIP IT ON A MARGIN ARGUMENT. The reasoned worst case (~23.5–26 h against this
+    36 h threshold) is exactly the arithmetic that was WRONG for player_seq — target 3 recorded
+    "~12h of headroom" there and the true figure was a 38.72 h BREACH. The precondition is the
+    same one this docstring already states for player_seq: **the re-export ordering fix and the
+    source flip must land together.** The fix is a ``reexport_team_seq_posteriors_op`` modelled
+    on ``reexport_player_seq_posteriors_op`` (fan-out leaf, ALERT tier, finite timeout, wired
+    into BOTH jobs that run the writer) — a pipeline-graph change with its own runtime gate,
+    NOT a config flip, which is why it is not bundled here.
+    ⚠️ AND IT MAY NOT BE ONLY A MONITORING QUESTION: ``feature_pregame_game_features_raw``'s
+    DuckDB (served) branch reads this mirror, so the served sequential-posterior block may carry
+    the same one-cycle staleness — the shape #693 recorded as its own "the served EB as-of seq
+    prior is one game stale" side finding. That is a SERVING question, not a monitor one; it
+    needs measuring on its own before anyone reorders the graph.
+
     ⭐ ``player_sequential_posteriors`` — UNBLOCKED 2026-08-09 (the INC-25 export-ordering fix).
     Target 3 recorded this entry as blocked by a STRUCTURAL 24h lag and estimated "~12h of
     headroom on a 36h threshold". Re-measured at 03:45 UTC the same night, the mirror was
@@ -67,11 +96,25 @@ INC-25 player-seq export-ordering fix (2026-08-09). READ THIS BEFORE "FINISHING 
       • ``player_profiles_raw`` — the S3 mirror is 41 days behind the live Snowflake table
         (weekly ingest; the mirror is not keeping up). Repointing TODAY would report
         "STALE 990h > 192h" on a feed that is healthy — a false FAIL.
-      • ``team_sequential_posteriors`` / ``eb_bullpen_team_posteriors`` /
-        ``eb_park_factors_raw`` — parity is EXACT today, so these are the safe next flips.
-        They are deliberately left on Snowflake anyway because flipping them buys ZERO wake
-        credit while the three blockers above remain (the queue lesson), and every flip is
-        risk. Flip them in the SAME change that clears the blockers.
+      • ``team_sequential_posteriors`` — BLOCKED, and NOT for the reason recorded on 08-08.
+        Its mirror trails its Snowflake writer by one cycle (INC-25); see the 08-14
+        re-measurement above. Needs the re-export ordering fix first, exactly as player_seq did.
+
+    ⛔ THE TWO FLIPS BELOW BUY ZERO WAKE CREDIT, AND THAT IS STILL THE HONEST READING.
+    ``needs_snowflake()`` remains True while ``player_profiles_raw``,
+    ``matchup_cell_sequential_posteriors`` and ``team_sequential_posteriors`` are Snowflake-
+    resident, so ``run()`` still opens a Snowflake connection on every fire and still pays the
+    COMPUTE_WH resume. Wake is a QUEUE (#679): this deletes no resume, it shortens the queue.
+    ``eb_bullpen_team_posteriors`` / ``eb_park_factors_raw`` are flipped because each is
+    INDIVIDUALLY CORRECT — the S3 parquet is the artifact the SERVED DuckDB path actually
+    reads, so the monitor now watches what is served rather than a warehouse copy of it (the
+    same argument target 3 made for check_prediction_coverage) — NOT because either buys credit.
+    ⭐ Their parity is STRUCTURAL, not a lucky reading, which is why these two are separable
+    from team_seq: ``eb_bullpen_team_posteriors``' S3 parquet is BUILT by ``--w8a`` and the
+    Snowflake table is a MERGE copy FROM ``lakehouse_ext`` over that same parquet, so S3 LEADS
+    Snowflake by construction and can never be the staler side; ``eb_park_factors_raw`` is an
+    ANNUAL hand-run fit (2026-05-27) read against a 180-DAY threshold, where a mirror trail of
+    hours or days cannot approach the bound.
 
     ⭐ WHY ``mart_player_archetype_posteriors`` WAS FLIPPED — this is a LIVE BUG FIX, not a
     cost repoint. Its Snowflake table has been FROZEN since 2026-07-05 because
@@ -203,8 +246,14 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "non_blocking": True,
         "source": "s3",
     },
-    # SOURCE = Snowflake. Parity EXACT on S3 (measured 2026-08-08) — a safe future flip, held
-    # back only because flipping it alone buys zero wake credit. See the DATA SOURCE block.
+    # SOURCE = Snowflake. ⛔ NOT FLIPPED — the 2026-08-08 "parity EXACT" reading was taken at a
+    # moment this module's DATA SOURCE block warns is structurally blind. RE-MEASURED 2026-08-14:
+    # SF 08-14 13:03:04 / 83,636 rows vs S3 08-14 10:16:26 / 83,619 rows — the mirror trails by
+    # 2.78h and 17 rows. Cause: lk10 (lakehouse_w8b_aggregator_op) mirrors this table near the TOP
+    # of daily_ingestion_job while its writer update_team_posteriors_op (p_team) runs ~40min later
+    # — the SAME INC-25 ordering defect #693 fixed for player_sequential_posteriors, which that
+    # fix did not sweep up. Precondition for the flip is the same: the re-export ordering fix and
+    # the source flip deploy TOGETHER. See the DATA SOURCE block.
     "baseball_data.betting.team_sequential_posteriors": {
         "ts_col": "update_ts",
         "max_stale_hours": 36,
@@ -212,13 +261,20 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
         "non_blocking": True,
         "source": "snowflake",
     },
-    # SOURCE = Snowflake. Parity EXACT on S3 (measured 2026-08-08) — safe future flip.
+    # SOURCE = S3 (flipped 2026-08-14). Parity re-measured that day: SF 2026-08-14 / 48,932 rows
+    # vs S3 2026-08-14 / 48,932 rows — EXACT on both max(fit_date) and row count.
+    # ⭐ The parity here is STRUCTURAL, not a lucky reading, which is what separates this entry
+    # from team_sequential_posteriors: since the W8a ownership transfer (2026-06-29) the S3
+    # parquet is BUILT by run_w1_lakehouse --w8a and the Snowflake table is a MERGE copy FROM
+    # lakehouse_ext over that same parquet (see the model's {% else %} branch), so S3 LEADS
+    # Snowflake by construction — reading S3 can never be the staler side, and it is the artifact
+    # the served DuckDB path actually reads. Zero wake credit; see the DATA SOURCE block.
     "baseball_data.betting.eb_bullpen_team_posteriors": {
-        "ts_col": "fit_date",   # DATE; compute_bullpen_posteriors writes this table
+        "ts_col": "fit_date",   # DATE; the --w8a dbt model builds this table (W8a transfer)
         "max_stale_hours": 48,
         "game_day_only": False,
         "non_blocking": True,
-        "source": "snowflake",
+        "source": "s3",
     },
     # ── E11.8 additions (2026-06-22) ────────────────────────────────────────
     # ⛔ derivative_odds_raw REMOVED 2026-07-29 — THIRD instance of the retired-SF-writer class
@@ -240,13 +296,23 @@ FRESHNESS_THRESHOLDS: dict[str, dict] = {
     # feature_pregame_park_features → feature_pregame_game_features_raw → serving.
     # Very loose threshold (180 days) catches a missed season-start update while
     # never false-alarming mid-season (data legitimately unchanged since spring).
-    # SOURCE = Snowflake. Parity EXACT on S3 (measured 2026-08-08) — safe future flip.
+    # SOURCE = S3 (flipped 2026-08-14). Parity re-measured that day: SF 2026-05-27 / 362 rows vs
+    # S3 2026-05-27 / 362 rows — EXACT on both max(fit_date) and row count.
+    # ⭐ Safe on MARGIN, and the margin is the design quantity rather than a reading: the fit is
+    # ANNUAL and hand-run, read against a 180-DAY threshold, so no plausible mirror trail (hours,
+    # or even weeks) can approach the bound — measured lag at flip time was 1,911h of an allowed
+    # 4,320h, i.e. the mirror could freeze for another 100 days before this entry changed verdict.
+    # ⭐ And S3 is the RIGHT side to watch: mart_eb_park_factors' DuckDB (served) branch reads
+    # read_parquet(lakehouse_loc("eb_park_factors_raw")), so if a future season's fit_park_priors
+    # run lands in Snowflake but the export_w5_raw_to_s3 mirror does not follow, the served park
+    # block IS stale and this entry SHOULD say so — reading Snowflake would hide exactly that.
+    # Zero wake credit; see the DATA SOURCE block.
     "baseball_data.betting.eb_park_factors_raw": {
         "ts_col": "fit_date",   # DATE; annual update at season start
         "max_stale_hours": 4320,   # 180 days
         "game_day_only": False,
         "non_blocking": True,
-        "source": "snowflake",
+        "source": "s3",
     },
     # ── E11.12 additions — feeds with no prior monitor ───────────────────────
     # ⛔ savant.sprint_speed_raw, savant.catcher_framing_raw, external.oaa_team_season_raw REMOVED
