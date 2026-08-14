@@ -1443,7 +1443,177 @@ const CASES = [
     to: "return { known: true, created: Boolean(res && res.created) }",
     grep: "un-deployed backend degrades",
   },
+
+  // ── E9.64b: the two REAL import paths — ESPN paste, and Yahoo OAuth ─────────────────────────
+  {
+    id: "espn-league-named-as-sleeper",
+    shipped: "LIVE UNTIL E9.64b — every ESPN import read back as a Sleeper league",
+    // ⭐⭐ A REAL DEFECT, FOUND BY WRITING THIS STORY'S SPEC. The review screen named the platform
+    // with a TWO-WAY test on a THREE-WAY field, so the paste flow — on the platform with the
+    // largest share of leagues — told the user their ESPN league came from Sleeper, on the one
+    // screen whose entire job is to let them check what we understood. Both branches are strings,
+    // so `tsc` was happy; nothing had ever opened this screen on a non-Sleeper preview.
+    detail: "Restores the two-way platform test on a three-way field.",
+    file: "components/fantasy/league-import.tsx",
+    from: "                  {platformLabel(preview.platform)}\n                  {preview.season",
+    to: '                  {preview.platform === "yahoo" ? "Yahoo" : "Sleeper"}\n                  {preview.season',
+    grep: "read back correctly from its own real payload",
+  },
+  {
+    id: "espn-yardage-scored-as-captured",
+    shipped: "NF-C0e — every ESPN league scored ZERO passing/rushing/receiving yardage",
+    // ⭐⭐ THE OUTAGE, RENDERED. `espn.py` wrote Sleeper's `pass_yd` where the engine reads the
+    // canonical `pass_yds`; an unrecognised key passes through verbatim and reports CAPTURED, which
+    // is a legitimate verdict for a rule we genuinely do not project — so nothing errored and the
+    // panel truthfully said so while nobody read it. Broken here from the CONSUMER side (the
+    // canonical map itself), which produces the identical rendered state: the term moves out of
+    // APPLIED and into "Saved with your league, but NOT applied".
+    detail: "Drops the canonical `pass_yds` key from STAT_FIELD, exactly as the outage did.",
+    file: "lib/league-config.ts",
+    from: 'pass_yds: "passYds"',
+    to: 'pass_yd: "passYds"',
+    grep: "scoring is APPLIED, not silently captured",
+  },
+  {
+    id: "espn-read-url-built-locally",
+    shipped: "pre-emptive: the settings link assembled client-side instead of by the server",
+    // `POST /espn/read-url` exists so the SERVER owns this string — it format-checks the league id
+    // and builds ESPN's path. A locally-built link renders perfectly, works today, and breaks
+    // silently the day ESPN's path moves. The E9.58 shape: internally consistent everywhere, and
+    // pointing somewhere that does not answer.
+    detail: "Ignores the server's URL and constructs one in the browser.",
+    file: "components/fantasy/league-import.tsx",
+    from: "    if (res?.url) setEspnLink(res.url)",
+    to: '    setEspnLink(`https://fantasy.espn.com/football/league?leagueId=${espnLeagueId.trim()}`)',
+    grep: "the SERVER's, not one the page assembled",
+  },
+  {
+    id: "import-error-replaced-with-a-generic-string",
+    shipped: "pre-emptive: the server's actionable message swapped for 'something went wrong'",
+    // `errorText`'s own docstring names this: the API's `detail` is written to be READ by a user
+    // ("that doesn't look like the JSON from ESPN — open the link we generated…"), and substituting
+    // a generic string throws away the only sentence that says what to DO. On the paste flow that
+    // is the difference between a recoverable typo and a dead end.
+    detail: "Discards the server's detail on every error.",
+    file: "components/fantasy/league-import.tsx",
+    from: 'if (!/^API error \\d+$/.test(message)) return message || "Something went wrong."',
+    to: 'if (!/^API error \\d+$/.test(message)) return "Something went wrong."',
+    grep: "says WHY, at the control",
+  },
+  {
+    id: "could-not-read-box-always-rendered",
+    shipped: "pre-emptive: telling every user we failed to read their league",
+    // ⭐ THE OTHER SIDE OF `import-warnings-suppressed`, and it needed a second real payload to be
+    // reachable at all: one committed ESPN capture parses with ZERO warnings. A component that
+    // rendered the header unconditionally passes the suppression case while alarming most users
+    // about a league we read perfectly.
+    detail: "Renders the 'what we could not read' header even with nothing to report.",
+    file: "components/fantasy/league-import.tsx",
+    from: "          {preview.warnings.length > 0 && (",
+    to: "          {true && (",
+    grep: "read CLEANLY shows no",
+  },
+  {
+    id: "captured-rule-shown-as-its-espn-number",
+    shipped: "pre-emptive: a disclosure the reader cannot act on",
+    // ESPN NUMBERS its scoring rules, so a captured term renders as "15" or "129@dst" without the
+    // server's label. Technically honest and completely useless: the user cannot tell WHICH of
+    // their settings we dropped, which is the entire point of the disclosure.
+    detail: "Stops reading the server's `unmapped_labels`.",
+    file: "components/fantasy/league-import.tsx",
+    from: "                                {preview.unmapped_labels?.[t.key] ?? t.key}",
+    to: "                                {t.key}",
+    grep: "ESPN number is made readable",
+  },
+  {
+    id: "yahoo-connect-offered-before-approval",
+    shipped: "pre-emptive: a button that 503s, on a platform Yahoo has not approved",
+    // `list_platforms`' docstring names this exact trade: `available` and `configured` are reported
+    // separately so the UI can say "coming, pending registration" instead of hiding the option or
+    // offering a control the server refuses. Production is in this state TODAY.
+    detail: "Offers the connect button regardless of the runtime `configured` flag.",
+    file: "components/fantasy/league-import.tsx",
+    from: "            {!platform?.configured ? (",
+    to: "            {false ? (",
+    grep: "offers NO button to press",
+  },
+  {
+    id: "yahoo-authorize-url-rebuilt-locally",
+    shipped: "pre-emptive: the OAuth URL assembled client-side, dropping the signed `state`",
+    // ⭐ The signed `state` is the ONLY thing binding a returning Yahoo grant to the account that
+    // started the flow — the callback is unauthenticated by necessity, since it is entered by a
+    // browser redirect carrying no bearer token. A client that rebuilds this URL either fails the
+    // round trip or grafts a Yahoo account onto the wrong Credence one.
+    detail: "Navigates to a locally-assembled authorize URL instead of the server's.",
+    file: "components/fantasy/league-import.tsx",
+    from: "    if (res?.authorize_url) window.location.href = res.authorize_url",
+    to: '    window.location.href = "https://api.login.yahoo.com/oauth2/request_auth?client_id=local"',
+    grep: "authorize URL the SERVER supplied",
+  },
+  {
+    id: "yahoo-return-states-collapsed",
+    shipped: "pre-emptive: one banner for connected, cancelled and failed",
+    // Three distinct facts. A single "you're connected" for all of them is wrong twice over: a user
+    // who CANCELLED is told they granted access, and a user whose sign-in FAILED never learns that
+    // nothing was saved before they walk away believing we hold a grant.
+    detail: "Shows the connected banner for every return flag.",
+    file: "components/fantasy/league-import.tsx",
+    from: '      {yahooFlag === "connected" && (',
+    to: "      {yahooFlag && (",
+    grep: "says what actually happened",
+  },
+  {
+    id: "yahoo-owner-team-not-preselected",
+    shipped: "pre-emptive: throwing away the one thing OAuth tells us that a paste cannot",
+    // Yahoo's response carries `is_current_login`, so the preview knows which team is the caller's —
+    // which is what lets My Teams score a roster without the user picking one. Discarding it is not
+    // a crash: the screen renders perfectly and quietly saves a league with no team linked.
+    detail: "Ignores `is_owner` when adopting a preview.",
+    file: "components/fantasy/league-import.tsx",
+    from: "    setSelectedTeamKey(res.teams.find((t) => t.is_owner)?.team_key ?? null)",
+    to: "    setSelectedTeamKey(null)",
+    grep: "pre-selects the user's team",
+  },
+  {
+    id: "yahoo-attribution-dropped",
+    shipped: "pre-emptive: a CONTRACTUAL requirement, invisible to every other instrument",
+    // 🚩 Yahoo's API terms require attribution wherever their data is shown. It renders in one
+    // branch nothing had ever entered, and losing it is a compliance failure that looks — to `tsc`,
+    // to `next build`, and to every other spec here — like a perfectly clean page.
+    detail: "Removes the Yahoo attribution from a screen showing Yahoo data.",
+    file: "components/fantasy/league-import.tsx",
+    from: '          {preview.platform === "yahoo" && (',
+    to: "          {false && (",
+    grep: "required attribution is rendered",
+  },
 ]
+
+/**
+ * ⭐ E9.64b — THE RECORDED BOARD, and the reason this script is now SCHEDULED.
+ *
+ * ══ THE FAILURE THIS EXISTS TO CATCH ══════════════════════════════════════════════════════════
+ *
+ * E9.64's first full run found SIX pre-existing cases whose verdict no longer matched their
+ * declaration — anchors that had drifted, and breaks whose data-flow had been retired underneath
+ * them. None was introduced by that story; they had simply gone dead at some point and nobody was
+ * looking, because **nothing ran this script**. It was a manual command, so its only trigger was a
+ * session remembering to type it, and a red-proof harness nobody runs is decorative — which is the
+ * exact defect it exists to prevent, one level up.
+ *
+ * So the board's shape is RECORDED here and the run FAILS when the shape moves. That turns
+ * "somebody should re-run the red proof" into a scheduled job with a verdict.
+ *
+ * ⚠️ WHAT A DRIFT MEANS, AND WHAT IT DOES NOT. This number changing is not automatically a bug —
+ * adding a guard SHOULD add a case. The rule is that the two move TOGETHER, in the same commit: a
+ * new case comes with an updated total, so the only way this fires unexpectedly is a case that
+ * stopped behaving as declared. ⛔ Do not "fix" a drift by editing these numbers to match the
+ * output; read the summary first — a case that flipped from RED to MISMATCH is a guard that has
+ * quietly become decorative, and it is the finding.
+ *
+ * Measured 2026-08-14 (E9.64b): 106 cases, 100 RED, 6 declared NOT-OBSERVABLE, exit 0.
+ * Previously (E9.64): 95 / 89 / 6.
+ */
+const RECORDED_BOARD = { total: 106, red: 100, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
@@ -1562,4 +1732,33 @@ if (bad.length) {
     `\n${bad.length} case(s) did not match their declared expectation. The suite is not proving what it claims.`,
   )
   process.exitCode = 1
+}
+
+// ── the recorded board ──────────────────────────────────────────────────────────────────────────
+//
+// Only meaningful for a FULL run: a filtered invocation is a debugging tool and its counts describe
+// whatever the operator asked for, not the board. Reporting drift there would train everyone to
+// ignore this line, which is how a monitor gets muted.
+if (!filter) {
+  const observed = {
+    total: results.length,
+    red: results.filter((r) => r.verdict === "RED").length,
+    notObservable: results.filter((r) => r.verdict === "NOT-OBSERVABLE").length,
+  }
+  const drifted = Object.keys(RECORDED_BOARD).filter((k) => observed[k] !== RECORDED_BOARD[k])
+  const shape = (b) => `${b.total} cases, ${b.red} RED, ${b.notObservable} NOT-OBSERVABLE`
+  if (drifted.length) {
+    console.log(
+      `\n⚠️  BOARD DRIFT — recorded: ${shape(RECORDED_BOARD)}\n` +
+        `                observed: ${shape(observed)}\n` +
+        `                moved:    ${drifted.join(", ")}\n\n` +
+        "If you ADDED or REMOVED a case, update RECORDED_BOARD in the same commit — the two are\n" +
+        "meant to move together. If you did not, a case has stopped behaving as declared: read the\n" +
+        "summary above and repair the case. ⛔ Never edit RECORDED_BOARD to match a drift you did\n" +
+        "not cause — that is how a guard becomes decorative.",
+    )
+    process.exitCode = 1
+  } else {
+    console.log(`\nboard matches the record — ${shape(observed)}`)
+  }
 }

@@ -1,0 +1,161 @@
+{
+  "config": {
+    "captured_rules": {
+      "draft_type": "SNAKE",
+      "keeper_count": 0,
+      "matchup_period_count": 14,
+      "player_rank_type": "PPR",
+      "playoff_team_count": 7,
+      "scoring_type": "H2H_POINTS"
+    },
+    "description": "Imported from ESPN \u2014 Sundays Best",
+    "format_version": "1.0",
+    "n_teams": 12,
+    "name": "Sundays Best",
+    "ppr": "ppr",
+    "roster": [
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "QB"
+        ],
+        "name": "QB"
+      },
+      {
+        "bench": false,
+        "count": 2,
+        "eligible": [
+          "RB"
+        ],
+        "name": "RB"
+      },
+      {
+        "bench": false,
+        "count": 2,
+        "eligible": [
+          "WR"
+        ],
+        "name": "WR"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "TE"
+        ],
+        "name": "TE"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "DST"
+        ],
+        "name": "DST"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "K"
+        ],
+        "name": "K"
+      },
+      {
+        "bench": true,
+        "count": 6,
+        "eligible": [],
+        "name": "BN"
+      },
+      {
+        "bench": true,
+        "count": 3,
+        "eligible": [],
+        "name": "IR"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "RB",
+          "WR",
+          "TE"
+        ],
+        "name": "FLEX"
+      }
+    ],
+    "scoring": {
+      "per_stat": {
+        "15": 1.0,
+        "16": 1.0,
+        "35": 1.0,
+        "36": 1.0,
+        "45": 1.0,
+        "46": 1.0,
+        "def_blocked_kick": 1.0,
+        "def_fumble_rec": 1.0,
+        "def_int": 1.0,
+        "def_sacks": 1.0,
+        "def_safety": 2.0,
+        "def_td": 6.0,
+        "dst_pa_g_0": 12.0,
+        "dst_pa_g_14_17": 3.0,
+        "dst_pa_g_18_20": 3.0,
+        "dst_pa_g_1_6": 9.0,
+        "dst_pa_g_21_27": 1.0,
+        "dst_pa_g_28_34": -1.0,
+        "dst_pa_g_35_45": -3.0,
+        "dst_pa_g_46p": -3.0,
+        "dst_pa_g_7_13": 6.0,
+        "fg_made_0_19": 2.0,
+        "fg_made_20_29": 2.0,
+        "fg_made_30_39": 2.0,
+        "fg_made_40_49": 3.0,
+        "fg_made_50_59": 4.0,
+        "fg_made_60p": 5.0,
+        "fumble_rec_td": 6.0,
+        "fumbles_lost": -1.0,
+        "pass_int": -1.0,
+        "pass_td": 4.0,
+        "pass_yds": 0.04,
+        "pat_made": 1.0,
+        "rec": 1.0,
+        "rec_td": 6.0,
+        "rec_yds": 0.1,
+        "rush_td": 6.0,
+        "rush_yds": 0.1,
+        "st_player_td": 6.0,
+        "two_pt": 2.0
+      },
+      "position_bonuses": {}
+    },
+    "sport": "nfl",
+    "superflex": false
+  },
+  "draft": null,
+  "platform": "espn",
+  "season": "2026",
+  "source_league_id": "998005",
+  "teams": [],
+  "unmapped_labels": {
+    "15": "Long passing touchdown bonus",
+    "16": "Long passing touchdown bonus",
+    "35": "Long rushing touchdown bonus",
+    "36": "Long rushing touchdown bonus",
+    "45": "Long receiving touchdown bonus",
+    "46": "Long receiving touchdown bonus"
+  },
+  "unmapped_scoring_keys": [
+    "15",
+    "16",
+    "35",
+    "36",
+    "45",
+    "46"
+  ],
+  "warnings": [
+    "Your league pays different amounts for two-point conversions (1.0, 2.0); we apply a single value of 2.0.",
+    "ESPN scores a game where your defence allows exactly 21 points in its 18-21 tier; we resolve points allowed on buckets that split at 20/21, so that one case scores at your 22-27 rate instead. Every other tier matches your league exactly."
+  ]
+}

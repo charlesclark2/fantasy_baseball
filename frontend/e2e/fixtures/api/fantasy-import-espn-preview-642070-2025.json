@@ -1,0 +1,1441 @@
+{
+  "config": {
+    "captured_rules": {
+      "draft_type": "SNAKE",
+      "keeper_count": 0,
+      "matchup_period_count": 13,
+      "player_rank_type": "PPR",
+      "playoff_team_count": 4,
+      "scoring_type": "H2H_POINTS"
+    },
+    "description": "Imported from ESPN \u2014 Dubbya Bee League",
+    "format_version": "1.0",
+    "n_teams": 10,
+    "name": "Dubbya Bee League",
+    "ppr": "half",
+    "roster": [
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "QB"
+        ],
+        "name": "QB"
+      },
+      {
+        "bench": false,
+        "count": 2,
+        "eligible": [
+          "RB"
+        ],
+        "name": "RB"
+      },
+      {
+        "bench": false,
+        "count": 2,
+        "eligible": [
+          "WR"
+        ],
+        "name": "WR"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "TE"
+        ],
+        "name": "TE"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "DST"
+        ],
+        "name": "DST"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "K"
+        ],
+        "name": "K"
+      },
+      {
+        "bench": true,
+        "count": 7,
+        "eligible": [],
+        "name": "BN"
+      },
+      {
+        "bench": true,
+        "count": 2,
+        "eligible": [],
+        "name": "IR"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "RB",
+          "WR",
+          "TE"
+        ],
+        "name": "FLEX"
+      }
+    ],
+    "scoring": {
+      "per_stat": {
+        "103": 6.0,
+        "93": 6.0,
+        "def_blocked_kick": 2.0,
+        "def_fumble_rec": 2.0,
+        "def_int": 2.0,
+        "def_sacks": 1.0,
+        "def_safety": 2.0,
+        "def_td": 6.0,
+        "dst_pa_g_0": 5.0,
+        "dst_pa_g_14_17": 1.0,
+        "dst_pa_g_1_6": 4.0,
+        "dst_pa_g_28_34": -1.0,
+        "dst_pa_g_35_45": -3.0,
+        "dst_pa_g_46p": -5.0,
+        "dst_pa_g_7_13": 3.0,
+        "dst_ya_g_0_99": 5.0,
+        "dst_ya_g_100_199": 3.0,
+        "dst_ya_g_200_299": 2.0,
+        "dst_ya_g_350_399": -1.0,
+        "dst_ya_g_400_449": -3.0,
+        "dst_ya_g_450_499": -5.0,
+        "dst_ya_g_500_549": -6.0,
+        "dst_ya_g_550p": -7.0,
+        "fg_made_0_19": 3.0,
+        "fg_made_20_29": 3.0,
+        "fg_made_30_39": 3.0,
+        "fg_made_40_49": 4.0,
+        "fg_made_50_59": 5.0,
+        "fg_made_60p": 5.0,
+        "fg_missed": -1.0,
+        "fumble_rec_td": 6.0,
+        "fumbles_lost": -2.0,
+        "pass_int": -2.0,
+        "pass_td": 4.0,
+        "pass_yds": 0.04,
+        "pat_made": 1.0,
+        "rec": 0.5,
+        "rec_td": 6.0,
+        "rec_yds": 0.1,
+        "rush_td": 6.0,
+        "rush_yds": 0.1,
+        "st_player_td": 6.0,
+        "st_td": 6.0,
+        "two_pt": 2.0
+      },
+      "position_bonuses": {}
+    },
+    "sport": "nfl",
+    "superflex": false
+  },
+  "draft": null,
+  "platform": "espn",
+  "season": "2026",
+  "source_league_id": "642070",
+  "teams": [
+    {
+      "is_owner": false,
+      "name": "Team 1",
+      "owner": "manager1",
+      "players": [
+        {
+          "name": "Josh Jacobs",
+          "player_key": "4047365",
+          "position": "RB",
+          "starter": true,
+          "team": "GB"
+        },
+        {
+          "name": "Davante Adams",
+          "player_key": "16800",
+          "position": "WR",
+          "starter": false,
+          "team": "LAR"
+        },
+        {
+          "name": "George Kittle",
+          "player_key": "3040151",
+          "position": "TE",
+          "starter": true,
+          "team": "SF"
+        },
+        {
+          "name": "Kenneth Walker III",
+          "player_key": "4567048",
+          "position": "RB",
+          "starter": true,
+          "team": "SEA"
+        },
+        {
+          "name": "Tetairoa McMillan",
+          "player_key": "4685472",
+          "position": "WR",
+          "starter": true,
+          "team": "CAR"
+        },
+        {
+          "name": "Patrick Mahomes",
+          "player_key": "3139477",
+          "position": "QB",
+          "starter": false,
+          "team": "KC"
+        },
+        {
+          "name": "Mark Andrews",
+          "player_key": "3116365",
+          "position": "TE",
+          "starter": false,
+          "team": "BAL"
+        },
+        {
+          "name": "Chris Godwin Jr.",
+          "player_key": "3116165",
+          "position": "WR",
+          "starter": false,
+          "team": "TB"
+        },
+        {
+          "name": "Brandon Aiyuk",
+          "player_key": "4360438",
+          "position": "WR",
+          "starter": false,
+          "team": "SF"
+        },
+        {
+          "name": "Chase McLaughlin",
+          "player_key": "3150744",
+          "position": "K",
+          "starter": false,
+          "team": "TB"
+        },
+        {
+          "name": "Wan'Dale Robinson",
+          "player_key": "4569587",
+          "position": "WR",
+          "starter": true,
+          "team": "NYG"
+        },
+        {
+          "name": "Troy Franklin",
+          "player_key": "4431280",
+          "position": "WR",
+          "starter": false,
+          "team": "DEN"
+        },
+        {
+          "name": "Kyle Monangai",
+          "player_key": "4608686",
+          "position": "RB",
+          "starter": false,
+          "team": "CHI"
+        },
+        {
+          "name": "Kareem Hunt",
+          "player_key": "3059915",
+          "position": "RB",
+          "starter": false,
+          "team": "KC"
+        },
+        {
+          "name": "Christian Watson",
+          "player_key": "4248528",
+          "position": "WR",
+          "starter": true,
+          "team": "GB"
+        },
+        {
+          "name": "Brandon McManus",
+          "player_key": "16339",
+          "position": "K",
+          "starter": true,
+          "team": "GB"
+        },
+        {
+          "name": "Packers D/ST",
+          "player_key": "-16009",
+          "position": "DST",
+          "starter": true,
+          "team": "GB"
+        },
+        {
+          "name": "Brock Purdy",
+          "player_key": "4361741",
+          "position": "QB",
+          "starter": true,
+          "team": "SF"
+        }
+      ],
+      "team_key": "1"
+    },
+    {
+      "is_owner": false,
+      "name": "Team 2",
+      "owner": "manager2",
+      "players": [
+        {
+          "name": "Saquon Barkley",
+          "player_key": "3929630",
+          "position": "RB",
+          "starter": true,
+          "team": "PHI"
+        },
+        {
+          "name": "A.J. Brown",
+          "player_key": "4047646",
+          "position": "WR",
+          "starter": true,
+          "team": "PHI"
+        },
+        {
+          "name": "Trey McBride",
+          "player_key": "4361307",
+          "position": "TE",
+          "starter": true,
+          "team": "ARI"
+        },
+        {
+          "name": "Garrett Wilson",
+          "player_key": "4569618",
+          "position": "WR",
+          "starter": false,
+          "team": "NYJ"
+        },
+        {
+          "name": "Baker Mayfield",
+          "player_key": "3052587",
+          "position": "QB",
+          "starter": false,
+          "team": "TB"
+        },
+        {
+          "name": "DeVonta Smith",
+          "player_key": "4241478",
+          "position": "WR",
+          "starter": true,
+          "team": "PHI"
+        },
+        {
+          "name": "David Montgomery",
+          "player_key": "4035538",
+          "position": "RB",
+          "starter": true,
+          "team": "HOU"
+        },
+        {
+          "name": "Tyrone Tracy Jr.",
+          "player_key": "4360516",
+          "position": "RB",
+          "starter": false,
+          "team": "NYG"
+        },
+        {
+          "name": "Brandon Aubrey",
+          "player_key": "3953687",
+          "position": "K",
+          "starter": true,
+          "team": "DAL"
+        },
+        {
+          "name": "Josh Downs",
+          "player_key": "4688813",
+          "position": "WR",
+          "starter": false,
+          "team": "IND"
+        },
+        {
+          "name": "Jauan Jennings",
+          "player_key": "3886598",
+          "position": "WR",
+          "starter": false,
+          "team": "SF"
+        },
+        {
+          "name": "Rashid Shaheed",
+          "player_key": "4032473",
+          "position": "WR",
+          "starter": false,
+          "team": "SEA"
+        },
+        {
+          "name": "Colston Loveland",
+          "player_key": "4723086",
+          "position": "TE",
+          "starter": true,
+          "team": "CHI"
+        },
+        {
+          "name": "Texans D/ST",
+          "player_key": "-16034",
+          "position": "DST",
+          "starter": true,
+          "team": "HOU"
+        },
+        {
+          "name": "Bhayshul Tuten",
+          "player_key": "4882093",
+          "position": "RB",
+          "starter": false,
+          "team": "JAX"
+        },
+        {
+          "name": "Jared Goff",
+          "player_key": "3046779",
+          "position": "QB",
+          "starter": true,
+          "team": "DET"
+        },
+        {
+          "name": "Jake Bates",
+          "player_key": "4689936",
+          "position": "K",
+          "starter": false,
+          "team": "DET"
+        }
+      ],
+      "team_key": "2"
+    },
+    {
+      "is_owner": false,
+      "name": "Team 6",
+      "owner": "manager3",
+      "players": [
+        {
+          "name": "Bijan Robinson",
+          "player_key": "4430807",
+          "position": "RB",
+          "starter": true,
+          "team": "ATL"
+        },
+        {
+          "name": "Brock Bowers",
+          "player_key": "4432665",
+          "position": "TE",
+          "starter": false,
+          "team": "LV"
+        },
+        {
+          "name": "Terry McLaurin",
+          "player_key": "3121422",
+          "position": "WR",
+          "starter": false,
+          "team": "WSH"
+        },
+        {
+          "name": "Chuba Hubbard",
+          "player_key": "4241416",
+          "position": "RB",
+          "starter": true,
+          "team": "CAR"
+        },
+        {
+          "name": "Xavier Worthy",
+          "player_key": "4683062",
+          "position": "WR",
+          "starter": false,
+          "team": "KC"
+        },
+        {
+          "name": "Rome Odunze",
+          "player_key": "4431299",
+          "position": "WR",
+          "starter": false,
+          "team": "CHI"
+        },
+        {
+          "name": "Isiah Pacheco",
+          "player_key": "4361529",
+          "position": "RB",
+          "starter": false,
+          "team": "KC"
+        },
+        {
+          "name": "Michael Pittman Jr.",
+          "player_key": "4035687",
+          "position": "WR",
+          "starter": true,
+          "team": "IND"
+        },
+        {
+          "name": "Jayden Reed",
+          "player_key": "4362249",
+          "position": "WR",
+          "starter": false,
+          "team": "GB"
+        },
+        {
+          "name": "Jordan Addison",
+          "player_key": "4429205",
+          "position": "WR",
+          "starter": true,
+          "team": "MIN"
+        },
+        {
+          "name": "Joe Mixon",
+          "player_key": "3116385",
+          "position": "RB",
+          "starter": false,
+          "team": "HOU"
+        },
+        {
+          "name": "Jake Ferguson",
+          "player_key": "4242355",
+          "position": "TE",
+          "starter": true,
+          "team": "DAL"
+        },
+        {
+          "name": "Darius Slayton",
+          "player_key": "3916945",
+          "position": "WR",
+          "starter": false,
+          "team": "NYG"
+        },
+        {
+          "name": "Aaron Rodgers",
+          "player_key": "8439",
+          "position": "QB",
+          "starter": false,
+          "team": "PIT"
+        },
+        {
+          "name": "Caleb Williams",
+          "player_key": "4431611",
+          "position": "QB",
+          "starter": true,
+          "team": "CHI"
+        },
+        {
+          "name": "Luke Musgrave",
+          "player_key": "4428085",
+          "position": "TE",
+          "starter": true,
+          "team": "GB"
+        },
+        {
+          "name": "Jason Myers",
+          "player_key": "2473037",
+          "position": "K",
+          "starter": true,
+          "team": "SEA"
+        },
+        {
+          "name": "Bears D/ST",
+          "player_key": "-16003",
+          "position": "DST",
+          "starter": true,
+          "team": "CHI"
+        }
+      ],
+      "team_key": "6"
+    },
+    {
+      "is_owner": false,
+      "name": "Team 7",
+      "owner": "manager4",
+      "players": [
+        {
+          "name": "Justin Jefferson",
+          "player_key": "4262921",
+          "position": "WR",
+          "starter": true,
+          "team": "MIN"
+        },
+        {
+          "name": "Nico Collins",
+          "player_key": "4258173",
+          "position": "WR",
+          "starter": true,
+          "team": "HOU"
+        },
+        {
+          "name": "Drake London",
+          "player_key": "4426502",
+          "position": "WR",
+          "starter": true,
+          "team": "ATL"
+        },
+        {
+          "name": "Jalen Hurts",
+          "player_key": "4040715",
+          "position": "QB",
+          "starter": true,
+          "team": "PHI"
+        },
+        {
+          "name": "D'Andre Swift",
+          "player_key": "4259545",
+          "position": "RB",
+          "starter": true,
+          "team": "CHI"
+        },
+        {
+          "name": "T.J. Hockenson",
+          "player_key": "4036133",
+          "position": "TE",
+          "starter": false,
+          "team": "MIN"
+        },
+        {
+          "name": "Calvin Ridley",
+          "player_key": "3925357",
+          "position": "WR",
+          "starter": false,
+          "team": "TEN"
+        },
+        {
+          "name": "Ricky Pearsall",
+          "player_key": "4428209",
+          "position": "WR",
+          "starter": false,
+          "team": "SF"
+        },
+        {
+          "name": "Stefon Diggs",
+          "player_key": "2976212",
+          "position": "WR",
+          "starter": false,
+          "team": "NE"
+        },
+        {
+          "name": "Rhamondre Stevenson",
+          "player_key": "4569173",
+          "position": "RB",
+          "starter": true,
+          "team": "NE"
+        },
+        {
+          "name": "Romeo Doubs",
+          "player_key": "4361432",
+          "position": "WR",
+          "starter": false,
+          "team": "GB"
+        },
+        {
+          "name": "Seahawks D/ST",
+          "player_key": "-16026",
+          "position": "DST",
+          "starter": false,
+          "team": "SEA"
+        },
+        {
+          "name": "Dallas Goedert",
+          "player_key": "3121023",
+          "position": "TE",
+          "starter": true,
+          "team": "PHI"
+        },
+        {
+          "name": "Tyler Loop",
+          "player_key": "4697745",
+          "position": "K",
+          "starter": true,
+          "team": "BAL"
+        },
+        {
+          "name": "Darnell Mooney",
+          "player_key": "4040655",
+          "position": "WR",
+          "starter": false,
+          "team": "ATL"
+        },
+        {
+          "name": "Devin Singletary",
+          "player_key": "4040761",
+          "position": "RB",
+          "starter": false,
+          "team": "NYG"
+        },
+        {
+          "name": "Bam Knight",
+          "player_key": "4427728",
+          "position": "RB",
+          "starter": false,
+          "team": "ARI"
+        },
+        {
+          "name": "Rams D/ST",
+          "player_key": "-16014",
+          "position": "DST",
+          "starter": true,
+          "team": "LAR"
+        }
+      ],
+      "team_key": "7"
+    },
+    {
+      "is_owner": false,
+      "name": "Team 8",
+      "owner": "manager5",
+      "players": [
+        {
+          "name": "CeeDee Lamb",
+          "player_key": "4241389",
+          "position": "WR",
+          "starter": true,
+          "team": "DAL"
+        },
+        {
+          "name": "Derrick Henry",
+          "player_key": "3043078",
+          "position": "RB",
+          "starter": false,
+          "team": "BAL"
+        },
+        {
+          "name": "Kyren Williams",
+          "player_key": "4430737",
+          "position": "RB",
+          "starter": true,
+          "team": "LAR"
+        },
+        {
+          "name": "Jaxon Smith-Njigba",
+          "player_key": "4430878",
+          "position": "WR",
+          "starter": true,
+          "team": "SEA"
+        },
+        {
+          "name": "TreVeyon Henderson",
+          "player_key": "4432710",
+          "position": "RB",
+          "starter": true,
+          "team": "NE"
+        },
+        {
+          "name": "Rashee Rice",
+          "player_key": "4428331",
+          "position": "WR",
+          "starter": false,
+          "team": "KC"
+        },
+        {
+          "name": "Travis Etienne Jr.",
+          "player_key": "4239996",
+          "position": "RB",
+          "starter": true,
+          "team": "JAX"
+        },
+        {
+          "name": "Trey Benson",
+          "player_key": "4429275",
+          "position": "RB",
+          "starter": false,
+          "team": "ARI"
+        },
+        {
+          "name": "Rico Dowdle",
+          "player_key": "4038815",
+          "position": "RB",
+          "starter": false,
+          "team": "CAR"
+        },
+        {
+          "name": "Jaxson Dart",
+          "player_key": "4689114",
+          "position": "QB",
+          "starter": false,
+          "team": "NYG"
+        },
+        {
+          "name": "Emanuel Wilson",
+          "player_key": "4887558",
+          "position": "RB",
+          "starter": false,
+          "team": "GB"
+        },
+        {
+          "name": "Dak Prescott",
+          "player_key": "2577417",
+          "position": "QB",
+          "starter": true,
+          "team": "DAL"
+        },
+        {
+          "name": "Darren Waller",
+          "player_key": "2576925",
+          "position": "TE",
+          "starter": false,
+          "team": "MIA"
+        },
+        {
+          "name": "Juwan Johnson",
+          "player_key": "3929645",
+          "position": "TE",
+          "starter": false,
+          "team": "NO"
+        },
+        {
+          "name": "Evan McPherson",
+          "player_key": "4360234",
+          "position": "K",
+          "starter": true,
+          "team": "CIN"
+        },
+        {
+          "name": "Taysom Hill",
+          "player_key": "2468609",
+          "position": "TE",
+          "starter": true,
+          "team": "NO"
+        },
+        {
+          "name": "Lions D/ST",
+          "player_key": "-16008",
+          "position": "DST",
+          "starter": true,
+          "team": "DET"
+        }
+      ],
+      "team_key": "8"
+    },
+    {
+      "is_owner": false,
+      "name": "Team 9",
+      "owner": "manager6",
+      "players": [
+        {
+          "name": "Christian McCaffrey",
+          "player_key": "3117251",
+          "position": "RB",
+          "starter": true,
+          "team": "SF"
+        },
+        {
+          "name": "Ashton Jeanty",
+          "player_key": "4890973",
+          "position": "RB",
+          "starter": true,
+          "team": "LV"
+        },
+        {
+          "name": "Tee Higgins",
+          "player_key": "4239993",
+          "position": "WR",
+          "starter": false,
+          "team": "CIN"
+        },
+        {
+          "name": "Lamar Jackson",
+          "player_key": "3916387",
+          "position": "QB",
+          "starter": false,
+          "team": "BAL"
+        },
+        {
+          "name": "Zay Flowers",
+          "player_key": "4429615",
+          "position": "WR",
+          "starter": true,
+          "team": "BAL"
+        },
+        {
+          "name": "Jameson Williams",
+          "player_key": "4426388",
+          "position": "WR",
+          "starter": true,
+          "team": "DET"
+        },
+        {
+          "name": "Tony Pollard",
+          "player_key": "3916148",
+          "position": "RB",
+          "starter": false,
+          "team": "TEN"
+        },
+        {
+          "name": "Jakobi Meyers",
+          "player_key": "3916433",
+          "position": "WR",
+          "starter": true,
+          "team": "JAX"
+        },
+        {
+          "name": "Deebo Samuel",
+          "player_key": "3126486",
+          "position": "WR",
+          "starter": false,
+          "team": "WSH"
+        },
+        {
+          "name": "Jordan Love",
+          "player_key": "4036378",
+          "position": "QB",
+          "starter": false,
+          "team": "GB"
+        },
+        {
+          "name": "Dalton Kincaid",
+          "player_key": "4385690",
+          "position": "TE",
+          "starter": true,
+          "team": "BUF"
+        },
+        {
+          "name": "Drake Maye",
+          "player_key": "4431452",
+          "position": "QB",
+          "starter": true,
+          "team": "NE"
+        },
+        {
+          "name": "Dalton Schultz",
+          "player_key": "3117256",
+          "position": "TE",
+          "starter": false,
+          "team": "HOU"
+        },
+        {
+          "name": "Chargers D/ST",
+          "player_key": "-16024",
+          "position": "DST",
+          "starter": true,
+          "team": "LAC"
+        },
+        {
+          "name": "Jerry Jeudy",
+          "player_key": "4241463",
+          "position": "WR",
+          "starter": false,
+          "team": "CLE"
+        },
+        {
+          "name": "Eagles D/ST",
+          "player_key": "-16021",
+          "position": "DST",
+          "starter": false,
+          "team": "PHI"
+        },
+        {
+          "name": "Cam Little",
+          "player_key": "4686361",
+          "position": "K",
+          "starter": true,
+          "team": "JAX"
+        }
+      ],
+      "team_key": "9"
+    },
+    {
+      "is_owner": false,
+      "name": "Team 10",
+      "owner": "manager7",
+      "players": [
+        {
+          "name": "Jahmyr Gibbs",
+          "player_key": "4429795",
+          "position": "RB",
+          "starter": true,
+          "team": "DET"
+        },
+        {
+          "name": "De'Von Achane",
+          "player_key": "4429160",
+          "position": "RB",
+          "starter": true,
+          "team": "MIA"
+        },
+        {
+          "name": "Josh Allen",
+          "player_key": "3918298",
+          "position": "QB",
+          "starter": true,
+          "team": "BUF"
+        },
+        {
+          "name": "Marvin Harrison Jr.",
+          "player_key": "4432708",
+          "position": "WR",
+          "starter": false,
+          "team": "ARI"
+        },
+        {
+          "name": "Mike Evans",
+          "player_key": "16737",
+          "position": "WR",
+          "starter": true,
+          "team": "TB"
+        },
+        {
+          "name": "DJ Moore",
+          "player_key": "3915416",
+          "position": "WR",
+          "starter": true,
+          "team": "CHI"
+        },
+        {
+          "name": "RJ Harvey",
+          "player_key": "4568490",
+          "position": "RB",
+          "starter": true,
+          "team": "DEN"
+        },
+        {
+          "name": "Tyler Warren",
+          "player_key": "4431459",
+          "position": "TE",
+          "starter": true,
+          "team": "IND"
+        },
+        {
+          "name": "Zach Charbonnet",
+          "player_key": "4426385",
+          "position": "RB",
+          "starter": false,
+          "team": "SEA"
+        },
+        {
+          "name": "Woody Marks",
+          "player_key": "4429059",
+          "position": "RB",
+          "starter": false,
+          "team": "HOU"
+        },
+        {
+          "name": "Patriots D/ST",
+          "player_key": "-16017",
+          "position": "DST",
+          "starter": true,
+          "team": "NE"
+        },
+        {
+          "name": "Ka'imi Fairbairn",
+          "player_key": "2971573",
+          "position": "K",
+          "starter": true,
+          "team": "HOU"
+        },
+        {
+          "name": "Quentin Johnston",
+          "player_key": "4429025",
+          "position": "WR",
+          "starter": false,
+          "team": "LAC"
+        },
+        {
+          "name": "Blake Corum",
+          "player_key": "4429096",
+          "position": "RB",
+          "starter": false,
+          "team": "LAR"
+        },
+        {
+          "name": "Bills D/ST",
+          "player_key": "-16002",
+          "position": "DST",
+          "starter": false,
+          "team": "BUF"
+        },
+        {
+          "name": "Trevor Lawrence",
+          "player_key": "4360310",
+          "position": "QB",
+          "starter": false,
+          "team": "JAX"
+        }
+      ],
+      "team_key": "10"
+    },
+    {
+      "is_owner": false,
+      "name": "Team 11",
+      "owner": "manager8",
+      "players": [
+        {
+          "name": "Amon-Ra St. Brown",
+          "player_key": "4374302",
+          "position": "WR",
+          "starter": false,
+          "team": "DET"
+        },
+        {
+          "name": "Brian Thomas Jr.",
+          "player_key": "4432773",
+          "position": "WR",
+          "starter": true,
+          "team": "JAX"
+        },
+        {
+          "name": "Ladd McConkey",
+          "player_key": "4612826",
+          "position": "WR",
+          "starter": true,
+          "team": "LAC"
+        },
+        {
+          "name": "Omarion Hampton",
+          "player_key": "4685382",
+          "position": "RB",
+          "starter": false,
+          "team": "LAC"
+        },
+        {
+          "name": "Sam LaPorta",
+          "player_key": "4430027",
+          "position": "TE",
+          "starter": false,
+          "team": "DET"
+        },
+        {
+          "name": "Aaron Jones Sr.",
+          "player_key": "3042519",
+          "position": "RB",
+          "starter": true,
+          "team": "MIN"
+        },
+        {
+          "name": "Emeka Egbuka",
+          "player_key": "4567750",
+          "position": "WR",
+          "starter": true,
+          "team": "TB"
+        },
+        {
+          "name": "Justin Herbert",
+          "player_key": "4038941",
+          "position": "QB",
+          "starter": true,
+          "team": "LAC"
+        },
+        {
+          "name": "Cameron Dicker",
+          "player_key": "4362081",
+          "position": "K",
+          "starter": true,
+          "team": "LAC"
+        },
+        {
+          "name": "Kimani Vidal",
+          "player_key": "4430968",
+          "position": "RB",
+          "starter": false,
+          "team": "LAC"
+        },
+        {
+          "name": "Browns D/ST",
+          "player_key": "-16005",
+          "position": "DST",
+          "starter": true,
+          "team": "CLE"
+        },
+        {
+          "name": "Kyle Pitts Sr.",
+          "player_key": "4360248",
+          "position": "TE",
+          "starter": true,
+          "team": "ATL"
+        },
+        {
+          "name": "Tyler Allgeier",
+          "player_key": "4373626",
+          "position": "RB",
+          "starter": true,
+          "team": "ATL"
+        },
+        {
+          "name": "Sam Darnold",
+          "player_key": "3912547",
+          "position": "QB",
+          "starter": false,
+          "team": "SEA"
+        },
+        {
+          "name": "Jake Elliott",
+          "player_key": "3050478",
+          "position": "K",
+          "starter": false,
+          "team": "PHI"
+        },
+        {
+          "name": "Jets D/ST",
+          "player_key": "-16020",
+          "position": "DST",
+          "starter": false,
+          "team": "NYJ"
+        }
+      ],
+      "team_key": "11"
+    },
+    {
+      "is_owner": false,
+      "name": "Team 12",
+      "owner": "manager9",
+      "players": [
+        {
+          "name": "Puka Nacua",
+          "player_key": "4426515",
+          "position": "WR",
+          "starter": true,
+          "team": "LAR"
+        },
+        {
+          "name": "Jonathan Taylor",
+          "player_key": "4242335",
+          "position": "RB",
+          "starter": true,
+          "team": "IND"
+        },
+        {
+          "name": "James Cook III",
+          "player_key": "4379399",
+          "position": "RB",
+          "starter": true,
+          "team": "BUF"
+        },
+        {
+          "name": "Jayden Daniels",
+          "player_key": "4426348",
+          "position": "QB",
+          "starter": false,
+          "team": "WSH"
+        },
+        {
+          "name": "Jaylen Waddle",
+          "player_key": "4372016",
+          "position": "WR",
+          "starter": false,
+          "team": "MIA"
+        },
+        {
+          "name": "Breece Hall",
+          "player_key": "4427366",
+          "position": "RB",
+          "starter": false,
+          "team": "NYJ"
+        },
+        {
+          "name": "Chris Olave",
+          "player_key": "4361370",
+          "position": "WR",
+          "starter": true,
+          "team": "NO"
+        },
+        {
+          "name": "Travis Kelce",
+          "player_key": "15847",
+          "position": "TE",
+          "starter": false,
+          "team": "KC"
+        },
+        {
+          "name": "Keenan Allen",
+          "player_key": "15818",
+          "position": "WR",
+          "starter": false,
+          "team": "LAC"
+        },
+        {
+          "name": "Javonte Williams",
+          "player_key": "4361579",
+          "position": "RB",
+          "starter": true,
+          "team": "DAL"
+        },
+        {
+          "name": "Broncos D/ST",
+          "player_key": "-16007",
+          "position": "DST",
+          "starter": true,
+          "team": "DEN"
+        },
+        {
+          "name": "Kenneth Gainwell",
+          "player_key": "4371733",
+          "position": "RB",
+          "starter": false,
+          "team": "PIT"
+        },
+        {
+          "name": "Matthew Stafford",
+          "player_key": "12483",
+          "position": "QB",
+          "starter": true,
+          "team": "LAR"
+        },
+        {
+          "name": "Andy Borregales",
+          "player_key": "4569923",
+          "position": "K",
+          "starter": true,
+          "team": "NE"
+        },
+        {
+          "name": "Bo Nix",
+          "player_key": "4426338",
+          "position": "QB",
+          "starter": false,
+          "team": "DEN"
+        },
+        {
+          "name": "Hunter Henry",
+          "player_key": "3046439",
+          "position": "TE",
+          "starter": true,
+          "team": "NE"
+        },
+        {
+          "name": "Steelers D/ST",
+          "player_key": "-16023",
+          "position": "DST",
+          "starter": false,
+          "team": "PIT"
+        }
+      ],
+      "team_key": "12"
+    },
+    {
+      "is_owner": false,
+      "name": "Team 13",
+      "owner": "manager10",
+      "players": [
+        {
+          "name": "Ja'Marr Chase",
+          "player_key": "4362628",
+          "position": "WR",
+          "starter": true,
+          "team": "CIN"
+        },
+        {
+          "name": "Bucky Irving",
+          "player_key": "4596448",
+          "position": "RB",
+          "starter": true,
+          "team": "TB"
+        },
+        {
+          "name": "Chase Brown",
+          "player_key": "4362238",
+          "position": "RB",
+          "starter": true,
+          "team": "CIN"
+        },
+        {
+          "name": "Alvin Kamara",
+          "player_key": "3054850",
+          "position": "RB",
+          "starter": false,
+          "team": "NO"
+        },
+        {
+          "name": "DK Metcalf",
+          "player_key": "4047650",
+          "position": "WR",
+          "starter": true,
+          "team": "PIT"
+        },
+        {
+          "name": "Courtland Sutton",
+          "player_key": "3128429",
+          "position": "WR",
+          "starter": false,
+          "team": "DEN"
+        },
+        {
+          "name": "George Pickens",
+          "player_key": "4426354",
+          "position": "WR",
+          "starter": true,
+          "team": "DAL"
+        },
+        {
+          "name": "Jaylen Warren",
+          "player_key": "4569987",
+          "position": "RB",
+          "starter": false,
+          "team": "PIT"
+        },
+        {
+          "name": "Joe Burrow",
+          "player_key": "3915511",
+          "position": "QB",
+          "starter": true,
+          "team": "CIN"
+        },
+        {
+          "name": "Michael Wilson",
+          "player_key": "4360761",
+          "position": "WR",
+          "starter": false,
+          "team": "ARI"
+        },
+        {
+          "name": "Jayden Higgins",
+          "player_key": "4877706",
+          "position": "WR",
+          "starter": false,
+          "team": "HOU"
+        },
+        {
+          "name": "Chris Rodriguez Jr.",
+          "player_key": "4362619",
+          "position": "RB",
+          "starter": false,
+          "team": "WSH"
+        },
+        {
+          "name": "Harold Fannin Jr.",
+          "player_key": "5083076",
+          "position": "TE",
+          "starter": true,
+          "team": "CLE"
+        },
+        {
+          "name": "Devin Neal",
+          "player_key": "4682652",
+          "position": "RB",
+          "starter": false,
+          "team": "NO"
+        },
+        {
+          "name": "Vikings D/ST",
+          "player_key": "-16016",
+          "position": "DST",
+          "starter": true,
+          "team": "MIN"
+        },
+        {
+          "name": "Michael Carter",
+          "player_key": "4240657",
+          "position": "RB",
+          "starter": false,
+          "team": "ARI"
+        },
+        {
+          "name": "Eddy Pineiro",
+          "player_key": "4034949",
+          "position": "K",
+          "starter": true,
+          "team": "SF"
+        },
+        {
+          "name": "Jacoby Brissett",
+          "player_key": "2578570",
+          "position": "QB",
+          "starter": false,
+          "team": "ARI"
+        }
+      ],
+      "team_key": "13"
+    }
+  ],
+  "unmapped_labels": {
+    "103": "Interception returned for touchdown by an individual defender",
+    "93": "Blocked-kick return touchdown by an individual defender"
+  },
+  "unmapped_scoring_keys": [
+    "103",
+    "93"
+  ],
+  "warnings": [
+    "ESPN's response doesn't say which of these teams is yours, so we haven't marked one. Your scoring and roster settings are unaffected."
+  ]
+}

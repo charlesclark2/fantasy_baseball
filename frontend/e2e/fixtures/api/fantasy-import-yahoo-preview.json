@@ -1,0 +1,168 @@
+{
+  "config": {
+    "captured_rules": {
+      "fractional_scoring": true,
+      "playoff_weeks": 15
+    },
+    "description": "Imported from Yahoo (2025).",
+    "format_version": "1.0",
+    "n_teams": 10,
+    "name": "Test Yahoo League",
+    "ppr": "half",
+    "roster": [
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "QB"
+        ],
+        "name": "QB"
+      },
+      {
+        "bench": false,
+        "count": 2,
+        "eligible": [
+          "RB"
+        ],
+        "name": "RB"
+      },
+      {
+        "bench": false,
+        "count": 3,
+        "eligible": [
+          "WR"
+        ],
+        "name": "WR"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "TE"
+        ],
+        "name": "TE"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "RB",
+          "WR",
+          "TE"
+        ],
+        "name": "FLEX"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "K"
+        ],
+        "name": "K"
+      },
+      {
+        "bench": false,
+        "count": 1,
+        "eligible": [
+          "DST"
+        ],
+        "name": "DST"
+      },
+      {
+        "bench": true,
+        "count": 6,
+        "eligible": [],
+        "name": "BN"
+      },
+      {
+        "bench": true,
+        "count": 2,
+        "eligible": [],
+        "name": "IR"
+      }
+    ],
+    "scoring": {
+      "per_stat": {
+        "def_int": 2.0,
+        "def_sacks": 1.0,
+        "dst_pa_g_14_17": 1.0,
+        "dst_pa_g_18_20": 1.0,
+        "dst_pa_g_35_45": -4.0,
+        "dst_pa_g_46p": -4.0,
+        "fg_made_0_19": 3.0,
+        "fg_made_40_49": 4.0,
+        "fg_made_50_59": 5.0,
+        "fg_made_60p": 5.0,
+        "fumbles_lost": -2.0,
+        "pass_int": -1.0,
+        "pass_td": 4.0,
+        "pass_yds": 0.04,
+        "pat_made": 1.0,
+        "rec": 0.5,
+        "rec_td": 6.0,
+        "rec_yds": 0.1,
+        "rush_td": 6.0,
+        "rush_yds": 0.1,
+        "yahoo_9999_some_bonus": 3.0
+      },
+      "position_bonuses": {}
+    },
+    "sport": "nfl",
+    "superflex": false
+  },
+  "draft": null,
+  "platform": "yahoo",
+  "season": "2025",
+  "source_league_id": "461.l.1000",
+  "teams": [
+    {
+      "is_owner": true,
+      "name": "Credence FC",
+      "owner": "e2e-owner",
+      "players": [
+        {
+          "name": "Ja'Marr Chase",
+          "player_key": "461.p.30977",
+          "position": "WR",
+          "starter": true,
+          "team": "Cin"
+        },
+        {
+          "name": "Bijan Robinson",
+          "player_key": "461.p.32671",
+          "position": "RB",
+          "starter": true,
+          "team": "Atl"
+        },
+        {
+          "name": "Trey McBride",
+          "player_key": "461.p.31002",
+          "position": "TE",
+          "starter": false,
+          "team": "Ari"
+        }
+      ],
+      "team_key": "461.l.1000.t.1"
+    },
+    {
+      "is_owner": false,
+      "name": "Rivals United",
+      "owner": "someone-else",
+      "players": [
+        {
+          "name": "Malik Nabers",
+          "player_key": "461.p.33391",
+          "position": "WR",
+          "starter": true,
+          "team": "NYG"
+        }
+      ],
+      "team_key": "461.l.1000.t.2"
+    }
+  ],
+  "unmapped_labels": {},
+  "unmapped_scoring_keys": [
+    "yahoo_9999_some_bonus"
+  ],
+  "warnings": []
+}
