@@ -268,7 +268,8 @@ the same shape #693 recorded as its own side finding ("the served EB as-of seq p
 stale"). That is a **serving** question, needs its own measurement, and must not be folded into a
 monitor change. Not chased here; flagged.
 
-## Guards — `betting_ml/tests/test_e11_24_check_guard_s3_repoint.py` (+7, 40 total)
+## Guards — `betting_ml/tests/test_e11_24_check_guard_s3_repoint.py`
+(6 new test functions → +7 collected cases; **33 collected** in the file)
 
 All five deliberate breaks were **RED-proven**, with the harness asserting the mutation actually
 landed on disk before invoking pytest (E11.24 #682: a RED-proof that can silently no-op reports a
