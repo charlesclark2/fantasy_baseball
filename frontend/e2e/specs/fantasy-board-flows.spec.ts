@@ -220,6 +220,44 @@ test.describe("Rankings — filtering, searching and paging the free board", () 
   })
 })
 
+test.describe("exporting the board", () => {
+  test("Export CSV produces a file whose contents match the board on screen", async ({ page }) => {
+    // ⭐ A DOWNLOAD IS THE ONE OUTPUT THAT LEAVES THE PAGE BEHIND — no tooltips, no column
+    // definitions, no lock chips — so the file is the only thing a spreadsheet reader ever sees.
+    // Nothing anywhere opened it. The failure modes are silent by construction: a button wired to
+    // nothing (the click does nothing and there is no error), a header row that has drifted from
+    // the rows beneath it, or an export of the VISIBLE PAGE rather than the filtered board, which
+    // hands back 50 of 858 rows and looks complete.
+    const { errors } = await openBoard(page, "/fantasy/rankings")
+    const total = await boardTotal(page)
+
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: "Export CSV" }).click(),
+    ])
+
+    const stream = await download.createReadStream()
+    const chunks: Buffer[] = []
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+    const csv = Buffer.concat(chunks).toString("utf8")
+
+    const lines = csv.trim().split("\n")
+    const header = lines[0].split(",")
+    expect(header, "the exported file has no header row").toContain("player")
+
+    // ⭐ THE WHOLE FILTERED BOARD, NOT THE VISIBLE PAGE. `downloadCsv`'s own comment says a
+    // paginated export "would silently hand back 50 of 700 rows" — and 50 rows of a 858-row board
+    // is a perfectly well-formed CSV, which is exactly why only a row count can catch it.
+    expect(
+      lines.length - 1,
+      `the export contains ${lines.length - 1} rows for a board of ${total} — a paginated export ` +
+        `hands back a well-formed file with most of the board missing`,
+    ).toBe(total)
+
+    expectNoPageErrors(errors)
+  })
+})
+
 test.describe("Projections — the same controls on the other public board", () => {
   // Not redundant with the block above: these are DIFFERENT components reading a DIFFERENT endpoint
   // (`/fantasy/nfl/projections` rather than `/fantasy/nfl/board`), with their own filter state and
