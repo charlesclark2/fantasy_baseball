@@ -64,9 +64,20 @@ def _declared_raw_captures() -> list[dict]:
     assert block, "the raw-capture registry declaration moved — update this parser"
     entries = []
     for chunk in re.finditer(
-        r'file:\s*"([^"]+)".*?teams:\s*(\d+)', block.group(0), re.DOTALL
+        r'file:\s*"([^"]+)".*?teams:\s*(\d+).*?source:\s*(SIZE_EXTENDED|"[a-z-]+")',
+        block.group(0),
+        re.DOTALL,
     ):
-        entries.append({"file": chunk.group(1), "teams": int(chunk.group(2))})
+        source = chunk.group(3)
+        entries.append(
+            {
+                "file": chunk.group(1),
+                "teams": int(chunk.group(2)),
+                # `SIZE_EXTENDED` is the exported constant whose value is "size-extended".
+                "source": "size-extended" if source == "SIZE_EXTENDED" else source.strip('"'),
+            }
+        )
+    assert entries, "parsed no registry entries — the declaration shape moved"
     return entries
 
 
@@ -109,8 +120,23 @@ class TestTheCapIsPinnedAcrossLanguages:
 class TestTheRawCaptureRegistry:
     def test_it_declares_the_two_sizes_the_pruner_exists_for(self):
         """A 12-team league imports today only by a hair and a 14-team league only because the
-        pruner runs. Those are the sizes worth capturing, so the registry has to name them."""
+        pruner runs. Those are the sizes worth testing, so the registry has to name them."""
         assert {c["teams"] for c in _declared_raw_captures()} >= {12, 14}
+
+    def test_at_least_one_size_demands_a_real_capture(self):
+        """⭐ THE SHAPE CLAIM CANNOT BE SIZE-EXTENDED INTO EXISTENCE.
+
+        A `size-extended` entry replicates real teams out of a real capture, which is honest for a
+        SIZE claim and worth nothing for a SHAPE one — two copies of one payload are one payload.
+        So the registry must always keep at least one entry that demands a genuine capture; a
+        future edit that flipped every entry to `size-extended` would leave the suite green while
+        no real ESPN bytes were involved anywhere.
+        """
+        sources = [c["source"] for c in _declared_raw_captures()]
+        assert "captured" in sources, (
+            "every declared league size is now size-extended, so nothing in the pruner suite reads "
+            "real ESPN bytes — the denylist would be unproven while the suite reported green"
+        )
 
     @pytest.mark.parametrize(
         "capture", _declared_raw_captures(), ids=lambda c: f"{c['teams']}-team"
@@ -129,10 +155,16 @@ class TestTheRawCaptureRegistry:
         """
         path = FIXTURES / capture["file"]
         if not path.exists():
+            extra = (
+                " (this size is SIZE-EXTENDED from the captured one when absent, which covers its "
+                "size and adds no shape evidence — a real capture here would still be better, and "
+                "a PUBLIC ESPN league needs no credential; see espn-raw-captures.ts)"
+                if capture["source"] == "size-extended"
+                else " Until it lands, pruneEspnPayload's denylist is unproven against real bytes."
+            )
             pytest.skip(
                 f"⏭️ OPERATOR CAPTURE OUTSTANDING: {capture['file']} — a real un-pruned "
-                f"{capture['teams']}-team ESPN response. Until it lands, pruneEspnPayload's "
-                "denylist and cap behaviour are unproven at this league size."
+                f"{capture['teams']}-team ESPN response.{extra}"
             )
 
         text = path.read_text()

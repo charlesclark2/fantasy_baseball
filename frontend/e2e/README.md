@@ -167,10 +167,33 @@ coverage. This list is the honest half of the table above.
      being right — so it is scoped to latency and to catching the walk BREAKING (a renamed key, a
      wrong path), never to whether our belief about ESPN's shape is CORRECT. That half is exactly
      what the operator captures are for.
-   ⏭️ **THE ONE OPEN ITEM: capture a real un-pruned drafted 12-team and 14-team ESPN response**
+   ⏭️ **THE ONE OPEN ITEM: capture ONE real un-pruned drafted ESPN response** — a 12-team league
    (procedure in `e2e/support/espn-raw-captures.ts`). ⛔ It must not be fabricated by re-inflating a
-   pruned capture — that would encode our assumption about the very shape under test and make all
-   ten gated tests pass while proving nothing.
+   pruned capture — that would encode our assumption about the very shape under test and make every
+   gated test pass while proving nothing.
+   - **Why one is enough for the SHAPE claim, and what it does not cover.** The denylist question is
+     "do these fields exist where we think, in ESPN's output" — a claim about field names, not about
+     league size, so one real capture settles it at every size. What one capture cannot disconfirm
+     is that ESPN returns a materially different field set for a *larger* league; that is unverified
+     and stated rather than assumed.
+   - **The 14-team leg is answered by SIZE-EXTENSION, not left pending.** No account we have access
+     to is in a 14-team ESPN league, so waiting would leave that leg permanently "pending" — a
+     limitation that reads as a considered decision and stops anyone re-checking it. Instead the
+     14-team payload replicates whole teams out of the real 12-team capture: every byte is genuine
+     ESPN output, so it carries the SIZE claim at that scale honestly and adds **zero** independent
+     shape evidence. The registry test reports the two counts **separately** (`SHAPE proven on N
+     independently-captured real payload(s); SIZE additionally covered at M size-extended league
+     size(s)`) precisely so the second cannot be laundered into the first, and a Python guard fails
+     if every declared size is ever flipped to size-extended.
+   - ⭐ **A genuinely real 14-team payload needs no credential.** A league whose owner has set it
+     PUBLIC is readable unauthenticated from the same host (`docs/nf_c0_espn_access_probe.md` §1(b)
+     — that path was rejected as a *product* path because it cannot reach private leagues, which is
+     no objection to using it as a *fixture*). Drop a public 14-team league id into the read URL and
+     the file slot takes it; a real capture always wins over extension.
+   - **The "12-team ≈99% of cap / 14-team REFUSED" figures are now MEASURED and reported**, not
+     inherited. They had been quoted in three places since NF-C0e and were themselves extrapolated
+     from a single 10-team measurement. The cap test prints the real headroom; a capture that
+     disagrees is a docstring to correct, not a test to fail.
 6. **Rankings and Projections have no sortable columns.** Their order is the board's own rank, so
    there is no sort control to test — recorded so a future reader does not go looking for the test.
    The Draft Optimizer's Pts/VOR headers are the only user-driven sort in the product, and they are

@@ -9,12 +9,9 @@ import {
   ESPN_REMOVED_FIELDS,
   MAX_PASTE_BYTES,
   payloadBytes,
-  rawCaptureExists,
-  rawCapturePath,
-  readRawCapture,
   removableFieldCounts,
+  resolveCapture,
   withoutRemovedFields,
-  type EspnRawCapture,
 } from "../support/espn-raw-captures"
 
 /**
@@ -41,21 +38,29 @@ import {
  *
  * ══ WHAT IS ASSERTED WHERE, AND WHY THE LINE IS DRAWN THERE ════════════════════════════════════
  *
- * Two claims are in play and they need different evidence:
+ * Two claims are in play, they need different evidence, and the whole design here is keeping them
+ * apart:
  *
- *   1. SHAPE + CAP — "it removes the right fields, and the result fits". This depends on our field
- *      names actually matching ESPN's, so it is provable ONLY against a real un-pruned capture. A
- *      synthetic would be built from the same assumption the pruner encodes and would agree with it
- *      no matter how wrong both were — precisely the defect NF-C0e shipped. ⇒ gated on the
- *      operator-supplied captures; SKIPS, loudly, until they land.
+ *   1. SHAPE — "it removes the RIGHT fields". This depends on our field names actually matching
+ *      ESPN's, so it is provable ONLY against a real un-pruned capture. Anything we generate is
+ *      built from the same assumption the pruner encodes and would agree with it no matter how
+ *      wrong both were — precisely the defect NF-C0e shipped. ⇒ needs a real capture; SKIPS,
+ *      loudly, until one lands. **One real capture carries this for every league size**, because
+ *      it is a claim about ESPN's field names, not about league size.
  *
- *   2. SIZE + LATENCY — "the control and the pruner survive 3.3 MB". This does NOT depend on the
- *      field names being right, only on the byte volume, so a synthetic of the right SIZE is
- *      legitimate evidence. ⇒ runs today, and is scoped to exactly that claim. It is labelled
- *      everywhere so it can never be read as (1).
+ *   2. SIZE — "a payload this big prunes to something that fits, and the control survives it".
+ *      This does NOT depend on the field names being right, only on byte volume. So it can be
+ *      answered two ways that are both honest, and are labelled distinctly wherever they appear:
+ *        · SIZE-EXTENDED — real teams REPLICATED out of the real capture to reach a league size we
+ *          cannot obtain (the operator has a 12-team ESPN league, not a 14-team one). Every byte is
+ *          genuine ESPN output. Adds real size evidence, and ZERO independent shape evidence.
+ *        · SYNTHETIC — a generated document of ~3.3 MB, used only for latency and for catching the
+ *          walk BREAKING. Never for a claim about ESPN.
  *
- * ⛔ Do not "unblock" (1) by generating a raw payload from a pruned one. That would make every
- * assertion here pass and prove nothing. `espn-raw-captures.ts` documents the capture procedure.
+ * ⛔ Do not "unblock" (1) by generating a raw payload, or by promoting a size-extended one. Two
+ * copies of one payload are one payload. `espn-raw-captures.ts` documents the capture procedure,
+ * and notes that a PUBLIC ESPN league is readable with no credential at all if a genuinely
+ * independent second payload is wanted.
  */
 
 /** ~3.3 MB — the measured size of a real drafted TEN-team response before pruning. */
@@ -121,22 +126,30 @@ test.describe("the un-pruned ESPN capture registry", () => {
    */
   test("reports, in the open, which claims are currently proven on real bytes", async () => {
     const lines: string[] = []
-    let proven = 0
+    let captured = 0
+    let extended = 0
 
     for (const capture of ESPN_RAW_CAPTURES) {
-      if (!rawCaptureExists(capture)) {
-        lines.push(`  ⏭️  ${capture.id}: MISSING — ${capture.file} (operator capture; see espn-raw-captures.ts)`)
+      const resolved = resolveCapture(capture)
+      if (!resolved) {
+        lines.push(
+          `  ⏭️  ${capture.id}: UNAVAILABLE — ${capture.file} (see espn-raw-captures.ts)`,
+        )
         continue
       }
-      const counts = removableFieldCounts(readRawCapture(capture))
+      const counts = removableFieldCounts(resolved.text)
       const bulk = ESPN_BULK_DRIVER_FIELDS.map((f) => `${f}=${counts[f]}`).join(" ")
-      lines.push(`  ✅ ${capture.id}: present, ${bulk}`)
-      proven += 1
+      lines.push(`  ✅ ${capture.id}: ${resolved.provenance}, ${bulk}`)
+      resolved.isIndependentEvidence ? (captured += 1) : (extended += 1)
     }
 
+    // ⭐ THE TWO COUNTS ARE REPORTED SEPARATELY, AND THAT SEPARATION IS THE HONESTY.
+    // A size-extended payload replicates real teams out of a real capture, so it answers the SIZE
+    // question at that league size and adds ZERO independent evidence about ESPN's field shape.
+    // Collapsing the two into one "N/2 proven" would launder the second into the first.
     const summary =
-      `pruneEspnPayload proven on real un-pruned bytes for ${proven}/${ESPN_RAW_CAPTURES.length} ` +
-      `declared league sizes\n${lines.join("\n")}`
+      `pruneEspnPayload — SHAPE proven on ${captured} independently-captured real payload(s); ` +
+      `SIZE additionally covered at ${extended} size-extended league size(s)\n${lines.join("\n")}`
     console.log(`\n── ESPN pruner coverage ──\n${summary}\n`)
     test.info().annotations.push({ type: "espn-pruner-coverage", description: summary })
 
@@ -154,12 +167,20 @@ test.describe("the un-pruned ESPN capture registry", () => {
 for (const capture of ESPN_RAW_CAPTURES) {
   test.describe(`pruneEspnPayload on a real un-pruned ${capture.id} ESPN league`, () => {
     test.skip(
-      () => !rawCaptureExists(capture),
-      `⏭️ BLOCKED ON AN OPERATOR CAPTURE: ${capture.file} is not committed. Nothing in this repo ` +
-        `can produce it and it must not be fabricated — see e2e/support/espn-raw-captures.ts for ` +
-        `the capture procedure. Until it lands, the pruner's DENYLIST and its 4 MB cap behaviour ` +
-        `are unproven for a ${capture.teams}-team league.`,
+      () => resolveCapture(capture) === null,
+      `⏭️ BLOCKED ON AN OPERATOR CAPTURE: no real un-pruned ESPN payload is committed, so nothing ` +
+        `can be resolved for a ${capture.teams}-team league. Nothing in this repo can produce one ` +
+        `and it must not be fabricated — see e2e/support/espn-raw-captures.ts. Until it lands, the ` +
+        `pruner's DENYLIST and its 4 MB cap behaviour are unproven at every league size.`,
     )
+
+    /** The bytes under test, plus an honest label. ⚠️ Read once per test rather than hoisted: the
+     *  file can land between runs, and a module-scope read would pin the skip decision to whatever
+     *  was on disk when the file was first imported. */
+    const bytes = () => {
+      const resolved = resolveCapture(capture)!
+      return resolved
+    }
 
     /**
      * ⭐ THE NON-VACUITY GUARD, AND IT RUNS FIRST ON PURPOSE.
@@ -173,8 +194,9 @@ for (const capture of ESPN_RAW_CAPTURES) {
      * SILENTLY in the direction of a green suite. This is the one check that cannot be skipped.
      */
     test("the capture is genuinely un-pruned, so the assertions below can fail", () => {
-      const raw = readRawCapture(capture)
+      const { text: raw, provenance } = bytes()
       const counts = removableFieldCounts(raw)
+      test.info().annotations.push({ type: `provenance-${capture.id}`, description: provenance })
 
       // Reported for all six; required for the three that carry the bulk. Whether ESPN returns
       // `outlooks` / `ratings` / `notificationSettings` for a given league and view set is a fact
@@ -188,27 +210,38 @@ for (const capture of ESPN_RAW_CAPTURES) {
       for (const field of ESPN_BULK_DRIVER_FIELDS) {
         expect(
           counts[field],
-          `${capture.file} contains no "${field}" key, so it is NOT an un-pruned capture — it is a ` +
-            `pruned artifact, and every pruner assertion in this file would pass on it while ` +
-            `proving nothing. Re-capture it verbatim from the ESPN read URL (see ` +
+          `the ${capture.id} payload (${provenance}) contains no "${field}" key, so it is NOT ` +
+            `un-pruned — it is a pruned artifact, and every pruner assertion in this file would ` +
+            `pass on it while proving nothing. Re-capture verbatim from the ESPN read URL (see ` +
             `espn-raw-captures.ts) rather than deriving it from a committed fixture. ` +
             `Observed: ${report}`,
         ).toBeGreaterThan(0)
       }
+
+      // The payload has to be the SIZE it claims, whether captured or extended — a 14-team result
+      // read off a 12-team document would be the quietest possible way for this leg to say nothing.
+      expect(
+        (JSON.parse(raw).teams ?? []).length,
+        `the ${capture.id} payload carries the wrong number of teams`,
+      ).toBe(capture.teams)
     })
 
     test("pruning brings the payload under the server's paste cap", () => {
-      const raw = readRawCapture(capture)
+      const { text: raw, provenance } = bytes()
       const rawSize = payloadBytes(raw)
       const prunedSize = payloadBytes(pruneEspnPayload(raw))
 
+      // ⭐ THE INHERITED CLAIM, TURNED INTO A MEASUREMENT. "12-team ≈99% of the cap, 14-team
+      // REFUSED" has been quoted in three places since NF-C0e and was itself EXTRAPOLATED from one
+      // 10-team measurement — nobody had ever weighed a payload at either size. It is REPORTED here
+      // rather than asserted: a real capture that disagrees is a docstring to correct, not a test
+      // to fail, and failing on it would be reverse-engineering the bar from the answer.
       const pct = (n: number) => `${((n / MAX_PASTE_BYTES) * 100).toFixed(1)}% of the cap`
-      test.info().annotations.push({
-        type: `cap-${capture.id}`,
-        description:
-          `raw ${rawSize} B (${pct(rawSize)}) → pruned ${prunedSize} B (${pct(prunedSize)}); ` +
-          `raw ${rawSize > MAX_PASTE_BYTES ? "EXCEEDS" : "fits under"} the cap unpruned`,
-      })
+      const measurement =
+        `${capture.id} (${provenance}): raw ${rawSize} B (${pct(rawSize)}) → pruned ${prunedSize} B ` +
+        `(${pct(prunedSize)}); un-pruned it ${rawSize > MAX_PASTE_BYTES ? "EXCEEDS the cap (would be REFUSED)" : "fits under the cap"}`
+      console.log(`\n── ESPN pruner, cap headroom ──\n  ${measurement}\n`)
+      test.info().annotations.push({ type: `cap-${capture.id}`, description: measurement })
 
       // ⭐ THE DoD. Everything else in this file is diagnosis; this is the property the user needs.
       expect(
@@ -232,7 +265,7 @@ for (const capture of ESPN_RAW_CAPTURES) {
     })
 
     test("it removes exactly the unread fields, and nothing else", () => {
-      const raw = readRawCapture(capture)
+      const { text: raw } = bytes()
       const pruned = pruneEspnPayload(raw)
 
       // ⭐ THE SILENT-CATCH PATH, CAUGHT. `pruneEspnPayload` returns its INPUT verbatim on anything
@@ -260,8 +293,9 @@ for (const capture of ESPN_RAW_CAPTURES) {
     })
 
     test("everything the import reads survives the rewrite", () => {
-      const raw = JSON.parse(readRawCapture(capture))
-      const pruned = JSON.parse(pruneEspnPayload(readRawCapture(capture)))
+      const { text } = bytes()
+      const raw = JSON.parse(text)
+      const pruned = JSON.parse(pruneEspnPayload(text))
 
       // The server resolves the league from these two, so losing either turns a good paste into an
       // unrecognisable one — the failure mode a size-only assertion would sail straight past.
@@ -290,7 +324,7 @@ for (const capture of ESPN_RAW_CAPTURES) {
 
     test("pasting the raw payload posts a body that fits under the cap", async ({ page }) => {
       test.setTimeout(90_000)
-      const raw = readRawCapture(capture)
+      const { text: raw } = bytes()
       const { mock, errors } = await openEspnPanel(page)
 
       await pasteRaw(page, raw)
