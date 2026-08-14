@@ -1099,6 +1099,63 @@ const CASES = [
     to: "  const comparable = allComparable.filter((d) => d.draftable)",
     grep: "no kicker or defense can lead the list",
   },
+  // ── the free tier's nav gate, both directions + the anchor that keeps the negative honest ────
+  {
+    id: "logged-out-nav-does-not-mount",
+    shipped: "not a shipped defect — this proves the negative spec's ANCHOR can actually fail",
+    // ⭐ THE CASE THAT TESTS THE TEST, and the only break that reaches this anchor. Removing the
+    // logged-out nav's Sign Up affordance stands in for "the nav did not render": the three
+    // `toHaveCount(0)`s below it are still trivially satisfied, so a RED here can only have come
+    // from the anchor. Without this case the anchor would be an unfalsifiable line of ceremony —
+    // which is the exact shape it was added to remove.
+    detail: "Drops the Sign Up affordance from the logged-out nav, so the anchor has nothing.",
+    file: "components/nav.tsx",
+    from: "<Link href={SIGNUP_HREF}>Sign Up</Link>",
+    to: "<span>Sign Up</span>",
+    grep: "logged-out visitor is not offered",
+  },
+  {
+    id: "league-nav-offered-to-a-logged-out-visitor",
+    shipped: "the shape `public: true` would have had — a menu that lies about what it opens",
+    // ⭐ DECLARED GREEN, AND THAT IS THE FINDING. Pinning it here is what keeps it one.
+    //
+    // "a logged-out visitor is not offered the league surfaces" reads like a guard on
+    // `freeSignedIn && isSignedIn`. It is not. MEASURED while de-flaking its sibling: the anonymous
+    // nav renders ONE unlabelled button and six links, with no `NFL`/`MLB` dropdown at all, because
+    // `showSubNav = authenticated || isSignedIn` (nav.tsx:93) withholds the entire sport sub-nav
+    // one level ABOVE the item filter. So promoting `freeSignedIn` to public puts the items in a
+    // menu that is not in the DOM, and the spec cannot see it.
+    //
+    // The requirement still holds — anonymous visitors genuinely are not offered these — it is just
+    // over-determined, and the spec's own comment now says so rather than implying a guard it does
+    // not provide. If this ever flips to RED the nav's structure moved and both notes are stale.
+    expect: "GREEN",
+    detail: "Treats `freeSignedIn` as public; invisible here because the whole sub-nav is withheld.",
+    file: "components/nav.tsx",
+    from: "surfaceItems(g).filter((i) => i.public || (i.freeSignedIn && isSignedIn))",
+    to: "surfaceItems(g).filter((i) => i.public || i.freeSignedIn)",
+    grep: "logged-out visitor is not offered",
+  },
+  {
+    id: "logged-out-nav-renders-nothing-at-all",
+    shipped: "not a shipped defect — this measures the REACH of the negative spec's anchor",
+    // ⭐ ALSO DECLARED GREEN, for the same structural reason, and it bounds what the anchor claims.
+    //
+    // The intent was: empty the locked menu, leaving the three `toHaveCount(0)`s trivially
+    // satisfied so ONLY the render anchor can fail. It stays green because the anchor is
+    // `nav a[href="/signup"]` — logged-out nav CHROME, which this filter never touches.
+    //
+    // That is deliberate rather than a weaker choice: for an anonymous visitor no anchor inside the
+    // sport menu exists to reach for. The anchor therefore proves the nav MOUNTED (the blank-page
+    // vacuity this spec really was exposed to) and nothing more, which is exactly what the spec now
+    // claims. Over-claiming it would repeat the mistake one level up.
+    expect: "GREEN",
+    detail: "Empties the locked menu; the anchor is nav chrome, so it is untouched by design.",
+    file: "components/nav.tsx",
+    from: "surfaceItems(g).filter((i) => i.public || (i.freeSignedIn && isSignedIn))",
+    to: "surfaceItems(g).filter(() => false)",
+    grep: "logged-out visitor is not offered",
+  },
   // ── G100-D0-R1: the signup event counts ACCOUNTS, not buttons ────────────────────────────────
   {
     id: "signup-keyed-on-the-button-again",

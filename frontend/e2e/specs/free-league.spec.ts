@@ -31,6 +31,16 @@ import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors } from "../suppor
 
 const SIGNED_IN_FREE = { groups: [] as string[] }
 
+/**
+ * The three `freeSignedIn` nav items (`lib/nav-model.ts`) — offered to a signed-in free account,
+ * withheld from a logged-out visitor.
+ *
+ * ONE list, read by both halves of that contract, because they are two statements about the same
+ * membership: an item added to the menu but not to the negative test would be asserted reachable
+ * and never asserted withheld. Same reason the app keeps one ordering function rather than two.
+ */
+const LEAGUE_NAV_HREFS = ["/fantasy/my-league", "/fantasy/import", "/fantasy/league-settings"] as const
+
 /** Every spec here needs the same three things: a session, the API, and no third-party traffic. */
 async function openMyLeague(
   page: Page,
@@ -349,11 +359,17 @@ test.describe("the free personalized league", () => {
     await mockApi(page, { entitlement: "free", leagues: "one" })
     await page.goto("/fantasy/rankings")
 
-    for (const href of ["/fantasy/my-league", "/fantasy/import", "/fantasy/league-settings"]) {
-      expect(
-        await page.locator(`a[href="${href}"]`).count(),
+    for (const href of LEAGUE_NAV_HREFS) {
+      // ⏳ AUTO-RETRYING, and it has to be. `page.goto` resolves on `load`; the nav gates these
+      // items on `isSignedIn = !!accessToken`, which `AuthContext` restores in an EFFECT that runs
+      // after that. A single-shot `await locator.count()` therefore reads whatever happened to be
+      // painted at one instant — it wins on a fast machine and loses on a loaded CI runner, which
+      // is exactly what it did (2026-08-13: one commit, two runs minutes apart, one red one green,
+      // with only a markdown file changed between them).
+      await expect(
+        page.locator(`a[href="${href}"]`),
         `${href} is unreachable for a signed-in free account`,
-      ).toBeGreaterThan(0)
+      ).not.toHaveCount(0)
     }
   })
 
@@ -364,11 +380,36 @@ test.describe("the free personalized league", () => {
     await mockApi(page, { entitlement: "free" })
     await page.goto("/fantasy/rankings")
 
-    for (const href of ["/fantasy/my-league", "/fantasy/import", "/fantasy/league-settings"]) {
-      expect(
-        await page.locator(`a[href="${href}"]`).count(),
+    // ⚠️⚠️ READ THIS BEFORE TRUSTING THE ASSERTIONS BELOW — THEY ARE WEAKER THAN THEY LOOK, AND
+    // THE COMMENT THEY USED TO CARRY NAMED THE WRONG MECHANISM.
+    //
+    // The requirement is real and is met. But it is NOT met by `freeSignedIn && isSignedIn`, which
+    // is what a reader naturally assumes from the sibling test. It is met one level up, by
+    // `showSubNav = authenticated || isSignedIn` (`components/nav.tsx:93`), which withholds the
+    // ENTIRE sport sub-nav from an anonymous visitor. MEASURED: a logged-out nav renders one
+    // unlabelled button and the links `/`, `/fantasy/rankings`, `/fantasy/track-record`, `/about`,
+    // `/login`, `/signup`; a signed-in one renders `NFL`/`MLB` dropdowns and all 20+ surface items.
+    //
+    // ⇒ THIS SPEC IS OVER-DETERMINED. `lockedVisibleItems` can be broken in EITHER direction —
+    // items dropped, or `freeSignedIn` promoted to public — and these assertions stay green,
+    // because the menu that would carry them is not in the DOM at all. Both breaks are registered
+    // in `e2e/red-proof.mjs` as DECLARED-GREEN cases so that fact is recorded rather than
+    // rediscovered; if either ever flips to RED, the nav's structure moved and this note is stale.
+    //
+    // The anchor below therefore claims only what it can: the logged-out nav MOUNTED. That is the
+    // one failure this spec can genuinely catch (a blank or crashed page silently satisfying three
+    // `toHaveCount(0)`s), and it is worth catching — it is the shape the repo has been bitten by
+    // repeatedly, where a test reads as coverage so nobody looks again.
+    await expect(
+      page.locator('nav a[href="/signup"]'),
+      "the logged-out nav never mounted — the absences below would be vacuous",
+    ).not.toHaveCount(0)
+
+    for (const href of LEAGUE_NAV_HREFS) {
+      await expect(
+        page.locator(`a[href="${href}"]`),
         `${href} was offered to a logged-out visitor, who cannot use it`,
-      ).toBe(0)
+      ).toHaveCount(0)
     }
   })
 })
