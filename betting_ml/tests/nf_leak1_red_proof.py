@@ -272,6 +272,13 @@ CASES = [
         "        return True\n    except Exception:\n        return True",
         "test_a_failed_ledger_write_is_reported_rather_than_swallowed",
     ),
+    (
+        "store the ledger without the float→Decimal conversion DynamoDB requires",
+        DYNAMO,
+        '            ExpressionAttributeValues={":led": _to_ddb(ledger)},',
+        '            ExpressionAttributeValues={":led": dict(ledger)},',
+        "test_the_ledger_survives_a_real_dynamodb_round_trip",
+    ),
     # ── the honest framing ─────────────────────────────────────────────────────────────────────
     (
         "let the module claim the leak is closed",

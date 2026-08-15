@@ -175,12 +175,12 @@ impossible".
 
 ## 7. Guards
 
-`betting_ml/tests/test_nf_leak1_scoring_probe_guard.py` — **35 tests**, two-sided: the attack is
+`betting_ml/tests/test_nf_leak1_scoring_probe_guard.py` — **36 tests**, two-sided: the attack is
 priced out; real leagues and real editing are untouched; the failure modes (a refusal must not spend
 a token, an unreadable ledger must not lock a user out, the read path must never run the write rules)
 are pinned; and the record is forbidden from overclaiming.
 
-`betting_ml/tests/nf_leak1_red_proof.py` — **32/32 breaks turn their named clause RED**, with every
+`betting_ml/tests/nf_leak1_red_proof.py` — **33/33 breaks turn their named clause RED**, with every
 named test verified PASSING on unmutated source first. The first three cases delete the enforcement
 entirely (the pre-fix world), so the story cannot be decoration.
 
@@ -207,6 +207,7 @@ each fixed by fixing the fixture:
 | first-few-tweaks not flagged | the baseline was a 9-term stub; the defect only reproduces at a real league's ~28 terms |
 | failed ledger write | asserted on a throttling outcome a log line cannot change |
 | the whole overclaim scan | flagged the module's own **prohibition** ("nothing here may claim the leak is closed") — a forbidden-phrase scan must exclude the lines that forbid it |
+| DynamoDB float rejection | called `_to_ddb` directly instead of the writer, so the writer was free to stop calling it (wired-≠-invoked, NF-C0e) — fixed with a fake table that rejects floats the way DynamoDB does |
 
 ---
 

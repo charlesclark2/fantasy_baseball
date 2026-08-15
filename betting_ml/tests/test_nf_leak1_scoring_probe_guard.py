@@ -476,6 +476,70 @@ class TestFailureModes:
             r.getMessage() for r in caplog.records
         ]
 
+    def test_the_ledger_survives_a_real_dynamodb_round_trip(self):
+        """⭐ THE RUNTIME-CLASS BUG CI CANNOT SEE. DynamoDB refuses Python floats, and this ledger is
+        almost entirely floats (`tokens`, `checked_at`, every stored weight). Every test above holds
+        the ledger as a plain dict, so a serialization failure would be invisible here and would
+        surface only on the box — as a `[METRIC] …ledger_write_failed` on EVERY change, i.e. as the
+        budget silently never being enforced.
+
+        Driven through the REAL `put_fantasy_scoring_ledger` / `get_fantasy_scoring_ledger` pair
+        against a table that REJECTS floats exactly as DynamoDB does — not through `_to_ddb`
+        directly, which would test the conversion helper while leaving the writer free to stop
+        calling it (the wired-≠-invoked shape, NF-C0e). Then charged again off the round-tripped
+        value, because "it serialized" is not "it still works as a ledger".
+        """
+        from decimal import Decimal
+
+        from app.backend.services import dynamo
+
+        guard = _guard()
+
+        class FloatRejectingTable:
+            """DynamoDB refuses `float`; boto3 raises `TypeError: Float types are not supported`."""
+
+            def __init__(self):
+                self.stored = None
+
+            @staticmethod
+            def _check(value):
+                if isinstance(value, float):
+                    raise TypeError("Float types are not supported. Use Decimal types instead.")
+                if isinstance(value, dict):
+                    for v in value.values():
+                        FloatRejectingTable._check(v)
+                elif isinstance(value, (list, tuple)):
+                    for v in value:
+                        FloatRejectingTable._check(v)
+
+            def update_item(self, Key, UpdateExpression, ExpressionAttributeNames=None,  # noqa: N803
+                            ExpressionAttributeValues=None, ConditionExpression=None):
+                self._check(ExpressionAttributeValues)
+                self.stored = (ExpressionAttributeValues or {})[":led"]
+                return {}
+
+            def get_item(self, Key):  # noqa: N803
+                return {"Item": {"fantasy_scoring_ledger": self.stored}}
+
+        table = FloatRejectingTable()
+        original = dynamo._users_table
+        dynamo._users_table = lambda: table
+        try:
+            verdict = guard.charge(None, _cfg({**REAL, "rec": 0.75}), 1_760_000_000.5)
+            assert dynamo.put_fantasy_scoring_ledger("u1", verdict.ledger) is True, (
+                "the ledger could not be written to a DynamoDB-faithful table"
+            )
+            assert isinstance(table.stored["tokens"], Decimal)
+            restored = dynamo.get_fantasy_scoring_ledger("u1")
+        finally:
+            dynamo._users_table = original
+
+        assert isinstance(restored, dict)
+        again = guard.charge(restored, _cfg({**REAL, "rec": 0.9}), 1_760_000_050.0)
+        assert again.allowed
+        assert again.ledger["changes"] == verdict.ledger["changes"] + 1
+        assert again.ledger["tokens"] == pytest.approx(guard.BUDGET_BURST - 2.0, abs=0.01)
+
     def test_the_throttle_message_names_what_still_works(self):
         """A paywall message that only says "no" reads as a broken form. It has to tell a real user
         what to do and what they can still edit."""
