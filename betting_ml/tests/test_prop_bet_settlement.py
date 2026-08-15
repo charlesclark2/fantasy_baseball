@@ -329,3 +329,64 @@ def test_the_batters_query_scans_the_wide_lineup_table_only_once():
         f"{src.count('stg_statsapi_lineups_wide')}"
     )
     assert "unnest(" in src
+
+
+# ── duck_connect must survive an empty $HOME (the 2026-08-15 prod outage) ─────
+#
+# The Lambda runtime leaves $HOME empty. DuckDB resolves its extension directory under the
+# home directory, so `INSTALL httpfs` raised before downloading anything and EVERY lakehouse
+# read in the API degraded to [] — both prop pickers, and every other lakehouse-backed panel:
+#
+#   duckdb.duckdb.IOException: IO Error: Can't find the home directory at ''
+#   Specify a home directory using the SET home_directory='/path/to/dir' option.
+#
+# Reproduced locally by setting HOME='' (fails identically; fixed by the SET). These tests are
+# hermetic — a real INSTALL would need the network, which the suite forbids — so they pin the
+# ORDER of the statements duck_connect issues, which is the part that was wrong.
+
+class _RecordingConn:
+    """Minimal duckdb-connection stand-in that records executed SQL and raises on INSTALL
+    unless a home directory was set first — mirroring the real failure."""
+
+    def __init__(self):
+        self.statements: list[str] = []
+        self.home_set = False
+
+    def execute(self, sql: str, *args, **kwargs):
+        self.statements.append(sql)
+        if "home_directory" in sql:
+            self.home_set = True
+        if sql.startswith("INSTALL httpfs") and not self.home_set:
+            raise RuntimeError("IO Error: Can't find the home directory at ''")
+        return self
+
+
+def _connect_with_recorder(monkeypatch):
+    import duckdb
+
+    from app.backend.services import lakehouse_read
+    rec = _RecordingConn()
+    monkeypatch.setattr(duckdb, "connect", lambda *a, **k: rec)
+    lakehouse_read.duck_connect()
+    return rec
+
+
+def test_duck_connect_sets_a_home_directory_before_installing_httpfs(monkeypatch):
+    rec = _connect_with_recorder(monkeypatch)
+    home_idx = next(i for i, s in enumerate(rec.statements) if "home_directory" in s)
+    install_idx = next(i for i, s in enumerate(rec.statements) if s.startswith("INSTALL httpfs"))
+    assert home_idx < install_idx, (
+        "home_directory must be set BEFORE INSTALL httpfs — DuckDB resolves the extension "
+        "directory under $HOME, which the Lambda runtime leaves empty"
+    )
+
+
+def test_duck_connect_points_the_writable_dirs_at_tmp(monkeypatch):
+    """/tmp is the only writable path in Lambda; a dir anywhere else cannot be created."""
+    rec = _connect_with_recorder(monkeypatch)
+    joined = " ".join(rec.statements)
+    for setting in ("home_directory", "extension_directory", "secret_directory"):
+        stmt = next((s for s in rec.statements if setting in s), None)
+        assert stmt is not None, f"{setting} is not set"
+        assert "'/tmp" in stmt, f"{setting} must live under /tmp, got: {stmt}"
+    assert "INSTALL httpfs" in joined

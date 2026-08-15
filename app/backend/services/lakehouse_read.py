@@ -90,21 +90,31 @@ def duck_connect():
     import duckdb  # lazy import — see module docstring
 
     conn = duckdb.connect()
-    # ⚠️ LAMBDA IS READ-ONLY EXCEPT /tmp. `INSTALL` downloads an extension and WRITES it to
-    # the extension directory, which defaults to ~/.duckdb — unwritable in Lambda, so the
-    # install raises and every lakehouse read then degrades to []. Point both writable
-    # directories at /tmp BEFORE the first INSTALL. Harmless everywhere else (a laptop just
-    # caches its extensions under /tmp instead of $HOME), and skipped silently on any DuckDB
-    # build that doesn't know these settings.
+    # ⚠️ THE LAMBDA RUNTIME LEAVES $HOME EMPTY, and DuckDB resolves its extension directory
+    # under the home directory. `INSTALL httpfs` therefore raises before it downloads
+    # anything, _get_conn() propagates, and EVERY lakehouse read in the API degrades to []:
+    #
+    #   duckdb.duckdb.IOException: IO Error: Can't find the home directory at ''
+    #   Specify a home directory using the SET home_directory='/path/to/dir' option.
+    #
+    # (Observed in prod 2026-08-15 on duckdb 1.2.2; reproduced locally by setting HOME='',
+    # which fails identically and is fixed by exactly this SET.) home_directory is FIRST and
+    # is the load-bearing one — the others are belt-and-braces for the read-only filesystem.
+    # /tmp is the only writable path in Lambda; elsewhere this just relocates the extension
+    # cache, which is harmless.
     for pragma in (
-        "SET extension_directory='/tmp/duckdb_extensions'",
         "SET home_directory='/tmp'",
+        "SET extension_directory='/tmp/duckdb_extensions'",
         "SET secret_directory='/tmp/duckdb_secrets'",
     ):
         try:
             conn.execute(pragma)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:  # noqa: BLE001 — an older build may not know a given setting
+            # NOT silent: home_directory failing is the difference between a working API and
+            # every lakehouse read returning []. A swallowed failure here would put us right
+            # back to guessing from an empty list.
+            logger.warning("duck_connect: %r failed; lakehouse reads may degrade", pragma,
+                           exc_info=True)
     conn.execute("INSTALL httpfs; LOAD httpfs")
     try:
         conn.execute("INSTALL icu; LOAD icu")  # AT TIME ZONE / tz casts in the odds reads
