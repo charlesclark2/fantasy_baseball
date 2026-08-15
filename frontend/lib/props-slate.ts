@@ -44,6 +44,11 @@ export interface SlateRow {
   line: number | null
   bookCount: number
   diff: number | null
+  /** Sportsbooks that quoted this row at all (any line), sorted + deduped — mirrors the index
+   *  payload's own `books` field (betting_ml/utils/{tb,k}_projection_serving.index_row). Empty
+   *  on an older cached payload written before this field existed (never absent/undefined — the
+   *  page maps a missing field to `[]` so the filter degrades to "no chips" rather than crashing). */
+  books: string[]
 }
 
 // First-pitch instant (ms) for sorting/grouping; same "treat as UTC if no tz suffix" rule the
@@ -139,17 +144,27 @@ export interface RowFilters {
   search: string
   line: number | null
   minBookCount: number | null
+  /** Sportsbook filter chips, OR'd — same semantics as the team/matchup chip: an empty set
+   *  matches every row, a non-empty set keeps a row if ANY selected book quoted it. So selecting
+   *  just "bovada" narrows to every prop Bovada posted a line for, on either tab. */
+  books: Set<string>
 }
 
-/** Row-level filters only — search, line value, min book count. Team/matchup filtering is
+/** Row-level filters — search, line value, min book count, sportsbook. Team/matchup filtering is
  *  group-level (see `groupMatchesTeams`) because it narrows to a MATCHUP, not to one side's rows. */
 export function filterRows(rows: SlateRow[], f: RowFilters): SlateRow[] {
   return rows.filter(
     (r) =>
       matchesSearch(r, f.search) &&
       (f.line == null || r.line === f.line) &&
-      (f.minBookCount == null || r.bookCount >= f.minBookCount),
+      (f.minBookCount == null || r.bookCount >= f.minBookCount) &&
+      matchesBooks(r, f.books),
   )
+}
+
+export function matchesBooks(row: SlateRow, selected: Set<string>): boolean {
+  if (selected.size === 0) return true
+  return row.books.some((b) => selected.has(b))
 }
 
 export function distinctLineValues(rows: SlateRow[]): number[] {
@@ -160,6 +175,11 @@ export function distinctLineValues(rows: SlateRow[]): number[] {
 
 export function distinctTeams(rows: SlateRow[]): string[] {
   return Array.from(new Set(rows.map((r) => r.team).filter((t): t is string => !!t))).sort()
+}
+
+/** Every sportsbook present anywhere in `rows`, sorted — the chip list for the sportsbook filter. */
+export function distinctBooks(rows: SlateRow[]): string[] {
+  return Array.from(new Set(rows.flatMap((r) => r.books))).sort()
 }
 
 /** A game qualifies for a team/matchup chip selection if EITHER side is a selected team — an

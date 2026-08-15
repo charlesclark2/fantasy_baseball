@@ -244,6 +244,11 @@ def index_row(payload: dict[str, Any]) -> dict[str, Any]:
         "p95": dist.get("p95"),
         "primary_line": primary,
         "book_count": len(payload.get("book_comparisons", []) or []),
+        # E5.10 — which sportsbooks quoted THIS row at all (any line), sorted + deduped, so the
+        # /props list can filter to a caller's own book without needing the full per-book table.
+        "books": sorted({
+            str(c["book"]) for c in payload.get("book_comparisons", []) or [] if c.get("book")
+        }),
         "model_p_over": (at_primary or {}).get("model_p_over"),
         "model_vs_book_p_over": (at_primary or {}).get("model_vs_book_p_over"),
         "model_mean_minus_line": (at_primary or {}).get("model_mean_minus_line"),

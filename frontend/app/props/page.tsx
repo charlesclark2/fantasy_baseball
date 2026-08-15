@@ -21,6 +21,7 @@ import { LogPastPropDialog } from "@/components/log-past-prop-dialog"
 import {
   buildGameGroups,
   buildGameMeta,
+  distinctBooks,
   distinctLineValues,
   distinctTeams,
   filterRows,
@@ -73,6 +74,9 @@ interface ProjectionRow {
   p95: number | null
   primary_line: number | null
   book_count: number
+  // E5.10 — which sportsbooks quoted this pitcher at all (any line), sorted + deduped. Optional:
+  // absent on an index row written before this field shipped (an older cached slate).
+  books?: string[] | null
   model_p_over: number | null
   model_vs_book_p_over: number | null
   model_mean_minus_line: number | null
@@ -97,6 +101,9 @@ interface BatterRow {
   p_ge_2: number | null
   primary_line: number | null
   book_count: number
+  // E5.10 — which sportsbooks quoted this batter at all (any line), sorted + deduped. Optional:
+  // absent on an index row written before this field shipped (an older cached slate).
+  books?: string[] | null
   model_p_over: number | null
   model_vs_book_p_over: number | null
   model_mean_minus_line: number | null
@@ -172,6 +179,7 @@ function ProjectionCard({ r }: { r: ProjectionRow }) {
     <Link
       href={r.game_date ? `/props/${r.pitcher_id}?as_of=${r.game_date}` : `/props/${r.pitcher_id}`}
       data-testid="props-card"
+      data-books={(r.books ?? []).join(",")}
       className="block rounded-lg border border-[#262626] bg-[#111111] p-4 transition-colors hover:border-[#3a3a3a] hover:bg-[#141414]"
     >
       <div className="flex items-start justify-between gap-2">
@@ -263,6 +271,7 @@ function BatterProjectionCard({ r }: { r: BatterRow }) {
         r.game_date ? `/props/batter/${r.batter_id}?as_of=${r.game_date}` : `/props/batter/${r.batter_id}`
       }
       data-testid="props-card"
+      data-books={(r.books ?? []).join(",")}
       className="block rounded-lg border border-[#262626] bg-[#111111] p-4 transition-colors hover:border-[#3a3a3a] hover:bg-[#141414]"
     >
       <div className="flex items-start justify-between gap-2">
@@ -365,11 +374,15 @@ function FilterChip({
   active,
   onClick,
   testId,
+  capitalizeLabel,
 }: {
   label: string
   active: boolean
   onClick: () => void
   testId: string
+  /** The raw book key ("bovada") is what's matched on; capitalize only how it's DISPLAYED — the
+   *  same `capitalize` CSS convention the per-book table on the detail page already uses. */
+  capitalizeLabel?: boolean
 }) {
   return (
     <button
@@ -378,6 +391,8 @@ function FilterChip({
       data-testid={testId}
       aria-pressed={active}
       className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+        capitalizeLabel ? "capitalize" : ""
+      } ${
         active
           ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300"
           : "border-[#262626] bg-[#111111] text-gray-400 hover:border-[#3a3a3a] hover:text-gray-200"
@@ -406,6 +421,7 @@ function PropsPageInner() {
   const [selectedTeams, setSelectedTeams] = useState<Set<string>>(new Set())
   const [lineFilter, setLineFilter] = useState<number | null>(null)
   const [minBookCount, setMinBookCount] = useState<number | null>(null)
+  const [selectedBooks, setSelectedBooks] = useState<Set<string>>(new Set())
   const [openGroups, setOpenGroups] = useState<string[]>([])
   const [initializedSlateKey, setInitializedSlateKey] = useState<string | null>(null)
 
@@ -448,6 +464,7 @@ function PropsPageInner() {
         line: r.primary_line,
         bookCount: r.book_count,
         diff: r.model_vs_book_p_over,
+        books: r.books ?? [],
       }))
     }
     return (data?.pitchers ?? []).map((r, i) => ({
@@ -463,6 +480,7 @@ function PropsPageInner() {
       line: r.primary_line,
       bookCount: r.book_count,
       diff: r.model_vs_book_p_over,
+      books: r.books ?? [],
     }))
   }, [data, isBatterTab])
 
@@ -474,6 +492,9 @@ function PropsPageInner() {
   const lineValuesAll = useMemo(() => distinctLineValues(rows), [rows])
   const maxBookCount = useMemo(() => rows.reduce((m, r) => Math.max(m, r.bookCount), 0), [rows])
   const bookCountThresholds = useMemo(() => [2, 3].filter((n) => n <= maxBookCount), [maxBookCount])
+  // E5.10 — every sportsbook that quoted anything on this slate, e.g. so a Bovada bettor can
+  // filter straight to the props their own book actually posted a line for.
+  const sportsbooksAll = useMemo(() => distinctBooks(rows), [rows])
 
   // A new tab or a new date is a fresh slate: reset search/sort/filters, and default to the next
   // game to start (collapsed elsewhere). Guarded so a background react-query refetch of the SAME
@@ -486,6 +507,7 @@ function PropsPageInner() {
     setSelectedTeams(new Set())
     setLineFilter(null)
     setMinBookCount(null)
+    setSelectedBooks(new Set())
     if (allGroups.length > 0) {
       const next = nextGameToStartPk(allGroups, Date.now())
       setOpenGroups(next != null ? [String(next)] : [])
@@ -496,8 +518,8 @@ function PropsPageInner() {
   }, [slateKey, allGroups, initializedSlateKey])
 
   const filteredRows = useMemo(
-    () => filterRows(rows, { search, line: lineFilter, minBookCount }),
-    [rows, search, lineFilter, minBookCount],
+    () => filterRows(rows, { search, line: lineFilter, minBookCount, books: selectedBooks }),
+    [rows, search, lineFilter, minBookCount, selectedBooks],
   )
   const visibleRows = useMemo(
     () =>
@@ -518,7 +540,12 @@ function PropsPageInner() {
     return sortRowsByMetric(visibleRows, sortKey)
   }, [visibleRows, sortKey])
 
-  const filtersActive = !!search.trim() || selectedTeams.size > 0 || lineFilter != null || minBookCount != null
+  const filtersActive =
+    !!search.trim() ||
+    selectedTeams.size > 0 ||
+    lineFilter != null ||
+    minBookCount != null ||
+    selectedBooks.size > 0
   const effectiveOpenValues = filtersActive ? groups.map((g) => String(g.gamePk)) : openGroups
 
   const projLabel = isBatterTab ? "Proj TB" : "Proj K"
@@ -533,11 +560,21 @@ function PropsPageInner() {
     })
   }
 
+  function toggleBook(book: string) {
+    setSelectedBooks((prev) => {
+      const next = new Set(prev)
+      if (next.has(book)) next.delete(book)
+      else next.add(book)
+      return next
+    })
+  }
+
   function clearFilters() {
     setSearch("")
     setSelectedTeams(new Set())
     setLineFilter(null)
     setMinBookCount(null)
+    setSelectedBooks(new Set())
   }
 
   function renderCard(id: number) {
@@ -688,7 +725,9 @@ function PropsPageInner() {
               )}
               {bookCountThresholds.length > 0 && (
                 <>
-                  <span className="ml-2 text-[11px] uppercase tracking-wider text-gray-600">Books</span>
+                  <span className="ml-2 text-[11px] uppercase tracking-wider text-gray-600">
+                    Min. books
+                  </span>
                   {bookCountThresholds.map((n) => (
                     <FilterChip
                       key={n}
@@ -696,6 +735,23 @@ function PropsPageInner() {
                       active={minBookCount === n}
                       onClick={() => setMinBookCount((prev) => (prev === n ? null : n))}
                       testId={`props-filter-books-${n}`}
+                    />
+                  ))}
+                </>
+              )}
+              {sportsbooksAll.length > 1 && (
+                <>
+                  <span className="ml-2 text-[11px] uppercase tracking-wider text-gray-600">
+                    Sportsbook
+                  </span>
+                  {sportsbooksAll.map((b) => (
+                    <FilterChip
+                      key={b}
+                      label={b}
+                      capitalizeLabel
+                      active={selectedBooks.has(b)}
+                      onClick={() => toggleBook(b)}
+                      testId={`props-filter-book-${b}`}
                     />
                   ))}
                 </>
