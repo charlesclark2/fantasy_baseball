@@ -30,45 +30,9 @@ import {
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import { normalizeTeam } from "@/lib/teams"
+import { PROP_MARKETS, PROP_KINDS, type PropKind } from "@/lib/prop-markets"
 
 const BOOKMAKER_OPTIONS = ["Bovada", "DraftKings", "FanDuel", "BetMGM", "Pinnacle", "Other"]
-
-// One row per prop type: the picker endpoint, the posted `market` strings, and the labels.
-// Settlement keys off `market` (settle_user_bets.py `_K_PROP_MARKETS` / `_TB_PROP_MARKETS`),
-// so a market string here that settlement does not know would sit Pending forever — the E9.49
-// unsettleable-bet class. Keep the two in sync.
-const PROP_TYPES = {
-  strikeouts: {
-    label: "Pitcher strikeouts",
-    endpoint: "/props/starters",
-    collection: "starters",
-    queryKey: "prop-starters",
-    playerLabel: "Pitcher",
-    lineLabel: "Strikeout line",
-    linePlaceholder: "6.5",
-    matchupTag: "K",
-    marketOver: "strikeouts over",
-    marketUnder: "strikeouts under",
-    settlesAgainst: "the pitcher's actual strikeouts",
-    emptyLabel: "No starters for this date yet",
-  },
-  total_bases: {
-    label: "Batter total bases",
-    endpoint: "/props/batters",
-    collection: "batters",
-    queryKey: "prop-batters",
-    playerLabel: "Batter",
-    lineLabel: "Total bases line",
-    linePlaceholder: "1.5",
-    matchupTag: "TB",
-    marketOver: "total bases over",
-    marketUnder: "total bases under",
-    settlesAgainst: "the batter's actual total bases",
-    emptyLabel: "No posted lineups for this date yet",
-  },
-} as const
-
-type PropType = keyof typeof PROP_TYPES
 
 // Both pickers are normalized to this shape on read, so the rest of the dialog never branches
 // on prop type again (the /props/starters rows key their id as `pitcher_id`, the batters rows
@@ -101,8 +65,8 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
   const [calOpen, setCalOpen] = useState(false)
   const dateStr = format(date, "yyyy-MM-dd")
 
-  const [propType, setPropType] = useState<PropType>("strikeouts")
-  const cfg = PROP_TYPES[propType]
+  const [propType, setPropType] = useState<PropKind>("strikeouts")
+  const cfg = PROP_MARKETS[propType]
   const [pitcherId, setPitcherId] = useState<string>("")
   const [side, setSide] = useState<"over" | "under">("over")
   const [book, setBook] = useState("Bovada")
@@ -114,7 +78,7 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
   // The eligible players for the chosen date + prop type: starting pitchers, or every batter
   // in a posted lineup. Settlement keys off the player_id + game_pk this returns, so the user
   // picks a real appearance rather than free-typing.
-  const { data, isLoading } = useQuery<Record<string, unknown>>({
+  const { data, isLoading, isError } = useQuery<Record<string, unknown>>({
     queryKey: [cfg.queryKey, dateStr],
     queryFn: () => apiFetch(`${cfg.endpoint}?date=${dateStr}`, {}, accessToken),
     enabled: !!accessToken && open,
@@ -230,7 +194,7 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
                 <Label className="text-xs text-gray-400">Prop</Label>
                 <Select
                   value={propType}
-                  onValueChange={(v) => { setPropType(v as PropType); setPitcherId(""); setLine("") }}
+                  onValueChange={(v) => { setPropType(v as PropKind); setPitcherId(""); setLine("") }}
                 >
                   <SelectTrigger
                     aria-label="Prop type"
@@ -240,10 +204,10 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="border-[#262626] bg-[#141414]">
-                    {(Object.keys(PROP_TYPES) as PropType[]).map((k) => (
+                    {PROP_KINDS.map((k) => (
                       <SelectItem key={k} value={k}
                         className="text-sm text-white focus:bg-[#1e1e1e] focus:text-white">
-                        {PROP_TYPES[k].label}
+                        {PROP_MARKETS[k].label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -275,8 +239,14 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
                 <Select value={pitcherId} onValueChange={setPitcherId} disabled={isLoading || players.length === 0}>
                   <SelectTrigger data-testid="log-prop-player"
                     className="border-[#262626] bg-[#0a0a0a] text-sm text-white">
+                    {/* An unreachable endpoint and a genuinely empty slate MUST read
+                        differently: while these shared one "none for this date" placeholder,
+                        a 404 from an un-deployed backend was indistinguishable from "no
+                        lineups posted yet" — the honest-empty-state rule. */}
                     <SelectValue placeholder={
-                      isLoading ? "Loading…" : players.length === 0 ? cfg.emptyLabel
+                      isLoading ? "Loading…"
+                        : isError ? "Couldn't load — please try again"
+                        : players.length === 0 ? cfg.emptyLabel
                         : `Select ${cfg.playerLabel.toLowerCase()}…`
                     } />
                   </SelectTrigger>

@@ -262,6 +262,16 @@ _FRONTEND_SURFACES = [
     _REPO_ROOT / "frontend" / "components" / "log-past-prop-dialog.tsx",
 ]
 
+# E5.10: files that CARRY user-facing prop copy but RENDER nothing themselves. They are held
+# to the banned-language bar — the copy the two affordances show now lives here, so omitting
+# them would make the scan cover LESS than before that extraction — but NOT to the
+# disclaimer-presence bar, which belongs to the surface that actually renders it. Requiring
+# the disclaimer string in a config module would be satisfied by a COMMENT, i.e. prose
+# satisfying a guard (the INC-38 vacuous-guard class), which is worse than not checking.
+_FRONTEND_COPY_MODULES = [
+    _REPO_ROOT / "frontend" / "lib" / "prop-markets.ts",
+]
+
 
 def test_caption_and_disclaimer_are_honest():
     text = f"{CAPTION}\n{DISCLAIMER}"
@@ -283,3 +293,14 @@ def test_frontend_surface_has_no_bet_rec_language(surface):
     hits = sorted({m.group(0) for m in _BANNED_RE.finditer(src)})
     assert not hits, f"banned profitability language in {surface.name}: {hits}"
     assert "not betting advice" in src.lower()
+
+
+@pytest.mark.parametrize("module", _FRONTEND_COPY_MODULES, ids=lambda p: p.name)
+def test_shared_prop_copy_has_no_bet_rec_language(module):
+    """A module holding prop copy for the affordances to render is held to the SAME
+    banned-language bar. No disclaimer-presence assertion here — see _FRONTEND_COPY_MODULES."""
+    if not module.exists():
+        pytest.skip(f"{module.name} not present in this checkout")
+    src = module.read_text(encoding="utf-8")
+    hits = sorted({m.group(0) for m in _BANNED_RE.finditer(src)})
+    assert not hits, f"banned profitability language in {module.name}: {hits}"
