@@ -126,14 +126,34 @@ class TestTheReconstructionAttackIsPricedOut:
         CHEAPEST path before this story (22 round trips, 99.80% exact); the two shape rules compose
         to refuse it: too few core families, and the spread the encoding needs."""
         guard = _guard()
+        models = pytest.importorskip("app.backend.models.fantasy")
+
         # ⭐ THE FIXTURE SATISFIES EVERY OTHER CLAUSE ON PURPOSE (NF-D17). It scores four core
         # families at realistic weights, so the core-stat rule CANNOT be what refuses it — only the
         # dynamic range can. A packed fixture that also happened to be degenerate would prove
         # nothing about the ratio cap, and deleting that cap would leave this test green.
-        packed = _cfg({
+        weights = {
             "pass_yds": 1.0, "pass_td": 1.0, "rush_yds": 1.0, "rec_yds": 1.0,
-            "def_safety": 1.0, "st_td": 100.0, "def_blocked_kick": 10000.0,
+            "def_safety": 1.0, "st_td": 1000.0,
+        }
+        packed = _cfg(weights)
+
+        # ⭐⭐ AND IT MUST BE A CONFIG THAT CAN ACTUALLY ARRIVE. Found on the live post-deploy walk:
+        # the first version of this fixture used a weight of 10 000, which `LeagueSave`'s
+        # pre-existing `|w| ≤ 1000` validator rejects — so over the wire it 422s and NEVER REACHES
+        # `shape_violations` at all. The test passed while exercising an input production cannot
+        # produce. Asserting the model ACCEPTS it is what keeps this rule's guard pointed at the
+        # band it actually owns (400 < ratio ≤ 1000); below 400 is legal, above 1000 the model
+        # already refuses.
+        models.LeagueSave(**{
+            "name": "packed", "n_teams": 12,
+            "scoring": {"per_stat": weights, "position_bonuses": {}},
+            "roster": [
+                {"name": "QB", "count": 1, "eligible": ["QB"]},
+                {"name": "BN", "count": 6, "eligible": [], "bench": True},
+            ],
         })
+
         assert guard.shape_violations(_cfg({
             "pass_yds": 1.0, "pass_td": 1.0, "rush_yds": 1.0, "rec_yds": 1.0,
         })) == [], "the fixture's non-packed half must be admissible, or this proves nothing"
