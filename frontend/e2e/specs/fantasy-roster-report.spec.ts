@@ -48,7 +48,7 @@ async function openReport(
   page: Page,
   opts: {
     groups?: string[]
-    leagues?: "none" | "one" | "drafted" | "linked"
+    leagues?: "none" | "one" | "drafted" | "linked" | "predraft"
     fail?: string[]
   } = {},
 ) {
@@ -193,13 +193,31 @@ test.describe("the four empty states are four different messages", () => {
   })
 
   test("a saved league with no team linked is NOT the same message", async ({ page }) => {
-    // ⭐ THE NF-C6 BUG, PINNED. The captured league has `source_team_key: null` — a real state, and
-    // distinct from "your league has not drafted yet". Conflating them told a user to go and pick a
-    // team they had already picked.
+    // The captured league has `source_team_key: null` — a real state, and distinct both from "you
+    // have no league" and from "your league has not drafted yet".
     await openReport(page, { groups: FREE.groups, leagues: "one" })
     await expect(page.getByTestId("report-empty-no-team-linked")).toBeVisible()
     await expect(page.getByTestId("report-empty-no-league")).toHaveCount(0)
     await expect(page.getByTestId("report-empty-not-drafted")).toHaveCount(0)
+  })
+
+  test("a LINKED team that has not drafted gets its own message", async ({ page }) => {
+    // ⭐⭐ THE NF-C6 BUG, PINNED — AND THE CASE THE RED PROOF HAD TO FORCE INTO EXISTENCE.
+    //
+    // The first cut of this file asserted the ABSENCE of `report-empty-not-drafted` on the two modes
+    // above and stopped there, which reads like coverage and is not: no fixture mode could PRODUCE
+    // that state (`one` is the captured league, whose `source_team_key` is null), so the reason
+    // branch was unreachable and collapsing the two reasons in `roster-report.ts` left the whole
+    // suite green. That is the vacuous-guard class exactly, and it was found by breaking the source
+    // rather than by reading the spec — which is what `leagues: "predraft"` now exists for.
+    //
+    // The distinction is not cosmetic. Telling someone whose league simply has not drafted to go and
+    // "pick your team" sends them to redo something they already did, and nothing about re-importing
+    // changes anything until the draft actually happens.
+    await openReport(page, { groups: FREE.groups, leagues: "predraft" })
+    await expect(page.getByTestId("report-empty-not-drafted")).toBeVisible()
+    await expect(page.getByTestId("report-empty-no-team-linked")).toHaveCount(0)
+    await expect(page.getByTestId("report-empty-no-league")).toHaveCount(0)
   })
 
   test("a board we could not read reports a fault, not an empty roster", async ({ page }) => {

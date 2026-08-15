@@ -182,8 +182,16 @@ export type MockOptions = {
    *                slots empty, so the bench, trade and depth sections of the roster report would
    *                render their empty branches and every assertion about them would pass on nothing.
    *                See `draftedRoster` for what each player in it is there to make reachable.
+   *   "predraft" — ⭐ NF-C6P2: ONE league with a team LINKED and an EMPTY roster. The ordinary state
+   *                between importing a league and drafting in it, and — until this mode existed —
+   *                UNREACHABLE in the harness: `one` is the captured league, whose
+   *                `source_team_key` is null, so "you never picked a team" and "your league has not
+   *                drafted" were served by the same fixture and every assertion separating them was
+   *                vacuous. The red proof is what found that: collapsing the two reasons in
+   *                `roster-report.ts` left the suite GREEN. ⛔ Do not fold this into `one`; the two
+   *                states differ in exactly one field and that field is the whole distinction.
    */
-  leagues?: "none" | "one" | "overQuota" | "linked" | "drafted"
+  leagues?: "none" | "one" | "overQuota" | "linked" | "drafted" | "predraft"
   /**
    * ⭐ G100-D0 — what `/subscription/status` reports for this caller.
    *
@@ -607,6 +615,19 @@ function draftedLeague(): any {
   }
 }
 
+/**
+ * ⭐ The SAME league with the team linked and NOBODY ON IT — the pre-draft state.
+ *
+ * It differs from `draftedLeague` in exactly one field (`imported_roster`) and from the captured
+ * league in exactly one other (`source_team_key`), and that is the point: the surface has to tell
+ * three states apart — no league, a league with no team picked, and a linked team that has not
+ * drafted — and each pair differs by one field. Both ESPN and Sleeper warn about this state at
+ * import time, so it is common rather than exotic.
+ */
+function predraftLeague(): any {
+  return { ...draftedLeague(), imported_roster: [], roster_synced_at: null }
+}
+
 function linkedLeaguePair(): any[] {
   const base = FIXTURES.myTeams().leagues[0]
   const roster = linkedRoster()
@@ -821,6 +842,7 @@ function leaguesFor(leagues: NonNullable<MockOptions["leagues"]>): any[] {
   if (leagues === "none") return []
   if (leagues === "linked") return linkedLeaguePair()
   if (leagues === "drafted") return [draftedLeague()]
+  if (leagues === "predraft") return [predraftLeague()]
   // `one` and `overQuota` both serve exactly the captured league.
   return [FIXTURES.myTeams().leagues[0]]
 }
@@ -895,10 +917,11 @@ function personalPayloadFor(
   // ⭐ E9.64 — both leagues are the caller's own and both are served; there is no quota story here,
   // so `saved_total` matches and `withheld_by_quota` stays 0 (a lapsed-member notice on this mode
   // would be a second, unrelated behaviour leaking into every My Teams assertion).
-  // ⭐ NF-C6P2 — one league, fully drafted. `saved_total` matches and nothing is withheld, so no
-  // quota story leaks into the roster-report assertions (same reasoning as `linked` below).
-  if (leagues === "drafted") {
-    const only = leaguesFor("drafted")
+  // ⭐ NF-C6P2 — one league, fully drafted (or linked-but-undrafted). `saved_total` matches and
+  // nothing is withheld, so no quota story leaks into the roster-report assertions (same reasoning
+  // as `linked` below).
+  if (leagues === "drafted" || leagues === "predraft") {
+    const only = leaguesFor(leagues)
     return pathname === "/fantasy/leagues"
       ? only
       : { ...base, leagues: only, saved_total: only.length, withheld_by_quota: 0, rosters: rostersFor(only) }
