@@ -731,6 +731,63 @@ def delete_fantasy_league(user_id: str, league_id: str) -> None:
     )
 
 
+# ── NF-LEAK1: the scoring-change ledger ──────────────────────────────────────
+# The per-ACCOUNT token bucket that prices paid-stat reconstruction through the
+# league scorer. Same "ride the users table" pattern as the league configs above.
+#
+# ⭐ WHY IT LIVES ON THE USER ITEM AND NOT ON THE LEAGUE. A free account may hold
+# only one league, but it may DELETE and RE-CREATE that league without limit — a
+# per-league counter would hand back a full bucket on every recreate, which is the
+# whole bypass this ledger exists to close. Keyed on `user_id`, delete+create is
+# just another charged change.
+#
+# ⚠️ AND WHY IT IS DURABLE RATHER THAN THE EXISTING IN-MEMORY LIMITER.
+# `cost_guardrails.RateLimiter` is per-Lambda-CONTAINER by its own docstring, so it
+# cannot count 38 changes spread across days, and it is keyed on an address the
+# attacker can change rather than on the identity they had to create.
+_SCORING_LEDGER_ATTR = "fantasy_scoring_ledger"
+
+
+def get_fantasy_scoring_ledger(user_id: str) -> dict | None:
+    """The user's scoring-change ledger, or None when there is none (or the read failed).
+
+    Non-raising, and `scoring_probe_guard._coerce` turns None into a FULL bucket. That
+    direction is deliberate: the failure being guarded against is our own storage, and
+    failing closed would present to a real user as their league becoming permanently
+    unsavable — much worse than one attacker getting one extra bucket.
+    """
+    try:
+        resp = _users_table().get_item(Key={"user_id": user_id})
+        raw = resp.get("Item", {}).get(_SCORING_LEDGER_ATTR)
+        record = _deep_from_dynamo(raw)
+    except Exception:
+        logger.warning("dynamo.get_fantasy_scoring_ledger failed for user=%s", user_id)
+        return None
+    return record if isinstance(record, dict) else None
+
+
+def put_fantasy_scoring_ledger(user_id: str, ledger: dict) -> bool:
+    """Persist the ledger. Returns whether it landed.
+
+    ⚠️ RETURNS A VERDICT RATHER THAN RAISING, and the caller LOGS a failure loudly instead
+    of refusing the save. A dropped ledger write means one change went uncounted; refusing
+    the save instead would turn a DynamoDB blip into "saving is broken" for a real user
+    (E8.6's silent-save class, pointed the other way). The bool exists so the miss is
+    reported rather than silently scored healthy (NF1.7 (a)).
+    """
+    try:
+        _users_table().update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET #sl = :led",
+            ExpressionAttributeNames={"#sl": _SCORING_LEDGER_ATTR},
+            ExpressionAttributeValues={":led": _to_ddb(ledger)},
+        )
+        return True
+    except Exception:
+        logger.warning("dynamo.put_fantasy_scoring_ledger failed for user=%s", user_id)
+        return False
+
+
 # ── Fantasy platform OAuth tokens (NF-C0) ────────────────────────────────────
 # A user's per-platform OAuth grant, stored as a `platform_tokens` map
 # {platform: {refresh_token, access_token, expires_at, connected_at}} on the user

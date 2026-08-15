@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import re
+import time
 from pathlib import Path
 
 import boto3
@@ -31,7 +32,13 @@ from app.backend.dependencies import (
     require_personalized_league_access,
 )
 from app.backend.models.fantasy import League, LeagueSave
-from app.backend.services import dynamo, entitlement, league_scoring, projection_fields
+from app.backend.services import (
+    dynamo,
+    entitlement,
+    league_scoring,
+    projection_fields,
+    scoring_probe_guard,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -606,6 +613,74 @@ def nfl_league_board(
     }
 
 
+def _enforce_scoring_probe_guard(
+    user_id: str, ent, *, before: dict | None, after: dict
+) -> None:
+    """NF-LEAK1 — price a scoring change, or refuse a config shaped like an extraction probe.
+
+    🔒 WHAT THIS DEFENDS. `/fantasy/nfl/league-board` scores an ARBITRARY caller-supplied config
+    against the full projection and returns `pts` per player. That is what lets a free account keep a
+    personalized league without ever seeing the paid stat line — and, by construction, it also leaks
+    information about that stat line: zero every weight but one and `pts` IS the stat.
+    Measured on the pre-fix code (`scripts/nf_leak1_reconstruction_cost.py`): the whole paid line for
+    all 858 players in 44 round trips and 22 seconds. See `scoring_probe_guard`'s header for the
+    model-by-model breakdown and for why this is "impractical + attributable", never "closed".
+
+    ⭐ ORDER IS DELIBERATE — SHAPE FIRST, THEN BUDGET. A config we are going to refuse outright must
+    not spend one of the caller's tokens; otherwise a scripted attacker could drain a real user's
+    bucket with configs that were never going to be stored, and a user who typo'd a weight would be
+    charged for our own refusal.
+
+    ⚠️ KNOWN, ACCEPTED WART: on `POST`, this runs BEFORE the quota check inside
+    `put_fantasy_league`, so a free caller already at their one-league quota spends a token and then
+    gets a 409. Costing them 1 of 12 in a flow the editor already disables (`atQuota`) is the
+    cheaper trade — the alternative is re-deriving the quota count here, which duplicates a rule
+    G100-C1 deliberately keeps in the WRITER (and the E9.60 coupling trap).
+
+    ⚠️ THE SHAPE RULES ARE UNIFORM; THE BUDGET IS NOT. An entitled caller can already `GET
+    /fantasy/nfl/projections/full` and receive the whole stat line in one request, so metering their
+    league edits protects nothing and only degrades what they paid for. The shape rules stay uniform
+    because they are league-plausibility rules that no real config violates, and applying them only
+    to free accounts would make a subscriber's saved league unsavable the day they lapse.
+    """
+    problems = scoring_probe_guard.shape_violations(after)
+    if problems:
+        raise HTTPException(status_code=400, detail="; ".join(problems))
+
+    if getattr(ent, "fantasy", False):
+        return
+    if not scoring_probe_guard.scoring_changed(before, after):
+        return
+
+    verdict = scoring_probe_guard.charge(
+        dynamo.get_fantasy_scoring_ledger(user_id), after, time.time()
+    )
+
+    if verdict.probe_shaped:
+        # Attributable by construction — every one of these carries a Cognito `sub`, which is the
+        # difference between this vector and the anonymous `curl` NF-EPIC 1 closed.
+        logger.warning(
+            "[METRIC] fantasy_scoring_probe user=%s changes=%s probe_hits=%s allowed=%s",
+            user_id, verdict.ledger.get("changes"), verdict.ledger.get("probe_hits"),
+            verdict.allowed,
+        )
+
+    if not dynamo.put_fantasy_scoring_ledger(user_id, verdict.ledger):
+        # The charge did not land. Loud, never silent (NF1.7 (a)): a guard that could not record
+        # its own state has not passed, and a run of these means the budget is not being enforced.
+        logger.warning(
+            "[METRIC] fantasy_scoring_ledger_write_failed=1 user=%s — this change went uncounted",
+            user_id,
+        )
+
+    if not verdict.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=scoring_probe_guard.throttle_message(verdict.retry_after_seconds),
+            headers={"Retry-After": str(verdict.retry_after_seconds)},
+        )
+
+
 @personal_router.post("/leagues", status_code=201)
 def create_league(
     request: Request,
@@ -623,10 +698,14 @@ def create_league(
     reads "25"; quoting the storage constant would have told a free user the wrong number, which on
     a paywall is worse than saying nothing.
     """
-    quota = entitlement.personalized_league_quota(entitlement.resolve_entitlement(request))
+    ent = entitlement.resolve_entitlement(request)
+    config = payload.model_dump()
+    _enforce_scoring_probe_guard(user_id, ent, before=None, after=config)
+
+    quota = entitlement.personalized_league_quota(ent)
     try:
         record = dynamo.put_fantasy_league(
-            user_id, None, payload.model_dump(), max_leagues=quota
+            user_id, None, config, max_leagues=quota
         )
     except ValueError as e:
         if str(e) == "too_many_leagues":
@@ -642,6 +721,7 @@ def create_league(
 
 @personal_router.put("/leagues/{league_id}")
 def update_league(
+    request: Request,
     league_id: str,
     payload: LeagueSave,
     user_id: str = Depends(require_personalized_league_access),
@@ -653,9 +733,19 @@ def update_league(
     league at whatever they first typed and present as "saving is broken" (E8.6's silent-save class).
     The `get_fantasy_league` ownership check is what keeps this from reaching anyone else's record.
     """
-    if dynamo.get_fantasy_league(user_id, league_id) is None:
+    existing = dynamo.get_fantasy_league(user_id, league_id)
+    if existing is None:
         raise HTTPException(status_code=404, detail="League not found")
-    record = dynamo.put_fantasy_league(user_id, league_id, payload.model_dump())
+
+    config = payload.model_dump()
+    # NF-LEAK1 — the SCORING is what opens the leak channel, so `existing` is passed in and an edit
+    # that leaves it alone (rename, roster, linked team, a re-import refreshing the roster snapshot)
+    # is not charged at all.
+    _enforce_scoring_probe_guard(
+        user_id, entitlement.resolve_entitlement(request), before=existing, after=config
+    )
+
+    record = dynamo.put_fantasy_league(user_id, league_id, config)
     return _league_response(record)
 
 
