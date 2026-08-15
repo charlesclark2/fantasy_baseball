@@ -73,6 +73,7 @@ import sys
 from datetime import date as _date
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 import pandas as pd
@@ -273,11 +274,67 @@ def _resolve_events(conn, lines: pd.DataFrame, slate: pd.DataFrame) -> dict[str,
     return {str(e): int(g) for e, g in rows}
 
 
-def _name_candidates(conn, names: list[str]) -> dict[str, set[int]]:
+def pick_display_name(candidates: Sequence[str]) -> str | None:
+    """One display name from the spellings a feed carries for a single player id.
+
+    The lineup feed is per-slot-per-game, so one id can arrive with several spellings — the
+    live 2026-08-15 slate carried both `George Lombard Jr.`/`George Lombard` and a
+    double-spaced `Hao-Yu  Lee`. Internal whitespace is collapsed, then the LONGEST spelling
+    wins (it keeps the suffix), ties broken alphabetically so the choice is deterministic and
+    a re-run can never flip a served name."""
+    cleaned = {" ".join(str(c).split()) for c in candidates if c and str(c).strip()}
+    if not cleaned:
+        return None
+    return sorted(cleaned, key=lambda s: (-len(s), s))[0]
+
+
+def _lineup_display_names(conn, game_pks: list[int]) -> dict[int, str]:
+    """batter_id → display name straight from the POSTED LINEUP feed.
+
+    ⚠️ `stg_ref_players` is a one-shot MANUAL export (scripts/export_ref_players_to_s3.py,
+    "run ONCE… re-run when ref_players changes"), on no schedule — the live parquet was last
+    written 2026-06-24 and holds ZERO players whose `mlb_played_last` is 2026. So every 2026
+    debutant is invisible to it: on the 2026-08-15 slate that was 34 batters (Travis Bazzana,
+    Spencer Jones, JJ Wetherholt, Munetaka Murakami, …), all of whom the lineup feed names
+    correctly. The lineup feed is intraday-fresh and authoritative for exactly the players in
+    today's lineups, so it is the PRIMARY name source here and stg_ref_players the fallback.
+    (The staleness itself is repo-wide — ~20 other consumers join that dimension — and is a
+    separate fix; this only stops it from silently dropping batters off the TB board.)"""
+    if not game_pks:
+        return {}
+    pk_list = ",".join(str(int(g)) for g in game_pks)
+    union = " UNION ALL ".join(
+        f"SELECT slot_{i}_player_id AS pid, slot_{i}_full_name AS nm "
+        f"FROM stg_statsapi_lineups_wide WHERE game_pk::BIGINT IN ({pk_list})"
+        for i in range(1, 10)
+    )
+    rows = conn.execute(
+        f"SELECT pid::BIGINT AS pid, nm FROM ({union}) WHERE pid IS NOT NULL AND nm IS NOT NULL"
+    ).fetchall()
+    by_id: dict[int, list[str]] = {}
+    for pid, nm in rows:
+        by_id.setdefault(int(pid), []).append(str(nm))
+    out: dict[int, str] = {}
+    for pid, names in by_id.items():
+        picked = pick_display_name(names)
+        if picked:
+            out[pid] = picked
+    return out
+
+
+def _name_candidates(conn, names: list[str],
+                     extra_players: dict[int, str] | None = None) -> dict[str, set[int]]:
     """player_name → candidate batter_ids via the SUBSTRATE'S two-tier keys (exact normalised
     key first; last-initial fallback ONLY when the exact key matches no reference player).
     Uses the substrate's local quote-folding (`_name_key`/`_li_key`) — NOT the raw
-    prop_edge.normalize_name (the curly-apostrophe divergence, phase-1 finding)."""
+    prop_edge.normalize_name (the curly-apostrophe divergence, phase-1 finding).
+
+    `extra_players` ({batter_id: display_name}) folds an ADDITIONAL id→name source in under
+    the identical keys — the posted-lineup names, because a book can quote a 2026 debutant
+    that the frozen stg_ref_players export has never heard of, and such a name would otherwise
+    have NO candidate id and be HELD forever (22 held names on the 2026-08-15 slate). This
+    only ever ADDS candidates; the caller still intersects them with that game's posted
+    lineup, so a wrong id cannot be arbitrated in."""
     if not names:
         return {}
     from betting_ml.utils.prop_edge import ref_display_name
@@ -295,6 +352,9 @@ def _name_candidates(conn, names: list[str]) -> dict[str, set[int]]:
     for bid, nk, lk in zip(ref.batter_id, ref.name_key, ref.li_key):
         by_exact.setdefault(nk, set()).add(int(bid))
         by_li.setdefault(lk, set()).add(int(bid))
+    for bid, display in (extra_players or {}).items():
+        by_exact.setdefault(_name_key(display), set()).add(int(bid))
+        by_li.setdefault(_li_key(display), set()).add(int(bid))
     out: dict[str, set[int]] = {}
     for nm in names:
         nk = _name_key(nm)
@@ -634,6 +694,12 @@ def _run_for_date(target: str, args, bundle: dict, design: Design) -> None:
               f"{len({gp for gp, _ in pop_pairs})} game(s) with a posted lineup/EB build for "
               f"{target}")
 
+        # Names come from the intraday-fresh POSTED LINEUP feed first (see
+        # `_lineup_display_names`: the stg_ref_players export is frozen at 2026-06-24 and holds
+        # no 2026 debutant at all), and are folded into the book-name candidate map so a book
+        # quoting a rookie can still resolve to an id instead of being held forever.
+        lineup_names = _lineup_display_names(conn, game_pks)
+
         # Book lines: OPTIONAL match onto the population above, never population-defining.
         lines = _load_book_lines(target)
         resolved: dict[tuple[int, str], int] = {}
@@ -646,7 +712,8 @@ def _run_for_date(target: str, args, bundle: dict, design: Design) -> None:
             lines = lines[lines["event_id"].astype(str).isin(event_map)].copy()
         if not lines.empty:
             lines["game_pk"] = lines["event_id"].astype(str).map(event_map)
-            cands = _name_candidates(conn, sorted(lines["player_name"].dropna().unique()))
+            cands = _name_candidates(conn, sorted(lines["player_name"].dropna().unique()),
+                                     extra_players=lineup_names)
 
             # Pregame arbitration: exact/li candidates ∩ posted lineup (or EB build) for THAT
             # game.
@@ -669,18 +736,20 @@ def _run_for_date(target: str, args, bundle: dict, design: Design) -> None:
             print(f"[tb-projection] no live TB book lines yet for {target} — serving "
                   "projections without a book comparison this run.")
 
-        # Fallback display names for population members no live line matched to (E5.10).
+        # Display names for population members no live line matched to (E5.10): the posted
+        # lineup first, stg_ref_players only as the fallback for a batter the lineup feed
+        # somehow lacks.
         unmatched_ids = sorted({bid for _, bid in pop_pairs} - set(resolved.values()))
-        ref_names = _batter_display_names(conn, unmatched_ids)
+        ref_names = {**_batter_display_names(conn, unmatched_ids),
+                     **{b: n for b, n in lineup_names.items() if b in set(unmatched_ids)}}
 
-        # A population member resolvable to neither a book-quoted name nor a stg_ref_players
-        # row (a very recent call-up the reference table hasn't caught up to yet, observed
-        # live) can't be served with a usable card — skip it loudly rather than shipping a
-        # nameless row; self-heals once the reference table catches up.
+        # A population member no source can name at all can't be served with a usable card —
+        # skip it loudly rather than shipping a nameless row.
         nameless = [bid for bid in unmatched_ids if bid not in ref_names]
         if nameless:
             _warn(f"[{target}] {len(nameless)} batter(s) have no resolvable name (no book "
-                  f"match, not yet in stg_ref_players) — skipped: {nameless}")
+                  f"match, absent from BOTH the posted lineup feed and stg_ref_players) — "
+                  f"skipped: {nameless}")
             pop_pairs = {(gp, bid) for gp, bid in pop_pairs if bid not in nameless}
 
         # Skip anyone whose side (team/opponent) we can't name — see the helper's docstring
