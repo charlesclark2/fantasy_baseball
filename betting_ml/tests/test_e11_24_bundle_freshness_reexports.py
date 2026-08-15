@@ -293,15 +293,25 @@ def test_the_op_is_alert_tier_and_cannot_raise(writer, reexport, script, table, 
 
 @pytest.mark.parametrize("writer,reexport,script,table,job_files", BUNDLE)
 def test_the_op_has_a_distinct_dedup_key(writer, reexport, script, table, job_files):
-    """INC-39: send_alert rate-limits on `dedup_key` with a 1-hour TTL. Three mirror re-exports
-    sharing one key would let the first failure of the hour SUPPRESS the other two — the page
-    would name one broken mirror while two others were also down."""
+    """INC-39: send_alert rate-limits on `dedup_key` with a 1-hour TTL. Two mirror re-exports
+    sharing one key would let the first failure of the hour SUPPRESS the other — the page would
+    name one broken mirror while another was also down.
+
+    Checked across the WHOLE re-export family, #693's `player_sequential_posteriors` leaf
+    included: these four ops run minutes apart in the same job and fail for the same reasons
+    (a wedged Snowflake fetch, an S3 outage), so they are exactly the set most likely to collide.
+    """
     body = _op_body(reexport)
     keys = re.findall(r'dedup_key\s*=\s*"([^"]+)"', body)
     assert len(keys) == 1, f"{reexport} should pass exactly one dedup_key, found {keys}"
-    siblings = [r for _w, r, _s, _t, _j in (p.values for p in BUNDLE) if r != reexport]
-    for sib in siblings:
-        assert keys[0] not in re.findall(r'dedup_key\s*=\s*"([^"]+)"', _op_body(sib)), (
+    family = [r for _w, r, _s, _t, _j in (p.values for p in BUNDLE)]
+    family.append("reexport_player_seq_posteriors_op")   # PR #693's leaf, same failure modes
+    for sib in family:
+        if sib == reexport:
+            continue
+        sib_keys = re.findall(r'dedup_key\s*=\s*"([^"]+)"', _op_body(sib))
+        assert sib_keys, f"non-vacuity: found no dedup_key in {sib} to compare against"
+        assert keys[0] not in sib_keys, (
             f"{reexport} and {sib} share dedup_key {keys[0]!r} — one failure would mute the other"
         )
 
