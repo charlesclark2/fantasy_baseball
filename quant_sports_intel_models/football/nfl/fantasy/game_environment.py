@@ -897,12 +897,19 @@ def classify_layer_b(sel: dict, *, n_folds: int, instrument_verdict: dict | None
 
     `cv_power.classify_null` takes `n_arms` as BOTH the DSR trial count and the CSCV config count.
     Layer B fields exactly ONE real arm by pre-registration, so the honest `n_arms=1` drives
-    `pbo_evaluable` false and the instrument returns `UNDEFINED` — rendering the cause as a FOLD
-    shortage ("8 fold(s) < 4") and publishing a NEGATIVE trigger ("-4 more fold(s)"). That is an
-    actively misleading record: it tells a future reader to buy seasons for a null no season count
-    can move. This is the third time in this vertical that `classify_null` has needed a hand
-    correction (NF-W2 → CONSTRAINT_REFUSED, NF-D18 → the 8th state, now the field-size axis), so
-    the instrument's verdict is RECORDED alongside rather than discarded.
+    `pbo_evaluable` false and the instrument returns `UNDEFINED`. This is the third time in this
+    vertical that `classify_null` has needed a hand correction (NF-W2 → CONSTRAINT_REFUSED, NF-D18 →
+    the 8th state, now the field-size axis), so the instrument's verdict is RECORDED alongside
+    rather than discarded.
+
+    ✅ **UPDATED BY MH2.7 (2026-08-14) — HALF OF THIS IS NO LONGER TRUE, AND SAYING SO MATTERS more
+    in a docstring than in a doc (the next reader takes the premise from here).** This function used
+    to note that the instrument *rendered the cause as a FOLD shortage ("8 fold(s) < 4") and
+    published a NEGATIVE trigger ("-4 more fold(s)")*. MH2.7 fixed exactly that in `cv_power`: a
+    single pre-registered contrast now reports PBO as INAPPLICABLE-not-unmet and publishes **no
+    trigger at all**. ⚠️ The hand correction is STILL REQUIRED — `UNDEFINED`-with-no-trigger is a
+    correct non-verdict, not Layer B's state, and only the caller knows the remaining gates are
+    reachable ⇒ POWER_LIMITED. What is gone is the misleading record it used to overwrite.
 
     The states, from the same numbers:
       · the arm loses ON AVERAGE ⇒ **GENUINE ABSENCE** — no `n` and no field size rescues a

@@ -555,6 +555,12 @@ class NullVerdict:
     extra_seasons: int | None = None
     max_field_size: int | None = None
     detail: dict = field(default_factory=dict)
+    #: ⭐ MH2.7 — is the `max_field_size` leg ACTIONABLE ADVICE, or is it arithmetic only? `False`
+    #: means the arithmetic-implied field sits BELOW the declared family, so acting on it would mean
+    #: dropping pre-registered arms because they lost. `None` when no field leg arises at all. A
+    #: MACHINE flag deliberately, so a report table can gate on it instead of parsing the prose (the
+    #: MH2.2 report had to carry a hand-written callout under the table — that is not enforcement).
+    field_remedy_admissible: bool | None = None
 
 
 # ⭐⭐ DSR-CONV (2026-08-08) — THE INSTRUMENT'S REMEDY IS ONLY AS TRUSTWORTHY AS THE `V` IT WAS
@@ -593,6 +599,80 @@ def _v_provenance_note(degenerates_excluded_from_v: bool | None) -> str:
     return _V_PROVENANCE_UNKNOWN
 
 
+# ⭐⭐ MH2.7 (2026-08-14) — **THE INSTRUMENT'S OWN REMEDY MUST OBEY THE RULE THE INSTRUMENT EXISTS TO
+# ENFORCE: YOU GET TO PRE-REGISTER A FAMILY, YOU DO NOT GET TO DISCOVER ONE.**
+#
+# `dsr_max_field_size` answers a purely ARITHMETIC question — "in how large a field would this effect
+# still have cleared?" — and that number is a legitimate design quantity worth recording. What was
+# NOT legitimate was handing it back as an IMPERATIVE. `classify_null` sees only a trial COUNT, so it
+# cannot tell a DECLARED narrow family (legitimate: the family was named in advance on mechanistic
+# grounds) from a DISCOVERED one (the post-hoc trim, which is satisfied by deleting whichever arm
+# LOST). MH2.2 hit the bad half live: on a 3-arm DECLARED family (`bb_pct`, 11 folds) the trigger read
+# "…OR a field of ≤2 arms at the CURRENT fold count" — and that ≤2-arm field IS the retired post-hoc
+# field the whole MH2 lineage exists to reject. Its DSR jump (0.849 → 0.998) was bought by the
+# cross-trial dispersion `V` collapsing 19,938× when the LOSING arm was dropped, i.e. by exactly the
+# selection bias DSR is there to deflate — re-committed inside a badge that reads like a remedy
+# (the E2.1-r inversion, one level up: not a metric chosen after the answer, a REMEDY chosen after it).
+#
+# The cure is provenance, and it is the same shape as the DSR-CONV `V` note above: the CALLER states
+# the smallest field that was PRE-REGISTERED, and an UNSTATED provenance is REFUSED, never assumed
+# permissive (NF1.7 (a) — a check that did not run is not a check that passed). Note which way the
+# default has to fall: the safe default is the field actually SCORED, because that is the only field
+# we know was pre-registered. So `classify_null` can no longer emit a below-declared prescription;
+# the number survives as arithmetic, flagged `field_remedy_admissible=False`.
+#
+# ⚠️ **AND THE HONEST LIMIT OF THIS GUARD, STATED RATHER THAN IMPLIED.** DSR-CONV can insist a
+# degenerate qualifies BY DESIGN and never by declaration, because "designed loser" has a measurable
+# signature (`|Sharpe| ≥ 3`). "Declared" has none: whether a family was pre-registered is a fact about
+# a DOCUMENT, not about the data, so no pure function can verify it. A caller who passes
+# `declared_field_size=2` for a family it only decided on afterwards still gets the admissible badge.
+# What changes is that the claim must now be MADE, EXPLICITLY, and it lands on the record
+# (`detail["declared_field_size_source"]`) where a reviewer can check it against the pre-registration
+# — instead of the instrument volunteering the post-hoc field unprompted, which is what it did to
+# MH2.2. The guard converts a silent default into an auditable assertion; it does not, and cannot,
+# adjudicate the pre-registration itself.
+_FIELD_ARITHMETIC_ONLY = (
+    "⛔ **NOT A REMEDY — ARITHMETIC ONLY.** The effect clears only in a field of ≤{max_field} arm(s), "
+    "which is BELOW the declared family of {declared}. Shrinking a field below what was "
+    "pre-registered means dropping arms BECAUSE THEY LOST — the very selection bias DSR exists to "
+    "deflate, and on MH2.2's `bb_pct` that move bought its whole apparent gain through a 19,938× "
+    "collapse in the cross-trial dispersion `V`, not through honest multiplicity. A smaller field is "
+    "a legitimate remedy ONLY if that smaller family was itself declared in advance on MECHANISTIC "
+    "grounds. ⇒ the ≤{max_field} figure is reported as a DESIGN QUANTITY, never as advice.")
+_FIELD_DECLARED_UNSTATED = (
+    " ⚠️ And `declared_field_size` was NOT stated, so this classifier cannot tell a DECLARED narrow "
+    "family from a DISCOVERED one; it falls back to the {n_arms} arm(s) actually scored — the only "
+    "field known to have been pre-registered — and REFUSES to prescribe below it. If a smaller "
+    "family genuinely was pre-registered, pass `declared_field_size=` and re-classify.")
+_FIELD_ADMISSIBLE = (
+    "re-run the mechanism in its PRE-REGISTERED {max_field}-arm-or-smaller family (≥ the declared "
+    "floor of {declared}, so no scored arm has to be dropped to reach it)")
+_FIELD_NO_RESCUE = (
+    "field size is NOT a lever here — even a 2-arm field does not clear at this fold count and "
+    "dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper "
+    "metric)")
+
+
+def _field_size_remedy(*, max_field: int, n_arms: int,
+                       declared_field_size: int | None) -> tuple[bool | None, str]:
+    """The `max_field_size` leg of a re-test trigger, made self-safe. Returns `(admissible, text)`.
+
+    `admissible is None` ⇒ field size is no lever at all here (nothing to be admissible ABOUT);
+    `False` ⇒ the arithmetic sits below the declared/scored family, so the number is reported but the
+    IMPERATIVE is refused; `True` ⇒ a pre-registered family at least this small exists, so the
+    prescription can be acted on without re-cutting a scored field.
+    """
+    if int(max_field) < 2:
+        return None, _FIELD_NO_RESCUE
+    declared = int(declared_field_size) if declared_field_size is not None else int(n_arms)
+    if int(max_field) >= declared:
+        return True, _FIELD_ADMISSIBLE.format(max_field=int(max_field), declared=declared)
+    text = _FIELD_ARITHMETIC_ONLY.format(max_field=int(max_field), declared=declared)
+    if declared_field_size is None:
+        text += _FIELD_DECLARED_UNSTATED.format(n_arms=int(n_arms))
+    return False, text
+
+
 def classify_null(*, metric: str, n_folds: int, n_arms: int,
                   beats_foil: bool, observed_sr: float | None = None,
                   var_trials_sr: float | None = None,
@@ -604,7 +684,8 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
                   skew: float = 0.0, kurt: float = 3.0,
                   confidence: float = DSR_CONFIDENCE,
                   degenerates_excluded_from_v: bool | None = None,
-                  var_trials_sr_with_degenerates: float | None = None) -> NullVerdict:
+                  var_trials_sr_with_degenerates: float | None = None,
+                  declared_field_size: int | None = None) -> NullVerdict:
     """Classify one recorded null into one of `NULL_STATES`. **Order matters** — each state below is checked before the ones
     that would otherwise absorb it.
 
@@ -632,6 +713,15 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
     degenerates` is recorded beside it so the size of the inflation is on the record rather than
     asserted. None of this changes a STATE — the classification is unchanged for a given `V`; what
     changes is whether the remedy sentence may be acted on.
+
+    ⭐⭐ **`declared_field_size` (MH2.7) states the SMALLEST field that was PRE-REGISTERED for this
+    mechanism**, and it is what stops the `max_field_size` leg from prescribing the retired post-hoc
+    field (see `_field_size_remedy`). Normally it equals `n_arms` — the declared family you scored —
+    and should be passed as such; pass something SMALLER only when that smaller family was itself
+    named in advance on mechanistic grounds (E7.15-H3's 7 eligible arms bundled two families, of
+    which the 3-arm trajectory family was declared). Leaving it `None` is REFUSED, not permitted:
+    the classifier falls back to `n_arms` and will not prescribe below it. Like the `V` provenance,
+    this changes NO state — only whether the field sentence is an imperative or a design quantity.
     """
     d: dict = {"n_folds": int(n_folds), "n_arms": int(n_arms)}
 
@@ -651,6 +741,32 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
             f"this design could detect. Not underpowered, not dead — unread. The remedy is a "
             f"harness that records its fold structure, not more data."),
             retest_trigger="record the fold structure in the artifact, then re-classify", detail=d)
+
+    if int(n_arms) < 2:
+        # ⭐ MH2.7 CO-FIX — **A SINGLE PRE-REGISTERED CONTRAST IS NOT A FOLD SHORTAGE.** `pbo_evaluable`
+        # is false for TWO structurally different reasons — too few folds, or too few arms — and
+        # collapsing them made the fold branch below render a 1-arm design as "8 fold(s) < 4",
+        # prescribing "−4 more fold(s)". That trigger tells a reader to BUY SEASONS for a deflation
+        # statistic a 1-arm design never needed, and it is exactly the actively-misleading direction
+        # this module was written to stop (the DSR_UNREACHABLE "needs N more seasons" lesson, one
+        # state over). The fantasy vertical hand-corrected it FOUR times (NF-W2 → NF-D18 → NF-W3 →
+        # NF-W4) before it was fixed here; a defect that keeps getting corrected downstream is a
+        # defect in the instrument. ⚠️ The STATE is deliberately UNCHANGED (`UNDEFINED` either way) —
+        # PBO genuinely is not computable, so no recorded verdict moves; what changes is that the
+        # reason names the real cause and the fabricated fold trigger is GONE (`None`, for the same
+        # reason `GENUINE_ABSENCE` carries none: quoting one would be a lie).
+        also_short = int(n_folds) < MIN_FOLDS_FOR_PBO
+        return NullVerdict("UNDEFINED", (
+            f"`{metric}`: the design is a SINGLE pre-registered contrast ({n_arms} selectable arm), "
+            f"so there is NO SEARCH to overfit — CSCV/PBO is INAPPLICABLE, not unmet, and no fold "
+            f"count makes it computable. ⛔ Do NOT read this as a power shortfall and do NOT quote a "
+            f"fold trigger for it (NF-W3/NF-W4). The deflation requirement is satisfied by the "
+            f"DESIGN; read the remaining gates — the paired contrast, its fold consistency and DSR — "
+            f"to classify the null itself."
+            + (f" ⚠️ Separately, {n_folds} fold(s) < {MIN_FOLDS_FOR_PBO} is a real shortfall for "
+               f"those OTHER gates; it is simply not what makes PBO undefined here." if also_short
+               else "")),
+            retest_trigger=None, folds_have=int(n_folds), detail=d)
 
     if not pbo_evaluable(n_folds, n_arms):
         return NullVerdict("UNDEFINED", (
@@ -689,21 +805,28 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
         max_field = dsr_max_field_size(observed_sr=float(observed_sr), n_obs=int(n_folds),
                                        var_trials_sr=float(var_trials_sr), skew=skew, kurt=kurt,
                                        confidence=confidence)
+        # ⭐ MH2.7 — the field leg is built ONCE here and shared by both DSR-derived states below, so
+        # the two can never drift apart on whether shrinking the field is admissible.
+        field_ok, field_text = _field_size_remedy(
+            max_field=max_field, n_arms=int(n_arms), declared_field_size=declared_field_size)
+        d.update({"declared_field_size": declared_field_size,
+                  "declared_field_size_source": ("stated" if declared_field_size is not None
+                                                 else "unstated — defaulted to n_arms (refused)"),
+                  "field_remedy_admissible": field_ok})
         if need is None:
             return NullVerdict("DSR_UNREACHABLE", (
                 f"`{metric}`: the winner's per-fold Sharpe {observed_sr:.3f} sits at or BELOW the "
                 f"{n_arms}-arm field's deflated benchmark SR0 {sr0:.3f}, so DSR is unreachable at "
                 f"ANY fold count — `n` scales a positive gap, it cannot create one. The remedy is a "
-                f"SMALLER, pre-registered field, not more seasons. {v_note}"),
+                f"SMALLER, PRE-REGISTERED field, not more seasons — and ⛔ only if such a field was "
+                f"pre-registered; this is NOT a licence to re-cut a field you have already scored "
+                f"(MH2.7). {v_note}"),
                 retest_trigger=(
-                    (f"re-run the mechanism in a field of ≤{max_field} arms"
-                     if max_field >= 2 else
-                     "NOT rescuable by field size either — even a 2-arm field does not "
-                     "clear at this fold count and dispersion, so the only lever left "
-                     "is a lower-variance design (more rows per fold / a sharper metric)")
+                    field_text
                     + ("" if degenerates_excluded_from_v is True
                        else f" — ⚠️ BUT FIRST: {v_note}")),
-                folds_have=int(n_folds), max_field_size=max_field, detail=d)
+                folds_have=int(n_folds), max_field_size=max_field,
+                field_remedy_admissible=field_ok, detail=d)
         if need > int(n_folds):
             # ⚠️ Stated in FOLDS, never translated to seasons here. The fold RULE differs per tier
             # — walk-forward burns `min_train_seasons` before its first fold, leave-one-cohort-out
@@ -716,13 +839,14 @@ def classify_null(*, metric: str, n_folds: int, n_arms: int,
                 f"cannot resolve it — DSR alone needs {need} folds against {n_folds} (the BH-FDR "
                 f"requirement is separate and may be larger). {v_note}"),
                 retest_trigger=(f"+{need - int(n_folds)} folds for the DSR gate"
-                                + (f", OR a field of ≤{max_field} arms at the CURRENT fold count"
-                                   if max_field >= 2 else
-                                   " — field size alone cannot rescue it at this dispersion")
+                                + (f", OR {field_text} at the CURRENT fold count" if field_ok
+                                   else f" — {field_text}" if field_ok is None
+                                   else f". On field size — {field_text}")
                                 + ("" if degenerates_excluded_from_v is True
                                    else f" — ⚠️ BUT FIRST: {v_note}")),
                 folds_have=int(n_folds), folds_needed=need,
-                extra_seasons=need - int(n_folds), max_field_size=max_field, detail=d)
+                extra_seasons=need - int(n_folds), max_field_size=max_field,
+                field_remedy_admissible=field_ok, detail=d)
 
     if p_one_sided is not None and bh_cutoff is not None:
         floor = sign_test_floor(n_folds, two_sided=False)
