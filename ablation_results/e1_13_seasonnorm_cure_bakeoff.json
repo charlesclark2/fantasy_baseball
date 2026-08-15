@@ -1,0 +1,99 @@
+{
+  "story": "E1.13",
+  "target": "total_runs",
+  "tier": "pre_lineup",
+  "smoke": false,
+  "generated_at": "2026-08-15T00:04:27.801095+00:00",
+  "window": {
+    "min_year": 2021,
+    "n_rows": 12078,
+    "n_folds": 3,
+    "embargo_days": 3
+  },
+  "contract": {
+    "sidecar": "betting_ml/models/total_runs/feature_columns_v6_total_runs_pre_lineup_served.json",
+    "n_base_cols": 14,
+    "seasonnorm_cols": [
+      "away_bp_eb_xwoba_seasonnorm",
+      "away_team_sequential_bullpen_xwoba_seasonnorm",
+      "home_bp_eb_xwoba_seasonnorm",
+      "home_bp_hard_hit_pct_30d_seasonnorm",
+      "home_off_xwoba_30d_seasonnorm",
+      "home_pit_hard_hit_pct_30d_seasonnorm"
+    ]
+  },
+  "exposure": {
+    "rows_touched": 180,
+    "rows_total": 12078,
+    "share": 0.0149,
+    "touched_eval_rows": 71
+  },
+  "design_bar": {
+    "n_folds": 3,
+    "n_arms": 2,
+    "pbo_evaluable": false,
+    "dsr_ceiling_at_any_effect": 0.9772,
+    "dsr_required_per_fold_sr_asymptotic_V": 3.109,
+    "reference_e7_9_design": {
+      "n_folds": 3,
+      "n_arms": 28,
+      "dsr_ceiling_at_any_effect": 0.9772,
+      "dsr_required_per_fold_sr_asymptotic_V": 7.279,
+      "pbo_evaluable": false
+    },
+    "achievable_folds_check": 3
+  },
+  "arms": {
+    "incumbent_asfit": "fit pre-cure, scored on cured eval (ship-cure-no-retrain)",
+    "refit_cured": "fit cured, scored on cured eval (the retrain candidate)"
+  },
+  "per_fold": [
+    {
+      "fold": 0,
+      "eval_year": 2024,
+      "n_eval": 2146,
+      "n_eval_touched": 26,
+      "crps_incumbent_asfit": 2.4205680828371716,
+      "crps_refit_cured": 2.4193554742224577,
+      "crps_incumbent_on_precure": 2.419713082388956
+    },
+    {
+      "fold": 1,
+      "eval_year": 2025,
+      "n_eval": 2025,
+      "n_eval_touched": 24,
+      "crps_incumbent_asfit": 2.581861145027582,
+      "crps_refit_cured": 2.5813620004823536,
+      "crps_incumbent_on_precure": 2.578021761358604
+    },
+    {
+      "fold": 2,
+      "eval_year": 2026,
+      "n_eval": 1517,
+      "n_eval_touched": 21,
+      "crps_incumbent_asfit": 2.513745507482494,
+      "crps_refit_cured": 2.511378024155338,
+      "crps_incumbent_on_precure": 2.5127930887228778
+    }
+  ],
+  "gates": {
+    "crps_margin": 0.00127,
+    "noise_floor": 0.02,
+    "dsr_fixed_convention": 0.9595,
+    "dsr_bar": 0.95,
+    "dsr_convention": "folds as observations; n_trials=2 (full declared field); asymptotic V=1/n_folds (single non-reference arm \u21d2 no measured cross-trial V exists)",
+    "pbo": "UNDEFINED",
+    "pit_ks_incumbent_asfit": 0.076,
+    "pit_ks_refit_cured": 0.0766,
+    "calibration_tolerance": 0.0076,
+    "calibration_ok": true
+  },
+  "controls": {
+    "input_shift_cost_mean_abs_crps": 0.00315,
+    "touched_rows_paired_delta_mean": 0.08592,
+    "untouched_rows_max_abs_crps_diff": 0.0
+  },
+  "verdict": "INCUMBENT_STANDS",
+  "contest": "TIES",
+  "best_alpha": 0
+}
