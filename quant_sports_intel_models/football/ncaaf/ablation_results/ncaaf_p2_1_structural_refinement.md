@@ -78,6 +78,16 @@ scope finding**, not a null.
 | **finishing drives vs red-zone-D** | ❌ `points_per_drive`, `scoring_opportunity_rate` are offense-only |
 | **pressure susceptibility vs generation** | ❌ no sack column |
 
+⚠️ **Source caveat, stated because it is easy to misread:** the 2026-08-03 stress-test doc itself
+(`ncaaf_model_current_state_evaluation_and_recommendations.md`) is **not in this repo** — `find`
+returns nothing for it or for the pushback response. The §6.2 compact set above was taken from the
+**verbatim enumeration inside `ncaaf_story_prompts.md`'s P2.1 cross-ref**, which lists all nine
+interactions by name, so the registered set is complete with respect to that list. What I could
+*not* read is doc **§5** (the fuller hierarchical-HFA bake-off), which the cross-ref only describes
+as "compatible" — so H1a/H1b/H1c are built from the story's own H1 wording plus the V1 code finding,
+and may not match whatever §5 specifies in detail. If §5 matters, it should be located before the
+H1 result is read as a verdict on the doc's proposal rather than on this battery's own H1.
+
 An H2b registered on the matrix alone would silently test **half** the doc's set while reporting the
 doc's name. The missing five are all derivable from the `plays` Delta (2.20 M plays, 2014–2025,
 carrying `playType`, `down`, `distance`, `yardsGained`, `yardsToGoal`, `ppa` and the running score),
