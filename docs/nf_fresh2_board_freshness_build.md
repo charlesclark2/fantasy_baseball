@@ -39,6 +39,14 @@ the following February — one full season cycle).
 | Does it create a concurrent dbt writer? | **No.** The three NFL crons stay disjoint: roll-forward 06:15 Mon, Sleeper 06:30 daily, game-day mart rebuild 11:00 daily. |
 | Does it fix the Sleeper break? | **No, and the docstring says so.** `sports_nfl_sleeper_injuries_job` dies at `duckdb.connect()` in ~114ms and its bare `except` returns SUCCESS. A wider cron produces *more* green-and-empty runs. Tracked separately. |
 
+**Verifying it on the box:** `scripts/check_nfl_schedule_coverage.py --strict`. It imports the
+DEPLOYED schedule module and iterates with **Dagster's own vendored cron engine** — ⚠️ `croniter` is
+NOT installed in the box image, and answering this with a `pip install`ed engine would be answering
+with a different engine than the one that fires. It is **two-sided**: it re-runs the identical
+assertion against the pre-NF-FRESH2 `3-8` crons and requires them to be REJECTED, so a PASS means
+something. Measured: the old crons jump from 2026-08-31 straight to 2027-03-29 — the seven-month
+hole, visible in one line.
+
 `services/dagster/aws/BOX_OPERATIONS.md §10` is corrected on both NFL rows: it recorded the
 roll-forward as STOPPED (it is RUNNING) and Sleeper as healthy (it is running and producing
 nothing). **Verify a claimed schedule state against the box run list, never against that table.**
@@ -151,11 +159,11 @@ nfl_board_publish_op         (P2)  nf1_5 build (--market-refresh) → league boa
 
 ## 6. Falsifiability
 
-`uv run python betting_ml/tests/nf_fresh2_red_proof.py` — 12 deliberate breaks, **all 12 caught**
+`uv run python betting_ml/tests/nf_fresh2_red_proof.py` — 13 deliberate breaks, **all 13 caught**
 (the pre-NF-FRESH2 cache-always-wins ordering; refreshing every season; losing the market on an
 outage; dropping a stamp from the allowlist; both `3-8` crons; un-chaining the two ops; swallowing
-the DuckDB precondition; dropping the explicit `--market-refresh`; and each verification clause on
-its own, so neither is vacuous). The harness asserts its own mutation landed before running pytest.
+the DuckDB precondition; dropping the explicit `--market-refresh`; making the schedule checker's own
+season window vacuous; and each verification clause on its own, so neither is vacuous). The harness asserts its own mutation landed before running pytest.
 
 ⚠️ Like the repo's nine other Python red proofs it is **not scheduled**, and E9.64 measured what that
 costs. Wiring the Python red proofs into a scheduled workflow is worth doing and is deliberately not
