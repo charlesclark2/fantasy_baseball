@@ -19,6 +19,16 @@ import { defineConfig, devices } from "@playwright/test"
 const PORT = Number(process.env.E2E_PORT ?? 3100)
 const BASE_URL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${PORT}`
 
+// E9.66 — worker count is a CI TUNING knob, so it lives in the environment rather than in this
+// file. The suite is ~650 test-seconds of almost perfectly parallel work (measured), so the wall
+// clock is set by how many browsers run at once and nothing else; being able to change that from
+// the workflow is what let the number below be MEASURED on a real runner instead of guessed.
+// ⚠️ An unset OR EMPTY value must fall through to the default. A `workflow_dispatch` input that the
+// caller left blank arrives as `""`, and `Number("")` is `0` — which Playwright reads as "use all
+// cores", silently ignoring the default this line exists to express.
+const WORKERS_ENV = Number(process.env.E2E_WORKERS)
+const WORKERS = Number.isFinite(WORKERS_ENV) && WORKERS_ENV > 0 ? WORKERS_ENV : undefined
+
 export default defineConfig({
   testDir: "./e2e/specs",
   // Every assertion here is on a fully-rendered client surface, so give react-query's fetch +
@@ -28,7 +38,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  workers: WORKERS ?? (process.env.CI ? 2 : undefined),
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }], ["list"]] : [["list"]],
 
   // `@live` reaches the real internet (today: one DNS/reachability check on the Cognito Hosted-UI

@@ -69,6 +69,28 @@ jobs:
     # runner is slower and a timeout here would read as a drift rather than as a timeout.
     timeout-minutes: 180
 
+    # ⭐ E9.66 — the same official Playwright image `frontend_e2e.yml` moved to, for the same reason
+    # and with a sharper edge here. That workflow's `apt` step was measured hanging for up to 640s;
+    # this job is UNATTENDED and WEEKLY, so the same hang would surface as a mystery on a Monday
+    # morning with nobody watching it happen. No apt, no mirror, no hang. The image also pins the
+    # browser to the runner's Playwright, which matters more for a harness whose whole output is a
+    # verdict about whether a spec went red: a browser/runner mismatch would read as a case that
+    # stopped proving what it claims, i.e. as exactly the drift this job exists to detect.
+    #
+    # ⚠️ Keep this tag in step with `frontend_e2e.yml` and with `@playwright/test` in
+    # `frontend/package-lock.json`. The functional pin guard lives in that workflow, which runs on
+    # every frontend PR — so drift is caught there, days before this weekly job would meet it.
+    #
+    # ⚠️ `--user 1001` matters more here than it does in the E2E job. `red-proof.mjs` rewrites files
+    # in the checkout and restores them with `git checkout HEAD -- <file>`, so this job WRITES to a
+    # tree that `actions/checkout` created as uid 1001. Running as the image's default root would
+    # put the restore path on the wrong side of git's repository-ownership checks and leave every
+    # rewritten file root-owned; matching the checkout's uid keeps the one step whose failure would
+    # leave the tree dirty on the same side of both.
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --user 1001
+
     steps:
       - uses: actions/checkout@v4
 
@@ -79,24 +101,6 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - run: npm ci
-
-      - name: Resolve Playwright version
-        id: pw
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache@v4
-        id: pw-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
-
-      - name: Install Playwright browsers
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-
-      - name: Install browser system dependencies
-        if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
 
       # ⚠️ The script REFUSES to start on a dirty case file, because it restores from HEAD on exit
       # and would destroy uncommitted work. A CI checkout is clean, so this never fires here — it is
