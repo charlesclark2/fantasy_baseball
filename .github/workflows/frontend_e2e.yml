@@ -20,6 +20,56 @@ name: Frontend E2E
 # seconds after its own PR run and carries no new information. What remains is one run per gate:
 # the story PR, the release PR, and one on `main` — which is the only one that describes what
 # Vercel actually deployed, so it stays.
+
+# ══ E9.66 — WHY THIS JOB LOOKS THE WAY IT DOES, AND THE MEASUREMENTS THAT DECIDED IT ═══════════
+#
+# The story that produced this shape opened from a real observation — an `Install browser system
+# dependencies` step seen taking 10m+, its log full of `Ign: azure.archive.ubuntu.com` while apt
+# fell back from the (Azure-hosted) mirror to `archive.ubuntu.com`. The proposed reading was that
+# this step was most of the job.
+#
+# ⭐ MEASURED FIRST, over the 49 completed runs before the change (per-step timings from the Actions
+# API). The step's real profile was NOT a constant 10 minutes — it was a LOW MEDIAN WITH A FAT
+# TAIL: median 13s, p75 19s, p90 26s, but 4 runs of 49 (8%) above 60s and two of those at 608s and
+# 640s. So the ~10-minute observation was real and reproducible-in-kind, but it was the 92nd
+# percentile of a step whose typical cost was 13 seconds — the hazard here is VARIANCE, not mean.
+# Reporting it as "~10 minutes per run" would have overstated the saving by roughly 45×.
+#
+# That distinction changed the fix. Three candidate provisioning strategies were then run as
+# sibling jobs off ONE commit (same code, same hour, same runner pool) rather than argued about:
+#
+#   A  official Playwright container, 2 workers   →  container init 29s, suite 339s
+#   B  plain runner, browser cache, NO apt at all →  provisioning ~3s,   suite 321s
+#   C  official Playwright container, 4 workers   →  container init 27s, suite 313s
+#
+# ALL THREE PASSED, and each result overturned something:
+#
+#  · **B passing is the load-bearing one.** `install-deps` was never necessary: `ubuntu-latest`
+#    ships Google Chrome and Microsoft Edge preinstalled, so every shared library chromium links
+#    against is already on the image. The step that occasionally hung for ten minutes was doing no
+#    work at all on the other 45 runs.
+#  · **C is why there is a shard matrix below and not a bigger `workers` number.** Doubling workers
+#    returned only 8% (339s → 313s) because it is CPU-bound, not concurrency-bound: the same parse
+#    of both logs puts the summed per-test time at 1301s on 2 workers and 1821s on 4 — +40% of
+#    contention on a 4-vCPU runner, which is where the other 92% of the theoretical gain went. One
+#    runner cannot go faster; more runners can.
+#  · **A costs 29s of image pull to buy determinism** — that is 26s dearer than B, on a job that was
+#    ~390s. See the container note below for why it is still the one that shipped.
+#
+# NET, against the measured ~390s baseline: provisioning goes to a FIXED 29s with no apt, no mirror
+# and no tail, and the suite is cut ~3× by running on three runners at once.
+#
+# ⛔ WHAT WAS DELIBERATELY NOT DONE — TIERING. The story also proposed a smoke tier on branch→`dev`
+# with the full suite held for `dev`→`main`. With the shard matrix the full suite finishes in about
+# the time a smoke tier would have taken on ONE runner, so the trade it offers is no longer worth
+# taking: it would save perhaps a further minute in exchange for deferring detection of any
+# fantasy/import/props regression to the promotion PR — where it lands bundled with every other
+# story merged that day, which is materially harder to bisect than a red check on the PR that
+# caused it. Every spec in `e2e/README.md` is written from a defect that actually shipped, so the
+# per-story gate is where they earn their cost. This is a REVERSIBLE call and the operator's to
+# make: tiering is a `--grep @smoke` on the shard step plus a tag pass over the specs. It is
+# recorded here as declined-on-measurement, not as forgotten.
+
 on:
   pull_request:
     branches: [main, dev]
@@ -56,10 +106,148 @@ defaults:
 
 jobs:
   e2e:
-    name: Frontend E2E (smoke)
+    name: Frontend E2E (smoke) ${{ matrix.shard }}/3
     runs-on: ubuntu-latest
+    # Was 20. A shard is a THIRD of the suite, so this is now several times the expected runtime
+    # rather than a snug fit — which is what a timeout should be. A timeout that can be reached by
+    # ordinary slowness reports as a mysterious red rather than as the hang it exists to catch.
     timeout-minutes: 20
 
+    # ⭐ THE OFFICIAL PLAYWRIGHT IMAGE — browsers and every system library pre-baked, so this job
+    # runs no `apt` and contacts no Ubuntu mirror. That is the whole point: the 640s outlier was
+    # not slow work, it was `Ign:`-ing a mirror it could not reach, and a step that does not exist
+    # cannot hang.
+    #
+    # ⚠️ MEASURED HONESTLY: this is 26s DEARER per run than variant B (which simply deleted
+    # `install-deps` and kept the browser cache) and both are equally free of apt. B was not chosen
+    # because its correctness rests on a property of a runner image we do not control — that
+    # `ubuntu-latest` will go on shipping Chrome, and therefore chromium's libraries, forever. That
+    # is exactly the "documented ≠ actual, and it drifted underneath us" shape this repo keeps
+    # getting caught by. 29 fixed seconds to make the browser and its libraries a property of a
+    # pinned digest instead of a property of GitHub's image is the trade taken here. If a future
+    # session wants those 26s back, B is measured, working and a small diff — but it is a real
+    # trade, not a free win.
+    #
+    # ⚠️ THE TAG MUST TRACK `@playwright/test` IN `frontend/package-lock.json` (currently 1.62.1).
+    # A job-level `container:` is resolved before any step runs, so this cannot be computed from
+    # the lockfile in-job. It is therefore PINNED here and GUARDED below by a step that fails with
+    # the exact edit to make — see "the container must carry the browser this checkout expects".
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      # Run as the runner's own uid rather than as root (the image's default). Every file this job
+      # creates — `node_modules`, `.next`, the blob report — is then owned by the user that the
+      # non-container actions (`actions/checkout`, `actions/upload-artifact`) run as, instead of by
+      # root. This is the container configuration Playwright's own GitHub Actions guidance uses.
+      options: --user 1001
+
+    strategy:
+      # ⛔ A failing shard must NOT cancel its siblings. Two shards failing for two different
+      # reasons is a materially different report from one — and cancelling the others turns the
+      # second reason into "cancelled", which reads as infrastructure rather than as a defect.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22 comes from the runner tool cache, which is mounted into the container — measured at
+      # 1-4s. The image bakes Node 24; pinning 22 here keeps the runtime identical to what the
+      # frontend was building and testing under before this change, so the only variable E9.66
+      # moved is where the BROWSER comes from. `cache: npm` is unrelated to the browser and still
+      # earns its keep on `npm ci`.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      # ⭐ THE PIN GUARD. `container.image` above is a hardcoded tag and `package-lock.json` moves on
+      # its own, so this asserts the two still agree — and it asserts it FUNCTIONALLY, by asking the
+      # installed Playwright where it expects its browser and checking that the image actually has
+      # it. A string comparison would only prove two strings match; this proves the browser this
+      # checkout will reach for is present, which is the property that matters.
+      #
+      # Without it the drift still fails — Playwright would report `Executable doesn't exist at
+      # /ms-playwright/chromium-<other revision>` from inside the first spec, several minutes in.
+      # What this buys is naming the fix at the top of the job instead.
+      #
+      # ⚠️ An unparseable output must FAIL, never pass: an empty `expected` would make `test -d`
+      # trivially false and could just as easily have been written to skip. A check that cannot be
+      # evaluated is not a check that passed.
+      - name: The container must carry the browser this checkout expects
+        run: |
+          set -euo pipefail
+          expected="$(npx playwright install --dry-run chromium \
+            | awk -F'Install location:' '/Install location:/{gsub(/^[ \t]+/,"",$2); print $2; exit}')"
+          if [ -z "$expected" ]; then
+            echo "::error::Could not read the expected browser path from 'playwright install --dry-run'."
+            echo "The guard could not be evaluated, which is not the same as passing. Playwright's"
+            echo "--dry-run output format has probably changed; fix the parse above."
+            exit 1
+          fi
+          echo "runner @playwright/test: $(node -p "require('@playwright/test/package.json').version")"
+          echo "expects browser at:      $expected"
+          if [ ! -d "$expected" ]; then
+            echo "::error::The container image does not carry the browser this checkout expects."
+            echo "  expected: $expected   (missing)"
+            echo "  present:  $(ls /ms-playwright 2>/dev/null | tr '\n' ' ')"
+            echo
+            echo "FIX: @playwright/test in frontend/package-lock.json has moved away from the pinned"
+            echo "container tag. Set container.image in this workflow to"
+            echo "  mcr.microsoft.com/playwright:v$(node -p "require('@playwright/test/package.json').version")-noble"
+            exit 1
+          fi
+
+      # A production build, served by `next start` — NOT `next dev`. The E9.56c `/pricing` 404 was a
+      # routing fact, and dev-server routing is not the routing that ships. Env comes from
+      # `e2e/e2e.env` (every value fake on purpose; see that file).
+      # ⚠️ Each shard builds its own copy (~18s). Building once and passing `.next` between jobs was
+      # considered and is not worth it: the upload/download of a Next build costs about what the
+      # build does, and it would couple the shards to a shared artifact for no measured gain.
+      - name: Build (E2E environment)
+        run: npm run e2e:build
+
+      # `playwright.config.ts` starts and stops `next start` itself.
+      # `blob` is the shard-native reporter — it records the raw run so the shards can be merged
+      # back into ONE html report below. `github` is what annotates a failure inline on the PR
+      # diff, and it is per-shard by nature, so it stays here.
+      - name: Run E2E smoke suite (shard ${{ matrix.shard }}/3)
+        run: npx playwright test --shard=${{ matrix.shard }}/3 --reporter=blob,github
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: frontend/blob-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # Traces + failure screenshots. Only written on failure (see `use.trace`/`use.screenshot`), so
+      # this is empty on a green run — hence `if-no-files-found: ignore`.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-failures-${{ matrix.shard }}
+          path: frontend/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # ⭐ Sharding costs one thing: the human-readable report arrives in three pieces. This puts it back
+  # together into the single `playwright-report` artifact the rest of the repo refers to.
+  #
+  # ⚠️ It runs ONLY when a shard did not succeed. On a green run nobody opens the report, and making
+  # every green run wait ~40s for an artifact that will not be read would hand back a fifth of what
+  # the sharding just won. On a red run you are debugging anyway, and one merged report beats three
+  # partial ones. No container and no browsers here — merging is pure bookkeeping.
+  merge-report:
+    name: Merge shard reports (failures only)
+    runs-on: ubuntu-latest
+    needs: [e2e]
+    if: ${{ !cancelled() && needs.e2e.result != 'success' }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -71,52 +259,19 @@ jobs:
 
       - run: npm ci
 
-      # Cache the browser binaries (~90 MB) rather than re-downloading them every run. Keyed on the
-      # resolved Playwright version so a version bump can never be served a stale browser — the
-      # class of bug where the test runner and the browser it drives silently disagree.
-      - name: Resolve Playwright version
-        id: pw
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache@v4
-        id: pw-cache
+      - uses: actions/download-artifact@v4
         with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+          path: frontend/all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
 
-      - name: Install Playwright browsers
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-
-      # A cache hit still needs the OS-level shared libraries the browser links against; those live
-      # outside ~/.cache and are not part of the cached tree.
-      - name: Install browser system dependencies
-        if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
-
-      # A production build, served by `next start` — NOT `next dev`. The E9.56c `/pricing` 404 was a
-      # routing fact, and dev-server routing is not the routing that ships. Env comes from
-      # `e2e/e2e.env` (every value fake on purpose; see that file).
-      - name: Build (E2E environment)
-        run: npm run e2e:build
-
-      # `playwright.config.ts` starts and stops `next start` itself.
-      - name: Run E2E smoke suite
-        run: npx playwright test
+      - name: Merge into one html report
+        run: npx playwright merge-reports --reporter html ./all-blob-reports
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: playwright-report
           path: frontend/playwright-report/
-          retention-days: 14
-
-      # Traces + failure screenshots. Only written on failure (see `use.trace`/`use.screenshot`), so
-      # this is empty on a green run — hence `if-no-files-found: ignore`.
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-failures
-          path: frontend/test-results/
           retention-days: 14
           if-no-files-found: ignore
