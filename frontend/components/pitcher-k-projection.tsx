@@ -278,7 +278,20 @@ export function PitcherKProjection({ pitcherId, asOf }: { pitcherId: number; asO
 
       {/* Bookkeeping affordance — copy this line into the user's own Bet Log. Not a recommendation. */}
       <div className="mb-3 flex justify-end">
-        <LogPropButton projection={data} />
+        <LogPropButton
+          kind="strikeouts"
+          prop={{
+            player_id: data.pitcher_id,
+            full_name: data.full_name,
+            team: data.team,
+            opponent: data.opponent,
+            game_pk: data.game_pk,
+            game_date: data.game_date,
+            primary_line: data.primary_line,
+            book_comparisons: data.book_comparisons ?? [],
+            projection_mean: data.distribution?.mean ?? null,
+          }}
+        />
       </div>
 
       <div className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-4">

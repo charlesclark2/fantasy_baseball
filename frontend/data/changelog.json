@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "new",
+        "text": "Total Bases now has the same one-click \"Log this prop\" button the strikeout pages have had. Open any batter's projection and the button copies that batter, the book you pick and its posted line straight into your Bet Log, where it settles against the batter's real total bases once the game is final. The manual \"Log a prop\" dialog also tells you plainly when it cannot reach the server, instead of showing the same \"none for this date\" message it shows when a day genuinely has no lineups posted yet — those two are different situations and used to look identical."
+      },
+      {
+        "tag": "new",
         "text": "You can now log a batter total-bases prop to your Bet Log. The Props page has had a Total Bases tab for a while, but \"Log a prop\" only ever understood pitcher strikeouts — so a total-bases prop you had actually placed could not be recorded at all. The dialog now asks which prop type you are logging and offers every batter in that day's posted lineups, and total-bases bets settle automatically against the batter's real total bases once the game is final, the same way strikeout props already did. As before this is bookkeeping only: it records what you entered so you can track it, and is not betting advice."
       },
       {

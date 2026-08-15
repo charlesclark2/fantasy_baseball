@@ -1,11 +1,17 @@
 "use client"
 
-// E9.42 — "Log this prop": a bookkeeping affordance that copies the strikeout line the
-// user is viewing on /props/[id] into their own Bet Log. This is NOT betting advice and
+// E9.42 — "Log this prop": a bookkeeping affordance that copies the line the user is
+// viewing on a projection page into their own Bet Log. This is NOT betting advice and
 // carries NO recommendation: E5.4 found no demonstrable gain on this prop, so there is no
 // +/- framing here — the user self-reports their line/stake/odds and we optionally store
 // our projection alongside, clearly labelled as our projection at log time. The honest-
 // framing scan (test_k_projection_serving.py) guards this file for banned language.
+//
+// E5.10 — generalized from pitcher-strikeouts-only to any prop kind, so the batter TOTAL
+// BASES page gets the same one-click affordance the K page has had. The market strings and
+// labels come from lib/prop-markets (shared with the manual "Log a prop" dialog) — two
+// surfaces posting bets from independent market tables is how one of them ends up emitting
+// a string settlement cannot grade, which sits Pending forever with no error (E9.49).
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
@@ -20,14 +26,27 @@ import {
 } from "@/components/ui/dialog"
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
-import type { KProjection } from "@/components/pitcher-k-projection"
+import { PROP_MARKETS, bookLabel, type PropKind } from "@/lib/prop-markets"
 
-// Title-case a book slug ("bovada" → "Bovada") so logged props read like the rest of the log.
-function bookLabel(book: string): string {
-  return book ? book.charAt(0).toUpperCase() + book.slice(1) : book
+/** The projection fields this affordance needs, normalized across prop kinds. Both the K and
+ *  TB payloads are adapted to this at the call site, so the id-field difference
+ *  (`pitcher_id` vs `batter_id`) never leaks in here. */
+export interface LoggableProp {
+  player_id: number
+  full_name: string | null
+  team: string | null
+  opponent: string | null
+  game_pk: number | null
+  game_date: string | null
+  primary_line: number | null
+  book_comparisons: { book: string; line: number; over_odds: number | null; under_odds: number | null }[]
+  /** OUR projected mean at log time — stored for the user's own reference only. */
+  projection_mean: number | null
 }
 
-export function LogPropButton({ projection }: { projection: KProjection }) {
+export function LogPropButton({ prop, kind }: { prop: LoggableProp; kind: PropKind }) {
+  const cfg = PROP_MARKETS[kind]
+  const projection = prop
   const { accessToken } = useAuth()
   const [open, setOpen] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -72,16 +91,15 @@ export function LogPropButton({ projection }: { projection: KProjection }) {
     mutation.mutate({
       game_pk: projection.game_pk,
       score_date: projection.game_date ?? "",
-      matchup: `${projection.full_name ?? "Pitcher"} K${opponent}`,
-      market: side === "over" ? "strikeouts over" : "strikeouts under",
+      matchup: `${projection.full_name ?? cfg.playerLabel} ${cfg.matchupTag}${opponent}`,
+      market: side === "over" ? cfg.marketOver : cfg.marketUnder,
       bookmaker: bookLabel(book || (selectedBook?.book ?? "")),
       american_odds: Number(odds),
       stake: Number(stake),
       prop_line: Number(line),
-      player_id: projection.pitcher_id,
+      player_id: projection.player_id,
       player_name: projection.full_name ?? undefined,
-      // Our projected mean K at log time — stored for the user's own reference only.
-      projection: projection.distribution?.mean ?? undefined,
+      projection: projection.projection_mean ?? undefined,
       ...(notes ? { notes } : {}),
     })
   }
@@ -117,9 +135,9 @@ export function LogPropButton({ projection }: { projection: KProjection }) {
         <DialogHeader>
           <DialogTitle className="text-white">Track this line</DialogTitle>
           <p className="text-xs text-gray-500">
-            {projection.full_name ?? "Pitcher"}
+            {projection.full_name ?? cfg.playerLabel}
             {projection.team ? ` · ${projection.team}` : ""}
-            {projection.opponent ? ` vs ${projection.opponent}` : ""} · strikeouts
+            {projection.opponent ? ` vs ${projection.opponent}` : ""} · {cfg.lineLabel.toLowerCase()}
           </p>
         </DialogHeader>
 
@@ -183,7 +201,7 @@ export function LogPropButton({ projection }: { projection: KProjection }) {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs text-gray-400">Strikeout line</Label>
+                <Label className="text-xs text-gray-400">{cfg.lineLabel}</Label>
                 <Input type="number" step="0.5" value={line} onChange={(e) => setLine(e.target.value)}
                   placeholder="6.5" className="border-[#262626] bg-[#0a0a0a] text-sm text-white placeholder:text-gray-600" />
               </div>
@@ -207,10 +225,10 @@ export function LogPropButton({ projection }: { projection: KProjection }) {
               </div>
             </div>
 
-            {projection.distribution?.mean != null && (
+            {projection.projection_mean != null && (
               <p className="text-[11px] text-gray-500">
-                Our projection at log time: {projection.distribution.mean.toFixed(1)} K (stored for your
-                reference only).
+                Our projection at log time: {projection.projection_mean.toFixed(1)}{" "}
+                {cfg.matchupTag} (stored for your reference only).
               </p>
             )}
             <p className="text-[11px] leading-relaxed text-gray-600">
