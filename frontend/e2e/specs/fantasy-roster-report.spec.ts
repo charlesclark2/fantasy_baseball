@@ -50,6 +50,7 @@ async function openReport(
     groups?: string[]
     leagues?: "none" | "one" | "drafted" | "linked" | "predraft"
     fail?: string[]
+    transform?: (path: string, body: any) => any
   } = {},
 ) {
   const errors = collectPageErrors(page)
@@ -58,6 +59,7 @@ async function openReport(
     entitlement: "entitled",
     leagues: opts.leagues ?? "drafted",
     fail: opts.fail,
+    transform: opts.transform,
   })
   await page.goto("/fantasy/roster-report")
   await expect(page.getByRole("heading", { name: "Your roster, read against your league" })).toBeVisible()
@@ -218,6 +220,43 @@ test.describe("the four empty states are four different messages", () => {
     await expect(page.getByTestId("report-empty-not-drafted")).toBeVisible()
     await expect(page.getByTestId("report-empty-no-team-linked")).toHaveCount(0)
     await expect(page.getByTestId("report-empty-no-league")).toHaveCount(0)
+  })
+
+  test("no bye weeks on the board says so, rather than inventing any", async ({ page }) => {
+    // ⭐ THE NF-INFRA1 DEPENDENCY, MADE OBSERVABLE. Bye weeks come from the published projections
+    // artifact, which derives them from the lake's `schedules` — and `bye_week_map` leaves them NULL
+    // until the season lands, which is gated on NFL ingest schedules that ship STOPPED. (Measured on
+    // the current served artifact they ARE populated, 858 of 858, so this is not blocking today —
+    // but "it happens to be there right now" is not a design.)
+    //
+    // The requirement is that absent data produces an honest empty state and NEVER a fabricated
+    // report. The failure mode worth pinning is not a crash: it is a bye table that renders week
+    // "0", or an ⁠—-filled row, or silently drops the section so a reader concludes their roster has
+    // no bye conflicts. So: strip every bye, and demand the rest of the report still stands while
+    // the bye section says what it does not know.
+    await openReport(page, {
+      groups: FREE.groups,
+      // ⚠️ BOTH ARRAYS. The first cut stripped `board.players` only and the test failed with a full
+      // bye table — because the report reads each rostered player's bye off the JOINED row
+      // (`roster[].board`), which the harness builds by reference and a spread over the other array
+      // does not touch. A partial mutation is a red proof that proves nothing about the clause it
+      // names; the failure was the harness working, not the app.
+      transform: (path, body: any) => {
+        if (path !== "/fantasy/nfl/league-board") return body
+        const strip = (p: any) => (p == null ? p : { ...p, bye: null })
+        return {
+          ...body,
+          board: { ...body.board, players: body.board.players.map(strip) },
+          roster: body.roster.map((r: any) => ({ ...r, board: strip(r.board) })),
+        }
+      },
+    })
+
+    await expect(page.getByTestId("roster-report")).toBeVisible()
+    await expect(page.getByTestId("team-total")).toBeVisible()
+    await expect(page.getByTestId("bye-conflicts")).toContainText("No bye weeks are known")
+    expect(await page.locator('[data-testid^="bye-week-"]').count()).toBe(0)
+    await expectNoNaN(page)
   })
 
   test("a board we could not read reports a fault, not an empty roster", async ({ page }) => {
