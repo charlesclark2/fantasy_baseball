@@ -8,8 +8,15 @@ sports_lake:
   outputs:
     dev:
       type: duckdb
-      # Default DB path is the project root (NOT build/…) — DuckDB won't create a missing
-      # parent dir, so a subdir default fails on a fresh checkout. Gitignored via *.duckdb.
+      # ⭐ NF-INFRA1 — SPORTS_DUCKDB_PATH is the ONE authoritative owner of this path
+      # (betting_ml/utils/sports_duckdb.py). On the box it is REQUIRED (env.required ⇒ deploy.sh
+      # fails without it) and points at /var/lib/credence/sports/sports.duckdb — the `sports_duckdb`
+      # NAMED VOLUME, the only location that survives a deploy. Every Dagster caller exports the
+      # RESOLVED ABSOLUTE path via `sports_duckdb_env()`, so this literal is never used on the box.
+      # The fallback is laptop/CI ONLY and is relative to --project-dir (dbt's cwd), which is this
+      # directory — i.e. the same file as the resolver's repo-root-relative REPO_DEFAULT.
+      # ⚠️ Keep it a bare filename: DuckDB will not create a missing parent dir, so a subdir
+      # default fails on a fresh checkout. Gitignored via *.duckdb.
       path: "{{ env_var('SPORTS_DUCKDB_PATH', 'sports.duckdb') }}"
       extensions:
         - httpfs
@@ -32,6 +39,7 @@ sports_lake:
     # with this target (a real build needs the S3 secret → use `dev`).
     ci:
       type: duckdb
+      # Same single-owner contract as `dev` above (CI sets SPORTS_DUCKDB_PATH itself).
       path: "{{ env_var('SPORTS_DUCKDB_PATH', 'sports.duckdb') }}"
       extensions:
         - httpfs
