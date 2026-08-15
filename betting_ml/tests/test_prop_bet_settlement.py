@@ -116,3 +116,127 @@ def test_prop_starters_empty_on_miss(monkeypatch):
     monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: [])
     out = bets.prop_starters(date="2026-07-01", _="uid")
     assert out == {"date": "2026-07-01", "source": "probable_pitchers", "starters": []}
+
+
+# ── E5.10: batter TOTAL-BASES props ──────────────────────────────────────────
+#
+# /props shipped a Total Bases tab (E5.9) while the log dialog and settlement were both
+# strikeout-only, so a TB prop could not be recorded at all. These cover the three places
+# that had to learn the market: the write model, the grader, and the batter picker.
+
+def test_betcreate_accepts_a_total_bases_prop():
+    from app.backend.models.bets import BetCreate
+    b = BetCreate(game_pk=1, score_date="2026-08-15", market="total bases over",
+                  american_odds=-115, stake=25, prop_line=1.5,
+                  player_id=650490, player_name="Yandy Diaz")
+    assert b.market == "total bases over" and b.prop_line == 1.5
+
+
+def test_betcreate_rejects_a_total_bases_prop_with_no_line():
+    """E9.49: a prop stored without its grading input sits Pending forever and looks
+    identical to 'not finished yet' — so the line is required at WRITE time."""
+    import pytest as _pytest
+    from app.backend.models.bets import BetCreate
+    with _pytest.raises(ValueError):
+        BetCreate(game_pk=1, score_date="2026-08-15", market="total bases under",
+                  american_odds=-115, stake=25, player_id=650490)
+
+
+@pytest.mark.parametrize("market,actual,line,expected", [
+    ("total bases over", 3, 1.5, "win"),
+    ("total bases over", 1, 1.5, "loss"),
+    ("total bases under", 1, 1.5, "win"),
+    ("total bases under", 4, 1.5, "loss"),
+    ("total bases over", 2, 2, "push"),      # integer line, exact
+    ("total bases under", 2, 2, "push"),
+    ("total bases over", 0, 0.5, "loss"),    # an 0-for-4 is a real settleable result
+])
+def test_total_bases_prop_outcome(market, actual, line, expected):
+    from scripts.settle_user_bets import _prop_outcome
+    assert _prop_outcome(market, actual, line) == expected
+
+
+def test_the_two_prop_families_grade_independently():
+    """A K market must never be graded off a TB total or vice versa — they share the
+    grader, so the market string is the only thing keeping them apart."""
+    from scripts.settle_user_bets import _K_PROP_MARKETS, _TB_PROP_MARKETS
+    assert not (_K_PROP_MARKETS & _TB_PROP_MARKETS)
+
+
+def test_settlement_and_the_api_agree_on_the_market_vocabulary():
+    """The two _PROP_MARKETS sets are declared separately (the box script takes no
+    app.backend import). A market the API accepts but settlement cannot grade is an
+    unsettleable bet — the E9.49 class — so they must match exactly."""
+    from app.backend.models.bets import _PROP_MARKETS as api_markets
+    from scripts.settle_user_bets import _PROP_MARKETS as settle_markets
+    assert api_markets == settle_markets
+
+
+# ── total bases from a boxscore batting line ─────────────────────────────────
+
+@pytest.mark.parametrize("batting,expected", [
+    ({"hits": 0, "doubles": 0, "triples": 0, "homeRuns": 0}, 0),      # 0-for-4
+    ({"hits": 1, "doubles": 0, "triples": 0, "homeRuns": 0}, 1),      # single
+    ({"hits": 1, "doubles": 1, "triples": 0, "homeRuns": 0}, 2),      # double
+    ({"hits": 1, "doubles": 0, "triples": 1, "homeRuns": 0}, 3),      # triple
+    ({"hits": 1, "doubles": 0, "triples": 0, "homeRuns": 1}, 4),      # homer
+    ({"hits": 3, "doubles": 1, "triples": 0, "homeRuns": 1}, 7),      # 1B + 2B + HR
+])
+def test_total_bases_from_batting_line(batting, expected):
+    from scripts.settle_user_bets import total_bases_from_batting_line
+    assert total_bases_from_batting_line(batting) == expected
+
+
+@pytest.mark.parametrize("batting", [
+    {},                                                          # player never batted
+    {"hits": 2, "doubles": 1, "triples": 0},                      # homeRuns absent
+    {"hits": 1, "doubles": None, "triples": 0, "homeRuns": 0},    # null component
+    {"hits": 1, "doubles": 2, "triples": 0, "homeRuns": 0},       # XBH exceed hits
+])
+def test_an_uncomputable_batting_line_returns_none_never_zero(batting):
+    """A missing stat and a genuine 0-for-4 are DIFFERENT facts: returning 0 here would
+    silently settle an 'under' as a win off data we never had (NF1.7 (a))."""
+    from scripts.settle_user_bets import total_bases_from_batting_line
+    assert total_bases_from_batting_line(batting) is None
+
+
+# ── /props/batters endpoint (the TB picker source) ───────────────────────────
+
+def test_prop_batters_shapes_rows(monkeypatch):
+    from datetime import date as _date
+
+    from app.backend.routers import bets
+
+    fake = [{
+        "GAME_PK": 822941, "PLAYER_ID": 650490, "PLAYER_NAME": "Yandy Diaz",
+        "TEAM": "Tampa Bay Rays", "OPPONENT": "Baltimore Orioles",
+        "BATTING_SLOT": 1, "GAME_DATE": _date(2026, 8, 15),
+    }]
+    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: fake)
+    out = bets.prop_batters(date="2026-08-15", _="uid")
+    assert out["date"] == "2026-08-15" and out["source"] == "lineups_wide"
+    b = out["batters"][0]
+    assert b["game_pk"] == 822941 and b["player_id"] == 650490
+    assert b["player_name"] == "Yandy Diaz" and b["opponent"] == "Baltimore Orioles"
+    assert b["game_date"] == "2026-08-15"
+
+
+def test_prop_batters_empty_on_miss(monkeypatch):
+    from app.backend.routers import bets
+    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: [])
+    out = bets.prop_batters(date="2026-08-15", _="uid")
+    assert out == {"date": "2026-08-15", "source": "lineups_wide", "batters": []}
+
+
+def test_prop_batters_drops_a_row_with_no_usable_identity(monkeypatch):
+    """A nameless/id-less row cannot be logged against — settlement keys on player_id —
+    so it must not reach the picker as a blank option."""
+    from app.backend.routers import bets
+    fake = [
+        {"GAME_PK": 1, "PLAYER_ID": None, "PLAYER_NAME": "Ghost", "TEAM": None,
+         "OPPONENT": None, "BATTING_SLOT": 1, "GAME_DATE": None},
+        {"GAME_PK": 1, "PLAYER_ID": 5, "PLAYER_NAME": "", "TEAM": None,
+         "OPPONENT": None, "BATTING_SLOT": 2, "GAME_DATE": None},
+    ]
+    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: fake)
+    assert bets.prop_batters(date="2026-08-15", _="uid")["batters"] == []

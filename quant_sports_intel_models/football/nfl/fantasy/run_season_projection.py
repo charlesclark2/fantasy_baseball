@@ -57,6 +57,9 @@ from quant_sports_intel_models.football.nfl.fantasy import season_projection as 
 from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
     rookie_publish_policy as _ROOKIE_POLICY,
 )
+from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
+    veteran_level_policy as _LEVEL_POLICY,
+)
 from quant_sports_intel_models.football.nfl.fantasy import win_total_source  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import xfp_source  # noqa: E402
 
@@ -174,6 +177,13 @@ OUTPUT_COLS = [
     #    that travels without saying so can be re-read later as an optimised selection.
     "rookie_selection_status", "rookie_shrink_lambda", "rookie_statistically_selected",
     "rookie_source_model", "rookie_decision_story",
+    # ── NF-TR2b: the VETERAN-LEVEL POLICY STAMP, board-wide, same reasoning as the rookie stamp above.
+    # `veteran_level_params` is the fitted per-position constant as a JSON string (this board's
+    # actual correction, walk-forward-fitted at build time — never the policy module's word for it);
+    # `level_model_version` is what the NF-G0 `model_stamp_consistency` gate reconciles.
+    "veteran_level_status", "veteran_level_form", "veteran_level_params", "veteran_level_window",
+    "veteran_level_source_model", "veteran_level_decision_story",
+    "veteran_level_statistically_selected", "level_model_version",
 ]
 
 # ── The per-player base-season raw line. Realized season totals ÷ played games → per-game counting
@@ -872,7 +882,7 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
                              rescue_absent: bool = True,
                              absence_prior_family: str | None = None,
                              absence_prior_blend: float | None = None,
-                             band_model=None) -> pd.DataFrame:
+                             band_model=None, level_recal: tuple | None = None) -> pd.DataFrame:
     """The VETERAN half of the board, as a WIDE frame (every base-season input column retained).
 
     ⭐ Factored out of `build_projection` by NF1.9 because the veteran interval's band has to be FITTED
@@ -930,7 +940,8 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
     if a_blend > 0 and "seasons_missed" in base.columns and (base["seasons_missed"] >= 1).any():
         kw["absence_prior"] = fit_absence_prior_for(
             con, base_season, family=absence_prior_family or _SP._ABSENCE_PRIOR_FAMILY, schema=schema)
-    return project_veterans(base, priors, projection_season, band_model=band_model, **kw)
+    return project_veterans(base, priors, projection_season, band_model=band_model,
+                            level_recal=level_recal, **kw)
 
 
 def build_projection(con, base_season: int, projection_season: int, schema: str,
@@ -960,16 +971,47 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     #    veteran interval to the pre-NF1.9 normal approximation — loudly, never silently.
     want_band = _SP._VET_BAND_PER_PLAYER if veteran_band is None else bool(veteran_band)
     band_model = None
+    panel = band_panel
     if want_band:
         panel = (band_panel if band_panel is not None
                  else build_veteran_band_panel(con, projection_season, schema))
         band_model = fit_veteran_band_from_panel(panel, projection_season)
+    # ── NF-TR2b: the served veteran LEVEL recalibration, fitted at BUILD time from the same
+    #    walk-forward panel the band is fitted on (target seasons strictly before this one, the
+    #    trailing `WINDOW_SEASONS`, incumbent-anchored tier rows) — so a backtest board for season Y
+    #    is fitted on < Y exactly like the harness folds (the E5.9 boundary), and the panel itself
+    #    (built by `build_veteran_panel_season`, which never passes `level_recal`) stays the
+    #    INCUMBENT's history the constant is measured against — the correction cannot compound.
+    #    ⭐ ONE READ of `serving_form()`: "" ⇒ identity ⇒ the pre-NF-TR2 board byte for byte.
+    level_form = _LEVEL_POLICY.serving_form()
+    level_params: dict = {}
+    if level_form:
+        from quant_sports_intel_models.football.nfl.fantasy import (
+            season_level_recalibration as _SLR,
+        )
+        if panel is None:
+            panel = build_veteran_band_panel(con, projection_season, schema)
+        level_params = _SLR.fit_level_from_panel(
+            panel, level_form, projection_season, veteran_tier_size(),
+            window=_LEVEL_POLICY.WINDOW_SEASONS)
+        if level_params:
+            log.info("NF-TR2b: veteran LEVEL recalibration ON — %s (%s, window %d, %s) params %s",
+                     level_form, _LEVEL_POLICY.ESTIMATOR, _LEVEL_POLICY.WINDOW_SEASONS,
+                     _LEVEL_POLICY.SELECTION_STATUS, _SLR.params_to_json(level_params))
+        else:
+            log.warning("[ALERT] NF-TR2b: veteran LEVEL recalibration is ON but the panel could not "
+                        "support a fit for %d — the board serves the INCUMBENT level for this season "
+                        "(loud, never silent)", projection_season)
+    else:
+        log.warning("[ALERT] NF-TR2b: veteran LEVEL recalibration is OFF — the board serves the "
+                    "pre-NF-TR2 incumbent veteran level. This is the rollback state.")
     vets = build_veteran_projection(
         con, base_season, projection_season, schema, usage_role_blend=usage_role_blend,
         mover_opportunity_blend=mover_opportunity_blend, env_tilt_blend=env_tilt_blend,
         injury_override_blend=injury_override_blend, xfp_td_blend=xfp_td_blend,
         rescue_absent=rescue_absent, absence_prior_family=absence_prior_family,
-        absence_prior_blend=absence_prior_blend, band_model=band_model)
+        absence_prior_blend=absence_prior_blend, band_model=band_model,
+        level_recal=((level_form, level_params) if (level_form and level_params) else None))
     if veteran_postprocess is not None:
         vets = veteran_postprocess(vets, band_model)
 
@@ -1034,6 +1076,21 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     #    reads unambiguously as "no source model — this board carries no correction".
     proj["rookie_source_model"] = _ROOKIE_POLICY.SOURCE_MODEL if _recal_lambda else ""
     proj["rookie_decision_story"] = _ROOKIE_POLICY.DECISION_STORY if _recal_lambda else ""
+    # ── the VETERAN-LEVEL stamp (NF-TR2b), board-wide; the PARAMS are THIS board's fitted constant
+    #    (a JSON string; "" when no correction was applied), so a reader can confirm the correction
+    #    from any row rather than trusting the policy module.
+    _lvl_on = bool(level_form and level_params)
+    _lvl_stamp = _LEVEL_POLICY.stamp() if _lvl_on else {
+        "veteran_level_status": "incumbent", "veteran_level_form": "", "veteran_level_window": 0,
+        "veteran_level_source_model": "", "veteran_level_decision_story": "",
+        "veteran_level_statistically_selected": False,
+        "level_model_version": "nfl_fantasy_fastpath_v1"}
+    for _c, _v in _lvl_stamp.items():
+        proj[_c] = _v
+    from quant_sports_intel_models.football.nfl.fantasy import (
+        season_level_recalibration as _SLR2,
+    )
+    proj["veteran_level_params"] = _SLR2.params_to_json(level_params) if _lvl_on else ""
     # keep only draft-relevant offensive positions (drop K/DEF/defensive rows with no fantasy line)
     proj = proj[proj["position"].isin(("QB", "RB", "WR", "TE", "FB"))].copy()
     for c in OUTPUT_COLS:

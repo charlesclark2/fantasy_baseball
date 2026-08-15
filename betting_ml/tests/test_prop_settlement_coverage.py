@@ -397,8 +397,19 @@ class TestReadModelIsNotBoundByCreateRules:
 class TestFallbackSourceInvariants:
     def test_every_http_call_has_a_finite_timeout(self):
         # INC-32: an un-timed-out network call on a scheduled-job path can wedge the worker.
-        assert SETTLE.count("timeout=_HTTP_TIMEOUT") == 2, (
-            "both Stats API calls (schedule confirm + boxscore) must pass a finite timeout"
+        # Anchored on the RATIO (every call carries a timeout), not on a hardcoded call
+        # count: the count is an accident of how many hops the module happens to have, and
+        # pinning it makes a LEGITIMATE new hop look like a regression while saying nothing
+        # extra about the invariant. E5.10 added a third (the batter total-bases boxscore).
+        n_calls = SETTLE.count("requests.get(")
+        n_timeouts = SETTLE.count("timeout=_HTTP_TIMEOUT")
+        assert n_calls >= 2, (
+            f"expected the Stats API hops to be present, found {n_calls} requests.get call(s) "
+            "— if they moved, re-anchor this guard rather than deleting it"
+        )
+        assert n_timeouts == n_calls, (
+            f"{n_calls} requests.get call(s) but only {n_timeouts} finite timeout(s) — every "
+            "Stats API call on this scheduled-job path must pass timeout=_HTTP_TIMEOUT"
         )
         assert "_HTTP_TIMEOUT = " in SETTLE
 
@@ -413,10 +424,17 @@ class TestFallbackSourceInvariants:
         # WARN-tier and must never take down the op.
         # INC-38 moved the schedule-confirm hop into _statsapi_final_scores (which now serves BOTH
         # the prop Final-confirm and the game-market score fallback) and left _statsapi_final_games
-        # as a thin set() view over it — so the slice starts at the new entry point. Still exactly
-        # two guarded network hops: the schedule confirm and the boxscore fetch.
+        # as a thin set() view over it — so the slice starts at the new entry point. Anchored on
+        # "every network hop in this region is guarded", not on a fixed hop count (E5.10 added a
+        # third: the batter total-bases boxscore read).
         body = SETTLE[SETTLE.find("def _statsapi_final_scores"):SETTLE.find("# ── Settlement math")]
-        assert body.count("except Exception") == 2
+        n_hops = body.count("requests.get(")
+        assert n_hops >= 2, f"expected the guarded network hops in this region, found {n_hops}"
+        assert body.count("except Exception") >= n_hops, (
+            f"{n_hops} network hop(s) in the fallback region but only "
+            f"{body.count('except Exception')} broad guard(s) — each must degrade to 'leave "
+            "the bet pending'"
+        )
         # No `raise` STATEMENT (resp.raise_for_status() is fine — it is caught).
         assert not [ln for ln in body.splitlines() if ln.strip().startswith("raise ")], (
             "the fallback must degrade to 'leave the bet pending', never propagate"
