@@ -56,6 +56,8 @@ import {
   REPORT_EMPTY,
   REPORT_FIRST_WEEK_NOTE,
   REPORT_FRAGILITY_NOTE,
+  REPORT_FREE_AGENT_NOTE,
+  REPORT_FREE_AGENT_PARTIAL_NOTE,
   REPORT_LEAGUE_BASELINE_NOTE,
   REPORT_POSITION_DEFINITION,
   REPORT_TRADE_NOTE,
@@ -275,7 +277,8 @@ function Empty({ reason }: { reason: keyof typeof REPORT_EMPTY }) {
 
 function Report({ report, entitled }: { report: RosterReport; entitled: boolean }) {
   const [tab, setTab] = useState<TabId>("positions")
-  const { projection, coverage, positions, bench, byes, fragility, waivers, trades } = report
+  const { projection, coverage, positions, bench, byes, fragility, waivers, trades, leagueRosters } =
+    report
   const ranked = positions
     .filter((p) => p.edge != null && p.starters > 0)
     .sort((a, b) => (b.edge as number) - (a.edge as number))
@@ -392,7 +395,17 @@ function Report({ report, entitled }: { report: RosterReport; entitled: boolean 
             </thead>
             <tbody>
               {report.lineup.slots.map((s, i) => (
-                <tr key={`${s.name}-${i}`} className="border-t border-white/5" data-testid="lineup-row">
+                // `data-slot` so a spec can address ONE slot deterministically. Filtering by text
+                // cannot: the slot is named "DST" while the player renders as "SEA D/ST", so a
+                // text filter that finds the filled row finds NOTHING when the row is empty — the
+                // assertion would then fail for a reason that reads like a missing element rather
+                // than like the unfilled slot it is (NF-C6P3).
+                <tr
+                  key={`${s.name}-${i}`}
+                  className="border-t border-white/5"
+                  data-testid="lineup-row"
+                  data-slot={s.name}
+                >
                   <td className="py-1 pr-3 text-gray-400">{s.name}</td>
                   <td className="py-1 pr-3 text-gray-200">
                     {s.player ? s.player.name : <span className="text-[#f59e0b]">nobody eligible</span>}
@@ -498,10 +511,27 @@ function Report({ report, entitled }: { report: RosterReport; entitled: boolean 
 
       <Panel id="moves" active={tab}>
       {/* ── Waivers ─────────────────────────────────────────────────────────────────────────── */}
-      <Section testId="waiver-ideas" title="Worth a look on the wire" note={REPORT_WAIVER_NOTE}>
+      {/* ⭐ NF-C6P3 — the heading and the note are chosen from what we HOLD, not from what reads
+          better. `complete` (every team's roster stored) is the only state in which "free agent" is
+          an observation; partial coverage reports the absence and keeps the older, weaker
+          definition, because a pool computed from 8 of 12 rosters would list the missing four
+          teams' players as unowned and look exactly like a correct list. */}
+      <Section
+        testId="waiver-ideas"
+        title={leagueRosters.complete ? "Free agents worth a look" : "Worth a look on the wire"}
+        note={
+          leagueRosters.complete
+            ? REPORT_FREE_AGENT_NOTE
+            : leagueRosters.teamsHeld > 0
+              ? REPORT_FREE_AGENT_PARTIAL_NOTE
+              : REPORT_WAIVER_NOTE
+        }
+      >
         {waivers.length === 0 ? (
           <p className="text-[13px] text-gray-400">
-            Nothing outside the drafted pool stands out against what you already hold.
+            {leagueRosters.complete
+              ? "Nobody unowned in your league stands out against what you already hold."
+              : "Nothing outside the drafted pool stands out against what you already hold."}
           </p>
         ) : (
           <ul className="space-y-2">
@@ -510,11 +540,33 @@ function Report({ report, entitled }: { report: RosterReport; entitled: boolean 
             ))}
           </ul>
         )}
-        {report.poolSize != null && (
-          <p className="mt-3 text-[11px] text-gray-600">
-            &ldquo;Outside the drafted pool&rdquo; means beyond board rank {int(report.poolSize)} —{" "}
-            {int(report.league.n_teams)} teams times the drafted slots in your roster.
+        {leagueRosters.complete ? (
+          <p className="mt-3 text-[11px] text-gray-600" data-testid="free-agent-basis">
+            Read against all {int(leagueRosters.teamsInLeague)} rosters in your league
+            {leagueRosters.syncedAt
+              ? `, as they stood on ${new Date(leagueRosters.syncedAt).toLocaleDateString()}`
+              : ""}
+            .
+            {leagueRosters.unmatched > 0
+              ? ` ${int(leagueRosters.unmatched)} rostered player${leagueRosters.unmatched === 1 ? "" : "s"} across the league did not match our board, so a few of them could show up below.`
+              : ""}
           </p>
+        ) : (
+          <>
+            {leagueRosters.teamsHeld > 0 && (
+              <p className="mt-3 text-[11px] text-amber-500/80" data-testid="free-agent-partial">
+                We hold {int(leagueRosters.teamsHeld)} of {int(leagueRosters.teamsInLeague)} rosters
+                in this league.
+              </p>
+            )}
+            {report.poolSize != null && (
+              <p className="mt-3 text-[11px] text-gray-600">
+                &ldquo;Outside the drafted pool&rdquo; means beyond board rank{" "}
+                {int(report.poolSize)} — {int(report.league.n_teams)} teams times the drafted slots
+                in your roster.
+              </p>
+            )}
+          </>
         )}
       </Section>
 

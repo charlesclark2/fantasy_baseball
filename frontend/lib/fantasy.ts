@@ -417,6 +417,19 @@ export interface LeagueBoardPayload {
     coverage: unknown
   }
   roster: RosterMatchRow[]
+  /** NF-C6P3 — every stored team's roster joined to the SAME board, server-side (additive key: a
+   *  league imported before this shipped has none, and the client reads it with `?? []`). */
+  league_rosters?: LeagueTeamRoster[] | null
+}
+
+/** One team in the league, its roster already joined to this league's board. */
+export interface LeagueTeamRoster {
+  team_key: string
+  team_name: string
+  /** Resolved server-side from `source_team_key` — never by team NAME, because two managers in one
+   *  league may well have picked the same one. */
+  is_mine: boolean
+  rows: RosterMatchRow[]
 }
 
 /** One roster slot joined to its scored board row. `board` is null on an honest miss (a spelling
@@ -464,6 +477,23 @@ export interface LeagueProvenance {
   source_team_name?: string | null
   imported_roster?: ImportedPlayer[] | null
   roster_synced_at?: string | null
+  // ── NF-C6P3: EVERY team's roster, not just the user's own ─────────────────────────────────────
+  // We already fetched all of them at import (`ImportedLeague.teams[].players` — it is how the
+  // "which team is yours?" screen works) and then discarded all but one. Keeping them is what turns
+  // "outside the pool a league your size drafts" into a TRUE free-agent pool, and what makes a
+  // comparison against the other managers possible at all. A snapshot, never re-fetched.
+  // Slimmed to name/position/team server-side (`models/fantasy.LEAGUE_ROSTER_PLAYER_FIELDS`) and
+  // bounded there too — `league_rosters_truncated` says when we stored fewer than we were given.
+  league_rosters?: LeagueRosterEntry[] | null
+  league_rosters_synced_at?: string | null
+  league_rosters_truncated?: boolean | null
+}
+
+/** One team's stored roster, as the platform named the players. */
+export interface LeagueRosterEntry {
+  team_key: string
+  team_name: string
+  players: { name: string | null; position: string | null; team: string | null }[]
 }
 
 /** What a save accepts: the shared config, optionally stamped with where it was imported from. */

@@ -610,7 +610,49 @@ def nfl_league_board(
         "roster": league_scoring.match_roster_to_board(
             record.get("imported_roster") or [], board["players"]
         ),
+        # 🔑 NF-C6P3 — EVERY team's roster, joined to the SAME board (additive key, NF-C0/E8.6: the
+        # deployed client knows none of this and reads `league_rosters ?? []`).
+        #
+        # ⭐ THE JOIN HAPPENS HERE, NOT IN THE BROWSER, and that is the architecture constraint this
+        # story inherited rather than a preference. `match_roster_to_board` is the SAME function the
+        # caller's own roster already goes through — no new scorer (the fourth-implementation tax
+        # `test_nf_epic1_parity.py` exists to police) and no new read (E9.26b: a wide
+        # `lakehouse_query` in this Lambda fails SILENTLY and returns `[]`). It is one extra pass
+        # over a board that is already in memory.
+        "league_rosters": _joined_league_rosters(record, board["players"]),
     }
+
+
+def _joined_league_rosters(record: dict, board_players: list[dict]) -> list[dict]:
+    """`[{team_key, team_name, is_mine, rows: [{roster, board}]}]` — every stored team's roster,
+    joined to this league's own board.
+
+    `is_mine` is resolved from `source_team_key` so the consumer never has to re-derive which team
+    is the caller's by NAME — two managers in one league may well pick the same team name, and a
+    name match would then highlight the wrong row on the comparison table.
+
+    ⚠️ Returns `[]` when the league has no stored rosters. That is the ordinary state for every
+    league imported before this shipped and for every hand-entered one, and it is distinguishable
+    from "this league has rosters and they are all empty" by the surfaces that care.
+    """
+    stored = record.get("league_rosters") or []
+    mine = str(record.get("source_team_key") or "")
+    out: list[dict] = []
+    for entry in stored:
+        if not isinstance(entry, dict):
+            continue
+        team_key = str(entry.get("team_key") or "")
+        out.append(
+            {
+                "team_key": team_key,
+                "team_name": str(entry.get("team_name") or ""),
+                "is_mine": bool(mine) and team_key == mine,
+                "rows": league_scoring.match_roster_to_board(
+                    entry.get("players") or [], board_players
+                ),
+            }
+        )
+    return out
 
 
 def _enforce_scoring_probe_guard(

@@ -28,6 +28,25 @@ MAX_STAT_TERMS = 200
 MAX_NAME_LEN = 80
 MAX_IMPORTED_ROSTER_PLAYERS = 60
 
+# ── NF-C6P3: the WHOLE league's rosters ──────────────────────────────────────────────────────────
+# `MAX_IMPORTED_ROSTER_PLAYERS` bounds ONE team. A whole league is a different order of magnitude and
+# needs its own limit, because these all land in the SAME DynamoDB item: `fantasy_leagues` is a map
+# on the user row, so a subscriber's 25 leagues share one 400 KB ceiling with their portfolio, their
+# platform tokens and their MLB leagues. Measured on the real captured ESPN league (10 teams / 172
+# players) the slim form below is ~11 KB; a 14-team league is ~16 KB. Twenty-five of those would be
+# 400 KB on their own — i.e. a per-league cap ALONE cannot keep the item safe, which is why
+# `dynamo.put_fantasy_league` carries a second, TOTAL budget. These two bounds do different jobs and
+# both are needed.
+MAX_LEAGUE_ROSTER_TEAMS = 32  # the `n_teams` ceiling — a league cannot have more rosters than teams
+MAX_LEAGUE_ROSTER_PLAYERS = 500  # total across every team: 32 × 15 starters + deep benches
+
+#: The per-player fields kept for OTHER teams. Deliberately NOT `ImportedPlayer.to_dict()`:
+#: `player_key` is a platform id that is not joinable to anything of ours (`canonical.ImportedPlayer`
+#: says so in its own docstring) and `starter` is THEIR lineup decision, which the comparison
+#: explicitly does not use — it fills every roster with OUR optimizer, and says so. Dropping the two
+#: is a 40% size saving on the field that is up against the item ceiling.
+LEAGUE_ROSTER_PLAYER_FIELDS = ("name", "position", "team")
+
 
 class RosterSlotModel(BaseModel):
     """One starting-lineup or bench slot. A BENCH slot (BN/IR) may declare an EMPTY eligibility
@@ -97,6 +116,87 @@ class _LeagueFields(BaseModel):
     imported_roster: list[dict] | None = None
     roster_synced_at: str | None = None
 
+    # ── NF-C6P3: EVERY team's roster, not just the user's own ─────────────────────────────────
+    # ⭐ THE FINDING THAT MADE THIS CHEAP: we already FETCH all of them. `ImportedLeague.teams[]`
+    # carries `players` for every adapter — it is how the "which of these is your team?" screen
+    # works — and then we threw all but one away. So the surface that said "we do not hold your
+    # league's other rosters, so these are not waiver claims" was describing a limit we had
+    # imposed on ourselves, and the fix was to KEEP them rather than to reword the caveat.
+    #
+    # Two things it makes possible, neither of which was expressible before: a TRUE free-agent pool
+    # (a player on nobody's roster, instead of "outside the pool a league your size drafts"), and a
+    # comparison of your roster against the other teams in your own league.
+    #
+    # ⚠️ A SNAPSHOT AT IMPORT TIME, exactly like `imported_roster`, and the surfaces must keep
+    # saying so: we never re-fetch, so a waiver claim made after the import is invisible to us.
+    # `league_rosters_synced_at` is what keeps the age honest.
+    #
+    # ⚠️ BOUNDED, AND TRUNCATION IS BY WHOLE TEAMS. `LeagueSave` slims and caps this; the writer
+    # applies a second total-item budget. Both drop ENTIRE teams — never players within a team —
+    # because a half-stored roster would produce a team total that is quietly too low and looks
+    # exactly like a real one, whereas a missing team is simply absent and can be counted and named
+    # ("we hold 8 of your 12 rosters"). `league_rosters_truncated` records that it happened.
+    league_rosters: list[dict] | None = None
+    league_rosters_synced_at: str | None = None
+    league_rosters_truncated: bool = False
+
+
+def bound_league_rosters(
+    rosters: list[dict] | None,
+) -> tuple[list[dict] | None, bool]:
+    """Slim and cap a whole league's rosters. Returns `(kept, truncated)`.
+
+    ⭐ TRUNCATION IS BY WHOLE TEAMS, IN ORDER, AND THAT IS THE LOAD-BEARING CHOICE. Dropping players
+    from inside a team would leave a roster that still LOOKS complete and whose optimal-lineup total
+    is quietly too low — a plausible wrong number, which is the class this repo keeps paying for
+    (E9.46's rank, the empty D/ST slot this same story fixes). A dropped TEAM is simply absent: it
+    can be counted, named and rendered as "we hold 8 of your 12 rosters".
+
+    Slimming to `LEAGUE_ROSTER_PLAYER_FIELDS` is not cosmetic either — it is what keeps the field
+    inside the shared item budget (see the constants above).
+
+    Pure and total: a malformed entry is skipped rather than raised on, because this runs on a WRITE
+    that the user experiences as "save my league" and a single junk row must not cost them the save.
+    A skipped entry counts as truncation, so it is never silent.
+    """
+    if rosters is None:
+        return None, False
+
+    kept: list[dict] = []
+    players_kept = 0
+    truncated = False
+    for entry in rosters:
+        if not isinstance(entry, dict):
+            truncated = True
+            continue
+        raw_players = entry.get("players")
+        if not isinstance(raw_players, list):
+            raw_players = []
+        players = [
+            {f: (p.get(f) if p.get(f) is not None else None) for f in LEAGUE_ROSTER_PLAYER_FIELDS}
+            for p in raw_players
+            if isinstance(p, dict)
+        ]
+        if len(kept) >= MAX_LEAGUE_ROSTER_TEAMS:
+            truncated = True
+            continue
+        if players_kept + len(players) > MAX_LEAGUE_ROSTER_PLAYERS:
+            # This team does not fit WHOLE, so it does not go in at all. Continuing rather than
+            # breaking lets a later, smaller team still land — the cap is on total players, not on
+            # position in the list.
+            truncated = True
+            continue
+        kept.append(
+            {
+                "team_key": str(entry.get("team_key") or ""),
+                "team_name": str(entry.get("team_name") or entry.get("name") or ""),
+                "players": players,
+            }
+        )
+        players_kept += len(players)
+
+    return kept, truncated
+
 
 class LeagueSave(_LeagueFields):
     """Inbound payload for POST/PUT. Every validator here applies to SAVES only."""
@@ -138,6 +238,31 @@ class LeagueSave(_LeagueFields):
         if v is not None and len(v) > MAX_IMPORTED_ROSTER_PLAYERS:
             raise ValueError(f"imported_roster has more than {MAX_IMPORTED_ROSTER_PLAYERS} players")
         return v
+
+    @model_validator(mode="after")
+    def _bound_league_rosters(self) -> "LeagueSave":
+        """NF-C6P3 — SLIM AND CAP, never reject.
+
+        ⚠️ DELIBERATELY NOT A `raise` like `_roster_size_sane` above, and the difference matters.
+        `imported_roster` over 60 players is a malformed payload — no real team has one. A league's
+        combined rosters legitimately RUN LARGE (a 32-team dynasty), and refusing the save would
+        fail the user's whole import over an enhancement they never asked for. So the oversized
+        part is dropped, the drop is RECORDED on `league_rosters_truncated`, and the surfaces
+        render "we hold N of your M rosters" — an absence reported, never imputed.
+
+        ⚠️ IT LIVES ON `LeagueSave`, NOT ON `_LeagueFields`. E9.49: a write-time rule that ran on
+        the READ path would re-slim every stored league on every read, and the day the shape changes
+        it would silently rewrite history under the user.
+        """
+        if self.league_rosters is None:
+            return self
+        kept, truncated = bound_league_rosters(self.league_rosters)
+        self.league_rosters = kept
+        # ⭐ OR, never assignment: a client that already truncated (the importer slims before it
+        # sends) has told us something true, and overwriting its flag with our own `False` would
+        # erase it. Truncation is a claim that can only ever be added to.
+        self.league_rosters_truncated = bool(self.league_rosters_truncated or truncated)
+        return self
 
     @model_validator(mode="after")
     def _roster_is_rankable(self) -> "LeagueSave":

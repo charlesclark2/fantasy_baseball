@@ -3,6 +3,14 @@
     "week": "2026-08-10",
     "items": [
       {
+        "tag": "fixed",
+        "text": "Your league defence now scores. When you imported a league, your D/ST was matched by name — but your platform calls it \"Lions D/ST\" while our board calls it \"DET D/ST\", so no team defence ever matched: the D/ST slot on the Post-Draft Roster Report sat empty and its points were missing from your projected team total. Defences are now matched by team, so the slot fills and the headline includes it."
+      },
+      {
+        "tag": "improved",
+        "text": "The Roster Report's wire section is now a real free-agent pool. Importing a league already read every team's roster and we only kept yours, so \"worth a look on the wire\" could only offer players outside the pool a league your size drafts. We now store every roster, so the section lists players on nobody's roster in your league — and says plainly that it is the picture from when you imported, since we never re-read your league. If we only hold some of your league's rosters we say so and fall back to the old definition rather than guessing."
+      },
+      {
         "tag": "new",
         "text": "The Props page now has a Total Bases tab: our model's per-batter total-bases projection for every batter with a posted line, shown beside each sportsbook's line. Each batter card opens a full distribution view — the projected range, the chance of 1+, 2+, 3+ and 4+ bases, and a per-book comparison of our probability against the book's de-vigged price (with an explicit push probability on whole-number lines). Like the strikeout projections, this is a projection and transparency comparison only — not betting advice, and we make no profitability claim. The model is fit on regular-season games only, and every payload is stamped with the model version and fit date."
       },
