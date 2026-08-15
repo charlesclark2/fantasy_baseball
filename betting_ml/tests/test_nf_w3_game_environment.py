@@ -694,19 +694,29 @@ class TestLayerBNullClassification:
                                                     "retest_trigger": None})
         assert v["hand_corrected"] is False
 
-    def test_red_proof_the_instrument_alone_publishes_a_NEGATIVE_fold_trigger(self):
-        """⭐ The defect the hand correction exists for, reproduced from the instrument itself:
-        at EIGHT folds and a one-arm field it returns UNDEFINED, blames the FOLD COUNT, and
-        prescribes a NEGATIVE number of additional folds — a record that tells a future reader to
-        buy seasons for a null no season count can move."""
+    def test_the_instrument_declines_to_classify_a_one_arm_design_so_the_hand_path_must(self):
+        """⭐ RE-ANCHORED BY MH2.7 (2026-08-14) — the same property, on the fixed instrument.
+
+        This clause has always asserted the SAME thing: `classify_null` cannot supply Layer B's
+        state, so the hand path must. What changed is HOW it fails to supply it. Before MH2.7 it
+        returned UNDEFINED, blamed the FOLD COUNT ("8 fold(s) < 4") and published a NEGATIVE trigger
+        ("-4 more fold(s)") — the actively-misleading record this vertical hand-corrected four times
+        (NF-W2 → NF-D18 → NF-W3 → NF-W4). MH2.7 fixed that IN the instrument: a single pre-registered
+        contrast now reports PBO as INAPPLICABLE and emits **no trigger at all**.
+
+        ⚠️ Asserting the old defect here would make this suite encode a RETIRED world — a guard that
+        goes red because the thing it complained about got fixed. So the assertions move to the new
+        behaviour; the hand correction is still REQUIRED, because `UNDEFINED`-with-no-trigger is
+        still not Layer B's honest state (POWER_LIMITED is), and that is what this proves."""
         from betting_ml.utils import cv_power
         v = cv_power.classify_null(
             metric="probe", n_folds=8, n_arms=1, beats_foil=True, observed_sr=0.28,
             var_trials_sr=None, fold_wins=5, p_one_sided=0.2273, bh_cutoff=GE.FDR_Q)
         assert v.state == "UNDEFINED", "the premise of the hand correction no longer holds"
-        assert "8 fold(s) < 4" in v.reason
-        assert v.retest_trigger and v.retest_trigger.strip().startswith("-")
-        # …and the hand path replaces exactly that with a signed, honest state
+        assert "SINGLE pre-registered contrast" in v.reason
+        assert "8 fold(s) < 4" not in v.reason, "MH2.7: the fold count is not what makes PBO undefined"
+        assert v.retest_trigger is None, "MH2.7: no fold trigger may be published for a 1-arm design"
+        # …and the hand path still supplies the state the instrument cannot, signed and honest.
         fixed = GE.classify_layer_b(_layer_b_sel(0.0027, -0.0053, 0.0107, 5, 0.2273, 0.28),
                                     n_folds=8)
         assert fixed["state"] == "POWER_LIMITED"
@@ -802,8 +812,15 @@ class TestTheVerdictLayerIsDerivedNotStored:
                 key = f"layer_a::{k}" if k in GE.TARGETS else f"layer_b::{k}"
                 assert key in d["null_states"], f"{k} refused without a classified state"
 
-    def test_red_proof_the_runner_would_republish_the_instruments_bad_trigger(self):
-        """Mutating the hand correction away restores the nonsensical published record."""
+    def test_red_proof_the_runner_would_republish_the_instruments_non_verdict(self):
+        """Mutating the hand correction away leaves the record with NO state of its own.
+
+        ⭐ RE-ANCHORED BY MH2.7: the mutation used to restore a *nonsensical* record (UNDEFINED +
+        a negative fold trigger). Now that the instrument no longer fabricates that trigger, the
+        mutation restores an *empty* one — UNDEFINED with no trigger and no honest state — which is
+        still a materially worse record than POWER_LIMITED and still exactly what the hand path
+        exists to prevent. The RED proof survives the instrument's repair because it keeps asserting
+        the DIFFERENCE the hand path makes, not the shape of the instrument's old defect."""
         mod = _mutated(
             _RUNNER,
             "    out = GE.classify_layer_b(\n        sel, n_folds=n_folds,\n"
@@ -814,13 +831,15 @@ class TestTheVerdictLayerIsDerivedNotStored:
             "nfw3_runner_no_hand")
         sel = _layer_b_sel(0.0027, -0.0053, 0.0107, 5, 0.2273, 0.28)
         bad = mod._classify_layer_b("RB", sel, 8, {"pbo_ok": False})
-        assert bad["state"] == "UNDEFINED" and str(bad["retest_trigger"]).strip().startswith("-"), (
-            "the mutation must land — the pre-fix path must republish the negative trigger")
+        assert bad["state"] == "UNDEFINED" and bad["retest_trigger"] is None, (
+            "the mutation must land — the no-hand path must republish the instrument's non-verdict")
         from quant_sports_intel_models.football.nfl.fantasy import (
             run_nf_w3_game_environment as R,
         )
         good = R._classify_layer_b("RB", sel, 8, {"pbo_ok": False})
         assert good["state"] == "POWER_LIMITED"
+        assert good["retest_trigger"] and "folds" in good["retest_trigger"], (
+            "…and it must be a REAL trigger, or the hand path is only relabelling")
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

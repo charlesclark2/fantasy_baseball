@@ -184,15 +184,33 @@ model's 3-fold ceiling is a **window choice** (E7.9 used 2021–2026) while the 
 `n`, declares itself UNDEFINED rather than passed when unattainable, and is weakly stricter than the
 legacy rate everywhere (so it can only prevent a false ADD).
 
-**5. ⚠️ `classify_null`'s `max_field_size` trigger is UNSAFE ADVICE against an ALREADY-pre-registered
-field — the CALLER must scope it, because the instrument cannot** (MH2.2, 2026-08-03). On a
-`POWER_LIMITED` verdict `classify_null` offers *"…OR a field of ≤N arms at the CURRENT fold count"*.
-That is arithmetically correct and, on MH2.2's `bb_pct`, the ≤2-arm field it prescribes **is the
-retired post-hoc one** — so taken literally the trigger re-commits the selection bias of rule 2
-inside a badge that reads like a remedy. `classify_null` sees only a trial COUNT; it cannot know
-whether a smaller family would be *declared* or *discovered*. ⇒ **a smaller field is a legitimate
-remedy ONLY when the narrower family is pre-registered on MECHANISTIC grounds; never quote the
-`max_field_size` leg against a field you have already scored.**
+**5. `classify_null`'s `max_field_size` leg is ARITHMETIC, not advice — and the instrument now
+enforces that itself** (MH2.2 diagnosed 2026-08-03; ✅ **MH2.7 FIXED it in `cv_power` 2026-08-14**).
+On a `POWER_LIMITED` / `DSR_UNREACHABLE` verdict the classifier used to offer *"…OR a field of ≤N
+arms at the CURRENT fold count"*. That is arithmetically correct and, on MH2.2's `bb_pct`, the ≤2-arm
+field it prescribed **is the retired post-hoc one** — reached by deleting the arm that LOST, whose
+whole apparent gain came from a 19,938× collapse in `V` (rule 6) — so taken literally the trigger
+re-committed the selection bias of rule 2 inside a badge that read like a remedy.
+⇒ **`classify_null` now takes `declared_field_size=` and REFUSES to prescribe below it.** Pass the
+smallest field that was pre-registered for the mechanism (normally `n_arms`); a smaller value is
+legitimate only when that narrower family was itself named in advance on mechanistic grounds.
+**Leaving it unstated is refused, not permitted** — the classifier falls back to the field actually
+scored and says so (NF1.7 (a)). Read the machine flag **`NullVerdict.field_remedy_admissible`**
+(`False` ⇒ report the ≤N figure as a design quantity only; `None` ⇒ field size is no lever at all)
+rather than parsing the prose. ⚠️ **The guard's honest limit:** "declared" is a fact about a
+pre-registration DOCUMENT, not about the data, so no pure function can verify it — MH2.7 converts a
+silent default into an *auditable assertion* (`detail["declared_field_size_source"]`), it does not
+adjudicate the pre-registration. A reviewer still checks the claim.
+
+**5b. A SINGLE pre-registered contrast is not a fold shortage** (MH2.7, from NF-W2/NF-D18/NF-W3/NF-W4).
+`pbo_evaluable` is false for two structurally different reasons — too few folds, or too few arms —
+and collapsing them made a 1-arm design report *"8 fold(s) < 4"* and prescribe *"−4 more fold(s)"*,
+i.e. telling a reader to buy seasons for a deflation statistic a 1-arm design never needed. A single
+contrast has **no search to overfit**, so PBO is **INAPPLICABLE, not unmet**, and no fold count makes
+it computable. `classify_null` now says exactly that and emits **no re-test trigger** for it (the
+state stays `UNDEFINED` — that was always right). The fantasy vertical hand-corrected this four times
+before it was fixed in the instrument; **a defect that keeps being corrected downstream is a defect
+in the instrument.**
 
 **6. Report WHICH CHANNEL a field change paid through, not just that the field changed** (MH2.2).
 `SR0 = √V·z(N)`: trimming a field lowers the trial COUNT `N` *and* the cross-trial Sharpe DISPERSION
@@ -215,8 +233,9 @@ cannot fail.
 **Every `[Model-*]` prompt whose outcome may be a null carries:** *"🔭 POWER (per §0.5.4): state the
 achievable fold count and field size BEFORE the run; on a null, classify it with
 `cv_power.classify_null` and state the re-test trigger in the unit that grows — or say plainly that
-it is a genuine absence / DSR-unreachable / inactive. ⛔ Do NOT quote the `max_field_size` leg of that
-trigger unless the narrower family is pre-registered on mechanistic grounds (§0.5.4 rule 5)."*
+it is a genuine absence / DSR-unreachable / inactive. **Pass `declared_field_size=`** so the
+`max_field_size` leg is scoped; ⛔ do NOT quote that leg unless `field_remedy_admissible is True`
+(§0.5.4 rule 5)."*
 
 ---
 
