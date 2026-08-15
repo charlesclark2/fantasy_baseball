@@ -1,0 +1,1067 @@
+{
+  "generated": "2026-08-15T01:40:00.726716+00:00",
+  "smoke": false,
+  "seed": 20260814,
+  "substrate": "/private/tmp/claude-501/-Users-charlesclark-Documents-machine-learning-baseball-betting-mlb-batter-props-2/8118edd9-41a1-4ae0-bbfa-2a30e60a0348/scratchpad/batter_prop_substrate_v1.parquet",
+  "markets": {
+    "batter_hits": {
+      "market": "batter_hits",
+      "n_folds": 6,
+      "fold_meta": [
+        {
+          "fold": "2023H2",
+          "n_train": 6005,
+          "n_eval": 9925,
+          "secs": 5.5
+        },
+        {
+          "fold": "2024H1",
+          "n_train": 17063,
+          "n_eval": 13699,
+          "secs": 5.7
+        },
+        {
+          "fold": "2024H2",
+          "n_train": 28262,
+          "n_eval": 20678,
+          "secs": 6.2
+        },
+        {
+          "fold": "2025H1",
+          "n_train": 51440,
+          "n_eval": 20253,
+          "secs": 7.1
+        },
+        {
+          "fold": "2025H2",
+          "n_train": 69751,
+          "n_eval": 20243,
+          "secs": 8.1
+        },
+        {
+          "fold": "2026H1",
+          "n_train": 91936,
+          "n_eval": 20778,
+          "secs": 8.6
+        }
+      ],
+      "per_fold_crps": {
+        "glm_poisson": [
+          0.44844,
+          0.43661,
+          0.44285,
+          0.4518,
+          0.44632,
+          0.44479
+        ],
+        "glm_nb": [
+          0.44844,
+          0.43661,
+          0.44285,
+          0.4518,
+          0.44632,
+          0.44479
+        ],
+        "hurdle_nb": [
+          0.47133,
+          0.46172,
+          0.46839,
+          0.47543,
+          0.47295,
+          0.46919
+        ],
+        "lgbm_nb": [
+          0.46206,
+          0.44363,
+          0.44716,
+          0.45391,
+          0.44778,
+          0.44516
+        ],
+        "pa_structural": [
+          0.45171,
+          0.44211,
+          0.44931,
+          0.45599,
+          0.45042,
+          0.44809
+        ],
+        "degenerate_zero": [
+          0.87234,
+          0.84882,
+          0.86058,
+          0.87444,
+          0.86919,
+          0.85461
+        ],
+        "degenerate_marginal": [
+          0.45993,
+          0.45035,
+          0.45767,
+          0.46343,
+          0.45786,
+          0.45451
+        ]
+      },
+      "mean_crps": {
+        "glm_poisson": 0.44513,
+        "glm_nb": 0.44513,
+        "hurdle_nb": 0.46984,
+        "lgbm_nb": 0.44995,
+        "pa_structural": 0.44961,
+        "degenerate_zero": 0.86333,
+        "degenerate_marginal": 0.45729
+      },
+      "mean_mae": {
+        "glm_poisson": 0.64208,
+        "glm_nb": 0.64208,
+        "hurdle_nb": 0.64171,
+        "lgbm_nb": 0.65529,
+        "pa_structural": 0.66268,
+        "degenerate_zero": 0.86333,
+        "degenerate_marginal": 0.66489
+      },
+      "leader": "glm_poisson",
+      "foil": "glm_poisson",
+      "beats_foil": false,
+      "tie_with_foil": true,
+      "skill_per_fold": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "fold_wins": 0,
+      "fold_consistency": {
+        "required": 5,
+        "attainable": true,
+        "passed": false
+      },
+      "p_one_sided": 1.0,
+      "pbo": 0.0,
+      "pbo_companions": {
+        "flip_distribution": {
+          "glm_poisson": 20
+        },
+        "bailey_degradation": 0.0,
+        "contender_spread": 0.0
+      },
+      "dsr": {
+        "dsr": NaN,
+        "observed_sr": NaN,
+        "sr0": NaN,
+        "var_trials_sr": NaN,
+        "binds": null,
+        "dsr_with_degenerates_in_V": null,
+        "n_obs": 6,
+        "n_trials": 7,
+        "declared_degenerate_arms": null,
+        "degenerate_trial_arms": null,
+        "available": false,
+        "note": "the leader's per-fold skill series is degenerate (fewer than 3 folds, or identically zero because the leader IS the incumbent) \u2014 DSR is UNDEFINED here, not failed"
+      },
+      "paired_mechanism_deltas": {
+        "dispersion (glm_nb \u2212 glm_poisson)": [
+          -0.0,
+          -0.0,
+          -0.0,
+          -0.0,
+          -0.0,
+          -0.0
+        ],
+        "zero_mechanism (hurdle_nb \u2212 glm_nb)": [
+          -0.02289,
+          -0.02511,
+          -0.02553,
+          -0.02364,
+          -0.02664,
+          -0.0244
+        ]
+      },
+      "anchors": {
+        "oracle_floor_per_form_last_fold": {
+          "glm_poisson": 0.44406,
+          "glm_nb": 0.44406,
+          "hurdle_nb": 0.46767,
+          "lgbm_nb": 0.35337,
+          "pa_structural": 0.44771
+        },
+        "oracle_respected_last_fold": {
+          "glm_poisson": true,
+          "glm_nb": true,
+          "hurdle_nb": true,
+          "lgbm_nb": true,
+          "pa_structural": true
+        },
+        "matched_n_candidate": {
+          "glm_poisson": 0.44798
+        },
+        "oracle_beats_matched_n": true,
+        "degenerate_zero_loses_crps": true,
+        "degenerate_marginal_loses_crps": true,
+        "mae_inversion_observed": false
+      },
+      "pit_max_decile_dev_pooled": {
+        "glm_poisson": 0.0139,
+        "glm_nb": 0.0136,
+        "hurdle_nb": 0.0726,
+        "lgbm_nb": 0.01,
+        "pa_structural": 0.007
+      },
+      "coverage_80_per_fold": {
+        "glm_poisson": [
+          0.9599,
+          0.9621,
+          0.9595,
+          0.9537,
+          0.9605,
+          0.9585
+        ],
+        "glm_nb": [
+          0.9599,
+          0.9621,
+          0.9595,
+          0.9537,
+          0.9605,
+          0.9585
+        ],
+        "hurdle_nb": [
+          0.992,
+          0.9937,
+          0.9937,
+          0.9924,
+          0.9929,
+          0.9935
+        ],
+        "lgbm_nb": [
+          0.9519,
+          0.9601,
+          0.9575,
+          0.9539,
+          0.9608,
+          0.9585
+        ],
+        "pa_structural": [
+          0.9557,
+          0.9585,
+          0.9545,
+          0.9494,
+          0.9557,
+          0.9563
+        ]
+      },
+      "market_benchmark_per_fold": [
+        {
+          "fold": "2023H2",
+          "n_eval": 9925,
+          "n_two_sided": 9736,
+          "coverage_share": 0.981,
+          "n_benchmark": 9472,
+          "brier_market": 0.24439,
+          "brier_market_level_adj": 0.24435,
+          "brier_model": 0.23511,
+          "bias_market": -0.0485,
+          "bias_model": -0.0307,
+          "train_gap_applied": -0.0004
+        },
+        {
+          "fold": "2024H1",
+          "n_eval": 13699,
+          "n_two_sided": 13101,
+          "coverage_share": 0.9563,
+          "n_benchmark": 13050,
+          "brier_market": 0.23982,
+          "brier_market_level_adj": 0.24069,
+          "brier_model": 0.22726,
+          "bias_market": 0.0016,
+          "bias_model": -0.0264,
+          "train_gap_applied": -0.0278
+        },
+        {
+          "fold": "2024H2",
+          "n_eval": 20678,
+          "n_two_sided": 19818,
+          "coverage_share": 0.9584,
+          "n_benchmark": 19707,
+          "brier_market": 0.23843,
+          "brier_market_level_adj": 0.23857,
+          "brier_model": 0.23147,
+          "bias_market": -0.0047,
+          "bias_model": -0.0182,
+          "train_gap_applied": -0.0175
+        },
+        {
+          "fold": "2025H1",
+          "n_eval": 20253,
+          "n_two_sided": 19937,
+          "coverage_share": 0.9844,
+          "n_benchmark": 19705,
+          "brier_market": 0.23711,
+          "brier_market_level_adj": 0.2374,
+          "brier_model": 0.23462,
+          "bias_market": 0.0078,
+          "bias_model": -0.025,
+          "train_gap_applied": -0.0107
+        },
+        {
+          "fold": "2025H2",
+          "n_eval": 20243,
+          "n_two_sided": 20114,
+          "coverage_share": 0.9936,
+          "n_benchmark": 19888,
+          "brier_market": 0.23704,
+          "brier_market_level_adj": 0.23729,
+          "brier_model": 0.23165,
+          "bias_market": 0.0178,
+          "bias_model": -0.0167,
+          "train_gap_applied": -0.006
+        },
+        {
+          "fold": "2026H1",
+          "n_eval": 20778,
+          "n_two_sided": 20556,
+          "coverage_share": 0.9893,
+          "n_benchmark": 20193,
+          "brier_market": 0.23904,
+          "brier_market_level_adj": 0.23905,
+          "brier_model": 0.2349,
+          "bias_market": 0.0137,
+          "bias_model": -0.0228,
+          "train_gap_applied": -0.0002
+        }
+      ],
+      "market_benchmark_pooled": {
+        "brier_market": 0.23876,
+        "brier_market_level_adj": 0.239,
+        "brier_model": 0.23259
+      },
+      "model_beats_market_folds": "6/6"
+    },
+    "batter_home_runs": {
+      "market": "batter_home_runs",
+      "n_folds": 6,
+      "fold_meta": [
+        {
+          "fold": "2023H2",
+          "n_train": 5966,
+          "n_eval": 9818,
+          "secs": 5.3
+        },
+        {
+          "fold": "2024H1",
+          "n_train": 16917,
+          "n_eval": 13694,
+          "secs": 5.4
+        },
+        {
+          "fold": "2024H2",
+          "n_train": 28112,
+          "n_eval": 21139,
+          "secs": 6.5
+        },
+        {
+          "fold": "2025H1",
+          "n_train": 51750,
+          "n_eval": 20340,
+          "secs": 6.7
+        },
+        {
+          "fold": "2025H2",
+          "n_train": 70149,
+          "n_eval": 20220,
+          "secs": 8.6
+        },
+        {
+          "fold": "2026H1",
+          "n_train": 92310,
+          "n_eval": 20595,
+          "secs": 9.6
+        }
+      ],
+      "per_fold_crps": {
+        "glm_poisson": [
+          0.11748,
+          0.10363,
+          0.10807,
+          0.10364,
+          0.1138,
+          0.10706
+        ],
+        "glm_nb": [
+          0.11748,
+          0.10363,
+          0.10807,
+          0.10364,
+          0.1138,
+          0.10706
+        ],
+        "hurdle_nb": [
+          0.12121,
+          0.10614,
+          0.11082,
+          0.10607,
+          0.11668,
+          0.109
+        ],
+        "lgbm_nb": [
+          0.12295,
+          0.10586,
+          0.1091,
+          0.10393,
+          0.11448,
+          0.10713
+        ],
+        "pa_structural": [
+          0.11752,
+          0.10388,
+          0.10835,
+          0.10392,
+          0.11391,
+          0.10714
+        ],
+        "degenerate_zero": [
+          0.13557,
+          0.11801,
+          0.12366,
+          0.11711,
+          0.13101,
+          0.12207
+        ],
+        "degenerate_marginal": [
+          0.11927,
+          0.10553,
+          0.11036,
+          0.10525,
+          0.11605,
+          0.1089
+        ]
+      },
+      "mean_crps": {
+        "glm_poisson": 0.10895,
+        "glm_nb": 0.10895,
+        "hurdle_nb": 0.11165,
+        "lgbm_nb": 0.11057,
+        "pa_structural": 0.10912,
+        "degenerate_zero": 0.12457,
+        "degenerate_marginal": 0.11089
+      },
+      "mean_mae": {
+        "glm_poisson": 0.12464,
+        "glm_nb": 0.12464,
+        "hurdle_nb": 0.12459,
+        "lgbm_nb": 0.12457,
+        "pa_structural": 0.12466,
+        "degenerate_zero": 0.12457,
+        "degenerate_marginal": 0.12457
+      },
+      "leader": "glm_nb",
+      "foil": "glm_poisson",
+      "beats_foil": false,
+      "tie_with_foil": true,
+      "skill_per_fold": [
+        0.0,
+        -0.0,
+        0.0,
+        0.0,
+        0.0,
+        -0.0
+      ],
+      "fold_wins": 4,
+      "fold_consistency": {
+        "required": 5,
+        "attainable": true,
+        "passed": false
+      },
+      "p_one_sided": 1.0,
+      "pbo": 0.0,
+      "pbo_companions": {
+        "flip_distribution": {
+          "glm_nb": 17,
+          "glm_poisson": 3
+        },
+        "bailey_degradation": 0.0,
+        "contender_spread": 0.0
+      },
+      "dsr": {
+        "dsr": 7.3671090477660754e-09,
+        "observed_sr": 0.4834209573772024,
+        "sr0": 2.9437356578054374,
+        "var_trials_sr": 4.505945626835235,
+        "binds": "degenerate_excluded_whole_field",
+        "dsr_with_degenerates_in_V": 3.927448280426589e-28,
+        "n_obs": 6,
+        "n_trials": 7,
+        "declared_degenerate_arms": [
+          "degenerate_zero",
+          "degenerate_marginal"
+        ],
+        "degenerate_trial_arms": [],
+        "available": true,
+        "note": null
+      },
+      "paired_mechanism_deltas": {
+        "dispersion (glm_nb \u2212 glm_poisson)": [
+          0.0,
+          -0.0,
+          0.0,
+          0.0,
+          0.0,
+          -0.0
+        ],
+        "zero_mechanism (hurdle_nb \u2212 glm_nb)": [
+          -0.00373,
+          -0.00251,
+          -0.00275,
+          -0.00243,
+          -0.00288,
+          -0.00194
+        ]
+      },
+      "anchors": {
+        "oracle_floor_per_form_last_fold": {
+          "glm_poisson": 0.10673,
+          "glm_nb": 0.10673,
+          "hurdle_nb": 0.10917,
+          "lgbm_nb": 0.06244,
+          "pa_structural": 0.10685
+        },
+        "oracle_respected_last_fold": {
+          "glm_poisson": true,
+          "glm_nb": true,
+          "hurdle_nb": false,
+          "lgbm_nb": true,
+          "pa_structural": true
+        },
+        "matched_n_candidate": {
+          "glm_nb": 0.10748
+        },
+        "oracle_beats_matched_n": true,
+        "degenerate_zero_loses_crps": true,
+        "degenerate_marginal_loses_crps": true,
+        "mae_inversion_observed": true
+      },
+      "pit_max_decile_dev_pooled": {
+        "glm_poisson": 0.001,
+        "glm_nb": 0.0016,
+        "hurdle_nb": 0.018,
+        "lgbm_nb": 0.012,
+        "pa_structural": 0.0031
+      },
+      "coverage_80_per_fold": {
+        "glm_poisson": [
+          0.9694,
+          0.962,
+          0.9669,
+          0.9655,
+          0.966,
+          0.9518
+        ],
+        "glm_nb": [
+          0.9694,
+          0.962,
+          0.9669,
+          0.9655,
+          0.966,
+          0.9518
+        ],
+        "hurdle_nb": [
+          0.9715,
+          0.9641,
+          0.9687,
+          0.9668,
+          0.9676,
+          0.952
+        ],
+        "lgbm_nb": [
+          0.9016,
+          0.9312,
+          0.9535,
+          0.9616,
+          0.9635,
+          0.9614
+        ],
+        "pa_structural": [
+          0.9703,
+          0.9651,
+          0.969,
+          0.9671,
+          0.9673,
+          0.9543
+        ]
+      },
+      "market_benchmark_per_fold": [
+        {
+          "fold": "2023H2",
+          "n_eval": 9818,
+          "n_two_sided": 9369,
+          "coverage_share": 0.9543,
+          "n_benchmark": 9347,
+          "brier_market": 0.11119,
+          "brier_market_level_adj": 0.111,
+          "brier_model": 0.11174,
+          "bias_market": 0.014,
+          "bias_model": 0.0049,
+          "train_gap_applied": 0.0135
+        },
+        {
+          "fold": "2024H1",
+          "n_eval": 13694,
+          "n_two_sided": 12663,
+          "coverage_share": 0.9247,
+          "n_benchmark": 11722,
+          "brier_market": 0.09227,
+          "brier_market_level_adj": 0.09155,
+          "brier_model": 0.09064,
+          "bias_market": 0.0321,
+          "bias_model": -0.0018,
+          "train_gap_applied": 0.0143
+        },
+        {
+          "fold": "2024H2",
+          "n_eval": 21139,
+          "n_two_sided": 19067,
+          "coverage_share": 0.902,
+          "n_benchmark": 14820,
+          "brier_market": 0.07381,
+          "brier_market_level_adj": 0.0729,
+          "brier_model": 0.0712,
+          "bias_market": 0.0323,
+          "bias_model": 0.0018,
+          "train_gap_applied": 0.0207
+        },
+        {
+          "fold": "2025H1",
+          "n_eval": 20340,
+          "n_two_sided": 18956,
+          "coverage_share": 0.932,
+          "n_benchmark": 17104,
+          "brier_market": 0.09267,
+          "brier_market_level_adj": 0.09183,
+          "brier_model": 0.09168,
+          "bias_market": 0.0292,
+          "bias_model": 0.0062,
+          "train_gap_applied": 0.0255
+        },
+        {
+          "fold": "2025H2",
+          "n_eval": 20220,
+          "n_two_sided": 19054,
+          "coverage_share": 0.9423,
+          "n_benchmark": 18864,
+          "brier_market": 0.10581,
+          "brier_market_level_adj": 0.10558,
+          "brier_model": 0.10565,
+          "bias_market": 0.0176,
+          "bias_model": 0.0008,
+          "train_gap_applied": 0.0268
+        },
+        {
+          "fold": "2026H1",
+          "n_eval": 20595,
+          "n_two_sided": 3208,
+          "coverage_share": 0.1558,
+          "n_benchmark": 3080,
+          "brier_market": 0.12598,
+          "brier_market_level_adj": 0.12623,
+          "brier_model": 0.12755,
+          "bias_market": 0.007,
+          "bias_model": -0.0303,
+          "train_gap_applied": 0.0244
+        }
+      ],
+      "market_benchmark_pooled": null,
+      "model_beats_market_folds": "4/6"
+    },
+    "batter_total_bases": {
+      "market": "batter_total_bases",
+      "n_folds": 6,
+      "fold_meta": [
+        {
+          "fold": "2023H2",
+          "n_train": 6007,
+          "n_eval": 10044,
+          "secs": 5.5
+        },
+        {
+          "fold": "2024H1",
+          "n_train": 17186,
+          "n_eval": 13693,
+          "secs": 5.6
+        },
+        {
+          "fold": "2024H2",
+          "n_train": 28380,
+          "n_eval": 21121,
+          "secs": 6.2
+        },
+        {
+          "fold": "2025H1",
+          "n_train": 52000,
+          "n_eval": 20321,
+          "secs": 7.1
+        },
+        {
+          "fold": "2025H2",
+          "n_train": 70380,
+          "n_eval": 20244,
+          "secs": 7.6
+        },
+        {
+          "fold": "2026H1",
+          "n_train": 92565,
+          "n_eval": 20651,
+          "secs": 8.9
+        }
+      ],
+      "per_fold_crps": {
+        "glm_poisson": [
+          0.92661,
+          0.87945,
+          0.89772,
+          0.89358,
+          0.92381,
+          0.89414
+        ],
+        "glm_nb": [
+          0.88388,
+          0.84334,
+          0.857,
+          0.85514,
+          0.88103,
+          0.85825
+        ],
+        "hurdle_nb": [
+          0.89737,
+          0.85778,
+          0.87441,
+          0.87306,
+          0.89733,
+          0.87064
+        ],
+        "lgbm_nb": [
+          0.9444,
+          0.87803,
+          0.8797,
+          0.86569,
+          0.88726,
+          0.86291
+        ],
+        "pa_structural": [
+          0.88936,
+          0.85021,
+          0.86533,
+          0.86268,
+          0.8852,
+          0.86165
+        ],
+        "degenerate_zero": [
+          1.46784,
+          1.40269,
+          1.41722,
+          1.41858,
+          1.46053,
+          1.41499
+        ],
+        "degenerate_marginal": [
+          0.90609,
+          0.86473,
+          0.88214,
+          0.87474,
+          0.89852,
+          0.87409
+        ]
+      },
+      "mean_crps": {
+        "glm_poisson": 0.90255,
+        "glm_nb": 0.86311,
+        "hurdle_nb": 0.87843,
+        "lgbm_nb": 0.88633,
+        "pa_structural": 0.86907,
+        "degenerate_zero": 1.43031,
+        "degenerate_marginal": 0.88338
+      },
+      "mean_mae": {
+        "glm_poisson": 1.24692,
+        "glm_nb": 1.21018,
+        "hurdle_nb": 1.2386,
+        "lgbm_nb": 1.23132,
+        "pa_structural": 1.23347,
+        "degenerate_zero": 1.43031,
+        "degenerate_marginal": 1.23516
+      },
+      "leader": "glm_nb",
+      "foil": "glm_poisson",
+      "beats_foil": true,
+      "tie_with_foil": false,
+      "skill_per_fold": [
+        0.04273,
+        0.03611,
+        0.04071,
+        0.03844,
+        0.04278,
+        0.03589
+      ],
+      "fold_wins": 6,
+      "fold_consistency": {
+        "required": 5,
+        "attainable": true,
+        "passed": true
+      },
+      "p_one_sided": 0.0,
+      "pbo": 0.0,
+      "pbo_companions": {
+        "flip_distribution": {
+          "glm_nb": 20
+        },
+        "bailey_degradation": 0.0,
+        "contender_spread": 0.00691
+      },
+      "dsr": {
+        "dsr": 0.99934207010343,
+        "observed_sr": 12.69061595887052,
+        "sr0": 6.921188883413404,
+        "var_trials_sr": 24.90862376351716,
+        "binds": "degenerate_excluded_whole_field",
+        "dsr_with_degenerates_in_V": 6.98796408985833e-44,
+        "n_obs": 6,
+        "n_trials": 7,
+        "declared_degenerate_arms": [
+          "degenerate_zero",
+          "degenerate_marginal"
+        ],
+        "degenerate_trial_arms": [
+          "glm_nb",
+          "degenerate_zero"
+        ],
+        "available": true,
+        "note": null
+      },
+      "paired_mechanism_deltas": {
+        "dispersion (glm_nb \u2212 glm_poisson)": [
+          0.04273,
+          0.03611,
+          0.04071,
+          0.03844,
+          0.04278,
+          0.03589
+        ],
+        "zero_mechanism (hurdle_nb \u2212 glm_nb)": [
+          -0.01349,
+          -0.01444,
+          -0.01741,
+          -0.01792,
+          -0.0163,
+          -0.01239
+        ]
+      },
+      "anchors": {
+        "oracle_floor_per_form_last_fold": {
+          "glm_poisson": 0.89421,
+          "glm_nb": 0.85664,
+          "hurdle_nb": 0.87054,
+          "lgbm_nb": 0.6668,
+          "pa_structural": 0.86071
+        },
+        "oracle_respected_last_fold": {
+          "glm_poisson": false,
+          "glm_nb": true,
+          "hurdle_nb": true,
+          "lgbm_nb": true,
+          "pa_structural": true
+        },
+        "matched_n_candidate": {
+          "glm_nb": 0.86273
+        },
+        "oracle_beats_matched_n": true,
+        "degenerate_zero_loses_crps": true,
+        "degenerate_marginal_loses_crps": true,
+        "mae_inversion_observed": false
+      },
+      "pit_max_decile_dev_pooled": {
+        "glm_poisson": 0.0703,
+        "glm_nb": 0.011,
+        "hurdle_nb": 0.0359,
+        "lgbm_nb": 0.0366,
+        "pa_structural": 0.0077
+      },
+      "coverage_80_per_fold": {
+        "glm_poisson": [
+          0.8602,
+          0.8647,
+          0.8683,
+          0.8739,
+          0.8656,
+          0.8636
+        ],
+        "glm_nb": [
+          0.9152,
+          0.9164,
+          0.9206,
+          0.9226,
+          0.9183,
+          0.9123
+        ],
+        "hurdle_nb": [
+          0.9505,
+          0.9536,
+          0.953,
+          0.9542,
+          0.9549,
+          0.9512
+        ],
+        "lgbm_nb": [
+          0.8321,
+          0.8676,
+          0.8895,
+          0.9065,
+          0.9067,
+          0.9124
+        ],
+        "pa_structural": [
+          0.9316,
+          0.9336,
+          0.9364,
+          0.9327,
+          0.932,
+          0.9273
+        ]
+      },
+      "market_benchmark_per_fold": [
+        {
+          "fold": "2023H2",
+          "n_eval": 10044,
+          "n_two_sided": 9910,
+          "coverage_share": 0.9867,
+          "n_benchmark": 9562,
+          "brier_market": 0.24399,
+          "brier_market_level_adj": 0.24401,
+          "brier_model": 0.23775,
+          "bias_market": 0.0075,
+          "bias_model": 0.0077,
+          "train_gap_applied": -0.0012
+        },
+        {
+          "fold": "2024H1",
+          "n_eval": 13693,
+          "n_two_sided": 13105,
+          "coverage_share": 0.9571,
+          "n_benchmark": 12782,
+          "brier_market": 0.2416,
+          "brier_market_level_adj": 0.24147,
+          "brier_model": 0.23852,
+          "bias_market": 0.0128,
+          "bias_model": 0.0056,
+          "train_gap_applied": 0.0071
+        },
+        {
+          "fold": "2024H2",
+          "n_eval": 21121,
+          "n_two_sided": 19862,
+          "coverage_share": 0.9404,
+          "n_benchmark": 19699,
+          "brier_market": 0.24232,
+          "brier_market_level_adj": 0.2422,
+          "brier_model": 0.23974,
+          "bias_market": 0.011,
+          "bias_model": 0.0159,
+          "train_gap_applied": 0.0093
+        },
+        {
+          "fold": "2025H1",
+          "n_eval": 20321,
+          "n_two_sided": 19975,
+          "coverage_share": 0.983,
+          "n_benchmark": 19712,
+          "brier_market": 0.24313,
+          "brier_market_level_adj": 0.24293,
+          "brier_model": 0.24138,
+          "bias_market": 0.0149,
+          "bias_model": 0.0088,
+          "train_gap_applied": 0.0101
+        },
+        {
+          "fold": "2025H2",
+          "n_eval": 20244,
+          "n_two_sided": 20109,
+          "coverage_share": 0.9933,
+          "n_benchmark": 19546,
+          "brier_market": 0.24311,
+          "brier_market_level_adj": 0.24266,
+          "brier_model": 0.23969,
+          "bias_market": 0.0258,
+          "bias_model": 0.0132,
+          "train_gap_applied": 0.0113
+        },
+        {
+          "fold": "2026H1",
+          "n_eval": 20651,
+          "n_two_sided": 20518,
+          "coverage_share": 0.9936,
+          "n_benchmark": 19580,
+          "brier_market": 0.24359,
+          "brier_market_level_adj": 0.24318,
+          "brier_model": 0.24123,
+          "bias_market": 0.0214,
+          "bias_model": -0.0024,
+          "train_gap_applied": 0.0147
+        }
+      ],
+      "market_benchmark_pooled": {
+        "brier_market": 0.24294,
+        "brier_market_level_adj": 0.2427,
+        "brier_model": 0.24
+      },
+      "model_beats_market_folds": "6/6"
+    }
+  },
+  "verdicts": {
+    "batter_hits": {
+      "gates": {
+        "beats_foil": false,
+        "pbo_lt_0.2": true,
+        "dsr_ge_0.95": false,
+        "fold_consistency": false,
+        "bh_fdr": false
+      },
+      "verdict": "NULL",
+      "null_state": "GENUINE_ABSENCE",
+      "null_reason": "`batter_hits:crps`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+      "retest_trigger": null
+    },
+    "batter_home_runs": {
+      "gates": {
+        "beats_foil": false,
+        "pbo_lt_0.2": true,
+        "dsr_ge_0.95": false,
+        "fold_consistency": false,
+        "bh_fdr": false
+      },
+      "verdict": "NULL",
+      "null_state": "GENUINE_ABSENCE",
+      "null_reason": "`batter_home_runs:crps`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+      "retest_trigger": null
+    },
+    "batter_total_bases": {
+      "gates": {
+        "beats_foil": true,
+        "pbo_lt_0.2": true,
+        "dsr_ge_0.95": true,
+        "fold_consistency": true,
+        "bh_fdr": true
+      },
+      "verdict": "SHIP_CANDIDATE (research-only, deploy-held)"
+    }
+  },
+  "p_values": {
+    "batter_hits": 1.0,
+    "batter_home_runs": 1.0,
+    "batter_total_bases": 0.0
+  },
+  "bh_fdr": {
+    "batter_total_bases": true,
+    "batter_hits": false,
+    "batter_home_runs": false
+  }
+}

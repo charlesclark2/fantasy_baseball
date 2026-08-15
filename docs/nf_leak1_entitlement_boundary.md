@@ -222,3 +222,23 @@ both on endpoints that already return `4xx`. No frontend change ships with this,
 entry is warranted — no visible change to legitimate free editing.
 
 **Post-merge operator steps** are in the handoff.
+
+### Live post-deploy verification (2026-08-14, admin token, prod)
+
+| check | result |
+|---|---|
+| isolating probe `{"rec": 1.0}` | **400** — `a league must score at least 2 of the core stats … this one scores 0` ⇒ the guard is live |
+| a real 9-term league | **201** — no false refusal |
+| magnitude-packed probe | **422 from `LeagueSave`, not 400 from the shape rules** — see below |
+
+⭐ **The packed probe exposed a guard defect the live walk found and CI could not.** The published
+test fixture used a weight of **10 000**, which `LeagueSave`'s pre-existing `|w| ≤ 1000` validator
+rejects — so over the wire it 422s and **never reaches `shape_violations` at all**. The unit test
+passed while exercising an input production cannot produce, because it called `shape_violations`
+directly and skipped the model.
+
+**Rule:** a guard on a request-path rule must use a fixture the REQUEST MODEL accepts, and should
+assert that acceptance — otherwise it tests a state the system cannot reach. Fixed by moving the
+fixture into the band this rule actually owns (**400 < ratio ≤ 1000**; below 400 is legal, above
+1000 the model already refuses) and asserting `LeagueSave` accepts it. The two rules compose as
+defense in depth — the config was refused either way — but only one of them was being tested.
