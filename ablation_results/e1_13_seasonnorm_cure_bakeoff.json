@@ -3,7 +3,7 @@
   "target": "total_runs",
   "tier": "pre_lineup",
   "smoke": false,
-  "generated_at": "2026-08-15T00:04:27.801095+00:00",
+  "generated_at": "2026-08-15T00:45:18.581801+00:00",
   "window": {
     "min_year": 2021,
     "n_rows": 12078,
@@ -53,44 +53,44 @@
       "eval_year": 2024,
       "n_eval": 2146,
       "n_eval_touched": 26,
-      "crps_incumbent_asfit": 2.4205680828371716,
-      "crps_refit_cured": 2.4193554742224577,
-      "crps_incumbent_on_precure": 2.419713082388956
+      "crps_incumbent_asfit": 2.419309456959301,
+      "crps_refit_cured": 2.4198417531036203,
+      "crps_incumbent_on_precure": 2.4186603829331084
     },
     {
       "fold": 1,
       "eval_year": 2025,
       "n_eval": 2025,
       "n_eval_touched": 24,
-      "crps_incumbent_asfit": 2.581861145027582,
-      "crps_refit_cured": 2.5813620004823536,
-      "crps_incumbent_on_precure": 2.578021761358604
+      "crps_incumbent_asfit": 2.580814547319969,
+      "crps_refit_cured": 2.579036980361126,
+      "crps_incumbent_on_precure": 2.577117184878344
     },
     {
       "fold": 2,
       "eval_year": 2026,
       "n_eval": 1517,
       "n_eval_touched": 21,
-      "crps_incumbent_asfit": 2.513745507482494,
-      "crps_refit_cured": 2.511378024155338,
-      "crps_incumbent_on_precure": 2.5127930887228778
+      "crps_incumbent_asfit": 2.5128054302318947,
+      "crps_refit_cured": 2.5118586123565403,
+      "crps_incumbent_on_precure": 2.511975844934876
     }
   ],
   "gates": {
-    "crps_margin": 0.00127,
+    "crps_margin": 0.00068,
     "noise_floor": 0.02,
-    "dsr_fixed_convention": 0.9595,
+    "dsr_fixed_convention": 0.659,
     "dsr_bar": 0.95,
     "dsr_convention": "folds as observations; n_trials=2 (full declared field); asymptotic V=1/n_folds (single non-reference arm \u21d2 no measured cross-trial V exists)",
     "pbo": "UNDEFINED",
-    "pit_ks_incumbent_asfit": 0.076,
-    "pit_ks_refit_cured": 0.0766,
-    "calibration_tolerance": 0.0076,
+    "pit_ks_incumbent_asfit": 0.0765,
+    "pit_ks_refit_cured": 0.076,
+    "calibration_tolerance": 0.0077,
     "calibration_ok": true
   },
   "controls": {
-    "input_shift_cost_mean_abs_crps": 0.00315,
-    "touched_rows_paired_delta_mean": 0.08592,
+    "input_shift_cost_mean_abs_crps": 0.00292,
+    "touched_rows_paired_delta_mean": 0.09085,
     "untouched_rows_max_abs_crps_diff": 0.0
   },
   "verdict": "INCUMBENT_STANDS",
