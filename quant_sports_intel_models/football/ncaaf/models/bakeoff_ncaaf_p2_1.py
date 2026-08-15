@@ -829,10 +829,18 @@ def stage_decide(args) -> None:
                     "shrinkage→∞, the effect is a GLOBAL LEVEL (H1a's territory), not per-team "
                     "content — the mechanism claim is refuted, not assumed (NF-D15 g′)."}
 
-    # ── null classification, per non-surviving hypothesis ──────────────────────────────────────
+    # ── null classification ────────────────────────────────────────────────────────────────────
+    # ⭐ A SURVIVOR IS CLASSIFIED TOO WHENEVER THE RUN DOES NOT PROMOTE IT. An arm can clear every
+    # ARM-LEVEL gate (eligible, not a tie, BH-FDR, fold-consistency) and still not ship because a
+    # RUN-LEVEL gate (PBO / DSR) failed — and then its state is the single most important line in
+    # the report, because it says whether the shortfall is reachable. Skipping survivors left
+    # exactly that line missing on the first real run: `pace` cleared 8/8 folds at p=0.0020 and was
+    # reported with NO state at all, so a reader could not tell POWER_LIMITED (buy more seasons)
+    # from DSR_UNREACHABLE (no `n` and no field size ever clears). Classify every non-promoted arm.
+    promoted = set(survivors) if (survivors and deflation_clean and anchors_ok) else set()
     nulls = {}
     for arm in real:
-        if arm in survivors:
+        if arm in promoted:
             continue
         r = rows[arm]
         state_override = None
@@ -852,6 +860,7 @@ def stage_decide(args) -> None:
             var_trials_sr_with_degenerates=V_all,
             declared_field_size=DECLARED_FIELD_SIZE)
         nulls[arm] = {
+            "arm_level_gates_cleared": bool(arm in survivors),
             "state": state_override[0] if state_override else v.state,
             "reason": state_override[1] if state_override else v.reason,
             "retest_trigger": None if state_override else v.retest_trigger,
@@ -986,10 +995,15 @@ def render_dossier(d: dict) -> str:
           "MACHINE flag `field_remedy_admissible`, not the prose (MH2.7). A `CONSTRAINT_REFUSED` "
           "gets **no** re-test trigger — no sampling error accumulates against a hard constraint "
           "(NF-D18).", "",
-          "| arm | state | field remedy admissible | re-test trigger |", "|---|---|---|---|"]
+          "⭐ An arm marked **arm-gates ✅** cleared every ARM-level gate (eligible · not a tie · "
+          "BH-FDR · fold-consistency) and was still not promoted because a RUN-level gate "
+          "(PBO / DSR) failed. Its state is the line that says whether that shortfall is "
+          "REACHABLE.", "",
+          "| arm | arm-gates | state | field remedy admissible | re-test trigger |",
+          "|---|---|---|---|---|"]
     for arm, v in d["nulls"].items():
-        L.append(f"| `{arm}` | {v['state']} | {v['field_remedy_admissible']} | "
-                 f"{v['retest_trigger'] or '—'} |")
+        L.append(f"| `{arm}` | {'✅' if v.get('arm_level_gates_cleared') else '—'} | {v['state']} | "
+                 f"{v['field_remedy_admissible']} | {v['retest_trigger'] or '—'} |")
     L += ["", "## Honest framing", "",
           f"`best_alpha = {d['best_alpha']}`. A calibration result is **product value** (honest "
           "3-market probabilities), never an edge claim. An edge claim additionally requires the "
