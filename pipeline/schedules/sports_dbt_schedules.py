@@ -25,15 +25,29 @@ nflverse have published, early enough that the marts are fresh for any daytime w
 from dagster import DefaultScheduleStatus, RunRequest, ScheduleEvaluationContext, SkipReason, schedule
 
 from betting_ml.monitoring.sports_game_day_gate import evaluate_gate
+from betting_ml.utils.sports_duckdb import sports_duckdb_path
 from pipeline.jobs.sports_dbt_job import (
     sports_ncaaf_dbt_build_job,
     sports_nfl_dbt_build_job,
 )
 
-# The local DuckDB each job materializes into — the same defaults the ops use. The gate reads
-# these files (never S3) to answer "was a game played yesterday".
-NCAAF_DUCKDB = "/tmp/sports_ncaaf.duckdb"
-NFL_DUCKDB = "/tmp/sports_nfl.duckdb"
+# ⭐ NF-INFRA1 — BOTH gates read the ONE database `_run_sports_dbt` writes.
+#
+# They used to hardcode `/tmp/sports_ncaaf.duckdb` and `/tmp/sports_nfl.duckdb`. The NFL one was
+# a file NOTHING EVER WROTE (the build op's own default was the NCAAF name), so the NFL game-day
+# gate had been permanently fail-OPEN since it shipped — an unreadable database is treated as
+# "run anyway" by design, so the defect presented as a gate that simply never skipped, never as an
+# error (`nf_nflverse_data_health_audit.md` #8). Resolving through the shared helper makes the
+# gate read whatever the build actually wrote, by construction.
+#
+# One file for both sports is correct: dbt materializes each into its own SCHEMA, which is why
+# these two relations are schema-qualified below.
+def _gate_duckdb() -> str:
+    """Resolved at CALL time, never at import: the schedule module is imported once when the code
+    server boots, and reading the env var then would freeze a value the operator can still change
+    with a redeploy."""
+    return sports_duckdb_path()
+
 
 # NCAAF: Aug–Dec plus January (CFP / bowls run into mid-January).
 NCAAF_CRON = "0 11 * 8-12,1 *"
@@ -50,7 +64,7 @@ NFL_CRON = "0 11 * 9-12,1-2 *"
 def sports_ncaaf_dbt_schedule(context: ScheduleEvaluationContext):
     """Rebuild the NCAAF marts the morning after an NCAAF game day."""
     decision = evaluate_gate(
-        duckdb_path=NCAAF_DUCKDB,
+        duckdb_path=_gate_duckdb(),
         # dim_ncaaf_game carries a real DATE column and every FBS game in the universe.
         relation="main_ncaaf_marts.dim_ncaaf_game",
         date_column="game_date",
@@ -70,7 +84,7 @@ def sports_ncaaf_dbt_schedule(context: ScheduleEvaluationContext):
 def sports_nfl_dbt_schedule(context: ScheduleEvaluationContext):
     """Rebuild the NFL marts the morning after an NFL game day."""
     decision = evaluate_gate(
-        duckdb_path=NFL_DUCKDB,
+        duckdb_path=_gate_duckdb(),
         relation="main_nfl_staging.stg_nfl_schedules",
         # ⚠️ VARCHAR ISO date in the nflverse parquet (INC-23) — the gate casts ::date.
         date_column="game_date",
