@@ -117,9 +117,10 @@ jobs:
   e2e:
     name: Frontend E2E (smoke) ${{ matrix.shard }}/3
     runs-on: ubuntu-latest
-    # Was 20. A shard is a THIRD of the suite, so this is now several times the expected runtime
-    # rather than a snug fit — which is what a timeout should be. A timeout that can be reached by
-    # ordinary slowness reports as a mysterious red rather than as the hang it exists to catch.
+    # Left at 20 deliberately. A shard is a THIRD of the suite and measured at ~3-4 min, so 20 is
+    # now roughly 5× the expected runtime rather than the snug fit it used to be — which is what a
+    # timeout should be. A timeout reachable by ordinary slowness reports as a mysterious red
+    # instead of as the hang it exists to catch, so the headroom is the point; it is not dead space.
     timeout-minutes: 20
 
     # ⭐ THE OFFICIAL PLAYWRIGHT IMAGE — browsers and every system library pre-baked, so this job
