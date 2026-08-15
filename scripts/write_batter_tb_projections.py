@@ -31,11 +31,19 @@ Serving semantics vs training (documented deltas — see also the consistency ch
   * REGULAR SEASON ONLY: non-'R' games are skipped loudly (the model is a regular-season fit;
     a postseason slate is an extrapolation and is not served).
 
-Population: batters with a live TB book line for the target date (the market-selected
-population the model was TRAINED on), resolved name→id via the substrate's two-tier keys and
-arbitrated pregame by lineup membership (stg_statsapi_lineups_wide) or EB-posterior presence —
-the appearance arbitration the substrate used is impossible pregame, so an ambiguous name with
-no lineup yet is HELD for the next hourly run, never guessed.
+Population (E5.10 — CHANGED; it was previously the live book-line feed): batters in the target
+date's POSTED LINEUPS (stg_statsapi_lineups_wide), unioned with the EB-posterior build, then
+narrowed to those whose SIDE is known (`pairs_with_a_known_side` — EB carries no team column,
+and a sideless row renders as "Unknown matchup"). A live TB book line is OPTIONAL ENRICHMENT
+matched onto that population, NEVER population-defining: the hourly `--mode live` capture
+OVERWRITES the day's snapshot rather than accumulating, so a line-driven population silently
+DROPPED every batter in a game the moment it started and fell out of the "live" pull — whole
+started games vanished from the served list (observed 2026-08-15). Book lines are still
+resolved name→id via the substrate's two-tier keys and arbitrated pregame by lineup membership
+or EB-posterior presence; an ambiguous name is HELD for the next hourly run, never guessed.
+The pregame LEAKAGE gate is unchanged — `_load_book_lines` only reads snapshots captured
+strictly before first pitch, so a started game shows its batters with no book comparison
+rather than a post-first-pitch price.
 
 TIER = WARN / ALERT-loud-but-continue (E11.7): peripheral, app-cosmetic. Any failure logs a
 WARNING to stderr and exits 0 — it NEVER blocks predictions or serving.
@@ -295,6 +303,25 @@ def _name_candidates(conn, names: list[str]) -> dict[str, set[int]]:
         else:
             out[nm] = set(by_li.get(_li_key(nm), set()))
     return out
+
+
+def pairs_with_a_known_side(
+    pop_pairs: set[tuple[int, int]],
+    members: dict[int, dict[int, dict]],
+) -> tuple[set[tuple[int, int]], list[tuple[int, int]]]:
+    """Split (game_pk, batter_id) population pairs into (servable, sideless).
+
+    A batter's SIDE — and therefore their team/opponent — is knowable only from the posted
+    lineup: `eb_batter_posteriors_raw` carries no team/home_away column (verified against the
+    live table). A row whose side we can't name renders as "Unknown matchup", which is worse
+    than the row's absence (the group header loses BOTH team names and the card can't say who
+    the batter plays for), so the caller skips those loudly rather than serving them.
+
+    Pure + unit-tested: the live slate has no EB-before-lineup window most days, so this
+    cannot be exercised by a real run — see test_write_batter_tb_projections.py."""
+    servable = {(gp, bid) for gp, bid in pop_pairs if (members.get(gp) or {}).get(bid)}
+    sideless = sorted(pop_pairs - servable)
+    return servable, sideless
 
 
 def _batter_display_names(conn, batter_ids: list[int]) -> dict[int, str]:
@@ -655,6 +682,21 @@ def _run_for_date(target: str, args, bundle: dict, design: Design) -> None:
             _warn(f"[{target}] {len(nameless)} batter(s) have no resolvable name (no book "
                   f"match, not yet in stg_ref_players) — skipped: {nameless}")
             pop_pairs = {(gp, bid) for gp, bid in pop_pairs if bid not in nameless}
+
+        # Skip anyone whose side (team/opponent) we can't name — see the helper's docstring
+        # for why an "Unknown matchup" card is worse than the row's absence. In practice the
+        # EB build and the posted lineup land together (measured: every game with EB rows also
+        # had lineup rows), so this costs nothing in the steady state — it exists so an
+        # EB-before-lineup window can never ship an unnamed matchup.
+        pop_pairs, sideless = pairs_with_a_known_side(pop_pairs, members)
+        if sideless:
+            _warn(f"[{target}] {len(sideless)} batter-game(s) have EB posteriors but no posted "
+                  f"lineup, so their side (team/opponent) is unknown — skipped rather than "
+                  f"served as an unknown matchup; retried once the lineup posts.")
+        if not pop_pairs:
+            _warn(f"[{target}] no batter has both a resolvable name and a known side — "
+                  "nothing served this run.")
+            return
 
         pairs = pd.DataFrame(
             [{"game_pk": gp, "batter_id": bid} for gp, bid in pop_pairs]
