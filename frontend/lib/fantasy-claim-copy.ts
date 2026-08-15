@@ -250,6 +250,23 @@ export const PAID_TIER_SUMMARY: readonly { title: string; detail: string }[] = [
     detail:
       "The draft optimizer, and the in-season calls — waivers, trades, start/sit — worked in your league's scoring rather than left as an exercise.",
   },
+  // ⭐ NF-LEAK1 RIDER — THE PERK THAT BACKS A CLAIM WE WERE ALREADY MAKING.
+  //
+  // `scoring_probe_guard.throttle_message` tells a throttled free caller to "subscribe for unlimited
+  // edits". Until this entry existed, that sentence was the ONLY place the product said so, and it
+  // was said at the worst possible moment — inside a 429, to someone who had just been refused. A
+  // benefit that appears only in an error message is not a benefit anyone can find before they hit
+  // it, and it reads as a penalty invented on the spot.
+  //
+  // ⛔ NO NUMBERS. The budget's capacity and refill rate are the attacker's cost model (see that
+  // module's header — they were tuned against a measured reconstruction plan), and publishing them
+  // hands an extraction walk its exact schedule. "A limit generous enough that ordinary tuning never
+  // meets it" is both true and all a real user needs; the exact figures stay in the code.
+  {
+    title: "Unlimited scoring edits",
+    detail:
+      "Retune your league's scoring as often as you like. A free account can edit too — there is a rate limit generous enough that ordinary tuning never reaches it — but a membership takes the ceiling off entirely.",
+  },
 ]
 
 // ══ THE FORMAT LOCK — what a visitor reads on a preset they cannot open ═════════════════════════
@@ -411,3 +428,123 @@ export const LEAGUE_QUOTA_REACHED_DETAIL =
  *  there and still deletable — what is paused is the board we compute from them. */
 export const LEAGUE_WITHHELD_BY_QUOTA_DETAIL =
   "Your other saved leagues are still here — a free account personalizes one at a time. Nothing has been deleted, and you can choose a different one in League Settings."
+
+// ══ NF-C6P2 — THE POST-DRAFT ROSTER REPORT ═══════════════════════════════════════════════════════
+//
+// The conversion moment: a user finishes their draft, imports the result, and reads what they
+// actually built. It is the single most tempting surface in the product to overclaim on, because
+// the reader is primed for a verdict — "did I win my draft?" — and we have not measured anything
+// that answers that question.
+//
+//   ✅ "your starters project to N points, with an 80% range of X–Y"  — arithmetic we performed
+//   ✅ "you are above/below what an average team in THIS league holds at RB" — a comparison of our
+//      own numbers against our own replacement levels
+//   ✅ "week 8 costs you the most, and here is why"                   — a re-fill of your lineup
+//   ⛔ "you drafted the best team", "a playoff roster", a grade, a rank against the other teams
+//   ⛔ anything about winning, and anything implying we know the other eleven rosters
+//
+// ⭐ WE CANNOT SEE THE OTHER TEAMS. The platform-import red line means we hold the caller's own
+// roster and nothing else, so every league-relative statement here is against the BOARD's own
+// replacement and starter demand — never against real opponents. Two constants
+// (`REPORT_LEAGUE_BASELINE_NOTE`, `REPORT_WAIVER_NOTE`) exist to say that out loud on the surface,
+// and they are not optional garnish: without them a reader takes "above average" to mean "above the
+// other eleven managers", which is a claim about data we do not have.
+//
+// Screened by `test_nf_tr1_claim_copy.py` alongside every other string in this file.
+
+export const ROSTER_REPORT_HEADING = "Your roster, read against your league"
+
+export const ROSTER_REPORT_BLURB =
+  "Your drafted roster scored under your league's own rules, then measured against the replacement level and starter demand that same league creates. Every figure below is a sum of the projections on your board — nothing here predicts a result."
+
+/** ⭐ THE UNCERTAINTY SENTENCE, and the one that had to be written most carefully.
+ *
+ *  A team total is a SUM of distributions, and how you combine them is an assumption with a known
+ *  direction of error. Independence under-disperses a correlated sum — NF-W7b measured exactly that
+ *  on a DST leg — and real rosters co-move (one offense, shared game script, a stacked pair). So the
+ *  surface renders the independent band AND states the fully-correlated one beside it, rather than
+ *  printing one number and calling it "the range". */
+export const ROSTER_REPORT_RANGE_NOTE =
+  "The total is exact — expected points add up however your players' seasons turn out. The range is not: it combines each player's own 80% range assuming their seasons are independent of one another. Real rosters move together to some degree, so treat this as the narrow end; the wider figure beside it is what the range becomes if every season moved in step."
+
+/** How a position's "above/below average" figure is built. Names the baseline explicitly. */
+export const REPORT_LEAGUE_BASELINE_NOTE =
+  "Above or below is against an average team in a league with your settings — the players your league's roster shape expects to start, shared out by team count. It is not a comparison against the other managers in your league; we do not hold their rosters."
+
+/** Value over replacement, restated for a reader who arrived here straight from a draft. */
+export const REPORT_POSITION_DEFINITION =
+  "Each position is scored by value over replacement: your starters' points minus the points of the first player at that position who does not start anywhere in your league. That is what makes a quarterback and a running back comparable on one line."
+
+export const REPORT_BENCH_NOTE =
+  "A bench is optionality, not points. What matters is how many of these players would be starting somewhere in your league, because those are the ones covering a bye or an absence."
+
+export const REPORT_BYE_NOTE =
+  "Each week is your lineup re-filled with that week's byes removed, in points per game played. A week costs you nothing if your bench covers it — which is the useful thing to know before waivers open."
+
+/** ⚠️ THE MOST MISREADABLE SECTION ON THE PAGE, so its note is the longest. "Injury concentration"
+ *  invites a reader to think we are forecasting injuries. We are not: expected games is already
+ *  inside the points, and this section only shows where that discount and the roster's dependence on
+ *  one player are concentrated. */
+export const REPORT_FRAGILITY_NOTE =
+  "Projected games are already priced into the points above — a player expected to miss time is projected lower for it. Nothing here forecasts an injury. This is where your projection is concentrated, and how much a lineup slot drops if the best body on your bench has to take it."
+
+export const REPORT_WAIVER_NOTE =
+  "We do not hold your league's other rosters, so these are not waiver claims — they are the best players outside the pool a league your size drafts, aimed at the gaps above."
+
+export const REPORT_TRADE_NOTE =
+  "A shape, not an offer. It says you hold startable depth in one place and your thinnest starters in another; what a trade is worth, and whether anyone would take it, is not something we have measured."
+
+/** ⚠️ The first-week lineup's honest label. The weekly model is not published yet, so this is the
+ *  SEASON projection expressed per game played — which is a different and weaker thing than a week-1
+ *  forecast, and saying so is the whole point of the string. */
+export const REPORT_FIRST_WEEK_NOTE =
+  "Built from the season projection expressed per game played, not from a week-by-week model — that one is still in the lab. It answers 'who are my best nine' rather than 'who has the best matchup'."
+
+// ── The empty states. Four different facts, four different messages ─────────────────────────────
+//
+// ⚠️ These must not be collapsed into one "nothing to show". "You have no league", "you have not
+// picked your team", "your league has not drafted" and "we could not read the board" are four
+// different situations with four different next actions, and NF-C6 already shipped the bug where two
+// of them shared a message and told a user to do something they had already done.
+
+export const REPORT_EMPTY = {
+  "no-league": {
+    title: "Import your league to see your roster report",
+    detail:
+      "Pull it in from Sleeper, Yahoo or ESPN, or enter the scoring and roster by hand. One personalized league is included with a free account.",
+  },
+  "no-team-linked": {
+    title: "Pick your team and the report will build itself",
+    detail:
+      "Your league is saved, but we do not know which of its teams is yours. Re-import it and choose your team on the review step.",
+  },
+  "not-drafted": {
+    title: "Nothing drafted yet",
+    detail:
+      "Your team is linked and the platform reports no players on it — usually because the draft has not happened. Come back and re-import once it has, and this page fills in.",
+  },
+  "no-board": {
+    title: "We could not build your board just now",
+    detail:
+      "This one is on us, not on your league. Refresh in a moment; if it keeps happening the projections may be mid-publish.",
+  },
+  "nothing-matched": {
+    title: "We could not match your roster to our board",
+    detail:
+      "Your league and team are saved, but none of the rostered players resolved to a player we project. Re-importing usually fixes it.",
+  },
+} as const
+
+// ── The season upgrade prompt — the conversion moment ───────────────────────────────────────────
+//
+// ⛔⛔ THIS SELLS ONGOING ANALYSIS, NOT AN OUTCOME. The reader has just been shown a real read on
+// their roster; the honest offer is that the read keeps arriving all season in their league's own
+// scoring. It is NOT "and then you will win", and it may not imply the free report is missing an
+// edge. `best_alpha = 0`, and the denylist screening covers these strings like every other.
+
+export const REPORT_UPGRADE_HEADING = "Keep this read going all season"
+
+export const REPORT_UPGRADE_DETAIL =
+  "This report is a snapshot of draft day. A membership keeps it current: your board re-scored as projections move, start/sit and waiver calls worked in your league's scoring rather than left to you, several leagues instead of one, and the ranges beside every number so you can see how much of a call is real."
+
+export const REPORT_UPGRADE_CTA = "See membership options"

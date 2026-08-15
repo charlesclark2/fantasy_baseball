@@ -38,14 +38,23 @@ import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors } from "../suppor
 const SIGNED_IN_FREE = { groups: [] as string[] }
 
 /**
- * The three `freeSignedIn` nav items (`lib/nav-model.ts`) — offered to a signed-in free account,
+ * The `freeSignedIn` nav items (`lib/nav-model.ts`) — offered to a signed-in free account,
  * withheld from a logged-out visitor.
  *
  * ONE list, read by both halves of that contract, because they are two statements about the same
  * membership: an item added to the menu but not to the negative test would be asserted reachable
  * and never asserted withheld. Same reason the app keeps one ordering function rather than two.
+ * ⚠️ EXHAUSTIVE, AND PINNED AS SUCH. A `freeSignedIn` item added to the menu but not to this list
+ * is asserted reachable nowhere and asserted withheld nowhere — the registry-drift shape INC-38
+ * records. `test_nf_c6p2_roster_report.py::test_every_free_signed_in_nav_item_is_in_both_registries`
+ * reads `nav-model.ts` and fails the build when the two disagree.
  */
-const LEAGUE_NAV_HREFS = ["/fantasy/my-league", "/fantasy/import", "/fantasy/league-settings"] as const
+const LEAGUE_NAV_HREFS = [
+  "/fantasy/my-league",
+  "/fantasy/roster-report",
+  "/fantasy/import",
+  "/fantasy/league-settings",
+] as const
 
 /** Every spec here needs the same three things: a session, the API, and no third-party traffic. */
 async function openMyLeague(

@@ -131,8 +131,10 @@ def _within_position_ranks(players: list[dict], key, reverse: bool) -> dict[str,
     return ranks
 
 
-def _select_featured(players: list[dict]) -> tuple[dict, int, int, int] | None:
-    """Pick the player to feature. Returns (player, our_rank, adp_rank, universe_size) or None.
+def _select_featured(players: list[dict]) -> tuple[dict, int, int, int, int] | None:
+    """Pick the player to feature.
+
+    Returns `(player, board_rank, our_rank_among_drafted, adp_rank, universe_size)` or None.
 
     ⭐ THE RULE IS DETERMINISTIC AND IS THE HONEST PART OF THIS ENDPOINT. It is computed from the
     served artifact on every request rather than curated, so nobody is choosing a flattering
@@ -159,29 +161,46 @@ def _select_featured(players: list[dict]) -> tuple[dict, int, int, int] | None:
 
     Ties break on lower ADP then player id, so the result is stable across identical inputs.
     """
-    # ⚠️⚠️ TWO DIFFERENT POPULATIONS, AND CONFLATING THEM SHIPS A WRONG NUMBER TO THE HOMEPAGE.
+    # ⚠️⚠️ THREE DIFFERENT POPULATIONS, AND CONFLATING ANY TWO SHIPS A WRONG NUMBER TO THE HOMEPAGE.
     #
-    #   `ranked`  — every player at the position carrying BOTH our projection and an ADP. This is
-    #               what the RANKS ARE COMPUTED OVER, because "WR15" has to mean fifteenth on the
-    #               board. Matched on both fields for the same reason the track-record export
-    #               matches them: ranking our side over a different population than the market's
-    #               would make the two numbers uncomparable and the gap meaningless.
+    #   `board`    — every player at the position carrying OUR PROJECTION, whether or not the market
+    #               has drafted them. ⭐ THIS IS WHAT "Our rank" MEANS, because it is what
+    #               `/fantasy/rankings` shows: that page ranks the full board (`posRank`), and a
+    #               visitor who reads "TE21" here and clicks through must find him at TE21 there.
+    #   `ranked`   — the subset carrying BOTH our projection and an ADP. The ONLY population in which
+    #               a comparison against the market is meaningful (you cannot rank a player against a
+    #               market rank the market never produced), so it is what the GAP is computed over —
+    #               "vs ADP among draftable" — and what the SELECTION is made on.
     #   `universe` — the subset ELIGIBLE TO BE FEATURED (draftable, explainable). Selection only.
     #
-    # The first cut ranked inside `universe`, so the card would have rendered "our WR15" meaning
-    # fifteenth of the 111 filtered players rather than fifteenth on the board — a plausible-looking
-    # number that is simply not the one the label claims. It also changed WHICH player won.
-    ranked = [
+    # ⭐ E9.46 FOLLOW-UP (NF-C6P2, 2026-08-14) — WHY THIS SPLIT EXISTS NOW. Until this change, the
+    # displayed `ourRank` was the `ranked` rank, and the two surfaces agreed only BY LUCK. Measured
+    # on the served 2026 board, the populations are nowhere near each other:
+    #
+    #     QB 27 of 105 · RB 57 of 194 · WR 78 of 316 · TE 23 of 169 · K 18 of 42 · DST 23 of 32
+    #
+    # George Kittle happened to sit at TE21 under BOTH readings, which is exactly why it shipped and
+    # then sat open as a follow-up: the one player on the card was the one player it could not be
+    # observed on. Any selection at a position with many projected-but-undrafted players above the
+    # winner would have rendered one number on the home page and a different one on the rankings
+    # page, for the same player, with nothing anywhere to say they were different quantities.
+    #
+    # ⛔ THE GAP DID NOT MOVE, AND MUST NOT. `rankGap` stays `adp_rank − our_rank_among_drafted`,
+    # both sides on `ranked`. Substituting the board rank into it would compare our position among
+    # 169 tight ends against the market's among 23 — a difference of populations rendered as a
+    # disagreement about a player, which is a much worse error than the one being fixed here.
+    board = [
         p
         for p in players
         if p.get("pos") in _FEATURED_POSITIONS
-        and isinstance(p.get("adp"), (int, float))
         and isinstance(p.get("fpPpr"), (int, float))
         and p.get("id")
     ]
+    ranked = [p for p in board if isinstance(p.get("adp"), (int, float))]
     if not ranked:
         return None
 
+    board_ranks = _within_position_ranks(board, key=lambda p: p["fpPpr"], reverse=True)
     our_ranks = _within_position_ranks(ranked, key=lambda p: p["fpPpr"], reverse=True)
     adp_ranks = _within_position_ranks(ranked, key=lambda p: p["adp"], reverse=False)
 
@@ -198,7 +217,13 @@ def _select_featured(players: list[dict]) -> tuple[dict, int, int, int] | None:
         return (-gap, p["adp"], p["id"])
 
     winner = sorted(universe, key=sort_key)[0]
-    return winner, our_ranks[winner["id"]], adp_ranks[winner["id"]], len(universe)
+    return (
+        winner,
+        board_ranks[winner["id"]],
+        our_ranks[winner["id"]],
+        adp_ranks[winner["id"]],
+        len(universe),
+    )
 
 
 def _featured_payload() -> dict | None:
@@ -218,7 +243,7 @@ def _featured_payload() -> dict | None:
     picked = _select_featured(players)
     if picked is None:
         return None
-    p, our_rank, adp_rank, universe = picked
+    p, board_rank, our_rank_among_drafted, adp_rank, universe = picked
 
     # Driver labels come from the manifest's own legend so the plain-English wording has ONE home
     # (it is already rendered on the entitled player page). A missing legend degrades to the raw
@@ -266,9 +291,18 @@ def _featured_payload() -> dict | None:
             "adpFormat": projections.get("adp_format"),
             "adpTeams": projections.get("adp_teams"),
             "adpRank": adp_rank,
-            "ourRank": our_rank,
-            # Positive ⇒ we rank him HIGHER than the market drafts him.
-            "rankGap": adp_rank - our_rank,
+            # ⭐ THE FULL-BOARD RANK — the number `/fantasy/rankings` shows for this player. See
+            # `_select_featured` for the three populations and why this one is what the label means.
+            "ourRank": board_rank,
+            # ⭐ ADDITIVE (NF-C0): a deployed client that knows nothing of this key keeps rendering
+            # exactly what it renders today. It is the rank among players the market has actually
+            # drafted, and it is the ONLY one that belongs beside `adpRank` — the card renders it
+            # whenever it differs from `ourRank`, so a reader who subtracts the two visible tiles and
+            # gets a third number is told why rather than left to conclude one of them is wrong.
+            "ourRankAmongDrafted": our_rank_among_drafted,
+            # Positive ⇒ we rank him HIGHER than the market drafts him. BOTH SIDES ON THE MATCHED
+            # SET — see the ⛔ note in `_select_featured`.
+            "rankGap": adp_rank - our_rank_among_drafted,
         },
         "drivers": drivers,
         "lean": p.get("mktLean"),

@@ -124,6 +124,33 @@ CORE_STATS: tuple[str, ...] = (
     "pass_yds", "pass_td", "rush_yds", "rush_td", "rec_yds", "rec_td",
 )
 
+#: Plain-English names for the six, for the refusal a HUMAN reads.
+#:
+#: ⚠️ WHY THIS EXISTS AT ALL. `shape_violations` returns strings that go straight into a 400 `detail`
+#: and land in a toast under someone's league form. The first version listed the raw column keys
+#: (`pass_yds, pass_td, rush_yds, …`), which are our internal spelling of the stat and appear nowhere
+#: in the UI a user just filled in — so the message named the fix in a vocabulary the reader has no
+#: way to map back to the fields they typed. Naming the stat in the words the form uses is the whole
+#: difference between "here is what to change" and "the form is broken".
+#:
+#: ⛔ NOT a second source of truth for WHICH stats are core — `shape_violations` still iterates
+#: `CORE_STATS`, and this map is only consulted for display, with the raw key as the fallback. A key
+#: added to `CORE_STATS` without a label here degrades to the key rather than disappearing from the
+#: message. Pinned by `test_nf_leak1_scoring_probe_guard.py`.
+CORE_STAT_LABELS: dict[str, str] = {
+    "pass_yds": "passing yards",
+    "pass_td": "passing touchdowns",
+    "rush_yds": "rushing yards",
+    "rush_td": "rushing touchdowns",
+    "rec_yds": "receiving yards",
+    "rec_td": "receiving touchdowns",
+}
+
+
+def core_stat_names() -> list[str]:
+    """`CORE_STATS` in the words the league form uses. Falls back to the raw key, never drops one."""
+    return [CORE_STAT_LABELS.get(stat, stat) for stat in CORE_STATS]
+
 #: How many of `CORE_STATS` a config must actually pay for.
 #:
 #: ⚠️ A CORE-FAMILY RULE, NOT A TERM COUNT, AND THE DIFFERENCE IS A BYPASS. The first cut of this
@@ -258,19 +285,27 @@ def shape_violations(config: dict | None) -> list[str]:
         if any(k == stat or k.endswith(f":{stat}") for k in fingerprint)
     )
     if core < MIN_CORE_STATS:
+        names = core_stat_names()
         problems.append(
-            f"a league must score at least {MIN_CORE_STATS} of the core stats "
-            f"({', '.join(CORE_STATS)}); this one scores {core}"
+            "A league needs to award points for at least "
+            f"{MIN_CORE_STATS} of the main ways players score — "
+            f"{', '.join(names[:-1])} or {names[-1]}. "
+            f"This scoring awards points for {core} of them, so we can't save it as a league"
         )
 
     magnitudes = [abs(w) for w in fingerprint.values()]
     if magnitudes:
         smallest, largest = min(magnitudes), max(magnitudes)
         if smallest > 0 and largest / smallest > MAX_WEIGHT_RATIO:
+            # ⚠️ THE WORD "range" IS LOAD-BEARING, not decoration.
+            # `test_nf_leak1_scoring_probe_guard.py::test_a_magnitude_packed_probe_is_refused`
+            # keys on it to tell WHICH of the two shape rules fired — a refusal that named neither
+            # would let a config refused by the core-stat rule pass a test written for this one.
             problems.append(
-                "scoring weights span an implausible range "
-                f"({smallest:g} to {largest:g}); real leagues stay within a factor of "
-                f"{MAX_WEIGHT_RATIO:g}"
+                f"Your scoring values cover too wide a range: one of them is "
+                f"{largest / smallest:,.0f} times another ({smallest:g} against {largest:g}). "
+                f"Real leagues stay within about {MAX_WEIGHT_RATIO:g}x. It is usually a value "
+                "typed in the wrong units — check your largest and smallest"
             )
 
     return problems

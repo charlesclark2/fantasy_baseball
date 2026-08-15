@@ -176,8 +176,22 @@ export type MockOptions = {
    *                roster — an honest state, and the ONLY one the other three modes can produce, so
    *                every roster table on that surface was structurally unreachable. See
    *                `linkedLeaguePair` for why the two differ in exactly one scoring rule.
+   *   "drafted"  — ⭐ NF-C6P2: ONE league with a COMPLETE post-draft roster — every starting slot
+   *                fillable, real bench depth, and one unresolvable name. `"linked"` cannot stand in
+   *                for it: its five-player roster leaves six of the captured league's ten starting
+   *                slots empty, so the bench, trade and depth sections of the roster report would
+   *                render their empty branches and every assertion about them would pass on nothing.
+   *                See `draftedRoster` for what each player in it is there to make reachable.
+   *   "predraft" — ⭐ NF-C6P2: ONE league with a team LINKED and an EMPTY roster. The ordinary state
+   *                between importing a league and drafting in it, and — until this mode existed —
+   *                UNREACHABLE in the harness: `one` is the captured league, whose
+   *                `source_team_key` is null, so "you never picked a team" and "your league has not
+   *                drafted" were served by the same fixture and every assertion separating them was
+   *                vacuous. The red proof is what found that: collapsing the two reasons in
+   *                `roster-report.ts` left the suite GREEN. ⛔ Do not fold this into `one`; the two
+   *                states differ in exactly one field and that field is the whole distinction.
    */
-  leagues?: "none" | "one" | "overQuota" | "linked"
+  leagues?: "none" | "one" | "overQuota" | "linked" | "drafted" | "predraft"
   /**
    * ⭐ G100-D0 — what `/subscription/status` reports for this caller.
    *
@@ -508,6 +522,112 @@ export const E2E_LINKED_LEAGUES = {
   standard: { id: "e2e-league-standard", name: "Standard Money" },
 } as const
 
+/**
+ * ⭐ NF-C6P2 — A COMPLETE POST-DRAFT ROSTER, and every row in it exists to make a section reachable.
+ *
+ * ══ WHY `linked` COULD NOT BE REUSED ══════════════════════════════════════════════════════════
+ *
+ * `linkedRoster()` holds five players against a league that starts TEN (QB, RB×2, WR×2, TE×2,
+ * SUPERFLEX, K, DST). On the roster report that leaves six slots empty and the bench EMPTY — so the
+ * bench summary, the trade shape, the positional depth column and the fragility "best body on your
+ * bench" line would all render their nothing-to-say branches, and a spec asserting on them would be
+ * green against a report that computed nothing. That is the vacuous-fixture shape this file guards
+ * against everywhere else, so this mode is a separate one rather than a widening of `linked`.
+ *
+ * ══ WHAT EACH GROUP IS FOR ════════════════════════════════════════════════════════════════════
+ *
+ *   · one at each dedicated slot                — fills the lineup, so `unfilled` is 0 and the
+ *                                                 headline total is the sum of a REAL nine
+ *   · a second QB                               — the SUPERFLEX filler, so the most-restrictive-first
+ *                                                 allocation has something to get wrong (a naive
+ *                                                 fill takes the QB into the flex and leaves the
+ *                                                 dedicated QB slot empty)
+ *   · a spare RB and a spare WR                 — bench depth ABOVE the league's starter cutoff, so
+ *                                                 the bench summary and the trade shape are non-empty
+ *   · one unresolvable name                     — so the "N of M matched" coverage note has something
+ *                                                 to count; a roster where everything matches cannot
+ *                                                 tell "the note is correct" from "it never renders"
+ *
+ * ⛔ NOTHING IS HAND-AUTHORED. Every player is read out of the served projections fixture through
+ * `boardPlayerAt`, so the roster resolves through the SAME normalized `name|pos` join the app uses —
+ * a hand-typed roster would encode this session's assumption about that join, which is the thing
+ * under test.
+ */
+export const E2E_DRAFTED_LEAGUE = { id: "e2e-league-drafted", name: "Draft Night" } as const
+
+/** The `n`th player at `pos` in served order, so a roster can hold several without repeating one. */
+function boardPlayersAt(pos: string, count: number): any[] {
+  const players = FIXTURES.projectionsEntitled().players as any[]
+  const hits = players.filter((p) => p.pos === pos && !!p.name).slice(0, count)
+  // A short position is a FIXTURE change, not a shrug: every assertion downstream would silently
+  // describe a roster missing a player and the lineup would report a slot as unfillable.
+  if (hits.length < count) {
+    throw new Error(`e2e: the projections fixture has only ${hits.length} ${pos}s, needed ${count}`)
+  }
+  return hits
+}
+
+/** The COMPLETE post-draft roster — see `E2E_DRAFTED_LEAGUE` for what each group is for. */
+function draftedRoster(): unknown[] {
+  const entry = (p: any, starter: boolean) => ({
+    player_key: `e2e-drafted-${p.id}`,
+    name: p.name,
+    position: p.pos,
+    team: p.team,
+    starter,
+  })
+  const qbs = boardPlayersAt("QB", 2)
+  const rbs = boardPlayersAt("RB", 3)
+  const wrs = boardPlayersAt("WR", 3)
+  const tes = boardPlayersAt("TE", 2)
+  const ks = boardPlayersAt("K", 1)
+  const dsts = boardPlayersAt("DST", 1)
+  return [
+    ...qbs.map((p, i) => entry(p, i === 0)),
+    ...rbs.map((p, i) => entry(p, i < 2)),
+    ...wrs.map((p, i) => entry(p, i < 2)),
+    ...tes.map((p) => entry(p, true)),
+    ...ks.map((p) => entry(p, true)),
+    ...dsts.map((p) => entry(p, true)),
+    // ⚠️ `starter` on the ROSTER row is the PLATFORM's own label and is deliberately NOT what the
+    // report's lineup is built from — the report re-fills the slots itself from the league's roster
+    // shape. Carrying the platform flag through unchanged keeps that distinction observable.
+    {
+      player_key: "e2e-drafted-unmatched",
+      name: E2E_UNMATCHED_ROSTER_NAME,
+      position: "WR",
+      team: "FA",
+      starter: false,
+    },
+  ]
+}
+
+/** The captured league with a complete drafted roster attached. */
+function draftedLeague(): any {
+  return {
+    ...FIXTURES.myTeams().leagues[0],
+    league_id: E2E_DRAFTED_LEAGUE.id,
+    name: E2E_DRAFTED_LEAGUE.name,
+    source_team_key: "e2e-team-1",
+    source_team_name: "Credence FC",
+    imported_roster: draftedRoster(),
+    roster_synced_at: "2026-08-12T12:00:00Z",
+  }
+}
+
+/**
+ * ⭐ The SAME league with the team linked and NOBODY ON IT — the pre-draft state.
+ *
+ * It differs from `draftedLeague` in exactly one field (`imported_roster`) and from the captured
+ * league in exactly one other (`source_team_key`), and that is the point: the surface has to tell
+ * three states apart — no league, a league with no team picked, and a linked team that has not
+ * drafted — and each pair differs by one field. Both ESPN and Sleeper warn about this state at
+ * import time, so it is common rather than exotic.
+ */
+function predraftLeague(): any {
+  return { ...draftedLeague(), imported_roster: [], roster_synced_at: null }
+}
+
 function linkedLeaguePair(): any[] {
   const base = FIXTURES.myTeams().leagues[0]
   const roster = linkedRoster()
@@ -709,19 +829,52 @@ function espnPreviewForPaste(posted: string): unknown | undefined {
  * `payloadFor` would blur the one distinction the harness exists to model, so the per-caller reads
  * get their own resolver and the shape of the code states which half of the tier each path is in.
  */
+/**
+ * The leagues a mode SERVES — the personalization set, i.e. what `/fantasy/nfl/my-teams` returns and
+ * what `/fantasy/nfl/league-board` will resolve an id against.
+ *
+ * ⚠️ NOT the MANAGEMENT list. `overQuota` deliberately serves one of three (a lapsed subscriber
+ * keeps every config visible and deletable on `/fantasy/leagues` while only one is personalized),
+ * and that asymmetry IS the behaviour — so this helper is the SERVED half only, and the management
+ * half stays written out at its own branch below.
+ */
+function leaguesFor(leagues: NonNullable<MockOptions["leagues"]>): any[] {
+  if (leagues === "none") return []
+  if (leagues === "linked") return linkedLeaguePair()
+  if (leagues === "drafted") return [draftedLeague()]
+  if (leagues === "predraft") return [predraftLeague()]
+  // `one` and `overQuota` both serve exactly the captured league.
+  return [FIXTURES.myTeams().leagues[0]]
+}
+
 function personalPayloadFor(
   pathname: string,
   leagues: NonNullable<MockOptions["leagues"]>,
+  search = "",
 ): unknown | undefined {
   // 🔒 NF-EPIC 1 — the league board is scored SERVER-SIDE now (the raw stat line it is scored from
   // became paid). The harness computes it with the SAME `buildBoard` the browser used to run, off
   // the entitled projections fixture, so the delta this screen exists to show stays REAL. Returning
   // the generic board here instead would make every riser/faller assertion pass against a board
   // that never moved — the vacuous-fixture shape this file already guards against elsewhere.
+  //
+  // ⭐ NF-C6P2 — IT NOW RESOLVES THE REQUESTED `league_id` INSTEAD OF ALWAYS SERVING `leagues[0]`.
+  // The server looks the id up among the caller's served leagues and 404s anything else; the old
+  // behaviour handed back the first league whatever was asked for, which is fine for a one-league
+  // surface and silently wrong for any surface that can switch between them — a spec could select
+  // league B, be served league A, and assert happily about the wrong roster.
+  //
+  // ⚠️ AN UNRESOLVABLE ID FALLS THROUGH TO `undefined`, which lands in `unmatched` and 501s rather
+  // than being quietly answered. That is the harness's standing rule: a request this file cannot
+  // model must be VISIBLE, because `expectApiFullyMocked` is what tells a spec its conclusions
+  // rested on data. (The real server answers 404; the page renders an error state either way.)
   if (pathname === "/fantasy/nfl/league-board") {
-    const league = FIXTURES.myTeams().leagues[0]
-    if (!league || leagues === "none") return undefined
-    const built = leagueBoardBuild()
+    if (leagues === "none") return undefined
+    const wanted = new URLSearchParams(search).get("league_id")
+    const served = leaguesFor(leagues)
+    const league = wanted ? served.find((l: any) => l.league_id === wanted) : served[0]
+    if (!league) return undefined
+    const built = buildBoard(FIXTURES.projectionsEntitled().players, league)
     return {
       season: 2026,
       league,
@@ -764,6 +917,16 @@ function personalPayloadFor(
   // ⭐ E9.64 — both leagues are the caller's own and both are served; there is no quota story here,
   // so `saved_total` matches and `withheld_by_quota` stays 0 (a lapsed-member notice on this mode
   // would be a second, unrelated behaviour leaking into every My Teams assertion).
+  // ⭐ NF-C6P2 — one league, fully drafted (or linked-but-undrafted). `saved_total` matches and
+  // nothing is withheld, so no quota story leaks into the roster-report assertions (same reasoning
+  // as `linked` below).
+  if (leagues === "drafted" || leagues === "predraft") {
+    const only = leaguesFor(leagues)
+    return pathname === "/fantasy/leagues"
+      ? only
+      : { ...base, leagues: only, saved_total: only.length, withheld_by_quota: 0, rosters: rostersFor(only) }
+  }
+
   if (leagues === "linked") {
     const pair = linkedLeaguePair()
     return pathname === "/fantasy/leagues"
@@ -1058,7 +1221,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
     }
 
     let body =
-      personalPayloadFor(apiPath, options.leagues ?? "none") ??
+      personalPayloadFor(apiPath, options.leagues ?? "none", search) ??
       billingPayloadFor(apiPath, options.subscription ?? "none") ??
       payloadFor(apiPath, entitlement)
     if (body === undefined) {
