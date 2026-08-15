@@ -1,6 +1,6 @@
 # NF-W6c — the NF-W6b per-stat distributions wired onto the served raw line
 
-**Generated:** 2026-08-15T02:55:45+00:00 · **serve:** 2025 wk 18 (gw 174) · **served rows:** 695 across 6 cells · **train rows:** 17256 · ⚠️ **SMOKE**
+**Generated:** 2026-08-15T03:09:43+00:00 · **serve:** 2025 wk 18 (gw 174) · **served rows:** 695 across 6 cells · **train rows:** 17256 · ⚠️ **SMOKE**
 
 > ⚖️ **Edge-independent projection product** — `best_alpha = 0`, **deploy-held**. This story WIRES an already-certified result: NF-W6b's six SHIP cells are fitted fresh on full train through the identical pinned code path and emitted in the served 199-level representation. ⛔ No bake-off, no selection, no gate, no re-reading of a settled verdict. The distributions are honest predictive UNCERTAINTY (a quantile bank and its P(0)); they make no edge, ROI or win-rate claim. The points hurdle champion (total fantasy points) is UNTOUCHED — these sit beside it on the raw line.
 
@@ -70,6 +70,7 @@ A single week against a record that pools 8 half-season folds: these differ by s
 
 - matrix: the NF-W6 certified build (`build_matrix_w6`, cache key `57c4cf96bb3c3570`) — the NF-W0a PIT gate ran on load: 175 weeks / 84553 records, 0 rows dropped.
 - serving train ⊇ validated fold train, PROVED at this boundary: 84036 serving-train rows vs 83011 in NF-W6b's purged fold train (+1025; purge = 2 weeks). Serving with MORE data than was certified is the safe direction; the containment is measured, not asserted.
+  - ⚠️ SMOKE: the fit below trains on the last 36 global weeks only, a SUBSET of the serving rule these counts describe. The containment is proved for the serving rule; it does not certify this smoke fit.
 - features: the champion set, 29 columns (⛔ no new features — the NF-W6b prereg constraint carries to serving).
 - withheld NULL cells (⛔ not served): ['RB|receiving_yards', 'RB|rushing_tds'] — RB receiving_yards is PM Decision B (calendar-bound re-test), RB rushing_tds is PM Decision C (deferred NF-W6b-C, a FRESH atom-aware family).
 - CLOSED cells (⛔ re-opening needs a different mechanism): ['QB|rushing_tds', 'RB|receiving_tds', 'WR|receiving_tds', 'TE|receiving_tds'].
@@ -81,4 +82,4 @@ A single week against a record that pools 8 half-season folds: these differ by s
 - NF-G0 promotion review — the ten gates plus a PM decision; NF-W6b promoted nothing and this story stages, it does not promote
 - the downstream arbitrary-league re-scoring consumer is a FOLLOW-ON story — the moment a scorer reads these distributions the three-implementations parity tax (fantasy_engine / the browser TS scorer / the Lambda scorer) triggers under the merge-gate parity test
 
-_Runtime: 163.1s · fit 160.1s · served_version `nfl_fantasy_w6c_v1`_
+_Runtime: 144.4s · fit 142.8s · served_version `nfl_fantasy_w6c_v1`_

@@ -526,6 +526,20 @@ class TestHonestFraming:
                 f"the serving smoke reaches control flow in {ast.unparse(node)[:70]!r} — a "
                 f"fresh-fit readout must never decide anything (E2.1-r)")
 
+    def test_a_smoke_artifact_says_its_containment_does_not_certify_its_own_fit(self):
+        """A smoke trains on a SUBSET of the serving rule, so the containment counts printed
+        beside it describe the RULE, not that fit. An unqualified containment line next to a
+        short-train fit reads as a certification of it — so the artifact says so itself."""
+        smoke = _FANTASY / "ablation_results" / "nf_w6c_served_stat_distributions_smoke.json"
+        if not smoke.is_file():
+            pytest.skip("no smoke artifact committed yet")
+        payload = json.loads(smoke.read_text())
+        assert payload["smoke"] is True, "the smoke artifact lost its smoke flag"
+        c = payload["provenance"]["train_containment"]
+        assert c.get("applies_to_this_run") is False, (
+            "the smoke artifact claims its containment certifies the fit that ran — it does not")
+        assert "SMOKE" in c.get("note", ""), "the qualification lost its wording"
+
     def test_the_emitted_artifact_labels_the_readout_as_never_a_gate(self):
         """The content half — read off the ARTIFACT a reader actually receives, not off a
         docstring the test could be fitted to."""

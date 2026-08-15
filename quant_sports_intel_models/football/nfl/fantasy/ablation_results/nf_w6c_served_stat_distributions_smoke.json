@@ -1,8 +1,8 @@
 {
   "story": "NF-W6c",
   "smoke": true,
-  "generated_at": "2026-08-15T02:55:45+00:00",
-  "runtime_seconds": 163.1,
+  "generated_at": "2026-08-15T03:09:43+00:00",
+  "runtime_seconds": 144.4,
   "matrix_key": "57c4cf96bb3c3570",
   "pit_audit": {
     "weeks_checked": 175,
@@ -86,7 +86,9 @@
       "n_serving_train": 84036,
       "n_fold_train": 83011,
       "extra_rows_vs_fold_train": 1025,
-      "purge_weeks": 2
+      "purge_weeks": 2,
+      "applies_to_this_run": false,
+      "note": "SMOKE: the fit below trains on the last 36 global weeks only, a SUBSET of the serving rule these counts describe. The containment is proved for the serving rule; it does not certify this smoke fit."
     },
     "fit_notes": {
       "fits": {
@@ -118,7 +120,7 @@
       "n_fits": 4,
       "n_cells": 6
     },
-    "fit_seconds": 160.1,
+    "fit_seconds": 142.8,
     "smoke_train_weeks": 36
   },
   "cell_summary": {

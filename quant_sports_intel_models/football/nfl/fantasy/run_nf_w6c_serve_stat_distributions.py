@@ -83,6 +83,19 @@ def build(feat: pd.DataFrame, serve_gw: int, *, smoke: bool) -> tuple[pd.DataFra
     if smoke:
         gw = pd.to_numeric(feat["gw"], errors="coerce").to_numpy()
         train_mask = train_mask & (gw >= serve_gw - SMOKE_TRAIN_WEEKS)
+        # ⚠️ The containment above is a property of the serving RULE, and the smoke deliberately
+        # trains on a subset of it — so on a smoke run the proved superset relation does NOT
+        # describe the fit that actually ran. Said here, in the artifact, rather than left for a
+        # reader to notice: an unqualified containment line beside a 17k-row smoke fit reads as a
+        # certification of that fit, which it is not.
+        containment = containment | {
+            "applies_to_this_run": False,
+            "note": (f"SMOKE: the fit below trains on the last {SMOKE_TRAIN_WEEKS} global weeks "
+                     f"only, a SUBSET of the serving rule these counts describe. The containment "
+                     f"is proved for the serving rule; it does not certify this smoke fit."),
+        }
+    else:
+        containment = containment | {"applies_to_this_run": True}
     train = feat.loc[train_mask].reset_index(drop=True)
     serve = feat.loc[(pd.to_numeric(feat["gw"], errors="coerce") == serve_gw).to_numpy()
                      ].reset_index(drop=True)
@@ -198,6 +211,8 @@ def write_report(payload: dict, path: Path) -> None:  # noqa: C901 — a report,
       f"serving-train rows vs {c['n_fold_train']} in NF-W6b's purged fold train "
       f"(+{c['extra_rows_vs_fold_train']}; purge = {c['purge_weeks']} weeks). Serving with MORE "
       f"data than was certified is the safe direction; the containment is measured, not asserted.")
+    if not c.get("applies_to_this_run", True):
+        p(f"  - ⚠️ {c['note']}")
     p(f"- features: the champion set, {len(man['features'])} columns (⛔ no new features — the "
       f"NF-W6b prereg constraint carries to serving).")
     p(f"- withheld NULL cells (⛔ not served): {list(man['withheld_null_cells'])} — RB "
