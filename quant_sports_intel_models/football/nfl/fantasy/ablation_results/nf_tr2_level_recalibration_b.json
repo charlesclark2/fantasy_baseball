@@ -1,0 +1,2230 @@
+{
+ "story": "NF-TR2b",
+ "generated_at": "2026-08-15T21:49:09.213387+00:00",
+ "model_version": "nfl_fantasy_nf_tr2b_veteran_level_v1",
+ "recalibrates": "nfl_fantasy_fastpath_v1",
+ "best_alpha": 0,
+ "smoke": false,
+ "wall_time_s": 22.1,
+ "window": 5,
+ "window_derivation": {
+  "tier_rows_per_position_per_season": {
+   "QB": 35.77,
+   "RB": 37.69,
+   "TE": 19.31,
+   "WR": 63.23
+  },
+  "min_rows": 90,
+  "derived_window": 5,
+  "pinned_window": 5
+ },
+ "window_sensitivity": [
+  {
+   "window": 3,
+   "is_registered": false,
+   "CRPS": 49.4114,
+   "bias": -0.055643905826130685,
+   "bias_QB": 4.867665507089848,
+   "bias_RB": -4.840600442801132,
+   "bias_WR": -0.2699074434678929,
+   "bias_TE": 0.8663260306413945,
+   "cov80": 0.8333,
+   "MAE": 70.5991
+  },
+  {
+   "window": 8,
+   "is_registered": false,
+   "CRPS": 49.4229,
+   "bias": 3.855536209331333,
+   "bias_QB": 10.159102257812926,
+   "bias_RB": -5.4608115790791185,
+   "bias_WR": 4.775607626591513,
+   "bias_TE": 7.351765288173215,
+   "cov80": 0.8343,
+   "MAE": 70.758
+  },
+  {
+   "window": "full history",
+   "is_registered": false,
+   "CRPS": 49.4173,
+   "bias": 7.881152519454248,
+   "bias_QB": 12.615180495548483,
+   "bias_RB": -4.246042163342678,
+   "bias_WR": 10.64640090479697,
+   "bias_TE": 13.729631455450084,
+   "cov80": 0.8348,
+   "MAE": 70.8832
+  },
+  {
+   "window": 5,
+   "is_registered": true,
+   "CRPS": 49.3394,
+   "bias": 1.4117258361110376,
+   "bias_QB": 7.623867510080437,
+   "bias_RB": -5.3152275510728515,
+   "bias_WR": 1.3792513481829332,
+   "bias_TE": 3.141826674362977,
+   "cov80": 0.8343,
+   "MAE": 70.4922
+  }
+ ],
+ "window_rows_by_fold": {
+  "2013": {
+   "window": 5,
+   "n_rows": 780,
+   "rows_by_position": {
+    "QB": 155,
+    "RB": 236,
+    "WR": 327,
+    "TE": 62
+   }
+  },
+  "2014": {
+   "window": 5,
+   "n_rows": 780,
+   "rows_by_position": {
+    "QB": 156,
+    "RB": 230,
+    "WR": 320,
+    "TE": 74
+   }
+  },
+  "2015": {
+   "window": 5,
+   "n_rows": 780,
+   "rows_by_position": {
+    "QB": 150,
+    "RB": 203,
+    "WR": 334,
+    "TE": 93
+   }
+  },
+  "2016": {
+   "window": 5,
+   "n_rows": 780,
+   "rows_by_position": {
+    "QB": 157,
+    "RB": 186,
+    "WR": 336,
+    "TE": 101
+   }
+  },
+  "2017": {
+   "window": 5,
+   "n_rows": 780,
+   "rows_by_position": {
+    "QB": 160,
+    "RB": 181,
+    "WR": 337,
+    "TE": 102
+   }
+  },
+  "2018": {
+   "window": 5,
+   "n_rows": 780,
+   "rows_by_position": {
+    "QB": 165,
+    "RB": 182,
+    "WR": 331,
+    "TE": 102
+   }
+  },
+  "2019": {
+   "window": 5,
+   "n_rows": 780,
+   "rows_by_position": {
+    "QB": 171,
+    "RB": 184,
+    "WR": 323,
+    "TE": 102
+   }
+  },
+  "2020": {
+   "window": 5,
+   "n_rows": 780,
+   "rows_by_position": {
+    "QB": 176,
+    "RB": 196,
+    "WR": 313,
+    "TE": 95
+   }
+  },
+  "2021": {
+   "window": 5,
+   "n_rows": 780,
+   "rows_by_position": {
+    "QB": 177,
+    "RB": 208,
+    "WR": 305,
+    "TE": 90
+   }
+  },
+  "2022": {
+   "window": 5,
+   "n_rows": 780,
+   "rows_by_position": {
+    "QB": 185,
+    "RB": 201,
+    "WR": 308,
+    "TE": 86
+   }
+  },
+  "2023": {
+   "window": 5,
+   "n_rows": 780,
+   "rows_by_position": {
+    "QB": 188,
+    "RB": 198,
+    "WR": 309,
+    "TE": 85
+   }
+  },
+  "2024": {
+   "window": 5,
+   "n_rows": 780,
+   "rows_by_position": {
+    "QB": 188,
+    "RB": 193,
+    "WR": 313,
+    "TE": 86
+   }
+  },
+  "2025": {
+   "window": 5,
+   "n_rows": 780,
+   "rows_by_position": {
+    "QB": 188,
+    "RB": 186,
+    "WR": 315,
+    "TE": 91
+   }
+  }
+ },
+ "preregistration": {
+  "story": "NF-TR2",
+  "model_version": "nfl_fantasy_nf_tr2_veteran_level_v1",
+  "recalibrates": "nfl_fantasy_fastpath_v1",
+  "recalibrated_leg": "veteran",
+  "excluded_legs": [
+   "rookie",
+   "K",
+   "DST"
+  ],
+  "positions": [
+   "QB",
+   "RB",
+   "WR",
+   "TE"
+  ],
+  "forms": [
+   "pos_const",
+   "pos_affine"
+  ],
+  "noop": "incumbent",
+  "declared_field_size": 3,
+  "declared_field_source": "NF-TR2 brief (2026-08-15): \"Pre-register the recalibration forms against matched foils, selected in-fold: per-position constant vs per-position affine (slope) vs a no-op foil.\"",
+  "learned_foil": "pos_affine",
+  "space": "per_game",
+  "estimator": "mean_match",
+  "min_fit_rows": 30,
+  "mult_clip": [
+   0.5,
+   2.5
+  ],
+  "lambda": 1.0,
+  "lambda_sweep": [
+   0.25,
+   0.5,
+   0.75,
+   1.25,
+   1.5,
+   2.0
+  ],
+  "band_treatment": "fixed",
+  "band_treatments_disclosed": [
+   "fixed",
+   "refit",
+   "scaled"
+  ],
+  "tier_anchor": "incumbent_projection",
+  "tier_n": 156,
+  "fold_seasons": [
+   2013,
+   2014,
+   2015,
+   2016,
+   2017,
+   2018,
+   2019,
+   2020,
+   2021,
+   2022,
+   2023,
+   2024,
+   2025
+  ],
+  "train_panel_start": 2007,
+  "selection_metric": "crps",
+  "framing": "pooled",
+  "dsr_reading": "whole_field_declared",
+  "gates": {
+   "pbo_max": 0.2,
+   "dsr_min": 0.95,
+   "alpha": 0.1,
+   "coverage_floor": 0.8,
+   "ordering_do_no_harm": 0.02,
+   "level_reduction_min": 0.5,
+   "level_se_mult": 2.0
+  },
+  "b3_field_sr0_disclosed": 0.271,
+  "b3_recorded": {
+   "story": "NF-B3",
+   "winner": "pos_const \u00b7 infold \u03bb=0.25",
+   "dsr_whole_field": 0.8773,
+   "n_trials_in_field": 8,
+   "verdict": "RECORDED NULL \u2014 POWER_LIMITED"
+  },
+  "non_shippable": [
+   "over_scale",
+   "wide_band",
+   "zero_project",
+   "pos_median",
+   "oracle_perplayer",
+   "permuted_across",
+   "permuted_within",
+   "lambda_sweep@0.25",
+   "lambda_sweep@0.5",
+   "lambda_sweep@0.75",
+   "lambda_sweep@1.25",
+   "lambda_sweep@1.5",
+   "lambda_sweep@2"
+  ],
+  "tr2b": {
+   "story": "NF-TR2b",
+   "model_version": "nfl_fantasy_nf_tr2b_veteran_level_v1",
+   "window_seasons": 5,
+   "window_min_rows": 90,
+   "window_sensitivity": [
+    3,
+    8,
+    null
+   ]
+  }
+ },
+ "step0_reproduction": {
+  "universe_is80": 160.888,
+  "universe_is80_recorded": 160.888,
+  "universe_is80_delta_pct": 0.0,
+  "tier_coverage_full_window": 0.8328,
+  "served_tier_coverage_2019_2025": 0.8452,
+  "served_tier_coverage_2019_2025_recorded": 0.8452,
+  "panel_column_tier_coverage_2019_2025": 0.5046,
+  "panel_column_tier_coverage_2019_2025_recorded": 0.5046,
+  "incumbent_fallback_frac": 0.0,
+  "n_universe": 8398,
+  "n_tier": 2028
+ },
+ "folds": [
+  2013,
+  2014,
+  2015,
+  2016,
+  2017,
+  2018,
+  2019,
+  2020,
+  2021,
+  2022,
+  2023,
+  2024,
+  2025
+ ],
+ "structurally_rookieless_boards": [
+  2013,
+  2014,
+  2015
+ ],
+ "premise": {
+  "universe": {
+   "reading": "universe (unconditional)",
+   "n": 8099,
+   "mean_bias": 0.84,
+   "median_bias": 13.84,
+   "ours_over_actual": 1.013,
+   "pct_zero_outcome": 0.324,
+   "per_position": {
+    "QB": {
+     "n": 1116,
+     "mean_bias": 8.54,
+     "ours_over_actual": 1.094
+    },
+    "RB": {
+     "n": 2018,
+     "mean_bias": -2.8,
+     "ours_over_actual": 0.956
+    },
+    "TE": {
+     "n": 1801,
+     "mean_bias": -0.03,
+     "ours_over_actual": 0.999
+    },
+    "WR": {
+     "n": 3164,
+     "mean_bias": 0.93,
+     "ours_over_actual": 1.015
+    }
+   }
+  },
+  "draftable_tier_incumbent_anchor": {
+   "reading": "draftable tier, INCUMBENT anchor (top 156/season) \u2b50 PRE-REGISTERED",
+   "n": 2028,
+   "mean_bias": -12.85,
+   "median_bias": -14.35,
+   "ours_over_actual": 0.919,
+   "pct_zero_outcome": 0.075,
+   "per_position": {
+    "QB": {
+     "n": 465,
+     "mean_bias": -0.57,
+     "ours_over_actual": 0.997
+    },
+    "RB": {
+     "n": 490,
+     "mean_bias": -21.54,
+     "ours_over_actual": 0.859
+    },
+    "TE": {
+     "n": 251,
+     "mean_bias": -9.05,
+     "ours_over_actual": 0.93
+    },
+    "WR": {
+     "n": 822,
+     "mean_bias": -15.78,
+     "ours_over_actual": 0.897
+    }
+   }
+  },
+  "draftable_tier_realized_anchor": {
+   "reading": "draftable tier, REALIZED anchor (top 156/season) \u26d4 forbidden",
+   "n": 2028,
+   "mean_bias": -64.8,
+   "median_bias": -65.53,
+   "ours_over_actual": 0.661,
+   "pct_zero_outcome": 0.0,
+   "per_position": {
+    "QB": {
+     "n": 383,
+     "mean_bias": -52.06,
+     "ours_over_actual": 0.781
+    },
+    "RB": {
+     "n": 529,
+     "mean_bias": -78.14,
+     "ours_over_actual": 0.582
+    },
+    "TE": {
+     "n": 284,
+     "mean_bias": -60.73,
+     "ours_over_actual": 0.614
+    },
+    "WR": {
+     "n": 832,
+     "mean_bias": -63.57,
+     "ours_over_actual": 0.654
+    }
+   }
+  },
+  "played_at_least_6_games": {
+   "reading": "played \u22656 games \u26d4 outcome-conditioned",
+   "n": 4708,
+   "mean_bias": -23.83,
+   "median_bias": -11.04,
+   "ours_over_actual": 0.773,
+   "pct_zero_outcome": 0.024,
+   "per_position": {
+    "QB": {
+     "n": 503,
+     "mean_bias": -35.29,
+     "ours_over_actual": 0.817
+    },
+    "RB": {
+     "n": 1188,
+     "mean_bias": -30.42,
+     "ours_over_actual": 0.714
+    },
+    "TE": {
+     "n": 1112,
+     "mean_bias": -14.42,
+     "ours_over_actual": 0.783
+    },
+    "WR": {
+     "n": 1905,
+     "mean_bias": -22.17,
+     "ours_over_actual": 0.785
+    }
+   }
+  },
+  "motivating_figures": {
+   "source": "production_model_state/nfl_season_fantasy.md \u2014 MEASURED LEVEL BIAS (NF-TR1)",
+   "n": 1165,
+   "mean_bias": -37.7,
+   "median_bias": -34.5,
+   "ours_over_actual": {
+    "QB": 0.923,
+    "RB": 0.693,
+    "WR": 0.778,
+    "TE": 0.816
+   },
+   "population_note": "stated as unconditional; not reproducible on this panel \u2014 see verdict"
+  },
+  "premise_confirmed": true,
+  "reproduces_motivating_magnitude": false,
+  "per_position_sign_agrees_with_motivating": {
+   "QB": true,
+   "RB": true,
+   "WR": true,
+   "TE": true
+  },
+  "table": [
+   {
+    "reading": "universe (unconditional)",
+    "n": 8099,
+    "mean_bias": 0.84,
+    "median_bias": 13.84,
+    "ours_over_actual": 1.013,
+    "pct_zero_outcome": 0.324
+   },
+   {
+    "reading": "draftable tier, INCUMBENT anchor (top 156/season) \u2b50 PRE-REGISTERED",
+    "n": 2028,
+    "mean_bias": -12.85,
+    "median_bias": -14.35,
+    "ours_over_actual": 0.919,
+    "pct_zero_outcome": 0.075
+   },
+   {
+    "reading": "draftable tier, REALIZED anchor (top 156/season) \u26d4 forbidden",
+    "n": 2028,
+    "mean_bias": -64.8,
+    "median_bias": -65.53,
+    "ours_over_actual": 0.661,
+    "pct_zero_outcome": 0.0
+   },
+   {
+    "reading": "played \u22656 games \u26d4 outcome-conditioned",
+    "n": 4708,
+    "mean_bias": -23.83,
+    "median_bias": -11.04,
+    "ours_over_actual": 0.773,
+    "pct_zero_outcome": 0.024
+   }
+  ]
+ },
+ "decomposition": {
+  "tier": {
+   "pooled": {
+    "n": 2028,
+    "bias": -12.850295382832726,
+    "availability_part": 3.7344863169163682,
+    "rate_part": -16.584781699749097,
+    "our_over_actual": 0.9186259047299896,
+    "proj_games_mean": 13.060751322474742,
+    "real_games_mean": 12.554733727810651,
+    "games_ratio": 1.0403049244718894,
+    "proj_rate_pooled": 11.10701773187848,
+    "real_rate_pooled": 12.578227092415851,
+    "rate_ratio_pooled": 0.8830352362278108,
+    "mean_match_k": 1.0885824086290365,
+    "zero_outcome_frac": 0.07051282051282051
+   },
+   "per_position": {
+    "QB": {
+     "n": 465,
+     "bias": -0.5653816320415723,
+     "availability_part": -1.5222926736035158,
+     "rate_part": 0.956911041561943,
+     "our_over_actual": 0.9969582754393006,
+     "proj_games_mean": 11.82169335441339,
+     "real_games_mean": 11.679569892473118,
+     "games_ratio": 1.0121685527163002,
+     "proj_rate_pooled": 15.67541701946501,
+     "real_rate_pooled": 15.914571902043823,
+     "rate_ratio_pooled": 0.9849725846192507,
+     "mean_match_k": 1.003051004877169,
+     "zero_outcome_frac": 0.07526881720430108
+    },
+    "RB": {
+     "n": 490,
+     "bias": -21.538635403752874,
+     "availability_part": -1.1347188996437794,
+     "rate_part": -20.40391650410909,
+     "our_over_actual": 0.8589626599029744,
+     "proj_games_mean": 12.357454744309106,
+     "real_games_mean": 12.428571428571429,
+     "games_ratio": 0.9942779679329166,
+     "proj_rate_pooled": 10.615228139221076,
+     "real_rate_pooled": 12.287481116584564,
+     "rate_ratio_pooled": 0.8639059574947034,
+     "mean_match_k": 1.1641949605969564,
+     "zero_outcome_frac": 0.05918367346938776
+    },
+    "TE": {
+     "n": 251,
+     "bias": -9.054042197239486,
+     "availability_part": 12.360556749040503,
+     "rate_part": -21.41459894627999,
+     "our_over_actual": 0.9301148454449671,
+     "proj_games_mean": 14.744371165512993,
+     "real_games_mean": 13.266932270916335,
+     "games_ratio": 1.1113625112744028,
+     "proj_rate_pooled": 8.172744187345812,
+     "real_rate_pooled": 9.765333333333334,
+     "rate_ratio_pooled": 0.8369140006156961,
+     "mean_match_k": 1.0751360489484498,
+     "zero_outcome_frac": 0.06374501992031872
+    },
+    "WR": {
+     "n": 822,
+     "bias": -15.779806129123378,
+     "availability_part": 6.976784502126906,
+     "rate_part": -22.756590631250287,
+     "our_over_actual": 0.8974404580797132,
+     "proj_games_mean": 13.666820297957816,
+     "real_games_mean": 12.907542579075425,
+     "games_ratio": 1.0588243435364115,
+     "proj_rate_pooled": 10.103311684701742,
+     "real_rate_pooled": 11.920158341187559,
+     "rate_ratio_pooled": 0.8475820031510747,
+     "mean_match_k": 1.1142800516702103,
+     "zero_outcome_frac": 0.07664233576642336
+    }
+   },
+   "identity_holds": true,
+   "miss_is_rate": true
+  },
+  "universe": {
+   "pooled": {
+    "n": 8099,
+    "bias": 0.8385445928984602,
+    "availability_part": 3.2569413795848914,
+    "rate_part": -2.4183967866864315,
+    "our_over_actual": 1.0134194886478949,
+    "proj_games_mean": 8.984901712764335,
+    "real_games_mean": 8.30942091616249,
+    "games_ratio": 1.0812909591916304,
+    "proj_rate_pooled": 7.048003591453846,
+    "real_rate_pooled": 7.520027638265625,
+    "rate_ratio_pooled": 0.9372310755335677,
+    "mean_match_k": 0.9867582094105974,
+    "zero_outcome_frac": 0.3151006297073713
+   },
+   "per_position": {
+    "QB": {
+     "n": 1116,
+     "bias": 8.544426959472698,
+     "availability_part": 1.186274572815098,
+     "rate_part": 7.358152386657599,
+     "our_over_actual": 1.0936941024825462,
+     "proj_games_mean": 6.9705033582825955,
+     "real_games_mean": 6.684587813620071,
+     "games_ratio": 1.0427723522578254,
+     "proj_rate_pooled": 14.308773720963938,
+     "real_rate_pooled": 13.642565683646113,
+     "rate_ratio_pooled": 1.048833045980232,
+     "mean_match_k": 0.9143324424353458,
+     "zero_outcome_frac": 0.26344086021505375
+    },
+    "RB": {
+     "n": 2018,
+     "bias": -2.7962839868507925,
+     "availability_part": 1.286768910015364,
+     "rate_part": -4.083052896866156,
+     "our_over_actual": 0.9563668474594057,
+     "proj_games_mean": 8.6968421135684,
+     "real_games_mean": 8.305252725470764,
+     "games_ratio": 1.0471496053210638,
+     "proj_rate_pooled": 7.047378714817677,
+     "real_rate_pooled": 7.716348448687351,
+     "rate_ratio_pooled": 0.9133048827021965,
+     "mean_match_k": 1.0456238656290795,
+     "zero_outcome_frac": 0.2978196233894945
+    },
+    "TE": {
+     "n": 1801,
+     "bias": -0.030681058685091918,
+     "availability_part": 3.506592544337605,
+     "rate_part": -3.537273603022697,
+     "our_over_actual": 0.9992647792792284,
+     "proj_games_mean": 9.694039997212275,
+     "real_games_mean": 8.921154913936702,
+     "games_ratio": 1.0866350927353774,
+     "proj_rate_pooled": 4.301583682724495,
+     "real_rate_pooled": 4.677690919275534,
+     "rate_ratio_pooled": 0.9195955348393797,
+     "mean_match_k": 1.0007357616679955,
+     "zero_outcome_frac": 0.33037201554691836
+    },
+    "WR": {
+     "n": 3164,
+     "bias": 0.933612466267335,
+     "availability_part": 5.101774013032034,
+     "rate_part": -4.168161546764699,
+     "our_over_actual": 1.014782549425897,
+     "proj_games_mean": 9.47548792783648,
+     "real_games_mean": 8.536978508217446,
+     "games_ratio": 1.109934611960854,
+     "proj_rate_pooled": 6.76376811401356,
+     "real_rate_pooled": 7.397979341749658,
+     "rate_ratio_pooled": 0.9142723710842231,
+     "mean_match_k": 0.9854327910602522,
+     "zero_outcome_frac": 0.3356510745891277
+    }
+   },
+   "identity_holds": true,
+   "miss_is_rate": false
+  }
+ },
+ "leaderboard": [
+  {
+   "arm": "pos_affine \u00b7 \u03bb=1 \u00b7 OLS [refit band DISCLOSURE]",
+   "form": "pos_affine",
+   "treatment": "refit",
+   "CRPS": 49.0722,
+   "MAE": 70.1733,
+   "bias (pooled rows)": -1.1961163929325411,
+   "cov80": 0.8284,
+   "universe CRPS": 29.1847,
+   "universe bias": 2.3824,
+   "trial": false,
+   "eligible": false,
+   "bias_QB": 1.5241794530929864,
+   "bias_RB": -7.017629918972504,
+   "bias_WR": -0.4180075269047821,
+   "bias_TE": 2.5807703460431335,
+   "cov_QB": 0.84,
+   "cov_RB": 0.822,
+   "cov_WR": 0.847,
+   "cov_TE": 0.756
+  },
+  {
+   "arm": "pos_affine \u00b7 \u03bb=1 \u00b7 OLS",
+   "form": "pos_affine",
+   "treatment": "fixed",
+   "CRPS": 49.1812,
+   "MAE": 70.1733,
+   "bias (pooled rows)": -1.1961163929325411,
+   "cov80": 0.8348,
+   "universe CRPS": 28.9621,
+   "universe bias": 2.3824,
+   "trial": true,
+   "eligible": false,
+   "bias_QB": 1.5241794530929864,
+   "bias_RB": -7.017629918972504,
+   "bias_WR": -0.4180075269047821,
+   "bias_TE": 2.5807703460431335,
+   "cov_QB": 0.857,
+   "cov_RB": 0.825,
+   "cov_WR": 0.856,
+   "cov_TE": 0.743
+  },
+  {
+   "arm": "pos_const \u00b7 \u03bb=1 \u00b7 mean-match [refit band DISCLOSURE]",
+   "form": "pos_const",
+   "treatment": "refit",
+   "CRPS": 49.2529,
+   "MAE": 70.4922,
+   "bias (pooled rows)": 1.4117258361110376,
+   "cov80": 0.8304,
+   "universe CRPS": 29.7621,
+   "universe bias": 7.4872,
+   "trial": false,
+   "eligible": false,
+   "bias_QB": 7.623867510080437,
+   "bias_RB": -5.3152275510728515,
+   "bias_WR": 1.3792513481829332,
+   "bias_TE": 3.141826674362977,
+   "cov_QB": 0.842,
+   "cov_RB": 0.82,
+   "cov_WR": 0.855,
+   "cov_TE": 0.742
+  },
+  {
+   "arm": "pos_const \u00b7 \u03bb=1 \u00b7 mean-match",
+   "form": "pos_const",
+   "treatment": "fixed",
+   "CRPS": 49.3394,
+   "MAE": 70.4922,
+   "bias (pooled rows)": 1.4117258361110376,
+   "cov80": 0.8343,
+   "universe CRPS": 29.7379,
+   "universe bias": 7.4872,
+   "trial": true,
+   "eligible": true,
+   "bias_QB": 7.623867510080437,
+   "bias_RB": -5.3152275510728515,
+   "bias_WR": 1.3792513481829332,
+   "bias_TE": 3.141826674362977,
+   "cov_QB": 0.855,
+   "cov_RB": 0.825,
+   "cov_WR": 0.856,
+   "cov_TE": 0.743
+  },
+  {
+   "arm": "pos_const \u00b7 \u03bb=1 \u00b7 mean-match [scaled band DISCLOSURE]",
+   "form": "pos_const",
+   "treatment": "scaled",
+   "CRPS": 49.5789,
+   "MAE": 70.4922,
+   "bias (pooled rows)": 1.4117258361110376,
+   "cov80": 0.8812,
+   "universe CRPS": 30.0695,
+   "universe bias": 7.4872,
+   "trial": false,
+   "eligible": false,
+   "bias_QB": 7.623867510080437,
+   "bias_RB": -5.3152275510728515,
+   "bias_WR": 1.3792513481829332,
+   "bias_TE": 3.141826674362977,
+   "cov_QB": 0.867,
+   "cov_RB": 0.888,
+   "cov_WR": 0.912,
+   "cov_TE": 0.792
+  },
+  {
+   "arm": "incumbent (NULL)",
+   "form": "incumbent",
+   "treatment": "served",
+   "CRPS": 49.9214,
+   "MAE": 71.7011,
+   "bias (pooled rows)": -12.850295382832726,
+   "cov80": 0.8333,
+   "universe CRPS": 29.3817,
+   "universe bias": 0.8286,
+   "trial": true,
+   "eligible": true,
+   "bias_QB": -0.5653816320415723,
+   "bias_RB": -21.538635403752874,
+   "bias_WR": -15.779806129123378,
+   "bias_TE": -9.054042197239486,
+   "cov_QB": 0.855,
+   "cov_RB": 0.825,
+   "cov_WR": 0.856,
+   "cov_TE": 0.735
+  },
+  {
+   "arm": "pos_affine \u00b7 \u03bb=1 \u00b7 OLS [scaled band DISCLOSURE]",
+   "form": "pos_affine",
+   "treatment": "scaled",
+   "CRPS": 50.2806,
+   "MAE": 70.1733,
+   "bias (pooled rows)": -1.1961163929325411,
+   "cov80": 0.9093,
+   "universe CRPS": 29.7787,
+   "universe bias": 2.3824,
+   "trial": false,
+   "eligible": false,
+   "bias_QB": 1.5241794530929864,
+   "bias_RB": -7.017629918972504,
+   "bias_WR": -0.4180075269047821,
+   "bias_TE": 2.5807703460431335,
+   "cov_QB": 0.937,
+   "cov_RB": 0.924,
+   "cov_WR": 0.914,
+   "cov_TE": 0.813
+  }
+ ],
+ "fitted_params_final_fold": {
+  "pos_const": "{\"QB\": 0.9418470646368412, \"RB\": 1.1909543087655077, \"TE\": 1.0839139129853799, \"WR\": 1.1148363612759715}",
+  "pos_affine": "{\"QB\": [-1.7490995583955915, 1.0398471547798434], \"RB\": [1.7776948404144688, 1.019070048254655], \"TE\": [0.7578553804506298, 0.9909906599661684], \"WR\": [-2.21734298335545, 1.332281059825699]}"
+ },
+ "fitted_params_by_fold": {
+  "pos_const": {
+   "2013": "{\"QB\": 1.1139666587088035, \"RB\": 1.1310675178313874, \"TE\": 1.3070652688490318, \"WR\": 1.2246496751216889}",
+   "2014": "{\"QB\": 1.0969114618607145, \"RB\": 1.123961272485999, \"TE\": 1.2021070840424557, \"WR\": 1.1610834661765574}",
+   "2015": "{\"QB\": 1.1016102391779268, \"RB\": 1.0969935480923423, \"TE\": 1.1441950170924935, \"WR\": 1.1056634870012825}",
+   "2016": "{\"QB\": 1.0915326121305977, \"RB\": 1.0880229190848965, \"TE\": 1.1583011791174604, \"WR\": 1.120395793184352}",
+   "2017": "{\"QB\": 1.1015992527309704, \"RB\": 1.0714612979264557, \"TE\": 1.111611155354815, \"WR\": 1.1025574491233212}",
+   "2018": "{\"QB\": 1.0802653933879038, \"RB\": 1.0881406293951859, \"TE\": 1.078005226626509, \"WR\": 1.0905732176578418}",
+   "2019": "{\"QB\": 1.0969980539794857, \"RB\": 1.0814890308221827, \"TE\": 1.0679378729462203, \"WR\": 1.0996325352600556}",
+   "2020": "{\"QB\": 1.0612855889625525, \"RB\": 1.1330078605229104, \"TE\": 1.0432522356658578, \"WR\": 1.110731836078444}",
+   "2021": "{\"QB\": 1.0386540622216254, \"RB\": 1.1013938186725283, \"TE\": 0.9911713306171118, \"WR\": 1.1062140548958204}",
+   "2022": "{\"QB\": 0.9895866144163881, \"RB\": 1.1294054725315412, \"TE\": 1.0161605239662195, \"WR\": 1.1143383603132038}",
+   "2023": "{\"QB\": 0.9853388534479836, \"RB\": 1.1656600223168696, \"TE\": 1.0366093116695771, \"WR\": 1.128551427006409}",
+   "2024": "{\"QB\": 0.93990257372343, \"RB\": 1.1880552388077714, \"TE\": 1.0560817976782848, \"WR\": 1.1323497551275779}",
+   "2025": "{\"QB\": 0.9418470646368412, \"RB\": 1.1909543087655077, \"TE\": 1.0839139129853799, \"WR\": 1.1148363612759715}"
+  },
+  "pos_affine": {
+   "2013": "{\"QB\": [-6.119441492727454, 1.5210685591032], \"RB\": [-3.004391060633526, 1.422847996140304], \"TE\": [3.0759879843885622, 0.9033351555152601], \"WR\": [1.481365851323166, 1.0314510869123283]}",
+   "2014": "{\"QB\": [-5.603851928210899, 1.44486818806434], \"RB\": [-2.7203212775925767, 1.3757144791125797], \"TE\": [-0.8595102855928737, 1.2939039264610848], \"WR\": [-0.2595195319340912, 1.163291996426205]}",
+   "2015": "{\"QB\": [-6.200233873197791, 1.4688017572301213], \"RB\": [-4.410297558486267, 1.503078571418552], \"TE\": [-0.3901142569101944, 1.1845709346612259], \"WR\": [-2.9492759327711067, 1.3856565025193308]}",
+   "2016": "{\"QB\": [-8.642056626901491, 1.6162862319974045], \"RB\": [-3.582851714811929, 1.4108771390777954], \"TE\": [-0.8144201741122545, 1.255011496080754], \"WR\": [-3.451789647478846, 1.4524244087289402]}",
+   "2017": "{\"QB\": [-10.075860273705073, 1.6989379201348698], \"RB\": [-2.868989075996699, 1.3325394731190372], \"TE\": [-0.7472422771501668, 1.1970186091863357], \"WR\": [-3.382898756430566, 1.4254956646576322]}",
+   "2018": "{\"QB\": [-5.300393123056697, 1.3636385949654182], \"RB\": [-1.8508392484433485, 1.2573718794792657], \"TE\": [-0.1488195777501138, 1.0921396143001059], \"WR\": [-2.1210368434336204, 1.291743531557389]}",
+   "2019": "{\"QB\": [-10.753711894272552, 1.7290679953532067], \"RB\": [-2.623706744868394, 1.3295106777578383], \"TE\": [0.6697536376854007, 0.9784252148389476], \"WR\": [-2.602249297330693, 1.351979526420941]}",
+   "2020": "{\"QB\": [-4.808865890860102, 1.3101988341814912], \"RB\": [-2.330410574700615, 1.3503171641475498], \"TE\": [-1.6348615284124708, 1.2420234582195693], \"WR\": [-0.9626649196750128, 1.194247463090444]}",
+   "2021": "{\"QB\": [-9.412908799775849, 1.5729500828201994], \"RB\": [-1.965407056621568, 1.2793326091539774], \"TE\": [-2.7363971843572665, 1.3206756974615543], \"WR\": [0.5839789356705746, 1.034137343453977]}",
+   "2022": "{\"QB\": [-5.329646111797112, 1.2826998698571512], \"RB\": [-1.271433398826804, 1.2351340108720124], \"TE\": [-2.080529762045975, 1.2652657302748416], \"WR\": [0.7324420750607926, 1.034227728448127]}",
+   "2023": "{\"QB\": [-3.155006645557032, 1.1508948700449886], \"RB\": [-0.7079399361920841, 1.2150039400045194], \"TE\": [-2.273141450506406, 1.3054097449263367], \"WR\": [-0.7147691992784175, 1.1941508351716408]}",
+   "2024": "{\"QB\": [-1.5546129384022032, 1.0151606208533555], \"RB\": [0.14556811091915983, 1.1575241312534152], \"TE\": [-0.7368677785989449, 1.1428493204382673], \"WR\": [-1.070110480187943, 1.235352687434455]}",
+   "2025": "{\"QB\": [-1.7490995583955915, 1.0398471547798434], \"RB\": [1.7776948404144688, 1.019070048254655], \"TE\": [0.7578553804506298, 0.9909906599661684], \"WR\": [-2.21734298335545, 1.332281059825699]}"
+  }
+ },
+ "anchor_table": [
+  {
+   "anchor": "oracle_perplayer",
+   "role": "ceiling",
+   "expected": "beats every real arm",
+   "CRPS": 0.0043,
+   "MAE": 0.0043,
+   "bias": 0.004309664694280079,
+   "cov80": 0.9951,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "zero_project",
+   "role": "degenerate",
+   "expected": "loses to every real arm",
+   "CRPS": 157.9249,
+   "MAE": 157.9249,
+   "bias": -157.916291913215,
+   "cov80": 0.0705,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "pos_median",
+   "role": "degenerate",
+   "expected": "loses to every real arm",
+   "CRPS": 81.9364,
+   "MAE": 81.9364,
+   "bias": -2.700749506903351,
+   "cov80": 0.0,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "wide_band",
+   "role": "degenerate",
+   "expected": "loses to every real arm",
+   "CRPS": 63.3477,
+   "MAE": 71.7011,
+   "bias": -12.850295382832726,
+   "cov80": 0.9916,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "permuted_across@pos_const",
+   "role": "permutation",
+   "expected": "loses to every real arm",
+   "CRPS": 49.7391,
+   "MAE": 72.0656,
+   "bias": 0.9800443595844724,
+   "cov80": 0.8363,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "permuted_within@pos_const",
+   "role": "permutation",
+   "expected": "loses to every real arm",
+   "CRPS": 49.3394,
+   "MAE": 70.4922,
+   "bias": 1.4117258361110367,
+   "cov80": 0.8343,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "permuted_across@pos_affine",
+   "role": "permutation",
+   "expected": "loses to every real arm",
+   "CRPS": 53.8247,
+   "MAE": 82.9071,
+   "bias": -7.208319072042193,
+   "cov80": 0.8338,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "permuted_within@pos_affine",
+   "role": "permutation",
+   "expected": "loses to every real arm",
+   "CRPS": 53.3882,
+   "MAE": 81.1746,
+   "bias": -7.894693773651595,
+   "cov80": 0.8333,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "over_scale",
+   "role": "degenerate",
+   "expected": "loses to every real arm",
+   "CRPS": 49.5944,
+   "MAE": 72.0421,
+   "bias": 15.673747055054802,
+   "cov80": 0.8358,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "lambda_sweep@0.25",
+   "role": "degenerate",
+   "expected": "loses to every real arm",
+   "CRPS": 49.7032,
+   "MAE": 71.1437,
+   "bias": -9.284790078096785,
+   "cov80": 0.8333,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "lambda_sweep@0.5",
+   "role": "degenerate",
+   "expected": "loses to every real arm",
+   "CRPS": 49.5311,
+   "MAE": 70.7598,
+   "bias": -5.719284773360845,
+   "cov80": 0.8333,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "lambda_sweep@0.75",
+   "role": "degenerate",
+   "expected": "loses to every real arm",
+   "CRPS": 49.4063,
+   "MAE": 70.5313,
+   "bias": -2.1537794686249034,
+   "cov80": 0.8343,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "lambda_sweep@1.25",
+   "role": "degenerate",
+   "expected": "loses to every real arm",
+   "CRPS": 49.3259,
+   "MAE": 70.6351,
+   "bias": 4.977231140846979,
+   "cov80": 0.8348,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "lambda_sweep@1.5",
+   "role": "degenerate",
+   "expected": "loses to every real arm",
+   "CRPS": 49.3655,
+   "MAE": 70.9595,
+   "bias": 8.54273644558292,
+   "cov80": 0.8348,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "lambda_sweep@2",
+   "role": "degenerate",
+   "expected": "loses to every real arm",
+   "CRPS": 49.5944,
+   "MAE": 72.0421,
+   "bias": 15.673747055054802,
+   "cov80": 0.8358,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "window_sensitivity@w3",
+   "role": "degenerate",
+   "expected": "loses to every real arm",
+   "CRPS": 49.4114,
+   "MAE": 70.5991,
+   "bias": -0.055643905826130685,
+   "cov80": 0.8333,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "window_sensitivity@w8",
+   "role": "degenerate",
+   "expected": "loses to every real arm",
+   "CRPS": 49.4229,
+   "MAE": 70.758,
+   "bias": 3.855536209331333,
+   "cov80": 0.8343,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "window_sensitivity@wNone",
+   "role": "degenerate",
+   "expected": "loses to every real arm",
+   "CRPS": 49.4173,
+   "MAE": 70.8832,
+   "bias": 7.881152519454248,
+   "cov80": 0.8348,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "oracle_pos_const",
+   "role": "ceiling",
+   "expected": "beats every real arm",
+   "CRPS": 48.8642,
+   "MAE": 69.765,
+   "bias": 4.122463296499912,
+   "cov80": 0.8358,
+   "behaves as expected": true
+  },
+  {
+   "anchor": "oracle_pos_affine",
+   "role": "ceiling",
+   "expected": "beats every real arm",
+   "CRPS": 47.8106,
+   "MAE": 68.3228,
+   "bias": 0.15083640901590784,
+   "cov80": 0.8378,
+   "behaves as expected": true
+  }
+ ],
+ "lambda_sweep": [
+  {
+   "treatment": "fixed",
+   "\u03bb": 0.0,
+   "CRPS": 49.9214,
+   "bias": -12.850295382832726,
+   "cov80": 0.8333,
+   "MAE": 71.7011
+  },
+  {
+   "treatment": "fixed",
+   "\u03bb": 0.25,
+   "CRPS": 49.7032,
+   "bias": -9.284790078096785,
+   "cov80": 0.8333,
+   "MAE": 71.1437
+  },
+  {
+   "treatment": "fixed",
+   "\u03bb": 0.5,
+   "CRPS": 49.5311,
+   "bias": -5.719284773360845,
+   "cov80": 0.8333,
+   "MAE": 70.7598
+  },
+  {
+   "treatment": "fixed",
+   "\u03bb": 0.75,
+   "CRPS": 49.4063,
+   "bias": -2.1537794686249034,
+   "cov80": 0.8343,
+   "MAE": 70.5313
+  },
+  {
+   "treatment": "fixed",
+   "\u03bb": 1.0,
+   "CRPS": 49.3394,
+   "bias": 1.4117258361110376,
+   "cov80": 0.8343,
+   "MAE": 70.4922
+  },
+  {
+   "treatment": "fixed",
+   "\u03bb": 1.25,
+   "CRPS": 49.3259,
+   "bias": 4.977231140846979,
+   "cov80": 0.8348,
+   "MAE": 70.6351
+  },
+  {
+   "treatment": "fixed",
+   "\u03bb": 1.5,
+   "CRPS": 49.3655,
+   "bias": 8.54273644558292,
+   "cov80": 0.8348,
+   "MAE": 70.9595
+  },
+  {
+   "treatment": "fixed",
+   "\u03bb": 2.0,
+   "CRPS": 49.5944,
+   "bias": 15.673747055054802,
+   "cov80": 0.8358,
+   "MAE": 72.0421
+  },
+  {
+   "treatment": "refit",
+   "\u03bb": 0.0,
+   "CRPS": 49.9214,
+   "bias": -12.850295382832726,
+   "cov80": 0.8333,
+   "MAE": 71.7011
+  },
+  {
+   "treatment": "refit",
+   "\u03bb": 0.25,
+   "CRPS": 49.6655,
+   "bias": -9.284790078096785,
+   "cov80": 0.8309,
+   "MAE": 71.1437
+  },
+  {
+   "treatment": "refit",
+   "\u03bb": 0.5,
+   "CRPS": 49.4936,
+   "bias": -5.719284773360845,
+   "cov80": 0.8319,
+   "MAE": 70.7598
+  },
+  {
+   "treatment": "refit",
+   "\u03bb": 0.75,
+   "CRPS": 49.3582,
+   "bias": -2.1537794686249034,
+   "cov80": 0.8328,
+   "MAE": 70.5313
+  },
+  {
+   "treatment": "refit",
+   "\u03bb": 1.0,
+   "CRPS": 49.2529,
+   "bias": 1.4117258361110376,
+   "cov80": 0.8304,
+   "MAE": 70.4922
+  },
+  {
+   "treatment": "refit",
+   "\u03bb": 1.25,
+   "CRPS": 49.3051,
+   "bias": 4.977231140846979,
+   "cov80": 0.8264,
+   "MAE": 70.6351
+  },
+  {
+   "treatment": "refit",
+   "\u03bb": 1.5,
+   "CRPS": 49.3387,
+   "bias": 8.54273644558292,
+   "cov80": 0.8274,
+   "MAE": 70.9595
+  },
+  {
+   "treatment": "refit",
+   "\u03bb": 2.0,
+   "CRPS": 49.6078,
+   "bias": 15.673747055054802,
+   "cov80": 0.8294,
+   "MAE": 72.0421
+  },
+  {
+   "treatment": "scaled",
+   "\u03bb": 0.0,
+   "CRPS": 49.9214,
+   "bias": -12.850295382832726,
+   "cov80": 0.8333,
+   "MAE": 71.7011
+  },
+  {
+   "treatment": "scaled",
+   "\u03bb": 0.25,
+   "CRPS": 49.6185,
+   "bias": -9.284790078096785,
+   "cov80": 0.8491,
+   "MAE": 71.1437
+  },
+  {
+   "treatment": "scaled",
+   "\u03bb": 0.5,
+   "CRPS": 49.4643,
+   "bias": -5.719284773360845,
+   "cov80": 0.8614,
+   "MAE": 70.7598
+  },
+  {
+   "treatment": "scaled",
+   "\u03bb": 0.75,
+   "CRPS": 49.4542,
+   "bias": -2.1537794686249034,
+   "cov80": 0.8743,
+   "MAE": 70.5313
+  },
+  {
+   "treatment": "scaled",
+   "\u03bb": 1.0,
+   "CRPS": 49.5789,
+   "bias": 1.4117258361110376,
+   "cov80": 0.8812,
+   "MAE": 70.4922
+  },
+  {
+   "treatment": "scaled",
+   "\u03bb": 1.25,
+   "CRPS": 49.8296,
+   "bias": 4.977231140846979,
+   "cov80": 0.8881,
+   "MAE": 70.6351
+  },
+  {
+   "treatment": "scaled",
+   "\u03bb": 1.5,
+   "CRPS": 50.1977,
+   "bias": 8.54273644558292,
+   "cov80": 0.8935,
+   "MAE": 70.9595
+  },
+  {
+   "treatment": "scaled",
+   "\u03bb": 2.0,
+   "CRPS": 51.2608,
+   "bias": 15.673747055054802,
+   "cov80": 0.9019,
+   "MAE": 72.0421
+  }
+ ],
+ "predecessor": {
+  "story": "NF-TR2",
+  "record": "ablation_results/nf_tr2_level_recalibration.md",
+  "why_a_successor": "NF-TR2's full-history mean-match passed every inherited gate and was REFUSED by its own level gates (over-correction out of fold from a non-stationary level \u2014 see season_level_recalibration.py, the TR2b block); the successor is the same family with the trailing window DERIVED from the tier's thinnest position, declared before this run"
+ },
+ "family_ceiling_check_fixed_band": {
+  "per_form": {
+   "pos_const": true,
+   "pos_affine": true
+  },
+  "ceilings": {
+   "pos_const": {
+    "ceiling_crps": 48.8642,
+    "arm_crps_fixed_band": 49.3394
+   },
+   "pos_affine": {
+    "ceiling_crps": 47.8106,
+    "arm_crps_fixed_band": 49.1812
+   }
+  },
+  "ceilings_order_by_capacity": true
+ },
+ "constraint_table": [
+  {
+   "arm": "incumbent (NULL)",
+   "holds out (C1\u2227C2\u2227C3)": true,
+   "C1 only": true,
+   "C2 only": true,
+   "C3 only": true,
+   "failing folds": [],
+   "C2 active folds": null,
+   "C2 structurally absent": null
+  },
+  {
+   "arm": "pos_const \u00b7 \u03bb=1 \u00b7 mean-match",
+   "holds out (C1\u2227C2\u2227C3)": true,
+   "C1 only": true,
+   "C2 only": true,
+   "C3 only": true,
+   "failing folds": [],
+   "C2 active folds": [
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "C2 structurally absent": [
+    2013,
+    2014,
+    2015
+   ]
+  },
+  {
+   "arm": "pos_affine \u00b7 \u03bb=1 \u00b7 OLS",
+   "holds out (C1\u2227C2\u2227C3)": false,
+   "C1 only": false,
+   "C2 only": true,
+   "C3 only": true,
+   "failing folds": [
+    2013,
+    2015,
+    2016,
+    2017,
+    2019,
+    2021
+   ],
+   "C2 active folds": [
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "C2 structurally absent": [
+    2013,
+    2014,
+    2015
+   ]
+  }
+ ],
+ "selection": {
+  "framing": "pooled",
+  "n_candidates": 3,
+  "n_eligible": 2,
+  "incumbent_metric": 49.9214,
+  "winner": {
+   "label": "pos_const \u00b7 \u03bb=1 \u00b7 mean-match",
+   "key": null,
+   "form": "pos_const",
+   "space": null,
+   "rule": "fixed \u03bb=1",
+   "recalibrates": true,
+   "shippable": true,
+   "lam_by_fold": {
+    "2013": 1.0,
+    "2014": 1.0,
+    "2015": 1.0,
+    "2016": 1.0,
+    "2017": 1.0,
+    "2018": 1.0,
+    "2019": 1.0,
+    "2020": 1.0,
+    "2021": 1.0,
+    "2022": 1.0,
+    "2023": 1.0,
+    "2024": 1.0,
+    "2025": 1.0
+   },
+   "metric": 49.3394,
+   "bias": 1.4117,
+   "mae": 70.4922,
+   "coverage80": 0.8343,
+   "universe_bias": 7.4872,
+   "rho": {
+    "QB": 1.0,
+    "RB": 1.0,
+    "WR": 1.0,
+    "TE": 1.0
+   }
+  },
+  "best_any": {
+   "label": "pos_affine \u00b7 \u03bb=1 \u00b7 OLS",
+   "metric": 49.1812,
+   "eligible": false
+  },
+  "ordering": {
+   "per_position": {
+    "QB": {
+     "rho": 1.0,
+     "ok": true
+    },
+    "RB": {
+     "rho": 1.0,
+     "ok": true
+    },
+    "WR": {
+     "rho": 1.0,
+     "ok": true
+    },
+    "TE": {
+     "rho": 1.0,
+     "ok": true
+    }
+   }
+  },
+  "coverage": {
+   "ok": true,
+   "strict_ok": false,
+   "governs_the_change": true,
+   "floor": 0.8,
+   "per_position": {
+    "QB": {
+     "n": 465,
+     "coverage": 0.8559,
+     "covered_rows": 398,
+     "binding_level": 0.8,
+     "rows_required": 372,
+     "rows_of_slack": 26,
+     "ok": true,
+     "rows_of_slack_strict": 26,
+     "strict_ok": true,
+     "incumbent_coverage": 0.8559
+    },
+    "RB": {
+     "n": 490,
+     "coverage": 0.8245,
+     "covered_rows": 404,
+     "binding_level": 0.8,
+     "rows_required": 392,
+     "rows_of_slack": 12,
+     "ok": true,
+     "rows_of_slack_strict": 12,
+     "strict_ok": true,
+     "incumbent_coverage": 0.8245
+    },
+    "WR": {
+     "n": 822,
+     "coverage": 0.8552,
+     "covered_rows": 703,
+     "binding_level": 0.8,
+     "rows_required": 658,
+     "rows_of_slack": 45,
+     "ok": true,
+     "rows_of_slack_strict": 45,
+     "strict_ok": true,
+     "incumbent_coverage": 0.8552
+    },
+    "TE": {
+     "n": 251,
+     "coverage": 0.745,
+     "covered_rows": 187,
+     "binding_level": 0.7371,
+     "rows_required": 185,
+     "rows_of_slack": 2,
+     "ok": true,
+     "rows_of_slack_strict": -14,
+     "strict_ok": false,
+     "incumbent_coverage": 0.7371
+    }
+   },
+   "pooled_coverage": 0.8343,
+   "breaches": [],
+   "breaches_strict": [
+    "TE 0.7450<0.800 (-14 rows)"
+   ],
+   "evaluable": true
+  },
+  "placement": {
+   "holds_out": true,
+   "per_fold": {
+    "2013": {
+     "lam": 1.0,
+     "c1_ordering_ok": true,
+     "c2_placement_ok": true,
+     "c2_inactive_structural": true,
+     "c3_coverage_ok": true,
+     "admissible": true,
+     "rank": null,
+     "incumbent_rank": null,
+     "worst_rank_move": 0.0,
+     "coverage_breaches": [],
+     "within_position_rho": {
+      "QB": 1.0,
+      "RB": 1.0,
+      "WR": 1.0,
+      "TE": 1.0
+     }
+    },
+    "2014": {
+     "lam": 1.0,
+     "c1_ordering_ok": true,
+     "c2_placement_ok": true,
+     "c2_inactive_structural": true,
+     "c3_coverage_ok": true,
+     "admissible": true,
+     "rank": null,
+     "incumbent_rank": null,
+     "worst_rank_move": 0.0,
+     "coverage_breaches": [],
+     "within_position_rho": {
+      "QB": 1.0,
+      "RB": 1.0,
+      "WR": 1.0,
+      "TE": 1.0
+     }
+    },
+    "2015": {
+     "lam": 1.0,
+     "c1_ordering_ok": true,
+     "c2_placement_ok": true,
+     "c2_inactive_structural": true,
+     "c3_coverage_ok": true,
+     "admissible": true,
+     "rank": null,
+     "incumbent_rank": null,
+     "worst_rank_move": 0.0,
+     "coverage_breaches": [],
+     "within_position_rho": {
+      "QB": 1.0,
+      "RB": 1.0,
+      "WR": 1.0,
+      "TE": 1.0
+     }
+    },
+    "2016": {
+     "lam": 1.0,
+     "c1_ordering_ok": true,
+     "c2_placement_ok": true,
+     "c2_inactive_structural": false,
+     "c3_coverage_ok": true,
+     "admissible": true,
+     "rank": 636.0,
+     "incumbent_rank": 636,
+     "worst_rank_move": 0.0,
+     "coverage_breaches": [],
+     "within_position_rho": {
+      "QB": 1.0,
+      "RB": 1.0,
+      "WR": 0.9999999999999998,
+      "TE": 1.0
+     }
+    },
+    "2017": {
+     "lam": 1.0,
+     "c1_ordering_ok": true,
+     "c2_placement_ok": true,
+     "c2_inactive_structural": false,
+     "c3_coverage_ok": true,
+     "admissible": true,
+     "rank": 21.0,
+     "incumbent_rank": 17,
+     "worst_rank_move": 0.0,
+     "coverage_breaches": [],
+     "within_position_rho": {
+      "QB": 1.0,
+      "RB": 1.0,
+      "WR": 1.0,
+      "TE": 1.0
+     }
+    },
+    "2018": {
+     "lam": 1.0,
+     "c1_ordering_ok": true,
+     "c2_placement_ok": true,
+     "c2_inactive_structural": false,
+     "c3_coverage_ok": true,
+     "admissible": true,
+     "rank": 10.0,
+     "incumbent_rank": 8,
+     "worst_rank_move": 0.0,
+     "coverage_breaches": [],
+     "within_position_rho": {
+      "QB": 1.0,
+      "RB": 1.0,
+      "WR": 1.0,
+      "TE": 1.0
+     }
+    },
+    "2019": {
+     "lam": 1.0,
+     "c1_ordering_ok": true,
+     "c2_placement_ok": true,
+     "c2_inactive_structural": false,
+     "c3_coverage_ok": true,
+     "admissible": true,
+     "rank": 33.0,
+     "incumbent_rank": 22,
+     "worst_rank_move": 0.0,
+     "coverage_breaches": [],
+     "within_position_rho": {
+      "QB": 0.9999999999999999,
+      "RB": 1.0,
+      "WR": 1.0,
+      "TE": 1.0
+     }
+    },
+    "2020": {
+     "lam": 1.0,
+     "c1_ordering_ok": true,
+     "c2_placement_ok": true,
+     "c2_inactive_structural": false,
+     "c3_coverage_ok": true,
+     "admissible": true,
+     "rank": 19.0,
+     "incumbent_rank": 15,
+     "worst_rank_move": 0.0,
+     "coverage_breaches": [],
+     "within_position_rho": {
+      "QB": 1.0,
+      "RB": 1.0,
+      "WR": 1.0,
+      "TE": 1.0
+     }
+    },
+    "2021": {
+     "lam": 1.0,
+     "c1_ordering_ok": true,
+     "c2_placement_ok": true,
+     "c2_inactive_structural": false,
+     "c3_coverage_ok": true,
+     "admissible": true,
+     "rank": 12.0,
+     "incumbent_rank": 10,
+     "worst_rank_move": 0.0,
+     "coverage_breaches": [],
+     "within_position_rho": {
+      "QB": 1.0,
+      "RB": 1.0,
+      "WR": 1.0,
+      "TE": 1.0
+     }
+    },
+    "2022": {
+     "lam": 1.0,
+     "c1_ordering_ok": true,
+     "c2_placement_ok": true,
+     "c2_inactive_structural": false,
+     "c3_coverage_ok": true,
+     "admissible": true,
+     "rank": 45.0,
+     "incumbent_rank": 31,
+     "worst_rank_move": 0.0,
+     "coverage_breaches": [],
+     "within_position_rho": {
+      "QB": 0.9999999999999999,
+      "RB": 0.9999999999999999,
+      "WR": 1.0,
+      "TE": 1.0
+     }
+    },
+    "2023": {
+     "lam": 1.0,
+     "c1_ordering_ok": true,
+     "c2_placement_ok": true,
+     "c2_inactive_structural": false,
+     "c3_coverage_ok": true,
+     "admissible": true,
+     "rank": 23.0,
+     "incumbent_rank": 19,
+     "worst_rank_move": 0.0,
+     "coverage_breaches": [],
+     "within_position_rho": {
+      "QB": 1.0,
+      "RB": 1.0,
+      "WR": 1.0,
+      "TE": 1.0
+     }
+    },
+    "2024": {
+     "lam": 1.0,
+     "c1_ordering_ok": true,
+     "c2_placement_ok": true,
+     "c2_inactive_structural": false,
+     "c3_coverage_ok": true,
+     "admissible": true,
+     "rank": 22.0,
+     "incumbent_rank": 17,
+     "worst_rank_move": 0.0,
+     "coverage_breaches": [],
+     "within_position_rho": {
+      "QB": 0.9999999999999999,
+      "RB": 1.0,
+      "WR": 1.0,
+      "TE": 1.0
+     }
+    },
+    "2025": {
+     "lam": 1.0,
+     "c1_ordering_ok": true,
+     "c2_placement_ok": true,
+     "c2_inactive_structural": false,
+     "c3_coverage_ok": true,
+     "admissible": true,
+     "rank": 18.0,
+     "incumbent_rank": 14,
+     "worst_rank_move": 0.0,
+     "coverage_breaches": [],
+     "within_position_rho": {
+      "QB": 0.9999999999999999,
+      "RB": 1.0,
+      "WR": 1.0,
+      "TE": 0.9999999999999999
+     }
+    }
+   },
+   "c1_only": true,
+   "c2_only": true,
+   "c3_only": true,
+   "failing_folds": [],
+   "c2_active_folds": [
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+   ],
+   "c2_structurally_absent_folds": [
+    2013,
+    2014,
+    2015
+   ]
+  },
+  "deflation": {
+   "pbo": 0.0,
+   "n_splits": 1716,
+   "median_logit": 0.693,
+   "os_gap_pct": 0.0,
+   "os_gap_p90_pct": 0.0,
+   "contender_spread_pct": 1.18,
+   "flips": [
+    {
+     "config": "pos_const \u00b7 \u03bb=1 \u00b7 mean-match",
+     "IS-half wins": 1716,
+     "share": 1.0,
+     "full-sample IS80": 49.339,
+     "\u0394 vs best %": 0.0
+    }
+   ],
+   "n_configs": 2,
+   "dsr": 0.9995,
+   "dsr_contenders": 0.9995
+  },
+  "deflation_unrestricted_disclosure": {
+   "pbo": 0.0,
+   "n_splits": 1716,
+   "median_logit": 1.099,
+   "os_gap_pct": 0.0,
+   "os_gap_p90_pct": 0.0,
+   "contender_spread_pct": 1.51,
+   "flips": [
+    {
+     "config": "pos_affine \u00b7 \u03bb=1 \u00b7 OLS",
+     "IS-half wins": 1665,
+     "share": 0.97,
+     "full-sample IS80": 49.181,
+     "\u0394 vs best %": 0.0
+    },
+    {
+     "config": "pos_const \u00b7 \u03bb=1 \u00b7 mean-match",
+     "IS-half wins": 51,
+     "share": 0.03,
+     "full-sample IS80": 49.339,
+     "\u0394 vs best %": 0.32
+    }
+   ],
+   "n_configs": 3,
+   "note": "the search that WOULD have run had the constraints not bound \u2014 a DISCLOSURE only, gating nothing; the pre-registered PBO is over the ELIGIBLE set"
+  },
+  "pvalue": 0.0002,
+  "per_fold_delta": [
+   0.4545,
+   0.7166,
+   0.7832,
+   0.4101,
+   -0.1806,
+   0.4221,
+   0.7421,
+   0.1536,
+   0.1057,
+   0.4901,
+   1.263,
+   1.3761,
+   0.83
+  ],
+  "eligible_labels": [
+   "incumbent (NULL)",
+   "pos_const \u00b7 \u03bb=1 \u00b7 mean-match"
+  ],
+  "ineligible": [
+   {
+    "label": "pos_affine \u00b7 \u03bb=1 \u00b7 OLS",
+    "metric": 49.1812,
+    "holds_out": false,
+    "failing_folds": [
+     2013,
+     2015,
+     2016,
+     2017,
+     2019,
+     2021
+    ],
+    "c2_ok": true,
+    "c3_ok": true
+   }
+  ]
+ },
+ "per_position": {
+  "per_position": [
+   {
+    "position": "QB",
+    "incumbent_metric": 59.2997,
+    "winner": "pos_const \u00b7 \u03bb=1 \u00b7 mean-match",
+    "metric": 59.0474,
+    "delta": -0.2523,
+    "pbo": 0.2185,
+    "dsr": 0.8138,
+    "pvalue": 0.1093
+   },
+   {
+    "position": "RB",
+    "incumbent_metric": 51.7438,
+    "winner": "pos_const \u00b7 \u03bb=1 \u00b7 mean-match",
+    "metric": 50.7804,
+    "delta": -0.9634,
+    "pbo": 0.0058,
+    "dsr": 0.9982,
+    "pvalue": 0.0208
+   },
+   {
+    "position": "WR",
+    "incumbent_metric": 47.4356,
+    "winner": "pos_const \u00b7 \u03bb=1 \u00b7 mean-match",
+    "metric": 46.8,
+    "delta": -0.6356,
+    "pbo": 0.0,
+    "dsr": 1.0,
+    "pvalue": 0.0013
+   },
+   {
+    "position": "TE",
+    "incumbent_metric": 37.4341,
+    "winner": "pos_const \u00b7 \u03bb=1 \u00b7 mean-match",
+    "metric": 37.0027,
+    "delta": -0.4314,
+    "pbo": 0.0495,
+    "dsr": 0.9699,
+    "pvalue": 0.0362
+   }
+  ],
+  "bh_cutoff_unconditional": 0.025,
+  "fdr": {
+   "QB": false,
+   "RB": true,
+   "WR": true,
+   "TE": true
+  }
+ },
+ "gate_table": {
+  "ship": true,
+  "framing": "pooled",
+  "has_eligible_winner": true,
+  "recalibrates": true,
+  "beats_incumbent": true,
+  "ordering_ok_every_position": true,
+  "placement_holds_out_every_fold": true,
+  "coverage_floors_hold": true,
+  "pbo_ok": true,
+  "dsr_ok": true,
+  "significant": true
+ },
+ "deflation_disclosure": {
+  "declared_field_size": 3,
+  "declared_field_source": "NF-TR2 brief (2026-08-15): \"Pre-register the recalibration forms against matched foils, selected in-fold: per-position constant vs per-position affine (slope) vs a no-op foil.\"",
+  "n_trial_sharpes": 2,
+  "trial_sharpes": [
+   1.3261,
+   1.864
+  ],
+  "sr0_declared_field": 0.1977,
+  "dsr_declared_field": 0.9995,
+  "b3_field_sr0": 0.271,
+  "dsr_under_b3_field": 0.999,
+  "b3_recorded": {
+   "story": "NF-B3",
+   "winner": "pos_const \u00b7 infold \u03bb=0.25",
+   "dsr_whole_field": 0.8773,
+   "n_trials_in_field": 8,
+   "verdict": "RECORDED NULL \u2014 POWER_LIMITED"
+  },
+  "note": "the SAME winner, the SAME folds: the declared-field DSR is the pre-registered gate; the NF-B3-field DSR is the tax the winner would carry inside NF-B3's 11-arm heterogeneous field. Both are on this page so a narrower family cannot launder a result \u2014 whether the brief's 3-trial family is admissible is a fact about the brief (see declared_field_source), not about this run."
+ },
+ "level_gate": {
+  "L1_pooled_reduced": true,
+  "L1_detail": {
+   "incumbent": -12.850295382832726,
+   "winner": 1.4117258361110376,
+   "reduction": 0.890140592565909
+  },
+  "L2_per_position": {
+   "QB": true,
+   "RB": true,
+   "WR": true,
+   "TE": true
+  },
+  "L2_all": true,
+  "L3_no_inflation": true,
+  "L3_detail": {
+   "not_significantly_hot": true,
+   "over_scale_loses": true,
+   "pooled_se": 1.9574161313208067
+  },
+  "L4_availability_preserved": true,
+  "pass": true,
+  "se": {
+   "QB": 4.871425799779968,
+   "RB": 4.068618813320924,
+   "WR": 2.862212204740051,
+   "TE": 4.026231724009692,
+   "pooled": 1.9574161313208067
+  }
+ },
+ "rank_identity": {
+  "QB": {
+   "folds": 13,
+   "min_within_position_rho": 0.9999999999999999,
+   "delta_rho_identical": true,
+   "order_identical": true,
+   "max_abs_delta_rho_change": 0.0
+  },
+  "RB": {
+   "folds": 13,
+   "min_within_position_rho": 0.9999999999999999,
+   "delta_rho_identical": true,
+   "order_identical": true,
+   "max_abs_delta_rho_change": 0.0
+  },
+  "WR": {
+   "folds": 13,
+   "min_within_position_rho": 0.9999999999999998,
+   "delta_rho_identical": true,
+   "order_identical": true,
+   "max_abs_delta_rho_change": 0.0
+  },
+  "TE": {
+   "folds": 13,
+   "min_within_position_rho": 0.9999999999999999,
+   "delta_rho_identical": true,
+   "order_identical": true,
+   "max_abs_delta_rho_change": 0.0
+  }
+ },
+ "verdict": {
+  "ship": true,
+  "pooled_gate": {
+   "ship": true,
+   "framing": "pooled",
+   "has_eligible_winner": true,
+   "recalibrates": true,
+   "beats_incumbent": true,
+   "ordering_ok_every_position": true,
+   "placement_holds_out_every_fold": true,
+   "coverage_floors_hold": true,
+   "pbo_ok": true,
+   "dsr_ok": true,
+   "significant": true
+  },
+  "level_gate_pass": true,
+  "L5_rank_identity": true,
+  "premise_confirmed": true,
+  "miss_is_rate": true,
+  "sanity_degenerates_lose": true,
+  "oracle_respected": true,
+  "permutation_across_beaten": true,
+  "over_scale_loses": true,
+  "wide_band_loses": true,
+  "family_ceiling_respected_fixed_band": true,
+  "ceilings_order_by_capacity": true,
+  "rookie_leg_untouched": true
+ },
+ "null": null,
+ "serving": {
+  "form": "pos_const",
+  "params_2026": {
+   "QB": 0.9287565281164292,
+   "RB": 1.2479906943402788,
+   "WR": 1.1003071269200309,
+   "TE": 1.1115566369997747
+  },
+  "window": 5,
+  "fitted_on": "panel target seasons < 2026, trailing window 5 (tier top 156/season)",
+  "diffs": [
+   {
+    "board": "fastpath 2026 (nfl_fantasy_season_projections_2026)",
+    "n": 784,
+    "n_veterans": 703,
+    "per_position": [
+     {
+      "position": "QB",
+      "n_veterans": 95,
+      "mean_before": 104.72,
+      "mean_after": 97.26,
+      "level_shift_pct": -7.12,
+      "spearman_before_after": 1.0,
+      "kendall_before_after": 1.0,
+      "order_identical": true
+     },
+     {
+      "position": "RB",
+      "n_veterans": 165,
+      "mean_before": 58.16,
+      "mean_after": 72.59,
+      "level_shift_pct": 24.8,
+      "spearman_before_after": 1.0,
+      "kendall_before_after": 1.0,
+      "order_identical": true
+     },
+     {
+      "position": "WR",
+      "n_veterans": 280,
+      "mean_before": 50.87,
+      "mean_after": 55.98,
+      "level_shift_pct": 10.03,
+      "spearman_before_after": 1.0,
+      "kendall_before_after": 1.0,
+      "order_identical": true
+     },
+     {
+      "position": "TE",
+      "n_veterans": 147,
+      "mean_before": 40.14,
+      "mean_after": 44.62,
+      "level_shift_pct": 11.16,
+      "spearman_before_after": 1.0,
+      "kendall_before_after": 1.0,
+      "order_identical": true
+     }
+    ],
+    "rookies_untouched": true,
+    "top24_before": [
+     "JOSH ALLEN",
+     "JALEN HURTS",
+     "JARED GOFF",
+     "LAMAR JACKSON",
+     "DAK PRESCOTT",
+     "JUSTIN HERBERT",
+     "MATTHEW STAFFORD",
+     "TREVOR LAWRENCE",
+     "CHRISTIAN MCCAFFREY",
+     "BAKER MAYFIELD",
+     "PATRICK MAHOMES",
+     "Fernando Mendoza",
+     "CALEB WILLIAMS",
+     "BO NIX",
+     "DRAKE MAYE",
+     "JA'MARR CHASE",
+     "BIJAN ROBINSON",
+     "JONATHAN TAYLOR",
+     "AMON-RA ST. BROWN",
+     "JORDAN LOVE",
+     "JAHMYR GIBBS",
+     "JAXSON DART",
+     "PUKA NACUA",
+     "AARON RODGERS"
+    ],
+    "top24_after": [
+     "CHRISTIAN MCCAFFREY",
+     "BIJAN ROBINSON",
+     "JONATHAN TAYLOR",
+     "JAHMYR GIBBS",
+     "JOSH ALLEN",
+     "JALEN HURTS",
+     "JARED GOFF",
+     "JA'MARR CHASE",
+     "DE'VON ACHANE",
+     "LAMAR JACKSON",
+     "DAK PRESCOTT",
+     "AMON-RA ST. BROWN",
+     "JUSTIN HERBERT",
+     "Fernando Mendoza",
+     "MATTHEW STAFFORD",
+     "PUKA NACUA",
+     "TREVOR LAWRENCE",
+     "SAQUON BARKLEY",
+     "BAKER MAYFIELD",
+     "PATRICK MAHOMES",
+     "DERRICK HENRY",
+     "KYREN WILLIAMS",
+     "CALEB WILLIAMS",
+     "BO NIX"
+    ],
+    "top24_membership_stable": false
+   },
+   {
+    "board": "NF1.5 served 2026 (nf1_5_season_projections_2026)",
+    "n": 794,
+    "n_veterans": 713,
+    "per_position": [
+     {
+      "position": "QB",
+      "n_veterans": 96,
+      "mean_before": 103.77,
+      "mean_after": 96.38,
+      "level_shift_pct": -7.12,
+      "spearman_before_after": 1.0,
+      "kendall_before_after": 1.0,
+      "order_identical": true
+     },
+     {
+      "position": "RB",
+      "n_veterans": 168,
+      "mean_before": 57.04,
+      "mean_after": 71.19,
+      "level_shift_pct": 24.8,
+      "spearman_before_after": 1.0,
+      "kendall_before_after": 1.0,
+      "order_identical": true
+     },
+     {
+      "position": "WR",
+      "n_veterans": 285,
+      "mean_before": 49.85,
+      "mean_after": 54.85,
+      "level_shift_pct": 10.03,
+      "spearman_before_after": 1.0,
+      "kendall_before_after": 1.0,
+      "order_identical": true
+     },
+     {
+      "position": "TE",
+      "n_veterans": 148,
+      "mean_before": 39.71,
+      "mean_after": 44.14,
+      "level_shift_pct": 11.16,
+      "spearman_before_after": 1.0,
+      "kendall_before_after": 1.0,
+      "order_identical": true
+     }
+    ],
+    "rookies_untouched": true,
+    "top24_before": [
+     "JOSH ALLEN",
+     "LAMAR JACKSON",
+     "DRAKE MAYE",
+     "JOE BURROW",
+     "JAYDEN DANIELS",
+     "JALEN HURTS",
+     "CALEB WILLIAMS",
+     "JUSTIN HERBERT",
+     "JAHMYR GIBBS",
+     "TREVOR LAWRENCE",
+     "DAK PRESCOTT",
+     "JAXSON DART",
+     "Fernando Mendoza",
+     "BROCK PURDY",
+     "PATRICK MAHOMES",
+     "JA'MARR CHASE",
+     "CHRISTIAN MCCAFFREY",
+     "BIJAN ROBINSON",
+     "PUKA NACUA",
+     "BO NIX",
+     "MATTHEW STAFFORD",
+     "JONATHAN TAYLOR",
+     "AMON-RA ST. BROWN",
+     "JARED GOFF"
+    ],
+    "top24_after": [
+     "JAHMYR GIBBS",
+     "CHRISTIAN MCCAFFREY",
+     "BIJAN ROBINSON",
+     "JONATHAN TAYLOR",
+     "JOSH ALLEN",
+     "LAMAR JACKSON",
+     "DRAKE MAYE",
+     "JA'MARR CHASE",
+     "ASHTON JEANTY",
+     "JOE BURROW",
+     "JAYDEN DANIELS",
+     "PUKA NACUA",
+     "JALEN HURTS",
+     "Fernando Mendoza",
+     "CALEB WILLIAMS",
+     "AMON-RA ST. BROWN",
+     "JUSTIN HERBERT",
+     "DE'VON ACHANE",
+     "TREVOR LAWRENCE",
+     "DAK PRESCOTT",
+     "JAXSON DART",
+     "JAMES COOK III",
+     "CHASE BROWN",
+     "BROCK PURDY"
+    ],
+    "top24_membership_stable": false
+   }
+  ],
+  "refit_vs_fixed": {
+   "crps_refit": 49.3394,
+   "crps_fixed": 49.3394,
+   "cov80_refit": 0.8343,
+   "cov80_fixed": 0.8343,
+   "cov80_incumbent": 0.8333,
+   "band_fallback_rows_frac": 0.0
+  }
+ },
+ "registry_action": {
+  "registry": "betting_ml/models/model_family_registry.yaml (NF-G0)",
+  "action": "STAGE a challenger \u2014 level_model_version \u2192 nfl_fantasy_nf_tr2b_veteran_level_v1 (operator, post-merge, via the NF-G0 publish flow)"
+ }
+}
