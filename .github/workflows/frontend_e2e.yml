@@ -103,6 +103,15 @@ concurrency:
 defaults:
   run:
     working-directory: frontend
+    # ⚠️ E9.66 — LOAD-BEARING INSIDE A CONTAINER, and it cost this story a CI cycle to learn.
+    # A `run:` step on a normal runner defaults to `bash`, but a step inside a `container:` defaults
+    # to **`sh`** (dash), because the runner cannot assume the image has bash. Every bash-ism is
+    # then a syntax error at the first line: the pin guard below opens `set -euo pipefail`, and dash
+    # answered `Illegal option -o pipefail` and exited 2 — so the guard reported a browser mismatch
+    # it had never actually looked for. It failed CLOSED, which is the right direction, but the
+    # message named the wrong cause. Declaring the shell once here removes the discrepancy for every
+    # step in the workflow rather than leaving it as a trap for the next multi-line script.
+    shell: bash
 
 jobs:
   e2e:
@@ -265,8 +274,21 @@ jobs:
           pattern: blob-report-*
           merge-multiple: true
 
+      # ⚠️ A shard can fail BEFORE it runs a single test — a bad build, or the pin guard above — and
+      # then there is no blob report to merge. `merge-reports` treats an empty directory as an
+      # error, which would post a SECOND red job whose only content is "there was nothing to
+      # merge": noise stacked on top of the real failure, and noise that points away from it. Say
+      # so and exit clean; the shard's own red is the finding.
       - name: Merge into one html report
-        run: npx playwright merge-reports --reporter html ./all-blob-reports
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          reports=(./all-blob-reports/*)
+          if [ ${#reports[@]} -eq 0 ]; then
+            echo "::notice::No blob reports were produced — the shards failed before running any tests. See the shard jobs."
+            exit 0
+          fi
+          npx playwright merge-reports --reporter html ./all-blob-reports
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
