@@ -158,33 +158,39 @@ test.describe("the report is built from the served board", () => {
     // The drafted fixture is built so the bench and trade sections have real content (see
     // `E2E_DRAFTED_LEAGUE`). Asserting the CONTENT rather than the container is what stops this
     // passing against a report whose every section rendered its "nothing to say" branch.
+    // ⚠️ `expect.poll` rather than a bare `count()` — see the bye-week test for why a non-retrying
+    // count is the assertion that passes locally and fails on a shared CI runner.
     await expect(page.getByTestId("bench-summary")).toBeVisible()
-    expect(await page.getByTestId("position-row-RB").count()).toBe(1)
-    expect(await page.getByTestId("lineup-row").count()).toBeGreaterThan(5)
+    await expect(page.getByTestId("position-row-RB")).toHaveCount(1)
+    await expect.poll(() => page.getByTestId("lineup-row").count()).toBeGreaterThan(5)
   })
 
   test("the bye-week table costs a week the roster actually has off", async ({ page }) => {
     await openReport(page, { groups: FREE.groups })
 
-    const rows = page.locator('[data-testid^="bye-week-"]')
-    const count = await rows.count()
-    expect(count, "no bye weeks rendered — the fixture roster carries real bye numbers").toBeGreaterThan(0)
+    // ⚠️ `locator.count()` DOES NOT AUTO-RETRY, unlike an `expect(locator)` assertion. The first cut
+    // read it straight after `goto` and passed locally while failing on CI, where two workers share
+    // a runner and the report was still on its `LoadingBlock` when the count was taken — "no bye
+    // weeks rendered" is what an un-settled page and a genuinely broken bye table both look like.
+    // Waiting on the report and polling the count separates them.
+    await expect(page.getByTestId("roster-report")).toBeVisible()
+    await expect
+      .poll(
+        () => page.locator('[data-testid^="bye-week-"]').count(),
+        { message: "no bye weeks rendered — the fixture roster carries real bye numbers" },
+      )
+      .toBeGreaterThan(0)
 
     // A bye cost is a LOSS, so it can never be negative; and at least one week must cost something,
     // or the re-fill is not actually removing anybody (a lineup re-filled from the same pool
     // returns the same total and the whole section is decorative).
-    const costs = await columnValues(page, `bye-cost-${(await firstByeWeek(page))}`)
-    for (const c of costs) expect(c).toBeGreaterThanOrEqual(0)
     const all = await page.locator('[data-testid^="bye-cost-"]').allInnerTexts()
     const numeric = all.map((t) => Number(t.trim())).filter((v) => Number.isFinite(v))
+    expect(numeric.length, `no bye costs rendered: ${all.join(", ")}`).toBeGreaterThan(0)
+    for (const c of numeric) expect(c).toBeGreaterThanOrEqual(0)
     expect(numeric.some((v) => v > 0), `every bye week costs 0: ${all.join(", ")}`).toBe(true)
   })
 })
-
-async function firstByeWeek(page: Page): Promise<string> {
-  const id = await page.locator('[data-testid^="bye-week-"]').first().getAttribute("data-testid")
-  return (id ?? "bye-week-0").replace("bye-week-", "")
-}
 
 test.describe("the four empty states are four different messages", () => {
   test("no saved league at all", async ({ page }) => {
@@ -255,7 +261,7 @@ test.describe("the four empty states are four different messages", () => {
     await expect(page.getByTestId("roster-report")).toBeVisible()
     await expect(page.getByTestId("team-total")).toBeVisible()
     await expect(page.getByTestId("bye-conflicts")).toContainText("No bye weeks are known")
-    expect(await page.locator('[data-testid^="bye-week-"]').count()).toBe(0)
+    await expect(page.locator('[data-testid^="bye-week-"]')).toHaveCount(0)
     await expectNoNaN(page)
   })
 
