@@ -2196,21 +2196,22 @@ def _game_features_wrapper_sql() -> str:
     parquet silently diverge. Pinned by
     betting_ml/tests/test_w8b_wrapper_seasonnorm_parity.py.
 
-    🩸 KNOWN DEFECT (diagnosed E9.53 2026-07-30; FIX DEFERRED TO E1.12, which retrains):
-    the bare `coalesce(..., 0)` below cannot distinguish a missing/zero-variance BASELINE (where
-    z=0 is correct and intended) from a missing RAW FEATURE (where z=0 is a FABRICATED "exactly
-    league average" served in place of "we don't know"). Consequence: a _seasonnorm column reads
-    100% NOT-NULL straight through a TOTAL outage of its own block — which is why the 07-22..07-28
-    team_sequential outage LOOKED like the raw and _seasonnorm columns came from different paths;
-    THIS COALESCE IS THE ENTIRE DIFFERENCE. It also permanently dilutes
-    predict_today.discriminative_coverage (a never-NULL column can never be flagged imputed).
-    ⛔ Do NOT change it here alone: it is a SERVED model input, so it needs the E1.12 retrain.
-    Full rationale + the exact E1.12 steps are in the matching comment in
-    dbt/models/feature/feature_pregame_game_features.sql.
+    ✅ E1.13 (2026-08-14) — the E9.53 seasonnorm NULL CURE is APPLIED (was the "KNOWN DEFECT /
+    deferred to E1.12" note). A missing RAW feature now carries NULL through to the _seasonnorm
+    column (routed to the model's imputer + counted by discriminative_coverage) instead of being
+    served as a fabricated 0.0 ("exactly league average"). The coalesce-to-0 is KEPT for the two
+    cases where 0 is correct and intended: a missing/zero-variance BASELINE with a present raw
+    (a regime-neutral matchup — the documented Story 27.7 behaviour). Consequences to know:
+    the _seasonnorm columns are now genuinely nullable (a whole-block outage is visible in them,
+    not masked), and the is_degraded rate RISES once genuinely-missing core features stop
+    counting as present — re-baseline it after the --full-refresh rebuild (this is a historical
+    correction: the change reaches every row whose raw was absent, throughout all history).
     """
     cc = _contact_quality_columns()
     sn = ",\n    ".join(
-        f"coalesce((raw.{c} - b.{c}__mu) / nullif(b.{c}__sd, 0), 0)::double as {c}_seasonnorm"
+        f"(case when raw.{c} is null then null "
+        f"else coalesce((raw.{c} - b.{c}__mu) / nullif(b.{c}__sd, 0), 0) end)"
+        f"::double as {c}_seasonnorm"
         for c in cc)
     return (
         f"select\n    raw.*,\n    {sn}\n"

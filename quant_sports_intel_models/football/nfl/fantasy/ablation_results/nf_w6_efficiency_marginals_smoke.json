@@ -1,0 +1,3902 @@
+{
+  "generated_at": "2026-08-14T19:36:01+00:00",
+  "story": "NF-W6",
+  "smoke": true,
+  "runtime_seconds": 1024.6,
+  "selection_metric": "crps_q199",
+  "n_folds": 2,
+  "fold_labels": [
+    "2025H1",
+    "2025H2"
+  ],
+  "n_rows": 84553,
+  "matrix_key": "57c4cf96bb3c3570",
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 84553,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "td_attach_audit": {
+    "n_rows": 84553,
+    "feed_dup_keys": 0,
+    "passing_tds_total": 8000.0,
+    "passing_tds_filled_zero_rows": 26835,
+    "rushing_tds_total": 4720.0,
+    "rushing_tds_filled_zero_rows": 26835,
+    "receiving_tds_total": 7969.0,
+    "receiving_tds_filled_zero_rows": 26835
+  },
+  "preregistration": {
+    "position_stats": {
+      "QB": [
+        "passing_yards",
+        "passing_tds",
+        "rushing_yards",
+        "rushing_tds"
+      ],
+      "RB": [
+        "rushing_yards",
+        "rushing_tds",
+        "receiving_yards",
+        "receiving_tds"
+      ],
+      "WR": [
+        "receiving_yards",
+        "receiving_tds"
+      ],
+      "TE": [
+        "receiving_yards",
+        "receiving_tds"
+      ]
+    },
+    "incumbent_forms": [
+      "inc_head_bank",
+      "inc_climatology"
+    ],
+    "oracle_forms": [
+      "inc_climatology",
+      "inc_head_bank",
+      "cand_lgbm_quantile"
+    ],
+    "anchors": [
+      "nihilist_zero",
+      "zero_width",
+      "max_width",
+      "oracle__inc_climatology",
+      "oracle__inc_head_bank",
+      "oracle__cand_lgbm_quantile",
+      "matched_n__inc_climatology",
+      "matched_n__inc_head_bank",
+      "matched_n__cand_lgbm_quantile"
+    ],
+    "primary_metric": "crps_q199",
+    "crossfit_k": 3,
+    "ceiling_bands": [
+      2.0,
+      5.0
+    ],
+    "min_bank_rows": 50,
+    "min_tail_n": 10,
+    "fit_levels": [
+      0.05,
+      0.1,
+      0.25,
+      0.4,
+      0.5,
+      0.6,
+      0.75,
+      0.9,
+      0.95
+    ],
+    "test_blocks": [
+      [
+        2022,
+        1
+      ],
+      [
+        2022,
+        2
+      ],
+      [
+        2023,
+        1
+      ],
+      [
+        2023,
+        2
+      ],
+      [
+        2024,
+        1
+      ],
+      [
+        2024,
+        2
+      ],
+      [
+        2025,
+        1
+      ],
+      [
+        2025,
+        2
+      ]
+    ],
+    "purge_weeks": 2,
+    "fdr_q": 0.1,
+    "fdr_families": {
+      "yards": [
+        "w6_ceiling_QB|passing_yards",
+        "w6_ceiling_QB|rushing_yards",
+        "w6_ceiling_RB|rushing_yards",
+        "w6_ceiling_RB|receiving_yards",
+        "w6_ceiling_WR|receiving_yards",
+        "w6_ceiling_TE|receiving_yards"
+      ],
+      "tds": [
+        "w6_ceiling_QB|passing_tds",
+        "w6_ceiling_QB|rushing_tds",
+        "w6_ceiling_RB|rushing_tds",
+        "w6_ceiling_RB|receiving_tds",
+        "w6_ceiling_WR|receiving_tds",
+        "w6_ceiling_TE|receiving_tds"
+      ]
+    },
+    "capture_era_folds": [
+      "2025H1",
+      "2025H2"
+    ],
+    "features": [
+      "game_context__is_home",
+      "game_context__div_game",
+      "game_context__week_index",
+      "game_context__days_since_last_game",
+      "prior_week_box__ppr_l1",
+      "prior_week_box__ppr_l4_mean",
+      "prior_week_box__ppr_ewm",
+      "prior_week_box__ppr_s2d_mean",
+      "prior_week_box__targets_l4",
+      "prior_week_box__carries_l4",
+      "prior_week_box__attempts_l4",
+      "prior_week_box__receptions_l4",
+      "prior_week_box__rec_yards_l4",
+      "prior_week_box__rush_yards_l4",
+      "prior_week_box__pass_yards_l4",
+      "prior_week_box__played_share_l4",
+      "prior_week_box__games_s2d",
+      "prior_week_box__ppr_sum_s2d",
+      "snap_share__l1",
+      "snap_share__l4_mean",
+      "snap_share__observed_l4",
+      "team_environment__pass_att_l4",
+      "team_environment__rush_att_l4",
+      "team_environment__ppr_l4",
+      "opponent_matchup__dvp_ppr_index_l8",
+      "opponent_matchup__def_ppr_allowed_l8",
+      "prior_season_priors__ppg_prior",
+      "prior_season_priors__games_prior",
+      "prior_season_priors__rookie_flag"
+    ],
+    "seed": 20260814
+  },
+  "fold_results": [
+    {
+      "label": "2025H1",
+      "n_test": 4308,
+      "cells": {
+        "QB|passing_yards": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 36.46032022193766,
+              "coverage_80": 0.7913561847988078,
+              "pred_p0": 0.26985898194399716,
+              "real_p0": 0.5514157973174366,
+              "n": 671
+            },
+            "inc_climatology": {
+              "crps_q199": 61.34052107819274,
+              "coverage_80": 0.9344262295081968,
+              "pred_p0": 0.5628140703517587,
+              "real_p0": 0.5514157973174366,
+              "n": 671
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 61.21644678684032,
+              "coverage_80": 0.9016393442622951,
+              "pred_p0": 0.5527638190954773,
+              "real_p0": 0.5514157973174366,
+              "n": 671
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 37.53323207347843,
+              "coverage_80": 0.8002980625931445,
+              "pred_p0": 0.2500131057672865,
+              "real_p0": 0.5514157973174366,
+              "n": 671
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 61.28902831781859,
+              "coverage_80": 0.9180327868852459,
+              "pred_p0": 0.5477386934673367,
+              "real_p0": 0.5514157973174366,
+              "n": 671
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 39.97250854954226,
+              "coverage_80": 0.639344262295082,
+              "pred_p0": 0.23854743164406234,
+              "real_p0": 0.5514157973174366,
+              "n": 671
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 33.18727514281916,
+              "coverage_80": 0.7526080476900149,
+              "pred_p0": 0.3114529428064315,
+              "real_p0": 0.5514157973174366,
+              "n": 671
+            },
+            "nihilist_zero": {
+              "crps_q199": 92.80029806259314,
+              "coverage_80": 0.5514157973174366,
+              "pred_p0": 1.0,
+              "real_p0": 0.5514157973174366,
+              "n": 671
+            },
+            "zero_width": {
+              "crps_q199": 44.2050675368957,
+              "coverage_80": 0.0,
+              "pred_p0": 0.3144560357675112,
+              "real_p0": 0.5514157973174366,
+              "n": 671
+            },
+            "max_width": {
+              "crps_q199": 44.55027042179929,
+              "coverage_80": 0.9806259314456036,
+              "pred_p0": 0.30847980588486396,
+              "real_p0": 0.5514157973174366,
+              "n": 671
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 30.92341332356815,
+              "coverage_80": 0.7839046199701938,
+              "pred_p0": 0.3200128810969901,
+              "real_p0": 0.5514157973174366,
+              "n": 671
+            }
+          },
+          "tail_note": {
+            "beta_hi": 62.81592594244525,
+            "beta_lo": 34.0401541594333,
+            "n_hi": 62,
+            "n_lo": 36,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "cal_split": {
+            "n_train": 74849,
+            "n_core": 58687,
+            "n_cal": 15161,
+            "cal_gw_min": 123,
+            "cal_gw_max": 154
+          }
+        },
+        "QB|passing_tds": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 0.40052785011212366,
+              "coverage_80": 0.7839046199701938,
+              "pred_p0": 0.33004815433351553,
+              "real_p0": 0.6676602086438153,
+              "n": 671
+            },
+            "inc_climatology": {
+              "crps_q199": 0.48540998584577133,
+              "coverage_80": 0.9180327868852459,
+              "pred_p0": 0.6834170854271359,
+              "real_p0": 0.6676602086438153,
+              "n": 671
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 0.484817006043631,
+              "coverage_80": 0.9180327868852459,
+              "pred_p0": 0.6683417085427134,
+              "real_p0": 0.6676602086438153,
+              "n": 671
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 0.4274774860276956,
+              "coverage_80": 0.8002980625931445,
+              "pred_p0": 0.32288117188026566,
+              "real_p0": 0.6676602086438153,
+              "n": 671
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 0.4850553812280478,
+              "coverage_80": 0.9180327868852459,
+              "pred_p0": 0.6783919597989951,
+              "real_p0": 0.6676602086438153,
+              "n": 671
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 0.4602500869395086,
+              "coverage_80": 0.6602086438152012,
+              "pred_p0": 0.21385616607628305,
+              "real_p0": 0.6676602086438153,
+              "n": 671
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 0.3533347425840123,
+              "coverage_80": 0.7421758569299552,
+              "pred_p0": 0.3835870859513664,
+              "real_p0": 0.6676602086438153,
+              "n": 671
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.6378539493293591,
+              "coverage_80": 0.6676602086438153,
+              "pred_p0": 1.0,
+              "real_p0": 0.6676602086438153,
+              "n": 671
+            },
+            "zero_width": {
+              "crps_q199": 0.4757909493924556,
+              "coverage_80": 0.0,
+              "pred_p0": 0.33979135618479883,
+              "real_p0": 0.6676602086438153,
+              "n": 671
+            },
+            "max_width": {
+              "crps_q199": 0.4667781507598219,
+              "coverage_80": 0.9880774962742176,
+              "pred_p0": 0.3544698155456867,
+              "real_p0": 0.6676602086438153,
+              "n": 671
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 0.3420215403480721,
+              "coverage_80": 0.8107302533532041,
+              "pred_p0": 0.41098188408510505,
+              "real_p0": 0.6676602086438153,
+              "n": 671
+            }
+          },
+          "tail_note": {
+            "beta_hi": 0.8125457612223302,
+            "beta_lo": 0.026025255788168545,
+            "n_hi": 57,
+            "n_lo": 24,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "cal_split": {
+            "n_train": 74849,
+            "n_core": 58687,
+            "n_cal": 15161,
+            "cal_gw_min": 123,
+            "cal_gw_max": 154
+          }
+        },
+        "QB|rushing_yards": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 5.689370857398182,
+              "coverage_80": 0.7943368107302533,
+              "pred_p0": 0.3126961184461803,
+              "real_p0": 0.5767511177347243,
+              "n": 671
+            },
+            "inc_climatology": {
+              "crps_q199": 6.357846443469209,
+              "coverage_80": 0.8092399403874814,
+              "pred_p0": 0.6733668341708544,
+              "real_p0": 0.5767511177347243,
+              "n": 671
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 6.3176497914310765,
+              "coverage_80": 0.8464977645305514,
+              "pred_p0": 0.6331658291457287,
+              "real_p0": 0.5767511177347243,
+              "n": 671
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 6.274434459626305,
+              "coverage_80": 0.8002980625931445,
+              "pred_p0": 0.3507178215968067,
+              "real_p0": 0.5767511177347243,
+              "n": 671
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 6.3215691067109026,
+              "coverage_80": 0.8390461997019374,
+              "pred_p0": 0.6381909547738694,
+              "real_p0": 0.5767511177347243,
+              "n": 671
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 6.449253133163124,
+              "coverage_80": 0.6527570789865872,
+              "pred_p0": 0.28201364497599773,
+              "real_p0": 0.5767511177347243,
+              "n": 671
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 4.802498388375628,
+              "coverage_80": 0.7809239940387481,
+              "pred_p0": 0.3841787177317287,
+              "real_p0": 0.5767511177347243,
+              "n": 671
+            },
+            "nihilist_zero": {
+              "crps_q199": 7.783904619970194,
+              "coverage_80": 0.5767511177347243,
+              "pred_p0": 1.0,
+              "real_p0": 0.5767511177347243,
+              "n": 671
+            },
+            "zero_width": {
+              "crps_q199": 6.757047303518224,
+              "coverage_80": 0.0,
+              "pred_p0": 0.2786885245901639,
+              "real_p0": 0.5767511177347243,
+              "n": 671
+            },
+            "max_width": {
+              "crps_q199": 6.579542290720978,
+              "coverage_80": 0.96274217585693,
+              "pred_p0": 0.36084296295186813,
+              "real_p0": 0.5767511177347243,
+              "n": 671
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 4.839648568274843,
+              "coverage_80": 0.7704918032786885,
+              "pred_p0": 0.3376270323300556,
+              "real_p0": 0.5767511177347243,
+              "n": 671
+            }
+          },
+          "tail_note": {
+            "beta_hi": 10.391297567232993,
+            "beta_lo": 2.012340971699947,
+            "n_hi": 43,
+            "n_lo": 49,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "cal_split": {
+            "n_train": 74849,
+            "n_core": 58687,
+            "n_cal": 15161,
+            "cal_gw_min": 123,
+            "cal_gw_max": 154
+          }
+        },
+        "RB|rushing_yards": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 11.996830035378439,
+              "coverage_80": 0.8135593220338984,
+              "pred_p0": 0.24939196926250837,
+              "real_p0": 0.4133709981167608,
+              "n": 1062
+            },
+            "inc_climatology": {
+              "crps_q199": 16.301142776027028,
+              "coverage_80": 0.891713747645951,
+              "pred_p0": 0.4371859296482414,
+              "real_p0": 0.4133709981167608,
+              "n": 1062
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 16.284470356963727,
+              "coverage_80": 0.8888888888888888,
+              "pred_p0": 0.42713567839195987,
+              "real_p0": 0.4133709981167608,
+              "n": 1062
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 13.233614478382213,
+              "coverage_80": 0.7984934086629002,
+              "pred_p0": 0.2658726778903936,
+              "real_p0": 0.4133709981167608,
+              "n": 1062
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 16.302239355913276,
+              "coverage_80": 0.9011299435028248,
+              "pred_p0": 0.40703517587939686,
+              "real_p0": 0.4133709981167608,
+              "n": 1062
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 13.34809571209581,
+              "coverage_80": 0.632768361581921,
+              "pred_p0": 0.22538303570583615,
+              "real_p0": 0.4133709981167608,
+              "n": 1062
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 11.136778888503462,
+              "coverage_80": 0.7071563088512242,
+              "pred_p0": 0.22450766071411674,
+              "real_p0": 0.4133709981167608,
+              "n": 1062
+            },
+            "nihilist_zero": {
+              "crps_q199": 23.32297551789077,
+              "coverage_80": 0.4133709981167608,
+              "pred_p0": 1.0,
+              "real_p0": 0.4133709981167608,
+              "n": 1062
+            },
+            "zero_width": {
+              "crps_q199": 14.809287625120794,
+              "coverage_80": 0.0,
+              "pred_p0": 0.15725047080979285,
+              "real_p0": 0.4133709981167608,
+              "n": 1062
+            },
+            "max_width": {
+              "crps_q199": 15.239617401615424,
+              "coverage_80": 0.9868173258003766,
+              "pred_p0": 0.336910541407603,
+              "real_p0": 0.4133709981167608,
+              "n": 1062
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 11.359926834303652,
+              "coverage_80": 0.7278719397363466,
+              "pred_p0": 0.18461895163198289,
+              "real_p0": 0.4133709981167608,
+              "n": 1062
+            }
+          },
+          "tail_note": {
+            "beta_hi": 25.930841689622568,
+            "beta_lo": 3.547327453448004,
+            "n_hi": 105,
+            "n_lo": 60,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "cal_split": {
+            "n_train": 74849,
+            "n_core": 58687,
+            "n_cal": 15161,
+            "cal_gw_min": 123,
+            "cal_gw_max": 154
+          }
+        },
+        "QB|rushing_tds": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 0.10941272649051813,
+              "coverage_80": 0.8077496274217586,
+              "pred_p0": 0.40779905488695334,
+              "real_p0": 0.9314456035767511,
+              "n": 671
+            },
+            "inc_climatology": {
+              "crps_q199": 0.07753439327786472,
+              "coverage_80": 0.9314456035767511,
+              "pred_p0": 0.9396984924623116,
+              "real_p0": 0.9314456035767511,
+              "n": 671
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 0.0774643710355054,
+              "coverage_80": 0.9314456035767511,
+              "pred_p0": 0.9346733668341709,
+              "real_p0": 0.9314456035767511,
+              "n": 671
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 0.11728805646808865,
+              "coverage_80": 0.8315946348733234,
+              "pred_p0": 0.507410375274285,
+              "real_p0": 0.9314456035767511,
+              "n": 671
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 0.0774643710355054,
+              "coverage_80": 0.9314456035767511,
+              "pred_p0": 0.9346733668341709,
+              "real_p0": 0.9314456035767511,
+              "n": 671
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 0.11299868684917165,
+              "coverage_80": 0.7421758569299552,
+              "pred_p0": 0.4575785035460462,
+              "real_p0": 0.9314456035767511,
+              "n": 671
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 0.07760549764842882,
+              "coverage_80": 0.9344262295081968,
+              "pred_p0": 0.6229882647215211,
+              "real_p0": 0.9314456035767511,
+              "n": 671
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.08196721311475409,
+              "coverage_80": 0.9314456035767511,
+              "pred_p0": 1.0,
+              "real_p0": 0.9314456035767511,
+              "n": 671
+            },
+            "zero_width": {
+              "crps_q199": 0.12791894897918513,
+              "coverage_80": 0.0,
+              "pred_p0": 0.4113263785394933,
+              "real_p0": 0.9314456035767511,
+              "n": 671
+            },
+            "max_width": {
+              "crps_q199": 0.1278857379325624,
+              "coverage_80": 0.9195230998509687,
+              "pred_p0": 0.42323390424551965,
+              "real_p0": 0.9314456035767511,
+              "n": 671
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 0.07717758807701908,
+              "coverage_80": 0.9388971684053651,
+              "pred_p0": 0.6396513117000802,
+              "real_p0": 0.9314456035767511,
+              "n": 671
+            }
+          },
+          "tail_note": {
+            "beta_hi": 0.6684384243873619,
+            "beta_lo": 0.0,
+            "n_hi": 34,
+            "n_lo": 0,
+            "thin_hi": false,
+            "thin_lo": true
+          },
+          "cal_split": {
+            "n_train": 74849,
+            "n_core": 58687,
+            "n_cal": 15161,
+            "cal_gw_min": 123,
+            "cal_gw_max": 154
+          }
+        },
+        "RB|rushing_tds": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 0.19894611761746003,
+              "coverage_80": 0.7871939736346516,
+              "pred_p0": 0.3971363408378995,
+              "real_p0": 0.8653483992467044,
+              "n": 1062
+            },
+            "inc_climatology": {
+              "crps_q199": 0.15118398016447587,
+              "coverage_80": 0.9698681732580038,
+              "pred_p0": 0.8693467336683416,
+              "real_p0": 0.8653483992467044,
+              "n": 1062
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 0.15118375493285635,
+              "coverage_80": 0.9698681732580038,
+              "pred_p0": 0.8693467336683416,
+              "real_p0": 0.8653483992467044,
+              "n": 1062
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 0.201859649283194,
+              "coverage_80": 0.7984934086629002,
+              "pred_p0": 0.4269511398801919,
+              "real_p0": 0.8653483992467044,
+              "n": 1062
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 0.1514840681751507,
+              "coverage_80": 0.9698681732580038,
+              "pred_p0": 0.8492462311557788,
+              "real_p0": 0.8653483992467044,
+              "n": 1062
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 0.19629039222067726,
+              "coverage_80": 0.6977401129943502,
+              "pred_p0": 0.3885765929458971,
+              "real_p0": 0.8653483992467044,
+              "n": 1062
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 0.14748619718700276,
+              "coverage_80": 0.8822975517890772,
+              "pred_p0": 0.5099035667982095,
+              "real_p0": 0.8653483992467044,
+              "n": 1062
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.1694915254237288,
+              "coverage_80": 0.8653483992467044,
+              "pred_p0": 1.0,
+              "real_p0": 0.8653483992467044,
+              "n": 1062
+            },
+            "zero_width": {
+              "crps_q199": 0.2361257971870963,
+              "coverage_80": 0.0,
+              "pred_p0": 0.3785310734463277,
+              "real_p0": 0.8653483992467044,
+              "n": 1062
+            },
+            "max_width": {
+              "crps_q199": 0.2381466106382891,
+              "coverage_80": 0.9887005649717514,
+              "pred_p0": 0.41708542713567837,
+              "real_p0": 0.8653483992467044,
+              "n": 1062
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 0.14759040297115827,
+              "coverage_80": 0.9030131826741996,
+              "pred_p0": 0.5398934408388457,
+              "real_p0": 0.8653483992467044,
+              "n": 1062
+            }
+          },
+          "tail_note": {
+            "beta_hi": 0.6563902947809218,
+            "beta_lo": 0.0,
+            "n_hi": 81,
+            "n_lo": 0,
+            "thin_hi": false,
+            "thin_lo": true
+          },
+          "cal_split": {
+            "n_train": 74849,
+            "n_core": 58687,
+            "n_cal": 15161,
+            "cal_gw_min": 123,
+            "cal_gw_max": 154
+          }
+        },
+        "RB|receiving_yards": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 5.86132594713096,
+              "coverage_80": 0.8013182674199624,
+              "pred_p0": 0.27941496560012874,
+              "real_p0": 0.5489642184557438,
+              "n": 1062
+            },
+            "inc_climatology": {
+              "crps_q199": 6.467710019021662,
+              "coverage_80": 0.8926553672316384,
+              "pred_p0": 0.5628140703517588,
+              "real_p0": 0.5489642184557438,
+              "n": 1062
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 6.445214671284861,
+              "coverage_80": 0.8747645951035782,
+              "pred_p0": 0.5728643216080403,
+              "real_p0": 0.5489642184557438,
+              "n": 1062
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 6.4087492760848175,
+              "coverage_80": 0.7984934086629002,
+              "pred_p0": 0.3265669212351778,
+              "real_p0": 0.5489642184557438,
+              "n": 1062
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 6.461250166084661,
+              "coverage_80": 0.8926553672316384,
+              "pred_p0": 0.5628140703517588,
+              "real_p0": 0.5489642184557438,
+              "n": 1062
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 7.160381817563582,
+              "coverage_80": 0.5725047080979284,
+              "pred_p0": 0.21476497364411512,
+              "real_p0": 0.5489642184557438,
+              "n": 1062
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 5.4013877028830235,
+              "coverage_80": 0.7306967984934086,
+              "pred_p0": 0.24809073616670924,
+              "real_p0": 0.5489642184557438,
+              "n": 1062
+            },
+            "nihilist_zero": {
+              "crps_q199": 8.22316384180791,
+              "coverage_80": 0.5489642184557438,
+              "pred_p0": 1.0,
+              "real_p0": 0.5489642184557438,
+              "n": 1062
+            },
+            "zero_width": {
+              "crps_q199": 7.231866486761945,
+              "coverage_80": 0.0,
+              "pred_p0": 0.19962335216572505,
+              "real_p0": 0.5489642184557438,
+              "n": 1062
+            },
+            "max_width": {
+              "crps_q199": 7.491895462427025,
+              "coverage_80": 0.987758945386064,
+              "pred_p0": 0.36687202490796733,
+              "real_p0": 0.5489642184557438,
+              "n": 1062
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 5.214123492615977,
+              "coverage_80": 0.7429378531073446,
+              "pred_p0": 0.24386527742289604,
+              "real_p0": 0.5489642184557438,
+              "n": 1062
+            }
+          },
+          "tail_note": {
+            "beta_hi": 13.013387968257026,
+            "beta_lo": 1.8729300650612608,
+            "n_hi": 89,
+            "n_lo": 63,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "cal_split": {
+            "n_train": 74849,
+            "n_core": 58687,
+            "n_cal": 15161,
+            "cal_gw_min": 123,
+            "cal_gw_max": 154
+          }
+        },
+        "WR|receiving_yards": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 13.18885605044927,
+              "coverage_80": 0.8036047234307023,
+              "pred_p0": 0.22852922162084505,
+              "real_p0": 0.4139216904909882,
+              "n": 1609
+            },
+            "inc_climatology": {
+              "crps_q199": 16.489791776783235,
+              "coverage_80": 0.9042883778744562,
+              "pred_p0": 0.40703517587939686,
+              "real_p0": 0.4139216904909882,
+              "n": 1609
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 16.460404678457547,
+              "coverage_80": 0.891858297078931,
+              "pred_p0": 0.422110552763819,
+              "real_p0": 0.4139216904909882,
+              "n": 1609
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 13.98391215505003,
+              "coverage_80": 0.7998756991920447,
+              "pred_p0": 0.24165263858134672,
+              "real_p0": 0.4139216904909882,
+              "n": 1609
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 16.48244695884644,
+              "coverage_80": 0.90863890615289,
+              "pred_p0": 0.40703517587939686,
+              "real_p0": 0.4139216904909882,
+              "n": 1609
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 14.762894397489285,
+              "coverage_80": 0.5394655065257924,
+              "pred_p0": 0.14853009609889098,
+              "real_p0": 0.4139216904909882,
+              "n": 1609
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 12.27565142632277,
+              "coverage_80": 0.6532007458048478,
+              "pred_p0": 0.15578514074411834,
+              "real_p0": 0.4139216904909882,
+              "n": 1609
+            },
+            "nihilist_zero": {
+              "crps_q199": 24.46985705407085,
+              "coverage_80": 0.4139216904909882,
+              "pred_p0": 1.0,
+              "real_p0": 0.4139216904909882,
+              "n": 1609
+            },
+            "zero_width": {
+              "crps_q199": 16.874798362648015,
+              "coverage_80": 0.0,
+              "pred_p0": 0.16904909881914232,
+              "real_p0": 0.4139216904909882,
+              "n": 1609
+            },
+            "max_width": {
+              "crps_q199": 16.99402295248167,
+              "coverage_80": 0.9968924798011187,
+              "pred_p0": 0.3271453601131824,
+              "real_p0": 0.4139216904909882,
+              "n": 1609
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 12.512538838566348,
+              "coverage_80": 0.6650093225605966,
+              "pred_p0": 0.15427666611491267,
+              "real_p0": 0.4139216904909882,
+              "n": 1609
+            }
+          },
+          "tail_note": {
+            "beta_hi": 23.70037180017104,
+            "beta_lo": 3.35518560361162,
+            "n_hi": 192,
+            "n_lo": 144,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "cal_split": {
+            "n_train": 74849,
+            "n_core": 58687,
+            "n_cal": 15161,
+            "cal_gw_min": 123,
+            "cal_gw_max": 154
+          }
+        },
+        "TE|receiving_yards": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 8.676664247098229,
+              "coverage_80": 0.7908902691511387,
+              "pred_p0": 0.24590863218785436,
+              "real_p0": 0.49585921325051757,
+              "n": 966
+            },
+            "inc_climatology": {
+              "crps_q199": 10.753844157641208,
+              "coverage_80": 0.9006211180124224,
+              "pred_p0": 0.4974874371859296,
+              "real_p0": 0.49585921325051757,
+              "n": 966
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 10.749006312618993,
+              "coverage_80": 0.8985507246376812,
+              "pred_p0": 0.4974874371859296,
+              "real_p0": 0.49585921325051757,
+              "n": 966
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 9.433207425091151,
+              "coverage_80": 0.7991718426501035,
+              "pred_p0": 0.28494959268391645,
+              "real_p0": 0.49585921325051757,
+              "n": 966
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 10.755187212980013,
+              "coverage_80": 0.9047619047619048,
+              "pred_p0": 0.492462311557789,
+              "real_p0": 0.49585921325051757,
+              "n": 966
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 10.26455380789671,
+              "coverage_80": 0.5652173913043478,
+              "pred_p0": 0.1812530561711248,
+              "real_p0": 0.49585921325051757,
+              "n": 966
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 8.021103788506553,
+              "coverage_80": 0.7008281573498965,
+              "pred_p0": 0.18260557445613157,
+              "real_p0": 0.49585921325051757,
+              "n": 966
+            },
+            "nihilist_zero": {
+              "crps_q199": 14.897515527950311,
+              "coverage_80": 0.49585921325051757,
+              "pred_p0": 1.0,
+              "real_p0": 0.49585921325051757,
+              "n": 966
+            },
+            "zero_width": {
+              "crps_q199": 10.786379855486949,
+              "coverage_80": 0.0,
+              "pred_p0": 0.17598343685300208,
+              "real_p0": 0.49585921325051757,
+              "n": 966
+            },
+            "max_width": {
+              "crps_q199": 10.651492546299584,
+              "coverage_80": 0.9855072463768116,
+              "pred_p0": 0.33026415722504865,
+              "real_p0": 0.49585921325051757,
+              "n": 966
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 7.910201118926182,
+              "coverage_80": 0.7101449275362319,
+              "pred_p0": 0.18759948812384908,
+              "real_p0": 0.49585921325051757,
+              "n": 966
+            }
+          },
+          "tail_note": {
+            "beta_hi": 17.996362674895142,
+            "beta_lo": 2.7017376500416384,
+            "n_hi": 91,
+            "n_lo": 61,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "cal_split": {
+            "n_train": 74849,
+            "n_core": 58687,
+            "n_cal": 15161,
+            "cal_gw_min": 123,
+            "cal_gw_max": 154
+          }
+        },
+        "RB|receiving_tds": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 0.06698214715219017,
+              "coverage_80": 0.8286252354048964,
+              "pred_p0": 0.4560845659559568,
+              "real_p0": 0.9500941619585688,
+              "n": 1062
+            },
+            "inc_climatology": {
+              "crps_q199": 0.04958559274716332,
+              "coverage_80": 0.9500941619585688,
+              "pred_p0": 0.9597989949748745,
+              "real_p0": 0.9500941619585688,
+              "n": 1062
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 0.049536287842224316,
+              "coverage_80": 0.9500941619585688,
+              "pred_p0": 0.9547738693467339,
+              "real_p0": 0.9500941619585688,
+              "n": 1062
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 0.0841634846536027,
+              "coverage_80": 0.8502824858757062,
+              "pred_p0": 0.5207440214253943,
+              "real_p0": 0.9500941619585688,
+              "n": 1062
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 0.049536287842224316,
+              "coverage_80": 0.9500941619585688,
+              "pred_p0": 0.9547738693467339,
+              "real_p0": 0.9500941619585688,
+              "n": 1062
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 0.08981713360763699,
+              "coverage_80": 0.660075329566855,
+              "pred_p0": 0.41616746633355106,
+              "real_p0": 0.9500941619585688,
+              "n": 1062
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 0.051693990916966234,
+              "coverage_80": 0.9538606403013182,
+              "pred_p0": 0.6076569287113534,
+              "real_p0": 0.9500941619585688,
+              "n": 1062
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.051789077212806026,
+              "coverage_80": 0.9500941619585688,
+              "pred_p0": 1.0,
+              "real_p0": 0.9500941619585688,
+              "n": 1062
+            },
+            "zero_width": {
+              "crps_q199": 0.0764050094630932,
+              "coverage_80": 0.0,
+              "pred_p0": 0.4369114877589454,
+              "real_p0": 0.9500941619585688,
+              "n": 1062
+            },
+            "max_width": {
+              "crps_q199": 0.07909671727927572,
+              "coverage_80": 0.9463276836158192,
+              "pred_p0": 0.4525925295025031,
+              "real_p0": 0.9500941619585688,
+              "n": 1062
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 0.05210347163563228,
+              "coverage_80": 0.9510357815442562,
+              "pred_p0": 0.6383376392319412,
+              "real_p0": 0.9500941619585688,
+              "n": 1062
+            }
+          },
+          "tail_note": {
+            "beta_hi": 0.5199927510358949,
+            "beta_lo": 0.0,
+            "n_hi": 44,
+            "n_lo": 0,
+            "thin_hi": false,
+            "thin_lo": true
+          },
+          "cal_split": {
+            "n_train": 74849,
+            "n_core": 58687,
+            "n_cal": 15161,
+            "cal_gw_min": 123,
+            "cal_gw_max": 154
+          }
+        },
+        "WR|receiving_tds": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 0.1757947678953437,
+              "coverage_80": 0.7886886264760721,
+              "pred_p0": 0.40285017380251165,
+              "real_p0": 0.8651336233685519,
+              "n": 1609
+            },
+            "inc_climatology": {
+              "crps_q199": 0.1357426036334563,
+              "coverage_80": 0.9844623990055935,
+              "pred_p0": 0.864321608040201,
+              "real_p0": 0.8651336233685519,
+              "n": 1609
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 0.13574190904803693,
+              "coverage_80": 0.9844623990055935,
+              "pred_p0": 0.8693467336683417,
+              "real_p0": 0.8651336233685519,
+              "n": 1609
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 0.1908897353598832,
+              "coverage_80": 0.7998756991920447,
+              "pred_p0": 0.4305086651404943,
+              "real_p0": 0.8651336233685519,
+              "n": 1609
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 0.13594089153036779,
+              "coverage_80": 0.9844623990055935,
+              "pred_p0": 0.8542713567839197,
+              "real_p0": 0.8651336233685519,
+              "n": 1609
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 0.2023278681682792,
+              "coverage_80": 0.5891858297078931,
+              "pred_p0": 0.32038689407260046,
+              "real_p0": 0.8651336233685519,
+              "n": 1609
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 0.1371516119554991,
+              "coverage_80": 0.8937228091982597,
+              "pred_p0": 0.5059199040572658,
+              "real_p0": 0.8651336233685519,
+              "n": 1609
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.15351149782473586,
+              "coverage_80": 0.8651336233685519,
+              "pred_p0": 1.0,
+              "real_p0": 0.8651336233685519,
+              "n": 1609
+            },
+            "zero_width": {
+              "crps_q199": 0.21473752963774645,
+              "coverage_80": 0.0,
+              "pred_p0": 0.3716594157862026,
+              "real_p0": 0.8651336233685519,
+              "n": 1609
+            },
+            "max_width": {
+              "crps_q199": 0.21968644038157106,
+              "coverage_80": 0.9956494717215661,
+              "pred_p0": 0.43206086367199575,
+              "real_p0": 0.8651336233685519,
+              "n": 1609
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 0.13630063004948506,
+              "coverage_80": 0.891858297078931,
+              "pred_p0": 0.5372199718293144,
+              "real_p0": 0.8651336233685519,
+              "n": 1609
+            }
+          },
+          "tail_note": {
+            "beta_hi": 0.5362289351585313,
+            "beta_lo": 0.0,
+            "n_hi": 122,
+            "n_lo": 0,
+            "thin_hi": false,
+            "thin_lo": true
+          },
+          "cal_split": {
+            "n_train": 74849,
+            "n_core": 58687,
+            "n_cal": 15161,
+            "cal_gw_min": 123,
+            "cal_gw_max": 154
+          }
+        },
+        "TE|receiving_tds": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 0.14685228260803312,
+              "coverage_80": 0.7463768115942029,
+              "pred_p0": 0.41801138196156773,
+              "real_p0": 0.8830227743271222,
+              "n": 966
+            },
+            "inc_climatology": {
+              "crps_q199": 0.12058938585265876,
+              "coverage_80": 0.8830227743271222,
+              "pred_p0": 0.9045226130653267,
+              "real_p0": 0.8830227743271222,
+              "n": 966
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 0.12020560618829135,
+              "coverage_80": 0.984472049689441,
+              "pred_p0": 0.884422110552764,
+              "real_p0": 0.8830227743271222,
+              "n": 966
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 0.16902280919547985,
+              "coverage_80": 0.7991718426501035,
+              "pred_p0": 0.44324104997034863,
+              "real_p0": 0.8830227743271222,
+              "n": 966
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 0.12086581978214055,
+              "coverage_80": 0.8830227743271222,
+              "pred_p0": 0.9095477386934673,
+              "real_p0": 0.8830227743271222,
+              "n": 966
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 0.17067621157587146,
+              "coverage_80": 0.6407867494824017,
+              "pred_p0": 0.36851441472372215,
+              "real_p0": 0.8830227743271222,
+              "n": 966
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 0.11931719261210408,
+              "coverage_80": 0.8913043478260869,
+              "pred_p0": 0.5615916019018488,
+              "real_p0": 0.8830227743271222,
+              "n": 966
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.13354037267080746,
+              "coverage_80": 0.8830227743271222,
+              "pred_p0": 1.0,
+              "real_p0": 0.8830227743271222,
+              "n": 966
+            },
+            "zero_width": {
+              "crps_q199": 0.1726896277076968,
+              "coverage_80": 0.0,
+              "pred_p0": 0.39026915113871635,
+              "real_p0": 0.8830227743271222,
+              "n": 966
+            },
+            "max_width": {
+              "crps_q199": 0.16796268542464166,
+              "coverage_80": 0.8788819875776398,
+              "pred_p0": 0.43107358739869117,
+              "real_p0": 0.8830227743271222,
+              "n": 966
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 0.11896618892109119,
+              "coverage_80": 0.8954451345755694,
+              "pred_p0": 0.5791223196728985,
+              "real_p0": 0.8830227743271222,
+              "n": 966
+            }
+          },
+          "tail_note": {
+            "beta_hi": 0.5899162524491288,
+            "beta_lo": 0.0,
+            "n_hi": 73,
+            "n_lo": 0,
+            "thin_hi": false,
+            "thin_lo": true
+          },
+          "cal_split": {
+            "n_train": 74849,
+            "n_core": 58687,
+            "n_cal": 15161,
+            "cal_gw_min": 123,
+            "cal_gw_max": 154
+          }
+        }
+      }
+    },
+    {
+      "label": "2025H2",
+      "n_test": 4380,
+      "cells": {
+        "QB|passing_yards": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 35.27075490509775,
+              "coverage_80": 0.81169757489301,
+              "pred_p0": 0.2533208123355723,
+              "real_p0": 0.5549215406562055,
+              "n": 701
+            },
+            "inc_climatology": {
+              "crps_q199": 58.75701073484397,
+              "coverage_80": 0.9343794579172611,
+              "pred_p0": 0.5628140703517586,
+              "real_p0": 0.5549215406562055,
+              "n": 701
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 58.40586294525409,
+              "coverage_80": 0.8987161198288159,
+              "pred_p0": 0.5577889447236181,
+              "real_p0": 0.5549215406562055,
+              "n": 701
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 38.85135774854446,
+              "coverage_80": 0.8002853067047075,
+              "pred_p0": 0.2669051391049398,
+              "real_p0": 0.5549215406562055,
+              "n": 701
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 58.62795382368333,
+              "coverage_80": 0.9072753209700428,
+              "pred_p0": 0.542713567839196,
+              "real_p0": 0.5549215406562055,
+              "n": 701
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 44.785524639835394,
+              "coverage_80": 0.6162624821683309,
+              "pred_p0": 0.12937727152165968,
+              "real_p0": 0.5549215406562055,
+              "n": 701
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 34.269668993412,
+              "coverage_80": 0.7817403708987162,
+              "pred_p0": 0.2722456791804959,
+              "real_p0": 0.5549215406562055,
+              "n": 701
+            },
+            "nihilist_zero": {
+              "crps_q199": 85.61911554921541,
+              "coverage_80": 0.5549215406562055,
+              "pred_p0": 1.0,
+              "real_p0": 0.5549215406562055,
+              "n": 701
+            },
+            "zero_width": {
+              "crps_q199": 42.96780546253984,
+              "coverage_80": 0.0,
+              "pred_p0": 0.19971469329529243,
+              "real_p0": 0.5549215406562055,
+              "n": 701
+            },
+            "max_width": {
+              "crps_q199": 44.288298248479784,
+              "coverage_80": 0.9900142653352354,
+              "pred_p0": 0.31218861783955437,
+              "real_p0": 0.5549215406562055,
+              "n": 701
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 32.91096644239581,
+              "coverage_80": 0.7717546362339515,
+              "pred_p0": 0.3099018630957928,
+              "real_p0": 0.5549215406562055,
+              "n": 701
+            }
+          },
+          "tail_note": {
+            "beta_hi": 64.5547826647274,
+            "beta_lo": 28.692041598031114,
+            "n_hi": 66,
+            "n_lo": 45,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "cal_split": {
+            "n_train": 79307,
+            "n_core": 62512,
+            "n_cal": 15910,
+            "cal_gw_min": 131,
+            "cal_gw_max": 163
+          }
+        },
+        "QB|passing_tds": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 0.375608351483785,
+              "coverage_80": 0.8074179743223966,
+              "pred_p0": 0.30721367178259346,
+              "real_p0": 0.7018544935805991,
+              "n": 701
+            },
+            "inc_climatology": {
+              "crps_q199": 0.42387837905648074,
+              "coverage_80": 0.9400855920114123,
+              "pred_p0": 0.6834170854271359,
+              "real_p0": 0.7018544935805991,
+              "n": 701
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 0.42300934056874967,
+              "coverage_80": 0.9400855920114123,
+              "pred_p0": 0.7035175879396985,
+              "real_p0": 0.7018544935805991,
+              "n": 701
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 0.3910028808216143,
+              "coverage_80": 0.8002853067047075,
+              "pred_p0": 0.33800242295643695,
+              "real_p0": 0.7018544935805991,
+              "n": 701
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 0.4262820034552219,
+              "coverage_80": 0.9400855920114123,
+              "pred_p0": 0.6582914572864321,
+              "real_p0": 0.7018544935805991,
+              "n": 701
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 0.3994340936601199,
+              "coverage_80": 0.7417974322396577,
+              "pred_p0": 0.23629560068530955,
+              "real_p0": 0.7018544935805991,
+              "n": 701
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 0.3092073885562651,
+              "coverage_80": 0.8102710413694721,
+              "pred_p0": 0.38659058487874465,
+              "real_p0": 0.7018544935805991,
+              "n": 701
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.5392296718972895,
+              "coverage_80": 0.7018544935805991,
+              "pred_p0": 1.0,
+              "real_p0": 0.7018544935805991,
+              "n": 701
+            },
+            "zero_width": {
+              "crps_q199": 0.4416292361625356,
+              "coverage_80": 0.0,
+              "pred_p0": 0.2838801711840228,
+              "real_p0": 0.7018544935805991,
+              "n": 701
+            },
+            "max_width": {
+              "crps_q199": 0.4553814053436865,
+              "coverage_80": 0.9957203994293866,
+              "pred_p0": 0.35283407049512894,
+              "real_p0": 0.7018544935805991,
+              "n": 701
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 0.31356936305263833,
+              "coverage_80": 0.8017118402282454,
+              "pred_p0": 0.42454067771095133,
+              "real_p0": 0.7018544935805991,
+              "n": 701
+            }
+          },
+          "tail_note": {
+            "beta_hi": 0.9487461423766774,
+            "beta_lo": 0.0,
+            "n_hi": 48,
+            "n_lo": 9,
+            "thin_hi": false,
+            "thin_lo": true
+          },
+          "cal_split": {
+            "n_train": 79307,
+            "n_core": 62512,
+            "n_cal": 15910,
+            "cal_gw_min": 131,
+            "cal_gw_max": 163
+          }
+        },
+        "QB|rushing_yards": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 5.532785726961634,
+              "coverage_80": 0.8159771754636234,
+              "pred_p0": 0.3265758177477975,
+              "real_p0": 0.5877318116975749,
+              "n": 701
+            },
+            "inc_climatology": {
+              "crps_q199": 5.76230765668571,
+              "coverage_80": 0.8288159771754636,
+              "pred_p0": 0.6733668341708544,
+              "real_p0": 0.5877318116975749,
+              "n": 701
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 5.750202689625015,
+              "coverage_80": 0.8373751783166904,
+              "pred_p0": 0.6532663316582915,
+              "real_p0": 0.5877318116975749,
+              "n": 701
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 6.217695657633034,
+              "coverage_80": 0.8002853067047075,
+              "pred_p0": 0.36343629703438735,
+              "real_p0": 0.5877318116975749,
+              "n": 701
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 5.764493795296024,
+              "coverage_80": 0.8530670470756063,
+              "pred_p0": 0.6231155778894473,
+              "real_p0": 0.5877318116975749,
+              "n": 701
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 6.312955490115904,
+              "coverage_80": 0.637660485021398,
+              "pred_p0": 0.25903411493989204,
+              "real_p0": 0.5877318116975749,
+              "n": 701
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 4.7849030723154256,
+              "coverage_80": 0.797432239657632,
+              "pred_p0": 0.29047520053907194,
+              "real_p0": 0.5877318116975749,
+              "n": 701
+            },
+            "nihilist_zero": {
+              "crps_q199": 7.032810271041369,
+              "coverage_80": 0.5877318116975749,
+              "pred_p0": 1.0,
+              "real_p0": 0.5877318116975749,
+              "n": 701
+            },
+            "zero_width": {
+              "crps_q199": 6.556062322231448,
+              "coverage_80": 0.0,
+              "pred_p0": 0.2724679029957204,
+              "real_p0": 0.5877318116975749,
+              "n": 701
+            },
+            "max_width": {
+              "crps_q199": 6.53467863364647,
+              "coverage_80": 0.9657631954350927,
+              "pred_p0": 0.37154388203499666,
+              "real_p0": 0.5877318116975749,
+              "n": 701
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 4.850347128117488,
+              "coverage_80": 0.7717546362339515,
+              "pred_p0": 0.34094868063570344,
+              "real_p0": 0.5877318116975749,
+              "n": 701
+            }
+          },
+          "tail_note": {
+            "beta_hi": 13.22268537969439,
+            "beta_lo": 1.6392443185012906,
+            "n_hi": 54,
+            "n_lo": 52,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "cal_split": {
+            "n_train": 79307,
+            "n_core": 62512,
+            "n_cal": 15910,
+            "cal_gw_min": 131,
+            "cal_gw_max": 163
+          }
+        },
+        "RB|rushing_yards": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 12.310000720518868,
+              "coverage_80": 0.7994454713493531,
+              "pred_p0": 0.25289571703248215,
+              "real_p0": 0.39833641404805914,
+              "n": 1082
+            },
+            "inc_climatology": {
+              "crps_q199": 17.24835146155918,
+              "coverage_80": 0.866913123844732,
+              "pred_p0": 0.4371859296482413,
+              "real_p0": 0.39833641404805914,
+              "n": 1082
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 17.179459936466063,
+              "coverage_80": 0.88909426987061,
+              "pred_p0": 0.4120603015075376,
+              "real_p0": 0.39833641404805914,
+              "n": 1082
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 13.518516336305327,
+              "coverage_80": 0.7985212569316081,
+              "pred_p0": 0.254734857280859,
+              "real_p0": 0.39833641404805914,
+              "n": 1082
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 17.224361637206364,
+              "coverage_80": 0.8604436229205176,
+              "pred_p0": 0.42211055276381915,
+              "real_p0": 0.39833641404805914,
+              "n": 1082
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 13.877354043442258,
+              "coverage_80": 0.5878003696857671,
+              "pred_p0": 0.16508141446604557,
+              "real_p0": 0.39833641404805914,
+              "n": 1082
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 11.326002127485372,
+              "coverage_80": 0.7800369685767098,
+              "pred_p0": 0.16982323818723932,
+              "real_p0": 0.39833641404805914,
+              "n": 1082
+            },
+            "nihilist_zero": {
+              "crps_q199": 24.930683918669132,
+              "coverage_80": 0.39833641404805914,
+              "pred_p0": 1.0,
+              "real_p0": 0.39833641404805914,
+              "n": 1082
+            },
+            "zero_width": {
+              "crps_q199": 15.096272477894642,
+              "coverage_80": 0.0,
+              "pred_p0": 0.20794824399260628,
+              "real_p0": 0.39833641404805914,
+              "n": 1082
+            },
+            "max_width": {
+              "crps_q199": 15.410893591687282,
+              "coverage_80": 0.9870609981515711,
+              "pred_p0": 0.3276177560631252,
+              "real_p0": 0.39833641404805914,
+              "n": 1082
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 11.24485475862115,
+              "coverage_80": 0.7162661737523105,
+              "pred_p0": 0.2018967294884775,
+              "real_p0": 0.39833641404805914,
+              "n": 1082
+            }
+          },
+          "tail_note": {
+            "beta_hi": 25.8639769426594,
+            "beta_lo": 3.3494615951516367,
+            "n_hi": 110,
+            "n_lo": 64,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "cal_split": {
+            "n_train": 79307,
+            "n_core": 62512,
+            "n_cal": 15910,
+            "cal_gw_min": 131,
+            "cal_gw_max": 163
+          }
+        },
+        "QB|rushing_tds": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 0.10271261725801464,
+              "coverage_80": 0.8288159771754636,
+              "pred_p0": 0.45200324016659615,
+              "real_p0": 0.9400855920114123,
+              "n": 701
+            },
+            "inc_climatology": {
+              "crps_q199": 0.07220689754048416,
+              "coverage_80": 0.9400855920114123,
+              "pred_p0": 0.9396984924623115,
+              "real_p0": 0.9400855920114123,
+              "n": 701
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 0.07216316962845613,
+              "coverage_80": 0.9400855920114123,
+              "pred_p0": 0.944723618090452,
+              "real_p0": 0.9400855920114123,
+              "n": 701
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 0.1187163743969497,
+              "coverage_80": 0.8402282453637661,
+              "pred_p0": 0.5063548842644033,
+              "real_p0": 0.9400855920114123,
+              "n": 701
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 0.07225329357199693,
+              "coverage_80": 0.9400855920114123,
+              "pred_p0": 0.9346733668341709,
+              "real_p0": 0.9400855920114123,
+              "n": 701
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 0.1184364481019804,
+              "coverage_80": 0.7631954350927247,
+              "pred_p0": 0.39488455114373583,
+              "real_p0": 0.9400855920114123,
+              "n": 701
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 0.07584760833301986,
+              "coverage_80": 0.9429386590584878,
+              "pred_p0": 0.6152302167040623,
+              "real_p0": 0.9400855920114123,
+              "n": 701
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.07560627674750357,
+              "coverage_80": 0.9400855920114123,
+              "pred_p0": 1.0,
+              "real_p0": 0.9400855920114123,
+              "n": 701
+            },
+            "zero_width": {
+              "crps_q199": 0.11839008607470897,
+              "coverage_80": 0.0,
+              "pred_p0": 0.44935805991440797,
+              "real_p0": 0.9400855920114123,
+              "n": 701
+            },
+            "max_width": {
+              "crps_q199": 0.12274986422804338,
+              "coverage_80": 0.9329529243937232,
+              "pred_p0": 0.4416519114832365,
+              "real_p0": 0.9400855920114123,
+              "n": 701
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 0.07853266011819474,
+              "coverage_80": 0.9429386590584878,
+              "pred_p0": 0.645359464942401,
+              "real_p0": 0.9400855920114123,
+              "n": 701
+            }
+          },
+          "tail_note": {
+            "beta_hi": 0.6698292163755479,
+            "beta_lo": 0.0,
+            "n_hi": 34,
+            "n_lo": 0,
+            "thin_hi": false,
+            "thin_lo": true
+          },
+          "cal_split": {
+            "n_train": 79307,
+            "n_core": 62512,
+            "n_cal": 15910,
+            "cal_gw_min": 131,
+            "cal_gw_max": 163
+          }
+        },
+        "RB|rushing_tds": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 0.20471779001564372,
+              "coverage_80": 0.7698706099815157,
+              "pred_p0": 0.40054245348740003,
+              "real_p0": 0.8493530499075785,
+              "n": 1082
+            },
+            "inc_climatology": {
+              "crps_q199": 0.16409273725373635,
+              "coverage_80": 0.967652495378928,
+              "pred_p0": 0.8693467336683416,
+              "real_p0": 0.8493530499075785,
+              "n": 1082
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 0.16374260396251128,
+              "coverage_80": 0.967652495378928,
+              "pred_p0": 0.8492462311557789,
+              "real_p0": 0.8493530499075785,
+              "n": 1082
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 0.21919233324986348,
+              "coverage_80": 0.7985212569316081,
+              "pred_p0": 0.41533452846487523,
+              "real_p0": 0.8493530499075785,
+              "n": 1082
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 0.16423549447793498,
+              "coverage_80": 0.967652495378928,
+              "pred_p0": 0.8693467336683416,
+              "real_p0": 0.8493530499075785,
+              "n": 1082
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 0.22789977286098306,
+              "coverage_80": 0.6737523105360443,
+              "pred_p0": 0.35779173129975206,
+              "real_p0": 0.8493530499075785,
+              "n": 1082
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 0.16012711192220935,
+              "coverage_80": 0.8798521256931608,
+              "pred_p0": 0.5338336785591543,
+              "real_p0": 0.8493530499075785,
+              "n": 1082
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.1866913123844732,
+              "coverage_80": 0.8493530499075785,
+              "pred_p0": 1.0,
+              "real_p0": 0.8493530499075785,
+              "n": 1082
+            },
+            "zero_width": {
+              "crps_q199": 0.24685684802205404,
+              "coverage_80": 0.0,
+              "pred_p0": 0.39648798521256934,
+              "real_p0": 0.8493530499075785,
+              "n": 1082
+            },
+            "max_width": {
+              "crps_q199": 0.2423833233388662,
+              "coverage_80": 0.9907578558225508,
+              "pred_p0": 0.40910188651204266,
+              "real_p0": 0.8493530499075785,
+              "n": 1082
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 0.16142249881110884,
+              "coverage_80": 0.8835489833641405,
+              "pred_p0": 0.5439303727510009,
+              "real_p0": 0.8493530499075785,
+              "n": 1082
+            }
+          },
+          "tail_note": {
+            "beta_hi": 0.5525280283218593,
+            "beta_lo": 0.0,
+            "n_hi": 87,
+            "n_lo": 0,
+            "thin_hi": false,
+            "thin_lo": true
+          },
+          "cal_split": {
+            "n_train": 79307,
+            "n_core": 62512,
+            "n_cal": 15910,
+            "cal_gw_min": 131,
+            "cal_gw_max": 163
+          }
+        },
+        "RB|receiving_yards": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 5.741569996488426,
+              "coverage_80": 0.8290203327171903,
+              "pred_p0": 0.31797620263981646,
+              "real_p0": 0.5646950092421442,
+              "n": 1082
+            },
+            "inc_climatology": {
+              "crps_q199": 6.317575957421117,
+              "coverage_80": 0.9001848428835489,
+              "pred_p0": 0.5628140703517586,
+              "real_p0": 0.5646950092421442,
+              "n": 1082
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 6.300253072200187,
+              "coverage_80": 0.8881700554528651,
+              "pred_p0": 0.577889447236181,
+              "real_p0": 0.5646950092421442,
+              "n": 1082
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 6.430385193003181,
+              "coverage_80": 0.7985212569316081,
+              "pred_p0": 0.32591794462144363,
+              "real_p0": 0.5646950092421442,
+              "n": 1082
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 6.303210966105945,
+              "coverage_80": 0.8881700554528651,
+              "pred_p0": 0.5678391959798994,
+              "real_p0": 0.5646950092421442,
+              "n": 1082
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 6.807044448931877,
+              "coverage_80": 0.566543438077634,
+              "pred_p0": 0.23182455716660938,
+              "real_p0": 0.5646950092421442,
+              "n": 1082
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 5.159323927255265,
+              "coverage_80": 0.7763401109057301,
+              "pred_p0": 0.2393436684345944,
+              "real_p0": 0.5646950092421442,
+              "n": 1082
+            },
+            "nihilist_zero": {
+              "crps_q199": 8.121072088724585,
+              "coverage_80": 0.5646950092421442,
+              "pred_p0": 1.0,
+              "real_p0": 0.5646950092421442,
+              "n": 1082
+            },
+            "zero_width": {
+              "crps_q199": 7.043647248450917,
+              "coverage_80": 0.0,
+              "pred_p0": 0.2855822550831793,
+              "real_p0": 0.5646950092421442,
+              "n": 1082
+            },
+            "max_width": {
+              "crps_q199": 7.364736342745024,
+              "coverage_80": 0.9824399260628466,
+              "pred_p0": 0.38360007059326207,
+              "real_p0": 0.5646950092421442,
+              "n": 1082
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 5.117425733625488,
+              "coverage_80": 0.7412199630314233,
+              "pred_p0": 0.24489824352817688,
+              "real_p0": 0.5646950092421442,
+              "n": 1082
+            }
+          },
+          "tail_note": {
+            "beta_hi": 13.583685460284126,
+            "beta_lo": 1.2644354837526093,
+            "n_hi": 79,
+            "n_lo": 60,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "cal_split": {
+            "n_train": 79307,
+            "n_core": 62512,
+            "n_cal": 15910,
+            "cal_gw_min": 131,
+            "cal_gw_max": 163
+          }
+        },
+        "WR|receiving_yards": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 13.442928713960145,
+              "coverage_80": 0.8014796547472256,
+              "pred_p0": 0.2431826208725502,
+              "real_p0": 0.4358816276202219,
+              "n": 1622
+            },
+            "inc_climatology": {
+              "crps_q199": 15.701666378749483,
+              "coverage_80": 0.9186189889025894,
+              "pred_p0": 0.4070351758793969,
+              "real_p0": 0.4358816276202219,
+              "n": 1622
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 15.559784660044983,
+              "coverage_80": 0.8970406905055487,
+              "pred_p0": 0.4371859296482414,
+              "real_p0": 0.4358816276202219,
+              "n": 1622
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 13.91767533008014,
+              "coverage_80": 0.7990135635018496,
+              "pred_p0": 0.25281152990600353,
+              "real_p0": 0.4358816276202219,
+              "n": 1622
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 15.620958271009796,
+              "coverage_80": 0.9106041923551171,
+              "pred_p0": 0.41708542713567837,
+              "real_p0": 0.4358816276202219,
+              "n": 1622
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 15.131451577439275,
+              "coverage_80": 0.49445129469790383,
+              "pred_p0": 0.14255618412655138,
+              "real_p0": 0.4358816276202219,
+              "n": 1622
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 12.164440405397226,
+              "coverage_80": 0.6794081381011098,
+              "pred_p0": 0.13610283228720668,
+              "real_p0": 0.4358816276202219,
+              "n": 1622
+            },
+            "nihilist_zero": {
+              "crps_q199": 22.54747225647349,
+              "coverage_80": 0.4358816276202219,
+              "pred_p0": 1.0,
+              "real_p0": 0.4358816276202219,
+              "n": 1622
+            },
+            "zero_width": {
+              "crps_q199": 17.125674688023725,
+              "coverage_80": 0.0,
+              "pred_p0": 0.1812577065351418,
+              "real_p0": 0.4358816276202219,
+              "n": 1622
+            },
+            "max_width": {
+              "crps_q199": 17.086611252197567,
+              "coverage_80": 0.9944512946979038,
+              "pred_p0": 0.33980320839710265,
+              "real_p0": 0.4358816276202219,
+              "n": 1622
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 12.357575182537937,
+              "coverage_80": 0.6393341553637485,
+              "pred_p0": 0.1532756259720303,
+              "real_p0": 0.4358816276202219,
+              "n": 1622
+            }
+          },
+          "tail_note": {
+            "beta_hi": 22.46157177926864,
+            "beta_lo": 2.2982704213857144,
+            "n_hi": 206,
+            "n_lo": 150,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "cal_split": {
+            "n_train": 79307,
+            "n_core": 62512,
+            "n_cal": 15910,
+            "cal_gw_min": 131,
+            "cal_gw_max": 163
+          }
+        },
+        "TE|receiving_yards": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 8.705092113115937,
+              "coverage_80": 0.7979487179487179,
+              "pred_p0": 0.2522716144826697,
+              "real_p0": 0.47384615384615386,
+              "n": 975
+            },
+            "inc_climatology": {
+              "crps_q199": 10.80031350341451,
+              "coverage_80": 0.9066666666666666,
+              "pred_p0": 0.49748743718592964,
+              "real_p0": 0.47384615384615386,
+              "n": 975
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 10.794800347893313,
+              "coverage_80": 0.8974358974358975,
+              "pred_p0": 0.477386934673367,
+              "real_p0": 0.47384615384615386,
+              "n": 975
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 9.371567172745335,
+              "coverage_80": 0.798974358974359,
+              "pred_p0": 0.27373276639608296,
+              "real_p0": 0.47384615384615386,
+              "n": 975
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 10.803243009921403,
+              "coverage_80": 0.9066666666666666,
+              "pred_p0": 0.49748743718592964,
+              "real_p0": 0.47384615384615386,
+              "n": 975
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 10.43437006748362,
+              "coverage_80": 0.5241025641025641,
+              "pred_p0": 0.17056564875660354,
+              "real_p0": 0.47384615384615386,
+              "n": 975
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 7.863275945706917,
+              "coverage_80": 0.7312820512820513,
+              "pred_p0": 0.16609199845380748,
+              "real_p0": 0.47384615384615386,
+              "n": 975
+            },
+            "nihilist_zero": {
+              "crps_q199": 15.023589743589744,
+              "coverage_80": 0.47384615384615386,
+              "pred_p0": 1.0,
+              "real_p0": 0.47384615384615386,
+              "n": 975
+            },
+            "zero_width": {
+              "crps_q199": 10.830785981798902,
+              "coverage_80": 0.0,
+              "pred_p0": 0.19282051282051282,
+              "real_p0": 0.47384615384615386,
+              "n": 975
+            },
+            "max_width": {
+              "crps_q199": 10.72454261208006,
+              "coverage_80": 0.9805128205128205,
+              "pred_p0": 0.3315139801571962,
+              "real_p0": 0.47384615384615386,
+              "n": 975
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 7.707887060998387,
+              "coverage_80": 0.6994871794871795,
+              "pred_p0": 0.1854812524159258,
+              "real_p0": 0.47384615384615386,
+              "n": 975
+            }
+          },
+          "tail_note": {
+            "beta_hi": 14.342476884821542,
+            "beta_lo": 1.289640478230999,
+            "n_hi": 92,
+            "n_lo": 60,
+            "thin_hi": false,
+            "thin_lo": false
+          },
+          "cal_split": {
+            "n_train": 79307,
+            "n_core": 62512,
+            "n_cal": 15910,
+            "cal_gw_min": 131,
+            "cal_gw_max": 163
+          }
+        },
+        "RB|receiving_tds": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 0.06290609908309587,
+              "coverage_80": 0.7865064695009242,
+              "pred_p0": 0.5035157302222759,
+              "real_p0": 0.9584103512014788,
+              "n": 1082
+            },
+            "inc_climatology": {
+              "crps_q199": 0.04467587475269137,
+              "coverage_80": 0.9584103512014788,
+              "pred_p0": 0.9597989949748743,
+              "real_p0": 0.9584103512014788,
+              "n": 1082
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 0.04467587475269137,
+              "coverage_80": 0.9584103512014788,
+              "pred_p0": 0.9597989949748743,
+              "real_p0": 0.9584103512014788,
+              "n": 1082
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 0.08005785815007062,
+              "coverage_80": 0.8576709796672828,
+              "pred_p0": 0.5310238809574676,
+              "real_p0": 0.9584103512014788,
+              "n": 1082
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 0.04467587475269137,
+              "coverage_80": 0.9584103512014788,
+              "pred_p0": 0.9597989949748743,
+              "real_p0": 0.9584103512014788,
+              "n": 1082
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 0.08050468840183807,
+              "coverage_80": 0.7292051756007394,
+              "pred_p0": 0.43393492415868623,
+              "real_p0": 0.9584103512014788,
+              "n": 1082
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 0.04718432188485294,
+              "coverage_80": 0.9593345656192237,
+              "pred_p0": 0.6379355186282615,
+              "real_p0": 0.9584103512014788,
+              "n": 1082
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.04621072088724584,
+              "coverage_80": 0.9584103512014788,
+              "pred_p0": 1.0,
+              "real_p0": 0.9584103512014788,
+              "n": 1082
+            },
+            "zero_width": {
+              "crps_q199": 0.07185060616733764,
+              "coverage_80": 0.0,
+              "pred_p0": 0.4944547134935305,
+              "real_p0": 0.9584103512014788,
+              "n": 1082
+            },
+            "max_width": {
+              "crps_q199": 0.07478818704393131,
+              "coverage_80": 0.9519408502772643,
+              "pred_p0": 0.464759100493224,
+              "real_p0": 0.9584103512014788,
+              "n": 1082
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 0.04765503346480919,
+              "coverage_80": 0.9621072088724584,
+              "pred_p0": 0.6591088529523773,
+              "real_p0": 0.9584103512014788,
+              "n": 1082
+            }
+          },
+          "tail_note": {
+            "beta_hi": 0.5927832394936853,
+            "beta_lo": 0.0,
+            "n_hi": 36,
+            "n_lo": 0,
+            "thin_hi": false,
+            "thin_lo": true
+          },
+          "cal_split": {
+            "n_train": 79307,
+            "n_core": 62512,
+            "n_cal": 15910,
+            "cal_gw_min": 131,
+            "cal_gw_max": 163
+          }
+        },
+        "WR|receiving_tds": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 0.16282506605300773,
+              "coverage_80": 0.8088779284833539,
+              "pred_p0": 0.40022554201339616,
+              "real_p0": 0.8785450061652281,
+              "n": 1622
+            },
+            "inc_climatology": {
+              "crps_q199": 0.12334012850937798,
+              "coverage_80": 0.9839704069050554,
+              "pred_p0": 0.864321608040201,
+              "real_p0": 0.8785450061652281,
+              "n": 1622
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 0.12308249013253691,
+              "coverage_80": 0.9839704069050554,
+              "pred_p0": 0.8793969849246234,
+              "real_p0": 0.8785450061652281,
+              "n": 1622
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 0.17505976502308032,
+              "coverage_80": 0.7990135635018496,
+              "pred_p0": 0.44086957599340726,
+              "real_p0": 0.8785450061652281,
+              "n": 1622
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 0.12338113254311016,
+              "coverage_80": 0.9839704069050554,
+              "pred_p0": 0.8592964824120605,
+              "real_p0": 0.8785450061652281,
+              "n": 1622
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 0.19743227493736207,
+              "coverage_80": 0.5733662145499383,
+              "pred_p0": 0.3210317927491961,
+              "real_p0": 0.8785450061652281,
+              "n": 1622
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 0.12642789295672113,
+              "coverage_80": 0.905672009864365,
+              "pred_p0": 0.5258257997756971,
+              "real_p0": 0.8785450061652281,
+              "n": 1622
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.1374845869297164,
+              "coverage_80": 0.8785450061652281,
+              "pred_p0": 1.0,
+              "real_p0": 0.8785450061652281,
+              "n": 1622
+            },
+            "zero_width": {
+              "crps_q199": 0.19889991808912874,
+              "coverage_80": 0.0,
+              "pred_p0": 0.34525277435265106,
+              "real_p0": 0.8785450061652281,
+              "n": 1622
+            },
+            "max_width": {
+              "crps_q199": 0.21048120408945453,
+              "coverage_80": 1.0,
+              "pred_p0": 0.43238696565441265,
+              "real_p0": 0.8785450061652281,
+              "n": 1622
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 0.12338193123031106,
+              "coverage_80": 0.8970406905055487,
+              "pred_p0": 0.5601156212629114,
+              "real_p0": 0.8785450061652281,
+              "n": 1622
+            }
+          },
+          "tail_note": {
+            "beta_hi": 0.5117547697991213,
+            "beta_lo": 0.0,
+            "n_hi": 131,
+            "n_lo": 0,
+            "thin_hi": false,
+            "thin_lo": true
+          },
+          "cal_split": {
+            "n_train": 79307,
+            "n_core": 62512,
+            "n_cal": 15910,
+            "cal_gw_min": 131,
+            "cal_gw_max": 163
+          }
+        },
+        "TE|receiving_tds": {
+          "scores": {
+            "inc_head_bank": {
+              "crps_q199": 0.12982568031658093,
+              "coverage_80": 0.7497435897435898,
+              "pred_p0": 0.40928746295580465,
+              "real_p0": 0.9066666666666666,
+              "n": 975
+            },
+            "inc_climatology": {
+              "crps_q199": 0.09628527251642831,
+              "coverage_80": 0.9066666666666666,
+              "pred_p0": 0.9045226130653267,
+              "real_p0": 0.9066666666666666,
+              "n": 975
+            },
+            "oracle__inc_climatology": {
+              "crps_q199": 0.09627042906841903,
+              "coverage_80": 0.9066666666666666,
+              "pred_p0": 0.9095477386934673,
+              "real_p0": 0.9066666666666666,
+              "n": 975
+            },
+            "oracle__inc_head_bank": {
+              "crps_q199": 0.14052340776835023,
+              "coverage_80": 0.8071794871794872,
+              "pred_p0": 0.4634402783146502,
+              "real_p0": 0.9066666666666666,
+              "n": 975
+            },
+            "matched_n__inc_climatology": {
+              "crps_q199": 0.09676986213116867,
+              "coverage_80": 0.9897435897435898,
+              "pred_p0": 0.8844221105527639,
+              "real_p0": 0.9066666666666666,
+              "n": 975
+            },
+            "matched_n__inc_head_bank": {
+              "crps_q199": 0.16077739104265332,
+              "coverage_80": 0.5887179487179487,
+              "pred_p0": 0.30823347506764587,
+              "real_p0": 0.9066666666666666,
+              "n": 975
+            },
+            "matched_n__cand_lgbm_quantile": {
+              "crps_q199": 0.09704836116028691,
+              "coverage_80": 0.9230769230769231,
+              "pred_p0": 0.5645303440278315,
+              "real_p0": 0.9066666666666666,
+              "n": 975
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.10461538461538461,
+              "coverage_80": 0.9066666666666666,
+              "pred_p0": 1.0,
+              "real_p0": 0.9066666666666666,
+              "n": 975
+            },
+            "zero_width": {
+              "crps_q199": 0.15526852102108946,
+              "coverage_80": 0.0,
+              "pred_p0": 0.38358974358974357,
+              "real_p0": 0.9066666666666666,
+              "n": 975
+            },
+            "max_width": {
+              "crps_q199": 0.15215197806778286,
+              "coverage_80": 0.9025641025641026,
+              "pred_p0": 0.42234248163896404,
+              "real_p0": 0.9066666666666666,
+              "n": 975
+            },
+            "oracle__cand_lgbm_quantile": {
+              "crps_q199": 0.09451691550227134,
+              "coverage_80": 0.916923076923077,
+              "pred_p0": 0.5948357170467723,
+              "real_p0": 0.9066666666666666,
+              "n": 975
+            }
+          },
+          "tail_note": {
+            "beta_hi": 0.5412170108763779,
+            "beta_lo": 0.0,
+            "n_hi": 61,
+            "n_lo": 0,
+            "thin_hi": false,
+            "thin_lo": true
+          },
+          "cal_split": {
+            "n_train": 79307,
+            "n_core": 62512,
+            "n_cal": 15910,
+            "cal_gw_min": 131,
+            "cal_gw_max": 163
+          }
+        }
+      }
+    }
+  ],
+  "positive_control": {
+    "stat": "passing_yards",
+    "position": "QB",
+    "scale": 1.3,
+    "ceiling_unshifted": 0.35115,
+    "ceiling_shifted": 0.94046,
+    "instrument_sees_the_shift": true
+  },
+  "selections": {
+    "QB|passing_yards": {
+      "cell": "QB|passing_yards",
+      "n_rows": 1372,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_head_bank": 35.86554,
+        "inc_climatology": 60.04877,
+        "oracle__inc_climatology": 59.81115,
+        "oracle__inc_head_bank": 38.19229,
+        "matched_n__inc_climatology": 59.95849,
+        "matched_n__inc_head_bank": 42.37902,
+        "matched_n__cand_lgbm_quantile": 33.72847,
+        "nihilist_zero": 89.20971,
+        "zero_width": 43.58644,
+        "max_width": 44.41928,
+        "oracle__cand_lgbm_quantile": 31.91719
+      },
+      "binding_incumbent": "inc_head_bank",
+      "mean_incumbent": 35.86554,
+      "per_form": {
+        "inc_climatology": {
+          "mean_delta": -23.94562,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 59.81115,
+          "matched_n_mean": 59.95849,
+          "oracle_beats_matched_n": true
+        },
+        "inc_head_bank": {
+          "mean_delta": -2.32676,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 38.19229,
+          "matched_n_mean": 42.37902,
+          "oracle_beats_matched_n": true
+        },
+        "cand_lgbm_quantile": {
+          "mean_delta": 3.94835,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 31.91719,
+          "matched_n_mean": 33.72847,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "best_form": "cand_lgbm_quantile",
+      "deltas_by_fold": [
+        5.53691,
+        2.35979
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 3.94835,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 11.009,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.8017,
+        "pred_p0_mean": 0.2616,
+        "real_p0": 0.5532
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 3.94835,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      },
+      "estimator_note": "max over the per-form block-peeking oracles vs the BINDING (better) incumbent \u2014 the oracle-side max is upward-biased by selection over the declared forms and the peek favors YES, so a NO is conservative (pre-registered; the NF-W5 rule).",
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field; declared before the run (the NF-W5 ceiling rule).",
+      "fdr_binding": false
+    },
+    "QB|passing_tds": {
+      "cell": "QB|passing_tds",
+      "n_rows": 1372,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_head_bank": 0.38807,
+        "inc_climatology": 0.45464,
+        "oracle__inc_climatology": 0.45391,
+        "oracle__inc_head_bank": 0.40924,
+        "matched_n__inc_climatology": 0.45567,
+        "matched_n__inc_head_bank": 0.42984,
+        "matched_n__cand_lgbm_quantile": 0.33127,
+        "nihilist_zero": 0.58854,
+        "zero_width": 0.45871,
+        "max_width": 0.46108,
+        "oracle__cand_lgbm_quantile": 0.3278
+      },
+      "binding_incumbent": "inc_head_bank",
+      "mean_incumbent": 0.38807,
+      "per_form": {
+        "inc_climatology": {
+          "mean_delta": -0.06585,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 0.45391,
+          "matched_n_mean": 0.45567,
+          "oracle_beats_matched_n": true
+        },
+        "inc_head_bank": {
+          "mean_delta": -0.02117,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 0.40924,
+          "matched_n_mean": 0.42984,
+          "oracle_beats_matched_n": true
+        },
+        "cand_lgbm_quantile": {
+          "mean_delta": 0.06027,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 0.3278,
+          "matched_n_mean": 0.33127,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "best_form": "cand_lgbm_quantile",
+      "deltas_by_fold": [
+        0.05851,
+        0.06204
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.06027,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 15.531,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.7959,
+        "pred_p0_mean": 0.3186,
+        "real_p0": 0.6848
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.06027,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      },
+      "estimator_note": "max over the per-form block-peeking oracles vs the BINDING (better) incumbent \u2014 the oracle-side max is upward-biased by selection over the declared forms and the peek favors YES, so a NO is conservative (pre-registered; the NF-W5 rule).",
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field; declared before the run (the NF-W5 ceiling rule).",
+      "fdr_binding": false
+    },
+    "QB|rushing_yards": {
+      "cell": "QB|rushing_yards",
+      "n_rows": 1372,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_head_bank": 5.61108,
+        "inc_climatology": 6.06008,
+        "oracle__inc_climatology": 6.03393,
+        "oracle__inc_head_bank": 6.24607,
+        "matched_n__inc_climatology": 6.04303,
+        "matched_n__inc_head_bank": 6.3811,
+        "matched_n__cand_lgbm_quantile": 4.7937,
+        "nihilist_zero": 7.40836,
+        "zero_width": 6.65655,
+        "max_width": 6.55711,
+        "oracle__cand_lgbm_quantile": 4.845
+      },
+      "binding_incumbent": "inc_head_bank",
+      "mean_incumbent": 5.61108,
+      "per_form": {
+        "inc_climatology": {
+          "mean_delta": -0.42285,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 6.03393,
+          "matched_n_mean": 6.04303,
+          "oracle_beats_matched_n": true
+        },
+        "inc_head_bank": {
+          "mean_delta": -0.63499,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 6.24607,
+          "matched_n_mean": 6.3811,
+          "oracle_beats_matched_n": true
+        },
+        "cand_lgbm_quantile": {
+          "mean_delta": 0.76608,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 4.845,
+          "matched_n_mean": 4.7937,
+          "oracle_beats_matched_n": false
+        }
+      },
+      "best_form": "cand_lgbm_quantile",
+      "deltas_by_fold": [
+        0.84972,
+        0.68244
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.76608,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 13.653,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.8054,
+        "pred_p0_mean": 0.3196,
+        "real_p0": 0.5822
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.76608,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      },
+      "estimator_note": "max over the per-form block-peeking oracles vs the BINDING (better) incumbent \u2014 the oracle-side max is upward-biased by selection over the declared forms and the peek favors YES, so a NO is conservative (pre-registered; the NF-W5 rule).",
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field; declared before the run (the NF-W5 ceiling rule).",
+      "fdr_binding": false
+    },
+    "QB|rushing_tds": {
+      "cell": "QB|rushing_tds",
+      "n_rows": 1372,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_head_bank": 0.10606,
+        "inc_climatology": 0.07487,
+        "oracle__inc_climatology": 0.07481,
+        "oracle__inc_head_bank": 0.118,
+        "matched_n__inc_climatology": 0.07486,
+        "matched_n__inc_head_bank": 0.11572,
+        "matched_n__cand_lgbm_quantile": 0.07673,
+        "nihilist_zero": 0.07879,
+        "zero_width": 0.12315,
+        "max_width": 0.12532,
+        "oracle__cand_lgbm_quantile": 0.07786
+      },
+      "binding_incumbent": "inc_climatology",
+      "mean_incumbent": 0.07487,
+      "per_form": {
+        "inc_climatology": {
+          "mean_delta": 6e-05,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 0.07481,
+          "matched_n_mean": 0.07486,
+          "oracle_beats_matched_n": true
+        },
+        "inc_head_bank": {
+          "mean_delta": -0.04313,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 0.118,
+          "matched_n_mean": 0.11572,
+          "oracle_beats_matched_n": false
+        },
+        "cand_lgbm_quantile": {
+          "mean_delta": -0.00298,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 1,
+          "oracle_mean": 0.07786,
+          "matched_n_mean": 0.07673,
+          "oracle_beats_matched_n": false
+        }
+      },
+      "best_form": "inc_climatology",
+      "deltas_by_fold": [
+        7e-05,
+        4e-05
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 6e-05,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 0.076,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.9359,
+        "pred_p0_mean": 0.9397,
+        "real_p0": 0.9358
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 6e-05,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      },
+      "estimator_note": "max over the per-form block-peeking oracles vs the BINDING (better) incumbent \u2014 the oracle-side max is upward-biased by selection over the declared forms and the peek favors YES, so a NO is conservative (pre-registered; the NF-W5 rule).",
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field; declared before the run (the NF-W5 ceiling rule).",
+      "fdr_binding": false
+    },
+    "RB|rushing_yards": {
+      "cell": "RB|rushing_yards",
+      "n_rows": 2144,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_head_bank": 12.15342,
+        "inc_climatology": 16.77475,
+        "oracle__inc_climatology": 16.73197,
+        "oracle__inc_head_bank": 13.37607,
+        "matched_n__inc_climatology": 16.7633,
+        "matched_n__inc_head_bank": 13.61272,
+        "matched_n__cand_lgbm_quantile": 11.23139,
+        "nihilist_zero": 24.12683,
+        "zero_width": 14.95278,
+        "max_width": 15.32526,
+        "oracle__cand_lgbm_quantile": 11.30239
+      },
+      "binding_incumbent": "inc_head_bank",
+      "mean_incumbent": 12.15342,
+      "per_form": {
+        "inc_climatology": {
+          "mean_delta": -4.57855,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 16.73197,
+          "matched_n_mean": 16.7633,
+          "oracle_beats_matched_n": true
+        },
+        "inc_head_bank": {
+          "mean_delta": -1.22265,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 13.37607,
+          "matched_n_mean": 13.61272,
+          "oracle_beats_matched_n": true
+        },
+        "cand_lgbm_quantile": {
+          "mean_delta": 0.85102,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 11.30239,
+          "matched_n_mean": 11.23139,
+          "oracle_beats_matched_n": false
+        }
+      },
+      "best_form": "cand_lgbm_quantile",
+      "deltas_by_fold": [
+        0.6369,
+        1.06515
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.85102,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 7.002,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.8064,
+        "pred_p0_mean": 0.2511,
+        "real_p0": 0.4059
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.85102,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      },
+      "estimator_note": "max over the per-form block-peeking oracles vs the BINDING (better) incumbent \u2014 the oracle-side max is upward-biased by selection over the declared forms and the peek favors YES, so a NO is conservative (pre-registered; the NF-W5 rule).",
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field; declared before the run (the NF-W5 ceiling rule).",
+      "fdr_binding": false
+    },
+    "RB|rushing_tds": {
+      "cell": "RB|rushing_tds",
+      "n_rows": 2144,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_head_bank": 0.20183,
+        "inc_climatology": 0.15764,
+        "oracle__inc_climatology": 0.15746,
+        "oracle__inc_head_bank": 0.21053,
+        "matched_n__inc_climatology": 0.15786,
+        "matched_n__inc_head_bank": 0.2121,
+        "matched_n__cand_lgbm_quantile": 0.15381,
+        "nihilist_zero": 0.17809,
+        "zero_width": 0.24149,
+        "max_width": 0.24026,
+        "oracle__cand_lgbm_quantile": 0.15451
+      },
+      "binding_incumbent": "inc_climatology",
+      "mean_incumbent": 0.15764,
+      "per_form": {
+        "inc_climatology": {
+          "mean_delta": 0.00018,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 0.15746,
+          "matched_n_mean": 0.15786,
+          "oracle_beats_matched_n": true
+        },
+        "inc_head_bank": {
+          "mean_delta": -0.05289,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 0.21053,
+          "matched_n_mean": 0.2121,
+          "oracle_beats_matched_n": true
+        },
+        "cand_lgbm_quantile": {
+          "mean_delta": 0.00313,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 0.15451,
+          "matched_n_mean": 0.15381,
+          "oracle_beats_matched_n": false
+        }
+      },
+      "best_form": "cand_lgbm_quantile",
+      "deltas_by_fold": [
+        0.00359,
+        0.00267
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.00313,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 1.987,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.9688,
+        "pred_p0_mean": 0.8693,
+        "real_p0": 0.8574
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.00313,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      },
+      "estimator_note": "max over the per-form block-peeking oracles vs the BINDING (better) incumbent \u2014 the oracle-side max is upward-biased by selection over the declared forms and the peek favors YES, so a NO is conservative (pre-registered; the NF-W5 rule).",
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field; declared before the run (the NF-W5 ceiling rule).",
+      "fdr_binding": false
+    },
+    "RB|receiving_yards": {
+      "cell": "RB|receiving_yards",
+      "n_rows": 2144,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_head_bank": 5.80145,
+        "inc_climatology": 6.39264,
+        "oracle__inc_climatology": 6.37273,
+        "oracle__inc_head_bank": 6.41957,
+        "matched_n__inc_climatology": 6.38223,
+        "matched_n__inc_head_bank": 6.98371,
+        "matched_n__cand_lgbm_quantile": 5.28036,
+        "nihilist_zero": 8.17212,
+        "zero_width": 7.13776,
+        "max_width": 7.42832,
+        "oracle__cand_lgbm_quantile": 5.16577
+      },
+      "binding_incumbent": "inc_head_bank",
+      "mean_incumbent": 5.80145,
+      "per_form": {
+        "inc_climatology": {
+          "mean_delta": -0.57129,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 6.37273,
+          "matched_n_mean": 6.38223,
+          "oracle_beats_matched_n": true
+        },
+        "inc_head_bank": {
+          "mean_delta": -0.61812,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 6.41957,
+          "matched_n_mean": 6.98371,
+          "oracle_beats_matched_n": true
+        },
+        "cand_lgbm_quantile": {
+          "mean_delta": 0.63567,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 5.16577,
+          "matched_n_mean": 5.28036,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "best_form": "cand_lgbm_quantile",
+      "deltas_by_fold": [
+        0.6472,
+        0.62414
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.63567,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 10.957,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.8153,
+        "pred_p0_mean": 0.2987,
+        "real_p0": 0.5568
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.63567,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      },
+      "estimator_note": "max over the per-form block-peeking oracles vs the BINDING (better) incumbent \u2014 the oracle-side max is upward-biased by selection over the declared forms and the peek favors YES, so a NO is conservative (pre-registered; the NF-W5 rule).",
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field; declared before the run (the NF-W5 ceiling rule).",
+      "fdr_binding": false
+    },
+    "RB|receiving_tds": {
+      "cell": "RB|receiving_tds",
+      "n_rows": 2144,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_head_bank": 0.06494,
+        "inc_climatology": 0.04713,
+        "oracle__inc_climatology": 0.04711,
+        "oracle__inc_head_bank": 0.08211,
+        "matched_n__inc_climatology": 0.04711,
+        "matched_n__inc_head_bank": 0.08516,
+        "matched_n__cand_lgbm_quantile": 0.04944,
+        "nihilist_zero": 0.049,
+        "zero_width": 0.07413,
+        "max_width": 0.07694,
+        "oracle__cand_lgbm_quantile": 0.04988
+      },
+      "binding_incumbent": "inc_climatology",
+      "mean_incumbent": 0.04713,
+      "per_form": {
+        "inc_climatology": {
+          "mean_delta": 2e-05,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 1,
+          "oracle_mean": 0.04711,
+          "matched_n_mean": 0.04711,
+          "oracle_beats_matched_n": false
+        },
+        "inc_head_bank": {
+          "mean_delta": -0.03498,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 0.08211,
+          "matched_n_mean": 0.08516,
+          "oracle_beats_matched_n": true
+        },
+        "cand_lgbm_quantile": {
+          "mean_delta": -0.00275,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 0.04988,
+          "matched_n_mean": 0.04944,
+          "oracle_beats_matched_n": false
+        }
+      },
+      "best_form": "inc_climatology",
+      "deltas_by_fold": [
+        5e-05,
+        0.0
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 2e-05,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 1,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 0.052,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.9543,
+        "pred_p0_mean": 0.9598,
+        "real_p0": 0.9543
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 2e-05,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      },
+      "estimator_note": "max over the per-form block-peeking oracles vs the BINDING (better) incumbent \u2014 the oracle-side max is upward-biased by selection over the declared forms and the peek favors YES, so a NO is conservative (pre-registered; the NF-W5 rule).",
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field; declared before the run (the NF-W5 ceiling rule).",
+      "fdr_binding": false
+    },
+    "WR|receiving_yards": {
+      "cell": "WR|receiving_yards",
+      "n_rows": 3231,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_head_bank": 13.31589,
+        "inc_climatology": 16.09573,
+        "oracle__inc_climatology": 16.01009,
+        "oracle__inc_head_bank": 13.95079,
+        "matched_n__inc_climatology": 16.0517,
+        "matched_n__inc_head_bank": 14.94717,
+        "matched_n__cand_lgbm_quantile": 12.22005,
+        "nihilist_zero": 23.50866,
+        "zero_width": 17.00024,
+        "max_width": 17.04032,
+        "oracle__cand_lgbm_quantile": 12.43506
+      },
+      "binding_incumbent": "inc_head_bank",
+      "mean_incumbent": 13.31589,
+      "per_form": {
+        "inc_climatology": {
+          "mean_delta": -2.6942,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 16.01009,
+          "matched_n_mean": 16.0517,
+          "oracle_beats_matched_n": true
+        },
+        "inc_head_bank": {
+          "mean_delta": -0.6349,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 13.95079,
+          "matched_n_mean": 14.94717,
+          "oracle_beats_matched_n": true
+        },
+        "cand_lgbm_quantile": {
+          "mean_delta": 0.88084,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 12.43506,
+          "matched_n_mean": 12.22005,
+          "oracle_beats_matched_n": false
+        }
+      },
+      "best_form": "cand_lgbm_quantile",
+      "deltas_by_fold": [
+        0.67632,
+        1.08535
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.88084,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 6.615,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.8025,
+        "pred_p0_mean": 0.2359,
+        "real_p0": 0.4249
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.88084,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      },
+      "estimator_note": "max over the per-form block-peeking oracles vs the BINDING (better) incumbent \u2014 the oracle-side max is upward-biased by selection over the declared forms and the peek favors YES, so a NO is conservative (pre-registered; the NF-W5 rule).",
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field; declared before the run (the NF-W5 ceiling rule).",
+      "fdr_binding": false
+    },
+    "WR|receiving_tds": {
+      "cell": "WR|receiving_tds",
+      "n_rows": 3231,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_head_bank": 0.16931,
+        "inc_climatology": 0.12954,
+        "oracle__inc_climatology": 0.12941,
+        "oracle__inc_head_bank": 0.18297,
+        "matched_n__inc_climatology": 0.12966,
+        "matched_n__inc_head_bank": 0.19988,
+        "matched_n__cand_lgbm_quantile": 0.13179,
+        "nihilist_zero": 0.1455,
+        "zero_width": 0.20682,
+        "max_width": 0.21508,
+        "oracle__cand_lgbm_quantile": 0.12984
+      },
+      "binding_incumbent": "inc_climatology",
+      "mean_incumbent": 0.12954,
+      "per_form": {
+        "inc_climatology": {
+          "mean_delta": 0.00013,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 0.12941,
+          "matched_n_mean": 0.12966,
+          "oracle_beats_matched_n": true
+        },
+        "inc_head_bank": {
+          "mean_delta": -0.05343,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 0.18297,
+          "matched_n_mean": 0.19988,
+          "oracle_beats_matched_n": true
+        },
+        "cand_lgbm_quantile": {
+          "mean_delta": -0.0003,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 0.12984,
+          "matched_n_mean": 0.13179,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "best_form": "inc_climatology",
+      "deltas_by_fold": [
+        0.0,
+        0.00026
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.00013,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 0.1,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.9842,
+        "pred_p0_mean": 0.8643,
+        "real_p0": 0.8718
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.00013,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      },
+      "estimator_note": "max over the per-form block-peeking oracles vs the BINDING (better) incumbent \u2014 the oracle-side max is upward-biased by selection over the declared forms and the peek favors YES, so a NO is conservative (pre-registered; the NF-W5 rule).",
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field; declared before the run (the NF-W5 ceiling rule).",
+      "fdr_binding": false
+    },
+    "TE|receiving_yards": {
+      "cell": "TE|receiving_yards",
+      "n_rows": 1941,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_head_bank": 8.69088,
+        "inc_climatology": 10.77708,
+        "oracle__inc_climatology": 10.7719,
+        "oracle__inc_head_bank": 9.40239,
+        "matched_n__inc_climatology": 10.77922,
+        "matched_n__inc_head_bank": 10.34946,
+        "matched_n__cand_lgbm_quantile": 7.94219,
+        "nihilist_zero": 14.96055,
+        "zero_width": 10.80858,
+        "max_width": 10.68802,
+        "oracle__cand_lgbm_quantile": 7.80904
+      },
+      "binding_incumbent": "inc_head_bank",
+      "mean_incumbent": 8.69088,
+      "per_form": {
+        "inc_climatology": {
+          "mean_delta": -2.08103,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 10.7719,
+          "matched_n_mean": 10.77922,
+          "oracle_beats_matched_n": true
+        },
+        "inc_head_bank": {
+          "mean_delta": -0.71151,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 9.40239,
+          "matched_n_mean": 10.34946,
+          "oracle_beats_matched_n": true
+        },
+        "cand_lgbm_quantile": {
+          "mean_delta": 0.88183,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 7.80904,
+          "matched_n_mean": 7.94219,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "best_form": "cand_lgbm_quantile",
+      "deltas_by_fold": [
+        0.76646,
+        0.99721
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.88183,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 10.147,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.7944,
+        "pred_p0_mean": 0.2491,
+        "real_p0": 0.4849
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.88183,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      },
+      "estimator_note": "max over the per-form block-peeking oracles vs the BINDING (better) incumbent \u2014 the oracle-side max is upward-biased by selection over the declared forms and the peek favors YES, so a NO is conservative (pre-registered; the NF-W5 rule).",
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field; declared before the run (the NF-W5 ceiling rule).",
+      "fdr_binding": false
+    },
+    "TE|receiving_tds": {
+      "cell": "TE|receiving_tds",
+      "n_rows": 1941,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_head_bank": 0.13834,
+        "inc_climatology": 0.10844,
+        "oracle__inc_climatology": 0.10824,
+        "oracle__inc_head_bank": 0.15477,
+        "matched_n__inc_climatology": 0.10882,
+        "matched_n__inc_head_bank": 0.16573,
+        "matched_n__cand_lgbm_quantile": 0.10818,
+        "nihilist_zero": 0.11908,
+        "zero_width": 0.16398,
+        "max_width": 0.16006,
+        "oracle__cand_lgbm_quantile": 0.10674
+      },
+      "binding_incumbent": "inc_climatology",
+      "mean_incumbent": 0.10844,
+      "per_form": {
+        "inc_climatology": {
+          "mean_delta": 0.0002,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 0.10824,
+          "matched_n_mean": 0.10882,
+          "oracle_beats_matched_n": true
+        },
+        "inc_head_bank": {
+          "mean_delta": -0.04634,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 0.15477,
+          "matched_n_mean": 0.16573,
+          "oracle_beats_matched_n": true
+        },
+        "cand_lgbm_quantile": {
+          "mean_delta": 0.0017,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 0.10674,
+          "matched_n_mean": 0.10818,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "best_form": "cand_lgbm_quantile",
+      "deltas_by_fold": [
+        0.00162,
+        0.00177
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.0017,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 1.564,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.8949,
+        "pred_p0_mean": 0.9045,
+        "real_p0": 0.8948
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0017,
+        "legacy_mean_delta": null,
+        "note": "REPORT-ONLY (NF-W2d/W2e): forward-looking sizing quotes the capture era."
+      },
+      "estimator_note": "max over the per-form block-peeking oracles vs the BINDING (better) incumbent \u2014 the oracle-side max is upward-biased by selection over the declared forms and the peek favors YES, so a NO is conservative (pre-registered; the NF-W5 rule).",
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field; declared before the run (the NF-W5 ceiling rule).",
+      "fdr_binding": false
+    }
+  },
+  "fdr": {
+    "own_family": {
+      "w6_ceiling_QB|passing_yards": false,
+      "w6_ceiling_QB|rushing_yards": false,
+      "w6_ceiling_RB|rushing_yards": false,
+      "w6_ceiling_RB|receiving_yards": false,
+      "w6_ceiling_WR|receiving_yards": false,
+      "w6_ceiling_TE|receiving_yards": false,
+      "w6_ceiling_QB|passing_tds": false,
+      "w6_ceiling_QB|rushing_tds": false,
+      "w6_ceiling_RB|rushing_tds": false,
+      "w6_ceiling_RB|receiving_tds": false,
+      "w6_ceiling_WR|receiving_tds": false,
+      "w6_ceiling_TE|receiving_tds": false
+    },
+    "pooled": {
+      "w6_ceiling_QB|passing_yards": false,
+      "w6_ceiling_QB|rushing_yards": false,
+      "w6_ceiling_RB|rushing_yards": false,
+      "w6_ceiling_RB|receiving_yards": false,
+      "w6_ceiling_WR|receiving_yards": false,
+      "w6_ceiling_TE|receiving_yards": false,
+      "w6_ceiling_QB|passing_tds": false,
+      "w6_ceiling_QB|rushing_tds": false,
+      "w6_ceiling_RB|rushing_tds": false,
+      "w6_ceiling_RB|receiving_tds": false,
+      "w6_ceiling_WR|receiving_tds": false,
+      "w6_ceiling_TE|receiving_tds": false
+    },
+    "binding": {
+      "w6_ceiling_QB|passing_yards": false,
+      "w6_ceiling_QB|rushing_yards": false,
+      "w6_ceiling_RB|rushing_yards": false,
+      "w6_ceiling_RB|receiving_yards": false,
+      "w6_ceiling_WR|receiving_yards": false,
+      "w6_ceiling_TE|receiving_yards": false,
+      "w6_ceiling_QB|passing_tds": false,
+      "w6_ceiling_QB|rushing_tds": false,
+      "w6_ceiling_RB|rushing_tds": false,
+      "w6_ceiling_RB|receiving_tds": false,
+      "w6_ceiling_WR|receiving_tds": false,
+      "w6_ceiling_TE|receiving_tds": false
+    }
+  },
+  "cell_decisions": {
+    "QB|passing_yards": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 11.009,
+      "reason": "ceiling 11.01% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude"
+    },
+    "QB|passing_tds": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 15.531,
+      "reason": "ceiling 15.53% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude"
+    },
+    "QB|rushing_yards": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 13.653,
+      "reason": "ceiling 13.65% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude"
+    },
+    "QB|rushing_tds": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 0.076,
+      "reason": "ceiling 0.08% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude"
+    },
+    "RB|rushing_yards": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 7.002,
+      "reason": "ceiling 7.00% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude"
+    },
+    "RB|rushing_tds": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 1.987,
+      "reason": "ceiling 1.99% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude"
+    },
+    "RB|receiving_yards": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 10.957,
+      "reason": "ceiling 10.96% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude"
+    },
+    "RB|receiving_tds": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 0.052,
+      "reason": "ceiling 0.05% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude"
+    },
+    "WR|receiving_yards": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 6.615,
+      "reason": "ceiling 6.62% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude"
+    },
+    "WR|receiving_tds": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 0.1,
+      "reason": "ceiling 0.10% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude"
+    },
+    "TE|receiving_yards": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 10.147,
+      "reason": "ceiling 10.15% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude"
+    },
+    "TE|receiving_tds": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 1.564,
+      "reason": "ceiling 1.56% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude"
+    }
+  },
+  "story_decision": {
+    "answer": "NULL",
+    "yes_cells": [],
+    "marginal_cells": [],
+    "reason": "no cell clears the YES band \u2014 the champion's per-stat marginals are already near their ceiling; the null is recorded and NOTHING is built (the story card's likely outcome, and a legitimate one)"
+  },
+  "anchor_failures": {},
+  "verdict": {
+    "story": "NULL",
+    "cells": {
+      "QB|passing_tds": "NO",
+      "QB|passing_yards": "NO",
+      "QB|rushing_tds": "NO",
+      "QB|rushing_yards": "NO",
+      "RB|receiving_tds": "NO",
+      "RB|receiving_yards": "NO",
+      "RB|rushing_tds": "NO",
+      "RB|rushing_yards": "NO",
+      "TE|receiving_tds": "NO",
+      "TE|receiving_yards": "NO",
+      "WR|receiving_tds": "NO",
+      "WR|receiving_yards": "NO"
+    }
+  },
+  "headline": "CEILING-GATE[NULL] yes=0 marginal=0 no=12 of 12 cells"
+}

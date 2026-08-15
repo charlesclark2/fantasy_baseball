@@ -274,16 +274,21 @@ class TestModelSourceCarriesTheFix:
             "the pivot-then-pick CTE is back — that is the defect this story fixed"
         )
 
-    def test_seasonnorm_masking_is_documented_as_deferred_to_e1_12(self):
+    def test_seasonnorm_null_cure_is_applied_and_documented(self):
         # E9.53 diagnosed that a bare coalesce(...,0) serves a missing RAW feature as a fabricated
-        # 0.0 ("exactly league average"), which is why the outage LOOKED like the raw and
-        # _seasonnorm columns came from different paths. The FIX changes a served model input, so
-        # it is deferred to the E1.12 retrain — but the finding must not be lost, or a future
-        # session re-diagnoses it from scratch. Semantics + the two-copy parity invariant are
-        # pinned by test_w8b_wrapper_seasonnorm_parity.py.
+        # 0.0 ("exactly league average"). E1.13 (2026-08-14, née E1.12) APPLIED the cure: the
+        # expression now carries the real NULL through (`case when raw.<c> is null then null`)
+        # while a missing/zero-variance BASELINE with a present raw still coalesces to 0. This pin
+        # keeps the cure + its provenance in the model source so a future session neither
+        # re-diagnoses the old defect nor quietly reverts to the bare coalesce. Semantics + the
+        # two-copy parity invariant are pinned by test_w8b_wrapper_seasonnorm_parity.py.
         src = _PUBLIC.read_text()
-        assert "DEFERRED TO E1.12" in src, (
-            "the deferred _seasonnorm masking defect must stay documented in the model"
+        assert "E1.13" in src and "NULL CURE" in src.upper(), (
+            "the E1.13 seasonnorm NULL-cure provenance must stay documented in the model"
+        )
+        assert re.search(r"case when raw\.\{\{ c \}\} is null then null", src), (
+            "the E1.13 cure expression (missing raw → NULL) is gone — a bare coalesce would "
+            "re-fabricate 0.0 for a missing raw feature (the E9.53 masking defect)"
         )
         # The INC-19 type pin must survive regardless.
         assert re.search(r"\)::double as \{\{ c \}\}_seasonnorm", src), (
