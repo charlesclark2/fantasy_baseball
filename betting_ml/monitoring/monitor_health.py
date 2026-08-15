@@ -50,6 +50,18 @@ CRITICAL_SCHEDULES = frozenset({
     # nobody watches reproduces the outage it exists to prevent (the autoheal lesson).
     "artifact_freshness_daytime",
     "artifact_freshness_overnight",
+    # NF-INFRA1 follow-up (2026-08-15): NF-INFRA1 turned sports_nfl_board_publish_schedule ON and
+    # confirmed sports_nfl_sleeper_injuries_schedule ON, but both shipped default_status=STOPPED —
+    # their ON state lived ONLY in the Dagster Postgres, so a volume reset / box re-host would
+    # silently revert them to STOPPED (the board freezes / Sleeper goes dark again) with nothing
+    # paging (the INC-16 default-status-revert + E11.23 "silently never runs" class, one level up
+    # from what NF-FRESH2/NF-INFRA1 already guard). Both now also carry default_status=RUNNING in
+    # code (see pipeline/schedules/sports_rollforward_schedules.py) — this is belt-and-suspenders.
+    # ⛔ Do NOT add the NCAAF schedules (sports_ncaaf_dbt_schedule /
+    # sports_ncaaf_roll_forward_schedule) here — they are intentionally STOPPED until the
+    # NCAAF-on-box card turns them on; adding them now would false-page every evaluation.
+    "sports_nfl_board_publish_schedule",
+    "sports_nfl_sleeper_injuries_schedule",
 })
 # Intraday / cutover env flags that must be permanently "1" on the box. An unset one = a
 # silently-gated-off refresh (3 of the 5 incidents). Scoped to the flags we are confident should
