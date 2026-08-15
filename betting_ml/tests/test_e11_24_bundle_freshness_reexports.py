@@ -32,6 +32,21 @@ assertions below unfalsifiable in the *other* direction.
 SOURCE-INSPECTION, not an import, for the fast-gate half: ``pipeline/__init__.py`` reads the dbt
 manifest, absent in the fast gate, so importing ``pipeline`` there would crash at COLLECTION
 rather than skip (E11.23).
+
+⭐ THIS BRANCH MERGES PR #772 (`e11.24-aug-14`), and the merge is load-bearing rather than tidy.
+Both PRs edit ``check_data_freshness.py``, and the collision is dangerous in two ways that only
+a real merge surfaces:
+  1. The textual conflict is 2 PROSE hunks — and resolving it the reflex way (``git checkout
+     --theirs``) takes the WHOLE file from one side and silently reverts #772's
+     ``eb_bullpen_team_posteriors`` / ``eb_park_factors_raw`` flips. Nothing catches that: no
+     test fails, ``needs_snowflake()`` just stays True and the wake credit never lands.
+  2. Two of #772's OWN guards assert the world this bundle retires (team_seq held back; some
+     entry still Snowflake-resident), so both PRs landing independently leaves ``dev`` RED.
+Merging here resolves both ONCE, under test, instead of at merge time — and it turns the
+"all seven entries read S3, ``needs_snowflake()`` is False" claim from a SIMULATION into a
+direct reading. Same reasoning PR #693 used when it merged `e11.24-target-3` for this same
+file: a real tested change beats a prose reconciliation. Either merge order stays safe — git
+dedupes the commits.
 """
 
 from __future__ import annotations
@@ -80,14 +95,6 @@ FRESHNESS_KEY = {
     "player_profiles_raw": "baseball_data.statsapi.player_profiles_raw",
 }
 
-# Entries this bundle does NOT own. PR #772 flips these two; until it merges to `dev` they are
-# legitimately Snowflake-sourced here, and after it merges this set is simply empty. Naming them
-# explicitly is what lets `test_no_entry_outside_pr_772_still_reads_snowflake` be a real assertion
-# on both bases instead of a vacuous one on either.
-PR_772_ENTRIES = {
-    "baseball_data.betting.eb_bullpen_team_posteriors",
-    "baseball_data.betting.eb_park_factors_raw",
-}
 
 
 def _code_only(path: Path) -> str:
@@ -415,31 +422,33 @@ def test_reading_s3_requires_the_reexport_in_every_writer_job(
         )
 
 
-def test_no_entry_outside_pr_772_still_reads_snowflake():
-    """The bundle's own scope, asserted rather than narrated. Anything Snowflake-sourced here
-    other than PR #772's two cheap flips means a blocker was missed or a new Snowflake-resident
-    entry was added — and a single such entry silently re-opens the connection and puts this
-    script back in the COMPUTE_WH wake queue (#679: wake is a queue, so one entry costs the
-    whole saving)."""
+def test_no_entry_reads_snowflake_at_all():
+    """The bundle's whole point, asserted rather than narrated.
+
+    TIGHTENED 2026-08-14: this branch now MERGES PR #772 (see the module docstring), so the
+    former "⊆ PR #772's two cheap flips" allowance is retired — that carve-out was written for a
+    base without #772 and would now quietly permit exactly the two entries the merge just
+    flipped. A single Snowflake-sourced entry re-opens the connection and puts this script back
+    in the COMPUTE_WH wake queue (#679: wake is a queue, so one entry costs the WHOLE saving)."""
     fresh = _freshness_module()
     still_sf = {t for t, c in fresh.FRESHNESS_THRESHOLDS.items()
                 if fresh.entry_source(c) == "snowflake"}
-    assert still_sf <= PR_772_ENTRIES, (
-        f"Snowflake-sourced entries outside PR #772's set: {sorted(still_sf - PR_772_ENTRIES)}. "
-        f"Each one keeps check_data_freshness resuming COMPUTE_WH on every run."
+    assert not still_sf, (
+        f"Snowflake-sourced entries remain: {sorted(still_sf)}. Each one keeps "
+        f"check_data_freshness resuming COMPUTE_WH on every run."
     )
 
 
-def test_the_union_with_pr_772_leaves_no_snowflake_read():
-    """The dividend, proven on the union rather than asserted in prose. On a base that already
-    has PR #772 this is exactly `needs_snowflake() is False`; on a base without it, it proves
-    that #772's two flips are the ONLY thing between this branch and a Snowflake-free run."""
+def test_the_script_opens_no_snowflake_connection():
+    """The dividend, now proven DIRECTLY rather than by simulating the union.
+
+    Before the #772 merge this test had to synthesise the end state (flip #772's two entries in
+    a copy of the registry and assert the result). That simulation was the honest thing to do on
+    a base that lacked #772 — and it is exactly the kind of stand-in that can drift from what
+    actually ships, so it is replaced by the real reading now that the merge makes one possible.
+    """
     fresh = _freshness_module()
-    with_772 = {
-        k: ({**v, "source": "s3"} if k in PR_772_ENTRIES else v)
-        for k, v in fresh.FRESHNESS_THRESHOLDS.items()
-    }
-    assert fresh.needs_snowflake(with_772) is False
+    assert fresh.needs_snowflake() is False
 
 
 def test_needs_snowflake_still_discriminates():

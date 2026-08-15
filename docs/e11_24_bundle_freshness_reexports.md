@@ -173,10 +173,36 @@ than as silently redundant code.
    by a **one-time operator prime** of all three exports (see the handoff). The isolation fix above
    means a missed prime now costs one `QUERY ERROR` line instead of the whole check, but the prime
    is still the point — a blind entry is not a monitored one.
-3. **PR #772 must be in `dev`.** Without it, `eb_bullpen_team_posteriors` and
-   `eb_park_factors_raw` stay Snowflake-sourced, `needs_snowflake()` stays `True`, and the script
-   still opens the connection — this bundle then delivers three correct flips and **zero** wake
-   credit. Nothing breaks; the dividend just does not land.
+3. ✅ **PR #772 is MERGED INTO THIS BRANCH** (2026-08-14), so this hazard is discharged. It was
+   originally "#772 must be in `dev` first, or `needs_snowflake()` stays `True` and the dividend
+   does not land". Test-merging the four open E11.24 PRs surfaced two collisions that made
+   folding it in the right call rather than a convenience:
+
+   * **The textual conflict resolves dangerously.** The two PRs collide in 2 **prose** hunks of
+     `check_data_freshness.py`. Resolving it the reflex way — `git checkout --theirs` — takes the
+     **whole file** from one side and silently reverts #772's `eb_bullpen_team_posteriors` and
+     `eb_park_factors_raw` flips back to `snowflake`. Nothing catches it: no test fails (the
+     bundle's own guard *permitted* exactly those two), `needs_snowflake()` just stays `True`,
+     and the wake credit the whole bundle exists for never lands. Measured, not hypothesised —
+     the first resolution attempt did exactly this.
+   * **Two of #772's own guards go RED on the union**, so both PRs landing independently leaves
+     `dev` red: `test_team_seq_is_held_back_from_the_flip` (asserts `team_seq` is still
+     Snowflake — its own failure message prescribes *"Wire that first, then update this test"*,
+     and the bundle wired it) and `test_the_flip_buys_no_wake_credit_while_any_blocker_remains`
+     (asserts some entry is still Snowflake-resident). Both **re-anchored, not deleted** — the
+     first is still the non-vacuity anchor for the coupling test below it, now proving that
+     test's antecedent TRUE instead of FALSE; the second still pins that the credit belongs to
+     the whole set and to no individual flip.
+
+   The bundle's own two guards were tightened in the same pass, for the same reason: their
+   "⊆ PR #772's two entries" allowance was written for a base without #772 and would now quietly
+   permit exactly the entries the merge just flipped. And
+   `test_the_union_with_pr_772_leaves_no_snowflake_read` — which had to *simulate* the end state
+   — is replaced by a direct reading, because the merge makes one possible.
+
+   ⇒ **all 7 entries read S3 and `needs_snowflake()` returns `False`, executed rather than
+   simulated.** Either merge order is now safe; git dedupes the commits. Same reasoning PR #693
+   used when it merged `e11.24-target-3` for this same file.
 
 ---
 
