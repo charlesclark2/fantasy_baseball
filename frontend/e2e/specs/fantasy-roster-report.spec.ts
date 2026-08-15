@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import {
-  E2E_DRAFTED_LEAGUE,
+  E2E_LINKED_LEAGUES,
   E2E_UNMATCHED_ROSTER_NAME,
   collectPageErrors,
   mockApi,
@@ -272,14 +272,17 @@ test.describe("the report follows the league that is selected", () => {
     // be served league A, and assert happily about the wrong roster. The mock now resolves the id —
     // which means this spec is also what keeps the harness honest.
     const { mock } = await openReport(page, { groups: SUBSCRIBER.groups, leagues: "linked" })
-    const picker = page.getByTestId("report-league-picker")
-    await expect(picker).toBeVisible()
 
-    const second = (await picker.locator("option").nth(1).getAttribute("value")) as string
-    await picker.selectOption(second)
+    // ⚠️ A Radix `Picker`, not a native <select> — `selectOption` silently does nothing on one, so
+    // the trigger is clicked and then the option (`components/ui/picker.tsx` explains why the raw
+    // element is forbidden repo-wide).
+    await page.getByLabel("League", { exact: true }).click()
+    await page.getByRole("option", { name: E2E_LINKED_LEAGUES.standard.name, exact: true }).click()
 
     await expect
-      .poll(() => mock.requested.filter((r) => r.includes(`league_id=${second}`)).length)
+      .poll(() =>
+        mock.requested.filter((r) => r.includes(`league_id=${E2E_LINKED_LEAGUES.standard.id}`)).length,
+      )
       .toBeGreaterThan(0)
     await expectApiFullyMocked(mock)
   })

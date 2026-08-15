@@ -49,6 +49,7 @@ const GATED_SURFACES = [
   { label: "My Teams", path: "/fantasy/my-teams", gate: "entitlement" },
   // `FantasyLeagueGuard` — signed in, with a personalization quota. Free accounts have one.
   { label: "My League", path: "/fantasy/my-league", gate: "account" },
+  { label: "Roster Report", path: "/fantasy/roster-report", gate: "account" },
   { label: "Import League", path: "/fantasy/import", gate: "account" },
   { label: "League Settings", path: "/fantasy/league-settings", gate: "account" },
 ] as const

@@ -80,6 +80,7 @@ import {
   num,
   int,
 } from "@/components/fantasy/shared"
+import { Picker } from "@/components/ui/picker"
 import { useAuth } from "@/lib/auth-context"
 import { canAccess } from "@/lib/entitlements"
 
@@ -152,24 +153,24 @@ export function RosterReport() {
   return (
     <Shell>
       {teams.length > 1 && (
-        <div className="mb-4">
-          <label htmlFor="report-league" className="text-[11px] uppercase tracking-wider text-gray-500">
-            League
-          </label>
-          <select
+        <div className="mb-4 max-w-sm">
+          <div className="text-[11px] uppercase tracking-wider text-gray-500">League</div>
+          {/* ⚠️ `Picker`, NOT a raw <select> — on iOS the native popup opens detached from the
+              control it belongs to, on every surface that uses one (see `components/ui/picker.tsx`).
+              `test_mobile_form_control_guard.py` enforces this repo-wide, and it caught exactly this
+              control. Consequence for the E2E: `selectOption` silently does nothing on a Radix
+              trigger, so the spec clicks the trigger and then the option. */}
+          <Picker
             id="report-league"
-            data-testid="report-league-picker"
-            value={leagueId ?? ""}
-            onChange={(e) => setSelected(e.target.value)}
-            // `text-base` on mobile is load-bearing — see the note on `shared.tsx`'s selects.
-            className="mt-1 block w-full max-w-sm rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-base text-gray-200 sm:text-sm"
-          >
-            {teams.map((t) => (
-              <option key={t.league.league_id} value={t.league.league_id}>
-                {t.league.name}
-              </option>
-            ))}
-          </select>
+            className="mt-1 w-full"
+            ariaLabel="League"
+            value={leagueId}
+            onValueChange={setSelected}
+            options={teams.map((t) => ({
+              value: t.league.league_id,
+              label: t.league.name,
+            }))}
+          />
         </div>
       )}
 
