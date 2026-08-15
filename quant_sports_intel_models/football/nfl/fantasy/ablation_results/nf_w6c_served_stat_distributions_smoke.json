@@ -1,0 +1,284 @@
+{
+  "story": "NF-W6c",
+  "smoke": true,
+  "generated_at": "2026-08-15T02:55:45+00:00",
+  "runtime_seconds": 163.1,
+  "matrix_key": "57c4cf96bb3c3570",
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 84553,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "n_rows": 695,
+  "representation": {
+    "story": "NF-W6c",
+    "served_version": "nfl_fantasy_w6c_v1",
+    "levels": 199,
+    "level_grid": "MC.EVAL_LEVELS (0.005\u20260.995, step 0.005)",
+    "level_min": 0.005,
+    "level_max": 0.995,
+    "monotone": true,
+    "zero_atom": "P(0) = the share of grid levels at or below 1e-09 (column `p_zero`)",
+    "index_q10": 19,
+    "index_q50": 99,
+    "index_q90": 179,
+    "central_80_interval": "quantiles[index_q10] \u2026 quantiles[index_q90]",
+    "cells": {
+      "QB|passing_tds": "knn_quantile",
+      "QB|passing_yards": "lgbm_quantile_tail",
+      "QB|rushing_yards": "lgbm_hurdle_tail",
+      "RB|rushing_yards": "lgbm_hurdle_tail",
+      "TE|receiving_yards": "lgbm_hurdle_tail",
+      "WR|receiving_yards": "lgbm_hurdle_tail"
+    },
+    "withheld_null_cells": [
+      "RB|receiving_yards",
+      "RB|rushing_tds"
+    ],
+    "closed_cells": [
+      "QB|rushing_tds",
+      "RB|receiving_tds",
+      "WR|receiving_tds",
+      "TE|receiving_tds"
+    ],
+    "features": [
+      "game_context__is_home",
+      "game_context__div_game",
+      "game_context__week_index",
+      "game_context__days_since_last_game",
+      "prior_week_box__ppr_l1",
+      "prior_week_box__ppr_l4_mean",
+      "prior_week_box__ppr_ewm",
+      "prior_week_box__ppr_s2d_mean",
+      "prior_week_box__targets_l4",
+      "prior_week_box__carries_l4",
+      "prior_week_box__attempts_l4",
+      "prior_week_box__receptions_l4",
+      "prior_week_box__rec_yards_l4",
+      "prior_week_box__rush_yards_l4",
+      "prior_week_box__pass_yards_l4",
+      "prior_week_box__played_share_l4",
+      "prior_week_box__games_s2d",
+      "prior_week_box__ppr_sum_s2d",
+      "snap_share__l1",
+      "snap_share__l4_mean",
+      "snap_share__observed_l4",
+      "team_environment__pass_att_l4",
+      "team_environment__rush_att_l4",
+      "team_environment__ppr_l4",
+      "opponent_matchup__dvp_ppr_index_l8",
+      "opponent_matchup__def_ppr_allowed_l8",
+      "prior_season_priors__ppg_prior",
+      "prior_season_priors__games_prior",
+      "prior_season_priors__rookie_flag"
+    ],
+    "uncertainty_framing": "honest predictive uncertainty for one player-week stat \u2014 a quantile bank and its P(0). Not a market comparison and not an edge/ROI claim of any kind."
+  },
+  "provenance": {
+    "serve_gw": 174,
+    "serve_season": 2025,
+    "serve_week": 18,
+    "n_train_rows": 17256,
+    "n_serve_player_weeks": 517,
+    "train_containment": {
+      "serve_gw": 174,
+      "n_serving_train": 84036,
+      "n_fold_train": 83011,
+      "extra_rows_vs_fold_train": 1025,
+      "purge_weeks": 2
+    },
+    "fit_notes": {
+      "fits": {
+        "knn_quantile|passing_tds": {
+          "calibration_split": null
+        },
+        "lgbm_quantile_tail|passing_yards": {
+          "n_train": 17256,
+          "n_core": 10105,
+          "n_cal": 6128,
+          "cal_gw_min": 161,
+          "cal_gw_max": 173
+        },
+        "lgbm_hurdle_tail|rushing_yards": {
+          "n_train": 17256,
+          "n_core": 10105,
+          "n_cal": 6128,
+          "cal_gw_min": 161,
+          "cal_gw_max": 173
+        },
+        "lgbm_hurdle_tail|receiving_yards": {
+          "n_train": 17256,
+          "n_core": 10105,
+          "n_cal": 6128,
+          "cal_gw_min": 161,
+          "cal_gw_max": 173
+        }
+      },
+      "n_fits": 4,
+      "n_cells": 6
+    },
+    "fit_seconds": 160.1,
+    "smoke_train_weeks": 36
+  },
+  "cell_summary": {
+    "QB|passing_tds": {
+      "n": 89,
+      "p_zero_mean": 0.7109,
+      "q10_mean": 0.0,
+      "q50_mean": 0.416,
+      "q90_mean": 1.135
+    },
+    "QB|passing_yards": {
+      "n": 89,
+      "p_zero_mean": 0.3492,
+      "q10_mean": 14.745,
+      "q50_mean": 65.977,
+      "q90_mean": 158.578
+    },
+    "QB|rushing_yards": {
+      "n": 89,
+      "p_zero_mean": 0.6262,
+      "q10_mean": 0.325,
+      "q50_mean": 4.877,
+      "q90_mean": 17.112
+    },
+    "RB|rushing_yards": {
+      "n": 126,
+      "p_zero_mean": 0.4152,
+      "q10_mean": 3.819,
+      "q50_mean": 20.644,
+      "q90_mean": 46.295
+    },
+    "TE|receiving_yards": {
+      "n": 115,
+      "p_zero_mean": 0.4931,
+      "q10_mean": 1.036,
+      "q50_mean": 10.896,
+      "q90_mean": 32.891
+    },
+    "WR|receiving_yards": {
+      "n": 187,
+      "p_zero_mean": 0.4437,
+      "q10_mean": 1.75,
+      "q50_mean": 16.675,
+      "q90_mean": 46.069
+    }
+  },
+  "serving_smoke": {
+    "QB|passing_tds": {
+      "n": 89,
+      "fresh": {
+        "crps_q199": 0.3049,
+        "coverage_80": 0.9551,
+        "pred_p0": 0.7109,
+        "real_p0": 0.764
+      },
+      "nf_w6b_record": {
+        "winner": "knn_quantile",
+        "coverage_80": 0.9484,
+        "real_p0": 0.6853,
+        "pred_p0": 0.6842,
+        "crps_q199": 0.29747
+      },
+      "note": "SERVING SMOKE \u2014 in-family check on ONE week; \u26d4 never a gate. The record's figures pool 8 half-season folds, so a single week differs by sampling alone; only a structural break (a dead atom, a collapsed band, a wrong-form fit) is a finding here."
+    },
+    "QB|passing_yards": {
+      "n": 89,
+      "fresh": {
+        "crps_q199": 38.1152,
+        "coverage_80": 0.7978,
+        "pred_p0": 0.3492,
+        "real_p0": 0.5506
+      },
+      "nf_w6b_record": {
+        "winner": "lgbm_quantile_tail",
+        "coverage_80": 0.7938,
+        "real_p0": 0.5497,
+        "pred_p0": 0.3099,
+        "crps_q199": 30.69922
+      },
+      "note": "SERVING SMOKE \u2014 in-family check on ONE week; \u26d4 never a gate. The record's figures pool 8 half-season folds, so a single week differs by sampling alone; only a structural break (a dead atom, a collapsed band, a wrong-form fit) is a finding here."
+    },
+    "QB|rushing_yards": {
+      "n": 89,
+      "fresh": {
+        "crps_q199": 5.3854,
+        "coverage_80": 0.7865,
+        "pred_p0": 0.6262,
+        "real_p0": 0.5955
+      },
+      "nf_w6b_record": {
+        "winner": "lgbm_hurdle_tail",
+        "coverage_80": 0.8268,
+        "real_p0": 0.5892,
+        "pred_p0": 0.6321,
+        "crps_q199": 4.6049
+      },
+      "note": "SERVING SMOKE \u2014 in-family check on ONE week; \u26d4 never a gate. The record's figures pool 8 half-season folds, so a single week differs by sampling alone; only a structural break (a dead atom, a collapsed band, a wrong-form fit) is a finding here."
+    },
+    "RB|rushing_yards": {
+      "n": 126,
+      "fresh": {
+        "crps_q199": 14.2914,
+        "coverage_80": 0.7937,
+        "pred_p0": 0.4152,
+        "real_p0": 0.3571
+      },
+      "nf_w6b_record": {
+        "winner": "lgbm_hurdle_tail",
+        "coverage_80": 0.8328,
+        "real_p0": 0.4002,
+        "pred_p0": 0.4254,
+        "crps_q199": 10.78942
+      },
+      "note": "SERVING SMOKE \u2014 in-family check on ONE week; \u26d4 never a gate. The record's figures pool 8 half-season folds, so a single week differs by sampling alone; only a structural break (a dead atom, a collapsed band, a wrong-form fit) is a finding here."
+    },
+    "TE|receiving_yards": {
+      "n": 115,
+      "fresh": {
+        "crps_q199": 7.7273,
+        "coverage_80": 0.8696,
+        "pred_p0": 0.4931,
+        "real_p0": 0.4696
+      },
+      "nf_w6b_record": {
+        "winner": "lgbm_hurdle_tail",
+        "coverage_80": 0.8874,
+        "real_p0": 0.4976,
+        "pred_p0": 0.5051,
+        "crps_q199": 7.45552
+      },
+      "note": "SERVING SMOKE \u2014 in-family check on ONE week; \u26d4 never a gate. The record's figures pool 8 half-season folds, so a single week differs by sampling alone; only a structural break (a dead atom, a collapsed band, a wrong-form fit) is a finding here."
+    },
+    "WR|receiving_yards": {
+      "n": 187,
+      "fresh": {
+        "crps_q199": 11.6023,
+        "coverage_80": 0.8342,
+        "pred_p0": 0.4437,
+        "real_p0": 0.4439
+      },
+      "nf_w6b_record": {
+        "winner": "lgbm_hurdle_tail",
+        "coverage_80": 0.8578,
+        "real_p0": 0.4118,
+        "pred_p0": 0.4119,
+        "crps_q199": 12.16074
+      },
+      "note": "SERVING SMOKE \u2014 in-family check on ONE week; \u26d4 never a gate. The record's figures pool 8 half-season folds, so a single week differs by sampling alone; only a structural break (a dead atom, a collapsed band, a wrong-form fit) is a finding here."
+    }
+  },
+  "promote_blockers": [
+    "NF-C6 Phase 2 \u2014 no weekly serving path exists (the deployed fantasy surface is the SEASON raw line `projections.json`; there is no weekly endpoint to attach a player-week distribution to)",
+    "NF-G0 promotion review \u2014 the ten gates plus a PM decision; NF-W6b promoted nothing and this story stages, it does not promote",
+    "the downstream arbitrary-league re-scoring consumer is a FOLLOW-ON story \u2014 the moment a scorer reads these distributions the three-implementations parity tax (fantasy_engine / the browser TS scorer / the Lambda scorer) triggers under the merge-gate parity test"
+  ],
+  "built_artifact": {
+    "path": "quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w6c_served_stat_distributions_smoke.parquet",
+    "sha256": "11dfc90ad25ed150edf9baf5673ddb739f1a772b5aa919060975780e8f6fdfb0",
+    "bytes": 730038,
+    "rows": 695,
+    "note": "gitignored (a built artifact, never committed). The registry stages THIS manifest, which pins the parquet by digest."
+  }
+}
