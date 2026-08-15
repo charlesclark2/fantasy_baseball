@@ -550,3 +550,173 @@ def test_the_league_board_response_key_is_additive():
     block = block[: block.index("def _joined_league_rosters")]
     for key in ('"season"', '"league"', '"board"', '"roster"'):
         assert key in block, f"{key} was removed from the league-board response — a deployed client reads it"
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# 5. NF-C6P3 (b) — the LEAGUE COMPARISON's honest-framing boundary
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⛔ THE MOST DANGEROUS SURFACE THIS STORY SHIPS. A standings-shaped table answers "did I win my
+# draft?" whether or not it was asked, and that is the one question the product has measured nothing
+# about: there is no weekly-variance schedule simulation and `best_alpha = 0`. A rank ON THIS MEASURE
+# is a fact about arithmetic we performed; a projected finish is a claim about work that does not
+# exist, and the distance between the two is one careless sentence.
+COMPARISON_COMPONENT = FRONTEND / "components/fantasy/roster-report.tsx"
+
+#: Outcome vocabulary the SHARED denylist does not carry, because no other surface in the product
+#: was ever shaped like a standings table. ⚠️ Screened NEGATION-AWARE below: the copy's own
+#: disclaimer ("it is not a projected finish") must not be what trips the guard — an over-eager scan
+#: pushes the copy the wrong way, and the cheapest way to satisfy it would be to delete the hedge
+#: (the NF-W7 `'temp' ⊂ 'attempt'` shape).
+_OUTCOME_CLAIMS = (
+    "projected finish",
+    "will finish",
+    "finish nth",
+    "playoff odds",
+    "playoff chance",
+    "chance of making",
+    "win probability",
+    "odds of winning",
+    "championship odds",
+    "expected to win",
+    "your ceiling is",
+)
+
+_COMPARISON_CONSTANTS = (
+    "REPORT_COMPARISON_HEADING",
+    "REPORT_COMPARISON_NOTE",
+    "REPORT_COMPARISON_CAVEAT_LINEUP",
+    "REPORT_COMPARISON_CAVEAT_SNAPSHOT",
+    "REPORT_COMPARISON_CAVEAT_OURS",
+    "REPORT_COMPARISON_PARTIAL",
+)
+
+
+def _comparison_copy() -> dict[str, str]:
+    """Each comparison constant's shipped string, comments stripped.
+
+    ⚠️ COMMENTS FIRST — the constants are NAMED in the prose above them, so a raw split lands on a
+    docstring rather than on a sentence a user reads (INC-38: prose must not satisfy a guard).
+    """
+    src = _strip_ts_comments(TS_CLAIM_COPY.read_text())
+    out: dict[str, str] = {}
+    for const in _COMPARISON_CONSTANTS:
+        assert f"export const {const}" in src, f"{const} is not exported from the copy module"
+        out[const] = src.split(f"export const {const}", 1)[1].split('"', 2)[1]
+    return out
+
+
+def test_the_comparison_copy_exists_and_is_extractable():
+    """⚠️ NON-VACUITY FIRST. Every clause below iterates these strings; an empty extraction would
+    make them all pass on nothing — the guard-that-cannot-fail class arriving through the fixture."""
+    copy = _comparison_copy()
+    assert len(copy) == len(_COMPARISON_CONSTANTS)
+    for const, text in copy.items():
+        assert len(text) > 40, f"{const} extracted as {text!r} — the split has gone stale"
+
+
+@pytest.mark.parametrize("phrase", _OUTCOME_CLAIMS)
+def test_the_comparison_copy_makes_no_finish_or_odds_claim(phrase: str):
+    """Parametrized so a forbidden phrase names ITSELF rather than failing a bundled assertion the
+    other ten could satisfy.
+
+    Negation-aware: the phrase may appear only after a `not`/`never`/`no` in the same sentence, which
+    is exactly what the surface's own disclaimer does."""
+    for const, text in _comparison_copy().items():
+        lowered = text.lower()
+        start = 0
+        while (at := lowered.find(phrase, start)) >= 0:
+            lead = lowered[max(0, at - 24) : at]
+            assert re.search(r"\b(not|never|no|without)\b[^.]*$", lead), (
+                f"{const} claims {phrase!r}: …{lead}{phrase}…"
+            )
+            start = at + len(phrase)
+
+
+def test_the_comparison_copy_passes_the_shared_claim_denylist():
+    """The same screen every other claim surface in the product passes. `test_nf_tr1_claim_copy.py`
+    screens the whole copy module; this narrows it to the constants this story added, so a failure
+    here names the sentence rather than the file."""
+    from quant_sports_intel_models.football.nfl.fantasy import export_track_record_json as ex
+
+    for const, text in _comparison_copy().items():
+        hits = [t for t in ex._CLAIM_DENYLIST if t in text.lower()]
+        assert not hits, f"{const} makes a forbidden claim {hits}: {text!r}"
+
+
+def test_the_headline_sentence_names_the_measure_it_ranks_on():
+    """⭐ THE ONE SENTENCE THE STORY PERMITS, AND ITS SHAPE IS THE PERMISSION. "You sit 7th" is what
+    a reader turns into "I will finish 7th"; "7th on projected starting points" is a fact about
+    arithmetic and cannot be read as a forecast. Asserted on the RENDERED string, so moving the
+    qualifier out of the sentence is a failure even if the words survive elsewhere on the page."""
+    src = _strip_ts_comments(COMPARISON_COMPONENT.read_text())
+    block = src[src.index('data-testid="league-comparison-summary"') :]
+    block = block[: block.index("</p>")]
+    assert "on projected starting" in block, (
+        "the comparison's headline sentence no longer names the measure its rank is on — a bare "
+        "rank reads as a projected finish"
+    )
+
+
+def test_all_three_caveats_render_unconditionally_with_the_table():
+    """⭐ NOT BEHIND A DISCLOSURE, NOT IN A TOOLTIP, NOT CONDITIONAL. A caveat behind a click is a
+    caveat that did not render, and each of these three names something a reader cannot work out.
+
+    ⚠️ Asserted inside the caveat LIST and required to be free of a `&&` guard, because "rendered"
+    and "rendered when some state happens to be true" are different claims and only one of them is
+    what the story requires."""
+    src = _strip_ts_comments(COMPARISON_COMPONENT.read_text())
+    block = src[src.index('data-testid="league-comparison-caveats"') :]
+    block = block[: block.index("</ul>")]
+    flat = re.sub(r"\s+", " ", block)
+    for const in (
+        "REPORT_COMPARISON_CAVEAT_LINEUP",
+        "REPORT_COMPARISON_CAVEAT_SNAPSHOT",
+        "REPORT_COMPARISON_CAVEAT_OURS",
+    ):
+        item = f"<li>{{{const}}}</li>"
+        assert item in flat, f"{const} does not render as a caveat in the table's own list"
+        # ⚠️ AND IT IS UNGUARDED. `{const in block}` alone is satisfied by
+        # `{someState && <li>{CONST}</li>}`, which renders in the happy case — so a screenshot looks
+        # right — and vanishes for exactly the readers who most need the hedge. The red proof caught
+        # this clause green on that break, which is the whole reason the check reads the preceding
+        # characters as well as the presence.
+        lead = flat[max(0, flat.index(item) - 48) : flat.index(item)]
+        assert "&&" not in lead and "?" not in lead, (
+            f"{const} is rendered CONDITIONALLY (…{lead}{item}) — a caveat that can disappear is not "
+            "a caveat the surface carries"
+        )
+
+
+def test_the_comparison_scores_nothing_and_reads_nothing():
+    """⛔ THE NF-C6P2 ARCHITECTURE CONSTRAINT, EXTENDED TO THE NEW SECTION. It is still an
+    AGGREGATOR: every total is a sum of `pts` the server already computed, through the same
+    `fillLineup`/`combineInterval` the caller's own team goes through. A fourth scorer would inherit
+    the whole `test_nf_epic1_parity.py` tax, and a wide read in this Lambda fails silently (E9.26b).
+
+    ⚠️ The repo-wide version of this clause lives in `test_nf_c6p2_roster_report.py` and covers the
+    same two files; this one is scoped to the comparison's own function, so a violation introduced
+    HERE names this story rather than the older one (the E9.60 coupling trap)."""
+    src = _strip_ts_comments(TS_REPORT_LIB.read_text())
+    block = src[src.index("export function leagueComparison") :]
+    # ⚠️ Bounded by a CODE anchor, not by the section comment — comments are stripped above, so a
+    # comment anchor would raise and the clause would fail for a reason unrelated to what it defends.
+    block = block[: block.index("export function buildRosterReport")]
+    for token in ("per_stat", "STAT_FIELD", "resolveScoring", "buildBoard", "fetch(", "apiFetch"):
+        assert token not in block, (
+            f"{token!r} appears in leagueComparison — it is re-deriving scoring or reaching for a "
+            "second source rather than aggregating the served board"
+        )
+    # …and it DOES go through the shared construction, so the league table and the caller's own
+    # headline cannot disagree about what a lineup is.
+    assert "fillLineup(" in block and "combineInterval(" in block
+
+
+def test_a_single_team_is_not_rendered_as_a_comparison():
+    """A one-row "comparison" is not one, and rendering it would imply a league-wide reading from a
+    single team. Every league imported before this story shipped is in exactly that state."""
+    src = _strip_ts_comments(TS_REPORT_LIB.read_text())
+    block = src[src.index("export function leagueComparison") :]
+    assert "if (held.length < 2) return null" in block, (
+        "leagueComparison no longer refuses to build a table from fewer than two rosters"
+    )

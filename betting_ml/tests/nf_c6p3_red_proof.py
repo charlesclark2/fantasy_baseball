@@ -40,6 +40,7 @@ TS_SCORING = REPO / "frontend/lib/league-scoring.ts"
 TS_REPORT = REPO / "frontend/lib/roster-report.ts"
 TS_COPY = REPO / "frontend/lib/fantasy-claim-copy.ts"
 TS_IMPORT = REPO / "frontend/components/fantasy/league-import.tsx"
+COMPONENT = REPO / "frontend/components/fantasy/roster-report.tsx"
 SUITE = "betting_ml/tests/test_nf_c6p3_league_rosters.py"
 
 #: `(label, file, anchor, replacement, the ONE test that must go red)`.
@@ -225,9 +226,58 @@ CASES = [
      "setStoredRosterTeams((res as { league_rosters?: unknown[] | null }).league_rosters?.length ?? 0)",
      "setStoredRosterTeams(leagueRosters.length)",
      "test_the_import_confirms_what_the_server_actually_stored"),
+
+    # ── NF-C6P3 (b): the league comparison's honest-framing boundary ───────────────────────────
+    #
+    # ⛔ Every case here re-introduces a sentence or a shape that would turn a ranking of projected
+    # starter points into a claim about how the season ends — the thing the product has measured
+    # nothing about.
+    ("promise a finish in the comparison's own note", TS_COPY,
+     '  "Every team\'s roster filled by our optimizer and totalled on your league\'s own board',
+     '  "Your projected finish, from every team\'s roster filled by our optimizer',
+     "test_the_comparison_copy_makes_no_finish_or_odds_claim"),
+
+    ("state a rank with no measure attached", COMPONENT,
+     "on projected starting\n          points today.",
+     "today.",
+     "test_the_headline_sentence_names_the_measure_it_ranks_on"),
+
+    # ⚠️ ONE CAVEAT PER CASE — a break that removes all three proves nothing about any of them, and
+    # the clause is written so that deleting exactly one turns it red (NF-D17 §7).
+    ("drop the optimal-fill caveat", COMPONENT,
+     "        <li>{REPORT_COMPARISON_CAVEAT_LINEUP}</li>\n",
+     "",
+     "test_all_three_caveats_render_unconditionally_with_the_table"),
+
+    ("drop the snapshot caveat", COMPONENT,
+     "        <li>{REPORT_COMPARISON_CAVEAT_SNAPSHOT}</li>\n",
+     "",
+     "test_all_three_caveats_render_unconditionally_with_the_table"),
+
+    ("drop the whose-opinion caveat", COMPONENT,
+     "        <li>{REPORT_COMPARISON_CAVEAT_OURS}</li>\n",
+     "",
+     "test_all_three_caveats_render_unconditionally_with_the_table"),
+
+    # ⭐ THE PLAUSIBLE WRONG FIX: put a caveat behind a condition. It renders in the happy case, so a
+    # screenshot looks right, and it vanishes for exactly the readers who most need it.
+    ("hide a caveat behind a condition", COMPONENT,
+     "        <li>{REPORT_COMPARISON_CAVEAT_OURS}</li>",
+     "        {report.leagueRosters.complete && <li>{REPORT_COMPARISON_CAVEAT_OURS}</li>}",
+     "test_all_three_caveats_render_unconditionally_with_the_table"),
+
+    ("let the comparison build its own board", TS_REPORT,
+     "    const lineup = fillLineup(players, roster, (p) => p.pts)",
+     "    const lineup = buildBoard(players, roster)",
+     "test_the_comparison_scores_nothing_and_reads_nothing"),
+
+    ("render a one-team league as a comparison", TS_REPORT,
+     "  if (held.length < 2) return null",
+     "  if (held.length < 1) return null",
+     "test_a_single_team_is_not_rendered_as_a_comparison"),
 ]
 
-FILES = {SCORING, MODELS, DYNAMO, ROUTER, TS_SCORING, TS_REPORT, TS_COPY, TS_IMPORT}
+FILES = {SCORING, MODELS, DYNAMO, ROUTER, TS_SCORING, TS_REPORT, TS_COPY, TS_IMPORT, COMPONENT}
 
 
 def run(test_name: str) -> tuple[int, str]:

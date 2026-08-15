@@ -1761,6 +1761,43 @@ const CASES = [
     to: "const complete = held.length > 0",
     grep: "reports the absence instead of guessing",
   },
+  {
+    id: "comparison-rank-is-not-the-table",
+    shipped: "NF-C6P3 (b) — pre-emptive: the comparison ranks by something it does not render",
+    // ⭐ THE PLAUSIBLE-LOOKING WRONG NUMBER, on the most quotable figure the page produces. Sorting
+    // by team NAME still renders a complete, tidy, ordered-looking table with a rank column and a
+    // summary sentence — and the reader's position in their league is simply wrong. Nothing about
+    // the page looks broken (E9.46's rank, one surface over).
+    detail: "Orders the table alphabetically instead of by the totals it renders.",
+    file: "lib/roster-report.ts",
+    from: "    .sort((a, b) => b.total - a.total || a.teamName.localeCompare(b.teamName))",
+    to: "    .sort((a, b) => a.teamName.localeCompare(b.teamName))",
+    grep: "rank follows the totals",
+  },
+  {
+    id: "comparison-caveats-behind-a-click",
+    shipped: "NF-C6P3 (b) — pre-emptive: the standings caveats move behind a disclosure",
+    // ⛔ THE FAILURE THIS WHOLE SECTION IS SHAPED AGAINST. A ranked table answers "did I win my
+    // draft?" whether or not it was asked; the three caveats are what keep it a statement about
+    // projected starter points. Behind a <details> they render for nobody, the table reads as
+    // standings, and not one number on the page has changed.
+    detail: "Wraps the caveat list in a collapsed disclosure.",
+    file: "components/fantasy/roster-report.tsx",
+    from: '      <ul className="mt-3 space-y-1.5 text-[11px] leading-relaxed text-gray-500" data-testid="league-comparison-caveats">',
+    to: '      <ul hidden className="mt-3 space-y-1.5 text-[11px] leading-relaxed text-gray-500" data-testid="league-comparison-caveats">',
+    grep: "caveats render with the table",
+  },
+  {
+    id: "comparison-promises-a-finish",
+    shipped: "NF-C6P3 (b) — pre-emptive: the ranking is restated as a projected finish",
+    // The one sentence that turns arithmetic into a forecast. It needs a weekly-variance schedule
+    // simulation that does not exist, and `best_alpha = 0`.
+    detail: "Rewrites the comparison note as an outcome claim.",
+    file: "lib/fantasy-claim-copy.ts",
+    from: '  "Every team\'s roster filled by our optimizer and totalled on your league\'s own board',
+    to: '  "Your projected finish this season, from every team\'s roster filled by our optimizer',
+    grep: "no finish, no odds",
+  },
 ]
 
 /**
@@ -1806,12 +1843,12 @@ const CASES = [
  * file. (Nothing reached a commit: staging by explicit path rather than `git add -A` is what kept
  * it out.)
  */
-// NF-C6P3 adds THREE cases, each RED-proven individually (`-- <id>`) rather than by a full board
-// run, for the same reason NF-C6P2 recorded: 117 cases × a production build each does not belong in
-// a session. So 117/111/6 is 114/108/6 plus three individually-proven REDs, and the next full run is
+// NF-C6P3 adds SIX cases in total (three in (a), three in (b)), each RED-proven individually (`-- <id>`) rather than by a full board
+// run, for the same reason NF-C6P2 recorded: 120 cases × a production build each does not belong in
+// a session. So 120/114/6 is 114/108/6 plus six individually-proven REDs, and the next full run is
 // what CONFIRMS it. ⛔ A projection is not a measurement — if that run disagrees, the finding is
 // whatever drifted, never this line.
-const RECORDED_BOARD = { total: 117, red: 111, notObservable: 6 }
+const RECORDED_BOARD = { total: 120, red: 114, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

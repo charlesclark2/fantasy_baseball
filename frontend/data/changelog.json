@@ -3,6 +3,10 @@
     "week": "2026-08-10",
     "items": [
       {
+        "tag": "new",
+        "text": "The Roster Report now has a League tab: every team in your league, their roster filled by our optimizer and totalled on your league's own board, so you can see where your starters sit in the range. It is a ranking of projected starting points and nothing more — not a projected finish and not a chance of winning anything, which would need a week-by-week schedule simulation we have not built. Three things ride with the table rather than behind a link: we do not know the lineup another manager will actually start, so every team is filled the same way yours is; these are the rosters as they stood when you imported the league, because we never re-read it; and the order is our projections' opinion, so it tells you whose roster our model likes."
+      },
+      {
         "tag": "fixed",
         "text": "Your league defence now scores. When you imported a league, your D/ST was matched by name — but your platform calls it \"Lions D/ST\" while our board calls it \"DET D/ST\", so no team defence ever matched: the D/ST slot on the Post-Draft Roster Report sat empty and its points were missing from your projected team total. Defences are now matched by team, so the slot fills and the headline includes it."
       },
