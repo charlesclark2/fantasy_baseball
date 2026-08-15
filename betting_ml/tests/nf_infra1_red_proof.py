@@ -31,6 +31,8 @@ PATH_TEST = "betting_ml/tests/test_nf_infra1_sports_duckdb_path.py"
 SLEEP_TEST = "betting_ml/tests/test_nf_infra1_sleeper_hardening.py"
 
 JOB = "pipeline/jobs/sports_nfl_sleeper_injuries_job.py"
+RSP = "quant_sports_intel_models/football/nfl/fantasy/run_season_projection.py"
+ROOKIE_TEST = "betting_ml/tests/test_nf_infra1_rookie_projection_source.py"
 SRC = "quant_sports_intel_models/football/nfl/fantasy/sleeper_injuries_source.py"
 FRESH = "betting_ml/monitoring/sports_delta_freshness.py"
 COMPOSE = "services/dagster/aws/docker-compose.yml"
@@ -106,6 +108,33 @@ BREAKS = [
     ("the deploy-time gate is removed from env.required", "services/dagster/aws/env.required",
      "\nSPORTS_DUCKDB_PATH\n", "\n#SPORTS_DUCKDB_PATH\n",
      f"{PATH_TEST}::test_env_required_gates_the_deploy_on_the_path_being_set"),
+
+    # ── layer 5: the rookie feeder must be obtainable on the box (the SECOND instance of the
+    #    gitignored-artifact class — it killed the first board build that ever ran there) ────────
+    ("the lake fallback is removed (a bare FileNotFoundError on the box again)", RSP,
+     "    if _ROOKIE_PARQUET.exists():", "    if True:",
+     f"{ROOKIE_TEST}::test_an_absent_local_artifact_falls_back_to_the_lake"),
+    ("the lake read is repointed at the wrong tier", RSP,
+     'expr = delta(_ROOKIE_LAKE_SOURCE, sport="ncaaf", tier=_ROOKIE_LAKE_TIER)',
+     'expr = delta(_ROOKIE_LAKE_SOURCE, sport="ncaaf", tier="raw")',
+     f"{ROOKIE_TEST}::test_an_absent_local_artifact_falls_back_to_the_lake"),
+    ("the lake is preferred over a present local artifact (laptop boards move silently)", RSP,
+     "    if _ROOKIE_PARQUET.exists():", "    if False:",
+     f"{ROOKIE_TEST}::test_a_present_local_artifact_is_used_and_the_lake_is_NOT_read"),
+    ("an EMPTY lake table builds a rookie-less board instead of refusing", RSP,
+     "    if df.empty:", "    if False:",
+     f"{ROOKIE_TEST}::test_an_EMPTY_lake_table_refuses_rather_than_building_a_rookieless_board"),
+    ("the both-absent error stops naming the box's cure", RSP,
+     'f"On the BOX the lake is the only source: check SPORTS_LAKE_REGION=us-east-2 and that "',
+     'f"It could not be found. "',
+     f"{ROOKIE_TEST}::test_both_sources_absent_raises_a_message_that_names_BOTH_and_the_cure"),
+    ("a call site bypasses the resolver and reads the parquet directly", RSP,
+     "    rookies_all = load_rookie_projection_frame()",
+     "    rookies_all = pd.read_parquet(_ROOKIE_PARQUET)",
+     f"{ROOKIE_TEST}::test_no_call_site_reads_the_parquet_directly"),
+    ("the per-build cache is removed (three reads, three possible vintages)", RSP,
+     "    if _rookie_frame_cache is not None:", "    if False:",
+     f"{ROOKIE_TEST}::test_the_frame_is_cached_so_one_build_reads_ONE_vintage"),
 ]
 
 

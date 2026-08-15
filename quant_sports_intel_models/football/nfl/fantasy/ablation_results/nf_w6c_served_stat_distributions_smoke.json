@@ -1,8 +1,8 @@
 {
   "story": "NF-W6c",
   "smoke": true,
-  "generated_at": "2026-08-15T03:09:43+00:00",
-  "runtime_seconds": 144.4,
+  "generated_at": "2026-08-15T18:14:21+00:00",
+  "runtime_seconds": 191.7,
   "matrix_key": "57c4cf96bb3c3570",
   "pit_audit": {
     "weeks_checked": 175,
@@ -10,7 +10,7 @@
     "weeks_dropped": [],
     "rows_dropped": 0
   },
-  "n_rows": 695,
+  "n_rows": 821,
   "representation": {
     "story": "NF-W6c",
     "served_version": "nfl_fantasy_w6c_v1",
@@ -30,11 +30,11 @@
       "QB|rushing_yards": "lgbm_hurdle_tail",
       "RB|rushing_yards": "lgbm_hurdle_tail",
       "TE|receiving_yards": "lgbm_hurdle_tail",
-      "WR|receiving_yards": "lgbm_hurdle_tail"
+      "WR|receiving_yards": "lgbm_hurdle_tail",
+      "RB|rushing_tds": "knn_quantile"
     },
     "withheld_null_cells": [
-      "RB|receiving_yards",
-      "RB|rushing_tds"
+      "RB|receiving_yards"
     ],
     "closed_cells": [
       "QB|rushing_tds",
@@ -115,12 +115,15 @@
           "n_cal": 6128,
           "cal_gw_min": 161,
           "cal_gw_max": 173
+        },
+        "knn_quantile|rushing_tds": {
+          "calibration_split": null
         }
       },
-      "n_fits": 4,
-      "n_cells": 6
+      "n_fits": 5,
+      "n_cells": 7
     },
-    "fit_seconds": 142.8,
+    "fit_seconds": 146.8,
     "smoke_train_weeks": 36
   },
   "cell_summary": {
@@ -144,6 +147,13 @@
       "q10_mean": 0.325,
       "q50_mean": 4.877,
       "q90_mean": 17.112
+    },
+    "RB|rushing_tds": {
+      "n": 126,
+      "p_zero_mean": 0.8584,
+      "q10_mean": 0.0,
+      "q50_mean": 0.0,
+      "q90_mean": 0.501
     },
     "RB|rushing_yards": {
       "n": 126,
@@ -219,6 +229,23 @@
       },
       "note": "SERVING SMOKE \u2014 in-family check on ONE week; \u26d4 never a gate. The record's figures pool 8 half-season folds, so a single week differs by sampling alone; only a structural break (a dead atom, a collapsed band, a wrong-form fit) is a finding here."
     },
+    "RB|rushing_tds": {
+      "n": 126,
+      "fresh": {
+        "crps_q199": 0.117,
+        "coverage_80": 0.9524,
+        "pred_p0": 0.8584,
+        "real_p0": 0.9048
+      },
+      "nf_w6b_record": {
+        "winner": "knn_quantile",
+        "coverage_80": 0.9537,
+        "real_p0": 0.8607,
+        "pred_p0": 0.8719,
+        "crps_q199": 0.13023
+      },
+      "note": "SERVING SMOKE \u2014 in-family check on ONE week; \u26d4 never a gate. The record's figures pool 8 half-season folds, so a single week differs by sampling alone; only a structural break (a dead atom, a collapsed band, a wrong-form fit) is a finding here."
+    },
     "RB|rushing_yards": {
       "n": 126,
       "fresh": {
@@ -278,9 +305,9 @@
   ],
   "built_artifact": {
     "path": "quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w6c_served_stat_distributions_smoke.parquet",
-    "sha256": "11dfc90ad25ed150edf9baf5673ddb739f1a772b5aa919060975780e8f6fdfb0",
-    "bytes": 730038,
-    "rows": 695,
+    "sha256": "43211e643569792e421b9daad70d776036191d0130e13663903b78d15ed7fe70",
+    "bytes": 733560,
+    "rows": 821,
     "note": "gitignored (a built artifact, never committed). The registry stages THIS manifest, which pins the parquet by digest."
   }
 }

@@ -94,11 +94,20 @@ Three layers, because fixing any one alone leaves the bug:
      `pct_matched = 100.0` **by construction** (the drop already removed every unresolved row), so
      it cannot tell a healthy crosswalk from a dead one. `load_sleeper_injuries_with_coverage`
      measures **before** the drop; `classify_land` gates the write on it.
-   * The floor (50%) is derived from the two **measured regimes** — native-only ~17–22% vs
-     crosswalked ~89–100% — not reverse-engineered from a run's answer (NF1.8). It is deliberately
-     loose: the pre-drop rate had never been recorded, and a tight floor would be a guess that can
-     only fail toward falsely refusing a healthy feed. Every run now logs `pct_resolved`, so it can
-     be tightened against real observations.
+   * The floor (50%) is derived from the two regimes, not reverse-engineered from a run's answer
+     (NF1.8). ⭐ **Both are now MEASURED** — the first healthy land after this story (box,
+     2026-08-15, season 2026, 4,038 fetched): **61.9%** with the crosswalk alive (2,501 resolved;
+     the crosswalk roughly doubles the 1,259 native ids, and 2,501 matches the last-known-good
+     2,499 of 07-26) versus **31.2%** native-only. 50 sits between them.
+   * ⚠️ **A correction worth recording.** Before that measurement this doc and the code put the
+     healthy regime at "~89–100%" — which was the **post-drop** rate, i.e. the very statistic
+     `load_sleeper_injuries_with_coverage` exists to replace, since it is 100% *by construction*.
+     The floor's VALUE was right and correctly placed; its stated **derivation** cited a number
+     nothing had measured. The real healthy-side margin is ~12pp, not "wide". Separately,
+     NF-FRESH1's "16.7% of rostered / 22.1% of flagged" is a **different denominator** and must not
+     be compared to this ratio directly. ⛔ Do not tighten the floor toward 61.9 on one
+     observation — the denominator moves with how many non-rostered players Sleeper carries, and a
+     floor that false-refuses is strictly worse than a generous one.
    * A **partial** land (zero flagged players) still writes, and **reports its magnitude**.
 3. **The artifact is asserted, not the producer** (INC-41) — `betting_ml/monitoring/sports_delta_freshness.py`.
    Everything else in this job watches the producer, and the producer reported success for 19 days.
@@ -110,12 +119,54 @@ Three layers, because fixing any one alone leaves the bug:
 
 ---
 
+## 2.4 The SECOND instance of the same class — the rookie feeder
+
+The first board build ever attempted on the box died at:
+
+```
+FileNotFoundError: '/app/.../ncaaf/models/artifacts/ncaaf_nfl_rookie_projections.parquet'
+```
+
+`*.parquet` is gitignored in that artifacts directory, so this is **structurally identical to the
+DuckDB**: a laptop-run output that is never in the `COPY . .` image. ⛔ And copying it onto the box
+is not a cure either — `/app` is replaced by every deploy, so it would vanish on the next one.
+
+The same writer already lands the authoritative copy in the sports lake
+(`ncaaf/derived/nfl_rookie_projections`, partitioned by `draft_year`) — it is what the
+`ncaaf_nfl_rookie_projections` dbt view reads. So `load_rookie_projection_frame()` reads:
+
+1. the **local artifact** when it exists, so a LAPTOP build stays **byte-identical** to every board
+   this repo has certified — changing which copy the laptop reads would silently move a published
+   board, a worse failure than the one being fixed;
+2. the **lake** when it does not, so the box reads the authoritative table instead of dying;
+3. …and it **logs which one it chose**, with the row count and the local file's mtime. A source
+   preference that does not announce itself is exactly how the pre-draft board regen silently
+   published a 2-day-old board.
+
+Two refusals rather than silent degradation: a readable-but-**EMPTY** lake table raises (it would
+otherwise publish a board with no rookies at all), and **neither source available** raises a message
+naming both paths and the actual cure for each of box and laptop — the original was a bare
+`FileNotFoundError` on a path whose absence is *expected* on the box, legible only to someone who
+already knew the gitignore.
+
+⚠️ **Residual risk, stated rather than hidden:** on a laptop whose local parquet is older than the
+lake, this prefers the stale copy. That is the pre-existing behaviour (the local file used to be the
+only source), so it is not a regression — the mtime in the log line is what makes it findable.
+
+📍 **A known same-class site left alone:** `run_nf1_1.build_season_projection` reads the same
+gitignored parquet directly. It is **off the publish path** (`run_nf1_5` imports only `_finite_top`,
+`_season_row` and `_sharpe` from that module, verified), it is a laptop-only research runner, and
+repointing it would change a certified research path for zero box benefit.
+
+---
+
 ## 3. Guards
 
 `betting_ml/tests/test_nf_infra1_sports_duckdb_path.py` (20) ·
-`betting_ml/tests/test_nf_infra1_sleeper_hardening.py` (28)
+`betting_ml/tests/test_nf_infra1_sleeper_hardening.py` (28) ·
+`betting_ml/tests/test_nf_infra1_rookie_projection_source.py` (9)
 
-**All 16 falsifiability claims RED-proven** — `uv run python betting_ml/tests/nf_infra1_red_proof.py`
+**All 23 falsifiability claims RED-proven** — `uv run python betting_ml/tests/nf_infra1_red_proof.py`
 (applies each break in-process, asserts the mutation landed, requires the named test to go RED).
 
 ⭐ **The harness earned its keep twice, and both are worth reading:**

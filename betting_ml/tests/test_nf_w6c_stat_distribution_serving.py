@@ -48,13 +48,20 @@ _BUILD_RUNNER = _FANTASY / "run_nf_w6c_serve_stat_distributions.py"
 _STAGE_RUNNER = _FANTASY / "run_nf_w6c_stage_registry.py"
 _RECORD_JSON = _FANTASY / "ablation_results" / "nf_w6b_stat_distributions.json"
 _RECORD_MD = _FANTASY / "ablation_results" / "nf_w6b_stat_distributions.md"
+#: NF-W6c-wire: the NF-W6b-C fresh-family successor record that ships the 7th cell — a SEPARATE
+#: §0.5 record from _RECORD_JSON/_RECORD_MD (MH2.2: nothing is promoted from W6b's retired
+#: field; this record is read on its own terms).
+_RECORD_JSON_W6BC = _FANTASY / "ablation_results" / "nf_w6b_c_rb_rush_tds.json"
 
-#: The six cells NF-W6b shipped — restated here ONLY so a silent edit to both the module and the
-#: record still fails; the record is the authority and is checked against it below.
-EXPECTED_SERVED = {
+#: The six cells NF-W6b shipped, and the one NF-W6b-C shipped — restated here ONLY so a silent
+#: edit to the module and either record still fails; the records are the authority and are
+#: checked against them below.
+EXPECTED_SERVED_W6B = {
     "QB|passing_tds", "QB|passing_yards", "QB|rushing_yards",
     "RB|rushing_yards", "TE|receiving_yards", "WR|receiving_yards",
 }
+EXPECTED_SERVED_W6BC = {"RB|rushing_tds"}
+EXPECTED_SERVED = EXPECTED_SERVED_W6B | EXPECTED_SERVED_W6BC
 
 
 def _stripped(path: Path) -> str:
@@ -83,6 +90,10 @@ def _record() -> dict:
     return json.loads(_RECORD_JSON.read_text())
 
 
+def _record_w6bc() -> dict:
+    return json.loads(_RECORD_JSON_W6BC.read_text())
+
+
 def _good_bank(n: int = 5, atom_levels: int = 40) -> np.ndarray:
     """A well-formed served bank: finite, monotone, (n, 199), with a real zero atom."""
     row = np.concatenate([np.zeros(atom_levels),
@@ -102,7 +113,13 @@ def _serve_frame(n_per_pos: int = 3) -> pd.DataFrame:
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 class TestServedSetIsTheRecordsShipVerdicts:
-    """The served cells are exactly what the gates certified — nothing more, nothing less."""
+    """The served cells are exactly what the gates certified — nothing more, nothing less.
+
+    TWO records certify the served set: NF-W6b (6 cells) and NF-W6b-C (RB|rushing_tds — a
+    SEPARATE, fresh-family registration that shipped where NF-W6b's OWN field could not clear
+    DSR for this cell). MH2.2 forbids re-scoring the retired field, so the successor's SHIP
+    verdict is read from its own record, never from a re-interpretation of NF-W6b's null — and
+    NF-W6b's own verdict for this cell stays a null, untouched."""
 
     def test_the_record_parses_and_is_non_vacuous(self):
         """⭐ Every clause below reads the record; if it stopped parsing they would pass on
@@ -113,26 +130,59 @@ class TestServedSetIsTheRecordsShipVerdicts:
         assert len(rec["selections"]) == 8, (
             f"the record no longer carries all 8 contested cells: {sorted(rec['selections'])}")
 
-    def test_served_cells_are_exactly_the_records_ship_cells(self):
-        ship = {c for c, v in _record()["verdict"]["cells"].items() if v == "SHIP"}
-        assert set(SDS.SERVED_CELLS) == ship == EXPECTED_SERVED, (
-            f"SERVED_CELLS {set(SDS.SERVED_CELLS)} != the record's SHIP set {ship}")
+    def test_the_w6bc_record_parses_and_ships_exactly_rb_rushing_tds(self):
+        """The successor record's own non-vacuity anchor — separate from the W6b record's."""
+        rec = _record_w6bc()
+        assert rec["verdict"] == {"RB|rushing_tds": "SHIP"}, (
+            f"the W6b-C record no longer ships exactly RB|rushing_tds: {rec['verdict']}")
+        assert rec["gate"]["ship"] is True and rec["null_state"] is None
+        assert rec["selection"]["cell"] == "RB|rushing_tds"
 
-    def test_each_served_form_is_the_records_winner_for_that_cell(self):
+    def test_the_w6b_record_still_shows_rb_rushing_tds_as_a_null(self):
+        """⭐ The mechanism that makes two records necessary, made falsifiable: NF-W6b's OWN
+        field never shipped this cell (its DSR could not clear — sr0 inflated by an excluded
+        arm), and that has NOT changed — the successor did not retroactively edit it (MH2.2). A
+        future reader must never "clean up" the W6b record to agree with the successor."""
+        assert _record()["verdict"]["cells"]["RB|rushing_tds"] != "SHIP", (
+            "the W6b record's own verdict for RB|rushing_tds is no longer a null — the retired "
+            "field must stay untouched (MH2.2); the SHIP verdict belongs only to the fresh "
+            "NF-W6b-C registration")
+
+    def test_served_cells_are_exactly_the_two_records_ship_cells(self):
+        ship_w6b = {c for c, v in _record()["verdict"]["cells"].items() if v == "SHIP"}
+        ship_w6bc = {c for c, v in _record_w6bc()["verdict"].items() if v == "SHIP"}
+        assert ship_w6b == EXPECTED_SERVED_W6B and ship_w6bc == EXPECTED_SERVED_W6BC
+        assert set(SDS.SERVED_CELLS) == (ship_w6b | ship_w6bc) == EXPECTED_SERVED, (
+            f"SERVED_CELLS {set(SDS.SERVED_CELLS)} != the two records' combined SHIP set "
+            f"{ship_w6b | ship_w6bc}")
+
+    def test_each_served_form_is_the_certifying_records_winner_for_that_cell(self):
         sels = _record()["selections"]
+        w6bc_sel = _record_w6bc()["selection"]
         assert SDS.SERVED_CELLS, "no served cells — this loop would pass on nothing"
         for cell, form in SDS.SERVED_CELLS.items():
+            if cell == w6bc_sel["cell"]:
+                assert form == w6bc_sel["winner"], (
+                    f"{cell}: serving {form!r} but the NF-W6b-C record certified "
+                    f"{w6bc_sel['winner']!r} — serving a form the gates did not select "
+                    f"(MH2.1 (b))")
+                continue
             assert form == sels[cell]["winner"], (
                 f"{cell}: serving {form!r} but the record certified {sels[cell]['winner']!r} — "
                 f"serving a form the gates did not select (MH2.1 (b))")
 
-    def test_the_recorded_nulls_are_withheld_not_served(self):
+    def test_the_recorded_null_is_withheld_not_served(self):
         rec = _record()["verdict"]["cells"]
         nulls = {c for c, v in rec.items() if v != "SHIP"}
-        assert nulls, "the record shows no null cells — this clause would pass on nothing"
-        assert set(SDS.WITHHELD_NULL_CELLS) == nulls, (
-            f"withheld set {set(SDS.WITHHELD_NULL_CELLS)} != the record's nulls {nulls}")
-        assert not (set(SDS.SERVED_CELLS) & nulls), "a recorded NULL cell is being served"
+        assert nulls == {"RB|receiving_yards", "RB|rushing_tds"}, (
+            f"the W6b record's null set moved: {sorted(nulls)}")
+        superseded = {c for c, v in _record_w6bc()["verdict"].items() if v == "SHIP"}
+        still_withheld = nulls - superseded
+        assert still_withheld, "this clause would pass on nothing if nothing stayed withheld"
+        assert set(SDS.WITHHELD_NULL_CELLS) == still_withheld == {"RB|receiving_yards"}, (
+            f"withheld set {set(SDS.WITHHELD_NULL_CELLS)} != {still_withheld}")
+        assert not (set(SDS.SERVED_CELLS) & set(SDS.WITHHELD_NULL_CELLS)), (
+            "a recorded NULL cell is being served")
 
     def test_the_closed_td_no_cells_can_never_be_served(self):
         assert SDS.CLOSED_CELLS == SD.CLOSED_CELLS, "the CLOSED set drifted from the pure module"
@@ -345,12 +395,16 @@ class TestSharedFitsAreAnIdentityNotAnApproximation:
             return base + np.linspace(0.0, 1.0, SDS.N_LEVELS)[None, :], {"stub": True}
         return _arm
 
-    def test_the_six_cells_need_exactly_four_distinct_fits(self):
+    def test_the_seven_cells_need_exactly_five_distinct_fits(self):
         keys = SDS.served_fit_keys()
-        assert len(keys) == 4, f"expected 4 distinct (arm, stat) fits, got {keys}"
-        assert len(SDS.SERVED_CELLS) == 6
+        assert len(keys) == 5, f"expected 5 distinct (arm, stat) fits, got {keys}"
+        assert len(SDS.SERVED_CELLS) == 7
         assert ("lgbm_hurdle_tail", "rushing_yards") in keys
         assert ("lgbm_hurdle_tail", "receiving_yards") in keys
+        assert ("knn_quantile", "passing_tds") in keys
+        assert ("knn_quantile", "rushing_tds") in keys, (
+            "RB|rushing_tds's own (arm, stat) fit is missing — it must NOT collide with the "
+            "QB|passing_tds knn_quantile fit (same arm, different stat)")
 
     def test_each_distinct_fit_is_dispatched_once_over_the_whole_serve_frame(self, monkeypatch):
         calls: list = []
@@ -585,7 +639,11 @@ class TestTheShippedManifestIsWhatWeSayItIs:
     def test_the_shipped_artifact_was_built_on_the_certified_matrix(self):
         p = self._payload()
         assert p["matrix_key"] == json.loads(_RECORD_JSON.read_text())["matrix_key"], (
-            "the served artifact was built on a different matrix than the record certified")
+            "the served artifact was built on a different matrix than the NF-W6b record "
+            "certified")
+        assert p["matrix_key"] == _record_w6bc()["matrix_key"], (
+            "the served artifact was built on a different matrix than the NF-W6b-C record "
+            "certified")
         assert p["pit_audit"]["rows_dropped"] == 0, "the PIT gate dropped rows on the served build"
 
     def test_the_shipped_artifact_pins_its_parquet_by_digest(self):
@@ -633,7 +691,7 @@ class TestTheGuardsAboveCanActuallyFail:
         self._breaks([(dict(SDS.SERVED_CELLS), broken)])
         monkeypatch.setattr(SDS, "SERVED_CELLS", broken)
         self._clause_must_fail(
-            TestServedSetIsTheRecordsShipVerdicts().test_the_recorded_nulls_are_withheld_not_served)
+            TestServedSetIsTheRecordsShipVerdicts().test_the_recorded_null_is_withheld_not_served)
 
     def test_red_serving_a_closed_td_no_cell_is_caught(self, monkeypatch):
         broken = dict(SDS.SERVED_CELLS) | {"QB|rushing_tds": "knn_quantile"}
@@ -647,7 +705,27 @@ class TestTheGuardsAboveCanActuallyFail:
         self._breaks([(dict(SDS.SERVED_CELLS), broken)])
         monkeypatch.setattr(SDS, "SERVED_CELLS", broken)
         self._clause_must_fail(
-            TestServedSetIsTheRecordsShipVerdicts().test_each_served_form_is_the_records_winner_for_that_cell)
+            TestServedSetIsTheRecordsShipVerdicts()
+                .test_each_served_form_is_the_certifying_records_winner_for_that_cell)
+
+    def test_red_dropping_the_w6bc_cell_from_served_cells_is_caught(self, monkeypatch):
+        """A forgotten wiring step — SERVED_CELLS never gained the 7th cell — must be caught by
+        the combined-ship-set clause, not just by a per-form check."""
+        broken = dict(SDS.SERVED_CELLS_FROM_W6B)
+        self._breaks([(dict(SDS.SERVED_CELLS), broken)])
+        monkeypatch.setattr(SDS, "SERVED_CELLS", broken)
+        self._clause_must_fail(
+            TestServedSetIsTheRecordsShipVerdicts().test_served_cells_are_exactly_the_two_records_ship_cells)
+
+    def test_red_serving_the_wrong_form_for_the_w6bc_cell_is_caught(self, monkeypatch):
+        """⭐ The NEW branch this story adds — proven separately from the W6b-cell break above,
+        so the w6bc-record comparison path is independently attributable (NF-D17)."""
+        broken = dict(SDS.SERVED_CELLS) | {"RB|rushing_tds": "lgbm_hurdle_tail"}
+        self._breaks([(dict(SDS.SERVED_CELLS), broken)])
+        monkeypatch.setattr(SDS, "SERVED_CELLS", broken)
+        self._clause_must_fail(
+            TestServedSetIsTheRecordsShipVerdicts()
+                .test_each_served_form_is_the_certifying_records_winner_for_that_cell)
 
     def test_red_a_drifted_index_pin_is_caught(self, monkeypatch):
         self._breaks([(SDS.IDX_Q10, SDS.IDX_Q10 + 1)])

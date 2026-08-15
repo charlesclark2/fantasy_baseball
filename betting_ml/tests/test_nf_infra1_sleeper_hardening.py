@@ -10,7 +10,9 @@ THREE INDEPENDENT INVARIANTS, because the bug had three layers and fixing any on
      so landing a crosswalk-less frame does not sit beside the good snapshot, it replaces it. The
      tempting "make the DuckDB optional and land native-gsis rows" was MEASURED at 16.7% of
      rostered / 22.1% of flagged and would drop 95 of 122 flagged players while reporting success —
-     strictly worse than a loud break;
+     strictly worse than a loud break. (⚠️ those are NF-FRESH1's denominators; on the ratio the
+     floor actually gates — resolved/fetched — the same regime measured 31.2% on 2026-08-15
+     against 61.9% healthy.);
   3. the ARTIFACT is checked, not just the producer (INC-41) — the producer reported success for
      19 days; only the Delta log disagreed.
 
@@ -34,8 +36,14 @@ from quant_sports_intel_models.football.nfl.fantasy import sleeper_injuries_sour
 _REPO = Path(__file__).resolve().parents[2]
 _JOB = _REPO / "pipeline/jobs/sports_nfl_sleeper_injuries_job.py"
 
-_HEALTHY = {"n_fetched": 2800, "n_resolved": 2499, "pct_resolved": 89.3,
-            "n_native_gsis": 470, "n_crosswalk_resolved": 2029, "n_flagged": 122}
+# The FIRST healthy land after NF-INFRA1, measured on the box 2026-08-15 (season 2026). Real
+# observation, not a fixture invented to pass — an earlier version of this used pct_resolved=89.3,
+# a number nothing had ever measured (see DEFAULT_MIN_PCT_RESOLVED's derivation).
+_HEALTHY = {"n_fetched": 4038, "n_resolved": 2501, "pct_resolved": 61.9,
+            "n_native_gsis": 1259, "n_crosswalk_resolved": 1242, "n_flagged": 25}
+# The same run's native-gsis-only counts — what a crosswalk-less land would have written.
+_NATIVE_ONLY = {"n_fetched": 4038, "n_resolved": 1259, "pct_resolved": 31.2,
+                "n_native_gsis": 1259, "n_crosswalk_resolved": 0, "n_flagged": 8}
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════
@@ -56,11 +64,10 @@ def test_an_empty_feed_refuses_the_write_and_is_critical():
 
 
 def test_a_collapsed_crosswalk_refuses_the_write():
-    """The measured native-only regime (16.7% of rostered / 22.1% of flagged). This is the land the
-    story explicitly forbids: plausible-looking, 100%-matched after the drop, and missing most
-    flagged players."""
-    v = SI.classify_land({"n_fetched": 2800, "n_resolved": 468, "pct_resolved": 16.7,
-                          "n_native_gsis": 468, "n_crosswalk_resolved": 0, "n_flagged": 27})
+    """The MEASURED native-only regime from the 2026-08-15 land: 1,259 of 4,038 = 31.2%, versus
+    61.9% with the crosswalk alive. This is the land the story explicitly forbids — plausible-
+    looking, 100%-matched after the drop, and missing two thirds of the players."""
+    v = SI.classify_land(_NATIVE_ONLY)
     assert v["verdict"] == "CROSSWALK_DEGRADED"
     assert v["should_write"] is False
     assert v["severity"] == "CRITICAL"
@@ -72,10 +79,14 @@ def test_resolving_nothing_at_all_refuses_the_write():
     assert v["should_write"] is False
 
 
-def test_the_floor_separates_the_two_MEASURED_regimes_with_margin():
-    """The floor is derived from the two regimes (native-only ~17-22%, crosswalked ~89-100%), not
-    reverse-engineered from a run's answer (NF1.8). Both regimes must land on the correct side."""
-    assert 22.1 < SI.DEFAULT_MIN_PCT_RESOLVED < 89.3
+def test_the_floor_separates_THE_MEASURED_REGIMES_not_assumed_ones():
+    """Both sides are real observations from the 2026-08-15 land, on the SAME denominator the floor
+    is computed over — 31.2% native-only vs 61.9% crosswalked (NF1.8: derive the floor from the
+    regimes, never from a run's answer). The healthy-side margin is ~12pp, so the floor must not
+    drift upward casually."""
+    assert _NATIVE_ONLY["pct_resolved"] < SI.DEFAULT_MIN_PCT_RESOLVED < _HEALTHY["pct_resolved"]
+    assert SI.classify_land(_NATIVE_ONLY)["should_write"] is False
+    assert SI.classify_land(_HEALTHY)["should_write"] is True
 
 
 def test_a_zero_flagged_land_still_WRITES_but_reports_its_magnitude():
@@ -88,9 +99,8 @@ def test_a_zero_flagged_land_still_WRITES_but_reports_its_magnitude():
 
 
 def test_every_refusal_names_the_magnitude_not_just_a_verdict():
-    v = SI.classify_land({"n_fetched": 2800, "n_resolved": 468, "pct_resolved": 16.7,
-                          "n_native_gsis": 468, "n_crosswalk_resolved": 0, "n_flagged": 27})
-    assert "468" in v["reason"] and "2800" in v["reason"] and "16.7" in v["reason"]
+    v = SI.classify_land(_NATIVE_ONLY)
+    assert "1259" in v["reason"] and "4038" in v["reason"] and "31.2" in v["reason"]
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════
