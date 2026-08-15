@@ -1,20 +1,38 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import { format } from "date-fns"
-import { CalendarIcon, Info } from "lucide-react"
+import { CalendarIcon, Info, Search as SearchIcon, X as ClearIcon } from "lucide-react"
 import { Nav } from "@/components/nav"
 import { AuthGuard } from "@/components/auth-guard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Input } from "@/components/ui/input"
+import { Picker } from "@/components/ui/picker"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { useAuth } from "@/lib/auth-context"
 import { useSelectedDate } from "@/lib/date-context"
 import { apiFetch } from "@/lib/api"
 import { LogPastPropDialog } from "@/components/log-past-prop-dialog"
+import {
+  buildGameGroups,
+  buildGameMeta,
+  distinctLineValues,
+  distinctTeams,
+  filterRows,
+  fmtGameTime,
+  groupMatchesTeams,
+  nextGameToStartPk,
+  slateOrderCompare,
+  sortOptionsFor,
+  sortRowsByMetric,
+  type SlateRow,
+  type SlateSortKey,
+} from "@/lib/props-slate"
 
 // ---------------------------------------------------------------------------
 // Prop types — extensible. Only Strikeouts (K) has a projection surface today; add more here as
@@ -108,26 +126,6 @@ function fmtSignedPct(p: number | null): string {
   return `${v >= 0 ? "+" : ""}${v.toFixed(0)} pts`
 }
 
-// First-pitch time from an ISO timestamp, in the viewer's local zone (e.g. "7:05 PM").
-// Mirror the tracker page's parser: use the string as-is if it already carries tz info
-// (Z or ±HH:MM); otherwise treat it as UTC by appending "Z" (game_datetime is a UTC instant).
-function fmtGameTime(raw: string | null): string | null {
-  if (!raw) return null
-  const iso = raw.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(raw) ? raw : raw + "Z"
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return null
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
-}
-
-// Comparable first-pitch instant (ms) for sorting; same Z-append rule as fmtGameTime.
-// Missing/unparseable times sort last (Infinity).
-function gameTimeMs(raw: string | null): number {
-  if (!raw) return Infinity
-  const iso = raw.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(raw) ? raw : raw + "Z"
-  const t = new Date(iso).getTime()
-  return isNaN(t) ? Infinity : t
-}
-
 // Compact range bar: 5th–95th band, 80% (p10–p90) emphasis, median tick, book-line marker.
 function MiniRange({ r }: { r: ProjectionRow }) {
   const p05 = r.p05
@@ -173,11 +171,14 @@ function ProjectionCard({ r }: { r: ProjectionRow }) {
   return (
     <Link
       href={r.game_date ? `/props/${r.pitcher_id}?as_of=${r.game_date}` : `/props/${r.pitcher_id}`}
+      data-testid="props-card"
       className="block rounded-lg border border-[#262626] bg-[#111111] p-4 transition-colors hover:border-[#3a3a3a] hover:bg-[#141414]"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate font-semibold text-white">{r.full_name ?? `Pitcher ${r.pitcher_id}`}</div>
+          <div data-testid="props-card-name" className="truncate font-semibold text-white">
+            {r.full_name ?? `Pitcher ${r.pitcher_id}`}
+          </div>
           <div className="truncate text-[11px]">
             <span className="font-medium text-gray-200">{r.team ?? "—"}</span>
             {r.opponent ? <span className="text-gray-600"> vs {r.opponent}</span> : null}
@@ -185,7 +186,11 @@ function ProjectionCard({ r }: { r: ProjectionRow }) {
         </div>
         <div className="text-right">
           <div className="text-[10px] uppercase tracking-wider text-gray-500">Proj K</div>
-          <div className="text-2xl font-bold tabular-nums text-emerald-400">
+          <div
+            data-testid="props-card-proj"
+            data-proj={r.mean ?? ""}
+            className="text-2xl font-bold tabular-nums text-emerald-400"
+          >
             {r.mean != null ? r.mean.toFixed(1) : "—"}
           </div>
           {fmtGameTime(r.game_datetime) && (
@@ -216,13 +221,19 @@ function ProjectionCard({ r }: { r: ProjectionRow }) {
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-wider text-gray-600">Book line</div>
-          <div className="text-xs tabular-nums text-amber-400">
+          <div
+            data-testid="props-card-line"
+            data-line={r.primary_line ?? ""}
+            className="text-xs tabular-nums text-amber-400"
+          >
             {r.primary_line != null ? r.primary_line : "—"}
           </div>
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-wider text-gray-600">Model − Book</div>
           <div
+            data-testid="props-card-diff"
+            data-diff={r.model_vs_book_p_over ?? ""}
             className={`text-xs tabular-nums ${
               (r.model_vs_book_p_over ?? 0) >= 0 ? "text-emerald-400" : "text-gray-400"
             }`}
@@ -251,11 +262,14 @@ function BatterProjectionCard({ r }: { r: BatterRow }) {
       href={
         r.game_date ? `/props/batter/${r.batter_id}?as_of=${r.game_date}` : `/props/batter/${r.batter_id}`
       }
+      data-testid="props-card"
       className="block rounded-lg border border-[#262626] bg-[#111111] p-4 transition-colors hover:border-[#3a3a3a] hover:bg-[#141414]"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="truncate font-semibold text-white">{r.full_name ?? `Batter ${r.batter_id}`}</div>
+          <div data-testid="props-card-name" className="truncate font-semibold text-white">
+            {r.full_name ?? `Batter ${r.batter_id}`}
+          </div>
           <div className="truncate text-[11px]">
             <span className="font-medium text-gray-200">{r.team ?? "—"}</span>
             {r.opponent ? <span className="text-gray-600"> vs {r.opponent}</span> : null}
@@ -266,7 +280,11 @@ function BatterProjectionCard({ r }: { r: BatterRow }) {
         </div>
         <div className="text-right">
           <div className="text-[10px] uppercase tracking-wider text-gray-500">Proj TB</div>
-          <div className="text-2xl font-bold tabular-nums text-emerald-400">
+          <div
+            data-testid="props-card-proj"
+            data-proj={r.mean ?? ""}
+            className="text-2xl font-bold tabular-nums text-emerald-400"
+          >
             {r.mean != null ? r.mean.toFixed(1) : "—"}
           </div>
           {fmtGameTime(r.game_datetime) && (
@@ -307,19 +325,25 @@ function BatterProjectionCard({ r }: { r: BatterRow }) {
       <div className="mt-3 grid grid-cols-3 gap-2 text-center">
         <div>
           <div className="text-[10px] uppercase tracking-wider text-gray-600">P(2+ bases)</div>
-          <div className="text-xs tabular-nums text-gray-300">
+          <div data-testid="props-card-p2" data-p2={r.p_ge_2 ?? ""} className="text-xs tabular-nums text-gray-300">
             {r.p_ge_2 != null ? `${(r.p_ge_2 * 100).toFixed(0)}%` : "—"}
           </div>
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-wider text-gray-600">Book line</div>
-          <div className="text-xs tabular-nums text-amber-400">
+          <div
+            data-testid="props-card-line"
+            data-line={r.primary_line ?? ""}
+            className="text-xs tabular-nums text-amber-400"
+          >
             {r.primary_line != null ? r.primary_line : "—"}
           </div>
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-wider text-gray-600">Model − Book</div>
           <div
+            data-testid="props-card-diff"
+            data-diff={r.model_vs_book_p_over ?? ""}
             className={`text-xs tabular-nums ${
               (r.model_vs_book_p_over ?? 0) >= 0 ? "text-emerald-400" : "text-gray-400"
             }`}
@@ -329,6 +353,38 @@ function BatterProjectionCard({ r }: { r: BatterRow }) {
         </div>
       </div>
     </Link>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// E5.10 — slate navigation: search, sort, filter chips.
+// ---------------------------------------------------------------------------
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+  testId,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+  testId: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      aria-pressed={active}
+      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+        active
+          ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300"
+          : "border-[#262626] bg-[#111111] text-gray-400 hover:border-[#3a3a3a] hover:text-gray-200"
+      }`}
+    >
+      {label}
+    </button>
   )
 }
 
@@ -344,7 +400,17 @@ function PropsPageInner() {
   const [propType, setPropType] = useState<string>(PROP_TYPES[0].key)
   const [calOpen, setCalOpen] = useState(false)
 
+  // ── E5.10 slate-navigation state ──────────────────────────────────────────────────────────────
+  const [search, setSearch] = useState("")
+  const [sortKey, setSortKey] = useState<SlateSortKey>("slate")
+  const [selectedTeams, setSelectedTeams] = useState<Set<string>>(new Set())
+  const [lineFilter, setLineFilter] = useState<number | null>(null)
+  const [minBookCount, setMinBookCount] = useState<number | null>(null)
+  const [openGroups, setOpenGroups] = useState<string[]>([])
+  const [initializedSlateKey, setInitializedSlateKey] = useState<string | null>(null)
+
   const active = PROP_TYPES.find((p) => p.key === propType) ?? PROP_TYPES[0]
+  const isBatterTab = active.key === "total_bases"
 
   const { data, isLoading, isError } = useQuery<ProjectionIndex>({
     queryKey: ["props-index", active.key, isoDate],
@@ -353,32 +419,136 @@ function PropsPageInner() {
     staleTime: 1000 * 60 * 30,
   })
 
-  // Sort cards by first-pitch time ascending, then game_pk — so the two starters
-  // facing each other (same game) sit next to each other, in slate order.
-  const pitchers = useMemo(() => {
-    const rows = data?.pitchers ?? []
-    return [...rows].sort((a, b) => {
-      const ta = gameTimeMs(a.game_datetime)
-      const tb = gameTimeMs(b.game_datetime)
-      if (ta !== tb) return ta - tb
-      return (a.game_pk ?? 0) - (b.game_pk ?? 0)
-    })
-  }, [data])
+  // Original per-tab rows, keyed by id, so a card can render its full field set (last3_k, p10/p90,
+  // batting slot, …) after the slate-nav logic below has reduced everything to the common shape.
+  const originalById = useMemo(() => {
+    const map = new Map<number, BatterRow | ProjectionRow>()
+    if (isBatterTab) {
+      for (const r of data?.batters ?? []) map.set(r.batter_id, r)
+    } else {
+      for (const r of data?.pitchers ?? []) map.set(r.pitcher_id, r)
+    }
+    return map
+  }, [data, isBatterTab])
 
-  // E5.9 — batter TB rows: slate order, then game, then lineup slot.
-  const batters = useMemo(() => {
-    const rows = data?.batters ?? []
-    return [...rows].sort((a, b) => {
-      const ta = gameTimeMs(a.game_datetime)
-      const tb = gameTimeMs(b.game_datetime)
-      if (ta !== tb) return ta - tb
-      if ((a.game_pk ?? 0) !== (b.game_pk ?? 0)) return (a.game_pk ?? 0) - (b.game_pk ?? 0)
-      return (a.batting_slot ?? 10) - (b.batting_slot ?? 10)
-    })
-  }, [data])
+  // Mapped once into the tab-agnostic shape every group/search/sort/filter function operates on
+  // (frontend/lib/props-slate.ts) — both tabs go through the SAME logic here.
+  const rows: SlateRow[] = useMemo(() => {
+    if (isBatterTab) {
+      return (data?.batters ?? []).map((r) => ({
+        id: r.batter_id,
+        fullName: r.full_name,
+        team: r.team,
+        opponent: r.opponent,
+        gamePk: r.game_pk,
+        gameDatetime: r.game_datetime,
+        order: r.batting_slot ?? 10,
+        proj: r.mean,
+        pGe2: r.p_ge_2,
+        line: r.primary_line,
+        bookCount: r.book_count,
+        diff: r.model_vs_book_p_over,
+      }))
+    }
+    return (data?.pitchers ?? []).map((r, i) => ({
+      id: r.pitcher_id,
+      fullName: r.full_name,
+      team: r.team,
+      opponent: r.opponent,
+      gamePk: r.game_pk,
+      gameDatetime: r.game_datetime,
+      order: i,
+      proj: r.mean,
+      pGe2: null,
+      line: r.primary_line,
+      bookCount: r.book_count,
+      diff: r.model_vs_book_p_over,
+    }))
+  }, [data, isBatterTab])
 
-  const isBatterTab = active.key === "total_bases"
-  const cardCount = isBatterTab ? batters.length : pitchers.length
+  const cardCount = rows.length
+  const gameMeta = useMemo(() => buildGameMeta(rows), [rows])
+  const allGroups = useMemo(() => buildGameGroups(rows, gameMeta), [rows, gameMeta])
+
+  const teamsAll = useMemo(() => distinctTeams(rows), [rows])
+  const lineValuesAll = useMemo(() => distinctLineValues(rows), [rows])
+  const maxBookCount = useMemo(() => rows.reduce((m, r) => Math.max(m, r.bookCount), 0), [rows])
+  const bookCountThresholds = useMemo(() => [2, 3].filter((n) => n <= maxBookCount), [maxBookCount])
+
+  // A new tab or a new date is a fresh slate: reset search/sort/filters, and default to the next
+  // game to start (collapsed elsewhere). Guarded so a background react-query refetch of the SAME
+  // slate never clobbers what the visitor already typed/clicked.
+  const slateKey = `${active.key}|${isoDate}`
+  useEffect(() => {
+    if (initializedSlateKey === slateKey) return
+    setSearch("")
+    setSortKey("slate")
+    setSelectedTeams(new Set())
+    setLineFilter(null)
+    setMinBookCount(null)
+    if (allGroups.length > 0) {
+      const next = nextGameToStartPk(allGroups, Date.now())
+      setOpenGroups(next != null ? [String(next)] : [])
+      setInitializedSlateKey(slateKey)
+    } else {
+      setOpenGroups([])
+    }
+  }, [slateKey, allGroups, initializedSlateKey])
+
+  const filteredRows = useMemo(
+    () => filterRows(rows, { search, line: lineFilter, minBookCount }),
+    [rows, search, lineFilter, minBookCount],
+  )
+  const visibleRows = useMemo(
+    () =>
+      filteredRows.filter((r) => {
+        if (r.gamePk == null) return selectedTeams.size === 0
+        return groupMatchesTeams(gameMeta.get(r.gamePk)?.teams ?? [], selectedTeams)
+      }),
+    [filteredRows, gameMeta, selectedTeams],
+  )
+
+  const groups = useMemo(() => {
+    const built = buildGameGroups(visibleRows, gameMeta)
+    return built.map((g) => ({ ...g, rows: [...g.rows].sort(slateOrderCompare) }))
+  }, [visibleRows, gameMeta])
+
+  const flatSorted = useMemo(() => {
+    if (sortKey === "slate") return []
+    return sortRowsByMetric(visibleRows, sortKey)
+  }, [visibleRows, sortKey])
+
+  const filtersActive = !!search.trim() || selectedTeams.size > 0 || lineFilter != null || minBookCount != null
+  const effectiveOpenValues = filtersActive ? groups.map((g) => String(g.gamePk)) : openGroups
+
+  const projLabel = isBatterTab ? "Proj TB" : "Proj K"
+  const sortOptions = useMemo(() => sortOptionsFor(isBatterTab, projLabel), [isBatterTab, projLabel])
+
+  function toggleTeam(team: string) {
+    setSelectedTeams((prev) => {
+      const next = new Set(prev)
+      if (next.has(team)) next.delete(team)
+      else next.add(team)
+      return next
+    })
+  }
+
+  function clearFilters() {
+    setSearch("")
+    setSelectedTeams(new Set())
+    setLineFilter(null)
+    setMinBookCount(null)
+  }
+
+  function renderCard(id: number) {
+    const orig = originalById.get(id)
+    if (!orig) return null
+    return isBatterTab ? (
+      <BatterProjectionCard key={id} r={orig as BatterRow} />
+    ) : (
+      <ProjectionCard key={id} r={orig as ProjectionRow} />
+    )
+  }
 
   return (
     <>
@@ -453,6 +623,98 @@ function PropsPageInner() {
           </div>
         </div>
 
+        {/* E5.10 — slate navigation: search, sort, filter chips. Only once there is a slate to
+            navigate; the loading/error/empty states below are unaffected. */}
+        {!isLoading && !isError && cardCount > 0 && (
+          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-[#1e1e1e] bg-[#0b0b0b] p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative w-full sm:max-w-xs">
+                <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-600" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={isBatterTab ? "Search batters" : "Search pitchers"}
+                  aria-label={isBatterTab ? "Search batters by name" : "Search pitchers by name"}
+                  data-testid="props-search"
+                  className="h-9 border-[#262626] bg-[#141414] pl-8 text-white placeholder:text-gray-600"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label htmlFor="props-sort" className="text-[11px] uppercase tracking-wider text-gray-600">
+                  Sort
+                </label>
+                <Picker
+                  id="props-sort"
+                  ariaLabel="Sort"
+                  value={sortKey}
+                  onValueChange={(v) => setSortKey(v as SlateSortKey)}
+                  options={sortOptions.map((o) => ({ value: o.key, label: o.label }))}
+                  className="h-9 w-[180px] border-[#262626] bg-[#141414] text-sm text-white"
+                  contentClassName="border-[#262626] bg-[#141414] text-white"
+                />
+              </div>
+            </div>
+
+            {/* Filter chips */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {teamsAll.length > 1 && (
+                <>
+                  <span className="text-[11px] uppercase tracking-wider text-gray-600">Team</span>
+                  {teamsAll.map((t) => (
+                    <FilterChip
+                      key={t}
+                      label={t}
+                      active={selectedTeams.has(t)}
+                      onClick={() => toggleTeam(t)}
+                      testId={`props-filter-team-${t}`}
+                    />
+                  ))}
+                </>
+              )}
+              {lineValuesAll.length > 1 && (
+                <>
+                  <span className="ml-2 text-[11px] uppercase tracking-wider text-gray-600">Line</span>
+                  {lineValuesAll.map((l) => (
+                    <FilterChip
+                      key={l}
+                      label={String(l)}
+                      active={lineFilter === l}
+                      onClick={() => setLineFilter((prev) => (prev === l ? null : l))}
+                      testId={`props-filter-line-${l}`}
+                    />
+                  ))}
+                </>
+              )}
+              {bookCountThresholds.length > 0 && (
+                <>
+                  <span className="ml-2 text-[11px] uppercase tracking-wider text-gray-600">Books</span>
+                  {bookCountThresholds.map((n) => (
+                    <FilterChip
+                      key={n}
+                      label={`${n}+`}
+                      active={minBookCount === n}
+                      onClick={() => setMinBookCount((prev) => (prev === n ? null : n))}
+                      testId={`props-filter-books-${n}`}
+                    />
+                  ))}
+                </>
+              )}
+              {filtersActive && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  data-testid="props-clear-filters"
+                  className="ml-1 inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-300"
+                >
+                  <ClearIcon className="h-3 w-3" />
+                  Clear filters
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -476,17 +738,60 @@ function PropsPageInner() {
                   'another date. To record a prop you placed on a past game, use "Log a prop" above.'}
             </p>
           </div>
-        ) : isBatterTab ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {batters.map((r) => (
-              <BatterProjectionCard key={r.batter_id} r={r} />
-            ))}
+        ) : visibleRows.length === 0 ? (
+          <div
+            data-testid="props-no-results"
+            className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-10 text-center"
+          >
+            <p className="text-sm text-gray-400">No {isBatterTab ? "batters" : "pitchers"} match your filters.</p>
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="mt-2 text-xs text-emerald-400 hover:text-emerald-300"
+            >
+              Clear filters
+            </button>
+          </div>
+        ) : sortKey === "slate" ? (
+          <div data-testid="props-game-groups">
+            <Accordion
+              type="multiple"
+              value={effectiveOpenValues}
+              onValueChange={setOpenGroups}
+              className="flex flex-col gap-2"
+            >
+              {groups.map((g) => (
+                <AccordionItem
+                  key={g.gamePk}
+                  value={String(g.gamePk)}
+                  data-testid="props-game-group"
+                  data-game-pk={g.gamePk}
+                  className="rounded-lg border border-[#262626] bg-[#0d0d0d] px-3"
+                >
+                  <AccordionTrigger data-testid="props-game-header" className="py-3 text-sm hover:no-underline">
+                    <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                      <span className="font-semibold text-white">{g.label}</span>
+                      {fmtGameTime(g.rows[0]?.gameDatetime ?? null) && (
+                        <span className="text-xs text-gray-500">{fmtGameTime(g.rows[0]?.gameDatetime ?? null)}</span>
+                      )}
+                      <span className="text-xs text-gray-600">
+                        · {g.rows.length} {isBatterTab ? "batter" : "pitcher"}
+                        {g.rows.length === 1 ? "" : "s"}
+                      </span>
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="grid gap-3 pb-1 sm:grid-cols-2 lg:grid-cols-3">
+                      {g.rows.map((r) => renderCard(r.id))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {pitchers.map((r) => (
-              <ProjectionCard key={r.pitcher_id} r={r} />
-            ))}
+          <div data-testid="props-flat-list" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {flatSorted.map((r) => renderCard(r.id))}
           </div>
         )}
 

@@ -8,8 +8,8 @@ opening a browser.
 This suite is the automated form of the "verify in incognito" step every app story already lists
 manually. E9.63 built it deliberately **minimal** — the launch-critical funnel, nothing else — and
 the coverage phases add specs to *this* harness rather than rebuilding it: **E9.64 (Fantasy
-interactivity) and E9.64b (the two real league-import paths) have landed**; E9.65 (MLB betting) is
-still to come.
+interactivity), E9.64b (the two real league-import paths) and E5.10 (the /props slate navigation)
+have landed**; the rest of E9.65 (MLB betting) is still to come.
 
 ## Running it
 
@@ -85,6 +85,18 @@ defects it is written from was mobile-only and a desktop-only suite is structura
 entries; the phone menu draws the full list once opened), so a desktop-only run never sees the
 majority of the authored list. Everything else in that file is a `router.push` and is skipped on
 mobile rather than run twice.
+
+### E5.10 — /props slate navigation
+
+| File | What it guards | The defect it is written from |
+|---|---|---|
+| `specs/props-slate-nav.spec.ts` | Both prop tabs (Strikeouts, Total Bases) group by game as collapsible sections, defaulting to only the next game to start; a team/matchup chip narrows to that one game in a single click; a partial-name search narrows to that player and says so when nobody matches; **Sort stays on Slate order by default and resets to it on any tab/date switch**; every other sort option (Proj/P(2+)/Difference vs books) actually re-orders the flattened slate by that metric (checked as arithmetic, not "fewer cards"); **the honest-framing denylist is screened against the whole rendered page once the "Difference vs books" sort exists**, not just its label | E5.10 — before this story `/props` was a flat card grid of 100+ rows with no way to find one game or one batter. The PM ruling that "difference vs books" is a legitimate, honestly-labelled sort but is NEVER the default is asserted directly, in the same test as the default-sort check, so the two properties cannot silently drift apart |
+| `specs/props-slate-nav-mobile.spec.ts` | The slate never scrolls sideways on a phone with the filter-chip row + a 6-game, 108-card slate on screen; a collapsed game header is tappable; a team chip is tappable; the Sort control is a Radix Picker (trigger-tap then option-tap), not a native `<select>` | The NF-C6P2 lesson, applied to a new surface: `selectOption` silently no-ops on a Radix trigger and a raw `<select>` trips the mobile-form-control guard, so this is the props page's own proof the sort control uses the right primitive |
+
+`e2e/fixtures/build-props-slate.mjs` generates the fixture — a synthetic 6-game, 108-batter /
+12-pitcher slate (there is no way to capture a real full MLB slate deterministically), dated in
+2027 so "the next game to start" default-expand behaviour is stable regardless of when the suite
+runs.
 
 ## The Fantasy interactivity inventory (E9.64)
 

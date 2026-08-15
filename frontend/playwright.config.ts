@@ -54,7 +54,9 @@ export default defineConfig({
       // nothing to do with the page under test. Its layout assertions are equally meaningless at
       // 1280px, which is the quieter half of the same problem: they would pass on desktop while
       // proving nothing about the viewport they exist for.
-      testIgnore: /home-mobile\.spec\.ts/,
+      // ⭐ E5.10 joins for the same reason: `props-slate-nav-mobile.spec.ts` drives the game-header
+      // accordion and the Sort Picker with `page.tap()`, which throws on a touch-incapable browser.
+      testIgnore: /(home-mobile|props-slate-nav-mobile)\.spec\.ts/,
     },
     // E9.58's second defect was mobile-only — the logged-out nav had no signup affordance on a
     // small screen because the whole block was `hidden sm:flex`. A desktop-only suite cannot see
@@ -81,7 +83,8 @@ export default defineConfig({
     // — including every entry that exists precisely because the bar had no room for it. The spec
     // reads its own project name and asserts the exact count each viewport is supposed to draw, so
     // "the menu opened" stays an answered question rather than a silent no-op.
-      testMatch: /(signup-funnel|expected-points-label|home-mobile|fantasy-entitlement-gates)\.spec\.ts/,
+      testMatch:
+        /(signup-funnel|expected-points-label|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile)\.spec\.ts/,
     },
   ],
 
