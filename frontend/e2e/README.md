@@ -38,6 +38,33 @@ E2E_BASE_URL=https://<preview>.vercel.app npx playwright test
 against a real deployment the fantasy specs talk to the real API. Useful as a live smoke; not the
 hermetic gate.
 
+## How it runs in CI (E9.66)
+
+`.github/workflows/frontend_e2e.yml` runs the suite inside the **official Playwright container**
+(`mcr.microsoft.com/playwright:v1.62.1-noble`), split across **three shards**. Both choices were
+measured rather than argued; the workflow's own header carries the numbers and the reasoning, and
+the short version is:
+
+- **The container replaces `apt`, not the browser cache.** The old job ran `playwright install-deps`
+  against `azure.archive.ubuntu.com`, which was measured at a median of 13s but with a fat tail —
+  8% of runs over 60s and two at ~10 minutes. A step that does not exist cannot hang. (The step was
+  also, it turned out, unnecessary: `ubuntu-latest` ships Chrome, so chromium's libraries were
+  already present. The container was still preferred, to stop that being a property of an image we
+  do not control.)
+- **Three shards, not more workers.** The suite is CPU-bound on a 4-vCPU runner: going 2 → 4 workers
+  returned 8% while inflating summed per-test time by 40%. One runner cannot go faster.
+- **`E2E_WORKERS`** overrides the worker count (default 2 in CI) — it exists so that number can be
+  re-measured on a runner rather than guessed at.
+- **Tiering was declined on measurement.** A smoke-only tier for story PRs would now save about a
+  minute and would defer any fantasy/import/props regression to the promotion PR, bundled with
+  every other story merged that day. Every spec below is written from a defect that shipped; the
+  per-story PR is where they earn their cost. Reversible — see the workflow header.
+
+⚠️ The container tag is pinned and must track `@playwright/test` in `package-lock.json`. A job-level
+`container:` is resolved before any step runs, so it cannot read the lockfile; a guard step fails
+early with the exact edit to make if the two drift. Bumping Playwright means bumping the tag in
+**both** `frontend_e2e.yml` and `frontend_red_proof.yml`.
+
 ## What is in here
 
 | File | What it guards | The defect it is written from |
