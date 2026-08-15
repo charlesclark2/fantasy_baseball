@@ -170,6 +170,105 @@ def get_k_projection(pitcher_id: int, as_of: str | None = None, _: str = Depends
     raise HTTPException(status_code=404, detail=f"K-projection not found for pitcher {pitcher_id}")
 
 
+def _empty_tb_index(game_date: str | None) -> dict:
+    return {"game_date": game_date, "count": 0, "batters": [],
+            "is_bet_recommendation": False, "best_alpha": 0, "regular_season_only": True}
+
+
+def _tb_index_from_s3(as_of: str) -> dict | None:
+    """Read the daily batter-TB index blob for one date from S3, or None on miss."""
+    artifacts_bucket = os.getenv("ARTIFACTS_BUCKET", "baseball-betting-ml-artifacts")
+    s3 = boto3.client("s3", region_name="us-east-2")
+    key = f"baseball/serving/batter_tb_projection/as_of={as_of}/index.json"
+    try:
+        response = s3.get_object(Bucket=artifacts_bucket, Key=key)
+        return json.loads(response["Body"].read().decode("utf-8"))
+    except ClientError as e:
+        if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
+            return None
+        logger.warning("tb_projection index S3 error as_of=%s: %s", as_of, e)
+        return None
+    except Exception as e:  # noqa: BLE001
+        logger.warning("tb_projection index S3 read error: %s", e)
+        return None
+
+
+@router.get("/tb-projections")
+def list_tb_projections(as_of: str | None = None, _: str = Depends(get_user_id)) -> dict:
+    """Return the daily batter TOTAL-BASES projection index for the /props Total Bases tab
+    (E5.9 — the batter-side analog of /players/k-projections; model batter_tb_glm_nb_v1).
+
+    `as_of` (YYYY-MM-DD) selects a specific slate; omitted → the latest available. Read order:
+    DynamoDB serving cache → S3 index fallback. Empty slate (not 404) on a miss so the date
+    picker degrades gracefully. 🔒 HONEST FRAMING: projections + calibration transparency only;
+    best_alpha=0, is_bet_recommendation=False; regular-season model (no postseason payloads).
+    """
+    if as_of:
+        payload = serving_cache.get_cache("batter_tb_projection/index", as_of)
+        if payload:
+            return payload
+        return _tb_index_from_s3(as_of) or _empty_tb_index(as_of)
+
+    payload = serving_cache.get_cache_latest("batter_tb_projection/index")
+    if payload:
+        return payload
+    today = current_game_date_iso()
+    for days_back in range(7):
+        d = (date.fromisoformat(today) - timedelta(days=days_back)).isoformat()
+        hit = _tb_index_from_s3(d)
+        if hit:
+            return hit
+    return _empty_tb_index(None)
+
+
+@router.get("/{batter_id}/tb-projection")
+def get_tb_projection(batter_id: int, as_of: str | None = None, _: str = Depends(get_user_id)) -> dict:
+    """Return the E5.9 batter TB projection + model-vs-book transparency payload.
+
+    `as_of` pins the exact slate the /props list linked from; omitted → latest. Read order:
+    DynamoDB serving cache → S3 serving prefix. 404 when nothing is written for this batter/date.
+    🔒 HONEST FRAMING: projection + calibration comparison, never a bet recommendation
+    (best_alpha=0, is_bet_recommendation=False).
+    """
+    artifacts_bucket = os.getenv("ARTIFACTS_BUCKET", "baseball-betting-ml-artifacts")
+    s3 = boto3.client("s3", region_name="us-east-2")
+
+    def _s3_for(day: str) -> dict | None:
+        key = f"baseball/serving/batter_tb_projection/as_of={day}/{batter_id}.json"
+        try:
+            response = s3.get_object(Bucket=artifacts_bucket, Key=key)
+            return json.loads(response["Body"].read().decode("utf-8"))
+        except ClientError as e:
+            if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
+                return None
+            logger.warning("tb_projection S3 error for batter=%s as_of=%s: %s", batter_id, day, e)
+            return None
+        except Exception as e:  # noqa: BLE001
+            logger.warning("tb_projection S3 read error: %s", e)
+            return None
+
+    if as_of:
+        payload = serving_cache.get_cache(f"batter_tb_projection/{batter_id}", as_of)
+        if payload:
+            return payload
+        hit = _s3_for(as_of)
+        if hit:
+            return hit
+        raise HTTPException(status_code=404,
+                            detail=f"TB projection not found for batter {batter_id} on {as_of}")
+
+    payload = serving_cache.get_cache_latest(f"batter_tb_projection/{batter_id}")
+    if payload:
+        return payload
+    today = current_game_date_iso()  # INC-22 — match the LA baseball-day write key
+    for days_back in range(3):
+        hit = _s3_for((date.fromisoformat(today) - timedelta(days=days_back)).isoformat())
+        if hit:
+            return hit
+
+    raise HTTPException(status_code=404, detail=f"TB projection not found for batter {batter_id}")
+
+
 @router.get("/{player_id}")
 def get_player(player_id: int, _: str = Depends(get_user_id)) -> dict:
     """Return the cached player profile for a given MLBAM player_id.

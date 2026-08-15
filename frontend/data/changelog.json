@@ -3,6 +3,10 @@
     "week": "2026-08-10",
     "items": [
       {
+        "tag": "new",
+        "text": "The Props page now has a Total Bases tab: our model's per-batter total-bases projection for every batter with a posted line, shown beside each sportsbook's line. Each batter card opens a full distribution view — the projected range, the chance of 1+, 2+, 3+ and 4+ bases, and a per-book comparison of our probability against the book's de-vigged price (with an explicit push probability on whole-number lines). Like the strikeout projections, this is a projection and transparency comparison only — not betting advice, and we make no profitability claim. The model is fit on regular-season games only, and every payload is stamped with the model version and fit date."
+      },
+      {
         "tag": "fixed",
         "text": "Kickers and defenses no longer sit among the skill players in the draft board's \"Available players\" list. Last week's fix stopped the optimizer from recommending them early, but only on the recommendations panel — the board underneath it was still ordered purely by value over replacement, so the same defense you had just been steered away from reappeared near the top of best-available. If you passed on a recommendation and scanned the list instead, you were one click from exactly the advice we had decided not to give. Both surfaces now share one ordering rule, so they cannot drift apart again: kickers and defenses sit below every skill player, under any sort you pick, and the K and DST tabs show them on their own whenever you want them. Two smaller things came with it. The overall-rank number is now blank for a kicker or defense rather than showing a rank built by comparing them to skill players — the comparison that caused this — while their position rank (DST4, K2) still sits beside the name as it always has. And the note on the roster panel that said kickers and defenses \"aren't projected … they won't appear on the board\" has been corrected: it had been wrong since we started projecting them, and it directly contradicted the note above the board on the same screen."
       },

@@ -30,6 +30,8 @@ type PropType = {
 
 const PROP_TYPES: PropType[] = [
   { key: "strikeouts", label: "Strikeouts (K)", endpoint: "/players/k-projections", available: true },
+  // E5.9 — batter total-bases projections (model batter_tb_glm_nb_v1; regular season only).
+  { key: "total_bases", label: "Total Bases (TB)", endpoint: "/players/tb-projections", available: true },
 ]
 
 // ---------------------------------------------------------------------------
@@ -58,10 +60,35 @@ interface ProjectionRow {
   model_mean_minus_line: number | null
 }
 
+// E5.9 — mirrors betting_ml/utils/tb_projection_serving.index_row (batter TB tab)
+interface BatterRow {
+  batter_id: number
+  full_name: string | null
+  team: string | null
+  opponent: string | null
+  game_pk: number | null
+  game_date: string | null
+  game_datetime: string | null
+  batting_slot: number | null
+  mean: number | null
+  median: number | null
+  p10: number | null
+  p90: number | null
+  p05: number | null
+  p95: number | null
+  p_ge_2: number | null
+  primary_line: number | null
+  book_count: number
+  model_p_over: number | null
+  model_vs_book_p_over: number | null
+  model_mean_minus_line: number | null
+}
+
 interface ProjectionIndex {
   game_date: string | null
   count: number
-  pitchers: ProjectionRow[]
+  pitchers?: ProjectionRow[]
+  batters?: BatterRow[]
   disclaimer?: string
   best_alpha?: number
   is_bet_recommendation?: boolean
@@ -208,6 +235,103 @@ function ProjectionCard({ r }: { r: ProjectionRow }) {
   )
 }
 
+// E5.9 — batter TB card (the Total Bases tab). Same furniture as the pitcher card so the two
+// tabs read as one surface; the headline is the projected TB mean + the P(2+ bases) chip.
+function BatterProjectionCard({ r }: { r: BatterRow }) {
+  const p05 = r.p05
+  const p95 = r.p95
+  const line = r.primary_line
+  const lo = p05 != null ? Math.min(p05, line ?? p05) - 1 : 0
+  const hi = p95 != null ? Math.max(p95, line ?? p95) + 1 : 1
+  const span = Math.max(hi - lo, 1)
+  const pos = (v: number) => ((v - lo) / span) * 100
+
+  return (
+    <Link
+      href={
+        r.game_date ? `/props/batter/${r.batter_id}?as_of=${r.game_date}` : `/props/batter/${r.batter_id}`
+      }
+      className="block rounded-lg border border-[#262626] bg-[#111111] p-4 transition-colors hover:border-[#3a3a3a] hover:bg-[#141414]"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate font-semibold text-white">{r.full_name ?? `Batter ${r.batter_id}`}</div>
+          <div className="truncate text-[11px]">
+            <span className="font-medium text-gray-200">{r.team ?? "—"}</span>
+            {r.opponent ? <span className="text-gray-600"> vs {r.opponent}</span> : null}
+            {r.batting_slot != null ? (
+              <span className="text-gray-600"> · batting {r.batting_slot}</span>
+            ) : null}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] uppercase tracking-wider text-gray-500">Proj TB</div>
+          <div className="text-2xl font-bold tabular-nums text-emerald-400">
+            {r.mean != null ? r.mean.toFixed(1) : "—"}
+          </div>
+          {fmtGameTime(r.game_datetime) && (
+            <div className="text-[10px] text-gray-500">{fmtGameTime(r.game_datetime)}</div>
+          )}
+        </div>
+      </div>
+
+      {p05 != null && p95 != null && (
+        <div className="relative mt-3 h-6">
+          <div
+            className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[#1f2937]"
+            style={{ left: `${pos(p05)}%`, width: `${pos(p95) - pos(p05)}%` }}
+          />
+          {r.p10 != null && r.p90 != null && (
+            <div
+              className="absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-emerald-500/40"
+              style={{ left: `${pos(r.p10)}%`, width: `${pos(r.p90) - pos(r.p10)}%` }}
+            />
+          )}
+          {r.median != null && (
+            <div
+              className="absolute top-1/2 h-4 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded bg-emerald-400"
+              style={{ left: `${pos(r.median)}%` }}
+              title={`Projected median: ${r.median} TB`}
+            />
+          )}
+          {line != null && (
+            <div
+              className="absolute top-1/2 h-5 w-[2px] -translate-x-1/2 -translate-y-1/2 bg-amber-400/90"
+              style={{ left: `${pos(line)}%` }}
+              title={`Book line: ${line}`}
+            />
+          )}
+        </div>
+      )}
+
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-gray-600">P(2+ bases)</div>
+          <div className="text-xs tabular-nums text-gray-300">
+            {r.p_ge_2 != null ? `${(r.p_ge_2 * 100).toFixed(0)}%` : "—"}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-gray-600">Book line</div>
+          <div className="text-xs tabular-nums text-amber-400">
+            {r.primary_line != null ? r.primary_line : "—"}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-gray-600">Model − Book</div>
+          <div
+            className={`text-xs tabular-nums ${
+              (r.model_vs_book_p_over ?? 0) >= 0 ? "text-emerald-400" : "text-gray-400"
+            }`}
+          >
+            {r.model_vs_book_p_over != null ? fmtSignedPct(r.model_vs_book_p_over) : "—"}
+          </div>
+        </div>
+      </div>
+    </Link>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -241,15 +365,34 @@ function PropsPageInner() {
     })
   }, [data])
 
+  // E5.9 — batter TB rows: slate order, then game, then lineup slot.
+  const batters = useMemo(() => {
+    const rows = data?.batters ?? []
+    return [...rows].sort((a, b) => {
+      const ta = gameTimeMs(a.game_datetime)
+      const tb = gameTimeMs(b.game_datetime)
+      if (ta !== tb) return ta - tb
+      if ((a.game_pk ?? 0) !== (b.game_pk ?? 0)) return (a.game_pk ?? 0) - (b.game_pk ?? 0)
+      return (a.batting_slot ?? 10) - (b.batting_slot ?? 10)
+    })
+  }, [data])
+
+  const isBatterTab = active.key === "total_bases"
+  const cardCount = isBatterTab ? batters.length : pitchers.length
+
   return (
     <>
       <Nav authenticated activeLink="props" userEmail={email} />
       <main className="mx-auto max-w-6xl px-4 py-8">
         <h1 className="mb-1 text-2xl font-bold text-white">Props</h1>
         <p className="mb-5 max-w-3xl text-sm text-gray-500">
-          Our model&apos;s projection for each probable starter, shown next to the sportsbooks&apos;
-          posted line. Projections and a transparency comparison only — click a pitcher for the full
-          distribution and per-book breakdown.
+          {isBatterTab
+            ? "Our model's total-bases projection for each batter with a posted line, shown next to " +
+              "the sportsbooks' line. Projections and a transparency comparison only — click a batter " +
+              "for the full distribution and per-book breakdown."
+            : "Our model's projection for each probable starter, shown next to the sportsbooks' " +
+              "posted line. Projections and a transparency comparison only — click a pitcher for the " +
+              "full distribution and per-book breakdown."}
         </p>
 
         {/* Prop-type + date controls */}
@@ -320,15 +463,24 @@ function PropsPageInner() {
           <div className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-8 text-center text-sm text-gray-500">
             Couldn&apos;t load projections right now. Please try again shortly.
           </div>
-        ) : pitchers.length === 0 ? (
+        ) : cardCount === 0 ? (
           <div className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-10 text-center">
             <p className="text-sm text-gray-400">
               No projections for {format(selectedDate, "MMM d, yyyy")} yet.
             </p>
             <p className="mt-1 text-xs text-gray-600">
-              Projections appear once probable starters are announced for the day&apos;s slate. Try
-              another date. To record a prop you placed on a past game, use &quot;Log a prop&quot; above.
+              {isBatterTab
+                ? "Total-bases projections appear once sportsbooks post batter lines for the day's " +
+                  "slate (regular-season games only). Try another date."
+                : "Projections appear once probable starters are announced for the day's slate. Try " +
+                  'another date. To record a prop you placed on a past game, use "Log a prop" above.'}
             </p>
+          </div>
+        ) : isBatterTab ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {batters.map((r) => (
+              <BatterProjectionCard key={r.batter_id} r={r} />
+            ))}
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
