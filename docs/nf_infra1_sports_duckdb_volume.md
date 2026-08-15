@@ -94,11 +94,20 @@ Three layers, because fixing any one alone leaves the bug:
      `pct_matched = 100.0` **by construction** (the drop already removed every unresolved row), so
      it cannot tell a healthy crosswalk from a dead one. `load_sleeper_injuries_with_coverage`
      measures **before** the drop; `classify_land` gates the write on it.
-   * The floor (50%) is derived from the two **measured regimes** — native-only ~17–22% vs
-     crosswalked ~89–100% — not reverse-engineered from a run's answer (NF1.8). It is deliberately
-     loose: the pre-drop rate had never been recorded, and a tight floor would be a guess that can
-     only fail toward falsely refusing a healthy feed. Every run now logs `pct_resolved`, so it can
-     be tightened against real observations.
+   * The floor (50%) is derived from the two regimes, not reverse-engineered from a run's answer
+     (NF1.8). ⭐ **Both are now MEASURED** — the first healthy land after this story (box,
+     2026-08-15, season 2026, 4,038 fetched): **61.9%** with the crosswalk alive (2,501 resolved;
+     the crosswalk roughly doubles the 1,259 native ids, and 2,501 matches the last-known-good
+     2,499 of 07-26) versus **31.2%** native-only. 50 sits between them.
+   * ⚠️ **A correction worth recording.** Before that measurement this doc and the code put the
+     healthy regime at "~89–100%" — which was the **post-drop** rate, i.e. the very statistic
+     `load_sleeper_injuries_with_coverage` exists to replace, since it is 100% *by construction*.
+     The floor's VALUE was right and correctly placed; its stated **derivation** cited a number
+     nothing had measured. The real healthy-side margin is ~12pp, not "wide". Separately,
+     NF-FRESH1's "16.7% of rostered / 22.1% of flagged" is a **different denominator** and must not
+     be compared to this ratio directly. ⛔ Do not tighten the floor toward 61.9 on one
+     observation — the denominator moves with how many non-rostered players Sleeper carries, and a
+     floor that false-refuses is strictly worse than a generous one.
    * A **partial** land (zero flagged players) still writes, and **reports its magnitude**.
 3. **The artifact is asserted, not the producer** (INC-41) — `betting_ml/monitoring/sports_delta_freshness.py`.
    Everything else in this job watches the producer, and the producer reported success for 19 days.
