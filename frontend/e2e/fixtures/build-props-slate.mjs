@@ -56,9 +56,19 @@ const MARQUEE_PITCHERS = {
 const TB_LINES = [0.5, 1.5, 2.5]
 const K_LINES = [4.5, 5.5, 6.5]
 
+// E5.10 — the sportsbook filter chips. A rotating deterministic subset of this pool (size ==
+// book_count) is assigned per row, so "bovada" appears on a real subset of the slate rather than
+// on everything (or nothing) — the fixture a book-availability filter needs to mean something.
+const BOOK_POOL = ["bovada", "draftkings", "fanduel", "caesars", "betmgm"]
+
 function round(n, d = 2) {
   const f = 10 ** d
   return Math.round(n * f) / f
+}
+
+function booksFor(seed, bookCount) {
+  const start = seed % BOOK_POOL.length
+  return Array.from({ length: bookCount }, (_, i) => BOOK_POOL[(start + i) % BOOK_POOL.length]).sort()
 }
 
 function batterRow({ batterId, name, team, opponent, gamePk, gameDatetime, slot, seed }) {
@@ -87,6 +97,7 @@ function batterRow({ batterId, name, team, opponent, gamePk, gameDatetime, slot,
     p_ge_2: pGe2,
     primary_line: line,
     book_count: bookCount,
+    books: booksFor(seed, bookCount),
     model_p_over: modelPOver,
     model_vs_book_p_over: diff,
     model_mean_minus_line: round(mean - line),
@@ -96,7 +107,11 @@ function batterRow({ batterId, name, team, opponent, gamePk, gameDatetime, slot,
 function pitcherRow({ pitcherId, name, team, opponent, gamePk, gameDatetime, seed }) {
   const line = K_LINES[seed % K_LINES.length]
   const mean = round(4.2 + (seed % 5) * 0.5)
-  const bookCount = 1 + (seed % 5)
+  // ⚠️ NOT `seed % 5` — every pitcher's seed lands exactly 9 or 19 past its game's start (9
+  // batters, then the pitcher), so consecutive pitcher seeds differ by a multiple of 5 and
+  // `seed % 5` is INVARIANT across all 12 pitchers (every one landed on bookCount=5, measured).
+  // `pitcherId` increments by exactly 1 per pitcher row, so it actually varies.
+  const bookCount = 1 + (pitcherId % 5)
   const modelPOver = round(0.4 + (seed % 4) * 0.05, 2)
   const diff = round((seed % 2 === 0 ? 1 : -1) * (0.01 + (seed % 4) * 0.02), 3)
   return {
@@ -116,6 +131,7 @@ function pitcherRow({ pitcherId, name, team, opponent, gamePk, gameDatetime, see
     p95: round(mean + 3),
     primary_line: line,
     book_count: bookCount,
+    books: booksFor(seed, bookCount),
     model_p_over: modelPOver,
     model_vs_book_p_over: diff,
     model_mean_minus_line: round(mean - line),
