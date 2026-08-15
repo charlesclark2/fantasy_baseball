@@ -430,6 +430,19 @@ _PUBLIC_PROJECTIONS_META_FIELDS = frozenset(
         "market_lean_note",
         "model_version",
         "base_season",
+        # ── NF-FRESH2 — the PER-INPUT VINTAGE STAMPS SURVIVE THE LOCK ───────────────────────
+        # ⭐ DELIBERATE, and the reverse would be an honesty bug. These are PROVENANCE, not model
+        # output: they say WHEN each input was read, never WHAT it said. A locked caller already
+        # sees `generated_at`, so withholding the ADP/ECR vintage beside it would leave exactly the
+        # defect NF-FRESH2 exists to fix (one build date rendered over inputs of three different
+        # vintages) in place for the non-entitled half of the audience. Nothing here is derivable
+        # into a paid value — `adp` itself is public on this surface anyway.
+        # ⚠️ These allowlists are the E9.41 silently-dropped-field class in ALLOWLIST form: a new
+        # served field absent from the list is stripped with no error. Any future provenance field
+        # must be added here in the SAME change that starts shipping it.
+        "adp_as_of",
+        "ecr_as_of",
+        "freshness",
     }
 )
 
@@ -450,6 +463,10 @@ _PUBLIC_MANIFEST_FIELDS = frozenset(
         "sizes",
         "configs",
         "projections",
+        # NF-FRESH2 — provenance, kept for the same reason as on the projections payload above.
+        "adp_as_of",
+        "ecr_as_of",
+        "freshness",
     }
 )
 
@@ -465,6 +482,10 @@ _PUBLIC_MANIFEST_PROJECTION_FIELDS = frozenset(
         "market_lean_note",
         "model_version",
         "base_season",
+        # NF-FRESH2 — provenance (see the projections allowlist above).
+        "adp_as_of",
+        "ecr_as_of",
+        "freshness",
     }
 )
 

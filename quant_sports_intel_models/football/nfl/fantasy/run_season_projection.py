@@ -1075,7 +1075,8 @@ _ADP_AUDIT_SAMPLES = (("ppr", 12), ("ppr", 10), ("half-ppr", 12), ("half-ppr", 1
 
 
 def adp_coverage_check(con, proj: pd.DataFrame, projection_season: int,
-                       samples: tuple = _ADP_AUDIT_SAMPLES, schema: str = MARTS_SCHEMA) -> dict:
+                       samples: tuple = _ADP_AUDIT_SAMPLES, schema: str = MARTS_SCHEMA,
+                       market_refresh: bool = False) -> dict:
     """NF-D11 — the STANDING coverage diagnostic, run at the end of every board build: diff the
     market's ADP census against the projection's own universe, across every shipped ADP sample, and
     log/return the two failure classes SEPARATELY (a name-alias miss vs a genuine universe absence,
@@ -1084,12 +1085,17 @@ def adp_coverage_check(con, proj: pd.DataFrame, projection_season: int,
     WARN-tier and best-effort by construction: FFC is a network fetch, so a failure on one sample
     logs and is skipped — a coverage AUDIT must never be able to fail a board build."""
     from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+    from quant_sports_intel_models.football.nfl.fantasy import market_freshness as MF
     from quant_sports_intel_models.football.nfl.fantasy import projection_coverage as PC
     by_sample: dict[str, dict] = {}
     for fmt, teams in samples:
         key = f"{fmt}/{teams}"
         try:
-            adp = A.fetch_ffc_adp(projection_season, fmt=fmt, teams=teams)
+            # NF-FRESH2 P1 — audit the SAME market vintage the board was built from. Reduced
+            # through `should_refresh_market`, so a historical audit stays on its pinned snapshot.
+            adp = A.fetch_ffc_adp(projection_season, fmt=fmt, teams=teams,
+                                  refresh=MF.should_refresh_market(projection_season,
+                                                                   market_refresh))
         except Exception as exc:  # noqa: BLE001 — WARN-tier: the audit is advisory, never a gate
             log.warning("NF-D11 ADP coverage: sample %s skipped — FFC fetch failed (%s)", key, exc)
             continue
@@ -1318,6 +1324,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--s3", action="store_true", help="also land the projection(s) to the S3 sports lake")
     ap.add_argument("--lake-root", default=None, help="land to a LOCAL-FS Delta tree instead of S3")
     ap.add_argument("--no-report", action="store_true")
+    # NF-FRESH2 P1 — same pair as `run_nf1_5.py`. Here it only affects the NF-D11 coverage AUDIT
+    # (MVP-1 is market-blind by design), but a coverage census taken against a different market
+    # vintage than the board was built from is a census of the wrong universe.
+    ap.add_argument("--market-refresh", dest="market_refresh", action="store_true", default=True,
+                    help="re-fetch the ADP census for the CURRENT season (default)")
+    ap.add_argument("--no-market-refresh", dest="market_refresh", action="store_false",
+                    help="audit against the on-disk ADP caches only")
     ap.add_argument("--no-adp-audit", action="store_true",
                     help="skip the NF-D11 standing ADP coverage diagnostic (it needs a network fetch "
                          "of the FFC ADP sample; the audit is advisory and never gates the build)")
@@ -1401,7 +1414,8 @@ def main(argv: list[str] | None = None) -> int:
                 # NF-D11 standing coverage diagnostic — the market's ADP census vs our universe.
                 # WARN-tier: a network fetch failure logs and yields an empty audit, never a failure.
                 if not args.no_adp_audit:
-                    adp_audit = adp_coverage_check(con, proj, y, schema=args.schema)
+                    adp_audit = adp_coverage_check(con, proj, y, schema=args.schema,
+                                                   market_refresh=args.market_refresh)
                 # NF1.4 rookie over-placement gate (advisory) — measured against the FULL drafted
                 # rookie population, so "what rookies actually do" includes the ones who never
                 # played. A trip logs loudly; it never blocks the projection (this is a projection

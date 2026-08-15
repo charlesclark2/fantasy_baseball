@@ -14,7 +14,7 @@ import Link from "next/link"
 import { Info, Lock } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Picker } from "@/components/ui/picker"
-import type { LeagueConfigMeta, Manifest } from "@/lib/draft-optimizer"
+import type { FreshnessBlock, LeagueConfigMeta, Manifest } from "@/lib/draft-optimizer"
 import { freeSelection, isFreeConfig } from "@/lib/draft-optimizer"
 import { marketLeaningPositions } from "@/lib/fantasy"
 import type { ProjectedPlayer } from "@/lib/fantasy"
@@ -813,23 +813,82 @@ export function PlayerContributionsPanel({
   )
 }
 
-/** Provenance strip — what the numbers were built from and when. */
+/** A short date for a provenance stamp, or null when the string is absent/unparseable.
+ *  ⚠️ An ISO DATE (`2026-08-14`, what the market stamps are) parses as UTC MIDNIGHT, so rendering
+ *  it with the local calendar shows the previous day west of Greenwich. Dates are formatted in UTC;
+ *  full timestamps (the lake vintages, which carry a real time) keep local rendering. */
+function shortStamp(value?: string | null): string | null {
+  if (!value) return null
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return null
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value)
+  return d.toLocaleDateString(undefined, {
+    month: "numeric",
+    day: "numeric",
+    ...(dateOnly ? { timeZone: "UTC" } : {}),
+  })
+}
+
+/** NF-FRESH2 — the per-input vintage items for the provenance strip.
+ *
+ *  ⭐ WHY THIS EXISTS. Before it, every fantasy surface rendered ONE `built <date>` over a row
+ *  whose inputs had three different vintages: on 2026-08-10 the board said "built 8/10" beside an
+ *  ADP column whose draft window ended 7/25 and a depth-chart view from 8/03. A reader reasonably
+ *  takes one date as covering the whole row, so the strip was dishonest by omission — the staleness
+ *  was real and only inferable by an audit. A staleness figure must be VISIBLE.
+ *
+ *  ⭐ ABSENT ≠ NULL, and the distinction is load-bearing in BOTH directions:
+ *    • key ABSENT (an older payload, or an older backend under NF-C0 deploy skew) → emit nothing.
+ *      Inventing "unknown" for a payload that never carried the field would put a scary word on
+ *      every surface during a routine deploy window.
+ *    • value NULL (the exporter looked and could not tell) → emit "unknown". Silently dropping it
+ *      would let a missing stamp read as covered by the build date — the exact defect (NF1.7(a):
+ *      an unevaluable check is never scored healthy).
+ */
+function freshnessItems(freshness?: FreshnessBlock | null): string[] {
+  if (!freshness) return []
+  const items: string[] = []
+  if ("adp" in freshness) items.push(`ADP ${shortStamp(freshness.adp?.as_of) ?? "unknown"}`)
+  if ("ecr" in freshness)
+    items.push(`expert ranks ${shortStamp(freshness.ecr?.as_of) ?? "unknown"}`)
+  const vintage = freshness.input_vintage
+  if (vintage && "depth_chart_as_of" in vintage)
+    items.push(`depth charts ${shortStamp(vintage.depth_chart_as_of) ?? "unknown"}`)
+  return items
+}
+
+/** Provenance strip — what the numbers were built from and when.
+ *
+ *  Two lines by design: the BUILD clock on top, the DATA clocks below. Folding them into one line
+ *  is what let a build date be read as covering inputs it does not describe. */
 export function ProvenanceLine({
   season,
   generatedAt,
   extra,
+  freshness,
 }: {
   season: number
   generatedAt?: string | null
   extra?: string | null
+  /** NF-FRESH2 — from `manifest.freshness` or `projections.freshness`. Omit and the input line
+   *  simply does not render (every caller upgraded independently; nothing regresses meanwhile). */
+  freshness?: FreshnessBlock | null
 }) {
   const when = generatedAt ? new Date(generatedAt) : null
+  const inputs = freshnessItems(freshness)
   return (
-    <p className="text-[11px] text-gray-600">
-      {season} season projections
-      {extra ? ` · ${extra}` : ""}
-      {when && !isNaN(when.getTime()) ? ` · built ${when.toLocaleDateString()}` : ""}
-    </p>
+    <div className="text-[11px] text-gray-600">
+      <p>
+        {season} season projections
+        {extra ? ` · ${extra}` : ""}
+        {when && !isNaN(when.getTime()) ? ` · built ${when.toLocaleDateString()}` : ""}
+      </p>
+      {inputs.length > 0 && (
+        <p className="mt-0.5">
+          Market and role inputs as of: {inputs.join(" · ")}
+        </p>
+      )}
+    </div>
   )
 }
 

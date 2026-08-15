@@ -428,6 +428,7 @@ function PlayerView({ playerId }: { playerId: string }) {
               season={projPayload?.season ?? 2026}
               generatedAt={projPayload?.generated_at}
               extra={projPayload?.base_season ? `built off ${projPayload.base_season} production` : null}
+              freshness={projPayload?.freshness}
             />
           </div>
 
