@@ -352,6 +352,30 @@ def test_the_nfl_ingest_crons_reach_the_opener_and_the_season(const):
     assert {3, 4, 5, 6, 7, 8} <= months, f"{const} lost part of the offseason window"
 
 
+def test_the_operator_schedule_checker_is_two_sided():
+    """The P0 verification tool must REJECT the pre-NF-FRESH2 crons as well as accept the new ones.
+
+    Pinned because a checker that only ever reports PASS cannot tell a fixed cron from a broken one
+    — and this one exists precisely to be the operator's evidence that the 09-01 cliff is closed.
+    (`croniter` is absent from the box image; the tool uses Dagster's own vendored engine, which is
+    the one that actually fires.)
+
+    RED PROOF: widen `check`'s `SEASON_MONTHS` to `()` — every clause becomes vacuous and the
+    control assertion below fails."""
+    from datetime import datetime, timezone
+
+    import scripts.check_nfl_schedule_coverage as C
+
+    start = datetime(2026, 8, 30, tzinfo=timezone.utc)
+    ok_new, _, _ = C.check("15 6 * 3-12,1-2 1", "America/Los_Angeles", start, 400)
+    assert ok_new, "the shipped cron must pass"
+    for _label, old_cron in C.CONTROL_CRONS:
+        ok_old, covered, problems = C.check(old_cron, "America/Los_Angeles", start, 400)
+        assert not ok_old, f"the checker accepted the known-broken cron {old_cron!r}"
+        assert covered == set(range(3, 9)), covered  # the seven-month hole, measured
+        assert any("cliff" in p for p in problems)
+
+
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # P2/P4 — the publish job: ordering, cadence, and the refusal to succeed silently
 # ══════════════════════════════════════════════════════════════════════════════════════════════
