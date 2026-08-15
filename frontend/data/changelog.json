@@ -3,6 +3,10 @@
     "week": "2026-08-10",
     "items": [
       {
+        "tag": "new",
+        "text": "You can now log a batter total-bases prop to your Bet Log. The Props page has had a Total Bases tab for a while, but \"Log a prop\" only ever understood pitcher strikeouts — so a total-bases prop you had actually placed could not be recorded at all. The dialog now asks which prop type you are logging and offers every batter in that day's posted lineups, and total-bases bets settle automatically against the batter's real total bases once the game is final, the same way strikeout props already did. As before this is bookkeeping only: it records what you entered so you can track it, and is not betting advice."
+      },
+      {
         "tag": "improved",
         "text": "The draft board now refreshes on a cadence instead of only when we republished it by hand, and it reads the current market when it does. Average draft position and the expert consensus rankings were being read from a cache that nothing could refresh: a rebuild re-read the same file, so the board you saw last week was pricing against a market from three weeks earlier. That matters more than a stale reference column would, because those two inputs feed the order the board is sorted in, not just the ADP figure printed beside a name — so a player whose stock had risen could still show the older, worse draft position and read as better value than he now is. Through draft season the board rebuilds and republishes daily, and it does so after that day's roster and depth-chart data has landed rather than before it, which is what used to leave the depth-chart view about a week older than the build date suggested. To be plain about what this is and is not: a fresher build is not a better model. Refreshing the market makes the market half of our ordering current — it does not make our order more independent of the market, and the note on the board saying which positions lean on consensus is unchanged. Nothing about how a projection is computed changed here; only how recent its inputs are."
       },
