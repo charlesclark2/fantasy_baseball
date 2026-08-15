@@ -1806,10 +1806,13 @@ const CASES = [
     // a comment nobody re-verifies. Nothing about the page looks broken: every sort option still
     // works, the labels are still honest, the slate still renders. Only the FIRST thing a visitor
     // sees has quietly become the delta ranking.
-    detail: "The sort control opens on Difference vs books instead of Slate order.",
+    // ⚠️ NOT the `useState` initializer — the slate-key-reset effect runs unconditionally on mount
+    // (`initializedSlateKey` starts null) and OVERWRITES it, so the effect's own default is what a
+    // visitor actually sees. That effect call is the one this case has to break.
+    detail: "The reset effect opens the sort control on Difference vs books instead of Slate order.",
     file: "app/props/page.tsx",
-    from: '  const [sortKey, setSortKey] = useState<SlateSortKey>("slate")',
-    to: '  const [sortKey, setSortKey] = useState<SlateSortKey>("diff")',
+    from: '    setSearch("")\n    setSortKey("slate")',
+    to: '    setSearch("")\n    setSortKey("diff")',
     grep: "Slate order stays the default|reads Slate order on first load",
   },
   {
