@@ -474,6 +474,41 @@ def test_duckdb_binds_a_parquet_view_at_create_time_not_lazily():
     assert "No files found" in str(exc.value) or "IO Error" in str(exc.value)
 
 
+def test_duck_connection_actually_uses_the_isolated_loop():
+    """The split is only worth something if `_duck_connection` INVOKES it — otherwise the test
+    below proves an isolated loop that production never runs (the NF-C0e wired-≠-invoked class,
+    made possible precisely by extracting the loop to make it testable).
+
+    Also pins that the batch helper is not back in the CODE: `register_lakehouse_views` registers
+    every view in one loop with no per-table isolation, which is the regression this whole section
+    exists to prevent. ⚠️ Matched as an IMPORT or a CALL, never as a bare name — the docstrings
+    here discuss that helper by name to explain why it was dropped, and a substring check would
+    fire on that prose (the INC-38 lesson, in its false-RED direction).
+    """
+    path = SCRIPTS / "check_data_freshness.py"
+    code = _code_only(path)
+    body = code[code.find("def _duck_connection("):code.find("def _register_views_isolated(")]
+    assert "_register_views_isolated(" in body, (
+        "_duck_connection no longer calls _register_views_isolated — the isolation is dead code"
+    )
+    import ast
+    tree = ast.parse(path.read_text())
+    banned = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            banned |= {a.name for a in node.names if a.name == "register_lakehouse_views"}
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id == "register_lakehouse_views":
+                banned.add("call")
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if node.func.attr == "register_lakehouse_views":
+                banned.add("call")
+    assert not banned, (
+        "check_data_freshness imports or calls the batch register_lakehouse_views helper, which "
+        "aborts on the FIRST unreadable prefix and blinds every other entry"
+    )
+
+
 def test_one_unregisterable_mirror_does_not_blind_the_other_entries(tmp_path, monkeypatch):
     """THE REGRESSION this isolation prevents. A re-export leaf's mirror does not exist until
     that leaf's job first RUNS, so a fresh deploy genuinely has an absent prefix — and the batch
@@ -481,8 +516,10 @@ def test_one_unregisterable_mirror_does_not_blind_the_other_entries(tmp_path, mo
     EVERY check. That is the savant.batter_pitches decommission failure (2026-07-06) reproduced
     one layer earlier, where `run()`'s per-table try/except cannot reach it.
 
-    Driven through the REAL `_duck_connection` against REAL DuckDB over local parquet — a mocked
-    connection would only restate the loop's own structure.
+    Driven through the REAL registration loop (`_register_views_isolated`) against REAL DuckDB
+    over local parquet — a mocked connection would only restate the loop's own structure. The
+    loop is split out of `_duck_connection` precisely so this can run in the fast gate: `duck()`
+    creates a DuckDB S3 SECRET that needs a live AWS credential chain, and CI mocks all IO.
     """
     duckdb = pytest.importorskip("duckdb")
     pytest.importorskip("pandas")
@@ -494,8 +531,6 @@ def test_one_unregisterable_mirror_does_not_blind_the_other_entries(tmp_path, mo
         present / "data.parquet")
 
     fresh = _freshness_module()
-    monkeypatch.setattr(
-        fresh, "_duck_connection", fresh._duck_connection)          # keep the real one explicit
 
     import betting_ml.utils.delta_lakehouse as dl
     monkeypatch.setattr(
@@ -503,7 +538,8 @@ def test_one_unregisterable_mirror_does_not_blind_the_other_entries(tmp_path, mo
         lambda t: ("SELECT * FROM read_parquet('"
                    f"{tmp_path / t}/**/*.parquet', union_by_name=true)"))
 
-    conn = fresh._duck_connection(["present_table", "absent_table"])
+    conn = fresh._register_views_isolated(
+        duckdb.connect(), ["present_table", "absent_table"])
     try:
         # the healthy table still answers …
         ts = fresh._max_ingestion_timestamp_s3(

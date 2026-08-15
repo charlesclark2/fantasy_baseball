@@ -403,14 +403,29 @@ def _duck_connection(tables):
     _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if _root not in sys.path:
         sys.path.insert(0, _root)
-    from betting_ml.utils.delta_lakehouse import ensure_delta_extension, lakehouse_view_sql
     from betting_ml.utils.lakehouse_monitor import duck
 
-    conn = duck()
-    ensure_delta_extension(conn)
+    return _register_views_isolated(duck(), tables)
+
+
+def _register_views_isolated(conn, tables):
+    """The isolated registration loop — split out from ``_duck_connection`` so it is TESTABLE.
+
+    ``duck()`` creates a DuckDB S3 SECRET, which needs a live AWS credential chain and therefore
+    cannot run in the fast gate (CI mocks all IO). Keeping the loop in a function that takes an
+    ALREADY-BUILT connection lets the guard drive this exact code against a plain local DuckDB —
+    the real loop, not a re-description of it. Nothing here touches S3; that is ``duck()``'s job.
+    """
+    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if _root not in sys.path:
+        sys.path.insert(0, _root)
+    from betting_ml.utils import delta_lakehouse as _dl
+
+    _dl.ensure_delta_extension(conn)
     for name in sorted(set(tables)):
         try:
-            conn.execute(f"CREATE OR REPLACE VIEW {name} AS {lakehouse_view_sql(name)}")
+            # module-attribute lookup, not `from … import` — so the view SQL stays patchable
+            conn.execute(f"CREATE OR REPLACE VIEW {name} AS {_dl.lakehouse_view_sql(name)}")
         except Exception as e:  # noqa: BLE001 — one unreadable prefix must not blind the rest
             log.warning(
                 "  %-55s VIEW REGISTRATION FAILED (%s) — this table will report QUERY ERROR; "
