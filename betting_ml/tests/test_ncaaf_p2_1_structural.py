@@ -267,6 +267,17 @@ def test_pbo_is_computed_over_the_eligible_real_set_not_the_whole_field():
     assert 'elig_arms = [a for a in real if rows[a]["eligible"]]' in src
 
 
+def test_dsr_deflates_the_arm_that_would_be_promoted_not_merely_the_best_crps_one():
+    """The promotion gate must bind on the thing it gates. If a candidate leads on raw CRPS but is
+    INELIGIBLE (or a tie, or fails BH), deflating IT decides the gate on an arm that cannot be
+    promoted — so the survivor set is consulted first."""
+    src = _strip_comments(_HARNESS.read_text())
+    assert "dsr_arm = (min(survivors, key=lambda a: arms[a][\"pooled_crps\"]) if survivors" in src, (
+        "DSR must be computed on the best SURVIVOR when one exists")
+    assert src.index("survivors = [a for a in real") < src.index("dsr_arm ="), (
+        "survivors must be resolved BEFORE the arm to deflate is chosen")
+
+
 def test_bh_fdr_is_monotone_and_controls_the_registered_family():
     from quant_sports_intel_models.football.ncaaf.models.bakeoff_ncaaf_p2_1 import _bh
     p = {"a": 0.001, "b": 0.02, "c": 0.4, "d": 0.9}

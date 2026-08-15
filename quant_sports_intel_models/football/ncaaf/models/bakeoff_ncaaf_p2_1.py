@@ -798,18 +798,24 @@ def stage_decide(args) -> None:
     V_clean = float(np.var(sr_real, ddof=1)) if len(sr_real) > 1 else None
     V_all = float(np.var(sr_all, ddof=1)) if len(sr_all) > 1 else None
 
-    best_arm = min(real, key=lambda a: arms[a]["pooled_crps"]) if real else None
-    dsr_clean = dsr_all = float("nan")
-    if best_arm and rows[best_arm]["gain_crps"] > 0:
-        imp = bucket_improvement(best_arm)
-        dsr_clean = float(deflated_sharpe(imp, n_trials=n_trials, var_trials_sr=V_clean).dsr)
-        dsr_all = float(deflated_sharpe(imp, n_trials=n_trials, var_trials_sr=V_all).dsr)
-
     # ── survivors ──────────────────────────────────────────────────────────────────────────────
     survivors = [a for a in real
                  if rows[a]["eligible"] and not rows[a]["tie_with_foil"]
                  and rows[a]["gain_crps"] > 0 and rows[a]["bh_pass"]
                  and rows[a]["fold_clause_passes"]]
+
+    # ⭐ DEFLATE THE ARM THAT WOULD ACTUALLY BE PROMOTED, not merely the best-CRPS one. If a
+    # candidate leads on raw CRPS but is INELIGIBLE (or a tie, or fails BH), deflating IT would
+    # decide the promotion gate on an arm that cannot be promoted — the gate must bind on the
+    # thing it is gating. Falls back to the best arm only when there is no survivor, purely so a
+    # null still reports a DSR figure.
+    dsr_arm = (min(survivors, key=lambda a: arms[a]["pooled_crps"]) if survivors
+               else (min(real, key=lambda a: arms[a]["pooled_crps"]) if real else None))
+    dsr_clean = dsr_all = float("nan")
+    if dsr_arm and rows[dsr_arm]["gain_crps"] > 0:
+        imp = bucket_improvement(dsr_arm)
+        dsr_clean = float(deflated_sharpe(imp, n_trials=n_trials, var_trials_sr=V_clean).dsr)
+        dsr_all = float(deflated_sharpe(imp, n_trials=n_trials, var_trials_sr=V_all).dsr)
     deflation_clean = bool(np.isfinite(pbo) and pbo < _PBO_GATE and dsr_clean >= _DSR_GATE)
 
     # H1b attribution vs its matched level-only foil (NF-D15 g′)
@@ -879,6 +885,7 @@ def stage_decide(args) -> None:
         "dsr_degenerate_excluded": round(dsr_clean, 4) if np.isfinite(dsr_clean) else None,
         "dsr_whole_field": round(dsr_all, 4) if np.isfinite(dsr_all) else None,
         "dsr_gate": _DSR_GATE, "dsr_binding": "degenerate-excluded (DSR-CONV, declared forward)",
+        "dsr_arm": dsr_arm, "dsr_arm_is_survivor": bool(dsr_arm in survivors),
         "V_degenerate_excluded": V_clean, "V_whole_field": V_all,
         "deflation_clean": deflation_clean,
         "attribution": attribution, "nulls": nulls,
