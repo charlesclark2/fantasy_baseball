@@ -364,6 +364,15 @@ honest, and where it is not. An arm that fails to beat the market is **not** a f
    The **modelling** target (`y_actual`) is unaffected — this limits only what the HR predictive can
    be *graded against*, not what it can be *fit to*. hits (75–80%) and TB (81%) are unaffected
    throughout and need no fold restriction.
+
+   ⭐ **PM RULING 2026-08-14 (post-run, after PR #788 — a FORWARD constraint on successor stories,
+   not a change to this registration's executed design):** the two-sided HR benchmark is **RETIRED**.
+   Phase 2 ran it per-fold exactly as registered above (verdict: GENUINE_ABSENCE on the HR bake-off);
+   going forward HR is a **model-only leg** — the predictive is graded on realized outcomes, with no
+   market benchmark. Any future HR product surface or re-test must **re-register its grading
+   estimand against the one-way "anytime HR" presentation** — P(HR ≥ 1) vs the anytime price, with a
+   declared de-vig convention for one-way quotes — and ⛔ must never resurrect the two-sided line
+   (which by 2026-07 is a single-book, ~15–20%-coverage estimand no durable claim can be graded on).
 2. **~3% of prop events never resolve to a `game_pk`** (§ handoff). Unresolved events are dropped,
    not guessed. This is not missing-at-random and should not be characterised as such without
    checking.

@@ -112,3 +112,25 @@ from this work.
    "anytime HR" presentation instead.
 3. A calibration surface ("our P(over) vs the de-vigged line, no bet") on hits/TB would be
    honest-framing-compatible (6/6-fold Brier advantage), but is a product decision.
+
+## PM rulings (2026-08-14 — decided after PR #788 merged; Phase 2 CLOSED)
+
+- **TB product surface: YES (operator decision)** — carded as a NEW story with its own
+  runtime gate; the surface ships on the recorded GLM champion. Nothing deploys from this
+  story itself.
+- **(b) HR grading — the two-sided benchmark is RETIRED; HR stays a model-only leg**
+  (predictive graded on realized outcomes, no market benchmark). The two-sided line is
+  structurally dying (60.9→8.7% two-sided by season; only Pinnacle two-sided from 2026-07 at
+  ~15–20% coverage) and HR is a GENUINE_ABSENCE with no product to grade.
+  ⭐ **FORWARD CONSTRAINT (binds any future HR story):** any HR product surface or re-test
+  must RE-REGISTER its grading estimand against the one-way "anytime HR" presentation —
+  P(HR ≥ 1) vs the anytime price, with a declared de-vig convention for one-way quotes —
+  and ⛔ must never resurrect the two-sided line. A rule for a future story, not work now.
+  (Also recorded as an amendment in the pre-registration's §9.1.)
+- **(c) The fixed-config GBM null is ACCEPTED; no tuned-GBM successor now (deferred
+  backlog).** The tuned-candidate discipline exists to make a NULL trustworthy; here the
+  verdict is a SHIP (the GLM won), so the weak fixed-config GBM null is a footnote that does
+  not undermine the TB ship. If a tuned-GBM (+ seeded-NGBoost) challenge is ever wanted it is
+  a FRESH registration — own field + degenerates declared forward per DSR-CONV, ⛔ never
+  folded into the recorded Phase-2 field — running independently of and NOT gating the TB
+  surface (a later winner could swap the form without blocking the product).
