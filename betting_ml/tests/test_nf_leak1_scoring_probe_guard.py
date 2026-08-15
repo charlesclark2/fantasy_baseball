@@ -861,3 +861,43 @@ def _configs_in(obj, out=None) -> list[dict]:
         for value in obj:
             _configs_in(value, out)
     return out
+
+
+class TestTheRefusalIsReadableByTheHumanWhoGetsIt:
+    """NF-C6P2 rider — `shape_violations`' strings go straight into a 400 `detail` and land in a
+    toast under someone's league form. That makes them PRODUCT COPY, not a log line.
+
+    The first version listed the raw column keys (`pass_yds, pass_td, rush_yds, …`), which is our
+    internal spelling of the stat and appears nowhere in the form the user just filled in — so the
+    message named the fix in a vocabulary the reader had no way to map back to the fields they had
+    typed, which reads as "the form is broken" rather than "here is what to change"."""
+
+    def test_the_core_stat_refusal_uses_no_internal_column_names(self):
+        guard = _guard()
+        problems = guard.shape_violations(_cfg({"rec": 1.0}))
+        assert problems, "the degenerate config must still be refused — this is a COPY test, not a policy change"
+        message = " ".join(problems)
+        # ⭐ Asserted against `CORE_STATS` ITSELF rather than a literal list, so a key added to the
+        # tuple without a label joins this assertion automatically instead of quietly slipping
+        # through in raw form.
+        leaked = [stat for stat in guard.CORE_STATS if stat in message]
+        assert not leaked, f"raw column names reached the user-facing refusal: {leaked}"
+
+    def test_it_still_names_the_stats_it_wants_in_plain_english(self):
+        """⚠️ THE OTHER HALF, AND WITHOUT IT THE TEST ABOVE IS SATISFIED BY DELETING THE LIST.
+        "Say less" is the cheapest way to pass a no-raw-keys assertion and it makes the message
+        strictly worse — the refusal exists to name what to change."""
+        guard = _guard()
+        message = " ".join(guard.shape_violations(_cfg({"rec": 1.0})))
+        for phrase in ("passing yards", "rushing touchdowns", "receiving yards"):
+            assert phrase in message, f"the refusal does not name {phrase!r}"
+
+    def test_every_core_stat_has_a_label_so_none_can_silently_degrade(self):
+        """`core_stat_names` falls back to the raw key rather than dropping a stat, which is the
+        right failure — but a missing label would then reintroduce exactly what the first test
+        forbids, and only on the stat somebody just added."""
+        guard = _guard()
+        assert set(guard.CORE_STATS) <= set(guard.CORE_STAT_LABELS), (
+            "a core stat has no plain-English label and would render as its raw column name"
+        )
+        assert len(guard.core_stat_names()) == len(guard.CORE_STATS)

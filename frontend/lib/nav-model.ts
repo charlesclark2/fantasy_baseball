@@ -112,6 +112,18 @@ export const SPORTS: SportNav[] = [
                 key: "fantasy-my-league",
                 freeSignedIn: true,
               },
+              // ⭐ NF-C6P2 — the POST-DRAFT report. `freeSignedIn` for the same reason My League is,
+              // and one more that is specific to this surface: it is where the season upgrade is
+              // SOLD, so gating it on the fantasy entitlement would hide the conversion surface
+              // from every single user it is meant to convert. Sits directly under My League — that
+              // screen answers "what changed because it's my league", this one answers "what did I
+              // actually end up with", and they are read in that order.
+              {
+                label: "Roster Report",
+                href: "/fantasy/roster-report",
+                key: "fantasy-roster-report",
+                freeSignedIn: true,
+              },
               // NF-C0 — platform import: pull the real league in from Sleeper/Yahoo. Sits ABOVE
               // the manual editor because it is the path most users should take; the editor stays
               // as the floor beneath it for every league we cannot reach compliantly.

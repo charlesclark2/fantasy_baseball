@@ -59,7 +59,14 @@ type FeaturedFantasyPlayer = {
     adpFormat: string | null
     adpTeams: number | null
     adpRank: number | null
+    /** ⭐ E9.46 follow-up — the FULL-BOARD within-position rank, i.e. the number `/fantasy/rankings`
+     *  shows for this player. */
     ourRank: number | null
+    /** …and our rank among the players the market has actually drafted, which is the population the
+     *  gap below is computed in. OPTIONAL: the API Lambda ships only via `deploy.sh` while this
+     *  frontend auto-deploys, so there is a guaranteed window where the deployed API does not send
+     *  it (NF-C0). Absent ⇒ the reconciliation line simply does not render. */
+    ourRankAmongDrafted?: number | null
     rankGap: number | null
   }
   drivers: { feature: string; label: string; pts: number | null }[]
@@ -125,6 +132,24 @@ export function FeaturedFantasyPlayer() {
       : weAreHigher
         ? `We rank him ${Math.abs(gap)} ${Math.abs(gap) === 1 ? "spot" : "spots"} higher than the market drafts him.`
         : `We rank him ${Math.abs(gap)} ${Math.abs(gap) === 1 ? "spot" : "spots"} lower than the market drafts him.`
+
+  // ⭐ E9.46 FOLLOW-UP — THE RECONCILIATION LINE, and it exists because two tiles invite subtraction.
+  //
+  // "Our rank" is now the FULL-BOARD rank, so it agrees with `/fantasy/rankings` when the reader
+  // clicks through. "Market rank" can only ever be among the players the market has drafted — the
+  // market produces no rank for a player nobody drafts. So the two tiles are on DIFFERENT
+  // populations, the gap is computed on the market's one, and a reader who subtracts the tiles
+  // arrives at a third number.
+  //
+  // ⛔ The alternatives were worse. Showing the matched rank in the tile puts a number on the card
+  // that the rankings page contradicts (the defect being fixed). Computing the gap across the two
+  // populations reports a difference of populations as a disagreement about a player. Saying it
+  // outright, only when the two actually differ, costs one line and is the only reading that is true.
+  const draftedRank = market.ourRankAmongDrafted ?? null
+  const populationNote =
+    draftedRank != null && market.ourRank != null && draftedRank !== market.ourRank
+      ? `Our rank is his place on our whole board for the position. Among the ${player.pos}s the market actually drafts he is ${player.pos}${draftedRank}, which is the comparison above.`
+      : null
 
   const formats: { label: string; pts: number | null }[] = [
     { label: "Standard", pts: projection.ptsStd },
@@ -231,6 +256,12 @@ export function FeaturedFantasyPlayer() {
             </div>
 
             <p className="mt-4 text-sm font-medium text-white">{gapPhrase}</p>
+
+            {populationNote && (
+              <p className="mt-2 text-xs leading-relaxed text-gray-500" data-testid="rank-population-note">
+                {populationNote}
+              </p>
+            )}
 
             {/* ⛔ The caveat renders WITH the gap, not behind a disclosure. */}
             {data.leanNote && (
