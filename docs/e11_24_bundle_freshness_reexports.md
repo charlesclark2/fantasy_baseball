@@ -194,7 +194,7 @@ than as silently redundant code.
 * `scripts/check_data_freshness.py` — the three entries flip to `source="s3"`; the module docstring
   rewritten (the blocked-entry list is discharged; the retained Snowflake escape hatch is now an
   explicit, guarded decision rather than a leftover).
-* `betting_ml/tests/test_e11_24_bundle_freshness_reexports.py` — 58 guards, **18 deliberate breaks
+* `betting_ml/tests/test_e11_24_bundle_freshness_reexports.py` — 59 guards, **20 deliberate breaks
   RED-proven in-process with each mutation asserted to land** (E11.24 #682), including a stripper
   control and two-sided controls for `ON_DEMAND_ONLY` and `needs_snowflake()`.
 * `betting_ml/tests/test_e11_24_check_guard_s3_repoint.py` — two guards **re-anchored** (not
