@@ -39,9 +39,18 @@ S3 LAYOUT: baseball/lakehouse/<name>/data.parquet (single-file mart layout). The
 S3 AUTH: the shared instance-role-safe `lakehouse_raw_writer.make_s3_client()` (the W7b-1 AKID footgun
   cure — NEVER pass aws_access_key_id=os.environ.get(...) to boto3). Lint-enforced.
 
+  • matchup_cell_sequential_posteriors (betting; sequential_bayes/update_matchup_cell_posteriors.py
+      — SCD-2 MERGE). ⛔ ON-DEMAND ONLY (not in the no-arg default set — see ON_DEMAND_ONLY).
+      Added by the E11.24 Bundle (2026-08-14): it had NO S3 prefix at all, which was the last of
+      check_data_freshness's three Snowflake blockers. It has no S3 CONSUMER today
+      (generate_matchup_signals.py reads it natively from Snowflake), so the mirror exists for the
+      freshness monitor and for a future read repoint — and it is written by
+      reexport_matchup_cell_posteriors_op DOWNSTREAM of its writer, never at lk10.
+
 Usage:
-  uv run python scripts/export_w8b_precursors_to_s3.py                                 # all 4
+  uv run python scripts/export_w8b_precursors_to_s3.py                        # the DEFAULT set
   uv run python scripts/export_w8b_precursors_to_s3.py --table feature_pregame_lineup_state
+  uv run python scripts/export_w8b_precursors_to_s3.py --table matchup_cell_sequential_posteriors
   uv run python scripts/export_w8b_precursors_to_s3.py --dry-run                       # counts only
 """
 
@@ -74,6 +83,14 @@ _S3_BUCKET = "baseball-betting-ml-artifacts"
 MIRROR_TABLES = {
     "feature_pregame_lineup_state":    "baseball_data.betting_features.feature_pregame_lineup_state",
     "team_sequential_posteriors":      "baseball_data.betting.team_sequential_posteriors",
+    # E11.24 Bundle (2026-08-14) — matchup_cell_sequential_posteriors had NO S3 prefix at all,
+    # the last of check_data_freshness's three blockers. Identical shape to its sibling
+    # team_sequential_posteriors directly above (same schema, same SCD-2 MERGE writer in
+    # betting_ml/scripts/sequential_bayes/, same accumulate-safe full-table SELECT *), so it
+    # reuses this exporter rather than growing a fourth near-identical script.
+    # ⛔ ON-DEMAND ONLY — see ON_DEMAND_ONLY below. It is deliberately NOT in the no-arg set.
+    "matchup_cell_sequential_posteriors":
+        "baseball_data.betting.matchup_cell_sequential_posteriors",
     # fct_fangraphs_pitching_analytics DROPPED (E11.1-W11-FG) — now W4-built natively in DuckDB; see docstring.
     # ⛔ stg_actionnetwork_public_betting RETIRED (E11.20 INC-31 audit, 2026-07-10): the W11d
     # native build (run_w1_lakehouse --w11d-only, W11D_PUBLIC_BETTING_NIGHTLY=1 on the box)
@@ -87,6 +104,20 @@ MIRROR_TABLES = {
     # ⚠️ Requires W11D_PUBLIC_BETTING_NIGHTLY=1 (verified live on the box) or the key freezes.
 }
 ALL_NAMES = sorted(MIRROR_TABLES)
+
+# ⛔ E11.24 Bundle — tables that are exportable by an explicit `--table` but are NOT part of the
+# no-arg (default) run. The no-arg invocation is the one `lakehouse_w8b_aggregator_op` makes at
+# graph position lk10, i.e. BEFORE the sequential writers advance Snowflake later in the same
+# daily run. Putting a table in the default set therefore hands it a lk10 mirror that is, by
+# construction, one writer-cycle stale — the exact INC-25 trail this bundle exists to remove, and
+# a SECOND writer racing the on-demand one for the same S3 key (the INC-31 two-writers-one-key
+# shape). team_sequential_posteriors legitimately stays in the default set because the `--w8b`
+# DuckDB build READS it (feature_pregame_game_features_raw), so the mirror must exist before that
+# build runs; matchup_cell_sequential_posteriors has NO S3 consumer at all today
+# (generate_matchup_signals.py reads it straight from Snowflake), so a lk10 copy would be pure
+# cost with a pre-installed defect. Pinned by test_e11_24_bundle_freshness_reexports.py.
+ON_DEMAND_ONLY = frozenset({"matchup_cell_sequential_posteriors"})
+DEFAULT_NAMES = [n for n in ALL_NAMES if n not in ON_DEMAND_ONLY]
 
 
 def get_snowflake_conn():
@@ -170,11 +201,13 @@ def _export(conn, lakehouse_name: str, fqn: str, dry_run: bool) -> int:
 
 def main():
     ap = argparse.ArgumentParser(description="E11.1-W8b serving-aggregator precursor export-mirror → S3")
-    ap.add_argument("--table", choices=ALL_NAMES, help="Export one (default: all 4)")
+    ap.add_argument("--table", choices=ALL_NAMES,
+                    help=f"Export one (default: {DEFAULT_NAMES}; "
+                         f"on-demand only: {sorted(ON_DEMAND_ONLY)})")
     ap.add_argument("--dry-run", action="store_true", help="Row counts only, no S3 write")
     args = ap.parse_args()
 
-    selected = [args.table] if args.table else ALL_NAMES
+    selected = [args.table] if args.table else list(DEFAULT_NAMES)
     print(f"E11.1-W8b precursor mirror: {selected}" + ("  | DRY-RUN" if args.dry_run else ""))
 
     failures: list[tuple[str, str]] = []

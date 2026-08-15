@@ -123,13 +123,24 @@ its reads leave, which is why `story_prompts` calls it "a DIVIDEND of target 6, 
 
 ## Follow-ups this opens
 
-1. **Export `matchup_cell_sequential_posteriors` to S3** — the hard blocker.
-2. **Fix the `player_profiles_raw` S3 mirror** (41 d stale; nothing else appears to read it, so the
-   staleness is currently invisible).
-3. **Re-export `player_sequential_posteriors` after its writer**, not at `lk9` — an INC-25
-   build-ordering fix that also makes the mirror honest for any future consumer.
-4. Then flip the remaining five together; `needs_snowflake()` turns the script Snowflake-free
+1. ✅ **Export `matchup_cell_sequential_posteriors` to S3** — the hard blocker.
+   *Done 2026-08-14, E11.24 Bundle → `docs/e11_24_bundle_freshness_reexports.md`.*
+2. ✅ **Fix the `player_profiles_raw` S3 mirror** (41 d stale; nothing else appears to read it, so
+   the staleness is currently invisible). *Done 2026-08-14, same bundle — and it was a WRITER gap,
+   not a lagging mirror: `export_w4_raw_to_s3.py` is a hand-run precursor no job ever scheduled.*
+3. ✅ **Re-export `player_sequential_posteriors` after its writer**, not at `lk9` — an INC-25
+   build-ordering fix that also makes the mirror honest for any future consumer. *Done 2026-08-09,
+   PR #693.*
+4. ✅ Then flip the remaining five together; `needs_snowflake()` turns the script Snowflake-free
    automatically, and **that** is when the ~2.3 resumes/day are actually deleted.
+   *Two flipped by PR #772 (2026-08-14), three by the Bundle the same day — the credit lands only
+   once BOTH are in `dev`.*
+   ⚠️ **`team_sequential_posteriors` was NOT one of the "safe next flips" this doc listed.** Its
+   08-08 "parity EXACT" row was read in-job, at the moment this doc's own two-callers note calls
+   blind; re-measured 2026-08-14 it trailed its writer by 2.78 h / 17 rows (an INC-25 ordering
+   trail). #772 refused the flip on that measurement and carded the op. ⇒ **a parity reading taken
+   at the blind moment is not evidence of parity**, and this doc's "safe next flips" line was
+   wrong on one of its three.
 
 ## Deploy + runtime gate (operator)
 

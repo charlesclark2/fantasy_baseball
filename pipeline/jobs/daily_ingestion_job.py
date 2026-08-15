@@ -74,7 +74,9 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_weather,
     finalize_prior_slate_game_detail_op,
     predict_today_morning,
+    reexport_matchup_cell_posteriors_op,
     reexport_player_seq_posteriors_op,
+    reexport_team_seq_posteriors_op,
     settle_user_bets_op,
     update_lineup_state_scd2,
     update_market_features_scd2,
@@ -256,7 +258,22 @@ def daily_ingestion_job():
     # the p_player → p_team chain.
     reexport_player_seq_posteriors_op(start=p_player)
     p_team    = update_team_posteriors_op(start=p_player)
+    # 🩸 INC-25 ORDERING FIX (E11.24 Bundle, 2026-08-14) — the SAME defect one table over.
+    # lakehouse_w8b_aggregator_op mirrors team_sequential_posteriors at lk10, ~40 min EARLIER in
+    # this same run, so the S3 parquet always trailed the writer directly above: measured
+    # 2026-08-14, SF max(update_ts) 13:03:04 / 83,636 rows vs S3 10:16:26 / 83,619 — 2.78h and 17
+    # rows behind. PR #772 refused to flip this table's freshness entry to S3 because of it.
+    # The lk10 mirror STAYS (the --w8b build reads it) and the order cannot be swapped — the
+    # writer needs the SF eb_bullpen_posteriors copy, which needs the ext refresh, which runs
+    # after lk10 (a genuine cycle, documented at lineup_intraday_s3_feature_rebuild / E9.53).
+    # A FAN-OUT LEAF: nothing consumes its output, so a mirror failure can never block p_matchup
+    # or predict. It pages instead (ALERT tier). Do NOT thread it into the chain.
+    reexport_team_seq_posteriors_op(start=p_team)
     p_matchup = update_matchup_cell_posteriors_op(start=p_team)
+    # 🩸 E11.24 Bundle — matchup_cell_sequential_posteriors had NO S3 prefix at all. Its mirror is
+    # BORN downstream of its writer rather than being added to the lk10 export set, so the family's
+    # fourth member is never created with the INC-25 trail pre-installed. Fan-out leaf, as above.
+    reexport_matchup_cell_posteriors_op(start=p_matchup)
     # E11.8 (INC-8 fix) — archetype posteriors MUST also run in the daily job,
     # not only in statcast_catchup_job. The catchup sensor skips when Statcast
     # data arrived before the 07:00 run (rare but real), leaving

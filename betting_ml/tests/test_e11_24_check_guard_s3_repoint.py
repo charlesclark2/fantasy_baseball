@@ -362,10 +362,25 @@ def test_every_entry_declares_a_source_explicitly():
     assert not bad, f"unknown source values: {bad}"
 
 
-def test_needs_snowflake_is_true_while_any_entry_is_still_snowflake_resident():
-    assert fresh.needs_snowflake() is True, (
-        "expected some entries to still be Snowflake-resident — if this flipped, the "
-        "blockers were cleared and the module docstring's blocked-entry list is now stale"
+def test_only_pr_772s_two_cheap_flips_may_still_be_snowflake_resident():
+    """RE-ANCHORED 2026-08-14 by the E11.24 Bundle, which cleared the last three blockers
+    (team_sequential_posteriors / player_profiles_raw / matchup_cell_sequential_posteriors).
+
+    This test previously asserted `needs_snowflake() is True` — a correct reading of the world
+    when it was written, and a retired one now (the guard-suite-encodes-a-retired-world class).
+    Re-anchoring it onto the new implementation keeps the property it was defending — "know
+    exactly which entries still cost a COMPUTE_WH resume" — instead of deleting it. The two
+    names below are PR #772's; on a base that already has #772 this set is simply empty.
+    The full-strength version of this assertion lives in
+    test_e11_24_bundle_freshness_reexports.py::test_no_entry_outside_pr_772_still_reads_snowflake.
+    """
+    still_sf = {t for t, c in fresh.FRESHNESS_THRESHOLDS.items()
+                if fresh.entry_source(c) == "snowflake"}
+    allowed = {"baseball_data.betting.eb_bullpen_team_posteriors",
+               "baseball_data.betting.eb_park_factors_raw"}
+    assert still_sf <= allowed, (
+        f"unexpected Snowflake-resident entries {sorted(still_sf - allowed)} — every one of "
+        f"them re-opens the connection this script's repoint exists to close"
     )
 
 
@@ -428,14 +443,27 @@ def test_a_fully_repointed_guard_has_no_snowflake_code_path(filename):
     )
 
 
-def test_the_partially_repointed_guard_still_declares_its_remaining_snowflake_use():
-    """The counterpart assertion, so the test above cannot be satisfied by simply deleting the
-    Snowflake code from a script that legitimately still needs it. check_data_freshness KEEPS a
-    Snowflake path for the five blocked entries; the day those clear, this test is what tells
-    the next session the docstring's blocked list needs rewriting too."""
+def test_the_retained_snowflake_escape_hatch_is_still_detectable():
+    """The two-sided counterpart: without it, `_snowflake_names_in_code` could return an empty
+    set for EVERY file (a broken AST walk) and the test above would pass on nothing.
+
+    UPDATED 2026-08-14 (E11.24 Bundle). This used to read "KEEPS a Snowflake path for the five
+    blocked entries" and instructed the next session to delete that path once the blockers
+    cleared. The blockers ARE cleared — every entry now reads S3 (modulo PR #772's two, see
+    above) — and the path was deliberately RETAINED anyway: it is the escape hatch for a future
+    genuinely Snowflake-resident feed, `_DEFAULT_SOURCE` still fails toward the store that
+    certainly exists, and `run()` never opens the connection while no entry asks for it
+    (`needs_snowflake()` is lazy). So the detector must still FIND Snowflake here — which is
+    exactly what makes it a valid control for the two fully-repointed scripts above.
+    Deleting the branch remains a legitimate future call; it is a decision to argue, not drift
+    into, and it lands here plus in test_e11_24_bundle_freshness_reexports.py.
+    """
     found = _snowflake_names_in_code(_SCRIPTS / "check_data_freshness.py")
     assert any("get_snowflake_connection" in f for f in found), (
-        "check_data_freshness no longer imports get_snowflake_connection — if every entry is "
-        "now source='s3', delete the Snowflake branch AND the blocked-entry list in its "
-        "docstring, then update this test"
+        "check_data_freshness no longer imports get_snowflake_connection. If that was a "
+        "deliberate removal of the retained escape hatch, add check_data_freshness.py to "
+        "test_a_fully_repointed_guard_has_no_snowflake_code_path, pick a different script as "
+        "this control's positive case, and update "
+        "test_e11_24_bundle_freshness_reexports.py::test_the_snowflake_escape_hatch_is_retained_"
+        "deliberately."
     )
