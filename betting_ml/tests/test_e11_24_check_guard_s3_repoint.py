@@ -362,10 +362,24 @@ def test_every_entry_declares_a_source_explicitly():
     assert not bad, f"unknown source values: {bad}"
 
 
-def test_needs_snowflake_is_true_while_any_entry_is_still_snowflake_resident():
-    assert fresh.needs_snowflake() is True, (
-        "expected some entries to still be Snowflake-resident — if this flipped, the "
-        "blockers were cleared and the module docstring's blocked-entry list is now stale"
+def test_needs_snowflake_tracks_the_registry_in_both_directions():
+    """RE-ANCHORED 2026-08-14 by the E11.24 Bundle. This test previously asserted
+    `needs_snowflake() is True` — correct when written, retired now that every entry reads S3
+    (the guard-suite-encodes-a-retired-world class).
+
+    Rather than restate `is False` (which the re-anchored
+    `test_the_credit_lands_only_now_that_every_blocker_is_cleared` above already asserts, more
+    strictly), this slot is re-pointed at the property that assertion CANNOT establish on its
+    own: that the helper still DISCRIMINATES. A `needs_snowflake` hard-wired to return False
+    would satisfy every "is False" test in both files while silently disabling the escape hatch
+    — so regress one entry and the answer must flip back.
+    """
+    assert fresh.needs_snowflake() is False
+    regressed = dict(fresh.FRESHNESS_THRESHOLDS)
+    regressed[_TEAM_SEQ] = {**regressed[_TEAM_SEQ], "source": "snowflake"}
+    assert fresh.needs_snowflake(regressed) is True, (
+        "needs_snowflake() no longer reacts to a Snowflake-resident entry — it is stuck False, "
+        "and every 'the script is Snowflake-free' assertion in this suite is now vacuous"
     )
 
 
@@ -428,14 +442,171 @@ def test_a_fully_repointed_guard_has_no_snowflake_code_path(filename):
     )
 
 
-def test_the_partially_repointed_guard_still_declares_its_remaining_snowflake_use():
-    """The counterpart assertion, so the test above cannot be satisfied by simply deleting the
-    Snowflake code from a script that legitimately still needs it. check_data_freshness KEEPS a
-    Snowflake path for the five blocked entries; the day those clear, this test is what tells
-    the next session the docstring's blocked list needs rewriting too."""
+def test_the_retained_snowflake_escape_hatch_is_still_detectable():
+    """The two-sided counterpart: without it, `_snowflake_names_in_code` could return an empty
+    set for EVERY file (a broken AST walk) and the test above would pass on nothing.
+
+    UPDATED 2026-08-14 (E11.24 Bundle). This used to read "KEEPS a Snowflake path for the five
+    blocked entries" and instructed the next session to delete that path once the blockers
+    cleared. The blockers ARE cleared — every entry now reads S3 (modulo PR #772's two, see
+    above) — and the path was deliberately RETAINED anyway: it is the escape hatch for a future
+    genuinely Snowflake-resident feed, `_DEFAULT_SOURCE` still fails toward the store that
+    certainly exists, and `run()` never opens the connection while no entry asks for it
+    (`needs_snowflake()` is lazy). So the detector must still FIND Snowflake here — which is
+    exactly what makes it a valid control for the two fully-repointed scripts above.
+    Deleting the branch remains a legitimate future call; it is a decision to argue, not drift
+    into, and it lands here plus in test_e11_24_bundle_freshness_reexports.py.
+    """
     found = _snowflake_names_in_code(_SCRIPTS / "check_data_freshness.py")
     assert any("get_snowflake_connection" in f for f in found), (
-        "check_data_freshness no longer imports get_snowflake_connection — if every entry is "
-        "now source='s3', delete the Snowflake branch AND the blocked-entry list in its "
-        "docstring, then update this test"
+        "check_data_freshness no longer imports get_snowflake_connection. If that was a "
+        "deliberate removal of the retained escape hatch, add check_data_freshness.py to "
+        "test_a_fully_repointed_guard_has_no_snowflake_code_path, pick a different script as "
+        "this control's positive case, and update "
+        "test_e11_24_bundle_freshness_reexports.py::test_the_snowflake_escape_hatch_is_retained_"
+        "deliberately."
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# 6. The 2026-08-14 flip — two entries move, the third is HELD, and the hold is mechanical
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# The story asked for three entries to flip. Two did. `team_sequential_posteriors` did NOT,
+# because the "parity EXACT (2026-08-08)" claim it inherited was falsified by re-measurement:
+#
+#   SF 2026-08-14 13:03:04 / 83,636 rows   vs   S3 2026-08-14 10:16:26 / 83,619 rows
+#
+# — the mirror trails by 2.78h and 17 rows, because `lakehouse_w8b_aggregator_op` (lk10)
+# mirrors it near the TOP of daily_ingestion_job while its writer `update_team_posteriors_op`
+# (p_team) runs ~40min later. That is the SAME INC-25 ordering defect PR #693 fixed for
+# `player_sequential_posteriors`, which #693 did not sweep up.
+#
+# ⚠️ THE VACUITY TRAP THIS SECTION IS WRITTEN AROUND (NF1.7(a) / NF-D17). The natural guard —
+# "if the entry is s3 then a re-export op must be wired" — is VACUOUSLY TRUE today, because the
+# antecedent is false. So the coupling clause is paired with an explicit NON-VACUITY anchor
+# asserting the state it is conditioned on, and the two are separate tests with separate
+# fixtures so each is independently RED-provable.
+
+_TEAM_SEQ = "baseball_data.betting.team_sequential_posteriors"
+_FLIPPED_ON_08_14 = (
+    "baseball_data.betting.eb_bullpen_team_posteriors",
+    "baseball_data.betting.eb_park_factors_raw",
+)
+
+
+@pytest.mark.parametrize("table", _FLIPPED_ON_08_14)
+def test_the_structurally_safe_entries_read_s3(table):
+    """Both flipped entries have STRUCTURAL parity, not a lucky reading — which is exactly what
+    separates them from team_seq. eb_bullpen's S3 parquet is BUILT by --w8a and its Snowflake
+    table is a MERGE copy from lakehouse_ext over that same parquet, so S3 leads by
+    construction; eb_park_factors is an ANNUAL hand-run fit read against a 180-DAY threshold."""
+    assert fresh.entry_source(fresh.FRESHNESS_THRESHOLDS[table]) == "s3"
+
+
+# ── The flipped entries' ts_col is a DATE, and a DATE reads as MIDNIGHT ───────────────────
+# Both flipped entries use `fit_date` (a DATE), which `_max_ingestion_timestamp_s3` reads as
+# `MAX(fit_date::timestamp)` = 00:00 on that date. So a store written TODAY still measures up to
+# 24h "stale" by the end of the UTC day. That arithmetic is IDENTICAL on the Snowflake twin
+# (`MAX(fit_date)` is the same DATE), so the flip does not move the threshold — but the archetype
+# entry needed 48h→72h for precisely this family of reason (a race nobody had timed), so the
+# margin is derived here rather than assumed.
+#   · this check's cron is `30 12,17` UTC (capture.crontab)
+#   · the --w8a build that sets eb_bullpen's fit_date runs inside the daily job (~12:40 UTC);
+#     MEASURED 2026-08-14 15:03 UTC: fit_date was already TODAY, lag 15.13h.
+_EB_BULLPEN = "baseball_data.betting.eb_bullpen_team_posteriors"
+_CRON_HOURS_UTC = (12.5, 17.5)
+
+
+def _date_col_lag_hours(cron_hour: float, writer_ran_today: bool) -> float:
+    """Lag of a DATE-valued ts_col read at `cron_hour`, given whether the writer has run."""
+    return cron_hour + (0 if writer_ran_today else 24)
+
+
+def test_the_eb_bullpen_threshold_clears_its_structural_worst_case():
+    """The healthy worst case is the 12:30 run, which lands BEFORE the day's ~12:40 --w8a build
+    and therefore reads fit_date = D-1: 36.5h. A 48h threshold clears that with 11.5h of margin.
+    If this goes red, the entry cries wolf on every 12:30 run — the archetype defect verbatim."""
+    cfg = fresh.FRESHNESS_THRESHOLDS[_EB_BULLPEN]
+    worst_healthy = max(_date_col_lag_hours(h, writer_ran_today=(h > 12.5))
+                        for h in _CRON_HOURS_UTC)
+    assert worst_healthy == pytest.approx(36.5)
+    assert cfg["max_stale_hours"] > worst_healthy, (
+        f"max_stale_hours={cfg['max_stale_hours']}h is below the healthy-store worst case "
+        f"({worst_healthy}h) for a DATE-valued ts_col read at the 12:30 cron"
+    )
+
+
+def test_the_eb_bullpen_threshold_still_catches_a_real_build_outage():
+    """The other side: a floor that clears the race must not become one nothing can trip."""
+    cfg = fresh.FRESHNESS_THRESHOLDS[_EB_BULLPEN]
+    one_day_outage = max(_date_col_lag_hours(h, writer_ran_today=False)
+                         for h in _CRON_HOURS_UTC) + 24
+    assert cfg["max_stale_hours"] < one_day_outage, (
+        f"max_stale_hours={cfg['max_stale_hours']}h would not flag a --w8a build that stopped "
+        f"for a full extra day ({one_day_outage}h)"
+    )
+
+
+def test_team_seq_is_now_flipped_and_therefore_the_coupling_below_is_live():
+    """RE-ANCHORED 2026-08-14 by the E11.24 Bundle — this test previously asserted the OPPOSITE
+    (`== "snowflake"`), and its own failure message prescribed exactly this update:
+    *"Wire that first, then update this test."* The re-export ordering fix
+    (`reexport_team_seq_posteriors_op`) is wired in BOTH writer jobs, so the precondition it was
+    holding the line on is satisfied and the flip has been made.
+
+    Its JOB is unchanged: it remains the NON-VACUITY ANCHOR for the coupling test below. That
+    test is written as `if entry is s3: <assert the re-export is wired>`, so it proves nothing
+    unless something independently establishes which branch is taken. Before, this anchor proved
+    the antecedent FALSE (vacuous by design, deliberately); now it proves it TRUE, so the
+    coupling test is LIVE and its assertion actually runs. Either way the pair cannot both be
+    passing on nothing.
+    """
+    assert fresh.entry_source(fresh.FRESHNESS_THRESHOLDS[_TEAM_SEQ]) == "s3", (
+        "team_sequential_posteriors reverted to snowflake. If that was deliberate, the coupling "
+        "test below has gone vacuous again — say so there rather than leaving it silently inert."
+    )
+
+
+def test_flipping_team_seq_to_s3_requires_its_mirror_to_be_reordered_first():
+    """THE COUPLING, made mechanical rather than left as prose in a docstring — the same shape
+    #693 used for player_seq. Conditioned on the entry being s3, so it is currently vacuous BY
+    DESIGN; `test_team_seq_is_held_back_from_the_flip` above is what proves the condition it
+    rests on, so the pair cannot both be passing on nothing."""
+    if fresh.entry_source(fresh.FRESHNESS_THRESHOLDS[_TEAM_SEQ]) != "snowflake":
+        job = (_PROJECT_ROOT / "pipeline" / "jobs" / "daily_ingestion_job.py").read_text()
+        code = "\n".join(l for l in job.splitlines() if not l.lstrip().startswith("#"))
+        assert "reexport_team_seq_posteriors_op(" in code, (
+            "the team_sequential_posteriors freshness entry reads the S3 mirror, but "
+            "daily_ingestion_job does not wire a re-export of that mirror downstream of "
+            "update_team_posteriors_op — the mirror falls a writer-cycle behind (INC-25) and "
+            "the monitor will report a false STALE. #693 is the template."
+        )
+
+
+def test_the_credit_lands_only_now_that_every_blocker_is_cleared():
+    """RE-ANCHORED 2026-08-14 by the E11.24 Bundle. This test previously asserted that some
+    entry was STILL Snowflake-resident, pinning the honest reading that PR #772's two flips
+    bought ZERO wake credit. That reading was correct and is PRESERVED — what changed is that
+    the three blockers it named (team_seq's INC-25 mirror trail, player_profiles_raw's 41-day
+    mirror, matchup_cell having no S3 prefix at all) have now been cleared, so the queue is
+    finally empty.
+
+    ⛔ The discipline it was defending is unchanged and is the reason it is re-anchored rather
+    than deleted: wake is a QUEUE (#679), so the credit belongs to the WHOLE SET and to no
+    individual flip. Do not read this test as "#772 bought the credit" or "the Bundle bought the
+    credit" — neither did alone; the last flip in the set is simply where an all-or-nothing
+    saving becomes observable. And it is credit for THIS SCRIPT only: the other named wakers
+    (the feature_pregame_team_features view, the lineup_state SCD-2 writes, CI_WH, CREDENCE_API)
+    are untouched, and the queue moves to whichever of them fires first.
+    """
+    still_snowflake = {t for t, c in fresh.FRESHNESS_THRESHOLDS.items()
+                       if fresh.entry_source(c) == "snowflake"}
+    assert not still_snowflake, (
+        f"these entries are still Snowflake-resident: {sorted(still_snowflake)}. Every one of "
+        f"them re-opens the connection on every fire and puts this script back in the "
+        f"COMPUTE_WH wake queue — the saving is all-or-nothing across the set."
+    )
+    assert fresh.needs_snowflake() is False, (
+        "needs_snowflake() is still True with no Snowflake-sourced entry — the lazy-connection "
+        "logic and the source registry have drifted apart"
     )
