@@ -570,18 +570,102 @@ def adp_lookup(season: int, fmt: str, teams: int) -> dict[tuple[str, str], float
     return out
 
 
-def A_fetch(season: int, fmt: str, teams: int):
-    """Indirection so a test can stub the FFC fetch without reaching the network."""
-    from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+# NF-FRESH2 P1 — set once by `main()` from `--market-refresh`. Module state (rather than an extra
+# parameter) because `adp_cache_for` is an `lru_cache` keyed on (season, fmt, teams) and threading a
+# 4th argument through it would give the two refresh modes SEPARATE cache entries, i.e. one export
+# could fetch the same sample twice. The refresh decision is a per-RUN property, not a per-sample
+# one, so it belongs beside the run, not in the memo key.
+_MARKET_REFRESH = False
 
-    return A.fetch_ffc_adp(season, fmt=fmt, teams=teams)
+
+def set_market_refresh(enabled: bool) -> None:
+    """Set the per-run market-refresh mode and drop the memoized ADP samples.
+
+    Clearing `adp_cache_for` matters: without it a lookup memoized under the previous mode would be
+    replayed under the new one, and the export would ship a snapshot it did not actually fetch."""
+    global _MARKET_REFRESH
+    _MARKET_REFRESH = bool(enabled)
+    adp_cache_for.cache_clear()
+
+
+def A_fetch(season: int, fmt: str, teams: int):
+    """Indirection so a test can stub the FFC fetch without reaching the network.
+
+    ⭐ NF-FRESH2 P1 — the `refresh` argument is reduced through `should_refresh_market`, so the
+    exporter can only ever re-fetch the CURRENT season. A historical export (a re-publish of a past
+    season's board) still reads that season's pinned snapshot no matter what the CLI said — the
+    E5.9 backfill boundary, enforced here as well as in the projection build."""
+    from quant_sports_intel_models.football.nfl.fantasy import adp_source as A
+    from quant_sports_intel_models.football.nfl.fantasy import market_freshness as MF
+
+    refresh = MF.should_refresh_market(season, _MARKET_REFRESH)
+    if _MARKET_REFRESH and not refresh:
+        log.info("market refresh REFUSED for season %s (not the current season) — reading the "
+                 "pinned ADP snapshot", season)
+    return A.fetch_ffc_adp(season, fmt=fmt, teams=teams, refresh=refresh)
+
+
+# Every (fmt, teams) ADP sample this export actually pulled. Recorded through the ONE funnel every
+# ADP fetch goes through, so the freshness block reports the samples the boards were REALLY built
+# from rather than a hard-coded list that could drift from the shipped configs.
+_ADP_SAMPLES_USED: set[tuple[str, int]] = set()
 
 
 @functools.lru_cache(maxsize=None)
 def adp_cache_for(season: int, fmt: str, teams: int) -> dict[tuple[str, str], float]:
     """Memoized `adp_lookup` — the 14 (config, size) boards share only a handful of distinct ADP
     samples, so this keeps the export to one FFC fetch per (format, size) instead of one per board."""
+    _ADP_SAMPLES_USED.add((fmt, int(teams)))
     return adp_lookup(season, fmt, teams)
+
+
+def _freshness_meta(season: int) -> dict:
+    """The NF-FRESH2 per-input vintage block, for both `projections.json` and `manifest.json`.
+
+    Flat `adp_as_of` / `ecr_as_of` are the two dates a surface renders beside the ADP column; the
+    nested `freshness` object carries the full provenance (the ADP draft WINDOW and draft count,
+    every sample the export pulled, and the lake-input vintages the projection build recorded).
+
+    ⛔ Every read here is a CACHE read — this function cannot fetch, so it can neither change what
+    the export shipped nor disagree with it. It reports the vintage; `A_fetch` chose it."""
+    from quant_sports_intel_models.football.nfl.fantasy import market_freshness as MF
+
+    adp = MF.adp_as_of(season, fmt=PROJECTION_ADP_FORMAT, teams=PROJECTION_ADP_TEAMS)
+    ecr = MF.ecr_as_of(season)
+    by_sample = {}
+    for fmt, teams in sorted(_ADP_SAMPLES_USED):
+        by_sample[f"{fmt}/{teams}"] = MF.adp_as_of(season, fmt=fmt, teams=teams)
+
+    # The projection build's own record of which lake inputs it consumed (NF-FRESH2 P2). Read from
+    # the summary the build wrote, NOT re-derived from the lake here: re-deriving would report what
+    # the lake holds NOW, which is a different and flattering question (NF-FRESH1 §1.1 measured the
+    # exact gap — a board generated 7h42m BEFORE that day's ingest landed).
+    input_vintage, built_at = None, None
+    summary = _ARTIFACTS / f"nf1_5_projection_summary_{season}.json"
+    try:
+        if summary.exists():
+            blob = json.loads(summary.read_text())
+            input_vintage = blob.get("input_vintage")
+            built_at = blob.get("generated_at")
+    except Exception as e:  # noqa: BLE001 — a provenance stamp must never fail the export
+        log.warning("freshness: could not read %s (%s: %s)", summary.name, type(e).__name__, e)
+
+    if adp is None:
+        log.warning("[ALERT] freshness: no ADP as-of stamp for %s %s/%dteam — the surfaces will "
+                    "render the ADP vintage as unknown", season, PROJECTION_ADP_FORMAT,
+                    PROJECTION_ADP_TEAMS)
+    return {
+        "adp_as_of": (adp or {}).get("as_of"),
+        "ecr_as_of": (ecr or {}).get("as_of"),
+        "freshness": {
+            "adp": adp,
+            "ecr": ecr,
+            "adp_by_sample": by_sample or None,
+            "input_vintage": input_vintage,
+            "projection_built_at": built_at,
+            "market_refresh": bool(_MARKET_REFRESH),
+        },
+    }
 
 
 def _attach_adp(recs: list[dict], adp: dict[tuple[str, str], float]) -> int:
@@ -1099,6 +1183,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--from-lake", action="store_true",
                     help="read the boards + season projection from the S3 Delta instead of local artifacts")
     ap.add_argument("--out", type=Path, default=None, help="override the local staging output dir")
+    # ── NF-FRESH2 P1 — the ADP column's refresh, DEFAULT ON, bounded to the current season ─────
+    # Mirrors `run_nf1_5.py`'s pair. Before this, `A_fetch` omitted `refresh` entirely, so a
+    # republish re-read whatever JSON was already on disk — which is how the 2026-08-10 publish
+    # shipped a 2026-07-25 ADP window (NF-FRESH1 §2.2).
+    ap.add_argument("--market-refresh", dest="market_refresh", action="store_true", default=True,
+                    help="re-fetch the ADP samples for the CURRENT season (default; a historical "
+                         "season always reads its pinned snapshot)")
+    ap.add_argument("--no-market-refresh", dest="market_refresh", action="store_false",
+                    help="read the on-disk ADP caches only — for reproducing an archived export")
     ap.add_argument(
         "--s3-bucket",
         default=os.getenv("CACHE_BUCKET"),
@@ -1121,6 +1214,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
+    # NF-FRESH2 P1 — arm the refresh BEFORE any ADP sample is fetched or memoized.
+    set_market_refresh(args.market_refresh)
 
     df = load_boards_lake(args.season) if args.from_lake else load_boards_local(args.season)
     if "config_name" not in df.columns or "n_teams" not in df.columns:
@@ -1275,6 +1371,14 @@ def main(argv: list[str] | None = None) -> int:
         proj_meta = {
             "adp_format": PROJECTION_ADP_FORMAT,
             "adp_teams": PROJECTION_ADP_TEAMS,
+            # ── NF-FRESH2 — PER-INPUT VINTAGE ────────────────────────────────────────────────
+            # ⭐ THE HONESTY FIX, not a nice-to-have. Every surface renders ONE `built <date>` from
+            # `generated_at`, and on 2026-08-10 that read "built 8/10" over an ADP column whose
+            # window ended 7/25 and a depth-chart view from 8/03 — one date stated over three
+            # vintages, which a reader reasonably takes as covering the whole row (NF-FRESH1 §1.2).
+            # These say which vintage each input actually is. A null means "we could not tell", and
+            # the UI renders that as unknown — never as fresh (NF1.7(a)).
+            **_freshness_meta(args.season),
             # NF1.5b — which projection lineage this board IS, and (for the market-aware one) how
             # market-leaning each position's ordering is. Shipped so the surfaces can carry the
             # caveat from the data instead of hard-coding a claim that can go stale.
@@ -1317,6 +1421,10 @@ def main(argv: list[str] | None = None) -> int:
         "season": args.season,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source": "lake" if args.from_lake else "local-artifacts",
+        # NF-FRESH2 — the per-input vintage, on the MANIFEST as well as on `projections.json`,
+        # because the boards ship even on a run where the projections blob is skipped, and the
+        # Rankings / League Board surfaces read their provenance line from the manifest alone.
+        **_freshness_meta(args.season),
         "positions": list(PROJECTABLE),
         # NF1.5b — which projection lineage EVERY blob in this export came from. Top-level (not only
         # inside `projections`) because the league boards carry it too, and they are exported even

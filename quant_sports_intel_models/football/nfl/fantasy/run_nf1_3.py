@@ -52,6 +52,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from quant_sports_intel_models.football.nfl.fantasy import adp_source as ADP  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import fantasypros_source as ECR  # noqa: E402
+from quant_sports_intel_models.football.nfl.fantasy import market_freshness as MF  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import nf1_3_model as M13  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import nf1_model as M1  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import season_projection as SP  # noqa: E402
@@ -86,19 +87,31 @@ NF1_3_EXTRA_COLS = ["nf1_scale", "nf1_3_learner", "nf1_3_blend_w", "market_lean"
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Feature assembly — NF1.1 pool (+ xFP) + the leakage-safe ADP/ECR market join (per PROJECTION season)
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def _load_market_for_season(con, season: int, schema: str) -> pd.DataFrame:
+def _load_market_for_season(con, season: int, schema: str,
+                            market_refresh: bool = False) -> pd.DataFrame:
     """ADP (FFC) ⋈ ECR (FantasyPros) for ONE projection season, keyed to our gsis `player_id`. Both
     are preseason snapshots for `season` (leakage-safe forward signals). Returns one row per matched
     player with `player_id, adp, adp_stdev, ecr_rank, ecr_std` (either side may be NaN — a player the
-    market does not rank is simply absent / half-covered). Empty frame when neither source has data."""
+    market does not rank is simply absent / half-covered). Empty frame when neither source has data.
+
+    ⭐ NF-FRESH2 P1 — `market_refresh` is REDUCED THROUGH `should_refresh_market`, which refuses any
+    season that is not the clock-derived `current_season()`. So a caller threading the flag through
+    a whole 2017→2026 training pool refreshes the CURRENT season only; every historical season
+    still reads its pinned snapshot. That is the E5.9 backfill boundary (regrading a past benchmark
+    against an ADP that did not exist at the time would be a hindsight benchmark), and it lives in
+    the helper precisely so no future call site can forget it."""
     cols = ["player_id", "adp", "adp_stdev", "ecr_rank", "ecr_std"]
+    refresh = MF.should_refresh_market(season, market_refresh)
+    if market_refresh and not refresh:
+        log.info("market refresh REFUSED for %s — not the current season; reading the pinned "
+                 "snapshot (the E5.9 backfill boundary)", season)
     try:
-        adp = ADP.load_adp_for_season(con, int(season), schema=schema)
+        adp = ADP.load_adp_for_season(con, int(season), schema=schema, refresh=refresh)
     except Exception as e:  # noqa: BLE001 — a source outage degrades to the other / to market-blind
         log.warning("ADP load failed for %s: %s", season, e)
         adp = pd.DataFrame()
     try:
-        ecr = ECR.load_ecr_for_season(con, int(season), schema=schema)
+        ecr = ECR.load_ecr_for_season(con, int(season), schema=schema, refresh=refresh)
     except Exception as e:  # noqa: BLE001
         log.warning("ECR load failed for %s: %s", season, e)
         ecr = pd.DataFrame()
@@ -121,7 +134,8 @@ def _load_market_for_season(con, season: int, schema: str) -> pd.DataFrame:
     return merged[cols]
 
 
-def attach_market(con, frame: pd.DataFrame, schema: str = MARTS_SCHEMA) -> pd.DataFrame:
+def attach_market(con, frame: pd.DataFrame, schema: str = MARTS_SCHEMA,
+                  market_refresh: bool = False) -> pd.DataFrame:
     """LEFT-JOIN the leakage-safe ADP/ECR consensus onto a feature frame per PROJECTION season (each
     row's market snapshot is the season it PROJECTS — `projection_season`, falling back to
     `base_season + 1`), then derive the model-facing market columns (`market_rank` / `market_dispersion`
@@ -135,7 +149,7 @@ def attach_market(con, frame: pd.DataFrame, schema: str = MARTS_SCHEMA) -> pd.Da
     frames = []
     for key, grp in out.groupby(season_col, sort=True):
         proj_season = int(key) if season_col == "projection_season" else int(key) + 1
-        mkt = _load_market_for_season(con, proj_season, schema)
+        mkt = _load_market_for_season(con, proj_season, schema, market_refresh=market_refresh)
         if mkt.empty:
             g = grp.copy()
             for c in ("adp", "adp_stdev", "ecr_rank", "ecr_std"):

@@ -80,6 +80,79 @@ def _normalize_name(name: str) -> str:
     return _NAME_ALIASES.get(n, n)
 
 
+def _read_cached_payload(cache: Path) -> dict | None:
+    """The cache file, or None when it is absent/corrupt (a corrupt cache just re-fetches)."""
+    if not cache.exists():
+        return None
+    try:
+        return json.loads(cache.read_text())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _ffc_payload(season: int, *, fmt: str, teams: int, cache_dir: str | Path | None,
+                 refresh: bool, timeout: int) -> dict | None:
+    """The raw FFC payload: cache-first, or network-first when `refresh` is set.
+
+    ⭐ NF-FRESH2 P1 — A REFRESH FALLS BACK TO THE CACHE, LOUDLY, RATHER THAN LOSING THE MARKET.
+    `refresh=True` is now the DEFAULT for the current season on every board build, which puts an
+    external free API on the path of a serving artifact. If a transient FFC outage propagated, the
+    caller's `except` would degrade that season to market-BLIND — i.e. a 30-second network blip
+    would silently change the served RANKING (the market feeds the order, NF-FRESH1 §2.3), which is
+    a far worse outcome than shipping a slightly older market. So a failed refresh keeps the last
+    good snapshot and WARNs.
+
+    That fallback is self-announcing rather than silent (the E9.62 "a clamp must report whether it
+    bound" lesson): the payload's `adp_as_of` stamp is read from the SAME cache file, so a bound
+    fallback ships — and renders — the OLD date. There is no state in which the board claims a
+    vintage it does not have."""
+    cache_dir = Path(cache_dir or _DEFAULT_CACHE)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache = cache_dir / f"ffc_{fmt}_{teams}_{season}.json"
+
+    if not refresh:
+        cached = _read_cached_payload(cache)
+        if cached is not None:
+            return cached
+
+    url = _FFC_URL.format(fmt=fmt, teams=teams, season=season)
+    req = urllib.request.Request(url, headers={"User-Agent": _UA})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — fixed https host
+            payload = json.loads(resp.read().decode())
+    except Exception as e:  # noqa: BLE001
+        cached = _read_cached_payload(cache) if refresh else None
+        if cached is not None:
+            log.warning("⚠️ FFC ADP %s %s/%dteam REFRESH FAILED (%s: %s) — falling back to the "
+                        "cached snapshot (as-of %s). The served adp_as_of stamp will show that "
+                        "older date.", season, fmt, teams, type(e).__name__, e,
+                        ((cached.get("meta") or {}).get("end_date")))
+            return cached
+        raise
+
+    # ⚠️ CACHE ONLY A SUCCESSFUL PAYLOAD (NF-D16 carried fix). This write used to be
+    # UNCONDITIONAL, which made a TRANSIENT failure PERMANENT: FFC answers an unavailable season
+    # with a 200 carrying `{"status":"Error","errors":"No ADP data found."}`, that 51-byte blob
+    # got persisted, and every later run read it back as "no data" and never re-fetched — which
+    # is why the archived NF1.5 run carried a stale error blob for `ffc_ppr_12_2025.json` and
+    # served 2025 market coverage 0.796 (ECR-only). A network exception already skips the write
+    # by propagating; this closes the other half, where the failure arrives as a 200.
+    if (payload or {}).get("status") == "Success":
+        cache.write_text(json.dumps(payload))
+        return payload
+
+    log.warning("FFC ADP %s %s: NOT caching a non-Success payload (status=%s) — the next run "
+                "will re-fetch", season, fmt, (payload or {}).get("status"))
+    if refresh:
+        cached = _read_cached_payload(cache)
+        if cached is not None and cached.get("status") == "Success":
+            log.warning("⚠️ FFC ADP %s %s/%dteam refresh returned status=%s — falling back to the "
+                        "cached snapshot (as-of %s).", season, fmt, teams,
+                        (payload or {}).get("status"), ((cached.get("meta") or {}).get("end_date")))
+            return cached
+    return payload
+
+
 def fetch_ffc_adp(
     season: int, fmt: str = "ppr", teams: int = 12, cache_dir: str | Path | None = None,
     refresh: bool = False, timeout: int = 30,
@@ -90,33 +163,8 @@ def fetch_ffc_adp(
     (e.g. 2025). Caches the raw JSON under `cache_dir` so subsequent runs are offline-reproducible —
     ⚠️ but ONLY a `status == "Success"` payload is written, so a transient outage (or FFC's 200-with-
     an-error-body for an unavailable season) can never be cached permanently as "no data"."""
-    cache_dir = Path(cache_dir or _DEFAULT_CACHE)
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache = cache_dir / f"ffc_{fmt}_{teams}_{season}.json"
-
-    payload = None
-    if cache.exists() and not refresh:
-        try:
-            payload = json.loads(cache.read_text())
-        except Exception:  # noqa: BLE001 — a corrupt cache just re-fetches
-            payload = None
-    if payload is None:
-        url = _FFC_URL.format(fmt=fmt, teams=teams, season=season)
-        req = urllib.request.Request(url, headers={"User-Agent": _UA})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — fixed https host
-            payload = json.loads(resp.read().decode())
-        # ⚠️ CACHE ONLY A SUCCESSFUL PAYLOAD (NF-D16 carried fix). This write used to be
-        # UNCONDITIONAL, which made a TRANSIENT failure PERMANENT: FFC answers an unavailable season
-        # with a 200 carrying `{"status":"Error","errors":"No ADP data found."}`, that 51-byte blob
-        # got persisted, and every later run read it back as "no data" and never re-fetched — which
-        # is why the archived NF1.5 run carried a stale error blob for `ffc_ppr_12_2025.json` and
-        # served 2025 market coverage 0.796 (ECR-only). A network exception already skips the write
-        # by propagating; this closes the other half, where the failure arrives as a 200.
-        if (payload or {}).get("status") == "Success":
-            cache.write_text(json.dumps(payload))
-        else:
-            log.warning("FFC ADP %s %s: NOT caching a non-Success payload (status=%s) — the next run "
-                        "will re-fetch", season, fmt, (payload or {}).get("status"))
+    payload = _ffc_payload(season, fmt=fmt, teams=teams, cache_dir=cache_dir, refresh=refresh,
+                           timeout=timeout)
 
     cols = ["season", "source", "adp_format", "player_name", "position", "team",
             "adp", "adp_stdev", "adp_high", "adp_low", "times_drafted"]

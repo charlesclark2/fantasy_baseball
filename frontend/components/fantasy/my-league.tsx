@@ -345,6 +345,7 @@ export function MyLeague() {
                   }`
                 : null
             }
+            freshness={manifest?.freshness}
           />
         </div>
       </SurfaceHeader>

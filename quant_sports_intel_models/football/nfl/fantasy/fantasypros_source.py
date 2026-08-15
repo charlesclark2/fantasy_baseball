@@ -61,6 +61,68 @@ _COLS = ["season", "source", "scoring", "player_name", "position", "team",
          "tier", "total_experts", "last_updated"]
 
 
+def _read_cached_payload(cache: Path) -> dict | None:
+    """The cache file, or None when it is absent/corrupt (a corrupt cache just re-fetches)."""
+    if not cache.exists():
+        return None
+    try:
+        return json.loads(cache.read_text())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _fp_payload(season: int, *, scoring: str, cache_dir: str | Path | None,
+                refresh: bool, timeout: int) -> dict | None:
+    """The raw FantasyPros payload: cache-first, or network-first when `refresh` is set.
+
+    ⭐ NF-FRESH2 P1 — like `adp_source._ffc_payload`, A FAILED REFRESH FALLS BACK TO THE CACHE,
+    LOUDLY, rather than degrading the season to market-blind. ECR feeds the served RANKING (the
+    market-led/market-blend lean, NF-FRESH1 §2.3), so a transient FantasyPros outage must not be
+    able to reorder the board. The `ecr_as_of` stamp is read from the same cache file, so a bound
+    fallback ships the OLD date — the fallback announces itself instead of hiding."""
+    scoring = scoring.upper()
+    cache_dir = Path(cache_dir or _DEFAULT_CACHE)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache = cache_dir / f"fp_ecr_{scoring}_{season}.json"
+
+    if not refresh:
+        cached = _read_cached_payload(cache)
+        if cached is not None:
+            return cached
+
+    url = _FP_URL.format(season=season, scoring=scoring)
+    req = urllib.request.Request(url, headers={"User-Agent": _UA})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — fixed https host
+            payload = json.loads(resp.read().decode())
+    except Exception as e:  # noqa: BLE001
+        cached = _read_cached_payload(cache) if refresh else None
+        if cached is not None:
+            log.warning("⚠️ FantasyPros ECR %s %s REFRESH FAILED (%s: %s) — falling back to the "
+                        "cached snapshot (last_updated %s). The served ecr_as_of stamp will show "
+                        "that older date.", season, scoring, type(e).__name__, e,
+                        cached.get("last_updated"))
+            return cached
+        raise
+
+    # Only cache a payload that actually carries rankings — an empty/error body must not be able to
+    # persist as "no data" (the NF-D16 lesson `adp_source` already carries).
+    if (payload or {}).get("players"):
+        cache.write_text(json.dumps(payload))
+        return payload
+
+    log.warning("FantasyPros ECR %s %s: NOT caching a payload with no players — the next run will "
+                "re-fetch", season, scoring)
+    if refresh:
+        cached = _read_cached_payload(cache)
+        if cached is not None and cached.get("players"):
+            log.warning("⚠️ FantasyPros ECR %s %s refresh returned no players — falling back to the "
+                        "cached snapshot (last_updated %s).", season, scoring,
+                        cached.get("last_updated"))
+            return cached
+    return payload
+
+
 def fetch_fp_ecr(
     season: int, scoring: str = "PPR", cache_dir: str | Path | None = None,
     refresh: bool = False, timeout: int = 30,
@@ -70,23 +132,9 @@ def fetch_fp_ecr(
     rank_std, rank_min, rank_max, pos_rank, tier, total_experts, last_updated`. Empty DataFrame (with
     the columns) when FP has no data for the season. Caches the raw JSON so subsequent runs are
     offline-reproducible."""
-    scoring = scoring.upper()
-    cache_dir = Path(cache_dir or _DEFAULT_CACHE)
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache = cache_dir / f"fp_ecr_{scoring}_{season}.json"
-
-    payload = None
-    if cache.exists() and not refresh:
-        try:
-            payload = json.loads(cache.read_text())
-        except Exception:  # noqa: BLE001 — a corrupt cache just re-fetches
-            payload = None
-    if payload is None:
-        url = _FP_URL.format(season=season, scoring=scoring)
-        req = urllib.request.Request(url, headers={"User-Agent": _UA})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — fixed https host
-            payload = json.loads(resp.read().decode())
-        cache.write_text(json.dumps(payload))
+    scoring = scoring.upper()  # the `scoring` COLUMN below must stay canonical, not caller-cased
+    payload = _fp_payload(season, scoring=scoring, cache_dir=cache_dir, refresh=refresh,
+                          timeout=timeout)
 
     players = (payload or {}).get("players")
     if not players:

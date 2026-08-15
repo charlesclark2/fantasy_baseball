@@ -312,6 +312,7 @@ export function RankingsBoard() {
             season={manifest?.season ?? 2026}
             generatedAt={manifest?.generated_at}
             extra={config?.label}
+            freshness={manifest?.freshness}
           />
         </div>
       </SurfaceHeader>

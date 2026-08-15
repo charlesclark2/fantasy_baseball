@@ -194,6 +194,7 @@ export function LeagueBoard() {
             season={manifest?.season ?? 2026}
             generatedAt={manifest?.generated_at}
             extra={config ? `${config.label} · ${size ?? "—"} teams` : null}
+            freshness={manifest?.freshness}
           />
         </div>
       </SurfaceHeader>

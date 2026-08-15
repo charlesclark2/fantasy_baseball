@@ -28,11 +28,24 @@ depth_charts/injuries/rookie-class so MVP-1's fantasy board can sharpen off REAL
 Fires `sports_nfl_roll_forward_job` (ingest → mart rebuild) on a clock-derived `current_season()`
 — same annual-cadence pattern as NCAAF's, re-runnable next spring with no code change.
 
-⏰ WINDOW: weekly Mondays, MARCH–AUGUST — NFL free agency (mid-March) through the draft (April)
-through OTAs/camp/roster cuts (Aug), i.e. exactly the months rosters/depth charts/the rookie class
-churn before kickoff. UNLIKE NCAAF, nflverse needs no API key, so the only reason this ships
-STOPPED is the shared `sports_nfl_dbt_build_job`/`sports_nfl_dbt_schedule` box-readiness gate
-(dbt-duckdb + S3 instance-role read) the rebuild step depends on — see `BOX_OPERATIONS.md §10`.
+⏰ WINDOW (widened by NF-FRESH2 P0, 2026-08-15): weekly Mondays, MARCH → the following FEBRUARY —
+one full NFL season cycle: free agency (mid-March) → the draft (April) → OTAs/camp/roster cuts
+(Aug) → the regular season and playoffs (Sep–Feb). It USED to be March–August, which meant every
+NFL raw feed froze on 09-01 — through the opener and the entire season. UNLIKE NCAAF, nflverse
+needs no API key, so the only reason this ships STOPPED is the shared
+`sports_nfl_dbt_build_job`/`sports_nfl_dbt_schedule` box-readiness gate (dbt-duckdb + S3
+instance-role read) the rebuild step depends on — see `BOX_OPERATIONS.md §10`.
+
+⭐ WHY RUNNING IT IN-SEASON IS SAFE (audited before the widening, NF-FRESH2 P0): nothing in the
+repo assumes these raw feeds are quiet in-season. The raw tier is a LATEST-SNAPSHOT tier by
+construction (`replaceWhere season=YYYY` — an idempotent full-season overwrite), which is exactly
+WHY the NF-W0a point-in-time capture (`sports_nfl_pit_*_job`) exists and writes to its OWN store
+with its OWN `capture_timestamp`; a raw overwrite cannot damage PIT fidelity. The one prose claim
+that the pull "stops for the season" belongs to the NCAAF schedule above, whose game-day
+`sports_ncaaf_dbt_schedule` genuinely takes over — the NFL analog does NOT, because the NFL
+game-day schedule rebuilds MARTS and ingests NOTHING. Clock-wise the three NFL crons stay
+disjoint (roll-forward 06:15 Mon, Sleeper 06:30 daily, the game-day mart rebuild 11:00 daily), so
+widening the window introduces no new concurrent-dbt writer.
 
 ═══════════════════════════════════════════════════════════════════════════════════════════════
 NF-D5 — the Sleeper forward-availability schedule (below): a DAILY (not weekly — the story's
@@ -41,26 +54,56 @@ NF-D2 slice 5's roster-status unavailability flag with an earlier, offseason-cov
 `sports_nfl_sleeper_injuries_job` (ingest → refresh just the sleeper-injuries staging model) —
 WARN-tier throughout, advisory/non-serving (see the job's own docstring).
 
-⏰ WINDOW: daily, MARCH–AUGUST — the same offseason/camp churn window as NF-D1's roll-forward
-(surgeries/PUP/IR designations land on Sleeper throughout free agency → the draft → camp). Ships
-STOPPED for the same reason as NF-D1: the staging-model refresh step shares the
+⏰ WINDOW (widened by NF-FRESH2 P0): daily, MARCH → the following FEBRUARY — the same full-season
+cycle as NF-D1's roll-forward. It used to be March–August; availability designations churn
+HARDEST in-season, so the old window excluded exactly the months this feed is most useful.
+Ships STOPPED for the same reason as NF-D1: the staging-model refresh step shares the
 `sports_nfl_dbt_build_job` box-readiness prereq — the Sleeper fetch itself needs no key.
+
+🚨 KNOWN, UNRELATED BREAK (NF-FRESH1, 2026-08-15) — widening the window does NOT fix it and this
+docstring must not be read as claiming it does: `sports_nfl_sleeper_injuries_job`'s ingest op dies
+at `duckdb.connect(read_only=True)` in ~114ms on the box (the sports DuckDB is gitignored, so it
+is absent from the `COPY . .` image) and its bare `except` returns SUCCESS — 19 consecutive green
+runs that wrote nothing. A wider cron just produces more green-and-empty runs until the box's
+sports DuckDB prereq is satisfied. Tracked separately; see CLAUDE.md's NF-FRESH1 landmine entry.
+
+═══════════════════════════════════════════════════════════════════════════════════════════════
+NF-FRESH2 — the draft-board publish schedule (below): the cadence that makes the SERVED board
+move. See `pipeline/jobs/sports_nfl_board_publish_job.py` for the ordering rationale (INC-25).
 """
 
-from dagster import DefaultScheduleStatus, RunRequest, ScheduleEvaluationContext, schedule
+from datetime import date
+
+from dagster import (
+    DefaultScheduleStatus,
+    RunRequest,
+    ScheduleEvaluationContext,
+    SkipReason,
+    schedule,
+)
 
 from pipeline.jobs.sports_ncaaf_rollforward_job import sports_ncaaf_roll_forward_job
+from pipeline.jobs.sports_nfl_board_publish_job import sports_nfl_board_publish_job
 from pipeline.jobs.sports_nfl_rollforward_job import sports_nfl_roll_forward_job
 from pipeline.jobs.sports_nfl_sleeper_injuries_job import sports_nfl_sleeper_injuries_job
 
 # Weekly Monday 06:00 PT, months February–August (the pre-season roll-forward window).
 NCAAF_ROLL_FORWARD_CRON = "0 6 * 2-8 1"
-# Weekly Monday 06:15 PT (offset from the NCAAF pull), months March–August (free agency → camp
-# cuts — the NFL roster/depth-chart churn window).
-NFL_ROLL_FORWARD_CRON = "15 6 * 3-8 1"
-# Daily 06:30 PT (offset from the weekly NFL pull), months March–August — the NF-D5 cheap daily
-# forward-availability capture (one unauthenticated HTTP GET + a single-model dbt rebuild).
-NFL_SLEEPER_INJURIES_CRON = "30 6 * 3-8 *"
+# Weekly Monday 06:15 PT (offset from the NCAAF pull), months March → the following February —
+# i.e. ONE FULL NFL SEASON CYCLE, free agency (Mar) through the Super Bowl (Feb).
+# ⚠️ NF-FRESH2 P0 — this used to be `3-8` (March–August) and that was a SEASONAL BOUNDARY HOLE of
+# exactly the E9.48(c) / INC-37 class: on 09-01 every NFL raw feed (rosters, weekly_rosters,
+# depth_charts, injuries, schedules) would have STOPPED advancing — through the 2026-09-09 opener
+# and the whole season — while the Sep–Feb `sports_nfl_dbt_schedule` kept rebuilding MARTS over
+# frozen raw, and the nflverse `injuries` report (in-season-only upstream, so it FIRST PUBLISHES
+# in September) would never have been ingested at all. A month-range cron is a seasonal hole;
+# grep a schedule's month range before trusting it covers the season you need.
+NFL_ROLL_FORWARD_CRON = "15 6 * 3-12,1-2 1"
+# Daily 06:30 PT (offset from the weekly NFL pull), same March → February season cycle — the
+# NF-D5 cheap daily forward-availability capture (one unauthenticated HTTP GET + a single-model
+# dbt rebuild). Same NF-FRESH2 P0 widening, same reason: IR/PUP/practice designations churn
+# HARDEST in-season, which is precisely the window the old `3-8` window excluded.
+NFL_SLEEPER_INJURIES_CRON = "30 6 * 3-12,1-2 *"
 
 
 @schedule(
@@ -103,3 +146,65 @@ def sports_nfl_sleeper_injuries_schedule(context: ScheduleEvaluationContext):
     context.log.info(
         "[nfl sleeper-injuries] firing daily forward-availability capture")
     return RunRequest(run_key=None, tags={"sport": "nfl", "cadence": "sleeper_injuries"})
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-FRESH2 P2 — the draft-board publish cadence
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Daily 07:15 PT, EVERY MONTH. The hour is deliberate: it sits AFTER the 06:15 weekly roll-forward
+# and the 06:30 daily Sleeper capture, so on a Monday the board is published downstream of both.
+# ⚠️ That offset is a courtesy, NOT the ordering guarantee — the guarantee is the graph edge inside
+# `sports_nfl_board_publish_job` (its own daily depth-chart/roster ingest runs upstream of the
+# publish op, in the same run). INC-25 was learned the hard way: an ordering that lives only in two
+# crons is one slow ingest away from publishing a board built before its own inputs landed.
+#
+# ⛔ NO MONTH RANGE. Every other NFL schedule in this file carries one, and P0 in this same story
+# had to widen two of them after a `3-8` window would have frozen the whole vertical on 09-01. A
+# publish cadence has no reason to have a seasonal cliff at all, so it does not get one.
+NFL_BOARD_PUBLISH_CRON = "15 7 * * *"
+
+
+def is_draft_season(today: date) -> bool:
+    """August 1 → September 15: the window in which fantasy drafts actually happen.
+
+    Clock-derived and injectable, never a pinned year — the NCAAF-P0.6 stale-by-a-season landmine
+    that `current_season()` exists to avoid, applied to a cadence instead of a season. The end
+    bound reaches past the ~Sep-9 opener because leagues keep drafting through week 1.
+
+    The window is intentionally GENEROUS at both ends. Being wrong toward "daily" costs one cheap
+    rebuild; being wrong toward "weekly" costs a drafting user a board built on a market up to six
+    days old, which is the entire defect this story exists to fix."""
+    return today.month == 8 or (today.month == 9 and today.day <= 15)
+
+
+@schedule(
+    job=sports_nfl_board_publish_job,
+    cron_schedule=NFL_BOARD_PUBLISH_CRON,
+    execution_timezone="America/Los_Angeles",
+    default_status=DefaultScheduleStatus.STOPPED,  # ⛔ operator-gated — see below
+)
+def sports_nfl_board_publish_schedule(context: ScheduleEvaluationContext):
+    """DAILY through draft season, WEEKLY (Mondays) the rest of the year.
+
+    ⭐ ONE SCHEDULE, NOT TWO. The obvious alternative — a daily cron for Aug–Sep beside a weekly one
+    for the rest — gives one logical job two execution owners that OVERLAP in exactly the window
+    that matters, i.e. a double publish every August day. That is the INC-30 (crontab under two
+    users) / INC-36 (two concurrent deploys) / INC-38 (a flag on one caller of four) shape this repo
+    keeps paying for. A single owner that decides its own cadence cannot collide with itself.
+
+    ⛔ Ships STOPPED, and unlike its siblings that is NOT merely convention here: the job's build
+    chain needs the box's sports DuckDB, which is gitignored and absent from the image until
+    `sports_nfl_dbt_build_job` has materialized it. Enabling this before that prereq holds produces
+    a daily CRITICAL page (by design — the publish op refuses to report success on a run that
+    published nothing). The intended state belongs in `BOX_OPERATIONS.md §10`.
+    """
+    today = context.scheduled_execution_time.date()
+    if is_draft_season(today):
+        context.log.info("[nfl board publish] draft season (%s) — publishing daily", today)
+    elif today.weekday() == 0:
+        context.log.info("[nfl board publish] out of draft season (%s) — the Monday publish", today)
+    else:
+        return SkipReason(
+            f"{today} is outside draft season (Aug 1 – Sep 15) and is not a Monday — the board "
+            "publishes weekly off-season. The previously published board keeps serving.")
+    return RunRequest(run_key=None, tags={"sport": "nfl", "cadence": "board_publish"})
