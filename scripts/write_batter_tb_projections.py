@@ -297,6 +297,23 @@ def _name_candidates(conn, names: list[str]) -> dict[str, set[int]]:
     return out
 
 
+def _batter_display_names(conn, batter_ids: list[int]) -> dict[int, str]:
+    """batter_id -> canonical display name (stg_ref_players), for population members with no
+    matched book-line row to borrow a name from (E5.10 — see `_run_for_date`'s population
+    change: a batter with no live line still needs a `full_name` for the served card)."""
+    if not batter_ids:
+        return {}
+    from betting_ml.utils.prop_edge import ref_display_name
+    id_list = ",".join(str(int(b)) for b in batter_ids)
+    rows = conn.execute(
+        f"""
+        SELECT mlb_bam_id::BIGINT AS batter_id, first_name, last_name
+        FROM stg_ref_players WHERE mlb_bam_id IN ({id_list})
+        """
+    ).fetchall()
+    return {int(bid): ref_display_name(fn, ln) for bid, fn, ln in rows}
+
+
 def _lineup_members(conn, game_pks: list[int]) -> dict[int, dict[int, dict]]:
     """{game_pk: {batter_id: {side, team_is_home}}} from the posted lineups (may be partial or
     absent pregame — callers treat absence as 'not posted yet', never as 'not playing')."""
@@ -542,14 +559,6 @@ def _s3_put(key: str, body: bytes) -> None:
 # ---------------------------------------------------------------------------
 
 def _run_for_date(target: str, args, bundle: dict, design: Design) -> None:
-    lines = _load_book_lines(target)
-    if lines.empty:
-        _warn(f"[{target}] no live TB book lines yet — nothing to serve (the hourly capture "
-              "posts them through the afternoon).")
-        return
-    print(f"[tb-projection] {lines['event_id'].nunique()} events / "
-          f"{lines['player_name'].nunique()} quoted batters with TB lines for {target}")
-
     conn = _duck_lakehouse(_LAKEHOUSE_TABLES)
     try:
         slate = _load_slate(conn, target)
@@ -565,47 +574,90 @@ def _run_for_date(target: str, args, bundle: dict, design: Design) -> None:
             _warn(f"[{target}] no regular-season games — nothing served (by design).")
             return
 
-        event_map = _resolve_events(conn, lines, slate)
-        n_unres = lines["event_id"].nunique() - len(event_map)
-        if n_unres:
-            _warn(f"[{target}] {n_unres} prop event(s) unresolved to a game_pk (first-pitch "
-                  "resolver) — their batters are skipped this run.")
-        lines = lines[lines["event_id"].astype(str).isin(event_map)].copy()
-        if lines.empty:
-            _warn(f"[{target}] no resolvable events — skipped.")
-            return
-        lines["game_pk"] = lines["event_id"].astype(str).map(event_map)
-
-        cands = _name_candidates(conn, sorted(lines["player_name"].dropna().unique()))
-        game_pks = sorted(lines["game_pk"].astype(int).unique())
+        # E5.10 — POPULATION comes from today's posted lineups (falling back to EB-posterior
+        # presence), never from the live props feed. Previously the whole slate was driven
+        # top-down from `lines`, so a batter/game with no CURRENTLY-captured book line was
+        # excluded outright — and because the hourly `--mode live` capture OVERWRITES the
+        # day's snapshot (never accumulates), a game that had a perfectly good pregame price an
+        # hour ago would silently vanish from the served list the moment it started and dropped
+        # out of the "live" pull. Mirrors write_pitcher_k_projections.py's probable-pitcher
+        # population (schedule-derived, never gated on a book price). Book lines below are now
+        # OPTIONAL enrichment: a batter with no matched line still gets a projection card, with
+        # `book_comparisons: []` (tb_projection_serving already renders that as no line/no
+        # books rather than excluding the row — see index_row's None/[] fallbacks).
+        game_pks = sorted(slate["game_pk"].astype(int).unique())
         members = _lineup_members(conn, game_pks)
         eb = _eb_rows(conn, game_pks)
         eb_ids = {int(g): set(grp["batter_id"].astype(int))
                   for g, grp in eb.groupby("game_pk")} if not eb.empty else {}
 
-        # Pregame arbitration: exact/li candidates ∩ posted lineup (or EB build) for THAT game.
-        resolved: dict[tuple[int, str], int] = {}
-        held = 0
-        for (gp, nm), _grp in lines.groupby(["game_pk", "player_name"]):
-            ids = cands.get(nm, set())
-            gp = int(gp)
-            allowed = set(members.get(gp, {})) or eb_ids.get(gp, set())
-            pick = ids & allowed if allowed else ids
-            if len(pick) == 1:
-                resolved[(gp, nm)] = next(iter(pick))
-            elif len(ids) == 1 and not allowed:
-                resolved[(gp, nm)] = next(iter(ids))
-            else:
-                held += 1
-        if held:
-            _warn(f"[{target}] {held} quoted batter-game name(s) held (ambiguous or not in the "
-                  "posted lineup yet) — retried on the next run.")
-        if not resolved:
-            _warn(f"[{target}] no batters resolved — skipped.")
+        pop_pairs: set[tuple[int, int]] = set()
+        for gp, batters in members.items():
+            pop_pairs.update((gp, bid) for bid in batters)
+        for gp, bids in eb_ids.items():
+            pop_pairs.update((gp, bid) for bid in bids)
+        no_lineup = [gp for gp in game_pks if gp not in members and gp not in eb_ids]
+        if no_lineup:
+            _warn(f"[{target}] {len(no_lineup)} game(s) have no posted lineup or EB posterior "
+                  "yet — their batters aren't listed this run (retried hourly once posted).")
+        if not pop_pairs:
+            _warn(f"[{target}] no lineups posted / EB posteriors built yet — nothing to serve.")
             return
+        print(f"[tb-projection] {len(pop_pairs)} batters across "
+              f"{len({gp for gp, _ in pop_pairs})} game(s) with a posted lineup/EB build for "
+              f"{target}")
+
+        # Book lines: OPTIONAL match onto the population above, never population-defining.
+        lines = _load_book_lines(target)
+        resolved: dict[tuple[int, str], int] = {}
+        if not lines.empty:
+            event_map = _resolve_events(conn, lines, slate)
+            n_unres = lines["event_id"].nunique() - len(event_map)
+            if n_unres:
+                _warn(f"[{target}] {n_unres} prop event(s) unresolved to a game_pk (first-pitch "
+                      "resolver) — their batters get no book comparison this run.")
+            lines = lines[lines["event_id"].astype(str).isin(event_map)].copy()
+        if not lines.empty:
+            lines["game_pk"] = lines["event_id"].astype(str).map(event_map)
+            cands = _name_candidates(conn, sorted(lines["player_name"].dropna().unique()))
+
+            # Pregame arbitration: exact/li candidates ∩ posted lineup (or EB build) for THAT
+            # game.
+            held = 0
+            for (gp, nm), _grp in lines.groupby(["game_pk", "player_name"]):
+                ids = cands.get(nm, set())
+                gp = int(gp)
+                allowed = set(members.get(gp, {})) or eb_ids.get(gp, set())
+                pick = ids & allowed if allowed else ids
+                if len(pick) == 1:
+                    resolved[(gp, nm)] = next(iter(pick))
+                elif len(ids) == 1 and not allowed:
+                    resolved[(gp, nm)] = next(iter(ids))
+                else:
+                    held += 1
+            if held:
+                _warn(f"[{target}] {held} quoted batter-game name(s) held (ambiguous or not in "
+                      "the posted lineup yet) — retried on the next run.")
+        else:
+            print(f"[tb-projection] no live TB book lines yet for {target} — serving "
+                  "projections without a book comparison this run.")
+
+        # Fallback display names for population members no live line matched to (E5.10).
+        unmatched_ids = sorted({bid for _, bid in pop_pairs} - set(resolved.values()))
+        ref_names = _batter_display_names(conn, unmatched_ids)
+
+        # A population member resolvable to neither a book-quoted name nor a stg_ref_players
+        # row (a very recent call-up the reference table hasn't caught up to yet, observed
+        # live) can't be served with a usable card — skip it loudly rather than shipping a
+        # nameless row; self-heals once the reference table catches up.
+        nameless = [bid for bid in unmatched_ids if bid not in ref_names]
+        if nameless:
+            _warn(f"[{target}] {len(nameless)} batter(s) have no resolvable name (no book "
+                  f"match, not yet in stg_ref_players) — skipped: {nameless}")
+            pop_pairs = {(gp, bid) for gp, bid in pop_pairs if bid not in nameless}
 
         pairs = pd.DataFrame(
-            [{"game_pk": gp, "batter_id": bid} for (gp, _nm), bid in resolved.items()]
+            [{"game_pk": gp, "batter_id": bid} for gp, bid in pop_pairs]
         ).drop_duplicates().merge(
             slate[["game_pk", "venue_id", "season", "home_team_name", "away_team_name",
                    "game_datetime"]],
@@ -620,9 +672,12 @@ def _run_for_date(target: str, args, bundle: dict, design: Design) -> None:
     mu = np.clip(bundle["model"].predict(X), 1e-4, None)
     pmfs = nb_pmf_grid(mu, float(bundle["nb_alpha"]), int(bundle["grid_cap"]))
 
-    # Per-batter book lines keyed by (game_pk, resolved batter_id).
+    # Per-batter book lines keyed by (game_pk, resolved batter_id). E5.10 — `names_by_id` now
+    # has two sources: the book-quoted spelling for a matched batter (kept, existing
+    # behavior), falling back to the canonical ref name (`ref_names`) for a population member
+    # no line matched to this run.
     by_key: dict[tuple[int, int], list[dict]] = {}
-    names_by_id: dict[int, str] = {}
+    names_by_id: dict[int, str] = dict(ref_names)
     for (gp, nm), bid in resolved.items():
         names_by_id.setdefault(int(bid), str(nm))
         sub = lines[(lines["game_pk"] == gp) & (lines["player_name"] == nm)]
