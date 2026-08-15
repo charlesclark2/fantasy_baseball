@@ -1,29 +1,35 @@
-"""stat_distribution_serving.py — NF-W6c: the NF-W6b per-stat distributions on the served raw
-line (pure).
+"""stat_distribution_serving.py — NF-W6c: the NF-W6b / NF-W6b-C per-stat distributions on the
+served raw line (pure).
 
 THE STORY IN ONE PARAGRAPH. NF-W6b's §0.5 bake-off shipped 6 of 8 per-stat cells: an honest
 DISTRIBUTION (quantiles + a correctly-priced P(0)) beats the champion's per-stat point mean by
 11.5–22.1% of CRPS on QB passing_tds / passing_yards / rushing_yards, RB rushing_yards, TE
-receiving_yards and WR receiving_yards. Today's raw line carries a POINT per stat and cannot
-express uncertainty at all. NF-W6c is the wiring: it fits those six winning constructions FRESH
-ON FULL TRAIN through the identical pinned code path and emits the served 199-level
-representation, so any league's scoring can eventually be priced off per-stat distributions.
+receiving_yards and WR receiving_yards. NF-W6c wired those six. NF-W6c-wire adds a SEVENTH: RB
+rushing_tds, which W6b's OWN field could never clear DSR for (an excluded linear-residual arm
+inflated the field's cross-trial dispersion), but which NF-W6b-C — a FRESH, coherent, atom-aware
+registration under PM Decision C — shipped cleanly (`knn_quantile`, +12.966% CRPS, DSR 1.0). Today
+the raw line carries a POINT per stat and cannot express uncertainty at all; this module fits the
+seven winning constructions FRESH ON FULL TRAIN through the identical pinned code path and emits
+the served 199-level representation, so any league's scoring can eventually be priced off per-stat
+distributions.
 
-⭐ WHY THERE IS A FIT HERE AT ALL — the hand-off caveat that shapes the module. NF-W6b produced
-NO fitted pickles, deliberately: a CV bake-off fits per fold, so what the gates certified is the
-CONSTRUCTION + SELECTION, not one serialized object. Serving therefore requires a fresh full-train
-fit — and the MH2.1 (b) serve-what-was-validated rule then binds on the FORM: this module
-DISPATCHES into `stat_distributions` (`SD.arm_*`) verbatim and re-derives nothing. There is no
-second implementation of the hurdle, the quantile bank, the tail, or the mixture here; a
+⭐ WHY THERE IS A FIT HERE AT ALL — the hand-off caveat that shapes the module. Neither NF-W6b nor
+NF-W6b-C produced fitted pickles, deliberately: a CV bake-off fits per fold, so what the gates
+certified is the CONSTRUCTION + SELECTION, not one serialized object. Serving therefore requires a
+fresh full-train fit — and the MH2.1 (b) serve-what-was-validated rule then binds on the FORM: this
+module DISPATCHES into `stat_distributions` (`SD.arm_*`) verbatim and re-derives nothing. There is
+no second implementation of the hurdle, the quantile bank, the tail, or the mixture here; a
 `SERVED_CELLS` entry is a POINTER at the certified function, and `test_nf_w6c_stat_distribution_
-serving.py` pins both the winner map and the dispatch against the NF-W6b record.
+serving.py` pins both the winner map and the dispatch against the certifying record — NF-W6b's for
+six cells, NF-W6b-C's for RB|rushing_tds (a SEPARATE record: MH2.2 forbids re-scoring W6b's
+retired field, so the successor's SHIP verdict is read from its own record, never from a
+re-interpretation of W6b's null — W6b's own verdict for this cell stays a null, untouched).
 
 ⛔ WHAT THIS MODULE DELIBERATELY DOES NOT DO.
   · It does NOT touch the points hurdle champion (total fantasy points). NF-W6b never tested it
     and never beat it; the per-stat distributions sit BESIDE it on the raw line.
-  · It does NOT open the 2 recorded-null cells (RB receiving_yards = the calendar-bound re-test,
-    RB rushing_tds = the deferred NF-W6b-C successor) or the 4 CLOSED TD-NO cells. All six are
-    pinned out and guard-tested.
+  · It does NOT open the 1 remaining recorded-null cell (RB receiving_yards = the calendar-bound
+    re-test, PM Decision B) or the 4 CLOSED TD-NO cells. Both are pinned out and guard-tested.
   · It does NOT select, re-score, re-tune or re-derive anything. The realized-label readout the
     runner prints is a SERVING SMOKE — a well-formedness + in-family check — never a gate and
     never a re-decision (re-reading a shipped verdict off a fresh fit would be the E2.1-r
@@ -69,15 +75,19 @@ STORY = "NF-W6c"
 MODEL_FAMILY = "nfl_fantasy"
 REGISTRY_TARGET = "weekly_stat_distribution"
 SERVED_VERSION = "nfl_fantasy_w6c_v1"
-#: The certified record this whole module is a pointer at. Read by the guards, never at serve.
+#: The certified record this whole module is a pointer at (NF-W6b's 6 cells). Read by the guards,
+#: never at serve.
 RECORD_RELPATH = ("quant_sports_intel_models/football/nfl/fantasy/ablation_results/"
                   "nf_w6b_stat_distributions.json")
+#: NF-W6c-wire: the NF-W6b-C fresh-family successor record that ships the 7th cell
+#: (RB|rushing_tds) — a SEPARATE §0.5 record from RECORD_RELPATH (MH2.2: nothing is promoted
+#: from W6b's retired field; this is a fresh registration, read on its own terms).
+RECORD_RELPATH_W6BC = ("quant_sports_intel_models/football/nfl/fantasy/ablation_results/"
+                       "nf_w6b_c_rb_rush_tds.json")
 
-# ── The served cells: NF-W6b's 6 SHIP verdicts, cell → the winning form ─────────────────────────
-#: ⭐ A CONSTANT (the NF-D16 discipline: everything decidable in advance is pinned, not recomputed
-#: at run time) — and guard-pinned against the record's own `verdict`/`selections`, so a hand edit
-#: here that disagrees with what the gates certified fails the fast gate.
-SERVED_CELLS: dict[str, str] = {
+# ── The served cells: NF-W6b's 6 SHIP verdicts + NF-W6b-C's 1, cell → the winning form ──────────
+#: NF-W6b's 6 SHIP verdicts (certified by RECORD_RELPATH).
+SERVED_CELLS_FROM_W6B: dict[str, str] = {
     "QB|passing_tds": "knn_quantile",
     "QB|passing_yards": "lgbm_quantile_tail",
     "QB|rushing_yards": "lgbm_hurdle_tail",
@@ -85,11 +95,22 @@ SERVED_CELLS: dict[str, str] = {
     "TE|receiving_yards": "lgbm_hurdle_tail",
     "WR|receiving_yards": "lgbm_hurdle_tail",
 }
-#: ⛔ Recorded NULLS — NOT served. RB receiving_yards is PM Decision B (calendar-bound re-test on
-#: the same harness once the 2026 folds exist); RB rushing_tds is PM Decision C (deferred
-#: NF-W6b-C, a FRESH atom-aware family — its DSR is unreachable in NF-W6b's field, so it must
-#: never be quietly promoted on NF-W6c's infrastructure).
-WITHHELD_NULL_CELLS: tuple[str, ...] = ("RB|receiving_yards", "RB|rushing_tds")
+#: NF-W6b-C's 1 SHIP verdict (certified by RECORD_RELPATH_W6BC — NOT RECORD_RELPATH: W6b's own
+#: field never cleared DSR for this cell, and MH2.2 forbids re-scoring that field. The fresh,
+#: coherent atom-aware registration cleared DSR (1.0, sr0 1.33 vs W6b's own field's ≈7.32) where
+#: W6b's field could not; THAT record, not a re-read of W6b's null, licenses serving it).
+SERVED_CELLS_FROM_W6BC: dict[str, str] = {
+    "RB|rushing_tds": "knn_quantile",
+}
+#: ⭐ A CONSTANT (the NF-D16 discipline: everything decidable in advance is pinned, not recomputed
+#: at run time) — and guard-pinned against each source record's own `verdict`/`selections`, so a
+#: hand edit here that disagrees with what the gates certified fails the fast gate.
+SERVED_CELLS: dict[str, str] = {**SERVED_CELLS_FROM_W6B, **SERVED_CELLS_FROM_W6BC}
+#: ⛔ Recorded NULL — NOT served. RB receiving_yards is PM Decision B (calendar-bound re-test on
+#: the same harness once the 2026 folds exist). RB rushing_tds (PM Decision C) is no longer
+#: withheld: NF-W6c-wire moved it from here into SERVED_CELLS once NF-W6b-C's fresh atom-aware
+#: family shipped it under NF-G0 governance.
+WITHHELD_NULL_CELLS: tuple[str, ...] = ("RB|receiving_yards",)
 #: ⛔ CLOSED by NF-W6's measurement — re-opening needs a different MECHANISM, not this wiring.
 CLOSED_CELLS: tuple[str, ...] = SD.CLOSED_CELLS
 
@@ -337,7 +358,9 @@ def readout(bank: np.ndarray, y: np.ndarray) -> dict:
 
 def record_reference(record_path: Path) -> dict:
     """The NF-W6b record's per-cell reference figures for the served cells (winner, coverage,
-    atom) — read from the certified JSON, never re-typed."""
+    atom) — read from the certified JSON, never re-typed. `sels` is keyed by cell (the W6b
+    multi-cell record shape); a cell this record never contested (RB|rushing_tds — that's
+    NF-W6b-C's, a different record) is silently absent, not an error."""
     rec = json.loads(Path(record_path).read_text())
     sels = rec["selections"]
     return {cell: {"winner": sels[cell]["winner"],
@@ -346,6 +369,28 @@ def record_reference(record_path: Path) -> dict:
                    "pred_p0": sels[cell]["atom_calibration"]["winner_pred_p0"],
                    "crps_q199": sels[cell]["mean_crps"][sels[cell]["winner"]]}
             for cell in SERVED_CELLS if cell in sels}
+
+
+def record_reference_single_cell(record_path: Path) -> dict:
+    """The same reference SHAPE as `record_reference`, read from a single-cell §0.5 record (the
+    NF-W6b-C shape: `selection` is one dict, not keyed by cell, because the fresh registration
+    only ever contested one). Nothing is re-derived — only re-shaped into the shared contract."""
+    rec = json.loads(Path(record_path).read_text())
+    sel = rec["selection"]
+    cell = sel["cell"]
+    if cell not in SERVED_CELLS:
+        return {}
+    return {cell: {"winner": sel["winner"],
+                   "coverage_80": sel["coverage"]["winner_coverage_80"],
+                   "real_p0": sel["atom_calibration"]["real_p0"],
+                   "pred_p0": sel["atom_calibration"]["winner_pred_p0"],
+                   "crps_q199": sel["mean_crps"][sel["winner"]]}}
+
+
+def all_record_references(record_path: Path, record_path_w6bc: Path) -> dict:
+    """The full reference set spanning both certifying records, merged — so a caller (the
+    serving smoke) never has to know how many records back the served set."""
+    return {**record_reference(record_path), **record_reference_single_cell(record_path_w6bc)}
 
 
 def representation_manifest() -> dict:

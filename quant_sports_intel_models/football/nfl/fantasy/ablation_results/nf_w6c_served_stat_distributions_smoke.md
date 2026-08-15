@@ -1,29 +1,31 @@
 # NF-W6c — the NF-W6b per-stat distributions wired onto the served raw line
 
-**Generated:** 2026-08-15T03:09:43+00:00 · **serve:** 2025 wk 18 (gw 174) · **served rows:** 695 across 6 cells · **train rows:** 17256 · ⚠️ **SMOKE**
+**Generated:** 2026-08-15T18:14:21+00:00 · **serve:** 2025 wk 18 (gw 174) · **served rows:** 821 across 7 cells · **train rows:** 17256 · ⚠️ **SMOKE**
 
-> ⚖️ **Edge-independent projection product** — `best_alpha = 0`, **deploy-held**. This story WIRES an already-certified result: NF-W6b's six SHIP cells are fitted fresh on full train through the identical pinned code path and emitted in the served 199-level representation. ⛔ No bake-off, no selection, no gate, no re-reading of a settled verdict. The distributions are honest predictive UNCERTAINTY (a quantile bank and its P(0)); they make no edge, ROI or win-rate claim. The points hurdle champion (total fantasy points) is UNTOUCHED — these sit beside it on the raw line.
+> ⚖️ **Edge-independent projection product** — `best_alpha = 0`, **deploy-held**. This story WIRES already-certified results: NF-W6b's six SHIP cells plus NF-W6b-C's RB rushing_tds successor are fitted fresh on full train through the identical pinned code path and emitted in the served 199-level representation. ⛔ No bake-off, no selection, no gate, no re-reading of a settled verdict. The distributions are honest predictive UNCERTAINTY (a quantile bank and its P(0)); they make no edge, ROI or win-rate claim. The points hurdle champion (total fantasy points) is UNTOUCHED — these sit beside it on the raw line.
 
-## Served cells (cell → the NF-W6b winning form → the pinned constructing function)
+## Served cells (cell → the certifying record's winning form → the pinned constructing function)
 
 | cell | form | constructing function | serve rows | P(0) served | q10 | q50 | q90 |
 |---|---|---|---|---|---|---|---|
 | QB\|passing_tds | knn_quantile | `SD.arm_knn_quantile` | 89 | 0.7109 | 0.0 | 0.416 | 1.135 |
 | QB\|passing_yards | lgbm_quantile_tail | `SD.arm_lgbm_quantile_tail` | 89 | 0.3492 | 14.745 | 65.977 | 158.578 |
 | QB\|rushing_yards | lgbm_hurdle_tail | `SD.arm_lgbm_hurdle_tail` | 89 | 0.6262 | 0.325 | 4.877 | 17.112 |
+| RB\|rushing_tds | knn_quantile | `SD.arm_knn_quantile` | 126 | 0.8584 | 0.0 | 0.0 | 0.501 |
 | RB\|rushing_yards | lgbm_hurdle_tail | `SD.arm_lgbm_hurdle_tail` | 126 | 0.4152 | 3.819 | 20.644 | 46.295 |
 | TE\|receiving_yards | lgbm_hurdle_tail | `SD.arm_lgbm_hurdle_tail` | 115 | 0.4931 | 1.036 | 10.896 | 32.891 |
 | WR\|receiving_yards | lgbm_hurdle_tail | `SD.arm_lgbm_hurdle_tail` | 187 | 0.4437 | 1.75 | 16.675 | 46.069 |
 
-## Serving smoke — fresh full-train fit vs the NF-W6b record (⛔ NEVER a gate)
+## Serving smoke — fresh full-train fit vs the certifying records (⛔ NEVER a gate)
 
-A single week against a record that pools 8 half-season folds: these differ by sampling alone. What this table is FOR is the structural break — a dead zero atom, a collapsed band, a cell served by the wrong form — which is what a wiring defect looks like.
+A single week against records that each pool 8 half-season folds (NF-W6b for six cells, NF-W6b-C for RB|rushing_tds): these differ by sampling alone. What this table is FOR is the structural break — a dead zero atom, a collapsed band, a cell served by the wrong form — which is what a wiring defect looks like.
 
 | cell | n | CRPS fresh | CRPS record | cov80 fresh | cov80 record | P(0) fresh | P(0) record | realized P(0) |
 |---|---|---|---|---|---|---|---|---|
 | QB\|passing_tds | 89 | 0.3049 | 0.29747 | 0.9551 | 0.9484 | 0.7109 | 0.6842 | 0.764 |
 | QB\|passing_yards | 89 | 38.1152 | 30.69922 | 0.7978 | 0.7938 | 0.3492 | 0.3099 | 0.5506 |
 | QB\|rushing_yards | 89 | 5.3854 | 4.6049 | 0.7865 | 0.8268 | 0.6262 | 0.6321 | 0.5955 |
+| RB\|rushing_tds | 126 | 0.117 | 0.13023 | 0.9524 | 0.9537 | 0.8584 | 0.8719 | 0.9048 |
 | RB\|rushing_yards | 126 | 14.2914 | 10.78942 | 0.7937 | 0.8328 | 0.4152 | 0.4254 | 0.3571 |
 | TE\|receiving_yards | 115 | 7.7273 | 7.45552 | 0.8696 | 0.8874 | 0.4931 | 0.5051 | 0.4696 |
 | WR\|receiving_yards | 187 | 11.6023 | 12.16074 | 0.8342 | 0.8578 | 0.4437 | 0.4119 | 0.4439 |
@@ -50,11 +52,11 @@ A single week against a record that pools 8 half-season folds: these differ by s
     "QB|rushing_yards": "lgbm_hurdle_tail",
     "RB|rushing_yards": "lgbm_hurdle_tail",
     "TE|receiving_yards": "lgbm_hurdle_tail",
-    "WR|receiving_yards": "lgbm_hurdle_tail"
+    "WR|receiving_yards": "lgbm_hurdle_tail",
+    "RB|rushing_tds": "knn_quantile"
   },
   "withheld_null_cells": [
-    "RB|receiving_yards",
-    "RB|rushing_tds"
+    "RB|receiving_yards"
   ],
   "closed_cells": [
     "QB|rushing_tds",
@@ -72,9 +74,9 @@ A single week against a record that pools 8 half-season folds: these differ by s
 - serving train ⊇ validated fold train, PROVED at this boundary: 84036 serving-train rows vs 83011 in NF-W6b's purged fold train (+1025; purge = 2 weeks). Serving with MORE data than was certified is the safe direction; the containment is measured, not asserted.
   - ⚠️ SMOKE: the fit below trains on the last 36 global weeks only, a SUBSET of the serving rule these counts describe. The containment is proved for the serving rule; it does not certify this smoke fit.
 - features: the champion set, 29 columns (⛔ no new features — the NF-W6b prereg constraint carries to serving).
-- withheld NULL cells (⛔ not served): ['RB|receiving_yards', 'RB|rushing_tds'] — RB receiving_yards is PM Decision B (calendar-bound re-test), RB rushing_tds is PM Decision C (deferred NF-W6b-C, a FRESH atom-aware family).
+- withheld NULL cell (⛔ not served): ['RB|receiving_yards'] — RB receiving_yards is PM Decision B (calendar-bound re-test on the same harness once the 2026 folds exist). RB rushing_tds (PM Decision C) is no longer withheld: NF-W6b-C's fresh atom-aware family (a separate §0.5 record) shipped it, and NF-W6c-wire moved it into the served set under NF-G0 governance.
 - CLOSED cells (⛔ re-opening needs a different mechanism): ['QB|rushing_tds', 'RB|receiving_tds', 'WR|receiving_tds', 'TE|receiving_tds'].
-- built artifact: `quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w6c_served_stat_distributions_smoke.parquet` — 695 rows, 730038 bytes, sha256 `11dfc90ad25ed150edf9baf5673ddb739f1a772b5aa919060975780e8f6fdfb0` (gitignored; this manifest is what the registry pins).
+- built artifact: `quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w6c_served_stat_distributions_smoke.parquet` — 821 rows, 733560 bytes, sha256 `43211e643569792e421b9daad70d776036191d0130e13663903b78d15ed7fe70` (gitignored; this manifest is what the registry pins).
 
 ## Deploy hold — why nothing publishes
 
@@ -82,4 +84,4 @@ A single week against a record that pools 8 half-season folds: these differ by s
 - NF-G0 promotion review — the ten gates plus a PM decision; NF-W6b promoted nothing and this story stages, it does not promote
 - the downstream arbitrary-league re-scoring consumer is a FOLLOW-ON story — the moment a scorer reads these distributions the three-implementations parity tax (fantasy_engine / the browser TS scorer / the Lambda scorer) triggers under the merge-gate parity test
 
-_Runtime: 144.4s · fit 142.8s · served_version `nfl_fantasy_w6c_v1`_
+_Runtime: 191.7s · fit 146.8s · served_version `nfl_fantasy_w6c_v1`_

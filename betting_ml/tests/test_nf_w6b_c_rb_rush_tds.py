@@ -14,10 +14,13 @@ Discipline inherited from the NF-W6b suite plus this story's own requirements:
   · ⛔ the linear-residual class is pinned OUT of the field (the whole point of the story);
   · `cv_power.classify_null` IS wired here — with `declared_field_size` stated, the record
     reading `field_remedy_admissible` (MH2.7) — the inverse of the W6b never-call guard;
-  · the serving pin: RB|rushing_tds stays OUT of NF-W6c's dispatch regardless of verdict.
+  · the serving pin: RB|rushing_tds is now WIRED (NF-W6c-wire moved it from
+    `WITHHELD_NULL_CELLS` into `SERVED_CELLS` once this SHIP verdict licensed it) — this suite
+    proves the served form still matches THIS record's winner, never re-litigates the move.
 """
 from __future__ import annotations
 
+import json
 import re
 import types
 from pathlib import Path
@@ -193,14 +196,26 @@ class TestFreshFieldPreregistration:
 # 2. The serving pin — a SHIP here does NOT join NF-W6c's dispatch
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 class TestServingStaysPinnedOut:
-    def test_rb_rushing_tds_is_withheld_from_serving(self):
+    """NF-W6c-wire is the licensed wiring story (PM Decision C): it moved RB|rushing_tds from
+    `WITHHELD_NULL_CELLS` to `SERVED_CELLS` once THIS record shipped it. This suite does not
+    re-litigate that move — it proves the served form still matches this record's own winner
+    (MH2.1 (b): serving must point at what the gates certified, never re-derive it) and that the
+    cell is not double-counted as still withheld."""
+
+    def test_rb_rushing_tds_is_served_via_this_records_winner(self):
         from quant_sports_intel_models.football.nfl.fantasy import (
             stat_distribution_serving as SRV,
         )
-        assert SDC.CELL in SRV.WITHHELD_NULL_CELLS
-        assert SDC.CELL not in SRV.SERVED_CELLS
-        # and the module SAYS so — moving the pin is a future wiring story's change, not ours
-        assert "WITHHELD_NULL_CELLS" in _MODULE.read_text()
+        assert SDC.CELL not in SRV.WITHHELD_NULL_CELLS, (
+            "RB|rushing_tds is still withheld — either NF-W6c-wire has not landed, or it "
+            "regressed")
+        assert SDC.CELL in SRV.SERVED_CELLS
+        record = json.loads((_MODULE.parent / "ablation_results"
+                             / "nf_w6b_c_rb_rush_tds.json").read_text())
+        assert record["selection"]["cell"] == SDC.CELL
+        assert SRV.SERVED_CELLS[SDC.CELL] == record["selection"]["winner"], (
+            f"serving {SRV.SERVED_CELLS[SDC.CELL]!r} but this record certified "
+            f"{record['selection']['winner']!r} — serving a form the gates did not select")
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
