@@ -170,6 +170,10 @@ export function LeagueImport() {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
+  // NF-C6P3 — how many team rosters the SERVER said it stored, read off the save RESPONSE. `null`
+  // until a save happens. See `saveImported` for why this may never be derived from the payload we
+  // sent: an un-deployed backend accepts the new field, drops it, and answers 200.
+  const [storedRosterTeams, setStoredRosterTeams] = useState<number | null>(null)
   // NF-C0c — which team roster rows are expanded to show their players. Collapsed by default: a
   // 12-team league can carry 300+ roster spots, so showing every name up front would bury the
   // settings review this page exists for.
@@ -331,6 +335,7 @@ export function LeagueImport() {
   function applyPreview(res: ImportPreview) {
     setPreview(res)
     setSaved(null)
+    setStoredRosterTeams(null)
     setSelectedTeamKey(res.teams.find((t) => t.is_owner)?.team_key ?? null)
   }
 
@@ -361,6 +366,23 @@ export function LeagueImport() {
     // NF-C6 — the team the reviewer picked below, if any. `null` is honest and saveable: the league
     // settings are still useful (rankings/board/draft) even before a roster is linked to it.
     const myTeam = preview.teams.find((t) => t.team_key === selectedTeamKey) ?? null
+    // ⭐ NF-C6P3 — KEEP EVERY TEAM'S ROSTER, not just the user's own. The preview ALREADY holds all
+    // of them (it is what the team picker above is built from); before this we discarded all but
+    // one and then told the user on the report that "we do not hold your league's other rosters",
+    // which described a limit we had imposed on ourselves.
+    //
+    // Slimmed to the three fields the board join uses. The server slims and bounds this again
+    // (`models/fantasy.bound_league_rosters`) — it must, since a client can send anything — so this
+    // is a bandwidth saving rather than the enforcement.
+    const leagueRosters = preview.teams.map((t) => ({
+      team_key: t.team_key,
+      team_name: t.name,
+      players: (t.players ?? []).map((p) => ({
+        name: p.name,
+        position: p.position,
+        team: p.team,
+      })),
+    }))
     const payload: LeagueSaveInput = {
       ...preview.config,
       source_platform: preview.platform,
@@ -370,12 +392,22 @@ export function LeagueImport() {
       source_team_name: myTeam?.name ?? null,
       imported_roster: myTeam?.players ?? null,
       roster_synced_at: myTeam ? new Date().toISOString() : null,
+      league_rosters: leagueRosters.length > 0 ? leagueRosters : null,
+      league_rosters_synced_at: leagueRosters.length > 0 ? new Date().toISOString() : null,
     }
     const res = await run("save", () =>
       saveLeague.mutateAsync({ leagueId: already?.league_id ?? null, config: payload }),
     )
     if (res) {
       setSaved(already ? "updated" : "saved")
+      // ⚠️ READ THE ROSTER COUNT BACK OFF THE **SERVER'S RESPONSE**, NEVER OFF WHAT WE SENT.
+      // NF-C0/E8.6: the API Lambda has no CI/CD, so there is always a window where the deployed
+      // backend predates this client — and because the FastAPI request models carry no
+      // `extra="forbid"`, an un-deployed backend ACCEPTS `league_rosters`, IGNORES it and returns
+      // 200. Echoing our own payload back would report "all 12 rosters stored" over a server that
+      // stored none, which is the exact silent-save phantom E8.6 records. The response is the only
+      // thing that knows what was actually persisted — including the server's own truncation.
+      setStoredRosterTeams((res as { league_rosters?: unknown[] | null }).league_rosters?.length ?? 0)
 
       // ── G100-C1: the SECOND clause of the activation definition ──────────────────────────────
       //
@@ -933,6 +965,20 @@ export function LeagueImport() {
                 {selectedTeamKey
                   ? " Your team is linked, so it will show up on My Teams too."
                   : " No team linked yet — pick yours above and save again to see it on My Teams."}
+              </p>
+            )}
+            {/* NF-C6P3 — WHAT WAS ACTUALLY STORED, from the response rather than from the payload.
+                A save that silently drops the league's other rosters (an un-deployed backend, or
+                the item-size budget) is otherwise invisible: the user would just find the report's
+                free-agent pool quietly back to its old definition with nothing having said so. */}
+            {saved && storedRosterTeams != null && (
+              <p
+                className={`mt-1.5 text-xs ${storedRosterTeams > 0 ? "text-gray-400" : "text-amber-400"}`}
+                data-testid="import-stored-rosters"
+              >
+                {storedRosterTeams > 0
+                  ? `We stored all ${storedRosterTeams} team roster${storedRosterTeams === 1 ? "" : "s"} as they stand right now, so the roster report can tell you who is genuinely a free agent in your league. It is a snapshot — we do not re-read your league after this.`
+                  : "Your league's other rosters were not stored, so free agents on the roster report fall back to “beyond the pool a league your size drafts”. Re-importing will try again."}
               </p>
             )}
 

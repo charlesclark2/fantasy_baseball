@@ -53,9 +53,17 @@ import {
 import {
   REPORT_BENCH_NOTE,
   REPORT_BYE_NOTE,
+  REPORT_COMPARISON_CAVEAT_LINEUP,
+  REPORT_COMPARISON_CAVEAT_OURS,
+  REPORT_COMPARISON_CAVEAT_SNAPSHOT,
+  REPORT_COMPARISON_HEADING,
+  REPORT_COMPARISON_NOTE,
+  REPORT_COMPARISON_PARTIAL,
   REPORT_EMPTY,
   REPORT_FIRST_WEEK_NOTE,
   REPORT_FRAGILITY_NOTE,
+  REPORT_FREE_AGENT_NOTE,
+  REPORT_FREE_AGENT_PARTIAL_NOTE,
   REPORT_LEAGUE_BASELINE_NOTE,
   REPORT_POSITION_DEFINITION,
   REPORT_TRADE_NOTE,
@@ -122,10 +130,15 @@ function Section({
 //
 // The four groupings are by the QUESTION each answers, not by data type: what have I got (Positions)
 // · who starts (Lineup) · can I cover a gap (Depth & byes) · what do I do next (Next moves).
+//
+// NF-C6P3 adds a fifth: THE LEAGUE. It is its own tab rather than a block under Positions because
+// it is the only section that talks about anybody but you, and because its three caveats need room
+// to render beside the table rather than being appended to another section's note.
 const TABS = [
   { id: "positions", label: "Positions" },
   { id: "lineup", label: "Lineup" },
   { id: "depth", label: "Depth & byes" },
+  { id: "league", label: "The league" },
   { id: "moves", label: "Next moves" },
 ] as const
 
@@ -275,7 +288,8 @@ function Empty({ reason }: { reason: keyof typeof REPORT_EMPTY }) {
 
 function Report({ report, entitled }: { report: RosterReport; entitled: boolean }) {
   const [tab, setTab] = useState<TabId>("positions")
-  const { projection, coverage, positions, bench, byes, fragility, waivers, trades } = report
+  const { projection, coverage, positions, bench, byes, fragility, waivers, trades, leagueRosters } =
+    report
   const ranked = positions
     .filter((p) => p.edge != null && p.starters > 0)
     .sort((a, b) => (b.edge as number) - (a.edge as number))
@@ -392,7 +406,17 @@ function Report({ report, entitled }: { report: RosterReport; entitled: boolean 
             </thead>
             <tbody>
               {report.lineup.slots.map((s, i) => (
-                <tr key={`${s.name}-${i}`} className="border-t border-white/5" data-testid="lineup-row">
+                // `data-slot` so a spec can address ONE slot deterministically. Filtering by text
+                // cannot: the slot is named "DST" while the player renders as "SEA D/ST", so a
+                // text filter that finds the filled row finds NOTHING when the row is empty — the
+                // assertion would then fail for a reason that reads like a missing element rather
+                // than like the unfilled slot it is (NF-C6P3).
+                <tr
+                  key={`${s.name}-${i}`}
+                  className="border-t border-white/5"
+                  data-testid="lineup-row"
+                  data-slot={s.name}
+                >
                   <td className="py-1 pr-3 text-gray-400">{s.name}</td>
                   <td className="py-1 pr-3 text-gray-200">
                     {s.player ? s.player.name : <span className="text-[#f59e0b]">nobody eligible</span>}
@@ -496,12 +520,33 @@ function Report({ report, entitled }: { report: RosterReport; entitled: boolean 
 
       </Panel>
 
+      <Panel id="league" active={tab}>
+        <LeagueComparisonSection report={report} />
+      </Panel>
+
       <Panel id="moves" active={tab}>
       {/* ── Waivers ─────────────────────────────────────────────────────────────────────────── */}
-      <Section testId="waiver-ideas" title="Worth a look on the wire" note={REPORT_WAIVER_NOTE}>
+      {/* ⭐ NF-C6P3 — the heading and the note are chosen from what we HOLD, not from what reads
+          better. `complete` (every team's roster stored) is the only state in which "free agent" is
+          an observation; partial coverage reports the absence and keeps the older, weaker
+          definition, because a pool computed from 8 of 12 rosters would list the missing four
+          teams' players as unowned and look exactly like a correct list. */}
+      <Section
+        testId="waiver-ideas"
+        title={leagueRosters.complete ? "Free agents worth a look" : "Worth a look on the wire"}
+        note={
+          leagueRosters.complete
+            ? REPORT_FREE_AGENT_NOTE
+            : leagueRosters.teamsHeld > 0
+              ? REPORT_FREE_AGENT_PARTIAL_NOTE
+              : REPORT_WAIVER_NOTE
+        }
+      >
         {waivers.length === 0 ? (
           <p className="text-[13px] text-gray-400">
-            Nothing outside the drafted pool stands out against what you already hold.
+            {leagueRosters.complete
+              ? "Nobody unowned in your league stands out against what you already hold."
+              : "Nothing outside the drafted pool stands out against what you already hold."}
           </p>
         ) : (
           <ul className="space-y-2">
@@ -510,11 +555,33 @@ function Report({ report, entitled }: { report: RosterReport; entitled: boolean 
             ))}
           </ul>
         )}
-        {report.poolSize != null && (
-          <p className="mt-3 text-[11px] text-gray-600">
-            &ldquo;Outside the drafted pool&rdquo; means beyond board rank {int(report.poolSize)} —{" "}
-            {int(report.league.n_teams)} teams times the drafted slots in your roster.
+        {leagueRosters.complete ? (
+          <p className="mt-3 text-[11px] text-gray-600" data-testid="free-agent-basis">
+            Read against all {int(leagueRosters.teamsInLeague)} rosters in your league
+            {leagueRosters.syncedAt
+              ? `, as they stood on ${new Date(leagueRosters.syncedAt).toLocaleDateString()}`
+              : ""}
+            .
+            {leagueRosters.unmatched > 0
+              ? ` ${int(leagueRosters.unmatched)} rostered player${leagueRosters.unmatched === 1 ? "" : "s"} across the league did not match our board, so a few of them could show up below.`
+              : ""}
           </p>
+        ) : (
+          <>
+            {leagueRosters.teamsHeld > 0 && (
+              <p className="mt-3 text-[11px] text-amber-500/80" data-testid="free-agent-partial">
+                We hold {int(leagueRosters.teamsHeld)} of {int(leagueRosters.teamsInLeague)} rosters
+                in this league.
+              </p>
+            )}
+            {report.poolSize != null && (
+              <p className="mt-3 text-[11px] text-gray-600">
+                &ldquo;Outside the drafted pool&rdquo; means beyond board rank{" "}
+                {int(report.poolSize)} — {int(report.league.n_teams)} teams times the drafted slots
+                in your roster.
+              </p>
+            )}
+          </>
         )}
       </Section>
 
@@ -614,6 +681,137 @@ function ByeRow({ b }: { b: ByeWeek }) {
       </td>
     </tr>
   )
+}
+
+/**
+ * NF-C6P3 — THE LEAGUE COMPARISON.
+ *
+ * ⛔ READ `lib/roster-report.ts`'s boundary note before touching a string here. A standings-shaped
+ * table answers "did I win my draft?" whether or not it was asked, and that is the one question this
+ * product has measured nothing about. The permitted sentence is a rank ON THIS MEASURE; a projected
+ * finish, playoff odds or a win probability would need a weekly-variance schedule simulation that
+ * does not exist. `best_alpha = 0`.
+ *
+ * ⭐ THE THREE CAVEATS RENDER WITH THE TABLE, ABOVE IT, UNCONDITIONALLY. Not behind a disclosure,
+ * not in a tooltip, not below the fold of a long table — a caveat behind a click is a caveat that
+ * did not render, and each of these three names something the reader cannot work out for themselves.
+ */
+function LeagueComparisonSection({ report }: { report: RosterReport }) {
+  const { comparison, leagueRosters } = report
+  if (!comparison) {
+    // An honest empty state, and it distinguishes the two reasons. "We hold nothing" and "we hold
+    // only your team" are different facts, and the second one has an action attached.
+    return (
+      <Section
+        testId="league-comparison"
+        title={REPORT_COMPARISON_HEADING}
+        note={REPORT_COMPARISON_NOTE}
+      >
+        <p className="text-[13px] text-gray-400" data-testid="league-comparison-empty">
+          {leagueRosters.teamsHeld > 0
+            ? "We only hold your own roster for this league, so there is nothing to compare it against yet. Re-importing the league picks up the other teams."
+            : "We do not hold the other teams' rosters for this league — import it again and we will store them, so this table can be built."}
+        </p>
+      </Section>
+    )
+  }
+
+  const mine = comparison.mine
+  return (
+    <Section testId="league-comparison" title={REPORT_COMPARISON_HEADING} note={REPORT_COMPARISON_NOTE}>
+      {mine && (
+        // ⭐ THE PERMITTED SENTENCE, AND IT NAMES ITS OWN MEASURE IN THE SAME BREATH AS THE RANK.
+        // "You sit Kth" alone is what a reader turns into "I will finish Kth"; "Kth on projected
+        // starting points" is a fact about arithmetic and cannot be read as a forecast.
+        <p className="text-[13px] text-gray-200" data-testid="league-comparison-summary">
+          Your starters project to{" "}
+          <span className="font-mono text-white">{num(mine.total, 1)}</span>. The{" "}
+          {int(comparison.teams.length)} rosters we hold range from{" "}
+          <span className="font-mono">{num(comparison.low, 1)}</span> to{" "}
+          <span className="font-mono">{num(comparison.high, 1)}</span>, which puts you{" "}
+          <span className="font-mono text-white">{ordinal(mine.rank)}</span> on projected starting
+          points today.
+        </p>
+      )}
+
+      <ul className="mt-3 space-y-1.5 text-[11px] leading-relaxed text-gray-500" data-testid="league-comparison-caveats">
+        <li>{REPORT_COMPARISON_CAVEAT_LINEUP}</li>
+        <li>{REPORT_COMPARISON_CAVEAT_SNAPSHOT}</li>
+        <li>{REPORT_COMPARISON_CAVEAT_OURS}</li>
+        {leagueRosters.teamsHeld < leagueRosters.teamsInLeague && (
+          <li className="text-amber-500/80" data-testid="league-comparison-partial">
+            {REPORT_COMPARISON_PARTIAL} We hold {int(leagueRosters.teamsHeld)} of{" "}
+            {int(leagueRosters.teamsInLeague)}.
+          </li>
+        )}
+      </ul>
+
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full min-w-[520px] text-left text-[12px]">
+          <thead>
+            <tr className="text-gray-500">
+              <th className="py-1 pr-3 font-medium">#</th>
+              <th className="py-1 pr-3 font-medium">Team</th>
+              <th className="py-1 pr-3 text-right font-medium">Projected starters</th>
+              <th className="py-1 pr-3 text-right font-medium">80% range</th>
+              <th className="py-1 pr-3 text-right font-medium">Matched</th>
+            </tr>
+          </thead>
+          <tbody>
+            {comparison.teams.map((t) => (
+              <tr
+                key={t.teamKey}
+                className={`border-t border-white/5 ${t.isMine ? "bg-[#10b981]/5" : ""}`}
+                data-testid="league-comparison-row"
+              >
+                <td className="py-1 pr-3 font-mono text-gray-500">{int(t.rank)}</td>
+                <td className={`py-1 pr-3 ${t.isMine ? "font-semibold text-[#10b981]" : "text-gray-200"}`}>
+                  {t.teamName}
+                  {t.isMine && <span className="ml-1.5 text-[10px] uppercase tracking-wide">you</span>}
+                  {t.unfilled > 0 && (
+                    <span className="ml-2 text-[10px] text-[#f59e0b]">
+                      {t.unfilled} slot{t.unfilled === 1 ? "" : "s"} unfilled
+                    </span>
+                  )}
+                </td>
+                <td className="py-1 pr-3 text-right font-mono text-gray-200" data-testid="league-comparison-total">
+                  {num(t.total, 1)}
+                </td>
+                <td className="py-1 pr-3 text-right font-mono text-gray-400">
+                  <RangeCell p10={t.p10} p90={t.p90} />
+                </td>
+                {/* An absence is reported, never imputed: a team whose roster did not fully resolve
+                    has a total that is understated by whatever those players are worth, and the
+                    reader has to be able to see that rather than read the rank at face value. */}
+                <td
+                  className={`py-1 pr-3 text-right font-mono ${t.matched < t.rosterRows ? "text-[#f59e0b]" : "text-gray-500"}`}
+                >
+                  {int(t.matched)}/{int(t.rosterRows)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {comparison.incomplete > 0 && (
+        <p className="mt-3 text-[11px] text-[#f59e0b]" data-testid="league-comparison-incomplete">
+          {int(comparison.incomplete)} team{comparison.incomplete === 1 ? "" : "s"} carr
+          {comparison.incomplete === 1 ? "ies" : "y"} a rostered player we could not match to a
+          projection, so their total — and their place in this order — is understated by whatever
+          those players are worth.
+        </p>
+      )}
+    </Section>
+  )
+}
+
+/** "1st", "2nd", "11th". Plain English, so the rank reads as a position on a list rather than as a
+ *  finish. */
+function ordinal(n: number): string {
+  const rem100 = n % 100
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`
+  return `${n}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`
 }
 
 function WaiverRow({ w }: { w: WaiverIdea }) {

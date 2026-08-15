@@ -278,23 +278,117 @@ function normalizePlayerName(name: string): string {
     .trim()
 }
 
+// ══ NF-C6P3 — THE D/ST JOIN. A team defence is not a person, and the name join never matched one ══
+//
+// The board publishes a unit as "DET D/ST"; every platform publishes it under its NICKNAME (ESPN
+// "Lions D/ST", Sleeper "Detroit Lions", Yahoo "Detroit"). Normalized, that is `det dst` against
+// `lions dst` — no match, for any team, on any platform. The miss is a legitimate `board: null`, so
+// nothing errors: the D/ST STARTING SLOT simply sits empty and contributes ZERO to the headline
+// total. A confidently wrong number that renders perfectly.
+//
+// So a DST row keys on its FRANCHISE: the row's own `team` field, else a nickname in the name, else
+// an abbreviation token in the name (which is how our own board renders it). Unresolvable ⇒ the old
+// name key and an honest miss; there is deliberately NO fuzzy fallback, because matching the WRONG
+// defence would credit a user with points they never drafted.
+//
+// ⚠️ MIRRORS `app/backend/services/league_scoring.py` EXACTLY — that module is what the live server
+// joins with, this one is what the E2E harness scores through, and
+// `betting_ml/tests/test_nf_c6p3_league_rosters.py` pins the two maps against each other and against
+// the research tree's franchise table. A nickname added here and not there is a failing test.
+
+/** Franchise nickname → the abbreviation our board publishes, keyed on what `normalizePlayerName`
+ *  PRODUCES. ⚠️ "49ers" folds to "ers" (digits are dropped), so that is the key — it looks like a
+ *  typo and is not. Historical nicknames are included: an older league still names them that way. */
+export const NFL_TEAM_BY_NICKNAME: Record<string, string> = {
+  cardinals: "ARI", falcons: "ATL", ravens: "BAL", bills: "BUF",
+  panthers: "CAR", bears: "CHI", bengals: "CIN", browns: "CLE",
+  cowboys: "DAL", broncos: "DEN", lions: "DET", packers: "GB",
+  texans: "HOU", colts: "IND", jaguars: "JAX", jags: "JAX",
+  chiefs: "KC", chargers: "LAC", rams: "LAR", raiders: "LV",
+  dolphins: "MIA", vikings: "MIN", patriots: "NE", saints: "NO",
+  giants: "NYG", jets: "NYJ", eagles: "PHI", steelers: "PIT",
+  seahawks: "SEA", ers: "SF", niners: "SF", buccaneers: "TB",
+  bucs: "TB", titans: "TEN", commanders: "WAS", redskins: "WAS",
+  // ⚠️ THE ONLY TWO-WORD ENTRY — Washington played as the "Football Team" for 2020–21, so
+  // `dstTeam` checks adjacent token PAIRS too. "team" alone cannot be a key: a defence rendered
+  // "Team 3 D/ST" would then resolve to Washington.
+  "football team": "WAS",
+}
+
+/** A platform's team abbreviation → ours. DIVERGENCES only; relocations dominate. */
+export const NFL_TEAM_ABBREV_ALIASES: Record<string, string> = {
+  OAK: "LV", LVR: "LV",
+  SD: "LAC", SDG: "LAC",
+  STL: "LAR", LA: "LAR", RAM: "LAR",
+  WSH: "WAS", WFT: "WAS",
+  JAC: "JAX",
+  GNB: "GB", KAN: "KC", NWE: "NE", NOR: "NO", SFO: "SF", TAM: "TB",
+  ARZ: "ARI", BLT: "BAL", CLV: "CLE", HST: "HOU",
+}
+
+const NFL_TEAM_ABBREVIATIONS = new Set(Object.values(NFL_TEAM_BY_NICKNAME))
+
+/** A platform's team abbreviation as OUR board spells it, or `""` when unresolvable.
+ *  ⚠️ `""` rather than the input: a key built from an unknown abbreviation can only ever match
+ *  itself, which is a silent no-match dressed up as a resolution. */
+export function normalizeTeamAbbrev(team: string | null | undefined): string {
+  const t = String(team ?? "").trim().toUpperCase()
+  if (!t) return ""
+  const aliased = NFL_TEAM_ABBREV_ALIASES[t] ?? t
+  return NFL_TEAM_ABBREVIATIONS.has(aliased) ? aliased : ""
+}
+
+/** The franchise a D/ST row belongs to, or `""` when it cannot be resolved honestly. */
+export function dstTeam(name: string, team: string | null | undefined): string {
+  const resolved = normalizeTeamAbbrev(team)
+  if (resolved) return resolved
+  // Adjacent PAIRS before single tokens: the map has one two-word nickname whose second word must
+  // never be a key on its own.
+  const tokens = normalizePlayerName(name).split(" ")
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const hit = NFL_TEAM_BY_NICKNAME[`${tokens[i]} ${tokens[i + 1]}`]
+    if (hit) return hit
+  }
+  for (const token of tokens) {
+    const hit = NFL_TEAM_BY_NICKNAME[token]
+    if (hit) return hit
+  }
+  // Our own board's rendering ("DET D/ST"): read off the RAW name, since normalization lowercases.
+  for (const token of String(name ?? "").replace(/\//g, " ").split(/\s+/)) {
+    const hit = normalizeTeamAbbrev(token)
+    if (hit) return hit
+  }
+  return ""
+}
+
+/** The key both sides of the join reduce to. Everyone but a team defence keys on `name|pos`
+ *  exactly as before — this is not a rewrite of a join that works for 95% of a roster. */
+function joinKey(name: string, pos: string | null | undefined, team: string | null | undefined): string {
+  const position = normalizePosition(pos ?? "")
+  if (position === "DST") {
+    const resolved = dstTeam(name, team)
+    if (resolved) return `DST|${resolved}`
+  }
+  return `${normalizePlayerName(name)}|${position}`
+}
+
 export interface RosterMatch {
   roster: ImportedPlayer
-  /** The scored board row for this roster player, or `null` when no name+position match was found
-   *  in the current projection universe (an honest miss — see the module note above). */
+  /** The scored board row for this roster player, or `null` when no match was found in the current
+   *  projection universe (an honest miss — see the module note above). */
   board: Player | null
 }
 
-/** Join one imported roster onto an already-`buildBoard`'d array, by normalized name + position. */
+/** Join one imported roster onto an already-`buildBoard`'d array. */
 export function matchRosterToBoard(roster: ImportedPlayer[], board: Player[]): RosterMatch[] {
   const byKey = new Map<string, Player>()
   for (const p of board) {
-    const key = `${normalizePlayerName(p.name)}|${normalizePosition(p.pos)}`
+    const key = joinKey(p.name, p.pos, p.team)
     if (!byKey.has(key)) byKey.set(key, p) // first (highest-VOR, since board is VOR-sorted) wins
   }
   return roster.map((r) => {
     if (!r.name) return { roster: r, board: null }
-    const key = `${normalizePlayerName(r.name)}|${normalizePosition(r.position ?? "")}`
+    const key = joinKey(r.name, r.position ?? "", r.team)
     return { roster: r, board: byKey.get(key) ?? null }
   })
 }

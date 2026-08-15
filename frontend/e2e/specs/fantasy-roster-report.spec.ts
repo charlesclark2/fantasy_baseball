@@ -4,6 +4,7 @@ import {
   E2E_UNMATCHED_ROSTER_NAME,
   collectPageErrors,
   mockApi,
+  rivalRosteredPlayerNames,
 } from "../support/api-mock"
 import { signIn } from "../support/session"
 import { forbiddenPhrasesIn } from "../support/claim-denylist"
@@ -48,7 +49,7 @@ async function openReport(
   page: Page,
   opts: {
     groups?: string[]
-    leagues?: "none" | "one" | "drafted" | "linked" | "predraft"
+    leagues?: "none" | "one" | "drafted" | "linked" | "predraft" | "partialRosters"
     fail?: string[]
     transform?: (path: string, body: any) => any
   } = {},
@@ -426,6 +427,237 @@ test.describe("E9.46 — one rank, one meaning", () => {
     await page.goto("/")
     await expect(page.locator("#fantasy-proof")).toBeVisible()
     await expect(page.getByTestId("rank-population-note")).toHaveCount(0)
+  })
+})
+
+/**
+ * NF-C6P3 — THE WHOLE LEAGUE'S ROSTERS, AND THE D/ST SLOT THAT WAS NEVER FILLED.
+ *
+ * Both defects here render perfectly and are wrong, which is why they need a browser at all:
+ *
+ *   · THE D/ST SLOT. Our board publishes "SEA D/ST"; every platform publishes a nickname. The name
+ *     join therefore matched no team defence on any platform — an honest `board: null`, so nothing
+ *     errored: the slot simply sat empty and its points were silently missing from the headline.
+ *     ⚠️ The fixture's D/ST row is taken from the REAL captured ESPN league (`platformDstRow`),
+ *     because a row built from our own board's naming matches trivially under the broken join and
+ *     the whole assertion would pass on nothing (NF-C0e).
+ *   · THE FREE-AGENT POOL. "Outside the pool a league your size drafts" and "on nobody's roster"
+ *     are DIFFERENT claims, and only one of them is an observation. The surface has to say which it
+ *     is making, and must not make the stronger one from a partial league.
+ */
+test.describe("the league's own rosters", () => {
+  test("the D/ST slot is filled, and its points are inside the headline", async ({ page }) => {
+    const { errors, mock } = await openReport(page, { groups: FREE.groups })
+    await openTab(page, "Lineup")
+
+    // ⭐ THE SLOT IS FILLED. Before the join fix this row rendered "nobody eligible" — a real,
+    // legitimate-looking empty state, which is exactly why nobody noticed for a whole story.
+    const dstRow = page.locator('[data-testid="lineup-row"][data-slot="DST"]')
+    await expect(dstRow).toHaveCount(1)
+    await expect(dstRow, "the D/ST slot is empty — the team-defence join is not resolving").not.toContainText(
+      "nobody eligible",
+    )
+
+    // ⭐ AND ITS POINTS ARE IN THE TOTAL. A slot that rendered a player while the headline was still
+    // summed over a lineup that had dropped him would pass the assertion above and be exactly as
+    // wrong. Same arithmetic as the headline clause at the top of this file, so the D/ST row now has
+    // to be part of what is summed.
+    const total = Number((await page.getByTestId("team-total").innerText()).replace(/,/g, ""))
+    const lineup = await columnValues(page, "lineup-season-pts")
+    const summed = lineup.reduce((a, b) => a + b, 0)
+    expect(Math.abs(total - summed)).toBeLessThan(0.55)
+
+    // The D/ST cell carries a real number, not the "—" an unfilled slot renders.
+    const dstPoints = await dstRow.getByTestId("lineup-season-pts").innerText()
+    // ⚠️ Thousands separators stripped — `num()` renders "2,924.5" and `Number("2,924.5")` is NaN,
+    // which would fail this clause on a perfectly filled slot.
+    expect(
+      Number(dstPoints.trim().replace(/,/g, "")),
+      `the D/ST slot scored ${dstPoints}`,
+    ).toBeGreaterThan(0)
+
+    await expectNoNaN(page)
+    await expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
+  test("the free-agent pool excludes players on another manager's roster", async ({ page }) => {
+    const { errors, mock } = await openReport(page, { groups: FREE.groups })
+    await openTab(page, "Next moves")
+
+    const section = page.getByTestId("waiver-ideas")
+    await expect(section).toBeVisible()
+    // ⭐ THE OBSERVATION, NOT THE DEFINITION. `free-agent-basis` renders only when every roster in
+    // the league is held, so its presence is the surface committing to the stronger claim.
+    await expect(page.getByTestId("free-agent-basis")).toBeVisible()
+
+    // ⛔ NOT ONE OF THE OFFERED PLAYERS MAY BE ON A RIVAL'S ROSTER. Asserted over the WHOLE set
+    // rather than against one chosen name, because the section shows only three players and which
+    // three it shows is a function of the roster's own gaps — a single-name assertion is satisfied
+    // by the two thirds of the list it never looks at.
+    //
+    // ⚠️ The rivals hold the TOP of every position (`otherTeamRosters`), so the archetypes' first
+    // choice IS a rostered player. That is what makes this clause bite: with the filter removed the
+    // section fills with players somebody already owns. The first cut dealt the rivals a mid-board
+    // slice, and the red proof caught the whole clause passing on nothing.
+    const rostered = rivalRosteredPlayerNames()
+    const offered = await page.getByTestId("waiver-idea").allInnerTexts()
+    expect(offered.length, "the section offered nobody — the clause below would be vacuous").toBeGreaterThan(0)
+    const owned = [...rostered].filter((name) => offered.some((t) => t.includes(name)))
+    expect(owned, `players on another manager's roster were offered as free agents`).toEqual([])
+
+    await expectNoNaN(page)
+    await expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
+  test("a league we hold only PART of reports the absence instead of guessing", async ({ page }) => {
+    // ⚠️ THE ISOLATING HALF, and it defends the more dangerous direction. A pool computed from 8 of
+    // 12 rosters would list four teams' worth of rostered players as free agents — a confidently
+    // wrong list that reads exactly like a right one. The mock is one team short of complete, which
+    // is the smallest possible difference: a surface that treats "nearly all" as "all" fails here.
+    const { errors, mock } = await openReport(page, {
+      groups: FREE.groups,
+      leagues: "partialRosters",
+    })
+    await openTab(page, "Next moves")
+
+    await expect(page.getByTestId("free-agent-basis")).toHaveCount(0)
+    const partial = page.getByTestId("free-agent-partial")
+    await expect(partial).toBeVisible()
+    // The count is rendered, so "we hold some" is an arithmetic statement rather than a vague hedge.
+    await expect(partial).toContainText("of 10")
+
+    // …and the section falls back to the older, weaker definition rather than to silence. Keyed on
+    // the drafted-pool ARITHMETIC line, which only the fallback renders.
+    await expect(page.getByTestId("waiver-ideas")).toContainText("beyond board rank")
+
+    await expectNoNaN(page)
+    await expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+})
+
+/**
+ * NF-C6P3 (b) — THE LEAGUE COMPARISON.
+ *
+ * ⛔ THE DANGEROUS SURFACE ON THIS PAGE. A standings-shaped table answers "did I win my draft?"
+ * whether or not it was asked, and that is the one question this product has measured nothing about.
+ * There is no weekly-variance schedule simulation and `best_alpha = 0`, so a projected finish, a
+ * playoff chance or a win probability would be a claim about work that does not exist.
+ *
+ * Three things are pinned, and each has a different failure mode:
+ *   · THE ARITHMETIC IS REAL — the rank must follow the totals the table itself renders, or it is a
+ *     plausible-looking wrong number (the E9.46 class) on the most quotable figure on the page.
+ *   · THE CAVEATS RENDER, UNCONDITIONALLY AND WITH THE TABLE — a caveat behind a click is a caveat
+ *     that did not render, and the surface is being asked to carry three of them.
+ *   · NO FINISH OR ODDS CLAIM reaches the DOM, screened by the shared denylist plus this story's own
+ *     outcome vocabulary.
+ */
+test.describe("the league comparison", () => {
+  test("the rank follows the totals the table renders", async ({ page }) => {
+    const { errors, mock } = await openReport(page, { groups: FREE.groups })
+    await openTab(page, "The league")
+
+    await expect(page.getByTestId("league-comparison")).toBeVisible()
+    const totals = await columnValues(page, "league-comparison-total")
+    expect(totals.length, "the comparison table rendered no teams").toBeGreaterThan(2)
+
+    // ⭐ ARITHMETIC, NOT "A TABLE RENDERED". The rendered totals must be in descending order — a
+    // table that ranked by team name, by served order, or by a number it did not show renders just
+    // as cleanly and fails here.
+    const sorted = [...totals].sort((a, b) => b - a)
+    expect(totals, "the table's rows are not ordered by the totals it renders").toEqual(sorted)
+
+    // …and the summary's rank must be the caller's own row, not a number derived some other way.
+    const summary = await page.getByTestId("league-comparison-summary").innerText()
+    const myRow = page.locator('[data-testid="league-comparison-row"]', { hasText: "you" }).first()
+    const myRank = (await myRow.innerText()).trim().split(/\s/)[0]
+    expect(summary, `the summary does not quote this team's own rank (${myRank})`).toMatch(
+      new RegExp(`\\b${myRank}(st|nd|rd|th)\\b`),
+    )
+
+    await expectNoNaN(page)
+    await expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
+  test("all three caveats render with the table, not behind a disclosure", async ({ page }) => {
+    await openReport(page, { groups: FREE.groups })
+    await openTab(page, "The league")
+
+    const caveats = page.getByTestId("league-comparison-caveats")
+    await expect(caveats).toBeVisible()
+    // ⚠️ ONE ASSERTION PER CAVEAT, keyed on the distinctive phrase of each, so deleting ONE of the
+    // three turns exactly one clause red rather than being absorbed by the other two.
+    await expect(caveats, "the optimal-fill caveat is missing").toContainText(
+      "We do not know the lineup another manager will actually start",
+    )
+    await expect(caveats, "the snapshot caveat is missing").toContainText(
+      "as they stood when you imported the league",
+    )
+    await expect(caveats, "the whose-opinion caveat is missing").toContainText(
+      "The order is our projections' opinion",
+    )
+  })
+
+  test("the table promises no finish, no odds and no win probability", async ({ page }) => {
+    await openReport(page, { groups: FREE.groups })
+    await openTab(page, "The league")
+    await expect(page.getByTestId("league-comparison")).toBeVisible()
+
+    const text = (await page.getByTestId("league-comparison").innerText()).toLowerCase()
+    // The shared claim denylist first — the same screen every other claim surface passes.
+    expect(forbiddenPhrasesIn(text), "the comparison makes a forbidden claim").toEqual([])
+    // …then this story's OWN outcome vocabulary, which the shared list does not carry because no
+    // other surface in the product was ever shaped like a standings table.
+    //
+    // ⚠️ NEGATION-AWARE, AND IT HAS TO BE. A bare substring scan fires on the surface's own
+    // DISCLAIMER — "it is not a projected finish and not a chance of winning anything" — i.e. it
+    // would forbid the very sentence that makes the table honest, and the cheapest way to satisfy
+    // it would be to DELETE that sentence. Same shape as the scan that could not say "attempt"
+    // because it banned "temp" (NF-W7): an over-eager guard pushes the copy the wrong way.
+    //
+    // So the rule is what it always meant: each phrase may appear only in a NEGATED context.
+    for (const phrase of [
+      "projected finish",
+      "will finish",
+      "playoff odds",
+      "chance of making",
+      "win probability",
+      "odds of winning",
+      "championship odds",
+      "expected to win",
+    ]) {
+      let from = 0
+      for (;;) {
+        const at = text.indexOf(phrase, from)
+        if (at < 0) break
+        const lead = text.slice(Math.max(0, at - 24), at)
+        expect(
+          /\b(not|never|no|without)\b[^.]*$/.test(lead),
+          `the comparison table claims "${phrase}" — "…${lead}${phrase}…"`,
+        ).toBe(true)
+        from = at + phrase.length
+      }
+    }
+  })
+
+  test("a league with no other rosters says so rather than rendering a table of one", async ({
+    page,
+  }) => {
+    // ⚠️ THE ISOLATING HALF. A one-row "comparison" is not one, and rendering it would imply a
+    // league-wide reading from a single team. Every league imported before this shipped is in this
+    // state, so it is the common case rather than an edge one.
+    await openReport(page, {
+      groups: FREE.groups,
+      transform: (path, body: any) =>
+        path.startsWith("/fantasy/nfl/league-board") ? { ...body, league_rosters: [] } : body,
+    })
+    await openTab(page, "The league")
+
+    await expect(page.getByTestId("league-comparison-empty")).toBeVisible()
+    await expect(page.getByTestId("league-comparison-row")).toHaveCount(0)
   })
 })
 
