@@ -476,15 +476,161 @@ def normalize_player_name(name: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# NF-C6P3 — THE D/ST JOIN. A team defence is not a person, and the name join never worked on it.
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# Measured on the real captured ESPN league (`espn_league_642070_2025_drafted.json`, 10 teams / 172
+# players): the board publishes a team unit as **"DET D/ST"** and every platform publishes it under
+# its NICKNAME — ESPN "Lions D/ST", Sleeper "Detroit Lions", Yahoo "Detroit". Fold both through
+# `normalize_player_name` and you get `det dst` against `lions dst`: no match, ever, for any team,
+# on any platform.
+#
+# ⚠️ AND THE FAILURE IS SILENT AND EXPENSIVE. The miss is a legitimate `board: None` row, so nothing
+# errors — it lands in the report's "we could not resolve" list while the D/ST STARTING SLOT sits
+# empty and contributes exactly ZERO to the headline team total. A number that is confidently wrong
+# and renders perfectly (the E9.46 class), on the one figure this whole surface is opened to read.
+#
+# ⭐ THE FIX IS TO JOIN A UNIT ON ITS TEAM, NOT ON ITS NAME. A team defence is uniquely identified by
+# its franchise, both sides carry that franchise, and a name is a lossy rendering of it. So for a
+# DST row the key becomes `dst|<abbreviation>`, resolved in this order:
+#
+#     1. the row's own `team` field — the strongest signal, present on both sides and on every
+#        adapter (ESPN "DET", Yahoo "Det", Sleeper "DET"); aliased so a platform's spelling of a
+#        relocated franchise (OAK/LV, SD/LAC, STL/LAR, WSH/WAS, JAC/JAX, LA) lands on ours;
+#     2. failing that, a NICKNAME in the name ("Lions D/ST", "Detroit Lions", "Bills");
+#     3. failing that, an ABBREVIATION token in the name ("DET D/ST" — which is how OUR OWN board
+#        names them, so this branch is what matches the board side when its `team` is absent).
+#
+# A row that resolves to nothing keeps the old name key and is reported unmatched, exactly as before:
+# an absence is reported, never imputed. ⛔ There is deliberately NO fuzzy fallback — matching the
+# WRONG defence would silently credit a user with points they did not draft, which is worse than the
+# honest miss this replaces.
+#
+# ⚠️ THIS MAP MUST MIRROR THE TS PORT AND THE RESEARCH TREE'S FRANCHISE TABLE.
+# `frontend/lib/league-scoring.ts` carries the same two maps (the E2E harness scores through it), and
+# `coaching_source._FRANCHISE_ERAS` is the repo's existing franchise authority. Both are pinned
+# mechanically by `betting_ml/tests/test_nf_c6p3_league_rosters.py` — a nickname added to one and not
+# the others is a failing test, not a platform that quietly stops matching (the E9.61 "two renderers
+# of one field are two rule sets" lesson, on the join side).
+
+#: Franchise nickname → the abbreviation our board publishes. Lowercased single words, because that
+#: is what survives `normalize_player_name` on every rendering a platform uses. Historical nicknames
+#: are included: a league imported from an older season still names them that way, and a nickname is
+#: never reused by a different franchise.
+NFL_TEAM_BY_NICKNAME: dict[str, str] = {
+    "cardinals": "ARI", "falcons": "ATL", "ravens": "BAL", "bills": "BUF",
+    "panthers": "CAR", "bears": "CHI", "bengals": "CIN", "browns": "CLE",
+    "cowboys": "DAL", "broncos": "DEN", "lions": "DET", "packers": "GB",
+    "texans": "HOU", "colts": "IND", "jaguars": "JAX", "jags": "JAX",
+    "chiefs": "KC", "chargers": "LAC", "rams": "LAR", "raiders": "LV",
+    "dolphins": "MIA", "vikings": "MIN", "patriots": "NE", "saints": "NO",
+    "giants": "NYG", "jets": "NYJ", "eagles": "PHI", "steelers": "PIT",
+    "seahawks": "SEA", "ers": "SF", "niners": "SF", "buccaneers": "TB",
+    "bucs": "TB", "titans": "TEN", "commanders": "WAS", "redskins": "WAS",
+    # ⚠️ THE ONLY TWO-WORD ENTRY, and it is why `dst_team` checks adjacent token PAIRS as well as
+    # single tokens. Washington played as the "Football Team" for 2020–21, so a league imported from
+    # those seasons names its defence that way — and the single token "team" cannot be the key,
+    # because a defence rendered "Team 3 D/ST" would then resolve to Washington. Found by the guard
+    # that walks `coaching_source._FRANCHISE_ERAS`, not by inspection.
+    "football team": "WAS",
+}
+# ⚠️ "49ers" folds to "ers" under `normalize_player_name` (digits are outside `[a-z ]`), which is why
+# the key above is "ers" rather than "49ers". It looks like a typo and is not — the map is keyed on
+# what the NORMALIZER produces, because that is the only string the join ever sees.
+
+#: A platform's team abbreviation → the one our board publishes. Only the DIVERGENCES are listed;
+#: anything already matching passes through. Relocations dominate, because a league imported from an
+#: older season carries the franchise's abbreviation at the time.
+NFL_TEAM_ABBREV_ALIASES: dict[str, str] = {
+    "OAK": "LV", "LVR": "LV",
+    "SD": "LAC", "SDG": "LAC",
+    "STL": "LAR", "LA": "LAR", "RAM": "LAR",
+    "WSH": "WAS", "WFT": "WAS",
+    "JAC": "JAX",
+    "GNB": "GB", "KAN": "KC", "NWE": "NE", "NOR": "NO", "SFO": "SF", "TAM": "TB",
+    "ARZ": "ARI", "BLT": "BAL", "CLV": "CLE", "HST": "HOU",
+}
+
+#: The abbreviations the board actually publishes — the set a resolution must land in. Derived from
+#: the two maps' targets so it cannot drift from them.
+NFL_TEAM_ABBREVIATIONS: frozenset[str] = frozenset(NFL_TEAM_BY_NICKNAME.values())
+
+
+def normalize_team(team: str | None) -> str:
+    """A platform's team abbreviation, as OUR board spells it. `""` when it is not resolvable.
+
+    ⚠️ Returns `""` rather than the input for anything unrecognised. A DST key built from an
+    unknown abbreviation would be a key that can only ever match itself, i.e. a silent no-match
+    dressed up as a resolution; the caller falls back to the name instead and reports the miss.
+    """
+    t = str(team or "").strip().upper()
+    if not t:
+        return ""
+    t = NFL_TEAM_ABBREV_ALIASES.get(t, t)
+    return t if t in NFL_TEAM_ABBREVIATIONS else ""
+
+
+def dst_team(name: str, team: str | None) -> str:
+    """The franchise a D/ST row belongs to, or `""` when it cannot be resolved honestly.
+
+    The three-step resolution documented above. Kept separate from `_join_key` so both the guard
+    suite and the TS parity table can exercise it directly on real platform renderings.
+    """
+    resolved = normalize_team(team)
+    if resolved:
+        return resolved
+    # `normalize_player_name` is what both sides of the join are folded through, so resolving off
+    # its output (rather than off the raw string) is what makes "Lions D/ST", "lions d/st" and
+    # "Detroit Lions" the same lookup.
+    tokens = normalize_player_name(name).split()
+    # Adjacent PAIRS before single tokens: the map has one two-word nickname ("football team") whose
+    # second word must never be a key on its own. Pairs first so a name containing both a pair and a
+    # single-token match resolves to the more specific one.
+    for i in range(len(tokens) - 1):
+        hit = NFL_TEAM_BY_NICKNAME.get(f"{tokens[i]} {tokens[i + 1]}")
+        if hit:
+            return hit
+    for token in tokens:
+        hit = NFL_TEAM_BY_NICKNAME.get(token)
+        if hit:
+            return hit
+    # Our own board's rendering ("DET D/ST") — the abbreviation is a token of the RAW name, since
+    # normalization lowercases it. Read off the raw string so "det" and "DET" both resolve.
+    for token in str(name or "").replace("/", " ").split():
+        hit = normalize_team(token)
+        if hit:
+            return hit
+    return ""
+
+
+def _join_key(name: str, pos: str | None, team: str | None) -> str:
+    """The key both sides of the roster/board join are reduced to.
+
+    Everyone but a team defence keys on `name|pos` exactly as before — this is deliberately NOT a
+    rewrite of a join that works for 95% of a roster.
+    """
+    position = normalize_position(pos or "")
+    if position == "DST":
+        resolved = dst_team(name, team)
+        if resolved:
+            return f"DST|{resolved}"
+    return f"{normalize_player_name(name)}|{position}"
+
+
 def match_roster_to_board(roster: list[dict], board_players: list[dict]) -> list[dict]:
     """Join an imported roster onto an already-scored board, by normalized name + position.
 
     First match wins, and because the board arrives VOR-sorted that is the highest-VOR row — the
     same tiebreak the TS version documents.
+
+    ⭐ NF-C6P3 — a D/ST row keys on its FRANCHISE instead (see the block above): the name join
+    structurally never matched a team defence on any platform, which left the starting D/ST slot
+    empty and silently absent from the headline total.
     """
     by_key: dict[str, dict] = {}
     for p in board_players:
-        key = f"{normalize_player_name(str(p.get('name') or ''))}|{normalize_position(p.get('pos'))}"
+        key = _join_key(str(p.get("name") or ""), p.get("pos"), p.get("team"))
         by_key.setdefault(key, p)
 
     out: list[dict] = []
@@ -493,6 +639,6 @@ def match_roster_to_board(roster: list[dict], board_players: list[dict]) -> list
         if not name:
             out.append({"roster": r, "board": None})
             continue
-        key = f"{normalize_player_name(name)}|{normalize_position(r.get('position') or '')}"
+        key = _join_key(name, r.get("position") or "", r.get("team"))
         out.append({"roster": r, "board": by_key.get(key)})
     return out

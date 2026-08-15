@@ -1718,6 +1718,49 @@ const CASES = [
     to: "  if (false) return null",
     grep: "tabbed, not a single scroll",
   },
+  {
+    id: "dst-join-reverted",
+    shipped: "NF-C6P3 — the D/ST starting slot was EMPTY for every imported league",
+    // ⭐ THIS IS THE DEFECT AS IT ACTUALLY SHIPPED, and it is the most instructive case on the board.
+    // Our own board publishes a team defence as "SEA D/ST"; every platform publishes a NICKNAME
+    // ("Seahawks D/ST", "Detroit Lions", "Seattle"). Folded through the name normalizer those are
+    // `sea dst` and `seahawks dst`, so the join matched NO defence on ANY platform — and because a
+    // miss is a legitimate `board: null`, nothing errored: the slot rendered "nobody eligible" and
+    // its points were silently missing from the headline total.
+    //
+    // ⚠️ The case only bites because the fixture's D/ST row is taken from the REAL captured ESPN
+    // league (`platformDstRow`). A roster row built from our own board's naming matches trivially
+    // even with this branch removed, and the whole clause would pass on nothing (NF-C0e).
+    detail: "Removes the team-defence branch, restoring the name-only join.",
+    file: "lib/league-scoring.ts",
+    from: '  if (position === "DST") {',
+    to: "  if (false) {",
+    grep: "D/ST slot is filled",
+  },
+  {
+    id: "free-agent-pool-ignores-the-rosters",
+    shipped: "NF-C6P3 — pre-emptive: the pool stops reading the league's stored rosters",
+    // The section still renders, still calls itself a free-agent pool, and still carries the
+    // sentence saying it is one — it just offers players who are on somebody's roster. Nothing
+    // about the page looks wrong; the list is simply a claim we can no longer support.
+    detail: "Every unowned-by-me player is treated as available again.",
+    file: "lib/roster-report.ts",
+    from: "if (rosteredIds) return !rosteredIds.has(p.id)",
+    to: "if (rosteredIds) return true",
+    grep: "excludes players on another manager",
+  },
+  {
+    id: "partial-league-read-as-complete",
+    shipped: "NF-C6P3 — pre-emptive: partial roster coverage promoted to a free-agent claim",
+    // ⭐ THE DANGEROUS DIRECTION. With 8 of 12 rosters held, this break lists four teams' worth of
+    // ROSTERED players as free agents — a confidently wrong list that reads exactly like a right
+    // one, under copy that has just told the reader we hold every roster.
+    detail: "Treats any held roster as complete coverage of the league.",
+    file: "lib/roster-report.ts",
+    from: "const complete = held.length > 0 && nTeams > 0 && held.length >= nTeams",
+    to: "const complete = held.length > 0",
+    grep: "reports the absence instead of guessing",
+  },
 ]
 
 /**
@@ -1763,7 +1806,12 @@ const CASES = [
  * file. (Nothing reached a commit: staging by explicit path rather than `git add -A` is what kept
  * it out.)
  */
-const RECORDED_BOARD = { total: 114, red: 108, notObservable: 6 }
+// NF-C6P3 adds THREE cases, each RED-proven individually (`-- <id>`) rather than by a full board
+// run, for the same reason NF-C6P2 recorded: 117 cases × a production build each does not belong in
+// a session. So 117/111/6 is 114/108/6 plus three individually-proven REDs, and the next full run is
+// what CONFIRMS it. ⛔ A projection is not a measurement — if that run disagrees, the finding is
+// whatever drifted, never this line.
+const RECORDED_BOARD = { total: 117, red: 111, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

@@ -619,6 +619,67 @@ def upsert_user_portfolio(user_id: str, prefs: dict) -> dict:
 # infrastructure — the existing GetItem/UpdateItem grant already covers it.
 MAX_LEAGUES_PER_USER = 25
 
+# ── NF-C6P3: the item budget that "a league config is a couple of KB" no longer covers ───────────
+#
+# ⚠️ THE PREMISE ABOVE HAS AN EXPIRY DATE AND NF-C6P3 REACHED IT. Storing every team's roster (not
+# just the user's own) takes a league from ~2 KB to ~13 KB — measured on the real captured ESPN
+# league, 10 teams / 172 players — and a 14-team league to ~18 KB. Twenty-five of those is ~450 KB,
+# past the 400 KB item ceiling ON ITS OWN, before the portfolio / platform tokens / scoring ledger /
+# MLB leagues that share the row.
+#
+# ⭐ AND AN OVERFLOW HERE IS NOT A DEGRADED FEATURE — IT IS A DEAD USER ROW. DynamoDB refuses the
+# whole `UpdateItem`, so once the item is at the ceiling EVERY subsequent write for that user fails:
+# no new league, no bet, no preference. A silent product limit is a bad trade for that, so the
+# budget is enforced HERE, at the one place that can see the whole item.
+#
+# ⭐ WHAT GETS DROPPED, AND WHY IT IS THE INCOMING LEAGUE'S ROSTERS. The alternative — evicting
+# rosters from OTHER, already-stored leagues to make room — mutates data the caller did not ask us
+# to touch, on a write they experience as saving one league. First-come-first-served instead: the
+# league being written loses its `league_rosters` and keeps everything else, which degrades that
+# league EXACTLY to the pre-NF-C6P3 product (your own roster, the pool-size waiver definition) and
+# says so through `league_rosters_truncated`. Never a raise: a save must not fail over an
+# enhancement.
+#
+# Sized from the ceiling, not guessed: 400 KB total, of which the fantasy map may claim 260 KB. The
+# remaining ~140 KB is for every other attribute on the row plus DynamoDB's own per-key overhead,
+# which the JSON estimate below does not model and which is why the reserve is generous.
+DYNAMO_ITEM_LIMIT_BYTES = 400 * 1024
+MAX_FANTASY_LEAGUES_BYTES = 260 * 1024
+
+
+def _estimated_bytes(value) -> int:
+    """A conservative stand-in for DynamoDB's item-size accounting.
+
+    ⚠️ NOT EXACT, AND IT DOES NOT NEED TO BE. DynamoDB counts attribute NAMES plus values plus a
+    per-element overhead this cannot see, so the real size is somewhat LARGER than the JSON length.
+    That is the safe direction for a budget check — we under-estimate what we are storing and
+    therefore refuse slightly earlier than strictly necessary — and it is why the reserve above is
+    140 KB rather than a few. An exact serializer would be a second implementation of DynamoDB's
+    accounting rules with no way to test it against the real thing.
+    """
+    try:
+        return len(json.dumps(value, default=str).encode("utf-8"))
+    except Exception:  # noqa: BLE001
+        # An unserializable value is not a reason to fail a save; treat it as large so the budget
+        # errs toward dropping the enhancement rather than toward overflowing the item.
+        return MAX_FANTASY_LEAGUES_BYTES
+
+
+def _fits_fantasy_budget(user_id: str, league_id: str, record: dict) -> bool:
+    """Would storing `record` keep the whole `fantasy_leagues` map inside its budget?
+
+    Reads the caller's OTHER leagues (the same read `put_fantasy_league` already does) and adds this
+    record to them. A read failure answers True: `list_fantasy_leagues` is non-raising and returns
+    `[]` on failure, so a transient read problem would otherwise look like an empty account and
+    permit the write anyway — being explicit about it here is cheaper than a subtle one.
+    """
+    others = sum(
+        _estimated_bytes(league)
+        for league in list_fantasy_leagues(user_id)
+        if str(league.get("league_id") or "") != league_id
+    )
+    return others + _estimated_bytes(record) <= MAX_FANTASY_LEAGUES_BYTES
+
 
 def list_fantasy_leagues(user_id: str) -> list[dict]:
     """Every league the user has saved, newest-updated first.
@@ -698,6 +759,17 @@ def put_fantasy_league(
     record.pop("league_id", None)
     record["created_at"] = (existing or {}).get("created_at") or now
     record["updated_at"] = now
+
+    # NF-C6P3 — the shared-item budget (see MAX_FANTASY_LEAGUES_BYTES). Only the all-team rosters
+    # are ever dropped, and only from the league being written; everything else is stored verbatim.
+    if record.get("league_rosters") and not _fits_fantasy_budget(user_id, league_id, record):
+        record["league_rosters"] = None
+        record["league_rosters_truncated"] = True
+        logger.warning(
+            "[METRIC] fantasy_league_rosters_dropped_for_size=1 user=%s league=%s — the user item "
+            "is near its 400 KB ceiling; this league keeps its own roster only",
+            user_id, league_id,
+        )
 
     table = _users_table()
     try:

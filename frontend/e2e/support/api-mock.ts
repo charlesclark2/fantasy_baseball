@@ -191,7 +191,7 @@ export type MockOptions = {
    *                `roster-report.ts` left the suite GREEN. ⛔ Do not fold this into `one`; the two
    *                states differ in exactly one field and that field is the whole distinction.
    */
-  leagues?: "none" | "one" | "overQuota" | "linked" | "drafted" | "predraft"
+  leagues?: "none" | "one" | "overQuota" | "linked" | "drafted" | "predraft" | "partialRosters"
   /**
    * ⭐ G100-D0 — what `/subscription/status` reports for this caller.
    *
@@ -567,6 +567,38 @@ function boardPlayersAt(pos: string, count: number): any[] {
   return hits
 }
 
+/**
+ * ⭐ NF-C6P3 — THE D/ST ROW, TAKEN FROM THE REAL PLATFORM CAPTURE RATHER THAN FROM OUR OWN BOARD.
+ *
+ * Every other roster row here is read out of the projections fixture through `boardPlayersAt`, which
+ * is right for a person: the platform and the board spell "Josh Jacobs" the same way. It is exactly
+ * WRONG for a team defence, and that is how the shipped D/ST bug survived a green suite. Our board
+ * publishes "SEA D/ST"; ESPN publishes "Seahawks D/ST", Sleeper "Seattle Seahawks", Yahoo "Seattle".
+ * A fixture built from our own naming matches trivially under the broken join — a fixture derived
+ * from the transform's own output cannot test the transform (NF-C0e).
+ *
+ * So this reaches into the REAL captured ESPN league and takes a real D/ST row, nickname and all.
+ * ⚠️ It must be a franchise that exists on the projections fixture's board, or the row would be an
+ * honest miss for a reason unrelated to the join — checked, not assumed.
+ */
+function platformDstRow(): any {
+  const preview = FIXTURES.importEspnPreview("642070", "2025") as any
+  const boardTeams = new Set(
+    (FIXTURES.projectionsEntitled().players as any[])
+      .filter((p) => p.pos === "DST")
+      .map((p) => p.team),
+  )
+  for (const team of preview.teams ?? []) {
+    for (const p of team.players ?? []) {
+      if (p.position === "DST" && boardTeams.has(p.team)) return p
+    }
+  }
+  throw new Error(
+    "e2e: the captured ESPN league has no D/ST whose franchise is on the projections board — " +
+      "the roster-report fixtures can no longer exercise the NF-C6P3 team-defence join",
+  )
+}
+
 /** The COMPLETE post-draft roster — see `E2E_DRAFTED_LEAGUE` for what each group is for. */
 function draftedRoster(): unknown[] {
   const entry = (p: any, starter: boolean) => ({
@@ -581,14 +613,17 @@ function draftedRoster(): unknown[] {
   const wrs = boardPlayersAt("WR", 3)
   const tes = boardPlayersAt("TE", 2)
   const ks = boardPlayersAt("K", 1)
-  const dsts = boardPlayersAt("DST", 1)
+  const dst = platformDstRow()
   return [
     ...qbs.map((p, i) => entry(p, i === 0)),
     ...rbs.map((p, i) => entry(p, i < 2)),
     ...wrs.map((p, i) => entry(p, i < 2)),
     ...tes.map((p) => entry(p, true)),
     ...ks.map((p) => entry(p, true)),
-    ...dsts.map((p) => entry(p, true)),
+    // ⭐ The platform's own rendering ("Seahawks D/ST"), NOT our board's ("SEA D/ST") — see
+    // `platformDstRow`. Under the pre-NF-C6P3 name join this row matches NOTHING and the D/ST slot
+    // renders empty while the headline total silently drops it.
+    { player_key: dst.player_key, name: dst.name, position: dst.position, team: dst.team, starter: true },
     // ⚠️ `starter` on the ROSTER row is the PLATFORM's own label and is deliberately NOT what the
     // report's lineup is built from — the report re-fills the slots itself from the league's roster
     // shape. Carrying the platform flag through unchanged keeps that distinction observable.
@@ -603,6 +638,109 @@ function draftedRoster(): unknown[] {
 }
 
 /** The captured league with a complete drafted roster attached. */
+/**
+ * ⭐ NF-C6P3 — EVERY team's roster, which is what makes a TRUE free-agent pool possible.
+ *
+ * The user's own team is entry 0 and carries `draftedRoster()` verbatim, so the roster the report
+ * asserts on and the roster in the league table are the SAME rows — a league table built from a
+ * separately-derived copy of the user's roster could disagree with the headline and neither number
+ * would look wrong.
+ *
+ * The other nine are read out of the served projections fixture in disjoint slices, so:
+ *   · every one of their players MATCHES the board, which is what lets a spec assert arithmetically
+ *     that a rostered player is excluded from the free-agent list (a roster of unmatchable names
+ *     would make that assertion pass on nothing);
+ *   · the slices do not overlap, so "rostered by somebody" is unambiguous.
+ *
+ * ⚠️ TEN teams, because `league.n_teams` is 10 on the captured league and the report only treats the
+ * pool as an OBSERVATION when it holds EVERY roster. Nine would exercise the partial-coverage path
+ * instead — which is a real state and is asserted separately by `partialRosterLeague`.
+ */
+export const E2E_OTHER_TEAM_COUNT = 9
+
+/**
+ * ⚠️⚠️ THE RIVALS MUST HOLD THE TOP OF THE BOARD, AND THE FIRST CUT OF THIS FILE DID NOT.
+ *
+ * It dealt them a mid-board slice, which is realistic-looking and made the free-agent assertion
+ * VACUOUS: the waiver section only ever shows three players, each the BEST available by some
+ * criterion, so those picks came from the untouched top of the board whether the rostered filter
+ * ran or not. The red proof caught it — `free-agent-pool-ignores-the-rosters` broke the filter
+ * outright and the spec stayed green.
+ *
+ * So the rivals draft the way a real league drafts: the best remaining player at each position,
+ * dealt round-robin, immediately behind the user's own picks. Now the top of every position is
+ * owned by somebody, the archetypes' first choice is a rostered player, and a filter that stops
+ * excluding them changes what renders.
+ *
+ * ⭐ THE GENERAL SHAPE, worth carrying: a fixture that makes the CORRECT and BROKEN implementations
+ * produce the same output is not a weak test, it is not a test. Build the fixture so the thing under
+ * test is the only thing that can decide the answer.
+ */
+function otherTeamRosters(): any[] {
+  const players = FIXTURES.projectionsEntitled().players as any[]
+  const mine = new Set((draftedRoster() as any[]).map((p) => p.name))
+  // Ordered by the payload's own PPR points — the fixture's number, not a hand-authored ranking —
+  // so "the best remaining" is read from the data rather than asserted by this file.
+  const bestAt = (pos: string, n: number) =>
+    players
+      .filter((p) => p.pos === pos && !!p.name && !mine.has(p.name))
+      .sort((a, b) => (b.fpPpr ?? 0) - (a.fpPpr ?? 0))
+      .slice(0, n)
+
+  // One full starting lineup per rival, at this league's own roster shape (1 QB / 2 RB / 2 WR /
+  // 2 TE / 1 SUPERFLEX / 1 K / 1 DST), plus a little bench — i.e. the league really is drafted.
+  const byPos = [
+    ...bestAt("QB", E2E_OTHER_TEAM_COUNT * 2),
+    ...bestAt("RB", E2E_OTHER_TEAM_COUNT * 4),
+    ...bestAt("WR", E2E_OTHER_TEAM_COUNT * 4),
+    ...bestAt("TE", E2E_OTHER_TEAM_COUNT * 2),
+    ...bestAt("K", E2E_OTHER_TEAM_COUNT),
+  ]
+  const teams = Array.from({ length: E2E_OTHER_TEAM_COUNT }, (_, i) => ({
+    team_key: `e2e-team-${i + 2}`,
+    team_name: `Rival ${i + 1}`,
+    players: [] as { name: string; position: string; team: string }[],
+  }))
+  // Round-robin, so no single rival hoards a position and every team is a plausible roster.
+  byPos.forEach((p, i) => {
+    teams[i % E2E_OTHER_TEAM_COUNT].players.push({ name: p.name, position: p.pos, team: p.team })
+  })
+  return teams
+}
+
+/** Every player on a rival's roster, by name — the set a free agent must NOT be drawn from.
+ *  Exported so there is ONE spelling of the subject (the `linkedRosterSubject` rule). */
+export function rivalRosteredPlayerNames(): Set<string> {
+  const names = new Set(otherTeamRosters().flatMap((t) => t.players.map((p: any) => String(p.name))))
+  if (names.size < 50) {
+    throw new Error(`e2e: only ${names.size} rival-rostered players — the free-agent clause is thin`)
+  }
+  return names
+}
+
+function leagueRosters(): any[] {
+  return [
+    {
+      team_key: "e2e-team-1",
+      team_name: "Credence FC",
+      players: (draftedRoster() as any[]).map((p) => ({
+        name: p.name,
+        position: p.position,
+        team: p.team,
+      })),
+    },
+    ...otherTeamRosters(),
+  ]
+}
+
+/** The drafted league holding only SOME of its rosters — one team short of the league's own
+ *  `n_teams`, which is the smallest possible difference and therefore the strongest test: a surface
+ *  that treats "we hold nearly all of them" as "we hold them all" passes anything looser. */
+function partialRosterLeague(): any {
+  const full = draftedLeague()
+  return { ...full, league_rosters: full.league_rosters.slice(0, -1), league_rosters_truncated: true }
+}
+
 function draftedLeague(): any {
   return {
     ...FIXTURES.myTeams().leagues[0],
@@ -612,6 +750,9 @@ function draftedLeague(): any {
     source_team_name: "Credence FC",
     imported_roster: draftedRoster(),
     roster_synced_at: "2026-08-12T12:00:00Z",
+    league_rosters: leagueRosters(),
+    league_rosters_synced_at: "2026-08-12T12:00:00Z",
+    league_rosters_truncated: false,
   }
 }
 
@@ -843,6 +984,11 @@ function leaguesFor(leagues: NonNullable<MockOptions["leagues"]>): any[] {
   if (leagues === "linked") return linkedLeaguePair()
   if (leagues === "drafted") return [draftedLeague()]
   if (leagues === "predraft") return [predraftLeague()]
+  // NF-C6P3 — the PARTIAL-coverage state: some of the league's rosters held, not all. It is a real
+  // state (a league imported before this shipped and re-imported since, a platform that previewed
+  // fewer teams than the league has, the writer's item-size budget) and the report must report the
+  // absence rather than compute a free-agent pool from an incomplete league.
+  if (leagues === "partialRosters") return [partialRosterLeague()]
   // `one` and `overQuota` both serve exactly the captured league.
   return [FIXTURES.myTeams().leagues[0]]
 }
@@ -885,6 +1031,16 @@ function personalPayloadFor(
         coverage: built.coverage,
       },
       roster: matchRosterToBoard(league.imported_roster ?? [], built.players),
+      // NF-C6P3 — mirrors `routers/fantasy._joined_league_rosters`: EVERY stored team's roster,
+      // joined to the SAME board by the SAME function. Computed here rather than hardcoded for the
+      // usual reason — a canned array would make "the free-agent pool excludes rostered players"
+      // pass without the join ever running.
+      league_rosters: (league.league_rosters ?? []).map((t: any) => ({
+        team_key: t.team_key,
+        team_name: t.team_name,
+        is_mine: !!league.source_team_key && t.team_key === league.source_team_key,
+        rows: matchRosterToBoard(t.players ?? [], built.players),
+      })),
     }
   }
   if (pathname !== "/fantasy/nfl/my-teams" && pathname !== "/fantasy/leagues") return undefined
@@ -920,7 +1076,7 @@ function personalPayloadFor(
   // ⭐ NF-C6P2 — one league, fully drafted (or linked-but-undrafted). `saved_total` matches and
   // nothing is withheld, so no quota story leaks into the roster-report assertions (same reasoning
   // as `linked` below).
-  if (leagues === "drafted" || leagues === "predraft") {
+  if (leagues === "drafted" || leagues === "predraft" || leagues === "partialRosters") {
     const only = leaguesFor(leagues)
     return pathname === "/fantasy/leagues"
       ? only

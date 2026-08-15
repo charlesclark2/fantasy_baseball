@@ -55,7 +55,7 @@
 // a weekly artifact lands, `perGameRate` is the one function that changes.
 
 import type { Player } from "@/lib/draft-optimizer"
-import type { LeagueBoardPayload, RosterMatchRow } from "@/lib/fantasy"
+import type { LeagueBoardPayload, LeagueTeamRoster, RosterMatchRow } from "@/lib/fantasy"
 import type { RosterSlotConfig } from "@/lib/league-config"
 import { draftablePoolSize } from "@/lib/league-delta"
 
@@ -563,11 +563,21 @@ export interface WaiverIdea {
 /**
  * Likely-available players worth a look, in three archetypes.
  *
- * ⛔⛔ WE CANNOT SEE THE OTHER ROSTERS, so "available" is a DEFINITION, not an observation: a player
- * outside the pool a league this size drafts (`draftablePoolSize` = teams × drafted slots, the same
- * arithmetic `league-delta` already shows on screen). The surface states that definition next to
- * the list. Presenting these as "on waivers" would be a claim about information the product does not
- * have — the platform-import red line means we never hold the league's live rosters.
+ * ⭐ NF-C6P3 — "AVAILABLE" IS NOW AN OBSERVATION WHEN WE HOLD THE LEAGUE'S ROSTERS, and only a
+ * DEFINITION when we do not. Those are genuinely different claims and the surface says which one it
+ * is making:
+ *
+ *   • `rosteredIds` non-null ⇒ a TRUE FREE-AGENT POOL: every player on nobody's roster in this
+ *     league, as of the snapshot taken when the league was imported. This is what the report always
+ *     wanted to say; before NF-C6P3 we fetched all twelve rosters at import and stored one, so the
+ *     old caveat described a limit we had imposed on ourselves.
+ *   • `rosteredIds` null (a hand-entered league, or one imported before this shipped) ⇒ the old
+ *     definition: outside the pool a league this size drafts (`draftablePoolSize` = teams × drafted
+ *     slots, the arithmetic `league-delta` already shows on screen).
+ *
+ * ⚠️ THE SNAPSHOT CAVEAT SURVIVES EITHER WAY and belongs on the surface: we do not re-read the
+ * league, so a claim made after the import is invisible to us. "Free agent at import time" is an
+ * honest thing to say; "on waivers right now" is not, and never becomes one without a live read.
  */
 export function waiverIdeas(
   board: Player[],
@@ -575,14 +585,18 @@ export function waiverIdeas(
   poolSize: number | null,
   thinnestPos: string | null,
   worstByeWeek: { week: number; pos: string } | null,
+  rosteredIds: Set<string> | null = null,
 ): WaiverIdea[] {
   const owned = new Set(mine.map((p) => p.board.id))
-  const available = board.filter(
-    (p) =>
-      !owned.has(p.id) &&
-      p.pts != null &&
-      (poolSize == null || (Number.isFinite(p.ovrRank) && p.ovrRank > poolSize)),
-  )
+  const available = board.filter((p) => {
+    if (owned.has(p.id) || p.pts == null) return false
+    // ⛔ NOT `rosteredIds ?? poolSize`: when the rosters ARE held, the pool-size rank filter must
+    // NOT also apply. A genuinely undrafted star inside the drafted-pool rank (someone's league
+    // left him on the board) is exactly the player this section exists to surface, and keeping
+    // both filters would hide him behind the very definition the rosters replace.
+    if (rosteredIds) return !rosteredIds.has(p.id)
+    return poolSize == null || (Number.isFinite(p.ovrRank) && p.ovrRank > poolSize)
+  })
   const bestAt = (pos: string): Player | null =>
     available
       .filter((p) => p.pos === pos)
@@ -674,6 +688,71 @@ export interface RosterReport {
   /** teams × drafted slots, or null when the roster shape does not say. Rendered, so the waiver
    *  pool's definition is visible arithmetic rather than a hidden constant. */
   poolSize: number | null
+  /** NF-C6P3 — what we hold of the OTHER managers' rosters. Always present, so the surface can
+   *  state which of the two free-agent definitions it is using rather than implying the stronger
+   *  one by default. */
+  leagueRosters: LeagueRosterCoverage
+}
+
+/** How much of the league's own roster picture we actually hold.
+ *
+ * ⚠️ AN ABSENCE IS COUNTED AND NAMED, NEVER IMPUTED (rule 3 of this module's header). `teamsHeld`
+ * below `teamsInLeague` is a real, reportable state — a league imported before NF-C6P3 shipped, a
+ * hand-entered one, a platform that previewed fewer teams than the league has, or the storage
+ * budget dropping them — and every one of those must read as "we hold 8 of 12", never as a silent
+ * free-agent pool computed from a partial league. */
+export interface LeagueRosterCoverage {
+  /** Teams whose rosters we hold. 0 ⇒ the pool falls back to the drafted-pool definition. */
+  teamsHeld: number
+  /** `league.n_teams` — what a complete picture would be. */
+  teamsInLeague: number
+  /** True only when we hold EVERY team's roster. The free-agent pool is an OBSERVATION only here;
+   *  otherwise a player absent from what we hold might simply be on a roster we do not have. */
+  complete: boolean
+  /** When the rosters were captured. Never re-read after import, so the age is always shown. */
+  syncedAt: string | null
+  /** The board ids on ANY held roster, or null when we hold none. The waiver pool's input. */
+  rosteredIds: Set<string> | null
+  /** Roster rows across all held teams that did not match the board — the same honest-miss count
+   *  the caller's own roster reports, so a thin free-agent pool is explicable rather than mystifying. */
+  unmatched: number
+}
+
+/**
+ * Fold the served, already-joined league rosters into a coverage summary.
+ *
+ * ⛔ IT SCORES AND JOINS NOTHING. The server did the join with the SAME `match_roster_to_board` the
+ * caller's own roster goes through (`_joined_league_rosters`); this counts what came back.
+ *
+ * ⭐ WHY `complete` GATES THE POOL RATHER THAN "we hold at least one". A free-agent pool computed
+ * from 8 of 12 rosters would list four teams' worth of rostered players as free agents — a
+ * confidently wrong list that reads exactly like a right one. Partial coverage is therefore
+ * reported and NOT used; the drafted-pool definition, which never claimed to be an observation,
+ * remains the honest fallback.
+ */
+export function leagueRosterCoverage(
+  teams: LeagueTeamRoster[] | null | undefined,
+  nTeams: number,
+  syncedAt: string | null,
+): LeagueRosterCoverage {
+  const held = teams ?? []
+  const ids = new Set<string>()
+  let unmatched = 0
+  for (const t of held) {
+    for (const row of t.rows ?? []) {
+      if (row.board?.id) ids.add(row.board.id)
+      else unmatched++
+    }
+  }
+  const complete = held.length > 0 && nTeams > 0 && held.length >= nTeams
+  return {
+    teamsHeld: held.length,
+    teamsInLeague: nTeams,
+    complete,
+    syncedAt,
+    rosteredIds: complete ? ids : null,
+    unmatched,
+  }
 }
 
 export type RosterReportResult = RosterReport | { ready: false; reason: NotReadyReason }
@@ -741,6 +820,14 @@ export function buildRosterReport(payload: LeagueBoardPayload | null | undefined
 
   const started = payload.board?.started ?? {}
   const nTeams = Number(league.n_teams ?? 0)
+  // NF-C6P3 — read with `?? null`: a league imported before this shipped carries no `league_rosters`
+  // key at all, and the additive-response rule (NF-C0) means the client must fall through to a
+  // visible, honest state rather than to `undefined` propagating into the arithmetic.
+  const coverageOfLeague = leagueRosterCoverage(
+    payload.league_rosters ?? null,
+    nTeams,
+    league.league_rosters_synced_at ?? null,
+  )
   const positions = positionStrengths(players, lineup, board, started, nTeams)
   const bench = benchQuality(lineup.bench, board, started)
   const byes = byeWeeks(players, rosterShape)
@@ -789,7 +876,9 @@ export function buildRosterReport(payload: LeagueBoardPayload | null | undefined
       draftablePoolSize(league),
       thinnestPos,
       worstByeWeek && worstByeWeek.pos ? worstByeWeek : null,
+      coverageOfLeague.rosteredIds,
     ),
+    leagueRosters: coverageOfLeague,
     trades: tradeIdeas(positions, bench),
     firstWeek: fillLineup(
       players.filter((p) => p.bye !== FIRST_WEEK),
