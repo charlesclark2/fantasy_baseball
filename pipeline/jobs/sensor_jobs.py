@@ -19,7 +19,9 @@ from pipeline.ops.daily_ingestion_ops import (
     finalize_prior_slate_game_detail_op,
     generate_pick_narratives_op,
     predict_today_morning,
+    reexport_matchup_cell_posteriors_op,
     reexport_player_seq_posteriors_op,
+    reexport_team_seq_posteriors_op,
     update_archetype_posteriors_op,
     update_matchup_cell_posteriors_op,
     update_player_posteriors_op,
@@ -129,7 +131,15 @@ def statcast_catchup_job():
     # betting_ml/tests/test_e11_24_player_seq_reexport_ordering.py.
     reexport_player_seq_posteriors_op(start=pp)
     pt = update_team_posteriors_op(start=pp)
+    # 🩸 INC-25 ORDERING FIX (E11.24 Bundle, 2026-08-14) — THE SECOND CALLER, exactly as for the
+    # player-seq leaf above. This job runs the same team/matchup-cell writers as
+    # daily_ingestion_job, so wiring the re-mirrors only there would let a late-Statcast catch-up
+    # advance Snowflake while both S3 parquets froze until the next morning (INC-38: the fix must
+    # be on EVERY caller). Fan-out leaves — never threaded into the pp → pt → pm chain, so a
+    # mirror failure cannot block the catch-up re-score.
+    reexport_team_seq_posteriors_op(start=pt)
     pm = update_matchup_cell_posteriors_op(start=pt)
+    reexport_matchup_cell_posteriors_op(start=pm)
     # INC-2 (2026-06-22): refresh the archetype posteriors daily here too (previously
     # unwired → stale since 2026-05-31), after the sequential posteriors and before
     # dbt_umpire_feature_rebuild folds mart_player_archetype_posteriors into the

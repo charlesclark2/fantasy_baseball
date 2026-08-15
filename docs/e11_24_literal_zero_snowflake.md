@@ -3372,3 +3372,166 @@ no INC-36 concurrency — the prior CD had been `completed` since 05:56 UTC, and
 healthy on both post-deploy serving checks). Recorded as a fact, not a precedent: the content shipped
 was uniquely low-risk (docs, a laptop instrument, guards, and a dbt target that production does not
 use — zero serving or pipeline code), which is not true of the #682/#693 promotions still to come.
+
+---
+
+# 🔬 CI_WH RE-VERIFIED — the repoint is REAL but was never PROVEN (2026-08-14, branch `e11.24-aug-14-ci`)
+
+**Read-only. No flip, no deploy, no serving change.** Every query ran on `MONITOR_WH` via
+`get_monitoring_connection()`; `COMPUTE_WH` was never touched. `best_alpha=0`, cost-only.
+
+This session was handed the story "move the GitHub dbt-Build off COMPUTE_WH". **Phases 0 and 1
+were already done and merged to `main`** (`3b2b11a7` → `73f92cdd` → `a6a52749`, 2026-08-10). The
+pre-flight found the real gap in **Phase 2**.
+
+## Phase 0 — the attribution is CONFIRMED (re-measured independently)
+
+The operator's pushback ("dbt moved to the box, GitHub shouldn't run overnight") is answered: the
+overnight `COMPUTE_WH` mass was the **GitHub dbt-Build CI**, not the box `dbt-runner`. Every
+`ci_betting` burst matches a `dbt_build_ci.yml` run, and the mass ends when CI stops:
+
+| UTC day | warehouse | execs | billable | waits | window (UTC) |
+|---|---|---|---|---|---|
+| 08-03 | COMPUTE_WH | 10 | 6 | 1 | 16:34 |
+| 08-06 | COMPUTE_WH | 60 | 49 | 14 | 05:49 |
+| 08-07 | COMPUTE_WH | 184 | 155 | 21 | 03:52 → 04:41 |
+| 08-10 | COMPUTE_WH | 71 | 65 | **39** | 05:53 |
+| **08-10** | **CI_WH** | **12** | **0** | **0** | 23:30 → 23:42 |
+
+Magnitude confirmed as **dev-activity-dependent** — zero on most days. ⛔ Do not annualise it.
+
+## 🚨 THE FINDING — `CI_WH` has never carried a billable statement, so the repoint is unproven
+
+The 08-10 record reads **"CI_WH IS LIVE AND PROVEN — traffic moved"**, on 8 statements under
+`CI_WH` and 0 under `COMPUTE_WH`. Re-measured over **all of `CI_WH`'s history**:
+
+| kind | execs | waits | bytes scanned | first → last (UTC) |
+|---|---|---|---|---|
+| `metadata_only` | **12** | 0 | **0** | 2026-08-10 23:30 → 23:42 |
+| `BILLABLE` | **0** | — | — | — |
+
+Query types: **8 `DROP`, 3 `SELECT`, 1 `GRANT`** — i.e. the `drop_ci_schemas` teardowns and
+nothing else. `SHOW WAREHOUSES` corroborates: `CI_WH` is `SUSPENDED` with `resumed_on ==
+created_on`, so it has **never been resumed for work**.
+
+**Why:** that promotion PR changed `dbt/profiles.yml` and the workflow — neither is a model — so
+`dbtf build --select state:modified+` selected **nothing**. There was no build.
+
+⇒ **A CI run that builds nothing puts zero statements on `COMPUTE_WH` whether or not the repoint
+works.** Healthy and broken are the same observation. ⭐ And the 08-10 doc states the standard that
+rules its own proof out, two paragraphs above it: *"a green CI run that selects zero models proves
+the env var is read, never that the warehouse is usable or that traffic moved."* The run it then
+cited met exactly that description. **Writing the caveat is not the same as applying it** — this is
+the repo's vacuous-guard class (NF1.7 (a) / INC-38 / INC-39) landing on a *verification* rather
+than a test.
+
+**What IS established** (not nothing): the profile resolves to `CI_WH`, dbt genuinely reads the env
+var (the 08-10 four-case rendering table), and the connection is attributed to `CI_WH`. **What is
+NOT:** that `CI_WH` can carry a real build, and that a real build stays off `COMPUTE_WH`.
+
+## The coverage gap is MEASURED and benign — `dbt-compile` is metadata-only
+
+`dbt-compile` runs on `push`/`pull_request` with **no `--target`**, i.e. on the production profile,
+and was deliberately left uncovered. Measured on the 08-11 00:31 UTC push→main run:
+
+| user | warehouse | kind | execs | waits |
+|---|---|---|---|---|
+| `DBT_RW` | `COMPUTE_WH` | metadata_only | **9** | **0** |
+
+Zero billable, zero waits — `dbtf compile` never occupies the warehouse. (Two *billable*
+`COMPUTE_WH` statements in that window are `check_prediction_coverage`/coverage reads from the box
+pipeline, not CI.) ⇒ the uncovered job is **not** a waker; no further work is needed there. Recorded
+as a measurement so a later session does not re-open it on suspicion.
+
+## Post-flip residual: the overnight band is NOT pipeline-clean
+
+`COMPUTE_WH`, 00-07 UTC, billable, `DBT_RW`, since 08-11 — **zero CI**, all pipeline:
+
+| UTC day | owner | execs | waits |
+|---|---|---|---|
+| 08-12 | predictions write / narratives | 1 | 1 |
+| 08-13 | **`starter_ip` signal writer (hourly)** | 15 | **4** |
+| 08-13 | scd2 `lineup_state` writer | 3 | 1 |
+| 08-13 | `check_odds_coverage` | 1 | 1 |
+| 08-13 | `backfill_prediction_log` | 8 | 1 |
+
+⚠️ This **corrects** the 08-08 statement that "nothing in the nightly pipeline wakes `COMPUTE_WH`
+between 00:00 and 07:00 UTC." As of 08-13 the overnight band carries **8 pipeline waits on a single
+day**, dominated by an hourly `starter_ip_signals` MERGE firing at 00:15/01:15/02:15/03:15/04:15.
+That is targets 3 and 5 on the ranked board, and it is now the overnight blocker for target 7.
+
+⛔ **The post-flip "zero CI overnight waits" is NOT evidence the repoint works** — there have been
+**no `dbt_build_ci.yml` runs since 08-11 00:31** (no `dbt/**` change has merged), so the window
+cannot distinguish "the repoint holds" from "CI never ran." Same non-discriminating shape as the
+proof it was meant to confirm.
+
+## ⏱️ INSTRUMENT CAVEAT — `hour(start_time)` is session-local, on 100% of rows
+
+`query_history.start_time` is `TIMESTAMP_LTZ`. Measured this session:
+`hour(start_time) = hour(convert_timezone('UTC', start_time))` on **0 of 10,331** statements
+(session is UTC−7); the *day* label agrees on 96.9%, so day-level readings mostly survive and
+hour-level ones do not. `report_e11_24_other_attribution.py` derives `hr` from `hour(start_time)`
+and `utc_day` from `start_time::timestamp_ntz`; `report_e11_24_wake_census.py` classifies its
+bands with `hour(start_time)` (though its Table 6 day label *does* convert). **Those labels are
+therefore environment-dependent, not wrong-by-construction** — the recorded 08-06/08-07 figures
+reconcile exactly with the UTC-explicit numbers above, so nothing published needs revising. But a
+session on a differently-configured connection gets differently-labelled bands.
+
+🪤 **And converting is not enough** — `convert_timezone('UTC', start_time) BETWEEN '<literal>'`
+coerces the **literal** back to session-local `TIMESTAMP_LTZ`, silently re-introducing the same
+shift. That cost this session a query that read **07:20–08:30 UTC while claiming 00:20–01:30**.
+⇒ cast the converted value to `TIMESTAMP_NTZ` so **both sides** are tz-naive UTC:
+`convert_timezone('UTC', start_time)::timestamp_ntz between '…' and '…'`. (5th distinct LTZ/NTZ
+bug in this repo.) ⏭️ Carded, not fixed here: changing the census instrument mid-E11.24 would break
+comparability with recorded readings, and no reading is currently wrong.
+
+## ✅ What shipped — the missing proof is now executable on demand
+
+1. **`workflow_dispatch` on `dbt_build_ci.yml`**, with a `select` input defaulting to **`ref_teams`**
+   (a 32-row seed → a real `INSERT`, so it *occupies* the warehouse; a view-only selection would be
+   metadata-only and reproduce the non-proof). The story's own Phase 2 names `workflow_dispatch` as
+   the trigger; the workflow simply had none.
+2. **`dbt-compile` is excluded from dispatch** (`if: github.event_name != 'workflow_dispatch'`). It
+   runs on the production profile, so excluding it makes the window **discriminating**: in a
+   dispatch window, *any* `DBT_RW` statement on `COMPUTE_WH` means the repoint did not hold.
+3. **`scripts/verify_ci_warehouse_repoint.py`** — the two-sided assertion, on `MONITOR_WH`:
+   (1) `CI_WH` carried ≥1 **BILLABLE** statement, and (2) **no CI (`ci_betting`) statement** ran on
+   `COMPUTE_WH`. ⚠️ **Clause (2) is scoped to the schema deliberately, and the first cut of this
+   script got it wrong.** The obvious form — "`DBT_RW` ran nothing on `COMPUTE_WH`" — is unusable:
+   measured 2026-08-14, the box pipeline puts `DBT_RW` on `COMPUTE_WH` in **19 of 24 hours**
+   (2,007 statements in a 5-hour sample), so that clause reports NOT PROVEN on a *working* repoint
+   in almost any window — a check that fails regardless is exactly as useless as one that passes
+   regardless, and it would have been read as "the repoint broke." `ci_betting` is what the CI
+   target builds into, it is what the pre-repoint CI bursts carried, and the box **never** writes it
+   (0 `ci_betting` execs on `COMPUTE_WH` across all 19 hours) ⇒ discriminating AND confound-free.
+   Two-sided control: on a heavy box-traffic window clause (2) correctly stays green, and pointed at
+   the 08-10 05:53 UTC pre-repoint burst it correctly fires on 71 `ci_betting` statements while
+   ignoring 8,904 box ones.
+   An empty window exits **2 = UNVERIFIED**, never a pass (NF1.7 (a)). Positive control: pointed at
+   the 08-10 window it correctly reports **NOT PROVEN — all metadata-only**, i.e. the instrument
+   detects the exact known-bad state that was recorded as a pass.
+4. **Three guards**, each RED-proven on its own break and verified independent:
+   - no `dbtf` call reachable from dispatch may run off `--target ci`. ⭐ It requires
+     **exactly one** `--target`, because the obvious `"--target ci" in call` form is satisfied by
+     `--target ci --target dev` (dbt takes the last) — the first RED-proof of this guard flipped
+     **nothing**, which is how that hole was found;
+   - `dbt-compile` cannot run on dispatch (its isolating fixture also grants compile `--target ci`,
+     so *only* the gate clause can flip — NF-D17);
+   - no `${{ inputs.* }}` is interpolated into a `run:` body (shell-injection sink).
+
+## Honest framing — unchanged, and worth repeating
+
+This **relocates** compute, it does not delete it; credits move roughly sideways. Its value is that
+`COMPUTE_WH`'s quiet windows become genuinely quiet (the precondition for target 7) and that CI
+stops contaminating soak baselines on promotion days. ⛔ Do not book a credit saving.
+
+## NOT VERIFIED — do not inherit these as settled
+
+- **`CI_WH` has still never run a real build.** Everything above measures history; the proof
+  requires the operator to dispatch the workflow and run the verifier. Until then the repoint is
+  *implemented and plausible*, not *proven*.
+- **No box run, no deploy.** CI config only; the 🟥 runtime gate does not apply (this is not
+  pipeline/serving code), but note the change **only takes effect once the workflow file reaches
+  `main`** — `workflow_dispatch` is read from the default branch.
+- **The census instruments' hour-band labels are session-dependent** (above). Recorded figures
+  reconcile; portability does not.

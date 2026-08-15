@@ -1860,11 +1860,137 @@ def update_team_posteriors_op(context):
 
 
 @op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def reexport_team_seq_posteriors_op(context):
+    """INC-25 ORDERING FIX — re-mirror team_sequential_posteriors to S3 AFTER its writer.
+
+    THE DEFECT, and why #693 did not sweep it up. ``lakehouse_w8b_aggregator_op`` mirrors this
+    table at graph position lk10, near the TOP of the daily job, while
+    ``update_team_posteriors_op`` writes Snowflake ~40 minutes later. Nothing re-exported it
+    afterwards. This is the identical shape #693 fixed for the sibling
+    ``player_sequential_posteriors``, on a table that story did not touch — E11.24 PR #772
+    refused to flip this entry's freshness source for exactly this reason.
+
+    MEASURED 2026-08-14 (laptop; the Snowflake side on MONITOR_WH so the COMPUTE_WH soak was
+    untouched):
+
+        source   max(update_ts)        rows      trail
+        SF       13:03:04              83,636    —
+        S3       10:16:26              83,619    2.78 h and 17 rows behind
+
+    ⛔ AND THE ORDER CANNOT SIMPLY BE SWAPPED — that is a GENUINE CYCLE, already documented at
+    ``sensor_ops.lineup_intraday_s3_feature_rebuild`` (E9.53): ``update_team_posteriors_op``
+    reads the Snowflake ``eb_bullpen_posteriors`` copy, which needs ``refresh_w1_external_tables``,
+    which runs AFTER lk10. So the writer must stay downstream of the mirror, and the cure is an
+    additive re-export leaf rather than a reordering.
+
+    ⭐ WHAT THIS DOES AND DOES NOT FIX — say it precisely, because the trail is NOT purely a
+    monitoring artifact. The served sequential block carries a one-game-stale prior on the
+    MORNING tier: the ``--w8b`` build runs at lk10 off a Snowflake table that has not yet been
+    advanced for the previous slate. This op does NOT heal that, and claiming it would be false:
+    nothing rebuilds ``--w8b`` after it in either job, and the NEXT day's lk10 re-mirror would
+    have picked up the same rows anyway. What it DOES fix is every read of the mirror taken
+    BETWEEN the writer and the next lk10 — the freshness monitor (which is why PR #772 could not
+    flip this entry), an operator hand-run ``--w8b-only``/``--w8a-only``, and any future consumer
+    repointed at this parquet. Healing the morning served block needs a second ``--w8b`` build
+    after this op (~minutes, all-history) and is deliberately NOT bundled here; the post_lineup
+    tier already gets it, because ``lineup_intraday_s3_feature_rebuild`` re-mirrors this table
+    itself and then rebuilds ``--w8b-only``.
+
+    TIER — ALERT-loud-but-continue, and a FAN-OUT LEAF. Nothing takes this op's output, so it is
+    structurally incapable of withholding a slate; it does not raise anyway. A stale mirror
+    degrades a monitor, never a prediction.
+
+    NOT GATED on the W8b flags, for the same reason ``reexport_player_seq_posteriors_op`` is not:
+    a plain ``SELECT *`` → S3 has no dependency on the DuckDB build, and a gated mirror freezes
+    silently the day a flag lapses (the documented-but-never-set class).
+
+    INC-32 — FINITE TIMEOUT, and being a LEAF does not excuse it: both jobs use
+    ``in_process_executor``, which runs steps ONE AT A TIME in topological order, so a hung leaf
+    stalls every step scheduled after it, predict included.
+    """
+    try:
+        _run_script(context, "export_w8b_precursors_to_s3.py",
+                    ["--table", "team_sequential_posteriors"], timeout=900)
+        context.log.info(
+            "[team-seq-mirror] re-exported team_sequential_posteriors to S3 after the writer — "
+            "the mirror now carries this run's chain advance."
+        )
+    except Exception as exc:  # noqa: BLE001 — ALERT tier; a mirror must never stop the chain.
+        msg = (
+            "reexport_team_seq_posteriors_op failed; the S3 team_sequential_posteriors mirror is "
+            "now one writer-cycle STALE. Consequences: check_data_freshness reads that mirror and "
+            "will report STALE (>36h) on its next off-cycle run, and any out-of-band DuckDB "
+            "rebuild taken before tomorrow's lk10 re-mirror seeds the pre-game team-sequential "
+            "block from a chain missing this run's advance. Neither withholds a slate. "
+            f"Error: {exc}"
+        )
+        context.log.warning("[ALERT] " + msg)
+        try:
+            from pipeline.utils.alerting import send_alert
+            send_alert("team_sequential_posteriors S3 mirror re-export failed", msg,
+                       severity="ERROR", dedup_key="team_seq_mirror_reexport")
+        except Exception as alert_exc:  # noqa: BLE001 — a failed page must not fail the op
+            context.log.warning(f"[team-seq-mirror] send_alert failed (non-fatal): {alert_exc}")
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
 def update_matchup_cell_posteriors_op(context):
     # 2026-07-22: --catchup (was --date yesterday) — self-healing ordered advance; see the note on
     # update_player_posteriors_op + catchup.py.
     _run_script(context, f"{_SEQ_DIR}/update_matchup_cell_posteriors.py",
                 ["--catchup"] + _w7a_s3_args())
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def reexport_matchup_cell_posteriors_op(context):
+    """E11.24 Bundle — mirror matchup_cell_sequential_posteriors to S3, AFTER its writer.
+
+    THE GAP. Unlike its two sequential siblings this table had NO ``baseball/lakehouse/`` prefix
+    at all (verified 2026-08-08: a DuckDB IOException, not a stale read), which is why
+    ``check_data_freshness`` could not read it from S3 and why the script kept opening a
+    Snowflake connection on every run. This op creates and maintains that mirror.
+
+    ⭐ WIRED DOWNSTREAM OF ``update_matchup_cell_posteriors_op`` FROM DAY ONE — deliberately, and
+    this is the whole point of building it inside this bundle rather than as a bare export. The
+    obvious cheap alternative (add the table to ``export_w8b_precursors_to_s3.py``'s default set,
+    which lk10 already invokes) would have shipped it with the INC-25 trail PRE-INSTALLED: lk10
+    runs ~40 minutes before this writer, so the mirror would have been born one writer-cycle
+    behind and would have become the fourth member of the family this bundle exists to close.
+    Hence ``ON_DEMAND_ONLY`` in that exporter — the on-demand table is written HERE and nowhere
+    else, so there is exactly one writer for the key and it runs after the data exists.
+
+    NO S3 CONSUMER TODAY, and that is stated rather than implied: ``generate_matchup_signals.py``
+    reads ``matchup_cell_sequential_posteriors`` straight from Snowflake
+    (``_SEQ_POSTERIORS_TABLE``). The mirror exists for the freshness monitor and as the precursor
+    a future read-repoint needs. It is not load-bearing for any served feature.
+
+    TIER / GATING / TIMEOUT — identical to the two sibling re-exports above: an unbound fan-out
+    LEAF, ALERT-loud-but-continue that really pages, ungated, finite ``timeout=`` (INC-32; a
+    leaf still stalls the topological queue behind it under ``in_process_executor``).
+    """
+    try:
+        _run_script(context, "export_w8b_precursors_to_s3.py",
+                    ["--table", "matchup_cell_sequential_posteriors"], timeout=900)
+        context.log.info(
+            "[matchup-cell-mirror] re-exported matchup_cell_sequential_posteriors to S3 after "
+            "the writer."
+        )
+    except Exception as exc:  # noqa: BLE001 — ALERT tier; a mirror must never stop the chain.
+        msg = (
+            "reexport_matchup_cell_posteriors_op failed; the S3 "
+            "matchup_cell_sequential_posteriors mirror is now STALE (or, on a first run, "
+            "ABSENT). Consequence: check_data_freshness reads that mirror and will report STALE "
+            "(>36h) or NO DATA. Nothing served reads it — no slate is affected. "
+            f"Error: {exc}"
+        )
+        context.log.warning("[ALERT] " + msg)
+        try:
+            from pipeline.utils.alerting import send_alert
+            send_alert("matchup_cell_sequential_posteriors S3 mirror re-export failed", msg,
+                       severity="ERROR", dedup_key="matchup_cell_mirror_reexport")
+        except Exception as alert_exc:  # noqa: BLE001 — a failed page must not fail the op
+            context.log.warning(
+                f"[matchup-cell-mirror] send_alert failed (non-fatal): {alert_exc}")
 
 
 # INC-2 (2026-06-22): compute_archetype_posteriors.py had NO scheduled caller and
@@ -2204,6 +2330,69 @@ def ingest_player_profiles_update(context):
     E11.20 phase 1.5: under W7A_LAKEHOUSE_S3=1 the mart_pitch_play_event ID-universe scan
     reads from the S3 lakehouse (precondition for dropping the SF mart_pitch_* views)."""
     _run_script(context, "ingest_player_profiles.py", _w7a_s3_args() + ["update"])
+
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def reexport_player_profiles_op(context):
+    """E11.24 Bundle — re-mirror player_profiles_raw to S3 AFTER its weekly writer.
+
+    THE DEFECT — and note it is a WRITER gap, not a trail. ``ingest_player_profiles.py update``
+    writes ONLY Snowflake. The S3 mirror at ``baseball/lakehouse/player_profiles_raw/`` has a
+    single writer, ``export_w4_raw_to_s3.py``, which no job runs on any schedule — it is a
+    hand-run W4 build precursor. So the mirror froze at whenever someone last ran it: measured
+    2026-08-08 at 2026-06-28 against a live Snowflake table at 08-02, i.e. ~41 days, and ~47 days
+    (~1,133 h) by 08-14, against this entry's own 192 h threshold.
+
+    ⭐ WHY IT WENT UNNOTICED FOR SO LONG — nothing LOUD reads the mirror. The only consumer is the
+    ``duckdb`` branch of ``stg_statsapi_player_profiles``, and a stale profile table does not
+    error: it silently omits recent call-ups from ``mart_player_profile_identity`` (birth_date /
+    height / weight land NULL for a player who does not exist in a 47-day-old snapshot) and
+    degrades quietly. The freshness monitor is the loud reader, and it could not be pointed here
+    until the writer gap was closed — which is why this op is a precursor to that flip and not a
+    consequence of it.
+
+    THE FIX, same shape as the two sequential re-exports: a fan-out LEAF wired downstream of
+    ``ingest_player_profiles_update`` in ``weekly_player_profiles_job`` — the ONLY job that runs
+    that writer (the INC-38 every-caller set, pinned by
+    test_e11_24_bundle_freshness_reexports.py). It mirrors ONE table, not the whole W4 raw set:
+    a bare ``export_w4_raw_to_s3.py`` would also re-export savant_park_factors_raw and the two
+    ZiPS tables, adding three needless Snowflake ``SELECT *``s.
+
+    ⚠️ CADENCE, stated because it bounds what the freshness flip can promise: the writer runs
+    weekly (``0 10 * * 0`` UTC), so the mirror is at most ~168 h old plus this op's runtime,
+    against a 192 h threshold — ~24 h of margin, and identical to what the Snowflake side already
+    reported, because ``last_fetched_at`` only advances when a week's ``people/changes`` call
+    actually writes rows. The flip does not tighten or loosen this entry; it makes the two sides
+    agree.
+
+    TIER / GATING / TIMEOUT — ALERT-loud-but-continue that really pages, ungated, unbound leaf,
+    finite ``timeout=`` (INC-32).
+    """
+    try:
+        _run_script(context, "export_w4_raw_to_s3.py",
+                    ["--table", "player_profiles_raw"], timeout=900)
+        context.log.info(
+            "[player-profiles-mirror] re-exported player_profiles_raw to S3 after the weekly "
+            "ingest — the mirror now matches Snowflake."
+        )
+    except Exception as exc:  # noqa: BLE001 — ALERT tier; a mirror must never stop the job.
+        msg = (
+            "reexport_player_profiles_op failed; the S3 player_profiles_raw mirror is now a full "
+            "WEEK behind (its only other writer is the hand-run export_w4_raw_to_s3.py, so it "
+            "will not self-heal until the next weekly run). Consequences: check_data_freshness "
+            "reads that mirror and will report STALE (>192h) once two weekly cycles are missed, "
+            "and the duckdb branch of stg_statsapi_player_profiles omits this week's call-ups "
+            "from mart_player_profile_identity (NULL bio, never an error). No slate is withheld. "
+            f"Error: {exc}"
+        )
+        context.log.warning("[ALERT] " + msg)
+        try:
+            from pipeline.utils.alerting import send_alert
+            send_alert("player_profiles_raw S3 mirror re-export failed", msg,
+                       severity="ERROR", dedup_key="player_profiles_mirror_reexport")
+        except Exception as alert_exc:  # noqa: BLE001 — a failed page must not fail the op
+            context.log.warning(
+                f"[player-profiles-mirror] send_alert failed (non-fatal): {alert_exc}")
 
 
 # ── API cache warm (A0.3) ────────────────────────────────────────────────────
