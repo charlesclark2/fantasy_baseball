@@ -325,9 +325,23 @@ def test_a_normal_league_is_stored_whole():
 def test_the_stored_player_row_is_slimmed_to_the_join_fields():
     """`player_key` is a platform id joinable to nothing of ours; `starter` is THEIR lineup decision,
     which the comparison explicitly does not use. Dropping both is what keeps this field inside the
-    shared item budget."""
+    shared item budget.
+
+    ⚠️ ASSERTED AGAINST THE LITERAL FIELD SET, NOT AGAINST `LEAGUE_ROSTER_PLAYER_FIELDS`. Comparing
+    the stored row to the constant that PRODUCED it is a restatement of the code, not a test of it:
+    widen the constant and both sides move together. The red proof caught exactly that — this clause
+    stayed green with `player_key` and `starter` added back to the constant (the NF-C0e "a test that
+    reads a value back under the key the code wrote can never catch a wrong key" class).
+    """
     saved = models.LeagueSave(**_base_payload(league_rosters=_rosters(2, 1)))
-    assert set(saved.league_rosters[0]["players"][0]) == set(models.LEAGUE_ROSTER_PLAYER_FIELDS)
+    row = saved.league_rosters[0]["players"][0]
+    assert set(row) == {"name", "position", "team"}
+    for dropped in ("player_key", "starter"):
+        assert dropped not in row, (
+            f"{dropped!r} is being stored for every player on every team in the league — it joins to "
+            "nothing of ours and the field is up against a shared 400 KB item ceiling"
+        )
+    assert set(models.LEAGUE_ROSTER_PLAYER_FIELDS) == {"name", "position", "team"}
 
 
 def test_a_league_over_the_player_cap_truncates_by_whole_teams():
@@ -407,10 +421,15 @@ def test_the_writer_carries_a_total_item_budget():
         "the per-league cap now fits 25 times inside the item limit — if that is genuinely true the "
         "budget below is redundant, but check the arithmetic before deleting it"
     )
-    src = _strip_ts_comments(DYNAMO.read_text())
-    assert "_fits_fantasy_budget" in src and "league_rosters" in src, (
-        "put_fantasy_league no longer checks the item budget before storing the league rosters"
+    # ⚠️ READ THE CALL SITE INSIDE `put_fantasy_league`, NOT THE FILE. `"_fits_fantasy_budget" in
+    # src` is satisfied by the function's own DEFINITION, so it stays true with every caller
+    # deleted — the red proof caught this clause green with the check replaced by `if False:`. The
+    # repo's own lesson, one file over: count CALL SITES, never `grep` a name (DSR-CONV #690).
+    body = _put_fantasy_league_body()
+    assert re.search(r"_fits_fantasy_budget\(\s*user_id", body), (
+        "put_fantasy_league no longer CALLS the item-budget check before storing the league rosters"
     )
+    assert "league_rosters" in body
 
 
 def dynamo_module():
@@ -421,12 +440,24 @@ def dynamo_module():
     return dynamo
 
 
+def _put_fantasy_league_body() -> str:
+    """The BODY of `put_fantasy_league`, comments stripped.
+
+    Scoping every writer clause to the function keeps them off the module's other 1,000 lines — a
+    guard satisfied by a definition or by an unrelated mention elsewhere in the file is not a guard.
+    """
+    src = DYNAMO.read_text()
+    body = src[src.index("def put_fantasy_league(") :]
+    body = body[: body.index("\ndef delete_fantasy_league")]
+    return re.sub(r"#[^\n]*", "", body)
+
+
 def test_the_budget_drops_only_the_rosters_and_only_from_the_incoming_league():
     """⭐ FIRST-COME-FIRST-SERVED, NOT EVICTION. Making room by dropping OTHER stored leagues'
     rosters would mutate data the caller did not ask us to touch, on a write they experience as
     saving one league. Dropping this one's degrades it exactly to the pre-NF-C6P3 product."""
-    src = _strip_ts_comments(DYNAMO.read_text())
-    block = src[src.index("_fits_fantasy_budget(user_id, league_id, record)") :]
+    body = _put_fantasy_league_body()
+    block = body[body.index("_fits_fantasy_budget(user_id, league_id, record)") :]
     block = block[: block.index("table = _users_table()")]
     assert 'record["league_rosters"] = None' in block
     assert 'record["league_rosters_truncated"] = True' in block, (
