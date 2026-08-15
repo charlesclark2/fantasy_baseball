@@ -96,11 +96,78 @@ function Section({
   testId: string
 }) {
   return (
-    <section className="mt-8 rounded-lg border border-[#262626] bg-[#0f0f0f] p-5" data-testid={testId}>
+    <section className="mt-6 rounded-lg border border-[#262626] bg-[#0f0f0f] p-5" data-testid={testId}>
       <h2 className="text-sm font-semibold text-gray-200">{title}</h2>
       {note && <p className="mt-1.5 max-w-3xl text-[12px] leading-relaxed text-gray-500">{note}</p>}
       <div className="mt-4">{children}</div>
     </section>
+  )
+}
+
+// ══ THE TABS ═════════════════════════════════════════════════════════════════════════════════════
+//
+// Operator, 2026-08-15, on the shipped single-column build: "the organization of this page isn't the
+// easiest because you have to do so much scrolling" — eight stacked sections is roughly four screens
+// on a laptop, and the sections a drafter actually acts on (byes, the wire) were the furthest down.
+// Every leading competitor tabs this surface.
+//
+// ⭐ TWO THINGS DELIBERATELY STAY OUTSIDE THE TABS, and both are load-bearing:
+//
+//   1. THE TEAM PROJECTION, because it is the answer to the question the page is opened with, and a
+//      headline you have to select a tab to see is not a headline. It also carries the uncertainty
+//      disclosure and the unmatched-roster note — neither may end up on a tab a reader never opens,
+//      since a caveat behind a click is a caveat that did not render.
+//   2. THE UPGRADE PROMPT, because burying the conversion moment behind a tab is exactly how this
+//      surface would stop doing the job it exists for.
+//
+// The four groupings are by the QUESTION each answers, not by data type: what have I got (Positions)
+// · who starts (Lineup) · can I cover a gap (Depth & byes) · what do I do next (Next moves).
+const TABS = [
+  { id: "positions", label: "Positions" },
+  { id: "lineup", label: "Lineup" },
+  { id: "depth", label: "Depth & byes" },
+  { id: "moves", label: "Next moves" },
+] as const
+
+type TabId = (typeof TABS)[number]["id"]
+
+/** ⚠️ Real tab semantics, not styled buttons: `tablist`/`tab`/`tabpanel` with `aria-selected` is what
+ *  makes the grouping legible to a screen reader, and it is what the E2E locates by role. */
+function Tabs({ value, onChange }: { value: TabId; onChange: (t: TabId) => void }) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Roster report sections"
+      className="mt-6 flex flex-wrap gap-1.5 border-b border-[#262626] pb-3"
+      data-testid="report-tabs"
+    >
+      {TABS.map((t) => (
+        <button
+          key={t.id}
+          role="tab"
+          id={`report-tab-${t.id}`}
+          aria-selected={value === t.id}
+          aria-controls={`report-panel-${t.id}`}
+          onClick={() => onChange(t.id)}
+          className={`rounded border px-3 py-1.5 text-xs font-medium transition-colors ${
+            value === t.id
+              ? "border-[#10b981]/50 bg-[#10b981]/10 text-[#10b981]"
+              : "border-[#262626] bg-[#0f0f0f] text-gray-400 hover:text-gray-200"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function Panel({ id, active, children }: { id: TabId; active: TabId; children: React.ReactNode }) {
+  if (id !== active) return null
+  return (
+    <div role="tabpanel" id={`report-panel-${id}`} aria-labelledby={`report-tab-${id}`}>
+      {children}
+    </div>
   )
 }
 
@@ -207,6 +274,7 @@ function Empty({ reason }: { reason: keyof typeof REPORT_EMPTY }) {
 }
 
 function Report({ report, entitled }: { report: RosterReport; entitled: boolean }) {
+  const [tab, setTab] = useState<TabId>("positions")
   const { projection, coverage, positions, bench, byes, fragility, waivers, trades } = report
   const ranked = positions
     .filter((p) => p.edge != null && p.starters > 0)
@@ -269,7 +337,10 @@ function Report({ report, entitled }: { report: RosterReport; entitled: boolean 
         )}
       </section>
 
-      {/* ── Position strengths ───────────────────────────────────────────────────────────────── */}
+      <Tabs value={tab} onChange={setTab} />
+
+      {/* ── Positions ────────────────────────────────────────────────────────────────────────── */}
+      <Panel id="positions" active={tab}>
       <Section
         testId="position-strengths"
         title="Where you are strong, and where you are thin"
@@ -296,6 +367,9 @@ function Report({ report, entitled }: { report: RosterReport; entitled: boolean 
         </div>
       </Section>
 
+      </Panel>
+
+      <Panel id="lineup" active={tab}>
       {/* ── The starting lineup ──────────────────────────────────────────────────────────────
           ⭐ ONE TABLE, AND IT IS THE ONE THE HEADLINE SUMS. The report has two legitimate lineups —
           the SEASON one (ordered by season points, which is what `team-total` above adds up) and the
@@ -340,6 +414,9 @@ function Report({ report, entitled }: { report: RosterReport; entitled: boolean 
         <FirstWeekDifference report={report} />
       </Section>
 
+      </Panel>
+
+      <Panel id="depth" active={tab}>
       {/* ── Bench ───────────────────────────────────────────────────────────────────────────── */}
       <Section testId="bench-quality" title="Your bench" note={REPORT_BENCH_NOTE}>
         <p className="text-[13px] text-gray-300" data-testid="bench-summary">
@@ -417,6 +494,9 @@ function Report({ report, entitled }: { report: RosterReport; entitled: boolean 
         </ul>
       </Section>
 
+      </Panel>
+
+      <Panel id="moves" active={tab}>
       {/* ── Waivers ─────────────────────────────────────────────────────────────────────────── */}
       <Section testId="waiver-ideas" title="Worth a look on the wire" note={REPORT_WAIVER_NOTE}>
         {waivers.length === 0 ? (
@@ -457,6 +537,8 @@ function Report({ report, entitled }: { report: RosterReport; entitled: boolean 
           </ul>
         )}
       </Section>
+
+      </Panel>
 
       {/* ── The conversion moment ───────────────────────────────────────────────────────────── */}
       <UpgradePrompt entitled={entitled} />
