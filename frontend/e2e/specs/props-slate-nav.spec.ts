@@ -47,6 +47,23 @@ function gameGroup(page: Page, gamePk: number) {
   return page.locator(`[data-testid="props-game-group"][data-game-pk="${gamePk}"]`)
 }
 
+/** Expand every game EXCEPT the default-expanded first one. `locator.count()` does not
+ *  auto-retry, so this clicks every collapsed header unconditionally rather than reading-then-
+ *  deciding whether one is already open (the NF-C6P2 race — see the min-book-count test). The
+ *  "before" read is safe here (not a control-flow decision, just a comparison baseline) because
+ *  the caller has already awaited the page settling before this runs. */
+async function expandAllGames(page: Page) {
+  const before = await page.getByTestId("props-card").count()
+  for (const pk of [900002, 900003, 900004, 900005, 900006]) {
+    await gameGroup(page, pk).getByTestId("props-game-header").click()
+  }
+  await expect
+    .poll(() => page.getByTestId("props-card").count(), {
+      message: "expanding every game did not grow the card count at all",
+    })
+    .toBeGreaterThan(before)
+}
+
 test.describe("games are grouped by matchup, collapsed except the next one to start", () => {
   for (const tab of ["TB", "K"] as const) {
     // ⭐ THE STRIKEOUTS TAB REGRESSION CHECK, PARAMETRIZED INSTEAD OF DUPLICATED. Both tabs go
@@ -168,7 +185,7 @@ test.describe("name search finds a batter/pitcher by partial name", () => {
   })
 })
 
-test.describe("filter chips — line value and min book count", () => {
+test.describe("filter chips — line value, min book count, sportsbook", () => {
   test("a line-value chip leaves only rows carrying that exact line", async ({ page }) => {
     const { errors, mock } = await openProps(page, { tab: "TB" })
     await page.getByTestId("props-filter-line-1.5").click()
@@ -199,19 +216,7 @@ test.describe("filter chips — line value and min book count", () => {
 
   test("a min-book-count chip drops thinly-covered rows", async ({ page }) => {
     await openProps(page, { tab: "TB" })
-
-    // ⚠️ `locator.count()` does NOT auto-retry — a single-shot read here would race the default
-    // expand-state settling. Every game EXCEPT the default-expanded first one starts collapsed, so
-    // click those five unconditionally rather than reading-then-deciding whether to click (the race
-    // NF-C6P2 documents: a read that happens to land mid-render looks identical to "already open").
-    for (const pk of [900002, 900003, 900004, 900005, 900006]) {
-      await gameGroup(page, pk).getByTestId("props-game-header").click()
-    }
-    await expect
-      .poll(() => page.getByTestId("props-card").count(), {
-        message: "expanding every game did not grow the card count at all",
-      })
-      .toBeGreaterThan(TB_BATTER_COUNT)
+    await expandAllGames(page)
     const fullSlate = await page.getByTestId("props-card").count()
 
     await page.getByTestId("props-filter-books-3").click()
@@ -223,6 +228,137 @@ test.describe("filter chips — line value and min book count", () => {
     await expect
       .poll(() => page.getByTestId("props-card").count())
       .toBeGreaterThan(0)
+  })
+
+  /**
+   * ⭐⭐ THE OPERATOR'S ASK, VERBATIM: "if my betting platform is Bovada, a user should be able to
+   * add a filter that allows them to filter down to those books" — a book-AVAILABILITY filter,
+   * distinct from the "min. books" COUNT filter above (which doesn't know or care WHICH specific
+   * books quoted a line, only how many did).
+   *
+   * The fixture guarantees a real split: 60 of 108 TB rows carry "bovada", 48 don't
+   * (`e2e/fixtures/build-props-slate.mjs`'s rotating book pool), so this is a genuine narrowing
+   * and not a filter that happens to match everything or nothing.
+   */
+  test("a sportsbook chip leaves only rows that book actually quoted", async ({ page }) => {
+    const { errors, mock } = await openProps(page, { tab: "TB" })
+    await expandAllGames(page)
+    const fullSlate = await page.getByTestId("props-card").count()
+
+    await page.getByTestId("props-filter-book-bovada").click()
+
+    // ⭐ THE ARITHMETIC CLAUSE — every SURVIVING card's own `data-books` list actually contains
+    // "bovada". "Fewer cards" alone is satisfied by a filter keyed on the wrong field entirely.
+    await expect
+      .poll(async () => (await page.getByTestId("props-card").count()) > 0, {
+        message: "the bovada chip matched nothing — the fixture guarantees ~60 of 108 rows",
+      })
+      .toBe(true)
+    const bookLists = await page
+      .locator('[data-testid="props-card"]')
+      .evaluateAll((els) => els.map((e) => (e.getAttribute("data-books") ?? "").split(",")))
+    expect(
+      bookLists.filter((books) => !books.includes("bovada")),
+      "a card slipped through the bovada filter without bovada in its own books list",
+    ).toEqual([])
+
+    const filteredCount = await page.getByTestId("props-card").count()
+    expect(filteredCount, "the bovada chip did not narrow the slate at all").toBeLessThan(fullSlate)
+
+    // Toggling the same chip again clears it and restores the full slate.
+    await page.getByTestId("props-filter-book-bovada").click()
+    await expect
+      .poll(() => page.getByTestId("props-card").count(), {
+        message: "clearing the bovada chip did not restore the full slate",
+      })
+      .toBe(fullSlate)
+
+    await expectNoNaN(page)
+    await expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
+  test("[K] a sportsbook chip is offered and filters the pitcher tab too", async ({ page }) => {
+    // ⚠️ REGRESSION-CHECK, not a duplicate: this proves the filter is genuinely shared logic
+    // (`frontend/lib/props-slate.ts::matchesBooks`, the same function the TB test above exercises)
+    // rather than something wired only into the batter tab.
+    await openProps(page, { tab: "K" })
+    const fullSlate = await page.getByTestId("props-card").count()
+
+    await page.getByTestId("props-filter-book-caesars").click()
+    const bookLists = await page
+      .locator('[data-testid="props-card"]')
+      .evaluateAll((els) => els.map((e) => (e.getAttribute("data-books") ?? "").split(",")))
+    expect(bookLists.length, "the caesars chip matched no pitcher on this slate").toBeGreaterThan(0)
+    expect(
+      bookLists.filter((books) => !books.includes("caesars")),
+      "a pitcher card slipped through the caesars filter",
+    ).toEqual([])
+    expect(bookLists.length).toBeLessThanOrEqual(fullSlate)
+  })
+
+  /**
+   * ⭐ THE OPERATOR'S FOLLOW-UP CONDITION: "but still be able to do sorting and such." A filter
+   * that only worked in Slate order — or that got silently dropped the moment a sort was chosen —
+   * would technically satisfy "add a filter" while breaking the thing that makes it useful in
+   * combination. This proves the sportsbook filter SURVIVES a sort switch and the flattened list
+   * is BOTH filtered (every card carries bovada) AND actually ordered by the chosen metric.
+   */
+  test("a sportsbook filter stays applied through a sort switch, and the result is still sorted", async ({
+    page,
+  }) => {
+    const { errors, mock } = await openProps(page, { tab: "TB" })
+    await page.getByTestId("props-filter-book-bovada").click()
+
+    await page.getByLabel("Sort", { exact: true }).click()
+    await page.getByRole("option", { name: "Proj TB", exact: true }).click()
+    await expect(page.getByTestId("props-flat-list")).toBeVisible()
+
+    const cards = page.locator('[data-testid="props-card"]')
+    await expect
+      .poll(() => cards.count(), { message: "the flat, filtered list rendered nothing" })
+      .toBeGreaterThan(0)
+
+    const bookLists = await cards.evaluateAll((els) =>
+      els.map((e) => (e.getAttribute("data-books") ?? "").split(",")),
+    )
+    expect(
+      bookLists.filter((books) => !books.includes("bovada")),
+      "switching to a Proj TB sort dropped the sportsbook filter",
+    ).toEqual([])
+
+    const proj = await page
+      .locator('[data-testid="props-card-proj"]')
+      .evaluateAll((els) => els.map((e) => Number(e.getAttribute("data-proj"))))
+    const sorted = [...proj].sort((a, b) => b - a)
+    expect(proj, "the bovada-filtered flat list is not ordered by descending Proj TB").toEqual(sorted)
+
+    await expectNoNaN(page)
+    await expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
+  test("the sportsbook filter and the team filter combine (both must match)", async ({ page }) => {
+    // Team filters narrow to a MATCHUP (both sides' rows survive); the sportsbook filter then
+    // narrows further within it. Selecting a team whose game has both bovada and non-bovada rows
+    // proves the two filters are ANDed rather than one silently overriding the other.
+    const { mock } = await openProps(page, { tab: "TB" })
+    await page.getByTestId("props-filter-team-STL").click() // isolates game 900006 (18 rows)
+    await expect(page.getByTestId("props-game-group")).toHaveCount(1)
+    const withTeamOnly = await page.getByTestId("props-card").count()
+
+    await page.getByTestId("props-filter-book-fanduel").click()
+    await expect
+      .poll(() => page.getByTestId("props-card").count(), {
+        message: "adding the sportsbook filter on top of the team filter did nothing",
+      })
+      .toBeLessThan(withTeamOnly)
+    // …and still only the one game — the sportsbook filter must not have silently cleared the
+    // team selection.
+    await expect(page.getByTestId("props-game-group")).toHaveCount(1)
+    await expect(gameGroup(page, LAST_GAME_PK)).toBeVisible()
+
+    await expectApiFullyMocked(mock)
   })
 })
 

@@ -1851,6 +1851,18 @@ const CASES = [
     to: "  return [...rows]",
     grep: "Proj TB sorts the flattened slate by projection, descending",
   },
+  {
+    id: "props-sportsbook-chip-does-not-filter",
+    shipped: "E5.10 — pre-emptive: the sportsbook filter chip becomes a no-op",
+    // The operator's own follow-up request: "if my betting platform is Bovada, a user should be
+    // able to filter down to those books". The chip still renders and still shows as pressed —
+    // it just stops actually narrowing the slate to that book's own props.
+    detail: "matchesBooks always reports a match, so no sportsbook chip can ever narrow the slate.",
+    file: "lib/props-slate.ts",
+    from: "export function matchesBooks(row: SlateRow, selected: Set<string>): boolean {\n  if (selected.size === 0) return true\n  return row.books.some((b) => selected.has(b))\n}",
+    to: "export function matchesBooks(row: SlateRow, selected: Set<string>): boolean {\n  return true\n}",
+    grep: "a sportsbook chip leaves only rows that book actually quoted",
+  },
 ]
 
 /**
@@ -1901,10 +1913,11 @@ const CASES = [
 // a session. So 120/114/6 is 114/108/6 plus six individually-proven REDs, and the next full run is
 // what CONFIRMS it. ⛔ A projection is not a measurement — if that run disagrees, the finding is
 // whatever drifted, never this line.
-// E5.10 adds FOUR cases (default sort, team-chip filter, name search, non-slate-sort ordering),
-// each RED-proven individually (`-- props-`) for the same reason — 124 cases × a production build
-// does not belong in a session. So 120/114/6 → 124/118/6, and the next full run CONFIRMS it.
-const RECORDED_BOARD = { total: 124, red: 118, notObservable: 6 }
+// E5.10 adds FIVE cases (default sort, team-chip filter, name search, non-slate-sort ordering,
+// sportsbook filter — the last a follow-up request in the same story), each RED-proven
+// individually (`-- props-`) for the same reason — a production build per case does not belong
+// in a session. So 120/114/6 → 125/119/6, and the next full run CONFIRMS it.
+const RECORDED_BOARD = { total: 125, red: 119, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

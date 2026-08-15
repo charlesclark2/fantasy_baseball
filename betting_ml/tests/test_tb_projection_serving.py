@@ -193,12 +193,36 @@ def test_index_row_and_payload():
     assert r["primary_line"] == 1.5
     assert r["p_ge_2"] == p["distribution"]["p_ge"]["2"]
     assert r["book_count"] == 1
+    assert r["books"] == ["dk"]
     idx = build_index_payload([r], game_date="2026-08-14", model_fit_date="2026-08-14")
     assert idx["count"] == 1 and idx["batters"][0] is r
     assert idx["best_alpha"] == 0 and idx["is_bet_recommendation"] is False
     assert idx["regular_season_only"] is True
     assert idx["model_version"] == MODEL_VERSION
     json.dumps(idx)
+
+
+def test_index_row_books_are_sorted_and_deduped():
+    # Same book quoting TWO lines (e.g. a whole + half line both posted) must collapse to ONE
+    # entry — "books" answers "did this book quote this batter at all", not "how many lines".
+    p = _payload(book_comparisons=comparisons_from_pmf(
+        np.append(_toy_pmf(), np.zeros(18)),
+        [
+            {"book": "fanduel", "line": 1.5, "over_odds": -110, "under_odds": -110},
+            {"book": "bovada", "line": 2.0, "over_odds": +105, "under_odds": -125},
+            {"book": "fanduel", "line": 2.5, "over_odds": +100, "under_odds": -120},
+        ],
+        model_mean=1.4,
+    ))
+    r = index_row(p)
+    assert r["book_count"] == 3  # book_count is a LINE count, unchanged by this story
+    assert r["books"] == ["bovada", "fanduel"]  # sorted, deduped
+
+
+def test_index_row_books_empty_when_no_books():
+    r = index_row(_payload(book_comparisons=[]))
+    assert r["book_count"] == 0
+    assert r["books"] == []
 
 
 def test_index_sorts_by_mean_desc():
