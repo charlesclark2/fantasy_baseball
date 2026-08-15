@@ -90,6 +90,21 @@ def duck_connect():
     import duckdb  # lazy import — see module docstring
 
     conn = duckdb.connect()
+    # ⚠️ LAMBDA IS READ-ONLY EXCEPT /tmp. `INSTALL` downloads an extension and WRITES it to
+    # the extension directory, which defaults to ~/.duckdb — unwritable in Lambda, so the
+    # install raises and every lakehouse read then degrades to []. Point both writable
+    # directories at /tmp BEFORE the first INSTALL. Harmless everywhere else (a laptop just
+    # caches its extensions under /tmp instead of $HOME), and skipped silently on any DuckDB
+    # build that doesn't know these settings.
+    for pragma in (
+        "SET extension_directory='/tmp/duckdb_extensions'",
+        "SET home_directory='/tmp'",
+        "SET secret_directory='/tmp/duckdb_secrets'",
+    ):
+        try:
+            conn.execute(pragma)
+        except Exception:  # noqa: BLE001
+            pass
     conn.execute("INSTALL httpfs; LOAD httpfs")
     try:
         conn.execute("INSTALL icu; LOAD icu")  # AT TIME ZONE / tz casts in the odds reads
@@ -261,23 +276,27 @@ def _get_conn():
     return _conn
 
 
-def lakehouse_query_checked(sql: str, params: dict | None = None) -> tuple[list[dict], bool]:
-    """`lakehouse_query`, but also reporting WHETHER THE READ SUCCEEDED.
+def lakehouse_query_reason(sql: str, params: dict | None = None) -> tuple[list[dict], str | None]:
+    """`lakehouse_query`, returning (rows, reason) where `reason` is None on success and a
+    SHORT description of the failure otherwise ("<ExceptionClass>: <message>", truncated).
 
-    Returns (rows, ok). `ok=False` means the read RAISED — DuckDB/S3/import failure — and the
-    rows are meaningless; `ok=True` with `[]` means the query genuinely matched nothing.
+    ⚠️ WHY THE REASON AND NOT JUST A BOOLEAN: this layer only ever logs its traceback to
+    CloudWatch, which not every operator can read (the deploy user is denied
+    `logs:DescribeLogGroups`). A degraded picker then gives nobody anything to act on — you
+    know it broke, not why. Returning a short reason lets an AUTHENTICATED caller see the
+    cause from the browser. It is deliberately truncated and carries no query text, so it
+    describes the failure without dumping internals.
 
-    ⚠️ WHY THIS EXISTS (E9.26b): `lakehouse_query` swallows every failure and returns [], so a
-    read that BLEW UP inside the Lambda is byte-identical to a slate that genuinely has no
-    rows. That is the silent-empty class — a panel zeroes, no error surfaces anywhere, and the
-    only symptom is a user saying "it's empty". Callers that can distinguish the two for the
-    user (an honest "couldn't load" vs "nothing for this date") should use this variant and
-    say so; `lakehouse_query` remains for callers that genuinely cannot act on the difference.
+    ⚠️ AND WHY IT EXISTS AT ALL (E9.26b): `lakehouse_query` swallows every failure and
+    returns [], so a read that BLEW UP inside the Lambda is byte-identical to a slate that
+    genuinely has no rows. That is the silent-empty class — a panel zeroes, nothing surfaces,
+    and the only symptom is a user saying "it's empty". Callers that can show the user the
+    difference should use this variant; `lakehouse_query` remains for callers that cannot.
     """
     try:
         conn = _get_conn()
         if conn is None:
-            return [], False
+            return [], "duckdb unavailable: _get_conn() returned None"
         needed = referenced_tables(sql)
         missing = [t for t in needed if t not in _registered]
         if missing:
@@ -287,10 +306,10 @@ def lakehouse_query_checked(sql: str, params: dict | None = None) -> tuple[list[
                 if missing:
                     register_views(conn, missing)
                     _registered.update(missing)
-        return query_upper(conn, sql, params), True
-    except Exception:  # noqa: BLE001 — last-resort must never 500
+        return query_upper(conn, sql, params), None
+    except Exception as exc:  # noqa: BLE001 — last-resort must never 500
         logger.warning("lakehouse_query (DuckDB/S3 last-resort) failed; returning []", exc_info=True)
-        return [], False
+        return [], f"{type(exc).__name__}: {exc}"[:300]
 
 
 def lakehouse_query(sql: str, params: dict | None = None) -> list[dict]:
@@ -303,5 +322,5 @@ def lakehouse_query(sql: str, params: dict | None = None) -> list[dict]:
     keep their existing try/except (defence in depth) — this just guarantees they never see
     a 500 from the last-resort path itself. Use `lakehouse_query_checked` when the caller can
     tell the user the difference between "failed" and "genuinely empty"."""
-    rows, _ok = lakehouse_query_checked(sql, params)
+    rows, _reason = lakehouse_query_reason(sql, params)
     return rows

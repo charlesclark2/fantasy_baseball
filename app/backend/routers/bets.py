@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.backend.dependencies import get_user_id
 from app.backend.models.bets import Bet, BetCreate, BetUpdate, BetsResponse, LoginSyncRequest
 from app.backend.services.dynamo import delete_bet, list_bets, put_bet, update_bet, upsert_user
-from app.backend.services.lakehouse_read import lakehouse_query, lakehouse_query_checked
+from app.backend.services.lakehouse_read import lakehouse_query, lakehouse_query_reason
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["bets"])
@@ -147,7 +147,7 @@ def prop_starters(date: str, _: str = Depends(get_user_id)) -> dict:
         WHERE r.rn = 1
         ORDER BY pitcher_name
     """
-    rows, read_ok = lakehouse_query_checked(sql, {"date": date})
+    rows, read_err = lakehouse_query_reason(sql, {"date": date})
     starters = [
         {
             "game_pk": r["GAME_PK"],
@@ -162,8 +162,8 @@ def prop_starters(date: str, _: str = Depends(get_user_id)) -> dict:
     # `source` identifies which build is live (the probable-pitcher feed, post-DH-fix). Extra
     # field; the frontend ignores it. If a deployed /props/starters response lacks this key, the
     # Lambda is still on the pre-fix build regardless of the (identical) empty-array shape.
-    return {"date": date, "source": "probable_pitchers", "degraded": not read_ok,
-            "starters": starters}
+    return {"date": date, "source": "probable_pitchers", "degraded": read_err is not None,
+            "degraded_reason": read_err, "starters": starters}
 
 
 @router.get("/props/batters")
@@ -218,7 +218,7 @@ def prop_batters(date: str, _: str = Depends(get_user_id)) -> dict:
         GROUP BY s.game_pk, s.player_id, s.home_away
         ORDER BY player_name
     """
-    rows, read_ok = lakehouse_query_checked(sql, {"date": date})
+    rows, read_err = lakehouse_query_reason(sql, {"date": date})
     batters = [
         {
             "game_pk": r["GAME_PK"],
@@ -234,8 +234,8 @@ def prop_batters(date: str, _: str = Depends(get_user_id)) -> dict:
         for r in rows
         if r.get("PLAYER_ID") is not None and r.get("PLAYER_NAME")
     ]
-    return {"date": date, "source": "lineups_wide", "degraded": not read_ok,
-            "batters": batters}
+    return {"date": date, "source": "lineups_wide", "degraded": read_err is not None,
+            "degraded_reason": read_err, "batters": batters}
 
 
 @router.post("/users/login")
