@@ -48,6 +48,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from quant_sports_intel_models.football.nfl.fantasy import market_freshness as MF  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import nf1_2_model as M12  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import nf1_3_model as M13  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import nf1_5_model as M15  # noqa: E402
@@ -93,7 +94,7 @@ PLACEBO_SEED = 20260727
 # universe, the survivorship-order contract) + the NF1.3 leakage-safe market join.
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def build_pool(con, base_seasons: list[int], schema: str = MARTS_SCHEMA,
-               use_cache: bool = True) -> pd.DataFrame:
+               use_cache: bool = True, market_refresh: bool = False) -> pd.DataFrame:
     _FEATURE_CACHE.mkdir(parents=True, exist_ok=True)
     frames, missing = [], []
     for b in base_seasons:
@@ -115,13 +116,57 @@ def build_pool(con, base_seasons: list[int], schema: str = MARTS_SCHEMA,
             part = build_nf1_2_pool(con, [b], inputs, schema, use_cache=use_cache)
             if part.empty:
                 continue
-            part = attach_market(con, part, schema)
+            # `market_refresh` is threaded but is a STRUCTURAL NO-OP here: every season in the
+            # training pool is a COMPLETED season, and `should_refresh_market` refuses anything
+            # that is not `current_season()`. Passed through anyway so the flag has ONE meaning
+            # repo-wide rather than a call site that silently drops it (the E5.9 boundary).
+            part = attach_market(con, part, schema, market_refresh=market_refresh)
             part.to_parquet(_FEATURE_CACHE / f"pool_base{b}.parquet", index=False)
             frames.append(part)
     if not frames:
         return pd.DataFrame()
     pool = pd.concat(frames, ignore_index=True, sort=False)
     return pool.sort_values(["target_season", "position", "player_id"]).reset_index(drop=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-FRESH2 P2 — INPUT VINTAGE, recorded BY the build that consumed the inputs
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+_VINTAGE_READS: tuple[tuple[str, str, str], ...] = (
+    # (payload key, relation, timestamp column)
+    ("depth_chart_as_of", "{staging}.stg_nfl_depth_charts_current", "snap_ts"),
+    ("sleeper_status_as_of", "{staging}.stg_nfl_sleeper_injuries", "ingested_at"),
+)
+
+
+def read_input_vintage(con, projection_season: int, schema: str = MARTS_SCHEMA) -> dict:
+    """`{key -> ISO timestamp | None}` for the freshest row of each freshness-critical lake input.
+
+    ⭐ WHY THIS IS READ HERE AND NOT AT EXPORT TIME. NF-FRESH1 §1.1 measured the defect this
+    closes: the 2026-08-10 board stamped `generated_at 05:33Z` while that Monday's ingest did not
+    land until `13:15Z`, so the SERVED depth-chart view was ~12 days old against a build date that
+    read ~5 days old. Two staleness clocks, only one of them visible. Recording the vintage from
+    the connection the build ACTUALLY read means the stamp can only ever describe the data that
+    went into this artifact — re-deriving it at export time would report whatever the lake holds
+    when the exporter runs, which is a different (and flattering) question.
+
+    Best-effort by construction: a relation that does not exist yet (the Sleeper staging model is
+    only built once its ingest has run) yields None, and a null stamp ships as `null` → the UI
+    renders "unknown", never "fresh" (NF1.7(a) — an unevaluable check is not a pass)."""
+    staging = schema.replace("_marts", "_staging")
+    out: dict[str, str | None] = {}
+    for key, rel_tmpl, col in _VINTAGE_READS:
+        rel = rel_tmpl.format(staging=staging)
+        try:
+            row = con.sql(f"select max({col}) from {rel} "
+                          f"where season = {int(projection_season)}").fetchone()
+            val = row[0] if row else None
+            out[key] = None if val is None else str(val)
+        except Exception as e:  # noqa: BLE001 — a vintage stamp must never fail a board build
+            log.warning("input vintage: %s unreadable (%s: %s) — shipping null", rel,
+                        type(e).__name__, e)
+            out[key] = None
+    return out
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -462,7 +507,8 @@ def _make_selected_learner(pos: str, sel: dict, nf11: dict):
 
 def learned_scores_by_player(con, base_season: int, projection_season: int, schema: str,
                              selections: dict[str, dict], inputs,
-                             pool: pd.DataFrame) -> dict[str, float]:
+                             pool: pd.DataFrame,
+                             market_refresh: bool = False) -> dict[str, float]:
     """`{player_id -> learned ordering score}` for the selected positions, fit on ALL completed
     history in `pool` and applied to the NF1.5 research feature frame for `projection_season`.
 
@@ -473,7 +519,10 @@ def learned_scores_by_player(con, base_season: int, projection_season: int, sche
     feats = build_extended_frame(con, base_season, projection_season, inputs, schema)
     if feats.empty:
         return {}
-    feats = attach_market(con, feats, schema)
+    # ⭐ THE ONE CALL THAT ACTUALLY REFRESHES: `feats` is the PROJECTION-season frame, so this is
+    # the market snapshot the SERVED ordering is computed from (NF-FRESH1 §2.3 — the market feeds
+    # the ranking, not just a reference column).
+    feats = attach_market(con, feats, schema, market_refresh=market_refresh)
     out: dict[str, float] = {}
     for pos, sel in selections.items():
         tr = pool[pool["position"] == pos] if not pool.empty else pd.DataFrame()
@@ -493,7 +542,8 @@ def learned_scores_by_player(con, base_season: int, projection_season: int, sche
 def build_season_projection(con, base_season: int, projection_season: int, schema: str,
                             selections: dict[str, dict], inputs, base_from: int = 2017,
                             pool: pd.DataFrame | None = None,
-                            band_panel: pd.DataFrame | None = None) -> pd.DataFrame:
+                            band_panel: pd.DataFrame | None = None,
+                            market_refresh: bool = False) -> pd.DataFrame:
     """The NF1.5 refined board = **the SHIPPED MVP-1 board with the veteran ORDER re-assigned**.
 
     ⭐ NF1.5b REBUILT THIS AS A TRANSFORM OF THE SHIPPED BOARD rather than a parallel assembly, and
@@ -528,10 +578,12 @@ def build_season_projection(con, base_season: int, projection_season: int, schem
     his MVP-1 points would interleave two different scales."""
     if pool is None:
         base_seasons = [b for b in range(base_from, base_season) if b + 1 < projection_season]
-        pool = build_pool(con, base_seasons, schema) if selections else pd.DataFrame()
+        pool = (build_pool(con, base_seasons, schema, market_refresh=market_refresh)
+                if selections else pd.DataFrame())
 
     scores = (learned_scores_by_player(con, base_season, projection_season, schema, selections,
-                                       inputs, pool) if selections else {})
+                                       inputs, pool, market_refresh=market_refresh)
+              if selections else {})
     positions = tuple(p for p in M1.LEARN_POSITIONS if p in selections)
     scale_by_pid: dict[str, float] = {}
 
@@ -835,6 +887,21 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seasons", default=None, help="grade: comma seasons (default 2019-2024)")
     ap.add_argument("--no-cache", action="store_true", help="rebuild the feature pool cache")
     ap.add_argument("--smoke", action="store_true", help="tiny subset; writes *_smoke reports")
+    # ── NF-FRESH2 P1 — the market refresh, DEFAULT ON, bounded to the current season ──────────
+    # Before this flag existed there was NO code path that could refresh ADP/ECR: both fetchers
+    # default `refresh=False` and every caller omitted it, so once the cache file existed the
+    # market was frozen forever and a full rebuild+republish re-read a 3-week-old snapshot
+    # (NF-FRESH1 §2.2). Default ON because the FAILURE MODE OF OFF IS INVISIBLE — a stale market
+    # looks exactly like a fresh one in every log and artifact — while the failure mode of ON is
+    # loud (a WARN + an older `adp_as_of` stamp in the served payload).
+    # ⛔ `--no-market-refresh` is for reproducing an ARCHIVED run byte-for-byte. It is NOT the
+    #    historical-season guard — that guard is `market_freshness.should_refresh_market` and it
+    #    applies unconditionally, so a historical bake-off stays pinned with the flag left ON.
+    ap.add_argument("--market-refresh", dest="market_refresh", action="store_true", default=True,
+                    help="re-fetch ADP/ECR for the CURRENT season (default; historical seasons "
+                         "always read their pinned snapshot)")
+    ap.add_argument("--no-market-refresh", dest="market_refresh", action="store_false",
+                    help="read the on-disk ADP/ECR caches only — for reproducing an archived run")
     ap.add_argument("--s3", action="store_true", help="build: land the projection to S3")
     ap.add_argument("--lake-root", default=None)
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -851,7 +918,8 @@ def main(argv: list[str] | None = None) -> int:
             n_trials = 2 if args.smoke else (args.n_trials or default_trials)
             placebo_trials = 1 if args.smoke else (args.placebo_trials or max(2, n_trials // 4))
             pool = build_pool(con, list(range(bf, bt + 1)), args.schema,
-                              use_cache=not args.no_cache)
+                              use_cache=not args.no_cache,
+                              market_refresh=args.market_refresh)
             if pool.empty:
                 raise SystemExit("empty training pool — build the NFL marts first")
             report = _load_report(suffix)
@@ -940,7 +1008,8 @@ def main(argv: list[str] | None = None) -> int:
             # NF1.5b: no κ to fit — the band is MVP-1's own NF1.9 per-player band, re-derived at the
             # re-assigned level. The held-out coverage VERIFY lives in `--mode grade`.
             proj = build_season_projection(con, base_season, proj_season, args.schema, selections,
-                                           inputs, base_from=args.base_from)
+                                           inputs, base_from=args.base_from,
+                                           market_refresh=args.market_refresh)
             cal = {"note": "band inherited from the shipped NF1.9 per-player fit; "
                            "held-out coverage verified in --mode grade",
                    "uncertainty_tiers": {str(k): int(v) for k, v in
@@ -961,11 +1030,23 @@ def main(argv: list[str] | None = None) -> int:
                                          tier="fantasy/derived", local_root=args.lake_root)
                 log.info("landed %d rows → nfl/fantasy/derived/nf1_5_season_projections season=%d",
                          n, proj_season)
+            # NF-FRESH2 — the two extra clocks the served payload needs so a user can see WHICH
+            # vintage of each input this board was built from, not just when the build ran.
+            vintage = read_input_vintage(con, proj_season, args.schema)
+            market_stamp = MF.market_as_of(proj_season)
+            log.info("NF-FRESH2 vintage: market_refresh=%s adp_as_of=%s ecr_as_of=%s "
+                     "depth_chart_as_of=%s sleeper_status_as_of=%s", args.market_refresh,
+                     (market_stamp.get("adp") or {}).get("as_of"),
+                     (market_stamp.get("ecr") or {}).get("as_of"),
+                     vintage.get("depth_chart_as_of"), vintage.get("sleeper_status_as_of"))
             (_ART / f"nf1_5_projection_summary_{proj_season}.json").write_text(json.dumps({
                 "model_version": M15.MODEL_VERSION, "board": args.board, "selections": selections,
                 "market_lean": {p: _market_lean(s) for p, s in selections.items()},
                 "projection_season": proj_season, "interval": cal,
                 "n_players": int(len(proj)), "generated_at": datetime.now(timezone.utc).isoformat(),
+                "market_refresh": bool(args.market_refresh),
+                "market_as_of": market_stamp,
+                "input_vintage": vintage,
             }, indent=2, default=float))
             print(f"NF1.5 {proj_season} built (board={args.board}); interval tiers "
                   f"{cal['uncertainty_tiers']}; top: "

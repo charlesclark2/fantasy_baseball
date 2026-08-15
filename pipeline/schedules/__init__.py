@@ -24,6 +24,7 @@ from pipeline.schedules.sports_dbt_schedules import (
 # the Sleeper fetch itself needs no API key). WARN-tier throughout — advisory, non-serving.
 from pipeline.schedules.sports_rollforward_schedules import (
     sports_ncaaf_roll_forward_schedule,
+    sports_nfl_board_publish_schedule,
     sports_nfl_roll_forward_schedule,
     sports_nfl_sleeper_injuries_schedule,
 )
@@ -58,6 +59,7 @@ all_schedules = [
     sports_ncaaf_dbt_schedule,
     sports_nfl_dbt_schedule,
     sports_ncaaf_roll_forward_schedule,
+    sports_nfl_board_publish_schedule,
     sports_nfl_roll_forward_schedule,
     sports_nfl_sleeper_injuries_schedule,
     sports_ncaaf_odds_capture_schedule,

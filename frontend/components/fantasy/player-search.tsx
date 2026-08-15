@@ -60,6 +60,7 @@ export function PlayerSearch() {
             season={data?.season ?? 2026}
             generatedAt={data?.generated_at}
             extra={data?.base_season ? `built off ${data.base_season} production` : null}
+            freshness={data?.freshness}
           />
         </div>
       </SurfaceHeader>

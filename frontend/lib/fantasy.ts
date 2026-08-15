@@ -5,7 +5,7 @@
 // by hitting the raw asset URL.
 
 import { apiFetch, cdnFetch } from "@/lib/api"
-import type { Manifest, Player } from "@/lib/draft-optimizer"
+import type { FreshnessBlock, Manifest, Player } from "@/lib/draft-optimizer"
 
 // NF3 — the format-INDEPENDENT season projection: one row per projectable player, the raw
 // season stat line plus an 80% PPR interval and the honest uncertainty metadata. This is what
@@ -215,6 +215,12 @@ export interface ProjectionPayload {
   season: number
   generated_at: string
   source: string
+  /** NF-FRESH2 — the per-input vintage. `generated_at` above is the BUILD clock; these are the
+   *  DATA clocks, and they do not agree (NF-FRESH1 §1.2). Optional throughout: an absent key means
+   *  the payload predates the stamps, a null value means we could not tell. */
+  adp_as_of?: string | null
+  ecr_as_of?: string | null
+  freshness?: FreshnessBlock | null
   model_version: string | null
   base_season: number | null
   /** Which FFC ADP sample the `adp` column came from — this surface is format-independent, so its

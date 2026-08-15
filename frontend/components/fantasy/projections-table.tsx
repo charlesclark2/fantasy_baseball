@@ -158,6 +158,7 @@ export function ProjectionsTable() {
             season={data?.season ?? FANTASY_SEASON}
             generatedAt={data?.generated_at}
             extra={data?.base_season ? `built off ${data.base_season} production` : null}
+            freshness={data?.freshness}
           />
         </div>
       </SurfaceHeader>

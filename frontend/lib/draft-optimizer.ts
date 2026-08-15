@@ -86,10 +86,53 @@ export interface FeatureLegendEntry {
   description: string
 }
 
+/** NF-FRESH2 — one market source's own as-of stamp, read from the snapshot the build consumed.
+ *  ⚠️ `asOf` is the vintage of the DATA, never the build. A build date is true of the projection
+ *  and can be false of the ADP column beside it — which is exactly the defect these exist to fix. */
+export interface MarketAsOf {
+  source: string
+  /** ISO date. For ADP this is FFC's `end_date` — the LAST day of the rolling draft window the
+   *  average covers, i.e. the newest real information in the number. */
+  as_of: string
+  window_start?: string | null
+  window_end?: string | null
+  drafts?: number | null
+  scoring?: string | null
+  format?: string | null
+  teams?: number | null
+  /** FantasyPros' own bare "7/26" label, year-less by their choice — kept for reconciliation
+   *  against their page, never for sorting or rendering. */
+  label?: string | null
+  experts?: number | null
+}
+
+/** NF-FRESH2 — the full per-input provenance block. Every field is optional and every value may be
+ *  null, and the two mean DIFFERENT things (NF-C0 skew + NF1.7(a)):
+ *    • the key is ABSENT  → this payload predates the stamps; claim nothing, render nothing.
+ *    • the value is NULL  → we looked and could not tell; render "unknown", never "fresh". */
+export interface FreshnessBlock {
+  adp?: MarketAsOf | null
+  ecr?: MarketAsOf | null
+  adp_by_sample?: Record<string, MarketAsOf | null> | null
+  input_vintage?: {
+    depth_chart_as_of?: string | null
+    sleeper_status_as_of?: string | null
+  } | null
+  projection_built_at?: string | null
+  /** Whether THIS build was allowed to re-fetch the market. False on a `--no-market-refresh`
+   *  reproduction run, and on any historical season (the E5.9 backfill boundary). */
+  market_refresh?: boolean | null
+}
+
 export interface Manifest {
   season: number
   generated_at: string
   source: string
+  /** NF-FRESH2 — the two dates a surface renders beside the ADP column. See `FreshnessBlock` for
+   *  what an absent key vs a null value each mean. */
+  adp_as_of?: string | null
+  ecr_as_of?: string | null
+  freshness?: FreshnessBlock | null
   positions: string[]
   sizes: number[]
   configs: LeagueConfigMeta[]
