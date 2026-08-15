@@ -262,8 +262,15 @@ def served_rows(serve: pd.DataFrame, bank: np.ndarray, cell: str) -> pd.DataFram
     if "position" in out.columns and not (out["position"].astype(str) == pos).all():
         raise ValueError(f"{cell}: served rows carry a position other than {pos} — the cell grain "
                          f"is broken")
-    for name, values in encode_bank(bank).items():
-        out[name] = values
+    summaries = encode_bank(bank)
+    # ⭐ SUMMARY_COLUMNS is the DECLARED contract, so it must have a consumer — a column list
+    # nothing checks is the NF-C0e wired-≠-invoked shape, and this module argues against exactly
+    # that. Reconciled here, so a summary added to one and not the other cannot ship.
+    if tuple(summaries) != SUMMARY_COLUMNS:
+        raise ValueError(f"{cell}: encode_bank emits {tuple(summaries)} but the served contract "
+                         f"declares {SUMMARY_COLUMNS} — the declaration and its producer drifted")
+    for name in SUMMARY_COLUMNS:
+        out[name] = summaries[name]
     out["quantiles"] = list(np.asarray(bank, dtype=float))
     return out
 

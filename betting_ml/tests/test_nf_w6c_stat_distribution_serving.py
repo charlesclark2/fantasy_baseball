@@ -282,6 +282,15 @@ class TestTheRepresentationCheckFailsClosed:
         with pytest.raises(ValueError, match="position"):
             SDS.served_rows(serve, _good_bank(n=len(serve)), "QB|passing_yards")
 
+    def test_a_summary_producer_that_drifts_from_the_declared_contract_is_refused(self,
+                                                                                  monkeypatch):
+        """SUMMARY_COLUMNS is a DECLARATION; this is the consumer that makes it real."""
+        monkeypatch.setattr(SDS, "encode_bank",
+                            lambda bank: {"p_zero": np.zeros(len(bank))})
+        serve = _serve_frame().query("position == 'QB'").reset_index(drop=True)
+        with pytest.raises(ValueError, match="drifted"):
+            SDS.served_rows(serve, _good_bank(n=len(serve)), "QB|passing_yards")
+
     def test_served_rows_emits_the_identity_and_summary_contract(self):
         serve = _serve_frame().query("position == 'QB'").reset_index(drop=True)
         out = SDS.served_rows(serve, _good_bank(n=len(serve)), "QB|passing_yards")
