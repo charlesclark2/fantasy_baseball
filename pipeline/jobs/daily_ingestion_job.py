@@ -4,6 +4,7 @@ from pipeline.ops.daily_ingestion_ops import (
     backfill_prediction_log,
     build_zone_matchup_overlay_op,
     ingest_player_props_op,
+    write_batter_tb_projections_op,
     write_pitcher_k_projections_op,
     check_data_freshness,
     check_monitors_healthy_op,
@@ -305,6 +306,10 @@ def daily_ingestion_job():
     # E5.5 — daily K-projection payloads for the /props page. WARN-tier; fans out from
     # predict_today_morning in parallel with the zone overlays; writes DynamoDB + S3, never blocks.
     write_pitcher_k_projections_op(start=s19)
+    # E5.9 — daily batter TB-projection payloads for the /props Total Bases tab. WARN-tier;
+    # fans out from predict_today_morning like its E5.5 pitcher-side sibling; Snowflake-free
+    # (DuckDB/S3 reads only); writes DynamoDB + S3, never blocks predictions or serving.
+    write_batter_tb_projections_op(start=s19)
     # E11.22 — served-prediction integrity gate (the permanent INPUT-integrity monitor). Reads
     # TODAY's just-written daily_model_predictions and ALARMS per serving tier on the migration
     # failure classes parity misses and the 30-day sensor only catches weeks later: wrong-date

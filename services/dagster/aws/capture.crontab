@@ -120,6 +120,14 @@ SHELL=/bin/bash
 # SF auth resolves from the container env (inline key), exactly as the daily op invokes it.
 15 13-23,0-4 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/write_pitcher_k_projections.py >> /home/ec2-user/capture-cron.log 2>&1
 
+# (2b) E5.9 BATTER TB-PROJECTION RE-RUN — the batter-side analog of (2): re-score today's
+# market-quoted batters against the live TB prop lines each hour, so newly posted lines +
+# newly posted lineups (the pregame name-arbitration input) flow into the /props Total Bases
+# tab intraday. Fires at :20 past, AFTER the top-of-hour props pull lands. Compute-only (no
+# paid API), fully Snowflake-free (DuckDB over S3 + the S3 model bundle), writes DynamoDB +
+# S3. WARN/supplemental tier — the writer exits 0 on any internal error; never gates serving.
+20 13-23,0-4 * * * docker compose -f /home/ec2-user/app/services/dagster/aws/docker-compose.yml exec -T -e AWS_DEFAULT_REGION=us-east-2 dagster-codeloc python scripts/write_batter_tb_projections.py >> /home/ec2-user/capture-cron.log 2>&1
+
 # ── INC-16-P6 observability (host-cron) ──────────────────────────────────────
 # Service-liveness healthcheck every 5 min (core containers up + reachable; pages
 # via SNS on failure, self-cooldown 1h so a sustained outage doesn't spam).

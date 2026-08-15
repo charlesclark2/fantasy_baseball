@@ -2427,6 +2427,29 @@ def write_pitcher_k_projections_op(context):
         )
 
 
+# ── E5.9 — daily batter TB-projection generation (the /props page, batter side) ─
+
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def write_batter_tb_projections_op(context):
+    """Score today's market-quoted batters with the Phase-2 TB champion (batter_tb_glm_nb_v1)
+    and write the TB-projection serving payloads (DynamoDB primary + S3 fallback) + daily index
+    for the /props page's Total Bases tab. The batter-side analog of write_pitcher_k_projections_op.
+
+    WARN-tier (E11.7): peripheral/app-cosmetic calibration/transparency surface. A failure must
+    never block predictions or the serving writes — the writer exits 0 on any internal error, and
+    we guard here too. Snowflake-free: every read is DuckDB over S3 (live TB prop lines + the
+    lakehouse feature marts). Honest framing: projection + calibration comparison only,
+    best_alpha=0 — never a bet rec. Regular-season only (the model's training boundary).
+    """
+    try:
+        _run_script(context, "write_batter_tb_projections.py")
+    except Exception as exc:  # noqa: BLE001
+        context.log.warning(
+            "WARNING: write_batter_tb_projections_op failed (non-fatal — the /props Total Bases "
+            f"tab may be stale for today; predictions and serving are unaffected): {exc}"
+        )
+
+
 # ── E5.1b — daily pitcher-strikeout prop catch-up (the /props surface) ─────────
 
 # The ONLY player-prop market the app's Player Props page surfaces (E5.5 K-projection

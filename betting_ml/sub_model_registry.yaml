@@ -1301,3 +1301,60 @@ milb_mle_pitcher_prior_v1:
       MLE-moved columns so there is NO skew to fix, and eb_gb_pct nulled on both targets where it is
       relevant. ⭐ Ties to Q6: the column is kept on the premise that a future retrain tests it FREE —
       and home_win's next natural retrain IS that test. A known deferred gap, NOT a coverage failure.
+
+# =============================================================================
+# E5.9 — Batter TOTAL-BASES prop projection champion  [SERVING SURFACE, best_alpha=0]
+# =============================================================================
+# NOT a Layer-3 betting sub-model: a per-batter-game predictive DISTRIBUTION served as a
+# calibration/transparency surface (the /props Total Bases tab), the batter-side analog of
+# E5.5's K projections. Registered + version-stamped from day one (PROD-STATE-1 Class A —
+# the K-projections registry gap is not repeated): every served payload carries
+# model_version + model_fit_date, and this entry is the governance record.
+batter_tb_v1:
+  model_version: batter_tb_glm_nb_v1
+  artifact_path: s3://baseball-betting-ml-artifacts/mlb/models/prop_pricing_v1/batter_tb_glm_nb_v1.pkl
+  fit_script: betting_ml/scripts/prop_pricing/fit_batter_tb.py
+  serving_writer: scripts/write_batter_tb_projections.py
+  target:
+    source_table: s3://baseball-betting-ml-artifacts/baseball/research/batter_prop_substrate/batter_prop_substrate_v1.parquet
+    column: y_actual (total_bases)
+    grain: game_pk_batter
+  distribution_family: negbin_nb2   # Poisson-GLM mean + scalar fitted NB2 dispersion
+  feature_contract: batter_props_phase2_bakeoff.NUMERIC_FEATURES (pre-registered; market-blind)
+  training_window:
+    start: '2023-05-03'   # the Odds API archive floor (market-selected population)
+    end: rolling          # refit on the full substrate each cadence
+  cv_strategy: expanding_half_season_purged_embargoed   # 6 registered folds, Phase-2 prereg
+  cv_metric: crps_discrete_exact
+  cv_score: 0.8631        # glm_nb OOS mean CRPS vs foil 0.9026 (-4.4%), 6/6 fold wins
+  promotion_gate:
+    record: ablation_results/mlb_batter_props_phase2_readout.md
+    pbo: 0.0
+    dsr: 0.9993           # degenerate-excluded (DSR-CONV, forward-declared); with-degens-in-V 0.0
+    bh_fdr: pass
+    market_benchmark: "Brier better than de-vigged closing consensus 6/6 folds (0.2400 vs 0.2429) — a CALIBRATION statement, never an edge claim"
+  output_signals: []      # no mart_sub_model_signals; serves JSON payloads only
+  downstream_consumers:
+    - scripts/write_batter_tb_projections.py (DynamoDB batter_tb_projection/* + S3 baseball/serving/batter_tb_projection/)
+    - app/backend/routers/players.py (/players/tb-projections, /players/{batter_id}/tb-projection)
+    - frontend/app/props (Total Bases tab)
+  promotion_status: champion
+  promoted_at: '2026-08-14'
+  refit_cadence: |
+    MONTHLY during the regular season (decided at ship — the "42 days since fit" drift class
+    is not inherited). Operator flow: (1) rebuild the substrate (build_batter_prop_substrate.py,
+    LAPTOP >2 min), (2) uv run python betting_ml/scripts/prop_pricing/fit_batter_tb.py --promote.
+    The serving writer WARNs loudly when the served bundle is >45 days old.
+  notes: |
+    E5.9 (2026-08-14), ships the MLB Batter Props Phase 2 SHIP_CANDIDATE (session
+    mlb-batter-props-2). The win is a pure DISPERSION mechanism: same Poisson-GLM mean as the
+    foil, NB2 alpha fitted by MLE (matched-pair delta +0.036..+0.043 CRPS every fold) — TB is
+    genuinely super-Poisson. hits/HR were NULL (tie/absence) and have NO surface; any future HR
+    surface must re-register its grading estimand vs one-way "anytime HR" (PM ruling b).
+    Market-blind (book prices never features); the de-vigged consensus line is a REFERENCE.
+    best_alpha=0 — the surface makes a calibration claim only, never an edge/EV/win-rate claim.
+    REGULAR SEASON ONLY (substrate upstream boundary): the writer skips non-'R' games loudly.
+    Train/serve consistency: feature semantics are IMPORTED from the substrate builder + Phase-2
+    harness; `write_batter_tb_projections.py --consistency-check` diffs the live-mart serving
+    features against the substrate for a historical date (the E7.9 gate; run on box/laptop).
+    Known documented gap: doubleheader game 2 serves game-1 features (nightly mart cadence).
