@@ -226,15 +226,25 @@ def load_sleeper_injuries(
 
 
 # ── The land verdict (PURE — no IO, unit-tested offline) ────────────────────────────────────
-# The resolution rate separates two REGIMES that are far apart, and the floor is set from those
-# regimes rather than reverse-engineered from a run's answer (the NF1.8 rule):
-#   * crosswalk WORKING  — every landed row resolved; verified live 2026-07-26 (2,499 rows).
-#   * crosswalk ABSENT   — only Sleeper's own native `gsis_id` resolves: 16.7% of rostered /
-#                          22.1% of flagged players (measured, NF-FRESH1).
-# 50% sits between them with wide margin on both sides. It is deliberately LOOSE: the pre-drop
-# fetch count has never been recorded (nothing measured it until this story), so a tight floor
-# would be a guess that can only fail toward a FALSE REFUSAL of a healthy feed. Every run now logs
-# `pct_resolved`, so the floor can be tightened later against real observations.
+# The resolution rate separates two REGIMES, and the floor is set from those regimes rather than
+# reverse-engineered from a run's answer (the NF1.8 rule). ⭐ BOTH ARE NOW MEASURED — on the first
+# healthy land after NF-INFRA1 (box, 2026-08-15, season 2026, 4,038 fetched):
+#   * crosswalk WORKING  — n_resolved/n_fetched = 2,501/4,038 = 61.9%; the crosswalk roughly DOUBLES
+#                          resolution (1,259 native → 2,501 total), and 2,501 landed rows matches
+#                          the last-known-good 2,499 of 2026-07-26.
+#   * crosswalk ABSENT   — only Sleeper's own native `gsis_id` resolves: 1,259/4,038 = 31.2%.
+# ⚠️ NF-FRESH1's "16.7% of rostered / 22.1% of flagged" is a DIFFERENT DENOMINATOR (of rostered /
+# of flagged players, not of fetched rows) and must not be compared to this ratio directly. The
+# figure that binds here is 31.2%.
+# ⚠️ AND THE MARGIN IS ~12pp ON THE HEALTHY SIDE, NOT "wide": an earlier version of this comment
+# put the working regime at ~89-100%, which was the POST-DROP rate — i.e. the statistic
+# `load_sleeper_injuries_with_coverage` exists to replace, since it is 100% by construction. Do not
+# re-derive this floor from `coverage()` on a landed frame.
+# ⇒ 50% stays: it refuses a native-only land (31.2%) and admits the observed healthy rate (61.9%).
+# It should NOT be tightened toward 61.9 on this single observation — one measurement cannot bound
+# the seasonal variation in how many non-rostered players Sleeper's feed carries (the denominator
+# moves), and a floor that false-refuses is strictly worse than one that is generous. Revisit with
+# several months of the `pct_resolved` this now logs every run.
 DEFAULT_MIN_PCT_RESOLVED = 50.0
 
 # `n_flagged == 0` is suspicious, not impossible — Sleeper legitimately carries no long-absence

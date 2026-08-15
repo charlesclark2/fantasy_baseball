@@ -73,6 +73,86 @@ _ROOKIE_PARQUET = (
     _PROJECT_ROOT
     / "quant_sports_intel_models/football/ncaaf/models/artifacts/ncaaf_nfl_rookie_projections.parquet"
 )
+# The SAME frame in the sports lake. `run_college_nfl_translation.py --s3` writes BOTH: the local
+# parquet above (unconditionally) and this Delta table (partitioned by `draft_year`, plus a `season`
+# partition column). It is also what the `ncaaf_nfl_rookie_projections` dbt view reads, so it is the
+# authoritative copy.
+_ROOKIE_LAKE_SOURCE = "nfl_rookie_projections"
+_ROOKIE_LAKE_TIER = "derived"
+_rookie_frame_cache: "tuple[str, pd.DataFrame] | None" = None
+
+
+def load_rookie_projection_frame() -> pd.DataFrame:
+    """The NCAAF-P1A college→NFL rookie projections — from the local artifact, else from the LAKE.
+
+    🚨 WHY THE FALLBACK EXISTS (NF-INFRA1, 2026-08-15). `_ROOKIE_PARQUET` is a **gitignored** output
+    of a laptop `run_college_nfl_translation.py` run (`*.parquet` in that artifacts dir's own
+    `.gitignore`), so it is ABSENT from the box's `COPY . .` image. The first time the board build
+    ever ran on the box it died here with a bare `FileNotFoundError` — the SAME class as the sports
+    DuckDB that story fixed: a build step depending on an artifact the box has no way to obtain, and
+    which `/app` being replaced by each image means it could never durably acquire either.
+    ⛔ Copying the parquet onto the box is NOT the fix: `/app` is replaced by every deploy, so it
+    would silently vanish on the next one — the deploy-ephemeral trap, one artifact over.
+
+    ORDER — local first, lake second, and that is deliberate in BOTH directions:
+      * local first, so a LAPTOP build is **byte-identical** to every board this repo has certified.
+        Changing which copy the laptop reads would silently move a published board, which is a far
+        worse failure than the one being fixed.
+      * lake second, so the BOX (where the local copy can never exist) reads the authoritative table
+        instead of dying.
+    ⭐ AND IT LOGS WHICH ONE IT CHOSE, with the row count and the local file's mtime. A source
+    preference that does not announce itself is exactly how the pre-draft board regen silently
+    published a 2-day-old board; a wrong pick has to be VISIBLE in the run log.
+
+    ⚠️ RESIDUAL RISK, stated rather than hidden: on a laptop whose local parquet is older than the
+    lake, this prefers the stale copy. That is the PRE-EXISTING behaviour (until now the local file
+    was the only source), so it is not a regression — but the mtime in the log line is what makes it
+    findable. Re-run `run_college_nfl_translation.py --s3` to refresh both together.
+
+    Cached per process so one build reads one vintage (three call sites) rather than three.
+    """
+    global _rookie_frame_cache
+    if _rookie_frame_cache is not None:
+        return _rookie_frame_cache[1].copy()
+
+    if _ROOKIE_PARQUET.exists():
+        df = pd.read_parquet(_ROOKIE_PARQUET)
+        mtime = datetime.fromtimestamp(_ROOKIE_PARQUET.stat().st_mtime, tz=timezone.utc)
+        log.info("rookie projections: %d rows from the LOCAL artifact %s (mtime %s)",
+                 len(df), _ROOKIE_PARQUET, mtime.isoformat())
+        _rookie_frame_cache = ("local", df)
+        return df.copy()
+
+    try:
+        from quant_sports_intel_models.football.ncaaf.ingest.query_lake import delta, q
+
+        expr = delta(_ROOKIE_LAKE_SOURCE, sport="ncaaf", tier=_ROOKIE_LAKE_TIER)
+        df = q(f"select * from {expr}")
+    except Exception as exc:  # noqa: BLE001 — re-raised below with the operator's actual cure
+        raise FileNotFoundError(
+            f"the NCAAF-P1A rookie projections are unavailable from BOTH sources.\n"
+            f"  local artifact : {_ROOKIE_PARQUET} (absent — it is gitignored, so it is never in "
+            f"the deployed image)\n"
+            f"  sports lake    : ncaaf/{_ROOKIE_LAKE_TIER}/{_ROOKIE_LAKE_SOURCE} "
+            f"({type(exc).__name__}: {exc})\n\n"
+            f"On the BOX the lake is the only source: check SPORTS_LAKE_REGION=us-east-2 and that "
+            f"the instance role can read the sports lake bucket. On a LAPTOP, run "
+            f"`run_college_nfl_translation.py --s3` once to produce both copies."
+        ) from exc
+
+    if df.empty:
+        # A readable-but-empty table would silently produce a board with NO rookies — the
+        # silent-empty class. Refuse it here rather than shipping a rookie-less board.
+        raise ValueError(
+            f"the sports lake table ncaaf/{_ROOKIE_LAKE_TIER}/{_ROOKIE_LAKE_SOURCE} read "
+            f"successfully but is EMPTY. A board built from it would carry no rookies at all, so "
+            f"this refuses rather than publishing one. Re-run run_college_nfl_translation.py --s3.")
+    log.info("rookie projections: %d rows from the SPORTS LAKE "
+             "(ncaaf/%s/%s) — the local artifact is absent, which is expected ON THE BOX "
+             "(it is gitignored and therefore not in the image)",
+             len(df), _ROOKIE_LAKE_TIER, _ROOKIE_LAKE_SOURCE)
+    _rookie_frame_cache = ("lake", df)
+    return df.copy()
 
 # The final emitted schema (the input contract for MVP-2 / NF-C1). Ordered for readability.
 OUTPUT_COLS = [
@@ -582,7 +662,7 @@ def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA,
         matrix is a CONSTANT ZERO at fit time, so its coefficient fits to ~0 and the feature is
         quietly discarded — while at serve time the live P1A rows DO carry a real sd.
     Neither failure raises. Guard: `betting_ml/tests/test_nf1_7_rookie_intervals.py`."""
-    rk = pd.read_parquet(_ROOKIE_PARQUET)
+    rk = load_rookie_projection_frame()
     keep = ["gsis_id", "position_group", "draft_overall", "draft_year",
             "projected_nfl_z", "projected_nfl_z_sd"]
     rk = rk[
@@ -893,7 +973,7 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     if veteran_postprocess is not None:
         vets = veteran_postprocess(vets, band_model)
 
-    rookies_all = pd.read_parquet(_ROOKIE_PARQUET)
+    rookies_all = load_rookie_projection_frame()
     incoming = rookies_all[pd.to_numeric(rookies_all["draft_year"], errors="coerce") == projection_season]
     # NF1.4: the point curve fits the survivor-filtered history (unchanged); `band_hist` is
     # the FULL drafted population (zero-game rookies included) and calibrates the 80% rookie
