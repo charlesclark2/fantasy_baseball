@@ -130,6 +130,37 @@ derived from the code and are what the guards pin.
 
 ---
 
+## ⭐ A latent defect this bundle surfaced — registration was not isolated
+
+Reasoning about hazard 2 below turned up a real bug, unrelated to any flip but triggered by them:
+
+**DuckDB binds a parquet view at `CREATE` time, not lazily.** Measured on duckdb 1.5.3,
+`CREATE OR REPLACE VIEW … read_parquet('<missing prefix>/**/*.parquet')` raises
+`IOException: No files found that match the pattern` **immediately**. `_duck_connection` used the
+batch `register_lakehouse_views` helper, which registers every view in one loop — so **a single
+absent or unreadable S3 prefix aborted the connection before the first entry was read and blinded
+EVERY freshness check**.
+
+That is precisely the `savant.batter_pitches` decommission failure of 2026-07-06 — "one dead table
+blinded every other freshness check" — reproduced **one layer earlier**, where the per-table
+`try/except` added to `run()` in response to that incident structurally cannot reach it.
+
+It is a live risk for this bundle specifically: a mirror written by a re-export leaf **does not
+exist until that leaf's job first runs**, so `matchup_cell_sequential_posteriors`' absent prefix
+would have taken the whole monitor down on the first post-deploy run — materially worse than the
+false STALE the prime step was meant to avoid.
+
+**Fix:** registration is per-table. A failure logs loud, leaves that view unregistered, and the
+existing per-table read reports **QUERY ERROR for that entry alone** — never a silent OK (a check
+that did not run is not a pass, NF1.7 (a)). `stg_statsapi_games` is deliberately **not**
+special-cased: if the game-day probe cannot register, the run fails loudly, because every
+`game_day_only` entry would otherwise be silently `SKIP`ped and the monitor would go quietly blind.
+
+Both guards drive the **real** `_duck_connection` against **real** DuckDB over local parquet — a
+mocked connection would only restate the loop's own structure. The create-time-binding premise is
+*measured* rather than assumed, so a future DuckDB that goes lazy shows up as a failing test rather
+than as silently redundant code.
+
 ## Deploy hazards
 
 1. **The flips and the ops must ship together.** An S3-sourced entry on a box still running the
@@ -137,9 +168,11 @@ derived from the code and are what the guards pin.
    (`test_reading_s3_requires_the_reexport_in_every_writer_job`).
 2. ⚠️ **The mirrors need PRIMING.** A re-export leaf only heals a mirror when its job next *runs*.
    `team_sequential_posteriors` and `matchup_cell_sequential_posteriors` heal at the next daily
-   run; `matchup_cell` does not exist at all until then (`NO DATA`), and **`player_profiles_raw`
-   would report a false STALE for up to SEVEN DAYS**, because its writer is weekly. ⇒ the deploy
-   is accompanied by a **one-time operator prime** of all three exports (see the handoff).
+   run; `matchup_cell` does not exist at all until then, and **`player_profiles_raw` would report
+   a false STALE for up to SEVEN DAYS**, because its writer is weekly. ⇒ the deploy is accompanied
+   by a **one-time operator prime** of all three exports (see the handoff). The isolation fix above
+   means a missed prime now costs one `QUERY ERROR` line instead of the whole check, but the prime
+   is still the point — a blind entry is not a monitored one.
 3. **PR #772 must be in `dev`.** Without it, `eb_bullpen_team_posteriors` and
    `eb_park_factors_raw` stay Snowflake-sourced, `needs_snowflake()` stays `True`, and the script
    still opens the connection — this bundle then delivers three correct flips and **zero** wake
@@ -161,7 +194,7 @@ derived from the code and are what the guards pin.
 * `scripts/check_data_freshness.py` — the three entries flip to `source="s3"`; the module docstring
   rewritten (the blocked-entry list is discharged; the retained Snowflake escape hatch is now an
   explicit, guarded decision rather than a leftover).
-* `betting_ml/tests/test_e11_24_bundle_freshness_reexports.py` — 56 guards, **17 deliberate breaks
+* `betting_ml/tests/test_e11_24_bundle_freshness_reexports.py` — 58 guards, **18 deliberate breaks
   RED-proven in-process with each mutation asserted to land** (E11.24 #682), including a stripper
   control and two-sided controls for `ON_DEMAND_ONLY` and `needs_snowflake()`.
 * `betting_ml/tests/test_e11_24_check_guard_s3_repoint.py` — two guards **re-anchored** (not
