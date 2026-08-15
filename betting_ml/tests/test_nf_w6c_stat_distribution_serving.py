@@ -554,6 +554,48 @@ class TestHonestFraming:
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+class TestTheShippedManifestIsWhatWeSayItIs:
+    """Guards on the COMMITTED artifact, not on the code that produced it.
+
+    NF-C0e's lesson: the defects that survive code review are found by reading the published
+    artifact. ⚠️ Never touches the parquet — that is gitignored, so a guard requiring it would go
+    red in CI while being green on the author's laptop."""
+
+    _MANIFEST = _FANTASY / "ablation_results" / "nf_w6c_served_stat_distributions.json"
+
+    def _payload(self) -> dict:
+        if not self._MANIFEST.is_file():
+            pytest.skip("no full manifest committed yet (the operator build has not run)")
+        return json.loads(self._MANIFEST.read_text())
+
+    def test_the_shipped_manifest_is_not_a_smoke(self):
+        p = self._payload()
+        assert p["smoke"] is False, "a --smoke manifest is committed as the real artifact"
+        c = p["provenance"]["train_containment"]
+        assert c["applies_to_this_run"] is True, (
+            "the shipped manifest says its containment does not describe its own fit")
+        assert c["n_serving_train"] > c["n_fold_train"] > 0
+
+    def test_the_shipped_cells_are_the_served_cells_and_nothing_else(self):
+        cells = self._payload()["representation"]["cells"]
+        assert cells == dict(SDS.SERVED_CELLS), "the shipped cells drifted from the module"
+        withheld = set(SDS.WITHHELD_NULL_CELLS) | set(SDS.CLOSED_CELLS)
+        assert not (set(cells) & withheld), "a withheld or CLOSED cell reached the artifact"
+
+    def test_the_shipped_artifact_was_built_on_the_certified_matrix(self):
+        p = self._payload()
+        assert p["matrix_key"] == json.loads(_RECORD_JSON.read_text())["matrix_key"], (
+            "the served artifact was built on a different matrix than the record certified")
+        assert p["pit_audit"]["rows_dropped"] == 0, "the PIT gate dropped rows on the served build"
+
+    def test_the_shipped_artifact_pins_its_parquet_by_digest(self):
+        art = self._payload()["built_artifact"]
+        assert len(art["sha256"]) == 64 and art["rows"] > 0, (
+            "the manifest does not pin the built parquet — the registry stages this manifest, so "
+            "an unpinned parquet makes the staged digest meaningless")
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
 class TestTheGuardsAboveCanActuallyFail:
     """RED proofs — a guard that cannot fail is worse than no guard (NF1.7 (a) / INC-38 / NF-D17).
 
