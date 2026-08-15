@@ -659,6 +659,167 @@ export function tradeIdeas(
     .map(([from, surplus]) => ({ from, to: weakest.pos, surplus }))
 }
 
+// ══ NF-C6P3 — THE LEAGUE COMPARISON ═══════════════════════════════════════════════════════════════
+//
+// ⛔⛔ THE HARD BOUNDARY, AND IT IS THE WHOLE REASON THIS IS A SEPARATE PIECE OF WORK.
+//
+// A standings-shaped table is the single most dangerous thing this surface could render, because
+// the reader arrives asking "did I win my draft?" and a ranked list ANSWERS that question whether
+// or not it was asked. It silently launders "Nth on projected starter points" into "you will finish
+// Nth" — and we have measured nothing that supports the second sentence. There is no weekly-variance
+// schedule simulation in this product; `best_alpha = 0`.
+//
+// So what this MAY say is exactly: your starters project to X; the N teams range LO–HI; you sit Kth
+// ON THAT MEASURE today. What it may NOT say, in any wording, is a projected finish, playoff odds,
+// a win probability, or a verdict on the draft.
+//
+// ⭐ AND THE THREE CAVEATS SHIP WITH THE TABLE, NOT BEHIND A DISCLOSURE. Each names a way the number
+// is weaker than it looks, and none of them is recoverable by a reader who does not see it:
+//
+//   1. IT IS OUR OPTIMAL FILL OF THEIR ROSTER. We do not know, and never see, the lineup another
+//      manager will actually start. Every team here is filled by the same greedy `fillLineup` this
+//      report uses on your own roster — which flatters every opponent equally, and is the only
+//      construction available.
+//   2. IT IS A SNAPSHOT FROM IMPORT TIME. We never re-read the league, so a trade or a waiver claim
+//      made five minutes after the import is invisible here.
+//   3. IT IS RANKED BY OUR PROJECTIONS. It therefore measures whose roster OUR MODEL likes, which is
+//      a statement about the model at least as much as about the rosters.
+//
+// ⛔ IT SCORES NOTHING. Every total is a sum of `pts` the server already computed on this league's
+// own board, through the same `fillLineup`/`combineInterval` the caller's own team goes through.
+
+export interface LeagueTeamProjection {
+  teamKey: string
+  teamName: string
+  isMine: boolean
+  /** Σ of the starters OUR optimizer would field from their roster. */
+  total: number
+  /** The 80% band under the same independence assumption as your own team's (`combineInterval`). */
+  p10: number | null
+  p90: number | null
+  /** Starting slots their roster cannot fill — a real state, and it moves the total a long way. */
+  unfilled: number
+  /** Roster rows we hold for them, and how many resolved to a board row. */
+  rosterRows: number
+  matched: number
+  /** Competition rank on `total` (1 = highest). Ties share a rank. */
+  rank: number
+}
+
+export interface LeagueComparison {
+  teams: LeagueTeamProjection[]
+  /** The caller's own team, when it is among them. */
+  mine: LeagueTeamProjection | null
+  low: number
+  high: number
+  /** Teams carrying at least one roster row we could not resolve. Their total is understated by
+   *  whatever those players are worth, so the surface marks them rather than quietly ranking them. */
+  incomplete: number
+}
+
+/** The shared roster-row → `ReportPlayer` fold.
+ *
+ * ⭐ ONE SPELLING. `buildRosterReport` did this inline for the caller's own roster; the comparison
+ * needs the identical fold for eleven more. A second copy would drift, and the symptom would be one
+ * table disagreeing with another with neither looking wrong (E9.61). */
+export function toReportPlayers(rows: RosterMatchRow[]): {
+  players: ReportPlayer[]
+  unmatched: string[]
+} {
+  const players: ReportPlayer[] = []
+  const unmatched: string[] = []
+  for (const row of rows ?? []) {
+    const b = row.board
+    const name = String(row.roster?.name ?? "").trim()
+    if (!b || b.pts == null || b.vor == null) {
+      unmatched.push(name || String(row.roster?.player_key ?? "unknown"))
+      continue
+    }
+    players.push({
+      key: String(row.roster?.player_key ?? b.id),
+      name: b.name ?? name,
+      pos: b.pos,
+      team: b.team ?? null,
+      bye: b.bye ?? null,
+      board: b,
+      pts: b.pts,
+      p10: b.ptsP10 ?? null,
+      p90: b.ptsP90 ?? null,
+      vor: b.vor,
+      g: b.g ?? null,
+      slot: null,
+    })
+  }
+  return { players, unmatched }
+}
+
+/**
+ * Every held team's roster, filled by OUR optimizer and totalled on OUR board.
+ *
+ * Returns `null` when there is nothing to compare — no rosters held, or only the caller's own. A
+ * one-row "comparison" is not one, and rendering it would imply a league-wide reading from a single
+ * team. ⚠️ It is deliberately NOT gated on `complete`: unlike the free-agent pool — where a missing
+ * roster silently turns rostered players into free agents — a missing TEAM here is simply a team not
+ * in the table, and the surface says how many of the league it holds.
+ */
+export function leagueComparison(
+  teams: LeagueTeamRoster[] | null | undefined,
+  roster: RosterSlotConfig[],
+): LeagueComparison | null {
+  const held = teams ?? []
+  if (held.length < 2) return null
+
+  const rows = held.map((t) => {
+    const { players, unmatched } = toReportPlayers(t.rows ?? [])
+    // The SAME construction as the caller's own team: most-restrictive slot first, by season points.
+    const lineup = fillLineup(players, roster, (p) => p.pts)
+    const starters = lineup.slots
+      .map((s) => s.player)
+      .filter((p): p is ReportPlayer => p != null)
+    const band = combineInterval(starters.map((p) => ({ pts: p.pts, p10: p.p10, p90: p.p90 })))
+    return {
+      teamKey: t.team_key,
+      teamName: t.team_name || t.team_key,
+      isMine: !!t.is_mine,
+      total: lineup.total,
+      p10: band.p10,
+      p90: band.p90,
+      unfilled: lineup.unfilled,
+      rosterRows: (t.rows ?? []).length,
+      matched: players.length,
+      rank: 0,
+      _unmatched: unmatched.length,
+    }
+  })
+
+  // Sorted by total, then by NAME — so a tie is broken deterministically rather than by whatever
+  // order the server happened to serve the teams in.
+  const sorted = rows
+    .slice()
+    .sort((a, b) => b.total - a.total || a.teamName.localeCompare(b.teamName))
+  // ⭐ COMPETITION RANKING on the total ROUNDED AS RENDERED. Two teams showing the same number must
+  // not be given different ranks — that is a distinction the reader cannot see and that does not
+  // exist in the data.
+  let rank = 0
+  let previous: number | null = null
+  sorted.forEach((row, i) => {
+    const shown = Math.round(row.total * 10) / 10
+    if (previous == null || shown !== previous) rank = i + 1
+    previous = shown
+    row.rank = rank
+  })
+
+  const totals = sorted.map((r) => r.total)
+  const out: LeagueTeamProjection[] = sorted.map(({ _unmatched, ...t }) => t)
+  return {
+    teams: out,
+    mine: out.find((t) => t.isMine) ?? null,
+    low: Math.min(...totals),
+    high: Math.max(...totals),
+    incomplete: sorted.filter((t) => t._unmatched > 0).length,
+  }
+}
+
 // ── The report ──────────────────────────────────────────────────────────────────────────────────
 
 /** Why a report could not be produced. Each one renders a DIFFERENT honest empty state — "we have
@@ -692,6 +853,11 @@ export interface RosterReport {
    *  state which of the two free-agent definitions it is using rather than implying the stronger
    *  one by default. */
   leagueRosters: LeagueRosterCoverage
+  /** NF-C6P3 — every held team's roster filled by OUR optimizer and totalled on OUR board. `null`
+   *  when there is nothing to compare (no rosters held, or only the caller's own). ⛔ Read its
+   *  boundary note before rendering it: this may state a rank ON THIS MEASURE and may never state a
+   *  projected finish, playoff odds or a win probability. */
+  comparison: LeagueComparison | null
 }
 
 /** How much of the league's own roster picture we actually hold.
@@ -778,30 +944,9 @@ export function buildRosterReport(payload: LeagueBoardPayload | null | undefined
     }
   }
 
-  const players: ReportPlayer[] = []
-  const unmatched: string[] = []
-  for (const row of rows) {
-    const b = row.board
-    const name = String(row.roster?.name ?? "").trim()
-    if (!b || b.pts == null || b.vor == null) {
-      unmatched.push(name || String(row.roster?.player_key ?? "unknown"))
-      continue
-    }
-    players.push({
-      key: String(row.roster?.player_key ?? b.id),
-      name: b.name ?? name,
-      pos: b.pos,
-      team: b.team ?? null,
-      bye: b.bye ?? null,
-      board: b,
-      pts: b.pts,
-      p10: b.ptsP10 ?? null,
-      p90: b.ptsP90 ?? null,
-      vor: b.vor,
-      g: b.g ?? null,
-      slot: null,
-    })
-  }
+  // NF-C6P3 — the SAME fold the league comparison uses on every other team. It was inline here
+  // before; a second copy would put your own coverage note and the league table quietly out of step.
+  const { players, unmatched } = toReportPlayers(rows)
   const coverage: ReportCoverage = {
     rosterRows: rows.length,
     matched: players.length,
@@ -879,6 +1024,7 @@ export function buildRosterReport(payload: LeagueBoardPayload | null | undefined
       coverageOfLeague.rosteredIds,
     ),
     leagueRosters: coverageOfLeague,
+    comparison: leagueComparison(payload.league_rosters ?? null, rosterShape),
     trades: tradeIdeas(positions, bench),
     firstWeek: fillLineup(
       players.filter((p) => p.bye !== FIRST_WEEK),

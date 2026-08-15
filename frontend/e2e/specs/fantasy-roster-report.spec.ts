@@ -538,6 +538,129 @@ test.describe("the league's own rosters", () => {
   })
 })
 
+/**
+ * NF-C6P3 (b) — THE LEAGUE COMPARISON.
+ *
+ * ⛔ THE DANGEROUS SURFACE ON THIS PAGE. A standings-shaped table answers "did I win my draft?"
+ * whether or not it was asked, and that is the one question this product has measured nothing about.
+ * There is no weekly-variance schedule simulation and `best_alpha = 0`, so a projected finish, a
+ * playoff chance or a win probability would be a claim about work that does not exist.
+ *
+ * Three things are pinned, and each has a different failure mode:
+ *   · THE ARITHMETIC IS REAL — the rank must follow the totals the table itself renders, or it is a
+ *     plausible-looking wrong number (the E9.46 class) on the most quotable figure on the page.
+ *   · THE CAVEATS RENDER, UNCONDITIONALLY AND WITH THE TABLE — a caveat behind a click is a caveat
+ *     that did not render, and the surface is being asked to carry three of them.
+ *   · NO FINISH OR ODDS CLAIM reaches the DOM, screened by the shared denylist plus this story's own
+ *     outcome vocabulary.
+ */
+test.describe("the league comparison", () => {
+  test("the rank follows the totals the table renders", async ({ page }) => {
+    const { errors, mock } = await openReport(page, { groups: FREE.groups })
+    await openTab(page, "The league")
+
+    await expect(page.getByTestId("league-comparison")).toBeVisible()
+    const totals = await columnValues(page, "league-comparison-total")
+    expect(totals.length, "the comparison table rendered no teams").toBeGreaterThan(2)
+
+    // ⭐ ARITHMETIC, NOT "A TABLE RENDERED". The rendered totals must be in descending order — a
+    // table that ranked by team name, by served order, or by a number it did not show renders just
+    // as cleanly and fails here.
+    const sorted = [...totals].sort((a, b) => b - a)
+    expect(totals, "the table's rows are not ordered by the totals it renders").toEqual(sorted)
+
+    // …and the summary's rank must be the caller's own row, not a number derived some other way.
+    const summary = await page.getByTestId("league-comparison-summary").innerText()
+    const myRow = page.locator('[data-testid="league-comparison-row"]', { hasText: "you" }).first()
+    const myRank = (await myRow.innerText()).trim().split(/\s/)[0]
+    expect(summary, `the summary does not quote this team's own rank (${myRank})`).toMatch(
+      new RegExp(`\\b${myRank}(st|nd|rd|th)\\b`),
+    )
+
+    await expectNoNaN(page)
+    await expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
+  test("all three caveats render with the table, not behind a disclosure", async ({ page }) => {
+    await openReport(page, { groups: FREE.groups })
+    await openTab(page, "The league")
+
+    const caveats = page.getByTestId("league-comparison-caveats")
+    await expect(caveats).toBeVisible()
+    // ⚠️ ONE ASSERTION PER CAVEAT, keyed on the distinctive phrase of each, so deleting ONE of the
+    // three turns exactly one clause red rather than being absorbed by the other two.
+    await expect(caveats, "the optimal-fill caveat is missing").toContainText(
+      "We do not know the lineup another manager will actually start",
+    )
+    await expect(caveats, "the snapshot caveat is missing").toContainText(
+      "as they stood when you imported the league",
+    )
+    await expect(caveats, "the whose-opinion caveat is missing").toContainText(
+      "The order is our projections' opinion",
+    )
+  })
+
+  test("the table promises no finish, no odds and no win probability", async ({ page }) => {
+    await openReport(page, { groups: FREE.groups })
+    await openTab(page, "The league")
+    await expect(page.getByTestId("league-comparison")).toBeVisible()
+
+    const text = (await page.getByTestId("league-comparison").innerText()).toLowerCase()
+    // The shared claim denylist first — the same screen every other claim surface passes.
+    expect(forbiddenPhrasesIn(text), "the comparison makes a forbidden claim").toEqual([])
+    // …then this story's OWN outcome vocabulary, which the shared list does not carry because no
+    // other surface in the product was ever shaped like a standings table.
+    //
+    // ⚠️ NEGATION-AWARE, AND IT HAS TO BE. A bare substring scan fires on the surface's own
+    // DISCLAIMER — "it is not a projected finish and not a chance of winning anything" — i.e. it
+    // would forbid the very sentence that makes the table honest, and the cheapest way to satisfy
+    // it would be to DELETE that sentence. Same shape as the scan that could not say "attempt"
+    // because it banned "temp" (NF-W7): an over-eager guard pushes the copy the wrong way.
+    //
+    // So the rule is what it always meant: each phrase may appear only in a NEGATED context.
+    for (const phrase of [
+      "projected finish",
+      "will finish",
+      "playoff odds",
+      "chance of making",
+      "win probability",
+      "odds of winning",
+      "championship odds",
+      "expected to win",
+    ]) {
+      let from = 0
+      for (;;) {
+        const at = text.indexOf(phrase, from)
+        if (at < 0) break
+        const lead = text.slice(Math.max(0, at - 24), at)
+        expect(
+          /\b(not|never|no|without)\b[^.]*$/.test(lead),
+          `the comparison table claims "${phrase}" — "…${lead}${phrase}…"`,
+        ).toBe(true)
+        from = at + phrase.length
+      }
+    }
+  })
+
+  test("a league with no other rosters says so rather than rendering a table of one", async ({
+    page,
+  }) => {
+    // ⚠️ THE ISOLATING HALF. A one-row "comparison" is not one, and rendering it would imply a
+    // league-wide reading from a single team. Every league imported before this shipped is in this
+    // state, so it is the common case rather than an edge one.
+    await openReport(page, {
+      groups: FREE.groups,
+      transform: (path, body: any) =>
+        path.startsWith("/fantasy/nfl/league-board") ? { ...body, league_rosters: [] } : body,
+    })
+    await openTab(page, "The league")
+
+    await expect(page.getByTestId("league-comparison-empty")).toBeVisible()
+    await expect(page.getByTestId("league-comparison-row")).toHaveCount(0)
+  })
+})
+
 test.describe("the report is tabbed, not a single scroll", () => {
   test("only the selected tab's sections are in the document", async ({ page }) => {
     // ⚠️ THE CLAUSE THAT MAKES TABBING REAL. Rendering every panel and merely hiding the inactive

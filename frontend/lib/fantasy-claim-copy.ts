@@ -512,6 +512,42 @@ export const REPORT_FREE_AGENT_NOTE =
 export const REPORT_FREE_AGENT_PARTIAL_NOTE =
   "We hold some of your league's rosters but not all of them, so we can't tell you who is genuinely unowned without guessing about the teams we're missing. Re-import the league to pick the rest up."
 
+// ══ NF-C6P3 — THE LEAGUE COMPARISON'S COPY ═══════════════════════════════════════════════════════
+//
+// ⛔⛔ A STANDINGS-SHAPED TABLE ANSWERS "DID I WIN MY DRAFT?" WHETHER OR NOT IT WAS ASKED, and that
+// is the one question this product has measured nothing about. The strings below are the boundary:
+// a rank ON THIS MEASURE is a fact about arithmetic we performed; a projected finish, playoff odds
+// or a win probability would need a weekly-variance schedule simulation that does not exist, and
+// `best_alpha = 0`.
+//
+// ⭐ THE THREE CAVEATS SHIP WITH THE TABLE, NOT BEHIND A DISCLOSURE, and each names a way the number
+// is weaker than it looks that a reader cannot recover for themselves. A caveat behind a click is a
+// caveat that did not render.
+
+export const REPORT_COMPARISON_HEADING = "Your roster against the rest of your league"
+
+/** ⚠️ THE SENTENCE THAT DEFINES WHAT IS BEING RANKED, and it has to do that in its FIRST clause —
+ *  a reader who stops after the heading must already know this is about projected starter points
+ *  and not about where they will finish. */
+export const REPORT_COMPARISON_NOTE =
+  "Every team's roster filled by our optimizer and totalled on your league's own board — a ranking of projected starting points, and nothing more. It is not a projected finish and not a chance of winning anything: those need a week-by-week schedule simulation we have not built."
+
+/** Caveat 1 — the construction. */
+export const REPORT_COMPARISON_CAVEAT_LINEUP =
+  "We do not know the lineup another manager will actually start, so every team here is filled the same way yours is: our best legal lineup from the players on their roster. That flatters every opponent equally."
+
+/** Caveat 2 — the vintage. */
+export const REPORT_COMPARISON_CAVEAT_SNAPSHOT =
+  "These are the rosters as they stood when you imported the league. We do not re-read it, so a trade or a waiver claim since then is not in here."
+
+/** Caveat 3 — whose opinion this is. ⚠️ The most important of the three and the easiest to drop,
+ *  because it is the one that concedes the table is a statement about our model. */
+export const REPORT_COMPARISON_CAVEAT_OURS =
+  "The order is our projections' opinion. It tells you whose roster our model likes, which is a claim about the model as much as about the rosters."
+
+export const REPORT_COMPARISON_PARTIAL =
+  "We only hold some of your league's rosters, so the teams missing from this table are missing from the range and the position too."
+
 export const REPORT_TRADE_NOTE =
   "A shape, not an offer. It says you hold startable depth in one place and your thinnest starters in another; what a trade is worth, and whether anyone would take it, is not something we have measured."
 
