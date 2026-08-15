@@ -6,6 +6,24 @@
 🔗 **THE SHARED CORE:** the per-player-week posterior-predictive projection is built in **N1.2 (props)** and consumed here — build once, don't duplicate. NF1 refines it into fantasy points; if NF1 runs before N1.2, IT builds the shared core (coordinate).
 
 ---
+🚨 **NF-FRESH1 (LAUNCH-CRITICAL) — Draft-board data-freshness audit · PHASE 1 (READ-ONLY investigation)** [App/serving + data · OPUS · `best_alpha=0` · operator 2026-08-15] (Trello: top of To Do)
+
+**Why:** we launch into DRAFT SEASON, and a user drafting today must see current **ADP**, recent **injuries**, **depth-chart** movement (being sorted now that preseason started), and daily **transactions** (trades/cuts/signings that move draft stock). The PM's read is the live board likely reflects NONE of these — but that must be CONFIRMED, because the finding decides whether this is a small fix (only ADP stale) or a launch blocker (the board is injury-blind). ⛔ **READ-ONLY — no code/serving change this phase**; the deliverable is a written diagnosis + a scoped Phase-2 build plan.
+
+**Setup:** worktree off `dev`; read the served draft-board / season-projection build + publish path, the E9.61-ADP card (ADP = a known frozen FFC cache; daily refresh DECIDED, not built), NF-INFRA1 (the NFL ingest schedules ship STOPPED), and `nf_delivery_epic.md`.
+
+**Investigate — report the CURRENT state per axis** (fresh / stale / not-ingested / not-consumed / not-refreshed):
+1. **REBUILD CADENCE (the pivotal question):** is the served season-projection artifact a STATIC build-time S3 JSON (built once, frozen) or does it REBUILD on a cron/cadence? Find the build script + when/how it (re)generates + publishes. Static ⇒ the board is blind to every post-build change.
+2. **ADP** — confirmed frozen FFC cache (E9.61-ADP); note source + cadence.
+3. **INJURIES** — is official NFL injury data (reports/practice status, nflverse/feed) INGESTED today? does the projection/rank CONSUME injury status? does the board reflect a player going OUT/IR?
+4. **DEPTH CHARTS** — is nflverse depth-chart data ingested + consumed? does a player's depth-chart position move his projection/rank? (Critical NOW — preseason charts are being sorted.)
+5. **TRANSACTIONS** — are NFL transactions (trades/signings/cuts/waivers) ingested + consumed? does a traded/cut/signed player's stock move?
+
+**Also:** independently VERIFY NF-INFRA1's real state — are the NFL ingest schedules RUNNING or STOPPED right now (a STOPPED schedule silently never runs, the E11.23 class)? Box reads = operator/SSM; use S3 content-freshness / a read-only check, not `aws s3 ls` mtime.
+
+**Deliverable:** `docs/nf_fresh1_draft_board_freshness_audit.md` — the per-axis diagnosis + a scoped **Phase-2** plan (which feeds to enable, which model inputs to wire, what daily rebuild cadence), flagging the dependency that the build needs **NF-INFRA1**'s feeds ON. Record the honest-framing constraints for Phase 2: projections move on REAL info only (no manufactured precision), and backfilled/hindsight data must NEVER feed a track-record claim (the E5.9 backfill-boundary lesson). `best_alpha=0`; worktree; PR→dev (docs only).
+
+---
 ```
 ════════════════════════════════════════════════════════════════════════════════
 📦 NF DELIVERY EPIC — the finalized 2026 LAUNCH + weekly-retention + decision sequence (source-of-record: `nf_delivery_epic.md`, saved 2026-08-04 from PM-settled decisions)
