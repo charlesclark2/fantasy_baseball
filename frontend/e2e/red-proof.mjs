@@ -1608,6 +1608,95 @@ const CASES = [
     to: "          {false && (",
     grep: "required attribution is rendered",
   },
+
+  // ══ NF-C6P2 — THE POST-DRAFT ROSTER REPORT ══════════════════════════════════════════════════
+  //
+  // The report is an AGGREGATOR over already-served values, so its defects are not crashes. Every
+  // case below renders a complete, clean, plausible page and is wrong — which is exactly the class
+  // this file exists for, and the class `tsc`/`next build`/eslint are all blind to.
+  {
+    id: "total-is-not-the-lineup",
+    shipped: "pre-emptive: a headline total that is not the sum of the lineup beneath it",
+    // The E9.46 rank defect in a new costume: a plausible-looking number that is not the one the
+    // label claims. Totalling the whole ROSTER instead of the STARTERS is the natural way to write
+    // it, is off by the entire bench, and reads as a perfectly normal page — a user would have to
+    // add up ten rows by hand to notice.
+    detail: "Totals every rostered player instead of the ones actually in the lineup.",
+    file: "lib/roster-report.ts",
+    from: '  const total = slots.reduce((n, s) => n + (s.player?.pts ?? 0), 0)',
+    to: '  const total = players.reduce((n, p) => n + p.pts, 0)',
+    grep: "sum of the starting lineup",
+  },
+  {
+    id: "unmatched-roster-row-vanishes",
+    shipped: "pre-emptive: a rostered player we could not resolve, dropped without a word",
+    // ⛔ AN ABSENCE MUST BE REPORTED, NEVER IMPUTED (NF1.7 (a)). Silently dropping the row makes the
+    // report describe a smaller team than the user has, while presenting as complete. The opposite
+    // error — scoring it as zero — is equally invisible and understates the total instead.
+    detail: "Stops counting roster rows that did not match the board.",
+    file: "lib/roster-report.ts",
+    from: "      unmatched.push(name || String(row.roster?.player_key ?? \"unknown\"))",
+    to: "      // dropped",
+    grep: "could not resolve is named",
+  },
+  {
+    id: "empty-states-collapsed",
+    shipped: "NF-C6's own shipped bug, one surface over",
+    // "You never picked a team" and "your league has not drafted" are different facts with
+    // different next actions. NF-C6 shipped them sharing a message and told a real user to go and
+    // pick a team they had already picked. Collapsing them here reproduces that exactly.
+    detail: "Reports a pre-draft league as though no team were linked.",
+    file: "lib/roster-report.ts",
+    from: '      reason: league.source_team_key ? "not-drafted" : "no-team-linked",',
+    to: '      reason: "no-team-linked",',
+    grep: "NOT the same message",
+  },
+  {
+    id: "upgrade-prompt-sold-to-subscribers",
+    shipped: "pre-emptive: selling a member what they already pay for",
+    // Reads to a paying subscriber as a bug in our billing, and it passes every positive assertion
+    // about the prompt — only the negative half can see it.
+    detail: "Renders the season-upgrade prompt regardless of entitlement.",
+    file: "components/fantasy/roster-report.tsx",
+    from: "  if (entitled) return null",
+    to: "  if (false) return null",
+    grep: "NOT sold what they already pay for",
+  },
+  {
+    id: "team-band-swapped-for-the-correlated-one",
+    shipped: "pre-emptive: the pessimistic band presented as the honest one",
+    // ⭐ THE HONESTY DEFECT WITH NO VISIBLE SYMPTOM. Independence under-disperses a correlated sum
+    // (NF-W7b measured it), which is why BOTH ends are published and the wider one is labelled as
+    // the outer bound. Swapping them puts the comonotone band in the headline and the narrow one in
+    // the "if every season moved in step" line — every number is real, both are still rendered, and
+    // the page now says the widest reading is the tight one.
+    detail: "Swaps the independent band with the fully-correlated bound.",
+    file: "lib/roster-report.ts",
+    from: "    p10: Math.max(0, total - Z80 * Math.sqrt(varLo)),\n    p90: total + Z80 * Math.sqrt(varHi),\n    correlatedP10: Math.max(0, sumLo),\n    correlatedP90: sumHi,",
+    to: "    p10: Math.max(0, sumLo),\n    p90: sumHi,\n    correlatedP10: Math.max(0, total - Z80 * Math.sqrt(varLo)),\n    correlatedP90: total + Z80 * Math.sqrt(varHi),",
+    grep: "correlated bound is at least as wide",
+  },
+  {
+    id: "our-rank-falls-back-to-the-matched-set",
+    shipped: "E9.46 — the open follow-up this story closed",
+    // ⭐ THE DEFECT THE LIVE CARD COULD NOT SHOW. `ourRank` was the ADP-MATCHED rank while
+    // /fantasy/rankings ranks the full board; George Kittle sat at TE21 under both readings, so the
+    // site displayed no contradiction and the divergence stayed invisible. Measured on the served
+    // board the populations are nowhere near each other (TE 23 of 169).
+    //
+    // The break here is the natural client-side spelling of the regression — preferring the matched
+    // rank when it is present — and the spec catches it because the harness serves a rank the
+    // fixture cannot contain and demands the DOM follow it (the E9.59 hardcoded-price shape).
+    //
+    // ⚠️ The POPULATION itself is proven server-side, against the shipping selector, in
+    // `test_e9_46_featured_player.py` with a deliberately DEEP position — a browser cannot see it,
+    // because the featured fixture and the board fixture are generated from different sources.
+    detail: "Renders the ADP-matched rank in the tile labelled with the full-board one.",
+    file: "components/home/featured-fantasy-player.tsx",
+    from: "<PositionRank label={COPY.ourRankLabel} pos={player.pos} rank={market.ourRank} />",
+    to: "<PositionRank label={COPY.ourRankLabel} pos={player.pos} rank={market.ourRankAmongDrafted ?? market.ourRank} />",
+    grep: "rank is the SERVER",
+  },
 ]
 
 /**
@@ -1632,10 +1721,10 @@ const CASES = [
  * output; read the summary first — a case that flipped from RED to MISMATCH is a guard that has
  * quietly become decorative, and it is the finding.
  *
- * Measured 2026-08-14 (ESPN-PRUNER): 107 cases, 101 RED, 6 declared NOT-OBSERVABLE, exit 0.
- * Previously (E9.64b): 106 / 100 / 6. Previously (E9.64): 95 / 89 / 6.
+ * Measured 2026-08-14 (NF-C6P2): 113 cases, 107 RED, 6 declared NOT-OBSERVABLE, exit 0.
+ * Previously (ESPN-PRUNER): 107 / 101 / 6. (E9.64b): 106 / 100 / 6. (E9.64): 95 / 89 / 6.
  */
-const RECORDED_BOARD = { total: 107, red: 101, notObservable: 6 }
+const RECORDED_BOARD = { total: 113, red: 107, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

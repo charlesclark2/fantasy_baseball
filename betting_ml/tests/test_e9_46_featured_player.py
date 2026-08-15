@@ -308,3 +308,123 @@ def test_a_miss_is_not_memoized(tmp_path, monkeypatch):
     with pytest.raises(HTTPException):
         fantasy_public.featured_player()
     assert fantasy_public._featured_memo is None, "a 404 was cached"
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-C6P2 rider — THE TWO RANK POPULATIONS, AND WHY THEY MUST NOT SILENTLY DIVERGE
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# E9.46 shipped with `ourRank` computed over the ADP-MATCHED set (players carrying BOTH our
+# projection and an ADP) while `/fantasy/rankings` ranks the FULL BOARD. That was flagged as an open
+# follow-up rather than caught as a bug, and the reason is the whole point of this block:
+#
+#   ⭐ THE ONE PLAYER THE CARD WAS EVER OBSERVED ON COINCIDED. George Kittle is TE21 over the
+#     23-player matched set AND was TE21 over all 169 projected tight ends on the board of the day,
+#     so the site showed no contradiction and nothing anywhere said the two numbers were different
+#     quantities. Measured on the served 2026 artifact the populations are nowhere near each other —
+#     QB 27/105, RB 57/194, WR 78/316, TE 23/169, K 18/42, DST 23/32 — so the next selection at a
+#     position with many projected-but-undrafted players above the winner would have rendered one
+#     rank on the home page and a different one on the rankings page, for the same player.
+#
+# ⇒ THE FIXTURE BELOW USES A DEEP POSITION, deliberately, because a shallow one cannot fail. Every
+# player in `board_dir` above carries an ADP, so `board == ranked` there and both readings agree —
+# which is exactly the Kittle situation, and exactly why those tests could not have caught this.
+
+
+def _deep_te_board(tmp_path, monkeypatch):
+    """A TE position where the two populations are FAR apart, plus a WR field with no disagreement.
+
+    ⭐ THE SHAPE THAT MAKES THIS FALSIFIABLE. Four tight ends carry an ADP; five more are projected
+    ABOVE the featured player and carry NO ADP at all (`adp=None` — a real and common state: we
+    project 169 tight ends and the market drafts 23). So:
+
+        full board (pts desc, 9 TEs)  → u1..u5 occupy 1–5, then t1 6, t2 7, t3 8, t4 9
+        matched set (pts desc, 4 TEs) → t1 1, t2 2, t3 3, t4 4
+        matched ADP (adp asc)         → t4 1, t3 2, t2 3, t1 4
+
+    The featured player is `t4` (gap |1 − 4| = 3, the largest). His FULL-BOARD rank is TE9 and his
+    MATCHED rank is TE4 — six apart, so a test that asserts 9 fails loudly on the pre-fix code and
+    cannot pass by coincidence.
+
+    ⚠️ The undrafted five are given `drivers=False`, so they are ineligible to be featured for a
+    SECOND, independent reason. That is deliberate: it stops this fixture from also silently
+    re-testing the universe/rank split the tests above already own, and keeps the only thing this
+    case can fail on the population of the rank itself.
+    """
+    d = tmp_path / "2026"
+    d.mkdir()
+    players = [
+        # Projected above everyone, drafted by nobody. THE ROWS THE MATCHED SET CANNOT SEE.
+        *[
+            _player(f"u{i}", f"Undrafted TE {i}", "TE", adp=None, pts=900.0 - i, drivers=False)
+            for i in range(1, 6)
+        ],
+        _player("t1", "Top TE", "TE", adp=100.0, pts=200.0),
+        _player("t2", "Second TE", "TE", adp=60.0, pts=150.0),
+        _player("t3", "Third TE", "TE", adp=30.0, pts=120.0),
+        _player("t4", "Feature TE", "TE", adp=10.0, pts=100.0),
+        # WR: our order matches ADP order, so no WR can out-gap the TE and the winner is stable.
+        _player("w1", "One WR", "WR", adp=5.0, pts=300.0),
+        _player("w2", "Two WR", "WR", adp=20.0, pts=250.0),
+    ]
+    (d / "projections.json").write_text(json.dumps({
+        "season": 2026, "adp_format": "ppr", "adp_teams": 12, "players": players}))
+    (d / "manifest.json").write_text(json.dumps({"featureLegend": {}}))
+    monkeypatch.setattr(fantasy, "_LOCAL_BOARD_DIR", str(tmp_path))
+    monkeypatch.setattr(fantasy_public, "_featured_memo", None)
+
+
+def test_our_rank_is_the_full_board_rank_at_a_deep_position(tmp_path, monkeypatch):
+    """⭐⭐ THE CLAUSE. `ourRank` is the number `/fantasy/rankings` shows — his place among every
+    tight end we project, NOT among the ones the market drafts.
+
+    ⚠️ ISOLATING FIXTURE: `adpRank` and `rankGap` are asserted in a SEPARATE test below, so this one
+    fails on the rank population and on nothing else. Bundling all three into one assertion would
+    make a green run ambiguous about which clause was doing the work — the `and`-composed-guard trap
+    this repo has already been bitten by."""
+    _deep_te_board(tmp_path, monkeypatch)
+    out = fantasy_public.featured_player()
+    assert out["player"]["id"] == "t4"
+    assert out["market"]["ourRank"] == 9, (
+        "`ourRank` is not the full-board rank. Nine tight ends are projected and four are drafted; "
+        f"got {out['market']['ourRank']}, which is the ADP-matched rank (4) if it is 4. The home "
+        "card and /fantasy/rankings would print different numbers for the same player."
+    )
+
+
+def test_the_adp_gap_stays_inside_the_matched_set(tmp_path, monkeypatch):
+    """⛔ THE OTHER HALF, AND THE ONE A CARELESS FIX BREAKS. The gap must NOT be recomputed against
+    the full-board rank.
+
+    The market produces no rank for a player nobody drafts, so `adpRank` can only ever live in the
+    matched set. Subtracting a 9-of-169-style board rank from a 1-of-23-style market rank reports a
+    DIFFERENCE OF POPULATIONS as a disagreement about a player — here it would read −8 ("we rank him
+    eight spots lower than the market") when the real, like-for-like disagreement is −3. That is a
+    worse error than the one being fixed, and it is the natural way to get this wrong."""
+    _deep_te_board(tmp_path, monkeypatch)
+    m = fantasy_public.featured_player()["market"]
+    assert m["adpRank"] == 1
+    assert m["ourRankAmongDrafted"] == 4, "the matched-set rank is not carried"
+    assert m["rankGap"] == -3, (
+        f"the gap is {m['rankGap']}, not −3 — it is being computed across two different populations"
+    )
+    assert m["rankGap"] == m["adpRank"] - m["ourRankAmongDrafted"], (
+        "the gap is not the difference of the two matched-set ranks"
+    )
+
+
+def test_the_two_ranks_are_both_published_so_the_card_can_reconcile_them(tmp_path, monkeypatch):
+    """Both numbers ship, and `ourRankAmongDrafted` is ADDITIVE (NF-C0).
+
+    The API Lambda deploys only via `deploy.sh` while the frontend auto-deploys, so there is a
+    guaranteed window in which the deployed client is newer than the API. Every key the previous
+    client read is still present and still means what it meant; the new one is extra. A client that
+    has never heard of it renders exactly what it renders today."""
+    _deep_te_board(tmp_path, monkeypatch)
+    m = fantasy_public.featured_player()["market"]
+    assert {"adp", "adpFormat", "adpTeams", "adpRank", "ourRank", "rankGap"} <= set(m), (
+        "a key the deployed client reads was removed or renamed — the NF-C0 blank-screen class"
+    )
+    assert "ourRankAmongDrafted" in m
+    # They genuinely differ here, which is what makes the frontend's reconciliation line reachable.
+    assert m["ourRank"] != m["ourRankAmongDrafted"]
