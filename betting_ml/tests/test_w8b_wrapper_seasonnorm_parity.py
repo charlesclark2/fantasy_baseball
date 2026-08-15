@@ -13,12 +13,12 @@ same already-wrong parquet).
 concrete column and compares it to the Python port's line for that same column, so a change made
 in one place and not the other goes RED regardless of what the change is.
 
-⏭️ KNOWN DEFECT, FIX DEFERRED TO E1.12: the expression is a bare `coalesce(..., 0)`, which serves a
-missing RAW feature as a FABRICATED 0.0 ("exactly league average") — the masking that made the
-2026-07-22..28 whole-block outage look like the raw and _seasonnorm columns came from different
-paths. Fixing it changes a SERVED model input, so it lands with the E1.12 retrain, not before.
-`TestKnownMaskingDeferredToE1_12` pins the CURRENT behaviour deliberately: those tests are the ones
-E1.12 must flip, and they name what to change.
+✅ E1.13 (2026-08-14): the E9.53 NULL cure is APPLIED in both copies. The expression is now
+`case when raw.<c> is null then null else coalesce(..., 0) end` — a missing RAW feature carries a
+real NULL (imputer + discriminative_coverage see it) while a missing/zero-variance BASELINE with a
+present raw still coalesces to 0 (the documented regime-neutral behaviour).
+`TestE1_13CureAMissingRawIsNull` pins the CURED behaviour (these are the three tests the E1.12/E1.13
+deferral named to flip); the two baseline-coalesce tests survive unchanged.
 """
 
 from __future__ import annotations
@@ -116,14 +116,11 @@ class TestTheTwoCopiesAgree:
         assert len(names) == len(set(names)) == len(rwl._contact_quality_columns())
 
 
-class TestKnownMaskingDeferredToE1_12:
-    """⏭️ These pin the CURRENT (defective) behaviour ON PURPOSE.
+class TestE1_13CureAMissingRawIsNull:
+    """✅ E1.13 — these pin the CURED behaviour (the three tests the deferral named, flipped).
 
-    E9.53 diagnosed that a missing RAW feature is served as a fabricated 0.0; the fix changes a
-    served model input, so it ships with the E1.12 retrain. **E1.12 must flip these three tests**
-    (to `is None` for a missing raw, keeping the missing-BASELINE cases at 0.0) in the same change
-    that adds `case when raw.<c> is null then null else coalesce(...) end` to BOTH copies,
-    rebuilds the store, retrains, and re-baselines the is_degraded rate.
+    A missing RAW feature now carries NULL through to the _seasonnorm column; a missing or
+    zero-variance BASELINE with a present raw still coalesces to 0 (correct and intended).
     """
 
     @pytest.fixture()
@@ -142,24 +139,27 @@ class TestKnownMaskingDeferredToE1_12:
         (v,) = con.execute(sql).fetchone()
         return v
 
-    def test_a_missing_raw_feature_is_currently_served_as_zero(self, con):
-        # ⛔ THE DEFERRED DEFECT. A missing core feature is served as "exactly league average".
-        # E1.12 flips this expectation to `is None`.
-        assert self._seasonnorm(con, None, 0.310, 0.020) == pytest.approx(0.0)
+    def test_a_missing_raw_feature_is_served_as_null(self, con):
+        # ✅ THE E1.13 CURE. A missing core feature is served as NULL ("we don't know"),
+        # never as a fabricated "exactly league average" 0.0.
+        assert self._seasonnorm(con, None, 0.310, 0.020) is None
 
-    def test_a_missing_raw_is_indistinguishable_from_a_genuinely_average_one(self, con):
-        # This equality IS the masking: a real league-average feature and a MISSING feature
-        # produce the same served value, so no not-null / imputed-count check can tell them apart.
+    def test_a_missing_raw_is_distinguishable_from_a_genuinely_average_one(self, con):
+        # The masking E9.53 diagnosed is gone: a MISSING feature (NULL) and a genuinely
+        # league-average one (0.0) now produce different served values, so imputed-count /
+        # not-null checks can tell them apart.
         missing = self._seasonnorm(con, None, 0.310, 0.020)
         genuinely_average = self._seasonnorm(con, 0.310, 0.310, 0.020)
-        assert missing == genuinely_average == pytest.approx(0.0)
+        assert missing is None
+        assert genuinely_average == pytest.approx(0.0)
 
-    def test_the_seasonnorm_column_is_never_null(self, con):
-        # Hence check_feature_block_coverage.py must probe RAW columns only — enforced there by
-        # _assert_representative_columns_are_raw.
-        assert self._seasonnorm(con, None, None, None) is not None
+    def test_the_seasonnorm_column_is_null_when_its_raw_is_null(self, con):
+        # A missing raw dominates a missing baseline: still NULL, never a fabricated 0.
+        # (check_feature_block_coverage.py keeps probing RAW columns — raw remains the
+        # sharper detector and that rule is unchanged.)
+        assert self._seasonnorm(con, None, None, None) is None
 
-    # ── these two are CORRECT behaviour and must survive E1.12 unchanged ──
+    # ── these two are CORRECT behaviour and survived E1.13 unchanged ──
     def test_a_missing_baseline_correctly_coalesces_to_zero(self, con):
         # No baseline → regime-neutral 0. Documented + intended; keep it.
         assert self._seasonnorm(con, 0.330, None, None) == pytest.approx(0.0)
