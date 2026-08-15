@@ -631,6 +631,12 @@ def _enforce_scoring_probe_guard(
     bucket with configs that were never going to be stored, and a user who typo'd a weight would be
     charged for our own refusal.
 
+    ⚠️ KNOWN, ACCEPTED WART: on `POST`, this runs BEFORE the quota check inside
+    `put_fantasy_league`, so a free caller already at their one-league quota spends a token and then
+    gets a 409. Costing them 1 of 12 in a flow the editor already disables (`atQuota`) is the
+    cheaper trade — the alternative is re-deriving the quota count here, which duplicates a rule
+    G100-C1 deliberately keeps in the WRITER (and the E9.60 coupling trap).
+
     ⚠️ THE SHAPE RULES ARE UNIFORM; THE BUDGET IS NOT. An entitled caller can already `GET
     /fantasy/nfl/projections/full` and receive the whole stat line in one request, so metering their
     league edits protects nothing and only degrades what they paid for. The shape rules stay uniform
