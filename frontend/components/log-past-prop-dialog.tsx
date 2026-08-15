@@ -102,6 +102,11 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
       .filter((p) => Number.isFinite(p.player_id) && p.player_name)
   }, [data, cfg.collection, dateStr])
 
+  // The server tells us whether an empty list means "the read FAILED" or "this date genuinely
+  // has nobody" — without it the two are byte-identical (E9.26b), which is exactly how an
+  // unreachable picker read as "no lineups posted yet".
+  const degraded = data?.degraded === true
+
   const selected = useMemo(
     () => players.find((s) => String(s.player_id) === pitcherId),
     [players, pitcherId],
@@ -245,7 +250,7 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
                         lineups posted yet" — the honest-empty-state rule. */}
                     <SelectValue placeholder={
                       isLoading ? "Loading…"
-                        : isError ? "Couldn't load — please try again"
+                        : isError || degraded ? "Couldn't load — please try again"
                         : players.length === 0 ? cfg.emptyLabel
                         : `Select ${cfg.playerLabel.toLowerCase()}…`
                     } />
