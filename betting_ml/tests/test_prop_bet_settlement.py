@@ -101,7 +101,7 @@ def test_prop_starters_shapes_rows(monkeypatch):
         "GAME_PK": 778899, "PITCHER_ID": 543037, "PITCHER_NAME": "Gerrit Cole",
         "TEAM": "NYY", "OPPONENT": "BOS", "GAME_DATE": _date(2026, 7, 1),
     }]
-    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: fake)
+    monkeypatch.setattr(bets, "lakehouse_query_checked", lambda sql, params: (fake, True))
     out = bets.prop_starters(date="2026-07-01", _="uid")
     assert out["date"] == "2026-07-01"
     assert len(out["starters"]) == 1
@@ -113,9 +113,10 @@ def test_prop_starters_shapes_rows(monkeypatch):
 
 def test_prop_starters_empty_on_miss(monkeypatch):
     from app.backend.routers import bets
-    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: [])
+    monkeypatch.setattr(bets, "lakehouse_query_checked", lambda sql, params: ([], True))
     out = bets.prop_starters(date="2026-07-01", _="uid")
-    assert out == {"date": "2026-07-01", "source": "probable_pitchers", "starters": []}
+    assert out == {"date": "2026-07-01", "source": "probable_pitchers", "degraded": False,
+                   "starters": []}
 
 
 # ── E5.10: batter TOTAL-BASES props ──────────────────────────────────────────
@@ -212,7 +213,7 @@ def test_prop_batters_shapes_rows(monkeypatch):
         "TEAM": "Tampa Bay Rays", "OPPONENT": "Baltimore Orioles",
         "BATTING_SLOT": 1, "GAME_DATE": _date(2026, 8, 15),
     }]
-    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: fake)
+    monkeypatch.setattr(bets, "lakehouse_query_checked", lambda sql, params: (fake, True))
     out = bets.prop_batters(date="2026-08-15", _="uid")
     assert out["date"] == "2026-08-15" and out["source"] == "lineups_wide"
     b = out["batters"][0]
@@ -223,9 +224,10 @@ def test_prop_batters_shapes_rows(monkeypatch):
 
 def test_prop_batters_empty_on_miss(monkeypatch):
     from app.backend.routers import bets
-    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: [])
+    monkeypatch.setattr(bets, "lakehouse_query_checked", lambda sql, params: ([], True))
     out = bets.prop_batters(date="2026-08-15", _="uid")
-    assert out == {"date": "2026-08-15", "source": "lineups_wide", "batters": []}
+    assert out == {"date": "2026-08-15", "source": "lineups_wide", "degraded": False,
+                   "batters": []}
 
 
 def test_prop_batters_drops_a_row_with_no_usable_identity(monkeypatch):
@@ -238,5 +240,91 @@ def test_prop_batters_drops_a_row_with_no_usable_identity(monkeypatch):
         {"GAME_PK": 1, "PLAYER_ID": 5, "PLAYER_NAME": "", "TEAM": None,
          "OPPONENT": None, "BATTING_SLOT": 2, "GAME_DATE": None},
     ]
-    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: fake)
+    monkeypatch.setattr(bets, "lakehouse_query_checked", lambda sql, params: (fake, True))
     assert bets.prop_batters(date="2026-08-15", _="uid")["batters"] == []
+
+
+# ── the silent-empty guard (E9.26b) ──────────────────────────────────────────
+#
+# `lakehouse_query` swallows every failure and returns [], so a read that BLEW UP inside the
+# Lambda is byte-identical to a date that genuinely has nobody. That is exactly how the live
+# picker read as "No posted lineups for this date yet" while the endpoint worked fine locally.
+# Both pickers now report WHICH it was.
+
+@pytest.mark.parametrize("fn_name,collection", [
+    ("prop_starters", "starters"),
+    ("prop_batters", "batters"),
+])
+def test_a_failed_lakehouse_read_is_reported_as_degraded(monkeypatch, fn_name, collection):
+    from app.backend.routers import bets
+    monkeypatch.setattr(bets, "lakehouse_query_checked", lambda sql, params: ([], False))
+    out = getattr(bets, fn_name)(date="2026-08-15", _="uid")
+    assert out[collection] == []
+    assert out["degraded"] is True, (
+        "a FAILED read must be distinguishable from a genuinely empty date — otherwise the "
+        "picker shows 'nothing for this date' over a broken backend (E9.26b)"
+    )
+
+
+@pytest.mark.parametrize("fn_name,collection", [
+    ("prop_starters", "starters"),
+    ("prop_batters", "batters"),
+])
+def test_a_genuinely_empty_date_is_not_reported_as_degraded(monkeypatch, fn_name, collection):
+    """The other side of the same coin: an off-day must NOT claim the backend is broken."""
+    from app.backend.routers import bets
+    monkeypatch.setattr(bets, "lakehouse_query_checked", lambda sql, params: ([], True))
+    out = getattr(bets, fn_name)(date="2026-12-25", _="uid")
+    assert out[collection] == []
+    assert out["degraded"] is False
+
+
+def test_lakehouse_query_checked_reports_failure_without_raising():
+    """The helper itself: a read that raises must return ([], False), never propagate — the
+    router is a serving path and must not 500 on a cold lakehouse."""
+    from app.backend.services import lakehouse_read
+
+    def boom():
+        raise RuntimeError("S3 is having a day")
+
+    orig = lakehouse_read._get_conn
+    try:
+        lakehouse_read._get_conn = boom
+        rows, ok = lakehouse_read.lakehouse_query_checked("SELECT 1")
+        assert rows == [] and ok is False
+        # the swallowing wrapper keeps its old contract for existing callers
+        assert lakehouse_read.lakehouse_query("SELECT 1") == []
+    finally:
+        lakehouse_read._get_conn = orig
+
+
+def test_the_batters_query_scans_the_wide_lineup_table_only_once():
+    """E9.26b: a heavy read can fail inside the Lambda AND poison the shared DuckDB
+    singleton for later queries. The per-slot UNION ALL scanned the wide lineup table nine
+    times; the unnest form does it once. Guard the shape, since the failure it prevents is
+    invisible to CI (which mocks all IO)."""
+    import ast
+    import inspect
+    import textwrap
+
+    from app.backend.routers import bets
+
+    # Scan the CODE only — not the comments, not the docstring. Both explain WHY the per-slot
+    # union is gone and both name the table, so a raw text scan fails on correct source
+    # (INC-38: prose must neither satisfy nor trip a source guard). ast.unparse drops
+    # comments; the docstring is dropped explicitly.
+    fn = ast.parse(textwrap.dedent(inspect.getsource(bets.prop_batters))).body[0]
+    if (fn.body and isinstance(fn.body[0], ast.Expr)
+            and isinstance(getattr(fn.body[0], "value", None), ast.Constant)
+            and isinstance(fn.body[0].value.value, str)):
+        fn.body = fn.body[1:]
+    src = ast.unparse(fn)
+
+    assert "UNION ALL" not in src, (
+        "the batters picker must not re-scan the wide lineup table per slot"
+    )
+    assert src.count("stg_statsapi_lineups_wide") == 1, (
+        f"expected exactly one scan of the wide lineup table, found "
+        f"{src.count('stg_statsapi_lineups_wide')}"
+    )
+    assert "unnest(" in src

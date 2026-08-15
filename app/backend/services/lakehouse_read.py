@@ -261,19 +261,23 @@ def _get_conn():
     return _conn
 
 
-def lakehouse_query(sql: str, params: dict | None = None) -> list[dict]:
-    """Near drop-in for snowflake.execute_query(sql, params): runs the (Snowflake-dialect)
-    SQL against the S3 lakehouse via the cached DuckDB connection and returns UPPERCASE-keyed
-    dicts. Lazily registers any views the query references that aren't registered yet.
+def lakehouse_query_checked(sql: str, params: dict | None = None) -> tuple[list[dict], bool]:
+    """`lakehouse_query`, but also reporting WHETHER THE READ SUCCEEDED.
 
-    DEFENSIVE: never raises. On a DuckDB/import/S3 failure it logs at WARNING and returns
-    [] so a cold last-resort miss still 200s with an empty/empty-shell response. Callers may
-    keep their existing try/except (defence in depth) — this just guarantees they never see
-    a 500 from the last-resort path itself."""
+    Returns (rows, ok). `ok=False` means the read RAISED — DuckDB/S3/import failure — and the
+    rows are meaningless; `ok=True` with `[]` means the query genuinely matched nothing.
+
+    ⚠️ WHY THIS EXISTS (E9.26b): `lakehouse_query` swallows every failure and returns [], so a
+    read that BLEW UP inside the Lambda is byte-identical to a slate that genuinely has no
+    rows. That is the silent-empty class — a panel zeroes, no error surfaces anywhere, and the
+    only symptom is a user saying "it's empty". Callers that can distinguish the two for the
+    user (an honest "couldn't load" vs "nothing for this date") should use this variant and
+    say so; `lakehouse_query` remains for callers that genuinely cannot act on the difference.
+    """
     try:
         conn = _get_conn()
         if conn is None:
-            return []
+            return [], False
         needed = referenced_tables(sql)
         missing = [t for t in needed if t not in _registered]
         if missing:
@@ -283,7 +287,21 @@ def lakehouse_query(sql: str, params: dict | None = None) -> list[dict]:
                 if missing:
                     register_views(conn, missing)
                     _registered.update(missing)
-        return query_upper(conn, sql, params)
+        return query_upper(conn, sql, params), True
     except Exception:  # noqa: BLE001 — last-resort must never 500
         logger.warning("lakehouse_query (DuckDB/S3 last-resort) failed; returning []", exc_info=True)
-        return []
+        return [], False
+
+
+def lakehouse_query(sql: str, params: dict | None = None) -> list[dict]:
+    """Near drop-in for snowflake.execute_query(sql, params): runs the (Snowflake-dialect)
+    SQL against the S3 lakehouse via the cached DuckDB connection and returns UPPERCASE-keyed
+    dicts. Lazily registers any views the query references that aren't registered yet.
+
+    DEFENSIVE: never raises. On a DuckDB/import/S3 failure it logs at WARNING and returns
+    [] so a cold last-resort miss still 200s with an empty/empty-shell response. Callers may
+    keep their existing try/except (defence in depth) — this just guarantees they never see
+    a 500 from the last-resort path itself. Use `lakehouse_query_checked` when the caller can
+    tell the user the difference between "failed" and "genuinely empty"."""
+    rows, _ok = lakehouse_query_checked(sql, params)
+    return rows

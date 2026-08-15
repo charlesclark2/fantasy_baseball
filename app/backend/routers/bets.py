@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.backend.dependencies import get_user_id
 from app.backend.models.bets import Bet, BetCreate, BetUpdate, BetsResponse, LoginSyncRequest
 from app.backend.services.dynamo import delete_bet, list_bets, put_bet, update_bet, upsert_user
-from app.backend.services.lakehouse_read import lakehouse_query
+from app.backend.services.lakehouse_read import lakehouse_query, lakehouse_query_checked
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["bets"])
@@ -118,8 +118,10 @@ def prop_starters(date: str, _: str = Depends(get_user_id)) -> dict:
     on (see settle_user_bets.py), plus name / team / opponent for the picker. Read from the
     S3 lakehouse via DuckDB (stg_statsapi_probable_pitchers, one row per game/side joined to
     stg_statsapi_games for team names) — zero-Snowflake request path. Never raises: an empty
-    list on any miss (lakehouse_query already returns [] on failure), so the picker just shows
-    "no starters" rather than 500ing.
+    list on any miss, so the picker just shows "no starters" rather than 500ing — but the
+    response now says WHICH it was: `degraded=true` means the lakehouse read FAILED and the
+    empty list is meaningless, `degraded=false` means the date genuinely has no starters.
+    Without that flag the two are byte-identical (the E9.26b silent-empty class).
 
     NOTE: the probable-pitcher feed is the right source (NOT mart_player_game_starts, whose
     lineup-derived position_code '1' pitcher slot is empty in the universal-DH era — the
@@ -145,7 +147,7 @@ def prop_starters(date: str, _: str = Depends(get_user_id)) -> dict:
         WHERE r.rn = 1
         ORDER BY pitcher_name
     """
-    rows = lakehouse_query(sql, {"date": date})
+    rows, read_ok = lakehouse_query_checked(sql, {"date": date})
     starters = [
         {
             "game_pk": r["GAME_PK"],
@@ -160,7 +162,8 @@ def prop_starters(date: str, _: str = Depends(get_user_id)) -> dict:
     # `source` identifies which build is live (the probable-pitcher feed, post-DH-fix). Extra
     # field; the frontend ignores it. If a deployed /props/starters response lacks this key, the
     # Lambda is still on the pre-fix build regardless of the (identical) empty-array shape.
-    return {"date": date, "source": "probable_pitchers", "starters": starters}
+    return {"date": date, "source": "probable_pitchers", "degraded": not read_ok,
+            "starters": starters}
 
 
 @router.get("/props/batters")
@@ -176,30 +179,34 @@ def prop_batters(date: str, _: str = Depends(get_user_id)) -> dict:
     2026, so every 2026 debutant is missing from it. The lineup feed names exactly the
     players who actually batted, on any date in the back-log window.
 
-    Never raises: an empty list on any miss (lakehouse_query already returns [] on failure),
-    so the picker shows "no batters" rather than 500ing.
+    Never raises: an empty list on any miss, so the picker shows "no batters" rather than
+    500ing — and `degraded=true` distinguishes a FAILED read from a genuinely empty date
+    (see /props/starters above; the E9.26b silent-empty class).
     """
-    slots = " UNION ALL ".join(
-        f"""
-        SELECT lw.game_pk,
-               lw.slot_{i}_player_id   AS player_id,
-               lw.slot_{i}_full_name   AS player_name,
-               lw.home_away,
-               {i}                     AS batting_slot
-        FROM baseball_data.betting.stg_statsapi_lineups_wide lw
-        WHERE lw.game_pk IN (
-            SELECT game_pk FROM baseball_data.betting.stg_statsapi_games
-            WHERE CAST(official_date AS DATE) = CAST(%(date)s AS DATE)
-        ) AND lw.slot_{i}_player_id IS NOT NULL
-        """
-        for i in range(1, 10)
-    )
+    # ⚠️ ONE scan of the wide lineup table, not nine. The first cut UNION ALL'd a per-slot
+    # SELECT (9 scans of a very wide table) — precisely the heavy-read profile E9.26b showed
+    # can fail INSIDE the API Lambda while working fine locally, where lakehouse_query then
+    # swallows it and returns []. Worse, that lesson notes a failed read on the shared DuckDB
+    # singleton can take down a LATER query, so a heavy read here could zero /props/starters
+    # too. Parallel `unnest` lists zip positionally in DuckDB, giving the same rows in a
+    # single pass (verified: byte-identical 261 rows / 15 games on 2026-08-15).
+    slot_ids = ", ".join(f"lw.slot_{i}_player_id" for i in range(1, 10))
+    slot_names = ", ".join(f"lw.slot_{i}_full_name" for i in range(1, 10))
     sql = f"""
-        WITH slotted AS ({slots})
+        WITH slotted AS (
+            SELECT lw.game_pk,
+                   lw.home_away,
+                   unnest([{slot_ids}])   AS player_id,
+                   unnest([{slot_names}]) AS player_name
+            FROM baseball_data.betting.stg_statsapi_lineups_wide lw
+            WHERE lw.game_pk IN (
+                SELECT game_pk FROM baseball_data.betting.stg_statsapi_games
+                WHERE CAST(official_date AS DATE) = CAST(%(date)s AS DATE)
+            )
+        )
         SELECT s.game_pk,
                s.player_id,
                any_value(s.player_name) AS player_name,
-               min(s.batting_slot)      AS batting_slot,
                CASE WHEN lower(s.home_away) = 'home' THEN any_value(gm.home_team_name)
                     ELSE any_value(gm.away_team_name) END AS team,
                CASE WHEN lower(s.home_away) = 'home' THEN any_value(gm.away_team_name)
@@ -207,10 +214,11 @@ def prop_batters(date: str, _: str = Depends(get_user_id)) -> dict:
                any_value(CAST(gm.official_date AS DATE)) AS game_date
         FROM slotted s
         LEFT JOIN baseball_data.betting.stg_statsapi_games gm ON gm.game_pk = s.game_pk
+        WHERE s.player_id IS NOT NULL
         GROUP BY s.game_pk, s.player_id, s.home_away
         ORDER BY player_name
     """
-    rows = lakehouse_query(sql, {"date": date})
+    rows, read_ok = lakehouse_query_checked(sql, {"date": date})
     batters = [
         {
             "game_pk": r["GAME_PK"],
@@ -218,13 +226,16 @@ def prop_batters(date: str, _: str = Depends(get_user_id)) -> dict:
             "player_name": r["PLAYER_NAME"],
             "team": r["TEAM"],
             "opponent": r["OPPONENT"],
-            "batting_slot": r.get("BATTING_SLOT"),
+            # NB no batting_slot: the single-scan query does not carry it, and the picker
+            # does not show it. An always-null field is a declaration with no production
+            # behind it — better absent than permanently empty.
             "game_date": str(r["GAME_DATE"])[:10] if r.get("GAME_DATE") is not None else date,
         }
         for r in rows
         if r.get("PLAYER_ID") is not None and r.get("PLAYER_NAME")
     ]
-    return {"date": date, "source": "lineups_wide", "batters": batters}
+    return {"date": date, "source": "lineups_wide", "degraded": not read_ok,
+            "batters": batters}
 
 
 @router.post("/users/login")
