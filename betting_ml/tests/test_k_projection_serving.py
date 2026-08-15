@@ -189,6 +189,9 @@ def test_index_row_extracts_summary():
     assert row["p10"] == 3 and row["p90"] == 19   # grid=range(2,21): level idx 1→3, 17→19
     assert row["model_p_over"] == 0.61            # pulled from the 5.5 comparison row
     assert row["book_count"] == 3
+    # bovada+fanduel both quote 5.5, dk quotes 6.5 — three LINE rows, two DISTINCT books there,
+    # three distinct books total (E5.10 — the /props "sportsbook" filter chip).
+    assert row["books"] == ["bovada", "dk", "fanduel"]
     # index row must not leak edge/EV keys either
     assert {"edge_over", "ev_over", "best_ev"}.isdisjoint(row.keys())
 
@@ -203,6 +206,22 @@ def test_index_row_no_books():
     assert row["primary_line"] is None
     assert row["model_p_over"] is None
     assert row["book_count"] == 0
+    assert row["books"] == []
+
+
+def test_index_row_books_dedupe_when_one_book_quotes_two_lines():
+    comps = [
+        book_comparison_row("bovada", 5.5, -110, -110, 0.61, 0.39, 0.0, 6.2),
+        book_comparison_row("bovada", 6.5, -120, +100, 0.44, 0.56, 0.0, 6.2),
+    ]
+    p = build_k_projection_payload(
+        pitcher_id=1, full_name="x", team=None, game_pk=None, game_date="2026-06-30", opponent=None,
+        quantile_levels=_QUANTILES, k_quantile_grid=list(range(19)), mean=5.0, std=2.0,
+        calib_80=0.8, book_comparisons=comps,
+    )
+    row = index_row(p)
+    assert row["book_count"] == 2  # book_count is a LINE count, unchanged by this story
+    assert row["books"] == ["bovada"]  # one BOOK, deduped
 
 
 def test_build_index_payload_sorts_by_mean_desc_and_is_honest():
