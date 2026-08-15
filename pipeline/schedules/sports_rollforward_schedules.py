@@ -57,19 +57,32 @@ WARN-tier throughout, advisory/non-serving (see the job's own docstring).
 ⏰ WINDOW (widened by NF-FRESH2 P0): daily, MARCH → the following FEBRUARY — the same full-season
 cycle as NF-D1's roll-forward. It used to be March–August; availability designations churn
 HARDEST in-season, so the old window excluded exactly the months this feed is most useful.
-Ships STOPPED for the same reason as NF-D1: the staging-model refresh step shares the
-`sports_nfl_dbt_build_job` box-readiness prereq — the Sleeper fetch itself needs no key.
 
-🚨 KNOWN, UNRELATED BREAK (NF-FRESH1, 2026-08-15) — widening the window does NOT fix it and this
-docstring must not be read as claiming it does: `sports_nfl_sleeper_injuries_job`'s ingest op dies
-at `duckdb.connect(read_only=True)` in ~114ms on the box (the sports DuckDB is gitignored, so it
-is absent from the `COPY . .` image) and its bare `except` returns SUCCESS — 19 consecutive green
-runs that wrote nothing. A wider cron just produces more green-and-empty runs until the box's
-sports DuckDB prereq is satisfied. Tracked separately; see CLAUDE.md's NF-FRESH1 landmine entry.
+🚨 THE NF-FRESH1 BREAK (2026-08-15) — widening the window did NOT fix it: `sports_nfl_sleeper_
+injuries_job`'s ingest op died at `duckdb.connect(read_only=True)` in ~114ms on the box (the sports
+DuckDB is gitignored, so it was absent from the `COPY . .` image) and its bare `except` returned
+SUCCESS — 19 consecutive green runs that wrote nothing. NF-INFRA1 (same day) fixed it: the file now
+lives on the `sports_duckdb` named volume at one authoritative `SPORTS_DUCKDB_PATH`, and the ingest
+op pages+raises instead of swallowing. The operator confirmed this schedule RUNNING on the box.
+
+⭐ NF-INFRA1 FOLLOW-UP (2026-08-15): ships `default_status=RUNNING` and joined
+`check_monitors_healthy_op`'s required-RUNNING set
+(`betting_ml.monitoring.monitor_health.CRITICAL_SCHEDULES`). It used to ship STOPPED (an
+operator-gated exception shared with NF-D1, on the theory the staging-model refresh needed the
+`sports_nfl_dbt_build_job` box-readiness prereq) and its ON state lived ONLY in the Dagster
+Postgres from the operator's manual toggle — so a volume reset / box re-host would have silently
+reverted it to STOPPED with nothing paging, the exact "silently never runs" class (the INC-16
+default-status-revert + E11.23 family) this flip + the heartbeat entry close.
 
 ═══════════════════════════════════════════════════════════════════════════════════════════════
 NF-FRESH2 — the draft-board publish schedule (below): the cadence that makes the SERVED board
 move. See `pipeline/jobs/sports_nfl_board_publish_job.py` for the ordering rationale (INC-25).
+
+⭐ NF-INFRA1 FOLLOW-UP (2026-08-15): ships `default_status=RUNNING` and joined
+`check_monitors_healthy_op`'s required-RUNNING set. NF-INFRA1 turned it ON in Dagit once the
+`sports_duckdb` volume prereq was materialized, but that ON state lived only in the Dagster
+Postgres; this flip + the heartbeat entry are the belt-and-suspenders cure — the exact
+silent-board-freeze failure this whole schedule exists to prevent, one level up.
 """
 
 from datetime import date
@@ -139,7 +152,8 @@ def sports_nfl_roll_forward_schedule(context: ScheduleEvaluationContext):
     job=sports_nfl_sleeper_injuries_job,
     cron_schedule=NFL_SLEEPER_INJURIES_CRON,
     execution_timezone="America/Los_Angeles",
-    default_status=DefaultScheduleStatus.STOPPED,  # ⛔ operator-gated — see module docstring
+    # NF-INFRA1 follow-up (2026-08-15): self-starts + heartbeat-checked — see module docstring.
+    default_status=DefaultScheduleStatus.RUNNING,
 )
 def sports_nfl_sleeper_injuries_schedule(context: ScheduleEvaluationContext):
     """Daily (through camp) refresh of Sleeper's forward-availability snapshot (NF-D5)."""
@@ -181,7 +195,8 @@ def is_draft_season(today: date) -> bool:
     job=sports_nfl_board_publish_job,
     cron_schedule=NFL_BOARD_PUBLISH_CRON,
     execution_timezone="America/Los_Angeles",
-    default_status=DefaultScheduleStatus.STOPPED,  # ⛔ operator-gated — see below
+    # NF-INFRA1 follow-up (2026-08-15): self-starts + heartbeat-checked — see below.
+    default_status=DefaultScheduleStatus.RUNNING,
 )
 def sports_nfl_board_publish_schedule(context: ScheduleEvaluationContext):
     """DAILY through draft season, WEEKLY (Mondays) the rest of the year.
@@ -192,11 +207,16 @@ def sports_nfl_board_publish_schedule(context: ScheduleEvaluationContext):
     users) / INC-36 (two concurrent deploys) / INC-38 (a flag on one caller of four) shape this repo
     keeps paying for. A single owner that decides its own cadence cannot collide with itself.
 
-    ⛔ Ships STOPPED, and unlike its siblings that is NOT merely convention here: the job's build
-    chain needs the box's sports DuckDB, which is gitignored and absent from the image until
-    `sports_nfl_dbt_build_job` has materialized it. Enabling this before that prereq holds produces
-    a daily CRITICAL page (by design — the publish op refuses to report success on a run that
-    published nothing). The intended state belongs in `BOX_OPERATIONS.md §10`.
+    ⭐ Ships `default_status=RUNNING` (NF-INFRA1 follow-up, 2026-08-15): it used to ship STOPPED,
+    and unlike its siblings that was NOT merely convention — the job's build chain needs the box's
+    sports DuckDB, which is gitignored and absent from the image until `sports_nfl_dbt_build_job`
+    has materialized it. Enabling this before that prereq holds produces a daily CRITICAL page (by
+    design — the publish op refuses to report success on a run that published nothing). NF-INFRA1
+    landed the prereq (the `sports_duckdb` named volume) and the operator confirmed it materialized
+    + toggled this ON in Dagit — but that ON state lived ONLY in the Dagster Postgres, so a volume
+    reset / box re-host would have silently reverted it to STOPPED (the board freezes) with nothing
+    paging. This flip + the `check_monitors_healthy_op` required-RUNNING entry are the structural
+    cure. The intended state belongs in `BOX_OPERATIONS.md §10`.
     """
     today = context.scheduled_execution_time.date()
     if is_draft_season(today):
