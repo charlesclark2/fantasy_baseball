@@ -199,16 +199,20 @@ test.describe("filter chips — line value and min book count", () => {
 
   test("a min-book-count chip drops thinly-covered rows", async ({ page }) => {
     await openProps(page, { tab: "TB" })
-    const before = await page.getByTestId("props-card").count()
-    // Force every game open so the count is over the WHOLE slate, not just the default-expanded one.
-    for (const pk of [900001, 900002, 900003, 900004, 900005, 900006]) {
-      const group = gameGroup(page, pk)
-      if ((await group.getByTestId("props-card").count()) === 0) {
-        await group.getByTestId("props-game-header").click()
-      }
+
+    // ⚠️ `locator.count()` does NOT auto-retry — a single-shot read here would race the default
+    // expand-state settling. Every game EXCEPT the default-expanded first one starts collapsed, so
+    // click those five unconditionally rather than reading-then-deciding whether to click (the race
+    // NF-C6P2 documents: a read that happens to land mid-render looks identical to "already open").
+    for (const pk of [900002, 900003, 900004, 900005, 900006]) {
+      await gameGroup(page, pk).getByTestId("props-game-header").click()
     }
+    await expect
+      .poll(() => page.getByTestId("props-card").count(), {
+        message: "expanding every game did not grow the card count at all",
+      })
+      .toBeGreaterThan(TB_BATTER_COUNT)
     const fullSlate = await page.getByTestId("props-card").count()
-    expect(fullSlate).toBeGreaterThan(before)
 
     await page.getByTestId("props-filter-books-3").click()
     await expect
