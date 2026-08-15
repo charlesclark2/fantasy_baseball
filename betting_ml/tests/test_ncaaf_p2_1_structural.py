@@ -278,6 +278,24 @@ def test_dsr_deflates_the_arm_that_would_be_promoted_not_merely_the_best_crps_on
         "survivors must be resolved BEFORE the arm to deflate is chosen")
 
 
+def test_a_non_promoted_survivor_is_still_classified():
+    """⭐ An arm can clear every ARM-level gate (eligible · not a tie · BH-FDR · fold-consistency)
+    and still not ship because a RUN-level gate (PBO / DSR) failed. Its null STATE is then the most
+    important line in the report — it is what separates POWER_LIMITED ("buy more seasons") from
+    DSR_UNREACHABLE ("no `n` and no field size ever clears").
+
+    The first real run exposed this: `pace` won 8/8 folds at p=0.0020, was listed as a survivor,
+    the verdict was REFERENCE_STANDS, and the arm carried NO state at all because the classifier
+    skipped survivors. Classification must key on what was PROMOTED, not on the survivor list."""
+    src = _strip_comments(_HARNESS.read_text())
+    assert "promoted = set(survivors) if (survivors and deflation_clean and anchors_ok) else set()" in src
+    assert "if arm in promoted:" in src, "the null loop must skip PROMOTED arms, not survivors"
+    assert "if arm in survivors:\n            continue" not in src, (
+        "skipping survivors leaves a non-promoted survivor unclassified")
+    assert '"arm_level_gates_cleared": bool(arm in survivors)' in src, (
+        "the report must distinguish a survivor that lost on a RUN-level gate from a plain null")
+
+
 def test_bh_fdr_is_monotone_and_controls_the_registered_family():
     from quant_sports_intel_models.football.ncaaf.models.bakeoff_ncaaf_p2_1 import _bh
     p = {"a": 0.001, "b": 0.02, "c": 0.4, "d": 0.9}
