@@ -381,15 +381,40 @@ def _get_connection():
 
 
 def _duck_connection(tables):
-    """A registered, Snowflake-free DuckDB connection over the S3 lakehouse."""
+    """A registered, Snowflake-free DuckDB connection over the S3 lakehouse.
+
+    ⚠️ PER-TABLE ISOLATION AT **REGISTRATION**, not only at query time (2026-08-14). The batch
+    ``register_lakehouse_views`` helper registers every view in one loop, and DuckDB binds a view
+    AT CREATE TIME — measured on duckdb 1.5.3, ``CREATE OR REPLACE VIEW … read_parquet(<missing
+    prefix>)`` raises ``IOException: No files found that match the pattern`` immediately, it is
+    NOT lazy. So a single absent/unreadable S3 prefix used to abort ``_duck_connection`` before
+    the first entry was even read, blinding EVERY check — the exact failure the per-table
+    try/except in ``run()`` was added to prevent (the savant.batter_pitches decommission
+    straggler, 2026-07-06), reproduced one layer earlier where that guard cannot reach.
+
+    This is a live risk for any newly-flipped entry, because a mirror written by a re-export leaf
+    does not exist until that leaf's job first RUNS. Registration failures are therefore isolated:
+    the offending view is left unregistered, and the per-table read below reports QUERY ERROR for
+    that entry ALONE — never a silent OK (a check that did not run is not a pass, NF1.7 (a)).
+    ``stg_statsapi_games`` is deliberately NOT special-cased: if the game-day probe cannot be
+    registered, ``_is_game_day`` raises and the run fails loudly, which is correct — every
+    ``game_day_only`` entry would otherwise be skipped and the monitor would go quietly blind.
+    """
     _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if _root not in sys.path:
         sys.path.insert(0, _root)
-    from betting_ml.utils.delta_lakehouse import register_lakehouse_views
+    from betting_ml.utils.delta_lakehouse import ensure_delta_extension, lakehouse_view_sql
     from betting_ml.utils.lakehouse_monitor import duck
 
     conn = duck()
-    register_lakehouse_views(conn, sorted(set(tables)))
+    ensure_delta_extension(conn)
+    for name in sorted(set(tables)):
+        try:
+            conn.execute(f"CREATE OR REPLACE VIEW {name} AS {lakehouse_view_sql(name)}")
+        except Exception as e:  # noqa: BLE001 — one unreadable prefix must not blind the rest
+            log.warning(
+                "  %-55s VIEW REGISTRATION FAILED (%s) — this table will report QUERY ERROR; "
+                "every other check still runs", name, str(e).splitlines()[0][:120])
     return conn
 
 

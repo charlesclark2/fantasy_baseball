@@ -452,6 +452,75 @@ def test_needs_snowflake_still_discriminates():
     assert fresh.needs_snowflake(regressed) is True
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# 4b. A mirror that does not exist yet must cost ONE entry, not the whole check
+# ══════════════════════════════════════════════════════════════════════════════════════════
+
+def test_duckdb_binds_a_parquet_view_at_create_time_not_lazily():
+    """THE PREMISE, measured rather than assumed — everything below depends on it.
+
+    If DuckDB were lazy, an absent prefix would surface at query time and `run()`'s existing
+    per-table try/except would already contain it. It is NOT lazy (duckdb 1.5.3): CREATE VIEW
+    over a missing glob raises immediately, which is why the registration loop needs its own
+    isolation. This test is what tells a future reader if that ever changes.
+    """
+    duckdb = pytest.importorskip("duckdb")
+    conn = duckdb.connect()
+    with pytest.raises(Exception) as exc:
+        conn.execute(
+            "CREATE OR REPLACE VIEW t AS SELECT * FROM "
+            "read_parquet('/tmp/e1124_definitely_missing_prefix/**/*.parquet', union_by_name=true)"
+        )
+    assert "No files found" in str(exc.value) or "IO Error" in str(exc.value)
+
+
+def test_one_unregisterable_mirror_does_not_blind_the_other_entries(tmp_path, monkeypatch):
+    """THE REGRESSION this isolation prevents. A re-export leaf's mirror does not exist until
+    that leaf's job first RUNS, so a fresh deploy genuinely has an absent prefix — and the batch
+    registration helper would abort `_duck_connection` before the first entry was read, blinding
+    EVERY check. That is the savant.batter_pitches decommission failure (2026-07-06) reproduced
+    one layer earlier, where `run()`'s per-table try/except cannot reach it.
+
+    Driven through the REAL `_duck_connection` against REAL DuckDB over local parquet — a mocked
+    connection would only restate the loop's own structure.
+    """
+    duckdb = pytest.importorskip("duckdb")
+    pytest.importorskip("pandas")
+    import pandas as pd
+
+    present = tmp_path / "present_table"
+    present.mkdir()
+    pd.DataFrame({"update_ts": pd.to_datetime(["2026-08-14 13:03:04"])}).to_parquet(
+        present / "data.parquet")
+
+    fresh = _freshness_module()
+    monkeypatch.setattr(
+        fresh, "_duck_connection", fresh._duck_connection)          # keep the real one explicit
+
+    import betting_ml.utils.delta_lakehouse as dl
+    monkeypatch.setattr(
+        dl, "lakehouse_view_sql",
+        lambda t: ("SELECT * FROM read_parquet('"
+                   f"{tmp_path / t}/**/*.parquet', union_by_name=true)"))
+
+    conn = fresh._duck_connection(["present_table", "absent_table"])
+    try:
+        # the healthy table still answers …
+        ts = fresh._max_ingestion_timestamp_s3(
+            "baseball_data.betting.present_table", "update_ts", conn)
+        assert ts is not None and ts.year == 2026, (
+            "the absent mirror took the healthy one down with it — the registration loop is not "
+            "isolated"
+        )
+        # … and the absent one raises for ITSELF, which run()'s per-table except turns into a
+        # QUERY ERROR for that entry alone. It must NOT read as fresh (NF1.7 (a)).
+        with pytest.raises(Exception):
+            fresh._max_ingestion_timestamp_s3(
+                "baseball_data.betting.absent_table", "update_ts", conn)
+    finally:
+        conn.close()
+
+
 def test_the_snowflake_escape_hatch_is_retained_deliberately():
     """The Snowflake read path is kept (not deleted) as the escape hatch for a genuinely
     Snowflake-resident future feed, with `_DEFAULT_SOURCE` still failing toward the store that
