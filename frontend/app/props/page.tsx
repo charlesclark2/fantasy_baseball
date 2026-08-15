@@ -693,11 +693,15 @@ function PropsPageInner() {
               </div>
             </div>
 
-            {/* Filter chips */}
-            <div className="flex flex-wrap items-center gap-1.5">
+            {/* Filter chips — one category per row (E5.10 follow-up: previously all four
+                categories shared a single flex-wrap row and ran together whenever the chips
+                overflowed, reading as one messy jumble instead of four distinct filters). */}
+            <div className="flex flex-col gap-2">
               {teamsAll.length > 1 && (
-                <>
-                  <span className="text-[11px] uppercase tracking-wider text-gray-600">Team</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="w-[92px] shrink-0 text-[11px] uppercase tracking-wider text-gray-600">
+                    Team
+                  </span>
                   {teamsAll.map((t) => (
                     <FilterChip
                       key={t}
@@ -707,11 +711,13 @@ function PropsPageInner() {
                       testId={`props-filter-team-${t}`}
                     />
                   ))}
-                </>
+                </div>
               )}
               {lineValuesAll.length > 1 && (
-                <>
-                  <span className="ml-2 text-[11px] uppercase tracking-wider text-gray-600">Line</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="w-[92px] shrink-0 text-[11px] uppercase tracking-wider text-gray-600">
+                    Line
+                  </span>
                   {lineValuesAll.map((l) => (
                     <FilterChip
                       key={l}
@@ -721,11 +727,11 @@ function PropsPageInner() {
                       testId={`props-filter-line-${l}`}
                     />
                   ))}
-                </>
+                </div>
               )}
               {bookCountThresholds.length > 0 && (
-                <>
-                  <span className="ml-2 text-[11px] uppercase tracking-wider text-gray-600">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="w-[92px] shrink-0 text-[11px] uppercase tracking-wider text-gray-600">
                     Min. books
                   </span>
                   {bookCountThresholds.map((n) => (
@@ -737,11 +743,11 @@ function PropsPageInner() {
                       testId={`props-filter-books-${n}`}
                     />
                   ))}
-                </>
+                </div>
               )}
               {sportsbooksAll.length > 1 && (
-                <>
-                  <span className="ml-2 text-[11px] uppercase tracking-wider text-gray-600">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="w-[92px] shrink-0 text-[11px] uppercase tracking-wider text-gray-600">
                     Sportsbook
                   </span>
                   {sportsbooksAll.map((b) => (
@@ -754,14 +760,14 @@ function PropsPageInner() {
                       testId={`props-filter-book-${b}`}
                     />
                   ))}
-                </>
+                </div>
               )}
               {filtersActive && (
                 <button
                   type="button"
                   onClick={clearFilters}
                   data-testid="props-clear-filters"
-                  className="ml-1 inline-flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-300"
+                  className="inline-flex w-fit items-center gap-1 text-[11px] text-gray-500 hover:text-gray-300"
                 >
                   <ClearIcon className="h-3 w-3" />
                   Clear filters
