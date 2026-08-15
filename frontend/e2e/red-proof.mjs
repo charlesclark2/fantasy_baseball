@@ -1726,8 +1726,26 @@ const CASES = [
  * output; read the summary first — a case that flipped from RED to MISMATCH is a guard that has
  * quietly become decorative, and it is the finding.
  *
- * Measured 2026-08-14 (NF-C6P2): 113 cases, 107 RED, 6 declared NOT-OBSERVABLE, exit 0.
- * Previously (ESPN-PRUNER): 107 / 101 / 6. (E9.64b): 106 / 100 / 6. (E9.64): 95 / 89 / 6.
+ * Last FULL measurement 2026-08-14 (ESPN-PRUNER): 107 cases, 101 RED, 6 NOT-OBSERVABLE, exit 0.
+ * Previously (E9.64b): 106 / 100 / 6. (E9.64): 95 / 89 / 6.
+ *
+ * ⚠️ THE CURRENT NUMBERS ARE DERIVED, NOT MEASURED, and saying so is the point. NF-C6P2 added SIX
+ * cases and RED-proved each ONE AT A TIME (`--` by id), which is a real verdict per case; it did not
+ * re-run the whole board, because 113 cases × a production build each is an hour-plus job and does
+ * not belong in a session. So 113/107/6 is 107/101/6 plus six individually-proven REDs — and the
+ * next full run is what CONFIRMS it. ⛔ A projection is not a measurement: if that run disagrees,
+ * the finding is whatever drifted, never this line (see the ⛔ note above).
+ *
+ * Additionally verified without a full run: all 113 anchors resolve against the current tree, so no
+ * case is STALE.
+ *
+ * 🪤 AND A WARNING PAID FOR IN THIS SESSION: a full run KILLED mid-flight (a timeout, ^C, anything
+ * that does not let the exit trap finish) leaves the case file it was on MUTATED in the working
+ * tree. It surfaced here as `app/fantasy/draft/page.tsx` sitting in the `paid-half-un-gated` broken
+ * state — i.e. the Draft Optimizer publicly guarded — which reads exactly like a live entitlement
+ * hole rather than like test residue. `git status` before believing it, and `git checkout --` the
+ * file. (Nothing reached a commit: staging by explicit path rather than `git add -A` is what kept
+ * it out.)
  */
 const RECORDED_BOARD = { total: 113, red: 107, notObservable: 6 }
 
