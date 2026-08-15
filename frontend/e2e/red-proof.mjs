@@ -1649,7 +1649,12 @@ const CASES = [
     file: "lib/roster-report.ts",
     from: '      reason: league.source_team_key ? "not-drafted" : "no-team-linked",',
     to: '      reason: "no-team-linked",',
-    grep: "NOT the same message",
+    // ⚠️ THE WHOLE DESCRIBE BLOCK, not the one test whose title contains "NOT the same message" —
+    // which is what this case first pointed at, and it came back GREEN twice. That test drives the
+    // captured league (`source_team_key: null`), so it renders "no team linked" both before and
+    // after the break and structurally cannot see it. The clause that CAN is the positive one on a
+    // LINKED, undrafted league, so the grep has to reach it.
+    grep: "four different messages",
   },
   {
     id: "upgrade-prompt-sold-to-subscribers",
