@@ -302,3 +302,44 @@ def test_the_filter_is_not_vacuous_on_an_empty_population():
     keep, drop = _load_side_helper()(set(), {1: {100: {"is_home": True}}})
     assert keep == set()
     assert drop == []
+
+
+# ---------------------------------------------------------------------------
+# E5.10 — display-name picking. The posted-lineup feed carries one row per slot per game, so
+# one batter_id can arrive with several spellings; the served name must be deterministic (a
+# re-run flipping a name is a user-visible change with no cause). Both cases below are REAL
+# spellings observed on the 2026-08-15 slate.
+# ---------------------------------------------------------------------------
+
+def _load_name_picker():
+    src = _WRITER.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    fn = next(n for n in tree.body
+              if isinstance(n, ast.FunctionDef) and n.name == "pick_display_name")
+    ns: dict = {"Sequence": list}
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), str(_WRITER), "exec"), ns)
+    return ns["pick_display_name"]
+
+
+def test_a_suffix_spelling_wins_over_the_bare_name():
+    """`George Lombard Jr.` / `George Lombard` — the suffix is the more precise identity."""
+    assert _load_name_picker()(["George Lombard", "George Lombard Jr."]) == "George Lombard Jr."
+
+
+def test_internal_double_spacing_collapses_to_one_name():
+    """`Hao-Yu  Lee` (double space) and `Hao-Yu Lee` are ONE player, not two spellings."""
+    assert _load_name_picker()(["Hao-Yu  Lee", "Hao-Yu Lee"]) == "Hao-Yu Lee"
+
+
+def test_the_pick_is_order_independent():
+    """Feed order is an accident of the slot union — it must not decide the served name."""
+    pick = _load_name_picker()
+    assert pick(["George Lombard", "George Lombard Jr."]) == pick(
+        ["George Lombard Jr.", "George Lombard"])
+
+
+def test_blank_and_missing_spellings_yield_no_name_rather_than_an_empty_string():
+    """An empty string would serve a nameless card; the caller must see None and skip."""
+    pick = _load_name_picker()
+    assert pick([]) is None
+    assert pick(["", "   ", None]) is None
