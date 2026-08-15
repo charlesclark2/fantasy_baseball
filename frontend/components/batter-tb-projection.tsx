@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Info } from "lucide-react"
 import { apiFetch } from "@/lib/api"
+import { LogPropButton } from "@/components/log-prop-button"
 import { useAuth } from "@/lib/auth-context"
 
 // ---------------------------------------------------------------------------
@@ -248,6 +249,25 @@ export function BatterTbProjection({ batterId, asOf }: { batterId: number; asOf?
           {gameTime && <span>{gameTime}</span>}
           {data.batting_slot != null && <span>Batting {data.batting_slot}</span>}
         </div>
+      </div>
+
+      {/* Bookkeeping affordance — copy this line into the user's own Bet Log. Not a
+          recommendation. Mirrors the K page (E9.42); shared market table (E5.10). */}
+      <div className="mb-3 flex justify-end">
+        <LogPropButton
+          kind="total_bases"
+          prop={{
+            player_id: data.batter_id,
+            full_name: data.full_name,
+            team: data.team,
+            opponent: data.opponent,
+            game_pk: data.game_pk,
+            game_date: data.game_date,
+            primary_line: data.primary_line,
+            book_comparisons: data.book_comparisons ?? [],
+            projection_mean: data.distribution?.mean ?? null,
+          }}
+        />
       </div>
 
       <div className="rounded-lg border border-[#262626] bg-[#111111] px-4 py-4">
