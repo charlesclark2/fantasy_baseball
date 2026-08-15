@@ -1702,6 +1702,22 @@ const CASES = [
     to: "<PositionRank label={COPY.ourRankLabel} pos={player.pos} rank={market.ourRankAmongDrafted ?? market.ourRank} />",
     grep: "rank is the SERVER",
   },
+  {
+    id: "tabs-that-do-not-tab",
+    shipped: "pre-emptive: tabs that render every panel and hide the inactive ones",
+    // ⭐ THE FIX THAT LOOKS LIKE THE FIX. The operator's report was "too much scrolling" (2026-08-15,
+    // eight stacked sections ≈ four screens). A tab strip whose panels all render — hidden with CSS,
+    // or simply not gated at all — satisfies every "is this section visible" assertion, looks
+    // correct in a screenshot, and changes NOTHING about the problem: the page is still four screens
+    // long and a screen reader still reads all eight sections in order.
+    //
+    // The break makes `Panel` unconditional, which is exactly how it would really be written wrong.
+    detail: "Renders every panel regardless of which tab is selected.",
+    file: "components/fantasy/roster-report.tsx",
+    from: "  if (id !== active) return null",
+    to: "  if (false) return null",
+    grep: "tabbed, not a single scroll",
+  },
 ]
 
 /**
@@ -1736,7 +1752,7 @@ const CASES = [
  * next full run is what CONFIRMS it. ⛔ A projection is not a measurement: if that run disagrees,
  * the finding is whatever drifted, never this line (see the ⛔ note above).
  *
- * Additionally verified without a full run: all 113 anchors resolve against the current tree, so no
+ * Additionally verified without a full run: all 114 anchors resolve against the current tree, so no
  * case is STALE.
  *
  * 🪤 AND A WARNING PAID FOR IN THIS SESSION: a full run KILLED mid-flight (a timeout, ^C, anything
@@ -1747,7 +1763,7 @@ const CASES = [
  * file. (Nothing reached a commit: staging by explicit path rather than `git add -A` is what kept
  * it out.)
  */
-const RECORDED_BOARD = { total: 113, red: 107, notObservable: 6 }
+const RECORDED_BOARD = { total: 114, red: 108, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

@@ -66,6 +66,20 @@ async function openReport(
   return { errors, mock }
 }
 
+/**
+ * Select one of the report's tabs.
+ *
+ * ⚠️ THE SECTIONS ARE NO LONGER ALL ON SCREEN AT ONCE (operator, 2026-08-15 — eight stacked sections
+ * was ~four screens of scrolling). Located by ROLE rather than by test id, so the assertion also
+ * exercises the tab semantics a screen reader depends on: a set of styled `<button>`s with no
+ * `role="tab"`/`aria-selected` would fail this and would be an accessibility regression that renders
+ * identically.
+ */
+async function openTab(page: Page, name: string) {
+  await page.getByRole("tab", { name, exact: true }).click()
+  await expect(page.getByRole("tab", { name, exact: true })).toHaveAttribute("aria-selected", "true")
+}
+
 /** Every number in one column of a table, as floats. Blank/em-dash cells are dropped. */
 async function columnValues(page: Page, testId: string): Promise<number[]> {
   const raw = await page.locator(`[data-testid="${testId}"]`).allInnerTexts()
@@ -79,6 +93,7 @@ test.describe("the report is built from the served board", () => {
     const { errors, mock } = await openReport(page, { groups: FREE.groups })
 
     await expect(page.getByTestId("roster-report")).toBeVisible()
+    await openTab(page, "Lineup")
 
     // ⭐ THE ARITHMETIC. Not "a total rendered" — the total must BE the sum of the season column of
     // the lineup table directly above it. A report that summed the whole roster (bench included),
@@ -142,17 +157,25 @@ test.describe("the report is built from the served board", () => {
     // one — the arithmetic tests above are what prove the numbers. This exists so a section that
     // silently stops rendering (a thrown-away branch, a renamed field) is a red build rather than a
     // quietly shorter page.
-    for (const id of [
-      "team-projection",
-      "position-strengths",
-      "starting-lineup",
-      "bench-quality",
-      "bye-conflicts",
-      "fragility",
-      "waiver-ideas",
-      "trade-ideas",
-    ]) {
-      await expect(page.getByTestId(id), `the ${id} section is missing`).toBeVisible()
+    // The headline is OUTSIDE the tabs on purpose — it answers the question the page is opened
+    // with, and it carries the uncertainty disclosure and the unmatched-roster note, neither of
+    // which may end up behind a click.
+    await expect(page.getByTestId("team-projection")).toBeVisible()
+
+    // ⚠️ EVERY SECTION IS ASSERTED THROUGH ITS OWN TAB, so a section that silently stopped rendering
+    // is still a red build — and so is a section wired to the WRONG panel, which a flat
+    // "is it anywhere on the page" scan could not tell from a correct one.
+    const byTab: [string, string[]][] = [
+      ["Positions", ["position-strengths"]],
+      ["Lineup", ["starting-lineup"]],
+      ["Depth & byes", ["bench-quality", "bye-conflicts", "fragility"]],
+      ["Next moves", ["waiver-ideas", "trade-ideas"]],
+    ]
+    for (const [tab, ids] of byTab) {
+      await openTab(page, tab)
+      for (const id of ids) {
+        await expect(page.getByTestId(id), `${id} is missing from the ${tab} tab`).toBeVisible()
+      }
     }
 
     // The drafted fixture is built so the bench and trade sections have real content (see
@@ -160,13 +183,18 @@ test.describe("the report is built from the served board", () => {
     // passing against a report whose every section rendered its "nothing to say" branch.
     // ⚠️ `expect.poll` rather than a bare `count()` — see the bye-week test for why a non-retrying
     // count is the assertion that passes locally and fails on a shared CI runner.
+    await openTab(page, "Depth & byes")
     await expect(page.getByTestId("bench-summary")).toBeVisible()
+    await openTab(page, "Positions")
     await expect(page.getByTestId("position-row-RB")).toHaveCount(1)
+    await openTab(page, "Lineup")
     await expect.poll(() => page.getByTestId("lineup-row").count()).toBeGreaterThan(5)
   })
 
   test("the bye-week table costs a week the roster actually has off", async ({ page }) => {
     await openReport(page, { groups: FREE.groups })
+
+    await openTab(page, "Depth & byes")
 
     // ⚠️ `locator.count()` DOES NOT AUTO-RETRY, unlike an `expect(locator)` assertion. The first cut
     // read it straight after `goto` and passed locally while failing on CI, where two workers share
@@ -260,6 +288,7 @@ test.describe("the four empty states are four different messages", () => {
 
     await expect(page.getByTestId("roster-report")).toBeVisible()
     await expect(page.getByTestId("team-total")).toBeVisible()
+    await openTab(page, "Depth & byes")
     await expect(page.getByTestId("bye-conflicts")).toContainText("No bye weeks are known")
     await expect(page.locator('[data-testid^="bye-week-"]')).toHaveCount(0)
     await expectNoNaN(page)
@@ -397,5 +426,41 @@ test.describe("E9.46 — one rank, one meaning", () => {
     await page.goto("/")
     await expect(page.locator("#fantasy-proof")).toBeVisible()
     await expect(page.getByTestId("rank-population-note")).toHaveCount(0)
+  })
+})
+
+test.describe("the report is tabbed, not a single scroll", () => {
+  test("only the selected tab's sections are in the document", async ({ page }) => {
+    // ⚠️ THE CLAUSE THAT MAKES TABBING REAL. Rendering every panel and merely hiding the inactive
+    // ones with CSS would satisfy every "is it visible" assertion above and would not fix the
+    // problem the operator reported — the page would still be four screens long, and a screen
+    // reader would still read all eight sections. `Panel` returns null for an inactive tab, so the
+    // sections are ABSENT from the document, which is what this asserts.
+    await openReport(page, { groups: FREE.groups })
+    await expect(page.getByTestId("roster-report")).toBeVisible()
+
+    await openTab(page, "Positions")
+    await expect(page.getByTestId("position-strengths")).toBeVisible()
+    await expect(page.getByTestId("waiver-ideas")).toHaveCount(0)
+    await expect(page.getByTestId("bye-conflicts")).toHaveCount(0)
+
+    await openTab(page, "Next moves")
+    await expect(page.getByTestId("waiver-ideas")).toBeVisible()
+    await expect(page.getByTestId("position-strengths")).toHaveCount(0)
+  })
+
+  test("the headline and the upgrade prompt survive every tab", async ({ page }) => {
+    // Both are deliberately outside the tabs: the headline carries the uncertainty disclosure and
+    // the unmatched-roster note (a caveat behind a click is a caveat that did not render), and the
+    // conversion moment must not be reachable only by choosing the right tab.
+    await openReport(page, { groups: FREE.groups })
+    for (const tab of ["Positions", "Lineup", "Depth & byes", "Next moves"]) {
+      await openTab(page, tab)
+      await expect(page.getByTestId("team-total"), `headline missing on ${tab}`).toBeVisible()
+      await expect(
+        page.getByTestId("season-upgrade-prompt"),
+        `upgrade prompt missing on ${tab}`,
+      ).toBeVisible()
+    }
   })
 })
