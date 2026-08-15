@@ -101,6 +101,18 @@ services:
       # In-cluster service DNS — override whatever points at Railway/public hosts.
       DBT_RUNNER_URL: http://dbt-runner:8080
       FLARESOLVERR_URL: http://flaresolverr:8191/v1
+    # 🗄️ NF-INFRA1 — the PERSISTENT sports (NCAAF/NFL) DuckDB. `*.duckdb` is gitignored, so it is
+    # absent from the `COPY . .` image; before this volume the only places to put it were `/app`
+    # (replaced by every image) and `/tmp` (wiped by every deploy). That is how a DAILY op came to
+    # depend on a WEEKLY-rebuilt, deploy-ephemeral file and produced 19 consecutive green runs over
+    # a dead feed (NF-FRESH1). A NAMED VOLUME is the only thing here that outlives `up -d`.
+    # ⚠️ Mounted on THIS service only, and that is correct rather than an oversight: codeloc is both
+    # the gRPC code server (where schedule/sensor evaluation runs, incl. the game-day gate's DuckDB
+    # read) AND the run worker (DefaultRunLauncher subprocesses). The daemon/webserver only proxy
+    # over gRPC and never open the file, so mounting it there would add a second writer for nothing.
+    # The mount point must equal betting_ml/utils/sports_duckdb.BOX_VOLUME_DIR (guard-pinned).
+    volumes:
+      - sports_duckdb:/var/lib/credence/sports
     depends_on:
       dagster-postgres:
         condition: service_healthy
@@ -373,3 +385,9 @@ volumes:
   dagster_pg_data:
   caddy_data:    # INC-16-P4: persists Let's Encrypt certs + ACME account across restarts
   caddy_config:
+  # NF-INFRA1: the sports (NCAAF/NFL) DuckDB the whole football build chain reads/writes.
+  # Regenerable (`sports_nfl_dbt_build_job` rebuilds it from the S3 Delta lake in ~1–2 min), but it
+  # MUST survive a deploy — every consumer of it is a daily job and the build that produces it is
+  # weekly. ⛔ Do NOT `docker compose down -v` on the box: that deletes this volume AND
+  # `dagster_pg_data` (run history + every schedule's on/off state).
+  sports_duckdb:

@@ -50,6 +50,11 @@ from pathlib import Path
 
 from dagster import In, Nothing, Out, in_process_executor, job, op
 
+from betting_ml.utils.sports_duckdb import (
+    missing_duckdb_remedy,
+    sports_duckdb_env,
+    sports_duckdb_path,
+)
 from pipeline.jobs.sports_dbt_job import _run_sports_dbt
 
 # ── P4: the DAILY slice of the roll-forward ────────────────────────────────────────────────────
@@ -89,14 +94,14 @@ def _page(context, title: str, body: str, *, severity: str, dedup_key: str) -> N
 
 
 def _sports_duckdb_path() -> str:
-    """⚠️ ONE reader, ONE default. The repo currently has THREE different defaults for this env var
-    across the sports jobs (`sports_dbt/sports.duckdb`, `/tmp/sports_ncaaf.duckdb`, and
-    `profiles.yml`'s own) — the "one path, three owners, none authoritative" shape that let the
-    Sleeper op die silently. This job does not add a fourth: it reads the env var and, when unset,
-    uses the path the fantasy build scripts themselves default to, so the op and the subprocess it
-    spawns can never disagree about which database they are talking about."""
-    return os.environ.get("SPORTS_DUCKDB_PATH",
-                          "quant_sports_intel_models/sports_dbt/sports.duckdb")
+    """⚠️ ONE reader, ONE default — now enforced repo-wide.
+
+    When this job shipped, four owners each carried their own default (`sports_dbt/sports.duckdb`,
+    `/tmp/sports_ncaaf.duckdb`, `/tmp/sports_nfl.duckdb`, `profiles.yml`'s own) — the "one path,
+    many owners, none authoritative" shape that let the Sleeper op die silently. NF-INFRA1 collapsed
+    all of them onto `betting_ml.utils.sports_duckdb`, so this is now a thin alias kept only because
+    the module's own call sites and its guard test read it."""
+    return sports_duckdb_path()
 
 
 def _run(context, args: list[str], label: str, timeout: int) -> subprocess.CompletedProcess:
@@ -107,7 +112,9 @@ def _run(context, args: list[str], label: str, timeout: int) -> subprocess.Compl
     process would put it on every op's import path in this container."""
     cmd = [sys.executable, "-m", *args]
     context.log.info("[nfl board] %s: %s", label, " ".join(cmd))
-    env = {**os.environ, "SPORTS_DUCKDB_PATH": _sports_duckdb_path(),
+    # `sports_duckdb_env()` pins the RESOLVED ABSOLUTE path, so the op and the subprocess can never
+    # bind a relative default to different files (NF-INFRA1's single-owner contract).
+    env = {**sports_duckdb_env(),
            "SPORTS_LAKE_REGION": os.environ.get("SPORTS_LAKE_REGION", "us-east-2")}
     try:
         proc = subprocess.run(cmd, cwd=str(_APP_DIR), env=env, timeout=timeout,
@@ -202,13 +209,7 @@ def nfl_board_publish_op(context):
     # deployed image until `sports_nfl_dbt_build_job` has run on this box. Checking here turns an
     # opaque death three subprocesses deep into one legible sentence.
     if not resolved.exists():
-        msg = (f"the sports DuckDB is MISSING at {resolved} (SPORTS_DUCKDB_PATH="
-               f"{os.environ.get('SPORTS_DUCKDB_PATH', '<unset>')}).\n\n"
-               "`*.duckdb` is gitignored, so it is NOT in the deployed image — it must be "
-               "materialized on this box first by running `sports_nfl_dbt_build_job`, and "
-               "SPORTS_DUCKDB_PATH must be set on the box `.env` to the SAME path that job "
-               "writes. Until then this job cannot build a board, and it pages rather than "
-               "reporting a green run that published nothing.")
+        msg = missing_duckdb_remedy(resolved)
         _page(context, "NFL board publish: sports DuckDB missing", msg,
               severity="CRITICAL", dedup_key="nfl_board_publish:no_duckdb")
         raise Exception(f"NFL board publish precondition failed — {msg}")

@@ -24,6 +24,8 @@ import sys
 
 from dagster import In, Nothing, Out, in_process_executor, job, op
 
+from betting_ml.utils.sports_duckdb import sports_duckdb_env
+
 # The repo is copied to /app on the box; the shared sports project lives here.
 SPORTS_DBT_DIR = os.environ.get(
     "SPORTS_DBT_DIR", "/app/quant_sports_intel_models/sports_dbt"
@@ -150,13 +152,18 @@ def _run_sports_dbt(context, args, label):
         "--project-dir", SPORTS_DBT_DIR,
         "--profiles-dir", SPORTS_DBT_DIR,
     ]
+    # ⭐ NF-INFRA1 — `sports_duckdb_env()` pins SPORTS_DUCKDB_PATH to the ONE resolved absolute
+    # path. It replaces a `/tmp/sports_ncaaf.duckdb` default that was wrong twice over: `/tmp` is
+    # wiped by every deploy, and it disagreed with all three other owners (the Sleeper op, the
+    # publish op, the game-day gates) — so the build wrote a file the consumers never opened.
+    # Resolving it here (rather than letting dbt fall back to profiles.yml's own default) also
+    # matters because dbt runs with `cwd=SPORTS_DBT_DIR`, where a relative path binds elsewhere.
     env = {
-        **os.environ,
+        **sports_duckdb_env(),
         "DAGSTER_JOB_NAME": context.job_name,
         # DuckDB needs an explicit region for the S3 lake bucket (boto3 is region-less).
         "SPORTS_LAKE_REGION": os.environ.get("SPORTS_LAKE_REGION", "us-east-2"),
         "AWS_DEFAULT_REGION": os.environ.get("AWS_DEFAULT_REGION", "us-east-2"),
-        "SPORTS_DUCKDB_PATH": os.environ.get("SPORTS_DUCKDB_PATH", "/tmp/sports_ncaaf.duckdb"),
     }
     context.log.info(f"[{label}] {' '.join(cmd)}")
     try:
