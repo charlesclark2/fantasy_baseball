@@ -944,6 +944,38 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
                             level_recal=level_recal, **kw)
 
 
+def fit_serving_level(panel: pd.DataFrame | None, projection_season: int) -> tuple[str, dict]:
+    """NF-TR2b: the served veteran LEVEL recalibration, fitted at BUILD time from the walk-forward
+    veteran band panel (target seasons strictly before `projection_season`, the trailing
+    `WINDOW_SEASONS`, incumbent-anchored tier rows). Returns `(form, params)`; `("", {})` when the
+    policy is OFF (the identity — the pre-NF-TR2 board byte for byte, the rollback state), and
+    `(form, {})` with a LOUD alert when the panel cannot support a fit. ⭐ ONE READ of
+    `serving_form()`. Kept as its own function so a test can EXECUTE it with the policy ON — the
+    first cut inlined it in `build_projection`, where no test ran it, and shipped a NameError
+    (`veteran_tier_size` unqualified) that only the operator's real rebuild found."""
+    level_form = _LEVEL_POLICY.serving_form()
+    level_params: dict = {}
+    if not level_form:
+        log.warning("[ALERT] NF-TR2b: veteran LEVEL recalibration is OFF — the board serves the "
+                    "pre-NF-TR2 incumbent veteran level. This is the rollback state.")
+        return "", {}
+    from quant_sports_intel_models.football.nfl.fantasy import (
+        season_level_recalibration as _SLR,
+    )
+    level_params = _SLR.fit_level_from_panel(
+        panel, level_form, projection_season, _SP.veteran_tier_size(),
+        window=_LEVEL_POLICY.WINDOW_SEASONS)
+    if level_params:
+        log.info("NF-TR2b: veteran LEVEL recalibration ON — %s (%s, window %d, %s) params %s",
+                 level_form, _LEVEL_POLICY.ESTIMATOR, _LEVEL_POLICY.WINDOW_SEASONS,
+                 _LEVEL_POLICY.SELECTION_STATUS, _SLR.params_to_json(level_params))
+    else:
+        log.warning("[ALERT] NF-TR2b: veteran LEVEL recalibration is ON but the panel could not "
+                    "support a fit for %d — the board serves the INCUMBENT level for this season "
+                    "(loud, never silent)", projection_season)
+    return level_form, level_params
+
+
 def build_projection(con, base_season: int, projection_season: int, schema: str,
                      usage_role_blend: float | None = None,
                      mover_opportunity_blend: float | None = None,
@@ -983,28 +1015,9 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     #    (built by `build_veteran_panel_season`, which never passes `level_recal`) stays the
     #    INCUMBENT's history the constant is measured against — the correction cannot compound.
     #    ⭐ ONE READ of `serving_form()`: "" ⇒ identity ⇒ the pre-NF-TR2 board byte for byte.
-    level_form = _LEVEL_POLICY.serving_form()
-    level_params: dict = {}
-    if level_form:
-        from quant_sports_intel_models.football.nfl.fantasy import (
-            season_level_recalibration as _SLR,
-        )
-        if panel is None:
-            panel = build_veteran_band_panel(con, projection_season, schema)
-        level_params = _SLR.fit_level_from_panel(
-            panel, level_form, projection_season, veteran_tier_size(),
-            window=_LEVEL_POLICY.WINDOW_SEASONS)
-        if level_params:
-            log.info("NF-TR2b: veteran LEVEL recalibration ON — %s (%s, window %d, %s) params %s",
-                     level_form, _LEVEL_POLICY.ESTIMATOR, _LEVEL_POLICY.WINDOW_SEASONS,
-                     _LEVEL_POLICY.SELECTION_STATUS, _SLR.params_to_json(level_params))
-        else:
-            log.warning("[ALERT] NF-TR2b: veteran LEVEL recalibration is ON but the panel could not "
-                        "support a fit for %d — the board serves the INCUMBENT level for this season "
-                        "(loud, never silent)", projection_season)
-    else:
-        log.warning("[ALERT] NF-TR2b: veteran LEVEL recalibration is OFF — the board serves the "
-                    "pre-NF-TR2 incumbent veteran level. This is the rollback state.")
+    if _LEVEL_POLICY.serving_form() and panel is None:
+        panel = build_veteran_band_panel(con, projection_season, schema)
+    level_form, level_params = fit_serving_level(panel, projection_season)
     vets = build_veteran_projection(
         con, base_season, projection_season, schema, usage_role_blend=usage_role_blend,
         mover_opportunity_blend=mover_opportunity_blend, env_tilt_blend=env_tilt_blend,

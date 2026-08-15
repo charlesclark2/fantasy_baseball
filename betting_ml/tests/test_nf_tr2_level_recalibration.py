@@ -439,3 +439,41 @@ def test_live_readback_reconciles_level_model_version(tmp_path):
                                 served_version="v1", live_payload=bad, registry_path=reg)
     lvl = [c for c in disagree["checks"] if c["check"] == "level_model_version"][0]
     assert lvl["status"] == "FAIL" and disagree["pass"] is False
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 12. The BUILD-time fit is actually INVOKED (wired ≠ invoked, NF-C0e). The first cut inlined the
+#     fit in `build_projection` and no test executed it — a NameError shipped and only the operator's
+#     real rebuild found it. This runs `fit_serving_level` with the policy ON on a panel shaped like
+#     the real one and demands a fitted constant for every recalibrated position.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def test_build_time_level_fit_is_invoked_and_returns_a_constant_per_position(monkeypatch, caplog):
+    import logging
+    from quant_sports_intel_models.football.nfl.fantasy import run_season_projection as RSP
+    from quant_sports_intel_models.football.nfl.fantasy import veteran_level_policy as VLP
+
+    monkeypatch.setattr(VLP, "SERVING_ENABLED", True)
+    rng = np.random.default_rng(7)
+    rows = []
+    for season in range(2018, 2026):
+        for pos, k in (("QB", 0.95), ("RB", 1.20), ("WR", 1.10), ("TE", 1.05)):
+            n = 60
+            p = rng.uniform(40, 320, size=n)
+            y = np.clip(k * p + rng.normal(0, 25, size=n), 0, None)
+            for i in range(n):
+                rows.append({"target_season": season, "position": pos, "point": p[i],
+                             "real_fp_ppr": y[i], "proj_games": rng.uniform(10, 17)})
+    panel = pd.DataFrame(rows)
+    with caplog.at_level(logging.INFO):
+        form, params = RSP.fit_serving_level(panel, 2026)
+    assert form == VLP.FORM == "pos_const"
+    assert set(params) == set(VLP.RECALIBRATED_POSITIONS), params
+    assert all(0.8 < v < 1.4 for v in params.values()), params
+    # the mean-match direction on the synthetic lifts: RB above QB
+    assert params["RB"] > params["QB"]
+    assert any("veteran LEVEL recalibration ON" in r.getMessage() for r in caplog.records)
+    # and OFF is the identity, loudly
+    monkeypatch.setattr(VLP, "SERVING_ENABLED", False)
+    with caplog.at_level(logging.WARNING):
+        assert RSP.fit_serving_level(panel, 2026) == ("", {})
+    assert any("rollback state" in r.getMessage() for r in caplog.records)
