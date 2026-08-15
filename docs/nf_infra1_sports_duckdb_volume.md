@@ -119,12 +119,54 @@ Three layers, because fixing any one alone leaves the bug:
 
 ---
 
+## 2.4 The SECOND instance of the same class — the rookie feeder
+
+The first board build ever attempted on the box died at:
+
+```
+FileNotFoundError: '/app/.../ncaaf/models/artifacts/ncaaf_nfl_rookie_projections.parquet'
+```
+
+`*.parquet` is gitignored in that artifacts directory, so this is **structurally identical to the
+DuckDB**: a laptop-run output that is never in the `COPY . .` image. ⛔ And copying it onto the box
+is not a cure either — `/app` is replaced by every deploy, so it would vanish on the next one.
+
+The same writer already lands the authoritative copy in the sports lake
+(`ncaaf/derived/nfl_rookie_projections`, partitioned by `draft_year`) — it is what the
+`ncaaf_nfl_rookie_projections` dbt view reads. So `load_rookie_projection_frame()` reads:
+
+1. the **local artifact** when it exists, so a LAPTOP build stays **byte-identical** to every board
+   this repo has certified — changing which copy the laptop reads would silently move a published
+   board, a worse failure than the one being fixed;
+2. the **lake** when it does not, so the box reads the authoritative table instead of dying;
+3. …and it **logs which one it chose**, with the row count and the local file's mtime. A source
+   preference that does not announce itself is exactly how the pre-draft board regen silently
+   published a 2-day-old board.
+
+Two refusals rather than silent degradation: a readable-but-**EMPTY** lake table raises (it would
+otherwise publish a board with no rookies at all), and **neither source available** raises a message
+naming both paths and the actual cure for each of box and laptop — the original was a bare
+`FileNotFoundError` on a path whose absence is *expected* on the box, legible only to someone who
+already knew the gitignore.
+
+⚠️ **Residual risk, stated rather than hidden:** on a laptop whose local parquet is older than the
+lake, this prefers the stale copy. That is the pre-existing behaviour (the local file used to be the
+only source), so it is not a regression — the mtime in the log line is what makes it findable.
+
+📍 **A known same-class site left alone:** `run_nf1_1.build_season_projection` reads the same
+gitignored parquet directly. It is **off the publish path** (`run_nf1_5` imports only `_finite_top`,
+`_season_row` and `_sharpe` from that module, verified), it is a laptop-only research runner, and
+repointing it would change a certified research path for zero box benefit.
+
+---
+
 ## 3. Guards
 
 `betting_ml/tests/test_nf_infra1_sports_duckdb_path.py` (20) ·
-`betting_ml/tests/test_nf_infra1_sleeper_hardening.py` (28)
+`betting_ml/tests/test_nf_infra1_sleeper_hardening.py` (28) ·
+`betting_ml/tests/test_nf_infra1_rookie_projection_source.py` (9)
 
-**All 16 falsifiability claims RED-proven** — `uv run python betting_ml/tests/nf_infra1_red_proof.py`
+**All 23 falsifiability claims RED-proven** — `uv run python betting_ml/tests/nf_infra1_red_proof.py`
 (applies each break in-process, asserts the mutation landed, requires the named test to go RED).
 
 ⭐ **The harness earned its keep twice, and both are worth reading:**
