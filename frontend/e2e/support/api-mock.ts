@@ -658,30 +658,64 @@ function draftedRoster(): unknown[] {
  */
 export const E2E_OTHER_TEAM_COUNT = 9
 
+/**
+ * ⚠️⚠️ THE RIVALS MUST HOLD THE TOP OF THE BOARD, AND THE FIRST CUT OF THIS FILE DID NOT.
+ *
+ * It dealt them a mid-board slice, which is realistic-looking and made the free-agent assertion
+ * VACUOUS: the waiver section only ever shows three players, each the BEST available by some
+ * criterion, so those picks came from the untouched top of the board whether the rostered filter
+ * ran or not. The red proof caught it — `free-agent-pool-ignores-the-rosters` broke the filter
+ * outright and the spec stayed green.
+ *
+ * So the rivals draft the way a real league drafts: the best remaining player at each position,
+ * dealt round-robin, immediately behind the user's own picks. Now the top of every position is
+ * owned by somebody, the archetypes' first choice is a rostered player, and a filter that stops
+ * excluding them changes what renders.
+ *
+ * ⭐ THE GENERAL SHAPE, worth carrying: a fixture that makes the CORRECT and BROKEN implementations
+ * produce the same output is not a weak test, it is not a test. Build the fixture so the thing under
+ * test is the only thing that can decide the answer.
+ */
 function otherTeamRosters(): any[] {
   const players = FIXTURES.projectionsEntitled().players as any[]
-  // Skipping the top of the board keeps these clear of the players `draftedRoster` takes, so nobody
-  // is on two rosters at once. `boardPlayersAt` reads from the front; this reads from an offset past
-  // anything it could have claimed (2 QB + 3 RB + 3 WR + 2 TE + 1 K, in served order per position).
-  const pool = players.filter((p) => p.pos !== "DST" && !!p.name).slice(40)
-  const size = 12
-  return Array.from({ length: E2E_OTHER_TEAM_COUNT }, (_, i) => ({
+  const mine = new Set((draftedRoster() as any[]).map((p) => p.name))
+  // Ordered by the payload's own PPR points — the fixture's number, not a hand-authored ranking —
+  // so "the best remaining" is read from the data rather than asserted by this file.
+  const bestAt = (pos: string, n: number) =>
+    players
+      .filter((p) => p.pos === pos && !!p.name && !mine.has(p.name))
+      .sort((a, b) => (b.fpPpr ?? 0) - (a.fpPpr ?? 0))
+      .slice(0, n)
+
+  // One full starting lineup per rival, at this league's own roster shape (1 QB / 2 RB / 2 WR /
+  // 2 TE / 1 SUPERFLEX / 1 K / 1 DST), plus a little bench — i.e. the league really is drafted.
+  const byPos = [
+    ...bestAt("QB", E2E_OTHER_TEAM_COUNT * 2),
+    ...bestAt("RB", E2E_OTHER_TEAM_COUNT * 4),
+    ...bestAt("WR", E2E_OTHER_TEAM_COUNT * 4),
+    ...bestAt("TE", E2E_OTHER_TEAM_COUNT * 2),
+    ...bestAt("K", E2E_OTHER_TEAM_COUNT),
+  ]
+  const teams = Array.from({ length: E2E_OTHER_TEAM_COUNT }, (_, i) => ({
     team_key: `e2e-team-${i + 2}`,
     team_name: `Rival ${i + 1}`,
-    players: pool.slice(i * size, (i + 1) * size).map((p) => ({
-      name: p.name,
-      position: p.pos,
-      team: p.team,
-    })),
+    players: [] as { name: string; position: string; team: string }[],
   }))
+  // Round-robin, so no single rival hoards a position and every team is a plausible roster.
+  byPos.forEach((p, i) => {
+    teams[i % E2E_OTHER_TEAM_COUNT].players.push({ name: p.name, position: p.pos, team: p.team })
+  })
+  return teams
 }
 
-/** One board player who is on ANOTHER manager's roster — so a spec can assert he is NOT offered as a
- *  free agent. Exported so there is ONE spelling of the subject (the `linkedRosterSubject` rule). */
-export function rivalRosteredPlayerName(): string {
-  const first = otherTeamRosters()[0]?.players?.[0]?.name
-  if (!first) throw new Error("e2e: the rival rosters are empty — the free-agent assertion is vacuous")
-  return String(first)
+/** Every player on a rival's roster, by name — the set a free agent must NOT be drawn from.
+ *  Exported so there is ONE spelling of the subject (the `linkedRosterSubject` rule). */
+export function rivalRosteredPlayerNames(): Set<string> {
+  const names = new Set(otherTeamRosters().flatMap((t) => t.players.map((p: any) => String(p.name))))
+  if (names.size < 50) {
+    throw new Error(`e2e: only ${names.size} rival-rostered players — the free-agent clause is thin`)
+  }
+  return names
 }
 
 function leagueRosters(): any[] {

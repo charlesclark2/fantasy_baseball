@@ -4,7 +4,7 @@ import {
   E2E_UNMATCHED_ROSTER_NAME,
   collectPageErrors,
   mockApi,
-  rivalRosteredPlayerName,
+  rivalRosteredPlayerNames,
 } from "../support/api-mock"
 import { signIn } from "../support/session"
 import { forbiddenPhrasesIn } from "../support/claim-denylist"
@@ -491,14 +491,20 @@ test.describe("the league's own rosters", () => {
     // the league is held, so its presence is the surface committing to the stronger claim.
     await expect(page.getByTestId("free-agent-basis")).toBeVisible()
 
-    // ⛔ THE PLAYER WHO MUST NOT BE OFFERED. He is on a rival's roster in the mocked league and he
-    // matches the board, so a pool that ignored the stored rosters would list him — his rank is
-    // well inside the drafted pool the OLD definition filtered on, so this cannot be satisfied by
-    // the old behaviour either.
-    await expect(
-      section,
-      "a player on another manager's roster was offered as a free agent",
-    ).not.toContainText(rivalRosteredPlayerName())
+    // ⛔ NOT ONE OF THE OFFERED PLAYERS MAY BE ON A RIVAL'S ROSTER. Asserted over the WHOLE set
+    // rather than against one chosen name, because the section shows only three players and which
+    // three it shows is a function of the roster's own gaps — a single-name assertion is satisfied
+    // by the two thirds of the list it never looks at.
+    //
+    // ⚠️ The rivals hold the TOP of every position (`otherTeamRosters`), so the archetypes' first
+    // choice IS a rostered player. That is what makes this clause bite: with the filter removed the
+    // section fills with players somebody already owns. The first cut dealt the rivals a mid-board
+    // slice, and the red proof caught the whole clause passing on nothing.
+    const rostered = rivalRosteredPlayerNames()
+    const offered = await page.getByTestId("waiver-idea").allInnerTexts()
+    expect(offered.length, "the section offered nobody — the clause below would be vacuous").toBeGreaterThan(0)
+    const owned = [...rostered].filter((name) => offered.some((t) => t.includes(name)))
+    expect(owned, `players on another manager's roster were offered as free agents`).toEqual([])
 
     await expectNoNaN(page)
     await expectApiFullyMocked(mock)
