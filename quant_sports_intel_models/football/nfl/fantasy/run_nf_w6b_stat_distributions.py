@@ -322,6 +322,29 @@ def write_report(out: dict, path: Path) -> None:  # noqa: C901 — a report, not
     p(json.dumps(out["ppr_report"], indent=2))
     p("```")
     p("")
+    if out.get("pm_rulings"):
+        pm = out["pm_rulings"]
+        p(f"## PM rulings ({pm['ruled_at']}) — recorded post-run; preserved by --rewrite-report")
+        p("")
+        for key in ("decision_a", "decision_b", "decision_c"):
+            d = pm[key]
+            p(f"### {d['title']}")
+            p("")
+            p(d["ruling"])
+            p("")
+        p("### Wiring hand-off pins (Decision A — so NF-W6c is a lift-and-serve, "
+          "not a re-derivation)")
+        p("")
+        p(pm["wiring_handoff"]["preamble"])
+        p("")
+        p("| cell | winning form | constructing function (the pinned code path) |")
+        p("|---|---|---|")
+        for row in pm["wiring_handoff"]["cells"]:
+            p(f"| {row['cell']} | {row['winner']} | {row['construction']} |")
+        p("")
+        for note in pm["wiring_handoff"]["notes"]:
+            p(f"- {note}")
+        p("")
     p("## Pre-registration")
     p("")
     pre = out["preregistration"]

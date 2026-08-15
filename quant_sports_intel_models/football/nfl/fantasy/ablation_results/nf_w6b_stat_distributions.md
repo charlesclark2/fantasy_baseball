@@ -245,6 +245,39 @@ per-cell verdicts (no story-level aggregation gate): SHIP ['QB|passing_tds', 'QB
 }
 ```
 
+## PM rulings (2026-08-15) — recorded post-run; preserved by --rewrite-report
+
+### Decision A — YES: wiring carded as NF-W6c (all 6 ship cells)
+
+Card the wiring of ALL SIX winning cells into the served raw-line surface — the substrate is only complete with full raw-line coverage. Substrate first, arbitrary-league re-scoring second (the league-board path is the consumer that follows). ⛔ The points hurdle champion for TOTAL points stays untouched (never beaten; not tested here). NF-W6c ships as its own NF-G0-governed story (NF-W6b promotes nothing), inherits the three-implementations parity tax if any scoring surface consumes it, and stays deploy-held until the weekly serving path opens.
+
+### Decision B — YES: RB receiving_yards re-test scheduled (data-availability trigger)
+
+Re-score on THE SAME harness once the 2026 half-season folds exist (~mid-season; no new modeling): `run_nf_w6b_stat_distributions` with the fold axis extended. ⭐ This is a LEGITIMATE calendar-bound re-test, distinct in kind from the NF-D18/CONSTRAINT_REFUSED no-trigger class: every gate is green except DSR (0.8747 vs 0.95) and the observed per-fold Sharpe (14.509) sits ABOVE the deflation bar (sr0 ≈ 9.97), so n is the binding constraint and n is buyable by the calendar.
+
+### Decision C — carded but DEFERRED as NF-W6b-C (RB rushing_tds fresh-family successor)
+
+The finding is real (knn_quantile beats the discrete climatology by +13.0%, CI excludes zero, 8/8 folds) but DSR is UNREACHABLE in this field: the pre-registered linear arm (`enet_residual`, trial Sharpe −9.199 on an 86%-atom cell) inflates the cross-trial dispersion so sr0 ≈ 7.32 > the winner's sr 6.47, and MH2.2 forbids trimming a field after the fact. ⭐ SUCCESSOR REQUIREMENT (record so the field-inflation lesson is not re-earned): a FRESH registration whose declared family is coherent and atom-aware ONLY — lgbm_hurdle_tail, knn_quantile, and a discrete-count class (e.g. (beta-)binomial / Poisson-mixture) — ⛔ NO linear-residual arm: a position-constant residual bank around a linear mean cannot express an 86% atom, and its guaranteed huge loss re-inflates the very deflation bar that refused this cell. DEFERRED: smallest of the eight (~0.12 pts/wk points-units); may ride NF-W6c's infrastructure later; no dedicated session while fantasy launch is the focus.
+
+### Wiring hand-off pins (Decision A — so NF-W6c is a lift-and-serve, not a re-derivation)
+
+⚠️ NO FITTED PICKLES EXIST — deliberately: the bake-off fits per fold (CV), so what the gate validated is the CONSTRUCTION + SELECTION, not one fitted object. NF-W6c therefore serves a fresh full-train fit produced BY THE IDENTICAL pinned code path below (same functions, same champion features, same calibration-split tail discipline) — the MH2.1 serve-what-was-validated rule applied to a form: re-deriving the form in different code is forbidden.
+
+| cell | winning form | constructing function (the pinned code path) |
+|---|---|---|
+| QB|passing_tds | knn_quantile | `SD.arm_knn_quantile` — per-position kNN (k=300) over median-imputed (`WP._Imputer`, train medians) standardized champion features; predictive = empirical quantiles of the neighbors' realized stat |
+| QB|passing_yards | lgbm_quantile_tail | `SD.arm_lgbm_quantile_tail` — pooled 9-knot LGBM quantile bank (`WP._lgbm` quantile objective at `FIT_LEVELS`, position code appended), sorted + interpolated to the 199 grid, + per-position exponential mean-excess tails fit on the purged `MC.calibration_split` slice |
+| QB|rushing_yards | lgbm_hurdle_tail | `SD.arm_lgbm_hurdle_tail` — champion-construction LGBMClassifier P(y=0) (the `WP.fit_lgbm_hurdle` parameter block, verbatim) × conditional-on-nonzero 9-knot LGBM quantile bank (`WP._lgbm` quantile objective at `FIT_LEVELS`, position code appended) + per-position exponential mean-excess tails fit on the purged `MC.calibration_split` slice (beta = mean excess beyond the end knots; 0 if <10 exceedances), mixed exactly by `SD.mixture_quantiles199` (atom at fitted p0; negative conditional mass below the atom) |
+| RB|rushing_yards | lgbm_hurdle_tail | `SD.arm_lgbm_hurdle_tail` — champion-construction LGBMClassifier P(y=0) (the `WP.fit_lgbm_hurdle` parameter block, verbatim) × conditional-on-nonzero 9-knot LGBM quantile bank (`WP._lgbm` quantile objective at `FIT_LEVELS`, position code appended) + per-position exponential mean-excess tails fit on the purged `MC.calibration_split` slice (beta = mean excess beyond the end knots; 0 if <10 exceedances), mixed exactly by `SD.mixture_quantiles199` (atom at fitted p0; negative conditional mass below the atom) |
+| TE|receiving_yards | lgbm_hurdle_tail | `SD.arm_lgbm_hurdle_tail` — champion-construction LGBMClassifier P(y=0) (the `WP.fit_lgbm_hurdle` parameter block, verbatim) × conditional-on-nonzero 9-knot LGBM quantile bank (`WP._lgbm` quantile objective at `FIT_LEVELS`, position code appended) + per-position exponential mean-excess tails fit on the purged `MC.calibration_split` slice (beta = mean excess beyond the end knots; 0 if <10 exceedances), mixed exactly by `SD.mixture_quantiles199` (atom at fitted p0; negative conditional mass below the atom) |
+| WR|receiving_yards | lgbm_hurdle_tail | `SD.arm_lgbm_hurdle_tail` — champion-construction LGBMClassifier P(y=0) (the `WP.fit_lgbm_hurdle` parameter block, verbatim) × conditional-on-nonzero 9-knot LGBM quantile bank (`WP._lgbm` quantile objective at `FIT_LEVELS`, position code appended) + per-position exponential mean-excess tails fit on the purged `MC.calibration_split` slice (beta = mean excess beyond the end knots; 0 if <10 exceedances), mixed exactly by `SD.mixture_quantiles199` (atom at fitted p0; negative conditional mass below the atom) |
+
+- Served-quantile representation: an (n, 199) MONOTONE quantile bank at `MC.EVAL_LEVELS` (0.005…0.995, step 0.005); the zero atom appears as leading quantiles exactly 0.0 — consumers read P(0) as the share of grid levels at 0 and central intervals by level index (q10/q90 at indices 19/179).
+- Features: the champion set `WP.FEATURES` (29 columns) + position code — ⛔ no new features (the NF-W6b prereg constraint carries to serving).
+- Matrix: the NF-W6 certified build (`build_matrix_w6`, cache key 57c4cf96bb3c3570) — the PIT gate runs on every load; the TD label attach is grain- and conservation-guarded.
+- Selection provenance: per-fold scores for every (cell, label) live in THIS json (`fold_results`); the verdict layer re-derives from them at zero refit cost (`--rewrite-report`). Seed 20260815.
+- Tail constants: `MIN_TAIL_N=10` (a thinner side gets beta 0 = flat, loud); hurdle classifier params = the champion hurdle block, guard-pinned against `WP.fit_lgbm_hurdle` source.
+
 ## Pre-registration
 
 - cells: ['QB|passing_yards', 'QB|passing_tds', 'QB|rushing_yards', 'RB|rushing_yards', 'RB|rushing_tds', 'RB|receiving_yards', 'WR|receiving_yards', 'TE|receiving_yards'] (⛔ closed: ['QB|rushing_tds', 'RB|receiving_tds', 'WR|receiving_tds', 'TE|receiving_tds']); arms: ['lgbm_quantile_tail', 'lgbm_hurdle_tail', 'enet_residual', 'knn_quantile']; foils: ['inc_head_bank', 'inc_climatology'] (binding sets the bar); anchors: ['nihilist_zero', 'zero_width', 'max_width', 'permuted_quantile', 'oracle_marginal', 'matched_marginal'].
