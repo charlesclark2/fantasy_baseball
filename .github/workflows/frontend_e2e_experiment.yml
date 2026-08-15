@@ -5,30 +5,27 @@ name: Frontend E2E (E9.66 measurement scaffold — DELETE BEFORE MERGE)
 # rather than the one that sounded best. It is deleted in the same story that created it; if you are
 # reading this on `dev` or `main`, that deletion was missed — delete it.
 #
-# Dispatch-only, so it never fires on a push or a PR.
+# Triggered by a push to the story branch, path-gated to this file so an unrelated commit does not
+# re-run it. All three variants are JOBS rather than dispatch inputs, deliberately: a new
+# `workflow_dispatch` workflow is not dispatchable until it exists on the default branch, and
+# running the variants as siblings off ONE commit makes them directly comparable — same code, same
+# hour, same runner pool.
 
 on:
-  workflow_dispatch:
-    inputs:
-      variant:
-        description: "container | runner-nodeps | container-4w"
-        required: true
-        type: string
-      workers:
-        description: "Playwright workers (blank = config default)"
-        required: false
-        type: string
+  push:
+    branches: [e9.66]
+    paths:
+      - ".github/workflows/frontend_e2e_experiment.yml"
+      - "frontend/playwright.config.ts"
 
-# Keyed on the VARIANT so the three variants run concurrently instead of queueing behind each other.
 concurrency:
-  group: frontend-e2e-exp-${{ inputs.variant }}
-  cancel-in-progress: false
+  group: frontend-e2e-exp
+  cancel-in-progress: true
 
 jobs:
-  # ── VARIANT A / C: the official Playwright container ────────────────────────────────────────
-  container:
-    if: ${{ inputs.variant == 'container' || inputs.variant == 'container-4w' }}
-    name: "exp: container (${{ inputs.variant }})"
+  # ── VARIANT A: the official Playwright container, current worker count ──────────────────────
+  container-2w:
+    name: "A: container, 2 workers"
     runs-on: ubuntu-latest
     timeout-minutes: 30
     container:
@@ -37,8 +34,6 @@ jobs:
     defaults:
       run:
         working-directory: frontend
-    env:
-      E2E_WORKERS: ${{ inputs.workers }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -59,16 +54,13 @@ jobs:
         run: npx playwright test
 
   # ── VARIANT B: plain runner, browser cache, NO install-deps at all ──────────────────────────
-  runner-nodeps:
-    if: ${{ inputs.variant == 'runner-nodeps' }}
-    name: "exp: runner, no install-deps"
+  runner-nodeps-2w:
+    name: "B: runner no install-deps, 2 workers"
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
       run:
         working-directory: frontend
-    env:
-      E2E_WORKERS: ${{ inputs.workers }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -87,10 +79,36 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
       # The binary ONLY. No `--with-deps`, no `install-deps` — the question this variant answers is
       # whether the ubuntu-latest image (which ships Chrome and Edge) already carries every shared
-      # library chromium links against.
+      # library chromium links against. If it does not, chromium fails to launch, loudly.
       - name: Install Playwright browser binary (no deps)
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: npx playwright install chromium
+      - name: Build (E2E environment)
+        run: npm run e2e:build
+      - name: Run E2E suite
+        run: npx playwright test
+
+  # ── VARIANT C: container at 4 workers — does the suite scale past 2? ────────────────────────
+  container-4w:
+    name: "C: container, 4 workers"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+      options: --user 1001
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      E2E_WORKERS: "4"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
       - name: Build (E2E environment)
         run: npm run e2e:build
       - name: Run E2E suite
