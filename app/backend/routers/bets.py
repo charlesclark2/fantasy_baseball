@@ -163,6 +163,70 @@ def prop_starters(date: str, _: str = Depends(get_user_id)) -> dict:
     return {"date": date, "source": "probable_pitchers", "starters": starters}
 
 
+@router.get("/props/batters")
+def prop_batters(date: str, _: str = Depends(get_user_id)) -> dict:
+    """Batters in a given date's posted lineups, for logging a TOTAL-BASES prop (E5.10).
+
+    The batter-side analog of /props/starters, and the same contract: each row carries the
+    `player_id` + `game_pk` settlement keys on, plus name / team / opponent for the picker.
+
+    Source is stg_statsapi_lineups_wide (one row per game/side, nine slot columns unpivoted)
+    — deliberately NOT stg_ref_players, whose S3 export is a one-shot MANUAL job on no
+    schedule: it was last written 2026-06-24 and holds ZERO players whose mlb_played_last is
+    2026, so every 2026 debutant is missing from it. The lineup feed names exactly the
+    players who actually batted, on any date in the back-log window.
+
+    Never raises: an empty list on any miss (lakehouse_query already returns [] on failure),
+    so the picker shows "no batters" rather than 500ing.
+    """
+    slots = " UNION ALL ".join(
+        f"""
+        SELECT lw.game_pk,
+               lw.slot_{i}_player_id   AS player_id,
+               lw.slot_{i}_full_name   AS player_name,
+               lw.home_away,
+               {i}                     AS batting_slot
+        FROM baseball_data.betting.stg_statsapi_lineups_wide lw
+        WHERE lw.game_pk IN (
+            SELECT game_pk FROM baseball_data.betting.stg_statsapi_games
+            WHERE CAST(official_date AS DATE) = CAST(%(date)s AS DATE)
+        ) AND lw.slot_{i}_player_id IS NOT NULL
+        """
+        for i in range(1, 10)
+    )
+    sql = f"""
+        WITH slotted AS ({slots})
+        SELECT s.game_pk,
+               s.player_id,
+               any_value(s.player_name) AS player_name,
+               min(s.batting_slot)      AS batting_slot,
+               CASE WHEN lower(s.home_away) = 'home' THEN any_value(gm.home_team_name)
+                    ELSE any_value(gm.away_team_name) END AS team,
+               CASE WHEN lower(s.home_away) = 'home' THEN any_value(gm.away_team_name)
+                    ELSE any_value(gm.home_team_name) END AS opponent,
+               any_value(CAST(gm.official_date AS DATE)) AS game_date
+        FROM slotted s
+        LEFT JOIN baseball_data.betting.stg_statsapi_games gm ON gm.game_pk = s.game_pk
+        GROUP BY s.game_pk, s.player_id, s.home_away
+        ORDER BY player_name
+    """
+    rows = lakehouse_query(sql, {"date": date})
+    batters = [
+        {
+            "game_pk": r["GAME_PK"],
+            "player_id": r["PLAYER_ID"],
+            "player_name": r["PLAYER_NAME"],
+            "team": r["TEAM"],
+            "opponent": r["OPPONENT"],
+            "batting_slot": r.get("BATTING_SLOT"),
+            "game_date": str(r["GAME_DATE"])[:10] if r.get("GAME_DATE") is not None else date,
+        }
+        for r in rows
+        if r.get("PLAYER_ID") is not None and r.get("PLAYER_NAME")
+    ]
+    return {"date": date, "source": "lineups_wide", "batters": batters}
+
+
 @router.post("/users/login")
 def login_sync(body: LoginSyncRequest, user_id: str = Depends(get_user_id)) -> dict:
     """Called once by the frontend post-login. sub is trusted (JWT); email is
