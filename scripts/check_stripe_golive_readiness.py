@@ -53,6 +53,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 FUNCTION = "credence-prod-lambda-api"
 REGION = "us-east-1"
@@ -378,7 +379,13 @@ def check_public_routes_and_degrade(profile: str | None) -> Check:
         return Check("Public routes / degrade", UNKNOWN, f"could not read routes: {exc}")
 
     try:
-        sys.path.insert(0, ".")
+        # Anchor on THIS FILE's location, not the CWD. A go-live gate that only works when
+        # invoked from the repo root would report UNKNOWN — and therefore BLOCK — for a reason
+        # that has nothing to do with the system under test, which during a flip reads as a
+        # real defect. It fails closed either way; this makes it fail closed for true reasons.
+        repo_root = str(Path(__file__).resolve().parents[1])
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
         from app.backend.services.cost_guardrails import is_allowed_in_degrade
     except Exception as exc:
         return Check("Public routes / degrade", UNKNOWN, f"could not import the allowlist: {exc}")
