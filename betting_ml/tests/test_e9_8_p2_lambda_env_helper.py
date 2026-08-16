@@ -485,6 +485,67 @@ class TestTheGoLivePriceContract:
         assert isinstance(remaining, int) and 0 <= remaining <= 100, remaining
 
 
+class TestTheRunbookCommandsAreActuallyPasteable:
+    """`docs/e9_8_p2_stripe_golive.md` — the operator run-order.
+
+    ⭐ A RUNBOOK COMMAND MUST NOT CONTAIN A CHARACTER THE SHELL WILL ACT ON. `<PLACEHOLDER>`
+    reads as "fill this in" to a human and as INPUT REDIRECTION to bash/zsh, so pasting the
+    literal line dies with `no such file or directory: PLACEHOLDER` before the command ever
+    runs. That happened for real on 2026-08-16, mid-go-live, on the step that verifies the
+    live price — the single most consequential read in the whole procedure.
+
+    The repo's standing rule is that a handoff command is "FULL, copy-pasteable … no
+    placeholders left unfilled". This makes it mechanical instead of a habit: a value the
+    operator must supply is assigned to a shell VARIABLE on its own line, which is both
+    paste-safe and reusable by later steps.
+
+    Scoped to this runbook deliberately — it is the one this story owns, and a repo-wide
+    sweep would fail on older docs for reasons no one is acting on today.
+    """
+
+    RUNBOOK = Path(__file__).resolve().parents[2] / "docs" / "e9_8_p2_stripe_golive.md"
+
+    def _bash_blocks(self):
+        import re
+        blocks = re.findall(r"```bash\n(.*?)```", self.RUNBOOK.read_text(), re.S)
+        assert blocks, "no bash blocks found — this guard would pass on nothing"
+        return blocks
+
+    def test_no_shell_hostile_placeholder_survives_in_a_command(self):
+        import re
+        offenders = []
+        for block in self._bash_blocks():
+            for line in block.splitlines():
+                code = line.split("#", 1)[0]  # a placeholder inside a COMMENT is fine
+                if re.search(r"<[A-Z_]{3,}>", code):
+                    offenders.append(line.strip())
+        assert not offenders, (
+            "these runbook lines carry a <PLACEHOLDER> the shell reads as a redirect:\n  "
+            + "\n  ".join(offenders)
+        )
+
+    def test_the_price_verification_is_a_GET_not_a_POST(self):
+        """`curl -d` defaults to POST, and `POST /v1/prices/{id}` is Stripe's UPDATE endpoint.
+        A verification step must never be a write against a live billing object, so the
+        retrieve has to carry `-G`."""
+        for block in self._bash_blocks():
+            for line in block.splitlines():
+                if "api.stripe.com/v1/prices" in line and line.strip().startswith("curl"):
+                    assert " -G " in line, f"price read is a POST (missing -G): {line.strip()}"
+
+    def test_every_secret_exported_in_the_runbook_is_unset_at_the_end(self):
+        """A live key left in the operator's shell outlives the step that needed it."""
+        import re
+        text = self.RUNBOOK.read_text()
+        exported = set(re.findall(r"read -rs (\w+)\s+&&\s+export \1", text))
+        assert exported, "no `read -rs … && export` found — this guard would pass on nothing"
+        cleared = set()
+        for line in text.splitlines():
+            if line.strip().startswith("unset "):
+                cleared.update(line.split("#", 1)[0].split()[1:])
+        assert not (exported - cleared), f"never unset: {sorted(exported - cleared)}"
+
+
 @pytest.mark.parametrize("clause", sorted(_CLAUSES))
 def test_the_guard_goes_red_when_its_own_clause_is_deleted(clause, tmp_path, monkeypatch):
     """⭐ A guard that cannot fail is not a guard (NF1.7 (a) / INC-38 / NF-D17).
