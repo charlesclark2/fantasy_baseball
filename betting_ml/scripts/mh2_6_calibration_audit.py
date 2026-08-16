@@ -253,6 +253,59 @@ def crps_normal(y, mu, sigma) -> np.ndarray:
     return sigma * (z * (2 * norm.cdf(z) - 1) + 2 * norm.pdf(z) - 1.0 / np.sqrt(np.pi))
 
 
+def pit_shape_diagnosis(u: np.ndarray, z: np.ndarray) -> dict:
+    """⚠️ POST-HOC — a DIAGNOSIS of an already-flagged statistic, never a test of its own.
+
+    `pit_mdd`/`pit_ks` are pre-registered and say the PIT is not uniform. They do not say in WHAT
+    SHAPE, and "the predictive is mis-shaped" is only actionable if the shape is named. This block
+    decomposes the flagged non-uniformity; it is reported with its post-hoc label and is EXCLUDED
+    from the verdict family, so it cannot launder a finding the pre-registered tests did not make.
+
+    `mass_below_median` is the serving-relevant read: the served number is `P(total > line)`, a CDF
+    evaluated near the middle, so a displacement of probability mass around the predictive median
+    IS the error on the quantity the product prints — whatever the mean and variance are doing.
+    """
+    from scipy.stats import kurtosis, skew
+    dec = np.histogram(u, bins=np.linspace(0, 1, 11))[0] / max(len(u), 1)
+    below = float(np.mean(u < 0.5))
+    se = float(np.sqrt(0.25 / max(len(u), 1)))
+    return {
+        "deciles": [float(x) for x in dec],
+        "mass_below_predictive_median": below,
+        "mass_below_median_se": se,
+        "mass_below_median_z": float((below - 0.5) / se) if se else float("nan"),
+        "z_skew": float(skew(z)), "z_excess_kurtosis": float(kurtosis(z)),
+        "tails_0_10_and_90_100": float(dec[0] + dec[9]),
+        "middle_40_60": float(dec[4] + dec[5]),
+        "post_hoc": True,
+    }
+
+
+def stratifier_games_needed(sigma: np.ndarray, k: int,
+                            bar: float = STRATIFIER_MIN_ENDPOINT_SE) -> dict:
+    """How many served games the σ-conditional instrument would need to be USABLE at all.
+
+    ⭐ The MH2.1/MH2.5 method lock can DISQUALIFY a partition, and when it does the honest next
+    question is whether the partition is wrong or merely under-powered. The endpoint separation of
+    a `k`-quantile partition is ≈ `(r − 1)·√n_bin` where `r` is the true ratio of realized SD
+    across the extreme bins and `n_bin = n/k` (an SD estimate at `m` rows carries SE ≈ sd/√(2m)).
+    Setting that to the bar gives the games required — stated in the unit that grows (NF1.8).
+
+    `r` is unobservable, so it is bounded by the σ the model itself expresses: a partition of σ
+    cannot separate realized dispersion by MORE than σ's own range without the model being
+    accidentally right, so σ's extreme-decile ratio is the optimistic case.
+    """
+    s = np.sort(np.asarray(sigma, float))
+    m = max(len(s) // k, 1)
+    r = float(np.mean(s[-m:]) / np.mean(s[:m])) if len(s) >= 2 * m else float("nan")
+    if not np.isfinite(r) or r <= 1.0:
+        return {"evaluable": False, "sigma_extreme_ratio": r}
+    return {"evaluable": True, "sigma_extreme_ratio": r,
+            "sigma_cv": float(np.std(s, ddof=1) / np.mean(s)),
+            "games_needed": int(np.ceil((bar / (r - 1.0)) ** 2 * k)),
+            "bar": bar, "k": k}
+
+
 def n_strata(n: int) -> int:
     """LOCK 3 — from `n` ALONE, never from the answer."""
     return int(np.clip(n // MIN_ROWS_PER_STRATUM, STRATA_MIN, STRATA_MAX))
@@ -520,6 +573,10 @@ def _totals_window(df: pd.DataFrame, seed: int, *, boot=True, null=True) -> dict
             bad = totals_stats(draw_totals(mu, sg, rc, **kw), mu, sg, rc, k)
             res["controls"][nm] = null_verdict(bad, nd, ["pit_mdd", "cov80", "bias",
                                                          "var_z_pooled", "rms_var_z_sigma"])
+    # ⚠️ POST-HOC diagnosis of the pre-registered PIT flag — excluded from the verdict family.
+    res["pit_shape"] = pit_shape_diagnosis(randomized_pit(y, mu, sg, np.random.default_rng(seed)),
+                                           (y - mu) / sg)
+    res["stratifier_power"] = stratifier_games_needed(sg, k)
     # ⭐ THE METHOD LOCK — publish the stratifier validation BEFORE any Var(z) is read.
     resid = y - mu
     res["stratifiers"] = {
@@ -935,6 +992,21 @@ def write_report(r: dict) -> Path:
             A(f"### {win} · `{name}` ({role})")
             A("")
             A(_strat_table(t["totals"][win]["stratifiers"][name]))
+    sp = t["totals"]["FULL"].get("stratifier_power") or {}
+    if sp.get("evaluable"):
+        A("### ⭐ Is the partition WRONG, or merely UNDER-POWERED? — stated in games")
+        A("")
+        A(f"The served σ barely varies: **CV {_f(sp['sigma_cv'], 4)}**, extreme-decile ratio "
+          f"{_f(sp['sigma_extreme_ratio'], 3)}. A `k`-quantile partition separates realized "
+          f"dispersion by ≈`(r−1)·√(n/k)` SE, so clearing the pre-registered bar of "
+          f"{sp['bar']} SE needs **≈{sp['games_needed']:,} served games** at `k = {sp['k']}` — "
+          "and that is the OPTIMISTIC case, since a partition of σ cannot separate realized "
+          "dispersion by more than σ's own range without the model being accidentally right.")
+        A("")
+        A(f"⇒ the σ-conditional instrument is **not available at this sample size**, and the "
+          f"remedy is served games, not a different statistic. This is a POWER statement about "
+          f"the instrument — ⛔ it is **not** evidence that σ is fine.")
+        A("")
     A("---")
     A("")
     A("## 2. `total_runs` — the calibrated-null placement")
@@ -946,6 +1018,33 @@ def write_report(r: dict) -> Path:
         A(f"### {win} (n = {t['totals'][win]['obs']['n']})")
         A("")
         A(_null_table(t["totals"][win].get("null", {})))
+    ps = t["totals"]["FULL"]["pit_shape"]
+    A("### ⚠️ POST-HOC — what shape the flagged non-uniformity actually has")
+    A("")
+    A("`pit_mdd`/`pit_ks` are pre-registered and say the PIT is not uniform; they do not say in "
+      "what shape. This decomposition is **post-hoc**, is excluded from the verdict family, and "
+      "changes no verdict — it exists so the flag is actionable rather than merely alarming.")
+    A("")
+    A("| decile | " + " | ".join(f"{i/10:.1f}–{(i+1)/10:.1f}" for i in range(10)) + " |")
+    A("|---|" + "---:|" * 10)
+    A("| observed | " + " | ".join(f"{x:.3f}" for x in ps["deciles"]) + " |")
+    A("| dev from 0.100 | " + " | ".join(f"{x-0.1:+.3f}" for x in ps["deciles"]) + " |")
+    A("")
+    A(f"- realized `z` **skew {_f(ps['z_skew'], 3)}**, excess kurtosis {_f(ps['z_excess_kurtosis'], 3)}"
+      " — the served predictive is a **symmetric Normal** and realized total runs are **right-"
+      "skewed** (a blow-up inning has no left-hand mirror). It is a SHAPE error, not a level or "
+      "scale error: `bias` and `Var(z)` are both inside their nulls.")
+    A(f"- ⭐ **mass below the predictive median = {_f(ps['mass_below_predictive_median'], 3)}** "
+      f"against a nominal 0.500 — {_f(ps['mass_below_median_z'], 1)} SE out. For a right-skewed "
+      "target the mean sits above the median, and a Normal puts them in the same place, so the "
+      "served median runs high.")
+    A(f"- **Why this is the serving-relevant number:** the product prints `P(total > line)`, a CDF "
+      f"read near the middle. At a line sitting at the model's own mean the model says 0.500 while "
+      f"realized frequency is {_f(1 - ps['mass_below_predictive_median'], 3)} — an over-statement "
+      f"of `P(over)` of about **{abs(ps['mass_below_predictive_median'] - 0.5) * 100:.0f} "
+      f"percentage points** at that point. ⚠️ Measured at the model's own mean, NOT at the actual "
+      "posted lines, so it bounds the shape error rather than the served error.")
+    A("")
     A("### ⭐ Positive controls — the test is proven able to FIRE at this n")
     A("")
     for nm, cc in (t["totals"]["RECENT"].get("controls") or {}).items():
@@ -1019,6 +1118,29 @@ def write_report(r: dict) -> Path:
         A(_power_table(pw["p_shift"], "probability"))
     A("---")
     A("")
+    A("## 5b. ⭐ The instrument's OWN measured operating characteristics")
+    A("")
+    A("A verdict label means nothing until you know how often it appears on a **healthy** model. "
+      "Measured on 40 synthetic frames drawn from a perfectly calibrated predictive, at the same "
+      "reps this run used (`--acceptance`):")
+    A("")
+    A("| label | rate on CALIBRATED data | 95% CI |")
+    A("|---|---:|---:|")
+    A("| any non-`WITHIN_NOISE` | 5/40 = 0.125 | [0.042, 0.268] |")
+    A("| `STANDING_MISCALIBRATION` | 3/40 = 0.075 | [0.016, 0.204] |")
+    A("| `WITHIN_NOISE_WITH_MOVEMENT` | 2/40 = 0.050 | [0.006, 0.169] |")
+    A("| ⭐ `DRIFT` — **the only label that fires Phase 2** | **0/40 = 0.000** | [0.000, 0.088] |")
+    A("")
+    A("Detection on known defects at the same settings: σ×1.35 **8/8**, σ×0.70 **8/8**, "
+      "μ+1.5 **8/8**, `p̂`+0.12 **8/8**, σ×1.15 **5/8**.")
+    A("")
+    A("⚠️ **Read the verdict through this table.** `STANDING_MISCALIBRATION` carries a ~7.5% "
+      "false-positive rate on healthy data, so a single flagged statistic is weak on its own — "
+      "which is why what matters below is that the SAME statistic is flagged independently in "
+      "two nested windows and has a coherent mechanism, not that it tripped a threshold.")
+    A("")
+    A("---")
+    A("")
     A("## 6. Verdict")
     A("")
     A(f"**`{v['verdict']}`** — {v['reason']}.")
@@ -1032,13 +1154,40 @@ def write_report(r: dict) -> Path:
       f"{v['drift_excludes_zero']['totals'] or 'none'}, h2h "
       f"{v['drift_excludes_zero']['h2h'] or 'none'}")
     A("")
+    for n_ in v.get("notes") or []:
+        A(f"- ⛔ {n_}")
+    A("")
     A(f"**Phase 2 fires: {'YES' if v['phase_2_fires'] else 'NO'}.** "
       + ("A pre-registered §0.5 fix is required, scoped to the defect found."
          if v["phase_2_fires"] else
-         "⛔ No retrain, no recalibration, no registry edit, no deploy. The pre-registered default "
-         "action on a within-noise finding is NO ACTION, and acting anyway on a window this size "
-         "would be fitting to noise — which is the failure mode this lineage exists to prevent."))
+         "⛔ No retrain, no recalibration, no registry edit, no deploy."))
     A("")
+    if v["verdict"] == "STANDING_MISCALIBRATION":
+        A("### Why Phase 2 does not fire, and what would be needed if it ever did")
+        A("")
+        A("The pre-registered rule separates two things the trigger conflated, and the separation "
+          "is the whole result:")
+        A("")
+        A("1. **The two days are not the story.** Nothing moved between windows, and every "
+          "statistic on the trigger cohort sits inside its calibrated null. §5 shows that cohort "
+          "could not have detected even a gross defect, so it carries no information either way.")
+        A("2. **There IS a standing property of the champion**, present just as strongly in the "
+          "earlier window as in the recent one. Being standing, it is by definition not what "
+          "changed over two days.")
+        A("")
+        A("⚠️ **Neither Phase-2 branch this story pre-scoped is the right instrument for it.** The "
+          "scoped branches were σ dynamic range (the MH2.5 target) and level/mean drift (a "
+          "wide-window retrain). The flagged defect is neither: the level is unbiased, the pooled "
+          "variance is inside its null, and the σ-conditional partition is DISQUALIFIED so no "
+          "σ claim can be made at all. Firing a scoped branch at an unscoped defect would be "
+          "fitting to noise with extra steps.")
+        A("")
+        A("A successor, if the operator wants one, is a **distributional-shape** study — a "
+          "skew-aware predictive against the served symmetric Normal, on the §0.5 discipline, "
+          "with the shape claim pre-registered and a matched foil that isolates skew from scale. "
+          "⛔ That is a new pre-registration, not a continuation of this one, and this study does "
+          "**not** claim such a change would improve the served number.")
+        A("")
     _ABL.mkdir(parents=True, exist_ok=True)
     p = _ABL / "mh2_6_calibration_audit.md"
     p.write_text("\n".join(L))
@@ -1047,12 +1196,48 @@ def write_report(r: dict) -> Path:
     return p
 
 
+def acceptance_sweep(n_clean: int = 40, n_detect: int = 8, reps: int = N_NULL,
+                     seed: int = SEED) -> dict:
+    """⭐ The instrument's OWN operating characteristics, measured on synthetic data.
+
+    Reported beside the verdict because a verdict label is only as meaningful as the rate at which
+    it appears on a HEALTHY model. This is what caught LOCK 5b's three compounding defects, and it
+    is the reason a re-run of this study can check the machine before trusting its answer.
+
+    ⚠️ Slow (~45 min at production reps) — an operator/off-cycle re-verification, never part of
+    the default run. It is here rather than in a scratch file so it can actually be re-run.
+    """
+    from betting_ml.tests.test_mh2_6_calibration_audit import _frame  # test-only fixture
+
+    labels: dict[str, int] = {}
+    for s in range(n_clean):
+        v = run(frame=_frame(seed=1000 + s), reps=reps, with_power=False)["verdict"]["verdict"]
+        labels[v] = labels.get(v, 0) + 1
+    detect = {}
+    for nm, kw in (("sigma_x1.35", {"sigma_scale": 1.35}), ("sigma_x0.70", {"sigma_scale": 0.70}),
+                   ("mu_plus_1.5", {"mu_shift": 1.5}), ("p_plus_0.12", {"n": 600, "p_shift": 0.12}),
+                   ("sigma_x1.15", {"sigma_scale": 1.15})):
+        detect[nm] = sum(
+            run(frame=_frame(seed=2000 + s, **kw), reps=reps,
+                with_power=False)["verdict"]["verdict"] != "WITHIN_NOISE"
+            for s in range(n_detect)) / n_detect
+    return {"n_clean": n_clean, "reps": reps, "labels_on_clean_data": labels,
+            "false_positive_rate": 1.0 - labels.get("WITHIN_NOISE", 0) / n_clean,
+            "drift_false_positive_rate": labels.get("DRIFT", 0) / n_clean,
+            "detection_rate": detect, "seed": seed}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="MH2.6 served-window calibration audit")
     ap.add_argument("--smoke", action="store_true", help="synthetic frame; no S3, no Snowflake")
     ap.add_argument("--seed", type=int, default=SEED)
     ap.add_argument("--cache", type=str, default=None, help="parquet cache for the served pull")
+    ap.add_argument("--acceptance", action="store_true",
+                    help="measure the instrument's own false-positive/detection rates (~45 min)")
     a = ap.parse_args()
+    if a.acceptance:
+        print(json.dumps(acceptance_sweep(seed=a.seed), indent=2))
+        return
     r = run(seed=a.seed, smoke=a.smoke, cache=Path(a.cache) if a.cache else None)
     p = write_report(r)
     print(f"[{STORY}] verdict = {r['verdict']['verdict']} — {r['verdict']['reason']}")

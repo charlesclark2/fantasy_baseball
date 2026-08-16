@@ -412,6 +412,53 @@ class TestStatistics:
             s["reliability"] - s["resolution"] + s["uncertainty"], abs=2e-3)
 
 
+class TestThePostHocDiagnosis:
+    """The shape decomposition and the stratifier power statement. Both are DIAGNOSES of
+    pre-registered flags; neither may enter a verdict."""
+
+    def test_the_shape_diagnosis_is_labelled_post_hoc_and_is_not_in_the_verdict_family(self):
+        rng = np.random.default_rng(11)
+        z = rng.normal(0, 1, 500)
+        d = M.pit_shape_diagnosis(rng.uniform(size=500), z)
+        assert d["post_hoc"] is True
+        for k in d:
+            assert k not in M.VERDICT_STATS_TOTALS and k not in M.VERDICT_STATS_H2H
+
+    def test_mass_below_median_is_flat_on_a_symmetric_target_and_rises_on_a_right_skewed_one(self):
+        """Two-sided, or 'the median runs high' would be an artefact of the statistic rather than
+        of the data."""
+        rng = np.random.default_rng(12)
+        n = 40_000
+        mu = np.full(n, 9.0)
+        sg = np.full(n, 4.3)
+        sym = np.round(rng.normal(mu, sg))
+        u_sym = M.randomized_pit(sym, mu, sg, rng)
+        d_sym = M.pit_shape_diagnosis(u_sym, (sym - mu) / sg)
+        assert abs(d_sym["mass_below_predictive_median"] - 0.5) < 0.01
+        assert abs(d_sym["z_skew"]) < 0.05
+
+        # a right-skewed target with the SAME mean and SD — only the shape differs
+        g = rng.gamma(2.0, 1.0, n)
+        skewed = np.round(mu + (g - g.mean()) / g.std() * 4.3)
+        d_sk = M.pit_shape_diagnosis(M.randomized_pit(skewed, mu, sg, rng), (skewed - mu) / sg)
+        assert d_sk["mass_below_predictive_median"] > 0.53
+        assert d_sk["z_skew"] > 0.5
+
+    def test_the_stratifier_power_statement_is_monotone_in_sigma_dispersion(self):
+        """A flatter σ needs MORE games to separate realized dispersion — the direction that makes
+        'under-powered' a claim about the partition rather than a shrug."""
+        rng = np.random.default_rng(13)
+        wide = M.stratifier_games_needed(rng.normal(4.3, 0.60, 2000), 10)
+        narrow = M.stratifier_games_needed(rng.normal(4.3, 0.20, 2000), 10)
+        assert wide["evaluable"] and narrow["evaluable"]
+        assert narrow["games_needed"] > wide["games_needed"]
+
+    def test_a_constant_sigma_partition_is_declared_UNEVALUABLE_not_satisfied(self):
+        """NF1.7 (a): a partition that cannot separate anything must say so, not return a number."""
+        out = M.stratifier_games_needed(np.full(500, 4.3), 10)
+        assert out["evaluable"] is False
+
+
 class TestTheReport:
     @pytest.mark.slow
     def test_a_null_verdict_is_reported_together_with_its_MDE(self):

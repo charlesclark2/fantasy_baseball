@@ -194,6 +194,20 @@ regardless of the result:
 | outside the null **and** RECENT ≠ EARLIER | **DRIFT** | Phase 2, scoped to the defect found (σ dynamic range → the MH2.5 target; level/mean → the wide-window retrain). |
 | the instrument cannot resolve the MDE | **POWER_LIMITED** | say so in games; do not dress it as a clean null. |
 
+### 6b. Declared POST-HOC blocks (added after the run; verdict-inert by construction)
+
+Two blocks in the report were written **after** the pre-registered tests had run, and are labelled
+as such in the report itself:
+
+- **the PIT shape decomposition** — `pit_mdd`/`pit_ks` are pre-registered and say the PIT is not
+  uniform; they do not say *in what shape*. The decomposition names the shape so the flag is
+  actionable. It is excluded from the verdict family and changes no verdict.
+- **the stratifier power statement** (`games_needed`) — asks whether a DISQUALIFIED partition is
+  wrong or merely under-powered. A power statement about an instrument, not a test of the model.
+
+Neither may be cited as evidence *that* something is miscalibrated; both only characterise a flag
+the pre-registered tests already raised.
+
 ⛔ **Phase 2, if it fires, is deploy-held regardless of outcome** and carries the MH2.1 promotion
 landmines explicitly: a one-target swap breaks bundle-assuming consumers (`model_version` is stamped
 from `home_win`; `mart_clv_labeled_games` hardcodes `v6`; the backfill idempotency key); serve the
