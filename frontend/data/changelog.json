@@ -122,6 +122,10 @@
       {
         "tag": "fixed",
         "text": "On a phone, the menu no longer runs off the bottom of the screen — Sign Out and Settings are always reachable, and it scrolls on its own without moving the page behind it."
+      },
+      {
+        "tag": "new",
+        "text": "My League now lets you switch between every saved league you have, instead of always showing whichever one happened to load first. If you've saved more than one league — a subscriber account can save several — a picker at the top of the page lists them by name; choosing a different one re-scores the whole page, board and all, for that league, and your choice sticks through a refresh. A free account only ever has one saved league, so nothing changes there."
       }
     ]
   },
