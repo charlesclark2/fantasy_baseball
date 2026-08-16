@@ -234,19 +234,39 @@ In the Stripe dashboard with the **live/test toggle set to LIVE**, create the tw
 webhook endpoint, then confirm the founding Price really is $10:
 
 ```bash
-# Live restricted/secret key in the shell only — never on a command line.
+# Live secret key in the shell only — never on a command line (history, `ps`).
 read -rs STRIPE_LIVE_KEY && export STRIPE_LIVE_KEY
 
-curl -s https://api.stripe.com/v1/prices/<LIVE_FOUNDING_PRICE_ID> \
-  -u "$STRIPE_LIVE_KEY:" -d 'expand[]=product' \
-  | python3 -m json.tool \
-  | grep -E '"(unit_amount|currency|interval|interval_count|livemode|type|name|active)"'
+# Paste the two LIVE Price ids from the dashboard. ⚠️ SET THEM AS VARIABLES — never inline a
+# <PLACEHOLDER> into a shell command: `<` is INPUT REDIRECTION in bash/zsh, so pasting the
+# literal form fails with "no such file or directory: LIVE_FOUNDING_PRICE_ID" before curl ever
+# runs. (Hit for real on 2026-08-16; this block used to carry exactly that defect.)
+export PRICE_FOUNDING='price_...'
+export PRICE_STANDARD='price_...'
+
+# ⚠️ `-G` is LOAD-BEARING: `curl -d` defaults to POST, and `POST /v1/prices/{id}` is Stripe's
+# UPDATE endpoint. `-G` moves the data into the query string so this is the GET (retrieve) it
+# is meant to be — a verification step must not be a write against a live billing object.
+for P in "$PRICE_FOUNDING" "$PRICE_STANDARD"; do
+  echo "── $P"
+  curl -s -G "https://api.stripe.com/v1/prices/$P" \
+    -u "$STRIPE_LIVE_KEY:" -d 'expand[]=product' \
+    | python3 -m json.tool \
+    | grep -E '"(unit_amount|currency|interval|interval_count|livemode|type|name|active)"'
+done
 ```
 
-**Required:** `unit_amount: 1000`, `currency: "usd"`, `interval: "month"`, `interval_count: 1`,
-`livemode: true`, `type: "recurring"`, `active: true`. Repeat for the standard Price (expect
-`unit_amount: 2000`). ⛔ **If the founding Price is not exactly 1000, STOP** — every marketing
-surface says $10 and `stripe_pricing.resolve()` will render whatever Stripe returns.
+**Required:** founding `unit_amount: 1000` and standard `unit_amount: 2000`, both with
+`currency: "usd"`, `interval: "month"`, `interval_count: 1`, `livemode: true`,
+`type: "recurring"`, `active: true`. ⛔ **If the founding Price is not exactly 1000, STOP** —
+every marketing surface says $10 and `stripe_pricing.resolve()` renders whatever Stripe returns.
+
+If `python3 -m json.tool` reports `Expecting value: line 1 column 1`, the response was not JSON
+(a Stripe error, or a shell mangling before curl ran). Drop the pipe to read it:
+
+```bash
+curl -s -G "https://api.stripe.com/v1/prices/$PRICE_FOUNDING" -u "$STRIPE_LIVE_KEY:" | head -c 500
+```
 
 **Webhook endpoint (live mode):** URL `https://api.credencesports.com/stripe/webhook`, subscribed to
 exactly:
@@ -331,8 +351,14 @@ guessed.
 
 ```bash
 # Secrets into the shell only — `read -rs` echoes nothing and keeps them out of history.
-read -rs STRIPE_SECRET_KEY   && export STRIPE_SECRET_KEY      # sk_live_…
-read -rs STRIPE_WEBHOOK_SECRET && export STRIPE_WEBHOOK_SECRET  # whsec_… from step 1
+read -rs STRIPE_SECRET_KEY     && export STRIPE_SECRET_KEY       # sk_live_…
+read -rs STRIPE_WEBHOOK_SECRET && export STRIPE_WEBHOOK_SECRET   # whsec_… from step 1
+
+# $PRICE_FOUNDING / $PRICE_STANDARD are already set from step 1 — reuse them rather than
+# re-typing the ids, so the values you FLIP are byte-identical to the ones you VERIFIED.
+# (If this is a fresh shell, re-export them first; ⛔ never inline a <PLACEHOLDER>, `<` is a
+# shell redirect.)
+test -n "$PRICE_FOUNDING" && test -n "$PRICE_STANDARD" || echo "SET THE PRICE IDS FIRST"
 
 # DRY RUN first — writes nothing. Check the diff says sk_test_ -> sk_live_ and "0 removed".
 env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
@@ -340,8 +366,8 @@ env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
     --profile AdministratorAccess-769392325318 \
     --set-env STRIPE_SECRET_KEY \
     --set-env STRIPE_WEBHOOK_SECRET \
-    --set STRIPE_PRICE_FOUNDING=<LIVE_FOUNDING_PRICE_ID> \
-    --set STRIPE_PRICE_STANDARD=<LIVE_STANDARD_PRICE_ID> \
+    --set "STRIPE_PRICE_FOUNDING=$PRICE_FOUNDING" \
+    --set "STRIPE_PRICE_STANDARD=$PRICE_STANDARD" \
     --set ENFORCE_SUBSCRIBER_MFA=1
 
 # Then re-run the IDENTICAL command with --apply appended.
@@ -352,7 +378,7 @@ separately from the live price ids or the live webhook secret. The tool waits fo
 re-reads, and confirms every key landed with nothing else moved.
 
 ```bash
-unset STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET   # don't leave them in the shell
+unset STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_LIVE_KEY   # don't leave them in the shell
 ```
 
 ### Step 5 — Frontend MFA flag (VERCEL DASHBOARD)

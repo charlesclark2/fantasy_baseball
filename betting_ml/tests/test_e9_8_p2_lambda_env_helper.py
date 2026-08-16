@@ -445,6 +445,82 @@ class TestTheReadinessGateNeverScoresAnUnevaluableCheckHealthy:
         assert gate.main([]) == 1
 
 
+class TestAWrongKindOfStripeKeyNamesItself:
+    """Stripe hands you four key kinds and only `sk_`/`rk_` can act as a server secret.
+
+    ⭐ `pk_live_` is the PUBLISHABLE key — designed to be embedded in a web page. In
+    `STRIPE_SECRET_KEY` it breaks the ENTIRE billing surface at once (no Price read, no
+    Checkout Session, no billing portal) while looking completely plausible: same prefix
+    family, same length, and it says "live" right on it. It sits one line above the secret key
+    on the dashboard's API-keys page, which is exactly how it gets copied.
+
+    Nearly shipped on 2026-08-16 — caught only because a Price read returned
+    `invalid_request_error`. The gate already refused it (mode `?` ≠ `live`), but reported a
+    bare `sk_?_`, which does not tell an operator mid-flip what is wrong or where to look.
+    A refusal that does not name its cause is a refusal someone re-runs verbatim.
+    """
+
+    @staticmethod
+    def _gate():
+        spec = importlib.util.spec_from_file_location(
+            "_e98p2_readiness_keys",
+            Path(__file__).resolve().parents[2] / "scripts" / "check_stripe_golive_readiness.py",
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    _BASE = {
+        "STRIPE_PRICE_FOUNDING": "price_a",
+        "STRIPE_PRICE_STANDARD": "price_b",
+        "STRIPE_WEBHOOK_SECRET": "whsec_x",
+    }
+
+    def _check(self, gate, key, expect="live"):
+        env = {**self._BASE, **({"STRIPE_SECRET_KEY": key} if key else {})}
+        gate.aws_json = lambda args, profile: env
+        return gate.check_stripe_mode(None, expect)
+
+    def test_a_publishable_key_is_refused_AND_says_so(self):
+        gate = self._gate()
+        c = self._check(gate, "pk_live_FIXTUREaaa")
+        assert c.verdict == gate.NO_GO
+        blob = " ".join(c.notes).lower()
+        assert "publishable" in blob, "the refusal does not name the cause"
+        assert "sk_live_" in blob, "the refusal does not say what to use instead"
+        # The detail line must show the REAL prefix — rendering `sk_?_` would hide the defect.
+        assert "pk_live_" in c.detail
+
+    def test_a_restricted_key_is_flagged_for_its_scopes(self):
+        gate = self._gate()
+        c = self._check(gate, "rk_live_FIXTUREaaa")
+        assert c.verdict == gate.NO_GO
+        assert "restricted" in " ".join(c.notes).lower()
+
+    def test_an_absent_key_is_refused_and_named(self):
+        gate = self._gate()
+        c = self._check(gate, "")
+        assert c.verdict == gate.NO_GO
+        assert "absent" in " ".join(c.notes).lower()
+
+    @pytest.mark.parametrize("key,expect", [("sk_live_FIXTUREaaa", "live"), ("sk_test_FIXTUREaaa", "test")])
+    def test_a_correct_key_still_passes_cleanly(self, key, expect):
+        """⭐ Two-sided. Without this, 'refuse everything' would satisfy every test above —
+        and a gate that never passes is as useless as one that never fails."""
+        gate = self._gate()
+        c = self._check(gate, key, expect)
+        assert c.verdict == gate.GO, c.notes
+        assert not c.notes
+
+    def test_the_right_key_in_the_WRONG_MODE_is_still_refused(self):
+        """The original job of this check: a real secret key, but still test at flip time."""
+        gate = self._gate()
+        c = self._check(gate, "sk_test_FIXTUREaaa", "live")
+        assert c.verdict == gate.NO_GO
+        assert "sk_test_" in c.detail and "sk_live_" in c.detail
+
+
 class TestTheGoLivePriceContract:
     """The `$10 founding` promise, pinned against the fixture the E2E suite renders.
 
@@ -483,6 +559,67 @@ class TestTheGoLivePriceContract:
     def test_seats_remaining_is_a_sane_clamped_count(self):
         remaining = self._fixture()["founding_slots_remaining"]
         assert isinstance(remaining, int) and 0 <= remaining <= 100, remaining
+
+
+class TestTheRunbookCommandsAreActuallyPasteable:
+    """`docs/e9_8_p2_stripe_golive.md` — the operator run-order.
+
+    ⭐ A RUNBOOK COMMAND MUST NOT CONTAIN A CHARACTER THE SHELL WILL ACT ON. `<PLACEHOLDER>`
+    reads as "fill this in" to a human and as INPUT REDIRECTION to bash/zsh, so pasting the
+    literal line dies with `no such file or directory: PLACEHOLDER` before the command ever
+    runs. That happened for real on 2026-08-16, mid-go-live, on the step that verifies the
+    live price — the single most consequential read in the whole procedure.
+
+    The repo's standing rule is that a handoff command is "FULL, copy-pasteable … no
+    placeholders left unfilled". This makes it mechanical instead of a habit: a value the
+    operator must supply is assigned to a shell VARIABLE on its own line, which is both
+    paste-safe and reusable by later steps.
+
+    Scoped to this runbook deliberately — it is the one this story owns, and a repo-wide
+    sweep would fail on older docs for reasons no one is acting on today.
+    """
+
+    RUNBOOK = Path(__file__).resolve().parents[2] / "docs" / "e9_8_p2_stripe_golive.md"
+
+    def _bash_blocks(self):
+        import re
+        blocks = re.findall(r"```bash\n(.*?)```", self.RUNBOOK.read_text(), re.S)
+        assert blocks, "no bash blocks found — this guard would pass on nothing"
+        return blocks
+
+    def test_no_shell_hostile_placeholder_survives_in_a_command(self):
+        import re
+        offenders = []
+        for block in self._bash_blocks():
+            for line in block.splitlines():
+                code = line.split("#", 1)[0]  # a placeholder inside a COMMENT is fine
+                if re.search(r"<[A-Z_]{3,}>", code):
+                    offenders.append(line.strip())
+        assert not offenders, (
+            "these runbook lines carry a <PLACEHOLDER> the shell reads as a redirect:\n  "
+            + "\n  ".join(offenders)
+        )
+
+    def test_the_price_verification_is_a_GET_not_a_POST(self):
+        """`curl -d` defaults to POST, and `POST /v1/prices/{id}` is Stripe's UPDATE endpoint.
+        A verification step must never be a write against a live billing object, so the
+        retrieve has to carry `-G`."""
+        for block in self._bash_blocks():
+            for line in block.splitlines():
+                if "api.stripe.com/v1/prices" in line and line.strip().startswith("curl"):
+                    assert " -G " in line, f"price read is a POST (missing -G): {line.strip()}"
+
+    def test_every_secret_exported_in_the_runbook_is_unset_at_the_end(self):
+        """A live key left in the operator's shell outlives the step that needed it."""
+        import re
+        text = self.RUNBOOK.read_text()
+        exported = set(re.findall(r"read -rs (\w+)\s+&&\s+export \1", text))
+        assert exported, "no `read -rs … && export` found — this guard would pass on nothing"
+        cleared = set()
+        for line in text.splitlines():
+            if line.strip().startswith("unset "):
+                cleared.update(line.split("#", 1)[0].split()[1:])
+        assert not (exported - cleared), f"never unset: {sorted(exported - cleared)}"
 
 
 @pytest.mark.parametrize("clause", sorted(_CLAUSES))
