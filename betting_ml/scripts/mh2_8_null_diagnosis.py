@@ -38,7 +38,16 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import betting_ml.scripts.mh2_8_skew_predictive as M  # noqa: E402
 
-_RUN_JSON = PROJECT_ROOT / "betting_ml/evaluation/feature_selection/bakeoff/mh2_8_skew_predictive.json"
+_BAKEOFF = PROJECT_ROOT / "betting_ml/evaluation/feature_selection/bakeoff"
+_RUN_JSON = _BAKEOFF / "mh2_8_skew_predictive.json"
+#: The DECLARED LOCK-1 sensitivity, read beside the primary. ⭐ It is what shows that 2020 — a
+#: 60-game COVID season — is the fold that destroys the skill series' CONSISTENCY, which no single
+#: run could reveal.
+_SENS_JSON = _BAKEOFF / "mh2_8_skew_predictive_no2020.json"
+#: ⛔ DIAGNOSTIC ONLY (MH2.2). Arithmetic on already-computed per-fold scores, showing what a
+#: COHERENT family would have scored. It may size a SUCCESSOR's prospects; it may NEVER be quoted as
+#: a verdict, and a successor must PRE-REGISTER its family and re-run.
+_COHERENT_FAMILY = ("normal_recal", "skewnorm_recal")
 _OUT = PROJECT_ROOT / "quant_sports_intel_models/baseball/edge_program/ablation_results/mh2_8_null_diagnosis.md"
 
 #: The population sizes the sweep is run at. ⭐ BOTH are reported because the answer is
@@ -97,6 +106,29 @@ def clean_data_margin_sweep(n_ev: int, n_cal: int, reps: int, seed: int = 42) ->
         "margin_p95": float(np.percentile(m, 95)), "margin_max": float(m.max()),
         "clears_meaningful_bar": float((m >= M.MH28_MEANINGFUL_PIT_MDD_GAIN).mean()),
     }
+
+
+def coherent_family_probe(run: dict) -> dict:
+    """⛔ DIAGNOSTIC. What a COHERENT recal-only family would have scored on this window.
+
+    ⭐ **The result overturns the obvious story and that is why it is measured rather than asserted.**
+    The intuition — "a coherent family lowers `V`" — is FALSE here: dropping the far-out learned-family
+    arms makes `V` go UP, because a sample variance over the REMAINING near-mean points is WIDER
+    (DSR-CONV's non-monotone-exclusion lesson, live). The whole improvement comes from the
+    multiplicity term `z(N)` as `N` falls, not from dispersion.
+    """
+    from betting_ml.utils.cv_power import dsr_from_sr
+
+    fp = {a: np.array(v, float) for a, v in run["fold_primary"].items()}
+    inc = fp[M.MH28_INCUMBENT_ARM]
+    sh = {a: float(np.mean(inc - fp[a]) / np.std(inc - fp[a], ddof=1)) for a in _COHERENT_FAMILY}
+    V = float(np.var(list(sh.values()), ddof=1))
+    n_trials = len(_COHERENT_FAMILY) + 1                      # + the incumbent, in n_trials
+    return {"arms": list(_COHERENT_FAMILY), "n_trials": n_trials, "V": V,
+            "V_declared_field": float(run["dsr"]["var_trials_sr"]),
+            "dsr": float(dsr_from_sr(sr=float(run["dsr"]["observed_sr"]), n_obs=int(run["n_folds"]),
+                                     n_trials=n_trials, var_trials_sr=V)),
+            "dsr_declared_field": float(run["dsr"]["dsr"])}
 
 
 def main() -> None:
@@ -180,6 +212,70 @@ def main() -> None:
           "produce; it says field SIZE is no lever, not that field COMPOSITION is none. Acting on "
           "that distinction requires a FRESH pre-registration of a coherent family, decided on "
           "mechanistic grounds BEFORE any scoring — ⛔ never a re-cut of this scored field.\n"]
+    # ── the declared LOCK-1 sensitivity, read beside the primary ──────────────────────────────
+    if _SENS_JSON.exists():
+        sens = json.load(_SENS_JSON.open())
+        L += ["## 3. ⭐ The declared 2020 sensitivity overturns the REASON, not the verdict\n",
+              "Both windows return `INCUMBENT_STANDS`, and the 2020 run was run because it was "
+              "PRE-REGISTERED, not because the primary left a question open. But the two disagree "
+              "sharply about WHY, and only running both could show it.\n",
+              "| | primary (2020 kept) | sensitivity (2020 dropped) |", "|---|---:|---:|"]
+        pr_d, se_d = run["dsr"], sens["dsr"]
+        rows = [("folds", run["n_folds"], sens["n_folds"]),
+                ("winner per-fold Sharpe", f"{pr_d['observed_sr']:.3f}", f"{se_d['observed_sr']:.3f}"),
+                ("`SR0` (the bar)", f"{pr_d['sr0']:.3f}", f"{se_d['sr0']:.3f}"),
+                ("`V`", f"{pr_d['var_trials_sr']:.3f}", f"{se_d['var_trials_sr']:.3f}"),
+                ("**DSR**", f"**{pr_d['dsr']:.4f}**", f"**{se_d['dsr']:.4f}**"),
+                ("PBO", f"{run['pbo']:.3f}", f"{sens['pbo']:.3f}"),
+                ("fold consistency",
+                 f"{run['fold_consistency']['wins']}/{run['n_folds']}",
+                 f"{sens['fold_consistency']['wins']}/{sens['n_folds']}"),
+                ("`field_remedy_admissible`",
+                 str(run["decision"]["null_classification"]["field_remedy_admissible"]),
+                 str(sens["decision"]["null_classification"]["field_remedy_admissible"]))]
+        for a, b, c in rows:
+            L.append(f"| {a} | {b} | {c} |")
+        L += ["",
+              "⭐ **2020 is the fold that destroys the skill series' CONSISTENCY.** Dropping one "
+              "60-game COVID season — 581 of 21,169 rows, 2.7% — takes the winner's per-fold Sharpe "
+              f"from {pr_d['observed_sr']:.3f} to {se_d['observed_sr']:.3f}, a ~5× move, and DSR "
+              f"from {pr_d['dsr']:.4f} to {se_d['dsr']:.4f}. The BAR rose too "
+              f"({pr_d['sr0']:.3f} → {se_d['sr0']:.3f}, since `n_obs` fell 8 → 7), but the EVIDENCE "
+              "rose far more. ⚠️ A fold-count argument alone predicts the opposite and is wrong: the "
+              "consistency of the per-fold skill series, not the number of folds, is what moved.\n",
+              "⭐ **And `field_remedy_admissible` changes state**, from `None` (field size is no "
+              "lever at all — nothing clears) to `False` (a smaller field WOULD clear arithmetically, "
+              "but the imperative is REFUSED because 8 IS the declared minimum). That is a "
+              "materially different null: the primary says the evidence is nowhere near, the "
+              "sensitivity says the evidence is close and the DESIGN is what refuses it. ⛔ Neither "
+              "licenses re-cutting this field (MH2.2).\n"]
+        probe_p, probe_s = coherent_family_probe(run), coherent_family_probe(sens)
+        L += ["### ⛔ What a COHERENT family would have scored — DIAGNOSTIC, never a verdict\n",
+              "Arithmetic on already-computed per-fold scores, to size whether a SUCCESSOR is worth "
+              "pre-registering. A successor must DECLARE its family up front and RE-RUN; no figure "
+              "here may be quoted as a result (MH2.2).\n",
+              f"| window | declared field (`n_trials` {run['n_arms']}) | coherent recal-only "
+              f"(`n_trials` {probe_p['n_trials']}) |", "|---|---:|---:|",
+              f"| primary `V` / DSR | {probe_p['V_declared_field']:.3f} / "
+              f"{probe_p['dsr_declared_field']:.4f} | {probe_p['V']:.3f} / {probe_p['dsr']:.4f} |",
+              f"| sensitivity `V` / DSR | {probe_s['V_declared_field']:.3f} / "
+              f"{probe_s['dsr_declared_field']:.4f} | {probe_s['V']:.3f} / {probe_s['dsr']:.4f} |",
+              "",
+              "⭐⭐ **This refutes the obvious story about coherent families, and the refutation is "
+              "the useful part.** The intuition is that a coherent family wins by SHRINKING `V`. "
+              f"Measured, `V` moves in OPPOSITE DIRECTIONS on the two windows — DOWN on the primary "
+              f"({probe_p['V_declared_field']:.3f} → {probe_p['V']:.3f}) and UP on the sensitivity "
+              f"({probe_s['V_declared_field']:.3f} → {probe_s['V']:.3f}) — while DSR IMPROVES on "
+              "both. A sample variance over the REMAINING near-mean arms can be WIDER once the "
+              "far-out ones are gone, so `V` is not a reliable lever in either direction. That is "
+              "DSR-CONV's non-monotone-exclusion property, observed live rather than quoted, and "
+              "it is why an arm may qualify as a degenerate BY DESIGN and never BY DECLARATION. "
+              "What improves DSR consistently here is the MULTIPLICITY term `z(N)` as `N` falls "
+              f"{run['n_arms']} → {probe_p['n_trials']}.\n",
+              f"⚠️ And even so the best diagnostic figure is **{max(probe_p['dsr'], probe_s['dsr']):.4f}**, "
+              f"short of the {M.DSR_MIN_CONF} bar. ⇒ a coherent-family successor is worth "
+              "registering but is **not** a foregone clear, and anyone scoping one should size it "
+              "against that number rather than against the hope that coherence alone fixes DSR.\n"]
     _OUT.write_text("\n".join(L) + "\n")
     print(f"[MH2.8] diagnosis → {_OUT.relative_to(PROJECT_ROOT)}")
 

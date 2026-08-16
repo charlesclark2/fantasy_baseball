@@ -47,3 +47,35 @@ Leave-one-out on the `V` pool ['normal_recal', 'ngb_lognormal', 'ngb_gamma', 'lg
 
 ⛔ **`field_remedy_admissible` was `None`** — not even a 2-arm field clears. That figure holds `V` FIXED, so it cannot see the `V` reduction a coherently-declared family would produce; it says field SIZE is no lever, not that field COMPOSITION is none. Acting on that distinction requires a FRESH pre-registration of a coherent family, decided on mechanistic grounds BEFORE any scoring — ⛔ never a re-cut of this scored field.
 
+## 3. ⭐ The declared 2020 sensitivity overturns the REASON, not the verdict
+
+Both windows return `INCUMBENT_STANDS`, and the 2020 run was run because it was PRE-REGISTERED, not because the primary left a question open. But the two disagree sharply about WHY, and only running both could show it.
+
+| | primary (2020 kept) | sensitivity (2020 dropped) |
+|---|---:|---:|
+| folds | 8 | 7 |
+| winner per-fold Sharpe | 0.460 | 2.296 |
+| `SR0` (the bar) | 1.962 | 2.517 |
+| `V` | 1.808 | 2.975 |
+| **DSR** | **0.0020** | **0.3734** |
+| PBO | 0.057 | 0.000 |
+| fold consistency | 7/8 | 7/7 |
+| `field_remedy_admissible` | None | False |
+
+⭐ **2020 is the fold that destroys the skill series' CONSISTENCY.** Dropping one 60-game COVID season — 581 of 21,169 rows, 2.7% — takes the winner's per-fold Sharpe from 0.460 to 2.296, a ~5× move, and DSR from 0.0020 to 0.3734. The BAR rose too (1.962 → 2.517, since `n_obs` fell 8 → 7), but the EVIDENCE rose far more. ⚠️ A fold-count argument alone predicts the opposite and is wrong: the consistency of the per-fold skill series, not the number of folds, is what moved.
+
+⭐ **And `field_remedy_admissible` changes state**, from `None` (field size is no lever at all — nothing clears) to `False` (a smaller field WOULD clear arithmetically, but the imperative is REFUSED because 8 IS the declared minimum). That is a materially different null: the primary says the evidence is nowhere near, the sensitivity says the evidence is close and the DESIGN is what refuses it. ⛔ Neither licenses re-cutting this field (MH2.2).
+
+### ⛔ What a COHERENT family would have scored — DIAGNOSTIC, never a verdict
+
+Arithmetic on already-computed per-fold scores, to size whether a SUCCESSOR is worth pre-registering. A successor must DECLARE its family up front and RE-RUN; no figure here may be quoted as a result (MH2.2).
+
+| window | declared field (`n_trials` 8) | coherent recal-only (`n_trials` 3) |
+|---|---:|---:|
+| primary `V` / DSR | 1.808 / 0.0020 | 1.083 / 0.1412 |
+| sensitivity `V` / DSR | 2.975 / 0.3734 | 3.870 / 0.7865 |
+
+⭐⭐ **This refutes the obvious story about coherent families, and the refutation is the useful part.** The intuition is that a coherent family wins by SHRINKING `V`. Measured, `V` moves in OPPOSITE DIRECTIONS on the two windows — DOWN on the primary (1.808 → 1.083) and UP on the sensitivity (2.975 → 3.870) — while DSR IMPROVES on both. A sample variance over the REMAINING near-mean arms can be WIDER once the far-out ones are gone, so `V` is not a reliable lever in either direction. That is DSR-CONV's non-monotone-exclusion property, observed live rather than quoted, and it is why an arm may qualify as a degenerate BY DESIGN and never BY DECLARATION. What improves DSR consistently here is the MULTIPLICITY term `z(N)` as `N` falls 8 → 3.
+
+⚠️ And even so the best diagnostic figure is **0.7865**, short of the 0.95 bar. ⇒ a coherent-family successor is worth registering but is **not** a foregone clear, and anyone scoping one should size it against that number rather than against the hope that coherence alone fixes DSR.
+
