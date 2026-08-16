@@ -754,6 +754,32 @@ def test_a_pit_flatness_failure_blocks_a_ship_even_with_coverage_green():
     assert out["verdict"]["story_verdict"] == "NULL"
 
 
+def test_a_refused_fold_is_dropped_from_the_fold_count_not_silently_counted():
+    """A fold whose anchors could not be evaluated is REFUSED (NF1.7 (a) — a check that did not
+    run is not a pass) and must leave the fold count, so the fold-consistency clause and the
+    power classification are computed on the folds that actually produced a verdict."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
+    folds = [_fold(f"f{i}", winner_edge=0.30) for i in range(8)]
+    for fr in folds[:3]:
+        fr["positions"]["WR"] = {"skipped": "matched-n control below the estimation floor"}
+    out = R.derive_verdict_layer({"n_folds": 8, "fold_results": folds, "generated_at": "x"})
+    assert out["selections"]["WR"]["n_folds_used"] == 5
+    assert out["selections"]["QB"]["n_folds_used"] == 8, "an unrelated position must be unaffected"
+
+
+def test_a_position_refused_on_every_fold_is_reported_unavailable_not_null():
+    """'We could not evaluate this position' and 'this position produced a null' are different
+    findings — collapsing them would publish a null nobody measured."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
+    folds = [_fold(f"f{i}", winner_edge=0.30) for i in range(8)]
+    for fr in folds:
+        fr["positions"]["TE"] = {"skipped": "below the estimation floor"}
+    out = R.derive_verdict_layer({"n_folds": 8, "fold_results": folds, "generated_at": "x"})
+    assert out["unavailable_positions"] == ["TE"]
+    assert "TE" not in out["selections"] and "TE" not in out["verdict"]["null_positions"]
+    assert "TE" not in out["verdict"]["ship_positions"]
+
+
 def test_the_report_writer_survives_both_a_ship_and_a_null(tmp_path):
     """A report that crashes after an expensive operator run costs the run twice."""
     from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R

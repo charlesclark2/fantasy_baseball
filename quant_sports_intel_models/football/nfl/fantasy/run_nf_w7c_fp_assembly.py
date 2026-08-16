@@ -121,6 +121,16 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, smap: d
         return {"skipped": f"train {len(tr_p)} / test {len(te_p)} rows — below the estimation "
                            f"floor ({FA.MIN_ESTIMATION_ROWS}); REFUSED, not defaulted"}
     mtrain = KW.matched_n_train(train, test)
+    # ⭐ PRE-FLIGHT the matched-n control. NF1.7 (a) forbids treating a failed anchor as a pass, so
+    # an unestimable control MUST refuse — but discovering that by raising deep inside an
+    # expensive operator run costs the whole run. Checking here turns it into a RECORDED skip
+    # that drops the fold from `n_folds_used` (visible in the record), not a crash.
+    n_mtrain_p = int((mtrain["position"].astype(str) == position).sum())
+    if n_mtrain_p < FA.MIN_ESTIMATION_ROWS:
+        return {"skipped": f"the matched-n control carries {n_mtrain_p} {position} rows, below the "
+                           f"estimation floor ({FA.MIN_ESTIMATION_ROWS}) — the per-form oracle "
+                           f"floor could not be evaluated at matched n, so this fold is REFUSED "
+                           f"rather than scored against an anchor that did not run (NF1.7 (a))"}
 
     # ── marginal contexts (NF1.9 (f)): test / in-sample train / oracle / matched-n ──────────────
     ctx_te = _marginals(train, test, smap)
