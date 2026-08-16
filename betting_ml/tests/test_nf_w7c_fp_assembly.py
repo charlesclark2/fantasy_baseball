@@ -505,8 +505,11 @@ def test_the_field_partitions_and_every_arm_has_its_own_form_oracle():
     assert not set(FA.ELIGIBLE) & set(FA.DEGENERATES)
     for arm in FA.REAL_ARMS:                       # NF-D16 (g‴): the joint forms NEST one another
         assert f"oracle__{arm}" in FA.ANCHORS and f"matched_n__{arm}" in FA.ANCHORS
-    for foil in FA.FOILS:
+    for foil in FA.FOILS_WITH_ORACLE:
         assert f"oracle__{foil}" in FA.ANCHORS
+    # ⛔ the independent foil estimates NOTHING, so it must NOT carry a fabricated oracle
+    assert "assembled_indep" not in FA.FOILS_WITH_ORACLE
+    assert "oracle__assembled_indep" not in FA.ANCHORS
 
 
 def test_the_gate_clause_partition_covers_every_declared_check():
@@ -585,6 +588,36 @@ def test_the_record_writer_and_the_record_reader_cannot_drift_onto_different_fil
     assert R._ARTIFACT_REL is FA.RECORD_RELPATH, (
         "the runner defines its own artifact path instead of reading the serving module's")
     assert FA.RECORD_RELPATH.endswith("nf_w7c_fp_assembly.json")
+
+
+def test_even_a_smoke_run_reads_the_REAL_w6d_records_never_a_path_proof():
+    """⭐ The runner's `suffix` names ITS OWN artifact; the W6d records are a committed INPUT.
+
+    Letting one variable do both jobs (a) made `--smoke` demand a `nf_w6d_defaults_smoke.json`
+    that has never existed, and (b) passed `allow_path_proof=True`, which would have let a PATH
+    PROOF supply the served map a real assembly is built from. Reading the full records is both
+    the working path and the STRICTER one — asserted on the source so the loophole cannot come
+    back as a convenience during a future debugging session."""
+    import inspect
+
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
+    src = "\n".join(ln for ln in inspect.getsource(R.main).splitlines()
+                    if not ln.lstrip().startswith("#"))          # prose cannot satisfy a guard
+    assert 'record_paths("")' in src, (
+        "the runner no longer pins the W6d records to the FULL (decision-grade) variants")
+    assert "allow_path_proof" not in src, (
+        "the runner passes allow_path_proof — a path-proof W6d record could feed the assembly")
+
+
+def test_the_smoke_still_writes_its_OWN_artifact_as_a_path_proof():
+    """The other half of the split: this story's own smoke output stays suffixed `_smoke`, so it
+    remains unservable (`certified_arms` refuses it) even though its INPUTS are decision-grade."""
+    import inspect
+
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
+    src = inspect.getsource(R.main)
+    assert 'suffix = "_smoke" if args.smoke else ""' in src
+    assert 'art = _PROJECT_ROOT / _ARTIFACT_REL.replace(".json", f"{suffix}.json")' in src
 
 
 def test_the_served_assembly_produces_a_valid_bank_with_its_labelling():
