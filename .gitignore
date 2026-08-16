@@ -13,6 +13,11 @@ __pycache__/
 venv/
 .venv/
 
+# E9.8-P2 — pre-change backups of the API Lambda environment, written 0600 by
+# infrastructure/lambda/set_lambda_env.py. They contain the REAL live credentials, so this
+# directory must never be reachable by a stray `git add`.
+.secrets/
+
 # Marimo session state (large JSON files with hash strings that trigger GitHub secret scanning)
 exploratory_data_analysis/__marimo__/
 
