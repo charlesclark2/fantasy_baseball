@@ -387,6 +387,7 @@ class SkewNormalPred(Predictive):
         self.omega = s / np.sqrt(np.maximum(1.0 - (b * d) ** 2, 1e-12))
         self.xi = m - self.omega * b * d
         self.a = a
+        self._m, self._s = m, s
         self.n = len(m)
         self._grid_cache = None
 
@@ -397,6 +398,15 @@ class SkewNormalPred(Predictive):
     def ppf(self, q):
         from scipy.stats import skewnorm
         return skewnorm.ppf(q, self.a, loc=self.xi, scale=self.omega)
+
+    # ⭐ EXACT by construction — the parameterisation moment-matches, so the mean and SD are the
+    # targets themselves. Reading them off the quantile grid instead would be both slower and
+    # slightly WRONG (a grid approximation), and it is what made the control sweep intractable.
+    def mean(self):
+        return self._m
+
+    def sd(self):
+        return self._s
 
 
 @dataclass
@@ -434,6 +444,7 @@ class ClimoPred(Predictive):
         self.support = np.arange(np.floor(v.min()) - 1, np.ceil(v.max()) + 2)
         counts = np.array([np.mean(v <= s) for s in self.support])
         self.cum = counts
+        self._mu, self._sd = float(v.mean()), float(v.std(ddof=1))
         self.n = int(self.n_rows)
         self._grid_cache = None
 
@@ -447,6 +458,12 @@ class ClimoPred(Predictive):
         qq = np.atleast_1d(np.asarray(q, float))
         v = np.interp(qq, self.cum, self.support)
         return np.full(self.n, float(v[0])) if v.size == 1 else v
+
+    def mean(self):
+        return np.full(self.n, self._mu)
+
+    def sd(self):
+        return np.full(self.n, self._sd)
 
 
 @dataclass
@@ -805,6 +822,21 @@ def _fold(df, tr, ev, cols, tcol, *, seed: int, smoke: bool) -> dict:
 # THE VACUITY FLOOR (LOCK 7)
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
+def score_primaries_only(y, pred: Predictive, rng) -> dict:
+    """`pit_mdd` and `p_over_gap` ONLY — no CRPS grid.
+
+    ⚠️ Used by the CONTROLS, which select on the primaries alone. Building the shared 499-level
+    quantile grid for every control replicate is what made the sweep intractable (measured: the
+    full-scale MDE sweep would have been ~10^10 `ppf` evaluations). This computes exactly what
+    `_select_on_primaries` reads and nothing else — it is a COST decision, not a metric decision,
+    and the arms are still compared on identical code.
+    """
+    u = randomized_pit(y, pred, rng)
+    m = pred.mean()
+    return {"pit_mdd": pit_mdd(u),
+            "p_over_gap": float(np.mean(1.0 - pred.cdf(m)) - np.mean(np.asarray(y, float) > m))}
+
+
 def _select_on_primaries(scores: dict[str, dict]) -> str:
     """Which arm the PRIMARY metrics pick, among the served-evaluable recal family + the nihilist.
 
@@ -842,7 +874,7 @@ def _control_replicate(mu_cal, sigma_cal, mu_ev, sigma_ev, y_train, rng, *,
         "overskew": apply_shape_recal(mu_ev, sigma_ev, p_skew, alpha_scale=OVERSKEW_K),
         "climo": ClimoPred(y_train, len(y_ev)),
     }
-    return _select_on_primaries({a: score_arm(y_ev, p, rng) for a, p in arms.items()})
+    return _select_on_primaries({a: score_primaries_only(y_ev, p, rng) for a, p in arms.items()})
 
 
 def run_controls(per_fold: list[dict], *, seed: int, reps: int, mde_reps: int) -> dict:
