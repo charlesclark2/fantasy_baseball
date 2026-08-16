@@ -573,6 +573,11 @@ def write_report(out: dict, path: Path) -> None:
             f"{s['coverage_by_label']['assembled_indep']['coverage']} | "
             f"{s['pit_flatness_winner_max_decile_dev']} | {s['pbo']} | {s['dsr']} | "
             f"{'SHIP' if g['ship'] else 'NULL'} |")
+    L += ["", "⚠️ **A null above is about the FOIL named beside it, not about dependence.** The best "
+          "foil at every position is `foil_direct_points` — a learner pointed straight at league "
+          "points — so a `beats_foil` failure says *assembling from per-stat parts did not beat "
+          "modelling the total directly*, NOT that cross-stat correlation is inert. The next table "
+          "answers the dependence question, and it passes at every position.", ""]
     L += ["", "## Did correlation earn its place?", "",
           "| pos | Δ CRPS vs the matched INDEPENDENT foil | independence under-disperses | "
           "knob moves coverage | winner beats indep on coverage |", "|---|---|---|---|---|"]
@@ -608,6 +613,23 @@ def write_report(out: dict, path: Path) -> None:
         L += ["", "⚠️ **Oracle ceiling unevaluated at**: "
               + ", ".join(v["positions_with_unevaluated_oracle_ceiling"])
               + " — these positions ship (or fail) WITHOUT that anchor's protection.", ""]
+    # ⭐ The labelling belongs IN the record, not only in the JSON: a promote blocker below points
+    # the consumer at `calibration_warning`, and a report that never SHOWS it asks a reader to
+    # trust a field they cannot see (the NF-W6d labelling carry, honoured at the report layer).
+    L += ["", "## What the assembled row is actually made of", "",
+          "| pos | source | priced legs from a bake-off winner | on a calibrated DEFAULT |",
+          "|---|---|---|---|"]
+    for p, lab in out.get("labelling", {}).items():
+        defaults = set(lab.get("default_priced_legs") or ())
+        won = [x for x in lab.get("priced_legs", ()) if x not in defaults]
+        L.append(f"| {p} | `{lab.get('source')}` | {len(won)} of {len(lab.get('priced_legs', ()))}"
+                 f" ({', '.join(won) or 'none'}) | {len(defaults)} |")
+    for p, lab in out.get("labelling", {}).items():
+        if lab.get("calibration_warning"):
+            L.append(f"- **{p}** — {lab['calibration_warning']}")
+        if lab.get("unpriced_legs"):
+            L.append(f"  - legs no preset prices (never scored, never shown): "
+                     f"{', '.join(lab['unpriced_legs'])}")
     L += ["", "## Promote blockers", ""] + [f"- {b}" for b in v["promote_blockers"]] + [""]
     path.write_text("\n".join(L))
 
