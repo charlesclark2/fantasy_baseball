@@ -91,14 +91,43 @@ def _scorecard(*, delta=0.022, by_pos=None, us=0.517, them=0.494):
     }
 
 
-def _uncertainty(*, delta=0.022, lo=-0.006, hi=0.051, n_seasons=6, evaluated=True):
-    return {"results": [{
+def _uncertainty(*, delta=0.022, lo=-0.006, hi=0.051, n_seasons=6, evaluated=True,
+                 valid_run=True):
+    """A minimal NF-D17 artifact. `valid_run=True` carries the verdict block a REAL run writes
+    (A4 reproduction + anchors passing, a non-VOID recommendation) — the exporter refuses a VOID or
+    verdict-less run (see `test_a_void_nf_d17_run_cannot_feed_the_claim`)."""
+    out = {"results": [{
         "population": "P0_shipped", "source": "adp", "n_seasons": n_seasons,
         "n_mean": 162.0, "n_min": 140, "n_max": 172, "delta_rho_mean": delta,
         "bootstrap": {"evaluated": evaluated, "draws": 1000, "level": 0.9,
                       "lo": lo, "hi": hi, "median": delta,
                       "excludes_zero": not (lo <= 0.0 <= hi)},
     }]}
+    if valid_run:
+        out["reproduction"] = {"adp": {"pass": True}, "all_pass": True}
+        out["anchor_summary"] = {"all_pass": True, "failures": []}
+        out["decision"] = {"recommendation": "KEEP the shipped population"}
+    return out
+
+
+def test_a_void_nf_d17_run_cannot_feed_the_claim():
+    """NF-D17 §5 voids the WHOLE reading on a failed anchor/reproduction, but still writes the
+    numbers `_reconcile` compares — found live 2026-08-15 (a rebuild moved the headline, A4 read the
+    old pin, the run said VOID). One isolating fixture per clause (NF-D17's own AND-gate lesson)."""
+    import pytest
+    ok = _uncertainty()
+    ex.build_claim(_scorecard(), ok)                       # the valid shape builds
+    bad_repro = _uncertainty(); bad_repro["reproduction"] = {"all_pass": False}
+    with pytest.raises(ValueError, match="A4 reproduction"):
+        ex.build_claim(_scorecard(), bad_repro)
+    bad_anchor = _uncertainty(); bad_anchor["anchor_summary"] = {"all_pass": False}
+    with pytest.raises(ValueError, match="anchors A1"):
+        ex.build_claim(_scorecard(), bad_anchor)
+    void = _uncertainty(); void["decision"] = {"recommendation": "VOID — do not use this run"}
+    with pytest.raises(ValueError, match="VOID"):
+        ex.build_claim(_scorecard(), void)
+    with pytest.raises(ValueError, match="not a valid reading"):   # verdict-less = unevaluable
+        ex.build_claim(_scorecard(), _uncertainty(valid_run=False))
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -699,7 +728,8 @@ def test_a_missing_shipped_population_is_refused_rather_than_substituted():
             {"population": "P1_cross_source_matched", "source": "adp", "n_seasons": 6,
              "n_mean": 161.0, "n_min": 140, "n_max": 172, "delta_rho_mean": 0.022,
              "bootstrap": {"evaluated": True, "level": 0.9, "lo": -0.008, "hi": 0.048}},
-        ]})
+        ], "reproduction": {"all_pass": True}, "anchor_summary": {"all_pass": True},
+            "decision": {"recommendation": "KEEP"}})
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
