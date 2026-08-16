@@ -1079,3 +1079,187 @@ def test_the_sharpness_degenerate_does_not_collapse_into_the_nihilist():
     zero_heavy = np.array([0.0] * 70 + [10.0, 20.0, 30.0] * 10)
     assert float(np.median(zero_heavy)) == 0.0, "fixture premise: the median is 0"
     assert float(np.mean(zero_heavy)) > 0.0, "the mean stays positive — the anchors stay distinct"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+# 11. SMOKE AMENDMENT 2 — the per-form oracle floor is THREE-state
+#
+# The 2025H2 smoke measured every dependence oracle at or BELOW its own arm: peeking at Σ on the
+# ~701-row test block cannot beat estimating the same 13x13 matrix on ~12,622 train rows, so the
+# "ceiling" is not a ceiling. The two-state clause read that as a REFUSAL at every position, which
+# is the NF-W6d defect exactly. These guards pin the fix AND — the part that matters — pin that
+# the clause is still FALSIFIABLE: a real inversion must still block a ship.
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+def _series(mean: float, n: int = 8, jitter: float = 0.01) -> list[float]:
+    """A per-fold series with a fixed, deterministic wobble — no RNG, so a state never flickers."""
+    return [mean + jitter * (1 if i % 2 else -1) for i in range(n)]
+
+
+def test_an_oracle_that_beats_its_arm_is_RESPECTED():
+    """The ordinary healthy case: the peek acted and the floor held."""
+    st = FA.oracle_floor_state(_series(10.0), _series(9.6), _series(10.2))
+    assert st["state"] == FA.ORACLE_RESPECTED
+    assert st["respected"] is True
+    assert st["peek_gain_vs_arm"] > 0
+
+
+def test_an_oracle_beaten_by_its_arm_but_beating_matched_n_is_still_RESPECTED():
+    """NF1.9 (f): an arm may legitimately beat the peeking oracle on CAPACITY (more rows), and
+    the matched-n control is what licenses that — so this must NOT be a violation."""
+    st = FA.oracle_floor_state(_series(10.0), _series(10.2), _series(10.5))
+    assert st["state"] == FA.ORACLE_RESPECTED
+    assert st["peek_gain_vs_arm"] < 0 and st["peek_gain_vs_matched_n"] > 0
+
+
+def test_a_significant_inversion_is_VIOLATED_so_the_clause_can_still_FAIL():
+    """⭐ THE LOAD-BEARING ONE. A three-state clause that could never return VIOLATED would be a
+    gate that cannot fail — the vacuous-guard class (NF1.7 (a) / INC-38 / NF-D17). The arm beats
+    its own peeking ceiling CONSISTENTLY and the ceiling also loses to the matched-n control."""
+    st = FA.oracle_floor_state(_series(10.0), _series(10.5), _series(10.3),
+                               indep_by_fold=_series(11.0))   # claims 1.0, loses 0.5 to its ceiling
+    assert st["state"] == FA.ORACLE_VIOLATED
+    assert st["inversion_is_material"] and st["inversion_is_significant"]
+    assert st["respected"] is False
+    assert st["inversion_p_one_sided"] is not None
+    assert st["inversion_p_one_sided"] < FA.ORACLE_VIOLATION_ALPHA
+
+
+def test_a_tie_is_INACTIVE_and_is_neither_a_pass_nor_a_fail():
+    """The smoke's real shape: the oracle is worse than both references, but by a margin
+    indistinguishable from zero. NF-D20 — uninformative, never a fail; and `respected is None`
+    so no caller can read it as a clean pass."""
+    arm = _series(10.0, jitter=0.05)
+    st = FA.oracle_floor_state(arm, [a + 0.0002 for a in arm], [a - 0.006 for a in arm],
+                               indep_by_fold=[a + 0.11 for a in arm])
+    assert st["state"] == FA.ORACLE_INACTIVE
+    assert st["respected"] is None
+    # ⭐ significant but IMMATERIAL — a constant offset has zero paired variance, so p is tiny on
+    # a gap 0.2% the size of the claimed effect. Significance alone must not refuse (NF-W6).
+    assert st["inversion_is_significant"] and not st["inversion_is_material"]
+
+
+def test_the_measured_smoke_numbers_separate_the_inert_arms_from_the_attenuated_one():
+    """Pinned against the ACTUAL 2025H2 QB smoke means, not an invented fixture.
+
+    ⭐ AND THE RESULT IS NOT UNIFORM, WHICH IS THE POINT. The three RAW-scale arms lose to their
+    own ceilings by 2e-4 to 5e-3 while claiming ~0.10-0.12 over the independent foil — inert, so
+    INACTIVE. `joint_pit` loses 0.0095 while claiming only 0.061, so its inversion IS material and
+    the clause still calls it out. An amendment that turned every arm INACTIVE would be a gate
+    that cannot fail; this one discriminates on the measured numbers.
+
+    ⚠️ The fixture replicates one fold's mean 8x, so its paired variance is ZERO and significance
+    is artificial here — only the 8-fold run can say whether `joint_pit`'s inversion is CONSISTENT.
+    That is why the runner records the per-fold contrasts and the verdict is re-derivable at zero
+    refit cost (`--rewrite-report`).
+    """
+    indep = 2.749701                                   # the measured independent foil, same fold
+    inert = {                          # arm, own-form oracle, matched-n
+        "joint_rank": (2.642570, 2.642758, 2.636536),
+        "joint_factor": (2.649920, 2.650655, 2.640413),
+        "joint_double": (2.628862, 2.633614, 2.629820),
+    }
+    for arm_name, (a, o, m) in inert.items():
+        st = FA.oracle_floor_state(_series(a), _series(o), _series(m),
+                                   indep_by_fold=_series(indep))
+        assert st["state"] == FA.ORACLE_INACTIVE, f"{arm_name} should read INACTIVE, got {st}"
+        assert st["peek_gain_vs_arm"] <= 0, f"{arm_name}: the peek gained nothing on its own arm"
+        assert not st["inversion_is_material"]
+        # ⛔ and the pre-amendment clause would have REFUSED it — that is what the amendment fixed
+        assert st["pre_amendment_respected"] is False
+
+    st = FA.oracle_floor_state(_series(2.688482), _series(2.697998), _series(2.684514),
+                               indep_by_fold=_series(indep))
+    assert st["inversion_is_material"], "joint_pit's inversion is 15% of its claimed effect"
+    assert st["state"] != FA.ORACLE_INACTIVE, "a material inversion must not be waved through"
+
+
+def test_the_activity_detector_is_two_sided_on_the_real_foil_oracle():
+    """⭐ THE POSITIVE CONTROL. A detector that returned INACTIVE for everything would be useless.
+    The direct-points foil's oracle peeks at EVERYTHING and measured 2.6128 -> 1.7592 on the same
+    smoke, so the identical evaluator must call it RESPECTED — proving 'inactive' is a measured
+    property of the Sigma channel, not a blanket excuse (NF1.8's degenerate discipline)."""
+    st = FA.oracle_floor_state(_series(2.612798), _series(1.759188), _series(2.612798),
+                               indep_by_fold=_series(2.749701))
+    assert st["state"] == FA.ORACLE_RESPECTED
+    assert st["peek_gain_vs_arm"] > 0.8
+
+
+def test_an_inactive_ceiling_does_not_block_a_ship_but_is_NAMED_on_the_verdict():
+    """INACTIVE blocks nothing (NF-D20) — but the record must SAY the anchor never ran, or the
+    ship silently claims a protection it did not have (NF1.7 (a))."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
+    folds = []
+    for i in range(8):
+        fr = _fold(f"f{i}", winner_edge=0.30 + 0.01 * i)
+        for pos in FA.POSITIONS:
+            sc = dict(fr["positions"][pos]["scores"])
+            for a in FA.REAL_ARMS:                    # oracle inert: just above its own arm
+                sc[f"oracle__{a}"] = sc[a] + 0.0002
+                sc[f"matched_n__{a}"] = sc[a] - 0.006
+            fr["positions"][pos] = {**fr["positions"][pos], "scores": sc}
+        folds.append(fr)
+    out = R.derive_verdict_layer({"n_folds": 8, "fold_results": folds,
+                                  "generated_at": "2026-08-16T00:00:00Z"})
+    assert out["verdict"]["story_verdict"] == "SHIP", "an inactive anchor must not veto a ship"
+    for p in FA.POSITIONS:
+        assert out["gates"][p]["checks"]["oracle_floors_respected"] is True
+        assert out["selections"][p]["anchors"]["oracle_ceiling_evaluated"] is False
+    assert sorted(out["verdict"]["positions_with_unevaluated_oracle_ceiling"]) == \
+        sorted(FA.POSITIONS), "the unevaluated ceiling must be named on the verdict"
+
+
+def test_a_real_inversion_still_blocks_the_ship_end_to_end():
+    """The falsifiability proof at the GATE level, not just the helper: a consistent, significant
+    inversion must still turn `oracle_floors_respected` red and stop the ship."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
+    folds = []
+    for i in range(8):
+        fr = _fold(f"f{i}", winner_edge=0.30 + 0.01 * i)
+        for pos in FA.POSITIONS:
+            sc = dict(fr["positions"][pos]["scores"])
+            for a in FA.REAL_ARMS:                    # the arm beats its ceiling, consistently
+                sc[f"oracle__{a}"] = sc[a] + 0.5      # material: the arm claims ~0.3 over indep
+                sc[f"matched_n__{a}"] = sc[a] + 0.3
+            fr["positions"][pos] = {**fr["positions"][pos], "scores": sc}
+        folds.append(fr)
+    out = R.derive_verdict_layer({"n_folds": 8, "fold_results": folds,
+                                  "generated_at": "2026-08-16T00:00:00Z"})
+    assert out["verdict"]["story_verdict"] == "NULL"
+    for p in FA.POSITIONS:
+        assert out["gates"][p]["checks"]["oracle_floors_respected"] is False
+
+
+def test_red_proof_a_two_state_clause_reads_the_inactive_smoke_as_a_refusal():
+    """RED: revert to the pre-amendment two-state clause. It must go red on the MEASURED smoke
+    numbers — that is the defect this amendment exists to fix."""
+    def two_state(arm, orc, mnc):
+        a, o, m = float(np.mean(arm)), float(np.mean(orc)), float(np.mean(mnc))
+        return {"state": FA.ORACLE_RESPECTED if (a > o or o < m) else FA.ORACLE_VIOLATED}
+
+    def broken():
+        st = two_state(_series(2.642570), _series(2.642758), _series(2.636536))
+        assert st["state"] == FA.ORACLE_INACTIVE
+
+    _assert_red(broken)
+
+
+def test_red_proof_an_always_inactive_evaluator_is_caught_by_the_positive_control():
+    """RED: an evaluator that can only ever say INACTIVE would make the clause unfalsifiable.
+    The foil positive control is what catches it."""
+    def broken():
+        st = {"state": FA.ORACLE_INACTIVE, "peek_gain_vs_arm": 0.0}
+        assert st["state"] == FA.ORACLE_RESPECTED and st["peek_gain_vs_arm"] > 0.8
+
+    _assert_red(broken)
+
+
+def test_red_proof_the_source_cannot_go_back_to_a_two_state_floor():
+    """RED at the SOURCE level: the runner must not resurrect the boolean-OR clause, and the
+    verdict must keep naming an unevaluated ceiling."""
+    import inspect
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
+    src = "\n".join(ln for ln in inspect.getsource(R).splitlines()
+                    if not ln.lstrip().startswith("#"))     # prose may not satisfy a guard
+    assert "oracle_ceiling_evaluated" in src
+    assert "positions_with_unevaluated_oracle_ceiling" in src
+    assert "ORACLE_VIOLATED" in src, "the gate must key on the VIOLATED state, not a bare bool"
