@@ -1,0 +1,990 @@
+{
+  "story": "NF-W6d",
+  "smoke": false,
+  "generated_at": "2026-08-16T01:29:39+00:00",
+  "runtime_seconds": 377.7,
+  "matrix_key": "26c34fbe778c9d87",
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 84553,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "n_rows": 6721,
+  "records": {
+    "gate": "nf_w6d_ceiling_gate.json",
+    "bakeoff": "nf_w6d_stat_bakeoff.json",
+    "defaults": "nf_w6d_defaults.json"
+  },
+  "representation": {
+    "story": "NF-W6d",
+    "served_version": "nfl_fantasy_w6d_v1",
+    "levels": 199,
+    "level_grid": "MC.EVAL_LEVELS (0.005\u20260.995, step 0.005)",
+    "level_min": 0.005,
+    "level_max": 0.995,
+    "monotone": true,
+    "zero_atom": "P(0) = the share of grid levels at or below 1e-09 (column `p_zero`)",
+    "index_q10": 19,
+    "index_q50": 99,
+    "index_q90": 179,
+    "central_80_interval": "quantiles[index_q10] \u2026 quantiles[index_q90]",
+    "cells": {
+      "QB|passing_tds": "knn_quantile",
+      "QB|passing_yards": "lgbm_quantile_tail",
+      "QB|rushing_yards": "lgbm_hurdle_tail",
+      "RB|rushing_yards": "lgbm_hurdle_tail",
+      "TE|receiving_yards": "lgbm_hurdle_tail",
+      "WR|receiving_yards": "lgbm_hurdle_tail",
+      "RB|rushing_tds": "knn_quantile",
+      "RB|receiving_yards": "climatology",
+      "QB|attempts": "climatology",
+      "QB|passing_interceptions": "knn_quantile",
+      "QB|carries": "count_negbin",
+      "QB|rushing_tds": "count_negbin",
+      "QB|fumbles_lost": "count_negbin",
+      "QB|two_pt": "count_negbin",
+      "RB|carries": "lgbm_hurdle_tail",
+      "RB|targets": "count_negbin",
+      "RB|receptions": "lgbm_hurdle_tail",
+      "RB|receiving_tds": "count_negbin",
+      "RB|fumbles_lost": "count_negbin",
+      "RB|two_pt": "count_negbin",
+      "WR|targets": "lgbm_hurdle_tail",
+      "WR|receptions": "lgbm_hurdle_tail",
+      "WR|receiving_tds": "knn_quantile",
+      "WR|fumbles_lost": "count_negbin",
+      "WR|two_pt": "count_negbin",
+      "TE|targets": "lgbm_hurdle_tail",
+      "TE|receptions": "lgbm_hurdle_tail",
+      "TE|receiving_tds": "count_negbin",
+      "TE|fumbles_lost": "count_negbin",
+      "TE|two_pt": "count_negbin",
+      "QB|targets": "climatology",
+      "QB|receptions": "climatology",
+      "QB|receiving_yards": "climatology",
+      "QB|receiving_tds": "climatology",
+      "RB|attempts": "climatology",
+      "RB|passing_yards": "climatology",
+      "RB|passing_tds": "climatology",
+      "RB|passing_interceptions": "climatology",
+      "WR|attempts": "climatology",
+      "WR|passing_yards": "climatology",
+      "WR|passing_tds": "climatology",
+      "WR|passing_interceptions": "climatology",
+      "WR|carries": "climatology",
+      "WR|rushing_yards": "climatology",
+      "WR|rushing_tds": "climatology",
+      "TE|attempts": "climatology",
+      "TE|passing_yards": "climatology",
+      "TE|passing_tds": "climatology",
+      "TE|passing_interceptions": "climatology",
+      "TE|carries": "climatology",
+      "TE|rushing_yards": "climatology",
+      "TE|rushing_tds": "climatology"
+    },
+    "withheld_null_cells": [],
+    "closed_cells": [],
+    "features": [
+      "game_context__is_home",
+      "game_context__div_game",
+      "game_context__week_index",
+      "game_context__days_since_last_game",
+      "prior_week_box__ppr_l1",
+      "prior_week_box__ppr_l4_mean",
+      "prior_week_box__ppr_ewm",
+      "prior_week_box__ppr_s2d_mean",
+      "prior_week_box__targets_l4",
+      "prior_week_box__carries_l4",
+      "prior_week_box__attempts_l4",
+      "prior_week_box__receptions_l4",
+      "prior_week_box__rec_yards_l4",
+      "prior_week_box__rush_yards_l4",
+      "prior_week_box__pass_yards_l4",
+      "prior_week_box__played_share_l4",
+      "prior_week_box__games_s2d",
+      "prior_week_box__ppr_sum_s2d",
+      "snap_share__l1",
+      "snap_share__l4_mean",
+      "snap_share__observed_l4",
+      "team_environment__pass_att_l4",
+      "team_environment__rush_att_l4",
+      "team_environment__ppr_l4",
+      "opponent_matchup__dvp_ppr_index_l8",
+      "opponent_matchup__def_ppr_allowed_l8",
+      "prior_season_priors__ppg_prior",
+      "prior_season_priors__games_prior",
+      "prior_season_priors__rookie_flag"
+    ],
+    "uncertainty_framing": "honest predictive uncertainty for one player-week stat \u2014 a quantile bank and its P(0), for every scored weekly stat. A calibrated RANGE (a default where no conditional form earned a lift); not a market comparison and not an edge / ROI / win-rate claim of any kind.",
+    "cell_sources": {
+      "QB|passing_tds": "nf_w6b",
+      "QB|passing_yards": "nf_w6b",
+      "QB|rushing_yards": "nf_w6b",
+      "RB|rushing_yards": "nf_w6b",
+      "TE|receiving_yards": "nf_w6b",
+      "WR|receiving_yards": "nf_w6b",
+      "RB|rushing_tds": "nf_w6b_c",
+      "RB|receiving_yards": "nf_w6d_c_default",
+      "QB|attempts": "nf_w6d_c_default",
+      "QB|passing_interceptions": "nf_w6d_b_ship",
+      "QB|carries": "nf_w6d_c_default",
+      "QB|rushing_tds": "nf_w6d_b_ship",
+      "QB|fumbles_lost": "nf_w6d_c_default",
+      "QB|two_pt": "nf_w6d_c_default",
+      "RB|carries": "nf_w6d_b_ship",
+      "RB|targets": "nf_w6d_c_default",
+      "RB|receptions": "nf_w6d_b_ship",
+      "RB|receiving_tds": "nf_w6d_c_default",
+      "RB|fumbles_lost": "nf_w6d_c_default",
+      "RB|two_pt": "nf_w6d_c_default",
+      "WR|targets": "nf_w6d_b_ship",
+      "WR|receptions": "nf_w6d_b_ship",
+      "WR|receiving_tds": "nf_w6d_b_ship",
+      "WR|fumbles_lost": "nf_w6d_c_default",
+      "WR|two_pt": "nf_w6d_c_default",
+      "TE|targets": "nf_w6d_b_ship",
+      "TE|receptions": "nf_w6d_b_ship",
+      "TE|receiving_tds": "nf_w6d_c_default",
+      "TE|fumbles_lost": "nf_w6d_c_default",
+      "TE|two_pt": "nf_w6d_c_default",
+      "QB|targets": "nf_w6d_c_default",
+      "QB|receptions": "nf_w6d_c_default",
+      "QB|receiving_yards": "nf_w6d_c_default",
+      "QB|receiving_tds": "nf_w6d_c_default",
+      "RB|attempts": "nf_w6d_c_default",
+      "RB|passing_yards": "nf_w6d_c_default",
+      "RB|passing_tds": "nf_w6d_c_default",
+      "RB|passing_interceptions": "nf_w6d_c_default",
+      "WR|attempts": "nf_w6d_c_default",
+      "WR|passing_yards": "nf_w6d_c_default",
+      "WR|passing_tds": "nf_w6d_c_default",
+      "WR|passing_interceptions": "nf_w6d_c_default",
+      "WR|carries": "nf_w6d_c_default",
+      "WR|rushing_yards": "nf_w6d_c_default",
+      "WR|rushing_tds": "nf_w6d_c_default",
+      "TE|attempts": "nf_w6d_c_default",
+      "TE|passing_yards": "nf_w6d_c_default",
+      "TE|passing_tds": "nf_w6d_c_default",
+      "TE|passing_interceptions": "nf_w6d_c_default",
+      "TE|carries": "nf_w6d_c_default",
+      "TE|rushing_yards": "nf_w6d_c_default",
+      "TE|rushing_tds": "nf_w6d_c_default"
+    },
+    "calibration_warnings": {},
+    "n_cells": 52,
+    "cells_by_source": {
+      "nf_w6b": 6,
+      "nf_w6b_c": 1,
+      "nf_w6d_c_default": 36,
+      "nf_w6d_b_ship": 9
+    },
+    "stats": [
+      "attempts",
+      "passing_yards",
+      "passing_tds",
+      "passing_interceptions",
+      "carries",
+      "rushing_yards",
+      "rushing_tds",
+      "targets",
+      "receptions",
+      "receiving_yards",
+      "receiving_tds",
+      "fumbles_lost",
+      "two_pt"
+    ],
+    "positions": [
+      "QB",
+      "RB",
+      "WR",
+      "TE"
+    ],
+    "follow_on": "the arbitrary-league re-scoring ASSEMBLY (per-stat distributions \u2192 one per-player fantasy-point distribution under a league's scoring, with cross-stat correlation) \u2014 a separate story: it triggers the three-implementations parity tax (fantasy_engine / browser TS / Lambda)."
+  },
+  "provenance": {
+    "serve_gw": 174,
+    "serve_season": 2025,
+    "serve_week": 18,
+    "n_train_rows": 84036,
+    "n_serve_player_weeks": 517,
+    "train_containment": {
+      "serve_gw": 174,
+      "n_serving_train": 84036,
+      "n_fold_train": 83011,
+      "extra_rows_vs_fold_train": 1025,
+      "purge_weeks": 2,
+      "applies_to_this_run": true
+    },
+    "fit_notes": {
+      "fits": {
+        "knn_quantile|passing_tds": {
+          "calibration_split": null
+        },
+        "lgbm_quantile_tail|passing_yards": {
+          "n_train": 84036,
+          "n_core": 65761,
+          "n_cal": 17256,
+          "cal_gw_min": 138,
+          "cal_gw_max": 173
+        },
+        "lgbm_hurdle_tail|rushing_yards": {
+          "n_train": 84036,
+          "n_core": 65761,
+          "n_cal": 17256,
+          "cal_gw_min": 138,
+          "cal_gw_max": 173
+        },
+        "lgbm_hurdle_tail|receiving_yards": {
+          "n_train": 84036,
+          "n_core": 65761,
+          "n_cal": 17256,
+          "cal_gw_min": 138,
+          "cal_gw_max": 173
+        },
+        "knn_quantile|rushing_tds": {
+          "calibration_split": null
+        },
+        "climatology|receiving_yards": {
+          "form": "climatology",
+          "calibration_split": null
+        },
+        "climatology|attempts": {
+          "form": "climatology",
+          "calibration_split": null
+        },
+        "knn_quantile|passing_interceptions": {
+          "calibration_split": null
+        },
+        "count_negbin|carries": {
+          "alpha_by_pos": {
+            "QB": 0.954124,
+            "RB": 0.796998,
+            "WR": 1.147251,
+            "TE": 2.173188
+          },
+          "n_train": 84036,
+          "n_core": 65761,
+          "n_cal": 17256,
+          "cal_gw_min": 138,
+          "cal_gw_max": 173
+        },
+        "count_negbin|rushing_tds": {
+          "alpha_by_pos": {
+            "QB": 1.323315,
+            "RB": 0.215089,
+            "WR": 17.554937,
+            "TE": 12.459243
+          },
+          "n_train": 84036,
+          "n_core": 65761,
+          "n_cal": 17256,
+          "cal_gw_min": 138,
+          "cal_gw_max": 173
+        },
+        "count_negbin|fumbles_lost": {
+          "alpha_by_pos": {
+            "QB": 1.385365,
+            "RB": 5.5e-05,
+            "WR": 2.92516,
+            "TE": 7e-06
+          },
+          "n_train": 84036,
+          "n_core": 65761,
+          "n_cal": 17256,
+          "cal_gw_min": 138,
+          "cal_gw_max": 173
+        },
+        "count_negbin|two_pt": {
+          "alpha_by_pos": {
+            "QB": 5.883689,
+            "RB": 7.1e-05,
+            "WR": 7.1e-05,
+            "TE": 7e-06
+          },
+          "n_train": 84036,
+          "n_core": 65761,
+          "n_cal": 17256,
+          "cal_gw_min": 138,
+          "cal_gw_max": 173
+        },
+        "lgbm_hurdle_tail|carries": {
+          "n_train": 84036,
+          "n_core": 65761,
+          "n_cal": 17256,
+          "cal_gw_min": 138,
+          "cal_gw_max": 173
+        },
+        "count_negbin|targets": {
+          "alpha_by_pos": {
+            "QB": 49.999993,
+            "RB": 0.383145,
+            "WR": 0.346044,
+            "TE": 0.321972
+          },
+          "n_train": 84036,
+          "n_core": 65761,
+          "n_cal": 17256,
+          "cal_gw_min": 138,
+          "cal_gw_max": 173
+        },
+        "lgbm_hurdle_tail|receptions": {
+          "n_train": 84036,
+          "n_core": 65761,
+          "n_cal": 17256,
+          "cal_gw_min": 138,
+          "cal_gw_max": 173
+        },
+        "count_negbin|receiving_tds": {
+          "alpha_by_pos": {
+            "QB": 49.999994,
+            "RB": 0.324641,
+            "WR": 0.138463,
+            "TE": 7e-06
+          },
+          "n_train": 84036,
+          "n_core": 65761,
+          "n_cal": 17256,
+          "cal_gw_min": 138,
+          "cal_gw_max": 173
+        },
+        "lgbm_hurdle_tail|targets": {
+          "n_train": 84036,
+          "n_core": 65761,
+          "n_cal": 17256,
+          "cal_gw_min": 138,
+          "cal_gw_max": 173
+        },
+        "knn_quantile|receiving_tds": {
+          "calibration_split": null
+        },
+        "climatology|targets": {
+          "form": "climatology",
+          "calibration_split": null
+        },
+        "climatology|receptions": {
+          "form": "climatology",
+          "calibration_split": null
+        },
+        "climatology|receiving_tds": {
+          "form": "climatology",
+          "calibration_split": null
+        },
+        "climatology|passing_yards": {
+          "form": "climatology",
+          "calibration_split": null
+        },
+        "climatology|passing_tds": {
+          "form": "climatology",
+          "calibration_split": null
+        },
+        "climatology|passing_interceptions": {
+          "form": "climatology",
+          "calibration_split": null
+        },
+        "climatology|carries": {
+          "form": "climatology",
+          "calibration_split": null
+        },
+        "climatology|rushing_yards": {
+          "form": "climatology",
+          "calibration_split": null
+        },
+        "climatology|rushing_tds": {
+          "form": "climatology",
+          "calibration_split": null
+        }
+      },
+      "n_fits": 27,
+      "n_cells": 52
+    },
+    "fit_seconds": 376.4,
+    "smoke_train_weeks": null
+  },
+  "serving_smoke": {
+    "QB|attempts": {
+      "n": 89,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 7.5423,
+        "coverage_80": 0.9438,
+        "pred_p0": 0.5528,
+        "real_p0": 0.5393
+      }
+    },
+    "QB|carries": {
+      "n": 89,
+      "form": "count_negbin",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.9495,
+        "coverage_80": 0.8989,
+        "pred_p0": 0.4999,
+        "real_p0": 0.5618
+      }
+    },
+    "QB|fumbles_lost": {
+      "n": 89,
+      "form": "count_negbin",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0886,
+        "coverage_80": 0.9551,
+        "pred_p0": 0.9462,
+        "real_p0": 0.9101
+      }
+    },
+    "QB|passing_interceptions": {
+      "n": 89,
+      "form": "knn_quantile",
+      "source": "nf_w6d_b_ship",
+      "fresh": {
+        "crps_q199": 0.1622,
+        "coverage_80": 0.9326,
+        "pred_p0": 0.8023,
+        "real_p0": 0.7978
+      }
+    },
+    "QB|passing_tds": {
+      "n": 89,
+      "form": "knn_quantile",
+      "source": "nf_w6b",
+      "fresh": {
+        "crps_q199": 0.3041,
+        "coverage_80": 0.9551,
+        "pred_p0": 0.6992,
+        "real_p0": 0.764
+      }
+    },
+    "QB|passing_yards": {
+      "n": 89,
+      "form": "lgbm_quantile_tail",
+      "source": "nf_w6b",
+      "fresh": {
+        "crps_q199": 37.8863,
+        "coverage_80": 0.764,
+        "pred_p0": 0.3295,
+        "real_p0": 0.5506
+      }
+    },
+    "QB|receiving_tds": {
+      "n": 89,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0,
+        "coverage_80": 1.0,
+        "pred_p0": 1.0,
+        "real_p0": 1.0
+      }
+    },
+    "QB|receiving_yards": {
+      "n": 89,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.393,
+        "coverage_80": 0.9775,
+        "pred_p0": 0.995,
+        "real_p0": 0.9775
+      }
+    },
+    "QB|receptions": {
+      "n": 89,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0336,
+        "coverage_80": 0.9888,
+        "pred_p0": 0.995,
+        "real_p0": 0.9888
+      }
+    },
+    "QB|rushing_tds": {
+      "n": 89,
+      "form": "count_negbin",
+      "source": "nf_w6d_b_ship",
+      "fresh": {
+        "crps_q199": 0.0567,
+        "coverage_80": 0.9551,
+        "pred_p0": 0.9542,
+        "real_p0": 0.9438
+      }
+    },
+    "QB|rushing_yards": {
+      "n": 89,
+      "form": "lgbm_hurdle_tail",
+      "source": "nf_w6b",
+      "fresh": {
+        "crps_q199": 5.2637,
+        "coverage_80": 0.7978,
+        "pred_p0": 0.6602,
+        "real_p0": 0.5955
+      }
+    },
+    "QB|targets": {
+      "n": 89,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0336,
+        "coverage_80": 0.9888,
+        "pred_p0": 0.9899,
+        "real_p0": 0.9888
+      }
+    },
+    "QB|two_pt": {
+      "n": 89,
+      "form": "count_negbin",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0334,
+        "coverage_80": 0.9663,
+        "pred_p0": 0.9709,
+        "real_p0": 0.9663
+      }
+    },
+    "RB|attempts": {
+      "n": 126,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0,
+        "coverage_80": 1.0,
+        "pred_p0": 1.0,
+        "real_p0": 1.0
+      }
+    },
+    "RB|carries": {
+      "n": 126,
+      "form": "lgbm_hurdle_tail",
+      "source": "nf_w6d_b_ship",
+      "fresh": {
+        "crps_q199": 2.8134,
+        "coverage_80": 0.8016,
+        "pred_p0": 0.408,
+        "real_p0": 0.3492
+      }
+    },
+    "RB|fumbles_lost": {
+      "n": 126,
+      "form": "count_negbin",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0232,
+        "coverage_80": 0.9762,
+        "pred_p0": 0.9715,
+        "real_p0": 0.9762
+      }
+    },
+    "RB|passing_interceptions": {
+      "n": 126,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0,
+        "coverage_80": 1.0,
+        "pred_p0": 1.0,
+        "real_p0": 1.0
+      }
+    },
+    "RB|passing_tds": {
+      "n": 126,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0,
+        "coverage_80": 1.0,
+        "pred_p0": 1.0,
+        "real_p0": 1.0
+      }
+    },
+    "RB|passing_yards": {
+      "n": 126,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0,
+        "coverage_80": 1.0,
+        "pred_p0": 1.0,
+        "real_p0": 1.0
+      }
+    },
+    "RB|receiving_tds": {
+      "n": 126,
+      "form": "count_negbin",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0488,
+        "coverage_80": 0.9683,
+        "pred_p0": 0.9641,
+        "real_p0": 0.9444
+      }
+    },
+    "RB|receiving_yards": {
+      "n": 126,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 5.6739,
+        "coverage_80": 0.9286,
+        "pred_p0": 0.5628,
+        "real_p0": 0.4921
+      }
+    },
+    "RB|receptions": {
+      "n": 126,
+      "form": "lgbm_hurdle_tail",
+      "source": "nf_w6d_b_ship",
+      "fresh": {
+        "crps_q199": 0.6182,
+        "coverage_80": 0.873,
+        "pred_p0": 0.5685,
+        "real_p0": 0.4762
+      }
+    },
+    "RB|rushing_tds": {
+      "n": 126,
+      "form": "knn_quantile",
+      "source": "nf_w6b_c",
+      "fresh": {
+        "crps_q199": 0.1181,
+        "coverage_80": 0.9444,
+        "pred_p0": 0.8591,
+        "real_p0": 0.9048
+      }
+    },
+    "RB|rushing_yards": {
+      "n": 126,
+      "form": "lgbm_hurdle_tail",
+      "source": "nf_w6b",
+      "fresh": {
+        "crps_q199": 13.7019,
+        "coverage_80": 0.8254,
+        "pred_p0": 0.4218,
+        "real_p0": 0.3571
+      }
+    },
+    "RB|targets": {
+      "n": 126,
+      "form": "count_negbin",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.7298,
+        "coverage_80": 0.9286,
+        "pred_p0": 0.4519,
+        "real_p0": 0.4603
+      }
+    },
+    "RB|two_pt": {
+      "n": 126,
+      "form": "count_negbin",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0158,
+        "coverage_80": 0.9841,
+        "pred_p0": 0.9937,
+        "real_p0": 0.9841
+      }
+    },
+    "TE|attempts": {
+      "n": 115,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0,
+        "coverage_80": 1.0,
+        "pred_p0": 1.0,
+        "real_p0": 1.0
+      }
+    },
+    "TE|carries": {
+      "n": 115,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0346,
+        "coverage_80": 0.9826,
+        "pred_p0": 0.9899,
+        "real_p0": 0.9826
+      }
+    },
+    "TE|fumbles_lost": {
+      "n": 115,
+      "form": "count_negbin",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0172,
+        "coverage_80": 0.9826,
+        "pred_p0": 0.994,
+        "real_p0": 0.9826
+      }
+    },
+    "TE|passing_interceptions": {
+      "n": 115,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0,
+        "coverage_80": 1.0,
+        "pred_p0": 1.0,
+        "real_p0": 1.0
+      }
+    },
+    "TE|passing_tds": {
+      "n": 115,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0,
+        "coverage_80": 1.0,
+        "pred_p0": 1.0,
+        "real_p0": 1.0
+      }
+    },
+    "TE|passing_yards": {
+      "n": 115,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0,
+        "coverage_80": 1.0,
+        "pred_p0": 1.0,
+        "real_p0": 1.0
+      }
+    },
+    "TE|receiving_tds": {
+      "n": 115,
+      "form": "count_negbin",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0994,
+        "coverage_80": 0.9565,
+        "pred_p0": 0.9011,
+        "real_p0": 0.8957
+      }
+    },
+    "TE|receiving_yards": {
+      "n": 115,
+      "form": "lgbm_hurdle_tail",
+      "source": "nf_w6b",
+      "fresh": {
+        "crps_q199": 7.3094,
+        "coverage_80": 0.887,
+        "pred_p0": 0.5219,
+        "real_p0": 0.4696
+      }
+    },
+    "TE|receptions": {
+      "n": 115,
+      "form": "lgbm_hurdle_tail",
+      "source": "nf_w6d_b_ship",
+      "fresh": {
+        "crps_q199": 0.6195,
+        "coverage_80": 0.9217,
+        "pred_p0": 0.5018,
+        "real_p0": 0.4609
+      }
+    },
+    "TE|rushing_tds": {
+      "n": 115,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0087,
+        "coverage_80": 0.9913,
+        "pred_p0": 1.0,
+        "real_p0": 0.9913
+      }
+    },
+    "TE|rushing_yards": {
+      "n": 115,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0346,
+        "coverage_80": 0.9826,
+        "pred_p0": 0.9899,
+        "real_p0": 0.9826
+      }
+    },
+    "TE|targets": {
+      "n": 115,
+      "form": "lgbm_hurdle_tail",
+      "source": "nf_w6d_b_ship",
+      "fresh": {
+        "crps_q199": 0.8775,
+        "coverage_80": 0.8522,
+        "pred_p0": 0.4301,
+        "real_p0": 0.4174
+      }
+    },
+    "TE|two_pt": {
+      "n": 115,
+      "form": "count_negbin",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0088,
+        "coverage_80": 0.9913,
+        "pred_p0": 0.9949,
+        "real_p0": 0.9913
+      }
+    },
+    "WR|attempts": {
+      "n": 187,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0053,
+        "coverage_80": 0.9947,
+        "pred_p0": 0.995,
+        "real_p0": 0.9947
+      }
+    },
+    "WR|carries": {
+      "n": 187,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.1051,
+        "coverage_80": 0.9144,
+        "pred_p0": 0.9095,
+        "real_p0": 0.9144
+      }
+    },
+    "WR|fumbles_lost": {
+      "n": 187,
+      "form": "count_negbin",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0003,
+        "coverage_80": 1.0,
+        "pred_p0": 0.9902,
+        "real_p0": 1.0
+      }
+    },
+    "WR|passing_interceptions": {
+      "n": 187,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0,
+        "coverage_80": 1.0,
+        "pred_p0": 1.0,
+        "real_p0": 1.0
+      }
+    },
+    "WR|passing_tds": {
+      "n": 187,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0,
+        "coverage_80": 1.0,
+        "pred_p0": 1.0,
+        "real_p0": 1.0
+      }
+    },
+    "WR|passing_yards": {
+      "n": 187,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0,
+        "coverage_80": 1.0,
+        "pred_p0": 1.0,
+        "real_p0": 1.0
+      }
+    },
+    "WR|receiving_tds": {
+      "n": 187,
+      "form": "knn_quantile",
+      "source": "nf_w6d_b_ship",
+      "fresh": {
+        "crps_q199": 0.089,
+        "coverage_80": 0.9626,
+        "pred_p0": 0.8725,
+        "real_p0": 0.9144
+      }
+    },
+    "WR|receiving_yards": {
+      "n": 187,
+      "form": "lgbm_hurdle_tail",
+      "source": "nf_w6b",
+      "fresh": {
+        "crps_q199": 11.7885,
+        "coverage_80": 0.861,
+        "pred_p0": 0.4418,
+        "real_p0": 0.4439
+      }
+    },
+    "WR|receptions": {
+      "n": 187,
+      "form": "lgbm_hurdle_tail",
+      "source": "nf_w6d_b_ship",
+      "fresh": {
+        "crps_q199": 0.8666,
+        "coverage_80": 0.861,
+        "pred_p0": 0.4331,
+        "real_p0": 0.4439
+      }
+    },
+    "WR|rushing_tds": {
+      "n": 187,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0,
+        "coverage_80": 1.0,
+        "pred_p0": 1.0,
+        "real_p0": 1.0
+      }
+    },
+    "WR|rushing_yards": {
+      "n": 187,
+      "form": "climatology",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.6541,
+        "coverage_80": 0.9144,
+        "pred_p0": 0.9246,
+        "real_p0": 0.9144
+      }
+    },
+    "WR|targets": {
+      "n": 187,
+      "form": "lgbm_hurdle_tail",
+      "source": "nf_w6d_b_ship",
+      "fresh": {
+        "crps_q199": 1.3378,
+        "coverage_80": 0.8396,
+        "pred_p0": 0.3594,
+        "real_p0": 0.369
+      }
+    },
+    "WR|two_pt": {
+      "n": 187,
+      "form": "count_negbin",
+      "source": "nf_w6d_c_default",
+      "fresh": {
+        "crps_q199": 0.0163,
+        "coverage_80": 0.984,
+        "pred_p0": 0.9918,
+        "real_p0": 0.984
+      }
+    }
+  },
+  "promote_blockers": [
+    "NF-C6 Phase 2 \u2014 no weekly serving path exists (the deployed fantasy surface is the SEASON raw line `projections.json`; there is no weekly endpoint to attach a player-week distribution to)",
+    "NF-G0 promotion review \u2014 the ten gates plus a PM decision; NF-W6b promoted nothing and this story stages, it does not promote",
+    "the downstream arbitrary-league re-scoring consumer is a FOLLOW-ON story \u2014 the moment a scorer reads these distributions the three-implementations parity tax (fantasy_engine / the browser TS scorer / the Lambda scorer) triggers under the merge-gate parity test",
+    "NF-W6d Phase-C DEFAULT cells are calibrated ranges, not bake-off winners \u2014 the assembly consumer must read `source`/`calibration_warning` and never present a default as a conditional projection"
+  ],
+  "built_artifact": {
+    "path": "quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w6d_served_stat_distributions.parquet",
+    "sha256": "a2739df4d4ed73d67be66c91865ef96455dbd52fec146a0a4a74ab374fb96391",
+    "bytes": 1892934,
+    "rows": 6721
+  }
+}
