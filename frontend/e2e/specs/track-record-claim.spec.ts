@@ -2,6 +2,22 @@ import { expect, test, type Locator, type Page } from "@playwright/test"
 import { collectPageErrors, mockApi } from "../support/api-mock"
 import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors } from "../support/assertions"
 import { forbiddenPhrasesIn } from "../support/claim-denylist"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+
+// The fixture's `claim` block IS the shipping builder's output over the committed NF-D3/NF-D17
+// artifacts (`betting_ml/tests/test_nf_tr1_claim_copy.py` pins it byte-for-byte). Reading the
+// expectations from it — rather than from literals like "2019–2024" / "it is a wash" — is what
+// lets a deliberate track-record refresh (NF-TR2b archived the 2025 ADP: 7 seasons, RB now
+// "behind") re-pin this spec by regenerating ONE file instead of silently going red.
+const CLAIM = JSON.parse(
+  readFileSync(join(process.cwd(), "e2e", "fixtures", "api", "fantasy-nfl-track-record-manifest.json"), "utf8"),
+).claim as {
+  seasons: string
+  byPosition: { position: string; deltaRho: number; verdict: "ahead" | "behind" | "even" }[]
+}
+const READS_AS = { ahead: "we ranked closer", behind: "they ranked closer", even: "too close to call" } as const
+const RB = CLAIM.byPosition.find((r) => r.position === "RB")!
 
 /**
  * NF-TR1 — COPY GOVERNANCE, at the render level.
@@ -124,24 +140,30 @@ test.describe("public Track Record — NF-TR1 claim governance", () => {
     expectApiFullyMocked(mock)
   })
 
-  test("the position table is visible without expanding anything, and RB reads as a wash", async ({
+  test("the position table is visible without expanding anything, and RB reads as measured", async ({
     page,
   }) => {
     // The disclosure that costs us something is the one most likely to end up behind an expander.
+    // At NF-TR1 RB measured -0.000 and had to read "too close to call"; after the NF-TR2b refresh it
+    // measures -0.010 and must read "they ranked closer". Either way the row must carry the
+    // measured verdict's words and never be rounded UP to "we ranked closer".
     const mock = await mockApi(page)
     await gotoTrackRecord(page)
 
     const table = page.locator("table").filter({ hasText: "Gap vs. draft-day consensus" })
     await expect(table).toBeVisible()
     const rbRow = table.locator("tbody tr", { hasText: "RB" })
-    await expect(rbRow).toContainText("too close to call")
-    // ⚠️ And it must carry NO direction sign. The measured value is `-0.0`, and `-0.0 >= 0` is
-    // true in JavaScript — so the natural formatter renders a wash as "+0.000", putting a plus in
-    // front of the one row this story requires be legible as a wash.
-    expect(
-      (await rbRow.innerText()).replace(/RB/g, ""),
-      "the level position renders a direction sign it has not earned",
-    ).not.toMatch(/[+−-]\s*0/)
+    await expect(rbRow).toContainText(READS_AS[RB.verdict])
+    expect(RB.deltaRho <= 0 && RB.verdict === "ahead", "a non-positive RB gap rounded up to ahead").toBe(false)
+    if (RB.verdict === "even") {
+      // ⚠️ A wash must carry NO direction sign. The measured value is `-0.0`, and `-0.0 >= 0` is
+      // true in JavaScript — so the natural formatter renders a wash as "+0.000", putting a plus in
+      // front of the one row this story requires be legible as a wash.
+      expect(
+        (await rbRow.innerText()).replace(/RB/g, ""),
+        "the level position renders a direction sign it has not earned",
+      ).not.toMatch(/[+−-]\s*0/)
+    }
 
     await expectNoNaN(page)
     expectApiFullyMocked(mock)
@@ -161,7 +183,7 @@ test.describe("public Track Record — NF-TR1 claim governance", () => {
       "modestly outperformed the captured ADP benchmark",
     )
     expect(text, "the metric is not named").toContain("rank correlation")
-    expect(text, "the seasons are not stated").toContain("2019–2024")
+    expect(text, "the seasons are not stated").toContain(CLAIM.seasons)
     expect(text, "the player count is not stated").toMatch(/about \d+ per season/)
     expect(text, "the interval is not shown").toContain("includes zero")
 
@@ -173,8 +195,11 @@ test.describe("public Track Record — NF-TR1 claim governance", () => {
     await gotoTrackRecord(page)
     const text = (await renderedText(page)).toLowerCase()
 
+    // the level-position slot: "it is a wash" while a position measures level (NF-TR1); once none
+    // does (NF-TR2b: RB -0.010 = behind) the page must SAY no position measured level
+    const anyLevel = CLAIM.byPosition.some((r) => r.verdict === "even")
     for (const [name, marker] of [
-      ["RB is a wash", "it is a wash"],
+      ["level-position statement", anyLevel ? "it is a wash" : "no position measured level"],
       ["ECR/ESPN/Sleeper reported separately", "reported separately"],
       ["ordering uses market consensus", "blends the market"],
       ["not a guarantee", "not a guarantee"],

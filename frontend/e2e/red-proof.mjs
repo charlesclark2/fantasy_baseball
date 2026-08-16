@@ -1863,6 +1863,19 @@ const CASES = [
     to: "export function matchesBooks(row: SlateRow, selected: Set<string>): boolean {\n  return true\n}",
     grep: "a sportsbook chip leaves only rows that book actually quoted",
   },
+  {
+    id: "league-picker-reverts-to-teams-0",
+    shipped: "G100-C2 — pre-emptive: the multi-league picker stops actually switching leagues",
+    // The pre-story shape, restated: `entry` ignores the URL/picker selection entirely and always
+    // reads `teams[0]`. The control still renders, still lists both leagues, and still LOOKS like
+    // it worked — the heading and board simply never move, because nothing downstream of `entry`
+    // was ever reading the selection to begin with.
+    detail: "`entry` always resolves to teams[0], so picking the second league changes nothing.",
+    file: "components/fantasy/my-league.tsx",
+    from: "    return requested ?? teams[0]",
+    to: "    return teams[0]",
+    grep: "switching leagues re-scores the whole page for the selected league",
+  },
 ]
 
 /**
@@ -1917,7 +1930,10 @@ const CASES = [
 // sportsbook filter — the last a follow-up request in the same story), each RED-proven
 // individually (`-- props-`) for the same reason — a production build per case does not belong
 // in a session. So 120/114/6 → 125/119/6, and the next full run CONFIRMS it.
-const RECORDED_BOARD = { total: 125, red: 119, notObservable: 6 }
+// G100-C2 adds ONE case (the multi-league picker reverting to `teams[0]`), RED-proven individually
+// (`-- league-picker`) for the same reason. So 125/119/6 → 126/120/6, and the next full run CONFIRMS
+// it.
+const RECORDED_BOARD = { total: 126, red: 120, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

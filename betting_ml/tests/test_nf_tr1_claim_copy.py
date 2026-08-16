@@ -566,7 +566,11 @@ def test_the_precise_layer_names_the_benchmark_the_metric_the_count_and_the_seas
     precise = shipped_claim["precise"].lower()
     assert "captured adp benchmark" in precise, "the benchmark is not named"
     assert "rank correlation" in precise, "the metric is not named"
-    assert "2019" in precise and "2024" in precise, "the seasons are not stated"
+    # the season SPAN the claim itself carries (2019–2024 at NF-TR1; 2019–2025 once the NF-TR2b
+    # refresh archived the 2025 ADP) — derived, so a deliberate refresh cannot silently unpin it
+    span = str(shipped_claim["seasons"])
+    first, last = span.replace("–", "-").split("-")[0].strip(), span.replace("–", "-").split("-")[-1].strip()
+    assert first in precise and last in precise, f"the seasons ({span}) are not stated"
     assert str(shipped_claim["playersPerSeason"]) in precise, "the player count is not stated"
 
 
@@ -609,11 +613,24 @@ def test_the_approved_sentence_is_withdrawn_when_the_shape_changes():
 # AC 4 — a position-level table is available, and AC's six disclosures are all present
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def test_a_level_position_is_labelled_even_rather_than_ahead(shipped_claim):
-    """The measured RB gap is -0.0. A table that rounded that to "ahead" — or omitted the verdict
-    and left a reader to interpret "-0.000" — would bury the disclosure the story requires."""
-    rb = next(r for r in shipped_claim["byPosition"] if r["position"] == "RB")
-    assert rb["verdict"] == "even", rb
+    """At NF-TR1 the measured RB gap was -0.000 and had to read "even", not "ahead". After the
+    NF-TR2b refresh (2019–2025) RB reads -0.010 = "behind". Either way the table's verdict must be
+    the DERIVED direction word for the measured gap (never rounded up to "ahead"), and any position
+    where we trail must be named in the lead — the symmetric hedge #852 shipped."""
+    # ⚠️ the expected word is derived with the TEST'S OWN band, not `ex._verdict` — comparing the
+    # builder to itself passed a RED-proof in which "behind" was rewired to "even" (a restatement)
+    def expected(d: float) -> str:
+        return "even" if abs(d) <= 0.005 else ("ahead" if d > 0 else "behind")
+    for r in shipped_claim["byPosition"]:
+        assert r["verdict"] == expected(r["deltaRho"]), r
+        assert not (r["deltaRho"] <= 0 and r["verdict"] == "ahead"), r
     assert {r["position"] for r in shipped_claim["byPosition"]} == {"QB", "RB", "WR", "TE"}
+    behind = [r["position"] for r in shipped_claim["byPosition"] if r["verdict"] == "behind"]
+    if behind:
+        lead = shipped_claim["lead"].lower()
+        names = {"QB": "quarterback", "RB": "running back", "WR": "wide receiver", "TE": "tight end"}
+        for pos in behind:
+            assert names[pos] in lead, f"the lead does not name the BEHIND position {pos}: {lead}"
 
 
 def test_the_position_verdict_threshold_is_two_sided():
@@ -640,8 +657,12 @@ def test_all_six_required_disclosures_are_present(shipped_claim):
     """NF-TR1's six, checked by their DISTINGUISHING content rather than by count — a count would
     pass against six copies of the same sentence."""
     joined = " ".join(shipped_claim["disclosures"]).lower()
+    any_level = any(r["verdict"] == "even" for r in shipped_claim["byPosition"])
     required = {
-        "RB is a wash": "wash",
+        # the level-position slot: "RB is a wash" while a position measures level (NF-TR1); once
+        # none does (NF-TR2b refresh: RB -0.010 = behind) the builder must SAY no position is level
+        # and point at the table where we trail — silently dropping the slot is the failure
+        "level-position statement": "wash" if any_level else "no position measured level",
         "ECR/ESPN/Sleeper reported separately": "reported separately",
         "served ordering uses market consensus": "blends the market",
         "not a guarantee": "not a guarantee",
@@ -678,7 +699,10 @@ def test_the_headline_adp_claim_is_not_swapped_for_the_flattering_source():
     unc = json.loads(_UNCERTAINTY_JSON.read_text())
     row = ex.shipped_uncertainty(unc)
     assert row["population"] == "P0_shipped" and row["source"] == "adp"
-    assert abs(row["delta_rho_mean"] - 0.022) < 1e-9, row["delta_rho_mean"]
+    # the value is whatever THAT cell holds (+0.022 at NF-TR1, +0.018 after the NF-TR2b refresh) —
+    # pinned by identity to the artifact cell, not by a literal that a deliberate refresh unpins
+    art_cell = next(c for c in unc["results"] if c["population"] == "P0_shipped" and c["source"] == "adp")
+    assert abs(row["delta_rho_mean"] - art_cell["delta_rho_mean"]) < 1e-9, row["delta_rho_mean"]
 
     def cell(population, source, delta):
         return {"population": population, "source": source, "n_seasons": 6, "n_mean": 162.0,
