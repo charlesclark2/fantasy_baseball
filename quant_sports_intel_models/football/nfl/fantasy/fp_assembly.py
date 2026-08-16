@@ -152,10 +152,16 @@ ELIGIBLE: tuple[str, ...] = (*REAL_ARMS, *FOILS)
 #: selection criterion (NF-D18).
 DEGENERATES: tuple[str, ...] = ("nihilist_zero", "zero_width", "max_width",
                                 "assembled_comonotone")
+#: ⛔ `assembled_indep` deliberately has NO oracle. Every arm here differs only in Σ, and the
+#: independent draw ESTIMATES NOTHING — so a peek has nothing to improve and its "oracle" would be
+#: byte-identical to the arm itself. An anchor that cannot differ from what it anchors is décor,
+#: and scoring it as "respected" is a pass on nothing (NF1.7 (a) / NF1.9's "a mechanism that
+#: cannot act is a finding"). `foil_direct_points` is a real learner and DOES carry one.
+FOILS_WITH_ORACLE: tuple[str, ...] = ("foil_direct_points",)
 ANCHORS: tuple[str, ...] = (
     *DEGENERATES, "permuted_direct",
     *(f"oracle__{a}" for a in REAL_ARMS), *(f"matched_n__{a}" for a in REAL_ARMS),
-    *(f"oracle__{f}" for f in FOILS),
+    *(f"oracle__{f}" for f in FOILS_WITH_ORACLE),
 )
 
 #: One family per position — corrected within itself AND pooled; the STRICTER binds (MH2 (a)),
