@@ -101,7 +101,7 @@ def test_prop_starters_shapes_rows(monkeypatch):
         "GAME_PK": 778899, "PITCHER_ID": 543037, "PITCHER_NAME": "Gerrit Cole",
         "TEAM": "NYY", "OPPONENT": "BOS", "GAME_DATE": _date(2026, 7, 1),
     }]
-    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: fake)
+    monkeypatch.setattr(bets, "lakehouse_query_reason", lambda sql, params: (fake, None))
     out = bets.prop_starters(date="2026-07-01", _="uid")
     assert out["date"] == "2026-07-01"
     assert len(out["starters"]) == 1
@@ -113,9 +113,10 @@ def test_prop_starters_shapes_rows(monkeypatch):
 
 def test_prop_starters_empty_on_miss(monkeypatch):
     from app.backend.routers import bets
-    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: [])
+    monkeypatch.setattr(bets, "lakehouse_query_reason", lambda sql, params: ([], None))
     out = bets.prop_starters(date="2026-07-01", _="uid")
-    assert out == {"date": "2026-07-01", "source": "probable_pitchers", "starters": []}
+    assert out == {"date": "2026-07-01", "source": "probable_pitchers", "degraded": False,
+                   "degraded_reason": None, "starters": []}
 
 
 # ── E5.10: batter TOTAL-BASES props ──────────────────────────────────────────
@@ -212,7 +213,7 @@ def test_prop_batters_shapes_rows(monkeypatch):
         "TEAM": "Tampa Bay Rays", "OPPONENT": "Baltimore Orioles",
         "BATTING_SLOT": 1, "GAME_DATE": _date(2026, 8, 15),
     }]
-    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: fake)
+    monkeypatch.setattr(bets, "lakehouse_query_reason", lambda sql, params: (fake, None))
     out = bets.prop_batters(date="2026-08-15", _="uid")
     assert out["date"] == "2026-08-15" and out["source"] == "lineups_wide"
     b = out["batters"][0]
@@ -223,9 +224,10 @@ def test_prop_batters_shapes_rows(monkeypatch):
 
 def test_prop_batters_empty_on_miss(monkeypatch):
     from app.backend.routers import bets
-    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: [])
+    monkeypatch.setattr(bets, "lakehouse_query_reason", lambda sql, params: ([], None))
     out = bets.prop_batters(date="2026-08-15", _="uid")
-    assert out == {"date": "2026-08-15", "source": "lineups_wide", "batters": []}
+    assert out == {"date": "2026-08-15", "source": "lineups_wide", "degraded": False,
+                   "degraded_reason": None, "batters": []}
 
 
 def test_prop_batters_drops_a_row_with_no_usable_identity(monkeypatch):
@@ -238,5 +240,153 @@ def test_prop_batters_drops_a_row_with_no_usable_identity(monkeypatch):
         {"GAME_PK": 1, "PLAYER_ID": 5, "PLAYER_NAME": "", "TEAM": None,
          "OPPONENT": None, "BATTING_SLOT": 2, "GAME_DATE": None},
     ]
-    monkeypatch.setattr(bets, "lakehouse_query", lambda sql, params: fake)
+    monkeypatch.setattr(bets, "lakehouse_query_reason", lambda sql, params: (fake, None))
     assert bets.prop_batters(date="2026-08-15", _="uid")["batters"] == []
+
+
+# ── the silent-empty guard (E9.26b) ──────────────────────────────────────────
+#
+# `lakehouse_query` swallows every failure and returns [], so a read that BLEW UP inside the
+# Lambda is byte-identical to a date that genuinely has nobody. That is exactly how the live
+# picker read as "No posted lineups for this date yet" while the endpoint worked fine locally.
+# Both pickers now report WHICH it was.
+
+@pytest.mark.parametrize("fn_name,collection", [
+    ("prop_starters", "starters"),
+    ("prop_batters", "batters"),
+])
+def test_a_failed_lakehouse_read_is_reported_as_degraded(monkeypatch, fn_name, collection):
+    from app.backend.routers import bets
+    monkeypatch.setattr(bets, "lakehouse_query_reason", lambda sql, params: ([], "IOException: boom"))
+    out = getattr(bets, fn_name)(date="2026-08-15", _="uid")
+    assert out[collection] == []
+    assert out["degraded"] is True, (
+        "a FAILED read must be distinguishable from a genuinely empty date — otherwise the "
+        "picker shows 'nothing for this date' over a broken backend (E9.26b)"
+    )
+
+
+@pytest.mark.parametrize("fn_name,collection", [
+    ("prop_starters", "starters"),
+    ("prop_batters", "batters"),
+])
+def test_a_genuinely_empty_date_is_not_reported_as_degraded(monkeypatch, fn_name, collection):
+    """The other side of the same coin: an off-day must NOT claim the backend is broken."""
+    from app.backend.routers import bets
+    monkeypatch.setattr(bets, "lakehouse_query_reason", lambda sql, params: ([], None))
+    out = getattr(bets, fn_name)(date="2026-12-25", _="uid")
+    assert out[collection] == []
+    assert out["degraded"] is False
+
+
+def test_lakehouse_query_reason_reports_failure_without_raising():
+    """The helper itself: a read that raises must return ([], False), never propagate — the
+    router is a serving path and must not 500 on a cold lakehouse."""
+    from app.backend.services import lakehouse_read
+
+    def boom():
+        raise RuntimeError("S3 is having a day")
+
+    orig = lakehouse_read._get_conn
+    try:
+        lakehouse_read._get_conn = boom
+        rows, reason = lakehouse_read.lakehouse_query_reason("SELECT 1")
+        assert rows == [] and reason is not None
+        assert "RuntimeError" in reason, "the reason must name the failure, not just flag it"
+        # the swallowing wrapper keeps its old contract for existing callers
+        assert lakehouse_read.lakehouse_query("SELECT 1") == []
+    finally:
+        lakehouse_read._get_conn = orig
+
+
+def test_the_batters_query_scans_the_wide_lineup_table_only_once():
+    """E9.26b: a heavy read can fail inside the Lambda AND poison the shared DuckDB
+    singleton for later queries. The per-slot UNION ALL scanned the wide lineup table nine
+    times; the unnest form does it once. Guard the shape, since the failure it prevents is
+    invisible to CI (which mocks all IO)."""
+    import ast
+    import inspect
+    import textwrap
+
+    from app.backend.routers import bets
+
+    # Scan the CODE only — not the comments, not the docstring. Both explain WHY the per-slot
+    # union is gone and both name the table, so a raw text scan fails on correct source
+    # (INC-38: prose must neither satisfy nor trip a source guard). ast.unparse drops
+    # comments; the docstring is dropped explicitly.
+    fn = ast.parse(textwrap.dedent(inspect.getsource(bets.prop_batters))).body[0]
+    if (fn.body and isinstance(fn.body[0], ast.Expr)
+            and isinstance(getattr(fn.body[0], "value", None), ast.Constant)
+            and isinstance(fn.body[0].value.value, str)):
+        fn.body = fn.body[1:]
+    src = ast.unparse(fn)
+
+    assert "UNION ALL" not in src, (
+        "the batters picker must not re-scan the wide lineup table per slot"
+    )
+    assert src.count("stg_statsapi_lineups_wide") == 1, (
+        f"expected exactly one scan of the wide lineup table, found "
+        f"{src.count('stg_statsapi_lineups_wide')}"
+    )
+    assert "unnest(" in src
+
+
+# ── duck_connect must survive an empty $HOME (the 2026-08-15 prod outage) ─────
+#
+# The Lambda runtime leaves $HOME empty. DuckDB resolves its extension directory under the
+# home directory, so `INSTALL httpfs` raised before downloading anything and EVERY lakehouse
+# read in the API degraded to [] — both prop pickers, and every other lakehouse-backed panel:
+#
+#   duckdb.duckdb.IOException: IO Error: Can't find the home directory at ''
+#   Specify a home directory using the SET home_directory='/path/to/dir' option.
+#
+# Reproduced locally by setting HOME='' (fails identically; fixed by the SET). These tests are
+# hermetic — a real INSTALL would need the network, which the suite forbids — so they pin the
+# ORDER of the statements duck_connect issues, which is the part that was wrong.
+
+class _RecordingConn:
+    """Minimal duckdb-connection stand-in that records executed SQL and raises on INSTALL
+    unless a home directory was set first — mirroring the real failure."""
+
+    def __init__(self):
+        self.statements: list[str] = []
+        self.home_set = False
+
+    def execute(self, sql: str, *args, **kwargs):
+        self.statements.append(sql)
+        if "home_directory" in sql:
+            self.home_set = True
+        if sql.startswith("INSTALL httpfs") and not self.home_set:
+            raise RuntimeError("IO Error: Can't find the home directory at ''")
+        return self
+
+
+def _connect_with_recorder(monkeypatch):
+    import duckdb
+
+    from app.backend.services import lakehouse_read
+    rec = _RecordingConn()
+    monkeypatch.setattr(duckdb, "connect", lambda *a, **k: rec)
+    lakehouse_read.duck_connect()
+    return rec
+
+
+def test_duck_connect_sets_a_home_directory_before_installing_httpfs(monkeypatch):
+    rec = _connect_with_recorder(monkeypatch)
+    home_idx = next(i for i, s in enumerate(rec.statements) if "home_directory" in s)
+    install_idx = next(i for i, s in enumerate(rec.statements) if s.startswith("INSTALL httpfs"))
+    assert home_idx < install_idx, (
+        "home_directory must be set BEFORE INSTALL httpfs — DuckDB resolves the extension "
+        "directory under $HOME, which the Lambda runtime leaves empty"
+    )
+
+
+def test_duck_connect_points_the_writable_dirs_at_tmp(monkeypatch):
+    """/tmp is the only writable path in Lambda; a dir anywhere else cannot be created."""
+    rec = _connect_with_recorder(monkeypatch)
+    joined = " ".join(rec.statements)
+    for setting in ("home_directory", "extension_directory", "secret_directory"):
+        stmt = next((s for s in rec.statements if setting in s), None)
+        assert stmt is not None, f"{setting} is not set"
+        assert "'/tmp" in stmt, f"{setting} must live under /tmp, got: {stmt}"
+    assert "INSTALL httpfs" in joined

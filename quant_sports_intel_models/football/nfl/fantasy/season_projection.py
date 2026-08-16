@@ -806,8 +806,18 @@ def attach_season_interval(df: pd.DataFrame, band_model: "VeteranBandModel | Non
                         form_, params, fp_ppr[idx], sub["position"].to_numpy(),
                         pd.to_numeric(sub["proj_games"], errors="coerce").fillna(0.0)
                         .to_numpy(dtype=float))
+        # …and the SEASON SD the band is keyed on is the incumbent-equivalent one too: it carries
+        # `fp_per_game · games_sd`, which scales with the served point (the per-game sd is a realized
+        # property of the player and does not move). Inert for the served `knn_norm` at sd_gain=0 —
+        # it matters the day a band form reads `season_sd`. ⚠️ Known residual, measured on the first
+        # real rebuild: the level→re-order→re-score round trip is not exactly multiplicative on the
+        # deep bench (|Δ query point| ≤ 0.46), so ~18% of vets' p90 moved ≤5.3 pts at a knn-neighbour
+        # boundary — the same neighbour-swap noise class as the `refit` disclosure, not a level shift.
+        band_sd = season_sd
+        if query_pt is not fp_ppr:
+            band_sd = np.sqrt((fp_pg_sd * np.sqrt(eg_arr)) ** 2 + ((query_pt / eg_arr) * gsd) ** 2)
         frame = veteran_band_inputs(
-            df["position"], query_pt, season_sd, proj_games=df["proj_games"],
+            df["position"], query_pt, band_sd, proj_games=df["proj_games"],
             base_games=df.get("games_played"), snap_share=df.get("snap_share"),
             seasons_missed=df.get("seasons_missed"))
         b_lo, b_hi = band_model.band_many(frame)
