@@ -120,55 +120,62 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, smap: d
     if len(te_p) == 0 or len(tr_p) < FA.MIN_ESTIMATION_ROWS:
         return {"skipped": f"train {len(tr_p)} / test {len(te_p)} rows — below the estimation "
                            f"floor ({FA.MIN_ESTIMATION_ROWS}); REFUSED, not defaulted"}
-    mtrain = KW.matched_n_train(train, test)
-    # ⭐ PRE-FLIGHT the matched-n control. NF1.7 (a) forbids treating a failed anchor as a pass, so
-    # an unestimable control MUST refuse — but discovering that by raising deep inside an
-    # expensive operator run costs the whole run. Checking here turns it into a RECORDED skip
-    # that drops the fold from `n_folds_used` (visible in the record), not a crash.
-    n_mtrain_p = int((mtrain["position"].astype(str) == position).sum())
-    if n_mtrain_p < FA.MIN_ESTIMATION_ROWS:
-        return {"skipped": f"the matched-n control carries {n_mtrain_p} {position} rows, below the "
+    # ⭐⭐ THE ORACLE PEEKS AT THE DEPENDENCE, AND AT NOTHING ELSE.
+    #
+    # Every arm in this story differs from every other ONLY in Σ — the per-stat marginals are the
+    # NF-W6d served map, frozen and shared by every arm, every foil and every anchor. So the
+    # peeking ceiling for a dependence arm is "Σ estimated on the TEST outcomes, same marginals",
+    # NOT "refit everything on test": an oracle that also refits marginals is a DIFFERENT FAMILY
+    # (NF1.7 (b) — same-family AND same-sample), and it would confound peeking-at-dependence with
+    # peeking-at-marginals, so a floor violation could not be attributed to either.
+    #
+    # A first cut did refit the marginals on test (`serve_banks(test, test)`), inheriting NF-W7b's
+    # shape. It CRASHED, and the crash was the design telling on itself: the W6d forms need a
+    # temporal core/purge/cal split (`MC.calibration_split`), and a single half-season test block
+    # cannot be split that way — `core=0 cal=4380`. Peeking at the marginals was never the
+    # intent; removing it fixes the crash, tightens the floor onto the channel this story owns,
+    # and drops three of the five marginal fits per position.
+    ctx_te = _marginals(train, test, smap)          # the real arms' marginals (train → test)
+    ctx_tr = _marginals(train, train, smap)         # in-sample train predictives (joint_pit's Σ)
+    b_te = bank_tensor(ctx_te, position, len(te_p))
+    b_tr = bank_tensor(ctx_tr, position, len(tr_p))
+
+    raw_tr = realized_matrix(tr_p)
+    raw_te = realized_matrix(te_p)
+    y_te = FA.score_realized(raw_te, weights)
+
+    # The matched-n control (NF1.9 (f)): Σ estimated on a TRAIN slice the size of the test block —
+    # same family, same sample size, same marginals. It is a ROW SUBSET of the train context, so
+    # it costs no additional fit.
+    n_match = max(len(te_p), FA.MIN_ESTIMATION_ROWS)
+    order = np.argsort(tr_p["gw"].to_numpy(), kind="stable")
+    m_idx = np.sort(order[-n_match:])
+    if len(m_idx) < FA.MIN_ESTIMATION_ROWS:
+        return {"skipped": f"the matched-n control carries {len(m_idx)} {position} rows, below the "
                            f"estimation floor ({FA.MIN_ESTIMATION_ROWS}) — the per-form oracle "
                            f"floor could not be evaluated at matched n, so this fold is REFUSED "
                            f"rather than scored against an anchor that did not run (NF1.7 (a))"}
 
-    # ── marginal contexts (NF1.9 (f)): test / in-sample train / oracle / matched-n ──────────────
-    ctx_te = _marginals(train, test, smap)
-    ctx_tr = _marginals(train, train, smap)
-    ctx_or = _marginals(test, test, smap)
-    ctx_mn = _marginals(mtrain, test, smap)
-    ctx_mn_in = _marginals(mtrain, mtrain, smap)
-
-    # `serve_banks` already slices each cell to ITS position's rows within the serve frame, so a
-    # tensor is just the 13 cells stacked at that position's row count.
-    mtrain_p = mtrain.loc[mtrain["position"].astype(str) == position]
-    b_te = bank_tensor(ctx_te, position, len(te_p))
-    b_tr = bank_tensor(ctx_tr, position, len(tr_p))
-    b_or = bank_tensor(ctx_or, position, len(te_p))
-    b_mn = bank_tensor(ctx_mn, position, len(te_p))
-    b_mn_in = bank_tensor(ctx_mn_in, position, len(mtrain_p))
-
-    raw_tr = realized_matrix(tr_p)
-    raw_te = realized_matrix(te_p)
-    raw_mn = realized_matrix(mtrain_p)
-    y_te = FA.score_realized(raw_te, weights)
-
-    # ── Σ per arm, per estimation context ───────────────────────────────────────────────────────
+    # ── Σ per arm × estimation context (marginals identical throughout — only Σ moves) ──────────
     sig_tr, sig_or, sig_mn, notes = {}, {}, {}, {}
     for arm in FA.REAL_ARMS:
         sig_tr[arm], notes[arm] = FA.sigma_for_arm(arm, raw=raw_tr, banks=b_tr, realized=raw_tr)
-        sig_or[arm], _ = FA.sigma_for_arm(arm, raw=raw_te, banks=b_or, realized=raw_te)
-        sig_mn[arm], _ = FA.sigma_for_arm(arm, raw=raw_mn, banks=b_mn_in, realized=raw_mn)
+        sig_or[arm], _ = FA.sigma_for_arm(arm, raw=raw_te, banks=b_te, realized=raw_te)
+        sig_mn[arm], _ = FA.sigma_for_arm(arm, raw=raw_tr[m_idx], banks=b_tr[m_idx],
+                                          realized=raw_tr[m_idx])
 
     # ── arms, foils, anchors — ONE base-normal stream shared by all (common random numbers) ─────
     banks: dict[str, np.ndarray] = {}
     for arm in FA.REAL_ARMS:
         banks[arm] = FA.assemble_fp_bank(b_te, weights, corr=sig_tr[arm], draws=draws)
-        banks[f"oracle__{arm}"] = FA.assemble_fp_bank(b_or, weights, corr=sig_or[arm], draws=draws)
-        banks[f"matched_n__{arm}"] = FA.assemble_fp_bank(b_mn, weights, corr=sig_mn[arm],
+        banks[f"oracle__{arm}"] = FA.assemble_fp_bank(b_te, weights, corr=sig_or[arm], draws=draws)
+        banks[f"matched_n__{arm}"] = FA.assemble_fp_bank(b_te, weights, corr=sig_mn[arm],
                                                          draws=draws)
+    # ⛔ `assembled_indep` gets NO oracle, deliberately: it estimates NOTHING, so there is nothing
+    # for a peek to improve — its oracle would be byte-identical to itself. A fabricated anchor
+    # that cannot differ from its arm is décor, and reporting it as "respected" would be a pass on
+    # nothing (NF1.9's "a mechanism that cannot act is a finding", NF1.7 (a)).
     banks["assembled_indep"] = FA.assemble_fp_bank(b_te, weights, mode="indep", draws=draws)
-    banks["oracle__assembled_indep"] = FA.assemble_fp_bank(b_or, weights, mode="indep", draws=draws)
     banks["assembled_comonotone"] = FA.assemble_fp_bank(b_te, weights, mode="comonotone",
                                                         draws=draws)
 
@@ -281,8 +288,10 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
             (mean_s[a] > mean_s[f"oracle__{a}"])
             or (mean_s[f"oracle__{a}"] < mean_s[f"matched_n__{a}"])
             for a in FA.REAL_ARMS)),
+        # only the foils that HAVE an oracle — `assembled_indep` estimates nothing, so it has
+        # none, and inventing one would score a pass on nothing (NF1.7 (a))
         "foils_respect_own_oracle": bool(all(
-            mean_s[f] > mean_s[f"oracle__{f}"] for f in FA.FOILS)),
+            mean_s[f] > mean_s[f"oracle__{f}"] for f in FA.FOILS_WITH_ORACLE)),
     }
     pooled_cov = {lab: _pooled_coverage(fold_results, position, lab)
                   for lab in (*FA.REAL_ARMS, *FA.FOILS, "assembled_comonotone")}
@@ -494,8 +503,16 @@ def main(argv=None) -> int:
 
     FA.assert_stat_key_map()
     feat, pit_audit, attach = W6DA.build_matrix_w6d(SEASONS, rebuild_cache=args.rebuild_cache)
-    gate_p, bake_p, def_p = W6DS.record_paths(suffix)
-    smap = SDSD.served_map(gate_p, bake_p, def_p, allow_path_proof=args.smoke)
+    # ⭐ ALWAYS the FULL W6d records — never the `_smoke` variants, even on a smoke run.
+    # `suffix` names THIS story's OWN artifact (mine is the path proof); the W6d records are an
+    # INPUT DEPENDENCY that is already committed and decision-grade. Letting one variable do both
+    # jobs made `--smoke` demand a `nf_w6d_defaults_smoke.json` that has never existed (W6d's
+    # Phase-C smoke was only ever run `--only-two-pt`), and — worse — it passed
+    # `allow_path_proof=True`, which would have let a PATH PROOF feed the assembly's served map.
+    # Reading the real records is both the working path and the stricter one: no path-proof record
+    # can reach this story at all, so the fail-closed contract is never relaxed for convenience.
+    gate_p, bake_p, def_p = W6DS.record_paths("")
+    smap = SDSD.served_map(gate_p, bake_p, def_p)
     folds = WP.build_folds(feat)
     if args.smoke:
         folds = folds[-1:]
