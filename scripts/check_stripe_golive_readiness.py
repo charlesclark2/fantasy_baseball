@@ -107,6 +107,34 @@ def check_stripe_mode(profile: str | None, expect_mode: str) -> Check:
     # Only the mode prefix is ever read or printed. The rest is never touched.
     mode = "live" if key.startswith("sk_live_") else "test" if key.startswith("sk_test_") else "?"
     notes = []
+
+    # ⭐ NAME THE WRONG-KEY-TYPE CASE, don't just report `?`. Stripe hands you FOUR key kinds and
+    # only `sk_`/`rk_` can act as a server secret; `pk_` is the PUBLISHABLE key, designed to be
+    # embedded in a web page, and it cannot read a Price, open a Checkout Session or a billing
+    # portal. Pasted into STRIPE_SECRET_KEY it breaks the ENTIRE billing surface at once while
+    # looking plausible — same prefix family, same length, and it says "live" right on it.
+    # (Nearly happened on 2026-08-16: `pk_live_` was copied from the dashboard's API-keys page,
+    # and the first symptom was an `invalid_request_error` on a Price read.)
+    if key.startswith("pk_"):
+        notes.append(
+            "STRIPE_SECRET_KEY holds a PUBLISHABLE key (pk_…), not a secret key. It is the "
+            "client-side key and cannot read a Price, open Checkout or open the billing portal "
+            "— every billing call will fail. Use the SECRET key: Dashboard → Developers → API "
+            "keys → Secret key → Reveal live key (sk_live_…)."
+        )
+    elif key.startswith("rk_"):
+        notes.append(
+            "STRIPE_SECRET_KEY holds a RESTRICTED key (rk_…). Workable, but it must grant write "
+            "on Checkout Sessions + Billing Portal Sessions and read on Prices/Products/"
+            "Subscriptions, or parts of billing fail silently. A plain sk_ has all of them."
+        )
+    elif key and mode == "?":
+        notes.append(
+            f"STRIPE_SECRET_KEY starts with {key[:8]!r}, which is not a recognised Stripe key "
+            f"prefix (expected sk_live_ / sk_test_)."
+        )
+    elif not key:
+        notes.append("STRIPE_SECRET_KEY is ABSENT — every billing call 503s.")
     for name in ("STRIPE_PRICE_FOUNDING", "STRIPE_PRICE_STANDARD", "STRIPE_WEBHOOK_SECRET"):
         if not env.get(name):
             notes.append(f"{name} is ABSENT — billing will 503")
@@ -122,7 +150,10 @@ def check_stripe_mode(profile: str | None, expect_mode: str) -> Check:
                 f"{wrong} is set — the code reads STRIPE_WEBHOOK_SECRET, so this name is INERT"
             )
     verdict = GO if (mode == expect_mode and not notes) else NO_GO
-    return Check("Stripe key mode", verdict, f"sk_{mode}_ (expected {expect_mode})", notes=notes)
+    # Render the ACTUAL prefix when it is not an sk_ key — printing "sk_?_" for a `pk_live_`
+    # value would hide the very thing that is wrong.
+    shown = f"sk_{mode}_" if mode != "?" else (f"{key[:8]}…" if key else "<absent>")
+    return Check("Stripe key mode", verdict, f"{shown} (expected sk_{expect_mode}_)", notes=notes)
 
 
 def check_flag(profile: str | None, var: str, expect_on: bool, label: str) -> Check:

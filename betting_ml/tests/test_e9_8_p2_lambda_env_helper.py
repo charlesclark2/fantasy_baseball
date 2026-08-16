@@ -445,6 +445,82 @@ class TestTheReadinessGateNeverScoresAnUnevaluableCheckHealthy:
         assert gate.main([]) == 1
 
 
+class TestAWrongKindOfStripeKeyNamesItself:
+    """Stripe hands you four key kinds and only `sk_`/`rk_` can act as a server secret.
+
+    ⭐ `pk_live_` is the PUBLISHABLE key — designed to be embedded in a web page. In
+    `STRIPE_SECRET_KEY` it breaks the ENTIRE billing surface at once (no Price read, no
+    Checkout Session, no billing portal) while looking completely plausible: same prefix
+    family, same length, and it says "live" right on it. It sits one line above the secret key
+    on the dashboard's API-keys page, which is exactly how it gets copied.
+
+    Nearly shipped on 2026-08-16 — caught only because a Price read returned
+    `invalid_request_error`. The gate already refused it (mode `?` ≠ `live`), but reported a
+    bare `sk_?_`, which does not tell an operator mid-flip what is wrong or where to look.
+    A refusal that does not name its cause is a refusal someone re-runs verbatim.
+    """
+
+    @staticmethod
+    def _gate():
+        spec = importlib.util.spec_from_file_location(
+            "_e98p2_readiness_keys",
+            Path(__file__).resolve().parents[2] / "scripts" / "check_stripe_golive_readiness.py",
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    _BASE = {
+        "STRIPE_PRICE_FOUNDING": "price_a",
+        "STRIPE_PRICE_STANDARD": "price_b",
+        "STRIPE_WEBHOOK_SECRET": "whsec_x",
+    }
+
+    def _check(self, gate, key, expect="live"):
+        env = {**self._BASE, **({"STRIPE_SECRET_KEY": key} if key else {})}
+        gate.aws_json = lambda args, profile: env
+        return gate.check_stripe_mode(None, expect)
+
+    def test_a_publishable_key_is_refused_AND_says_so(self):
+        gate = self._gate()
+        c = self._check(gate, "pk_live_FIXTUREaaa")
+        assert c.verdict == gate.NO_GO
+        blob = " ".join(c.notes).lower()
+        assert "publishable" in blob, "the refusal does not name the cause"
+        assert "sk_live_" in blob, "the refusal does not say what to use instead"
+        # The detail line must show the REAL prefix — rendering `sk_?_` would hide the defect.
+        assert "pk_live_" in c.detail
+
+    def test_a_restricted_key_is_flagged_for_its_scopes(self):
+        gate = self._gate()
+        c = self._check(gate, "rk_live_FIXTUREaaa")
+        assert c.verdict == gate.NO_GO
+        assert "restricted" in " ".join(c.notes).lower()
+
+    def test_an_absent_key_is_refused_and_named(self):
+        gate = self._gate()
+        c = self._check(gate, "")
+        assert c.verdict == gate.NO_GO
+        assert "absent" in " ".join(c.notes).lower()
+
+    @pytest.mark.parametrize("key,expect", [("sk_live_FIXTUREaaa", "live"), ("sk_test_FIXTUREaaa", "test")])
+    def test_a_correct_key_still_passes_cleanly(self, key, expect):
+        """⭐ Two-sided. Without this, 'refuse everything' would satisfy every test above —
+        and a gate that never passes is as useless as one that never fails."""
+        gate = self._gate()
+        c = self._check(gate, key, expect)
+        assert c.verdict == gate.GO, c.notes
+        assert not c.notes
+
+    def test_the_right_key_in_the_WRONG_MODE_is_still_refused(self):
+        """The original job of this check: a real secret key, but still test at flip time."""
+        gate = self._gate()
+        c = self._check(gate, "sk_test_FIXTUREaaa", "live")
+        assert c.verdict == gate.NO_GO
+        assert "sk_test_" in c.detail and "sk_live_" in c.detail
+
+
 class TestTheGoLivePriceContract:
     """The `$10 founding` promise, pinned against the fixture the E2E suite renders.
 
