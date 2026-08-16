@@ -76,12 +76,37 @@ const TARGETS = [
 const sha = (s) => createHash("sha256").update(s).digest("hex").slice(0, 16)
 
 const checkOnly = process.argv.includes("--check")
+
+/**
+ * `--only <substring>` — capture just the matching fixture(s).
+ *
+ * E9.8-P2 needs this: the Stripe TEST→LIVE flip changes exactly ONE payload
+ * (`subscription-public-pricing.json`, whose amount comes from the live Stripe Price), and
+ * forcing a full re-capture to refresh it would rewrite the 378 KB board blobs at the same
+ * time. Those move on the operator's export cadence, not on the billing flip, so bundling
+ * them buries a one-line price change in an unreviewable diff — and re-captures them at
+ * whatever moment the flip happens to fall on rather than at a deliberate one.
+ */
+const onlyIdx = process.argv.indexOf("--only")
+const only = onlyIdx !== -1 ? process.argv[onlyIdx + 1] : null
+if (onlyIdx !== -1 && !only) {
+  console.error("--only needs a substring, e.g. --only subscription-public-pricing")
+  process.exit(2)
+}
+const targets = only ? TARGETS.filter((t) => t.file.includes(only)) : TARGETS
+if (only && targets.length === 0) {
+  console.error(`--only ${only}: matched no fixture. Known files:`)
+  for (const t of TARGETS) console.error(`  ${t.file}`)
+  process.exit(2)
+}
+if (only) console.log(`--only ${only}: capturing ${targets.length} of ${TARGETS.length} fixtures`)
+
 mkdirSync(OUT_DIR, { recursive: true })
 
 let drift = 0
 const provenance = []
 
-for (const t of TARGETS) {
+for (const t of targets) {
   const url = `${API}${t.path}`
   const res = await fetch(url)
   if (!res.ok) {
@@ -107,21 +132,43 @@ for (const t of TARGETS) {
 }
 
 if (!checkOnly) {
+  // ⚠️ A `--only` run must MERGE its provenance, never replace it. `provenance` holds just
+  // the files captured THIS run, so writing it verbatim after a filtered run would delete the
+  // records of every other fixture — the file would then claim those fixtures do not exist
+  // while they sit right beside it on disk. Carry forward what this run did not touch, and
+  // keep each entry's OWN capture time so a stale fixture cannot hide behind a fresh header.
+  const capturedAt = new Date().toISOString()
+  const capturedNow = new Set(provenance.map((p) => p.file))
+  const previous = existsSync(join(OUT_DIR, "CAPTURE.json"))
+    ? JSON.parse(readFileSync(join(OUT_DIR, "CAPTURE.json"), "utf8"))
+    : { files: [] }
+  const carried = (previous.files ?? [])
+    .filter((p) => !capturedNow.has(p.file))
+    .map((p) => ({ ...p, captured_at: p.captured_at ?? previous.captured_at }))
+  const files = [
+    ...provenance.map((p) => ({ ...p, captured_at: capturedAt })),
+    ...carried,
+  ].sort((a, b) => a.file.localeCompare(b.file))
+
   writeFileSync(
     join(OUT_DIR, "CAPTURE.json"),
     JSON.stringify(
       {
         captured_from: API,
-        captured_at: new Date().toISOString(),
-        how: "node e2e/fixtures/capture-fixtures.mjs",
+        captured_at: capturedAt,
+        how: only
+          ? `node e2e/fixtures/capture-fixtures.mjs --only ${only}`
+          : "node e2e/fixtures/capture-fixtures.mjs",
         anonymous: true,
-        files: provenance,
+        // Per-file `captured_at` — a single header date over files of different vintages
+        // hides staleness (NF-FRESH2). Read the entry, not the header.
+        files,
       },
       null,
       2,
     ) + "\n",
   )
-  console.log("wrote CAPTURE.json")
+  console.log(`wrote CAPTURE.json (${provenance.length} refreshed, ${carried.length} carried forward)`)
 }
 
 if (checkOnly && drift) {

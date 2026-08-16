@@ -1,43 +1,48 @@
 {
   "captured_from": "https://api.credencesports.com",
-  "captured_at": "2026-08-07T05:49:23.200Z",
-  "how": "node e2e/fixtures/capture-fixtures.mjs",
+  "captured_at": "2026-08-16T02:00:56.072Z",
+  "how": "node e2e/fixtures/capture-fixtures.mjs --only subscription-public-pricing",
   "anonymous": true,
   "files": [
     {
-      "file": "fantasy-nfl-projections-2026-locked.json",
-      "url": "https://api.credencesports.com/fantasy/nfl/projections?season=2026",
-      "bytes": 378007,
-      "sha256_16": "4be7d7b2832767da",
-      "note": "Locked (anonymous) season projections. `locked: true`, every model value stripped, rows re-ordered onto market ADP."
+      "file": "fantasy-nfl-board-full_ppr-12-2026-locked.json",
+      "url": "https://api.credencesports.com/fantasy/nfl/board?config=full_ppr&size=12&season=2026",
+      "bytes": 144904,
+      "sha256_16": "a1a4687e4c564fa0",
+      "note": "Locked draft board. A bare ARRAY (never an envelope — see lock_board_payload). This is the payload that rendered BLANK in E9.56b.",
+      "captured_at": "2026-08-07T05:49:23.200Z"
     },
     {
       "file": "fantasy-nfl-manifest-2026-locked.json",
       "url": "https://api.credencesports.com/fantasy/nfl/manifest?season=2026",
       "bytes": 12316,
       "sha256_16": "0d3deefb7d85b256",
-      "note": "Locked manifest — the board frame (configs + sizes) the CTA is rendered on."
+      "note": "Locked manifest — the board frame (configs + sizes) the CTA is rendered on.",
+      "captured_at": "2026-08-07T05:49:23.200Z"
     },
     {
-      "file": "fantasy-nfl-board-full_ppr-12-2026-locked.json",
-      "url": "https://api.credencesports.com/fantasy/nfl/board?config=full_ppr&size=12&season=2026",
-      "bytes": 144904,
-      "sha256_16": "a1a4687e4c564fa0",
-      "note": "Locked draft board. A bare ARRAY (never an envelope — see lock_board_payload). This is the payload that rendered BLANK in E9.56b."
-    },
-    {
-      "file": "fantasy-nfl-track-record-manifest.json",
-      "url": "https://api.credencesports.com/fantasy/nfl/track-record/manifest",
-      "bytes": 1049,
-      "sha256_16": "bfc7302a257c5c37",
-      "note": "Public track record manifest. Real numbers, no entitlement — the receipts surface."
+      "file": "fantasy-nfl-projections-2026-locked.json",
+      "url": "https://api.credencesports.com/fantasy/nfl/projections?season=2026",
+      "bytes": 378007,
+      "sha256_16": "4be7d7b2832767da",
+      "note": "Locked (anonymous) season projections. `locked: true`, every model value stripped, rows re-ordered onto market ADP.",
+      "captured_at": "2026-08-07T05:49:23.200Z"
     },
     {
       "file": "fantasy-nfl-track-record-2025.json",
       "url": "https://api.credencesports.com/fantasy/nfl/track-record/2025",
       "bytes": 77873,
       "sha256_16": "7ebe1be6c77f2099",
-      "note": "Public past-season track record. REAL, UNLOCKED model output — the honest 'a real payload renders real numbers' fixture. ⚠️ AUGMENTED, not hand-edited: `projGames` (the expected-games figure `ourPoints` is scaled by) does not exist in prod until the operator's post-merge `--publish`, so it was joined in per player from the served NF1.5 2025 projection artifact by `e2e/fixtures/build-track-record-proj-games.py` — the same source and the same rounding the export uses. Every other byte is the verbatim capture; the sha above is the PRE-augmentation capture. Re-capture after the publish, then delete that script."
+      "note": "Public past-season track record. REAL, UNLOCKED model output — the honest 'a real payload renders real numbers' fixture. ⚠️ AUGMENTED, not hand-edited: `projGames` (the expected-games figure `ourPoints` is scaled by) does not exist in prod until the operator's post-merge `--publish`, so it was joined in per player from the served NF1.5 2025 projection artifact by `e2e/fixtures/build-track-record-proj-games.py` — the same source and the same rounding the export uses. Every other byte is the verbatim capture; the sha above is the PRE-augmentation capture. Re-capture after the publish, then delete that script.",
+      "captured_at": "2026-08-07T05:49:23.200Z"
+    },
+    {
+      "file": "fantasy-nfl-track-record-manifest.json",
+      "url": "https://api.credencesports.com/fantasy/nfl/track-record/manifest",
+      "bytes": 1049,
+      "sha256_16": "bfc7302a257c5c37",
+      "note": "Public track record manifest. Real numbers, no entitlement — the receipts surface.",
+      "captured_at": "2026-08-07T05:49:23.200Z"
     },
     {
       "file": "picks-featured.json",
@@ -52,7 +57,8 @@
       "url": "https://api.credencesports.com/subscription/public-pricing",
       "bytes": 206,
       "sha256_16": "813bdbb756e99e1f",
-      "note": "Public price (E9.59). Read server-side from the Stripe Price object Checkout charges against — so this capture is the number a logged-out visitor actually sees. ⚠️ Stripe TEST mode until E9.8-P2; the amount will change at the live flip and this fixture should be re-captured then."
+      "note": "Public price (E9.59). Read server-side from the Stripe Price object Checkout charges against — so this capture is the number a logged-out visitor actually sees. ⚠️ Stripe TEST mode until E9.8-P2; the amount will change at the live flip and this fixture should be re-captured then.",
+      "captured_at": "2026-08-16T02:00:56.072Z"
     }
   ]
 }
