@@ -69,7 +69,7 @@ const TARGETS = [
   {
     file: "subscription-public-pricing.json",
     path: "/subscription/public-pricing",
-    note: "Public price (E9.59). Read server-side from the Stripe Price object Checkout charges against — so this capture is the number a logged-out visitor actually sees. ⚠️ Stripe TEST mode until E9.8-P2; the amount will change at the live flip and this fixture should be re-captured then.",
+    note: "Public price (E9.59). Read server-side from the Stripe Price object Checkout charges against — so this capture is the number a logged-out visitor actually sees. ✅ Captured from Stripe LIVE mode (E9.8-P2 flip, 2026-08-16): $10.00/mo founding, price_1Twvan…, 100 seats. ⚠️ `founding_slots_remaining` DRIFTS with every real conversion, so a re-capture will differ there — that is expected and no test asserts it; the PRICE contract ($10 / usd / monthly / recurring / founding) is what `test_e9_8_p2_lambda_env_helper.py::TestTheGoLivePriceContract` pins.",
   },
 ]
 
