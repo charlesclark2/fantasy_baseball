@@ -33,6 +33,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import posthog from "posthog-js"
 import {
   useFantasyBoard,
@@ -41,6 +42,7 @@ import {
   useLeagueBoard,
   useMyTeams,
 } from "@/lib/fantasy-queries"
+import { Picker } from "@/components/ui/picker"
 import { freeSelection } from "@/lib/draft-optimizer"
 import type { Player } from "@/lib/draft-optimizer"
 import {
@@ -181,11 +183,29 @@ export function MyLeague() {
     free?.size ?? null,
   )
 
-  // ⚠️ ONE league — this surface is deliberately singular. `/fantasy/nfl/my-teams` already caps its
-  // response at the caller's quota, so for a free account this array holds at most one entry; taking
-  // `[0]` here is reading what the server served, not a second cap. My Teams remains the surface for
-  // a member browsing several.
-  const entry = teams?.[0] ?? null
+  // ── LEAGUE SELECTION (G100-C2) ────────────────────────────────────────────────────────────────
+  //
+  // `/fantasy/nfl/my-teams` caps its response at the caller's quota — 1 for a free account, up to
+  // 25 for a subscriber (`personalized_league_quota`) — so `teams` can carry more than one entry.
+  // Reading `[0]` unconditionally meant a multi-league subscriber only ever saw whichever league
+  // happened to be served first, with nothing on screen naming the others. The picker below fixes
+  // that; a free account's `teams` never exceeds one entry, so the picker simply does not render
+  // there and behavior is unchanged.
+  //
+  // Selection is read from the URL (`?league=<id>`), not component state alone, so a refresh or a
+  // shared link lands back on the SAME league rather than silently reverting to whichever one is
+  // first. An id that does not match any served league (stale link, a league that fell out of
+  // quota) falls back to the first entry — the exact behavior every caller had before this story.
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const requestedLeagueId = searchParams.get("league")
+  const entry = useMemo(() => {
+    if (!teams || teams.length === 0) return null
+    const requested = requestedLeagueId
+      ? teams.find((t) => t.league.league_id === requestedLeagueId)
+      : undefined
+    return requested ?? teams[0]
+  }, [teams, requestedLeagueId])
   const league = entry?.league ?? null
 
   // 🔒 NF-EPIC 1 — THE BOARD IS SCORED ON THE SERVER NOW. It used to arrive pre-built on `entry`,
@@ -349,6 +369,45 @@ export function MyLeague() {
           />
         </div>
       </SurfaceHeader>
+
+      {/* ── the league picker (G100-C2) ───────────────────────────────────────────────────────────
+          Only renders once there is something to switch BETWEEN — a free account's `teams` never
+          exceeds one entry, so this stays invisible there and the page behaves exactly as before.
+          Everything below the header keys off `league`/`entry`, so picking a different value
+          re-renders the whole page: roster, board and delta. */}
+      {!teamsLoading && teams && teams.length > 1 && (
+        <div className="mb-5 flex flex-wrap items-center gap-2" data-testid="league-picker">
+          <label
+            htmlFor="my-league-picker"
+            className="text-[11px] uppercase tracking-wider text-gray-500"
+          >
+            League
+          </label>
+          <Picker
+            id="my-league-picker"
+            ariaLabel="League"
+            value={league?.league_id ?? null}
+            onValueChange={(id) => {
+              // Mirrors the position-tab handler below: a new league can have a different row
+              // count at the previously-selected position, so the page opens at the top rather
+              // than on whatever page happened to be clamped for the old one.
+              setPos("All")
+              setPage(0)
+              const params = new URLSearchParams(searchParams.toString())
+              params.set("league", id)
+              router.replace(`/fantasy/my-league?${params.toString()}`, { scroll: false })
+            }}
+            // ⭐ ONE OPTION LABEL FORMAT for a league picker: `t.league.name` alone, matching the
+            // roster report's picker exactly (`components/fantasy/roster-report.tsx`) rather than
+            // inventing a second spelling here.
+            options={teams.map((t) => ({
+              value: t.league.league_id,
+              label: t.league.name,
+            }))}
+            className="h-auto min-w-[220px] rounded border border-[#262626] bg-[#0f0f0f] px-3 py-1.5 text-sm text-gray-200 focus:border-[#10b981]"
+          />
+        </div>
+      )}
 
       {/* ── no league yet ─────────────────────────────────────────────────────────────────────── */}
       {!teamsLoading && !hasSavedLeague && (

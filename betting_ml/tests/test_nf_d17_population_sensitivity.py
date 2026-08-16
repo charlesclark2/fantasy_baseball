@@ -326,8 +326,10 @@ class TestPreRegistrationIsPinned:
         """These are the numbers behind the LIVE public track-record headline. Changing them here
         would disable anchor A4 — the one check that proves the harness is measuring the same thing
         the public page claims."""
-        assert PRE.SHIPPED_DELTA_RHO == {"adp": 0.022, "mfl_adp": 0.173}
-        assert PRE.SHIPPED_N_SEASONS == {"adp": 6, "mfl_adp": 7}
+        # 2026-08-15: re-pinned to the NF-TR2b track-record refresh vintage (see the constant's
+        # history note) — the ONLY admissible reason to move it is a deliberate headline regeneration.
+        assert PRE.SHIPPED_DELTA_RHO == {"adp": 0.018, "mfl_adp": 0.169}
+        assert PRE.SHIPPED_N_SEASONS == {"adp": 7, "mfl_adp": 7}
 
     def test_only_real_draft_adp_sources_are_headline_eligible(self):
         assert PRE.HEADLINE_ELIGIBLE_SOURCES == ("adp", "mfl_adp")

@@ -37,7 +37,7 @@ the following February — one full season cycle).
 | Does anything assume these raw feeds are quiet in-season? | **No.** The only "the pull stops for the season" prose belongs to the **NCAAF** schedule, whose game-day `sports_ncaaf_dbt_schedule` genuinely takes over. The NFL game-day schedule rebuilds **marts** and ingests **nothing**, so widening the NFL window replaces no other writer. |
 | Can an in-season overwrite damage point-in-time fidelity? | **No.** The raw tier is a latest-snapshot tier by construction (`replaceWhere season=YYYY`), which is exactly *why* NF-W0a's PIT capture writes to its own store with its own `capture_timestamp`. |
 | Does it create a concurrent dbt writer? | **No.** The three NFL crons stay disjoint: roll-forward 06:15 Mon, Sleeper 06:30 daily, game-day mart rebuild 11:00 daily. |
-| Does it fix the Sleeper break? | **No, and the docstring says so.** `sports_nfl_sleeper_injuries_job` dies at `duckdb.connect()` in ~114ms and its bare `except` returns SUCCESS. A wider cron produces *more* green-and-empty runs. Tracked separately. |
+| Does it fix the Sleeper break? | **No, and the docstring says so.** `sports_nfl_sleeper_injuries_job` dies at `duckdb.connect()` in ~114ms and its bare `except` returns SUCCESS. A wider cron produces *more* green-and-empty runs. Tracked separately — ✅ **fixed by NF-INFRA1** (`docs/nf_infra1_sports_duckdb_volume.md`), which also lands this story's DuckDB precondition and unblocks the publish schedule. |
 
 **Verifying it on the box:** `scripts/check_nfl_schedule_coverage.py --strict`. It imports the
 DEPLOYED schedule module and iterates with **Dagster's own vendored cron engine** — ⚠️ `croniter` is
@@ -141,7 +141,11 @@ nfl_board_publish_op         (P2)  nf1_5 build (--market-refresh) → league boa
   op re-reads the manifest and asserts (a) `generated_at` is not older than this run, and (b)
   `adp_as_of` is present. An **unreadable** manifest is a failure, never a pass.
 - **Precondition.** The build chain reads the box's sports DuckDB, which is gitignored and therefore
-  absent from the image. The op checks for it first and pages with a named remedy.
+  absent from the image. The op checks for it first and pages with a named remedy. ✅ **NF-INFRA1
+  landed the precondition**: the file now lives on the `sports_duckdb` named volume at one
+  authoritative `SPORTS_DUCKDB_PATH` (deploy-gated via `env.required`), so this op and the build
+  that writes the database can no longer disagree about which file they mean —
+  `docs/nf_infra1_sports_duckdb_volume.md` carries the operator steps.
 
 ## 5. Honest framing — what this does NOT claim
 

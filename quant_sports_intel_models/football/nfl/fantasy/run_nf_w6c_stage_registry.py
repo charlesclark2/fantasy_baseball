@@ -49,8 +49,11 @@ _FANTASY_DIR = "quant_sports_intel_models/football/nfl/fantasy"
 #: representation contract, the provenance, the serving smoke AND the built parquet's sha256 —
 #: so pinning this manifest pins the (gitignored) parquet by digest.
 ARTIFACT = f"{_FANTASY_DIR}/ablation_results/nf_w6c_served_stat_distributions.json"
-#: The §0.5 record that CERTIFIED the six forms — cited as the validation, never re-run here.
+#: The two §0.5 records that CERTIFIED the seven forms — cited as the validation, never re-run
+#: here. NF-W6b ships six cells; NF-W6b-C is a SEPARATE fresh-family registration that ships the
+#: seventh (RB|rushing_tds) after W6b's own field failed to clear DSR for it.
 BAKEOFF_RECORD = f"{_FANTASY_DIR}/ablation_results/nf_w6b_stat_distributions.md"
+BAKEOFF_RECORD_W6BC = f"{_FANTASY_DIR}/ablation_results/nf_w6b_c_rb_rush_tds.md"
 #: The rollback target. Nothing per-stat-distributional has ever served, so there is no previous
 #: served version; what the raw line reverts to is the CHAMPION'S PER-STAT POINT MEAN (the NF-W1
 #: component head) — its validated record is the fallback the serving rule falls back to.
@@ -99,16 +102,23 @@ def stage_entry(registry_path: Path = R._REGISTRY_PATH) -> dict:
             "+13.5%, TE receiving_yards +14.2%, WR receiving_yards +11.5% of CRPS (crps_q199) vs "
             "the binding champion-faithful incumbent; 8/8 folds each, PBO 0.0, DSR 0.969-1.0, "
             "two-family BH-FDR, coverage floor, degenerate + permutation anchors all green. "
-            f"Record: {BAKEOFF_RECORD}. NF-W6c re-derives NOTHING: it fits those certified "
-            "constructions fresh on full train through the identical pinned code path "
-            "(stat_distribution_serving dispatches into stat_distributions.arm_*) and emits the "
-            "199-level representation. Serving-smoke readout (in-family check on the served week, "
-            f"NEVER a gate) is in the staged manifest; serve gw {prov['serve_gw']} "
+            f"Record: {BAKEOFF_RECORD}. NF-W6b-C per-stat distributional successor (SEPARATE "
+            "record, fresh registration, seed 20260816): SHIP RB|rushing_tds — `knn_quantile` "
+            "+12.966% CRPS vs the discrete climatology, 8/8 folds, PBO 0.0, DSR 1.0 (sr0 1.33) "
+            "where NF-W6b's OWN field could not clear DSR for this cell (sr0 ≈7.32, inflated "
+            "by an excluded incoherent arm) — a fresh, coherent, atom-aware family, not a re-score "
+            f"of W6b's field (MH2.2). Record: {BAKEOFF_RECORD_W6BC}. NF-W6c re-derives NOTHING: "
+            "it fits those certified constructions fresh on full train through the identical "
+            "pinned code path (stat_distribution_serving dispatches into stat_distributions.arm_*) "
+            "and emits the 199-level representation. Serving-smoke readout (in-family check on "
+            f"the served week, NEVER a gate) is in the staged manifest; serve gw {prov['serve_gw']} "
             f"({prov['serve_season']} wk {prov['serve_week']}), {prov['n_train_rows']} train rows "
-            f"= a superset of NF-W6b's purged fold train ({prov['train_containment']['n_fold_train']}"
-            f", +{prov['train_containment']['extra_rows_vs_fold_train']}), containment measured."),
+            "= a superset of NF-W6b's purged fold train "
+            f"({prov['train_containment']['n_fold_train']}, "
+            f"+{prov['train_containment']['extra_rows_vs_fold_train']}), containment measured."),
         "reviewed_by": ("Charlie (operator/PM) — NF-W6b Decision A (wire ALL SIX ship cells; "
-                        "points hurdle champion untouched), 2026-08-15"),
+                        "points hurdle champion untouched) + NF-W6b-C Decision C (wire RB "
+                        "rushing_tds once the fresh-family successor shipped), 2026-08-15"),
         "notes": (
             "STAGED CHALLENGER (NF-W6c) — inert at serve by construction: served_entry() returns "
             "champion-status entries only and no serving path reads this registry. "
@@ -117,15 +127,17 @@ def stage_entry(registry_path: Path = R._REGISTRY_PATH) -> dict:
             + ". ⛔ `scoring_contract_version` is deliberately ABSENT: nothing scores these "
             "distributions yet (this story is the SUBSTRATE; the arbitrary-league re-scoring "
             "consumer is a follow-on), and stamping a scoring contract no consumer honors would "
-            "be a lineage claim with no consumer. ⛔ The two recorded-null cells are NOT staged — "
-            "RB receiving_yards is PM Decision B (calendar-bound re-test on the same harness once "
-            "the 2026 folds exist) and RB rushing_tds is PM Decision C (deferred NF-W6b-C, which "
-            "requires a FRESH atom-aware family; its DSR is unreachable in NF-W6b's field, so it "
-            "must never ride this story's infrastructure into serving). ⛔ The points hurdle "
-            "champion (total fantasy points) is untouched — NF-W6b never tested it and never beat "
-            "it; these per-stat distributions sit BESIDE it on the raw line. Nothing "
-            "distributional has ever served per-stat, so fallback_artifact_uri is the NF-W1 base "
-            "champion's record = the per-stat POINT mean the raw line reverts to. "
+            "be a lineage claim with no consumer. ⛔ The remaining recorded-null cell is NOT "
+            "staged — RB receiving_yards is PM Decision B (calendar-bound re-test on the same "
+            "harness once the 2026 folds exist). RB rushing_tds (PM Decision C) IS now staged: "
+            "NF-W6b's own field never cleared DSR for it (an excluded linear-residual arm "
+            "inflated the field's cross-trial dispersion), so NF-W6b-C registered a FRESH, "
+            "coherent, atom-aware family that cleared DSR cleanly (1.0, sr0 1.33) — that "
+            "successor record, not a re-read of NF-W6b's null, is what licenses serving it. ⛔ The "
+            "points hurdle champion (total fantasy points) is untouched — NF-W6b never tested it "
+            "and never beat it; these per-stat distributions sit BESIDE it on the raw line. "
+            "Nothing distributional has ever served per-stat, so fallback_artifact_uri is the "
+            "NF-W1 base champion's record = the per-stat POINT mean the raw line reverts to. "
             "Edge-independent projection product (best_alpha = 0): a quantile bank is honest "
             "predictive uncertainty and carries no edge, ROI or win-rate claim."),
     }

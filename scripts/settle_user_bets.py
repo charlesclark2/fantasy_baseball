@@ -122,7 +122,16 @@ _PENDING_INDEX = "gsi-pending-by-game"
 # E9.42: pitcher-strikeout props settle against the starter's actual K total, not the
 # final score. Kept in sync with _PROP_MARKETS in app/backend/models/bets.py (defined
 # locally so this box script needs no app.backend / FastAPI import).
-_PROP_MARKETS = {"strikeouts over", "strikeouts under"}
+_K_PROP_MARKETS = {"strikeouts over", "strikeouts under"}
+# E5.10: batter TOTAL-BASES props, the log path for the /props Total Bases tab (E5.9).
+# ⚠️ UNLIKE the K markets there is NO mart primary for these — mart_batter_rolling_stats
+# carries `hits` and `home_runs` at game grain but NOT doubles/triples, and TB needs the
+# extra-base split (TB = 1B + 2·2B + 3·3B + 4·HR); `slg` cannot rescue it either (the mart
+# has PA, not AB). So the Stats API boxscore is the PRIMARY authority for TB, gated on the
+# same independent terminal-game confirmation the E9.49 K fallback uses — never a mid-game
+# read, which would bank a partial line as final.
+_TB_PROP_MARKETS = {"total bases over", "total bases under"}
+_PROP_MARKETS = _K_PROP_MARKETS | _TB_PROP_MARKETS
 
 
 def _aws_session() -> boto3.Session:
@@ -346,6 +355,97 @@ def _boxscore_starter_strikeouts(game_pk: int) -> dict[int, int]:
     return out
 
 
+def total_bases_from_batting_line(batting: dict) -> int | None:
+    """Total bases from one boxscore BATTING line, or None if it can't be computed.
+
+    TB = 1B + 2·2B + 3·3B + 4·HR, and singles are only knowable as `hits − 2B − 3B − HR`
+    (the boxscore reports hits and the extra-base splits, never singles directly). Returns
+    None — never 0 — when any component is missing, because a missing stat and a genuine
+    0-for-4 are different facts and only the second may settle a bet.
+
+    Pure + unit-tested: the shape is a real MLB Stats API `stats.batting` object."""
+    try:
+        hits = batting["hits"]
+        doubles = batting["doubles"]
+        triples = batting["triples"]
+        homers = batting["homeRuns"]
+    except (KeyError, TypeError):
+        return None
+    if any(v is None for v in (hits, doubles, triples, homers)):
+        return None
+    try:
+        hits, doubles, triples, homers = int(hits), int(doubles), int(triples), int(homers)
+    except (TypeError, ValueError):
+        return None
+    singles = hits - doubles - triples - homers
+    if singles < 0:
+        # Internally inconsistent line (extra-base hits exceeding hits) — refuse rather than
+        # settle off a nonsense total.
+        return None
+    return singles + 2 * doubles + 3 * triples + 4 * homers
+
+
+def _boxscore_batter_total_bases(game_pk: int) -> dict[int, int]:
+    """batter_id -> total bases for one game, from the live boxscore.
+
+    Every player carrying a batting line is included (unlike the K path's starters-only
+    filter — a TB prop rides on whoever batted, including a pinch hitter). A player who
+    appeared but did not bat has no `atBats` key path we rely on; his line simply yields
+    None and is skipped. Returns {} on any failure so the caller leaves the bet pending
+    rather than mis-settling. Never raises.
+    """
+    try:
+        import requests
+
+        resp = requests.get(f"{_STATSAPI}/game/{int(game_pk)}/boxscore", timeout=_HTTP_TIMEOUT)
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception:
+        log.warning("Stats API boxscore fetch failed for game %s", game_pk, exc_info=True)
+        return {}
+
+    out: dict[int, int] = {}
+    for side in ("home", "away"):
+        players = ((payload.get("teams") or {}).get(side) or {}).get("players") or {}
+        for entry in players.values():
+            batting = (entry.get("stats") or {}).get("batting") or {}
+            if not batting:
+                continue
+            tb = total_bases_from_batting_line(batting)
+            pid = (entry.get("person") or {}).get("id")
+            if tb is None or pid is None:
+                continue
+            try:
+                out[int(pid)] = int(tb)
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def _statsapi_total_bases(pairs: list[tuple[int, int]]) -> dict[tuple[int, int], int]:
+    """(game_pk, batter_id) -> total bases. The PRIMARY authority for TB props (no mart
+    carries the extra-base split — see _TB_PROP_MARKETS). Only games the LIVE schedule
+    independently confirms terminal are read, so a mid-game line can never settle a bet."""
+    if not pairs or not _fallback_enabled():
+        if pairs:
+            log.warning("PROP_STATSAPI_FALLBACK is off — %s total-bases prop bet(s) left "
+                        "pending (the boxscore is their only authority)", len(pairs))
+        return {}
+    game_pks = sorted({gp for gp, _ in pairs})
+    confirmed = _statsapi_final_games(game_pks)
+    resolved: dict[tuple[int, int], int] = {}
+    for gp in game_pks:
+        if gp not in confirmed:
+            log.warning("Game %s not confirmed terminal by the live Stats API — leaving its "
+                        "total-bases prop bet(s) pending", gp)
+            continue
+        batters = _boxscore_batter_total_bases(gp)
+        for g, pid in pairs:
+            if g == gp and pid in batters:
+                resolved[(g, pid)] = batters[pid]
+    return resolved
+
+
 def _statsapi_strikeouts(pairs: list[tuple[int, int]]) -> dict[tuple[int, int], int]:
     """(game_pk, pitcher_id) -> K for the pairs the mart could not answer.
 
@@ -373,17 +473,23 @@ def _statsapi_strikeouts(pairs: list[tuple[int, int]]) -> dict[tuple[int, int], 
 
 # ── Settlement math ──────────────────────────────────────────────────────────
 
-def _prop_outcome(market: str, actual_k: int, prop_line) -> str | None:
-    """Settle a pitcher-strikeout prop vs the starter's actual K total (over/under/push)."""
+def _prop_outcome(market: str, actual: int, prop_line) -> str | None:
+    """Settle a player prop vs that player's actual total (over/under/push).
+
+    Covers the strikeout markets (vs the starter's K total) and the E5.10 total-bases
+    markets (vs the batter's TB). Both grade identically — the market string only decides
+    which side of the line wins — but they are listed explicitly rather than parsed from an
+    "over"/"under" suffix so an unknown market returns None and leaves the bet pending
+    instead of being graded by accident."""
     if prop_line is None:
         return None
     line = float(prop_line)
-    if actual_k == line:
+    if actual == line:
         return "push"  # only possible on an integer line
-    higher = actual_k > line
-    if market == "strikeouts over":
+    higher = actual > line
+    if market in ("strikeouts over", "total bases over"):
         return "win" if higher else "loss"
-    if market == "strikeouts under":
+    if market in ("strikeouts under", "total bases under"):
         return "loss" if higher else "win"
     return None
 
@@ -469,8 +575,9 @@ def main(argv: list[str] | None = None) -> int:
     first_pitch_read_ok = True
     try:
         scores = _final_scores(conn, game_pks)
-        # Only pay for the starter-K read when a prop bet is actually pending.
-        has_props = any(b.get("market") in _PROP_MARKETS for b in pending)
+        # Only pay for the starter-K read when a K prop is actually pending. (TB props have
+        # no mart primary — see _TB_PROP_MARKETS — so they add nothing to read here.)
+        has_props = any(b.get("market") in _K_PROP_MARKETS for b in pending)
         strikeouts = _starter_strikeouts(conn, game_pks) if has_props else {}
     except Exception:
         log.exception("Failed to load settlement data from the S3 lakehouse")
@@ -525,7 +632,7 @@ def main(argv: list[str] | None = None) -> int:
     missing_pairs = sorted({
         (int(b["pending_game_pk"]), int(b["player_id"]))
         for b in pending
-        if b.get("market") in _PROP_MARKETS
+        if b.get("market") in _K_PROP_MARKETS
         and not b.get("outcome")          # an orphaned index entry is de-indexed, not re-graded
         and b.get("player_id") is not None
         and int(b["pending_game_pk"]) in scores
@@ -535,6 +642,23 @@ def main(argv: list[str] | None = None) -> int:
     if fallback_ks:
         log.info("Stats API boxscore fallback resolved %s of %s prop bet(s) the mart could "
                  "not answer", len(fallback_ks), len(missing_pairs))
+
+    # E5.10: total-bases props. The boxscore is their PRIMARY authority (no mart carries the
+    # extra-base split), so unlike the K path this is not a "the mart lagged" fallback —
+    # every TB bet on a scored game comes through here. Same one-schedule-call +
+    # one-boxscore-call-per-game budget, computed once however many bets ride on it.
+    tb_pairs = sorted({
+        (int(b["pending_game_pk"]), int(b["player_id"]))
+        for b in pending
+        if b.get("market") in _TB_PROP_MARKETS
+        and not b.get("outcome")
+        and b.get("player_id") is not None
+        and int(b["pending_game_pk"]) in scores
+    })
+    total_bases = _statsapi_total_bases(tb_pairs)
+    if tb_pairs:
+        log.info("Stats API boxscore resolved %s of %s total-bases prop bet(s)",
+                 len(total_bases), len(tb_pairs))
 
     settled_at = datetime.now(timezone.utc).isoformat()
     settled = 0
@@ -583,22 +707,33 @@ def main(argv: list[str] | None = None) -> int:
                 final_unsettled += 1
                 unresolved.append(bet)
                 continue
-            actual_k = strikeouts.get((gp, int(pid)))
-            if actual_k is None:
-                # E9.49: the mart lags the game's final by >= 1 day (Statcast → daily W2), so
-                # fall back to the live boxscore. Still None ⇒ the API could not confirm the
-                # game terminal, or the pitcher did not START (a scratch): leave pending, never
-                # mis-settle.
-                actual_k = fallback_ks.get((gp, int(pid)))
+            if market in _TB_PROP_MARKETS:
+                # E5.10: the boxscore is the only authority for TB (no mart carries the
+                # extra-base split), so there is no mart tier to try first.
+                actual = total_bases.get((gp, int(pid)))
                 source = "statsapi"
-            if actual_k is None:
-                log.warning("Bet %s: no strikeout row for pitcher %s in game %s yet, and the "
-                            "Stats API fallback could not resolve it (leaving pending)",
-                            bet.get("bet_id"), pid, gp)
+                if actual is None:
+                    log.warning("Bet %s: no total-bases line for batter %s in game %s — the "
+                                "Stats API could not confirm the game terminal, or the batter "
+                                "did not bat (leaving pending)", bet.get("bet_id"), pid, gp)
+            else:
+                actual = strikeouts.get((gp, int(pid)))
+                if actual is None:
+                    # E9.49: the mart lags the game's final by >= 1 day (Statcast → daily W2),
+                    # so fall back to the live boxscore. Still None ⇒ the API could not confirm
+                    # the game terminal, or the pitcher did not START (a scratch): leave
+                    # pending, never mis-settle.
+                    actual = fallback_ks.get((gp, int(pid)))
+                    source = "statsapi"
+                if actual is None:
+                    log.warning("Bet %s: no strikeout row for pitcher %s in game %s yet, and "
+                                "the Stats API fallback could not resolve it (leaving pending)",
+                                bet.get("bet_id"), pid, gp)
+            if actual is None:
                 final_unsettled += 1
                 unresolved.append(bet)
                 continue
-            outcome = _prop_outcome(market, actual_k, bet.get("prop_line"))
+            outcome = _prop_outcome(market, actual, bet.get("prop_line"))
         else:
             home, away = scores[gp]
             outcome = _outcome(market, home, away, bet.get("total_line"))

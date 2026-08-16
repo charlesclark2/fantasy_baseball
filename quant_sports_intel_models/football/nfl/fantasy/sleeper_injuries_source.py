@@ -29,6 +29,13 @@ Public API (mirrors `adp_source`/`sleeper_source`):
   load_sleeper_injuries(con, season, ...)            -> fetch + crosswalk + stamp (ingest entry point;
                                                         `run_sleeper_injuries_ingest.py` lands this to
                                                         `nfl/raw/sleeper_injuries`)
+  load_sleeper_injuries_with_coverage(con, season)   -> the same frame PLUS the coverage measured
+                                                        BEFORE the unresolved-row drop — the only
+                                                        place a collapsed crosswalk is visible
+                                                        (NF-INFRA1); use this for anything that WRITES
+  classify_land(coverage, ...)                       -> PURE land verdict: may this snapshot be
+                                                        written, or would it overwrite a good
+                                                        partition with a degraded one?
 
 Dependency-light (urllib + pandas), caches the raw JSON per calendar day so a run is reproducible
 offline once primed and a daily recurring capture naturally refetches a new snapshot.
@@ -151,6 +158,57 @@ def attach_gsis(con, df: pd.DataFrame, season: int, schema: str = "main_nfl_mart
     return out
 
 
+def load_sleeper_injuries_with_coverage(
+    con, season: int, cache_dir: "str | Path | None" = None, refresh: bool = False,
+    schema: str = "main_nfl_marts", timeout: int = 30,
+) -> "tuple[pd.DataFrame, dict]":
+    """The ingest entry point, plus the coverage measured **BEFORE** the unresolved-row drop.
+
+    ⭐ WHY THE PRE-DROP MEASUREMENT EXISTS (NF-INFRA1). `load_sleeper_injuries` drops rows that
+    never resolve a `player_id`, so `coverage()` on its OUTPUT reports `pct_matched = 100.0` **by
+    construction** — it cannot distinguish a healthy crosswalk from a collapsed one. That is not a
+    hypothetical blind spot: NF-FRESH1 measured that Sleeper's own NATIVE `gsis_id` covers only
+    16.7% of rostered players and 22.1% of FLAGGED ones, so a run whose crosswalk source is
+    missing still lands a plausible-looking, 100%-matched frame that has silently DROPPED 95 of
+    122 flagged players (Waddle, Pacheco among them) — strictly worse than an unambiguous break,
+    because it overwrites the good Delta partition and reports SUCCESS.
+
+    So the ratio that matters is `n_resolved / n_fetched`, and it is only observable here.
+    Returns `(landing_frame, coverage)`; feed the coverage to `classify_land` and DO NOT WRITE
+    unless it says so.
+    """
+    fetched = fetch_sleeper_players(cache_dir=cache_dir, refresh=refresh, timeout=timeout)
+    n_fetched = int(len(fetched))
+    if n_fetched:
+        native = fetched["gsis_id"].notna() & (fetched["gsis_id"].astype(str).str.strip() != "")
+    else:
+        native = pd.Series([], dtype=bool)
+
+    df = attach_gsis(con, fetched, season, schema=schema)
+    resolved = (df["player_id"].notna() & (df["player_id"].astype(str).str.strip() != "")
+                if n_fetched else pd.Series([], dtype=bool))
+    landed = df.loc[resolved].copy() if n_fetched else df.copy()
+    landed["season"] = int(season)
+    landed["ingested_at"] = datetime.now(timezone.utc).isoformat()
+    landed = landed.reindex(columns=_ASSET_COLS).reset_index(drop=True)
+
+    n_resolved = int(len(landed))
+    cov = {
+        "n_fetched": n_fetched,
+        "n_resolved": n_resolved,
+        "pct_resolved": round(100.0 * n_resolved / n_fetched, 1) if n_fetched else 0.0,
+        # The crosswalk's own contribution — the quantity that goes to ~0 when the sports DuckDB
+        # or `fct_player_week` is unavailable, which is precisely the degradation to refuse.
+        "n_native_gsis": int((native & resolved).sum()) if n_fetched else 0,
+        "n_crosswalk_resolved": int((~native & resolved).sum()) if n_fetched else 0,
+        "n_flagged": int(landed["proj_status"].notna().sum()) if n_resolved else 0,
+        "by_injury_status": ({k: int(v) for k, v in
+                              landed["injury_status"].value_counts(dropna=True).items()}
+                             if n_resolved else {}),
+    }
+    return landed, cov
+
+
 def load_sleeper_injuries(
     con, season: int, cache_dir: "str | Path | None" = None, refresh: bool = False,
     schema: str = "main_nfl_marts",
@@ -158,14 +216,83 @@ def load_sleeper_injuries(
     """Ingest entry point: fetch Sleeper's player feed, resolve `player_id` (native gsis_id + the
     deterministic name/pos fallback), stamp `season`/`ingested_at`. Rows that never resolve a
     `player_id` are dropped (nothing for the lake/projection join to use). Returns the
-    `run_sleeper_injuries_ingest.py` landing frame (`_ASSET_COLS`)."""
-    df = fetch_sleeper_players(cache_dir=cache_dir, refresh=refresh)
-    df = attach_gsis(con, df, season, schema=schema)
-    resolved = df["player_id"].notna() & (df["player_id"].astype(str).str.strip() != "")
-    df = df.loc[resolved].copy()
-    df["season"] = int(season)
-    df["ingested_at"] = datetime.now(timezone.utc).isoformat()
-    return df.reindex(columns=_ASSET_COLS).reset_index(drop=True)
+    `run_sleeper_injuries_ingest.py` landing frame (`_ASSET_COLS`).
+
+    Thin wrapper over `load_sleeper_injuries_with_coverage` — prefer that one for anything that
+    WRITES, so the land can be gated on `classify_land` (see its docstring)."""
+    landed, _ = load_sleeper_injuries_with_coverage(
+        con, season, cache_dir=cache_dir, refresh=refresh, schema=schema)
+    return landed
+
+
+# ── The land verdict (PURE — no IO, unit-tested offline) ────────────────────────────────────
+# The resolution rate separates two REGIMES, and the floor is set from those regimes rather than
+# reverse-engineered from a run's answer (the NF1.8 rule). ⭐ BOTH ARE NOW MEASURED — on the first
+# healthy land after NF-INFRA1 (box, 2026-08-15, season 2026, 4,038 fetched):
+#   * crosswalk WORKING  — n_resolved/n_fetched = 2,501/4,038 = 61.9%; the crosswalk roughly DOUBLES
+#                          resolution (1,259 native → 2,501 total), and 2,501 landed rows matches
+#                          the last-known-good 2,499 of 2026-07-26.
+#   * crosswalk ABSENT   — only Sleeper's own native `gsis_id` resolves: 1,259/4,038 = 31.2%.
+# ⚠️ NF-FRESH1's "16.7% of rostered / 22.1% of flagged" is a DIFFERENT DENOMINATOR (of rostered /
+# of flagged players, not of fetched rows) and must not be compared to this ratio directly. The
+# figure that binds here is 31.2%.
+# ⚠️ AND THE MARGIN IS ~12pp ON THE HEALTHY SIDE, NOT "wide": an earlier version of this comment
+# put the working regime at ~89-100%, which was the POST-DROP rate — i.e. the statistic
+# `load_sleeper_injuries_with_coverage` exists to replace, since it is 100% by construction. Do not
+# re-derive this floor from `coverage()` on a landed frame.
+# ⇒ 50% stays: it refuses a native-only land (31.2%) and admits the observed healthy rate (61.9%).
+# It should NOT be tightened toward 61.9 on this single observation — one measurement cannot bound
+# the seasonal variation in how many non-rostered players Sleeper's feed carries (the denominator
+# moves), and a floor that false-refuses is strictly worse than one that is generous. Revisit with
+# several months of the `pct_resolved` this now logs every run.
+DEFAULT_MIN_PCT_RESOLVED = 50.0
+
+# `n_flagged == 0` is suspicious, not impossible — Sleeper legitimately carries no long-absence
+# designations at some points in the calendar. It WARNs and still lands (the magnitude is in the
+# log), because refusing the write there would discard a real snapshot on a survivable signal.
+
+
+def classify_land(coverage: dict, min_pct_resolved: float = DEFAULT_MIN_PCT_RESOLVED) -> dict:
+    """PURE — decide whether a fetched Sleeper snapshot may be written, from `coverage`.
+
+    ⛔ A run that produced nothing must be RED, never a green run over a stale artifact
+    (NF-FRESH1). ⛔ And a DEGRADED run must not write at all: the Delta write is a whole-partition
+    overwrite, so landing a crosswalk-less frame destroys the good snapshot and looks healthy.
+
+    Returns `{verdict, should_write, severity, reason}` where `severity is None` means healthy.
+    """
+    n_fetched = int(coverage.get("n_fetched", 0) or 0)
+    n_resolved = int(coverage.get("n_resolved", 0) or 0)
+    pct = float(coverage.get("pct_resolved", 0.0) or 0.0)
+    n_flagged = int(coverage.get("n_flagged", 0) or 0)
+
+    if n_fetched <= 0:
+        return {"verdict": "EMPTY_FEED", "should_write": False, "severity": "CRITICAL",
+                "reason": ("Sleeper's v1/players/nfl returned ZERO skill-position players. That is "
+                           "an upstream outage or a changed payload shape, never a quiet day — the "
+                           "previous Delta commit is left untouched.")}
+    if n_resolved <= 0:
+        return {"verdict": "CROSSWALK_DEGRADED", "should_write": False, "severity": "CRITICAL",
+                "reason": (f"fetched {n_fetched} players and resolved a player_id for NONE of them. "
+                           "The (name, position) crosswalk off `fct_player_week` is unavailable — "
+                           "check the sports DuckDB and that the NFL marts are built.")}
+    if pct < float(min_pct_resolved):
+        return {"verdict": "CROSSWALK_DEGRADED", "should_write": False, "severity": "CRITICAL",
+                "reason": (f"only {n_resolved}/{n_fetched} ({pct}%) of fetched players resolved a "
+                           f"player_id, under the {min_pct_resolved}% floor "
+                           f"(native gsis {coverage.get('n_native_gsis')}, crosswalk "
+                           f"{coverage.get('n_crosswalk_resolved')}). Landing this would OVERWRITE "
+                           "the good partition with a frame missing most flagged players while "
+                           "reporting success — refusing the write instead.")}
+    if n_flagged <= 0:
+        return {"verdict": "PARTIAL", "should_write": True, "severity": "WARN",
+                "reason": (f"landed {n_resolved}/{n_fetched} ({pct}%) players but ZERO carry a "
+                           "long-absence designation (PUP/RES/NFI/SUS). Possible upstream vocabulary "
+                           "change; the snapshot is still written.")}
+    return {"verdict": "OK", "should_write": True, "severity": None,
+            "reason": (f"landed {n_resolved}/{n_fetched} ({pct}%) players, {n_flagged} flagged "
+                       f"(native gsis {coverage.get('n_native_gsis')}, crosswalk "
+                       f"{coverage.get('n_crosswalk_resolved')}).")}
 
 
 def coverage(df: pd.DataFrame) -> dict:

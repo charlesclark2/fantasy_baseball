@@ -1,8 +1,9 @@
 """run_nf_w6c_serve_stat_distributions.py — NF-W6c: build the served per-stat distributions.
 
-Fits the SIX NF-W6b SHIP cells fresh on full train through the identical pinned code path
-(`stat_distribution_serving` dispatches into `stat_distributions.arm_*`; nothing is re-derived
-here) and writes the served 199-level artifact plus its manifest.
+Fits the SEVEN certified SHIP cells — NF-W6b's six plus NF-W6b-C's RB|rushing_tds successor —
+fresh on full train through the identical pinned code path (`stat_distribution_serving` dispatches
+into `stat_distributions.arm_*`; nothing is re-derived here) and writes the served 199-level
+artifact plus its manifest.
 
 ⛔ NO BAKE-OFF, NO SELECTION, NO GATE. NF-W6b's verdicts are settled; this runner serves them.
 The realized-label readout it prints is a SERVING SMOKE — it shows a fresh full-train fit lands in
@@ -54,6 +55,7 @@ _FANTASY_DIR = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy"
 _REPORT_DIR = _FANTASY_DIR / "ablation_results"
 _ARTIFACT_DIR = _FANTASY_DIR / "artifacts"
 RECORD_JSON = _PROJECT_ROOT / SDS.RECORD_RELPATH
+RECORD_JSON_W6BC = _PROJECT_ROOT / SDS.RECORD_RELPATH_W6BC
 SEASONS = W6R.SEASONS
 #: `--smoke` trains on the most recent SMOKE_TRAIN_WEEKS global weeks only — a PATH PROOF that the
 #: dispatch, the representation contract and the report all run end to end. ⛔ Its artifact is NOT
@@ -163,14 +165,16 @@ def write_report(payload: dict, path: Path) -> None:  # noqa: C901 — a report,
       + (" · ⚠️ **SMOKE**" if payload["smoke"] else ""))
     p("")
     p("> ⚖️ **Edge-independent projection product** — `best_alpha = 0`, **deploy-held**. This "
-      "story WIRES an already-certified result: NF-W6b's six SHIP cells are fitted fresh on full "
-      "train through the identical pinned code path and emitted in the served 199-level "
-      "representation. ⛔ No bake-off, no selection, no gate, no re-reading of a settled verdict. "
+      "story WIRES already-certified results: NF-W6b's six SHIP cells plus NF-W6b-C's RB "
+      "rushing_tds successor are fitted fresh on full train through the identical pinned code "
+      "path and emitted in the served 199-level representation. ⛔ No bake-off, no selection, no "
+      "gate, no re-reading of a settled verdict. "
       "The distributions are honest predictive UNCERTAINTY (a quantile bank and its P(0)); they "
       "make no edge, ROI or win-rate claim. The points hurdle champion (total fantasy points) is "
       "UNTOUCHED — these sit beside it on the raw line.")
     p("")
-    p("## Served cells (cell → the NF-W6b winning form → the pinned constructing function)")
+    p("## Served cells (cell → the certifying record's winning form → the pinned constructing "
+      "function)")
     p("")
     p("| cell | form | constructing function | serve rows | P(0) served | q10 | q50 | q90 |")
     p("|---|---|---|---|---|---|---|---|")
@@ -178,11 +182,12 @@ def write_report(payload: dict, path: Path) -> None:  # noqa: C901 — a report,
         p(f"| {_md(cell)} | {man['cells'][cell]} | `SD.arm_{man['cells'][cell]}` | {s['n']} | "
           f"{s['p_zero_mean']} | {s['q10_mean']} | {s['q50_mean']} | {s['q90_mean']} |")
     p("")
-    p("## Serving smoke — fresh full-train fit vs the NF-W6b record (⛔ NEVER a gate)")
+    p("## Serving smoke — fresh full-train fit vs the certifying records (⛔ NEVER a gate)")
     p("")
-    p("A single week against a record that pools 8 half-season folds: these differ by sampling "
-      "alone. What this table is FOR is the structural break — a dead zero atom, a collapsed "
-      "band, a cell served by the wrong form — which is what a wiring defect looks like.")
+    p("A single week against records that each pool 8 half-season folds (NF-W6b for six cells, "
+      "NF-W6b-C for RB|rushing_tds): these differ by sampling alone. What this table is FOR is "
+      "the structural break — a dead zero atom, a collapsed band, a cell served by the wrong "
+      "form — which is what a wiring defect looks like.")
     p("")
     p("| cell | n | CRPS fresh | CRPS record | cov80 fresh | cov80 record | P(0) fresh | "
       "P(0) record | realized P(0) |")
@@ -215,9 +220,11 @@ def write_report(payload: dict, path: Path) -> None:  # noqa: C901 — a report,
         p(f"  - ⚠️ {c['note']}")
     p(f"- features: the champion set, {len(man['features'])} columns (⛔ no new features — the "
       f"NF-W6b prereg constraint carries to serving).")
-    p(f"- withheld NULL cells (⛔ not served): {list(man['withheld_null_cells'])} — RB "
-      f"receiving_yards is PM Decision B (calendar-bound re-test), RB rushing_tds is PM Decision "
-      f"C (deferred NF-W6b-C, a FRESH atom-aware family).")
+    p(f"- withheld NULL cell (⛔ not served): {list(man['withheld_null_cells'])} — RB "
+      f"receiving_yards is PM Decision B (calendar-bound re-test on the same harness once the "
+      f"2026 folds exist). RB rushing_tds (PM Decision C) is no longer withheld: NF-W6b-C's "
+      f"fresh atom-aware family (a separate §0.5 record) shipped it, and NF-W6c-wire moved it "
+      f"into the served set under NF-G0 governance.")
     p(f"- CLOSED cells (⛔ re-opening needs a different mechanism): {list(man['closed_cells'])}.")
     art = payload.get("built_artifact") or {}
     p(f"- built artifact: `{art.get('path')}` — {art.get('rows')} rows, {art.get('bytes')} bytes, "
@@ -286,7 +293,8 @@ def main(argv=None) -> int:
         "representation": SDS.representation_manifest(),
         "provenance": provenance,
         "cell_summary": cell_summary,
-        "serving_smoke": serving_smoke(frame, serve, SDS.record_reference(RECORD_JSON)),
+        "serving_smoke": serving_smoke(
+            frame, serve, SDS.all_record_references(RECORD_JSON, RECORD_JSON_W6BC)),
         "promote_blockers": list(SDS.PROMOTE_BLOCKERS),
         "built_artifact": {
             "path": str(parquet_path.relative_to(_PROJECT_ROOT)),

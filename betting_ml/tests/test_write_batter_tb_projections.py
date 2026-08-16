@@ -241,3 +241,105 @@ def test_writer_is_market_blind():
     hits = {f for f in forbidden
             if f in names or any(f in s for s in strings if len(s) < 500)}
     assert not hits, f"market/price columns referenced in the serving writer: {hits}"
+
+
+# ---------------------------------------------------------------------------
+# E5.10 — population members whose SIDE is unknown must never be served
+#
+# The writer's population is the posted lineup UNION the EB posterior build. EB carries no
+# team/home_away column (verified against the live table), so an EB-only batter has no
+# determinable side and would render as "Unknown matchup" — a group header with neither team
+# named. Observed live on 2026-08-15. These cannot be exercised by a real run (the live slate
+# has EB and lineups landing together), which is exactly why they are unit tests.
+# ---------------------------------------------------------------------------
+
+def _load_side_helper():
+    """Import `pairs_with_a_known_side` by path — the writer is a script, not a package
+    module, and importing it wholesale would pull heavy deps into the fast gate."""
+    src = _WRITER.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    fn = next(n for n in tree.body
+              if isinstance(n, ast.FunctionDef) and n.name == "pairs_with_a_known_side")
+    ns: dict = {}
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), str(_WRITER), "exec"), ns)
+    return ns["pairs_with_a_known_side"]
+
+
+def test_a_batter_in_the_lineup_is_servable():
+    keep, drop = _load_side_helper()(
+        {(1, 100), (1, 101)},
+        {1: {100: {"is_home": True}, 101: {"is_home": False}}},
+    )
+    assert keep == {(1, 100), (1, 101)}
+    assert drop == []
+
+
+def test_an_eb_only_batter_is_dropped_because_the_card_would_say_unknown_matchup():
+    """The RED-provable core: batter 202 is in the population (EB) but not in any lineup, so
+    team/opponent are unknowable. Deleting the filter makes this assertion fail."""
+    keep, drop = _load_side_helper()(
+        {(2, 200), (2, 202)},
+        {2: {200: {"is_home": True}}},
+    )
+    assert keep == {(2, 200)}, "an EB-only batter must not be served"
+    assert drop == [(2, 202)]
+
+
+def test_a_game_with_no_posted_lineup_at_all_is_dropped_whole():
+    """EB built before any lineup posted (the two 2026-08-15 late games): no batter in that
+    game has a side, so the whole game is withheld rather than shipped unnamed."""
+    keep, drop = _load_side_helper()(
+        {(3, 300), (3, 301), (4, 400)},
+        {4: {400: {"is_home": True}}},
+    )
+    assert keep == {(4, 400)}
+    assert drop == [(3, 300), (3, 301)]
+
+
+def test_the_filter_is_not_vacuous_on_an_empty_population():
+    """An empty population must yield an empty result, not silently pass everything through
+    (NF1.7 (a) — a check that filters nothing has not been exercised)."""
+    keep, drop = _load_side_helper()(set(), {1: {100: {"is_home": True}}})
+    assert keep == set()
+    assert drop == []
+
+
+# ---------------------------------------------------------------------------
+# E5.10 — display-name picking. The posted-lineup feed carries one row per slot per game, so
+# one batter_id can arrive with several spellings; the served name must be deterministic (a
+# re-run flipping a name is a user-visible change with no cause). Both cases below are REAL
+# spellings observed on the 2026-08-15 slate.
+# ---------------------------------------------------------------------------
+
+def _load_name_picker():
+    src = _WRITER.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    fn = next(n for n in tree.body
+              if isinstance(n, ast.FunctionDef) and n.name == "pick_display_name")
+    ns: dict = {"Sequence": list}
+    exec(compile(ast.Module(body=[fn], type_ignores=[]), str(_WRITER), "exec"), ns)
+    return ns["pick_display_name"]
+
+
+def test_a_suffix_spelling_wins_over_the_bare_name():
+    """`George Lombard Jr.` / `George Lombard` — the suffix is the more precise identity."""
+    assert _load_name_picker()(["George Lombard", "George Lombard Jr."]) == "George Lombard Jr."
+
+
+def test_internal_double_spacing_collapses_to_one_name():
+    """`Hao-Yu  Lee` (double space) and `Hao-Yu Lee` are ONE player, not two spellings."""
+    assert _load_name_picker()(["Hao-Yu  Lee", "Hao-Yu Lee"]) == "Hao-Yu Lee"
+
+
+def test_the_pick_is_order_independent():
+    """Feed order is an accident of the slot union — it must not decide the served name."""
+    pick = _load_name_picker()
+    assert pick(["George Lombard", "George Lombard Jr."]) == pick(
+        ["George Lombard Jr.", "George Lombard"])
+
+
+def test_blank_and_missing_spellings_yield_no_name_rather_than_an_empty_string():
+    """An empty string would serve a nameless card; the caller must see None and skip."""
+    pick = _load_name_picker()
+    assert pick([]) is None
+    assert pick(["", "   ", None]) is None

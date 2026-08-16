@@ -366,6 +366,30 @@ def _adp_span(scorecard: dict) -> tuple[list[int], str]:
     return seasons, (f"{seasons[0]}–{seasons[-1]}" if seasons else "the scored seasons")
 
 
+def _require_valid_uncertainty_run(uncertainty: dict) -> None:
+    """A VOID NF-D17 run must not feed a public claim. NF-D17 §5 voids the WHOLE reading when any
+    anchor (A1–A3) or the A4 reproduction pin fails — its `delta_rho_mean`/bootstrap are still
+    written to the JSON, and `_reconcile` would happily match them to a fresh scorecard (found
+    2026-08-15: a rebuild moved the headline, A4 read the OLD pin, the run said VOID, and nothing
+    downstream looked). Refuse on the artifact's OWN verdict; a missing verdict is UNEVALUABLE and
+    refused too (NF1.7 (a))."""
+    repro = uncertainty.get("reproduction") or {}
+    anchors = uncertainty.get("anchor_summary") or {}
+    rec = str((uncertainty.get("decision") or {}).get("recommendation") or "")
+    problems = []
+    if repro.get("all_pass") is not True:
+        problems.append("A4 reproduction did not pass (the harness is not measuring the artifact the "
+                        "public headline is built from — re-pin SHIPPED_DELTA_RHO/SHIPPED_N_SEASONS "
+                        "in the SAME change as the regenerated scorecard, then re-run)")
+    if anchors.get("all_pass") is not True:
+        problems.append("anchors A1–A3 did not all pass")
+    if rec.upper().startswith("VOID"):
+        problems.append(f"the run's own recommendation is {rec!r}")
+    if problems:
+        raise ValueError("the NF-D17 uncertainty artifact is not a valid reading — refusing to build "
+                         "a claim from it: " + "; ".join(problems))
+
+
 def shipped_uncertainty(uncertainty: dict) -> dict:
     """The NF-D17 reading the PUBLIC claim is about — P0_shipped × `adp`, with its bootstrap.
 
@@ -416,6 +440,7 @@ def build_claim(scorecard: dict, uncertainty: dict) -> dict:
     Raises rather than degrading if either artifact is missing what the claim must disclose: an
     unpublishable claim is a loud failure, never a quietly weaker one (NF1.7 (a) — a disclosure that
     could not be evaluated is not a disclosure that passed)."""
+    _require_valid_uncertainty_run(uncertainty)
     agg = _adp_aggregate(scorecard)
     adp_seasons, span = _adp_span(scorecard)
     unc = shipped_uncertainty(uncertainty)
@@ -451,7 +476,7 @@ def build_claim(scorecard: dict, uncertainty: dict) -> dict:
 
     lead = _screen("lead", _build_lead(
         span=span, n_seasons=agg["n_seasons"], gap=gap, could_be_luck=could_be_luck,
-        level_positions=level_positions,
+        level_positions=level_positions, behind_positions=behind_positions,
     ))
     precise = _screen("precise", _build_precise(
         span=span, n_seasons=agg["n_seasons"], us=us, them=them, gap=gap,
@@ -522,7 +547,7 @@ _ARCHITECTURE_NOTE = (
 
 
 def _build_lead(*, span: str, n_seasons: int, gap: float, could_be_luck: bool,
-                level_positions: list[str]) -> str:
+                level_positions: list[str], behind_positions: list[str] = ()) -> str:
     """The CONSUMER lead: what the product gives you FIRST, the benchmark comparison second.
 
     ⭐ SIGN-AWARE AND INTERVAL-AWARE BY CONSTRUCTION. Plain prose reads as a claim in a way the old
@@ -554,8 +579,18 @@ def _build_lead(*, span: str, n_seasons: int, gap: float, could_be_luck: bool,
             f"order and the draft-day consensus finished level."
         )
     caveats = ["the gap is small", "it swings a lot from year to year and from position to position"]
+    # ⭐ SYMMETRIC BY CONSTRUCTION (2026-08-15): the lead names a position where we are level AND a
+    #    position where the crowd is ahead. The first cut named only the wash — so the day running
+    #    back slid from −0.000 to −0.010 (across the ±0.005 display band, still deep inside the noise)
+    #    the lead went from "at running back it is basically even" to naming nothing, while the
+    #    paragraph above it still read "our order within each position turned out a little closer".
+    #    A hedge that disappears when the evidence gets WORSE is the failure this copy exists to prevent.
     if level_positions:
-        caveats.append(f"and at {_join(level_positions)} it is basically even")
+        caveats.append(f"at {_join(level_positions)} it is basically even")
+    if behind_positions:
+        caveats.append(f"at {_join(list(behind_positions))} the crowd's order was slightly better than ours")
+    if len(caveats) > 2:
+        caveats[-1] = "and " + caveats[-1]
     hedge = f"But {', '.join(caveats[:-1])}, {caveats[-1]}." if len(caveats) > 1 else f"But {caveats[0]}."
     if could_be_luck:
         hedge += " It is small enough that it could just be luck — we are not promising it repeats."

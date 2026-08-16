@@ -109,6 +109,35 @@ Every position is negative, every season is negative (2019 −44.8 → 2025 −2
 > whose leg is separately and knowingly cold.) Full measurement:
 > `ablation_results/nf_recal1_level_recalibration.md` §0–1.
 
+> ### ✅ RESOLVED BY NF-TR2 / NF-TR2b (2026-08-15) — DECOMPOSED, THEN CORRECTED (code-ready, deploy-held)
+>
+> **The decomposition (Step 1, exact row identity `p−y = r̂(ĝ−g) + g(r̂−r)`, incumbent-anchored
+> 2013–2025 tier, n 2,028, bias −12.85):** availability **+3.7** — we slightly OVER-project games on
+> the tier, so the injury discount is NOT the cause and stays — and per-game RATE **−16.6**; rate
+> ratio RB 0.864 · TE 0.837 · WR 0.848 · QB 0.985 ⇒ a per-position PROPORTIONAL rate lowball. The
+> "availability carries most of it" reading above came from the LIVE board's projected games against
+> a differently-scoped population.
+>
+> **The correction that ships (NF-TR2b, `veteran_level_policy`):** a per-position MULTIPLICATIVE
+> constant on the per-game rate, `k_q = Σ realized / Σ projected` over the tier rows of the trailing
+> 5 target seasons (window DERIVED from the thinnest position's rows/season, not tuned), fitted at
+> build time walk-forward (a backtest board for Y is fitted on < Y). Held-out 2013–2025: CRPS 49.34
+> vs 49.92, PBO 0.0, DSR 0.9995 (declared 3-trial field) / 0.999 (under NF-B3's field), p 0.0002;
+> pooled OOF tier bias −12.85 → +1.41 (RB −21.5→−5.3, WR −15.8→+1.4, TE −9.1→+3.1, QB −0.6→+7.6
+> within 2·SE); within-position order EXACT; rookies untouched; games untouched. 2026 board: k = QB
+> 0.929 · RB 1.248 · WR 1.100 · TE 1.112 (QB −7.1% / RB +24.8% / WR +10.0% / TE +11.2%) — RBs move
+> UP the overall board relative to QBs. ⭐ The full-history mean-match (NF-TR2) was REFUSED by its own
+> no-inflation gate — the level is NON-STATIONARY (2007–09 a different regime; QB slightly HOT since
+> 2019) — which is why the window exists.
+>
+> ⭐ **THE BAND IS UNCHANGED, and that is a finding:** the served `knn_norm` band is built from
+> REALIZED outcomes of similarly-projected players, so it already sat at the realized level (the point
+> sat at 0.46 of its own band). Serving queries the band model at the incumbent-equivalent point so
+> the NF1.9-validated band stays byte-identical; NF-RECAL1/B3's scaling of the band with the point is
+> what put their CRPS optimum at λ≈0.5. Records: `ablation_results/nf_tr2_level_recalibration.md` +
+> `..._b.md`. ⏭️ Post-merge operator: rebuild + republish the board (NF-FRESH2 loop), stage/promote
+> `level_model_version` in the NF-G0 registry, re-run `run_interval_revalidation`.
+
 **Two durable methodology cautions:**
 1. ⛔ **Do NOT cite the outcome-BUCKETED decile table** (−123 on the top realized decile, +45 on the bottom) as evidence of bias/compression — that pattern appears even for a **perfectly-calibrated** projection because sorting on the REALIZED outcome selects for positive noise; it cannot distinguish bias from correct shrinkage. The **unconditional per-position means above** are the honest statistic.
 2. The games figures are from the **live 2026 board** while the bias is from the **frozen backtest** — suggestive, not proof of the availability decomposition; the same gap must be **confirmed on the live board** (2026 has no realized outcomes yet) before scoping any recalibration.

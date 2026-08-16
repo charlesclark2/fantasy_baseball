@@ -399,11 +399,15 @@ def _ridge_fit_predict(X_tr, y_m, y_t, X_ev, alpha: float = _RIDGE_ALPHA):
 # Scoring one arm on one fold
 # ===========================================================================
 
-def _arm_columns(arm: str, fold: Fold, ref_cols: list[str]):
+def _arm_columns(arm: str, fold: Fold, ref_cols: list[str], blocks: tuple = BLOCKS):
     """Materialise (train, eval, inner-train, inner-holdout) matrices for `arm`.
 
     An anchor that reuses the reference features returns them unchanged; `hfa_global` is the matched
-    LEVEL-ONLY foil for H1b (identical construction, shrinkage → ∞)."""
+    LEVEL-ONLY foil for H1b (identical construction, shrinkage → ∞).
+
+    `blocks` is the registry an arm name is resolved against — P2.1's `BLOCKS` by default. A
+    successor registration (S1) passes its OWN pre-registered registry so it can be scored by this
+    exact function (same folds, learner, form, seed, draws) without touching P2.1's registry."""
     tr, ev, itr, iho = fold.tr, fold.ev, fold.inner_tr, fold.inner_ho
 
     def build(a: pd.DataFrame, b: pd.DataFrame):
@@ -414,7 +418,7 @@ def _arm_columns(arm: str, fold: Fold, ref_cols: list[str]):
             return (pd.concat([a[ref_cols], a[["is_neutral_site"]], x], axis=1),
                     pd.concat([b[ref_cols], b[["is_neutral_site"]], y], axis=1),
                     list(ref_cols) + ["is_neutral_site"] + list(x.columns))
-        blk = next(bb for bb in BLOCKS if bb.arm == arm)
+        blk = next(bb for bb in blocks if bb.arm == arm)
         x, y, names = block_columns(blk, a, b)
         return (pd.concat([a[ref_cols], x], axis=1), pd.concat([b[ref_cols], y], axis=1),
                 list(dict.fromkeys(list(ref_cols) + names)))
@@ -428,8 +432,8 @@ def _arm_columns(arm: str, fold: Fold, ref_cols: list[str]):
 
 
 def score_arm_fold(arm: str, fold: Fold, ref_cols: list[str], rng: np.random.Generator,
-                   *, n_draws: int = _N_DRAWS) -> dict[str, Any]:
-    tr_f, ev_f, itr_f, iho_f, cols = _arm_columns(arm, fold, ref_cols)
+                   *, n_draws: int = _N_DRAWS, blocks: tuple = BLOCKS) -> dict[str, Any]:
+    tr_f, ev_f, itr_f, iho_f, cols = _arm_columns(arm, fold, ref_cols, blocks=blocks)
     assert_market_blind(cols, context=f"{_STORY} {arm} fold {fold.eval_year}")
 
     y_m_tr = fold.tr[_MARGIN].to_numpy(float)

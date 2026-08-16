@@ -57,6 +57,9 @@ from quant_sports_intel_models.football.nfl.fantasy import season_projection as 
 from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
     rookie_publish_policy as _ROOKIE_POLICY,
 )
+from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
+    veteran_level_policy as _LEVEL_POLICY,
+)
 from quant_sports_intel_models.football.nfl.fantasy import win_total_source  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import xfp_source  # noqa: E402
 
@@ -73,6 +76,86 @@ _ROOKIE_PARQUET = (
     _PROJECT_ROOT
     / "quant_sports_intel_models/football/ncaaf/models/artifacts/ncaaf_nfl_rookie_projections.parquet"
 )
+# The SAME frame in the sports lake. `run_college_nfl_translation.py --s3` writes BOTH: the local
+# parquet above (unconditionally) and this Delta table (partitioned by `draft_year`, plus a `season`
+# partition column). It is also what the `ncaaf_nfl_rookie_projections` dbt view reads, so it is the
+# authoritative copy.
+_ROOKIE_LAKE_SOURCE = "nfl_rookie_projections"
+_ROOKIE_LAKE_TIER = "derived"
+_rookie_frame_cache: "tuple[str, pd.DataFrame] | None" = None
+
+
+def load_rookie_projection_frame() -> pd.DataFrame:
+    """The NCAAF-P1A college→NFL rookie projections — from the local artifact, else from the LAKE.
+
+    🚨 WHY THE FALLBACK EXISTS (NF-INFRA1, 2026-08-15). `_ROOKIE_PARQUET` is a **gitignored** output
+    of a laptop `run_college_nfl_translation.py` run (`*.parquet` in that artifacts dir's own
+    `.gitignore`), so it is ABSENT from the box's `COPY . .` image. The first time the board build
+    ever ran on the box it died here with a bare `FileNotFoundError` — the SAME class as the sports
+    DuckDB that story fixed: a build step depending on an artifact the box has no way to obtain, and
+    which `/app` being replaced by each image means it could never durably acquire either.
+    ⛔ Copying the parquet onto the box is NOT the fix: `/app` is replaced by every deploy, so it
+    would silently vanish on the next one — the deploy-ephemeral trap, one artifact over.
+
+    ORDER — local first, lake second, and that is deliberate in BOTH directions:
+      * local first, so a LAPTOP build is **byte-identical** to every board this repo has certified.
+        Changing which copy the laptop reads would silently move a published board, which is a far
+        worse failure than the one being fixed.
+      * lake second, so the BOX (where the local copy can never exist) reads the authoritative table
+        instead of dying.
+    ⭐ AND IT LOGS WHICH ONE IT CHOSE, with the row count and the local file's mtime. A source
+    preference that does not announce itself is exactly how the pre-draft board regen silently
+    published a 2-day-old board; a wrong pick has to be VISIBLE in the run log.
+
+    ⚠️ RESIDUAL RISK, stated rather than hidden: on a laptop whose local parquet is older than the
+    lake, this prefers the stale copy. That is the PRE-EXISTING behaviour (until now the local file
+    was the only source), so it is not a regression — but the mtime in the log line is what makes it
+    findable. Re-run `run_college_nfl_translation.py --s3` to refresh both together.
+
+    Cached per process so one build reads one vintage (three call sites) rather than three.
+    """
+    global _rookie_frame_cache
+    if _rookie_frame_cache is not None:
+        return _rookie_frame_cache[1].copy()
+
+    if _ROOKIE_PARQUET.exists():
+        df = pd.read_parquet(_ROOKIE_PARQUET)
+        mtime = datetime.fromtimestamp(_ROOKIE_PARQUET.stat().st_mtime, tz=timezone.utc)
+        log.info("rookie projections: %d rows from the LOCAL artifact %s (mtime %s)",
+                 len(df), _ROOKIE_PARQUET, mtime.isoformat())
+        _rookie_frame_cache = ("local", df)
+        return df.copy()
+
+    try:
+        from quant_sports_intel_models.football.ncaaf.ingest.query_lake import delta, q
+
+        expr = delta(_ROOKIE_LAKE_SOURCE, sport="ncaaf", tier=_ROOKIE_LAKE_TIER)
+        df = q(f"select * from {expr}")
+    except Exception as exc:  # noqa: BLE001 — re-raised below with the operator's actual cure
+        raise FileNotFoundError(
+            f"the NCAAF-P1A rookie projections are unavailable from BOTH sources.\n"
+            f"  local artifact : {_ROOKIE_PARQUET} (absent — it is gitignored, so it is never in "
+            f"the deployed image)\n"
+            f"  sports lake    : ncaaf/{_ROOKIE_LAKE_TIER}/{_ROOKIE_LAKE_SOURCE} "
+            f"({type(exc).__name__}: {exc})\n\n"
+            f"On the BOX the lake is the only source: check SPORTS_LAKE_REGION=us-east-2 and that "
+            f"the instance role can read the sports lake bucket. On a LAPTOP, run "
+            f"`run_college_nfl_translation.py --s3` once to produce both copies."
+        ) from exc
+
+    if df.empty:
+        # A readable-but-empty table would silently produce a board with NO rookies — the
+        # silent-empty class. Refuse it here rather than shipping a rookie-less board.
+        raise ValueError(
+            f"the sports lake table ncaaf/{_ROOKIE_LAKE_TIER}/{_ROOKIE_LAKE_SOURCE} read "
+            f"successfully but is EMPTY. A board built from it would carry no rookies at all, so "
+            f"this refuses rather than publishing one. Re-run run_college_nfl_translation.py --s3.")
+    log.info("rookie projections: %d rows from the SPORTS LAKE "
+             "(ncaaf/%s/%s) — the local artifact is absent, which is expected ON THE BOX "
+             "(it is gitignored and therefore not in the image)",
+             len(df), _ROOKIE_LAKE_TIER, _ROOKIE_LAKE_SOURCE)
+    _rookie_frame_cache = ("lake", df)
+    return df.copy()
 
 # The final emitted schema (the input contract for MVP-2 / NF-C1). Ordered for readability.
 OUTPUT_COLS = [
@@ -94,6 +177,13 @@ OUTPUT_COLS = [
     #    that travels without saying so can be re-read later as an optimised selection.
     "rookie_selection_status", "rookie_shrink_lambda", "rookie_statistically_selected",
     "rookie_source_model", "rookie_decision_story",
+    # ── NF-TR2b: the VETERAN-LEVEL POLICY STAMP, board-wide, same reasoning as the rookie stamp above.
+    # `veteran_level_params` is the fitted per-position constant as a JSON string (this board's
+    # actual correction, walk-forward-fitted at build time — never the policy module's word for it);
+    # `level_model_version` is what the NF-G0 `model_stamp_consistency` gate reconciles.
+    "veteran_level_status", "veteran_level_form", "veteran_level_params", "veteran_level_window",
+    "veteran_level_source_model", "veteran_level_decision_story",
+    "veteran_level_statistically_selected", "level_model_version",
 ]
 
 # ── The per-player base-season raw line. Realized season totals ÷ played games → per-game counting
@@ -582,7 +672,7 @@ def load_rookie_training(con, upto_season: int, schema: str = MARTS_SCHEMA,
         matrix is a CONSTANT ZERO at fit time, so its coefficient fits to ~0 and the feature is
         quietly discarded — while at serve time the live P1A rows DO carry a real sd.
     Neither failure raises. Guard: `betting_ml/tests/test_nf1_7_rookie_intervals.py`."""
-    rk = pd.read_parquet(_ROOKIE_PARQUET)
+    rk = load_rookie_projection_frame()
     keep = ["gsis_id", "position_group", "draft_overall", "draft_year",
             "projected_nfl_z", "projected_nfl_z_sd"]
     rk = rk[
@@ -792,7 +882,7 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
                              rescue_absent: bool = True,
                              absence_prior_family: str | None = None,
                              absence_prior_blend: float | None = None,
-                             band_model=None) -> pd.DataFrame:
+                             band_model=None, level_recal: tuple | None = None) -> pd.DataFrame:
     """The VETERAN half of the board, as a WIDE frame (every base-season input column retained).
 
     ⭐ Factored out of `build_projection` by NF1.9 because the veteran interval's band has to be FITTED
@@ -850,7 +940,40 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
     if a_blend > 0 and "seasons_missed" in base.columns and (base["seasons_missed"] >= 1).any():
         kw["absence_prior"] = fit_absence_prior_for(
             con, base_season, family=absence_prior_family or _SP._ABSENCE_PRIOR_FAMILY, schema=schema)
-    return project_veterans(base, priors, projection_season, band_model=band_model, **kw)
+    return project_veterans(base, priors, projection_season, band_model=band_model,
+                            level_recal=level_recal, **kw)
+
+
+def fit_serving_level(panel: pd.DataFrame | None, projection_season: int) -> tuple[str, dict]:
+    """NF-TR2b: the served veteran LEVEL recalibration, fitted at BUILD time from the walk-forward
+    veteran band panel (target seasons strictly before `projection_season`, the trailing
+    `WINDOW_SEASONS`, incumbent-anchored tier rows). Returns `(form, params)`; `("", {})` when the
+    policy is OFF (the identity — the pre-NF-TR2 board byte for byte, the rollback state), and
+    `(form, {})` with a LOUD alert when the panel cannot support a fit. ⭐ ONE READ of
+    `serving_form()`. Kept as its own function so a test can EXECUTE it with the policy ON — the
+    first cut inlined it in `build_projection`, where no test ran it, and shipped a NameError
+    (`veteran_tier_size` unqualified) that only the operator's real rebuild found."""
+    level_form = _LEVEL_POLICY.serving_form()
+    level_params: dict = {}
+    if not level_form:
+        log.warning("[ALERT] NF-TR2b: veteran LEVEL recalibration is OFF — the board serves the "
+                    "pre-NF-TR2 incumbent veteran level. This is the rollback state.")
+        return "", {}
+    from quant_sports_intel_models.football.nfl.fantasy import (
+        season_level_recalibration as _SLR,
+    )
+    level_params = _SLR.fit_level_from_panel(
+        panel, level_form, projection_season, _SP.veteran_tier_size(),
+        window=_LEVEL_POLICY.WINDOW_SEASONS)
+    if level_params:
+        log.info("NF-TR2b: veteran LEVEL recalibration ON — %s (%s, window %d, %s) params %s",
+                 level_form, _LEVEL_POLICY.ESTIMATOR, _LEVEL_POLICY.WINDOW_SEASONS,
+                 _LEVEL_POLICY.SELECTION_STATUS, _SLR.params_to_json(level_params))
+    else:
+        log.warning("[ALERT] NF-TR2b: veteran LEVEL recalibration is ON but the panel could not "
+                    "support a fit for %d — the board serves the INCUMBENT level for this season "
+                    "(loud, never silent)", projection_season)
+    return level_form, level_params
 
 
 def build_projection(con, base_season: int, projection_season: int, schema: str,
@@ -880,20 +1003,32 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     #    veteran interval to the pre-NF1.9 normal approximation — loudly, never silently.
     want_band = _SP._VET_BAND_PER_PLAYER if veteran_band is None else bool(veteran_band)
     band_model = None
+    panel = band_panel
     if want_band:
         panel = (band_panel if band_panel is not None
                  else build_veteran_band_panel(con, projection_season, schema))
         band_model = fit_veteran_band_from_panel(panel, projection_season)
+    # ── NF-TR2b: the served veteran LEVEL recalibration, fitted at BUILD time from the same
+    #    walk-forward panel the band is fitted on (target seasons strictly before this one, the
+    #    trailing `WINDOW_SEASONS`, incumbent-anchored tier rows) — so a backtest board for season Y
+    #    is fitted on < Y exactly like the harness folds (the E5.9 boundary), and the panel itself
+    #    (built by `build_veteran_panel_season`, which never passes `level_recal`) stays the
+    #    INCUMBENT's history the constant is measured against — the correction cannot compound.
+    #    ⭐ ONE READ of `serving_form()`: "" ⇒ identity ⇒ the pre-NF-TR2 board byte for byte.
+    if _LEVEL_POLICY.serving_form() and panel is None:
+        panel = build_veteran_band_panel(con, projection_season, schema)
+    level_form, level_params = fit_serving_level(panel, projection_season)
     vets = build_veteran_projection(
         con, base_season, projection_season, schema, usage_role_blend=usage_role_blend,
         mover_opportunity_blend=mover_opportunity_blend, env_tilt_blend=env_tilt_blend,
         injury_override_blend=injury_override_blend, xfp_td_blend=xfp_td_blend,
         rescue_absent=rescue_absent, absence_prior_family=absence_prior_family,
-        absence_prior_blend=absence_prior_blend, band_model=band_model)
+        absence_prior_blend=absence_prior_blend, band_model=band_model,
+        level_recal=((level_form, level_params) if (level_form and level_params) else None))
     if veteran_postprocess is not None:
         vets = veteran_postprocess(vets, band_model)
 
-    rookies_all = pd.read_parquet(_ROOKIE_PARQUET)
+    rookies_all = load_rookie_projection_frame()
     incoming = rookies_all[pd.to_numeric(rookies_all["draft_year"], errors="coerce") == projection_season]
     # NF1.4: the point curve fits the survivor-filtered history (unchanged); `band_hist` is
     # the FULL drafted population (zero-game rookies included) and calibrates the 80% rookie
@@ -954,6 +1089,21 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     #    reads unambiguously as "no source model — this board carries no correction".
     proj["rookie_source_model"] = _ROOKIE_POLICY.SOURCE_MODEL if _recal_lambda else ""
     proj["rookie_decision_story"] = _ROOKIE_POLICY.DECISION_STORY if _recal_lambda else ""
+    # ── the VETERAN-LEVEL stamp (NF-TR2b), board-wide; the PARAMS are THIS board's fitted constant
+    #    (a JSON string; "" when no correction was applied), so a reader can confirm the correction
+    #    from any row rather than trusting the policy module.
+    _lvl_on = bool(level_form and level_params)
+    _lvl_stamp = _LEVEL_POLICY.stamp() if _lvl_on else {
+        "veteran_level_status": "incumbent", "veteran_level_form": "", "veteran_level_window": 0,
+        "veteran_level_source_model": "", "veteran_level_decision_story": "",
+        "veteran_level_statistically_selected": False,
+        "level_model_version": "nfl_fantasy_fastpath_v1"}
+    for _c, _v in _lvl_stamp.items():
+        proj[_c] = _v
+    from quant_sports_intel_models.football.nfl.fantasy import (
+        season_level_recalibration as _SLR2,
+    )
+    proj["veteran_level_params"] = _SLR2.params_to_json(level_params) if _lvl_on else ""
     # keep only draft-relevant offensive positions (drop K/DEF/defensive rows with no fantasy line)
     proj = proj[proj["position"].isin(("QB", "RB", "WR", "TE", "FB"))].copy()
     for c in OUTPUT_COLS:

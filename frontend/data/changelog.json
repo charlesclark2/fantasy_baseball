@@ -3,52 +3,84 @@
     "week": "2026-08-10",
     "items": [
       {
-        "tag": "improved",
-        "text": "The draft board now refreshes on a cadence instead of only when we republished it by hand, and it reads the current market when it does. Average draft position and the expert consensus rankings were being read from a cache that nothing could refresh: a rebuild re-read the same file, so the board you saw last week was pricing against a market from three weeks earlier. That matters more than a stale reference column would, because those two inputs feed the order the board is sorted in, not just the ADP figure printed beside a name — so a player whose stock had risen could still show the older, worse draft position and read as better value than he now is. Through draft season the board rebuilds and republishes daily, and it does so after that day's roster and depth-chart data has landed rather than before it, which is what used to leave the depth-chart view about a week older than the build date suggested. To be plain about what this is and is not: a fresher build is not a better model. Refreshing the market makes the market half of our ordering current — it does not make our order more independent of the market, and the note on the board saying which positions lean on consensus is unchanged. Nothing about how a projection is computed changed here; only how recent its inputs are."
+        "tag": "added",
+        "text": "Memberships are open. The first 100 members pay $10/month, locked in for as long as the membership stays active; after that it is $20. Cancel any time from Settings — access runs to the end of the period you have already paid for, and the page tells you the exact date."
       },
       {
-        "tag": "improved",
-        "text": "Every fantasy page now shows how old each input is, not just when the board was built. The line under the heading used to read \"built\" and a single date — which was true of the projection and could be wrong about the ADP column sitting right beside it, and about the depth charts behind the projection. On the 10 August board that one date said 8/10 over a market snapshot from 25 July. There is now a second line giving the average draft position, expert rankings and depth-chart dates separately, and where we genuinely cannot tell how old an input is it says \"unknown\" rather than letting the build date stand in for it."
+        "tag": "fixed",
+        "text": "On a phone, the Props filters now sit behind a \"Filters\" button, closed by default, with a count of how many you have set. A full slate carries all 30 clubs, so that panel had grown to about twenty lines you scrolled past before reaching a single game. Desktop is unchanged."
+      },
+      {
+        "tag": "fixed",
+        "text": "The player dropdown in \"Log a prop\" was empty for everyone, on every date — two stacked failures in the reads behind it, both fixed. Those reads now report why they failed instead of returning an empty list, which had looked exactly like a day with nothing scheduled yet."
       },
       {
         "tag": "new",
-        "text": "The Roster Report now has a League tab: every team in your league, their roster filled by our optimizer and totalled on your league's own board, so you can see where your starters sit in the range. It is a ranking of projected starting points and nothing more — not a projected finish and not a chance of winning anything, which would need a week-by-week schedule simulation we have not built. Three things ride with the table rather than behind a link: we do not know the lineup another manager will actually start, so every team is filled the same way yours is; these are the rosters as they stood when you imported the league, because we never re-read it; and the order is our projections' opinion, so it tells you whose roster our model likes."
+        "text": "Total Bases now has the same one-click \"Log this prop\" button as the strikeout pages. It copies the batter, the book you pick and its posted line into your Bet Log, where it settles against the batter’s real total bases once the game is final."
       },
       {
-        "tag": "fixed",
-        "text": "Your league defence now scores. When you imported a league, your D/ST was matched by name — but your platform calls it \"Lions D/ST\" while our board calls it \"DET D/ST\", so no team defence ever matched: the D/ST slot on the Post-Draft Roster Report sat empty and its points were missing from your projected team total. Defences are now matched by team, so the slot fills and the headline includes it."
+        "tag": "new",
+        "text": "You can now log a batter total-bases prop to your Bet Log. \"Log a prop\" only understood pitcher strikeouts, so a total-bases bet you had actually placed could not be recorded. It now asks which prop type you are logging and offers every batter in that day’s posted lineups. Bookkeeping only — not betting advice."
       },
       {
         "tag": "improved",
-        "text": "The Roster Report's wire section is now a real free-agent pool. Importing a league already read every team's roster and we only kept yours, so \"worth a look on the wire\" could only offer players outside the pool a league your size drafts. We now store every roster, so the section lists players on nobody's roster in your league — and says plainly that it is the picture from when you imported, since we never re-read your league. If we only hold some of your league's rosters we say so and fall back to the old definition rather than guessing."
+        "text": "NFL draft-board point totals now sit at the level players actually produce. Our track record showed expected points running below realized totals for the draftable tier, and the cause was the per-game rate. A per-position correction, fitted only on finished seasons, moves running backs up about a quarter, receivers and tight ends about a tenth, and quarterbacks down about seven percent. Order within a position and the 80% range are unchanged — this corrects the number toward what happened, it does not make us better at ranking players."
+      },
+      {
+        "tag": "improved",
+        "text": "The draft board now rebuilds daily through draft season and reads the current market when it does. Average draft position and expert rankings had been coming from a cache nothing could refresh, so a board could be pricing against a market three weeks old — and those inputs feed the sort order, not just the ADP column. A fresher build is not a better model."
+      },
+      {
+        "tag": "improved",
+        "text": "Every fantasy page now dates each input separately, not just the board build. One date used to stand for the projection, the ADP column beside it and the depth charts behind it — on the 10 August board that read 8/10 over a market snapshot from 25 July. Where we genuinely cannot tell how old an input is, it now says \"unknown\"."
       },
       {
         "tag": "new",
-        "text": "The Props page now has a Total Bases tab: our model's per-batter total-bases projection for every batter with a posted line, shown beside each sportsbook's line. Each batter card opens a full distribution view — the projected range, the chance of 1+, 2+, 3+ and 4+ bases, and a per-book comparison of our probability against the book's de-vigged price (with an explicit push probability on whole-number lines). Like the strikeout projections, this is a projection and transparency comparison only — not betting advice, and we make no profitability claim. The model is fit on regular-season games only, and every payload is stamped with the model version and fit date."
+        "text": "The Roster Report now has a League tab: every team in your league, filled by our optimizer and totalled on your league’s own scoring. It ranks projected starting points — not a projected finish, and not a chance of winning anything. We do not know what lineup another manager will start, so every team is filled the same way yours is, and rosters are as they stood when you imported."
+      },
+      {
+        "tag": "fixed",
+        "text": "Your league defence now scores. Your platform calls it \"Lions D/ST\" while our board calls it \"DET D/ST\", so no team defence ever matched by name — the D/ST slot sat empty and its points were missing from your projected team total. Defences are now matched by team."
+      },
+      {
+        "tag": "improved",
+        "text": "The Roster Report’s wire section is now a real free-agent pool. We keep every team’s roster at import, so it lists players on nobody’s roster in your league rather than only players outside the pool a league your size drafts. It is the picture from when you imported — we never re-read your league."
       },
       {
         "tag": "new",
-        "text": "A Post-Draft Roster Report. Once your league has drafted and you have imported the result, one page reads your team back to you in your league's own scoring: your starting lineup and what it projects to over the season, with the 80% range beside it; where you are strong and where you are thin, measured against the replacement level and starter demand your settings create; how much of the projection sits on your top two players and which lineup slot has the thinnest cover behind it; what each bye week costs you once your lineup is re-filled without the players who are idle; the best names outside the pool a league your size drafts, aimed at the gaps; and the trade shape your roster suggests. Two things it deliberately will not do. It does not grade your draft or predict where you finish — we have measured neither, and the report is a description of the roster rather than a forecast of a result. And it does not compare you to the other managers in your league: we hold your team and nobody else's, so every \"above average\" on the page is against an average team with your settings, and the page says so. The team total is exact — expected points add up however the seasons turn out — but the range around it is an assumption, so both readings are printed: the narrow one, which treats each player's season as independent, and the wider one you get if every season moved in step."
+        "text": "The Props page has a Total Bases tab: our per-batter total-bases projection beside each sportsbook’s line. Each card opens a full distribution — the projected range, the chance of 1+, 2+, 3+ and 4+ bases, and our probability against each book’s de-vigged price. A projection and transparency comparison only, not betting advice."
+      },
+      {
+        "tag": "improved",
+        "text": "The Props page is now organized by game rather than one long card grid — a full slate can be 100+ quoted batters. Games are collapsible sections in start-time order, plus a team filter, a name search and a Sportsbook filter. Sort still opens on slate order; you can instead order by projection, by our probability of 2+ bases, or by the gap to the book’s number — never a \"top plays\" pick."
       },
       {
         "tag": "fixed",
-        "text": "\"Our rank\" on the home page now means the same thing it means on the rankings page. It was our rank among the players the market has actually drafted, while the rankings page ranks every player we project — two different numbers that happened to agree for the player on the card, and would not have for the next one. On the current board the two populations are nowhere near the same size: we project 169 tight ends and the market drafts 23. The card now shows the full-board rank, so a number you read on the home page is the number you find when you click through. The comparison against where the market is drafting him is unchanged and still runs inside the drafted set, because the market produces no rank for a player nobody drafts — and when the two differ the card now says so in a line underneath rather than leaving you to subtract two numbers that are counting different things."
+        "text": "Total Bases was missing entire games that Strikeouts still showed, including games already under way — a batter only appeared once a book had a currently-live line, so a game starting dropped every batter in it. It is now built from posted lineups, with a book line shown when one is available."
+      },
+      {
+        "tag": "new",
+        "text": "A Post-Draft Roster Report. Import your drafted league and one page reads your team back in your league’s own scoring: your starting lineup and its season projection with an 80% range, where you are strong and thin, what each bye week costs, the best names on the wire, and the trade shape your roster suggests. It will not grade your draft or predict where you finish, and it compares you to an average team with your settings rather than to the other managers in your league."
       },
       {
         "tag": "fixed",
-        "text": "Kickers and defenses no longer sit among the skill players in the draft board's \"Available players\" list. Last week's fix stopped the optimizer from recommending them early, but only on the recommendations panel — the board underneath it was still ordered purely by value over replacement, so the same defense you had just been steered away from reappeared near the top of best-available. If you passed on a recommendation and scanned the list instead, you were one click from exactly the advice we had decided not to give. Both surfaces now share one ordering rule, so they cannot drift apart again: kickers and defenses sit below every skill player, under any sort you pick, and the K and DST tabs show them on their own whenever you want them. Two smaller things came with it. The overall-rank number is now blank for a kicker or defense rather than showing a rank built by comparing them to skill players — the comparison that caused this — while their position rank (DST4, K2) still sits beside the name as it always has. And the note on the roster panel that said kickers and defenses \"aren't projected … they won't appear on the board\" has been corrected: it had been wrong since we started projecting them, and it directly contradicted the note above the board on the same screen."
+        "text": "\"Our rank\" on the home page now means what it means on the rankings page. It had been our rank among the players the market actually drafts, while the rankings page ranks everyone we project — on the current board that is 23 tight ends against 169. The card now shows the full-board rank, so the number you read is the number you find when you click through."
       },
       {
         "tag": "fixed",
-        "text": "The draft optimizer no longer suggests a kicker or defense in the early rounds. It was doing so — on the current board, the round-six recommendation panel came back five-sixths kickers and defenses, with a D/ST as the single top suggestion. That is not advice anyone should follow, and it was undermining every other recommendation on the page. The cause was subtle: the tool ranks players by value over replacement, and at kicker and defense that number is real but tiny — the gap between the best defense and a replacement-level one is about 10 points across a whole season. By round six the best remaining running backs and receivers were worth about the same on paper, so the defense won the comparison. What that misses is how little the number can be trusted: the entire spread from the best kicker to a replacement one is roughly a fifteenth of the range a single kicker's own season could plausibly land in, and about an eighth at defense — against a bit over half at running back, receiver and tight end. In other words, the ranking an early pick would be buying at those positions is smaller than the noise around it, which is why our own player pages already tell you to read kicker and defense projections as streaming tiers rather than precise ranks. The optimizer now applies that same caveat to its own advice: kickers and defenses are held back until your roster actually needs them, which — combined with the starter-slot guarantee above — means late, but never too late. Nothing about the numbers themselves changed; only the order in which players are suggested."
+        "text": "Kickers and defenses no longer sit among the skill players in the board’s \"Available players\" list. Last week’s fix only covered the recommendations panel, so a defense you had just been steered away from reappeared near the top of best-available. Both surfaces now share one ordering rule. Their overall-rank number is blank rather than comparing them to skill players; position rank (DST4, K2) still sits beside the name."
       },
       {
         "tag": "fixed",
-        "text": "The draft optimizer will no longer let you finish a draft with an empty starter slot. Previously, once the good players at a position you still needed had all been taken, the recommendations could drift onto bench depth at other positions — a fourth quarterback scores more in isolation than a replacement-level running back, so it ranked higher. But an empty starter slot scores zero on Sunday, and bench players you cannot start score nothing at all, so that trade was never actually worth making. In a full 12-team test draft on the current board the optimizer finished with seven of nine starting slots filled and both running-back spots empty. Now, as soon as every remaining pick is needed to fill a starting slot, the optimizer only recommends players who fill one, and it tells you why — you will see \"Must fill a starter\" with how many picks and open slots are left. The same test draft now finishes nine of nine, worth 169 more projected points in the starting lineup. This only takes effect when there is genuinely no room left: while you still have spare picks, recommendations are unchanged and you are free to draft for value or upside as before."
+        "text": "The draft optimizer no longer suggests a kicker or defense in the early rounds — on the current board, round six came back five-sixths kickers and defenses. Their value over replacement is real but smaller than the noise around it, so they are now held back until your roster actually needs them."
       },
       {
         "tag": "fixed",
-        "text": "The draft optimizer's pick recommendations had a ranking bug, and on the live 2026 board it was affecting every position. The score behind each recommendation adds a scarcity bonus on top of a player's value — the idea being that when there is a steep drop-off after a player, you should grab him before the tier runs out. The bonus was being handed to whichever player happened to sit directly above the drop-off, no matter how good he actually was. Because the size of a gap says nothing about the quality of the player standing next to it, a worse player could out-score a better one at the same position. The clearest example: at kicker, the board's 31st-ranked kicker sat on the near side of a 29-point cliff and was recommended over the best kicker available — who was 19 points better — landing him at 66th overall and inside the first six rounds of a 12-team draft. Across the whole board there were 445 pairs where the optimizer ranked a worse player above a better one at the same position. The scarcity bonus now belongs to the position rather than to an individual: it goes to the best player still available there, which is the one you would actually draft. Deciding WHETHER to address a position now is what the drop-off is evidence for; deciding WHICH player to take at it was always just a matter of who is best. Within a position, recommendations are now ordered by value with no exceptions, and a thin position still gets filled late in a draft when everyone left is below replacement level."
+        "text": "The draft optimizer will no longer let you finish a draft with an empty starter slot. Recommendations could drift onto bench depth — a full 12-team test draft finished with both running-back spots empty. Once every remaining pick is needed to fill a slot, it only suggests players who fill one. The same draft now finishes nine of nine."
+      },
+      {
+        "tag": "fixed",
+        "text": "The draft optimizer’s recommendations had a ranking bug affecting every position: the scarcity bonus for a steep drop-off went to whoever sat directly above the cliff, regardless of how good he was. Across the board, 445 pairs ranked a worse player above a better one at the same position. The bonus now belongs to the position and goes to the best player still available there."
       },
       {
         "tag": "added",
@@ -94,6 +126,10 @@
       {
         "tag": "fixed",
         "text": "On a phone, the menu no longer runs off the bottom of the screen — Sign Out and Settings are always reachable, and it scrolls on its own without moving the page behind it."
+      },
+      {
+        "tag": "new",
+        "text": "My League now lets you switch between every saved league you have, instead of always showing whichever one happened to load first. If you've saved more than one league — a subscriber account can save several — a picker at the top of the page lists them by name; choosing a different one re-scores the whole page, board and all, for that league, and your choice sticks through a refresh. A free account only ever has one saved league, so nothing changes there."
       }
     ]
   },

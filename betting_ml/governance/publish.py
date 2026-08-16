@@ -245,6 +245,12 @@ def live_readback(*, model_family: str, target: str, served_version: str | None 
     _check("rookie_shrink_lambda", entry.get("rookie_shrink_lambda"), stamp.get("shrink_lambda"))
     _check("rookie_statistically_selected", entry.get("rookie_statistically_selected"),
            stamp.get("statistically_selected"))
+    # NF-TR2b: the VETERAN-LEVEL policy is read back too. Not REQUIRED (a pre-NF-TR2 payload carries
+    # no block and that is an honest absence), but a block that DISAGREES with the registry's
+    # `level_model_version` FAILS — a level stamp nobody reconciles would be décor.
+    vstamp = payload.get("veteranLevelPolicy") or payload.get("veteran_level_policy") or {}
+    _check("level_model_version", entry.get("level_model_version"),
+           vstamp.get("level_model_version"), required=False)
 
     post = [
         G.live_payload_matches_staged(entry.get("staged_digest"), live_digest),

@@ -1798,6 +1798,84 @@ const CASES = [
     to: '  "Your projected finish this season, from every team\'s roster filled by our optimizer',
     grep: "no finish, no odds",
   },
+  {
+    id: "props-default-sort-is-not-slate-order",
+    shipped: "E5.10 — pre-emptive: the honest-framing ruling that Slate order is ALWAYS the default",
+    // ⭐ THE PM RULING, MADE RED-PROVABLE. "Difference vs books" is a legitimate sort, but the ruling
+    // was that it must NEVER be the default — this is what makes that a checked property rather than
+    // a comment nobody re-verifies. Nothing about the page looks broken: every sort option still
+    // works, the labels are still honest, the slate still renders. Only the FIRST thing a visitor
+    // sees has quietly become the delta ranking.
+    // ⚠️ NOT the `useState` initializer — the slate-key-reset effect runs unconditionally on mount
+    // (`initializedSlateKey` starts null) and OVERWRITES it, so the effect's own default is what a
+    // visitor actually sees. That effect call is the one this case has to break.
+    detail: "The reset effect opens the sort control on Difference vs books instead of Slate order.",
+    file: "app/props/page.tsx",
+    from: '    setSearch("")\n    setSortKey("slate")',
+    to: '    setSearch("")\n    setSortKey("diff")',
+    grep: "Slate order stays the default|reads Slate order on first load",
+  },
+  {
+    id: "props-team-chip-does-not-filter",
+    shipped: "E5.10 — pre-emptive: the team/matchup filter chip becomes a no-op",
+    // The chip still renders, still shows as pressed/active, and the page does not error — it just
+    // stops actually narrowing the slate, so a 15-game slate goes back to being a scroll problem
+    // one click at a time.
+    detail: "groupMatchesTeams always reports a match, so no team chip can ever narrow the slate.",
+    file: "lib/props-slate.ts",
+    from: "export function groupMatchesTeams(teams: string[], selected: Set<string>): boolean {\n  if (selected.size === 0) return true\n  return teams.some((t) => selected.has(t))\n}",
+    to: "export function groupMatchesTeams(teams: string[], selected: Set<string>): boolean {\n  return true\n}",
+    grep: "team filter chip jumps straight to that game",
+  },
+  {
+    id: "props-search-does-not-filter",
+    shipped: "E5.10 — pre-emptive: the name search box stops narrowing the slate",
+    // The input still accepts text and nothing errors — every row just keeps rendering underneath
+    // it, which is indistinguishable from a search that works right up until you look for the one
+    // batter you typed.
+    detail: "matchesSearch always returns true, so no query narrows the rendered rows.",
+    file: "lib/props-slate.ts",
+    from: 'export function matchesSearch(row: SlateRow, search: string): boolean {\n  const q = search.trim().toLowerCase()\n  if (!q) return true\n  return (row.fullName ?? "").toLowerCase().includes(q)\n}',
+    to: "export function matchesSearch(row: SlateRow, search: string): boolean {\n  return true\n}",
+    grep: "a partial name narrows to that one player's game",
+  },
+  {
+    id: "props-sort-does-not-reorder",
+    shipped: "E5.10 — pre-emptive: a non-Slate sort flattens the slate without actually sorting it",
+    // The mode switch (grouped → flat list) still fires, so the page LOOKS like it changed — the
+    // cards are just left in whatever order they arrived in, not ordered by the metric the Sort
+    // control now claims to be showing.
+    detail: "sortRowsByMetric drops the comparator, so the flat list keeps its original order.",
+    file: "lib/props-slate.ts",
+    from: "  return [...rows].sort((a, b) => metric(b) - metric(a))",
+    to: "  return [...rows]",
+    grep: "Proj TB sorts the flattened slate by projection, descending",
+  },
+  {
+    id: "props-sportsbook-chip-does-not-filter",
+    shipped: "E5.10 — pre-emptive: the sportsbook filter chip becomes a no-op",
+    // The operator's own follow-up request: "if my betting platform is Bovada, a user should be
+    // able to filter down to those books". The chip still renders and still shows as pressed —
+    // it just stops actually narrowing the slate to that book's own props.
+    detail: "matchesBooks always reports a match, so no sportsbook chip can ever narrow the slate.",
+    file: "lib/props-slate.ts",
+    from: "export function matchesBooks(row: SlateRow, selected: Set<string>): boolean {\n  if (selected.size === 0) return true\n  return row.books.some((b) => selected.has(b))\n}",
+    to: "export function matchesBooks(row: SlateRow, selected: Set<string>): boolean {\n  return true\n}",
+    grep: "a sportsbook chip leaves only rows that book actually quoted",
+  },
+  {
+    id: "league-picker-reverts-to-teams-0",
+    shipped: "G100-C2 — pre-emptive: the multi-league picker stops actually switching leagues",
+    // The pre-story shape, restated: `entry` ignores the URL/picker selection entirely and always
+    // reads `teams[0]`. The control still renders, still lists both leagues, and still LOOKS like
+    // it worked — the heading and board simply never move, because nothing downstream of `entry`
+    // was ever reading the selection to begin with.
+    detail: "`entry` always resolves to teams[0], so picking the second league changes nothing.",
+    file: "components/fantasy/my-league.tsx",
+    from: "    return requested ?? teams[0]",
+    to: "    return teams[0]",
+    grep: "switching leagues re-scores the whole page for the selected league",
+  },
 ]
 
 /**
@@ -1848,7 +1926,14 @@ const CASES = [
 // a session. So 120/114/6 is 114/108/6 plus six individually-proven REDs, and the next full run is
 // what CONFIRMS it. ⛔ A projection is not a measurement — if that run disagrees, the finding is
 // whatever drifted, never this line.
-const RECORDED_BOARD = { total: 120, red: 114, notObservable: 6 }
+// E5.10 adds FIVE cases (default sort, team-chip filter, name search, non-slate-sort ordering,
+// sportsbook filter — the last a follow-up request in the same story), each RED-proven
+// individually (`-- props-`) for the same reason — a production build per case does not belong
+// in a session. So 120/114/6 → 125/119/6, and the next full run CONFIRMS it.
+// G100-C2 adds ONE case (the multi-league picker reverting to `teams[0]`), RED-proven individually
+// (`-- league-picker`) for the same reason. So 125/119/6 → 126/120/6, and the next full run CONFIRMS
+// it.
+const RECORDED_BOARD = { total: 126, red: 120, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

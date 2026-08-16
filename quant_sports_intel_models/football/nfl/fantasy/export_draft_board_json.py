@@ -895,6 +895,47 @@ def rookie_policy_stamp(pdf: pd.DataFrame) -> dict | None:
     return stamp or None
 
 
+#: NF-TR2b — the VETERAN-LEVEL policy stamp columns → payload keys (the rookie map's sibling).
+_VETERAN_LEVEL_COLUMNS: dict[str, str] = {
+    "veteran_level_status": "status",
+    "veteran_level_form": "form",
+    "veteran_level_params": "params",
+    "veteran_level_window": "window_seasons",
+    "veteran_level_source_model": "source_model",
+    "veteran_level_decision_story": "decision_story",
+    "veteran_level_statistically_selected": "statistically_selected",
+    "level_model_version": "level_model_version",
+}
+
+
+def veteran_level_stamp(pdf: pd.DataFrame) -> dict | None:
+    """The veteran-LEVEL policy block for the published payload, READ OFF THE BOARD's own stamp
+    columns — `rookie_policy_stamp`'s sibling, same rules: None for a pre-NF-TR2 board (an honest
+    absence), ⛔ never the policy module's values, and a board carrying two distinct policies is a
+    hard error. `params` is the board's OWN fitted per-position constant (a JSON string), decoded
+    here so the payload carries `{"QB": k, ...}` rather than a string-in-a-string."""
+    present = [c for c in _VETERAN_LEVEL_COLUMNS if c in pdf.columns]
+    if not present:
+        return None
+    stamp: dict = {}
+    for col in present:
+        vals = pdf[col].dropna().unique()
+        if len(vals) > 1:
+            raise ValueError(
+                f"board carries {len(vals)} distinct values for {col} ({list(vals)[:4]}) — two "
+                f"builds appear to have been concatenated; refusing to stamp one of them")
+        v = vals[0] if len(vals) else None
+        if hasattr(v, "item"):
+            v = v.item()
+        if col == "veteran_level_params" and isinstance(v, str):
+            try:
+                v = json.loads(v) if v else None
+            except ValueError:
+                pass
+        stamp[_VETERAN_LEVEL_COLUMNS[col]] = v
+    return stamp or None
+
+
 def player_bio_map() -> dict[str, dict]:
     """`{player_id -> bio dict}` for the NF3.1 player page — birth date, height, weight, college,
     years of NFL experience and an official headshot URL, all PASSED THROUGH from `nflverse_players`
@@ -1401,6 +1442,8 @@ def main(argv: list[str] | None = None) -> int:
             # means the payload can only ever claim the policy the board was ACTUALLY built at — and
             # the governance `model_stamp_consistency` gate then reconciles that against the registry.
             "rookie_policy": rookie_policy_stamp(pdf),
+            # ── NF-TR2b — the VETERAN-LEVEL policy stamp, READ OFF THE BUILT BOARD (same rule).
+            "veteran_level_policy": veteran_level_stamp(pdf),
         }
         payload = {
             "season": args.season,

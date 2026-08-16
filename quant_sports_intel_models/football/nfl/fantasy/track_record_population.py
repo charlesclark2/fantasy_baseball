@@ -180,8 +180,17 @@ ANCHORS = ("A1_identity", "A2_oracle_floor", "A3_degenerate_random", "A4_reprodu
 # §5 A4 — the SHIPPED figures this run must reproduce before any other number is trusted. Taken from
 # `ablation_results/nf_d3_benchmark_scorecard_nf1_5.json` (the exact artifact the live public headline
 # was built from) and hard-coded here so the reproduction check cannot drift with a re-generated file.
-SHIPPED_DELTA_RHO = {"adp": 0.022, "mfl_adp": 0.173}
-SHIPPED_N_SEASONS = {"adp": 6, "mfl_adp": 7}
+# ⭐ The pin MOVES ONLY WHEN THE HEADLINE'S ARTIFACT IS DELIBERATELY REGENERATED, in the SAME change
+# as that artifact — never to fit a result. History (kept so a reader can see what each vintage
+# reproduced):
+#   2026-08-03 (NF-D17 registration): adp +0.022 / 6 seasons (2025 ADP not yet archived); mfl +0.173 / 7
+#   2026-08-15 (NF-TR2b track-record refresh): the 2019–2025 boards rebuilt under the served veteran
+#              LEVEL recalibration (walk-forward, `veteran_level_policy`) + 2025 ADP now archived →
+#              adp +0.018 / 7; mfl +0.169 / 7 (per-position Δρ within ±0.01 of the prior vintage —
+#              a positive per-position constant cannot re-order a position; the pooled move is the
+#              cross-position re-ranking + the added 2025 season).
+SHIPPED_DELTA_RHO = {"adp": 0.018, "mfl_adp": 0.169}
+SHIPPED_N_SEASONS = {"adp": 7, "mfl_adp": 7}
 REPRODUCTION_TOLERANCE = 0.001  # the precision the scorecard itself prints
 
 # ── §6 uncertainty ─────────────────────────────────────────────────────────────────────────────

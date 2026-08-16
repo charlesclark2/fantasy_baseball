@@ -2,10 +2,19 @@ from __future__ import annotations
 
 from pydantic import BaseModel, field_validator, model_validator
 
-# Game markets (h2h/totals) settle against the final score. The strikeouts prop
-# markets (E9.42) settle against the starter's actual K total — see settle_user_bets.py.
+# Game markets (h2h/totals) settle against the final score. The player-prop markets settle
+# against that player's own actual total — see settle_user_bets.py.
+#   * strikeouts (E9.42) → the STARTER's K total.
+#   * total bases (E5.10) → the BATTER's total bases. Added because /props shipped a Total
+#     Bases tab (E5.9) with no way to log what you'd placed on it: the dialog and settlement
+#     were both strikeout-only, so a TB prop could not be recorded at all.
+# ⚠️ Kept in sync with the same two sets in scripts/settle_user_bets.py (defined there
+# separately so the box script needs no app.backend import) — a market this file accepts but
+# settlement does not know grades to nothing and sits Pending forever (the E9.49 class).
 _GAME_MARKETS = {"h2h home", "h2h away", "over", "under"}
-_PROP_MARKETS = {"strikeouts over", "strikeouts under"}
+_K_PROP_MARKETS = {"strikeouts over", "strikeouts under"}
+_TB_PROP_MARKETS = {"total bases over", "total bases under"}
+_PROP_MARKETS = _K_PROP_MARKETS | _TB_PROP_MARKETS
 _MARKETS = _GAME_MARKETS | _PROP_MARKETS
 
 
@@ -74,9 +83,9 @@ class BetCreate(_BetFields):
             raise ValueError("total_line is required for over/under bets (needed to settle)")
         if self.market in _PROP_MARKETS:
             if self.prop_line is None:
-                raise ValueError("prop_line is required for strikeout prop bets (needed to settle)")
+                raise ValueError("prop_line is required for player prop bets (needed to settle)")
             if self.player_id is None:
-                raise ValueError("player_id is required for strikeout prop bets (needed to settle)")
+                raise ValueError("player_id is required for player prop bets (needed to settle)")
         return self
 
 

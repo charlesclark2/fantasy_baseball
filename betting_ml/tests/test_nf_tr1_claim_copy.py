@@ -91,14 +91,43 @@ def _scorecard(*, delta=0.022, by_pos=None, us=0.517, them=0.494):
     }
 
 
-def _uncertainty(*, delta=0.022, lo=-0.006, hi=0.051, n_seasons=6, evaluated=True):
-    return {"results": [{
+def _uncertainty(*, delta=0.022, lo=-0.006, hi=0.051, n_seasons=6, evaluated=True,
+                 valid_run=True):
+    """A minimal NF-D17 artifact. `valid_run=True` carries the verdict block a REAL run writes
+    (A4 reproduction + anchors passing, a non-VOID recommendation) — the exporter refuses a VOID or
+    verdict-less run (see `test_a_void_nf_d17_run_cannot_feed_the_claim`)."""
+    out = {"results": [{
         "population": "P0_shipped", "source": "adp", "n_seasons": n_seasons,
         "n_mean": 162.0, "n_min": 140, "n_max": 172, "delta_rho_mean": delta,
         "bootstrap": {"evaluated": evaluated, "draws": 1000, "level": 0.9,
                       "lo": lo, "hi": hi, "median": delta,
                       "excludes_zero": not (lo <= 0.0 <= hi)},
     }]}
+    if valid_run:
+        out["reproduction"] = {"adp": {"pass": True}, "all_pass": True}
+        out["anchor_summary"] = {"all_pass": True, "failures": []}
+        out["decision"] = {"recommendation": "KEEP the shipped population"}
+    return out
+
+
+def test_a_void_nf_d17_run_cannot_feed_the_claim():
+    """NF-D17 §5 voids the WHOLE reading on a failed anchor/reproduction, but still writes the
+    numbers `_reconcile` compares — found live 2026-08-15 (a rebuild moved the headline, A4 read the
+    old pin, the run said VOID). One isolating fixture per clause (NF-D17's own AND-gate lesson)."""
+    import pytest
+    ok = _uncertainty()
+    ex.build_claim(_scorecard(), ok)                       # the valid shape builds
+    bad_repro = _uncertainty(); bad_repro["reproduction"] = {"all_pass": False}
+    with pytest.raises(ValueError, match="A4 reproduction"):
+        ex.build_claim(_scorecard(), bad_repro)
+    bad_anchor = _uncertainty(); bad_anchor["anchor_summary"] = {"all_pass": False}
+    with pytest.raises(ValueError, match="anchors A1"):
+        ex.build_claim(_scorecard(), bad_anchor)
+    void = _uncertainty(); void["decision"] = {"recommendation": "VOID — do not use this run"}
+    with pytest.raises(ValueError, match="VOID"):
+        ex.build_claim(_scorecard(), void)
+    with pytest.raises(ValueError, match="not a valid reading"):   # verdict-less = unevaluable
+        ex.build_claim(_scorecard(), _uncertainty(valid_run=False))
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -499,6 +528,28 @@ def test_the_level_position_is_read_from_the_data_not_asserted():
     )
 
 
+def test_a_position_where_the_crowd_is_ahead_is_named_in_the_lead_not_hidden():
+    """2026-08-15: the NF-TR2b track-record refresh moved running back from −0.000 (even) to −0.010
+    (behind the ±0.005 display band). The first-cut lead named only EVEN positions, so the hedge
+    silently vanished as the evidence got worse while the sentence above it still said "a little
+    closer". The lead must name a BEHIND position too — symmetric by construction.
+
+    ⭐ ISOLATING FIXTURE: the live split with only RB moved to −0.010; and the reverse (RB even) must
+    NOT print the behind clause, so the clause is derived, not hardcoded."""
+    behind = ex.build_claim(
+        _scorecard(by_pos={"QB": 0.03, "RB": -0.010, "WR": 0.027, "TE": 0.026}), _uncertainty()
+    )["lead"].lower()
+    assert "at running back the crowd's order was slightly better than ours" in behind, behind
+    assert "basically even" not in behind
+    hits = [t for t in ex._CLAIM_DENYLIST if t in behind]
+    assert not hits, hits
+    even = ex.build_claim(_scorecard(), _uncertainty())["lead"].lower()   # RB at exactly 0.0
+    assert "crowd's order was slightly better" not in even
+    assert "at running back it is basically even" in even
+    # both shapes still close on the evidence, not the caveat (AC 5)
+    assert "furthest from where the crowd" in _final_sentence(behind)
+
+
 def test_the_lead_never_claims_a_direction_the_measurement_does_not_support():
     """Sign-awareness, on the layer where it matters most: plain prose reads as a claim."""
     behind = ex.build_claim(_scorecard(delta=-0.04, us=0.470, them=0.510),
@@ -515,7 +566,11 @@ def test_the_precise_layer_names_the_benchmark_the_metric_the_count_and_the_seas
     precise = shipped_claim["precise"].lower()
     assert "captured adp benchmark" in precise, "the benchmark is not named"
     assert "rank correlation" in precise, "the metric is not named"
-    assert "2019" in precise and "2024" in precise, "the seasons are not stated"
+    # the season SPAN the claim itself carries (2019–2024 at NF-TR1; 2019–2025 once the NF-TR2b
+    # refresh archived the 2025 ADP) — derived, so a deliberate refresh cannot silently unpin it
+    span = str(shipped_claim["seasons"])
+    first, last = span.replace("–", "-").split("-")[0].strip(), span.replace("–", "-").split("-")[-1].strip()
+    assert first in precise and last in precise, f"the seasons ({span}) are not stated"
     assert str(shipped_claim["playersPerSeason"]) in precise, "the player count is not stated"
 
 
@@ -558,11 +613,24 @@ def test_the_approved_sentence_is_withdrawn_when_the_shape_changes():
 # AC 4 — a position-level table is available, and AC's six disclosures are all present
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def test_a_level_position_is_labelled_even_rather_than_ahead(shipped_claim):
-    """The measured RB gap is -0.0. A table that rounded that to "ahead" — or omitted the verdict
-    and left a reader to interpret "-0.000" — would bury the disclosure the story requires."""
-    rb = next(r for r in shipped_claim["byPosition"] if r["position"] == "RB")
-    assert rb["verdict"] == "even", rb
+    """At NF-TR1 the measured RB gap was -0.000 and had to read "even", not "ahead". After the
+    NF-TR2b refresh (2019–2025) RB reads -0.010 = "behind". Either way the table's verdict must be
+    the DERIVED direction word for the measured gap (never rounded up to "ahead"), and any position
+    where we trail must be named in the lead — the symmetric hedge #852 shipped."""
+    # ⚠️ the expected word is derived with the TEST'S OWN band, not `ex._verdict` — comparing the
+    # builder to itself passed a RED-proof in which "behind" was rewired to "even" (a restatement)
+    def expected(d: float) -> str:
+        return "even" if abs(d) <= 0.005 else ("ahead" if d > 0 else "behind")
+    for r in shipped_claim["byPosition"]:
+        assert r["verdict"] == expected(r["deltaRho"]), r
+        assert not (r["deltaRho"] <= 0 and r["verdict"] == "ahead"), r
     assert {r["position"] for r in shipped_claim["byPosition"]} == {"QB", "RB", "WR", "TE"}
+    behind = [r["position"] for r in shipped_claim["byPosition"] if r["verdict"] == "behind"]
+    if behind:
+        lead = shipped_claim["lead"].lower()
+        names = {"QB": "quarterback", "RB": "running back", "WR": "wide receiver", "TE": "tight end"}
+        for pos in behind:
+            assert names[pos] in lead, f"the lead does not name the BEHIND position {pos}: {lead}"
 
 
 def test_the_position_verdict_threshold_is_two_sided():
@@ -589,8 +657,12 @@ def test_all_six_required_disclosures_are_present(shipped_claim):
     """NF-TR1's six, checked by their DISTINGUISHING content rather than by count — a count would
     pass against six copies of the same sentence."""
     joined = " ".join(shipped_claim["disclosures"]).lower()
+    any_level = any(r["verdict"] == "even" for r in shipped_claim["byPosition"])
     required = {
-        "RB is a wash": "wash",
+        # the level-position slot: "RB is a wash" while a position measures level (NF-TR1); once
+        # none does (NF-TR2b refresh: RB -0.010 = behind) the builder must SAY no position is level
+        # and point at the table where we trail — silently dropping the slot is the failure
+        "level-position statement": "wash" if any_level else "no position measured level",
         "ECR/ESPN/Sleeper reported separately": "reported separately",
         "served ordering uses market consensus": "blends the market",
         "not a guarantee": "not a guarantee",
@@ -627,7 +699,10 @@ def test_the_headline_adp_claim_is_not_swapped_for_the_flattering_source():
     unc = json.loads(_UNCERTAINTY_JSON.read_text())
     row = ex.shipped_uncertainty(unc)
     assert row["population"] == "P0_shipped" and row["source"] == "adp"
-    assert abs(row["delta_rho_mean"] - 0.022) < 1e-9, row["delta_rho_mean"]
+    # the value is whatever THAT cell holds (+0.022 at NF-TR1, +0.018 after the NF-TR2b refresh) —
+    # pinned by identity to the artifact cell, not by a literal that a deliberate refresh unpins
+    art_cell = next(c for c in unc["results"] if c["population"] == "P0_shipped" and c["source"] == "adp")
+    assert abs(row["delta_rho_mean"] - art_cell["delta_rho_mean"]) < 1e-9, row["delta_rho_mean"]
 
     def cell(population, source, delta):
         return {"population": population, "source": source, "n_seasons": 6, "n_mean": 162.0,
@@ -699,7 +774,8 @@ def test_a_missing_shipped_population_is_refused_rather_than_substituted():
             {"population": "P1_cross_source_matched", "source": "adp", "n_seasons": 6,
              "n_mean": 161.0, "n_min": 140, "n_max": 172, "delta_rho_mean": 0.022,
              "bootstrap": {"evaluated": True, "level": 0.9, "lo": -0.008, "hi": 0.048}},
-        ]})
+        ], "reproduction": {"all_pass": True}, "anchor_summary": {"all_pass": True},
+            "decision": {"recommendation": "KEEP"}})
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

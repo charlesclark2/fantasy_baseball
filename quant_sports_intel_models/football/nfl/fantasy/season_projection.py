@@ -779,8 +779,45 @@ def attach_season_interval(df: pd.DataFrame, band_model: "VeteranBandModel | Non
     hi = fp_ppr + z80 * season_sd
     tier = np.full(len(df), "empirical", dtype=object)
     if band_model is not None:
+        # ── NF-TR2b: a level-recalibrated frame carries its form + params; the band model was
+        #    fitted on the INCUMBENT's own history, so it is queried at the incumbent-equivalent
+        #    point (new/k for the constant) and the band stays byte-identical to the incumbent's —
+        #    "the level moves, the validated band stays" (season_level_recalibration §0 (3)). The
+        #    served point still brackets the band below. Rows without a stamp query at their point.
+        query_pt = fp_ppr
+        if "veteran_level_form" in df.columns:
+            forms = df["veteran_level_form"].astype(str).replace("nan", "").fillna("")
+            if "is_rookie" in df.columns:      # the stamp is board-wide; the correction is veteran-only
+                forms = forms.where(~df["is_rookie"].fillna(False).astype(bool), "")
+            if bool((forms != "").any()):
+                import json as _json
+                from quant_sports_intel_models.football.nfl.fantasy import (
+                    season_level_recalibration as _SLR,
+                )
+                query_pt = fp_ppr.copy()
+                for form_, sub in df.groupby(forms):
+                    if not form_:
+                        continue
+                    raw = sub["veteran_level_params"].astype(str).iloc[0]
+                    params = {k: (tuple(v) if isinstance(v, list) else v)
+                              for k, v in _json.loads(raw).items()} if raw else {}
+                    idx = df.index.get_indexer(sub.index)
+                    query_pt[idx] = _SLR.invert_level(
+                        form_, params, fp_ppr[idx], sub["position"].to_numpy(),
+                        pd.to_numeric(sub["proj_games"], errors="coerce").fillna(0.0)
+                        .to_numpy(dtype=float))
+        # …and the SEASON SD the band is keyed on is the incumbent-equivalent one too: it carries
+        # `fp_per_game · games_sd`, which scales with the served point (the per-game sd is a realized
+        # property of the player and does not move). Inert for the served `knn_norm` at sd_gain=0 —
+        # it matters the day a band form reads `season_sd`. ⚠️ Known residual, measured on the first
+        # real rebuild: the level→re-order→re-score round trip is not exactly multiplicative on the
+        # deep bench (|Δ query point| ≤ 0.46), so ~18% of vets' p90 moved ≤5.3 pts at a knn-neighbour
+        # boundary — the same neighbour-swap noise class as the `refit` disclosure, not a level shift.
+        band_sd = season_sd
+        if query_pt is not fp_ppr:
+            band_sd = np.sqrt((fp_pg_sd * np.sqrt(eg_arr)) ** 2 + ((query_pt / eg_arr) * gsd) ** 2)
         frame = veteran_band_inputs(
-            df["position"], fp_ppr, season_sd, proj_games=df["proj_games"],
+            df["position"], query_pt, band_sd, proj_games=df["proj_games"],
             base_games=df.get("games_played"), snap_share=df.get("snap_share"),
             seasons_missed=df.get("seasons_missed"))
         b_lo, b_hi = band_model.band_many(frame)
@@ -788,6 +825,10 @@ def attach_season_interval(df: pd.DataFrame, band_model: "VeteranBandModel | Non
         lo = np.where(use, b_lo, lo)
         hi = np.where(use, b_hi, hi)
         tier = np.where(use, "calibrated_per_player", tier).astype(object)
+        # the band was bracketed to its QUERY point inside `band_many`; bracket it to the SERVED point
+        # too (a level-recalibrated point can sit above a band queried at its incumbent-equivalent).
+        lo = np.minimum(lo, fp_ppr)
+        hi = np.maximum(hi, fp_ppr)
     # Round the bounds OUTWARD (p10 down, p90 up). Both tiers guarantee lo ≤ point ≤ hi, but
     # nearest-rounding can push a bound past a point projection it exactly equals and emit a displayed
     # interval that excludes its own point estimate (the same fix `project_rookies` carries).
@@ -818,6 +859,7 @@ def project_veterans(
     absence_prior: "AbsenceReturnPrior | None" = None,
     absence_prior_blend: float = _ABSENCE_PRIOR_BLEND,
     band_model: "VeteranBandModel | None" = None,
+    level_recal: tuple | None = None,
 ) -> pd.DataFrame:
     """Project every base-season player's UPCOMING-season raw stat line.
 
@@ -839,6 +881,13 @@ def project_veterans(
     band_model: NF1.9 — the fitted PER-PLAYER veteran 80% band (`fit_veteran_band_model`). None ⇒ the
       pre-NF1.9 NORMAL APPROXIMATION, whose measured coverage of its own nominal 80% is only ~0.55.
       A row the model cannot speak to falls back to that normal band, labelled honestly.
+    level_recal: NF-TR2b — `(form, params)` of the served veteran LEVEL recalibration
+      (`veteran_level_policy` + `season_level_recalibration.fit_level_from_panel`), applied to the
+      per-game RATE via the whole stat line AFTER every availability step and BEFORE the band is
+      attached, so `proj_games` is untouched and the band is queried at the incumbent-equivalent
+      point (see `attach_season_interval`). None / an empty form ⇒ the identity (the pre-NF-TR2
+      board, byte for byte). The frame carries `veteran_level_form` / `veteran_level_params` so any
+      later re-derivation of the band (NF1.5's re-order) lands on the same band.
     Returns the RAW_STAT_COLS (season totals) + convenience fp + an 80% PPR interval, per player.
     """
     df = base_season.merge(priors, on="position", how="left")
@@ -973,6 +1022,20 @@ def project_veterans(
             (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
         df = score_line(df, prefix="proj_")
 
+    # ── NF-TR2b: the served veteran LEVEL recalibration — a per-position constant on the per-game
+    #    RATE, carried onto the whole line (every scoring format moves together). Applied LAST among
+    #    the level steps and BEFORE the band: `proj_games` is never touched (the availability
+    #    discount stays), the within-position order is preserved exactly (a positive constant is
+    #    monotone), and the band is then attached at the INCUMBENT-EQUIVALENT point so the
+    #    NF1.9-validated band stays byte-identical. No-op when `level_recal` is absent/empty.
+    lvl_form, lvl_params = (level_recal or ("", {}))
+    if lvl_form and lvl_params:
+        from quant_sports_intel_models.football.nfl.fantasy import (
+            season_level_recalibration as _SLR,
+        )
+        df = _SLR.recalibrate_projected_frame(df, lvl_form, lvl_params, score_line=score_line)
+        df["veteran_level_form"] = lvl_form
+        df["veteran_level_params"] = _SLR.params_to_json(lvl_params)
     df = attach_season_interval(df, band_model=band_model, absence_prior=absence_prior,
                                 absence_prior_blend=absence_prior_blend)
     df["is_rookie"] = False

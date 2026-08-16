@@ -1,6 +1,6 @@
 nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1:
   served_version: nfl_fantasy_nf1_5_v1
-  level_model_version: nfl_fantasy_fastpath_v1
+  level_model_version: nfl_fantasy_nf_tr2b_veteran_level_v1
   ordering_model_version: nfl_fantasy_nf1_5_v1
   rookie_model_version: rookie_slot_curve_v1
   rookie_selection_status: incumbent
@@ -23,7 +23,12 @@ nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1:
     [PM decision, NF-D21, 2026-08-05, Charlie (operator/PM); disposition=CONSTRAINT_REFUSED.
     Supporting measurements: ablation_results/nf_g0_d21_governance_publish.md section
     4 (the refusal) and ablation_results/nf1_9_interval_revalidation.md (the standing
-    floors at the served lambda=0).]'
+    floors at the served lambda=0).] [NF-TR2/TR2b, 2026-08-15: veteran LEVEL recalibration
+    promoted — level_model_version nfl_fantasy_nf_tr2b_veteran_level_v1 (pos_const
+    mean-match, trailing 5 seasons, band FIXED); record ablation_results/nf_tr2_level_recalibration_b.md
+    (CRPS 49.34 vs 49.92, PBO 0.0, DSR 0.9995 declared / 0.999 under NF-B3''s field,
+    p 0.0002); rebuilt + published 2026-08-15 by the operator (k QB 0.929 / RB 1.248
+    / WR 1.100 / TE 1.112). Rollback = veteran_level_policy.SERVING_ENABLED=False.]'
   promotion_status: champion
   promoted_at: '2026-08-01'
   reviewed_by: 'Charlie (operator/PM) — NF-D21 disposition 2026-08-05 (genesis promotion:
@@ -94,9 +99,9 @@ nfl_fantasy__weekly_stat_distribution__nfl_fantasy_w6c_v1:
     RB|rushing_yards: lgbm_hurdle_tail
     TE|receiving_yards: lgbm_hurdle_tail
     WR|receiving_yards: lgbm_hurdle_tail
+    RB|rushing_tds: knn_quantile
   withheld_null_cells:
   - RB|receiving_yards
-  - RB|rushing_tds
   closed_cells:
   - QB|rushing_tds
   - RB|receiving_tds
@@ -112,7 +117,7 @@ nfl_fantasy__weekly_stat_distribution__nfl_fantasy_w6c_v1:
   feature_bundle: weekly_projection.FEATURES (29 columns) + position code — the champion
     set; no new features (NF-W6b prereg)
   matrix_key: 57c4cf96bb3c3570
-  built_artifact_sha256: ed888dd30a5fa6a921b100a235ec12c555a6cb5122925b4919a728972b870e11
+  built_artifact_sha256: c2ca084b9999edac342eb352cff98dc8735245f4206a4d2f22624de0af08cda5
   fallback_artifact_uri: repo:quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w1_weekly_bakeoff.json
   validation_report: 'NF-W6b per-stat distributional bake-off, SHIP x6 of 8 cells
     (2026-08-15): QB passing_tds +22.1% / passing_yards +17.0% / rushing_yards +18.9%,
@@ -120,6 +125,12 @@ nfl_fantasy__weekly_stat_distribution__nfl_fantasy_w6c_v1:
     of CRPS (crps_q199) vs the binding champion-faithful incumbent; 8/8 folds each,
     PBO 0.0, DSR 0.969-1.0, two-family BH-FDR, coverage floor, degenerate + permutation
     anchors all green. Record: quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w6b_stat_distributions.md.
+    NF-W6b-C per-stat distributional successor (SEPARATE record, fresh registration,
+    seed 20260816): SHIP RB|rushing_tds — `knn_quantile` +12.966% CRPS vs the discrete
+    climatology, 8/8 folds, PBO 0.0, DSR 1.0 (sr0 1.33) where NF-W6b''s OWN field
+    could not clear DSR for this cell (sr0 ≈7.32, inflated by an excluded incoherent
+    arm) — a fresh, coherent, atom-aware family, not a re-score of W6b''s field (MH2.2).
+    Record: quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w6b_c_rb_rush_tds.md.
     NF-W6c re-derives NOTHING: it fits those certified constructions fresh on full
     train through the identical pinned code path (stat_distribution_serving dispatches
     into stat_distributions.arm_*) and emits the 199-level representation. Serving-smoke
@@ -127,7 +138,8 @@ nfl_fantasy__weekly_stat_distribution__nfl_fantasy_w6c_v1:
     serve gw 174 (2025 wk 18), 84036 train rows = a superset of NF-W6b''s purged fold
     train (83011, +1025), containment measured.'
   reviewed_by: Charlie (operator/PM) — NF-W6b Decision A (wire ALL SIX ship cells;
-    points hurdle champion untouched), 2026-08-15
+    points hurdle champion untouched) + NF-W6b-C Decision C (wire RB rushing_tds once
+    the fresh-family successor shipped), 2026-08-15
   notes: 'STAGED CHALLENGER (NF-W6c) — inert at serve by construction: served_entry()
     returns champion-status entries only and no serving path reads this registry.
     PROMOTE/PUBLISH BLOCKED until ALL of: (1) NF-C6 Phase 2 — no weekly serving path
@@ -141,20 +153,171 @@ nfl_fantasy__weekly_stat_distribution__nfl_fantasy_w6c_v1:
     is deliberately ABSENT: nothing scores these distributions yet (this story is
     the SUBSTRATE; the arbitrary-league re-scoring consumer is a follow-on), and stamping
     a scoring contract no consumer honors would be a lineage claim with no consumer.
-    ⛔ The two recorded-null cells are NOT staged — RB receiving_yards is PM Decision
-    B (calendar-bound re-test on the same harness once the 2026 folds exist) and RB
-    rushing_tds is PM Decision C (deferred NF-W6b-C, which requires a FRESH atom-aware
-    family; its DSR is unreachable in NF-W6b''s field, so it must never ride this
-    story''s infrastructure into serving). ⛔ The points hurdle champion (total fantasy
-    points) is untouched — NF-W6b never tested it and never beat it; these per-stat
-    distributions sit BESIDE it on the raw line. Nothing distributional has ever served
-    per-stat, so fallback_artifact_uri is the NF-W1 base champion''s record = the
-    per-stat POINT mean the raw line reverts to. Edge-independent projection product
-    (best_alpha = 0): a quantile bank is honest predictive uncertainty and carries
-    no edge, ROI or win-rate claim.'
+    ⛔ The remaining recorded-null cell is NOT staged — RB receiving_yards is PM Decision
+    B (calendar-bound re-test on the same harness once the 2026 folds exist). RB rushing_tds
+    (PM Decision C) IS now staged: NF-W6b''s own field never cleared DSR for it (an
+    excluded linear-residual arm inflated the field''s cross-trial dispersion), so
+    NF-W6b-C registered a FRESH, coherent, atom-aware family that cleared DSR cleanly
+    (1.0, sr0 1.33) — that successor record, not a re-read of NF-W6b''s null, is what
+    licenses serving it. ⛔ The points hurdle champion (total fantasy points) is untouched
+    — NF-W6b never tested it and never beat it; these per-stat distributions sit BESIDE
+    it on the raw line. Nothing distributional has ever served per-stat, so fallback_artifact_uri
+    is the NF-W1 base champion''s record = the per-stat POINT mean the raw line reverts
+    to. Edge-independent projection product (best_alpha = 0): a quantile bank is honest
+    predictive uncertainty and carries no edge, ROI or win-rate claim.'
   artifact_uri: repo:quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w6c_served_stat_distributions.json
   promotion_status: challenger
-  generated_at: '2026-08-15T03:33:24.339242+00:00'
-  staged_digest: 978568d89435e56dff028de001bb91bbec125dedd1807a139ff9d31a6cbc6587
+  generated_at: '2026-08-15T18:17:36.628791+00:00'
+  staged_digest: 6e9483e5c6d2acdc8f34941382d869eefa9b505c22348333ff9639a0f1848cf9
+  model_family: nfl_fantasy
+  target: weekly_stat_distribution
+nfl_fantasy__weekly_stat_distribution__nfl_fantasy_w6d_v1:
+  served_version: nfl_fantasy_w6d_v1
+  base_model_version: nfl_fantasy_nf_w1_v1
+  per_cell_form:
+    QB|passing_tds: knn_quantile
+    QB|passing_yards: lgbm_quantile_tail
+    QB|rushing_yards: lgbm_hurdle_tail
+    RB|rushing_yards: lgbm_hurdle_tail
+    TE|receiving_yards: lgbm_hurdle_tail
+    WR|receiving_yards: lgbm_hurdle_tail
+    RB|rushing_tds: knn_quantile
+    RB|receiving_yards: climatology
+    QB|attempts: climatology
+    QB|passing_interceptions: knn_quantile
+    QB|carries: count_negbin
+    QB|rushing_tds: count_negbin
+    QB|fumbles_lost: count_negbin
+    QB|two_pt: count_negbin
+    RB|carries: lgbm_hurdle_tail
+    RB|targets: count_negbin
+    RB|receptions: lgbm_hurdle_tail
+    RB|receiving_tds: count_negbin
+    RB|fumbles_lost: count_negbin
+    RB|two_pt: count_negbin
+    WR|targets: lgbm_hurdle_tail
+    WR|receptions: lgbm_hurdle_tail
+    WR|receiving_tds: knn_quantile
+    WR|fumbles_lost: count_negbin
+    WR|two_pt: count_negbin
+    TE|targets: lgbm_hurdle_tail
+    TE|receptions: lgbm_hurdle_tail
+    TE|receiving_tds: count_negbin
+    TE|fumbles_lost: count_negbin
+    TE|two_pt: count_negbin
+    QB|targets: climatology
+    QB|receptions: climatology
+    QB|receiving_yards: climatology
+    QB|receiving_tds: climatology
+    RB|attempts: climatology
+    RB|passing_yards: climatology
+    RB|passing_tds: climatology
+    RB|passing_interceptions: climatology
+    WR|attempts: climatology
+    WR|passing_yards: climatology
+    WR|passing_tds: climatology
+    WR|passing_interceptions: climatology
+    WR|carries: climatology
+    WR|rushing_yards: climatology
+    WR|rushing_tds: climatology
+    TE|attempts: climatology
+    TE|passing_yards: climatology
+    TE|passing_tds: climatology
+    TE|passing_interceptions: climatology
+    TE|carries: climatology
+    TE|rushing_yards: climatology
+    TE|rushing_tds: climatology
+  per_cell_source:
+    QB|passing_tds: nf_w6b
+    QB|passing_yards: nf_w6b
+    QB|rushing_yards: nf_w6b
+    RB|rushing_yards: nf_w6b
+    TE|receiving_yards: nf_w6b
+    WR|receiving_yards: nf_w6b
+    RB|rushing_tds: nf_w6b_c
+    RB|receiving_yards: nf_w6d_c_default
+    QB|attempts: nf_w6d_c_default
+    QB|passing_interceptions: nf_w6d_b_ship
+    QB|carries: nf_w6d_c_default
+    QB|rushing_tds: nf_w6d_b_ship
+    QB|fumbles_lost: nf_w6d_c_default
+    QB|two_pt: nf_w6d_c_default
+    RB|carries: nf_w6d_b_ship
+    RB|targets: nf_w6d_c_default
+    RB|receptions: nf_w6d_b_ship
+    RB|receiving_tds: nf_w6d_c_default
+    RB|fumbles_lost: nf_w6d_c_default
+    RB|two_pt: nf_w6d_c_default
+    WR|targets: nf_w6d_b_ship
+    WR|receptions: nf_w6d_b_ship
+    WR|receiving_tds: nf_w6d_b_ship
+    WR|fumbles_lost: nf_w6d_c_default
+    WR|two_pt: nf_w6d_c_default
+    TE|targets: nf_w6d_b_ship
+    TE|receptions: nf_w6d_b_ship
+    TE|receiving_tds: nf_w6d_c_default
+    TE|fumbles_lost: nf_w6d_c_default
+    TE|two_pt: nf_w6d_c_default
+    QB|targets: nf_w6d_c_default
+    QB|receptions: nf_w6d_c_default
+    QB|receiving_yards: nf_w6d_c_default
+    QB|receiving_tds: nf_w6d_c_default
+    RB|attempts: nf_w6d_c_default
+    RB|passing_yards: nf_w6d_c_default
+    RB|passing_tds: nf_w6d_c_default
+    RB|passing_interceptions: nf_w6d_c_default
+    WR|attempts: nf_w6d_c_default
+    WR|passing_yards: nf_w6d_c_default
+    WR|passing_tds: nf_w6d_c_default
+    WR|passing_interceptions: nf_w6d_c_default
+    WR|carries: nf_w6d_c_default
+    WR|rushing_yards: nf_w6d_c_default
+    WR|rushing_tds: nf_w6d_c_default
+    TE|attempts: nf_w6d_c_default
+    TE|passing_yards: nf_w6d_c_default
+    TE|passing_tds: nf_w6d_c_default
+    TE|passing_interceptions: nf_w6d_c_default
+    TE|carries: nf_w6d_c_default
+    TE|rushing_yards: nf_w6d_c_default
+    TE|rushing_tds: nf_w6d_c_default
+  calibration_warnings: {}
+  served_representation:
+    levels: 199
+    grid: MC.EVAL_LEVELS (0.005…0.995, step 0.005)
+    index_q10: 19
+    index_q50: 99
+    index_q90: 179
+    zero_atom: P(0) = the share of grid levels at 0
+  feature_bundle: weekly_projection.FEATURES (29 columns) + position code — the champion
+    set; no new features
+  matrix_key: 26c34fbe778c9d87
+  built_artifact_sha256: a2739df4d4ed73d67be66c91865ef96455dbd52fec146a0a4a74ab374fb96391
+  fallback_artifact_uri: repo:quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w6b_stat_distributions.md
+  validation_report: 'NF-W6d completes the per-stat distribution substrate: 52 (position,
+    stat) cells = the 7 NF-W6b/W6b-C SHIP cells + NF-W6d Phase-B SHIP cells (fresh
+    atom-aware per-class §0.5 bake-off, seed 20260817, reproduction control on the
+    7 served cells) + Phase-C CALIBRATED DEFAULTS (pre-registered order, coverage
+    floor + PIT flatness) for every cell with no ceiling / a null / a minor channel.
+    Records: nf_w6d_ceiling_gate.md, nf_w6d_stat_bakeoff.md, nf_w6d_defaults.md. Cells
+    by source: {''nf_w6b'': 6, ''nf_w6b_c'': 1, ''nf_w6d_c_default'': 36, ''nf_w6d_b_ship'':
+    9}. Serve gw 174 (2025 wk 18), 84036 train rows.'
+  reviewed_by: operator/PM — NF-W6d closeout (staged, promote blocked)
+  notes: 'STAGED CHALLENGER (NF-W6d) on the same target as NF-W6c — inert at serve.
+    PROMOTE/PUBLISH BLOCKED until: (1) NF-C6 Phase 2 — no weekly serving path exists
+    (the deployed fantasy surface is the SEASON raw line `projections.json`; there
+    is no weekly endpoint to attach a player-week distribution to); (2) NF-G0 promotion
+    review — the ten gates plus a PM decision; NF-W6b promoted nothing and this story
+    stages, it does not promote; (3) the downstream arbitrary-league re-scoring consumer
+    is a FOLLOW-ON story — the moment a scorer reads these distributions the three-implementations
+    parity tax (fantasy_engine / the browser TS scorer / the Lambda scorer) triggers
+    under the merge-gate parity test; (4) NF-W6d Phase-C DEFAULT cells are calibrated
+    ranges, not bake-off winners — the assembly consumer must read `source`/`calibration_warning`
+    and never present a default as a conditional projection. A default cell is a calibrated
+    range, never a conditional projection; the assembly consumer reads `source`. Edge-independent
+    (best_alpha = 0).'
+  artifact_uri: repo:quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w6d_served_stat_distributions.json
+  promotion_status: challenger
+  generated_at: '2026-08-16T01:32:15.458598+00:00'
+  staged_digest: e77a3f6cc222ebaf7ebb857b6ab5cbe517aa55da022a7f7f65afa4163793673e
   model_family: nfl_fantasy
   target: weekly_stat_distribution

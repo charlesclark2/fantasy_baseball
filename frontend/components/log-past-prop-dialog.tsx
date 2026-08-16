@@ -1,11 +1,18 @@
 "use client"
 
-// E9.42 — "Log a prop" (manual entry). Lets a user back-log a strikeout prop they placed on
-// any game within the last ~14 days, straight into their Bet Log, even when we never generated
-// a projection for that start. Pure bookkeeping: the user self-reports side / line / book / odds
-// / stake and it settles later against the pitcher's actual strikeouts. NOT betting advice and
+// E9.42 — "Log a prop" (manual entry). Lets a user back-log a prop they placed on any game
+// within the last ~14 days, straight into their Bet Log, even when we never generated a
+// projection for that start. Pure bookkeeping: the user self-reports side / line / book / odds
+// / stake and it settles later against the player's actual total. NOT betting advice and
 // carries no recommendation (E5.4 found no demonstrable gain on this prop) — the honest-framing
 // scan (test_k_projection_serving.py) guards this file for banned language.
+//
+// E5.10 — extended to BATTER TOTAL BASES. /props shipped a Total Bases tab (E5.9) while this
+// dialog and settlement were both strikeout-only, so a TB prop the user had actually placed
+// could not be recorded at all. The prop type drives three things together — which picker the
+// dialog loads (starters vs batters), the `market` string it posts, and therefore which actual
+// settlement grades it against — so they are derived from ONE table below rather than three
+// parallel ternaries that could drift apart.
 
 import { useMemo, useState } from "react"
 import { format, subDays } from "date-fns"
@@ -23,21 +30,20 @@ import {
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import { normalizeTeam } from "@/lib/teams"
+import { PROP_MARKETS, PROP_KINDS, type PropKind } from "@/lib/prop-markets"
 
 const BOOKMAKER_OPTIONS = ["Bovada", "DraftKings", "FanDuel", "BetMGM", "Pinnacle", "Other"]
 
-interface Starter {
+// Both pickers are normalized to this shape on read, so the rest of the dialog never branches
+// on prop type again (the /props/starters rows key their id as `pitcher_id`, the batters rows
+// as `player_id` — a difference that must not leak past this boundary).
+interface PropPlayer {
   game_pk: number
-  pitcher_id: number
-  pitcher_name: string
+  player_id: number
+  player_name: string
   team: string | null
   opponent: string | null
   game_date: string
-}
-
-interface StartersResponse {
-  date: string
-  starters: Starter[]
 }
 
 export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
@@ -59,6 +65,8 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
   const [calOpen, setCalOpen] = useState(false)
   const dateStr = format(date, "yyyy-MM-dd")
 
+  const [propType, setPropType] = useState<PropKind>("strikeouts")
+  const cfg = PROP_MARKETS[propType]
   const [pitcherId, setPitcherId] = useState<string>("")
   const [side, setSide] = useState<"over" | "under">("over")
   const [book, setBook] = useState("Bovada")
@@ -67,19 +75,41 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
   const [stake, setStake] = useState("")
   const [notes, setNotes] = useState("")
 
-  // Starting pitchers for the chosen date (both starters per game). Settlement keys off the
-  // pitcher_id + game_pk this returns, so the user picks a real start rather than free-typing.
-  const { data, isLoading } = useQuery<StartersResponse>({
-    queryKey: ["prop-starters", dateStr],
-    queryFn: () => apiFetch(`/props/starters?date=${dateStr}`, {}, accessToken),
+  // The eligible players for the chosen date + prop type: starting pitchers, or every batter
+  // in a posted lineup. Settlement keys off the player_id + game_pk this returns, so the user
+  // picks a real appearance rather than free-typing.
+  const { data, isLoading, isError } = useQuery<Record<string, unknown>>({
+    queryKey: [cfg.queryKey, dateStr],
+    queryFn: () => apiFetch(`${cfg.endpoint}?date=${dateStr}`, {}, accessToken),
     enabled: !!accessToken && open,
     staleTime: 5 * 60 * 1000,
   })
 
-  const starters = data?.starters ?? []
+  // Normalize both response shapes to PropPlayer. `?? []` on a missing collection is the
+  // NF-C0 guard: an older deployed API answering without the key must fall through to a
+  // visible empty state, never render nothing.
+  const players: PropPlayer[] = useMemo(() => {
+    const raw = (data?.[cfg.collection] as Record<string, unknown>[] | undefined) ?? []
+    return raw
+      .map((r) => ({
+        game_pk: Number(r.game_pk),
+        player_id: Number(r.player_id ?? r.pitcher_id),
+        player_name: String(r.player_name ?? r.pitcher_name ?? ""),
+        team: (r.team as string | null) ?? null,
+        opponent: (r.opponent as string | null) ?? null,
+        game_date: String(r.game_date ?? dateStr),
+      }))
+      .filter((p) => Number.isFinite(p.player_id) && p.player_name)
+  }, [data, cfg.collection, dateStr])
+
+  // The server tells us whether an empty list means "the read FAILED" or "this date genuinely
+  // has nobody" — without it the two are byte-identical (E9.26b), which is exactly how an
+  // unreachable picker read as "no lineups posted yet".
+  const degraded = data?.degraded === true
+
   const selected = useMemo(
-    () => starters.find((s) => String(s.pitcher_id) === pitcherId),
-    [starters, pitcherId],
+    () => players.find((s) => String(s.player_id) === pitcherId),
+    [players, pitcherId],
   )
 
   const mutation = useMutation({
@@ -94,6 +124,7 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
   function reset() {
     setSaved(false)
     mutation.reset()
+    setPropType("strikeouts")
     setPitcherId("")
     setSide("over")
     setBook("Bovada")
@@ -109,14 +140,14 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
     mutation.mutate({
       game_pk: selected.game_pk,
       score_date: selected.game_date,
-      matchup: `${selected.pitcher_name} K${opponent}`,
-      market: side === "over" ? "strikeouts over" : "strikeouts under",
+      matchup: `${selected.player_name} ${cfg.matchupTag}${opponent}`,
+      market: side === "over" ? cfg.marketOver : cfg.marketUnder,
       bookmaker: book,
       american_odds: Number(odds),
       stake: Number(stake),
       prop_line: Number(line),
-      player_id: selected.pitcher_id,
-      player_name: selected.pitcher_name,
+      player_id: selected.player_id,
+      player_name: selected.player_name,
       ...(notes ? { notes } : {}),
     })
   }
@@ -145,10 +176,10 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
 
       <DialogContent className="border-[#262626] bg-[#141414] text-white sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-white">Log a strikeout prop</DialogTitle>
+          <DialogTitle className="text-white">Log a prop</DialogTitle>
           <p className="text-xs text-gray-500">
-            Record a pitcher-strikeout prop you placed — it settles against the pitcher&apos;s actual
-            strikeouts once the game is final.
+            Record a prop you placed — it settles against {cfg.settlesAgainst} once the game is
+            final.
           </p>
         </DialogHeader>
 
@@ -163,6 +194,31 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
         ) : (
           <>
             <div className="grid grid-cols-2 gap-4 py-2">
+              {/* Prop type — drives the picker, the line label AND the posted market string */}
+              <div className="col-span-2 flex flex-col gap-1.5">
+                <Label className="text-xs text-gray-400">Prop</Label>
+                <Select
+                  value={propType}
+                  onValueChange={(v) => { setPropType(v as PropKind); setPitcherId(""); setLine("") }}
+                >
+                  <SelectTrigger
+                    aria-label="Prop type"
+                    data-testid="log-prop-type"
+                    className="border-[#262626] bg-[#0a0a0a] text-sm text-white"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-[#262626] bg-[#141414]">
+                    {PROP_KINDS.map((k) => (
+                      <SelectItem key={k} value={k}
+                        className="text-sm text-white focus:bg-[#1e1e1e] focus:text-white">
+                        {PROP_MARKETS[k].label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               {/* Date (last 14 days) */}
               <div className="col-span-2 flex flex-col gap-1.5">
                 <Label className="text-xs text-gray-400">Game date</Label>
@@ -182,20 +238,28 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
                 </Popover>
               </div>
 
-              {/* Pitcher */}
+              {/* Player (starting pitcher, or a batter in a posted lineup) */}
               <div className="col-span-2 flex flex-col gap-1.5">
-                <Label className="text-xs text-gray-400">Pitcher</Label>
-                <Select value={pitcherId} onValueChange={setPitcherId} disabled={isLoading || starters.length === 0}>
-                  <SelectTrigger className="border-[#262626] bg-[#0a0a0a] text-sm text-white">
+                <Label className="text-xs text-gray-400">{cfg.playerLabel}</Label>
+                <Select value={pitcherId} onValueChange={setPitcherId} disabled={isLoading || players.length === 0}>
+                  <SelectTrigger data-testid="log-prop-player"
+                    className="border-[#262626] bg-[#0a0a0a] text-sm text-white">
+                    {/* An unreachable endpoint and a genuinely empty slate MUST read
+                        differently: while these shared one "none for this date" placeholder,
+                        a 404 from an un-deployed backend was indistinguishable from "no
+                        lineups posted yet" — the honest-empty-state rule. */}
                     <SelectValue placeholder={
-                      isLoading ? "Loading starters…" : starters.length === 0 ? "No starters for this date yet" : "Select pitcher…"
+                      isLoading ? "Loading…"
+                        : isError || degraded ? "Couldn't load — please try again"
+                        : players.length === 0 ? cfg.emptyLabel
+                        : `Select ${cfg.playerLabel.toLowerCase()}…`
                     } />
                   </SelectTrigger>
                   <SelectContent className="border-[#262626] bg-[#141414]">
-                    {starters.map((s) => (
-                      <SelectItem key={`${s.game_pk}-${s.pitcher_id}`} value={String(s.pitcher_id)}
+                    {players.map((s) => (
+                      <SelectItem key={`${s.game_pk}-${s.player_id}`} value={String(s.player_id)}
                         className="text-sm text-white focus:bg-[#1e1e1e] focus:text-white">
-                        {s.pitcher_name}
+                        {s.player_name}
                         {s.team ? ` (${normalizeTeam(s.team)}${s.opponent ? ` vs ${normalizeTeam(s.opponent)}` : ""})` : ""}
                       </SelectItem>
                     ))}
@@ -217,9 +281,11 @@ export function LogPastPropDialog({ initialDate }: { initialDate?: Date }) {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs text-gray-400">Strikeout line</Label>
+                <Label className="text-xs text-gray-400">{cfg.lineLabel}</Label>
                 <Input type="number" step="0.5" value={line} onChange={(e) => setLine(e.target.value)}
-                  placeholder="6.5" className="border-[#262626] bg-[#0a0a0a] text-sm text-white placeholder:text-gray-600" />
+                  data-testid="log-prop-line"
+                  placeholder={cfg.linePlaceholder}
+                  className="border-[#262626] bg-[#0a0a0a] text-sm text-white placeholder:text-gray-600" />
               </div>
 
               <div className="flex flex-col gap-1.5">
