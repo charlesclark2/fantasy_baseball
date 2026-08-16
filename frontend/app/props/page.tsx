@@ -4,7 +4,15 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import { format } from "date-fns"
-import { CalendarIcon, Info, Search as SearchIcon, X as ClearIcon } from "lucide-react"
+import {
+  CalendarIcon,
+  ChevronDown,
+  Info,
+  Search as SearchIcon,
+  SlidersHorizontal,
+  X as ClearIcon,
+} from "lucide-react"
+import { cn } from "@/lib/utils"
 import { Nav } from "@/components/nav"
 import { AuthGuard } from "@/components/auth-guard"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -422,6 +430,10 @@ function PropsPageInner() {
   const [lineFilter, setLineFilter] = useState<number | null>(null)
   const [minBookCount, setMinBookCount] = useState<number | null>(null)
   const [selectedBooks, setSelectedBooks] = useState<Set<string>>(new Set())
+  // Chip panel: collapsed by default on a PHONE only (a real slate has all 30 clubs, so the Team
+  // row alone runs ~10 lines there and pushes every game below the fold). `sm:` and up ignores
+  // this entirely and renders exactly as before — the desktop layout is deliberately untouched.
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [openGroups, setOpenGroups] = useState<string[]>([])
   const [initializedSlateKey, setInitializedSlateKey] = useState<string | null>(null)
 
@@ -540,12 +552,15 @@ function PropsPageInner() {
     return sortRowsByMetric(visibleRows, sortKey)
   }, [visibleRows, sortKey])
 
-  const filtersActive =
-    !!search.trim() ||
-    selectedTeams.size > 0 ||
-    lineFilter != null ||
-    minBookCount != null ||
-    selectedBooks.size > 0
+  // Chip filters only — search has its own always-visible box, so counting it here would put a
+  // badge on a collapsed panel that contains nothing the user set.
+  const chipFilterCount =
+    selectedTeams.size +
+    (lineFilter != null ? 1 : 0) +
+    (minBookCount != null ? 1 : 0) +
+    selectedBooks.size
+
+  const filtersActive = !!search.trim() || chipFilterCount > 0
   const effectiveOpenValues = filtersActive ? groups.map((g) => String(g.gamePk)) : openGroups
 
   const projLabel = isBatterTab ? "Proj TB" : "Proj K"
@@ -693,13 +708,49 @@ function PropsPageInner() {
               </div>
             </div>
 
+            {/* Phone-only disclosure. On a real slate the chip panel is ~20 lines tall (30 clubs +
+                7 lines + 8 books), which on a phone is the entire first screen — you scroll past a
+                wall of filters to reach the games you came for. Hidden at `sm:` and up, where the
+                panel has always been fine. */}
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((o) => !o)}
+              aria-expanded={filtersOpen}
+              aria-controls="props-filter-chips"
+              data-testid="props-filters-toggle"
+              className="flex items-center justify-between gap-2 rounded-md border border-[#262626] bg-[#141414] px-3 py-2 text-xs text-gray-300 sm:hidden"
+            >
+              <span className="flex items-center gap-2">
+                <SlidersHorizontal className="h-3.5 w-3.5 text-gray-500" />
+                Filters
+                {/* The count is what makes a COLLAPSED panel honest: without it a user who set a
+                    filter, scrolled, and came back has no way to tell a narrowed slate from an
+                    empty one. */}
+                {chipFilterCount > 0 && (
+                  <span
+                    data-testid="props-filters-active-count"
+                    className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400"
+                  >
+                    {chipFilterCount}
+                  </span>
+                )}
+              </span>
+              <ChevronDown
+                className={cn("h-4 w-4 text-gray-500 transition-transform", filtersOpen && "rotate-180")}
+              />
+            </button>
+
             {/* Filter chips — one category per row (E5.10 follow-up: previously all four
                 categories shared a single flex-wrap row and ran together whenever the chips
                 overflowed, reading as one messy jumble instead of four distinct filters). */}
-            <div className="flex flex-col gap-2">
+            <div
+              id="props-filter-chips"
+              data-testid="props-filter-chips"
+              className={cn("flex-col gap-2 sm:flex", filtersOpen ? "flex" : "hidden")}
+            >
               {teamsAll.length > 1 && (
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="w-[92px] shrink-0 text-[11px] uppercase tracking-wider text-gray-600">
+                  <span className="w-full text-[11px] uppercase tracking-wider text-gray-600 sm:w-[92px] sm:shrink-0">
                     Team
                   </span>
                   {teamsAll.map((t) => (
@@ -715,7 +766,7 @@ function PropsPageInner() {
               )}
               {lineValuesAll.length > 1 && (
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="w-[92px] shrink-0 text-[11px] uppercase tracking-wider text-gray-600">
+                  <span className="w-full text-[11px] uppercase tracking-wider text-gray-600 sm:w-[92px] sm:shrink-0">
                     Line
                   </span>
                   {lineValuesAll.map((l) => (
@@ -731,7 +782,7 @@ function PropsPageInner() {
               )}
               {bookCountThresholds.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="w-[92px] shrink-0 text-[11px] uppercase tracking-wider text-gray-600">
+                  <span className="w-full text-[11px] uppercase tracking-wider text-gray-600 sm:w-[92px] sm:shrink-0">
                     Min. books
                   </span>
                   {bookCountThresholds.map((n) => (
@@ -747,7 +798,7 @@ function PropsPageInner() {
               )}
               {sportsbooksAll.length > 1 && (
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="w-[92px] shrink-0 text-[11px] uppercase tracking-wider text-gray-600">
+                  <span className="w-full text-[11px] uppercase tracking-wider text-gray-600 sm:w-[92px] sm:shrink-0">
                     Sportsbook
                   </span>
                   {sportsbooksAll.map((b) => (

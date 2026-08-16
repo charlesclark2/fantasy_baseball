@@ -33,6 +33,13 @@ function gameGroup(page: Page, gamePk: number) {
 test("the slate never scrolls sideways on a phone", async ({ page }) => {
   const { errors } = await openProps(page)
 
+  // ⚠️ THE CHIP PANEL IS COLLAPSED BY DEFAULT ON A PHONE, so this MUST open it first. Measuring
+  // overflow against a `hidden` panel would still pass — while measuring nothing — and this is
+  // the one test whose documented job is catching a chip row that will not wrap. A guard that
+  // cannot see the thing it guards is worse than no guard (NF1.7(a) / INC-38).
+  await page.getByTestId("props-filters-toggle").tap()
+  await expect(page.getByTestId("props-filter-chips")).toBeVisible()
+
   // ⭐ THE ONE THAT CATCHES A BROKEN GRID/FILTER ROW. A filter-chip row or a card grid that will not
   // wrap widens the document past the viewport — this is a 108-card, 6-team, multi-line-value
   // slate, the densest surface the filter chips will ever render against.
@@ -41,6 +48,30 @@ test("the slate never scrolls sideways on a phone", async ({ page }) => {
   )
   expect(overflow, "the props page scrolls horizontally on a phone").toBeLessThanOrEqual(1)
   expectNoPageErrors(errors)
+})
+
+test("the filter chips are collapsed behind a toggle on a phone, and the toggle counts what is set", async ({
+  page,
+}) => {
+  await openProps(page)
+
+  // Collapsed by default: a real slate carries all 30 clubs, so an always-open panel is ~20 lines
+  // and every game starts below the fold. The games are what the page is for.
+  await expect(page.getByTestId("props-filter-chips")).toBeHidden()
+  await expect(page.getByTestId("props-game-groups")).toBeVisible()
+  await expect(page.getByTestId("props-filters-active-count")).toHaveCount(0)
+
+  await page.getByTestId("props-filters-toggle").tap()
+  await expect(page.getByTestId("props-filter-chips")).toBeVisible()
+
+  // Setting a filter and re-collapsing must leave a VISIBLE trace. Without the count, a narrowed
+  // slate and an empty one look identical once the panel is shut — the silent-empty shape, in the
+  // UI: the user sees fewer games and nothing says why.
+  await page.getByTestId("props-filter-team-STL").tap()
+  await page.getByTestId("props-filters-toggle").tap()
+  await expect(page.getByTestId("props-filter-chips")).toBeHidden()
+  await expect(page.getByTestId("props-filters-active-count")).toHaveText("1")
+  await expect(page.getByTestId("props-game-group")).toHaveCount(1)
 })
 
 test("a collapsed game header is tappable and expands its section", async ({ page }) => {
@@ -58,6 +89,7 @@ test("a collapsed game header is tappable and expands its section", async ({ pag
 
 test("a team filter chip is tappable and narrows the slate to that matchup", async ({ page }) => {
   await openProps(page)
+  await page.getByTestId("props-filters-toggle").tap() // chips are behind the phone disclosure
   await page.getByTestId("props-filter-team-STL").tap()
   await expect(page.getByTestId("props-game-group")).toHaveCount(1)
   await expect(gameGroup(page, LAST_GAME_PK)).toBeVisible()
