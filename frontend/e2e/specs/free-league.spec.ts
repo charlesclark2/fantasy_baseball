@@ -1,9 +1,11 @@
 import { expect, test, type Page } from "@playwright/test"
 import {
+  E2E_LINKED_LEAGUES,
   FIXTURES,
   captureAnalytics,
   collectPageErrors,
   leagueBoardPlayers,
+  linkedRosterSubject,
   mockApi,
 } from "../support/api-mock"
 import { signIn } from "../support/session"
@@ -60,8 +62,12 @@ const LEAGUE_NAV_HREFS = [
 async function openMyLeague(
   page: Page,
   options: {
-    leagues?: "none" | "one" | "overQuota"
+    leagues?: "none" | "one" | "overQuota" | "linked"
     groups?: string[]
+    /** Defaults to "free" — the tier this file is named for. G100-C2's picker tests are the only
+     *  callers that need "entitled": a free account's quota is 1, so `leagues: "linked"` (two
+     *  served leagues) is meaningless without it — the server would still cap `teams` at one. */
+    entitlement?: "free" | "entitled"
     /** Rewrite a payload before it is served — how the pool tests below change the league's ROSTER
      *  without a second fixture, so the arithmetic is exercised on more than one shape. */
     transform?: (pathname: string, body: any) => any
@@ -70,7 +76,7 @@ async function openMyLeague(
   await signIn(page, { groups: options.groups ?? SIGNED_IN_FREE.groups })
   const errors = collectPageErrors(page)
   const mock = await mockApi(page, {
-    entitlement: "free",
+    entitlement: options.entitlement ?? "free",
     leagues: options.leagues ?? "one",
     transform: options.transform,
   })
@@ -718,6 +724,140 @@ test.describe("the one-league quota is enforced on BOTH create paths", () => {
     const cta = page.getByTestId("league-quota-upgrade")
     await expect(cta).toBeVisible()
     await expect(cta).toHaveAttribute("href", "/subscribe")
+    expectNoPageErrors(errors)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+// G100-C2 — THE LEAGUE PICKER: a subscriber with several saved leagues only ever saw whichever one
+// `teams?.[0]` happened to return, with nothing on screen naming the others. A free account's quota
+// is 1, so these tests deliberately sign in as a SUBSCRIBER (`entitlement: "entitled"`) — that is the
+// only shape that can exercise a picker at all, and it is why they cannot reuse `openMyLeague`'s free
+// default without overriding it.
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+
+test.describe("the league picker (G100-C2)", () => {
+  /** Two saved, both-served leagues — `leagues: "linked"` (api-mock.ts), which a free account's
+   *  quota of one can never produce. */
+  async function openWithTwoLeagues(page: Page) {
+    return openMyLeague(page, {
+      groups: ["subscriber"],
+      entitlement: "entitled",
+      leagues: "linked",
+    })
+  }
+
+  /** Every row visible, so a page boundary can never hide the subject. */
+  async function showAllRows(page: Page) {
+    // ⚠️ A Radix `Picker`, not a native <select>` — `selectOption` silently does nothing on one.
+    await page.getByLabel("Rows per page").first().click()
+    await page.getByRole("option", { name: "All", exact: true }).click()
+  }
+
+  /** The subject's `pts` cell on the currently-rendered board. */
+  async function subjectPts(page: Page, name: string): Promise<number> {
+    const row = page.locator('[data-testid="my-league-board"] tbody tr', { hasText: name }).first()
+    await expect(row, `${name} has no row on the rendered board`).toBeVisible()
+    // columns: # | Player | Pos | Team | Bye | pts | VOR | vs generic
+    const text = (await row.locator("td").nth(5).innerText()).trim()
+    const value = Number(text.replace(/,/g, ""))
+    expect(Number.isFinite(value), `${name}'s pts cell read "${text}" — not a number`).toBe(true)
+    return value
+  }
+
+  test("a subscriber with two saved leagues sees a picker naming both, defaulting to the first", async ({
+    page,
+  }) => {
+    const { errors, mock } = await openWithTwoLeagues(page)
+    await expect(page.getByTestId("league-delta")).toBeVisible()
+
+    // The default view is the FIRST served league — `teams[0]`, unchanged from before this story,
+    // so a single-league account's behavior never moves.
+    await expect(
+      page.getByRole("heading", { name: E2E_LINKED_LEAGUES.half.name, exact: true }),
+    ).toBeVisible()
+
+    const picker = page.getByTestId("league-picker")
+    await expect(picker).toBeVisible()
+    await page.getByLabel("League", { exact: true }).click()
+    await expect(
+      page.getByRole("option", { name: E2E_LINKED_LEAGUES.half.name, exact: true }),
+    ).toBeVisible()
+    await expect(
+      page.getByRole("option", { name: E2E_LINKED_LEAGUES.standard.name, exact: true }),
+    ).toBeVisible()
+    // Close without picking — this test only asks what the list OFFERS.
+    await page.keyboard.press("Escape")
+
+    await expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
+  test("switching leagues re-scores the whole page for the selected league, not teams[0]", async ({
+    page,
+  }) => {
+    // ⭐ THE GUARD. If the page still read `teams?.[0]` unconditionally, picking the SECOND league
+    // in the list would change nothing — the heading, the board and this player's points would all
+    // stay exactly what they were for the first league. A hardcoded read would satisfy "the picker
+    // is visible" and fail only THIS assertion, which is why it has to be the one that exists.
+    const { errors, mock } = await openWithTwoLeagues(page)
+    await expect(page.getByTestId("league-delta")).toBeVisible()
+    await showAllRows(page)
+
+    const subject = linkedRosterSubject()
+    const half = await subjectPts(page, subject.name)
+
+    await page.getByLabel("League", { exact: true }).click()
+    await page.getByRole("option", { name: E2E_LINKED_LEAGUES.standard.name, exact: true }).click()
+
+    await expect(
+      page.getByRole("heading", { name: E2E_LINKED_LEAGUES.standard.name, exact: true }),
+    ).toBeVisible()
+    const standard = await subjectPts(page, subject.name)
+
+    // Half-PPR pays 0.5 per reception and the standard twin pays 0; everything else about the two
+    // leagues is byte-identical (`linkedLeaguePair`, api-mock.ts), so the gap is fixed by the
+    // player's own projected receptions. A gap of 0 means the heading changed cosmetically without
+    // the board actually re-scoring — it would still be reading the FIRST league.
+    const expected = 0.5 * subject.rec
+    expect(
+      Math.abs(half - standard - expected),
+      `${subject.name} scored ${half} pts in the half-PPR league and ${standard} after switching ` +
+        `to the standard one; with ${subject.rec} projected receptions the gap should be ` +
+        `${expected.toFixed(1)}. A gap of 0 means the board never actually switched leagues.`,
+    ).toBeLessThanOrEqual(0.11)
+
+    await expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
+  test("the selection survives a reload — the URL carries it, not just component state", async ({
+    page,
+  }) => {
+    await openWithTwoLeagues(page)
+    await expect(page.getByTestId("league-delta")).toBeVisible()
+
+    await page.getByLabel("League", { exact: true }).click()
+    await page.getByRole("option", { name: E2E_LINKED_LEAGUES.standard.name, exact: true }).click()
+    await expect(
+      page.getByRole("heading", { name: E2E_LINKED_LEAGUES.standard.name, exact: true }),
+    ).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`league=${E2E_LINKED_LEAGUES.standard.id}`))
+
+    // Component state alone resets on a reload; only the URL param makes this pass.
+    await page.reload()
+    await expect(page.getByTestId("league-delta")).toBeVisible()
+    await expect(
+      page.getByRole("heading", { name: E2E_LINKED_LEAGUES.standard.name, exact: true }),
+    ).toBeVisible()
+  })
+
+  test("a free account, with one served league, never sees a picker", async ({ page }) => {
+    // The control exists to choose BETWEEN leagues. A free account's quota is 1, `teams` never
+    // exceeds one entry, and a one-option picker would be a control that visibly does nothing.
+    const { errors } = await openMyLeague(page)
+    await expect(page.getByTestId("my-league-board")).toBeVisible()
+    await expect(page.getByTestId("league-picker")).toHaveCount(0)
     expectNoPageErrors(errors)
   })
 })
