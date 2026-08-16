@@ -177,6 +177,18 @@ MIN_ESTIMATION_ROWS = JD.MIN_ESTIMATION_ROWS
 #: is the calibration TARGET. Max decile deviation from 0.10, pre-registered.
 PIT_MAX_DECILE_DEV = 0.05
 
+#: ⭐ Rows the RESIDUAL-scale estimator (`joint_pit`) computes PITs over — the most recent
+#: `PIT_ESTIMATION_ROWS` train rows, not all of them.
+#:
+#: DERIVED FROM A DESIGN QUANTITY, NOT TUNED TO A RUNTIME OR A RESULT. Σ here is a 13×13
+#: correlation; the standard error of a correlation is ≈(1−ρ²)/√(n−3), so at n = 8,000 it is
+#: ≈0.011 — an order of magnitude below any dependence magnitude this story could act on, and the
+#: raw-rank arms (which need no model predictions) keep using the FULL train window regardless.
+#: ⛔ The marginal FIT is UNCHANGED — still the full train set, the identical predictive the real
+#: arms serve; only the number of rows PITs are COMPUTED ON is capped. Pre-registered BEFORE any
+#: score exists, so this is a compute decision, never a result-shaped one (E2.1-r).
+PIT_ESTIMATION_ROWS = 8_000
+
 ASSEMBLY_DRAWS = KW.ASSEMBLY_DRAWS               # 4000, NF-W7's convention
 #: Rows per draw block. The base normals are seeded per BLOCK, so a run reproduces given
 #: (seed, ROW_BLOCK) — pinned here and recorded in the artifact rather than left implicit.

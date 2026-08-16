@@ -620,6 +620,41 @@ def test_the_smoke_still_writes_its_OWN_artifact_as_a_path_proof():
     assert 'art = _PROJECT_ROOT / _ARTIFACT_REL.replace(".json", f"{suffix}.json")' in src
 
 
+def test_the_marginals_are_built_once_per_FOLD_not_once_per_position():
+    """⭐ `serve_banks` fits per (form, stat) across EVERY position and then slices, so a marginal
+    context is position-INDEPENDENT. Building one inside the position loop repeats the identical
+    ~113 LightGBM fits 4× per fold — measured at 868.7s for ONE position on the 2025H2 fold.
+    Pinned on source (comment-stripped, so prose cannot satisfy it)."""
+    import inspect
+
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
+    body = "\n".join(ln for ln in inspect.getsource(R.run_position).splitlines()
+                     if not ln.lstrip().startswith("#"))
+    assert "_marginals(" not in body, (
+        "run_position builds a marginal context — that is position-independent work being redone "
+        "once per position (4× per fold)")
+    fold = inspect.getsource(R.run_fold)
+    assert fold.count("_marginals(") == 2, (
+        "run_fold should build exactly the two fold-level contexts (test + residual-PIT window)")
+
+
+def test_the_residual_pit_window_is_capped_and_the_marginal_fit_is_not():
+    """The cap is on the rows PITs are COMPUTED over, never on the FIT. `pit_window` selects from
+    train, and `run_fold` still fits on the FULL train frame — if the cap reached the fit, the
+    `joint_pit` arm would consume a predictive no other arm serves."""
+    import inspect
+
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
+    assert FA.PIT_ESTIMATION_ROWS >= 2_000, "too few rows to estimate a 13×13 correlation"
+    src = inspect.getsource(R.run_fold)
+    assert "_marginals(train, pit_frame, smap)" in src, (
+        "the residual-PIT context must FIT on the full train frame and only PREDICT on the window")
+    frame = pd.DataFrame({"gw": list(range(100)), "x": list(range(100))})
+    assert len(R.pit_window(frame, 10)) == 10
+    assert R.pit_window(frame, 10)["gw"].min() == 90, "the window must be the most RECENT rows"
+    assert len(R.pit_window(frame, 500)) == 100, "a window wider than train is the whole train"
+
+
 def test_the_served_assembly_produces_a_valid_bank_with_its_labelling():
     train_raw = np.random.default_rng(3).gamma(2.0, 2.0, size=(400, FA.N_LEGS))
     served = FA.serve_fp_frame({"WR": train_raw}, {"WR": _banks(30, seed=4)},
