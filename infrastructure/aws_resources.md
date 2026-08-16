@@ -179,28 +179,39 @@ Owner / Member / Developer / Security / Billing on the team being queried. Creat
 **vercel.com → Account Settings → Tokens** (scope it to the team; give it an expiry and note the
 renewal date — an expired token degrades to the seat floor silently apart from the page's note).
 
-⚠️ `update-function-configuration` **REPLACES the whole Variables map** — read the current
-environment first and re-send it, or every other setting on the function is wiped:
+⚠️ `update-function-configuration` **REPLACES the whole Variables map** — send it one key and every
+other setting on the function is wiped, and `deploy.sh` will NOT restore them (it only ever calls
+`update-function-code`). ⭐ **Use the tool, not a hand-rolled heredoc** (E9.8-P2): it reads the
+current map first and refuses on an empty read, asserts every unnamed key survives byte-identical,
+waits out the async update and re-reads to prove the change landed, keeps secrets off argv and out
+of the output, and takes a 0600 backup. Dry run is the default.
+
+```bash
+# Secret values go through the environment, never a command line (shell history, `ps`).
+read -rs VERCEL_API_TOKEN && export VERCEL_API_TOKEN
+
+# Dry run — prints a masked diff and the in/out key counts, writes nothing.
+uv run python infrastructure/lambda/set_lambda_env.py \
+  --set-env VERCEL_API_TOKEN \
+  --set VERCEL_TEAM_ID=team_xxx          # omit for a personal account
+
+# Same command with --apply appended to write it.
+```
+
+<details><summary>The raw AWS calls, for reference (⛔ prefer the tool — this is the shape it wraps)</summary>
 
 ```bash
 aws lambda get-function-configuration --function-name credence-prod-lambda-api \
-  --region us-east-1 --query 'Environment.Variables' > /tmp/lambda-env.json
-
-python3 - <<'PY'
-import json
-env = json.load(open('/tmp/lambda-env.json'))
-env['VERCEL_API_TOKEN'] = '<paste token>'
-env['VERCEL_TEAM_ID']   = '<team_xxx>'   # omit this line for a personal account
-json.dump({'Variables': env}, open('/tmp/lambda-env-new.json','w'))
-PY
-
+  --region us-east-1 --query 'Environment.Variables' > /tmp/lambda-env.json   # ⚠️ 0644, holds secrets
+# ...merge the changed keys into that map, re-send the WHOLE map...
 aws lambda update-function-configuration --function-name credence-prod-lambda-api \
   --region us-east-1 --environment file:///tmp/lambda-env-new.json
-
 # The call returns with LastUpdateStatus=InProgress — poll before testing, or you read the OLD env.
 aws lambda get-function-configuration --function-name credence-prod-lambda-api --region us-east-1 \
   --query '{vercel:Environment.Variables.VERCEL_TEAM_ID,status:LastUpdateStatus}'
 ```
+
+</details>
 
 ⭐ Read the flag, don't infer it (G100-D1): to check whether the token is live, query
 `Environment.Variables.VERCEL_API_TOKEN` — the finances page looks identical with the token
@@ -344,6 +355,13 @@ Apply this authorizer to all routes except:
 `AdministratorAccess-769392325318` SSO profile; the everyday `baseball-access-user` profile is denied
 `apigateway:*`, which is why this went unverified for so long). **THIRTEEN** routes now exist — the
 2026 board flip and E9.59's pricing route have landed since the 2026-08-05 reading of nine:
+
+> 🔄 **RE-READ 2026-08-15 (E9.8-P2): SIXTEEN routes, 15 of them `NONE`** — G100-C0's two email-OTP
+> routes (`POST /auth/email-otp/start`, `POST /auth/email-otp/verify`) and `GET
+> /blog/posts/{id}` have landed since. The list below is otherwise current. ⛔ Do not hand-maintain
+> this count: `scripts/check_stripe_golive_readiness.py` now reads the live route table and
+> cross-checks **every** `NONE` route against `_DEGRADE_ALLOWED_PREFIXES` mechanically, which is the
+> check the paragraph at the bottom of this file asks a reader to do by eye.
 
 ```
 ANY  /{proxy+}                            ← the catch-all: everything not listed below
@@ -1756,26 +1774,15 @@ Vercel has no API for this — it is dashboard-only.
 
 ```bash
 # ON — serve only the cached/static floor; the expensive personalized endpoints answer 503.
-# ⚠️ update-function-configuration REPLACES the whole Variables map — read the current env first
-#    and re-send everything, or you will wipe every other setting on the function.
-aws lambda get-function-configuration --function-name credence-prod-lambda-api \
-  --region us-east-1 --query 'Environment.Variables' > /tmp/lambda-env.json
+# ⚠️ update-function-configuration REPLACES the whole Variables map, so this goes through the
+#    read-modify-write tool (E9.8-P2). It also WAITS OUT the async update and re-reads to prove
+#    the flag landed — `update-function-configuration` returns immediately with
+#    `LastUpdateStatus: InProgress`, and a curl fired before it settles hits the OLD env and
+#    reports the pre-flip behaviour, which during an incident reads as "the switch did nothing".
+uv run python infrastructure/lambda/set_lambda_env.py --set COST_DEGRADE_MODE=1 --apply
 
-python3 - <<'PY'
-import json
-env = json.load(open('/tmp/lambda-env.json'))
-env['COST_DEGRADE_MODE'] = '1'          # '0' or remove the key to turn it back OFF
-json.dump({'Variables': env}, open('/tmp/lambda-env-new.json','w'))
-PY
-
-aws lambda update-function-configuration --function-name credence-prod-lambda-api \
-  --region us-east-1 --environment file:///tmp/lambda-env-new.json
-
-# ⚠️ WAIT FOR PROPAGATION BEFORE CURLING. `update-function-configuration` RETURNS IMMEDIATELY with
-#    `"LastUpdateStatus": "InProgress"`; a curl fired before it flips to `Successful` hits the OLD
-#    env and reports the pre-flip behaviour. Poll until Successful:
-aws lambda get-function-configuration --function-name credence-prod-lambda-api --region us-east-1 \
-  --query '{degrade:Environment.Variables.COST_DEGRADE_MODE,status:LastUpdateStatus}'
+# OFF again — same command with 0 (the code treats anything but 1/true/yes as off):
+#   uv run python infrastructure/lambda/set_lambda_env.py --set COST_DEGRADE_MODE=0 --apply
 
 # (a) THE FLOOR STAYS UP — anonymous, no token required:
 curl -si https://api.credencesports.com/fantasy/nfl/track-record/manifest | head -1  # expect 200
@@ -1787,15 +1794,17 @@ TOKEN='eyJ...'
 curl -si -H "Authorization: Bearer $TOKEN" \
   https://api.credencesports.com/performance/summary | head -1                       # expect 503
 
-# OFF — remove the key (absent == off; `degrade_mode_enabled` reads it per request).
-python3 - <<'PY'
-import json
-env = json.load(open('/tmp/lambda-env.json'))
-env.pop('COST_DEGRADE_MODE', None)
-json.dump({'Variables': env}, open('/tmp/lambda-env-off.json','w'))
-PY
-aws lambda update-function-configuration --function-name credence-prod-lambda-api \
-  --region us-east-1 --environment file:///tmp/lambda-env-off.json
+# OFF — remove the key entirely (absent == off; `degrade_mode_enabled` reads it per request).
+# `--unset` is the ONLY way a key leaves the map, and the tool proves it is gone afterwards.
+uv run python infrastructure/lambda/set_lambda_env.py --unset COST_DEGRADE_MODE --apply
+```
+
+⭐ **The whole state of this switch is one read, and it is the ONLY trustworthy one** (G100-D1 — read
+the flag, never infer it from an endpoint; see the two blocks below for why no anonymous request can
+answer this):
+
+```bash
+uv run python scripts/check_stripe_golive_readiness.py --expect-degrade off   # or --expect-degrade on
 ```
 
 ⛔⛔ **AN UNAUTHENTICATED CURL CANNOT DEMONSTRATE THE 503, AND ITS `401` READS EXACTLY LIKE SUCCESS —
@@ -1808,8 +1817,10 @@ nothing about the flag. It is the repo's vacuous-guard class (NF1.7 (a) / INC-38
 runbook rather than in a test.
 
 ⭐ **AND IT IS NOT INCIDENTAL — IT IS STRUCTURAL, BECAUSE THE TWO ALLOWLISTS COINCIDE BY DESIGN.**
-Cross-check the 13 `--authorization-type NONE` routes above against `_DEGRADE_ALLOWED_PREFIXES` in
-`app/backend/services/cost_guardrails.py`: **every single public route is degrade-allowlisted.** That
+Cross-check the `--authorization-type NONE` routes above against `_DEGRADE_ALLOWED_PREFIXES` in
+`app/backend/services/cost_guardrails.py` — ⭐ `scripts/check_stripe_golive_readiness.py` now does
+this mechanically against the LIVE route table, so it cannot rot as routes are added (re-verified
+2026-08-15: all 15 public routes stay up): **every single public route is degrade-allowlisted.** That
 is the correct product outcome — degrade mode is *defined* as "keep exactly the anonymous free floor
 up" — but it has a verification consequence that is easy to miss: **there is no anonymous request
 that degrade mode refuses**, so the switch's denial half is unobservable without a valid token, and
