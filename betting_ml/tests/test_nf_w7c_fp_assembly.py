@@ -633,9 +633,12 @@ def test_the_marginals_are_built_once_per_FOLD_not_once_per_position():
     assert "_marginals(" not in body, (
         "run_position builds a marginal context — that is position-independent work being redone "
         "once per position (4× per fold)")
-    fold = inspect.getsource(R.run_fold)
-    assert fold.count("_marginals(") == 2, (
-        "run_fold should build exactly the two fold-level contexts (test + residual-PIT window)")
+    fold = "\n".join(ln for ln in inspect.getsource(R.run_fold).splitlines()
+                      if not ln.lstrip().startswith("#"))
+    # re-anchored onto the shared single-pass build (the two separate calls it replaced were the
+    # thing that paid for every fit twice) — same property: fold-level, never position-level
+    assert fold.count("_marginals_for_two(") == 1, (
+        "run_fold should build both fold-level contexts in exactly one shared fit pass")
 
 
 def test_the_residual_pit_window_is_capped_and_the_marginal_fit_is_not():
@@ -647,7 +650,9 @@ def test_the_residual_pit_window_is_capped_and_the_marginal_fit_is_not():
     from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
     assert FA.PIT_ESTIMATION_ROWS >= 2_000, "too few rows to estimate a 13×13 correlation"
     src = inspect.getsource(R.run_fold)
-    assert "_marginals(train, pit_frame, smap)" in src, (
+    # re-anchored: the fit-on-FULL-train property now lives in the shared pass, whose FIRST arg is
+    # the full train frame and whose serve frames are (test, pit_frame)
+    assert "_marginals_for_two(train, test, pit_frame, smap)" in src, (
         "the residual-PIT context must FIT on the full train frame and only PREDICT on the window")
     frame = pd.DataFrame({"gw": list(range(100)), "x": list(range(100))})
     assert len(R.pit_window(frame, 10)) == 10
@@ -995,3 +1000,82 @@ def test_red_proof_a_dependence_knob_that_cannot_move_coverage_is_caught(monkeyp
     monkeypatch.setattr(JD, "gaussian_copula_uniforms",
                         lambda z, corr: JD.independent_uniforms(z))
     _assert_red(test_dependence_moves_the_assembled_dispersion_analytically_and_in_the_draw)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+# 11. Post-smoke hardening (both defects were found by a REAL run, not by this suite)
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+def test_both_marginal_contexts_come_from_ONE_fit_pass():
+    """The test context and the residual-PIT context fit the SAME 27 (form, stat) combos on the
+    SAME train frame — only the predict frame differs. Building them separately paid for every
+    fit twice: measured 829.9s, 86% of a 968.1s fold."""
+    import inspect
+
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
+    src = "\n".join(ln for ln in inspect.getsource(R.run_fold).splitlines()
+                    if not ln.lstrip().startswith("#"))
+    assert "_marginals_for_two(" in src, "run_fold no longer shares one fit pass"
+    assert src.count("_marginals(") == 0, "run_fold builds a context outside the shared pass"
+
+
+def test_the_two_context_split_preserves_row_order_and_counts():
+    """The split is by position row-count with `first` preceding `second`. `serve_banks` slices
+    with a boolean mask (order-preserving), so this is exact — proven here on a stub whose banks
+    carry their own row index, so a mis-split shows up as reordered values, not just wrong counts."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
+
+    first = pd.DataFrame({"position": ["QB", "WR", "QB"], "id": [0, 1, 2]})
+    second = pd.DataFrame({"position": ["WR", "QB"], "id": [3, 4]})
+
+    def fake_serve_banks(train, serve, smap):
+        pos = serve["position"].astype(str).to_numpy()
+        ids = serve["id"].to_numpy(float)
+        return {f"{p}|attempts": ids[pos == p][:, None] * np.ones((1, 4))
+                for p in ("QB", "WR")}, {}
+
+    import quant_sports_intel_models.football.nfl.fantasy.stat_distribution_serving_d as S
+    real = S.serve_banks
+    S.serve_banks = fake_serve_banks
+    try:
+        a, b = R._marginals_for_two(None, first, second, {})
+    finally:
+        S.serve_banks = real
+    assert [v[0] for v in a["QB|attempts"]] == [0.0, 2.0], "first-frame QB rows, in order"
+    assert [v[0] for v in b["QB|attempts"]] == [4.0], "second-frame QB rows, in order"
+    assert [v[0] for v in a["WR|attempts"]] == [1.0]
+    assert [v[0] for v in b["WR|attempts"]] == [3.0]
+
+
+def test_a_mismatched_split_is_refused_rather_than_silently_truncated():
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
+
+    first = pd.DataFrame({"position": ["QB"], "id": [0]})
+    second = pd.DataFrame({"position": ["QB"], "id": [1]})
+
+    import quant_sports_intel_models.football.nfl.fantasy.stat_distribution_serving_d as S
+    real = S.serve_banks
+    S.serve_banks = lambda t, s, m: ({"QB|attempts": np.zeros((5, 4))}, {})
+    try:
+        with pytest.raises(ValueError, match="the serve concatenation and the slice disagree"):
+            R._marginals_for_two(None, first, second, {})
+    finally:
+        S.serve_banks = real
+
+
+def test_the_sharpness_degenerate_does_not_collapse_into_the_nihilist():
+    """⚠️ Found by the smoke, not by this suite: on the QB fold `zero_width` scored 6.1409 —
+    byte-identical to `nihilist_zero` — because QB league points have a train median of 0, so a
+    median-located point mass IS the all-zero bank. Two anchors collapsing is a silent loss of
+    evidence (the sharpness degenerate stops being a distinct test). Locating it at the MEAN keeps
+    it a point mass while staying positive on a zero-heavy target."""
+    import inspect
+
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7c_fp_assembly as R
+    src = "\n".join(ln for ln in inspect.getsource(R.run_position).splitlines()
+                    if not ln.lstrip().startswith("#"))
+    assert "loc = float(np.mean(pts_tr))" in src, "zero_width is not located at the mean"
+    assert "np.quantile(pts_tr, 0.5)" not in src, "a median location re-collapses on a zero-heavy cohort"
+    # and the property itself: on a zero-median cohort the two anchors must differ
+    zero_heavy = np.array([0.0] * 70 + [10.0, 20.0, 30.0] * 10)
+    assert float(np.median(zero_heavy)) == 0.0, "fixture premise: the median is 0"
+    assert float(np.mean(zero_heavy)) > 0.0, "the mean stays positive — the anchors stay distinct"
