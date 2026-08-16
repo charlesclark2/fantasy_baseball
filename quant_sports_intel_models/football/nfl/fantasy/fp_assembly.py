@@ -377,11 +377,32 @@ def sigma_for_arm(arm: str, *, raw: np.ndarray, banks: np.ndarray | None = None,
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # The assembly — marginals untouched; only the uniforms' JOINT law changes
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def _uniforms(base_z: np.ndarray, mode: str, corr: np.ndarray | None) -> np.ndarray:
+def comonotone_flip(weights: np.ndarray) -> tuple[bool, ...]:
+    """Which legs take `1−u` in the comonotone degenerate — the ones whose POINTS DECREASE in
+    their own outcome.
+
+    ⚠️ THIS IS LOAD-BEARING AND LEAGUE-DEPENDENT. Two priced legs carry NEGATIVE weights (fumbles
+    lost, interceptions). Co-moving every leg in the OUTCOME direction would push yards and
+    interceptions up together, and their contributions would partly CANCEL in the weighted sum —
+    so the "maximally dispersed" anchor would not be maximally dispersed, and the over-correlated
+    ceiling registered to lose the metric (and to prove the coverage floor was not promoted into a
+    selection criterion) would be neither a ceiling nor a proof. Flipping the negative legs makes
+    the anchor co-move in the POINTS direction, which is the direction the gate reads. The flip is
+    derived from the league's own weights, never hand-typed (NF-W7b's `COMONOTONE_FLIP`, made
+    config-dependent because a league may price a term either way)."""
+    return tuple(bool(w < 0) for w in np.asarray(weights, dtype=float))
+
+
+def _uniforms(base_z: np.ndarray, mode: str, corr: np.ndarray | None,
+              weights: np.ndarray | None = None) -> np.ndarray:
     if mode == "indep":
         return JD.independent_uniforms(base_z)
     if mode == "comonotone":
-        return JD.comonotone_uniforms(base_z, tuple(False for _ in LEGS))
+        if weights is None:
+            raise ValueError("mode='comonotone' needs the league weights to orient the flip — a "
+                             "degenerate co-moved in the OUTCOME direction is not the "
+                             "maximal-dispersion anchor when a priced leg scores negatively")
+        return JD.comonotone_uniforms(base_z, comonotone_flip(weights))
     if mode == "copula":
         if corr is None:
             raise ValueError("mode='copula' requires corr")
@@ -432,7 +453,7 @@ def assemble_fp_bank(banks: np.ndarray, weights: np.ndarray, *, mode: str = "cop
         stop = min(start + row_block, n)
         rng = np.random.default_rng(seed + start)
         base_z = rng.standard_normal((stop - start, draws, N_LEGS))
-        pts = draw_legs(b[start:stop], _uniforms(base_z, mode, corr)) @ w
+        pts = draw_legs(b[start:stop], _uniforms(base_z, mode, corr, w)) @ w
         out[start:stop] = np.quantile(pts, EVAL_LEVELS, axis=1).T
     return out
 

@@ -297,6 +297,44 @@ def test_dependence_moves_the_assembled_dispersion_analytically_and_in_the_draw(
         "never be beaten on coverage and the gate clause would be inactive")
 
 
+def test_the_comonotone_anchor_flips_the_NEGATIVELY_weighted_legs():
+    """⭐ Two priced legs score NEGATIVELY (fumbles lost, interceptions). The comonotone degenerate
+    must co-move in the POINTS direction, not the OUTCOME direction — otherwise yards and
+    interceptions rise together, their contributions partly CANCEL in the weighted sum, and the
+    'over-correlated ceiling' is neither a ceiling nor the proof that the coverage floor was not
+    promoted into a selection criterion (NF-D18)."""
+    w = FA.leg_weights(LP.get_preset("full_ppr"), "QB")
+    flip = FA.comonotone_flip(w)
+    flipped = {leg for leg, f in zip(FA.LEGS, flip) if f}
+    assert flipped == {"passing_interceptions", "fumbles_lost"}, flipped
+    assert all(w[i] < 0 for i, f in enumerate(flip) if f)
+    assert all(w[i] >= 0 for i, f in enumerate(flip) if not f)
+
+
+def test_the_comonotone_anchor_is_the_MAXIMAL_dispersion_ceiling():
+    """The property the flip exists for, measured rather than argued: with real (mixed-sign)
+    league weights the comonotone draw must be strictly WIDER than both the independent draw and
+    a strongly-correlated copula — that is what makes it the registered ceiling."""
+    banks = _banks(12, seed=11, atom_leg=None)
+    w = FA.leg_weights(LP.get_preset("full_ppr"), "QB")
+    assert (w < 0).any(), "fixture premise: the gate league prices something negatively"
+    sigma = JD.psd_clamp(np.full((FA.N_LEGS, FA.N_LEGS), 0.5) + 0.5 * np.eye(FA.N_LEGS))
+    def width(mode, corr=None):
+        b = FA.assemble_fp_bank(banks, w, mode=mode, corr=corr, draws=4_000, seed=21)
+        return float((b[:, 179] - b[:, 19]).mean())
+    comono, indep, copula = width("comonotone"), width("indep"), width("copula", sigma)
+    assert comono > copula > indep, (
+        f"comonotone {comono:.2f} / copula {copula:.2f} / indep {indep:.2f} — the degenerate is "
+        f"not the maximal-dispersion ceiling it is registered as")
+
+
+def test_a_comonotone_draw_without_the_league_weights_is_refused():
+    """The flip cannot be guessed from the legs alone — it depends on the league's signs — so the
+    orientation is REQUIRED rather than silently defaulted to the outcome direction."""
+    with pytest.raises(ValueError, match="needs the league weights to orient the flip"):
+        FA._uniforms(np.zeros((2, 3, FA.N_LEGS)), "comonotone", None, None)
+
+
 def test_a_zero_weight_leg_cannot_influence_the_assembled_distribution():
     """Why the labelling is over PRICED legs: an unpriced leg contributes identically 0, so its
     provenance cannot matter to the answer. Asserted, not argued."""
