@@ -88,10 +88,25 @@ field as a contest, not a foregone conclusion.
   `assembled_comonotone`. The comonotone arm is the over-correlated ceiling: it will trivially
   SATISFY the coverage floor, and it must still lose the metric (NF1.8 — a constraint a degenerate
   satisfies is fine; a criterion a degenerate wins is fatal).
-- **ANCHORS:** `permuted_direct`; and **per-form** oracle + matched-n controls for every arm and
-  foil. ⭐ Per-FORM is load-bearing: the joint forms NEST one another (Σ=I ⊂ one-factor ⊂ full), so
-  a single field-wide ceiling would veto a legitimately-better nested form as a false metric
-  inversion (NF-D16 (g‴)).
+
+  ⚠️ **SMOKE AMENDMENT (2026-08-16, BEFORE any full run / any decision).** `zero_width` was first
+  located at the train MEDIAN. The path-proof smoke measured it at **6.1409 on the QB fold —
+  byte-identical to `nihilist_zero`** — because QB league points have a train median of 0, so a
+  median-located point mass IS the all-zero bank. Both still lose by a wide margin, so no verdict
+  was affected; but two anchors collapsing into one is a silent loss of evidence — the sharpness
+  degenerate stops being a distinct test (the NF-D11/D14 conditional-median lesson, appearing in
+  the anchor set). It is now located at the train MEAN: still a point mass (maximally sharp, which
+  is its entire purpose) but positive on a zero-heavy target, so the two degenerates test
+  different things again. Recorded here rather than silently changed.
+
+- **ANCHORS:** `permuted_direct`; and **per-form** oracle + matched-n controls for every real arm,
+  plus an own-form oracle for `foil_direct_points`. ⭐ Per-FORM is load-bearing: the joint forms
+  NEST one another (Σ=I ⊂ one-factor ⊂ full), so a single field-wide ceiling would veto a
+  legitimately-better nested form as a false metric inversion (NF-D16 (g‴)).
+  ⛔ `assembled_indep` deliberately carries **NO** oracle: it estimates nothing, so a peek has
+  nothing to improve and its "oracle" would be byte-identical to the arm itself. An anchor that
+  cannot differ from what it anchors is décor, and scoring it as "respected" would be a pass on
+  nothing (NF1.7 (a) / NF1.9's "a mechanism that cannot act is a finding").
 
 ## 5. Pre-declared arm-movability (a statistic the arm cannot move is décor — NF-MARGIN2 / NF-D20)
 
