@@ -294,14 +294,31 @@ env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
     --profile AdministratorAccess-769392325318
 ```
 
-### Step 3 — Deploy the backend FIRST (LAPTOP)
+### Step 3 — Deploy the backend FIRST, and PROVE the MFA guard is in it (LAPTOP)
 
-The API Lambda has **no CD** — a merged PR is not a deployed build. Deploy before flipping the env
-so the code and the config land in a defined order:
+**This PR contains no `app/backend/` change**, so the deploy is not for *this* PR. It is for the
+flag being flipped in step 4: `ENFORCE_SUBSCRIBER_MFA=1` is only safe if the **running** code
+carries the G100-C0-MFA guard — the `passwordless` exemption *and* the bracketed-`[subscriber]`
+group parser. Flip it against an older build and the guard reads as enabled while gating **nobody**
+(the pre-fix comma-only split matched no group in any observed claim shape).
+
+The API Lambda has **no CD**, so a merged PR is not a deployed build — and FU-1's lesson is that a
+flag is not armed until it is proven in the thing that actually runs. Deploy, then read the marker:
 
 ```bash
 ./infrastructure/lambda/deploy.sh
+
+# Prove the deployed build carries the guard. Sign in at www.credencesports.com, copy the
+# `authorization` request header from any API call in devtools → Network, then:
+TOKEN='eyJ...'
+curl -s -H "Authorization: Bearer $TOKEN" \
+  https://api.credencesports.com/auth/session-diagnostics | python3 -m json.tool
 ```
+
+**Required: `"guard_version": "g100-c0-mfa/1"`.** Anything else (or a 404) means the deployed build
+predates the guard — **stop and re-deploy**. The same response reports `mfa_enforced`,
+`totp_exempt` and `totp_exempt_reason`, which is what makes step 7's MFA leg answerable rather than
+guessed.
 
 ### Step 4 — Flip the Lambda env, in ONE update (LAPTOP)
 
