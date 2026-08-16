@@ -366,6 +366,30 @@ def _adp_span(scorecard: dict) -> tuple[list[int], str]:
     return seasons, (f"{seasons[0]}–{seasons[-1]}" if seasons else "the scored seasons")
 
 
+def _require_valid_uncertainty_run(uncertainty: dict) -> None:
+    """A VOID NF-D17 run must not feed a public claim. NF-D17 §5 voids the WHOLE reading when any
+    anchor (A1–A3) or the A4 reproduction pin fails — its `delta_rho_mean`/bootstrap are still
+    written to the JSON, and `_reconcile` would happily match them to a fresh scorecard (found
+    2026-08-15: a rebuild moved the headline, A4 read the OLD pin, the run said VOID, and nothing
+    downstream looked). Refuse on the artifact's OWN verdict; a missing verdict is UNEVALUABLE and
+    refused too (NF1.7 (a))."""
+    repro = uncertainty.get("reproduction") or {}
+    anchors = uncertainty.get("anchor_summary") or {}
+    rec = str((uncertainty.get("decision") or {}).get("recommendation") or "")
+    problems = []
+    if repro.get("all_pass") is not True:
+        problems.append("A4 reproduction did not pass (the harness is not measuring the artifact the "
+                        "public headline is built from — re-pin SHIPPED_DELTA_RHO/SHIPPED_N_SEASONS "
+                        "in the SAME change as the regenerated scorecard, then re-run)")
+    if anchors.get("all_pass") is not True:
+        problems.append("anchors A1–A3 did not all pass")
+    if rec.upper().startswith("VOID"):
+        problems.append(f"the run's own recommendation is {rec!r}")
+    if problems:
+        raise ValueError("the NF-D17 uncertainty artifact is not a valid reading — refusing to build "
+                         "a claim from it: " + "; ".join(problems))
+
+
 def shipped_uncertainty(uncertainty: dict) -> dict:
     """The NF-D17 reading the PUBLIC claim is about — P0_shipped × `adp`, with its bootstrap.
 
@@ -416,6 +440,7 @@ def build_claim(scorecard: dict, uncertainty: dict) -> dict:
     Raises rather than degrading if either artifact is missing what the claim must disclose: an
     unpublishable claim is a loud failure, never a quietly weaker one (NF1.7 (a) — a disclosure that
     could not be evaluated is not a disclosure that passed)."""
+    _require_valid_uncertainty_run(uncertainty)
     agg = _adp_aggregate(scorecard)
     adp_seasons, span = _adp_span(scorecard)
     unc = shipped_uncertainty(uncertainty)
