@@ -667,9 +667,12 @@ select * from final
 -- E11.24 (2026-08-15) — `table` → `view`. On the Snowflake target this model is nothing but
 -- `select * from baseball_data.lakehouse_ext.<model>`: a COPY of an external table, with the real
 -- assembly living in the DuckDB branch above. As a `table` it ran a
--- `create or replace transient table … as select *` on every daily build AND on every intraday
--- lineup tick (it sits in the `lineup_dbt_feature_rebuild` selector, pipeline/ops/
--- daily_ingestion_ops.py), and each of those statements can RESUME `COMPUTE_WH`.
+-- `create or replace transient table … as select *` on every DAILY build
+-- (`daily_ingestion_ops.dbt_umpire_feature_rebuild`, the op that also builds
+-- mart_bullpen_effectiveness), and that statement can RESUME `COMPUTE_WH`.
+-- ⚠️ It is NOT in the INTRADAY tick selector (`sensor_ops.lineup_dbt_feature_rebuild`) — verified
+-- 0 occurrences there, re-verified 2026-08-15 against dev@c54fde0e. The wake this removes lands in
+-- the daily-build band only; do not re-derive an intraday saving from this comment's history.
 -- `create or replace view` is metadata-only and provably never does — measured across the 9-day
 -- window in docs/e11_24_other_attribution.md Table 5: 30 distinct view objects / 837 executions,
 -- 0 waits, `metadata_only == execs`.
@@ -696,11 +699,17 @@ select * from final
 -- The Snowflake relation's only live scheduled reader is `generate_run_env_signals.py` (2 aliases
 -- × 2 dates in `_recent_completed_dates()` = 4 ext-table scans/day added); the remaining readers
 -- (`train_run_env.py`, the two ablation scripts, `parity_check_w8a.py`) are offline/operator-manual
--- and on no schedule. CONTROL: that same run_env query already joins
--- `feature_pregame_starter_features` TWICE and `feature_pregame_umpire_features` once, on the
--- identical `game_pk`-only predicate — and BOTH have been views over `lakehouse_ext` since
--- 2026-08-06 (target 6). The exact amplification shape this flip adds has therefore been running
--- in production on this exact query for 9 days.
+-- and on no schedule. ⭐ AND THAT 4-SCAN FIGURE IS AN UPPER BOUND, NOT A POINT ESTIMATE: the op
+-- passes `_w9_s3_read_args()`, so when `W9_LAKEHOUSE_S3_READS=1` that generator reads the S3
+-- lakehouse via DuckDB and touches this Snowflake relation ZERO times. That flag is NOT in
+-- `services/dagster/aws/env.required`, so its live box state is unenforced (the W7B
+-- documented-≠-set class) — which only ever makes this bound TIGHTER, never looser.
+-- CONTROL: that same run_env query already joins `feature_pregame_starter_features` TWICE and
+-- `feature_pregame_umpire_features` once, on the identical `game_pk`-only predicate — and BOTH have
+-- been views over `lakehouse_ext` since commit 5ac709f2, 2026-08-05 (target 6). The exact
+-- amplification shape this flip adds has therefore been running in production on this exact query
+-- for 10 days as of 2026-08-15. `feature_pregame_game_features{,_raw}` became views on 2026-08-08
+-- (1cbc5965), so the whole SF-side feature layer around this model is already view-materialised.
 --
 -- NO WRITERS. `grep -rIn -iE "(merge into|insert into|update|create or replace table|delete from)
 -- [^;]{0,120}feature_pregame_team_features"` returns nothing, so the INC-27 sibling hazard ("no

@@ -78,16 +78,23 @@ exactly as `team_features` is:
 
 | joined in the run_env query | Snowflake materialization |
 |---|---|
-| `feature_pregame_starter_features` (×2) | **view since 2026-08-06** |
-| `feature_pregame_umpire_features` | **view since 2026-08-06** |
+| `feature_pregame_starter_features` (×2) | **view since 2026-08-05** (`5ac709f2`, target 6) |
+| `feature_pregame_umpire_features` | **view since 2026-08-05** (`5ac709f2`, target 6) |
 | `feature_pregame_park_features` | table |
 | `feature_pregame_weather_features` | table |
 | `feature_pregame_team_features` | ← this flip |
 
 So the precise amplification shape this flip adds has been running in production **on this exact
-query for 9 days**. Per-read scale from #662's own control: native 0.17–0.51 s vs view 0.73–1.04 s.
-⇒ bounded at roughly **+2–4 s/day** of additional scan on one WARN-adjacent generator, against
-~2 provisioning waits/day removed. **Amplification accepted; no STOP.**
+query for 10 days** (re-measured 2026-08-15; the first draft said "since 08-06 / 9 days" — the flip
+commit is dated 08-05). Per-read scale from #662's own control: native 0.17–0.51 s vs view
+0.73–1.04 s. ⇒ bounded at roughly **+2–4 s/day** of additional scan on one WARN-adjacent generator,
+against ~2 provisioning waits/day removed. **Amplification accepted; no STOP.**
+
+⭐ **And the 4-scan figure is an UPPER BOUND, not a point estimate.** `generate_run_env_signals_op`
+passes `_w9_s3_read_args()`, so under `W9_LAKEHOUSE_S3_READS=1` that generator reads the S3 lakehouse
+via DuckDB and touches this Snowflake relation **zero** times. That flag is not in
+`services/dagster/aws/env.required`, so its live box state is unenforced — which can only make this
+bound *tighter*, never looser. (See the NOT-VERIFIED list.)
 
 ### 3. Freshness is monotonically improved, not traded
 
@@ -141,7 +148,7 @@ all occurrences) turned it red.
 
 ---
 
-## Verification done
+## Verification done (first cut, 2026-08-15, base `df30a5cb`)
 
 | Check | Result |
 |---|---|
@@ -153,13 +160,95 @@ all occurrences) turned it red.
 
 ---
 
+## RE-VERIFICATION against current `dev` (2026-08-15, base `c54fde0e`, +106 commits)
+
+The claims above were made on a base **106 commits old** — predating the Stripe go-live, NF-W7c,
+MH2.6 and the E11.24 Bundle. Re-verified before handing over a deploy, because a stale pre-flight is
+not a pre-flight (the "a card written days before pickup can carry a false premise" rule).
+
+### Merge
+
+`origin/dev` merged in cleanly. `git diff --name-only origin/dev HEAD` is **exactly the 3 story
+files** — no dev commit touched them, no changelog collision, nothing resolved by hand.
+
+### Every pre-flight claim, re-measured
+
+| Claim (as of `df30a5cb`) | Re-measured against `c54fde0e` | Verdict |
+|---|---|---|
+| Only scheduled SF reader is `generate_run_env_signals.py` | `git log -S"feature_pregame_team_features" 15ab3516~1..origin/dev` → **0 commits**. No dev commit added or removed *any* reference. | ✅ HOLDS |
+| No writer | guard clause 6 re-run over the merged tree → 0 offenders; and no dev-changed file references the model at all | ✅ HOLDS |
+| No type contract (INC-19 TYPE-PIN untouched) | `dbt/type_contracts/` has 6 entries, none for this model; `gen_type_contract.CONTRACTS` unchanged | ✅ HOLDS |
+| No view-on-view chain | ⭐ now confirmed at the **manifest** level, not just by reading source: `dbt ls --select feature_pregame_team_features+ --resource-type model` on the SF target returns **only the model itself — no children**. The `{% if target.name %}` Jinja means the consumer's `ref()`s are never rendered on the SF target, so the edge does not exist in the SF graph at all. | ✅ HOLDS (stronger evidence than the first cut) |
+| DuckDB branch is still a `view` (so clause 3's rationale stands) | `config(materialized='view', tags=['w8a_lakehouse'])` at line 30 — unchanged | ✅ HOLDS |
+| Still on the INC-40 `bullpen_eb`/`umpire` coverage path via daily `dbt_umpire_feature_rebuild` | still in that op's selector, beside `mart_bullpen_effectiveness`; and dev's own `test_feature_block_guard_ordering.py::test_the_producer_still_builds_the_blocks_the_guard_asserts_on` independently pins that membership | ✅ HOLDS |
+
+### Blast radius, measured rather than argued
+
+`dbt ls --select state:modified+ --resource-type model --state <prod baseline> --defer` selects
+**exactly one model** — `feature_pregame_team_features` — plus its 13 `not_null` tests. Nothing
+downstream. (Prod manifest baseline pulled from the `dbt-manifest` artifact, run `31853736300`.)
+
+⚠️ **Those 13 `not_null` tests declare no `severity`, so they default to `error`** = serving-critical
+under the E11.7 contract, and **INC-41's `check_dbt_test_results_op` pages on a red error-severity
+test**. They are therefore part of the runtime gate: a view over the same ext table returns the same
+rows, so they must stay green — if one goes red the flip is the first suspect.
+
+### The view DDL was actually executed (not just compiled)
+
+Rehearsed on the **isolated `dev` target** (schema `dev_betting_features`, never prod):
+
+```
+Succeeded [ 1.18s] model dev_betting_features.feature_pregame_team_features (view)
+```
+
+dbt reports the relation type as `(view)`, so the table→view transition executes for real against the
+live external table. `dbt run` only — **the 13 tests were deliberately excluded**, see below.
+
+### Re-run gates
+
+| Check | Result |
+|---|---|
+| `dbt compile` (fusion, SF target) on the merged tree | ✅ 1516 / 1516 success |
+| new guard + sibling views guard + ordering guard + type-contract guard + fast-gate hygiene | ✅ **402 passed** |
+| `serving-ops` shard (owns the new guard), `-n 4` | ✅ **1588 passed, 7 skipped** |
+| `guards` shard, `-n 4` | ✅ **624 passed** |
+| RED proof, re-run against the merged base | ✅ **11 / 11** breaks turn the *owning* clause red |
+
+### Two defects found by the re-verification
+
+1. **A false premise in the shipped code comment (fixed).** The model's new header said the table DDL
+   ran "on every daily build **AND on every intraday lineup tick** (it sits in the
+   `lineup_dbt_feature_rebuild` selector)" — which **contradicts the commit message, the guard's own
+   docstring, and the source** (0 occurrences in `sensor_ops`). A false premise in a *comment* is
+   worse than in a doc, because the next reader takes their reasoning off it (#675). Corrected to name
+   the daily op and to state the intraday non-membership explicitly.
+2. ⭐ **A RED-proof landing-assert is necessary but NOT sufficient — the mutation must also remove the
+   thing the clause asserts.** Re-running the RED proof, break 3 ("gut the DuckDB build branch") came
+   back **GREEN**. Not a vacuous guard: the harness appended `_XX` to the mart name, and
+   `"mart_bullpen_effectiveness_XX"` still *contains* the substring clause 3 asserts, so the mutation
+   landed on disk (satisfying #682) and still did not **bite**. Re-run with a substring-safe rename it
+   goes red on all four directions (each of the 3 marts, plus the circular-`lakehouse_ext` direction).
+   ⇒ **#682's "assert the mutation landed" catches a mutation that does not WRITE; it cannot catch one
+   that writes and does not BITE. A RED proof must also assert the asserted token is GONE.**
+
+---
+
 ## ⛔ NOT VERIFIED — do not inherit these as settled
 
 * **No box run.** CI mocks all IO, so the 🟥 runtime gate is **open** and is an operator step.
 * **No Snowflake measurement was taken by this session.** The Snowflake MCP connector is
   unauthenticated in this environment, so the read-cost bound in §2 rests on the structural argument
-  + the 9-day production control + #662's measured per-read figures — **not** on a fresh query of
+  + the 10-day production control + #662's measured per-read figures — **not** on a fresh query of
   this model. The operator's soak read is what confirms it.
+* ⛔ **No warehouse query was run from the laptop, DELIBERATELY.** The row-identity read
+  (`count(*)`/checksum, view vs ext table) would occupy `COMPUTE_WH` and inject laptop resumes into
+  the very per-day census window the operator reads to judge *this* flip — the repo's own precedent
+  is to keep laptop Snowflake work off `COMPUTE_WH` during a soak (the 2026-08-08 measurement was
+  taken on `MONITOR_WH` for exactly this reason). Row identity is true by construction
+  (`select * from <ext table>`) and its live confirmation belongs in the operator's box gate, where
+  the warehouse is already awake. Same reason the `dev`-target rehearsal ran `dbt run` and **not**
+  `dbt build`: a `create or replace view` / `drop table` is metadata-only and cannot resume a
+  warehouse, but the 13 `not_null` tests are real queries that would.
 * **No credit saving is claimed.** Wake is a QUEUE (#679): this promotes the next
   warehouse-occupying statement in the chain into the waker role. Removing ~2 waits/day of rebuild
   wake is a step toward the warehouse suspending on zero-game windows — it is **not** a standalone
