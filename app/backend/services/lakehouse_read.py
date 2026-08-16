@@ -25,6 +25,18 @@ role). Importing this module does NOT import snowflake.connector. `duckdb` itsel
 imported LAZILY (inside duck_connect) and guarded so that if the wheel is somehow
 absent from the bundle the last-resort logs+returns [] rather than 500-ing the whole
 router import.
+
+🔑 IAM — THE PART THAT IS NOT IN THIS REPO. Creds resolving is NOT the same as being
+allowed. The `**/*.parquet` glob below issues a `ListObjectsV2`, which is a BUCKET-level
+action, so the Lambda execution role needs BOTH:
+    s3:ListBucket  on  arn:aws:s3:::baseball-betting-ml-artifacts        (no /*)
+    s3:GetObject   on  arn:aws:s3:::baseball-betting-ml-artifacts/baseball/lakehouse/*
+Every OTHER Lambda grant on this bucket is GetObject on one narrow serving prefix, so a
+role that happily serves zone overlays still 403s every read here — and because
+`lakehouse_query` swallows the failure, the only symptom is an empty panel. The grant and
+the exact `put-role-policy` command live in infrastructure/aws_resources.md ("IAM — Lambda
+execution role (lakehouse DuckDB reads)"). Observed in prod 2026-08-15, stacked BEHIND the
+empty-$HOME bug below: fixing one just exposed the next.
 """
 from __future__ import annotations
 
