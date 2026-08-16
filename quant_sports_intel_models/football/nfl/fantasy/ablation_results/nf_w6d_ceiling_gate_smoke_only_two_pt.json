@@ -1,0 +1,1372 @@
+{
+  "generated_at": "2026-08-15T19:19:00+00:00",
+  "story": "NF-W6d",
+  "phase": "A",
+  "smoke": true,
+  "only_stat": "two_pt",
+  "runtime_seconds": 38.5,
+  "selection_metric": "crps_q199",
+  "n_folds": 2,
+  "fold_labels": [
+    "2025H1",
+    "2025H2"
+  ],
+  "n_rows": 84553,
+  "matrix_key": "26c34fbe778c9d87",
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 84553,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "attach_audit": {
+    "n_rows": 84553,
+    "feed_dup_keys": 0,
+    "passing_interceptions_total": 4121.0,
+    "passing_interceptions_filled_zero_rows": 26835,
+    "fumbles_lost_total": 2383.0,
+    "fumbles_lost_filled_zero_rows": 26835,
+    "two_pt_total": 978.0,
+    "two_pt_filled_zero_rows": 26835
+  },
+  "preregistration": {
+    "cells": [
+      "QB|attempts",
+      "QB|passing_interceptions",
+      "QB|carries",
+      "QB|rushing_tds",
+      "QB|fumbles_lost",
+      "QB|two_pt",
+      "RB|carries",
+      "RB|targets",
+      "RB|receptions",
+      "RB|receiving_tds",
+      "RB|fumbles_lost",
+      "RB|two_pt",
+      "WR|targets",
+      "WR|receptions",
+      "WR|receiving_tds",
+      "WR|fumbles_lost",
+      "WR|two_pt",
+      "TE|targets",
+      "TE|receptions",
+      "TE|receiving_tds",
+      "TE|fumbles_lost",
+      "TE|two_pt"
+    ],
+    "count_stats": [
+      "attempts",
+      "carries",
+      "targets",
+      "receptions"
+    ],
+    "event_stats": [
+      "receiving_tds",
+      "rushing_tds",
+      "passing_interceptions",
+      "fumbles_lost",
+      "two_pt"
+    ],
+    "ceiling_forms": {
+      "count": [
+        "marginal",
+        "head_bank",
+        "cand_quantile",
+        "knn",
+        "hurdle",
+        "negbin"
+      ],
+      "event": [
+        "marginal",
+        "knn",
+        "hurdle",
+        "negbin"
+      ]
+    },
+    "foils": {
+      "count": [
+        "inc_head_bank",
+        "inc_climatology"
+      ],
+      "event": [
+        "inc_climatology"
+      ]
+    },
+    "oracle_pairs": {
+      "marginal": [
+        "oracle_marginal",
+        "matched_marginal"
+      ],
+      "head_bank": [
+        "oracle_head_bank",
+        "matched_head_bank"
+      ],
+      "cand_quantile": [
+        "oracle_cand_quantile",
+        "matched_cand_quantile"
+      ],
+      "knn": [
+        "oracle_knn",
+        "matched_knn"
+      ],
+      "hurdle": [
+        "oracle_hurdle",
+        "matched_hurdle"
+      ],
+      "negbin": [
+        "oracle_negbin",
+        "matched_negbin"
+      ]
+    },
+    "bands": [
+      2.0,
+      5.0
+    ],
+    "license_bands": [
+      "YES",
+      "MARGINAL"
+    ],
+    "fdr_q": 0.1,
+    "crossfit_k": 3,
+    "min_cond_rows": 40,
+    "features": [
+      "game_context__is_home",
+      "game_context__div_game",
+      "game_context__week_index",
+      "game_context__days_since_last_game",
+      "prior_week_box__ppr_l1",
+      "prior_week_box__ppr_l4_mean",
+      "prior_week_box__ppr_ewm",
+      "prior_week_box__ppr_s2d_mean",
+      "prior_week_box__targets_l4",
+      "prior_week_box__carries_l4",
+      "prior_week_box__attempts_l4",
+      "prior_week_box__receptions_l4",
+      "prior_week_box__rec_yards_l4",
+      "prior_week_box__rush_yards_l4",
+      "prior_week_box__pass_yards_l4",
+      "prior_week_box__played_share_l4",
+      "prior_week_box__games_s2d",
+      "prior_week_box__ppr_sum_s2d",
+      "snap_share__l1",
+      "snap_share__l4_mean",
+      "snap_share__observed_l4",
+      "team_environment__pass_att_l4",
+      "team_environment__rush_att_l4",
+      "team_environment__ppr_l4",
+      "opponent_matchup__dvp_ppr_index_l8",
+      "opponent_matchup__def_ppr_allowed_l8",
+      "prior_season_priors__ppg_prior",
+      "prior_season_priors__games_prior",
+      "prior_season_priors__rookie_flag"
+    ],
+    "seed": 20260817,
+    "test_blocks": [
+      [
+        2022,
+        1
+      ],
+      [
+        2022,
+        2
+      ],
+      [
+        2023,
+        1
+      ],
+      [
+        2023,
+        2
+      ],
+      [
+        2024,
+        1
+      ],
+      [
+        2024,
+        2
+      ],
+      [
+        2025,
+        1
+      ],
+      [
+        2025,
+        2
+      ]
+    ],
+    "purge_weeks": 2
+  },
+  "fold_results": [
+    {
+      "label": "2025H1",
+      "n_test": 4308,
+      "cells": {
+        "QB|two_pt": {
+          "scores": {
+            "inc_climatology": {
+              "crps_q199": 0.03913689161156003,
+              "coverage_80": 0.9642324888226528,
+              "pred_p0": 0.9698492462311558,
+              "real_p0": 0.9642324888226528,
+              "n": 671
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.040238450074515646,
+              "coverage_80": 0.9642324888226528,
+              "pred_p0": 1.0,
+              "real_p0": 0.9642324888226528,
+              "n": 671
+            },
+            "zero_width": {
+              "crps_q199": 0.040238450074515646,
+              "coverage_80": 0.9642324888226528,
+              "pred_p0": 1.0,
+              "real_p0": 0.9642324888226528,
+              "n": 671
+            },
+            "max_width": {
+              "crps_q199": 0.040977840019770985,
+              "coverage_80": 0.9642324888226528,
+              "pred_p0": 0.9698492462311558,
+              "real_p0": 0.9642324888226528,
+              "n": 671
+            },
+            "oracle_marginal": {
+              "crps_q199": 0.039132649087464146,
+              "coverage_80": 0.9642324888226528,
+              "pred_p0": 0.9648241206030149,
+              "real_p0": 0.9642324888226528,
+              "n": 671
+            },
+            "matched_marginal": {
+              "crps_q199": 0.03912917793138569,
+              "coverage_80": 0.9642324888226528,
+              "pred_p0": 0.9648241206030149,
+              "real_p0": 0.9642324888226528,
+              "n": 671
+            },
+            "oracle_knn": {
+              "crps_q199": 0.03850566506152222,
+              "coverage_80": 0.9642324888226528,
+              "pred_p0": 0.9723131304810191,
+              "real_p0": 0.9642324888226528,
+              "n": 671
+            },
+            "matched_knn": {
+              "crps_q199": 0.03818094234211295,
+              "coverage_80": 0.9642324888226528,
+              "pred_p0": 0.9623227913037617,
+              "real_p0": 0.9642324888226528,
+              "n": 671
+            },
+            "oracle_hurdle": null,
+            "matched_hurdle": {
+              "crps_q199": 0.040355203738513735,
+              "coverage_80": 0.9642324888226528,
+              "pred_p0": 0.9987942694096414,
+              "real_p0": 0.9642324888226528,
+              "n": 671
+            },
+            "oracle_negbin": {
+              "crps_q199": 0.03848062967595054,
+              "coverage_80": 0.9761549925484352,
+              "pred_p0": 0.9683664222753109,
+              "real_p0": 0.9642324888226528,
+              "n": 671
+            },
+            "matched_negbin": {
+              "crps_q199": 0.043905818211774236,
+              "coverage_80": 0.9806259314456036,
+              "pred_p0": 0.9390469486029251,
+              "real_p0": 0.9642324888226528,
+              "n": 671
+            }
+          },
+          "stat_class": "event"
+        },
+        "RB|two_pt": {
+          "scores": {
+            "inc_climatology": {
+              "crps_q199": 0.004711031617598351,
+              "coverage_80": 0.995291902071563,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.995291902071563,
+              "n": 1062
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.004708097928436911,
+              "coverage_80": 0.995291902071563,
+              "pred_p0": 1.0,
+              "real_p0": 0.995291902071563,
+              "n": 1062
+            },
+            "zero_width": {
+              "crps_q199": 0.004708097928436911,
+              "coverage_80": 0.995291902071563,
+              "pred_p0": 1.0,
+              "real_p0": 0.995291902071563,
+              "n": 1062
+            },
+            "max_width": {
+              "crps_q199": 0.004811534130161164,
+              "coverage_80": 0.995291902071563,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.995291902071563,
+              "n": 1062
+            },
+            "oracle_marginal": {
+              "crps_q199": 0.004708097928436911,
+              "coverage_80": 0.995291902071563,
+              "pred_p0": 1.0,
+              "real_p0": 0.995291902071563,
+              "n": 1062
+            },
+            "matched_marginal": {
+              "crps_q199": 0.004711031617598351,
+              "coverage_80": 0.995291902071563,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.995291902071563,
+              "n": 1062
+            },
+            "oracle_knn": {
+              "crps_q199": 0.004690955247045018,
+              "coverage_80": 0.995291902071563,
+              "pred_p0": 0.9972177270533458,
+              "real_p0": 0.995291902071563,
+              "n": 1062
+            },
+            "matched_knn": {
+              "crps_q199": 0.004688295763185039,
+              "coverage_80": 0.995291902071563,
+              "pred_p0": 0.9958881034172745,
+              "real_p0": 0.995291902071563,
+              "n": 1062
+            },
+            "oracle_hurdle": null,
+            "matched_hurdle": {
+              "crps_q199": 0.004709044279779311,
+              "coverage_80": 0.995291902071563,
+              "pred_p0": 0.999962145946304,
+              "real_p0": 0.995291902071563,
+              "n": 1062
+            },
+            "oracle_negbin": {
+              "crps_q199": 0.0048294674880996315,
+              "coverage_80": 0.995291902071563,
+              "pred_p0": 0.9954764405833308,
+              "real_p0": 0.995291902071563,
+              "n": 1062
+            },
+            "matched_negbin": {
+              "crps_q199": 0.005244773774711601,
+              "coverage_80": 0.9962335216572504,
+              "pred_p0": 0.9877684088994881,
+              "real_p0": 0.995291902071563,
+              "n": 1062
+            }
+          },
+          "stat_class": "event"
+        },
+        "WR|two_pt": {
+          "scores": {
+            "inc_climatology": {
+              "crps_q199": 0.009279117776577108,
+              "coverage_80": 0.9906774394033562,
+              "pred_p0": 0.9949748743718593,
+              "real_p0": 0.9906774394033562,
+              "n": 1609
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.009322560596643879,
+              "coverage_80": 0.9906774394033562,
+              "pred_p0": 1.0,
+              "real_p0": 0.9906774394033562,
+              "n": 1609
+            },
+            "zero_width": {
+              "crps_q199": 0.009322560596643879,
+              "coverage_80": 0.9906774394033562,
+              "pred_p0": 1.0,
+              "real_p0": 0.9906774394033562,
+              "n": 1609
+            },
+            "max_width": {
+              "crps_q199": 0.00937962028913992,
+              "coverage_80": 0.9906774394033562,
+              "pred_p0": 0.9949748743718593,
+              "real_p0": 0.9906774394033562,
+              "n": 1609
+            },
+            "oracle_marginal": {
+              "crps_q199": 0.009279117776577108,
+              "coverage_80": 0.9906774394033562,
+              "pred_p0": 0.9949748743718593,
+              "real_p0": 0.9906774394033562,
+              "n": 1609
+            },
+            "matched_marginal": {
+              "crps_q199": 0.009279390114025692,
+              "coverage_80": 0.9906774394033562,
+              "pred_p0": 0.9899497487437185,
+              "real_p0": 0.9906774394033562,
+              "n": 1609
+            },
+            "oracle_knn": {
+              "crps_q199": 0.009279808145762998,
+              "coverage_80": 0.9906774394033562,
+              "pred_p0": 0.9917018279714295,
+              "real_p0": 0.9906774394033562,
+              "n": 1609
+            },
+            "matched_knn": {
+              "crps_q199": 0.00926155966282625,
+              "coverage_80": 0.9906774394033562,
+              "pred_p0": 0.9915206860904897,
+              "real_p0": 0.9906774394033562,
+              "n": 1609
+            },
+            "oracle_hurdle": null,
+            "matched_hurdle": {
+              "crps_q199": 0.009326995449591027,
+              "coverage_80": 0.9906774394033562,
+              "pred_p0": 0.9999406604183129,
+              "real_p0": 0.9906774394033562,
+              "n": 1609
+            },
+            "oracle_negbin": {
+              "crps_q199": 0.009373686330971203,
+              "coverage_80": 0.9906774394033562,
+              "pred_p0": 0.9936850192541328,
+              "real_p0": 0.9906774394033562,
+              "n": 1609
+            },
+            "matched_negbin": {
+              "crps_q199": 0.010155500935379196,
+              "coverage_80": 0.9919204474829086,
+              "pred_p0": 0.9823449128801247,
+              "real_p0": 0.9906774394033562,
+              "n": 1609
+            }
+          },
+          "stat_class": "event"
+        },
+        "TE|two_pt": {
+          "scores": {
+            "inc_climatology": {
+              "crps_q199": 0.0061990074596585416,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.9937888198757764,
+              "n": 966
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.006211180124223602,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 1.0,
+              "real_p0": 0.9937888198757764,
+              "n": 966
+            },
+            "zero_width": {
+              "crps_q199": 0.006211180124223602,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 1.0,
+              "real_p0": 0.9937888198757764,
+              "n": 966
+            },
+            "max_width": {
+              "crps_q199": 0.0062995099722213555,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.9937888198757764,
+              "n": 966
+            },
+            "oracle_marginal": {
+              "crps_q199": 0.0061990074596585416,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.9937888198757764,
+              "n": 966
+            },
+            "matched_marginal": {
+              "crps_q199": 0.0061990074596585416,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.9937888198757764,
+              "n": 966
+            },
+            "oracle_knn": {
+              "crps_q199": 0.0062168235067677925,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 0.997237741502544,
+              "real_p0": 0.9937888198757764,
+              "n": 966
+            },
+            "matched_knn": {
+              "crps_q199": 0.006167306251755672,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 0.9976330930012381,
+              "real_p0": 0.9937888198757764,
+              "n": 966
+            },
+            "oracle_hurdle": null,
+            "matched_hurdle": {
+              "crps_q199": 0.00621128416409168,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 0.9999895960131923,
+              "real_p0": 0.9937888198757764,
+              "n": 966
+            },
+            "oracle_negbin": {
+              "crps_q199": 0.006254148589739588,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 0.9953234079299188,
+              "real_p0": 0.9937888198757764,
+              "n": 966
+            },
+            "matched_negbin": {
+              "crps_q199": 0.006888791785012017,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 0.9869429965562804,
+              "real_p0": 0.9937888198757764,
+              "n": 966
+            }
+          },
+          "stat_class": "event"
+        }
+      },
+      "inapplicable": {
+        "two_pt|oracle_hurdle": "hurdle form inapplicable for `two_pt` (cross-fit part 0): 33 non-zero rows < MIN_COND_ROWS=40 \u2014 refusing to fit a conditional bank on a near-empty side (recorded as INAPPLICABLE, never scored on a constant)"
+      }
+    },
+    {
+      "label": "2025H2",
+      "n_test": 4380,
+      "cells": {
+        "QB|two_pt": {
+          "scores": {
+            "inc_climatology": {
+              "crps_q199": 0.02795152653424039,
+              "coverage_80": 0.9728958630527818,
+              "pred_p0": 0.9698492462311558,
+              "real_p0": 0.9728958630527818,
+              "n": 701
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.028530670470756064,
+              "coverage_80": 0.9728958630527818,
+              "pred_p0": 1.0,
+              "real_p0": 0.9728958630527818,
+              "n": 701
+            },
+            "zero_width": {
+              "crps_q199": 0.028530670470756064,
+              "coverage_80": 0.9728958630527818,
+              "pred_p0": 1.0,
+              "real_p0": 0.9728958630527818,
+              "n": 701
+            },
+            "max_width": {
+              "crps_q199": 0.029976057176037105,
+              "coverage_80": 0.9728958630527818,
+              "pred_p0": 0.9698492462311558,
+              "real_p0": 0.9728958630527818,
+              "n": 701
+            },
+            "oracle_marginal": {
+              "crps_q199": 0.027922422382956155,
+              "coverage_80": 0.9728958630527818,
+              "pred_p0": 0.9748743718592967,
+              "real_p0": 0.9728958630527818,
+              "n": 701
+            },
+            "matched_marginal": {
+              "crps_q199": 0.02795152653424039,
+              "coverage_80": 0.9728958630527818,
+              "pred_p0": 0.9698492462311558,
+              "real_p0": 0.9728958630527818,
+              "n": 701
+            },
+            "oracle_knn": {
+              "crps_q199": 0.027598247299263797,
+              "coverage_80": 0.9728958630527818,
+              "pred_p0": 0.9793116796536177,
+              "real_p0": 0.9728958630527818,
+              "n": 701
+            },
+            "matched_knn": {
+              "crps_q199": 0.0274567036322841,
+              "coverage_80": 0.9728958630527818,
+              "pred_p0": 0.9683653646262699,
+              "real_p0": 0.9728958630527818,
+              "n": 701
+            },
+            "oracle_hurdle": null,
+            "matched_hurdle": null,
+            "oracle_negbin": {
+              "crps_q199": 0.028618556405422265,
+              "coverage_80": 0.9728958630527818,
+              "pred_p0": 0.9828672606972093,
+              "real_p0": 0.9728958630527818,
+              "n": 701
+            },
+            "matched_negbin": {
+              "crps_q199": 0.030599502505394307,
+              "coverage_80": 0.9843081312410842,
+              "pred_p0": 0.9498634398812896,
+              "real_p0": 0.9728958630527818,
+              "n": 701
+            }
+          },
+          "stat_class": "event"
+        },
+        "RB|two_pt": {
+          "scores": {
+            "inc_climatology": {
+              "crps_q199": 0.010114435393232337,
+              "coverage_80": 0.9898336414048059,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.9898336414048059,
+              "n": 1082
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.010166358595194085,
+              "coverage_80": 0.9898336414048059,
+              "pred_p0": 1.0,
+              "real_p0": 0.9898336414048059,
+              "n": 1082
+            },
+            "zero_width": {
+              "crps_q199": 0.010166358595194085,
+              "coverage_80": 0.9898336414048059,
+              "pred_p0": 1.0,
+              "real_p0": 0.9898336414048059,
+              "n": 1082
+            },
+            "max_width": {
+              "crps_q199": 0.010214937905795151,
+              "coverage_80": 0.9898336414048059,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.9898336414048059,
+              "n": 1082
+            },
+            "oracle_marginal": {
+              "crps_q199": 0.01011411772355307,
+              "coverage_80": 0.9898336414048059,
+              "pred_p0": 0.9899497487437187,
+              "real_p0": 0.9898336414048059,
+              "n": 1082
+            },
+            "matched_marginal": {
+              "crps_q199": 0.010166358595194085,
+              "coverage_80": 0.9898336414048059,
+              "pred_p0": 1.0,
+              "real_p0": 0.9898336414048059,
+              "n": 1082
+            },
+            "oracle_knn": {
+              "crps_q199": 0.010104318728578194,
+              "coverage_80": 0.9898336414048059,
+              "pred_p0": 0.9904327552735954,
+              "real_p0": 0.9898336414048059,
+              "n": 1082
+            },
+            "matched_knn": {
+              "crps_q199": 0.010116188846264595,
+              "coverage_80": 0.9898336414048059,
+              "pred_p0": 0.9972645110952174,
+              "real_p0": 0.9898336414048059,
+              "n": 1082
+            },
+            "oracle_hurdle": null,
+            "matched_hurdle": null,
+            "oracle_negbin": {
+              "crps_q199": 0.010255111045058937,
+              "coverage_80": 0.9898336414048059,
+              "pred_p0": 0.9918724862761128,
+              "real_p0": 0.9898336414048059,
+              "n": 1082
+            },
+            "matched_negbin": {
+              "crps_q199": 0.011292692668518194,
+              "coverage_80": 0.9935304990757856,
+              "pred_p0": 0.9722178359449745,
+              "real_p0": 0.9898336414048059,
+              "n": 1082
+            }
+          },
+          "stat_class": "event"
+        },
+        "WR|two_pt": {
+          "scores": {
+            "inc_climatology": {
+              "crps_q199": 0.007984497084683592,
+              "coverage_80": 0.9919852034525277,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.9919852034525277,
+              "n": 1622
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.008014796547472256,
+              "coverage_80": 0.9919852034525277,
+              "pred_p0": 1.0,
+              "real_p0": 0.9919852034525277,
+              "n": 1622
+            },
+            "zero_width": {
+              "crps_q199": 0.008014796547472256,
+              "coverage_80": 0.9919852034525277,
+              "pred_p0": 1.0,
+              "real_p0": 0.9919852034525277,
+              "n": 1622
+            },
+            "max_width": {
+              "crps_q199": 0.008084999597246404,
+              "coverage_80": 0.9919852034525277,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.9919852034525277,
+              "n": 1622
+            },
+            "oracle_marginal": {
+              "crps_q199": 0.007984497084683592,
+              "coverage_80": 0.9919852034525277,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.9919852034525277,
+              "n": 1622
+            },
+            "matched_marginal": {
+              "crps_q199": 0.007984497084683592,
+              "coverage_80": 0.9919852034525277,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.9919852034525277,
+              "n": 1622
+            },
+            "oracle_knn": {
+              "crps_q199": 0.007978367020057128,
+              "coverage_80": 0.9919852034525277,
+              "pred_p0": 0.9941414842399421,
+              "real_p0": 0.9919852034525277,
+              "n": 1622
+            },
+            "matched_knn": {
+              "crps_q199": 0.007955582164831554,
+              "coverage_80": 0.9919852034525277,
+              "pred_p0": 0.9915855479617571,
+              "real_p0": 0.9919852034525277,
+              "n": 1622
+            },
+            "oracle_hurdle": null,
+            "matched_hurdle": null,
+            "oracle_negbin": {
+              "crps_q199": 0.008059130424006593,
+              "coverage_80": 0.9919852034525277,
+              "pred_p0": 0.9917528456090565,
+              "real_p0": 0.9919852034525277,
+              "n": 1622
+            },
+            "matched_negbin": {
+              "crps_q199": 0.011543537663657375,
+              "coverage_80": 0.9926017262638718,
+              "pred_p0": 0.9629900426918812,
+              "real_p0": 0.9919852034525277,
+              "n": 1622
+            }
+          },
+          "stat_class": "event"
+        },
+        "TE|two_pt": {
+          "scores": {
+            "inc_climatology": {
+              "crps_q199": 0.004111583558819741,
+              "coverage_80": 0.9958974358974358,
+              "pred_p0": 0.9949748743718593,
+              "real_p0": 0.9958974358974358,
+              "n": 975
+            },
+            "nihilist_zero": {
+              "crps_q199": 0.0041025641025641026,
+              "coverage_80": 0.9958974358974358,
+              "pred_p0": 1.0,
+              "real_p0": 0.9958974358974358,
+              "n": 975
+            },
+            "zero_width": {
+              "crps_q199": 0.0041025641025641026,
+              "coverage_80": 0.9958974358974358,
+              "pred_p0": 1.0,
+              "real_p0": 0.9958974358974358,
+              "n": 975
+            },
+            "max_width": {
+              "crps_q199": 0.004212086071382555,
+              "coverage_80": 0.9958974358974358,
+              "pred_p0": 0.9949748743718593,
+              "real_p0": 0.9958974358974358,
+              "n": 975
+            },
+            "oracle_marginal": {
+              "crps_q199": 0.0041025641025641026,
+              "coverage_80": 0.9958974358974358,
+              "pred_p0": 1.0,
+              "real_p0": 0.9958974358974358,
+              "n": 975
+            },
+            "matched_marginal": {
+              "crps_q199": 0.004111583558819741,
+              "coverage_80": 0.9958974358974358,
+              "pred_p0": 0.9949748743718593,
+              "real_p0": 0.9958974358974358,
+              "n": 975
+            },
+            "oracle_knn": {
+              "crps_q199": 0.004108339904651462,
+              "coverage_80": 0.9958974358974358,
+              "pred_p0": 0.9973766267233604,
+              "real_p0": 0.9958974358974358,
+              "n": 975
+            },
+            "matched_knn": {
+              "crps_q199": 0.004097788944723618,
+              "coverage_80": 0.9958974358974358,
+              "pred_p0": 0.9978662543486664,
+              "real_p0": 0.9958974358974358,
+              "n": 975
+            },
+            "oracle_hurdle": null,
+            "matched_hurdle": null,
+            "oracle_negbin": {
+              "crps_q199": 0.004190027058368767,
+              "coverage_80": 0.9958974358974358,
+              "pred_p0": 0.9960211312975132,
+              "real_p0": 0.9958974358974358,
+              "n": 975
+            },
+            "matched_negbin": {
+              "crps_q199": 0.0066331142893956965,
+              "coverage_80": 0.997948717948718,
+              "pred_p0": 0.9707408839067131,
+              "real_p0": 0.9958974358974358,
+              "n": 975
+            }
+          },
+          "stat_class": "event"
+        }
+      },
+      "inapplicable": {
+        "two_pt|oracle_hurdle": "hurdle form inapplicable for `two_pt` (cross-fit part 0): 31 non-zero rows < MIN_COND_ROWS=40 \u2014 refusing to fit a conditional bank on a near-empty side (recorded as INAPPLICABLE, never scored on a constant)",
+        "two_pt|matched_hurdle": "hurdle form inapplicable for `two_pt` (matched window): 34 non-zero rows < MIN_COND_ROWS=40 \u2014 refusing to fit a conditional bank on a near-empty side (recorded as INAPPLICABLE, never scored on a constant)"
+      }
+    }
+  ],
+  "selections": {
+    "QB|two_pt": {
+      "cell": "QB|two_pt",
+      "stat_class": "event",
+      "n_rows": 1372,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_climatology": 0.03354,
+        "nihilist_zero": 0.03438,
+        "zero_width": 0.03438,
+        "max_width": 0.03548,
+        "oracle_marginal": 0.03353,
+        "matched_marginal": 0.03354,
+        "oracle_knn": 0.03305,
+        "matched_knn": 0.03282,
+        "oracle_hurdle": null,
+        "matched_hurdle": null,
+        "oracle_negbin": 0.03355,
+        "matched_negbin": 0.03725
+      },
+      "binding_incumbent": "inc_climatology",
+      "mean_incumbent": 0.03354,
+      "per_form": {
+        "marginal": {
+          "mean_delta": 2e-05,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 0.03353,
+          "matched_n_mean": 0.03354,
+          "oracle_beats_matched_n": true
+        },
+        "knn": {
+          "mean_delta": 0.00049,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 0.03305,
+          "matched_n_mean": 0.03282,
+          "oracle_beats_matched_n": false
+        },
+        "negbin": {
+          "mean_delta": -1e-05,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 1,
+          "oracle_mean": 0.03355,
+          "matched_n_mean": 0.03725,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "inapplicable_forms": {
+        "hurdle": "2 oracle / 1 matched folds inapplicable"
+      },
+      "best_form": "knn",
+      "best_form_oracle_beats_matched_n": false,
+      "deltas_by_fold": [
+        0.00063,
+        0.00035
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.00049,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 1.467,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.9687,
+        "pred_p0_mean": 0.9698,
+        "real_p0": 0.9686
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.00049,
+        "legacy_mean_delta": null
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 a pre-registered anchor contrast, not a searched field (the NF-W5/W6 ceiling rule).",
+      "fdr_binding": false
+    },
+    "RB|two_pt": {
+      "cell": "RB|two_pt",
+      "stat_class": "event",
+      "n_rows": 2144,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_climatology": 0.00741,
+        "nihilist_zero": 0.00744,
+        "zero_width": 0.00744,
+        "max_width": 0.00751,
+        "oracle_marginal": 0.00741,
+        "matched_marginal": 0.00744,
+        "oracle_knn": 0.0074,
+        "matched_knn": 0.0074,
+        "oracle_hurdle": null,
+        "matched_hurdle": null,
+        "oracle_negbin": 0.00754,
+        "matched_negbin": 0.00827
+      },
+      "binding_incumbent": "inc_climatology",
+      "mean_incumbent": 0.00741,
+      "per_form": {
+        "marginal": {
+          "mean_delta": 0.0,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 0.00741,
+          "matched_n_mean": 0.00744,
+          "oracle_beats_matched_n": true
+        },
+        "knn": {
+          "mean_delta": 2e-05,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 2,
+          "oracle_mean": 0.0074,
+          "matched_n_mean": 0.0074,
+          "oracle_beats_matched_n": true
+        },
+        "negbin": {
+          "mean_delta": -0.00013,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 0.00754,
+          "matched_n_mean": 0.00827,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "inapplicable_forms": {
+        "hurdle": "2 oracle / 1 matched folds inapplicable"
+      },
+      "best_form": "knn",
+      "best_form_oracle_beats_matched_n": true,
+      "deltas_by_fold": [
+        2e-05,
+        1e-05
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 2e-05,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 2,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 0.204,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.9925,
+        "pred_p0_mean": 0.995,
+        "real_p0": 0.9926
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 2e-05,
+        "legacy_mean_delta": null
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 a pre-registered anchor contrast, not a searched field (the NF-W5/W6 ceiling rule).",
+      "fdr_binding": false
+    },
+    "TE|two_pt": {
+      "cell": "TE|two_pt",
+      "stat_class": "event",
+      "n_rows": 1941,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_climatology": 0.00516,
+        "nihilist_zero": 0.00516,
+        "zero_width": 0.00516,
+        "max_width": 0.00526,
+        "oracle_marginal": 0.00515,
+        "matched_marginal": 0.00516,
+        "oracle_knn": 0.00516,
+        "matched_knn": 0.00513,
+        "oracle_hurdle": null,
+        "matched_hurdle": null,
+        "oracle_negbin": 0.00522,
+        "matched_negbin": 0.00676
+      },
+      "binding_incumbent": "inc_climatology",
+      "mean_incumbent": 0.00516,
+      "per_form": {
+        "marginal": {
+          "mean_delta": 0.0,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 1,
+          "oracle_mean": 0.00515,
+          "matched_n_mean": 0.00516,
+          "oracle_beats_matched_n": true
+        },
+        "knn": {
+          "mean_delta": -1e-05,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 1,
+          "oracle_mean": 0.00516,
+          "matched_n_mean": 0.00513,
+          "oracle_beats_matched_n": false
+        },
+        "negbin": {
+          "mean_delta": -7e-05,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 0.00522,
+          "matched_n_mean": 0.00676,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "inapplicable_forms": {
+        "hurdle": "2 oracle / 1 matched folds inapplicable"
+      },
+      "best_form": "marginal",
+      "best_form_oracle_beats_matched_n": true,
+      "deltas_by_fold": [
+        0.0,
+        1e-05
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.0,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 1,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 0.087,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.9948,
+        "pred_p0_mean": 0.995,
+        "real_p0": 0.9948
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0,
+        "legacy_mean_delta": null
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 a pre-registered anchor contrast, not a searched field (the NF-W5/W6 ceiling rule).",
+      "fdr_binding": false
+    },
+    "WR|two_pt": {
+      "cell": "WR|two_pt",
+      "stat_class": "event",
+      "n_rows": 3231,
+      "selection_metric": "crps_q199",
+      "mean_crps": {
+        "inc_climatology": 0.00863,
+        "nihilist_zero": 0.00867,
+        "zero_width": 0.00867,
+        "max_width": 0.00873,
+        "oracle_marginal": 0.00863,
+        "matched_marginal": 0.00863,
+        "oracle_knn": 0.00863,
+        "matched_knn": 0.00861,
+        "oracle_hurdle": null,
+        "matched_hurdle": null,
+        "oracle_negbin": 0.00872,
+        "matched_negbin": 0.01085
+      },
+      "binding_incumbent": "inc_climatology",
+      "mean_incumbent": 0.00863,
+      "per_form": {
+        "marginal": {
+          "mean_delta": 0.0,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 0.00863,
+          "matched_n_mean": 0.00863,
+          "oracle_beats_matched_n": true
+        },
+        "knn": {
+          "mean_delta": 0.0,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 1,
+          "oracle_mean": 0.00863,
+          "matched_n_mean": 0.00861,
+          "oracle_beats_matched_n": false
+        },
+        "negbin": {
+          "mean_delta": -8e-05,
+          "ci95": [
+            null,
+            null
+          ],
+          "fold_wins": 0,
+          "oracle_mean": 0.00872,
+          "matched_n_mean": 0.01085,
+          "oracle_beats_matched_n": true
+        }
+      },
+      "inapplicable_forms": {
+        "hurdle": "2 oracle / 1 matched folds inapplicable"
+      },
+      "best_form": "marginal",
+      "best_form_oracle_beats_matched_n": true,
+      "deltas_by_fold": [
+        0.0,
+        0.0
+      ],
+      "fold_labels": [
+        "2025H1",
+        "2025H2"
+      ],
+      "mean_delta": 0.0,
+      "ci95": [
+        null,
+        null
+      ],
+      "fold_wins": 0,
+      "fold_clause": {
+        "required": null,
+        "attainable": false,
+        "passes": false
+      },
+      "p_one_sided": null,
+      "ceiling_pct": 0.0,
+      "anchors": {
+        "nihilist_loses": true,
+        "zero_width_loses": true,
+        "max_width_loses": true
+      },
+      "incumbent_calibration": {
+        "coverage_80": 0.9913,
+        "pred_p0_mean": 0.995,
+        "real_p0": 0.9913
+      },
+      "era_note": {
+        "capture_folds": [
+          "2025H1",
+          "2025H2"
+        ],
+        "capture_mean_delta": 0.0,
+        "legacy_mean_delta": null
+      },
+      "pbo": null,
+      "pbo_state": "UNDEFINED \u2014 a pre-registered anchor contrast, not a searched field (the NF-W5/W6 ceiling rule).",
+      "fdr_binding": false
+    }
+  },
+  "fdr": {
+    "own_family": {
+      "QB|two_pt": false,
+      "RB|two_pt": false,
+      "TE|two_pt": false,
+      "WR|two_pt": false
+    },
+    "pooled": {
+      "QB|two_pt": false,
+      "RB|two_pt": false,
+      "TE|two_pt": false,
+      "WR|two_pt": false
+    },
+    "binding": {
+      "QB|two_pt": false,
+      "RB|two_pt": false,
+      "TE|two_pt": false,
+      "WR|two_pt": false
+    }
+  },
+  "decisions": {
+    "QB|two_pt": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 1.467,
+      "reason": "ceiling 1.47% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude",
+      "licensed_for_bakeoff": false,
+      "license_rule": "licensed iff answer \u2208 ['YES', 'MARGINAL'] \u2227 stat_ok \u2014 MARGINAL licenses because the block peek under-reads atom-aware full-train capacity (NF-W6b-C: 4.08% at the gate \u2192 12.97% in the bake-off)"
+    },
+    "RB|two_pt": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 0.204,
+      "reason": "ceiling 0.20% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude",
+      "licensed_for_bakeoff": false,
+      "license_rule": "licensed iff answer \u2208 ['YES', 'MARGINAL'] \u2227 stat_ok \u2014 MARGINAL licenses because the block peek under-reads atom-aware full-train capacity (NF-W6b-C: 4.08% at the gate \u2192 12.97% in the bake-off)"
+    },
+    "TE|two_pt": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 0.087,
+      "reason": "ceiling 0.09% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude",
+      "licensed_for_bakeoff": false,
+      "license_rule": "licensed iff answer \u2208 ['YES', 'MARGINAL'] \u2227 stat_ok \u2014 MARGINAL licenses because the block peek under-reads atom-aware full-train capacity (NF-W6b-C: 4.08% at the gate \u2192 12.97% in the bake-off)"
+    },
+    "WR|two_pt": {
+      "answer": "NO",
+      "stat_ok": false,
+      "bands": [
+        2.0,
+        5.0
+      ],
+      "ceiling_pct": 0.0,
+      "reason": "ceiling 0.00% is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding False) \u2014 NO regardless of magnitude",
+      "licensed_for_bakeoff": false,
+      "license_rule": "licensed iff answer \u2208 ['YES', 'MARGINAL'] \u2227 stat_ok \u2014 MARGINAL licenses because the block peek under-reads atom-aware full-train capacity (NF-W6b-C: 4.08% at the gate \u2192 12.97% in the bake-off)"
+    }
+  },
+  "story_decision": {
+    "licensed_cells": [],
+    "yes_cells": [],
+    "marginal_cells": [],
+    "no_cells": [
+      "QB|two_pt",
+      "RB|two_pt",
+      "TE|two_pt",
+      "WR|two_pt"
+    ],
+    "headline": "CEILING-GATE yes=0 marginal=0 no=4 of 4 cells \u2192 0 licensed for the bake-off; 4 point-only (Phase-C default)"
+  },
+  "verdict": {
+    "story": "CEILING-GATE yes=0 marginal=0 no=4 of 4 cells \u2192 0 licensed for the bake-off; 4 point-only (Phase-C default)",
+    "cells": {
+      "QB|two_pt": "NO",
+      "RB|two_pt": "NO",
+      "TE|two_pt": "NO",
+      "WR|two_pt": "NO"
+    },
+    "licensed_cells": []
+  },
+  "headline": "CEILING-GATE yes=0 marginal=0 no=4 of 4 cells \u2192 0 licensed for the bake-off; 4 point-only (Phase-C default)"
+}

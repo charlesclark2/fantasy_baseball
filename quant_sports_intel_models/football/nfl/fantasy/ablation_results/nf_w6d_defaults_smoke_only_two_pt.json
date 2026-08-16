@@ -1,0 +1,874 @@
+{
+  "generated_at": "2026-08-15T19:43:18+00:00",
+  "story": "NF-W6d",
+  "phase": "C",
+  "smoke": true,
+  "only_stat": "two_pt",
+  "runtime_seconds": 11.3,
+  "n_folds": 2,
+  "fold_labels": [
+    "2025H1",
+    "2025H2"
+  ],
+  "n_rows": 84553,
+  "matrix_key": "26c34fbe778c9d87",
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 84553,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "attach_audit": {
+    "cache": "hit"
+  },
+  "preregistration": {
+    "default_order": {
+      "modeled": [
+        "count_negbin",
+        "climatology"
+      ],
+      "minor": [
+        "climatology"
+      ]
+    },
+    "pit_max_decile_dev": 0.03,
+    "coverage_floor": 0.8,
+    "coverage_block_se": 3.0,
+    "n_cells": 4,
+    "cells": [
+      "QB|two_pt",
+      "RB|two_pt",
+      "WR|two_pt",
+      "TE|two_pt"
+    ],
+    "seed": 20260817,
+    "served_cells_excluded": [
+      "QB|passing_tds",
+      "QB|passing_yards",
+      "QB|rushing_yards",
+      "RB|rushing_yards",
+      "TE|receiving_yards",
+      "WR|receiving_yards",
+      "RB|rushing_tds"
+    ]
+  },
+  "fold_results": [
+    {
+      "label": "2025H1",
+      "n_test": 4308,
+      "cells": {
+        "QB|two_pt": {
+          "scores": {
+            "nihilist_zero": {
+              "crps_q199": 0.040238450074515646,
+              "coverage_80": 0.9642324888226528,
+              "pred_p0": 1.0,
+              "real_p0": 0.9642324888226528,
+              "n": 671
+            },
+            "count_negbin": {
+              "crps_q199": 0.03907682975233845,
+              "coverage_80": 0.970193740685544,
+              "pred_p0": 0.9758329651236811,
+              "real_p0": 0.9642324888226528,
+              "n": 671,
+              "pit": {
+                "decile_counts": [
+                  61,
+                  64,
+                  72,
+                  46,
+                  68,
+                  60,
+                  75,
+                  82,
+                  64,
+                  79
+                ],
+                "n": 671,
+                "n_below_grid": 8,
+                "n_above_grid": 23,
+                "sum_z": 60.47660820585378,
+                "sum_z2": 695.2242663033244
+              }
+            },
+            "climatology": {
+              "crps_q199": 0.03913689161156003,
+              "coverage_80": 0.9642324888226528,
+              "pred_p0": 0.9698492462311558,
+              "real_p0": 0.9642324888226528,
+              "n": 671,
+              "pit": {
+                "decile_counts": [
+                  61,
+                  71,
+                  66,
+                  54,
+                  64,
+                  68,
+                  61,
+                  75,
+                  71,
+                  80
+                ],
+                "n": 671,
+                "n_below_grid": 15,
+                "n_above_grid": 15,
+                "sum_z": 38.27091452106859,
+                "sum_z2": 697.4295718996955
+              }
+            }
+          },
+          "kind": "modeled"
+        },
+        "RB|two_pt": {
+          "scores": {
+            "nihilist_zero": {
+              "crps_q199": 0.004708097928436911,
+              "coverage_80": 0.995291902071563,
+              "pred_p0": 1.0,
+              "real_p0": 0.995291902071563,
+              "n": 1062
+            },
+            "count_negbin": {
+              "crps_q199": 0.004730904995788737,
+              "coverage_80": 0.9962335216572504,
+              "pred_p0": 0.9940237912727481,
+              "real_p0": 0.995291902071563,
+              "n": 1062,
+              "pit": {
+                "decile_counts": [
+                  119,
+                  96,
+                  111,
+                  116,
+                  105,
+                  116,
+                  93,
+                  104,
+                  111,
+                  91
+                ],
+                "n": 1062,
+                "n_below_grid": 33,
+                "n_above_grid": 22,
+                "sum_z": -47.098492254629825,
+                "sum_z2": 1051.056226557267
+              }
+            },
+            "climatology": {
+              "crps_q199": 0.004711031617598351,
+              "coverage_80": 0.995291902071563,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.995291902071563,
+              "n": 1062,
+              "pit": {
+                "decile_counts": [
+                  106,
+                  114,
+                  113,
+                  95,
+                  113,
+                  91,
+                  112,
+                  126,
+                  100,
+                  92
+                ],
+                "n": 1062,
+                "n_below_grid": 22,
+                "n_above_grid": 23,
+                "sum_z": -22.056142684816248,
+                "sum_z2": 1022.3146879357853
+              }
+            }
+          },
+          "kind": "modeled"
+        },
+        "WR|two_pt": {
+          "scores": {
+            "nihilist_zero": {
+              "crps_q199": 0.009322560596643879,
+              "coverage_80": 0.9906774394033562,
+              "pred_p0": 1.0,
+              "real_p0": 0.9906774394033562,
+              "n": 1609
+            },
+            "count_negbin": {
+              "crps_q199": 0.009268467883232196,
+              "coverage_80": 0.9906774394033562,
+              "pred_p0": 0.9946188368817362,
+              "real_p0": 0.9906774394033562,
+              "n": 1609,
+              "pit": {
+                "decile_counts": [
+                  169,
+                  172,
+                  177,
+                  152,
+                  156,
+                  143,
+                  140,
+                  170,
+                  177,
+                  153
+                ],
+                "n": 1609,
+                "n_below_grid": 46,
+                "n_above_grid": 33,
+                "sum_z": -44.29511106588247,
+                "sum_z2": 1628.9751034230312
+              }
+            },
+            "climatology": {
+              "crps_q199": 0.009279117776577108,
+              "coverage_80": 0.9906774394033562,
+              "pred_p0": 0.9949748743718593,
+              "real_p0": 0.9906774394033562,
+              "n": 1609,
+              "pit": {
+                "decile_counts": [
+                  163,
+                  155,
+                  160,
+                  177,
+                  165,
+                  140,
+                  152,
+                  156,
+                  161,
+                  180
+                ],
+                "n": 1609,
+                "n_below_grid": 40,
+                "n_above_grid": 48,
+                "sum_z": 17.06480593190387,
+                "sum_z2": 1704.0582325092712
+              }
+            }
+          },
+          "kind": "modeled"
+        },
+        "TE|two_pt": {
+          "scores": {
+            "nihilist_zero": {
+              "crps_q199": 0.006211180124223602,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 1.0,
+              "real_p0": 0.9937888198757764,
+              "n": 966
+            },
+            "count_negbin": {
+              "crps_q199": 0.006125971472268173,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 0.9966447142545024,
+              "real_p0": 0.9937888198757764,
+              "n": 966,
+              "pit": {
+                "decile_counts": [
+                  95,
+                  100,
+                  87,
+                  94,
+                  99,
+                  98,
+                  89,
+                  108,
+                  103,
+                  93
+                ],
+                "n": 966,
+                "n_below_grid": 17,
+                "n_above_grid": 23,
+                "sum_z": 18.068596961945133,
+                "sum_z2": 927.3132194660438
+              }
+            },
+            "climatology": {
+              "crps_q199": 0.0061990074596585416,
+              "coverage_80": 0.9937888198757764,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.9937888198757764,
+              "n": 966,
+              "pit": {
+                "decile_counts": [
+                  107,
+                  88,
+                  98,
+                  98,
+                  105,
+                  84,
+                  100,
+                  104,
+                  98,
+                  84
+                ],
+                "n": 966,
+                "n_below_grid": 27,
+                "n_above_grid": 18,
+                "sum_z": -26.22732856706603,
+                "sum_z2": 965.2016181151326
+              }
+            }
+          },
+          "kind": "modeled"
+        }
+      }
+    },
+    {
+      "label": "2025H2",
+      "n_test": 4380,
+      "cells": {
+        "QB|two_pt": {
+          "scores": {
+            "nihilist_zero": {
+              "crps_q199": 0.028530670470756064,
+              "coverage_80": 0.9728958630527818,
+              "pred_p0": 1.0,
+              "real_p0": 0.9728958630527818,
+              "n": 701
+            },
+            "count_negbin": {
+              "crps_q199": 0.027823138517121985,
+              "coverage_80": 0.978601997146933,
+              "pred_p0": 0.9725589430748608,
+              "real_p0": 0.9728958630527818,
+              "n": 701,
+              "pit": {
+                "decile_counts": [
+                  75,
+                  67,
+                  75,
+                  56,
+                  70,
+                  69,
+                  60,
+                  76,
+                  80,
+                  73
+                ],
+                "n": 701,
+                "n_below_grid": 20,
+                "n_above_grid": 18,
+                "sum_z": 15.572721839151278,
+                "sum_z2": 732.4650792134097
+              }
+            },
+            "climatology": {
+              "crps_q199": 0.02795152653424039,
+              "coverage_80": 0.9728958630527818,
+              "pred_p0": 0.9698492462311558,
+              "real_p0": 0.9728958630527818,
+              "n": 701,
+              "pit": {
+                "decile_counts": [
+                  66,
+                  60,
+                  91,
+                  85,
+                  70,
+                  59,
+                  63,
+                  55,
+                  73,
+                  79
+                ],
+                "n": 701,
+                "n_below_grid": 20,
+                "n_above_grid": 13,
+                "sum_z": -7.055249757652376,
+                "sum_z2": 698.340585763338
+              }
+            }
+          },
+          "kind": "modeled"
+        },
+        "RB|two_pt": {
+          "scores": {
+            "nihilist_zero": {
+              "crps_q199": 0.010166358595194085,
+              "coverage_80": 0.9898336414048059,
+              "pred_p0": 1.0,
+              "real_p0": 0.9898336414048059,
+              "n": 1082
+            },
+            "count_negbin": {
+              "crps_q199": 0.01009632264836196,
+              "coverage_80": 0.9898336414048059,
+              "pred_p0": 0.9937998681020628,
+              "real_p0": 0.9898336414048059,
+              "n": 1082,
+              "pit": {
+                "decile_counts": [
+                  102,
+                  109,
+                  112,
+                  106,
+                  109,
+                  114,
+                  110,
+                  107,
+                  100,
+                  113
+                ],
+                "n": 1082,
+                "n_below_grid": 28,
+                "n_above_grid": 33,
+                "sum_z": 6.437480641277902,
+                "sum_z2": 1080.4761596592343
+              }
+            },
+            "climatology": {
+              "crps_q199": 0.010114435393232337,
+              "coverage_80": 0.9898336414048059,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.9898336414048059,
+              "n": 1082,
+              "pit": {
+                "decile_counts": [
+                  101,
+                  125,
+                  89,
+                  106,
+                  100,
+                  93,
+                  119,
+                  127,
+                  111,
+                  111
+                ],
+                "n": 1082,
+                "n_below_grid": 25,
+                "n_above_grid": 28,
+                "sum_z": 28.7012544361528,
+                "sum_z2": 1093.3934056500002
+              }
+            }
+          },
+          "kind": "modeled"
+        },
+        "WR|two_pt": {
+          "scores": {
+            "nihilist_zero": {
+              "crps_q199": 0.008014796547472256,
+              "coverage_80": 0.9919852034525277,
+              "pred_p0": 1.0,
+              "real_p0": 0.9919852034525277,
+              "n": 1622
+            },
+            "count_negbin": {
+              "crps_q199": 0.008037505654040858,
+              "coverage_80": 0.9919852034525277,
+              "pred_p0": 0.9945690226719295,
+              "real_p0": 0.9919852034525277,
+              "n": 1622,
+              "pit": {
+                "decile_counts": [
+                  160,
+                  158,
+                  150,
+                  167,
+                  201,
+                  158,
+                  162,
+                  143,
+                  158,
+                  165
+                ],
+                "n": 1622,
+                "n_below_grid": 42,
+                "n_above_grid": 51,
+                "sum_z": 9.57013540943209,
+                "sum_z2": 1627.893307415799
+              }
+            },
+            "climatology": {
+              "crps_q199": 0.007984497084683592,
+              "coverage_80": 0.9919852034525277,
+              "pred_p0": 0.9949748743718592,
+              "real_p0": 0.9919852034525277,
+              "n": 1622,
+              "pit": {
+                "decile_counts": [
+                  154,
+                  168,
+                  161,
+                  159,
+                  179,
+                  150,
+                  161,
+                  174,
+                  174,
+                  142
+                ],
+                "n": 1622,
+                "n_below_grid": 41,
+                "n_above_grid": 35,
+                "sum_z": -11.768037891198897,
+                "sum_z2": 1597.5372917911002
+              }
+            }
+          },
+          "kind": "modeled"
+        },
+        "TE|two_pt": {
+          "scores": {
+            "nihilist_zero": {
+              "crps_q199": 0.0041025641025641026,
+              "coverage_80": 0.9958974358974358,
+              "pred_p0": 1.0,
+              "real_p0": 0.9958974358974358,
+              "n": 975
+            },
+            "count_negbin": {
+              "crps_q199": 0.004167761886354851,
+              "coverage_80": 0.9958974358974358,
+              "pred_p0": 0.9964437572477775,
+              "real_p0": 0.9958974358974358,
+              "n": 975,
+              "pit": {
+                "decile_counts": [
+                  86,
+                  95,
+                  112,
+                  91,
+                  94,
+                  106,
+                  92,
+                  108,
+                  100,
+                  91
+                ],
+                "n": 975,
+                "n_below_grid": 20,
+                "n_above_grid": 17,
+                "sum_z": 13.310608152791236,
+                "sum_z2": 904.0966141284305
+              }
+            },
+            "climatology": {
+              "crps_q199": 0.004111583558819741,
+              "coverage_80": 0.9958974358974358,
+              "pred_p0": 0.9949748743718593,
+              "real_p0": 0.9958974358974358,
+              "n": 975,
+              "pit": {
+                "decile_counts": [
+                  99,
+                  107,
+                  93,
+                  90,
+                  92,
+                  82,
+                  97,
+                  92,
+                  118,
+                  105
+                ],
+                "n": 975,
+                "n_below_grid": 25,
+                "n_above_grid": 25,
+                "sum_z": 23.79792304366735,
+                "sum_z2": 1015.0503886978497
+              }
+            }
+          },
+          "kind": "modeled"
+        }
+      }
+    }
+  ],
+  "decisions": {
+    "QB|two_pt": {
+      "cell": "QB|two_pt",
+      "order": [
+        "count_negbin",
+        "climatology"
+      ],
+      "chosen": "count_negbin",
+      "reads": {
+        "count_negbin": {
+          "form": "count_negbin",
+          "n_rows": 1372,
+          "crps_q199": 0.03345,
+          "nihilist_crps": 0.03438,
+          "nihilist_loses": true,
+          "coverage_80": 0.9745,
+          "binomial_se": 0.0108,
+          "coverage_floor_ok": true,
+          "structural_expectation": 0.9969,
+          "real_p0": 0.9687,
+          "pred_p0": 0.9742,
+          "pit_max_decile_dev": 0.02566,
+          "pit_decile_freq": [
+            0.09913,
+            0.09548,
+            0.10714,
+            0.07434,
+            0.10058,
+            0.09402,
+            0.0984,
+            0.11516,
+            0.10496,
+            0.11079
+          ],
+          "pit_flat_ok": true,
+          "calibrated": true
+        },
+        "climatology": {
+          "form": "climatology",
+          "n_rows": 1372,
+          "crps_q199": 0.03354,
+          "nihilist_crps": 0.03438,
+          "nihilist_loses": true,
+          "coverage_80": 0.9687,
+          "binomial_se": 0.0108,
+          "coverage_floor_ok": true,
+          "structural_expectation": 0.9969,
+          "real_p0": 0.9687,
+          "pred_p0": 0.9698,
+          "pit_max_decile_dev": 0.01589,
+          "pit_decile_freq": [
+            0.09257,
+            0.09548,
+            0.11443,
+            0.10131,
+            0.09767,
+            0.09257,
+            0.09038,
+            0.09475,
+            0.10496,
+            0.11589
+          ],
+          "pit_flat_ok": true,
+          "calibrated": true
+        }
+      },
+      "calibration_warning": null,
+      "note": "a CALIBRATED DEFAULT chosen by pre-registered ORDER + calibration gates, NOT a bake-off winner and NOT selected on CRPS"
+    },
+    "RB|two_pt": {
+      "cell": "RB|two_pt",
+      "order": [
+        "count_negbin",
+        "climatology"
+      ],
+      "chosen": "count_negbin",
+      "reads": {
+        "count_negbin": {
+          "form": "count_negbin",
+          "n_rows": 2144,
+          "crps_q199": 0.00741,
+          "nihilist_crps": 0.00744,
+          "nihilist_loses": true,
+          "coverage_80": 0.993,
+          "binomial_se": 0.0086,
+          "coverage_floor_ok": true,
+          "structural_expectation": 0.9993,
+          "real_p0": 0.9925,
+          "pred_p0": 0.9939,
+          "pit_max_decile_dev": 0.00728,
+          "pit_decile_freq": [
+            0.10308,
+            0.09562,
+            0.10401,
+            0.10354,
+            0.09981,
+            0.10728,
+            0.09468,
+            0.09841,
+            0.09841,
+            0.09515
+          ],
+          "pit_flat_ok": true,
+          "calibrated": true
+        },
+        "climatology": {
+          "form": "climatology",
+          "n_rows": 2144,
+          "crps_q199": 0.00741,
+          "nihilist_crps": 0.00744,
+          "nihilist_loses": true,
+          "coverage_80": 0.9925,
+          "binomial_se": 0.0086,
+          "coverage_floor_ok": true,
+          "structural_expectation": 0.9993,
+          "real_p0": 0.9925,
+          "pred_p0": 0.995,
+          "pit_max_decile_dev": 0.018,
+          "pit_decile_freq": [
+            0.09655,
+            0.11147,
+            0.09422,
+            0.09375,
+            0.09935,
+            0.08582,
+            0.10774,
+            0.118,
+            0.09841,
+            0.09468
+          ],
+          "pit_flat_ok": true,
+          "calibrated": true
+        }
+      },
+      "calibration_warning": null,
+      "note": "a CALIBRATED DEFAULT chosen by pre-registered ORDER + calibration gates, NOT a bake-off winner and NOT selected on CRPS"
+    },
+    "TE|two_pt": {
+      "cell": "TE|two_pt",
+      "order": [
+        "count_negbin",
+        "climatology"
+      ],
+      "chosen": "count_negbin",
+      "reads": {
+        "count_negbin": {
+          "form": "count_negbin",
+          "n_rows": 1941,
+          "crps_q199": 0.00515,
+          "nihilist_crps": 0.00516,
+          "nihilist_loses": true,
+          "coverage_80": 0.9948,
+          "binomial_se": 0.0091,
+          "coverage_floor_ok": true,
+          "structural_expectation": 0.9995,
+          "real_p0": 0.9948,
+          "pred_p0": 0.9965,
+          "pit_max_decile_dev": 0.01128,
+          "pit_decile_freq": [
+            0.09325,
+            0.10046,
+            0.10252,
+            0.09531,
+            0.09943,
+            0.1051,
+            0.09325,
+            0.11128,
+            0.10459,
+            0.0948
+          ],
+          "pit_flat_ok": true,
+          "calibrated": true
+        },
+        "climatology": {
+          "form": "climatology",
+          "n_rows": 1941,
+          "crps_q199": 0.00516,
+          "nihilist_crps": 0.00516,
+          "nihilist_loses": true,
+          "coverage_80": 0.9948,
+          "binomial_se": 0.0091,
+          "coverage_floor_ok": true,
+          "structural_expectation": 0.9995,
+          "real_p0": 0.9948,
+          "pred_p0": 0.995,
+          "pit_max_decile_dev": 0.01448,
+          "pit_decile_freq": [
+            0.10613,
+            0.10046,
+            0.0984,
+            0.09686,
+            0.10149,
+            0.08552,
+            0.10149,
+            0.10098,
+            0.11128,
+            0.09737
+          ],
+          "pit_flat_ok": true,
+          "calibrated": true
+        }
+      },
+      "calibration_warning": null,
+      "note": "a CALIBRATED DEFAULT chosen by pre-registered ORDER + calibration gates, NOT a bake-off winner and NOT selected on CRPS"
+    },
+    "WR|two_pt": {
+      "cell": "WR|two_pt",
+      "order": [
+        "count_negbin",
+        "climatology"
+      ],
+      "chosen": "count_negbin",
+      "reads": {
+        "count_negbin": {
+          "form": "count_negbin",
+          "n_rows": 3231,
+          "crps_q199": 0.00865,
+          "nihilist_crps": 0.00867,
+          "nihilist_loses": true,
+          "coverage_80": 0.9913,
+          "binomial_se": 0.007,
+          "coverage_floor_ok": true,
+          "structural_expectation": 0.9991,
+          "real_p0": 0.9913,
+          "pred_p0": 0.9946,
+          "pit_max_decile_dev": 0.01049,
+          "pit_decile_freq": [
+            0.10183,
+            0.10214,
+            0.10121,
+            0.09873,
+            0.11049,
+            0.09316,
+            0.09347,
+            0.09687,
+            0.10368,
+            0.09842
+          ],
+          "pit_flat_ok": true,
+          "calibrated": true
+        },
+        "climatology": {
+          "form": "climatology",
+          "n_rows": 3231,
+          "crps_q199": 0.00863,
+          "nihilist_crps": 0.00867,
+          "nihilist_loses": true,
+          "coverage_80": 0.9913,
+          "binomial_se": 0.007,
+          "coverage_floor_ok": true,
+          "structural_expectation": 0.9991,
+          "real_p0": 0.9913,
+          "pred_p0": 0.995,
+          "pit_max_decile_dev": 0.01024,
+          "pit_decile_freq": [
+            0.09811,
+            0.09997,
+            0.09935,
+            0.10399,
+            0.10647,
+            0.08976,
+            0.09687,
+            0.10214,
+            0.10368,
+            0.09966
+          ],
+          "pit_flat_ok": true,
+          "calibrated": true
+        }
+      },
+      "calibration_warning": null,
+      "note": "a CALIBRATED DEFAULT chosen by pre-registered ORDER + calibration gates, NOT a bake-off winner and NOT selected on CRPS"
+    }
+  },
+  "summary": {
+    "n_cells": 4,
+    "by_form": {
+      "count_negbin": 4
+    },
+    "uncalibrated_cells": [],
+    "headline": "DEFAULTS 4 cells \u2192 {'count_negbin': 4}; 0 uncalibrated (flagged)"
+  },
+  "verdict": {
+    "story": "DEFAULTS 4 cells \u2192 {'count_negbin': 4}; 0 uncalibrated (flagged)",
+    "defaults": {
+      "QB|two_pt": "count_negbin",
+      "RB|two_pt": "count_negbin",
+      "TE|two_pt": "count_negbin",
+      "WR|two_pt": "count_negbin"
+    },
+    "uncalibrated_cells": []
+  },
+  "headline": "DEFAULTS 4 cells \u2192 {'count_negbin': 4}; 0 uncalibrated (flagged)"
+}
