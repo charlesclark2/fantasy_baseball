@@ -139,6 +139,36 @@ A defect is declared **only** when the observed statistic sits **outside** the c
 defect: the first without the second is a *standing* property of the model, not drift; the second
 without the first is a difference between two windows that are both fine.
 
+### 4b. ⭐ AMENDMENT — the verdict-bearing family is small, declared, and BH-corrected
+
+**Added 2026-08-15, BEFORE any real served statistic was read; the reason is a control result, not
+a result.** The pre-registered negative control (§5) was run first, on synthetic frames drawn from
+a *perfectly calibrated* predictive. §4 as originally written fired on them **9 times in 20**, twice
+reporting `DRIFT`.
+
+The cause is multiplicity, not a coding error: ~15 statistics were each placed in their own null at
+α = 0.05 with no correction, so the family-wise error rate was **≈50%, not 5%**. An audit that flags
+a healthy model half the time is the mirror image of a vacuous check, and on this study — whose
+expected answer is a null — it would have produced a **wrong answer**.
+
+The cure is the MH2 "declare a family, don't discover one" rule applied to **statistics** rather
+than to arms:
+
+| | |
+|---|---|
+| totals verdict family | `pit_mdd`, `bias`, `var_z_pooled`, `rms_var_z_sigma` |
+| h2h verdict family | `cil`, `ece` |
+| correction | Benjamini–Hochberg at **q = 0.05** across the union, per window |
+| ⭐ conditional membership | `rms_var_z_sigma` is admissible **only if the primary stratifier validated on that window**. A disqualified partition is refused outright — it is not read "with a caveat" — so it leaves the family and the test count falls accordingly. |
+
+Every other statistic is still **computed and reported**, as descriptive context, and **never as a
+verdict**. Acceptance for the amendment is two-sided and pre-stated: the false-positive rate on
+clean synthetic frames must fall to ≈5%, **and** the positive controls of §5 must still fire.
+
+⚠️ Recorded rather than quietly folded in: this changed the study's decision rule after the
+harness existed. It is admissible **only** because it was driven by a synthetic control and landed
+before any real number was read — the ordering is visible in the git history of this branch.
+
 ## 5. ⭐ LOCK — THE INSTRUMENT MUST BE PROVEN ABLE TO FAIL AT THIS n
 
 A "within noise" verdict is worthless if the instrument could not have detected a real defect at the
