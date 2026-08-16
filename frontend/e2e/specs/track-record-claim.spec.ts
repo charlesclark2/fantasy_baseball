@@ -100,8 +100,14 @@ test.describe("public Track Record — NF-TR1 claim governance", () => {
     const lead = await page.locator("h2", { hasText: "The honest read" }).locator("..").innerText()
     expect(lead.toLowerCase(), "the lead no longer says the gap is small").toContain("gap is small")
     expect(lead.toLowerCase(), "the lead no longer says it varies by season").toContain("year to year")
-    expect(lead.toLowerCase(), "the lead no longer names a position where it is level")
-      .toContain("basically even")
+    // The position clause is DERIVED from `delta_rho_by_pos`: a wash prints "basically even", a
+    // position the crowd led prints "the crowd's order was slightly better than ours". Either is the
+    // hedge; a lead that names NEITHER has dropped it (2026-08-15: RB slid −0.000 → −0.010 and the
+    // wash clause correctly disappeared — the behind clause must take its place, not silence).
+    expect(
+      /basically even|crowd's order was slightly better than ours/.test(lead.toLowerCase()),
+      "the lead no longer names a position with a direction word (even / behind)",
+    ).toBe(true)
     expect(lead.toLowerCase(), "the lead dropped the could-be-luck hedge while the measured " +
       "interval still includes zero").toContain("could just be luck")
 

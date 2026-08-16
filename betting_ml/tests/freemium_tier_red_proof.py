@@ -468,7 +468,7 @@ CASES = [
      "test_the_full_season_rate_is_the_expected_arithmetic", SUITE),
 
     ("label the rate without disclaiming consensus calibration", COPY,
-     "It is also our own arithmetic, not a figure reconciled against anyone else's published projections, and it stays conservative at running back.",
+     "It is also our own arithmetic, not a figure reconciled against anyone else's published projections.",
      "It is the cleanest way to compare two players.",
      "test_the_rate_label_does_not_imply_a_consensus_calibrated_number", SUITE),
 

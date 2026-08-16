@@ -1221,14 +1221,19 @@ def test_the_rate_renders_beside_the_expected_total(component):
 
 def test_the_rate_label_does_not_imply_a_consensus_calibrated_number():
     """⛔ It is our own projection divided by our own expected games — NOT reconciled against
-    anyone else's published 'if he plays every week' figure, and still conservative at running back.
-    The definition has to say so, because a bare full-slate number invites exactly that comparison.
+    anyone else's published 'if he plays every week' figure. The definition has to say so, because a
+    bare full-slate number invites exactly that comparison. (The former "still conservative at running
+    back" clause was RETIRED 2026-08-15 with NF-TR2b's served level recalibration — the RB residual is
+    now inside the noise, and a claim about it would be a claim about noise; the per-position table on
+    the Track Record page is where any residual is disclosed, derived.)
     """
     src = (_FRONTEND / "lib/fantasy-claim-copy.ts").read_text()
     block = src[src.index("FULL_SEASON_RATE_DEFINITION"):]
     block = block[: block.index("\n\n")].lower()
     assert "not a prediction that he plays all seventeen" in block, "the label reads as a forecast"
-    assert "running back" in block, "the residual RB conservatism is not disclosed"
+    assert "conservative at running back" not in block, (
+        "the retired pre-NF-TR2b RB-conservatism claim is back in the served copy"
+    )
     assert "not a figure reconciled against" in block, (
         "the definition does not disclaim consensus calibration"
     )
