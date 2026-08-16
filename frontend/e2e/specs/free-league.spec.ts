@@ -10,6 +10,7 @@ import {
 } from "../support/api-mock"
 import { signIn } from "../support/session"
 import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors } from "../support/assertions"
+import { forbiddenPhrasesIn } from "../support/claim-denylist"
 
 /**
  * G100-C1 — ONE FREE PERSONALIZED LEAGUE, and the activation screen it exists for.
@@ -859,5 +860,15 @@ test.describe("the league picker (G100-C2)", () => {
     await expect(page.getByTestId("my-league-board")).toBeVisible()
     await expect(page.getByTestId("league-picker")).toHaveCount(0)
     expectNoPageErrors(errors)
+  })
+
+  test("the picker adds no overclaim to the page", async ({ page }) => {
+    // The whole rendered surface, mirroring `fantasy-roster-report.spec.ts`'s equivalent check: a
+    // component's own static strings never pass through the export-side screening
+    // (`test_nf_tr1_claim_copy.py`), which only parses `fantasy-claim-copy.ts`.
+    await openWithTwoLeagues(page)
+    await expect(page.getByTestId("league-delta")).toBeVisible()
+    const text = await page.evaluate(() => document.body.innerText)
+    expect(forbiddenPhrasesIn(text), "an overclaim reached the league picker's My League").toEqual([])
   })
 })

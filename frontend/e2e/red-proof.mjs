@@ -1930,7 +1930,10 @@ const CASES = [
 // sportsbook filter — the last a follow-up request in the same story), each RED-proven
 // individually (`-- props-`) for the same reason — a production build per case does not belong
 // in a session. So 120/114/6 → 125/119/6, and the next full run CONFIRMS it.
-const RECORDED_BOARD = { total: 125, red: 119, notObservable: 6 }
+// G100-C2 adds ONE case (the multi-league picker reverting to `teams[0]`), RED-proven individually
+// (`-- league-picker`) for the same reason. So 125/119/6 → 126/120/6, and the next full run CONFIRMS
+// it.
+const RECORDED_BOARD = { total: 126, red: 120, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
