@@ -362,6 +362,18 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
     p_perm = M14.onesided_paired_pvalue(perm_lift)
     sd = float(np.nanstd(deltas, ddof=1))
 
+    # Per-form oracle floors, evaluated on the per-FOLD paired series (SMOKE AMENDMENT 2) so a
+    # numerical tie is separable from a real inversion. The FOIL's own oracle runs through the
+    # SAME evaluator as the POSITIVE CONTROL — it peeks at everything and is hugely active
+    # (measured 2.6128 → 1.7592 on the smoke), which is what proves the detector is not simply
+    # returning INACTIVE for everything (a two-sided check, NF1.8's degenerate discipline).
+    oracle_states = {a: FA.oracle_floor_state(mat[a], mat[f"oracle__{a}"], mat[f"matched_n__{a}"],
+                                              indep_by_fold=mat["assembled_indep"])
+                     for a in FA.REAL_ARMS}
+    oracle_control = {f: FA.oracle_floor_state(mat[f], mat[f"oracle__{f}"], mat[f],
+                                               indep_by_fold=mat["assembled_indep"])
+                      for f in FA.FOILS_WITH_ORACLE}
+
     anchors = {
         "degenerates_lose": bool(all(mean_s[d] > mean_s[winner] for d in FA.DEGENERATES)),
         "degenerate_detail": {d: round(float(mean_s[d]), 4) for d in FA.DEGENERATES},
@@ -371,10 +383,21 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
         # NF-D16 (g‴): each arm floored by the peeking version of ITS OWN form — the joint arms
         # NEST one another (Σ=I ⊂ one-factor ⊂ full), so one field-wide ceiling would veto a
         # legitimately-better nested form as a false metric inversion.
+        #
+        # ⭐ SMOKE AMENDMENT 2: THREE-state, not two. A VIOLATED arm still blocks; an INACTIVE one
+        # (the peek could not act — see `FA.oracle_floor_state`) is UNINFORMATIVE and blocks
+        # nothing, but is NAMED so the ceiling is visibly unevaluated rather than quietly passed.
         "oracle_floors_respected_at_matched_n": bool(all(
-            (mean_s[a] > mean_s[f"oracle__{a}"])
-            or (mean_s[f"oracle__{a}"] < mean_s[f"matched_n__{a}"])
-            for a in FA.REAL_ARMS)),
+            oracle_states[a]["state"] != FA.ORACLE_VIOLATED for a in FA.REAL_ARMS)),
+        # ⛔ never let INACTIVE read as a clean pass (NF-D20): the ceiling counts as EVALUATED
+        # only where a peek actually acted.
+        "oracle_ceiling_evaluated": bool(
+            any(oracle_states[a]["state"] == FA.ORACLE_RESPECTED for a in FA.REAL_ARMS)),
+        "winner_oracle_state": oracle_states[winner]["state"],
+        # ⛔ the UNAMENDED clause reported beside the amended one — pre-registered that the
+        # AMENDED one binds, but the reader can see exactly what the amendment changed (NF-D14)
+        "oracle_floors_respected_PRE_AMENDMENT": bool(all(
+            oracle_states[a]["pre_amendment_respected"] for a in FA.REAL_ARMS)),
         # only the foils that HAVE an oracle — `assembled_indep` estimates nothing, so it has
         # none, and inventing one would score a pass on nothing (NF1.7 (a))
         "foils_respect_own_oracle": bool(all(
@@ -413,10 +436,9 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
         "var_trials_sr": (round(float(np.var(np.asarray(trial_srs), ddof=1)), 5)
                           if len(trial_srs) > 1 else None),
         "anchors": anchors,
-        "oracle_detail": {a: {"arm": round(float(mean_s[a]), 4),
-                              "own_form_oracle": round(float(mean_s[f"oracle__{a}"]), 4),
-                              "matched_n": round(float(mean_s[f"matched_n__{a}"]), 4)}
-                          for a in FA.REAL_ARMS},
+        "oracle_detail": oracle_states,
+        # the positive control: an oracle that CAN act, scored by the identical evaluator
+        "oracle_activity_control": oracle_control,
         "permutation_detail": {"permuted_lift_vs_foil_mean": round(float(np.nanmean(perm_lift)), 4),
                                "permuted_lift_p_one_sided": p_perm},
         "coverage": {"winner_coverage_80": cov_w["coverage"], "n_rows": cov_w["n_rows"],
@@ -514,6 +536,14 @@ def derive_verdict_layer(out: dict) -> dict:
         "gate_league": GATE_LEAGUE,
         "declared_field_size": len(FA.REAL_ARMS),
         "promote_blockers": list(FA.PROMOTE_BLOCKERS),
+        # ⭐ SMOKE AMENDMENT 2 — an INACTIVE oracle floor blocks nothing (NF-D20: uninformative,
+        # never a fail) but must never read as a clean pass either, so any position whose ceiling
+        # went unevaluated is NAMED on the verdict itself, where a reader cannot miss it.
+        "positions_with_unevaluated_oracle_ceiling": sorted(
+            p for p, s in present.items()
+            if not s["anchors"]["oracle_ceiling_evaluated"]),
+        "winner_oracle_state": {p: s["anchors"]["winner_oracle_state"]
+                                for p, s in present.items()},
     }
     return out
 
@@ -562,7 +592,22 @@ def write_report(out: dict, path: Path) -> None:
     for p, s in out["selections"].items():
         L.append(f"- **{p}** degenerates {s['anchors']['degenerate_detail']} vs winner "
                  f"{s['mean_crps'][s['winner']]}")
-        L.append(f"  - per-form oracle floors (NF-D16 g‴): {s['oracle_detail']}")
+        for a, o in s["oracle_detail"].items():
+            L.append(f"  - oracle floor `{a}`: **{o['state']}** (arm {o['arm']}, own-form oracle "
+                     f"{o['own_form_oracle']}, matched-n {o['matched_n']}, peek gain vs arm "
+                     f"{o['peek_gain_vs_arm']}, inversion p {o['inversion_p_one_sided']})")
+        for f_, o in s.get("oracle_activity_control", {}).items():
+            L.append(f"  - ⭐ activity POSITIVE CONTROL `{f_}`: **{o['state']}**, peek gain "
+                     f"{o['peek_gain_vs_arm']} — proves the detector can see an oracle that acts")
+        if not s["anchors"]["oracle_ceiling_evaluated"]:
+            L.append("  - ⚠️ every per-form oracle here is INACTIVE: the peek estimates Σ on the "
+                     "test block while its arm estimates it on the full train window, so the "
+                     "ceiling is NOT a ceiling. The floor is UNEVALUATED at this position — "
+                     "uninformative, not a pass (NF-D20 / NF-W6d).")
+    if v.get("positions_with_unevaluated_oracle_ceiling"):
+        L += ["", "⚠️ **Oracle ceiling unevaluated at**: "
+              + ", ".join(v["positions_with_unevaluated_oracle_ceiling"])
+              + " — these positions ship (or fail) WITHOUT that anchor's protection.", ""]
     L += ["", "## Promote blockers", ""] + [f"- {b}" for b in v["promote_blockers"]] + [""]
     path.write_text("\n".join(L))
 
