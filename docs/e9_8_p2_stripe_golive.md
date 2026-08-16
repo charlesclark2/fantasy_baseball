@@ -115,7 +115,11 @@ The other four `passwordless` members (`ctcb57+r1`, `ctcb57+r2`, `charlie@creden
 | `STRIPE_PRICE_FOUNDING` / `_STANDARD` | both set (test ids) | set | ✅ |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` | set | ✅ |
 | `APP_BASE_URL` | `https://www.credencesports.com` | — | ✅ |
-| Lambda | 25 env vars, python3.12, 512 MB, last deployed 2026-08-15T23:47Z | — | ✅ |
+| Lambda | 25 env vars, python3.12, 512 MB, `LastModified` 2026-08-15T23:47Z | — | ✅ |
+
+⚠️ `LastModified` moves on a **config** change as well as a code deploy, so it is *not* evidence of
+which build is running. The only trustworthy read of that is the `guard_version` marker — Part C
+step 3.
 
 ### A5. 🚨 A NAME MISMATCH IN THE STORY BRIEF — read this before setting anything
 
