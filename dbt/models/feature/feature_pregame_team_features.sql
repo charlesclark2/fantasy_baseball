@@ -664,7 +664,65 @@ select * from final
 
 {% else %}
 
-{{ config(materialized='table') }}
+-- E11.24 (2026-08-15) — `table` → `view`. On the Snowflake target this model is nothing but
+-- `select * from baseball_data.lakehouse_ext.<model>`: a COPY of an external table, with the real
+-- assembly living in the DuckDB branch above. As a `table` it ran a
+-- `create or replace transient table … as select *` on every DAILY build
+-- (`daily_ingestion_ops.dbt_umpire_feature_rebuild`, the op that also builds
+-- mart_bullpen_effectiveness), and that statement can RESUME `COMPUTE_WH`.
+-- ⚠️ It is NOT in the INTRADAY tick selector (`sensor_ops.lineup_dbt_feature_rebuild`) — verified
+-- 0 occurrences there, re-verified 2026-08-15 against dev@c54fde0e. The wake this removes lands in
+-- the daily-build band only; do not re-derive an intraday saving from this comment's history.
+-- `create or replace view` is metadata-only and provably never does — measured across the 9-day
+-- window in docs/e11_24_other_attribution.md Table 5: 30 distinct view objects / 837 executions,
+-- 0 waits, `metadata_only == execs`.
+--
+-- ⭐ THE #675 GHOST/HISTORY-READER GATE DOES NOT APPLY, AND THAT IS WHY THIS ONE IS SAFE FIRST.
+-- The EB pair are `merge` incrementals, so their Snowflake relation is a permanently accumulating
+-- SUPERSET of the S3 full-rebuild (superseded-snapshot ghost rows), which is what forced #675 to
+-- ask "does any reader span the accumulated history?". This is a `table` — fully replaced from the
+-- SAME ext table on every run — so the relation is identical to the ext table BY CONSTRUCTION.
+-- There are no ghost rows and therefore no history-spanning-reader question to answer.
+--
+-- FRESHNESS IS MONOTONICALLY IMPROVED, NOT TRADED. As a table the content was the ext table's
+-- content AS OF THE LAST dbt RUN; as a view it is the ext table's content NOW. The ext table is
+-- refreshed daily in `refresh_w1_external_tables.py` (`W8A_TABLES`, called by the --w8a mirror op
+-- immediately after the --w8a build), so a view is always fresher-or-equal to the snapshot it
+-- replaces — never staler.
+--
+-- READ AMPLIFICATION IS BOUNDED, AND THERE IS NO VIEW-ON-VIEW CHAIN (this corrects the premise in
+-- docs/e11_24_other_attribution.md §"RANKED NEXT TARGETS" item 2, which named
+-- `feature_pregame_game_features_raw` as the SF consumer that would chain). It is NOT one: that
+-- model's two `ref('feature_pregame_team_features')` calls both sit inside its DuckDB branch (the
+-- duckdb arm of its target-name conditional), and its Snowflake branch reads its OWN ext table
+-- (`lakehouse_ext.feature_pregame_game_features_raw`). Nothing chains a view onto this view.
+-- The Snowflake relation's only live scheduled reader is `generate_run_env_signals.py` (2 aliases
+-- × 2 dates in `_recent_completed_dates()` = 4 ext-table scans/day added); the remaining readers
+-- (`train_run_env.py`, the two ablation scripts, `parity_check_w8a.py`) are offline/operator-manual
+-- and on no schedule. ⭐ AND THAT 4-SCAN FIGURE IS AN UPPER BOUND, NOT A POINT ESTIMATE: the op
+-- passes `_w9_s3_read_args()`, so when `W9_LAKEHOUSE_S3_READS=1` that generator reads the S3
+-- lakehouse via DuckDB and touches this Snowflake relation ZERO times. That flag is NOT in
+-- `services/dagster/aws/env.required`, so its live box state is unenforced (the W7B
+-- documented-≠-set class) — which only ever makes this bound TIGHTER, never looser.
+-- CONTROL: that same run_env query already joins `feature_pregame_starter_features` TWICE and
+-- `feature_pregame_umpire_features` once, on the identical `game_pk`-only predicate — and BOTH have
+-- been views over `lakehouse_ext` since commit 5ac709f2, 2026-08-05 (target 6). The exact
+-- amplification shape this flip adds has therefore been running in production on this exact query
+-- for 10 days as of 2026-08-15. `feature_pregame_game_features{,_raw}` became views on 2026-08-08
+-- (1cbc5965), so the whole SF-side feature layer around this model is already view-materialised.
+--
+-- NO WRITERS. `grep -rIn -iE "(merge into|insert into|update|create or replace table|delete from)
+-- [^;]{0,120}feature_pregame_team_features"` returns nothing, so the INC-27 sibling hazard ("no
+-- reader blocks it" ≠ "no writer does" — a MERGE INTO a view fails) does not apply.
+-- No type contract either (`dbt/type_contracts/` has no entry), so INC-19's TYPE-PIN is untouched;
+-- a view has no stored type to drift.
+--
+-- ⚠️ NOT A CREDIT WIN ON ITS OWN. Wake is a QUEUE (#679): flipping one statement PROMOTES the next
+-- warehouse-occupying statement in the same chain into the waker role. This removes ~2 waits/day of
+-- rebuild wake, but the bill only moves when the warehouse actually SUSPENDS. The remaining flip in
+-- this chain is the `feature_pregame_lineup_state` SCD-2 port — deliberately NOT bundled here
+-- (one-flip-per-soak).
+{{ config(materialized='view') }}
 
 select * from baseball_data.lakehouse_ext.feature_pregame_team_features
 

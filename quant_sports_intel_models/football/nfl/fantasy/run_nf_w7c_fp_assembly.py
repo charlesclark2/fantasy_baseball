@@ -114,12 +114,24 @@ def _marginals(train: pd.DataFrame, serve: pd.DataFrame, smap: dict) -> dict[str
 
 # ── One fold × position ─────────────────────────────────────────────────────────────────────────
 def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, smap: dict,
-                 weights: np.ndarray, *, draws: int) -> dict:
+                 weights: np.ndarray, *, draws: int,
+                 ctx_te: dict, ctx_pit: dict, pit_frame: pd.DataFrame) -> dict:
+    """⚠️ `ctx_te` / `ctx_pit` are the fold's marginal contexts, built ONCE by `run_fold` and
+    passed in. They are POSITION-INDEPENDENT (`serve_banks` fits per form×stat over every
+    position, then slices), so computing them inside this function — as the first cut did — redid
+    the identical ~113 LightGBM fits four times per fold for nothing. Measured on the 2025H2 fold:
+    868.7s for ONE position."""
     tr_p = train.loc[train["position"].astype(str) == position].reset_index(drop=True)
     te_p = test.loc[test["position"].astype(str) == position].reset_index(drop=True)
+    pit_p = pit_frame.loc[pit_frame["position"].astype(str) == position].reset_index(drop=True)
     if len(te_p) == 0 or len(tr_p) < FA.MIN_ESTIMATION_ROWS:
         return {"skipped": f"train {len(tr_p)} / test {len(te_p)} rows — below the estimation "
                            f"floor ({FA.MIN_ESTIMATION_ROWS}); REFUSED, not defaulted"}
+    if len(pit_p) < FA.MIN_ESTIMATION_ROWS:
+        return {"skipped": f"the residual-PIT window carries {len(pit_p)} {position} rows, below "
+                           f"the estimation floor ({FA.MIN_ESTIMATION_ROWS}) — `joint_pit` could "
+                           f"not be estimated, so this fold is REFUSED rather than scored with an "
+                           f"arm silently missing from its declared field (NF1.7 (a))"}
     # ⭐⭐ THE ORACLE PEEKS AT THE DEPENDENCE, AND AT NOTHING ELSE.
     #
     # Every arm in this story differs from every other ONLY in Σ — the per-stat marginals are the
@@ -135,34 +147,43 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, smap: d
     # cannot be split that way — `core=0 cal=4380`. Peeking at the marginals was never the
     # intent; removing it fixes the crash, tightens the floor onto the channel this story owns,
     # and drops three of the five marginal fits per position.
-    ctx_te = _marginals(train, test, smap)          # the real arms' marginals (train → test)
-    ctx_tr = _marginals(train, train, smap)         # in-sample train predictives (joint_pit's Σ)
     b_te = bank_tensor(ctx_te, position, len(te_p))
-    b_tr = bank_tensor(ctx_tr, position, len(tr_p))
+    b_pit = bank_tensor(ctx_pit, position, len(pit_p))
 
-    raw_tr = realized_matrix(tr_p)
+    raw_tr = realized_matrix(tr_p)                  # FULL train — the raw-rank arms need no fit
+    raw_pit = realized_matrix(pit_p)                # the capped residual-PIT window
     raw_te = realized_matrix(te_p)
     y_te = FA.score_realized(raw_te, weights)
 
-    # The matched-n control (NF1.9 (f)): Σ estimated on a TRAIN slice the size of the test block —
-    # same family, same sample size, same marginals. It is a ROW SUBSET of the train context, so
-    # it costs no additional fit.
+    # The matched-n control (NF1.9 (f)): Σ estimated on the most recent TRAIN rows, sized to the
+    # test block — same family, same sample size, same marginals. A ROW SUBSET of an existing
+    # context, so it costs no additional fit.
     n_match = max(len(te_p), FA.MIN_ESTIMATION_ROWS)
-    order = np.argsort(tr_p["gw"].to_numpy(), kind="stable")
-    m_idx = np.sort(order[-n_match:])
-    if len(m_idx) < FA.MIN_ESTIMATION_ROWS:
-        return {"skipped": f"the matched-n control carries {len(m_idx)} {position} rows, below the "
-                           f"estimation floor ({FA.MIN_ESTIMATION_ROWS}) — the per-form oracle "
-                           f"floor could not be evaluated at matched n, so this fold is REFUSED "
-                           f"rather than scored against an anchor that did not run (NF1.7 (a))"}
+
+    def _recent(frame: pd.DataFrame, n: int) -> np.ndarray:
+        return np.sort(np.argsort(frame["gw"].to_numpy(), kind="stable")[-n:])
+
+    m_tr = _recent(tr_p, n_match)
+    m_pit = _recent(pit_p, min(n_match, len(pit_p)))
+    if len(m_tr) < FA.MIN_ESTIMATION_ROWS or len(m_pit) < FA.MIN_ESTIMATION_ROWS:
+        return {"skipped": f"the matched-n control carries {len(m_tr)}/{len(m_pit)} {position} "
+                           f"rows, below the estimation floor ({FA.MIN_ESTIMATION_ROWS}) — the "
+                           f"per-form oracle floor could not be evaluated at matched n, so this "
+                           f"fold is REFUSED rather than scored against an anchor that did not "
+                           f"run (NF1.7 (a))"}
 
     # ── Σ per arm × estimation context (marginals identical throughout — only Σ moves) ──────────
+    # `joint_pit` is the only arm defined on the residual scale, so it is the only one that needs
+    # model predictions; the raw-rank family reads realized outcomes and uses the FULL window.
     sig_tr, sig_or, sig_mn, notes = {}, {}, {}, {}
     for arm in FA.REAL_ARMS:
-        sig_tr[arm], notes[arm] = FA.sigma_for_arm(arm, raw=raw_tr, banks=b_tr, realized=raw_tr)
+        pit = arm == "joint_pit"
+        sig_tr[arm], notes[arm] = FA.sigma_for_arm(
+            arm, raw=raw_pit if pit else raw_tr, banks=b_pit, realized=raw_pit)
         sig_or[arm], _ = FA.sigma_for_arm(arm, raw=raw_te, banks=b_te, realized=raw_te)
-        sig_mn[arm], _ = FA.sigma_for_arm(arm, raw=raw_tr[m_idx], banks=b_tr[m_idx],
-                                          realized=raw_tr[m_idx])
+        sig_mn[arm], _ = FA.sigma_for_arm(
+            arm, raw=raw_pit[m_pit] if pit else raw_tr[m_tr],
+            banks=b_pit[m_pit], realized=raw_pit[m_pit])
 
     # ── arms, foils, anchors — ONE base-normal stream shared by all (common random numbers) ─────
     banks: dict[str, np.ndarray] = {}
@@ -223,19 +244,43 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, smap: d
     }
 
 
+def pit_window(train: pd.DataFrame, n_rows: int = FA.PIT_ESTIMATION_ROWS) -> pd.DataFrame:
+    """The most recent `n_rows` train rows — the frame `joint_pit` computes residual PITs over.
+
+    ⛔ The marginal FIT is still the FULL train set; only the rows PITs are COMPUTED ON are
+    capped. Predicting the in-sample train predictive over all ~79k rows (18× the test block, and
+    a 79k-against-79k neighbour search for the kNN cells) is what made a fold cost 868.7s per
+    position, for a 13×13 correlation whose SE at 8,000 rows is already ≈0.011."""
+    gw = pd.to_numeric(train["gw"], errors="coerce").to_numpy()
+    return train.iloc[np.sort(np.argsort(gw, kind="stable")[-n_rows:])]
+
+
 def run_fold(fold: WP.Fold, feat: pd.DataFrame, smap: dict, *, draws: int) -> dict:
     t0 = time.time()
     train, test = feat.loc[fold.train_idx], feat.loc[fold.test_idx]
     cfg = LP.get_preset(GATE_LEAGUE)
+
+    # ⭐ ONE marginal build per fold, not one per position: `serve_banks` fits per (form, stat)
+    # across every position and then slices, so these are position-INDEPENDENT. Building them
+    # inside the position loop repeated the identical ~113 LightGBM fits 4× per fold.
+    t_m = time.time()
+    ctx_te = _marginals(train, test, smap)
+    pit_frame = pit_window(train)
+    ctx_pit = _marginals(train, pit_frame, smap)     # fit on FULL train, predict on the window
+    log.info("[W7c] fold %s marginals in %.1fs (test %d rows, pit window %d of %d train rows)",
+             fold.label, time.time() - t_m, len(test), len(pit_frame), len(train))
+
     out: dict[str, dict] = {}
     for position in FA.POSITIONS:
         FA.assert_assembly_is_priceable(cfg, position)      # fail-closed on an unmodeled term
         t_p = time.time()
         out[position] = run_position(position, train, test, smap,
-                                     FA.leg_weights(cfg, position), draws=draws)
+                                     FA.leg_weights(cfg, position), draws=draws,
+                                     ctx_te=ctx_te, ctx_pit=ctx_pit, pit_frame=pit_frame)
         log.info("[W7c] fold %s %s in %.1fs", fold.label, position, time.time() - t_p)
     log.info("[W7c] fold %s complete in %.1fs", fold.label, time.time() - t0)
-    return {"label": fold.label, "n_test": int(len(test)), "positions": out}
+    return {"label": fold.label, "n_test": int(len(test)),
+            "n_pit_window_rows": int(len(pit_frame)), "positions": out}
 
 
 # ── Selection (derived from stored fold scores — NF-W2e: zero refit cost) ────────────────────────
