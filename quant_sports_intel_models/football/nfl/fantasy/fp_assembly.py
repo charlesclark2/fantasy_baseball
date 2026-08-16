@@ -58,6 +58,7 @@ from quant_sports_intel_models.football.nfl.fantasy import joint_draw as JD
 from quant_sports_intel_models.football.nfl.fantasy import kdst_weekly as KW
 from quant_sports_intel_models.football.nfl.fantasy import league_presets as LP
 from quant_sports_intel_models.football.nfl.fantasy import margin_calibration as MC
+from quant_sports_intel_models.football.nfl.fantasy import nf1_1_model as M14
 from quant_sports_intel_models.football.nfl.fantasy import stat_distribution_serving_d as SDSD
 from quant_sports_intel_models.football.nfl.fantasy import stat_distributions_d as SDD
 from quant_sports_intel_models.football.nfl.fantasy import weekly_projection as WP
@@ -188,6 +189,27 @@ PIT_MAX_DECILE_DEV = 0.05
 #: arms serve; only the number of rows PITs are COMPUTED ON is capped. Pre-registered BEFORE any
 #: score exists, so this is a compute decision, never a result-shaped one (E2.1-r).
 PIT_ESTIMATION_ROWS = 8_000
+
+#: ⭐ SMOKE AMENDMENT 2 — the significance level at which a per-form oracle floor counts as
+#: VIOLATED rather than TIED. Reused verbatim from this story's pre-existing permutation clause
+#: (`permuted_lift_not_significant`, α = 0.05); it is NOT a new knob chosen after seeing a score.
+#: See `oracle_floor_state` for why a tie may not be read as a refusal.
+ORACLE_VIOLATION_ALPHA = 0.05
+
+#: ⭐ …AND SIGNIFICANCE ALONE IS NOT ENOUGH. A paired test over folds calls an arbitrarily TINY
+#: but CONSISTENT gap significant — the smoke's own oracle gaps are ~2e-4 on a metric near 2.64,
+#: and a constant-offset series has zero paired variance, so p → 0 on a difference nobody could
+#: act on. That is NF-W6's "the ceiling bands must refuse a ceiling that is statistically
+#: DEMONSTRABLE but IMMATERIAL" — demonstrable ≠ material.
+#:
+#: The yardstick is the arm's OWN claimed effect: an inversion counts only if it is at least this
+#: fraction of the CRPS the arm claims over the independent foil. An arm claiming 0.11 while
+#: losing 0.0002 to its own ceiling has not been meaningfully inverted.
+#: ⛔ A DESIGN CHOICE, DISCLOSED: one tenth of the claimed effect, fixed BEFORE the 8-fold run
+#: exists, and the raw contrasts are recorded per fold so any reader can re-derive under another
+#: rule. Both the pre-amendment and amended clause outcomes are reported; the amended one binds
+#: (NF-D14 — report both, pre-register which binds).
+ORACLE_INVERSION_MATERIAL_FRACTION = 0.10
 
 ASSEMBLY_DRAWS = KW.ASSEMBLY_DRAWS               # 4000, NF-W7's convention
 #: Rows per draw block. The base normals are seeded per BLOCK, so a run reproduces given
@@ -485,6 +507,89 @@ def assembled_sum_sd(banks: np.ndarray, weights: np.ndarray, corr: np.ndarray) -
     sds = b.std(axis=2)                                   # (n, 13) grid sd of each leg's bank
     a = sds * np.asarray(weights, dtype=float)[None, :]
     return np.sqrt(np.einsum("ni,ij,nj->n", a, np.asarray(corr, dtype=float), a))
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Per-form oracle floors — three-state (SMOKE AMENDMENT 2)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+ORACLE_RESPECTED = "RESPECTED"
+ORACLE_VIOLATED = "VIOLATED"
+ORACLE_INACTIVE = "INACTIVE"
+
+
+def oracle_floor_state(arm_by_fold, oracle_by_fold, matched_n_by_fold, *,
+                       indep_by_fold=None, alpha: float = ORACLE_VIOLATION_ALPHA,
+                       material_fraction: float = ORACLE_INVERSION_MATERIAL_FRACTION) -> dict:
+    """The per-form peeking-oracle floor (NF1.9 (f) / NF-D16 g‴), as THREE states.
+
+    ⭐ SMOKE AMENDMENT 2 — the two-state version read an INACTIVE anchor pair as a REFUSAL, which
+    is the NF-W6d defect verbatim ("a per-form oracle floor that TIES its matched control is
+    INACTIVE, not a refusal — an inactive anchor is UNINFORMATIVE (NF-D20), never a fail"), and
+    NF-W6d's own record cards the fix as belonging in the SHARED gate because it recurs.
+
+    WHY IT WENT INACTIVE HERE, measured on the 2025H2 smoke and not asserted: this story's oracle
+    peeks at Σ and at nothing else (NF1.7 (b) — an oracle that also refit the marginals would be a
+    different family), so it estimates a 13×13 correlation on the ~701-row TEST block while its
+    own arm estimates the same matrix on ~12,622 TRAIN rows. The peek's information gain is
+    swamped by an ~18× sample-size LOSS, so the "ceiling" lands BELOW the thing it is meant to
+    bound — every gap was ≤ 0 (joint_rank +0.0002, joint_factor +0.0007, joint_double +0.0048,
+    joint_pit +0.0095, all in the arm's favour). A peeking oracle is a floor only when the peek's
+    gain exceeds its sample-size loss; that is NF1.7 (b) facing the direction this story hit.
+
+    ⛔ THE CLAUSE STAYS FALSIFIABLE — this is not "a tie now passes". A genuine inversion (the
+    honest arm beating the peeking ceiling by a margin distinguishable from zero, while the oracle
+    also fails to beat the matched-n control that licenses a capacity win) still returns VIOLATED.
+    Only a numerically indistinguishable tie is demoted to INACTIVE. A gate that could not fail
+    would be the vacuous-guard class this repo keeps re-learning (NF1.7 (a) / INC-38 / NF-D17).
+
+    RESPECTED  the peek beat its own arm, or beat the matched-n control → the floor held.
+    VIOLATED   the peek beat NEITHER, **and** the arm's win over it is BOTH significant at
+               `alpha` AND material against the arm's own claimed effect.
+    INACTIVE   the peek beat neither and the inversion is a tie — immaterial, or not
+               distinguishable from zero. The pair could not act; the ceiling is UNEVALUATED,
+               which is neither a pass nor a fail and must be NAMED.
+
+    `pre_amendment_respected` carries the ORIGINAL two-state verdict unchanged, so the record
+    shows exactly what the amendment bought and a reader can reverse it (NF-D14).
+    """
+    arm = np.asarray(arm_by_fold, dtype=float)
+    orc = np.asarray(oracle_by_fold, dtype=float)
+    mnc = np.asarray(matched_n_by_fold, dtype=float)
+    arm_m, orc_m, mnc_m = float(np.nanmean(arm)), float(np.nanmean(orc)), float(np.nanmean(mnc))
+    # lower CRPS is better, so a peek that ACTED scores BELOW its reference
+    beats_arm, beats_matched = orc_m < arm_m, orc_m < mnc_m
+    # >0 ⇒ the honest arm beat the peeking ceiling (the inversion the floor exists to catch)
+    inversion = orc - arm
+    p = M14.onesided_paired_pvalue(inversion) if len(inversion) > 1 else None
+    # the materiality yardstick: a tenth of the CRPS this arm CLAIMS over the independent foil.
+    # With no independent reference supplied the claim is unmeasurable, so nothing is material —
+    # fail CLOSED toward INACTIVE rather than manufacture a refusal from a missing input.
+    claimed = (float(np.nanmean(np.asarray(indep_by_fold, dtype=float) - arm))
+               if indep_by_fold is not None else 0.0)
+    threshold = max(material_fraction * claimed, 0.0)
+    material = bool(float(np.nanmean(inversion)) > threshold) and threshold > 0.0
+    significant = p is not None and p < alpha
+    if beats_arm or beats_matched:
+        state = ORACLE_RESPECTED
+    elif material and significant:
+        state = ORACLE_VIOLATED
+    else:
+        state = ORACLE_INACTIVE
+    return {
+        "state": state,
+        "arm": round(arm_m, 4), "own_form_oracle": round(orc_m, 4), "matched_n": round(mnc_m, 4),
+        "peek_gain_vs_arm": round(arm_m - orc_m, 6),
+        "peek_gain_vs_matched_n": round(mnc_m - orc_m, 6),
+        "inversion_mean": round(float(np.nanmean(inversion)), 6),
+        "inversion_p_one_sided": p,
+        "claimed_effect_vs_indep": round(claimed, 6),
+        "materiality_threshold": round(threshold, 6),
+        "inversion_is_material": material,
+        "inversion_is_significant": bool(significant),
+        "respected": None if state == ORACLE_INACTIVE else state == ORACLE_RESPECTED,
+        # ⛔ the UNAMENDED clause, verbatim, so the amendment's effect is auditable and reversible
+        "pre_amendment_respected": bool(beats_arm or beats_matched),
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

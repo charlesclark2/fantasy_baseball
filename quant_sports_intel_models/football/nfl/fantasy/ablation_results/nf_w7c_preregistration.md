@@ -108,6 +108,64 @@ field as a contest, not a foregone conclusion.
   cannot differ from what it anchors is décor, and scoring it as "respected" would be a pass on
   nothing (NF1.7 (a) / NF1.9's "a mechanism that cannot act is a finding").
 
+  ⚠️⚠️ **SMOKE AMENDMENT 2 — THE ORACLE FLOOR IS NOW THREE-STATE (2026-08-16, BEFORE any full run
+  / any decision; the amendment is disclosed as SMOKE-INFORMED).**
+
+  The path-proof smoke measured **every** dependence oracle at or BELOW its own arm on the QB
+  fold — `joint_rank` +0.0002, `joint_factor` +0.0007, `joint_double` +0.0048, `joint_pit`
+  +0.0095, all in the ARM's favour — so the two-state clause
+  (`arm > oracle OR oracle < matched_n`) returned **False for all four arms** and would have
+  refused the story at every position regardless of how well the dependence performed.
+
+  **MECHANISM, measured not asserted.** This story's oracle peeks at Σ and nothing else, because
+  an oracle that also refit the marginals would be a DIFFERENT FAMILY (NF1.7 (b)). So it estimates
+  a 13×13 correlation on the ~701-row TEST block while its own arm estimates the same matrix on
+  ~12,622 TRAIN rows. **The peek's information gain is swamped by an ~18× sample-size loss, so the
+  "ceiling" lands BELOW the quantity it is meant to bound.** A peeking oracle is a floor only when
+  the peek's gain exceeds its sample-size loss — NF1.7 (b) facing the direction this story hit.
+  This is the NF-W6d finding verbatim ("a per-form oracle floor that TIES its matched control is
+  INACTIVE, not a refusal — an inactive anchor is UNINFORMATIVE (NF-D20), never a fail"), whose
+  own record cards the fix as belonging in the SHARED gate **because it recurs**. This is the
+  recurrence.
+
+  **THE AMENDED RULE.** `RESPECTED` — the peek beat its own arm or the matched-n control.
+  `VIOLATED` — it beat neither AND the arm's win over it is BOTH significant (α = 0.05, the level
+  this story's permutation clause already uses) AND **material**, defined as at least one tenth of
+  the CRPS that arm CLAIMS over the independent foil. `INACTIVE` — it beat neither and the
+  inversion is a tie. INACTIVE blocks nothing, is **never** scored as a pass (`respected is None`),
+  and is NAMED on the verdict (`positions_with_unevaluated_oracle_ceiling`) so a ship cannot
+  silently claim a protection it never had.
+
+  **WHY MATERIALITY AND NOT SIGNIFICANCE ALONE.** A paired test over folds calls an arbitrarily
+  TINY but CONSISTENT gap significant — a constant-offset series has zero paired variance, so
+  p → 0 on a 2e-4 difference nobody could act on. That is NF-W6's "the ceiling bands must refuse a
+  ceiling that is statistically DEMONSTRABLE but IMMATERIAL". The first cut of this amendment used
+  significance alone and was caught by its own fixture.
+
+  ⛔ **THE CLAUSE REMAINS FALSIFIABLE, AND IT ALREADY DISCRIMINATES ON THE REAL NUMBERS.** Under
+  the amended rule the three raw-scale arms read INACTIVE, but **`joint_pit` reads VIOLATED** — it
+  loses 0.0095 to its own ceiling while claiming only 0.061, i.e. ~15% of its claimed effect. The
+  amendment was NOT tuned until everything passed; the attenuated arm is still called out, and
+  `joint_pit` failing this way is consistent with NF-W7b's finding that residual-PIT estimates are
+  attenuated on zero-heavy discrete margins. A guard that could not fail would be the vacuous-guard
+  class this repo keeps re-learning (NF1.7 (a) / INC-38 / NF-D17).
+
+  **AUDITABILITY.** The UNAMENDED verdict is recorded beside the amended one
+  (`oracle_floors_respected_PRE_AMENDMENT`, and `pre_amendment_respected` per arm), the per-fold
+  contrasts are stored, and the whole verdict layer is re-derivable at zero refit cost
+  (`--rewrite-report`). The amended clause BINDS; the pre-amendment figure is reported so a reader
+  can reverse the decision (NF-D14 — report both, pre-register which binds).
+
+  ⚠️ **THE MATERIALITY FRACTION IS A DESIGN CHOICE MADE BEFORE THE 8-FOLD EVIDENCE EXISTS, AND
+  IT IS SMOKE-INFORMED.** One fold cannot say whether an inversion is CONSISTENT — the smoke's
+  significance is an artefact of replicating a single mean. Only the full run's per-fold series can
+  settle `joint_pit`, and it will do so under the rule fixed here, not one chosen afterwards.
+
+  ⭐ **ACTIVITY POSITIVE CONTROL.** `foil_direct_points`' own oracle peeks at EVERYTHING and
+  measured **2.6128 → 1.7592** on the same smoke. It runs through the IDENTICAL evaluator and must
+  read RESPECTED — which is what proves "inactive" is a measured property of the Σ channel rather
+  than a blanket excuse (NF1.8's two-sided degenerate discipline).
+
 ## 5. Pre-declared arm-movability (a statistic the arm cannot move is décor — NF-MARGIN2 / NF-D20)
 
 - **Analytic half:** `sd(Σ wᵢXᵢ) = √((w∘σ)ᵀ Σ (w∘σ))` is strictly increasing in every off-diagonal
