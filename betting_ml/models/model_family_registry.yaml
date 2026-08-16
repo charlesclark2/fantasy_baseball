@@ -1,6 +1,6 @@
 nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1:
   served_version: nfl_fantasy_nf1_5_v1
-  level_model_version: nfl_fantasy_fastpath_v1
+  level_model_version: nfl_fantasy_nf_tr2b_veteran_level_v1
   ordering_model_version: nfl_fantasy_nf1_5_v1
   rookie_model_version: rookie_slot_curve_v1
   rookie_selection_status: incumbent
@@ -23,7 +23,12 @@ nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1:
     [PM decision, NF-D21, 2026-08-05, Charlie (operator/PM); disposition=CONSTRAINT_REFUSED.
     Supporting measurements: ablation_results/nf_g0_d21_governance_publish.md section
     4 (the refusal) and ablation_results/nf1_9_interval_revalidation.md (the standing
-    floors at the served lambda=0).]'
+    floors at the served lambda=0).] [NF-TR2/TR2b, 2026-08-15: veteran LEVEL recalibration
+    promoted — level_model_version nfl_fantasy_nf_tr2b_veteran_level_v1 (pos_const
+    mean-match, trailing 5 seasons, band FIXED); record ablation_results/nf_tr2_level_recalibration_b.md
+    (CRPS 49.34 vs 49.92, PBO 0.0, DSR 0.9995 declared / 0.999 under NF-B3''s field,
+    p 0.0002); rebuilt + published 2026-08-15 by the operator (k QB 0.929 / RB 1.248
+    / WR 1.100 / TE 1.112). Rollback = veteran_level_policy.SERVING_ENABLED=False.]'
   promotion_status: champion
   promoted_at: '2026-08-01'
   reviewed_by: 'Charlie (operator/PM) — NF-D21 disposition 2026-08-05 (genesis promotion:
