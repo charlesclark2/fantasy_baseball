@@ -1,0 +1,385 @@
+{
+  "story": "NCAAF-P2.1-S1",
+  "decided_at": "2026-08-15",
+  "preregistration": "ablation_results/ncaaf_p2_1_s1_preregistration.md",
+  "verdict": "SHIP",
+  "primary": "pace",
+  "interpretable": true,
+  "anchors_ok": true,
+  "anchor_checks": {
+    "oracle_floor_holds": true,
+    "permute_loses": true,
+    "zero_width_loses": true,
+    "max_width_loses": true,
+    "zero_width_fails_floor": true,
+    "max_width_satisfies_floor": true
+  },
+  "anchors": {
+    "oracle_floor": {
+      "oracle_crps": 1.4042,
+      "best_real_crps": 18.43867,
+      "holds": true
+    },
+    "permute": {
+      "crps": 21.79745,
+      "loses_to_reference": true,
+      "satisfies_coverage_floor": false,
+      "margin_calib": 0.6766,
+      "total_calib": 0.7817,
+      "expectation": "must LOSE"
+    },
+    "zero_width": {
+      "crps": 23.18874,
+      "loses_to_reference": true,
+      "satisfies_coverage_floor": false,
+      "margin_calib": 0.1954,
+      "total_calib": 0.1849,
+      "expectation": "must LOSE + FAIL the floor"
+    },
+    "max_width": {
+      "crps": 27.45938,
+      "loses_to_reference": true,
+      "satisfies_coverage_floor": true,
+      "margin_calib": 0.9998,
+      "total_calib": 0.999,
+      "expectation": "must SATISFY the floor + LOSE"
+    }
+  },
+  "reproduction": {
+    "holds": true,
+    "max_abs_dev": 0.0,
+    "per_arm": {
+      "reference": 0.0,
+      "pace": 0.0
+    },
+    "tolerance": 0.0001,
+    "reason": ""
+  },
+  "n_folds": 8,
+  "n_games": 8325,
+  "declared_field_size": 3,
+  "n_trials": 8,
+  "series": {
+    "pbo": "per-BUCKET (8 folds \u00d7 4 quarters = 32) \u2014 P2.1's series, unchanged",
+    "dsr": "per-FOLD (8 season-forward folds) \u2014 DECLARED FORWARD, BINDING"
+  },
+  "reference": {
+    "pooled_crps": 18.51899,
+    "margin_calib": 0.7991,
+    "total_calib": 0.8039,
+    "h2h_brier": 0.1816,
+    "clv": {
+      "ats_hit_rate": 0.5009,
+      "ats_n": 4113,
+      "ats_placebo": 0.4899,
+      "ou_hit_rate": 0.5081,
+      "ou_n": 4135,
+      "n_with_close": 4187,
+      "breakeven": 0.5238,
+      "clears_edge_bar": false
+    }
+  },
+  "arms": {
+    "pace": {
+      "arm": "pace",
+      "gain_crps": 0.06197,
+      "pooled_crps": 18.45702,
+      "fold_deltas": [
+        0.06635,
+        0.03244,
+        0.10633,
+        0.03303,
+        0.06239,
+        0.00359,
+        0.06679,
+        0.13643
+      ],
+      "fold_years": [
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "fold_wins": 8,
+      "n_folds": 8,
+      "all_folds_positive": true,
+      "fold_clause_required": 6,
+      "fold_clause_attainable": true,
+      "fold_clause_passes": true,
+      "eligible": true,
+      "ineligible_reason": "",
+      "tie_with_foil": false,
+      "p_one_sided": 0.001972,
+      "sharpe_per_fold": 1.4915,
+      "sharpe_per_bucket": 0.5316,
+      "n_obs_fold": 8,
+      "n_obs_bucket": 32,
+      "margin_calib": 0.7961,
+      "total_calib": 0.8026,
+      "total_pit_flat_folds": 2,
+      "n_features": 33,
+      "clv": {
+        "ats_hit_rate": 0.5057,
+        "ats_n": 4113,
+        "ats_placebo": 0.4899,
+        "ou_hit_rate": 0.5141,
+        "ou_n": 4135,
+        "n_with_close": 4187,
+        "breakeven": 0.5238,
+        "clears_edge_bar": false
+      },
+      "bh_pass": true
+    },
+    "pace_axis": {
+      "arm": "pace_axis",
+      "gain_crps": 0.08032,
+      "pooled_crps": 18.43867,
+      "fold_deltas": [
+        0.06762,
+        0.07691,
+        0.10213,
+        0.021,
+        0.11899,
+        0.02583,
+        0.09353,
+        0.14112
+      ],
+      "fold_years": [
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "fold_wins": 8,
+      "n_folds": 8,
+      "all_folds_positive": true,
+      "fold_clause_required": 6,
+      "fold_clause_attainable": true,
+      "fold_clause_passes": true,
+      "eligible": true,
+      "ineligible_reason": "",
+      "tie_with_foil": false,
+      "p_one_sided": 0.000497,
+      "sharpe_per_fold": 1.9142,
+      "sharpe_per_bucket": 0.678,
+      "n_obs_fold": 8,
+      "n_obs_bucket": 32,
+      "margin_calib": 0.7986,
+      "total_calib": 0.8056,
+      "total_pit_flat_folds": 2,
+      "n_features": 27,
+      "clv": {
+        "ats_hit_rate": 0.503,
+        "ats_n": 4113,
+        "ats_placebo": 0.4899,
+        "ou_hit_rate": 0.5139,
+        "ou_n": 4135,
+        "n_with_close": 4187,
+        "breakeven": 0.5238,
+        "clears_edge_bar": false
+      },
+      "bh_pass": true
+    },
+    "pace_total_axis": {
+      "arm": "pace_total_axis",
+      "gain_crps": 0.07893,
+      "pooled_crps": 18.44006,
+      "fold_deltas": [
+        0.06445,
+        0.07584,
+        0.09826,
+        0.01858,
+        0.11854,
+        0.01924,
+        0.09574,
+        0.14434
+      ],
+      "fold_years": [
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "fold_wins": 8,
+      "n_folds": 8,
+      "all_folds_positive": true,
+      "fold_clause_required": 6,
+      "fold_clause_attainable": true,
+      "fold_clause_passes": true,
+      "eligible": true,
+      "ineligible_reason": "",
+      "tie_with_foil": false,
+      "p_one_sided": 0.000754,
+      "sharpe_per_fold": 1.7795,
+      "sharpe_per_bucket": 0.6785,
+      "n_obs_fold": 8,
+      "n_obs_bucket": 32,
+      "margin_calib": 0.7994,
+      "total_calib": 0.8046,
+      "total_pit_flat_folds": 3,
+      "n_features": 26,
+      "clv": {
+        "ats_hit_rate": 0.5028,
+        "ats_n": 4113,
+        "ats_placebo": 0.4899,
+        "ou_hit_rate": 0.5141,
+        "ou_n": 4135,
+        "n_with_close": 4187,
+        "breakeven": 0.5238,
+        "clears_edge_bar": false
+      },
+      "bh_pass": true
+    }
+  },
+  "fold_consistency": {
+    "n_folds": 8,
+    "wins_required": 6,
+    "attainable": true,
+    "false_fire": 0.14453125
+  },
+  "bh_cutoff": 0.05,
+  "fdr_alpha": 0.05,
+  "pbo": 0.03,
+  "pbo_gate": 0.2,
+  "pbo_over": "eligible real set + reference on the per-bucket series (32 buckets)",
+  "dsr": {
+    "binding": "per_fold_declared_field_degenerate_excluded",
+    "per_fold_declared_field_degenerate_excluded": {
+      "dsr": 0.9981,
+      "sr": 1.4915,
+      "sr0": 0.3151,
+      "n_trials": 8,
+      "n_obs": 8
+    },
+    "per_fold_whole_field": {
+      "dsr": 0.0,
+      "sr": 1.4915,
+      "sr0": 29.2723,
+      "n_trials": 8,
+      "n_obs": 8
+    },
+    "per_fold_lineage_inclusive": {
+      "dsr": 0.995,
+      "sr": 1.4915,
+      "sr0": 0.4477,
+      "n_trials": 30,
+      "n_obs": 8
+    },
+    "per_bucket_p21_series_REPORTED_ONLY": {
+      "dsr": 0.9809,
+      "sr": 0.5316,
+      "sr0": 0.1235,
+      "n_trials": 8,
+      "n_obs": 32
+    }
+  },
+  "dsr_gate": 0.95,
+  "dsr_binding_value": 0.9981,
+  "V_per_fold_degenerate_excluded": 0.04662800777963956,
+  "V_per_fold_whole_field": 402.52589162456405,
+  "V_per_bucket_degenerate_excluded": 0.0071643407881149595,
+  "gates": {
+    "anchors_ok": true,
+    "reproduction_ok": true,
+    "primary_arm_gates": true,
+    "pbo_ok": true,
+    "dsr_ok": true
+  },
+  "attribution": {
+    "levels_add_beyond_composites (pace vs pace_axis)": {
+      "crps_a": 18.45702,
+      "crps_b": 18.43867,
+      "a_minus_b_gain": -0.01835,
+      "a_beats_b": false,
+      "tie": false
+    },
+    "margin_axis_content (pace_axis vs pace_total_axis)": {
+      "crps_a": 18.43867,
+      "crps_b": 18.44006,
+      "a_minus_b_gain": 0.00139,
+      "a_beats_b": true,
+      "tie": false
+    }
+  },
+  "nulls": {
+    "pace_axis": {
+      "is_primary": false,
+      "arm_level_gates_cleared": true,
+      "state": "FIELD_MEMBER_CLEARED_NOT_PROMOTABLE",
+      "reason": "cleared every arm-level gate; not promotable \u2014 the primary was fixed as `pace` in the pre-registration. Reported as a successor representation hypothesis, never shipped from this run.",
+      "retest_trigger": null,
+      "folds_have": 8,
+      "folds_needed": null,
+      "extra_seasons": null,
+      "max_field_size": null,
+      "field_remedy_admissible": null,
+      "reclassified_from": null
+    },
+    "pace_total_axis": {
+      "is_primary": false,
+      "arm_level_gates_cleared": true,
+      "state": "FIELD_MEMBER_CLEARED_NOT_PROMOTABLE",
+      "reason": "cleared every arm-level gate; not promotable \u2014 the primary was fixed as `pace` in the pre-registration. Reported as a successor representation hypothesis, never shipped from this run.",
+      "retest_trigger": null,
+      "folds_have": 8,
+      "folds_needed": null,
+      "extra_seasons": null,
+      "max_field_size": null,
+      "field_remedy_admissible": null,
+      "reclassified_from": null
+    }
+  },
+  "lever_decomposition": {
+    "available": true,
+    "note": "rows = return series; cols = field. Binding = (fold, S1 field). (bucket, P2.1 field) must reproduce P2.1's recorded DSR 0.0409.",
+    "p21_field": {
+      "n_real_arms": 16,
+      "N": 22,
+      "V_per_fold": 0.6824,
+      "V_per_bucket": 0.2025
+    },
+    "cells": {
+      "bucket__p21_field": {
+        "dsr": 0.0409,
+        "sr": 0.5316,
+        "sr0": 0.8742,
+        "N": 22,
+        "V": 0.2025
+      },
+      "fold__p21_field": {
+        "dsr": 0.3903,
+        "sr": 1.4915,
+        "sr0": 1.6045,
+        "N": 22,
+        "V": 0.6824
+      },
+      "bucket__s1_field": {
+        "dsr": 0.9809,
+        "sr": 0.5316,
+        "sr0": 0.1235,
+        "N": 8,
+        "V": 0.0072
+      },
+      "fold__s1_field__BINDING": {
+        "dsr": 0.9981,
+        "sr": 1.4915,
+        "sr0": 0.3151,
+        "N": 8,
+        "V": 0.0466
+      }
+    }
+  },
+  "best_alpha": 0
+}

@@ -171,3 +171,153 @@ nfl_fantasy__weekly_stat_distribution__nfl_fantasy_w6c_v1:
   staged_digest: 6e9483e5c6d2acdc8f34941382d869eefa9b505c22348333ff9639a0f1848cf9
   model_family: nfl_fantasy
   target: weekly_stat_distribution
+nfl_fantasy__weekly_stat_distribution__nfl_fantasy_w6d_v1:
+  served_version: nfl_fantasy_w6d_v1
+  base_model_version: nfl_fantasy_nf_w1_v1
+  per_cell_form:
+    QB|passing_tds: knn_quantile
+    QB|passing_yards: lgbm_quantile_tail
+    QB|rushing_yards: lgbm_hurdle_tail
+    RB|rushing_yards: lgbm_hurdle_tail
+    TE|receiving_yards: lgbm_hurdle_tail
+    WR|receiving_yards: lgbm_hurdle_tail
+    RB|rushing_tds: knn_quantile
+    RB|receiving_yards: climatology
+    QB|attempts: climatology
+    QB|passing_interceptions: knn_quantile
+    QB|carries: count_negbin
+    QB|rushing_tds: count_negbin
+    QB|fumbles_lost: count_negbin
+    QB|two_pt: count_negbin
+    RB|carries: lgbm_hurdle_tail
+    RB|targets: count_negbin
+    RB|receptions: lgbm_hurdle_tail
+    RB|receiving_tds: count_negbin
+    RB|fumbles_lost: count_negbin
+    RB|two_pt: count_negbin
+    WR|targets: lgbm_hurdle_tail
+    WR|receptions: lgbm_hurdle_tail
+    WR|receiving_tds: knn_quantile
+    WR|fumbles_lost: count_negbin
+    WR|two_pt: count_negbin
+    TE|targets: lgbm_hurdle_tail
+    TE|receptions: lgbm_hurdle_tail
+    TE|receiving_tds: count_negbin
+    TE|fumbles_lost: count_negbin
+    TE|two_pt: count_negbin
+    QB|targets: climatology
+    QB|receptions: climatology
+    QB|receiving_yards: climatology
+    QB|receiving_tds: climatology
+    RB|attempts: climatology
+    RB|passing_yards: climatology
+    RB|passing_tds: climatology
+    RB|passing_interceptions: climatology
+    WR|attempts: climatology
+    WR|passing_yards: climatology
+    WR|passing_tds: climatology
+    WR|passing_interceptions: climatology
+    WR|carries: climatology
+    WR|rushing_yards: climatology
+    WR|rushing_tds: climatology
+    TE|attempts: climatology
+    TE|passing_yards: climatology
+    TE|passing_tds: climatology
+    TE|passing_interceptions: climatology
+    TE|carries: climatology
+    TE|rushing_yards: climatology
+    TE|rushing_tds: climatology
+  per_cell_source:
+    QB|passing_tds: nf_w6b
+    QB|passing_yards: nf_w6b
+    QB|rushing_yards: nf_w6b
+    RB|rushing_yards: nf_w6b
+    TE|receiving_yards: nf_w6b
+    WR|receiving_yards: nf_w6b
+    RB|rushing_tds: nf_w6b_c
+    RB|receiving_yards: nf_w6d_c_default
+    QB|attempts: nf_w6d_c_default
+    QB|passing_interceptions: nf_w6d_b_ship
+    QB|carries: nf_w6d_c_default
+    QB|rushing_tds: nf_w6d_b_ship
+    QB|fumbles_lost: nf_w6d_c_default
+    QB|two_pt: nf_w6d_c_default
+    RB|carries: nf_w6d_b_ship
+    RB|targets: nf_w6d_c_default
+    RB|receptions: nf_w6d_b_ship
+    RB|receiving_tds: nf_w6d_c_default
+    RB|fumbles_lost: nf_w6d_c_default
+    RB|two_pt: nf_w6d_c_default
+    WR|targets: nf_w6d_b_ship
+    WR|receptions: nf_w6d_b_ship
+    WR|receiving_tds: nf_w6d_b_ship
+    WR|fumbles_lost: nf_w6d_c_default
+    WR|two_pt: nf_w6d_c_default
+    TE|targets: nf_w6d_b_ship
+    TE|receptions: nf_w6d_b_ship
+    TE|receiving_tds: nf_w6d_c_default
+    TE|fumbles_lost: nf_w6d_c_default
+    TE|two_pt: nf_w6d_c_default
+    QB|targets: nf_w6d_c_default
+    QB|receptions: nf_w6d_c_default
+    QB|receiving_yards: nf_w6d_c_default
+    QB|receiving_tds: nf_w6d_c_default
+    RB|attempts: nf_w6d_c_default
+    RB|passing_yards: nf_w6d_c_default
+    RB|passing_tds: nf_w6d_c_default
+    RB|passing_interceptions: nf_w6d_c_default
+    WR|attempts: nf_w6d_c_default
+    WR|passing_yards: nf_w6d_c_default
+    WR|passing_tds: nf_w6d_c_default
+    WR|passing_interceptions: nf_w6d_c_default
+    WR|carries: nf_w6d_c_default
+    WR|rushing_yards: nf_w6d_c_default
+    WR|rushing_tds: nf_w6d_c_default
+    TE|attempts: nf_w6d_c_default
+    TE|passing_yards: nf_w6d_c_default
+    TE|passing_tds: nf_w6d_c_default
+    TE|passing_interceptions: nf_w6d_c_default
+    TE|carries: nf_w6d_c_default
+    TE|rushing_yards: nf_w6d_c_default
+    TE|rushing_tds: nf_w6d_c_default
+  calibration_warnings: {}
+  served_representation:
+    levels: 199
+    grid: MC.EVAL_LEVELS (0.005…0.995, step 0.005)
+    index_q10: 19
+    index_q50: 99
+    index_q90: 179
+    zero_atom: P(0) = the share of grid levels at 0
+  feature_bundle: weekly_projection.FEATURES (29 columns) + position code — the champion
+    set; no new features
+  matrix_key: 26c34fbe778c9d87
+  built_artifact_sha256: a2739df4d4ed73d67be66c91865ef96455dbd52fec146a0a4a74ab374fb96391
+  fallback_artifact_uri: repo:quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w6b_stat_distributions.md
+  validation_report: 'NF-W6d completes the per-stat distribution substrate: 52 (position,
+    stat) cells = the 7 NF-W6b/W6b-C SHIP cells + NF-W6d Phase-B SHIP cells (fresh
+    atom-aware per-class §0.5 bake-off, seed 20260817, reproduction control on the
+    7 served cells) + Phase-C CALIBRATED DEFAULTS (pre-registered order, coverage
+    floor + PIT flatness) for every cell with no ceiling / a null / a minor channel.
+    Records: nf_w6d_ceiling_gate.md, nf_w6d_stat_bakeoff.md, nf_w6d_defaults.md. Cells
+    by source: {''nf_w6b'': 6, ''nf_w6b_c'': 1, ''nf_w6d_c_default'': 36, ''nf_w6d_b_ship'':
+    9}. Serve gw 174 (2025 wk 18), 84036 train rows.'
+  reviewed_by: operator/PM — NF-W6d closeout (staged, promote blocked)
+  notes: 'STAGED CHALLENGER (NF-W6d) on the same target as NF-W6c — inert at serve.
+    PROMOTE/PUBLISH BLOCKED until: (1) NF-C6 Phase 2 — no weekly serving path exists
+    (the deployed fantasy surface is the SEASON raw line `projections.json`; there
+    is no weekly endpoint to attach a player-week distribution to); (2) NF-G0 promotion
+    review — the ten gates plus a PM decision; NF-W6b promoted nothing and this story
+    stages, it does not promote; (3) the downstream arbitrary-league re-scoring consumer
+    is a FOLLOW-ON story — the moment a scorer reads these distributions the three-implementations
+    parity tax (fantasy_engine / the browser TS scorer / the Lambda scorer) triggers
+    under the merge-gate parity test; (4) NF-W6d Phase-C DEFAULT cells are calibrated
+    ranges, not bake-off winners — the assembly consumer must read `source`/`calibration_warning`
+    and never present a default as a conditional projection. A default cell is a calibrated
+    range, never a conditional projection; the assembly consumer reads `source`. Edge-independent
+    (best_alpha = 0).'
+  artifact_uri: repo:quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_w6d_served_stat_distributions.json
+  promotion_status: challenger
+  generated_at: '2026-08-16T01:32:15.458598+00:00'
+  staged_digest: e77a3f6cc222ebaf7ebb857b6ab5cbe517aa55da022a7f7f65afa4163793673e
+  model_family: nfl_fantasy
+  target: weekly_stat_distribution

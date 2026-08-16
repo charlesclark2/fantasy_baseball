@@ -12,6 +12,7 @@
 // the free board's byte-identity invariant. It must never join the CDN allowlist or the public cache
 // rules; `/fantasy/nfl/my-teams` enforces the same gate server-side and answers `private, no-store`.
 
+import { Suspense } from "react"
 import { Nav } from "@/components/nav"
 import { FantasyLeagueGuard } from "@/components/auth-guard"
 import { useAuth } from "@/lib/auth-context"
@@ -23,7 +24,15 @@ export default function FantasyMyLeaguePage() {
     <FantasyLeagueGuard>
       <div className="min-h-screen bg-[#0a0a0a]">
         <Nav authenticated activeLink="fantasy-my-league" userEmail={email} />
-        <MyLeague />
+        {/* G100-C2 — `MyLeague` reads `?league=` via `useSearchParams`, which Next.js requires to
+            sit under a Suspense boundary at the page level. */}
+        <Suspense
+          fallback={
+            <div className="mx-auto max-w-6xl px-4 py-8 text-sm text-gray-500">Loading…</div>
+          }
+        >
+          <MyLeague />
+        </Suspense>
       </div>
     </FantasyLeagueGuard>
   )
