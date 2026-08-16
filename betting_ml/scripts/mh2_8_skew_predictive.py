@@ -1415,6 +1415,14 @@ def write_report(r: dict) -> Path:
     w = L.append
 
     w(f"# MH2.8 — a SKEW-CAPABLE `total_runs` predictive vs the served symmetric Normal\n")
+    if r.get("smoke"):
+        # ⚠️ A smoke report is a CODE-PATH proof, not a result. Without a banner in the file itself
+        # a stray copy reads exactly like the study — the repo's recurring "a number quoted from the
+        # wrong artifact" hazard, and the cheapest possible guard against it.
+        w("> # ⛔⛔ SMOKE RUN — **NOT A RESULT. DO NOT QUOTE ANY NUMBER BELOW.**\n"
+          "> Fits are tiny (60 NGBoost estimators on 400 rows/season) and the control replicate\n"
+          "> counts are a fraction of the pre-registered ones. This file exists to prove the code\n"
+          "> path executes. The study is the run WITHOUT `--smoke`.\n")
     w(f"**Verdict: `{d['verdict']}`** · `best_alpha = 0` · **deploy-held**\n")
     w("> **What this study is.** A distributional-SHAPE bake-off against the defect MH2.6 measured "
       "on the SERVED rows. It says nothing about win rate, edge or ROI — at `best_alpha = 0` no bet "
