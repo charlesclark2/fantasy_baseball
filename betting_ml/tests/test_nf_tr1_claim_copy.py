@@ -528,6 +528,28 @@ def test_the_level_position_is_read_from_the_data_not_asserted():
     )
 
 
+def test_a_position_where_the_crowd_is_ahead_is_named_in_the_lead_not_hidden():
+    """2026-08-15: the NF-TR2b track-record refresh moved running back from −0.000 (even) to −0.010
+    (behind the ±0.005 display band). The first-cut lead named only EVEN positions, so the hedge
+    silently vanished as the evidence got worse while the sentence above it still said "a little
+    closer". The lead must name a BEHIND position too — symmetric by construction.
+
+    ⭐ ISOLATING FIXTURE: the live split with only RB moved to −0.010; and the reverse (RB even) must
+    NOT print the behind clause, so the clause is derived, not hardcoded."""
+    behind = ex.build_claim(
+        _scorecard(by_pos={"QB": 0.03, "RB": -0.010, "WR": 0.027, "TE": 0.026}), _uncertainty()
+    )["lead"].lower()
+    assert "at running back the crowd's order was slightly better than ours" in behind, behind
+    assert "basically even" not in behind
+    hits = [t for t in ex._CLAIM_DENYLIST if t in behind]
+    assert not hits, hits
+    even = ex.build_claim(_scorecard(), _uncertainty())["lead"].lower()   # RB at exactly 0.0
+    assert "crowd's order was slightly better" not in even
+    assert "at running back it is basically even" in even
+    # both shapes still close on the evidence, not the caveat (AC 5)
+    assert "furthest from where the crowd" in _final_sentence(behind)
+
+
 def test_the_lead_never_claims_a_direction_the_measurement_does_not_support():
     """Sign-awareness, on the layer where it matters most: plain prose reads as a claim."""
     behind = ex.build_claim(_scorecard(delta=-0.04, us=0.470, them=0.510),

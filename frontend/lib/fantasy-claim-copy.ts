@@ -184,8 +184,11 @@ export const EXPECTED_POINTS_NOTE = {
 //
 // ⛔ AND IT IS NOT A CONSENSUS-CALIBRATED NUMBER. It is our own projection divided by our own
 // expected games — it is NOT reconciled against anyone else's published "if he plays every week"
-// figure, and it is still conservative at running back, where the residual miscalibration
-// `EXPECTED_POINTS_NOTE` refuses to bury has not gone anywhere. The copy below says both.
+// figure. (Until 2026-08-15 the copy also said "and it stays conservative at running back" — true
+// of the incumbent, whose per-game RATE under-projected the RB tier by ~20%; NF-TR2b's served level
+// recalibration removed most of that, and what remains at RB is inside the noise, so the RB clause
+// came out rather than stand as a claim about a residual we measured as noise. The Track Record
+// page's per-position table is where any position-level residual is disclosed, derived from data.)
 
 /** The column/tile label for the full-slate reading. "Rate" rather than "if healthy" deliberately:
  *  "if healthy" reads as a PREDICTION about a specific player staying healthy, which is precisely
@@ -195,7 +198,7 @@ export const FULL_SEASON_RATE_LABEL = "Full-season rate"
 /** The tappable definition behind that label (rendered through `InfoTip`, so it opens on TAP — the
  *  E9.63/NF3 touch lesson). */
 export const FULL_SEASON_RATE_DEFINITION =
-  "The same projection, stretched back out to a full seventeen games: expected points divided by expected games. It answers “what is he worth in the weeks he plays?”, which is the fairer way to compare two players whose injury risk differs. It is not a prediction that he plays all seventeen — the expected-points column beside it is the number that prices that in, and it is the one our rankings are built on. It is also our own arithmetic, not a figure reconciled against anyone else's published projections, and it stays conservative at running back."
+  "The same projection, stretched back out to a full seventeen games: expected points divided by expected games. It answers “what is he worth in the weeks he plays?”, which is the fairer way to compare two players whose injury risk differs. It is not a prediction that he plays all seventeen — the expected-points column beside it is the number that prices that in, and it is the one our rankings are built on. It is also our own arithmetic, not a figure reconciled against anyone else's published projections."
 
 /** Shown where a full-season rate cannot be computed — no expected-games figure, or zero. An
  *  em-dash with this behind it, never a blank and never a divide-by-zero. */
