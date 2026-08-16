@@ -447,6 +447,8 @@ it were captioned. The transferable lesson is for the NEXT story: **pre-register
 series separately from the PBO bucket series**, and prefer per-fold (or larger blocks) for DSR. That
 does not rescue `pace` here — a successor must re-register forward and re-run, never re-read.
 
+> **Addendum 2026-08-15 (S1 ran — [`ncaaf_p2_1_s1_readout.md`](./ncaaf_p2_1_s1_readout.md)):** the successor shipped `pace` (per-fold DSR 0.998, declared 3-arm family) — but its 2×2 decomposition shows this §9.6 diagnosis was INCOMPLETE: under THIS battery's 16-arm field the per-fold series alone posts DSR 0.39 (per-fold V = 0.68 > per-bucket V = 0.20 — far-out losers are far-out on every series), while a coherent pace-only family clears even on the bucket series (0.98). The series was the SECONDARY lever; field coherence (the NF-W6b-C mechanism) was PRIMARY. And `classify_null`'s `max_field_size = 0` in §9.3 is a statement at this battery's V — a coherent family changes V, not just N.
+
 ### 9.7 Edge: still a clean null
 
 | | ATS | placebo | O/U | breakeven |

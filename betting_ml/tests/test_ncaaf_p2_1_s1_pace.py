@@ -204,3 +204,12 @@ def test_sharpe_helper_is_zero_on_a_degenerate_series():
     assert s1.sharpe(np.array([1.0])) == 0.0
     assert s1.sharpe(np.array([2.0, 2.0, 2.0])) == 0.0
     assert s1.sharpe(np.array([1.0, 3.0])) == pytest.approx(2.0 / np.std([1.0, 3.0], ddof=1))
+
+
+def test_only_the_primary_can_be_promoted_and_a_cleared_sibling_is_not_called_a_null():
+    """The ship candidate is FIXED as the primary (prereg §2). A sibling that clears every arm gate is
+    reported as a non-promotable field member — never promoted, and never mis-labelled POWER_LIMITED."""
+    src = _strip_comments(_HARNESS.read_text())
+    assert re.search(r'promoted\s*=\s*\{PRIMARY\}\s*if\s*verdict\s*==\s*"SHIP"\s*else\s*set\(\)', src)
+    assert '"state": "FIELD_MEMBER_CLEARED_NOT_PROMOTABLE"' in src
+    assert re.search(r"if arm != PRIMARY and sib_cleared:", src)

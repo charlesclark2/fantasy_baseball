@@ -187,6 +187,53 @@ def reproduction_check(arms: dict, tol: float = _REPRO_TOL) -> dict[str, Any]:
             "reason": "" if mx < tol else f"max |Δ| {mx:.2e} ≥ {tol:g} — the harness drifted"}
 
 
+def lever_decomposition(arms: dict, V_fold_s1: float | None, V_bucket_s1: float | None,
+                        n_trials_s1: int) -> dict[str, Any]:
+    """POST-VERDICT DISCLOSURE (never a gate): which of S1's two design levers did the work?
+
+    S1 changed TWO things relative to P2.1's DSR: the RETURN SERIES (bucket → fold) and the FIELD
+    (16 heterogeneous arms → 3 pace representations, which sets `V` and `N`). The pre-registered
+    binding cell is (fold, S1 field). The other three cells are computed from the P2.1 record so a
+    reader can see whether the verdict rests on the series, the field, or both. The (bucket, P2.1
+    field) cell must reproduce P2.1's recorded 0.0409 — that reproduction is what makes the other
+    cells trustworthy. ⛔ None of these cells re-decides anything; the binding figure was fixed
+    before the run (E2.1-r)."""
+    if not _P21_SCORES.exists() or PRIMARY not in arms:
+        return {"available": False}
+    p21 = json.loads(_P21_SCORES.read_text())["arms"]
+    p21_real = [a for a in p21 if a not in ("reference",) and a not in p21_anchor_names()]
+    ref = p21["reference"]
+    sr_fold_16 = [sharpe(fold_series(ref, p21[a])) for a in p21_real]
+    sr_bkt_16 = [sharpe(bucket_series(ref, p21[a])) for a in p21_real]
+    V_fold_16 = float(np.var(sr_fold_16, ddof=1))
+    V_bkt_16 = float(np.var(sr_bkt_16, ddof=1))
+    N16 = 1 + len(p21_real) + len(p21_anchor_names())
+    f_series = fold_series(ref, p21[PRIMARY])
+    b_series = bucket_series(ref, p21[PRIMARY])
+
+    def cell(series, N, V):
+        r = deflated_sharpe(series, n_trials=N, var_trials_sr=V)
+        return {"dsr": round(float(r.dsr), 4), "sr": round(float(r.observed_sr), 4),
+                "sr0": round(float(r.sr0), 4), "N": int(N), "V": round(float(V), 4)}
+    return {
+        "available": True,
+        "note": "rows = return series; cols = field. Binding = (fold, S1 field). "
+                "(bucket, P2.1 field) must reproduce P2.1's recorded DSR 0.0409.",
+        "p21_field": {"n_real_arms": len(p21_real), "N": N16, "V_per_fold": round(V_fold_16, 4),
+                      "V_per_bucket": round(V_bkt_16, 4)},
+        "cells": {
+            "bucket__p21_field": cell(b_series, N16, V_bkt_16),
+            "fold__p21_field": cell(f_series, N16, V_fold_16),
+            "bucket__s1_field": cell(b_series, n_trials_s1, V_bucket_s1) if V_bucket_s1 else None,
+            "fold__s1_field__BINDING": cell(f_series, n_trials_s1, V_fold_s1) if V_fold_s1 else None,
+        },
+    }
+
+
+def p21_anchor_names() -> tuple[str, ...]:
+    return tuple(p21.ANCHORS)
+
+
 def stage_decide(args) -> None:
     if not _SCORES_JSON.exists():
         raise SystemExit(f"[{_STORY}] no scores — run `--stage battery` first.")
@@ -339,6 +386,24 @@ def stage_decide(args) -> None:
         if arm in promoted:
             continue
         r = rows[arm]
+        sib_cleared = bool(r["eligible"] and not r["tie_with_foil"] and r["gain_crps"] > 0
+                           and r["bh_pass"] and r["fold_clause_passes"])
+        if arm != PRIMARY and sib_cleared:
+            # ⭐ NOT A NULL. A non-primary field member that cleared every ARM-level gate is simply
+            # not PROMOTABLE (the ship candidate was fixed as the primary before the run — "pick
+            # the best of three" is the search this registration bounds). Running `classify_null`
+            # on it would print a POWER_LIMITED default about a null that does not exist.
+            nulls[arm] = {
+                "is_primary": False, "arm_level_gates_cleared": True,
+                "state": "FIELD_MEMBER_CLEARED_NOT_PROMOTABLE",
+                "reason": "cleared every arm-level gate; not promotable — the primary was fixed as "
+                          f"`{PRIMARY}` in the pre-registration. Reported as a successor "
+                          "representation hypothesis, never shipped from this run.",
+                "retest_trigger": None, "folds_have": n_folds, "folds_needed": None,
+                "extra_seasons": None, "max_field_size": None, "field_remedy_admissible": None,
+                "reclassified_from": None,
+            }
+            continue
         override = None
         if not r["eligible"]:
             override = ("CONSTRAINT_REFUSED",
@@ -366,6 +431,8 @@ def stage_decide(args) -> None:
             "reclassified_from": v.state if override else None,
         }
 
+    levers = lever_decomposition(arms, V_clean, V_bucket_clean, n_trials)
+
     out = {
         "story": _STORY, "decided_at": date.today().isoformat(),
         "preregistration": "ablation_results/ncaaf_p2_1_s1_preregistration.md",
@@ -390,7 +457,8 @@ def stage_decide(args) -> None:
         "V_per_bucket_degenerate_excluded": V_bucket_clean,
         "gates": {"anchors_ok": anchors_ok, "reproduction_ok": repro["holds"],
                   "primary_arm_gates": arm_gates, "pbo_ok": pbo_ok, "dsr_ok": dsr_ok},
-        "attribution": attribution, "nulls": nulls, "best_alpha": 0,
+        "attribution": attribution, "nulls": nulls,
+        "lever_decomposition": levers, "best_alpha": 0,
     }
     _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     _DECISION_JSON.write_text(json.dumps(out, indent=2, default=float))
@@ -488,10 +556,29 @@ def render_dossier(d: dict) -> str:
             tag = ("⭐ **BINDING**" if k == d["dsr"].get("binding") else
                    ("P2.1's series — reported only" if "REPORTED" in k else "reported"))
             L.append(f"| `{k}` | {v['dsr']} | {v['sr']} | {v['sr0']} | {v['n_trials']} | {v['n_obs']} | {tag} |")
-    L += ["", f"`V` (cross-trial per-fold Sharpe dispersion): degenerate-excluded {d['V_per_fold_degenerate_excluded']}"
-          f" · whole field {d['V_per_fold_whole_field']} · per-bucket degenerate-excluded "
-          f"{d['V_per_bucket_degenerate_excluded']}.", "",
-          "## Attribution reads (declared; reported, never gated)", ""]
+    def _v(x):
+        return "—" if x is None else f"{float(x):.4f}"
+    L += ["", f"`V` (cross-trial per-fold Sharpe dispersion): degenerate-excluded {_v(d['V_per_fold_degenerate_excluded'])}"
+          f" · whole field {_v(d['V_per_fold_whole_field'])} · per-bucket degenerate-excluded "
+          f"{_v(d['V_per_bucket_degenerate_excluded'])}.", ""]
+    lv = d.get("lever_decomposition") or {}
+    if lv.get("available"):
+        c = lv["cells"]
+        L += ["## Which lever did the work? — the 2×2 (series × field), post-verdict DISCLOSURE, never a gate", "",
+              "S1 changed TWO things vs P2.1's DSR: the return SERIES (bucket→fold) and the FIELD (16 "
+              "heterogeneous arms → 3 pace representations, which sets `V` and `N`). The binding cell "
+              "was fixed before the run; the other three are computed from the P2.1 record so the "
+              "verdict's dependence on each lever is auditable. The (bucket, P2.1 field) cell reproduces "
+              "P2.1's recorded 0.0409.", "",
+              f"P2.1 field: {lv['p21_field']['n_real_arms']} real arms, N = {lv['p21_field']['N']}, "
+              f"V per-fold = {lv['p21_field']['V_per_fold']}, V per-bucket = {lv['p21_field']['V_per_bucket']}.", "",
+              "| series ＼ field | P2.1 field (16 heterogeneous arms) | S1 field (3 pace representations) |",
+              "|---|---|---|"]
+        def _c(x):
+            return f"DSR **{x['dsr']}** (SR {x['sr']}, SR0 {x['sr0']}, N {x['N']}, V {x['V']})" if x else "—"
+        L += [f"| per-BUCKET (P2.1's series) | {_c(c['bucket__p21_field'])} ← P2.1 record | {_c(c['bucket__s1_field'])} |",
+              f"| per-FOLD (S1's series) | {_c(c['fold__p21_field'])} | {_c(c['fold__s1_field__BINDING'])} ⭐ BINDING |", ""]
+    L += ["## Attribution reads (declared; reported, never gated)", ""]
     for k, v in d["attribution"].items():
         L.append(f"- **{k}** — `{json.dumps(v)}`")
     L += ["", "## Null classification", "",
