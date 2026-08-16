@@ -112,6 +112,32 @@ def _marginals(train: pd.DataFrame, serve: pd.DataFrame, smap: dict) -> dict[str
     return banks
 
 
+def _marginals_for_two(train: pd.DataFrame, first: pd.DataFrame, second: pd.DataFrame,
+                       smap: dict) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """Marginals for TWO serve frames from ONE fit pass — exact, not approximate.
+
+    Every served form is row-independent given `train`, so predicting on `concat(first, second)`
+    yields byte-identical per-row banks to predicting on each separately. `serve_banks` slices
+    each cell to its position's rows with a boolean mask, which PRESERVES ORDER, and `first`
+    precedes `second` in the concatenation — so the split point for a cell is simply that
+    position's row count in `first`. Asserted, not assumed."""
+    combined = pd.concat([first, second], ignore_index=True)
+    banks = _marginals(train, combined, smap)
+    pos_first = first["position"].astype(str).to_numpy()
+    pos_second = second["position"].astype(str).to_numpy()
+    out_a: dict[str, np.ndarray] = {}
+    out_b: dict[str, np.ndarray] = {}
+    for cell, bank in banks.items():
+        pos = cell.split("|", 1)[0]
+        n_a = int((pos_first == pos).sum())
+        n_b = int((pos_second == pos).sum())
+        if len(bank) != n_a + n_b:
+            raise ValueError(f"{cell}: combined bank has {len(bank)} rows but the split expects "
+                             f"{n_a}+{n_b} — the serve concatenation and the slice disagree")
+        out_a[cell], out_b[cell] = bank[:n_a], bank[n_a:]
+    return out_a, out_b
+
+
 # ── One fold × position ─────────────────────────────────────────────────────────────────────────
 def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, smap: dict,
                  weights: np.ndarray, *, draws: int,
@@ -214,12 +240,21 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, smap: d
                                         tr_p["gw"].to_numpy()))
 
     # degenerates — SCORED, never reasoned about (NF1.8 / NF-D14)
-    med = float(np.quantile(tr_p[FA.TARGET].to_numpy(float), 0.5))
-    clim = np.quantile(tr_p[FA.TARGET].to_numpy(float), FA.EVAL_LEVELS)[None, :] \
-        * np.ones((len(te_p), 1))
+    #
+    # ⚠️ SMOKE AMENDMENT (2026-08-16, BEFORE the full run — recorded in the prereg §4). The first
+    # cut located `zero_width` at the train MEDIAN, and on a zero-heavy cohort the median IS 0:
+    # measured on the smoke's QB fold, `zero_width` scored 6.1409 — BYTE-IDENTICAL to
+    # `nihilist_zero`. Two anchors collapsing into one is not a wrong answer (both lose by a mile)
+    # but it is a SILENT LOSS OF EVIDENCE: the sharpness degenerate stops being a distinct test.
+    # The NF-D11/D14 conditional-median lesson, appearing in the anchor set. Locating it at the
+    # MEAN keeps it a point mass (maximally sharp — its whole purpose) while staying positive on a
+    # zero-heavy target, so the two degenerates test different things again.
+    pts_tr = tr_p[FA.TARGET].to_numpy(float)
+    loc = float(np.mean(pts_tr))
+    clim = np.quantile(pts_tr, FA.EVAL_LEVELS)[None, :] * np.ones((len(te_p), 1))
     banks["nihilist_zero"] = np.zeros((len(te_p), FA.N_LEVELS))
-    banks["zero_width"] = np.full_like(clim, med)
-    banks["max_width"] = med + 3.0 * (clim - med)
+    banks["zero_width"] = np.full_like(clim, loc)
+    banks["max_width"] = loc + 3.0 * (clim - loc)
 
     scores: dict[str, float] = {}
     for label, bank in banks.items():
@@ -263,12 +298,19 @@ def run_fold(fold: WP.Fold, feat: pd.DataFrame, smap: dict, *, draws: int) -> di
     # ⭐ ONE marginal build per fold, not one per position: `serve_banks` fits per (form, stat)
     # across every position and then slices, so these are position-INDEPENDENT. Building them
     # inside the position loop repeated the identical ~113 LightGBM fits 4× per fold.
+    #
+    # ⭐⭐ AND ONE BUILD FOR BOTH CONTEXTS. The test context and the residual-PIT context fit the
+    # SAME 27 (form, stat) combos on the SAME train frame — only the PREDICT frame differs — so
+    # building them separately paid for every fit twice (measured: 829.9s, 86% of a 968.1s fold).
+    # Every served form is row-INDEPENDENT given train (fits come from train/core; the serve frame
+    # enters only per row — `predict`, `apply_bank199`, a per-row `imp.transform`), so predicting
+    # on the concatenation and splitting is EXACT, not an approximation.
     t_m = time.time()
-    ctx_te = _marginals(train, test, smap)
     pit_frame = pit_window(train)
-    ctx_pit = _marginals(train, pit_frame, smap)     # fit on FULL train, predict on the window
-    log.info("[W7c] fold %s marginals in %.1fs (test %d rows, pit window %d of %d train rows)",
-             fold.label, time.time() - t_m, len(test), len(pit_frame), len(train))
+    ctx_te, ctx_pit = _marginals_for_two(train, test, pit_frame, smap)
+    log.info("[W7c] fold %s marginals in %.1fs (test %d rows, pit window %d of %d train rows, "
+             "ONE fit pass for both)", fold.label, time.time() - t_m, len(test), len(pit_frame),
+             len(train))
 
     out: dict[str, dict] = {}
     for position in FA.POSITIONS:
