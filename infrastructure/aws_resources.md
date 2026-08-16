@@ -1147,6 +1147,80 @@ aws iam get-role-policy \
   --policy-name S3ArtifactsZoneOverlayRead
 ```
 
+### IAM — Lambda execution role (lakehouse DuckDB reads) — **REQUIRED, E5.10**
+
+`app/backend/services/lakehouse_read.py` is the API's zero-Snowflake last-resort reader:
+DuckDB + httpfs globbing `baseball/lakehouse/<table>/**/*.parquet` directly. It backs
+`/props/starters`, `/props/batters`, the `GET /bets` postponed-game auto-void, and ~30 other
+call sites across `picks` / `performance` / `fantasy` / `parlay`.
+
+**The grant above is NOT sufficient for it, and this is the trap:** every prior Lambda grant
+on this bucket is `s3:GetObject` on ONE NARROW PREFIX (`baseball/serving/zone_matchup/*`).
+A DuckDB glob needs **two more things**:
+
+1. **`s3:ListBucket` on the BUCKET ARN** (no `/*`) — the glob resolves `**/*.parquet` with a
+   `ListObjectsV2` call, which is a *bucket-level* action. A GetObject-only policy denies it.
+2. **`s3:GetObject` on `baseball/lakehouse/*`** — a different prefix from zone_matchup.
+
+Without #1 the read fails with a 403 that names the list call, e.g.
+
+```
+HTTPException: HTTP Error: HTTP GET error on
+'/?encoding-type=url&list-type=2&prefix=baseball%2Flakehouse%2Fstg_statsapi_lineups_wide%2F' (HTTP 403)
+```
+
+⚠️ **That 403 is invisible without `degraded_reason`.** `lakehouse_query` catches everything and
+returns `[]`, so the symptom is a panel that is merely *empty* — indistinguishable from a date
+that genuinely has no rows (the E9.26b silent-empty class). Prefer `lakehouse_query_reason` on
+any surface that can show a user the difference.
+
+```bash
+# Run with the IAM-admin profile, NOT baseball-access-user (which cannot read/write IAM).
+aws iam put-role-policy \
+  --role-name credence-prod-lambda-execution-role \
+  --policy-name S3LakehouseRead \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "ListForDuckDBGlob",
+        "Effect": "Allow",
+        "Action": ["s3:ListBucket"],
+        "Resource": "arn:aws:s3:::baseball-betting-ml-artifacts"
+      },
+      {
+        "Sid": "ReadLakehouseParquet",
+        "Effect": "Allow",
+        "Action": ["s3:GetObject"],
+        "Resource": "arn:aws:s3:::baseball-betting-ml-artifacts/baseball/lakehouse/*"
+      }
+    ]
+  }'
+```
+
+`ListBucket` is deliberately **not** narrowed with an `s3:prefix` condition. Listing returns
+only object *keys* (no data — the object grant stays prefix-scoped), and a condition that does
+not exactly match how DuckDB issues its list requests fails **closed and silently**, which is
+the failure mode this whole section exists to prevent. Tighten it only with a live read to
+confirm afterwards.
+
+Verify after adding:
+```bash
+aws iam get-role-policy \
+  --role-name credence-prod-lambda-execution-role \
+  --policy-name S3LakehouseRead
+```
+
+Then verify **against the running API**, not the policy — an authenticated
+`GET /props/batters?date=<today>` must return `"degraded": false` with a non-empty array.
+A policy that reads correctly and a read that actually works are different claims.
+
+⚠️ **Region note:** the table at the top of this section records this bucket as `us-east-1`.
+Both `infrastructure/lambda/deploy.sh` and `lakehouse_read.py` (`S3_REGION`) treat it as
+**`us-east-2`**, and the repo CLAUDE.md documents `us-east-2` as the DuckDB region for it.
+The table row is believed stale; it was not re-measured here (`baseball-access-user` is denied
+`s3:GetBucketLocation`). IAM is global, so this does not affect the commands above.
+
 ---
 
 ### IAM — dbt-runner Railway service
