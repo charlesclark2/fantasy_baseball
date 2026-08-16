@@ -3,6 +3,14 @@
     "week": "2026-08-10",
     "items": [
       {
+        "tag": "fixed",
+        "text": "The Props page filters no longer take over the screen on a phone. Team, Line, Min. books and Sportsbook each got their own row recently, which reads well on a laptop — but a full slate carries all 30 clubs, so on a phone that panel ran about twenty lines and you scrolled past a wall of filter buttons before reaching a single game. The filters now sit behind a \"Filters\" button on phones, closed by default, and the button shows a count of how many you have set so a narrowed slate never looks like an empty one. Nothing changed on desktop."
+      },
+      {
+        "tag": "fixed",
+        "text": "The player dropdown in \"Log a prop\" was empty for everyone, on every date. The dialog reads the day's starting pitchers and posted lineups directly from our data store, and those reads had been failing outright — but the failure was being swallowed and turned into an empty list, which looks exactly like a day with nothing scheduled yet. Two separate causes sat on top of each other and both are fixed. The reads also now report why they failed instead of quietly returning nothing, so the next one of these is visible immediately rather than looking like a quiet day."
+      },
+      {
         "tag": "new",
         "text": "Total Bases now has the same one-click \"Log this prop\" button the strikeout pages have had. Open any batter's projection and the button copies that batter, the book you pick and its posted line straight into your Bet Log, where it settles against the batter's real total bases once the game is final. The manual \"Log a prop\" dialog also tells you plainly when it cannot reach the server, instead of showing the same \"none for this date\" message it shows when a day genuinely has no lineups posted yet — those two are different situations and used to look identical."
       },
