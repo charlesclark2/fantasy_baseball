@@ -250,7 +250,8 @@ def _fake_uncertainty(n_seasons=6, delta=0.022, lo=-0.006, hi=0.051):
         "n_mean": 162.0, "n_min": 140, "n_max": 172, "delta_rho_mean": delta,
         "bootstrap": {"evaluated": True, "draws": 1000, "level": 0.9, "lo": lo, "hi": hi,
                       "median": 0.021, "excludes_zero": not (lo <= 0.0 <= hi)},
-    }]}
+    }], "reproduction": {"all_pass": True}, "anchor_summary": {"all_pass": True},
+        "decision": {"recommendation": "KEEP"}}
 
 
 def test_build_headline_avoids_overclaims_and_uses_scorecard_numbers():
