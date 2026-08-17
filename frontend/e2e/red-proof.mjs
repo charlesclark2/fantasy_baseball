@@ -1988,6 +1988,69 @@ const CASES = [
     to: "    return teams[0]",
     grep: "switching leagues re-scores the whole page for the selected league",
   },
+  {
+    id: "mock-value-lists-inverted",
+    shipped: "NF-C2.1 — the defect this SHIPPED with, reported off a real mock draft",
+    // ⚠️ NOT pre-emptive. This one went out. `vsMarket` was `marketRank - overallPick`, which is
+    // POSITIVE for a REACH, and the screen filed the positive list under "fell furthest past ADP" —
+    // so both lists were exactly backwards. Live example from the report: Jordyn Tyson, taken at
+    // #44 with an ADP of 94, presented as the draft's biggest value when he was a fifty-pick reach.
+    //
+    // It survived because the only assertion on that panel was that it RENDERS. An inverted list
+    // renders perfectly, with plausible names and plausible numbers, and reads as a feature — which
+    // is why the guard that replaced it plants one unambiguous steal and one unambiguous reach and
+    // demands each land in its own list.
+    detail: "Flips the sign of vsMarket, so steals and reaches swap places exactly as they shipped.",
+    file: "lib/mock-draft.ts",
+    from: "      vsMarket: adp == null ? null : Math.round(overallPick - adp),",
+    to: "      vsMarket: adp == null ? null : Math.round(adp - overallPick),",
+    grep: "point the right way",
+  },
+  {
+    id: "mock-cpu-ignores-the-market",
+    shipped: "NF-C2.1 — pre-emptive: the CPU room quietly stops reading ADP",
+    // ⚠️ THE DEFECT WITH NO SYMPTOM. Every visible thing still works — the room picks, the log
+    // fills, names disappear off the board, the draft grades — it is just no longer a DRAFT ROOM.
+    // Opponents would take our board's order, so the user could sit on a consensus first-rounder
+    // until round 5 and the whole practice value is gone. Nothing renders differently; only an
+    // assertion about the DISTRIBUTION of the picks can see it, which is why the engine half of
+    // this spec exists at all.
+    detail: "The persona blend collapses to our own board rank, so the market half of it is dead.",
+    file: "lib/mock-draft.ts",
+    from: "    let key = persona.marketWeight * mr + (1 - persona.marketWeight) * br",
+    to: "    let key = br",
+    grep: "roughly when the market drafts them",
+  },
+  {
+    id: "mock-sim-is-not-replayable",
+    shipped: "NF-C2.1 — pre-emptive: 'Skip to my pick' becomes a DIFFERENT draft",
+    // ⭐ THE CASE THAT PROVES THE REPLAY TEST IS NOT DECORATIVE. Carrying one generator across the
+    // batch is the obvious way to write a seeded sim, and it is wrong here for a reason that never
+    // surfaces as an error: the result then depends on how many picks were drawn in one call. The
+    // timer path draws one at a time, the skip button draws many, and a mid-draft reload replays
+    // from stored picks — three paths, three different drafts, no symptom except that the room
+    // changes under you when you press fast-forward.
+    detail: "One generator shared across every pick, so the draft depends on the batching.",
+    file: "lib/mock-draft.ts",
+    from: "  const rng = makeRng(hashSeed(seed, overallPick, slot))",
+    to: "  const rng = ((globalThis as unknown as { __rp?: () => number }).__rp ??= makeRng(seed))",
+    grep: "IDENTICAL draft",
+  },
+  {
+    id: "mock-grade-drops-its-circularity-note",
+    shipped: "NF-C2.1 — pre-emptive: the grade presented as a verdict on the team",
+    // ⚠️ THE OVERCLAIM THIS FEATURE IS ONE COPY EDIT AWAY FROM AT ALL TIMES, and no word-list can
+    // catch it: the remaining copy is entirely denylist-clean. The room is ranked on OUR
+    // projections — the same numbers the recommendation panel maximises — while the CPU seats draft
+    // partly off market ADP, so a user who follows the recommendations tends to finish top BY
+    // CONSTRUCTION. Without the note, "1st of 12" reads as evidence the tool works. Deleting the
+    // paragraph is exactly the edit someone makes to tighten a results screen.
+    detail: "Removes the note saying the grade scores the room on the same projections it advised from.",
+    file: "components/fantasy/mock-draft.tsx",
+    from: "        {GRADE_CIRCULARITY_NOTE}\n",
+    to: "",
+    grep: "roster grades",
+  },
 ]
 
 /**
@@ -2045,7 +2108,7 @@ const CASES = [
 // G100-C2 adds ONE case (the multi-league picker reverting to `teams[0]`), RED-proven individually
 // (`-- league-picker`) for the same reason. So 125/119/6 → 126/120/6, and the next full run CONFIRMS
 // it.
-const RECORDED_BOARD = { total: 126, red: 120, notObservable: 6 }
+const RECORDED_BOARD = { total: 130, red: 124, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

@@ -8,8 +8,8 @@ opening a browser.
 This suite is the automated form of the "verify in incognito" step every app story already lists
 manually. E9.63 built it deliberately **minimal** — the launch-critical funnel, nothing else — and
 the coverage phases add specs to *this* harness rather than rebuilding it: **E9.64 (Fantasy
-interactivity), E9.64b (the two real league-import paths) and E5.10 (the /props slate navigation)
-have landed**; the rest of E9.65 (MLB betting) is still to come.
+interactivity), E9.64b (the two real league-import paths), E5.10 (the /props slate navigation) and
+NF-C2.1 (the mock draft simulator) have landed**; the rest of E9.65 (MLB betting) is still to come.
 
 ## Running it
 
@@ -124,6 +124,25 @@ mobile rather than run twice.
 12-pitcher slate (there is no way to capture a real full MLB slate deterministically), dated in
 2027 so "the next game to start" default-expand behaviour is stable regardless of when the suite
 runs.
+
+### NF-C2.1 — the mock draft simulator
+
+| File | What it guards | The defect it is written from |
+|---|---|---|
+| `specs/fantasy-mock-draft.spec.ts` | **The CPU room, as a distribution** — a fast-forward and a pick-at-a-time run produce the byte-identical draft; the market's top 40 are gone roughly on schedule but **not** in exact ADP order; players outside the ADP sample are still drafted, off **our** board; every CPU pick is legal for the roster that made it and nobody is taken twice. **Then the loop, in the browser** — the room drafts the seats ahead of the user and stops exactly on their turn, each opponent pick carrying the reason it was made; our recommendations render **with their reasoning**; a quick mock runs to a graded finish whose rank **names the measure it is a rank on** and carries the circularity note verbatim; and nothing on the screen trips the claim denylist | Pre-emptive, and the first spec here whose headline claim **no rendered page can answer**. "The opponents pick plausibly" is a property of ~100 picks, so a browser can only confirm that picking *happened*; a room that silently stopped reading ADP would still fill the log, empty the board and grade out. The two failure modes with no symptom at all are a sim whose fast-forward is a *different* draft (one generator carried across the batch — the obvious way to write it) and a grade that loses the note explaining it scores the room on the same projections it advised from, which is the overclaim this feature is one copy edit away from |
+
+⭐ **Why the engine assertions are discriminating rather than vacuous.** In
+`fantasy-nfl-board-full_ppr-12-2026-free.json` the ADP column is REAL (carried verbatim from the
+prod capture) while every model value is SYNTHETIC, seeded off the player id — measured Spearman
+ρ = 0.059 between the two orders. So "the CPU drafts off ADP" and "the CPU drafts off our board"
+are **separately falsifiable** on this fixture: an implementation that quietly dropped one source
+would still satisfy the other. On a fixture where the two orders agreed, both assertions would pass
+against either implementation and prove nothing.
+
+⚠️ The same independence **dilutes** the market numbers — 18–25 of the market's top 40 gone by the
+end of round 4, where the served board (on which ADP and our order agree closely) clears them far
+faster. The floors are set from the measured range and are deliberately NOT raised toward a
+realistic figure, which would be pinning a fixture artifact.
 
 ## The Fantasy interactivity inventory (E9.64)
 

@@ -631,6 +631,9 @@ _GATED_PAGES = [
     "app/fantasy/league-settings/page.tsx",
     "app/fantasy/import/page.tsx",
     "app/fantasy/draft/page.tsx",
+    # NF-C2.1 — the mock draft reads the SAME 403-ing gated board endpoints as the live tool,
+    # so a public wrapper here would render a permanently broken page, not a free one.
+    "app/fantasy/mock-draft/page.tsx",
     "app/fantasy/league-board/page.tsx",
     "app/fantasy/mlb/prospects/page.tsx",
 ]
@@ -671,8 +674,8 @@ def test_the_nav_marks_exactly_the_public_surfaces_public():
     for key in ("fantasy-rankings", "fantasy-projections", "fantasy-players"):
         line = next(ln for ln in code.splitlines() if f'key: "{key}"' in ln)
         assert "public: true" in line, f"{key} is a free surface but the nav still gates it"
-    for key in ("fantasy-league-board", "fantasy-draft", "fantasy-my-teams",
-                "fantasy-import", "fantasy-league-settings"):
+    for key in ("fantasy-league-board", "fantasy-draft", "fantasy-mock-draft",
+                "fantasy-my-teams", "fantasy-import", "fantasy-league-settings"):
         lines = [ln for ln in code.splitlines() if f'key: "{key}"' in ln]
         if lines:
             assert "public: true" not in lines[0], f"{key} is paid but the nav marks it public"
@@ -1152,6 +1155,10 @@ _ORDERING_MODULES = [
     "lib/draft-optimizer.ts",
     "components/fantasy/league-board.tsx",
     "components/fantasy/draft-optimizer.tsx",
+    # NF-C2.1 — the mock draft orders twice over: the CPU shortlist decides who the room takes,
+    # and the grade orders the room itself. Both are ordering, so both inherit the boundary.
+    "lib/mock-draft.ts",
+    "components/fantasy/mock-draft.tsx",
 ]
 
 

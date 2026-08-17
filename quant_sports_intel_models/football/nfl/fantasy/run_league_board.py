@@ -172,6 +172,15 @@ def load_kdst(artifacts_dir: Path, season: int, *, from_lake: bool = False) -> p
     42 K + 32 DST; the first automated `sports_nfl_board_publish_job` run (2026-08-16 07:15 PT,
     `generated_at` 14:22:15Z) shipped 795 players with ZERO of either.
 
+    🔴 INC-45 — AND THE FALLBACK ITSELF THEN FAILED ON THE BOX, for a reason no reading of this
+    function could show: it resolved credentials correctly and handed them to DuckDB through the
+    deprecated `s3_*` settings, which `delta_scan` IGNORES (it authenticates through the Secret
+    Manager). The read therefore ran on delta-kernel-rs's own ambient chain — which finds `~/.aws`
+    on a laptop and did not work on the box — so this returned 0 rows every morning and the publish
+    guard below refused to ship, freezing the board. Fixed by routing every lake read through
+    `s3io.duckdb_lake_connection`; see `docs/inc45_box_kdst_lake_read.md`. ⚠️ The lake PARTITION was
+    never the problem: it has held 74 rows since 2026-08-03.
+
     ⭐ THE FALLBACK IS TO THE LAKE, NOT TO A REBUILD. `run_kdst_projection --s3` already lands this
     projection at `nfl/fantasy/derived/kdst_projections/season=<season>/`, so the data the box needs
     is already there — it was only ever the local READ that was missing. Adding the model build to
@@ -226,40 +235,22 @@ def combine_projections(offense: pd.DataFrame, kdst: pd.DataFrame) -> pd.DataFra
 
 
 def _kdst_lake_connection():
-    import duckdb
-
+    """🔴 INC-45 — one owner for "how a lake read authenticates". This used to set the deprecated
+    `s3_*` settings, which `delta_scan` IGNORES: the read then depended on delta-kernel-rs's own
+    ambient chain, which is why it worked on the laptop and returned nothing on the box. See
+    `s3io.configure_duckdb_lake_auth`."""
     from quant_sports_intel_models.football.nfl.ingest import s3io
 
-    con = duckdb.connect()
-    con.execute("install delta; load delta; install httpfs; load httpfs;")
-    opts = s3io.storage_options()
-    con.execute(f"set s3_region='{opts.get('AWS_REGION', 'us-east-2')}';")
-    if opts.get("AWS_ACCESS_KEY_ID"):
-        con.execute(f"set s3_access_key_id='{opts['AWS_ACCESS_KEY_ID']}';")
-        con.execute(f"set s3_secret_access_key='{opts['AWS_SECRET_ACCESS_KEY']}';")
-        if opts.get("AWS_SESSION_TOKEN"):
-            con.execute(f"set s3_session_token='{opts['AWS_SESSION_TOKEN']}';")
-    return con
+    return s3io.duckdb_lake_connection()
 
 
 def load_projection_lake(season: int, source: str = DEFAULT_PROJECTION_SOURCE) -> pd.DataFrame:
     """Read the served season projection straight from the S3 lake Delta (the real-lake path)."""
-    import duckdb
-
     from quant_sports_intel_models.football.nfl.ingest import s3io
 
     uri = s3io.table_uri("nfl", _PROJECTION_LAKE_SOURCE[source], tier="fantasy/derived")
-    con = duckdb.connect()
+    con = _kdst_lake_connection()  # INC-45 — the secret channel `delta_scan` actually reads
     try:
-        con.execute("install delta; load delta; install httpfs; load httpfs;")
-        opts = s3io.storage_options()
-        region = opts.get("AWS_REGION", "us-east-2")
-        con.execute(f"set s3_region='{region}';")
-        if opts.get("AWS_ACCESS_KEY_ID"):
-            con.execute(f"set s3_access_key_id='{opts['AWS_ACCESS_KEY_ID']}';")
-            con.execute(f"set s3_secret_access_key='{opts['AWS_SECRET_ACCESS_KEY']}';")
-            if opts.get("AWS_SESSION_TOKEN"):
-                con.execute(f"set s3_session_token='{opts['AWS_SESSION_TOKEN']}';")
         df = con.sql(
             f"select * from delta_scan('{uri}') where projection_season = {season}"
         ).df()

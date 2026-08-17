@@ -124,6 +124,69 @@ def storage_options(region: str = DEFAULT_REGION) -> dict[str, str]:
     return opts
 
 
+# ── the DuckDB read side of the same auth contract (INC-45) ─────────────────────────────
+def configure_duckdb_lake_auth(con, *, region: str = DEFAULT_REGION,
+                               secret_name: str = "sports_lake_s3"):
+    """Load the lake extensions on `con` and give it credentials `delta_scan` will ACTUALLY USE.
+
+    🔴 INC-45 — THE CHANNEL IS THE ENTIRE BUG, and it is invisible on a laptop.
+
+    DuckDB's `delta` extension resolves S3 credentials through the **SECRET MANAGER** only. The
+    deprecated `SET s3_access_key_id / s3_secret_access_key / s3_region` settings are an httpfs
+    channel and are **IGNORED by `delta_scan`** — so six fantasy call sites that resolved
+    credentials through `storage_options()` and handed them to DuckDB that way were passing them
+    into a channel the reader never reads. What actually authenticated those reads was
+    delta-kernel-rs's OWN ambient chain, resolved inside the extension. Measured: with real
+    credentials set ONLY through the legacy settings and the ambient environment stripped,
+    `delta_scan` ignored them and went off to IMDS by itself.
+
+    That is why NF-K1's K/DST lake fallback worked on the laptop (where the ambient chain finds
+    `~/.aws`) and loaded 0 rows on the box — freezing the published board behind NF-K1's own
+    coverage guard. Every lake reader in this repo that is PROVEN on the box uses the secret
+    channel instead: `sports_dbt/profiles.yml` (`provider: credential_chain`, which `delta_scan`s
+    this exact bucket on this exact box), `ingest/query_lake`, `run_nf_c0e_captured_terms`.
+
+    Credentials go in EXPLICITLY whenever `storage_options()` can resolve them, because that is the
+    botocore chain (env → profile → IMDS instance role) every box writer here already depends on,
+    and it is the one that correctly SKIPS an empty-string `AWS_ACCESS_KEY_ID` — the AKID landmine
+    a compose-interpolated unset host var leaves in the container. Only when it resolves nothing do
+    we hand DuckDB `PROVIDER credential_chain` to resolve internally. ⚠️ `credential_chain`
+    validates EAGERLY, so on a machine with no credentials at all this raises here rather than at
+    scan time — deliberately: every caller wraps this, and a named auth failure beats an empty
+    frame (E5.10 — a swallowed error must be surfaceable).
+    """
+    # E5.10 — DuckDB resolves its EXTENSION DIRECTORY under $HOME, and raises
+    # `IOException: Can't find the home directory at ''` before any download when HOME is empty.
+    # A no-op wherever HOME is set (laptop, box), so this can only ever ADD a working path.
+    if not os.environ.get("HOME"):
+        con.execute("set home_directory='/tmp';")
+    con.execute("install httpfs; load httpfs; install delta; load delta;")
+    opts = storage_options(region)
+    key, secret = opts.get("AWS_ACCESS_KEY_ID"), opts.get("AWS_SECRET_ACCESS_KEY")
+    if key and secret:
+        clauses = [f"KEY_ID '{key}'", f"SECRET '{secret}'"]
+        if opts.get("AWS_SESSION_TOKEN"):
+            clauses.append(f"SESSION_TOKEN '{opts['AWS_SESSION_TOKEN']}'")
+    else:
+        clauses = ["PROVIDER credential_chain"]
+    con.execute(
+        f"CREATE OR REPLACE SECRET {secret_name} "
+        f"(TYPE S3, {', '.join(clauses)}, REGION '{opts.get('AWS_REGION', region)}')"
+    )
+    return con
+
+
+def duckdb_lake_connection(*, region: str = DEFAULT_REGION):
+    """A FRESH DuckDB connection that can read the lake's Delta tables — see
+    `configure_duckdb_lake_auth` for why the credential channel is load-bearing.
+
+    Fresh, never a module-level singleton: a failed read can poison a shared DuckDB connection for
+    every later query on it (E9.26b), and these readers are all best-effort by design."""
+    import duckdb
+
+    return configure_duckdb_lake_auth(duckdb.connect(), region=region)
+
+
 # ── record normalisation (PURE — unit-tested offline, no IO) ────────────────────────────
 def records_to_arrow(
     records: Iterable[dict],

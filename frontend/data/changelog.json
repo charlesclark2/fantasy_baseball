@@ -1,5 +1,22 @@
 [
   {
+    "week": "2026-08-17",
+    "items": [
+      {
+        "tag": "new",
+        "text": "Mock Draft: practise a full draft against CPU opponents, any time of year. Pick your format, league size and draft slot, and the room drafts around you — each seat with its own habits, blending market ADP with our projections, so players we like and the market does not actually fall to you. You draft with the same recommendations and the same reasoning the live Draft Optimizer gives you, then see how your roster came out: projected starter points against the rest of the room, position by position, and which of your picks fell furthest past ADP. Quick eight-round or full-roster, and a Skip button when you do not want to wait on the clock."
+      },
+      {
+        "tag": "improved",
+        "text": "The mock draft's results screen says plainly what it is measuring. It ranks the room on our own projections — the same numbers the recommendations use — while the CPU teams draft partly off market ADP, so following the board closely is most of what a high finish there means. That is on the screen beside the rank, not buried in a tooltip."
+      },
+      {
+        "tag": "fixed",
+        "text": "The draft board is rebuilding daily again. Since 16 August the automated rebuild had been unable to read the kicker and defence projections, and rather than publish a board missing two positions it published nothing — so the board you were reading was correct, but it had stopped picking up new market and depth-chart data. It is advancing again, and the check that stopped the bad board from shipping is unchanged."
+      }
+    ]
+  },
+  {
     "week": "2026-08-10",
     "items": [
       {

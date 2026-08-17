@@ -721,21 +721,11 @@ def build_coach_features(season: int, *, stints: pd.DataFrame | None = None,
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def _read_lake(season: int, source: str) -> pd.DataFrame | None:
     """Read a landed coaching Delta table for `season` from S3, or None when absent/offline."""
-    import duckdb
-
     from quant_sports_intel_models.football.nfl.ingest import s3io
 
     uri = s3io.table_uri(LAKE_SPORT, source, tier=LAKE_TIER)
-    con = duckdb.connect()
+    con = s3io.duckdb_lake_connection()  # INC-45 — the secret channel `delta_scan` actually reads
     try:
-        con.execute("install delta; load delta; install httpfs; load httpfs;")
-        opts = s3io.storage_options()
-        con.execute(f"set s3_region='{opts.get('AWS_REGION', 'us-east-2')}';")
-        if opts.get("AWS_ACCESS_KEY_ID"):
-            con.execute(f"set s3_access_key_id='{opts['AWS_ACCESS_KEY_ID']}';")
-            con.execute(f"set s3_secret_access_key='{opts['AWS_SECRET_ACCESS_KEY']}';")
-            if opts.get("AWS_SESSION_TOKEN"):
-                con.execute(f"set s3_session_token='{opts['AWS_SESSION_TOKEN']}';")
         df = con.sql(f"select * from delta_scan('{uri}') where season = {int(season)}").df()
         return df if not df.empty else None
     except Exception as exc:  # noqa: BLE001 — table absent / offline ⇒ caller computes

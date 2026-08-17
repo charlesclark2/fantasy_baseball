@@ -230,21 +230,13 @@ def load_boards_local(season: int) -> pd.DataFrame:
 
 
 def _lake_connection():
-    """A DuckDB connection wired for the S3 lakehouse (delta + httpfs + creds). SF-free / off-box."""
-    import duckdb
+    """A DuckDB connection wired for the S3 lakehouse (delta + httpfs + creds). SF-free / off-box.
 
+    INC-45 — the credentials must go in through the SECRET MANAGER; `delta_scan` ignores the
+    deprecated `s3_*` settings this used to set. See `s3io.configure_duckdb_lake_auth`."""
     from quant_sports_intel_models.football.nfl.ingest import s3io
 
-    con = duckdb.connect()
-    con.execute("install delta; load delta; install httpfs; load httpfs;")
-    opts = s3io.storage_options()
-    con.execute(f"set s3_region='{opts.get('AWS_REGION', 'us-east-2')}';")
-    if opts.get("AWS_ACCESS_KEY_ID"):
-        con.execute(f"set s3_access_key_id='{opts['AWS_ACCESS_KEY_ID']}';")
-        con.execute(f"set s3_secret_access_key='{opts['AWS_SECRET_ACCESS_KEY']}';")
-        if opts.get("AWS_SESSION_TOKEN"):
-            con.execute(f"set s3_session_token='{opts['AWS_SESSION_TOKEN']}';")
-    return con
+    return s3io.duckdb_lake_connection()
 
 
 def load_boards_lake(season: int) -> pd.DataFrame:

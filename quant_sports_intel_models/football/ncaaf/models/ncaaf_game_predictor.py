@@ -65,9 +65,59 @@ from quant_sports_intel_models.football.ncaaf.models.ncaaf_game_distribution imp
 _NORMAL_FORMS = ("gaussian", "native", "strength_posterior")
 
 
+_ARTIFACT_DIR = Path(__file__).resolve().parent / "artifacts"
+#: newest first — a post-P1.4 contract (NCAAF-P2.1 S1-serve) writes v2 beside the frozen v1.
+SERVED_DISPERSION_CANDIDATES: tuple[str, ...] = (
+    "ncaaf_game_distribution_v2.json", "ncaaf_game_distribution_v1.json")
+SERVED_MEAN_FILENAME = "ncaaf_game_mean_v2.json"
+
+
 def load_params(path: str | Path) -> NcaafGameDistributionParams:
-    """Load the served `ncaaf_game_distribution_v1.json` written by the bake-off finalize stage."""
+    """Load a served `ncaaf_game_distribution_v*.json` written by the bake-off finalize stage."""
     return NcaafGameDistributionParams.from_dict(json.loads(Path(path).read_text()))
+
+
+def resolve_served_dispersion(artifact_dir: str | Path = _ARTIFACT_DIR) -> Path:
+    """The dispersion artifact that actually serves — v2 (a post-P1.4 contract) if present, else v1.
+
+    ⭐ An explicit, ORDERED preference with the chosen path returned to the caller so it can be
+    LOGGED. The prospect-board regression was a silent source-precedence pick; this one is
+    auditable, and it prefers the NEWER schema rather than a name that a later build may stop
+    writing.
+    """
+    d = Path(artifact_dir)
+    for name in SERVED_DISPERSION_CANDIDATES:
+        if (d / name).exists():
+            return d / name
+    raise FileNotFoundError(
+        f"no served dispersion artifact in {d} (looked for {list(SERVED_DISPERSION_CANDIDATES)}) — "
+        "run `bakeoff_ncaaf_game --stage finalize`.")
+
+
+def load_served_pair(artifact_dir: str | Path = _ARTIFACT_DIR):
+    """Load (dispersion, mean, dispersion_path) and REFUSE a mismatched pair.
+
+    σ is calibrated on the OOS residuals of one (learner, contract) and μ is that config's refit;
+    pairing a dispersion with a mean fitted on a DIFFERENT contract is exactly the E7.9 train/serve
+    mismatch the S1 read-out flagged (a σ fitted on pace residuals served against a pace-free μ),
+    so it raises rather than degrading quietly. A mean artifact that is simply ABSENT is the
+    pre-S1-serve state and returns `None` — the caller must say so in its own output.
+    """
+    from quant_sports_intel_models.football.ncaaf.models.ncaaf_game_mean import NcaafGameMeanParams
+
+    disp_path = resolve_served_dispersion(artifact_dir)
+    disp = load_params(disp_path)
+    mean_path = Path(artifact_dir) / SERVED_MEAN_FILENAME
+    if not mean_path.exists():
+        return disp, None, disp_path
+    mean = NcaafGameMeanParams.load(mean_path)
+    if mean.contract != disp.contract or mean.learner != disp.learner:
+        raise ValueError(
+            f"served artifacts disagree: dispersion {disp_path.name} was fitted on "
+            f"{disp.learner}/{disp.contract} but the mean artifact carries "
+            f"{mean.learner}/{mean.contract}. Serving that pair is an E7.9 train/serve mismatch — "
+            "re-run `--stage finalize` so both are written together.")
+    return disp, mean, disp_path
 
 
 def matchup_sigma(
