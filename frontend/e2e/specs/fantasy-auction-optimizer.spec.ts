@@ -409,6 +409,49 @@ test.describe("driving an auction", () => {
     expectNoPageErrors(errors)
   })
 
+  test("the two surfaces that show a max bid always show the SAME max bid", async ({ page }) => {
+    // ⭐ THE DEFECT THIS CAUGHT, kept as its own regression. The recommendation panel and the
+    // available-players table both render "your max" for a player. The first cut recomputed it
+    // inline in the table and applied the affordability cap but NEITHER the inflation multiplier
+    // NOR the roster-eligibility check — so the same player showed two different numbers three
+    // rows apart, and the one further down the page was the wrong one.
+    //
+    // ⚠️ RUN AFTER A SALE, deliberately: with a full budget and an untouched roster the two
+    // computations agree by accident (inflation is ~1.00 and every position is still eligible), so
+    // a fresh screen cannot tell them apart. Spending money is what makes the fixture able to fail.
+    const { errors } = await startAuction(page)
+    await recordWin(page, 120)
+
+    const panel = await page.getByTestId("auction-candidate").evaluateAll((rows) =>
+      rows.map((r) => ({
+        name: (r.querySelector('[data-testid="auction-candidate-name"]')?.textContent ?? "").trim(),
+        bid: (r.querySelector('[data-testid="auction-max-bid"]')?.textContent ?? "").trim(),
+      })),
+    )
+    expect(panel.length, "no candidates — this test would assert on nothing").toBeGreaterThan(2)
+
+    const table = await page.getByTestId("auction-board-max-bid").evaluateAll((cells) =>
+      cells.map((c) => ({
+        row: c.closest("tr"),
+        bid: (c.textContent ?? "").trim(),
+      })).map(({ row, bid }) => ({
+        name: (row?.querySelector('a[href^="/fantasy/player/"]')?.textContent ?? "").trim(),
+        bid,
+      })),
+    )
+    const byName = new Map(table.map((t) => [t.name, t.bid]))
+
+    let compared = 0
+    for (const c of panel) {
+      const fromTable = byName.get(c.name)
+      if (fromTable === undefined) continue // below the table's 250-row cut
+      compared++
+      expect(fromTable, `${c.name} shows two different max bids`).toBe(c.bid)
+    }
+    expect(compared, "no player appeared on both surfaces — nothing was compared").toBeGreaterThan(1)
+    expectNoPageErrors(errors)
+  })
+
   test("a mid-auction reload keeps the money and the roster", async ({ page }) => {
     // ⭐ THE REASON THE STATE IS PERSISTED AT ALL. An auction runs for two hours in a tab that gets
     // reloaded, backgrounded and killed; losing the MONEY at spot 12 is losing the session.

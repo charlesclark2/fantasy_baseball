@@ -241,6 +241,14 @@ class TestSharedConfigContract:
         # A drifted version string would make round-tripped configs disagree about their own schema.
         assert C.CONFIG_FORMAT_VERSION == lc.CONFIG_FORMAT_VERSION
 
+    def test_canonical_auction_budget_matches_the_engine(self):
+        # NF-C5. `canonical.py` MIRRORS engine constants rather than importing them (the Lambda
+        # cold-start rule), so each mirrored constant needs its own pin or it drifts silently — an
+        # imported league would then round-trip to a different budget than the engine's default.
+        from quant_sports_intel_models.fantasy_engine import auction as auc
+
+        assert C.DEFAULT_AUCTION_BUDGET == auc.DEFAULT_AUCTION_BUDGET
+
     def test_yahoo_config_is_accepted_by_the_real_engine(self, monkeypatch):
         monkeypatch.setattr(yahoo, "_get", lambda path, token: YAHOO_SETTINGS)
         monkeypatch.setattr(yahoo, "_fetch_teams", lambda *_a, **_k: ())

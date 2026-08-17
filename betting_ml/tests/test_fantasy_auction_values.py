@@ -513,6 +513,34 @@ def test_the_exporter_stamps_the_auction_fields_on_every_row_additively():
     assert rows[-1]["aucVal"] == 1
 
 
+def test_a_saved_league_round_trips_its_draft_type_through_the_api_model():
+    """⚠️ THE SILENT-SAVE CLASS (E8.6), and it is why this is a test rather than a glance.
+
+    The league API models set no `extra="forbid"`, so a key the model does not DECLARE is accepted,
+    ignored and lost with a 200 and no error anywhere. `canonical.build_config` now emits
+    `draft_type`/`auction_budget` on every import, so a model missing them would round-trip every
+    imported league through the store having quietly dropped its draft type — the config would claim
+    a field the store does not keep.
+    """
+    from app.backend.models import fantasy as M
+
+    payload = {
+        "name": "Auction Home League",
+        "sport": "nfl",
+        "n_teams": 12,
+        "scoring": {"per_stat": {"rec": 1.0}, "position_bonuses": {}},
+        "roster": [{"name": "QB", "count": 1, "eligible": ["QB"], "bench": False}],
+        "draft_type": "auction",
+        "auction_budget": 260,
+    }
+    saved = M.LeagueSave(**payload)
+    assert saved.draft_type == "auction", "the draft type was dropped on save"
+    assert saved.auction_budget == 260, "the budget was dropped on save"
+    # ...and the default is snake, so every league already in the store reads correctly.
+    assert M.LeagueSave(**{k: v for k, v in payload.items()
+                          if k not in ("draft_type", "auction_budget")}).draft_type == "snake"
+
+
 def test_a_locked_caller_never_receives_an_auction_dollar_value():
     """⭐ AUCTION DOLLARS ARE A PAID FIELD, and this is the assertion that says so.
 

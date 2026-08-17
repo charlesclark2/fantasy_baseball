@@ -388,6 +388,19 @@ export interface AuctionBoard {
   /** Ranked candidates for MY next bid. */
   candidates: AuctionCandidate[]
   nomination: NominationPlan
+  /** Positions one of MY still-open roster slots can accept. */
+  openEligibility: Set<string>
+  /**
+   * ⭐ THE MAX BID FOR **ANY** PLAYER, not just a ranked candidate — exposed because the
+   * recommendation panel and the available-players table both show one.
+   *
+   * The first cut recomputed it inline in the table, and got a DIFFERENT answer: it applied the
+   * affordability cap but neither the inflation multiplier nor the roster-eligibility check, so the
+   * same player showed one number in the panel and another in the table three rows below. That is
+   * the E9.61 "two renderers of one field are two rule sets" defect exactly, on the number a user
+   * bids real money against. One function, every surface.
+   */
+  bidFor: (player: Player) => MaxBid
 }
 
 /** The room's money and slots, team by team. */
@@ -454,6 +467,17 @@ export function auctionBoard(args: AuctionArgs): AuctionBoard {
     if (!fs.player) fs.eligible.forEach((e) => myOpenEligibility.add(e))
   }
 
+  /** ⭐ THE ONE PLACE A MAX BID IS COMPUTED. Every surface calls this — see `bidFor` on the
+   *  returned object for why that matters. */
+  const bidFor = (player: Player): MaxBid =>
+    maxBid(
+      values.get(player.id)?.value ?? pool.minBid,
+      infl.multiplier,
+      me.remaining,
+      me.openSlots,
+      { minBid: pool.minBid, eligible: myOpenEligibility.has(player.pos) },
+    )
+
   const recs = recommend({ board, config, draftedIds, myPlayerIds, topN: Math.max(topN, 24) })
   const candidates: AuctionCandidate[] = recs.map((rec) => {
     const v = values.get(rec.player.id) ?? {
@@ -463,17 +487,13 @@ export function auctionBoard(args: AuctionArgs): AuctionBoard {
       high: pool.minBid,
       share: 0,
     }
-    const eligible = myOpenEligibility.has(rec.player.pos)
-    const bid = maxBid(v.value, infl.multiplier, me.remaining, me.openSlots, {
-      minBid: pool.minBid,
-      eligible,
-    })
+    const bid = bidFor(rec.player)
     return {
       player: rec.player,
       auction: v,
       bid,
       rec,
-      eligible,
+      eligible: myOpenEligibility.has(rec.player.pos),
       why: bidExplanation(bid, infl, me.remaining),
     }
   })
@@ -488,6 +508,8 @@ export function auctionBoard(args: AuctionArgs): AuctionBoard {
     perSlot: dollarsPerSlot(me.remaining, me.openSlots),
     candidates: candidates.slice(0, topN),
     nomination: nominationPlan({ candidates, budgets, me, inflation: infl, available, values }),
+    openEligibility: myOpenEligibility,
+    bidFor,
   }
 }
 

@@ -581,13 +581,18 @@ export function AuctionOptimizer() {
                           <td className="whitespace-nowrap py-1.5 text-right text-gray-300">
                             {formatMoneyRange(v?.low, v?.high)}
                           </td>
-                          <td className="py-1.5 text-right text-gray-400">
-                            {formatMoney(
-                              Math.min(
-                                v?.value ?? 1,
-                                Math.max(0, state.me.remaining - (state.me.openSlots - 1)),
-                              ),
-                            )}
+                          {/* ⭐ THE SHARED `bidFor`, never an inline recompute. The first cut
+                              did the arithmetic here and reached a DIFFERENT number than the panel
+                              above (it applied the affordability cap but neither inflation nor the
+                              eligibility check), so one player showed two max bids three rows
+                              apart — the E9.61 two-renderers defect on the number a user bids
+                              money against. */}
+                          <td
+                            data-testid="auction-board-max-bid"
+                            data-player={p.id}
+                            className="py-1.5 text-right text-gray-400"
+                          >
+                            {formatMoney(state.bidFor(p).maxBid)}
                           </td>
                           <td className="py-1.5 pr-1 text-right">
                             <button
