@@ -9,6 +9,10 @@
       {
         "tag": "improved",
         "text": "The mock draft's results screen says plainly what it is measuring. It ranks the room on our own projections — the same numbers the recommendations use — while the CPU teams draft partly off market ADP, so following the board closely is most of what a high finish there means. That is on the screen beside the rank, not buried in a tooltip."
+      },
+      {
+        "tag": "fixed",
+        "text": "The draft board is rebuilding daily again. Since 16 August the automated rebuild had been unable to read the kicker and defence projections, and rather than publish a board missing two positions it published nothing — so the board you were reading was correct, but it had stopped picking up new market and depth-chart data. It is advancing again, and the check that stopped the bad board from shipping is unchanged."
       }
     ]
   },

@@ -162,3 +162,18 @@ cd /Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_bett
 The change is additive on both sides (NF-C0): an older client ignores the key, and an older API
 sending no key leaves the surface on its previous single "not matched" wording rather than asserting
 a cause it cannot support. So the two halves may ship in either order.
+
+---
+
+## ⏭️ Sequel — INC-45: the lake fallback then failed on the box
+
+The recap above flagged the lake fallback as **unproven on the box** (the repair ran on the laptop,
+where the local parquet exists, so the fallback never fired). It fired on the box and loaded **0
+rows**, the publish guard correctly refused every morning, and the board froze — visibly, which is
+the guard working, not failing.
+
+Cause: the read handed its credentials to the deprecated DuckDB `s3_*` settings, which `delta_scan`
+**ignores** — so it authenticated off delta-kernel-rs's own ambient chain, which finds `~/.aws` on a
+laptop. ⚠️ The K/DST lake partition was **never absent** (74 rows since 2026-08-03), so the alert
+text that suggested it was is corrected. Full postmortem, the two-sided measurement, the decision
+NOT to add a scheduled rebuild, and the operator run-order: `docs/inc45_box_kdst_lake_read.md`.
