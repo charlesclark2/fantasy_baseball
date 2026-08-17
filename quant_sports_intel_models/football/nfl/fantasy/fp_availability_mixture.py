@@ -368,8 +368,8 @@ def pi_for_arm(arm: str, train: pd.DataFrame, test: pd.DataFrame, features: list
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Σ on PLAYED rows only — the conditional half of the separation
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def sigma_played(raw: np.ndarray, *, one_factor: bool = False,
-                 min_rows: int = MIN_ESTIMATION_ROWS) -> tuple[np.ndarray, dict]:
+def sigma_played(raw: np.ndarray, *, min_rows: int = MIN_ESTIMATION_ROWS
+                 ) -> tuple[np.ndarray, dict]:
     """The story's conditional Σ̂: NF-W7c's raw-rank estimator restricted to ACTIVE rows.
 
     ⭐ This is half the hypothesis. §11.1 measured QB's all-row ρ̄ at 0.239 against 0.127 on played
@@ -385,11 +385,12 @@ def sigma_played(raw: np.ndarray, *, one_factor: bool = False,
             f"dependence estimation refused: {int(active.sum())} ACTIVE rows < {min_rows} — the "
             f"conditional-on-playing correlation is unevaluable on this slice and must not be "
             f"silently replaced by the unconditional one")
+    # ⛔ ONE SHAPE, deliberately. A first cut carried an unused `one_factor=` branch; the declared
+    # family varies π and NOT the conditional Σ's structure, so a structural branch no arm invokes
+    # is an unregistered form sitting in the estimator waiting to be used without being declared
+    # (the NF-C0e wired-≠-invoked class, in miniature). A structural variant belongs in a fresh
+    # registration, not in a keyword argument.
     sig, note = FA.position_sigma(m[active], min_rows=min_rows)
-    if one_factor:
-        sig, lam = JD.one_factor_corr(sig)
-        note = {**note, "structure": "one_factor",
-                "loadings": {LEGS[i]: round(float(v), 4) for i, v in enumerate(lam)}}
     return sig, {**note, "population": "active_rows_only", "n_active": int(active.sum()),
                  "n_all": int(len(m)), "atom_rate": round(atom_rate(m), 4)}
 
