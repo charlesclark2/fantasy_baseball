@@ -205,6 +205,10 @@ export type MockOptions = {
     | "predraft"
     | "partialRosters"
     | "lineupGap"
+    // 🔴 NF-K1 — one linked league whose roster holds a K, a D/ST and an IDP row, scored against
+    // the board that actually shipped on 2026-08-16 (K and DST rows absent). The mode that makes
+    // all four "no projection" causes renderable at once.
+    | "kdstGap"
   /**
    * ⭐ G100-D0 — what `/subscription/status` reports for this caller.
    *
@@ -565,6 +569,49 @@ function linkedRoster(): unknown[] {
       starter: false,
     },
   ]
+}
+
+// ══ NF-K1 — the four "no projection beside this row" causes, in ONE render ══════════════════════
+//
+// 🔴 REPRODUCES THE SHIPPED ARTIFACT, not a hypothetical. On 2026-08-16 the published board carried
+// QB/RB/WR/TE and ZERO K, ZERO D/ST, so the `kdstGap` mode below serves a board with exactly those
+// rows removed — and a roster that holds a kicker and a defence, which is every carryover roster.
+//
+// ⭐ THE E2E FIXTURES ARE WHY NO TEST SAW THIS. `fantasy-nfl-projections-2026-entitled.synthetic.json`
+// still carries 42 K + 32 DST, so every fixture-based assertion in the repo was green while
+// production was missing two positions. Stripping them HERE is what lets a spec see the state that
+// actually shipped (the NF-C0e "a fixture cannot disconfirm the assumption it was built from" class).
+
+/** The rostered kicker's name — a real board K, so the row fails ONLY because the board lost the
+ *  position, never because the name was made up. */
+export const E2E_ROSTERED_KICKER = () => String(boardPlayerAt("K", false).name)
+
+/** A rostered defence, written the way every platform writes one (NF-C6P3 keys it on the franchise). */
+export const E2E_ROSTERED_DST = "Lions D/ST"
+
+/** A position we do not project at all — an IDP league's linebacker. Distinct from both other
+ *  causes: nothing is broken and there is nothing for the user to do. */
+export const E2E_ROSTERED_IDP = "Idp Linebacker"
+
+/** The linked roster PLUS one row per remaining cause. Kept separate from `linkedRoster()` so the
+ *  existing `linked` mode's counts and totals are untouched by this addition. */
+function kdstGapRoster(): unknown[] {
+  return [
+    ...(linkedRoster() as any[]),
+    { player_key: "e2e-k", name: E2E_ROSTERED_KICKER(), position: "K", team: "DET", starter: true },
+    { player_key: "e2e-dst", name: E2E_ROSTERED_DST, position: "DST", team: "DET", starter: true },
+    { player_key: "e2e-idp", name: E2E_ROSTERED_IDP, position: "LB", team: "DET", starter: false },
+  ]
+}
+
+/** The projections pool with K and DST removed — the 795-player board that actually shipped. */
+function boardWithoutKdst(): any[] {
+  const players = FIXTURES.projectionsEntitled().players as any[]
+  const out = players.filter((p) => p.pos !== "K" && p.pos !== "DST")
+  // A fixture that never HAD them could not reproduce the regression, and this mode would silently
+  // become a no-op. Assert the removal did something (the vacuous-fixture class).
+  if (out.length === players.length) throw new Error("e2e: the projections fixture has no K/DST to remove")
+  return out
 }
 
 /** The captured league, linked, plus its reception-free twin. Ids are stable for spec locators. */
@@ -1104,6 +1151,7 @@ function leaguesFor(leagues: NonNullable<MockOptions["leagues"]>): any[] {
   if (leagues === "none") return []
   if (leagues === "linked") return linkedLeaguePair()
   if (leagues === "lineupGap") return lineupGapLeaguePair()
+  if (leagues === "kdstGap") return [{ ...linkedLeaguePair()[0], imported_roster: kdstGapRoster() }]
   if (leagues === "drafted") return [draftedLeague()]
   if (leagues === "predraft") return [predraftLeague()]
   // NF-C6P3 — the PARTIAL-coverage state: some of the league's rosters held, not all. It is a real
@@ -1175,21 +1223,32 @@ function personalPayloadFor(
   // `any` is honest here rather than lazy: `fixture()` returns parsed JSON, so the league shape is
   // untyped at this boundary and inventing a local interface would be a second, driftable spelling
   // of `SavedLeague`.
-  const rostersFor = (ls: any[]) =>
+  // NF-K1 — `pool` is the board the rosters are scored against. It defaults to the full projections
+  // fixture; the `kdstGap` mode passes the K/DST-less pool that actually shipped.
+  const rostersFor = (ls: any[], pool?: any[]) =>
     Object.fromEntries(
       ls.map((l: any) => [
         l.league_id,
         matchRosterToBoard(
           l.imported_roster ?? [],
-          buildBoard(FIXTURES.projectionsEntitled().players, l).players,
+          buildBoard(pool ?? (FIXTURES.projectionsEntitled().players as any[]), l).players,
         ),
       ]),
     )
 
+  // NF-K1 — `board_positions`, DERIVED from the same pool the rosters were scored against rather
+  // than declared. A hardcoded list here would make the mock disagree with its own board, which is
+  // precisely the "documented ≠ actually served" failure the real endpoint is built to avoid.
+  const positionsFor = (pool?: any[]) => {
+    const players = pool ?? (FIXTURES.projectionsEntitled().players as any[])
+    const seen = new Set(players.map((p: any) => String(p.pos)))
+    return ["QB", "RB", "WR", "TE", "K", "DST"].filter((p) => seen.has(p))
+  }
+
   if (leagues === "none") {
     return pathname === "/fantasy/leagues"
       ? []
-      : { ...base, leagues: [], saved_total: 0, withheld_by_quota: 0, rosters: {} }
+      : { ...base, leagues: [], saved_total: 0, withheld_by_quota: 0, rosters: {}, board_positions: positionsFor() }
   }
 
   // ⭐ E9.64 — both leagues are the caller's own and both are served; there is no quota story here,
@@ -1209,7 +1268,7 @@ function personalPayloadFor(
     const only = leaguesFor(leagues)
     return pathname === "/fantasy/leagues"
       ? only
-      : { ...base, leagues: only, saved_total: only.length, withheld_by_quota: 0, rosters: rostersFor(only) }
+      : { ...base, leagues: only, saved_total: only.length, withheld_by_quota: 0, rosters: rostersFor(only), board_positions: positionsFor() }
   }
 
   if (leagues === "linked") {
@@ -1222,6 +1281,25 @@ function personalPayloadFor(
           saved_total: pair.length,
           withheld_by_quota: 0,
           rosters: rostersFor(pair),
+          board_positions: positionsFor(),
+        }
+  }
+
+  // 🔴 NF-K1 — the regression, end to end: a roster carrying a K and a D/ST against the board that
+  // actually shipped (K and DST rows absent). All four causes render at once, which is the point —
+  // the defect was that ONE phrase covered all of them.
+  if (leagues === "kdstGap") {
+    const pool = boardWithoutKdst()
+    const only = [{ ...linkedLeaguePair()[0], imported_roster: kdstGapRoster() }]
+    return pathname === "/fantasy/leagues"
+      ? only
+      : {
+          ...base,
+          leagues: only,
+          saved_total: only.length,
+          withheld_by_quota: 0,
+          rosters: rostersFor(only, pool),
+          board_positions: positionsFor(pool),
         }
   }
 
@@ -1236,12 +1314,12 @@ function personalPayloadFor(
     ]
     return pathname === "/fantasy/leagues"
       ? all
-      : { ...base, leagues: [one], saved_total: 3, withheld_by_quota: 2, rosters: rostersFor([one]) }
+      : { ...base, leagues: [one], saved_total: 3, withheld_by_quota: 2, rosters: rostersFor([one]), board_positions: positionsFor() }
   }
 
   return pathname === "/fantasy/leagues"
     ? [one]
-    : { ...base, rosters: rostersFor(base.leagues) }
+    : { ...base, rosters: rostersFor(base.leagues), board_positions: positionsFor() }
 }
 
 /**

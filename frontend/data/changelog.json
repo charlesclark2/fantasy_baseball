@@ -4,6 +4,14 @@
     "items": [
       {
         "tag": "fixed",
+        "text": "Kickers and defences are back on the draft board. A board rebuild on 16 August published without them, so every rostered K and D/ST on My Teams showed no projection at all. They are projected again, and the board now refuses to publish if a whole position is missing rather than shipping a board with a gap in it."
+      },
+      {
+        "tag": "improved",
+        "text": "When a player on your roster has no projection beside him, My Teams now says why: a position we have not published, a name we could not match, or a position we do not project at all. Those are three different things with three different answers — and only one of them is fixed by re-importing your league, which the page now tells you."
+      },
+      {
+        "tag": "fixed",
         "text": "My Teams reads properly on a phone. The roster and summary tables had a fixed minimum width, so you had to drag them left and right to reach the points column — on the one page most likely to be opened on a phone. The tables now fit the screen, dropping the two least important columns on a narrow one so the projection and the bench figure are always in view."
       },
       {

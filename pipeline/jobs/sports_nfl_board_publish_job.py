@@ -34,6 +34,17 @@ two halves pull in opposite directions:
     stamp SAYS it is stale), while the publish step PAGES AND RAISES: a red run that leaves the
     good board serving is strictly better than a green run that shipped nothing.
 
+🔴 NF-K1 (2026-08-16) — WHAT THIS JOB'S FIRST REAL RUN SHIPPED, and what now stops it. The publish
+step exited 0 three times and published a board with ZERO K and ZERO D/ST: the K/DST projection has
+its OWN artifact lineage that no step here rebuilds, and it is gitignored, so on the box it was
+simply absent and the exporter's local-only read warned and carried on. `_verify_published` passed
+too — `generated_at` and `adp_as_of` are both undisturbed by a missing position. Two changes close
+it: the exporter now falls back to the LAKE for K/DST (`run_league_board.load_kdst`), and
+`export_draft_board_json.assert_published_position_coverage` REFUSES to publish a board missing a
+whole projectable position — so this job now goes RED (and pages) rather than shipping the gap.
+⇒ a "NFL board publish FAILED at export + publish" page naming a missing position means the K/DST
+lake partition is genuinely absent, not that the board build broke; the remedy is in that message.
+
 🚦 PRECONDITION (and it is the likely first failure on the box): the whole build chain reads the
 sports DuckDB, which is **gitignored and therefore absent from the `COPY . .` image**. The publish
 op checks for it FIRST and fails with a named remedy rather than dying opaquely three subprocesses
