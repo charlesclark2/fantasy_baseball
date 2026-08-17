@@ -238,3 +238,80 @@ Nothing here promotes, publishes or retrains. The serving path (`certified_arms`
 is FAIL-CLOSED on the record: an absent / smoke / wrong-story / NULL-verdict record is REFUSED, so
 a challenger cannot serve itself into existence. `PROMOTE_BLOCKERS` are carried onto the artifact
 and into the report.
+
+---
+
+## 11. POST-RUN FINDINGS (added AFTER the decisive run — 2026-08-16)
+
+⛔ **Nothing in this section changes a gate, a threshold, an arm, or a verdict.** The run's result
+stands exactly as the pre-registration and its two smoke amendments defined it. This records what
+the completed record explains, and what it hands the next story.
+
+### 11.1 The QB PIT-flatness refusal is an AVAILABILITY defect, not a copula defect
+
+QB is the only position failing the pre-registered PIT bar (winner 0.0888; even the best-calibrated
+representation in the field reaches only 0.0563 against a 0.05 bar), so **no arm in the declared
+field could have passed it** — a refusal structural to the field, not a selection accident. For
+scale: a *perfectly* calibrated model at these sample sizes (n ≈ 690) posts a median max-decile
+deviation of **0.0201** and exceeds 0.05 essentially never (4,000-draw simulation).
+
+⭐ **Every representation fails, including `foil_direct_points`, which contains no copula at all**
+(0.0959 — the WORST in the field). So the defect belongs to the target, not to the assembly.
+
+The mechanism, measured on the W6d matrix (84,553 rows): **QB's fitted correlation is mostly "did he
+play", not "how did he play".**
+
+| pos | all-zero rows | ρ̄ all rows | ρ̄ played-only | ratio | PIT (`joint_rank`) |
+|---|---|---|---|---|---|
+| QB | 53.9% | 0.239 | 0.127 | **1.88×** | 0.065 ✗ |
+| RB | 35.2% | 0.189 | 0.143 | 1.32× | 0.025 ✓ |
+| WR | 32.9% | 0.126 | 0.102 | 1.23× | 0.017 ✓ |
+| TE | 42.4% | 0.127 | 0.111 | 1.14× | 0.020 ✓ |
+
+⭐ **The RATIO orders the failure; the SIZE of the zero atom does not.** RB carries the largest
+joint-zero excess over independence (17.6× vs QB's 11.0×) and passes comfortably. What breaks
+calibration is the distance between the MARGINAL dependence and the CONDITIONAL-ON-PLAYING
+dependence — one Gaussian copula is being asked to carry a binary availability factor and a
+within-game co-movement at once, and it fits a compromise between them. A Gaussian copula also has
+**zero tail dependence by construction**, so at ρ̂ ≈ 0.24 it cannot reproduce a 53.9% joint-zero
+atom at all.
+
+That single mechanism explains the whole QB table: `assembled_comonotone` has the BEST PIT (0.0563)
+because perfect dependence is a crude availability factor — every leg goes to zero together — and
+the WORST CRPS (2.6954) because it destroys the within-game structure. `joint_double` compensates
+the attenuation enough to win CRPS while doubling noise and signs indiscriminately, so its
+calibration degrades. **CRPS and PIT rank almost inversely at QB and nowhere else.**
+
+**SUCCESSOR (not run here):** an explicit availability mixture — Bernoulli(plays) × a
+conditional-on-playing joint draw — with Σ estimated on played rows only. ⚠️ **NF-W4 already tested
+an availability mixture and returned a null ×4**, so this is not a free win; NF-W4's target was
+per-stat availability, and no prior story measured the ASSEMBLED total's joint-zero atom, which is
+the specific claim here. A legitimate successor registers a fresh coherent family (MH2 (a)) —
+⛔ never a re-run of this field.
+
+### 11.2 Instrumentation gap: a calibration statistic that discards its own direction
+
+The record stores only `max_decile_dev` — not the decile vector, not WHICH decile is off — and the
+PITs themselves are not stored, so the direction of miscalibration is **not recoverable without
+another run**. §11.1's mechanism was inferred from the arm ORDERING plus the raw matrix, not from
+the PIT shape. Storing ten floats per label per fold would have answered it directly. Any successor
+touching calibration should carry the decile vector.
+
+### 11.3 The assembly's value is POSITION-DEPENDENT — an architectural finding
+
+`foil_direct_points` (a learner pointed straight at league points) BEATS the assembly at QB
+(−0.0025) and RB (−0.0589) and LOSES at WR (+0.0173) and TE (+0.0257). The sign split falls exactly
+at the availability-ratio boundary in §11.1 (RB 1.32 / WR 1.23), which suggests the same
+availability contamination that breaks calibration also decides where assembling from parts is
+worth doing. ⚠️ **SUGGESTIVE ONLY at n = 4 positions** — QB and RB swap order on margin, so this is
+a hypothesis for a successor to register, not a finding of this story.
+
+### 11.4 What the nulls do and do not say
+
+⭐ `classify_null` names the FOIL, not the HYPOTHESIS. QB/RB's `GENUINE_ABSENCE` answers "does
+assembling from per-stat parts beat modelling the total directly?" — **NOT** "does cross-stat
+dependence help?". On the story's own mechanism all three dependence clauses pass at **all four**
+positions, and the assembly beats independent draws by +0.0565 to +0.1051 CRPS while lifting
+coverage from 0.738–0.797 to 0.813–0.886. Reading these nulls as "dependence is dead at QB/RB"
+inverts the result. (Sixth hand-correction of this classifier's phrasing in the vertical — the
+carded instrument fix inherits this shape.)
