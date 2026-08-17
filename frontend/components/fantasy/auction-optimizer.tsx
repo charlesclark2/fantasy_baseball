@@ -480,7 +480,15 @@ export function AuctionOptimizer() {
                         onClick={() =>
                           sell(c.player.id, myTeam, priceFor(c.player.id, Math.max(1, c.bid.maxBid)))
                         }
-                        className="bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669]"
+                        // ⚠️ Only "I WON" is gated on eligibility — "Sold" (a rival's win) is not,
+                        // and must not be: whether a player fits MY roster says nothing about
+                        // whether someone else bought him, and refusing to record a real sale
+                        // would silently stop the room's prices updating.
+                        disabled={!c.eligible}
+                        title={
+                          c.eligible ? undefined : "No open slot on your roster fits this position"
+                        }
+                        className="bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669] disabled:opacity-40"
                       >
                         I won
                       </Button>
@@ -597,8 +605,13 @@ export function AuctionOptimizer() {
                           <td className="py-1.5 pr-1 text-right">
                             <button
                               onClick={() => sell(p.id, myTeam, Math.max(1, v?.value ?? 1))}
-                              className="rounded border border-[#2a2a2a] px-2 py-0.5 text-xs text-gray-400 hover:border-[#10b981] hover:text-[#10b981]"
-                              title={`Record ${p.name} sold to you at his value`}
+                              disabled={!state.openEligibility.has(p.pos)}
+                              className="rounded border border-[#2a2a2a] px-2 py-0.5 text-xs text-gray-400 hover:border-[#10b981] hover:text-[#10b981] disabled:opacity-30 disabled:hover:border-[#2a2a2a] disabled:hover:text-gray-400"
+                              title={
+                                state.openEligibility.has(p.pos)
+                                  ? `Record ${p.name} sold to you at his value`
+                                  : "No open slot on your roster fits this position"
+                              }
                             >
                               I won
                             </button>

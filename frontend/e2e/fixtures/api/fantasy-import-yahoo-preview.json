@@ -1,10 +1,12 @@
 {
   "config": {
+    "auction_budget": 200,
     "captured_rules": {
       "fractional_scoring": true,
       "playoff_weeks": 15
     },
     "description": "Imported from Yahoo (2025).",
+    "draft_type": "snake",
     "format_version": "1.0",
     "n_teams": 10,
     "name": "Test Yahoo League",
