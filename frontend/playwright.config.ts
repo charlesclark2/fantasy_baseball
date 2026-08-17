@@ -93,8 +93,14 @@ export default defineConfig({
     // — including every entry that exists precisely because the bar had no room for it. The spec
     // reads its own project name and asserts the exact count each viewport is supposed to draw, so
     // "the menu opened" stays an answered question rather than a silent no-op.
+    // ⭐ NF-C6b joins for a FIFTH reason, and it is the plainest one yet: the rollup was verified
+    // CORRECT on desktop and was unreadable on a phone — the operator had to drag the tables
+    // sideways to see the numbers. A "glance at my teams" is a phone surface before it is anything
+    // else, and no desktop assertion can see a fixed-width table. `fantasy-my-teams-mobile.spec.ts`
+    // is scoped to what only a small viewport can tell you; the correctness suite stays
+    // desktop-only rather than doubling.
       testMatch:
-        /(signup-funnel|expected-points-label|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile)\.spec\.ts/,
+        /(signup-funnel|expected-points-label|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile)\.spec\.ts/,
     },
   ],
 

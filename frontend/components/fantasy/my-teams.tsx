@@ -125,19 +125,24 @@ function PortfolioSummary({ teams }: { teams: MyTeamEntry[] }) {
       <div className="text-base font-medium text-gray-100">{PORTFOLIO_HEADING}</div>
       <p className="mt-1 text-xs text-gray-400">{PORTFOLIO_NOTE}</p>
 
+      {/* ⚠️ NO `min-w` HERE. A fixed minimum width forces the whole page to scroll sideways on a
+          phone, which is exactly what a portfolio GLANCE must not do — the operator hit this on the
+          roster tables below. The two lowest-value columns drop out under `sm` instead, so the
+          ranked figure and the bench gap are always on screen. `overflow-x-auto` stays as a
+          backstop for a very narrow device, never as the primary layout. */}
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[520px] text-left text-[11px]">
+        <table className="w-full text-left text-[11px]">
           <thead>
             <tr className="text-gray-600">
               <th className="py-1 pr-2 font-medium">#</th>
               <th className="py-1 pr-2 font-medium">League</th>
-              <th className="py-1 pr-2 font-medium">Scoring</th>
+              <th className="hidden py-1 pr-2 font-medium sm:table-cell">Scoring</th>
               {/* ⭐ BEST-POSSIBLE IS THE RANKED COLUMN and sits first of the three numbers, because
                   the order is only legible if the figure it was sorted on leads. */}
               <th className="py-1 pr-2 text-right font-medium">{PORTFOLIO_BEST_LABEL}</th>
               <th className="py-1 pr-2 text-right font-medium">{PORTFOLIO_AS_SET_LABEL}</th>
               <th className="py-1 pr-2 text-right font-medium">{PORTFOLIO_GAP_LABEL}</th>
-              <th className="py-1 pr-2 text-right font-medium">80% range</th>
+              <th className="hidden py-1 pr-2 text-right font-medium sm:table-cell">80% range</th>
             </tr>
           </thead>
           <tbody>
@@ -148,7 +153,7 @@ function PortfolioSummary({ teams }: { teams: MyTeamEntry[] }) {
                   {t.leagueName}
                   {t.teamName && <span className="text-gray-500"> · {t.teamName}</span>}
                 </td>
-                <td className="py-1 pr-2 text-gray-500">{t.formatLabel}</td>
+                <td className="hidden py-1 pr-2 text-gray-500 sm:table-cell">{t.formatLabel}</td>
                 <td
                   className="py-1 pr-2 text-right font-medium text-gray-100"
                   data-testid="portfolio-best"
@@ -172,7 +177,7 @@ function PortfolioSummary({ teams }: { teams: MyTeamEntry[] }) {
                 >
                   {t.gap >= GAP_EPSILON ? `+${num(t.gap)}` : "—"}
                 </td>
-                <td className="py-1 pr-2 text-right">
+                <td className="hidden py-1 pr-2 text-right sm:table-cell">
                   <RangeCell p10={t.p10} p90={t.p90} />
                 </td>
               </tr>
@@ -338,16 +343,16 @@ function RosterTable({ label, rows }: { label: string; rows: RosterMatch[] }) {
         {label} · {rows.length}
       </div>
       <div className="mt-2 overflow-x-auto">
-        <table className="w-full min-w-[480px] text-left text-[11px]">
+        <table className="w-full text-left text-[11px]">
           <thead>
             <tr className="text-gray-600">
               <th className="py-1 pr-2 font-medium">Player</th>
               <th className="py-1 pr-2 font-medium">Pos</th>
-              <th className="py-1 pr-2 font-medium">Team</th>
+              <th className="hidden py-1 pr-2 font-medium sm:table-cell">Team</th>
               <th className="py-1 pr-2 text-right font-medium">
                 <InfoTip label={`${EXPECTED_POINTS_LABEL} (ROS)`}>{GLOSSARY.expectedPoints}</InfoTip>
               </th>
-              <th className="py-1 pr-2 text-right font-medium">80% range</th>
+              <th className="hidden py-1 pr-2 text-right font-medium sm:table-cell">80% range</th>
             </tr>
           </thead>
           <tbody>
@@ -363,11 +368,13 @@ function RosterTable({ label, rows }: { label: string; rows: RosterMatch[] }) {
                     <span className="text-gray-600">—</span>
                   )}
                 </td>
-                <td className="py-1 pr-2 text-gray-500">{r.roster.team ?? "—"}</td>
+                <td className="hidden py-1 pr-2 text-gray-500 sm:table-cell">
+                  {r.roster.team ?? "—"}
+                </td>
                 <td className="py-1 pr-2 text-right text-gray-200">
                   {r.board ? num(r.board.pts) : <span className="text-gray-600">not matched</span>}
                 </td>
-                <td className="py-1 pr-2 text-right">
+                <td className="hidden py-1 pr-2 text-right sm:table-cell">
                   {r.board ? <RangeCell p10={r.board.ptsP10} p90={r.board.ptsP90} /> : "—"}
                 </td>
               </tr>

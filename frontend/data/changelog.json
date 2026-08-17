@@ -3,6 +3,10 @@
     "week": "2026-08-10",
     "items": [
       {
+        "tag": "fixed",
+        "text": "My Teams reads properly on a phone. The roster and summary tables had a fixed minimum width, so you had to drag them left and right to reach the points column — on the one page most likely to be opened on a phone. The tables now fit the screen, dropping the two least important columns on a narrow one so the projection and the bench figure are always in view."
+      },
+      {
         "tag": "added",
         "text": "My Teams now shows what each of your teams is projected to score — twice. \"Your current starters\" totals the lineup your platform reports; \"your best possible lineup\" totals the best legal one we could field from the same roster. The difference is the headline: how many projected points you are leaving on your bench, league by league. Both figures are full-season projections before kickoff, scored on that league's own rules, so the bench number is unaffected by the differences between your leagues. A summary at the top orders your teams by their best possible lineup — a rough guide only, since your leagues neither score the same way nor start the same number of players, and the page says so beside the table."
       },
