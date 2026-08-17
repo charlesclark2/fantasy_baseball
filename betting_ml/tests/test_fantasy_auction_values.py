@@ -401,7 +401,23 @@ def test_the_top_player_prices_in_the_band_a_real_auction_would_recognise():
 
     A top value between a fifth and a half of one team's budget is the range every published
     auction-value set lands in; outside it the model is broken in a way no unit of arithmetic
-    would show."""
+    would show.
+
+    ⚠️⚠️ RECORDED, NOT SILENTLY ACCOMMODATED: THE SERVED BOARD IS CURRENTLY OUTSIDE THIS BAND.
+    Measured 2026-08-17 on the published `board_half_ppr_12.json`, the top player prices at
+    **$113 of a $200 budget = 56.5%**, against the 20-50% asserted here. This test passes only
+    because the synthetic board above is shaped differently from production.
+
+    The mechanism is measured, not guessed: replacement sits at the STARTER cutoff, so the real
+    board has **107 above-replacement players against 180 roster spots** — 76 of the draftable 180
+    price at exactly the minimum. A real room spends real money on those bench spots; this model
+    cannot, so the whole surplus concentrates in the top 107 and the leaders inflate.
+
+    ⛔ THE BAND IS DELIBERATELY NOT WIDENED TO FIT. Re-deriving a plausibility bar from the number
+    that failed it is the E2.1-r inversion, and the bar is the only thing here making an
+    independent claim. This note is the honest record until the product decision is made (deepen
+    replacement for valuation, or accept concentration as our honest read); the fix belongs with
+    that decision, not with a test edit."""
     pool = A.auction_pool(12, 16, 200)
     values = sorted((v.value for v in A.auction_values(_realistic_board(), pool)), reverse=True)
     assert 0.20 * pool.budget <= values[0] <= 0.50 * pool.budget, (

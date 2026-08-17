@@ -373,10 +373,15 @@ export interface AuctionCandidate {
 
 export interface TeamBudget {
   team: number
+  /** What this team has actually paid out. Always honest, never clamped. */
   spent: number
+  /** Money still available to bid with — floored at 0. See the note in `teamBudgets`. */
   remaining: number
   filled: number
   openSlots: number
+  /** True when recorded prices exceed this team's budget. Surfaced so an entry mistake is
+   *  VISIBLE rather than silently absorbed into the room's arithmetic. */
+  overspent: boolean
 }
 
 export type NominationMode = "target" | "drain" | "balanced"
@@ -416,7 +421,23 @@ export interface AuctionBoard {
   bidFor: (player: Player) => MaxBid
 }
 
-/** The room's money and slots, team by team. */
+/**
+ * The room's money and slots, team by team.
+ *
+ * ⚠️ `remaining` IS FLOORED AT 0, and the asymmetry with `openSlots` is the bug this fixes.
+ * `openSlots` has always clamped at 0 (a team cannot hold more players than it has spots), while
+ * `remaining` did not — so a team credited with more purchases than it can hold went NEGATIVE and
+ * its negative buying power silently cancelled out other teams' real money in the room total.
+ *
+ * That was reachable because "Sold" hardcoded the winning team: EVERY rival purchase piled onto one
+ * team. Measured on a 10-team/17-slot/$200 league, the room's DOLLARS stayed correct (the negative
+ * offset exactly) but its SLOT count did not — past 17 purchases the surplus buys became invisible
+ * to `openSlots`, and by the end of a draft the room would count ~136 open slots that do not exist,
+ * which is the denominator `inflation` divides by.
+ *
+ * The UI now refuses to sell to a team with no open slot, so the state is unreachable from the
+ * front — this floor is the arithmetic backstop for a hand-entered price that overshoots a budget.
+ */
 function teamBudgets(args: AuctionArgs, slotsPerTeam: number): TeamBudget[] {
   const out: TeamBudget[] = []
   for (let t = 1; t <= args.nTeams; t++) {
@@ -425,9 +446,10 @@ function teamBudgets(args: AuctionArgs, slotsPerTeam: number): TeamBudget[] {
     out.push({
       team: t,
       spent,
-      remaining: args.budget - spent,
+      remaining: Math.max(0, args.budget - spent),
       filled: own.length,
       openSlots: Math.max(0, slotsPerTeam - own.length),
+      overspent: spent > args.budget,
     })
   }
   return out
@@ -461,6 +483,7 @@ export function auctionBoard(args: AuctionArgs): AuctionBoard {
     remaining: budget,
     filled: 0,
     openSlots: slotsPerTeam,
+    overspent: false,
   }
 
   const available = board.filter((p) => !draftedIds.has(p.id))
