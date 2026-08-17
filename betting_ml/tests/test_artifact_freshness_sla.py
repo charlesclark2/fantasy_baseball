@@ -26,6 +26,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -229,11 +230,37 @@ def _run_real_script_against(tmp_path: Path, now: datetime | None = None) -> str
     return buf.getvalue()
 
 
+def _ts_column_of(contract) -> str:
+    """The column a contract's ts_expr reads, DERIVED from the expression itself.
+
+    ⚠️ This used to be `"computed_at" if "computed_at" in ts_expr else "ingestion_ts"` — an
+    incomplete branch on what is really an open set. Adding a registry entry with any third column
+    silently produced a fixture with the WRONG column name, so the real script could not bind its
+    ts_expr and every end-to-end test reported UNEVALUABLE. (Caught exactly that way by the
+    `stg_ref_players` entry, whose stamp is `built_at`.) Deriving the name means a future entry
+    needs no change here at all — the same reason a two-way test on a three-way field is a bug
+    (E9.64b), not a style preference.
+    """
+    m = re.search(r"try_cast\(\s*([A-Za-z_][A-Za-z0-9_]*)\s+as\b", contract.ts_expr, re.I)
+    assert m, (
+        f"cannot derive the timestamp column from {contract.name}'s ts_expr "
+        f"({contract.ts_expr!r}) — the fixture would be built on a guess"
+    )
+    return m.group(1)
+
+
+def test_every_contract_yields_a_fixture_column():
+    """Anti-vacuity for the derivation above: if it silently returned nothing for an entry, that
+    entry's fixture would be malformed and its end-to-end coverage would evaporate."""
+    assert REGISTRY, "the registry is empty — every end-to-end test below is vacuous"
+    for c in REGISTRY:
+        assert _ts_column_of(c)
+
+
 def _all_fixtures(tmp_path: Path, ts: str) -> None:
     """Give every registered artifact a fixture at `ts`, using its own timestamp column."""
     for c in REGISTRY:
-        column = "computed_at" if "computed_at" in c.ts_expr else "ingestion_ts"
-        _write_fixture(tmp_path, c.ts_table, ts, column=column)
+        _write_fixture(tmp_path, c.ts_table, ts, column=_ts_column_of(c))
 
 
 class TestEndToEndOverRealParquet:
