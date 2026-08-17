@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "added",
+        "text": "My Teams now totals each of your teams and ranks them. Every roster's starters are added up on that league's own scoring — a full-season projected starting-points total, before kickoff — and a summary at the top of the page puts your teams in order. Because your leagues do not all score the same way, those totals are not like-for-like: a league that pays for receptions produces a bigger number than one that does not, for the very same players. The page says so beside the table, along with the fact that we total the lineup your platform reported rather than the best one we could pick for you."
+      },
+      {
+        "tag": "added",
         "text": "Memberships are open. The first 100 members pay $10/month, locked in for as long as the membership stays active; after that it is $20. Cancel any time from Settings — access runs to the end of the period you have already paid for, and the page tells you the exact date."
       },
       {
