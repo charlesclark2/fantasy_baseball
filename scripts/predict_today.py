@@ -1869,7 +1869,44 @@ INSERT INTO baseball_data.config.prediction_log (
 """
 
 
-def _write_prediction_log(output_rows: list[dict], prediction_date: str) -> None:
+def _prediction_log_delete_sql(scoped_game_pks: list[int] | None) -> str:
+    """Build the overwrite DELETE for the prediction_log write.
+
+    E11.24 — the A1.12 rule, applied to prediction_log (it had only ever been
+    applied to ``daily_model_predictions``, see ``_post_lineup_delete_sql``).
+
+    The lineup sensor fires ``predict_today --game-pks <newly confirmed>`` once per
+    completing lineup, so a slate produces ~8-14 separate scoped runs. Each one issued
+    a **date-wide** ``DELETE ... WHERE prediction_date = <date>`` and then inserted only
+    ITS games — so every run wiped the previous runs' rows and the log ended each day
+    holding just the LAST batch. Measured 2026-08-16: prediction_log carried 1-2 games
+    per date against 8-15 in ``daily_model_predictions`` (avg 1.25 games/date across
+    August vs ~10 historically), and ``compute_model_health``'s 14-day h2h sample was
+    18 rows instead of ~180.
+
+    So: when this run scored a strict SUBSET of the slate, scope the DELETE to the games
+    that run owns. A full-slate run (``scoped_game_pks`` falsy) keeps the date-wide
+    overwrite so dropped/postponed games are still cleaned up. game_pks are ints, so
+    inlining them is injection-safe; the date is BOUND (the previous inlined literal both
+    reopened an injection surface and fragmented query_history into one distinct
+    query_text per date, which is what hid this statement from the wake census).
+
+    ⚠️ This is a deliberate SEMANTICS CHANGE, not a refactor — a scoped run now deletes
+    strictly fewer rows than before. That is the fix.
+    """
+    base = ("DELETE FROM baseball_data.config.prediction_log "
+            "WHERE prediction_date = %(d)s")
+    if scoped_game_pks:
+        pk_list = ", ".join(str(int(pk)) for pk in scoped_game_pks)
+        return f"{base} AND game_pk IN ({pk_list})"
+    return base
+
+
+def _write_prediction_log(
+    output_rows: list[dict],
+    prediction_date: str,
+    scoped_game_pks: list[int] | None = None,
+) -> None:
     rows = []
     pred_date = date.fromisoformat(prediction_date)
     for r in output_rows:
@@ -1903,13 +1940,17 @@ def _write_prediction_log(output_rows: list[dict], prediction_date: str) -> None
         cur = conn.cursor()
         cur.execute(_CREATE_PREDICTION_LOG)
         cur.execute(
-            f"DELETE FROM baseball_data.config.prediction_log "
-            f"WHERE prediction_date = '{prediction_date}'"
+            _prediction_log_delete_sql(scoped_game_pks),
+            {"d": prediction_date},
         )
+        _deleted = cur.rowcount
         if rows:
             cur.executemany(_INSERT_PREDICTION_LOG, rows)
         conn.commit()
-        print(f"\nWrote {len(rows)} rows to prediction_log for {prediction_date}")
+        _scope = (f"game_pks {scoped_game_pks} (scoped overwrite)"
+                  if scoped_game_pks else "(full-slate overwrite)")
+        print(f"\nWrote {len(rows)} rows to prediction_log for {prediction_date} "
+              f"{_scope}; cleared {_deleted} prior row(s)")
     finally:
         conn.close()
 
@@ -2239,6 +2280,11 @@ def main(target_date: str, args) -> None:
     # which exist in NEITHER path, so it silently no-op'd and every scheduled game
     # was written as post_lineup / lineup_confirmed regardless of real status.
     # Gated on --lineup-confirmed so the morning (projected-lineup) run is unaffected.
+    # E11.24 — did THIS run score a strict SUBSET of the slate? A subset run must not
+    # issue a date-wide prediction_log DELETE (see _prediction_log_delete_sql): the
+    # lineup sensor fires per newly-confirmed game, so a date-wide overwrite leaves the
+    # log holding only the LAST batch's games. Set by either narrowing filter below.
+    slate_narrowed = False
     if args.lineup_confirmed:
         lineup_cols = ("home_has_full_lineup", "away_has_full_lineup")
         if all(c in df_today.columns for c in lineup_cols):
@@ -2251,11 +2297,14 @@ def main(target_date: str, args) -> None:
             if df_today.empty:
                 print("No games with confirmed lineups found.")
                 return
+            if len(df_today) != before:
+                slate_narrowed = True
         else:
             print("[WARN] --lineup-confirmed set but has_full_lineup columns absent; not filtering.")
 
     scoped_game_pks: list[int] | None = None
     if args.game_pks:
+        slate_narrowed = True
         target_pks = {int(pk.strip()) for pk in args.game_pks.split(",") if pk.strip()}
         before = len(df_today)
         if "game_pk" in df_today.columns:
@@ -2267,6 +2316,19 @@ def main(target_date: str, args) -> None:
         # A1.12 — remember the explicit subset so the post_lineup overwrite DELETE
         # is scoped to just these games (and doesn't wipe the rest of the slate).
         scoped_game_pks = sorted(int(pk) for pk in df_today["game_pk"].tolist())
+
+    # E11.24 — the game set THIS run owns for the prediction_log overwrite. `df_today`
+    # takes no further game-membership filter below, so this is the final scored set.
+    # A narrowed run (a lineup-sensor batch, or an explicit --game-pks subset) must clear
+    # ONLY its own games; a full-slate run keeps the date-wide overwrite so dropped /
+    # postponed games are still cleaned up. Owned by the CALLER rather than derived from
+    # `output_rows` so a scored game that produced no loggable row still has its stale
+    # prior row cleared instead of being silently left behind.
+    prediction_log_scope: list[int] | None = (
+        sorted({int(pk) for pk in df_today["game_pk"].tolist()})
+        if slate_narrowed and "game_pk" in df_today.columns
+        else None
+    )
 
     for col in ("has_odds", "home_win_prob_consensus"):
         if col not in df_today.columns:
@@ -2673,7 +2735,8 @@ def main(target_date: str, args) -> None:
     # --dry-run implies --no-log-snowflake (skip prediction_log) AND skips the
     # daily_model_predictions write below → a fully read-only local validation.
     if not args.no_log_snowflake and not args.dry_run:
-        _write_prediction_log(output_rows, target_date)
+        _write_prediction_log(output_rows, target_date,
+                              scoped_game_pks=prediction_log_scope)
         _backfill_outcomes()
 
     if args.dry_run:
