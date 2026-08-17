@@ -1,6 +1,6 @@
 # NCAAF-P1.5 — season-simulation futures (National Championship + conference titles)
 
-_Generated 2026-08-17T18:57:35.367909+00:00_
+_Generated 2026-08-17T19:21:11.029666+00:00_
 
 > ⚠️ **Product value, not an edge claim.** These are calibrated season-long title probabilities from a posterior-predictive Monte-Carlo on the P1.4 game model. Futures carry a HIGH hold (20–40%) and are brand/public-shaped; `best_alpha = 0` holds — an edge is only claimed if a de-vigged-vs-market number survives the deflation gate over teams×markets×seasons, which needs a historical futures capture that does not exist yet.
 
