@@ -1244,6 +1244,30 @@ def write_report(r: dict, controls: dict | None = None) -> Path:
         for nm, dd in controls["detection"].items():
             A(f"| {nm} | {dd['sigma_defect_rate']:.2f} | {dd['any_flag_rate']:.2f} |")
         A("")
+        bd = controls.get("shape_artifact_boundary")
+        if bd:
+            A(f"### ⭐ Is the scale/shape boundary in the right PLACE? (`--reachability`, "
+              f"t-df {bd['t_df']:g} — heavy-tailed AND genuinely mis-scaled)")
+            A("")
+            A("The clause-isolation guard proves `SHAPE_ARTIFACT` binds alone at the decision-rule "
+              "level. That is necessary but not sufficient: a discriminator can be reachable in "
+              "principle and still sit at a useless threshold. What must be shown is a **monotone "
+              "hand-over** — the verdict moving from `SHAPE_ARTIFACT` to `SIGMA_SCALE_DEFECT` as "
+              "the TRUE scale error grows past what the tail can account for. A machine answering "
+              "`SHAPE_ARTIFACT` at every scale error could never blame σ, which is the mirror "
+              "image of the premise's error and just as wrong.")
+            A("")
+            A("| true σ error | labels | `SHAPE_ARTIFACT` | `SIGMA_SCALE_DEFECT` |")
+            A("|---|---|---:|---:|")
+            for nm, dd in bd["by_scale"].items():
+                labs = ", ".join(f"`{k}` {v}" for k, v in dd["labels"].items())
+                A(f"| {nm.replace('sigma_x', '× ')} | {labs} | "
+                  f"{dd['shape_artifact_rate']:.2f} | {dd['sigma_defect_rate']:.2f} |")
+            A("")
+            A(f"both branches reached: "
+              f"{'✅' if bd['both_branches_reached'] else '⛔ **no**'} · hand-over monotone in the "
+              f"true scale error: {'✅' if bd['hands_over_monotonically'] else '⛔ **no**'}")
+            A("")
     A("---")
     A("")
     A("## 9. Verdict")

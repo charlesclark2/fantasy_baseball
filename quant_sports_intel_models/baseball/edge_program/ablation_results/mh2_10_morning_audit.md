@@ -385,6 +385,17 @@ This is the control that licenses any scale-vs-shape attribution at all: a corre
 | sigma_x1.15 | 1.00 | 1.00 |
 | sigma_x0.85 | 1.00 | 1.00 |
 
+### ⭐ Is the scale/shape boundary in the right PLACE? (`--reachability`, t-df 5 — heavy-tailed AND genuinely mis-scaled)
+
+The clause-isolation guard proves `SHAPE_ARTIFACT` binds alone at the decision-rule level. That is necessary but not sufficient: a discriminator can be reachable in principle and still sit at a useless threshold. What must be shown is a **monotone hand-over** — the verdict moving from `SHAPE_ARTIFACT` to `SIGMA_SCALE_DEFECT` as the TRUE scale error grows past what the tail can account for. A machine answering `SHAPE_ARTIFACT` at every scale error could never blame σ, which is the mirror image of the premise's error and just as wrong.
+
+| true σ error | labels | `SHAPE_ARTIFACT` | `SIGMA_SCALE_DEFECT` |
+|---|---|---:|---:|
+| × 1.06 | `OTHER_MISCALIBRATION` 3, `SHAPE_DEFECT` 1, `WITHIN_NOISE` 4 | 0.00 | 0.00 |
+| × 1.08 | `SHAPE_ARTIFACT` 6, `SIGMA_SCALE_DEFECT` 2 | 0.75 | 0.25 |
+
+both branches reached: ✅ · hand-over monotone in the true scale error: ✅
+
 ---
 
 ## 9. Verdict

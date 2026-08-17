@@ -2600,6 +2600,32 @@
         "any_flag_rate": 1.0
       }
     },
-    "seed": 42
+    "seed": 42,
+    "shape_artifact_boundary": {
+      "t_df": 5.0,
+      "n_rows_per_frame": 655,
+      "reps": 800,
+      "by_scale": {
+        "sigma_x1.06": {
+          "labels": {
+            "OTHER_MISCALIBRATION": 3,
+            "SHAPE_DEFECT": 1,
+            "WITHIN_NOISE": 4
+          },
+          "shape_artifact_rate": 0.0,
+          "sigma_defect_rate": 0.0
+        },
+        "sigma_x1.08": {
+          "labels": {
+            "SHAPE_ARTIFACT": 6,
+            "SIGMA_SCALE_DEFECT": 2
+          },
+          "shape_artifact_rate": 0.75,
+          "sigma_defect_rate": 0.25
+        }
+      },
+      "hands_over_monotonically": true,
+      "both_branches_reached": true
+    }
   }
 }
