@@ -42,6 +42,49 @@ on:
       # silently keep materializing the OLD marts with a green run. Same baked-image-drift class
       # as dbt/** above. (This path was missing since NFL-N0.3 — it covered NFL too.)
       - "quant_sports_intel_models/sports_dbt/**"
+      # ── NF-K1 (2026-08-17): the rest of `quant_sports_intel_models` THE BOX ACTUALLY RUNS ──────
+      # The sports_dbt line above was added because a model-only change ran stale on the box. The
+      # same is true of every OTHER subtree a Dagster op executes, and they were all missing — so
+      # the NF-K1 fix (`export_draft_board_json` + `run_league_board`, both run by
+      # `sports_nfl_board_publish_job`) reached the box ONLY because that PR incidentally edited a
+      # docstring in `pipeline/`. A fantasy-only fix would have gone green, merged, and kept
+      # publishing from the OLD image — which is precisely the regression NF-K1 existed to repair.
+      #
+      # ⭐ DERIVED, NOT GUESSED: this list is every `quant_sports_intel_models.*` subtree reachable
+      # from `pipeline/` or `scripts/`, and `betting_ml/tests/test_orchestration_cd_paths.py`
+      # RE-DERIVES it and fails if the two disagree. That is what stops this list rotting the way
+      # it just did — a new box-run module cannot be added without the guard demanding this line.
+      #
+      # ⭐ `fantasy_engine` is here because the guard computes a TRANSITIVE closure, not a list of
+      # direct references: nothing in `pipeline/` or `scripts/` names it, but `run_league_board`
+      # (which the board-publish job runs) imports `fantasy_engine.score_players` — i.e. the repo's
+      # actual board SCORER was one hop outside every direct-reference sweep. Same for the three
+      # low-churn subtrees below (3/18/3 commits in the same two months, so they are ~free to
+      # include, and the safe direction when reachability is indirect).
+      - "quant_sports_intel_models/fantasy_engine/**"
+      - "quant_sports_intel_models/football/ncaaf/feeder/**"
+      - "quant_sports_intel_models/football/ncaaf/ingest/**"
+      - "quant_sports_intel_models/football/ncaaf/models/**"
+      - "quant_sports_intel_models/football/nfl/entity/**"
+      - "quant_sports_intel_models/football/nfl/fantasy/**"
+      - "quant_sports_intel_models/football/nfl/ingest/**"
+      - "quant_sports_intel_models/football/nfl/pit/**"
+      # ⛔ NOT the whole `quant_sports_intel_models/**` tree, and the reason is measured rather than
+      # asserted: over the two months to 2026-08-17, 691 commits touched that tree but only 299
+      # touched the box-executed subtrees above — so a whole-tree filter would roughly 2.3× the box
+      # deploys, almost all of it research churn (bake-off runners, ablation_results) that the box
+      # never executes. `betting_ml/**`'s "wasteful but SAFE" reasoning does NOT carry over at that
+      # multiple: a deploy drains running jobs, and INC-36 showed a deploy race taking the Dagster
+      # daemon down for ~10 minutes. More deploys is more exposure to that, not free safety.
+      #
+      # ── the IMAGE's own build inputs ──────────────────────────────────────────────────────────
+      # The root Dockerfile pins every pickle-fragile ML lib (sklearn/ngboost/lightgbm) and asserts
+      # them against pyproject/uv.lock at build time. A pin BUMP that does not trigger a rebuild
+      # leaves the box on the old versions while the repo says otherwise — the 2026-07-03
+      # train/serve pickle-skew landmine, facing the delivery side.
+      - "Dockerfile"
+      - "pyproject.toml"
+      - "uv.lock"
   workflow_dispatch: {}
 
 # Serialize deploys — never two box deploys racing (singleton daemon).
