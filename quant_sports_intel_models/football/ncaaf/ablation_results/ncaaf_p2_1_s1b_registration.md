@@ -80,3 +80,14 @@ change that framing by a single word — it changes which of two already-gated c
 If a later story wants to *claim* the +0.018, it needs its own fresh registration and run — this
 record explicitly does not license quoting it as an independently-earned lift. What it licenses is
 serving the arm, on the mechanistic argument in §2, with the measurement disclosed.
+
+---
+
+_**Amendment 2026-08-17 (appended; the body above is unchanged).** §6's open question — whether a
+later story can *claim* the +0.018 — has been answered by a fresh §0.5 registration and run:
+**it cannot.** See [`ncaaf_p2_1_s1b_preregistration.md`](./ncaaf_p2_1_s1b_preregistration.md) and
+[`ncaaf_p2_1_s1b_readout.md`](./ncaaf_p2_1_s1b_readout.md) — verdict `MARGIN_NOT_EARNED` (the
+matched pair clears DSR at 0.9687 but fails BH-FDR and PBO). The sign holds in 6/8 folds, so the
+pre-registered revert trigger did not fire and **the served representation is unchanged**; it
+continues to stand on §2's mechanistic argument exactly as this document says it does. What changed
+is that the margin is now MEASURED to be non-quotable rather than merely undeclared._

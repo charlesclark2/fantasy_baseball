@@ -1,0 +1,409 @@
+{
+  "story": "NCAAF-P2.1-S1b",
+  "decided_at": "2026-08-17",
+  "preregistration": "ablation_results/ncaaf_p2_1_s1b_preregistration.md",
+  "verdict": "MARGIN_NOT_EARNED",
+  "primary": "pace_axis",
+  "foil": "pace",
+  "contrast": "matched pair \u2014 crps(pace 8-col block) \u2212 crps(arm); >0 \u21d4 the arm beats the block",
+  "interpretable": true,
+  "anchors_ok": true,
+  "anchor_checks": {
+    "oracle_floor_holds": true,
+    "permute_loses": true,
+    "zero_width_loses": true,
+    "max_width_loses": true,
+    "zero_width_fails_floor": true,
+    "max_width_satisfies_floor": true,
+    "no_pace_degenerate_loses_to_foil": true
+  },
+  "anchors": {
+    "oracle_floor": {
+      "oracle_crps": 1.4042,
+      "best_real_crps": 18.43867,
+      "holds": true
+    },
+    "permute": {
+      "crps": 21.79745,
+      "loses_to_foil": true,
+      "satisfies_coverage_floor": false,
+      "margin_calib": 0.6766,
+      "total_calib": 0.7817,
+      "expectation": "must LOSE"
+    },
+    "zero_width": {
+      "crps": 23.18874,
+      "loses_to_foil": true,
+      "satisfies_coverage_floor": false,
+      "margin_calib": 0.1954,
+      "total_calib": 0.1849,
+      "expectation": "must LOSE + FAIL the floor"
+    },
+    "max_width": {
+      "crps": 27.45938,
+      "loses_to_foil": true,
+      "satisfies_coverage_floor": true,
+      "margin_calib": 0.9998,
+      "total_calib": 0.999,
+      "expectation": "must SATISFY the floor + LOSE"
+    },
+    "no_pace_degenerate": {
+      "crps": 18.51899,
+      "foil_crps": 18.45702,
+      "loses_to_foil": true,
+      "expectation": "the NO-PACE contract must LOSE to the block \u2014 orients the matched pair"
+    }
+  },
+  "reproduction": {
+    "holds": true,
+    "max_abs_dev": 0.0,
+    "per_arm": {
+      "pace": 0.0,
+      "pace_axis": 0.0,
+      "pace_total_axis": 0.0,
+      "reference": 0.0
+    },
+    "tolerance": 0.0001,
+    "reason": ""
+  },
+  "n_folds": 8,
+  "n_games": 8325,
+  "contrast_activity": {
+    "probe_column": "home_seconds_per_play",
+    "per_fold": [
+      {
+        "eval_year": 2018,
+        "n_eval": 772,
+        "n_active": 710,
+        "active_share": 0.9197
+      },
+      {
+        "eval_year": 2019,
+        "n_eval": 774,
+        "n_active": 714,
+        "active_share": 0.9225
+      },
+      {
+        "eval_year": 2020,
+        "n_eval": 534,
+        "n_active": 467,
+        "active_share": 0.8745
+      },
+      {
+        "eval_year": 2021,
+        "n_eval": 770,
+        "n_active": 707,
+        "active_share": 0.9182
+      },
+      {
+        "eval_year": 2022,
+        "n_eval": 776,
+        "n_active": 707,
+        "active_share": 0.9111
+      },
+      {
+        "eval_year": 2023,
+        "n_eval": 792,
+        "n_active": 725,
+        "active_share": 0.9154
+      },
+      {
+        "eval_year": 2024,
+        "n_eval": 798,
+        "n_active": 732,
+        "active_share": 0.9173
+      },
+      {
+        "eval_year": 2025,
+        "n_eval": 808,
+        "n_active": 745,
+        "active_share": 0.922
+      }
+    ],
+    "n_eval_rows": 6024,
+    "n_active_rows": 5507,
+    "active_share": 0.9142,
+    "note": "rows where pace is NULL contribute EXACTLY 0 to the matched-pair delta (both arms impute to the train mean) \u2014 the pooled delta is diluted by them"
+  },
+  "declared_field_size": 2,
+  "n_trials": 7,
+  "series": {
+    "pbo": "CSCV over the raw per-BUCKET performance of the candidate set (eligible real arms + the foil), 8 folds \u00d7 4 quarters",
+    "dsr": "per-FOLD matched-pair delta (8 season-forward folds) \u2014 DECLARED FORWARD, BINDING"
+  },
+  "foil_readout": {
+    "pooled_crps": 18.45702,
+    "margin_calib": 0.7961,
+    "total_calib": 0.8026,
+    "margin_pit_flat_folds": 5,
+    "h2h_brier": 0.1816,
+    "clv": {
+      "ats_hit_rate": 0.5067,
+      "ats_n": 4117,
+      "ats_placebo": 0.4894,
+      "ou_hit_rate": 0.5151,
+      "ou_n": 4135,
+      "n_with_close": 4187,
+      "breakeven": 0.5238,
+      "clears_edge_bar": false
+    }
+  },
+  "arms": {
+    "pace_axis": {
+      "arm": "pace_axis",
+      "gain_vs_foil_crps": 0.01835,
+      "pooled_crps": 18.43867,
+      "fold_deltas": [
+        0.00127,
+        0.04447,
+        -0.0042,
+        -0.01203,
+        0.0566,
+        0.02224,
+        0.02674,
+        0.00469
+      ],
+      "fold_years": [
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "fold_wins": 6,
+      "n_folds": 8,
+      "all_folds_positive": false,
+      "fold_clause_required": 6,
+      "fold_clause_attainable": true,
+      "fold_clause_passes": true,
+      "eligible": true,
+      "ineligible_reason": "",
+      "tie_with_foil": false,
+      "sign_flipped_vs_foil": false,
+      "p_one_sided": 0.040747,
+      "sharpe_per_fold": 0.7189,
+      "sharpe_per_bucket": 0.4356,
+      "n_obs_fold": 8,
+      "n_obs_bucket": 32,
+      "margin_calib": 0.7986,
+      "total_calib": 0.8056,
+      "margin_pit_flat_folds": 4,
+      "margin_pit_required": 4,
+      "total_pit_flat_folds": 2,
+      "n_features": 27,
+      "clv": {
+        "ats_hit_rate": 0.504,
+        "ats_n": 4117,
+        "ats_placebo": 0.4894,
+        "ou_hit_rate": 0.5151,
+        "ou_n": 4135,
+        "n_with_close": 4187,
+        "breakeven": 0.5238,
+        "clears_edge_bar": false
+      },
+      "bh_pass": false
+    },
+    "pace_total_axis": {
+      "arm": "pace_total_axis",
+      "gain_vs_foil_crps": 0.01696,
+      "pooled_crps": 18.44006,
+      "fold_deltas": [
+        -0.0019,
+        0.0434,
+        -0.00807,
+        -0.01445,
+        0.05615,
+        0.01565,
+        0.02895,
+        0.00791
+      ],
+      "fold_years": [
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "fold_wins": 5,
+      "n_folds": 8,
+      "all_folds_positive": false,
+      "fold_clause_required": 6,
+      "fold_clause_attainable": true,
+      "fold_clause_passes": false,
+      "eligible": true,
+      "ineligible_reason": "",
+      "tie_with_foil": false,
+      "sign_flipped_vs_foil": false,
+      "p_one_sided": 0.057841,
+      "sharpe_per_fold": 0.6347,
+      "sharpe_per_bucket": 0.4039,
+      "n_obs_fold": 8,
+      "n_obs_bucket": 32,
+      "margin_calib": 0.7994,
+      "total_calib": 0.8046,
+      "margin_pit_flat_folds": 5,
+      "margin_pit_required": 4,
+      "total_pit_flat_folds": 3,
+      "n_features": 26,
+      "clv": {
+        "ats_hit_rate": 0.504,
+        "ats_n": 4117,
+        "ats_placebo": 0.4894,
+        "ou_hit_rate": 0.5154,
+        "ou_n": 4135,
+        "n_with_close": 4187,
+        "breakeven": 0.5238,
+        "clears_edge_bar": false
+      },
+      "bh_pass": false
+    }
+  },
+  "fold_consistency": {
+    "n_folds": 8,
+    "wins_required": 6,
+    "attainable": true,
+    "false_fire": 0.14453125
+  },
+  "bh_cutoff": 0.0,
+  "fdr_alpha": 0.05,
+  "pbo": 0.331,
+  "pbo_gate": 0.2,
+  "pbo_over": "eligible real arms + the foil, raw per-bucket CSCV (32 buckets)",
+  "pbo_companions": {
+    "available": true,
+    "n_candidates": 3,
+    "contender_spread_crps": 0.01835,
+    "contender_spread_pct_of_foil": 0.0994,
+    "pooled_crps_by_candidate": {
+      "pace_axis": 18.43867,
+      "pace_total_axis": 18.44006,
+      "pace": 18.45702
+    },
+    "fold_flip_distribution": {
+      "pace_axis": 4,
+      "pace_total_axis": 2,
+      "pace": 2
+    },
+    "n_folds_in_flip": 8,
+    "median_oos_rank_of_is_best": 3.0,
+    "n_cscv_combos": 1000,
+    "reading": "E2.1-r: a HIGH PBO over a field whose candidates genuinely TIE is the NULL \u2014 'which tied candidate wins is noise' \u2014 not evidence of overfitting; a high PBO with a WIDE spread IS overfitting. The SPREAD is the discriminator, so it is reported here beside the flip distribution rather than left for the reader to assume."
+  },
+  "dsr": {
+    "binding": "per_fold_declared_field_degenerate_excluded",
+    "per_fold_declared_field_degenerate_excluded": {
+      "dsr": 0.9687,
+      "sr": 0.7189,
+      "sr0": 0.0826,
+      "n_trials": 7,
+      "n_obs": 8
+    },
+    "per_fold_whole_field": {
+      "dsr": 0.0,
+      "sr": 0.7189,
+      "sr0": 30.3672,
+      "n_trials": 7,
+      "n_obs": 8
+    },
+    "per_fold_lineage_inclusive": {
+      "dsr": 0.958,
+      "sr": 0.7189,
+      "sr0": 0.1285,
+      "n_trials": 37,
+      "n_obs": 8
+    },
+    "per_bucket_REPORTED_ONLY": {
+      "dsr": 0.9892,
+      "sr": 0.4356,
+      "sr0": 0.0311,
+      "n_trials": 7,
+      "n_obs": 32
+    }
+  },
+  "dsr_gate": 0.95,
+  "moment_sensitivity": {
+    "series_skew": 0.508,
+    "series_kurtosis": 1.9888,
+    "n_obs": 8,
+    "observed_sr": 0.7189,
+    "dsr_estimated_moments_BINDING": 0.9687,
+    "folds_needed_for_dsr_measured_moments": 7,
+    "folds_needed_for_dsr_gaussian_moments": 10,
+    "note": "the binding DSR uses the series' own moments (AFML \u00a714, the program's standard instrument). At n=8 those estimates are noisy and here FAVOURABLE (kurt < 3 \u21d2 thinner tails \u21d2 a smaller denominator \u21d2 a higher DSR). `cv_power`'s reachability arithmetic DEFAULTS to Gaussian, and the two fold requirements above show how far apart that puts them \u2014 which is why this harness passes the measured moments to `classify_null` explicitly (see `series_moments`)."
+  },
+  "dsr_binding_value": 0.9687,
+  "V_per_fold_degenerate_excluded": 0.003546324507638551,
+  "V_per_fold_whole_field": 479.509623075858,
+  "V_per_bucket_degenerate_excluded": 0.0005035563654175436,
+  "gates": {
+    "anchors_ok": true,
+    "reproduction_ok": true,
+    "primary_arm_gates": false,
+    "pbo_ok": false,
+    "dsr_ok": true
+  },
+  "nulls": {
+    "pace_axis": {
+      "is_primary": true,
+      "arm_level_gates_cleared": false,
+      "state": "POWER_LIMITED",
+      "reason": "`CRPS(margin)+CRPS(total), matched pair vs the 8-col block`: at 8 folds the fold-sign floor is 0.0039, ABOVE the BH cutoff 0.0000 \u2014 no effect of any size could have passed. This is a statement about the design, not the mechanism (E7.14).",
+      "retest_trigger": "UNDEFINED \u2014 the instrument returned a non-positive fold requirement (folds_needed=0, extra_seasons=-8) because BH rejected every arm, leaving a degenerate cutoff of 0. The binding shortfall is NOT a fold count: it is the BH-FDR step itself \u2014 see `bh_shortfall` below.",
+      "retest_trigger_raw_from_instrument": "+-8 folds (\u21d2 0 total) for certifiability",
+      "retest_trigger_corrected": true,
+      "bh_shortfall": {
+        "m_registered_arms": 2,
+        "rank_by_p": 1,
+        "bh_step_required": 0.025,
+        "p_observed": 0.040747,
+        "shortfall": 0.015747,
+        "note": "ranked 1 of 2 by p-value, so the BH step is \u03b1\u00b71/2 = 0.025; the observed p is 0.040747. The gap is what would have to close \u2014 a smaller p, i.e. a larger or less noisy effect, NOT a larger field (a bigger m RAISES the bar for rank 1)."
+      },
+      "folds_have": 8,
+      "folds_needed": 0,
+      "extra_seasons": -8,
+      "max_field_size": null,
+      "field_remedy_admissible": null,
+      "reclassified_from": null,
+      "series_skew": 0.508,
+      "series_kurtosis": 1.9888,
+      "retest_reachable_now": false,
+      "retest_reachability_note": "the fold count is calendar-bound \u2014 2018\u20262025 is every completed FBS season in the cache; a new fold requires the 2026 season to be PLAYED (opener 2026-08-29). No window widening or field change can add one now."
+    },
+    "pace_total_axis": {
+      "is_primary": false,
+      "arm_level_gates_cleared": false,
+      "state": "POWER_LIMITED",
+      "reason": "`CRPS(margin)+CRPS(total), matched pair vs the 8-col block`: at 8 folds the fold-sign floor is 0.0039, ABOVE the BH cutoff 0.0000 \u2014 no effect of any size could have passed. This is a statement about the design, not the mechanism (E7.14).",
+      "retest_trigger": "UNDEFINED \u2014 the instrument returned a non-positive fold requirement (folds_needed=0, extra_seasons=-8) because BH rejected every arm, leaving a degenerate cutoff of 0. The binding shortfall is NOT a fold count: it is the BH-FDR step itself \u2014 see `bh_shortfall` below.",
+      "retest_trigger_raw_from_instrument": "+-8 folds (\u21d2 0 total) for certifiability",
+      "retest_trigger_corrected": true,
+      "bh_shortfall": {
+        "m_registered_arms": 2,
+        "rank_by_p": 2,
+        "bh_step_required": 0.05,
+        "p_observed": 0.057841,
+        "shortfall": 0.007841,
+        "note": "ranked 2 of 2 by p-value, so the BH step is \u03b1\u00b72/2 = 0.05; the observed p is 0.057841. The gap is what would have to close \u2014 a smaller p, i.e. a larger or less noisy effect, NOT a larger field (a bigger m RAISES the bar for rank 1)."
+      },
+      "folds_have": 8,
+      "folds_needed": 0,
+      "extra_seasons": -8,
+      "max_field_size": null,
+      "field_remedy_admissible": null,
+      "reclassified_from": null,
+      "series_skew": 0.4751,
+      "series_kurtosis": 1.9642,
+      "retest_reachable_now": false,
+      "retest_reachability_note": "the fold count is calendar-bound \u2014 2018\u20262025 is every completed FBS season in the cache; a new fold requires the 2026 season to be PLAYED (opener 2026-08-29). No window widening or field change can add one now."
+    }
+  },
+  "best_alpha": 0,
+  "served_effect": "NO CHANGE. The served representation continues to stand on S1-serve \u00a72's MECHANISTIC argument, which is independent of this margin. The record states the margin is NOT independently claimable \u2014 the status quo of \u00a76, now measured rather than asserted."
+}
