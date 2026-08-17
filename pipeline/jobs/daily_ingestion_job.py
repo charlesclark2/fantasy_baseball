@@ -74,6 +74,7 @@ from pipeline.ops.daily_ingestion_ops import (
     ingest_weather,
     finalize_prior_slate_game_detail_op,
     predict_today_morning,
+    build_ref_players_dimension_op,
     reexport_matchup_cell_posteriors_op,
     reexport_player_seq_posteriors_op,
     reexport_team_seq_posteriors_op,
@@ -274,6 +275,15 @@ def daily_ingestion_job():
     # BORN downstream of its writer rather than being added to the lk10 export set, so the family's
     # fourth member is never created with the INC-25 trail pre-installed. Fan-out leaf, as above.
     reexport_matchup_cell_posteriors_op(start=p_matchup)
+    # 🩸 E5.10 follow-up — rebuild the stg_ref_players name dimension DAILY, not only in the weekly
+    # profiles job. The profiles WRITER is weekly, but `mlb_played_first`/`mlb_played_last` are
+    # derived from Statcast appearances, which advance every night — so a weekly-only rebuild would
+    # leave the column E5.10 found frozen lagging by up to a week for every player who just debuted.
+    # Anchored HERE because that puts it downstream of the whole lk1..lk10 lakehouse chain, so the
+    # stg_batter_pitches it reads is this run's build and not yesterday's (INC-25).
+    # A FAN-OUT LEAF: nothing consumes its output, so a failure can never block predict. It pages
+    # instead (ALERT tier). Do NOT thread it into the chain.
+    build_ref_players_dimension_op(start=p_matchup)
     # E11.8 (INC-8 fix) — archetype posteriors MUST also run in the daily job,
     # not only in statcast_catchup_job. The catchup sensor skips when Statcast
     # data arrived before the 07:00 run (rare but real), leaving

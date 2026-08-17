@@ -18,3 +18,15 @@ def weekly_player_profiles_job():
     # ingest. It pages instead (ALERT tier). This is the ONLY job that runs the writer, so it is
     # the whole INC-38 caller set — pinned by test_e11_24_bundle_freshness_reexports.py.
     reexport_player_profiles_op(start=profiles)
+    # ⛔ E5.10 follow-up — build_ref_players_dimension_op is DELIBERATELY NOT wired here, and the
+    # reason is worth recording because chaining it off the mirror is the obvious thing to do.
+    # The dimension builder reads the S3 player_profiles_raw mirror this job refreshes, so INC-25
+    # would want it strictly downstream of that leaf — but binding the leaf's output destroys the
+    # property test_the_reexport_is_a_fan_out_leaf defends: an unbound leaf structurally cannot
+    # withhold anything chained behind it. Wiring it upstream instead would leave the two ops
+    # unordered relative to each other under a topological executor, which is the INC-25 hazard.
+    # Neither option is acceptable, and neither is needed: the builder runs as a leaf of the DAILY
+    # job, which fires ~2h after this one on the same day, so the freshest mirror reaches the
+    # dimension within hours and every other day of the week the daily pass is the only cadence
+    # that matters anyway (mlb_played_first/last track nightly Statcast appearances, not the
+    # weekly profile refresh). Keeping this job a two-op chain preserves the leaf invariant.
