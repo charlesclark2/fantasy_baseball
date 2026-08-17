@@ -22,17 +22,39 @@ that description.
 So the assertion here is deliberately TWO-SIDED and insists on OCCUPATION, not mere attribution:
 
     (1) CI_WH carried at least one BILLABLE statement   (`warehouse_size IS NOT NULL`)
-    (2) NO CI statement ran on COMPUTE_WH               (`schema_name = 'CI_BETTING'` there)
+    (2) NO CI statement ran on COMPUTE_WH               (see `_IS_CI_STATEMENT` below)
 
 (1) alone is the part the prior proof lacked. (2) alone is satisfiable by an empty run.
 
-⚠️ (2) IS SCOPED TO THE `CI_BETTING` SCHEMA, DELIBERATELY. The naive form — "DBT_RW ran nothing on
+⚠️ (2) IS SCOPED TO THE CI TARGET, DELIBERATELY. The naive form — "DBT_RW ran nothing on
 COMPUTE_WH" — is unusable: measured 2026-08-14, the box pipeline puts `DBT_RW` on `COMPUTE_WH` in
 **19 of 24 hours**, so that clause would report NOT PROVEN on a perfectly working repoint in almost
 any window. `ci_betting` is the schema the CI target builds into, it is what the pre-repoint CI
-bursts carried (08-06/07/10 on COMPUTE_WH), and the box pipeline never writes it — 0 `ci_betting`
-executions on COMPUTE_WH across all 19 of those hours. So this clause is BOTH discriminating and
-confound-free, where the broad one is neither. The broad count is still reported, as context.
+bursts carried (08-06/07/10 on COMPUTE_WH), and the box pipeline never writes it. So this clause is
+BOTH discriminating and confound-free, where the broad one is neither. The broad count is still
+reported, as context.
+
+🪤 BUT `schema_name` ALONE IS NOT THE CI TARGET — that was this clause's own vacuous-guard bug,
+found and fixed 2026-08-17 (E11.24 target 4). `schema_name` records the statement's SESSION schema,
+and dbt-fusion issues its TEST queries with no session schema set, so they land with
+`schema_name IS NULL` while referencing `baseball_data.ci_betting…` in the SQL text. MEASURED over
+all of CI_WH's history: **the shipped `schema_name = 'CI_BETTING'` test caught 14 of 64 billable CI
+statements (22%)**; the remaining 50 were `NULL`-schema dbt tests and `CI_BETTING_FEATURES`.
+
+That is not a cosmetic under-count, it is a FALSE PASS on the commonest run shape. A
+`state:modified+` PR that touches a VIEW model materializes nothing billable — the `CREATE VIEW` is
+cloud-services-only — so **every** billable statement in that run is a `NULL`-schema dbt test
+(exactly the 2026-08-16 04:53/04:58 PR runs). Under the precise failure this clause exists to catch
+(an EMPTY `SNOWFLAKE_CI_WAREHOUSE` → the `warehouse` key vanishes → Snowflake falls back to
+`DBT_RW`'s default = `COMPUTE_WH`), that whole run leaks onto `COMPUTE_WH` and the old clause would
+have reported ✅ (2) — a verdict of PROVEN on a fully broken repoint.
+
+⇒ the disqualifying test is now schema OR a **fully-qualified** relation reference in the SQL text.
+Measured: the qualified form catches **64 of 64** billable CI statements, and 0 statements on
+COMPUTE_WH/DBT_RW over the prior 6 days (no false fire). The qualification is load-bearing — a BARE
+`%ci_betting%` would self-match this very script's monitoring SQL (which contains the literal
+`'CI_BETTING'`), turning a verification read into its own disqualifying evidence; `baseball_data.`
+cannot appear in a `query_history` predicate but always appears in a real dbt-issued statement.
 
 HOW TO USE
 ----------
@@ -68,9 +90,29 @@ _WINDOW = f"{_UTC} >= dateadd(minute, -%(mins)s, convert_timezone('UTC', current
 # boundary day must never be a reported day — the LTZ boundary-truncation lesson).
 _PREFILTER = "start_time >= dateadd(minute, -%(mins)s - 1440, current_timestamp())"
 
+# The DISQUALIFYING predicate for clause (2). See the module docstring for why `schema_name` alone
+# is insufficient (it misses the NULL-schema dbt tests = 50 of 64 billable CI statements) and why
+# the text match must be FULLY QUALIFIED (a bare `%ci_betting%` self-matches this script's own
+# monitoring SQL).
+# ⚠️ HONEST SCOPE OF EACH HALF, measured over all of CI_WH's history rather than assumed: the
+# qualified-TEXT half alone catches 64 of 64 billable CI statements, so it is the half that carries
+# the verdict. The SCHEMA half is defence-in-depth, not load-bearing today — it exists to catch a
+# statement that references its relation UNQUALIFIED after a `USE SCHEMA` (a shape dbt-fusion does
+# not currently emit, so no fixture can prove it live). Do not delete it, but do not credit it with
+# the coverage either; the guard tests assert only what is actually demonstrable.
+_IS_CI_STATEMENT = (
+    "(schema_name in ('CI_BETTING', 'CI_BETTING_FEATURES') "
+    "or lower(query_text) like '%baseball_data.ci_betting%')"
+)
+
 
 def _rows(cur, sql: str, mins: int) -> list[tuple]:
-    cur.execute(sql % {"mins": mins})
+    # ⚠️ Substitute by REPLACE, not by `sql % {...}`. Python %-formatting treats a `%` in the SQL
+    # as a format specifier, so the moment clause (2) grew a `LIKE '%baseball_data.ci_betting%'`
+    # the old form raised `ValueError: unsupported format character 'b'`. Escaping to `%%` would
+    # work but leaves a trap for the next LIKE anyone adds; removing the formatting removes the
+    # class. `mins` is an argparse int, so it cannot carry SQL.
+    cur.execute(sql.replace("%(mins)s", str(int(mins))))
     return cur.fetchall()
 
 
@@ -115,8 +157,8 @@ def main() -> int:
         prod = _rows(
             cur,
             f"""
-            select iff(schema_name = 'CI_BETTING', 'CI (ci_betting) — DISQUALIFYING',
-                       'box pipeline (other schema) — context only') as who,
+            select iff({_IS_CI_STATEMENT}, 'CI (ci_betting) — DISQUALIFYING',
+                       'box pipeline (not the CI target) — context only') as who,
                    iff(warehouse_size is null, 'metadata_only', 'BILLABLE') as kind,
                    count(*) as execs,
                    sum(iff(queued_provisioning_time > 0, 1, 0)) as waits,

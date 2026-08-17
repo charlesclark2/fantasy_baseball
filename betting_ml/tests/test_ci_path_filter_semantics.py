@@ -297,3 +297,181 @@ def test_the_dispatch_input_is_never_interpolated_into_a_shell_body():
         f"job(s) {bodies} interpolate a workflow_dispatch input directly into a shell body; pass "
         "it through `env:` and quote it instead."
     )
+
+
+# ── E11.24 target 4 (2026-08-17) — the clause-2 predicate must not be vacuous ─────────────
+#
+# `scripts/verify_ci_warehouse_repoint.py` decides "is the dbt-CI repoint onto CI_WH proven?" on
+# two clauses. Clause (2) — "no CI statement ran on COMPUTE_WH" — was keyed on
+# `schema_name = 'CI_BETTING'`. MEASURED 2026-08-17 over ALL of CI_WH's history: that test catches
+# **14 of 64** billable CI statements. `schema_name` is the SESSION schema, and dbt-fusion issues
+# its TEST queries with none set, so they land `NULL` while naming `baseball_data.ci_betting…` in
+# the SQL text.
+#
+# That is a FALSE PASS on the commonest run shape, not an under-count. A `state:modified+` PR that
+# touches a VIEW model materializes nothing billable (a CREATE VIEW is cloud-services-only), so
+# EVERY billable statement in that run is a NULL-schema dbt test — exactly the 2026-08-16
+# 04:53/04:58 PR runs. Under the failure clause (2) exists to catch (an EMPTY
+# SNOWFLAKE_CI_WAREHOUSE → the `warehouse` key vanishes → fallback to DBT_RW's default =
+# COMPUTE_WH) that whole run leaks and the old clause reported ✅.
+#
+# These guards run the REAL predicate string from the script against DuckDB, over statement shapes
+# copied from measured `query_history` rows — not a Python restatement of it, which could only ever
+# agree with itself (the NF-C0e wrong-key class).
+
+_CI_WH_VERIFIER = Path(__file__).resolve().parents[2] / "scripts" / "verify_ci_warehouse_repoint.py"
+
+
+def _verifier_module():
+    """Load the verifier by path. Its Snowflake/dotenv imports live inside main(), so importing
+    the module opens no connection and touches no network."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_ci_wh_verifier", _CI_WH_VERIFIER)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+# (shape, schema_name, query_text, must_be_flagged_as_CI)
+# Every row is a real shape observed in `snowflake.account_usage.query_history` on 2026-08-17.
+_STATEMENT_SHAPES = [
+    (
+        "dbt test, NULL session schema — 50 of 64 billable CI statements look like this",
+        None,
+        "select count(*) as failures, count(*) != 0 as should_warn from ( select side from "
+        "baseball_data.ci_betting_features.feature_pregame_team_features where side is null ) "
+        "dbt_internal_test /* job=dbt_manual model=not_null_feature_pregame_team_features_side */",
+        True,
+    ),
+    (
+        "the ref_teams seed INSERT — the occupying write the proof dispatch exists to issue",
+        "CI_BETTING",
+        "insert overwrite into baseball_data.ci_betting.ref_teams (TEAM_ID, TEAM_ABBREV) values (1,'ARI')",
+        True,
+    ),
+    (
+        "box pipeline EB merge — must never be mistaken for CI (it runs 19 of 24 hours)",
+        "BETTING",
+        "merge into baseball_data.betting.eb_batter_posteriors_raw as t using (select 1) as s on t.id = s.id",
+        False,
+    ),
+    (
+        "THIS VERIFIER'S OWN monitoring read — a bare %ci_betting% would make it self-disqualifying",
+        None,
+        "select iff(schema_name = 'CI_BETTING', 'CI — DISQUALIFYING', 'box') as who, count(*) "
+        "from snowflake.account_usage.query_history where warehouse_name = 'COMPUTE_WH'",
+        False,
+    ),
+]
+
+
+def _classify_with_the_real_predicate():
+    """Evaluate the script's own `_IS_CI_STATEMENT` SQL over the fixtures, in DuckDB.
+
+    ⚠️ Wrapped in `iff(...)` exactly as the script wraps it, NOT read as a bare boolean. SQL is
+    three-valued: a NULL `schema_name` that fails the text match yields `NULL OR FALSE = NULL`,
+    not FALSE. The script routes that through `iff(pred, 'CI…', 'box…')`, where NULL takes the
+    else-branch and is correctly classified as non-CI — so testing the bare predicate would
+    measure something the script never evaluates.
+    """
+    import duckdb
+
+    predicate = _verifier_module()._IS_CI_STATEMENT
+    con = duckdb.connect()
+    try:
+        con.execute("create table qh (shape varchar, schema_name varchar, query_text varchar)")
+        con.executemany(
+            "insert into qh values (?, ?, ?)",
+            [(s, sch, txt) for s, sch, txt, _ in _STATEMENT_SHAPES],
+        )
+        # `CASE WHEN` rather than Snowflake's `IFF` (DuckDB has no `iff`) — the two are identical
+        # on the point that matters here: a NULL condition takes the ELSE branch in both.
+        rows = con.execute(
+            f"select shape, case when {predicate} then true else false end from qh"
+        ).fetchall()
+    finally:
+        con.close()
+    return dict(rows)
+
+
+def test_clause_two_flags_a_null_schema_dbt_test():
+    """RED-proves the QUALIFIED-TEXT half. Delete it from `_IS_CI_STATEMENT` and this fixture — a
+    NULL-schema dbt test, the shape 78% of billable CI statements take — escapes clause (2), which
+    is the false-PROVEN bug this change fixes. The other fixtures cannot trip this assertion."""
+    verdicts = _classify_with_the_real_predicate()
+    shape = _STATEMENT_SHAPES[0][0]
+    assert verdicts[shape] is True, (
+        "clause (2) does not flag a NULL-session-schema dbt test naming a ci_betting relation. "
+        "A schema_name-only test misses 50 of 64 billable CI statements and reports PROVEN on a "
+        "fully leaked view+tests run."
+    )
+
+
+def test_clause_two_does_not_self_match_the_verifiers_own_monitoring_sql():
+    """RED-proves the QUALIFICATION. Relax the text match to a bare `%ci_betting%` and this
+    fixture — the verifier's own query_history read, which contains the literal `'CI_BETTING'` —
+    becomes its own disqualifying evidence, so the check can never return PROVEN. Only the
+    `baseball_data.` qualifier separates the two; no other fixture exercises it."""
+    verdicts = _classify_with_the_real_predicate()
+    shape = _STATEMENT_SHAPES[3][0]
+    assert verdicts[shape] is False, (
+        "clause (2) flags the verifier's own monitoring SQL as a CI statement — the text match "
+        "must be FULLY QUALIFIED (`baseball_data.ci_betting`), never a bare `ci_betting`."
+    )
+
+
+def test_clause_two_does_not_fire_on_the_box_pipeline():
+    """The false-fire floor. The box puts DBT_RW on COMPUTE_WH in 19 of 24 hours; if ordinary
+    pipeline traffic disqualified, the verdict would be NOT PROVEN in almost any window and the
+    check would be as useless as one that always passes."""
+    verdicts = _classify_with_the_real_predicate()
+    shape = _STATEMENT_SHAPES[2][0]
+    assert verdicts[shape] is False, (
+        "clause (2) flags a box-pipeline statement as CI — the predicate is over-broad and would "
+        "report NOT PROVEN on a healthy repoint."
+    )
+
+
+def test_the_fixture_set_is_two_sided_so_the_guards_above_are_not_vacuous():
+    """A classifier fixture set that is all-True (or all-False) proves nothing — it is satisfied by
+    a predicate hardcoded to that constant. Assert both verdicts are actually represented."""
+    verdicts = _classify_with_the_real_predicate()
+    assert len(verdicts) == len(_STATEMENT_SHAPES) >= 4, "fixtures were dropped — guards are vacuous."
+    assert any(verdicts.values()), "no fixture is classified as CI — the guards pass on nothing."
+    assert not all(verdicts.values()), "every fixture is classified as CI — a constant-True predicate passes."
+
+
+def test_the_sql_builder_survives_a_like_pattern():
+    """RED-proves the `_rows` substitution fix. The queries were interpolated with
+    `sql % {"mins": mins}`, under which the `%` in `LIKE '%baseball_data.ci_betting%'` is a format
+    specifier — so the moment clause (2) grew a LIKE, every query raised
+    `ValueError: unsupported format character 'b'` at runtime. CI cannot catch that (it mocks IO),
+    so it is asserted here against a fake cursor."""
+    mod = _verifier_module()
+
+    class _FakeCursor:
+        def __init__(self):
+            self.sql = None
+
+        def execute(self, sql):
+            self.sql = sql
+
+        def fetchall(self):
+            return []
+
+    # Deliberately a LITERAL LIKE, not `_IS_CI_STATEMENT`. This guard defends `_rows`' contract
+    # ("any LIKE pattern reaches Snowflake intact"), and coupling it to the predicate's current
+    # text would make it fail for changes it does not defend — the NF-D17 isolation rule. The
+    # predicate's own content is pinned by the three clause-2 guards above.
+    cur = _FakeCursor()
+    sql = "select 1 from t where ts >= dateadd(minute, -%(mins)s, current_timestamp()) " \
+          "and lower(query_text) like '%baseball_data.ci_betting%'"
+    mod._rows(cur, sql, 90)
+
+    assert "-90," in cur.sql, f"the minutes placeholder was not substituted: {cur.sql!r}"
+    assert "%(mins)s" not in cur.sql, "the placeholder survived substitution."
+    assert "'%baseball_data.ci_betting%'" in cur.sql, (
+        "the LIKE pattern was mangled or escaped away — Snowflake must receive a single-`%` "
+        f"wildcard on each side. Got: {cur.sql!r}"
+    )

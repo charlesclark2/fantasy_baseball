@@ -1,13 +1,23 @@
 import { expect, test, type Page } from "@playwright/test"
 import {
+  E2E_LINEUP_GAP_LEAGUES,
   E2E_LINKED_LEAGUES,
   E2E_UNMATCHED_ROSTER_NAME,
   collectPageErrors,
+  linkedRosterStarters,
   linkedRosterSubject,
   mockApi,
 } from "../support/api-mock"
 import { signIn } from "../support/session"
 import { expectApiFullyMocked, expectNoNaN, expectNoPageErrors } from "../support/assertions"
+import { forbiddenPhrasesIn } from "../support/claim-denylist"
+import {
+  PORTFOLIO_CAVEAT_FORMATS,
+  PORTFOLIO_CAVEAT_LINEUP,
+  PORTFOLIO_CAVEAT_SNAPSHOT,
+  PORTFOLIO_BEST_LABEL,
+  PORTFOLIO_NOTE,
+} from "@/lib/fantasy-claim-copy"
 
 /**
  * E9.64 — MY TEAMS (NF-C6): every imported league's roster, each scored under ITS OWN format.
@@ -53,7 +63,12 @@ async function pointsFor(page: Page, leagueName: string, playerName: string): Pr
   return value
 }
 
-async function openMyTeams(page: Page, leagues: "linked" | "none" | "one" = "linked") {
+async function openMyTeams(
+  page: Page,
+  // `drafted` is the single-league post-draft fixture — NF-C6b uses it for the "one team gets a
+  // total but no ranking" case, which `linked` (two leagues) structurally cannot express.
+  leagues: "linked" | "none" | "one" | "drafted" | "lineupGap" = "linked",
+) {
   const errors = collectPageErrors(page)
   await signIn(page, { groups: ["subscriber"] })
   const mock = await mockApi(page, { entitlement: "entitled", leagues })
@@ -134,6 +149,289 @@ test.describe("every league is scored under its own format", () => {
     await expect(leagueCard(page, E2E_LINKED_LEAGUES.half.name)).toContainText(/half/i)
     await expect(leagueCard(page, E2E_LINKED_LEAGUES.standard.name)).toContainText(/standard/i)
     expectNoPageErrors(errors)
+  })
+})
+
+/**
+ * ══ NF-C6b — THE CROSS-LEAGUE PORTFOLIO ROLLUP ═══════════════════════════════════════════════════
+ *
+ * My Teams already listed every team. What it had no answer for was the aggregate question a
+ * multi-league subscription is bought for — "which of my teams is projecting the most?" — so NF-C6b
+ * adds a per-team total and a ranked summary across leagues.
+ *
+ * ⭐ THE TOTAL'S CONTRACT IS ARITHMETIC AND IS ASSERTED AS ARITHMETIC: it must equal the sum of the
+ * rows in that card's OWN Starters table. That rules out the three ways this goes quietly wrong —
+ * totalling the whole roster (bench included), totalling OUR optimizer's best lineup instead of the
+ * platform's reported starters (a real temptation, since `fillLineup` is right there in the
+ * aggregator this reuses), and dropping an unscored starter without saying so. Each renders a
+ * plausible number that the reader cannot check against the table beneath it.
+ *
+ * ⭐ AND THE RANKING'S SIZE IS PINNED, not just its order. The two linked leagues differ in exactly
+ * one rule — 0.5 a reception against 0 — over identical rosters, so the gap between their totals is
+ * fixed by the STARTERS' own receptions. An implementation that ranked on one shared board, or that
+ * ranked on something other than the total, satisfies "half is first" and fails this.
+ */
+test.describe("the portfolio rollup", () => {
+  /** Every rendered points figure in one card's Starters table. */
+  async function starterPoints(page: Page, leagueName: string): Promise<number[]> {
+    const rows = leagueCard(page, leagueName).getByTestId("starters-table").locator("tbody tr")
+    // Visibility first, then poll the row count to the number the fixture actually starts — a
+    // one-shot read here would race the render and could sum a partially-mounted table.
+    await expect(rows.first(), `${leagueName} rendered no starters at all`).toBeVisible()
+    await expect
+      .poll(() => rows.count(), {
+        message: `${leagueName}'s Starters table never settled at ${linkedRosterStarters().length} rows`,
+      })
+      .toBe(linkedRosterStarters().length)
+
+    const texts = await rows.locator("td:nth-child(4)").allInnerTexts()
+    return texts.map((t) => {
+      const value = Number(t.trim().replace(/,/g, ""))
+      expect(
+        Number.isFinite(value),
+        `a starter's points rendered as "${t}" in ${leagueName} — the total cannot be checked ` +
+          `against a table that is not showing numbers`,
+      ).toBe(true)
+      return value
+    })
+  }
+
+  /** One of the two figures on a card, by its test id. */
+  async function cardValue(page: Page, leagueName: string, testId: string): Promise<number> {
+    const cell = leagueCard(page, leagueName).getByTestId(testId)
+    await expect(cell, `${leagueName} rendered no ${testId}`).toBeVisible()
+    const text = (await cell.innerText()).trim()
+    const value = Number(text.replace(/,/g, ""))
+    expect(Number.isFinite(value), `${leagueName}'s ${testId} rendered as "${text}"`).toBe(true)
+    return value
+  }
+
+  const asSetTotal = (page: Page, league: string) => cardValue(page, league, "team-as-set-value")
+  const bestTotal = (page: Page, league: string) => cardValue(page, league, "team-best-value")
+
+  test("each team's as-set total is exactly the sum of the starters shown on its own card", async ({
+    page,
+  }) => {
+    // ⭐ THE CHECKABLE HALF. As-set is the figure a reader can verify by adding up the table under
+    // it, and keeping that true is why as-set exists alongside best-possible at all.
+    const { errors, mock } = await openMyTeams(page)
+
+    for (const league of [E2E_LINKED_LEAGUES.half, E2E_LINKED_LEAGUES.standard]) {
+      const points = await starterPoints(page, league.name)
+      const total = await asSetTotal(page, league.name)
+      const sum = points.reduce((a, b) => a + b, 0)
+
+      // Tolerance 0.06: the server rounds each player's points to one decimal and the total is
+      // rendered to one decimal, so these should agree exactly — the allowance is for float noise,
+      // not for a genuine difference. Anything larger would stop the check being arithmetic.
+      expect(
+        Math.abs(total - sum),
+        `${league.name} shows a current-starters total of ${total} over starters worth ` +
+          `${points.join(" + ")} = ${sum.toFixed(1)}. A total that includes the bench, or that ` +
+          `fields our optimizer's lineup instead of the platform's starters, lands here.`,
+      ).toBeLessThanOrEqual(0.06)
+    }
+
+    await expectNoNaN(page)
+    expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
+  test("best-possible fields the bench, and the gap is exactly what it adds", async ({ page }) => {
+    // ⭐ THE OTHER HALF, AND THE ONE THE RANKING USES. On the linked roster the optimizer can field
+    // every matched player — the three platform starters PLUS the benched TE — because the league
+    // starts ten and the roster holds four scoreable players. So best-possible is arithmetically
+    // as-set + that TE, and the gap IS the TE. An implementation that quietly reused the platform
+    // lineup for both figures produces a gap of 0 and fails here.
+    const { errors } = await openMyTeams(page)
+    const league = E2E_LINKED_LEAGUES.half
+
+    const benchRows = leagueCard(page, league.name).getByTestId("bench-table").locator("tbody tr")
+    await expect(benchRows.first(), "no bench rows rendered").toBeVisible()
+
+    // The bench holds the TE plus one deliberately unresolvable name; only the scoreable one can be
+    // fielded, so the gap is that single figure.
+    const benchTexts = await benchRows.locator("td:nth-child(4)").allInnerTexts()
+    const benchScoreable = benchTexts
+      .map((t) => Number(t.trim().replace(/,/g, "")))
+      .filter((v) => Number.isFinite(v))
+    expect(
+      benchScoreable.length,
+      "the bench carries no scoreable player, so this fixture cannot tell a best-possible lineup " +
+        "that fields the bench from one that does not",
+    ).toBe(1)
+
+    const asSet = await asSetTotal(page, league.name)
+    const best = await bestTotal(page, league.name)
+
+    expect(
+      Math.abs(best - asSet - benchScoreable[0]),
+      `best-possible ${best} minus current-starters ${asSet} should equal the one fieldable bench ` +
+        `player (${benchScoreable[0]}). A gap of 0 means both figures were built from the same ` +
+        `lineup and the optimizer never ran.`,
+    ).toBeLessThanOrEqual(0.06)
+
+    // And the hero line must actually state that gap, not merely compute it.
+    const gapLine = leagueCard(page, league.name).getByTestId("team-gap")
+    await expect(gapLine, "the bench gap is computed but never surfaced").toBeVisible()
+    await expect(gapLine).toContainText(/Leaving .* projected points on your bench/i)
+
+    await expectNoNaN(page)
+    expectNoPageErrors(errors)
+  })
+
+  test("the summary ranks the teams, and the gap is the one scoring rule they differ by", async ({
+    page,
+  }) => {
+    const { errors } = await openMyTeams(page)
+
+    const summary = page.getByTestId("portfolio-summary")
+    await expect(summary, "no cross-league summary rendered for a two-league account").toBeVisible()
+
+    const rows = summary.getByTestId("portfolio-row")
+    await expect
+      .poll(() => rows.count(), { message: "the summary never settled at two ranked teams" })
+      .toBe(2)
+
+    // ⭐ NON-VACUITY, FIRST. If the fixture's starters caught no passes the two totals would be
+    // equal, the ordering below would be arbitrary, and this test would pass while proving nothing.
+    const expectedGap = 0.5 * linkedRosterStarters().reduce((n, s) => n + s.rec, 0)
+    expect(
+      expectedGap,
+      "the linked fixture's starters have no receptions between them, so the two leagues score " +
+        "identically and this test cannot tell a correct ranking from an arbitrary one",
+    ).toBeGreaterThan(0)
+
+    // Half-PPR pays for those receptions and the twin does not, so half MUST rank first.
+    await expect(rows.nth(0), "the higher-scoring league is not ranked first").toContainText(
+      E2E_LINKED_LEAGUES.half.name,
+    )
+    await expect(rows.nth(1)).toContainText(E2E_LINKED_LEAGUES.standard.name)
+
+    const half = await asSetTotal(page, E2E_LINKED_LEAGUES.half.name)
+    const standard = await asSetTotal(page, E2E_LINKED_LEAGUES.standard.name)
+    expect(
+      Math.abs(half - standard - expectedGap),
+      `the two teams totalled ${half} and ${standard}; with ${expectedGap.toFixed(1)} of ` +
+        `reception scoring between them the gap should be ${expectedGap.toFixed(1)}. A gap of 0 ` +
+        `means both were totalled on ONE board and the rows merely relabelled.`,
+    ).toBeLessThanOrEqual(0.11)
+
+    await expectNoNaN(page)
+    expectNoPageErrors(errors)
+  })
+
+  test("the ranking is ordered by BEST-POSSIBLE, not by the lineup as set", async ({ page }) => {
+    // ⭐⭐ THE GATE THE `linked` FIXTURE CANNOT EXPRESS, and the reason `lineupGap` exists.
+    //
+    // In `linked` the half-PPR team leads on BOTH readings, so a summary that sorted on as-set
+    // would rank identically and this assertion would prove nothing. Here the two orderings are
+    // deliberately REVERSED: both leagues carry the same scoring, and the only difference is that
+    // "Benched Talent FC" holds a better roster with almost all of it benched.
+    //
+    //   as-set        → Lineup Set FC first  (it starts three good players; the other starts a TE)
+    //   best-possible → Benched Talent FC first (its roster is strictly the better one)
+    //
+    // So sorting on the wrong figure inverts the table, which is exactly what the PM's decision
+    // turned on: as-set would rank lineup-setting diligence rather than roster strength.
+    const { errors } = await openMyTeams(page, "lineupGap")
+
+    const rows = page.getByTestId("portfolio-summary").getByTestId("portfolio-row")
+    await expect
+      .poll(() => rows.count(), { message: "the summary never settled at two ranked teams" })
+      .toBe(2)
+
+    // NON-VACUITY: the two orderings must genuinely disagree in this fixture, or the assertion
+    // below is satisfied by either implementation.
+    const setBest = await bestTotal(page, E2E_LINEUP_GAP_LEAGUES.set.name)
+    const setAsSet = await asSetTotal(page, E2E_LINEUP_GAP_LEAGUES.set.name)
+    const benchedBest = await bestTotal(page, E2E_LINEUP_GAP_LEAGUES.benched.name)
+    const benchedAsSet = await asSetTotal(page, E2E_LINEUP_GAP_LEAGUES.benched.name)
+    expect(
+      benchedBest > setBest && benchedAsSet < setAsSet,
+      `this fixture no longer separates the two orderings (best-possible ${benchedBest} vs ` +
+        `${setBest}; as-set ${benchedAsSet} vs ${setAsSet}), so it cannot tell a summary ranked ` +
+        `on best-possible from one ranked on the lineup as set`,
+    ).toBe(true)
+
+    await expect(
+      rows.nth(0),
+      "the summary ranked the team with the better LINEUP first, not the better ROSTER — it is " +
+        "sorting on current starters instead of best-possible",
+    ).toContainText(E2E_LINEUP_GAP_LEAGUES.benched.name)
+    await expect(rows.nth(1)).toContainText(E2E_LINEUP_GAP_LEAGUES.set.name)
+
+    // The team with nothing on its bench must say so rather than printing a fabricated gap.
+    await expect(
+      leagueCard(page, E2E_LINEUP_GAP_LEAGUES.set.name).getByTestId("team-gap"),
+    ).toContainText(/already are our best lineup/i)
+
+    await expectNoNaN(page)
+    expectNoPageErrors(errors)
+  })
+
+  test("the ranking says what it ranks, and its caveats render with the table", async ({ page }) => {
+    // ⛔ A STANDINGS-SHAPED TABLE ANSWERS "WHERE WILL I FINISH?" WHETHER OR NOT IT WAS ASKED, and
+    // across leagues it also invites "which roster is best" — which these numbers cannot support,
+    // because a half-PPR total is bigger than a standard one for the very same players. Each caveat
+    // is asserted separately: a caveat behind a click is a caveat that did not render.
+    const { errors } = await openMyTeams(page)
+    const summary = page.getByTestId("portfolio-summary")
+    await expect(summary).toBeVisible()
+
+    await expect(summary, "the summary never says what it is ranking").toContainText(PORTFOLIO_NOTE)
+    await expect(
+      summary,
+      "the cross-league summary does not warn that the totals come from different scoring systems",
+    ).toContainText(PORTFOLIO_CAVEAT_FORMATS)
+    await expect(
+      summary,
+      "the summary does not say whose lineup it totalled",
+    ).toContainText(PORTFOLIO_CAVEAT_LINEUP)
+    await expect(summary, "the summary does not date the rosters").toContainText(
+      PORTFOLIO_CAVEAT_SNAPSHOT,
+    )
+
+    // The ranked figure must never appear without the label that says what it measures.
+    await expect(summary).toContainText(PORTFOLIO_BEST_LABEL)
+
+    const hits = forbiddenPhrasesIn(await page.locator("body").innerText())
+    expect(hits, `the portfolio copy makes a forbidden claim: ${hits.join(", ")}`).toEqual([])
+
+    expectNoPageErrors(errors)
+  })
+
+  test("a single league gets its total but no ranking", async ({ page }) => {
+    // A "ranking" of one team is not one, and rendering it would dress a single number up as a
+    // comparison. The card's own total still has to be there — that is the half that is meaningful.
+    const { errors } = await openMyTeams(page, "drafted")
+
+    await expect(page.getByTestId("team-total").first()).toBeVisible()
+    await expect(
+      page.getByTestId("portfolio-summary"),
+      "a one-league account was shown a cross-league ranking of itself",
+    ).toHaveCount(0)
+
+    await expectNoNaN(page)
+    expectNoPageErrors(errors)
+  })
+
+  test("the rollup never reaches a free account", async ({ page }) => {
+    // The gate is the page's, and it is server-backed (`require_personalized_league_access` caps
+    // what /my-teams serves). This asserts the rollup specifically: a free account is sent to the
+    // upsell and no portfolio table renders on the way past.
+    await signIn(page, { groups: [] })
+    await mockApi(page, { entitlement: "free", leagues: "one" })
+    await page.goto("/fantasy/my-teams")
+
+    await page.waitForURL((url) => !url.pathname.startsWith("/fantasy/my-teams"), {
+      timeout: 10_000,
+    })
+    expect(new URL(page.url()).pathname).toBe("/subscribe")
+    await expect(
+      page.getByTestId("portfolio-summary"),
+      "the portfolio rollup rendered for an account without a membership",
+    ).toHaveCount(0)
   })
 })
 

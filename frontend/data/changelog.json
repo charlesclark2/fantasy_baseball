@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "added",
+        "text": "My Teams now shows what each of your teams is projected to score — twice. \"Your current starters\" totals the lineup your platform reports; \"your best possible lineup\" totals the best legal one we could field from the same roster. The difference is the headline: how many projected points you are leaving on your bench, league by league. Both figures are full-season projections before kickoff, scored on that league's own rules, so the bench number is unaffected by the differences between your leagues. A summary at the top orders your teams by their best possible lineup — a rough guide only, since your leagues neither score the same way nor start the same number of players, and the page says so beside the table."
+      },
+      {
+        "tag": "added",
         "text": "Memberships are open. The first 100 members pay $10/month, locked in for as long as the membership stays active; after that it is $20. Cancel any time from Settings — access runs to the end of the period you have already paid for, and the page tells you the exact date."
       },
       {
