@@ -519,7 +519,15 @@ export function MockDraft() {
 
       {board && config && (
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-          <div className="flex flex-col gap-4">
+          {/* ⚠️ `min-w-0` IS LOAD-BEARING, NOT TIDY-UP. A grid item's automatic minimum is its
+              MIN-CONTENT width, and `truncate` (white-space: nowrap) makes the min-content of the
+              recommendation rationale the FULL sentence — so the `1fr` track grows to fit it, the
+              grid overflows `max-w-6xl`, and the whole page gets a horizontal scrollbar with the
+              roster panel pushed off screen. Measured before the fix at a 1512px viewport:
+              scrollWidth 2129. ⛔ `min-w-0` on the flex child inside is NOT enough — that removes
+              the item's automatic minimum for FLEX layout, it does not reduce the grid track's
+              intrinsic minimum. Guarded by "a long recommendation reason never widens the page". */}
+          <div className="flex min-w-0 flex-col gap-4">
             {grade ? (
               <GradeCard grade={grade} rounds={rounds} slotsPerTeam={slotsPerTeam} onRestart={restart} />
             ) : (
@@ -532,7 +540,11 @@ export function MockDraft() {
                     Picks are ranked by <strong>VOR</strong> (Value Over Replacement — projected fantasy
                     points above the last startable player at the position), then adjusted for{" "}
                     <strong>your roster needs</strong> and <strong>positional tier cliffs</strong>. The same
-                    engine the live Draft Optimizer uses. Not betting advice.
+                    engine the live Draft Optimizer uses. A candidate whose only open
+                  slot is the <strong>FLEX</strong> is scored against what could replace him{" "}
+                  <em>in that seat</em> — a startable RB or WR — rather than against his own
+                  position&apos;s replacement, so two flex candidates are compared on projected
+                  points. Not betting advice.
                   </InfoTip>
                 </div>
                 <div className="flex flex-col gap-2">

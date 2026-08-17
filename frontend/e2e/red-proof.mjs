@@ -2100,6 +2100,25 @@ const CASES = [
     grep: "gap over the FLEX POOL",
   },
   {
+    id: "draft-grid-item-cannot-shrink",
+    shipped: "NF-C2.1 follow-up — the horizontal scrollbar, reported on desktop",
+    // ⚠️ NOT pre-emptive. This went out: a longer recommendation reason widened the whole draft
+    // screen past `max-w-6xl`, gave the page a horizontal scrollbar and pushed the roster panel off
+    // the right edge. Measured at 1512px before the fix: scrollWidth 2129.
+    //
+    // ⭐ THE TRAP IS THAT THE CODE LOOKED RIGHT. The rationale row already carried `min-w-0 flex-1`
+    // and `truncate`, which is the usual answer — but a GRID item's automatic minimum is its
+    // MIN-CONTENT width, `truncate` sets `white-space: nowrap`, and the min-content of nowrap text
+    // is the entire sentence. `min-w-0` on the flex child removes the automatic minimum for FLEX
+    // layout and does nothing to the grid track. Deleting one utility class from the grid ITEM is a
+    // completely invisible edit that reproduces the whole bug.
+    detail: "Removes min-w-0 from the grid item holding the recommendation panel.",
+    file: "components/fantasy/mock-draft.tsx",
+    from: '          <div className="flex min-w-0 flex-col gap-4">',
+    to: '          <div className="flex flex-col gap-4">',
+    grep: "never widens the page",
+  },
+  {
     id: "roster-panel-drops-the-bye-week",
     shipped: "NF-C2.1 follow-up — pre-emptive: the roster panel stops showing bye weeks",
     // The bye is the one roster fact a drafter cannot reconstruct from the board in front of them,
@@ -2193,7 +2212,7 @@ const CASES = [
 // G100-C2 adds ONE case (the multi-league picker reverting to `teams[0]`), RED-proven individually
 // (`-- league-picker`) for the same reason. So 125/119/6 → 126/120/6, and the next full run CONFIRMS
 // it.
-const RECORDED_BOARD = { total: 136, red: 130, notObservable: 6 }
+const RECORDED_BOARD = { total: 137, red: 131, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
