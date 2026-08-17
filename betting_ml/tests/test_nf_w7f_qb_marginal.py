@@ -547,6 +547,22 @@ def test_the_preregistration_is_committed_and_names_the_declared_field() -> None
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # 7. The arm-attribution defect the SMOKE found — the clause must read the WINNER, not the primary
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+#: a distinct crossover per arm, so a pooled decomposition read for the WRONG arm is detectable
+_ARM_CROSSING = {"zm_conditional": 0.55, "zm_floor": 0.25, "zm_climatology": 0.75, "zm_over": 0.35}
+
+
+def _buckets(*, crossing: float = 0.5, rows: int = 70) -> dict:
+    """Bucket sums/counts whose pooled mean changes sign at `crossing` — the shape the smoke
+    measured (helps where availability is low, hurts where it is high)."""
+    edges = QM.PI_BUCKET_EDGES
+    sums, counts = [], []
+    for k in range(len(edges) - 1):
+        centre = 0.5 * (edges[k] + edges[k + 1])
+        counts.append(rows)
+        sums.append(round((crossing - centre) * rows, 6))
+    return {"sums": sums, "counts": counts}
+
+
 def _fold_block(*, scores: dict, per_leg_rel: dict, identity_gap: dict) -> dict:
     """A minimal-but-REAL `run_position` output for one (fold, QB) — enough for `select_position` to
     run its actual code path (INC-39: one test must exercise the real leg, not a monkeypatched one).
@@ -580,14 +596,21 @@ def _fold_block(*, scores: dict, per_leg_rel: dict, identity_gap: dict) -> dict:
         "per_leg_crps": {a: {
             "by_leg": {leg: {"served_crps": 1.0, "recalibrated_crps": 1.0 + per_leg_rel[a],
                              "delta": -per_leg_rel[a],
-                             "delta_by_pi_quartile": [0.1, 0.0, -0.1, -0.2], "priced": True}
+                             "delta_by_availability": _buckets(), "priced": True}
                        for leg in QM.LEGS},
             "priced_legs": list(QM.LEGS),
             "served_crps_sum_priced": float(QM.N_LEGS),
             "recalibrated_crps_sum_priced": float(QM.N_LEGS) * (1.0 + per_leg_rel[a]),
-            "relative_change": per_leg_rel[a]} for a in QM.REAL_ARMS},
+            "relative_change": per_leg_rel[a],
+            # each arm gets a DIFFERENT crossover so a guard can prove the pooled decomposition is
+            # read per arm rather than once for the primary (the §7 defect, one field over)
+            "priced_delta_by_availability": _buckets(
+                crossing=_ARM_CROSSING[a])} for a in QM.REAL_ARMS},
         "leg_zero_mass_table": {leg: {"predicted_zero_mass": 0.3, "realized_zero_rate": 0.55,
                                       "gap_realized_minus_predicted": 0.25} for leg in QM.LEGS},
+        "leg_zero_mass_table_recalibrated": {
+            leg: {"predicted_zero_mass": 0.55, "realized_zero_rate": 0.55,
+                  "gap_realized_minus_predicted": 0.0} for leg in QM.LEGS},
         "binding_leg_share_served": {"passing_yards": 1.0},
         "binding_leg_share_recalibrated": {"attempts": 1.0},
         "atom_cap": {"cap_served": 0.2658, "cap_recalibrated": 0.5431,
@@ -671,15 +694,16 @@ def test_the_availability_decomposition_is_reported_for_every_arm() -> None:
                                       identity_gap={a: 0.0 for a in QM.REAL_ARMS}), "QB")
     d = sel["per_leg_detail"]
     assert set(d["relative_change_by_arm"]) == set(QM.REAL_ARMS), d["relative_change_by_arm"]
-    assert len(d["delta_by_pi_quartile_priced"]) == 4, d["delta_by_pi_quartile_priced"]
     # the decomposition must be a REPORT, not part of the gate
-    assert "delta_by_pi_quartile" not in " ".join(QM.ANCHOR_CHECKS + QM.STATISTICAL_CHECKS)
+    assert not {"availability_decomposition", "channel_attribution", "per_fold_series"} & set(
+        QM.ANCHOR_CHECKS + QM.STATISTICAL_CHECKS)
 
 
 def test_the_per_leg_table_helper_decomposes_by_availability() -> None:
-    """The helper itself: the priced sum is what the clause reads, and the quartile decomposition
-    must actually separate rows by π̂ (a decomposition that returned the same number in every bucket
-    would be reporting nothing)."""
+    """The helper itself: the priced sum is what the clause reads, and the decomposition must
+    actually separate rows by π̂ (a decomposition returning the same number in every bucket would be
+    reporting nothing) — and it must emit SUMS AND COUNTS, never per-fold means, or the 8-fold pool
+    would be a mean-of-means that silently re-weights a thin fold equal to a fat one (NF1.8)."""
     from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7f_qb_marginal as R
     b = _banks(n=60)
     # a target that raises the atom a lot → it should HELP rows whose realized value is 0 and HURT
@@ -691,12 +715,220 @@ def test_the_per_leg_table_helper_decomposes_by_availability() -> None:
     w = np.ones(QM.N_LEGS)
     t = R._per_leg_table(b, recal, y, w, pi)
     assert t["priced_legs"] == list(QM.LEGS)
-    q = t["by_leg"]["passing_yards"]["delta_by_pi_quartile"]
-    assert len(q) == 4 and all(v is not None for v in q), q
-    assert q[0] > 0 > q[-1], f"the decomposition does not separate by availability: {q}"
+    nb = len(QM.PI_BUCKET_EDGES) - 1
+    for key, blk in (("leg", t["by_leg"]["passing_yards"]["delta_by_availability"]),
+                     ("priced", t["priced_delta_by_availability"])):
+        assert set(blk) == {"sums", "counts"}, f"{key}: means are not poolable — {blk.keys()}"
+        assert len(blk["sums"]) == len(blk["counts"]) == nb, key
+        assert sum(blk["counts"]) == 60, f"{key}: rows were dropped — {blk['counts']}"
+    # the SIGN assertion is made on the yardage leg, where the mechanism's direction is unambiguous:
+    # raising the atom must help a realized ZERO and hurt a realized 50. (Not on the priced SUM —
+    # several synthetic legs here sit at a scale where y=50 is outside BOTH banks, so the sum's sign
+    # is a property of this fixture's scales, not of the decomposition under test.)
+    pooled = QM.pool_availability_buckets(
+        [t["by_leg"]["passing_yards"]["delta_by_availability"]])
+    assert pooled["state"] == "CROSSES", pooled
+    assert pooled["mean_delta"][0] > 0 > pooled["mean_delta"][-1], pooled["mean_delta"]
     assert t["relative_change"] == pytest.approx(
         (t["recalibrated_crps_sum_priced"] - t["served_crps_sum_priced"])
         / t["served_crps_sum_priced"], rel=1e-6)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 8. The five PM-mandated captures — all REPORTED-ONLY, computed from the DECLARED arms
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# These exist because the decisive run is a single ~1h shot: a capture that is absent, unpoolable or
+# silently wrong cannot be re-taken without paying for the whole run again. ⛔ Not one of them may
+# reach the gate — adding an arm or a clause after the smoke would change the field PBO/DSR deflate
+# over (MH2/MH2.2), so each is asserted to be a REPORT.
+
+def _sel(winner: str = QM.PRIMARY_ARM, rel: float = -0.01) -> dict:
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7f_qb_marginal as R
+    return R.select_position(
+        _two_folds(winner_arm=winner, per_leg_rel={a: rel for a in QM.REAL_ARMS},
+                   identity_gap={a: 0.0 for a in QM.REAL_ARMS}), "QB")
+
+
+def test_fixed_bucket_edges_not_per_fold_quantiles() -> None:
+    """⭐ The defect this section was written to prevent. Per-fold QUANTILE edges make "bucket k" a
+    different population on every fold, so pooling them measures the movement of the edges as much
+    as the effect — and the PM's premise is explicitly an 8-fold claim. Fixed absolute edges make
+    the pool exact. A fold whose bucketing disagrees must RAISE, never be averaged in."""
+    assert QM.PI_BUCKET_EDGES[0] == 0.0 and QM.PI_BUCKET_EDGES[-1] == 1.0
+    assert list(QM.PI_BUCKET_EDGES) == sorted(QM.PI_BUCKET_EDGES)
+    with pytest.raises(ValueError, match="inconsistent bucketings"):
+        QM.pool_availability_buckets([{"sums": [1.0, 2.0], "counts": [50, 50]}])
+    # two folds of DIFFERENT size pool as Σsums/Σcounts, not as a mean of the two fold means
+    fat = {"sums": [100.0] + [0.0] * 9, "counts": [100] + [0] * 9}
+    thin = {"sums": [0.0] * 10, "counts": [50] + [0] * 9}
+    assert QM.pool_availability_buckets([fat, thin])["mean_delta"][0] == pytest.approx(
+        100 / 150, abs=1e-5)      # reported rounded to 5dp; a mean-of-means would give 0.5
+
+
+def test_a_thin_bucket_is_unevaluable_never_a_reading() -> None:
+    """NF1.7 (a): a bucket too thin to carry a sign must report None and must never supply a
+    crossover — and a decomposition with fewer than two evaluable buckets is UNDEFINED, ⛔ never
+    read as "no crossover" (which is what a `False`/0.0 default would say)."""
+    thin = {"sums": [1.0] * 10, "counts": [QM.MIN_BUCKET_ROWS - 1] * 10}
+    p = QM.pool_availability_buckets([thin])
+    assert p["mean_delta"] == [None] * 10 and p["state"] == "UNDEFINED", p
+    assert p["crossovers"] == [] and p["n_evaluable_buckets"] == 0
+    one = {"sums": [5.0] + [0.0] * 9, "counts": [QM.MIN_BUCKET_ROWS] + [0] * 9}
+    assert QM.pool_availability_buckets([one])["state"] == "UNDEFINED"
+
+
+def test_the_crossover_is_located_and_signed() -> None:
+    """The successor's premise is "helps below, hurts above" — so the report must name the direction
+    as well as the π̂, or a successor could read the flip backwards and gate on the wrong side."""
+    down = QM.pool_availability_buckets([_buckets(crossing=0.45)])
+    assert down["state"] == "CROSSES" and len(down["crossovers"]) == 1
+    assert down["crossovers"][0]["pi_hat"] == pytest.approx(0.45, abs=0.06)
+    assert down["crossovers"][0]["direction"] == "helps_below_hurts_above"
+    up = {"sums": [-v for v in _buckets(crossing=0.45)["sums"]],
+          "counts": _buckets(crossing=0.45)["counts"]}
+    assert QM.pool_availability_buckets([up])["crossovers"][0]["direction"] == \
+        "hurts_below_helps_above"
+    flat_pos = {"sums": [7.0] * 10, "counts": [70] * 10}
+    assert QM.pool_availability_buckets([flat_pos])["state"] == "ALL_POSITIVE"
+
+
+def test_the_availability_decomposition_is_pooled_per_arm_and_per_priced_leg() -> None:
+    """PM capture 1, through the REAL selection leg (INC-39). Per ARM, because a sign-flip claim
+    about one arm is not a claim about the mechanism; and per PRICED LEG, because the successor needs
+    to know which cells flip. ISOLATING: each arm carries a distinct crossover, so a decomposition
+    read once for the primary would report the primary's π̂ under every arm's name."""
+    for winner in QM.REAL_ARMS:
+        sel = _sel(winner)
+        av = sel["availability_decomposition"]
+        assert av["arm_read"] == winner, av["arm_read"]
+        assert set(av["by_arm"]) == set(QM.REAL_ARMS), set(av["by_arm"])
+        assert av["winner"] == av["by_arm"][winner], "the winner's block is not the winner's"
+        got = av["by_arm"][winner]["crossovers"][0]["pi_hat"]
+        assert got == pytest.approx(_ARM_CROSSING[winner], abs=0.06), (winner, got)
+        # every other arm keeps its OWN crossover — nothing was overwritten by the winner's
+        for a in QM.REAL_ARMS:
+            assert av["by_arm"][a]["crossovers"][0]["pi_hat"] == pytest.approx(
+                _ARM_CROSSING[a], abs=0.06), (a, av["by_arm"][a])
+        assert set(av["by_priced_leg"]) == set(QM.LEGS), set(av["by_priced_leg"])
+
+
+def test_the_channel_attribution_is_a_paired_delta_not_a_rank() -> None:
+    """PM capture 4 / NF-D10 + NF-W7d (g′): a rank cannot separate "inert" from "tied", and cannot
+    attribute a mechanism at all. Every channel must carry a per-fold paired series, a CI and a p —
+    and the availability-derived channel must be paired against the ROW-BLIND arm, which is the only
+    foil that keeps the re-splice machinery and removes the availability content."""
+    sel = _sel()
+    ch = sel["channel_attribution"]
+    for name in ("recalibration_channel", "availability_derived_target_channel",
+                 "split_channel_on_served_marginals"):
+        d = ch[name]
+        assert set(d) >= {"vs", "mean_delta", "ci95", "fold_wins", "n_folds", "p_one_sided",
+                          "by_fold"}, (name, set(d))
+        assert len(d["by_fold"]) == d["n_folds"] == sel["n_folds_used"], name
+    assert ch["recalibration_channel"]["vs"] == QM.MATCHED_FOIL
+    assert ch["availability_derived_target_channel"]["vs"] == "zm_climatology", \
+        "the availability channel must be isolated against the ROW-BLIND arm"
+    assert "zm_climatology" in QM.REAL_ARMS, \
+        "the row-blind foil must be a DECLARED arm — a foil invented post-smoke would grow the field"
+
+
+def test_the_per_fold_series_scores_the_anchors_on_every_fold() -> None:
+    """PM captures 3 + 5. "Clears the PIT bar for the first time" is an N-of-8 claim, so the series
+    must be per fold; and NF1.8 requires every degenerate's PIT printed every run, which is what
+    proves the bar was never promoted into a selection criterion."""
+    sel = _sel()
+    pf = sel["per_fold_series"]
+    n = sel["n_folds_used"]
+    assert len(pf["folds"]) == n
+    for lab in (*QM.DEGENERATES, "permuted_direct", "zm_permuted", QM.INCUMBENT_FOIL,
+                QM.MATCHED_FOIL):
+        assert len(pf["crps"][lab]) == n, lab
+    for lab in (*QM.DEGENERATES, QM.INCUMBENT_FOIL, QM.MATCHED_FOIL):
+        assert len(pf["pit_max_decile_dev"][lab]) == n, lab
+    assert len(pf["winner_pit_clears_bar_by_fold"]) == n
+    assert len(pf["incumbent_pit_clears_bar_by_fold"]) == n
+    assert len(pf["priced_leg_relative_change_by_fold"]) == n
+    assert len(pf["atom_cap_served_by_fold"]) == len(pf["atom_cap_recalibrated_by_fold"]) == n
+    assert f"oracle__{sel['winner']}" in pf["crps"], "the oracle is not scored per fold"
+    assert f"matched_n__{sel['winner']}" in pf["crps"], "the matched-n control is not per fold"
+
+
+def test_the_recalibrated_leg_table_shows_which_cells_the_clamp_cannot_reach() -> None:
+    """PM capture 2. The re-splice is RAISE-ONLY, so a cell already ABOVE its realized zero rate
+    (the smoke found `QB|attempts` at 0.5500 vs 0.5378) can never be corrected by ANY target in this
+    family. Reporting the table only BEFORE the re-splice would leave a successor unable to tell a
+    cell that was fixed from one that is structurally out of reach."""
+    sel = _sel()
+    pd_ = sel["premise_detail"]
+    assert set(pd_["leg_zero_mass_table_recalibrated_last_fold"]) == set(
+        pd_["leg_zero_mass_table_last_fold"]), "the after-table does not cover the same legs"
+    # ⚠️ the assertion above reads a key the FIXTURE supplies, so on its own it cannot see whether
+    # `run_position` ever emits it — deleting the emission left this test GREEN until this clause
+    # was added (found by the RED proof, not by the suite). `run_position` needs the lake, so the
+    # emission is pinned by SOURCE inspection, with comments stripped so prose cannot satisfy it
+    # (INC-38).
+    import inspect
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7f_qb_marginal as R
+    src = "\n".join(ln for ln in inspect.getsource(R.run_position).splitlines()
+                    if not ln.lstrip().startswith("#"))
+    assert '"leg_zero_mass_table_recalibrated": QM.leg_zero_mass_table(recal_primary' in src, \
+        "run_position does not emit the recalibrated leg table — the fixture was supplying it"
+    assert '"leg_zero_mass_table": QM.leg_zero_mass_table(b_te' in src, \
+        "run_position does not emit the served leg table"
+    # and the underlying builder is the SAME function, so the two tables cannot drift apart
+    b = _banks(n=40)
+    raw = np.zeros((40, QM.N_LEGS))
+    before = QM.leg_zero_mass_table(b, raw)
+    after = QM.leg_zero_mass_table(QM.resplice_zero_mass(b, np.full(b.shape[:2], 0.9)), raw)
+    for leg in QM.LEGS:
+        assert after[leg]["predicted_zero_mass"] >= before[leg]["predicted_zero_mass"] - 1e-9, \
+            f"{leg}: a raise-only transform lowered a zero mass"
+
+
+def test_a_mixed_statistical_and_anchor_failure_publishes_no_data_trigger() -> None:
+    """⭐ NF-D18, the direction that misleads. When a statistical gate AND an anchor/registration
+    clause both fail, the anchor half BINDS: buying seasons could clear the statistical half and the
+    ship would STILL be refused. Publishing the instrument's "+N folds" would send a reader to buy
+    data that cannot change the verdict — so the state is CONSTRAINT_REFUSED, the trigger is None,
+    and the statistical shortfall is REPORTED rather than hidden.
+
+    ISOLATING (NF-D17): `cap_was_lifted` is left TRUE so this cannot be the mechanism-inactivity
+    branch, and both a statistical and an anchor check are failed so it cannot be either
+    single-cause branch."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7f_qb_marginal as R
+    sel = _sel()
+    checks = {c: True for c in (*QM.STATISTICAL_CHECKS, *QM.ANCHOR_CHECKS)}
+    checks["cap_was_lifted"] = True
+    checks["per_leg_calibration_not_degraded"] = False        # the anchor half
+    checks["dsr_ok"] = False                                  # the statistical half
+    out = R.classify(sel, checks)
+    assert out["state"] == "CONSTRAINT_REFUSED", out["state"]
+    assert out["retest_trigger"] is None, out["retest_trigger"]
+    assert out["binding_half"] == "anchor"
+    assert "per_leg_calibration_not_degraded" in out["failing_anchor_checks"]
+    assert "dsr_ok" in out["failing_statistical_checks"], \
+        "the statistical shortfall was hidden rather than reported"
+    # the raw instrument reading survives for audit, un-edited
+    assert out["instrument_verdict"]["state"], out["instrument_verdict"]
+    # and a pure-anchor failure is still the plain constraint refusal, with no `binding_half`
+    checks["dsr_ok"] = True
+    pure = R.classify(sel, checks)
+    assert pure["state"] == "CONSTRAINT_REFUSED" and pure["retest_trigger"] is None
+    assert pure.get("binding_half") is None, pure.get("binding_half")
+
+
+def test_none_of_the_new_captures_reached_the_gate() -> None:
+    """⛔ The field and the gate were fixed before the smoke. A capture added afterwards may only
+    REPORT: a new clause would change what `ship` means, and a new arm would change the field PBO
+    and DSR deflate over (MH2 (a) / MH2.2). Pinned as a count so an addition is deliberate."""
+    assert len(QM.REAL_ARMS) == 4 and len(QM.ELIGIBLE) == 6, (QM.REAL_ARMS, QM.ELIGIBLE)
+    assert len(QM.ANCHOR_CHECKS) == 15, QM.ANCHOR_CHECKS
+    sel = _sel()
+    gate = __import__(
+        "quant_sports_intel_models.football.nfl.fantasy.run_nf_w7f_qb_marginal",
+        fromlist=["compose_gate"]).compose_gate(sel, fdr_pass=True)
+    assert set(gate["checks"]) <= set(QM.STATISTICAL_CHECKS) | set(QM.ANCHOR_CHECKS), \
+        set(gate["checks"]) - (set(QM.STATISTICAL_CHECKS) | set(QM.ANCHOR_CHECKS))
 
 
 def test_an_unknown_arm_is_refused_rather_than_silently_defaulted() -> None:

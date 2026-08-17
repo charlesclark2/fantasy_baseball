@@ -123,6 +123,18 @@ MAX_POSITIVE_LAW_DRIFT_RATIO = 1.0
 #: than informative — and an unevaluable check is never a pass (NF1.7 (a)).
 MIN_CONDITIONAL_KNOTS = 10
 
+# ── The availability decomposition's buckets (REPORTED, never gated) ────────────────────────────
+#: ⭐ FIXED, ABSOLUTE π̂ edges — ⛔ deliberately NOT per-fold quantiles. Quantile edges are computed
+#: from each fold's own π̂ distribution, so "bucket k" describes a DIFFERENT population on every
+#: fold and an 8-fold pool of them measures the fold-to-fold movement of the edges as much as the
+#: effect (the NF1.8 "a per-group figure must pool over ROWS, not average per-class means" lesson,
+#: one axis over — and the first cut of this table used quartiles, which is why it is called out).
+#: With fixed edges a bucket is the same population on every fold, so the pool is exact.
+PI_BUCKET_EDGES: tuple[float, ...] = tuple(round(0.1 * k, 2) for k in range(11))
+#: A bucket thinner than this cannot carry a sign, so its pooled delta is reported as `None` and it
+#: can never supply a crossover — an unevaluable cell is never a reading (NF1.7 (a)).
+MIN_BUCKET_ROWS = 30
+
 #: ⭐ The per-leg threshold below which a DRAW realizes as zero — derived from `FA.INTEGER_LEGS`,
 #: the same source `MX.leg_zero_mass` derives its own from, because `FA.draw_legs` ROUNDS integer
 #: legs (so a bank value below 0.5 draws as a zero and IS removable mass) and FLOORS every leg at 0
@@ -476,6 +488,95 @@ def leg_zero_mass_table(banks: np.ndarray, raw: np.ndarray) -> dict[str, dict]:
                   "realized_zero_rate": round(float(r[:, i].mean()), 4),
                   "gap_realized_minus_predicted": round(float(r[:, i].mean() - z[:, i].mean()), 4)}
             for i, leg in enumerate(LEGS)}
+
+
+def bucket_by_availability(delta_per_row: np.ndarray, pi_hat: np.ndarray) -> dict:
+    """Bucket a per-ROW quantity onto `PI_BUCKET_EDGES`, returning SUMS and COUNTS — never means.
+
+    Sums-and-counts is the whole point: a fold contributes its raw numerator and denominator, so
+    pooling across folds is `Σsums / Σcounts` = the exact row-pooled mean. A fold that returned
+    per-bucket MEANS could only be pooled as a mean-of-means, which silently re-weights a thin fold
+    equal to a fat one (NF1.8)."""
+    d = np.asarray(delta_per_row, dtype=float).ravel()
+    p = np.asarray(pi_hat, dtype=float).ravel()
+    if d.shape != p.shape:
+        raise ValueError(f"delta_per_row {d.shape} and pi_hat {p.shape} must be the same length")
+    nb = len(PI_BUCKET_EDGES) - 1
+    idx = np.clip(np.digitize(p, np.asarray(PI_BUCKET_EDGES[1:-1], dtype=float)), 0, nb - 1)
+    sums = np.bincount(idx, weights=d, minlength=nb)[:nb]
+    counts = np.bincount(idx, minlength=nb)[:nb]
+    return {"sums": [round(float(v), 6) for v in sums],
+            "counts": [int(v) for v in counts]}
+
+
+def pool_availability_buckets(per_fold: list[dict]) -> dict:
+    """Pool per-fold availability buckets over ROWS and locate the SIGN CROSSOVER.
+
+    ⭐ The successor's whole premise in one table: NF-W7f's smoke measured that the per-leg effect of
+    raising a leg's atom HELPS where the player probably did not play and HURTS where he probably
+    did — because the component model already prices availability internally, so an
+    availability-derived target prices it twice. That claim is only worth carrying forward if it is
+    MEASURED across folds with a located crossover, not asserted off one fold (the NF-W7d matched-
+    foil lesson: a mechanism claim needs a paired reading, and a mechanism's LOCATION needs a
+    measured one). REPORTED only — nothing gates on it."""
+    nb = len(PI_BUCKET_EDGES) - 1
+    if not per_fold:
+        return {"state": "UNDEFINED", "reason": "no folds supplied", "edges": PI_BUCKET_EDGES,
+                "counts": [0] * nb, "mean_delta": [None] * nb, "crossovers": [],
+                "n_evaluable_buckets": 0, "min_bucket_rows": MIN_BUCKET_ROWS}
+    sums, counts = np.zeros(nb), np.zeros(nb)
+    for f in per_fold:
+        s, c = np.asarray(f["sums"], dtype=float), np.asarray(f["counts"], dtype=float)
+        if s.shape != (nb,) or c.shape != (nb,):
+            raise ValueError(f"a fold supplied {s.shape}/{c.shape} buckets, expected ({nb},) — a "
+                             f"pool over inconsistent bucketings is not a measurement")
+        sums, counts = sums + s, counts + c
+    means = [round(float(sums[k] / counts[k]), 5) if counts[k] >= MIN_BUCKET_ROWS else None
+             for k in range(nb)]
+    centers = [round(0.5 * (PI_BUCKET_EDGES[k] + PI_BUCKET_EDGES[k + 1]), 3) for k in range(nb)]
+    ev = [(k, m) for k, m in enumerate(means) if m is not None]
+    # ⚠️ a bucket sitting EXACTLY at zero carries no sign, so it is dropped from the SIGN walk (it is
+    # still reported in `mean_delta`). Dropping it rather than treating it as a wall is what makes a
+    # crossover that lands exactly on a bucket centre locatable: its neighbours become adjacent in
+    # the walk and the interpolation returns that centre. Skipping the PAIR instead reported
+    # `MIXED_NO_ADJACENT_CROSSING` for a textbook single crossing — caught by its own guard.
+    ev_signed = [(k, m) for k, m in ev if m != 0.0]
+    crossings = []
+    for (k0, m0), (k1, m1) in zip(ev_signed, ev_signed[1:]):
+        if (m0 > 0.0) == (m1 > 0.0):
+            continue
+        w = abs(m0) / max(abs(m0) + abs(m1), 1e-12)
+        crossings.append({
+            "between_buckets": [PI_BUCKET_EDGES[k0], PI_BUCKET_EDGES[k1 + 1]],
+            "pi_hat": round(centers[k0] + w * (centers[k1] - centers[k0]), 4),
+            "direction": ("helps_below_hurts_above" if m0 > 0.0 else "hurts_below_helps_above"),
+            "delta_below": m0, "delta_above": m1})
+    if len(ev_signed) < 2:
+        state, reason = "UNDEFINED", (
+            f"only {len(ev_signed)} bucket(s) reached {MIN_BUCKET_ROWS} rows AND carried a sign, so "
+            f"no sign change could be located — UNEVALUABLE, never read as 'no crossover' "
+            f"(NF1.7 (a))")
+    elif not crossings:
+        allpos = all(m > 0.0 for _, m in ev_signed)
+        state = "ALL_POSITIVE" if allpos else ("ALL_NEGATIVE"
+                                              if all(m < 0.0 for _, m in ev_signed)
+                                              else "MIXED_NO_ADJACENT_CROSSING")
+        reason = (f"the pooled per-row delta has the same sign in every evaluable bucket "
+                  f"({state}) — the effect does NOT flip with availability on this population")
+    elif len(crossings) == 1:
+        state, reason = "CROSSES", (
+            f"the pooled per-row delta changes sign once, at π̂ ≈ {crossings[0]['pi_hat']} "
+            f"({crossings[0]['direction']})")
+    else:
+        state, reason = "NON_MONOTONE", (
+            f"{len(crossings)} sign changes — the effect is not a single crossover in availability, "
+            f"so a successor conditioning on a single π̂ threshold would be mis-specified")
+    return {"state": state, "reason": reason, "edges": list(PI_BUCKET_EDGES),
+            "counts": [int(c) for c in counts], "mean_delta": means, "bucket_centers": centers,
+            "crossovers": crossings, "n_evaluable_buckets": len(ev),
+            "min_bucket_rows": MIN_BUCKET_ROWS,
+            "pooled_mean_delta": (round(float(sums.sum() / counts.sum()), 5)
+                                  if counts.sum() > 0 else None)}
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

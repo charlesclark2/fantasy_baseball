@@ -432,6 +432,77 @@ nothing here is evidence about QB. Recorded because it is what found the transfo
 - The positive-law clause is RED-proved against **four distinct reshapes and a refit** (ratios
   8.9–28.5 against a bar of 1.0) and reports NOT-EVALUATED on an all-degenerate comparison.
 
+### 11.5 PM-mandated captures for the decisive run (2026-08-17, POST-smoke, **REPORTED-ONLY**)
+
+The PM decided **A — run the decisive 8-fold**, recorded the story as a *measured, attributed null*
+rather than unresolved-by-choice, and asked for five things captured in the SAME run (it is one shot
+at this cost). ⛔ **Every one is a REPORT computed from the arms already declared in §3.** Nothing
+below adds an arm, a foil, a clause or a threshold: a new arm would change the field PBO and DSR
+deflate over (MH2 (a) / MH2.2) and a new clause would change what `ship` means, so the additions are
+confined to what the record PRINTS. `test_none_of_the_new_captures_reached_the_gate` pins that: the
+gate's key set must remain a subset of the §5 checks, and the field sizes are pinned as counts.
+
+| # | capture | where it lands | how it is computed |
+|---|---|---|---|
+| 1 | component-error decomposition **by availability**, with the crossover located | `availability_decomposition` (per arm, per priced leg) | `QM.bucket_by_availability` + `QM.pool_availability_buckets` |
+| 2 | per-stat **cap contributions** across every QB leg, before *and* after | `premise_detail.leg_zero_mass_table[_recalibrated]_last_fold` + pooled `binding_leg_share_*` | `QM.leg_zero_mass_table` on served and re-spliced banks |
+| 3 | assembled **PIT + CRPS every fold** vs the reproduced incumbent | `per_fold_series` | the per-fold `scores` / `pit_flatness` already recorded |
+| 4 | a **matched foil per channel**, as a paired delta | `channel_attribution` | `mat[foil] − mat[winner]` per fold + CI95 + one-sided p |
+| 5 | **degenerates + oracle scored every fold** | `per_fold_series.crps` / `.pit_max_decile_dev` | ditto |
+
+Two defects were found while wiring them, both of which would have made a capture unusable:
+
+- ⭐ **capture 1 was NOT poolable across folds.** The smoke's decomposition bucketed by π̂
+  **quartiles computed per fold**, so "bucket k" described a different population on every fold and
+  an 8-fold pool would have measured the movement of the edges as much as the effect — and the PM's
+  premise is explicitly an 8-fold claim. It also pooled a mean-of-means, which re-weights a thin
+  fold equal to a fat one (**NF1.8**: pool over ROWS). Now: **fixed absolute** π̂ edges
+  (`PI_BUCKET_EDGES`, 10 bins), each fold contributing raw **sums and counts** so the pool is exactly
+  `Σsums/Σcounts`; a bucket below `MIN_BUCKET_ROWS = 30` reports `None` and can never supply a
+  crossover (**NF1.7 (a)**); fewer than two signed buckets is `UNDEFINED`, ⛔ never "no crossover".
+  A fold whose bucketing disagrees **raises** rather than being averaged in.
+- **the sign walk treated an exact-zero bucket as a wall**, so a textbook single crossing landing on
+  a bucket centre reported `NON_MONOTONE`/`MIXED`. Zero-valued buckets are dropped from the sign
+  walk (still reported), which makes such a crossover locatable. Caught by its own guard.
+
+**One genuine classifier defect, fixed (no bar moved).** `per_leg_calibration_not_degraded` is an
+`ANCHOR_CHECK`, so the *expected* shape (all statistical gates green, that clause red) already routed
+to `CONSTRAINT_REFUSED` with `retest_trigger: None` — the PM's requirement, satisfied by
+construction. But a **MIXED** failure (a statistical gate red *and* an anchor red) fell through to
+`cv_power.classify_null`, which could publish a "+N folds" trigger while a non-rescuable anchor
+refusal was still standing — exactly the misleading direction **NF-D18** names. A mixed failure now
+classifies `CONSTRAINT_REFUSED` with `binding_half: "anchor"` (the anchor half binds: more folds
+could clear the statistical half and the ship would *still* be refused), `retest_trigger: None`, the
+statistical shortfall **reported** in `failing_statistical_checks` rather than hidden, and the
+instrument's own reading kept verbatim in `instrument_verdict` for audit.
+
+⛔ **The failed clause stays a hard gate at tolerance 0.0** (E2.1-r). Whether "components must not
+degrade" should be a gate or a diagnostic is the **successor's** forward registration to decide, not
+this story's to re-read; the PM's lean is recorded there (keep it a hard gate unless the specific
+degraded component is shown not to be independently served/consumed).
+
+**Guards:** section 8 of `betting_ml/tests/test_nf_w7f_qb_marginal.py` — 9 new tests, 65 total,
+each with an isolating fixture (NF-D17) and each RED-proved against a deliberately broken source
+(12 further breaks, all 12 RED; every mutation asserted uniquely-anchored, landed, and — for a
+replacement — token-removed, with an insertion instead asserted to APPEAR: #682 / #815 / #885).
+
+⭐ **The RED proof found one real coverage hole and three defects in its own breaks** — worth recording
+because every one is the "a RED proof lies" family and none was visible from a green suite:
+- **the hole:** `test_the_recalibrated_leg_table_*` read the key out of the TEST FIXTURE, which
+  supplies it — so deleting the emission from `run_position` left the test GREEN. `run_position`
+  needs the lake, so the emission is now pinned by SOURCE inspection with comment lines stripped
+  (INC-38, so prose cannot satisfy it).
+- **a break that wrote without moving the asserted predicate** (#815): dividing sums AND counts by
+  the fold count leaves `Σsums/Σcounts` unchanged, so the "mean of fold means" break was a no-op. A
+  real mean-of-means break was needed.
+- **a break aimed at a clause that cannot fire:** the zero-bucket handling has ONE live mechanism
+  (the `ev_signed` filter); the zero tests inside the `continue` are unreachable once zeros are
+  filtered, so patching them was inert. The pre-fix behaviour needs BOTH lines reverted as a block.
+- **the harness itself hung** on an unbounded "walk up to `pyproject.toml`" from a scratchpad path
+  (`Path("/").parent` is `/`): 100% CPU, no children, no output — indistinguishable from a hanging
+  test, and it meant the first two runs proved NOTHING. A per-break `timeout` that reports `HUNG`
+  (⛔ never counted as RED) and a bounded root lookup are now part of the harness.
+
 ---
 
 ## 12. POST-RUN FINDINGS

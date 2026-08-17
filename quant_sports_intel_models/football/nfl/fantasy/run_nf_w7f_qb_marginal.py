@@ -168,28 +168,31 @@ def _per_leg_table(served: np.ndarray, recal: np.ndarray, y_leg: np.ndarray,
     did not play and hurts where he probably did. Without it a refusal would say "the parts got
     worse" and a successor would not know WHERE — which is the difference between a null that names
     where the answer lives (NF-D18 / MARGIN2→3) and one that just closes a door."""
-    q = np.quantile(np.asarray(pi_hat, dtype=float), [0.0, 0.25, 0.50, 0.75, 1.0])
     out: dict[str, dict] = {}
+    d_priced = np.zeros(len(y_leg), dtype=float)
     for i, leg in enumerate(QM.LEGS):
         s_row = KW.crps_dense(served[:, i, :], y_leg[:, i])
         r_row = KW.crps_dense(recal[:, i, :], y_leg[:, i])
         d = np.asarray(s_row, dtype=float) - np.asarray(r_row, dtype=float)   # >0 ⇒ improved
-        buckets = []
-        for lo, hi in zip(q[:-1], q[1:]):
-            m = (pi_hat >= lo) & (pi_hat <= hi)
-            buckets.append(round(float(d[m].mean()), 5) if m.any() else None)
+        priced_leg = bool(weights[i] != 0.0)
+        if priced_leg:
+            d_priced = d_priced + d
         out[leg] = {"served_crps": round(float(np.mean(s_row)), 5),
                     "recalibrated_crps": round(float(np.mean(r_row)), 5),
                     "delta": round(float(np.mean(d)), 5),
-                    "delta_by_pi_quartile": buckets,
-                    "priced": bool(weights[i] != 0.0)}
+                    # ⭐ sums+counts on FIXED π̂ edges, so the 8-fold pool is exact (QM.bucket_*)
+                    "delta_by_availability": QM.bucket_by_availability(d, pi_hat),
+                    "priced": priced_leg}
     priced = [leg for leg, v in out.items() if v["priced"]]
     s_tot = sum(out[leg]["served_crps"] for leg in priced)
     r_tot = sum(out[leg]["recalibrated_crps"] for leg in priced)
     return {"by_leg": out, "priced_legs": priced,
             "served_crps_sum_priced": round(s_tot, 5),
             "recalibrated_crps_sum_priced": round(r_tot, 5),
-            "relative_change": round((r_tot - s_tot) / max(s_tot, 1e-9), 6)}
+            "relative_change": round((r_tot - s_tot) / max(s_tot, 1e-9), 6),
+            # the summed PRICED delta per ROW, bucketed — the quantity the GATE reads, decomposed
+            # by availability. This is the successor's premise, so it is measured on every fold.
+            "priced_delta_by_availability": QM.bucket_by_availability(d_priced, pi_hat)}
 
 
 # ── One fold × position ─────────────────────────────────────────────────────────────────────────
@@ -375,6 +378,10 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, weights
         # ⭐ THE PREMISE, MEASURED: which cell caps the atom, and by how much each leg under-prices
         # its own zero. NF-W7e named `QB|passing_yards` as the suspect off an 89-row serving proof.
         "leg_zero_mass_table": QM.leg_zero_mass_table(b_te, raw_te),
+        # ⭐ the SAME table AFTER the primary arm's re-splice — the successor needs to know which
+        # cells the raise-only clamp could not reach (the smoke found `attempts` already ABOVE its
+        # realized rate, so no raise-only target can correct it) as well as which ones it fixed
+        "leg_zero_mass_table_recalibrated": QM.leg_zero_mass_table(recal_primary, raw_te),
         "binding_leg_share_served": QM.binding_leg_share(b_te),
         "binding_leg_share_recalibrated": QM.binding_leg_share(recal_primary),
         "atom_cap": {
@@ -493,17 +500,79 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
     served_tot = float(np.mean([t["served_crps_sum_priced"] for t in leg_tables]))
     recal_tot = float(np.mean([t["recalibrated_crps_sum_priced"] for t in leg_tables]))
     leg_frac = (recal_tot - served_tot) / max(served_tot, 1e-9)
-    # ⭐ the availability decomposition, pooled over folds and legs — REPORTED, never gated: it is
-    # what lets a refusal name WHERE the per-leg damage lands rather than only that it happened
-    n_q = len(leg_tables[0]["by_leg"][priced[0]]["delta_by_pi_quartile"])
-    leg_by_q = {
-        f"pi_quartile_{k + 1}": round(float(np.mean(
-            [v for t in leg_tables for leg in priced
-             if (v := t["by_leg"][leg]["delta_by_pi_quartile"][k]) is not None])), 5)
-        for k in range(n_q)}
+    # ⭐ the availability decomposition, pooled over FOLDS and ROWS with the crossover LOCATED —
+    # REPORTED, never gated: it is what lets a refusal name WHERE the per-leg damage lands rather
+    # than only that it happened, and it is the successor's entire premise so it is measured on
+    # every fold and for every ARM (a claim about one arm's sign flip is not a claim about the
+    # mechanism). Pools sums/counts, never means-of-means (NF1.8).
+    avail_by_arm = {
+        a: QM.pool_availability_buckets(
+            [fr["positions"][position]["per_leg_crps"][a]["priced_delta_by_availability"]
+             for fr in usable])
+        for a in QM.REAL_ARMS}
+    avail_winner = avail_by_arm[winner]
+    avail_by_leg = {
+        leg: QM.pool_availability_buckets(
+            [t["by_leg"][leg]["delta_by_availability"] for t in leg_tables])
+        for leg in priced}
     leg_frac_by_arm = {a: round(float(np.mean(
         [fr["positions"][position]["per_leg_crps"][a]["relative_change"] for fr in usable])), 6)
         for a in QM.REAL_ARMS}
+
+    # ⭐ CHANNEL ATTRIBUTION as PAIRED per-fold deltas, not ranks (NF-W7d (g′) / NF-D10): each
+    # channel is the winner against a foil that keeps EVERYTHING except that one channel, so the
+    # double-pricing story is a measured paired delta rather than a leaderboard position. REPORTED.
+    def _paired(foil: str, arm: str) -> dict:
+        """(foil − arm) per fold, so POSITIVE = `arm` is better. `vs` names the FOIL — the thing the
+        channel is isolated against — because that is what a reader needs to interpret the sign."""
+        d = (mat[foil] - mat[arm]).to_numpy(float)
+        m, lo_, hi_ = KW.paired_ci95(d)
+        return {"vs": foil, "arm": arm, "mean_delta": None if m is None else round(m, 5),
+                "ci95": [None if lo_ is None else round(lo_, 5),
+                         None if hi_ is None else round(hi_, 5)],
+                "fold_wins": int((d > 0).sum()), "n_folds": int(len(d)),
+                "p_one_sided": M14.onesided_paired_pvalue(d),
+                "by_fold": [round(float(x), 5) for x in d]}
+
+    channel_attribution = {
+        # the zero-mass recalibration itself, joint construction byte-identical
+        "recalibration_channel": _paired(QM.MATCHED_FOIL, winner),
+        # ⭐ the AVAILABILITY-DERIVED content of the target: `zm_climatology` runs the identical
+        # re-splice machinery from a ROW-BLIND target, so this pair isolates "the target knows who
+        # probably played" from "the atom was raised at all" — the double-pricing channel
+        "availability_derived_target_channel": _paired("zm_climatology", winner),
+        # NF-W7e's own claim (the availability SPLIT on served marginals), on the same CRN
+        "split_channel_on_served_marginals": _paired("single_copula", QM.MATCHED_FOIL),
+        "note": ("each entry is (foil − winner) per fold, so POSITIVE means the winner is better. "
+                 "A channel whose paired delta is indistinguishable from zero did not act, "
+                 "regardless of where either arm ranks (NF-D20 — count whether the mechanism "
+                 "could act before crediting it)."),
+    }
+
+    # ⭐ PER-FOLD SERIES — so "clears the PIT bar for the first time" is an N-of-8 claim and the
+    # anchors are demonstrably scored on EVERY fold, not just pooled (NF1.8: a degenerate's PIT is
+    # printed every run, which is what proves the bar was never promoted into a selection criterion)
+    per_fold_series = {
+        "folds": [fr["label"] for fr in usable],
+        "crps": {lab: [round(float(mat.loc[fr["label"], lab]), 4) for fr in usable]
+                 for lab in (winner, QM.MATCHED_FOIL, QM.INCUMBENT_FOIL, *QM.DEGENERATES,
+                             "permuted_direct", "zm_permuted", f"oracle__{winner}",
+                             f"matched_n__{winner}")},
+        "pit_max_decile_dev": {
+            lab: [round(float(fr["positions"][position]["pit_flatness"][lab]["max_decile_dev"]), 4)
+                  for fr in usable]
+            for lab in (winner, QM.MATCHED_FOIL, QM.INCUMBENT_FOIL, *QM.DEGENERATES)},
+        "winner_pit_clears_bar_by_fold": [
+            bool(fr["positions"][position]["pit_flatness"][winner]["max_decile_dev"]
+                 <= QM.PIT_MAX_DECILE_DEV) for fr in usable],
+        "incumbent_pit_clears_bar_by_fold": [
+            bool(fr["positions"][position]["pit_flatness"][QM.INCUMBENT_FOIL]["max_decile_dev"]
+                 <= QM.PIT_MAX_DECILE_DEV) for fr in usable],
+        "priced_leg_relative_change_by_fold": [
+            round(float(t["relative_change"]), 6) for t in leg_tables],
+        "atom_cap_recalibrated_by_fold": [round(float(c), 4) for c in caps_recal],
+        "atom_cap_served_by_fold": [round(float(c), 4) for c in caps_served],
+    }
 
     base = predecessor_cap_baseline()
     cap_mean = float(np.mean(caps_recal))
@@ -650,13 +719,34 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
             "relative_change": round(float(leg_frac), 6),
             "tolerance": QM.MAX_PER_LEG_CRPS_DEGRADATION,
             # ⭐ REPORTED, never gated — where the per-leg effect lands, and how every arm fares
-            "delta_by_pi_quartile_priced": leg_by_q,
             "relative_change_by_arm": leg_frac_by_arm,
             "by_leg_last_fold": leg_tables[-1]["by_leg"],
         },
+        # ⭐ PM capture 1 — the availability decomposition, pooled over folds AND rows, per arm and
+        # per priced leg, with the sign crossover located. REPORTED; nothing gates on it.
+        "availability_decomposition": {
+            "arm_read": winner,
+            "winner": avail_winner,
+            "by_arm": avail_by_arm,
+            "by_priced_leg": avail_by_leg,
+            "note": ("positive = the recalibration IMPROVED that availability bucket. Buckets are "
+                     "FIXED absolute π̂ edges (never per-fold quantiles), pooled as Σsums/Σcounts "
+                     "so the 8-fold figure is a row-pooled mean (NF1.8). A bucket below "
+                     f"{QM.MIN_BUCKET_ROWS} rows reports None and can never supply a crossover."),
+        },
+        # ⭐ PM capture 4 — each channel as a PAIRED per-fold delta against a foil that keeps
+        # everything except that channel
+        "channel_attribution": channel_attribution,
+        # ⭐ PM captures 3 + 5 — the per-fold series for the winner, the reproduced incumbent, the
+        # matched foil, every degenerate and both permutations
+        "per_fold_series": per_fold_series,
         "premise_detail": {
             "leg_zero_mass_table_last_fold":
                 usable[-1]["positions"][position]["leg_zero_mass_table"],
+            # ⭐ PM capture 2 — the same table AFTER the re-splice, so the successor can see which
+            # cells were reached and which the raise-only clamp structurally cannot correct
+            "leg_zero_mass_table_recalibrated_last_fold":
+                usable[-1]["positions"][position]["leg_zero_mass_table_recalibrated"],
             "binding_leg_share_served": _pool_share(binding_served),
             "binding_leg_share_recalibrated": _pool_share(binding_recal),
         },
@@ -775,6 +865,30 @@ def classify(sel: dict, checks: dict) -> dict:
                     f"deterministic constraint, not a sampling shortfall — more folds shrink "
                     f"nothing that would move it" + QM.REFUSAL_MECHANISM),
                 "retest_trigger": QM.REFUSAL_REMEDY, "failing_statistical_checks": stat_fail,
+            })
+        elif anchor_fail:
+            # ⭐ MIXED failure: a statistical gate AND an anchor/registration clause both fail. The
+            # BINDING constraint is the one no `n` can move — buying seasons could clear the
+            # statistical half and the ship would STILL be refused — so the state is the constraint
+            # and the trigger is NONE. Publishing the instrument's "+N folds" here would send a
+            # reader to buy data that cannot change the verdict (exactly the misleading direction
+            # NF-D18 names). The statistical shortfall is REPORTED, never hidden, and the raw
+            # instrument reading survives verbatim in `instrument_verdict`.
+            out = dict(base)
+            out.update({
+                "state": "CONSTRAINT_REFUSED", "hand_corrected": True,
+                "reason": (
+                    f"the null rests on BOTH statistical checks {stat_fail} and "
+                    f"anchor/registration clauses {anchor_fail}. The anchor half is not rescuable "
+                    f"by data, so it BINDS: more folds could clear the statistical half and the "
+                    f"ship would still be refused ⇒ no fold/season trigger is published "
+                    f"(NF-D18). The statistical shortfall is recorded below and the instrument's "
+                    f"own reading is kept verbatim in `instrument_verdict` for audit"
+                    + QM.REFUSAL_MECHANISM),
+                "retest_trigger": None,
+                "failing_anchor_checks": anchor_fail,
+                "failing_statistical_checks": stat_fail,
+                "binding_half": "anchor",
             })
     out["pbo_state"] = (
         f"EVALUABLE — PBO over the {len(QM.ELIGIBLE)}-config eligible field "
@@ -922,15 +1036,70 @@ def write_report(out: dict, path: Path) -> None:
               f"{sel['per_leg_detail']['recalibrated_crps_sum_priced']} (relative change "
               f"{sel['per_leg_detail']['relative_change']}, tolerance "
               f"{sel['per_leg_detail']['tolerance']})",
-              f"- by arm: {sel['per_leg_detail']['relative_change_by_arm']}",
-              f"- ⭐ WHERE the per-leg effect lands (mean Δ by π̂ quartile, low→high availability; "
-              f"positive = the recalibration IMPROVED that bucket): "
-              f"{sel['per_leg_detail']['delta_by_pi_quartile_priced']}", "",
+              f"- by arm: {sel['per_leg_detail']['relative_change_by_arm']}", ""]
+
+        av = sel["availability_decomposition"]
+        w_av = av["winner"]
+        L += [f"### ⭐ Where the per-leg effect lands — the availability decomposition "
+              f"(arm `{av['arm_read']}`)", "",
+              f"**`{w_av['state']}`** — {w_av['reason']}", "",
+              f"> {av['note']}", "",
+              "| π̂ bucket | rows | pooled Δ (priced legs, per row) |", "|---|---|---|"]
+        for k in range(len(w_av["edges"]) - 1):
+            m = w_av["mean_delta"][k]
+            L.append(f"| {w_av['edges'][k]}–{w_av['edges'][k + 1]} | {w_av['counts'][k]} | "
+                     f"{'—' if m is None else m} |")
+        L += ["", f"- crossovers: {w_av['crossovers']}",
+              f"- pooled Δ over all buckets: {w_av['pooled_mean_delta']}",
+              f"- state by arm: { {a: d['state'] for a, d in av['by_arm'].items()} }",
+              f"- crossover π̂ by arm: "
+              f"{ {a: [c['pi_hat'] for c in d['crossovers']] for a, d in av['by_arm'].items()} }",
+              f"- state by priced leg: "
+              f"{ {leg: d['state'] for leg, d in av['by_priced_leg'].items()} }", ""]
+
+        ch = sel["channel_attribution"]
+        L += ["### ⭐ Channel attribution (paired per-fold deltas, not ranks)", "",
+              f"> {ch['note']}", "",
+              "| channel | foil | Δ (foil − winner) | CI95 | folds | p |", "|---|---|---|---|---|---|"]
+        for name, d in ch.items():
+            if name == "note":
+                continue
+            L.append(f"| `{name}` | `{d['vs']}` | {d['mean_delta']} | {d['ci95']} | "
+                     f"{d['fold_wins']}/{d['n_folds']} | {d['p_one_sided']} |")
+
+        pf = sel["per_fold_series"]
+        L += ["", "### ⭐ Per-fold series (the anchors are scored on every fold)", "",
+              "| fold | " + " | ".join(f"`{lab}`" for lab in pf["crps"]) + " |",
+              "|---|" + "---|" * len(pf["crps"])]
+        for i, f in enumerate(pf["folds"]):
+            L.append(f"| {f} | " + " | ".join(str(v[i]) for v in pf["crps"].values()) + " |")
+        L += ["", "PIT (max-decile deviation) per fold — "
+              f"bar {QM.PIT_MAX_DECILE_DEV}:", "",
+              "| fold | " + " | ".join(f"`{lab}`" for lab in pf["pit_max_decile_dev"]) + " |",
+              "|---|" + "---|" * len(pf["pit_max_decile_dev"])]
+        for i, f in enumerate(pf["folds"]):
+            L.append(f"| {f} | "
+                     + " | ".join(str(v[i]) for v in pf["pit_max_decile_dev"].values()) + " |")
+        L += ["", f"- winner clears the PIT bar on "
+                  f"{sum(pf['winner_pit_clears_bar_by_fold'])}/{len(pf['folds'])} folds "
+                  f"({pf['winner_pit_clears_bar_by_fold']})",
+              f"- the reproduced incumbent clears it on "
+              f"{sum(pf['incumbent_pit_clears_bar_by_fold'])}/{len(pf['folds'])} "
+              f"({pf['incumbent_pit_clears_bar_by_fold']})",
+              f"- priced-leg relative change by fold: "
+              f"{pf['priced_leg_relative_change_by_fold']}",
+              f"- atom cap by fold — served {pf['atom_cap_served_by_fold']} → recalibrated "
+              f"{pf['atom_cap_recalibrated_by_fold']}", "",
               "### The premise, measured — per-leg predicted vs realized zero mass (last fold)", "",
-              "| leg | predicted P(0) | realized P(0) | gap |", "|---|---|---|---|"]
+              "| leg | predicted P(0) | realized P(0) | gap | AFTER re-splice | gap after |",
+              "|---|---|---|---|---|---|"]
+        after = sel["premise_detail"]["leg_zero_mass_table_recalibrated_last_fold"]
         for leg, row in sel["premise_detail"]["leg_zero_mass_table_last_fold"].items():
+            a = after.get(leg, {})
             L.append(f"| `{leg}` | {row['predicted_zero_mass']} | {row['realized_zero_rate']} | "
-                     f"{row['gap_realized_minus_predicted']} |")
+                     f"{row['gap_realized_minus_predicted']} | "
+                     f"{a.get('predicted_zero_mass', '—')} | "
+                     f"{a.get('gap_realized_minus_predicted', '—')} |")
         L += ["", f"- binding-leg share, SERVED: "
                   f"{sel['premise_detail']['binding_leg_share_served']}",
               f"- binding-leg share, RECALIBRATED: "
@@ -947,6 +1116,11 @@ def write_report(out: dict, path: Path) -> None:
         if p in out.get("null_states", {}):
             n = out["null_states"][p]
             L += [f"### Null state: `{n['state']}`", "", n["reason"], "",
+                  f"- failing anchor/registration clauses: {n.get('failing_anchor_checks')}",
+                  f"- failing statistical checks: {n.get('failing_statistical_checks')}",
+                  f"- binding half: {n.get('binding_half', 'n/a')}",
+                  f"- instrument's own reading (kept verbatim for audit): "
+                  f"{n.get('instrument_verdict')}",
                   f"- retest trigger: {n.get('retest_trigger')}",
                   f"- `field_remedy_admissible`: {n.get('field_remedy_admissible')}",
                   f"- declared field size source: {n.get('declared_field_size_source')}", ""]
