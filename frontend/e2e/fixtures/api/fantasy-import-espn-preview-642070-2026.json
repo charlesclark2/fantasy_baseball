@@ -1,5 +1,6 @@
 {
   "config": {
+    "auction_budget": 200,
     "captured_rules": {
       "draft_type": "SNAKE",
       "keeper_count": 0,
@@ -9,6 +10,7 @@
       "scoring_type": "H2H_POINTS"
     },
     "description": "Imported from ESPN \u2014 Dubbya Bee League",
+    "draft_type": "snake",
     "format_version": "1.0",
     "n_teams": 10,
     "name": "Dubbya Bee League",

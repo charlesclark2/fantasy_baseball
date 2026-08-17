@@ -47,6 +47,11 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from quant_sports_intel_models.fantasy_engine.auction import (  # noqa: E402
+    DEFAULT_AUCTION_BUDGET,
+    auction_pool,
+    auction_values,
+)
 from quant_sports_intel_models.football.nfl.fantasy import captured_terms  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import player_naming as PN  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy.league_presets import (  # noqa: E402
@@ -1153,6 +1158,32 @@ def kdst_records(
     return recs
 
 
+def attach_auction_values(recs: list[dict], config_name: str, n_teams: int,
+                          budget: int = DEFAULT_AUCTION_BUDGET) -> int:
+    """NF-C5 — stamp `aucVal` / `aucLo` / `aucHi` on every record of ONE board, in place.
+
+    ⭐ ADDITIVE ONLY. Three NEW keys; nothing existing is removed, renamed or repurposed. The API
+    Lambda has no CD (NF-C0), so the deployed client is always some previous build — a dropped or
+    renamed key blanks it with a 200 and no error anywhere.
+
+    ⭐ WHY THE WHOLE BOARD AND NOT JUST THE SKILL ROWS. This runs AFTER the K/DST gap-fill rows are
+    folded in, so every published row carries a value. A row the model could not project has
+    `vor = None` and prices at the minimum bid, which is both correct (he is free) and the only
+    answer that keeps him visible on an auction board instead of blank.
+
+    ⚠️ THE VALUES ARE QUOTED AT ONE BUDGET (`manifest.auctionBudget`), NOT AT THE USER'S. The
+    client re-prices for a league on a different budget through the same shared function — the
+    board is quoted in one currency and converted, rather than exported once per budget.
+    """
+    cfg = get_preset(config_name)
+    pool = auction_pool(n_teams, cfg.roster_spots(), budget)
+    for rec, val in zip(recs, auction_values(recs, pool)):
+        rec["aucVal"] = val.value
+        rec["aucLo"] = val.low
+        rec["aucHi"] = val.high
+    return pool.total
+
+
 def config_manifest_entry(name: str) -> dict:
     cfg = get_preset(name)  # roster shape is size-independent (n_teams only scales demand)
     return {
@@ -1164,6 +1195,11 @@ def config_manifest_entry(name: str) -> dict:
         # ADP is never shown as though it came from the user's exact format when it didn't
         "adpFormat": PRESET_ADP_FORMAT.get(name),
         "description": cfg.description,
+        # NF-C5 — every shipped preset is a SNAKE league; auction is a per-user choice made on the
+        # auction surface, not a property of the preset. Stated rather than implied so the client
+        # never has to infer a draft type from the absence of a key.
+        "draftType": cfg.draft_type,
+        "auctionBudget": int(cfg.auction_budget),
         "roster": [
             {"name": s.name, "count": s.count, "eligible": list(s.eligible), "bench": s.bench}
             for s in cfg.roster
@@ -1426,6 +1462,13 @@ def main(argv: list[str] | None = None) -> int:
                      "%d placeholder gap row(s)", config_name, n_teams,
                      sum(1 for r in skill if r["pos"] in LOW_PREDICTABILITY), n_projected, len(gaps))
         recs = skill + gaps
+        # NF-C5 — auction dollar values, on the WHOLE board (gap-fill rows included) so an auction
+        # drafter never meets a blank price. Quoted at `DEFAULT_AUCTION_BUDGET`; the client
+        # re-prices any other budget through the same formula.
+        room = attach_auction_values(recs, config_name, n_teams)
+        log.info("  %s_%d: auction values at $%d/team (a $%d room), top $%d",
+                 config_name, n_teams, DEFAULT_AUCTION_BUDGET, room,
+                 max((r.get("aucVal") or 0) for r in recs) if recs else 0)
         path = out_dir / f"board_{config_name}_{n_teams}.json"
         path.write_text(json.dumps(recs, separators=(",", ":")))
         combos += 1
@@ -1570,6 +1613,10 @@ def main(argv: list[str] | None = None) -> int:
         "projectionSource": args.projection_source,
         "projectionLabel": _PROJECTION_LABEL[args.projection_source],
         "sizes": sorted(sizes_present),
+        # NF-C5 — the budget the boards' `aucVal`/`aucLo`/`aucHi` are QUOTED AT. Load-bearing: the
+        # client re-prices a league on a different budget from these, and a re-price that assumed
+        # the wrong base currency would be silently wrong rather than obviously so.
+        "auctionBudget": DEFAULT_AUCTION_BUDGET,
         "configs": [config_manifest_entry(c) for c in sorted(configs_present)],
         # NF3: the browse surfaces read this to know whether the projections blob is available
         # (and to show its provenance) without a speculative fetch.
