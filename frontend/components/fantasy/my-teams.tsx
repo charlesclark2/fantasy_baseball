@@ -3,10 +3,25 @@
 // NF-C6 Phase 1 — My Teams: a cross-league browse surface, one place to see every imported team's
 // roster scored under ITS OWN league's format.
 //
-// Composes what already exists: NF-C0's saved leagues + NF-C0c's roster name resolution, scored by
-// the SAME client-side `buildBoard` every other fantasy surface uses (see `useMyTeams`'s docstring
-// in fantasy-queries.ts for why the scoring cannot move server-side — the API Lambda bundles neither
-// pandas/numpy nor `quant_sports_intel_models`). No new model, no new scoring logic.
+// Composes what already exists: NF-C0's saved leagues + NF-C0c's roster name resolution. No new
+// model, no new scoring logic.
+//
+// ⚠️ THIS HEADER USED TO SAY THE SCORING HAPPENS HERE, IN THE BROWSER, VIA `buildBoard` — AND THAT
+// IT "CANNOT MOVE SERVER-SIDE". Both halves stopped being true at NF-EPIC 1 (`144fa808`), which
+// made the raw stat line paid, ported the scorer to `app/backend/services/league_scoring.py` and
+// moved the arithmetic there. This file was not updated with it, so the comment sat here asserting
+// the opposite of what the code does — and a false comment is worse than a false doc, because the
+// next reader takes it as the design (a stale doc costs a lookup; this one drives a rewrite).
+//
+// WHAT ACTUALLY HAPPENS: `/fantasy/nfl/my-teams` returns each league's roster ALREADY JOINED to a
+// board scored under THAT league's own config (`_scored_rosters` → `build_board(players, record)`,
+// one `build_board` per league). This component renders `RosterMatch.board` and does no arithmetic.
+//
+// ⛔ SO DO NOT ADD A PER-CARD `/fantasy/nfl/league-board` FAN-OUT TO "GET THE SCORING". The scores
+// are already on the rows this page receives; a fan-out would be N redundant round trips for numbers
+// it already has. What `/my-teams` omits is the FULL ~858-row BOARD (25 leagues × that is ~6 MB,
+// past Lambda's proxy-response cap) — not the roster's scores. `useMyTeams` sets `board: null` for
+// that reason alone; a page needing one league's whole board calls `useLeagueBoard`.
 //
 // ROS = the season projection (pre-kickoff, so "rest of season" is effectively the full season) —
 // labelled honestly, never faked into a per-game number (a per-game figure divided out of a season
