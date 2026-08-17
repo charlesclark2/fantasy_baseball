@@ -37,6 +37,28 @@ offense/defense in proportion to their posterior sds so the identity `margin = o
 exactly per draw (a transparent, documented approximation — the strength model only gives the net
 decomposition, not an independent pace axis).
 
+⭐ THE PACE TERM (NCAAF-P2.1 S1 / S1b) — AN OPTIONAL, ADDITIVE, NULL-INERT ADJUSTMENT
+------------------------------------------------------------------------------------
+S1 certified `pace` as a real calibration improvement the analytic map above cannot express
+(+0.062 CRPS, 8/8 folds, DSR 0.998), and S1b ships it as the 2-column composite representation
+`{pace_sum, pace_diff}`. `PaceAdjustment` carries that term — the served mean artifact's pace
+coefficients plus each team's as-of-week `seconds_per_play` — and adds it to μ_margin:
+
+    Δμ_margin = b_sum·(pace_sum − c_sum) + b_diff·(pace_diff − c_diff)
+
+where the centres `c_*` are the served model's train means, so an UNKNOWN pace contributes
+**exactly 0.0** (see `ncaaf_game_mean`). Every week-1 team-week row is NULL, so a PRE-SEASON board
+is byte-identical to a `pace=None` board — pinned by a guard, together with a two-sided control
+that the term is not merely inert everywhere.
+
+⚠️ SCOPE, stated because it is easy to over-read: this board simulates the MARGIN axis only
+(wins → standings → titles), and S1 §3 measured pace's content as almost entirely on the TOTAL
+axis (`pace_diff`, the margin axis, sat at the edge of the tie band). So the honest expectation is
+that the term moves an in-season futures board very little; where it pays is the standalone game
+distribution's total. The term is wired here because a σ refitted under the pace contract must not
+be served against a pace-free μ (E7.9) — not because it is expected to reshuffle the board. The
+sim's own report prints the realised effect rather than asserting one.
+
 THE STRUCTURE (conference titles + the 2026 12-team CFP) — an EXPLICIT, SWAPPABLE ruleset
 ----------------------------------------------------------------------------------------
 Committee behaviour is fuzzy, so it is approximated by a TRANSPARENT heuristic stated as an explicit
@@ -128,6 +150,68 @@ class CfpFormat:
     loss_penalty: float = 8.0             # committee score = net_strength − loss_penalty·losses
     min_teams_for_conf_title: int = 6     # a conference smaller than this crowns no champion
     run_playoff: bool = True              # False → conference-title board only (format-independent)
+
+
+@dataclass(frozen=True)
+class PaceAdjustment:
+    """The certified S1/S1b pace term on the sim's MARGIN mean map.
+
+    `team_seconds_per_play` is aligned to the `TeamIndex` order (one entry per team, NaN = unknown
+    — every team at as-of-week 1). `coef_*` are ∂μ_margin/∂x in ORIGINAL units and `center_*` the
+    served model's train means, taken straight off the mean artifact; the delta is therefore
+    EXACTLY the contribution those columns make inside the served ridge.
+    """
+
+    coef_pace_sum: float
+    coef_pace_diff: float
+    center_pace_sum: float
+    center_pace_diff: float
+    team_seconds_per_play: np.ndarray
+
+    @classmethod
+    def from_mean_params(cls, mean_params, team_seconds_per_play: np.ndarray,
+                         *, target: str = "margin") -> "PaceAdjustment":
+        """Build from a `ncaaf_game_mean.NcaafGameMeanParams`. RAISES if the artifact declares no
+        pace columns — a caller asking for the pace term must not silently receive a no-op."""
+        need = ("pace_sum", "pace_diff")
+        missing = [c for c in need if c not in mean_params.pace_columns]
+        if missing:
+            raise ValueError(
+                f"the served mean artifact declares pace columns {list(mean_params.pace_columns)} "
+                f"— {missing} absent. A pace adjustment built from an artifact with no pace term "
+                "would be a silent no-op (the wired-but-never-invoked class, NF-C0e).")
+        return cls(
+            coef_pace_sum=mean_params.raw_coefficient(target, "pace_sum"),
+            coef_pace_diff=mean_params.raw_coefficient(target, "pace_diff"),
+            center_pace_sum=mean_params.center("pace_sum"),
+            center_pace_diff=mean_params.center("pace_diff"),
+            team_seconds_per_play=np.asarray(team_seconds_per_play, dtype=float),
+        )
+
+    @property
+    def n_teams_with_pace(self) -> int:
+        return int(np.isfinite(self.team_seconds_per_play).sum())
+
+    def margin_delta(self, home: np.ndarray, away: np.ndarray) -> np.ndarray:
+        """Δμ_margin for team-index arrays of any matching shape ((n_games,) or (n_sims, n_games)).
+
+        A game either of whose teams has unknown pace contributes exactly 0.0 — the same thing the
+        served ridge does with a mean-imputed column, so a pre-season board cannot move.
+        """
+        spp = self.team_seconds_per_play
+        h = spp[np.asarray(home)]
+        a = spp[np.asarray(away)]
+        ok = np.isfinite(h) & np.isfinite(a)
+        hs, as_ = np.where(ok, h, 0.0), np.where(ok, a, 0.0)
+        delta = (self.coef_pace_sum * ((hs + as_) - self.center_pace_sum)
+                 + self.coef_pace_diff * ((hs - as_) - self.center_pace_diff))
+        return np.where(ok, delta, 0.0)
+
+
+def _pace_margin_delta(pace: PaceAdjustment | None, home, away) -> float | np.ndarray:
+    """`pace.margin_delta` or a scalar 0.0 — the ONE place `pace is None` becomes a no-op, so
+    `pace=None` and an all-NaN pace vector are provably the same board."""
+    return 0.0 if pace is None else pace.margin_delta(home, away)
 
 
 @dataclass
@@ -228,17 +312,20 @@ def _sigma0(params: NcaafGameDistributionParams) -> tuple[float, float]:
 def _draw_game_margins(
     strengths: dict[str, np.ndarray], home: np.ndarray, away: np.ndarray, neutral: np.ndarray,
     hfa: float, league_base: float, params: NcaafGameDistributionParams,
-    rng: np.random.Generator,
+    rng: np.random.Generator, pace: PaceAdjustment | None = None,
 ) -> np.ndarray:
     """Simulated home margin for a BATCH of games, per sim. Vectorised over sims × games.
 
     `home`/`away`/`neutral` are (n_games,) team-index / bool arrays; `strengths[*]` are
     (n_sims, n_teams). Returns (n_sims, n_games) home-minus-away margins. Uses σ₀ only
-    (fixed_strength — the season draw already carries the strength uncertainty).
+    (fixed_strength — the season draw already carries the strength uncertainty). `pace` adds the
+    certified S1 term to μ; `None` (or unknown pace) contributes exactly 0.
     """
     s0_m, _ = _sigma0(params)
+    pace_delta = np.atleast_1d(np.asarray(_pace_margin_delta(pace, home, away), dtype=float))
     mu_margin = (strengths["margin"][:, home] - strengths["margin"][:, away]) \
-        + np.where(neutral, 0.0, hfa)[None, :]
+        + np.where(neutral, 0.0, hfa)[None, :] \
+        + pace_delta[None, :]                 # (1, n_games) or (1, 1) when there is no term
     z = rng.standard_normal(mu_margin.shape)
     return mu_margin + s0_m * z
 
@@ -260,7 +347,7 @@ class Standings:
 def simulate_regular_season(
     idx: TeamIndex, schedule: list[ScheduledGame], strengths: dict[str, np.ndarray],
     hfa: float, league_base: float, params: NcaafGameDistributionParams,
-    rng: np.random.Generator,
+    rng: np.random.Generator, pace: PaceAdjustment | None = None,
 ) -> Standings:
     """Simulate every game → per-sim standings. Played games are FIXED to their realized result
     (mid-season conditioning); the rest are drawn. Batches the unplayed games into one vectorised
@@ -298,7 +385,7 @@ def simulate_regular_season(
     if unplayed_home:
         margins = _draw_game_margins(
             strengths, np.array(unplayed_home), np.array(unplayed_away),
-            np.array(unplayed_neutral, dtype=bool), hfa, league_base, params, rng,
+            np.array(unplayed_neutral, dtype=bool), hfa, league_base, params, rng, pace,
         )
         home_wins = margins > 0  # (n_sims, n_unplayed); margin==0 → away (negligible, continuous)
         for k, (i, j, is_conf) in enumerate(unplayed_meta):
@@ -350,7 +437,7 @@ class ConferenceResult:
 def simulate_conference_titles(
     idx: TeamIndex, standings: Standings, strengths: dict[str, np.ndarray],
     fmt: CfpFormat, params: NcaafGameDistributionParams, rng: np.random.Generator,
-    league_base: float,
+    league_base: float, pace: PaceAdjustment | None = None,
 ) -> list[ConferenceResult]:
     """Per conference: seed by `_rank_key`, take the top 2, simulate a neutral championship GAME →
     champion. Conferences below `min_teams_for_conf_title` (or Independents) crown no champion."""
@@ -375,7 +462,7 @@ def simulate_conference_titles(
         # VARY per sim, so use the per-sim-column neutral helper (NOT _draw_game_margins, whose
         # home/away are shared across sims).
         champ_is_top1 = _batch_neutral(
-            strengths, top1[:, None], top2[:, None], params, rng)[:, 0] > 0
+            strengths, top1[:, None], top2[:, None], params, rng, pace)[:, 0] > 0
         champion = np.where(champ_is_top1, top1, top2)
         finalist = np.stack([top1, top2], axis=1)
         results.append(ConferenceResult(conf, members, True, champion, finalist))
@@ -398,6 +485,7 @@ def simulate_playoff(
     idx: TeamIndex, standings: Standings, strengths: dict[str, np.ndarray],
     conf_results: list[ConferenceResult], fmt: CfpFormat,
     params: NcaafGameDistributionParams, rng: np.random.Generator, league_base: float,
+    pace: PaceAdjustment | None = None,
 ) -> PlayoffResult:
     """Select the 12-team field (5 champ AQs + 7 at-large), straight-seed, simulate the bracket.
 
@@ -450,7 +538,7 @@ def simulate_playoff(
     top_seed[rows[:, None], seed_order[:, : fmt.n_byes]] = True
 
     champion, reached_final = _simulate_bracket(
-        seed_order, strengths, fmt, params, rng)
+        seed_order, strengths, fmt, params, rng, pace)
 
     return PlayoffResult(in_field=in_field, champion=champion, reached_final=reached_final,
                          top_seed=top_seed)
@@ -459,6 +547,7 @@ def simulate_playoff(
 def _simulate_bracket(
     seed_order: np.ndarray, strengths: dict[str, np.ndarray], fmt: CfpFormat,
     params: NcaafGameDistributionParams, rng: np.random.Generator,
+    pace: PaceAdjustment | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Simulate the standard 12-team seeded bracket (4 byes) → (champion (n_sims,),
     reached_final (n_sims, n_teams)).
@@ -480,7 +569,7 @@ def _simulate_bracket(
 
     def play(a_cols: np.ndarray, b_cols: np.ndarray) -> np.ndarray:
         """Winner team-indices for a (n_sims, g) batch of neutral games (a = higher seed)."""
-        margins = _batch_neutral(strengths, a_cols, b_cols, params, rng)   # a − b
+        margins = _batch_neutral(strengths, a_cols, b_cols, params, rng, pace)   # a − b
         return np.where(margins > 0, a_cols, b_cols)
 
     s = seed_order
@@ -502,12 +591,14 @@ def _simulate_bracket(
 def _batch_neutral(
     strengths: dict[str, np.ndarray], home_cols: np.ndarray, away_cols: np.ndarray,
     params: NcaafGameDistributionParams, rng: np.random.Generator,
+    pace: PaceAdjustment | None = None,
 ) -> np.ndarray:
     """Neutral-site margins for a (n_sims, n_games) batch where the team indices VARY per sim AND per
     game (home_cols/away_cols are (n_sims, n_games) team indices). Returns (n_sims, n_games)."""
     s0_m, _ = _sigma0(params)
     rows = np.arange(strengths["margin"].shape[0])[:, None]
-    mu = strengths["margin"][rows, home_cols] - strengths["margin"][rows, away_cols]
+    mu = strengths["margin"][rows, home_cols] - strengths["margin"][rows, away_cols] \
+        + _pace_margin_delta(pace, home_cols, away_cols)
     z = rng.standard_normal(mu.shape)
     return mu + s0_m * z
 
@@ -524,22 +615,65 @@ class SeasonBoard:
     meta: dict[str, Any] = field(default_factory=dict)
 
 
+def _pace_report(pace: PaceAdjustment | None, schedule: list[ScheduledGame],
+                 idx: TeamIndex) -> dict[str, Any]:
+    """What the pace term actually DID on this board — measured over the simulated (unplayed) games,
+    never asserted. `acted` is False on a pre-season board BY CONSTRUCTION (unknown pace ⇒ Δ = 0),
+    which is the honest answer, not a silent omission."""
+    if pace is None:
+        return {"applied": False, "reason": "no pace adjustment supplied", "acted": False}
+    pairs = [(idx.id_to_idx[g.home_id], idx.id_to_idx[g.away_id]) for g in schedule
+             if not g.played and g.home_id in idx.id_to_idx and g.away_id in idx.id_to_idx]
+    if not pairs:
+        deltas = np.zeros(0)
+    else:
+        h, a = np.array([p[0] for p in pairs]), np.array([p[1] for p in pairs])
+        deltas = np.asarray(pace.margin_delta(h, a), dtype=float)
+    n_nonzero = int((deltas != 0.0).sum())
+    return {
+        "applied": True,
+        "acted": n_nonzero > 0,
+        "representation": ["pace_sum", "pace_diff"],
+        "coef_pace_sum": round(float(pace.coef_pace_sum), 6),
+        "coef_pace_diff": round(float(pace.coef_pace_diff), 6),
+        "teams_with_pace": pace.n_teams_with_pace,
+        "n_teams": idx.n_teams,
+        "simulated_games": int(len(deltas)),
+        "games_with_pace_delta": n_nonzero,
+        "mean_abs_margin_delta": round(float(np.abs(deltas).mean()), 4) if len(deltas) else 0.0,
+        "max_abs_margin_delta": round(float(np.abs(deltas).max()), 4) if len(deltas) else 0.0,
+        "note": ("Δμ on the MARGIN axis only — this board simulates margins; S1 §3 measured pace's "
+                 "content as almost entirely on the TOTAL axis, so a small effect here is the "
+                 "expected result, not a wiring failure."),
+    }
+
+
 def simulate_season(
     posteriors: list[TeamPosterior], schedule: list[ScheduledGame],
     params: NcaafGameDistributionParams, hfa: float, league_base: float,
     fmt: CfpFormat, cfg: SeasonSimConfig, *, season: int = 0,
+    pace: PaceAdjustment | None = None,
 ) -> SeasonBoard:
     """Run the full season Monte-Carlo → a per-team futures board.
 
     Returns P(win conference title), P(make the playoff), P(earn a top seed / bye), P(reach the
     national final), P(win the national championship) per team, plus expected wins.
+
+    `pace` is the optional certified S1/S1b mean-map term. `None` — and equally an adjustment whose
+    team pace is entirely unknown, which is every pre-season board — leaves the draw byte-identical
+    to the pre-S1-serve engine.
     """
     idx = build_team_index(posteriors)
+    if pace is not None and len(pace.team_seconds_per_play) != idx.n_teams:
+        raise ValueError(
+            f"the pace adjustment carries {len(pace.team_seconds_per_play)} team entries for "
+            f"{idx.n_teams} teams — a misaligned pace vector would apply one team's tempo to "
+            "another; it must be built against this TeamIndex order.")
     rng = np.random.default_rng(cfg.seed)
     strengths = draw_season_strengths(idx, cfg.n_sims, rng, sd_scale=cfg.strength_sd_scale)
-    standings = simulate_regular_season(idx, schedule, strengths, hfa, league_base, params, rng)
+    standings = simulate_regular_season(idx, schedule, strengths, hfa, league_base, params, rng, pace)
     conf_results = simulate_conference_titles(
-        idx, standings, strengths, fmt, params, rng, league_base)
+        idx, standings, strengths, fmt, params, rng, league_base, pace)
 
     T = idx.n_teams
     n_sims = cfg.n_sims
@@ -557,7 +691,8 @@ def simulate_season(
     p_final = np.zeros(T)
     p_top_seed = np.zeros(T)
     if fmt.run_playoff:
-        po = simulate_playoff(idx, standings, strengths, conf_results, fmt, params, rng, league_base)
+        po = simulate_playoff(idx, standings, strengths, conf_results, fmt, params, rng,
+                              league_base, pace)
         p_playoff = po.in_field.mean(axis=0)
         p_top_seed = po.top_seed.mean(axis=0)
         p_final = po.reached_final.mean(axis=0)
@@ -588,6 +723,10 @@ def simulate_season(
         "n_teams": T, "hfa": hfa, "league_base": league_base, "form": params.form,
         "sigma0_margin": _sigma0(params)[0], "sigma0_total": _sigma0(params)[1],
         "strength_sd_scale": cfg.strength_sd_scale,
+        # ⭐ whether the certified pace term ACTED on this board, stated rather than inferable: a
+        # pre-season board legitimately reports acted=False (100 % of week-1 team-weeks are NULL),
+        # and an in-season board that reports acted=False is a defect, not a quiet no-op.
+        "pace_term": _pace_report(pace, schedule, idx),
         "power_conferences": sorted(fmt.power_conferences),
         "cfp": {"n_playoff_teams": fmt.n_playoff_teams, "n_byes": fmt.n_byes,
                 "n_auto_qualifiers": fmt.n_auto_qualifiers, "straight_seeding": fmt.straight_seeding,

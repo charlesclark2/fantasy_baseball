@@ -52,6 +52,40 @@ _STYLE_COLS: tuple[str, ...] = (
 )
 
 
+# ---------------------------------------------------------------------------
+# The pace composites — ONE implementation, two callers (P2.1's battery assemble and P1.4's
+# serving assemble). ⭐ NCAAF-P2.1-S1-serve: the served representation is `pace_axis` =
+# {pace_sum, pace_diff}, so the SERVING derivation must be byte-identical to the one the S1
+# certification scored — two renderers of one field would be two rule sets (the E9.61 lesson).
+# ---------------------------------------------------------------------------
+
+#: the per-side level the composites are built from (the `possession_seconds / off_plays` ratio,
+#: `feature_ncaaf_pregame_matrix.sql` L220/L312 — S1-V4 verified the identity holds exactly).
+PACE_SIDE_COL = "seconds_per_play"
+
+#: the two GAME-level composites. `pace_sum` is the TOTAL axis (slow+slow ⇒ fewer possessions);
+#: `pace_diff` is the margin axis (S1 §3 measured it at the edge of the tie band).
+PACE_COMPOSITE_COLS: tuple[str, ...] = ("pace_sum", "pace_diff")
+
+
+def derive_pace_composites(df: pd.DataFrame) -> pd.DataFrame:
+    """Add `pace_sum` / `pace_diff` to `df` IN PLACE-of-a-copy and return it.
+
+    NULL propagates: if either side's `seconds_per_play` is NULL (every week-1 row — the team-week
+    rollup's honest empty row) BOTH composites are NULL, which is what makes the served pace term
+    inert pre-season (S1-V6/V7).
+    """
+    out = df.copy()
+    missing = [f"{s}_{PACE_SIDE_COL}" for s in ("home", "away") if f"{s}_{PACE_SIDE_COL}" not in out.columns]
+    if missing:
+        raise KeyError(f"cannot derive the pace composites — absent column(s) {missing}. A missing "
+                       "pace source must RAISE, never silently produce a pace-free frame (NF1.7 a).")
+    spp = [pd.to_numeric(out[f"{s}_{PACE_SIDE_COL}"], errors="coerce") for s in ("home", "away")]
+    out["pace_sum"] = spp[0] + spp[1]      # the TOTAL axis: slow+slow ⇒ fewer possessions
+    out["pace_diff"] = spp[0] - spp[1]
+    return out
+
+
 def _z(train: pd.Series, target: pd.Series) -> np.ndarray:
     """z-score `target` using TRAIN-only mean/sd (leakage-safe). A zero-variance train column maps
     to zeros rather than infinities."""

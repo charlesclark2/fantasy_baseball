@@ -52,8 +52,15 @@ if str(_PROJECT_ROOT) not in sys.path:
 from quant_sports_intel_models.football.ncaaf.models.ncaaf_game_distribution import (  # noqa: E402
     NcaafGameDistributionParams,
 )
+from quant_sports_intel_models.football.ncaaf.models.ncaaf_game_mean import (  # noqa: E402
+    NcaafGameMeanParams,
+)
+from quant_sports_intel_models.football.ncaaf.models.ncaaf_game_predictor import (  # noqa: E402
+    load_served_pair,
+)
 from quant_sports_intel_models.football.ncaaf.models.season_simulation import (  # noqa: E402
     CfpFormat,
+    PaceAdjustment,
     ScheduledGame,
     SeasonBoard,
     SeasonSimConfig,
@@ -66,7 +73,10 @@ log = logging.getLogger("ncaaf.p1_5")
 _MODELS_DIR = Path(__file__).resolve().parent
 _ARTIFACT_DIR = _MODELS_DIR / "artifacts"
 _STRENGTH_PARQUET = _ARTIFACT_DIR / "ncaaf_team_strength_week.parquet"
-_SERVED_PARAMS = _ARTIFACT_DIR / "ncaaf_game_distribution_v1.json"
+# ⛔ NO hardcoded served-artifact path here. The served dispersion is RESOLVED (v2 over the frozen
+# v1) by `ncaaf_game_predictor.resolve_served_dispersion` and the chosen file is LOGGED — a constant
+# pinned to a filename the build may stop writing is a silent-staleness bomb (the prospect-board
+# `BOARD_WITH_COMPS` class).
 _DEFAULT_DUCKDB = _PROJECT_ROOT / "quant_sports_intel_models/sports_dbt/sports.duckdb"
 _MARTS_SCHEMA = "main_ncaaf_marts"
 _RESULTS_DIR = _MODELS_DIR.parent / "ablation_results"
@@ -213,10 +223,89 @@ def build_format(season: int, *, run_playoff: bool = True, loss_penalty: float =
                      loss_penalty=loss_penalty)
 
 
-def load_params(path: Path = _SERVED_PARAMS) -> NcaafGameDistributionParams:
-    if not path.exists():
-        raise SystemExit(f"[P1.5] served P1.4 params not found at {path} — run P1.4 finalize.")
-    return NcaafGameDistributionParams.from_dict(json.loads(path.read_text()))
+def load_served(artifact_dir: Path = _ARTIFACT_DIR
+                ) -> tuple[NcaafGameDistributionParams, NcaafGameMeanParams | None]:
+    """The served (dispersion, mean) pair, with the chosen dispersion path LOGGED.
+
+    `load_served_pair` prefers `ncaaf_game_distribution_v2.json` (a post-P1.4 contract) over the
+    frozen v1 and REFUSES a pair whose contracts disagree — the E7.9 mismatch the S1 read-out
+    flagged. An absent mean artifact is the pre-S1-serve state and yields `None`; the caller says
+    so on the board rather than treating it as "no pace by choice".
+    """
+    try:
+        disp, mean, path = load_served_pair(artifact_dir)
+    except FileNotFoundError as e:
+        raise SystemExit(f"[P1.5] {e}") from None
+    log.info("served dispersion ← %s (%s/%s, form %s)%s", path.name, disp.learner, disp.contract,
+             disp.form, "" if mean is None else f"; served mean ← {len(mean.columns)} cols, "
+             f"pace {mean.pace_columns or 'ABSENT'}")
+    if mean is None:
+        log.warning("[ALERT] no served MEAN artifact in %s — the board runs on the analytic "
+                    "strength map with NO pace term (the pre-S1-serve state). Run "
+                    "`bakeoff_ncaaf_game --stage finalize` to write one.", artifact_dir)
+    return disp, mean
+
+
+_TEAM_PACE_SQL = """
+select
+    team_id,
+    possession_seconds_per_game / nullif(off_plays_per_game, 0) as seconds_per_play
+from {schema}.rollup_ncaaf_team_week_asof
+where season = {season} and as_of_week = {week}
+"""
+
+
+def load_team_pace(season: int, as_of_week: int, *, duckdb_path: Path = _DEFAULT_DUCKDB,
+                   schema: str = _MARTS_SCHEMA) -> dict[int, float]:
+    """Per-team `seconds_per_play` AS OF `as_of_week` — the pregame-safe team-week rollup, which is
+    the SAME construction the served feature matrix uses (`feature_ncaaf_pregame_matrix.sql` L220:
+    `possession_seconds_per_game / nullif(off_plays_per_game, 0)`).
+
+    ⚠️ At `as_of_week = 1` every row is the rollup's honest EMPTY row ⇒ NULL ⇒ the pace term is
+    inert, which is exactly why a pre-season board is unchanged by this story.
+    """
+    import duckdb
+
+    con = duckdb.connect(str(duckdb_path), read_only=True)
+    try:
+        df = con.sql(_TEAM_PACE_SQL.format(schema=schema, season=season, week=int(as_of_week))).df()
+    finally:
+        con.close()
+    return {int(r.team_id): float(r.seconds_per_play)
+            for r in df.itertuples(index=False) if pd.notna(r.seconds_per_play)}
+
+
+def build_pace_adjustment(mean_params: NcaafGameMeanParams | None,
+                          posteriors: list[TeamPosterior], season: int, as_of_week: int, *,
+                          duckdb_path: Path = _DEFAULT_DUCKDB,
+                          enabled: bool = True) -> PaceAdjustment | None:
+    """Assemble the sim's pace term, aligned to the `TeamPosterior` order the sim indexes by.
+
+    Returns `None` (⇒ the engine's exact pre-S1-serve behaviour) when the term cannot or must not
+    act; every such path LOGS its reason, so "no pace" is never silent.
+    """
+    if not enabled:
+        log.info("pace term DISABLED (--no-pace)")
+        return None
+    if mean_params is None or not mean_params.pace_columns:
+        return None                                     # already logged by load_served
+    try:
+        pace_by_team = load_team_pace(season, as_of_week, duckdb_path=duckdb_path)
+    except Exception as e:                              # noqa: BLE001 — degrade LOUDLY (E11.7)
+        log.warning("[ALERT] could not read team pace for %d w%d (%s: %s) — the board runs with NO "
+                    "pace term; it is NOT a pace-free model by choice.", season, as_of_week,
+                    type(e).__name__, e)
+        return None
+    vec = np.array([pace_by_team.get(int(p.team_id), np.nan) for p in posteriors], dtype=float)
+    n_known = int(np.isfinite(vec).sum())
+    if n_known == 0:
+        log.info("pace term is INERT at season %d week %d — 0/%d teams carry a tempo yet (week-1 "
+                 "team-week rows are the rollup's honest empty row). The board is byte-identical "
+                 "to a pace-free run, by construction.", season, as_of_week, len(vec))
+    else:
+        log.info("pace term ACTIVE: %d/%d teams carry an as-of-week-%d tempo (median %.2f s/play)",
+                 n_known, len(vec), as_of_week, float(np.nanmedian(vec)))
+    return PaceAdjustment.from_mean_params(mean_params, vec)
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════
@@ -225,15 +314,18 @@ def load_params(path: Path = _SERVED_PARAMS) -> NcaafGameDistributionParams:
 
 def run_board(season: int, as_of_week: int | None, cfg: SeasonSimConfig, *,
               duckdb_path: Path = _DEFAULT_DUCKDB, run_playoff: bool = True,
-              loss_penalty: float = 8.0) -> SeasonBoard:
+              loss_penalty: float = 8.0, use_pace: bool = True) -> SeasonBoard:
     posteriors, hfa, league_base, week = load_strength(season, as_of_week)
     schedule, realized_ccg, _ = load_schedule(season, week, duckdb_path=duckdb_path)
     fmt = build_format(season, run_playoff=run_playoff, loss_penalty=loss_penalty)
-    params = load_params()
+    params, mean_params = load_served()
+    pace = build_pace_adjustment(mean_params, posteriors, season, week,
+                                 duckdb_path=duckdb_path, enabled=use_pace)
     log.info("season %d as-of-week %d: %d teams, %d regular-season games (%d already played), "
              "hfa %.2f base %.2f", season, week, len(posteriors), len(schedule),
              sum(g.played for g in schedule), hfa, league_base)
-    board = simulate_season(posteriors, schedule, params, hfa, league_base, fmt, cfg, season=season)
+    board = simulate_season(posteriors, schedule, params, hfa, league_base, fmt, cfg,
+                            season=season, pace=pace)
     board.meta["as_of_week"] = week
     board.meta["realized_conf_champions"] = realized_ccg
     board.meta["realized_natty"] = _REALIZED_NATTY.get(season)
@@ -275,7 +367,8 @@ def _brier_skill(p: np.ndarray, y: np.ndarray) -> dict:
 
 
 def run_calibration(seasons: list[int], cfg: SeasonSimConfig, *,
-                    duckdb_path: Path = _DEFAULT_DUCKDB, loss_penalty: float = 8.0) -> dict:
+                    duckdb_path: Path = _DEFAULT_DUCKDB, loss_penalty: float = 8.0,
+                    use_pace: bool = True) -> dict:
     """Pre-season sim for every season → pool (season, team) predictions vs realized outcomes.
 
     The three validation buckets, densest first (per the story: lean on the dense conf/berth markets,
@@ -288,14 +381,18 @@ def run_calibration(seasons: list[int], cfg: SeasonSimConfig, *,
     conf_p, conf_y = [], []
     natty_rows = []
     per_season = []
+    params, mean_params = load_served()
+    pace_acted: list[bool] = []
 
     for season in seasons:
         posteriors, hfa, league_base, week = load_strength(season, None)  # pre-season
         schedule, realized_ccg, realized_home_win = load_schedule(season, week, duckdb_path=duckdb_path)
         fmt = build_format(season, loss_penalty=loss_penalty)
-        params = load_params()
+        pace = build_pace_adjustment(mean_params, posteriors, season, week,
+                                     duckdb_path=duckdb_path, enabled=use_pace)
         board = simulate_season(posteriors, schedule, params, hfa, league_base, fmt, cfg,
-                                season=season)
+                                season=season, pace=pace)
+        pace_acted.append(bool(board.meta.get("pace_term", {}).get("acted")))
         id_by_name = {t["team"]: t["team_id"] for t in board.teams}
 
         # realized regular-season wins per team, over the SAME universe fed to the sim (excludes the
@@ -311,7 +408,14 @@ def run_calibration(seasons: list[int], cfg: SeasonSimConfig, *,
             if tid in real_games and real_games[tid] > 0:
                 ew_pred.append(t["exp_wins"])
                 ew_real.append(real_wins.get(tid, 0))
-            if t["conf_title_available"]:
+            # ⚠️ ONLY a season whose conference titles have actually been DECIDED can score this
+            # leg. An unplayed season has an empty `realized_ccg`, so every eligible team would be
+            # labelled "did not win" — turning "not finished yet" into a negative outcome and
+            # silently degrading the headline. Surfaced by the S1-serve re-run the moment 2026
+            # entered the strength mart: n 1257→1393, base rate 0.0485→0.0438, Brier-skill
+            # 0.0513→0.0272 — a pure artefact, indistinguishable from a real regression. This
+            # mirrors the guard the natty leg already had.
+            if t["conf_title_available"] and realized_ccg:
                 conf_p.append(t["p_conf_title"])
                 won = 1.0 if realized_ccg.get(t["conference"]) == tid else 0.0
                 conf_y.append(won)
@@ -320,6 +424,10 @@ def run_calibration(seasons: list[int], cfg: SeasonSimConfig, *,
                                    "p_natty": t["p_natty"],
                                    "is_champ": 1.0 if tid == realized_natty_id else 0.0})
 
+        if not realized_ccg:
+            log.warning("[ALERT] season %d has NO decided conference championships — it is scored "
+                        "for NOTHING in the conference-title leg (an undecided outcome is not a "
+                        "negative one). Its board was still simulated.", season)
         # per-season: where did the eventual champion rank on the pre-season board?
         champ_rank = None
         champ_p = None
@@ -331,7 +439,8 @@ def run_calibration(seasons: list[int], cfg: SeasonSimConfig, *,
                     break
         per_season.append({"season": season, "as_of_week": week, "n_teams": len(board.teams),
                            "champion": realized_natty_name, "champion_preseason_rank": champ_rank,
-                           "champion_preseason_p_natty": champ_p})
+                           "champion_preseason_p_natty": champ_p,
+                           "conf_titles_decided": bool(realized_ccg)})
         log.info("season %d: champion %s pre-season rank %s (p_natty %s)", season,
                  realized_natty_name, champ_rank, champ_p)
 
@@ -339,6 +448,18 @@ def run_calibration(seasons: list[int], cfg: SeasonSimConfig, *,
     natty_df = pd.DataFrame(natty_rows)
     result = {
         "seasons": seasons, "n_sims": cfg.n_sims, "strength_sd_scale": cfg.strength_sd_scale,
+        "served": {
+            "learner": params.learner, "contract": params.contract, "form": params.form,
+            "sigma0_margin": round(float(params.sigma0_margin or params.sigma_margin), 4),
+            "mean_artifact": None if mean_params is None else {
+                "contract": mean_params.contract, "n_columns": len(mean_params.columns),
+                "pace_columns": list(mean_params.pace_columns)},
+            # ⭐ the calibration gate is a PRE-SEASON read, so the pace term is inert on every
+            # season by construction (week-1 team-weeks are NULL). Recorded, not assumed: any
+            # movement vs the pre-S1-serve gate is the σ REFIT under the pace contract, never the
+            # pace term itself.
+            "pace_acted_on_any_season": bool(any(pace_acted)),
+        },
         "expected_wins": {
             "n": int(len(ew_pred)),
             "mae": round(float(np.mean(np.abs(ew_pred - ew_real))), 3) if len(ew_pred) else None,
@@ -348,6 +469,7 @@ def run_calibration(seasons: list[int], cfg: SeasonSimConfig, *,
         "conference_title": {
             **_brier_skill(np.array(conf_p), np.array(conf_y)),
             "reliability": _reliability(np.array(conf_p), np.array(conf_y)),
+            "scored_seasons": [r["season"] for r in per_season if r["conf_titles_decided"]],
         },
         "national_title": {
             **(_brier_skill(natty_df["p_natty"].to_numpy(), natty_df["is_champ"].to_numpy())
@@ -464,6 +586,19 @@ def write_report(board: SeasonBoard | None, calib: dict | None) -> None:
           f"strength_sd_scale {calib['strength_sd_scale']}. The P1.2 thin-seed season (2015, whose "
           "pre-season prior is fit on one prior season → near-flat noise) is dropped by default._")
         a("")
+        srv = calib.get("served", {})
+        if srv:
+            ma = srv.get("mean_artifact")
+            a(f"_Served model: `{srv.get('learner')}` / `{srv.get('contract')}` / form "
+              f"`{srv.get('form')}` (σ₀_margin {srv.get('sigma0_margin')}); mean artifact "
+              + (f"`{ma['contract']}`, {ma['n_columns']} cols, pace "
+                 f"{ma['pace_columns'] or 'ABSENT'}" if ma else "**absent** (pre-S1-serve state)")
+              + ". ⭐ This gate is a PRE-SEASON read, so the pace term is inert on every season by "
+                "construction (measured: pace acted on "
+              + ("some" if srv.get("pace_acted_on_any_season") else "NO")
+              + " season) — any movement vs the pre-S1-serve gate is the σ REFIT under the pace "
+                "contract, not the pace term._")
+            a("")
         ew = calib["expected_wins"]
         a(f"**Expected wins** (the cleanest dense check of the game layer): MAE **{ew['mae']}** "
           f"wins · bias {ew['bias']} · corr {ew['corr']} (n={ew['n']} team-seasons). A ~1.6-win MAE "
@@ -509,6 +644,23 @@ def write_report(board: SeasonBoard | None, calib: dict | None) -> None:
     if board is not None:
         a(f"## Board — {board.season} (as-of week {board.meta.get('as_of_week')}, "
           f"{board.n_sims:,} sims)")
+        a("")
+        pt = board.meta.get("pace_term") or {}
+        if pt.get("applied"):
+            if pt.get("acted"):
+                a(f"_Mean map carries the certified NCAAF-P2.1 S1/S1b **pace term** "
+                  f"(`pace_sum`, `pace_diff`): {pt['teams_with_pace']}/{pt['n_teams']} teams have an "
+                  f"as-of-week tempo, moving μ_margin on {pt['games_with_pace_delta']} of "
+                  f"{pt['simulated_games']} simulated games by {pt['mean_abs_margin_delta']} pts on "
+                  f"average (max {pt['max_abs_margin_delta']}). Margin axis only — S1 §3 put pace's "
+                  "content almost entirely on the TOTAL axis, so a small board effect is expected._")
+            else:
+                a("_The certified pace term is **INERT on this board by construction** — no team "
+                  "carries an as-of-week tempo yet (every week-1 team-week row is the rollup's "
+                  "honest empty row), so μ is bit-for-bit the pre-S1-serve mean map. Pace acts "
+                  "in-season (`--as-of-week` ≥ 2)._")
+        else:
+            a(f"_No pace term on this board — {pt.get('reason', 'unknown reason')}._")
         a("")
         a("| team | conf | strength | E[W] | P(conf) | P(CFP) | P(bye) | P(final) | P(natty) |")
         a("|---|---|---|---|---|---|---|---|---|")
@@ -563,6 +715,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--loss-penalty", type=float, default=8.0,
                    help="committee score = net strength − loss_penalty·losses")
     p.add_argument("--no-playoff", action="store_true", help="conference-title board only")
+    p.add_argument("--no-pace", action="store_true",
+                   help="disable the certified S1/S1b pace term in the mean map (it is inert "
+                        "pre-season regardless; this is the explicit off switch for an in-season "
+                        "A/B). The board records which way it ran.")
     p.add_argument("--duckdb", default=str(_DEFAULT_DUCKDB))
     p.add_argument("--out-dir", default=str(_ARTIFACT_DIR))
     p.add_argument("--s3", action="store_true", help="land the board in the sports lake")
@@ -597,13 +753,15 @@ def main(argv: list[str] | None = None) -> int:
                 log.info("calibration drops thin-seed season(s) %s (P1.2 hyper_n_prior_seasons=1 → "
                          "flat pre-season prior); pass --seasons to include them", dropped)
         log.info("calibration over seasons %s (%d sims each)", seasons, args.n_sims)
-        calib = run_calibration(seasons, cfg, duckdb_path=duckdb_path, loss_penalty=args.loss_penalty)
+        calib = run_calibration(seasons, cfg, duckdb_path=duckdb_path,
+                                loss_penalty=args.loss_penalty, use_pace=not args.no_pace)
         (_RESULTS_DIR / "ncaaf_p1_5_calibration.json").write_text(json.dumps(calib, indent=2, default=float))
         log.info("calibration → %s", _RESULTS_DIR / "ncaaf_p1_5_calibration.json")
 
     if args.season is not None:
         board = run_board(args.season, args.as_of_week, cfg, duckdb_path=duckdb_path,
-                          run_playoff=not args.no_playoff, loss_penalty=args.loss_penalty)
+                          run_playoff=not args.no_playoff, loss_penalty=args.loss_penalty,
+                          use_pace=not args.no_pace)
         write_board_outputs(board, Path(args.out_dir), to_s3=args.s3)
 
     if not args.no_report:
