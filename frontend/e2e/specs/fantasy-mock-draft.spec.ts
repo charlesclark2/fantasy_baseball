@@ -198,9 +198,10 @@ test.describe("the CPU opponents", () => {
 
 // ── the loop, in the browser ────────────────────────────────────────────────────────────────────
 
-/** Sign in as a subscriber and start a quick mock from draft slot 4 — deliberately NOT slot 1, so
- *  the room has to make eleven picks before the user's first turn and "the CPU actually picks" is a
- *  reachable question. */
+/** Sign in as a subscriber and start a quick mock from draft slot 4 — deliberately NOT slot 1, where
+ *  the user is on the clock immediately and "does the room actually draft?" is unreachable before
+ *  their first pick. From slot 4 the three seats ahead must pick first, which is exactly what the
+ *  opening test asserts (and asserts as three, not "some"). */
 async function startMock(page: Page) {
   const errors = collectPageErrors(page)
   await signIn(page, { groups: ["subscriber"] })
@@ -234,15 +235,25 @@ async function startMock(page: Page) {
  *
  *  The apostrophe is a character class because the copy is one editorial pass away from becoming a
  *  typographic ’, which would silently make a `'`-spelled regex match nothing. */
-async function readPhase(page: Page): Promise<"graded" | "my-turn" | "cpu" | "unknown"> {
+type Phase = "graded" | "my-turn" | "cpu" | "unknown"
+
+async function readState(page: Page): Promise<{ phase: Phase; pick: number }> {
   return page.evaluate(() => {
-    if (document.querySelector('[data-testid="mock-draft-grade"]')) return "graded" as const
     const text = document.body.innerText
-    if (/You['’]re on the clock/.test(text)) return "my-turn" as const
-    if (/Skip to my pick/.test(text)) return "cpu" as const
-    return "unknown" as const
+    const m = text.match(/Pick (\d+)/)
+    const pick = m ? Number(m[1]) : -1
+    const phase = document.querySelector('[data-testid="mock-draft-grade"]')
+      ? ("graded" as const)
+      : /You['’]re on the clock/.test(text)
+        ? ("my-turn" as const)
+        : /Skip to my pick/.test(text)
+          ? ("cpu" as const)
+          : ("unknown" as const)
+    return { phase, pick }
   })
 }
+
+const readPhase = async (page: Page): Promise<Phase> => (await readState(page)).phase
 
 /** Drive the mock to completion: take the top recommendation on every turn, fast-forward the room
  *  in between.
@@ -269,15 +280,41 @@ async function playToTheEnd(page: Page, rounds = 8) {
       })
       .not.toBe("unknown")
 
-    const phase = await readPhase(page)
-    if (phase === "graded") return
-    if (phase === "my-turn") {
-      await page.getByRole("button", { name: "Draft", exact: true }).first().click()
+    const before = await readState(page)
+    if (before.phase === "graded") return
+
+    if (before.phase === "my-turn") {
+      // ⭐ EVERY STEP IS BOUNDED, AND THE PICK NUMBER IS THE PROOF OF PROGRESS. Playwright's default
+      // action timeout is the TEST budget, so one click that never becomes actionable silently eats
+      // all 180s and reports whatever happened to be in flight at teardown — which is exactly how a
+      // CI failure here presented as an unrelated `page.evaluate` error while the real symptom was
+      // a draft frozen at Round 1 Pick 4. A short click timeout plus an explicit "did the draft
+      // actually move?" turns that into a named failure in seconds.
+      await page
+        .getByRole("button", { name: "Draft", exact: true })
+        .first()
+        .click({ timeout: 15_000 })
+      await expect
+        .poll(
+          async () => {
+            const now = await readState(page)
+            return now.phase === "graded" || now.pick > before.pick
+          },
+          {
+            message: `clicking Draft at pick ${before.pick} did not advance the draft`,
+            timeout: 20_000,
+          },
+        )
+        .toBe(true)
       continue
     }
+
     // A fast-forward click can miss — the button detaches when the room finishes a round underneath
     // it. Swallowing it is safe because the loop simply re-reads the phase and tries again.
-    await page.getByRole("button", { name: /Skip to my pick/ }).click().catch(() => {})
+    await page
+      .getByRole("button", { name: /Skip to my pick/ })
+      .click({ timeout: 15_000 })
+      .catch(() => {})
   }
 }
 
@@ -386,17 +423,25 @@ test.describe("running a mock draft", () => {
       "the grade shipped without the note saying it scores the room on our own projections",
     ).toBeVisible()
 
+    // ⭐ THE RESULTS SCREEN'S DENYLIST SCREEN LIVES HERE rather than in its own test, deliberately.
+    // best_alpha = 0, so all three screens must be clean — but playing a mock out is the expensive
+    // thing this file does, and a second test that replayed one purely to re-read the same rendered
+    // text would double the cost of the slowest surface in the suite to assert nothing new. The
+    // setup and board screens are screened in their own test, which needs no draft.
+    const gradedText = await page.evaluate(() => document.body.innerText)
+    expect(
+      forbiddenPhrasesIn(gradedText),
+      "the mock draft RESULTS screen makes a claim the denylist forbids",
+    ).toEqual([])
+
     await expectNoNaN(page)
     expectNoPageErrors(errors)
   })
 
-  test("nothing on the mock draft claims an edge over the market", async ({ page }) => {
-    // best_alpha = 0. The denylist is the shared mirror of the exporter's own list, so a phrase
-    // added there is enforced here too.
-    //
-    // ⚠️ ALL THREE SCREENS, because they are three different bodies of copy and the results screen
-    // is the one most likely to grow a claim. The setup screen has to be captured before the draft
-    // starts — it is gone by the time the grade renders.
+  test("nothing on the setup or draft screens claims an edge over the market", async ({ page }) => {
+    // The denylist is the shared mirror of the exporter's own list, so a phrase added there is
+    // enforced here too. The SETUP copy has to be captured before the draft starts — it is the one
+    // screen that stops existing, so a scan run later can never see it.
     const { errors, setupText } = await startMock(page)
     expect(
       forbiddenPhrasesIn(setupText),
@@ -407,15 +452,6 @@ test.describe("running a mock draft", () => {
     expect(
       forbiddenPhrasesIn(draftText),
       "the mock draft BOARD makes a claim the denylist forbids",
-    ).toEqual([])
-
-    await playToTheEnd(page)
-    await expect(page.getByTestId("mock-draft-grade")).toBeVisible()
-
-    const gradedText = await page.evaluate(() => document.body.innerText)
-    expect(
-      forbiddenPhrasesIn(gradedText),
-      "the mock draft RESULTS screen makes a claim the denylist forbids",
     ).toEqual([])
     expectNoPageErrors(errors)
   })
