@@ -1458,6 +1458,35 @@ const CASES = [
     grep: "no ranking",
   },
 
+  {
+    id: "portfolio-mobile-fixed-width-summary",
+    shipped: "NF-C6b — the rollup shipped unreadable on a phone",
+    // ⭐ THE OPERATOR'S OWN BUG, restored. `min-w-[520px]` on the summary makes the table wider than
+    // a phone, so the reader has to drag it sideways to reach the ranked figure and the bench gap —
+    // the two numbers the surface exists for. Desktop-only assertions cannot see this: at 1280px
+    // every column fits and the page verifies as correct.
+    detail: "Puts a fixed 520px minimum back on the summary table.",
+    file: "components/fantasy/my-teams.tsx",
+    from: '      <div className="mt-3 overflow-x-auto">\n        <table className="w-full text-left text-[11px]">',
+    to: '      <div className="mt-3 overflow-x-auto">\n        <table className="w-full min-w-[520px] text-left text-[11px]">',
+    // ⚠️ NOT the page-level "never scrolls sideways" test — that one CANNOT catch this, because
+    // `overflow-x-auto` keeps the DOCUMENT tidy while the table scrolls inside its own container.
+    // Pointing this case at it produced a MISMATCH (green on broken source) on the first cut, which
+    // is precisely the vacuous-guard shape the red proof exists to surface.
+    grep: "numbers that matter",
+  },
+  {
+    id: "portfolio-mobile-fixed-width-roster",
+    shipped: "NF-C6b — the roster tables the operator actually screenshotted",
+    // The pre-existing half of the same defect: the Starters/Bench tables carried `min-w-[480px]`
+    // from NF-C6 Phase 1, which is what cut "Expected pts" off the right edge of the screenshot.
+    detail: "Puts a fixed 480px minimum back on the roster tables.",
+    file: "components/fantasy/my-teams.tsx",
+    from: '      <div className="mt-2 overflow-x-auto">\n        <table className="w-full text-left text-[11px]">',
+    to: '      <div className="mt-2 overflow-x-auto">\n        <table className="w-full min-w-[480px] text-left text-[11px]">',
+    grep: "numbers that matter",
+  },
+
   // ── league import: the review queue ─────────────────────────────────────────────────────────
   {
     id: "import-warnings-suppressed",
