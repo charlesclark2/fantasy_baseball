@@ -3535,3 +3535,142 @@ stops contaminating soak baselines on promotion days. ⛔ Do not book a credit s
   `main`** — `workflow_dispatch` is read from the default branch.
 - **The census instruments' hour-band labels are session-dependent** (above). Recorded figures
   reconcile; portability does not.
+
+---
+
+# ✅ CI_WH PROVEN UNDER LOAD — target 4 closed (2026-08-17, branch `e11.24-0816-1`)
+
+**Read-only + CI config. No serving change, no box run, no deploy, `best_alpha=0`.** Every
+measurement below ran on `MONITOR_WH` via `get_monitoring_connection()`; `COMPUTE_WH` was never
+touched by this session.
+
+The "NOT VERIFIED" bullet directly above — *"`CI_WH` has still never run a real build"* — is now
+**closed**. It was already stale when this story was written: the operator ran #775's handoff
+dispatch on **08-15 05:25 UTC** and it landed the occupying write.
+
+## The proof
+
+A `workflow_dispatch` of `dbt_build_ci.yml` on `main` (run
+[31990158618](https://github.com/charlesclark2/fantasy_baseball/actions/runs/31990158618),
+`ref_teams`, build step **2026-08-17 03:08:22 → 03:08:27 UTC**), verified against
+`snowflake.information_schema.query_history` — the **zero-lag** path, because `account_usage` was
+lagging 105 min and an unverifiable window is not a pass:
+
+| clause | result |
+|---|---|
+| **(1) `CI_WH` OCCUPIED by a real write** | `insert overwrite into baseball_data.ci_betting.ref_teams` @ **03:08:25**, `warehouse_size = X-Small`, `queued_provisioning_time = 107 ms` → the warehouse **resumed for it**. 14 billable statements, 7,680 bytes scanned. |
+| **(2) nothing CI on `COMPUTE_WH`** | **zero** CI statements — and in fact **zero `COMPUTE_WH` traffic of any kind** in the window. |
+
+`CI_WH.resumed_on` advanced to **2026-08-17 03:08:26 UTC**, so the #775 finding
+(`resumed_on == created_on`, i.e. never resumed) no longer holds.
+
+⏱️ **Exact UTC minute for target-2's census to exclude, if it wants to: `2026-08-17 03:08`.**
+In practice nothing needs excluding — the run put **no** statement on `COMPUTE_WH`, which is the
+point: only a *broken* repoint could have polluted that day.
+
+## Corroboration — this is not one synthetic dispatch
+
+| when (UTC) | trigger | billable on `CI_WH` |
+|---|---|---|
+| 08-15 00:20 | `pull_request` (real CI) | ✔ (view + 19 tests) |
+| 08-15 05:26 | `workflow_dispatch` (#775 handoff) | ✔ the `ref_teams` INSERT |
+| 08-16 04:53 / 04:58 | `pull_request` (real CI) | ✔ |
+| **08-17 03:08** | `workflow_dispatch` (this session) | ✔ |
+
+⭐ **The two-sided boundary, which is the strongest single figure here: the LAST `ci_betting`
+statement on `COMPUTE_WH` was `2026-08-10 05:53:51 UTC`** — the last pre-repoint PR run. Zero
+since, across ~7 days and 129,188 statements examined. `CI_WH` lifetime: **64 billable execs / 31
+waits / 7,680 bytes** (was 12 execs, all metadata-only).
+
+The repo's own verifier agrees, and is two-sided in practice rather than in principle:
+
+```
+uv run python scripts/verify_ci_warehouse_repoint.py --since-minutes 2900   # → PROVEN   (post-repoint)
+uv run python scripts/verify_ci_warehouse_repoint.py --since-minutes 10100  # → NOT PROVEN (reaches back
+                                                                            #   past 08-10: 78 CI statements
+                                                                            #   on COMPUTE_WH, 39 waits)
+```
+
+**No fix to the repoint was needed.** `dbt/profiles.yml`'s `ci:` target and the workflow's
+`|| 'COMPUTE_WH'` fallback are byte-identical on `main` and on this branch; the `dev` target's
+hardcoded `COMPUTE_WH` was **deliberately left alone**.
+
+## 🪤 …but the verifier itself was carrying a FALSE-PASS bug, and it was found by measuring it
+
+Clause (2) tested `schema_name = 'CI_BETTING'`. **Measured over all of `CI_WH`'s history, that
+catches 14 of 64 billable CI statements (22%).** `schema_name` is the *session* schema, and
+dbt-fusion issues its **test** queries with none set, so they land `NULL` while naming
+`baseball_data.ci_betting…` in the SQL text.
+
+That is not an under-count, it is a **false PROVEN on the commonest run shape**. A
+`state:modified+` PR touching a VIEW model materializes nothing billable (a `CREATE VIEW` is
+cloud-services-only), so *every* billable statement in that run is a `NULL`-schema dbt test —
+exactly the 08-16 04:53/04:58 runs above. Under the precise failure clause (2) exists to catch (an
+**empty** `SNOWFLAKE_CI_WAREHOUSE` → the `warehouse` key vanishes → fallback to `DBT_RW`'s default
+= `COMPUTE_WH`), that whole run leaks and the old clause reported ✅.
+
+**Fix:** disqualify on schema **or** a *fully-qualified* relation reference in the SQL text
+(`_IS_CI_STATEMENT`). Measured: the qualified form catches **64 of 64** billable CI statements, with
+**0** false fires on `COMPUTE_WH`/`DBT_RW` over the prior 6 days.
+
+⭐ **The qualification is load-bearing, not decoration.** A bare `%ci_betting%` would match *this
+very script's* monitoring SQL (which contains the literal `'CI_BETTING'`), turning a verification
+read into its own disqualifying evidence — the check could then never return PROVEN.
+`baseball_data.` cannot appear in a `query_history` predicate but always appears in a real
+dbt-issued statement.
+
+Two smaller things fell out of the same change:
+
+- **`_rows` interpolated with `sql % {...}`**, under which the `%` in a `LIKE '%…%'` is a *format
+  specifier* — adding the LIKE made every query raise `ValueError: unsupported format character
+  'b'`. Escaping to `%%` works but leaves the trap armed for the next LIKE; the substitution is now
+  a `.replace()`, which removes the class.
+- **Three-valued logic.** A `NULL` `schema_name` that fails the text match gives `NULL OR FALSE =
+  NULL`, not `FALSE`. The script routes it through `iff(...)`, where `NULL` correctly takes the
+  else-branch — but a guard reading the bare predicate would measure something the script never
+  evaluates, so the guards wrap it the same way.
+
+**Guards** (in `betting_ml/tests/test_ci_path_filter_semantics.py`) run the *real*
+`_IS_CI_STATEMENT` SQL through DuckDB over four statement shapes copied from measured
+`query_history` rows — not a Python restatement, which could only ever agree with itself. All four
+breaks were RED-proven with the mutation asserted to have landed **in the code the guard reads**
+(a whole-file "token is gone" check was satisfied by the docstring's own prose — the #815 lesson,
+one level in), and B1/B2/B4 each turn exactly **one** guard red (NF-D17 isolation).
+
+## Target 6 — the Snowsight default warehouse: FIXED AND HELD, no action needed
+
+`SHOW USERS LIKE 'CCL1196'` → **`default_warehouse = MONITOR_WH`**. The earlier "free fix" card
+was accurate; this reconfirms it against behaviour, not just configuration:
+
+- **Last `CCL1196` statement that ever occupied `COMPUTE_WH`: `2026-08-08 07:19:50 UTC`**
+  (lifetime there: 5,080 billable execs / 1,068 waits).
+- **08-09 → 08-17: zero billable, zero waits** on `COMPUTE_WH` — 8 consecutive days.
+- The cost-dashboard work moved as intended: 08-15 shows 37 billable / 2 waits on `MONITOR_WH`.
+- Overnight (00–07 UTC) `COMPUTE_WH` resumers over the last 7 days are now **`DBT_RW` (116 execs /
+  51 waits)** and **`CREDENCE_API` (9 / 4)** — `CCL1196` is off the overnight board entirely.
+
+⚠️ `CCL1196` still shows statements *attributed to* `COMPUTE_WH` (6–48/day), but every one is
+`warehouse_size IS NULL` with 0 waits — Snowsight session bootstrap (`SYSTEM$BOOTSTRAP_DATA_REQUEST`,
+`SHOW PARAMETERS`, `CURRENT_ROLE()`). Cloud-services-only statements **cannot resume a warehouse**,
+so they are harmless. Do not re-open target 6 on the strength of that row count — it is the
+`warehouse_size IS NULL` correction from `e11_24_other_attribution.md` presenting again.
+
+⇒ **no `ALTER USER` is required.** Had it reverted, the command would be:
+`ALTER USER CCL1196 SET DEFAULT_WAREHOUSE = MONITOR_WH;` (operator/Snowsight — the MCP role cannot
+run DDL).
+
+## NOT VERIFIED — do not inherit these as settled
+
+- **This does not delete credits, it relocates them** (the framing above is unchanged). The value
+  is that `COMPUTE_WH`'s quiet windows become genuinely quiet and CI stops contaminating soak
+  baselines. ⛔ Do not book a saving.
+- **CI's overnight mass is dev-activity-dependent** — zero on several days in every window
+  measured. ⛔ Never annualise it.
+- **The overnight band is still not pipeline-clean.** With CI and `CCL1196` both gone, `DBT_RW`
+  remains at 116 billable execs / **51 waits** over 7 nights (00–07 UTC) — the `starter_ip_signals`
+  MERGE / scd2 `lineup_state` / `check_*` cluster #775 named. That is now the whole remaining
+  overnight blocker, plus `CREDENCE_API` (4 waits).
+- **The schema half of `_IS_CI_STATEMENT` is defence-in-depth, not load-bearing today** — the
+  qualified-text half alone carries 64/64. It is kept for a relation referenced unqualified after a
+  `USE SCHEMA`, a shape dbt-fusion does not currently emit, so no fixture can prove it live. It is
+  documented that way rather than credited with coverage it does not have.
