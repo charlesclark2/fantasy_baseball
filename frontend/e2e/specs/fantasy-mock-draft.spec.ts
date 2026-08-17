@@ -209,13 +209,17 @@ async function startMock(page: Page) {
 
   await expect(page.getByRole("heading", { name: "Mock Draft" })).toBeVisible()
 
+  // The setup screen's copy is returned rather than screened here, because it is the ONLY screen
+  // that stops existing once the draft starts — a denylist scan run at the end can never see it.
+  const setupText = await page.evaluate(() => document.body.innerText)
+
   // ⚠️ A Radix `Picker`, not a native <select> — `selectOption` silently does nothing on one.
   await page.getByLabel("My draft slot").click()
   await page.getByRole("option", { name: "Pick 4", exact: true }).click()
 
   await page.getByRole("button", { name: "Start mock draft" }).click()
   await expect(page.locator("table tbody tr").first()).toBeVisible()
-  return { errors }
+  return { errors, setupText }
 }
 
 /** Drive the mock to completion: take the top recommendation on every turn, skip the CPU otherwise.
@@ -330,14 +334,29 @@ test.describe("running a mock draft", () => {
   test("nothing on the mock draft claims an edge over the market", async ({ page }) => {
     // best_alpha = 0. The denylist is the shared mirror of the exporter's own list, so a phrase
     // added there is enforced here too.
-    const { errors } = await startMock(page)
+    //
+    // ⚠️ ALL THREE SCREENS, because they are three different bodies of copy and the results screen
+    // is the one most likely to grow a claim. The setup screen has to be captured before the draft
+    // starts — it is gone by the time the grade renders.
+    const { errors, setupText } = await startMock(page)
+    expect(
+      forbiddenPhrasesIn(setupText),
+      "the mock draft SETUP screen makes a claim the denylist forbids",
+    ).toEqual([])
+
+    const draftText = await page.evaluate(() => document.body.innerText)
+    expect(
+      forbiddenPhrasesIn(draftText),
+      "the mock draft BOARD makes a claim the denylist forbids",
+    ).toEqual([])
+
     await playToTheEnd(page)
     await expect(page.getByTestId("mock-draft-grade")).toBeVisible()
 
-    const text = await page.evaluate(() => document.body.innerText)
+    const gradedText = await page.evaluate(() => document.body.innerText)
     expect(
-      forbiddenPhrasesIn(text),
-      "the mock draft screen makes a claim the denylist forbids",
+      forbiddenPhrasesIn(gradedText),
+      "the mock draft RESULTS screen makes a claim the denylist forbids",
     ).toEqual([])
     expectNoPageErrors(errors)
   })

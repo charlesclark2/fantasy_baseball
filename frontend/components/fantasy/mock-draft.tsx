@@ -63,6 +63,8 @@ const POS_COLORS: Record<string, string> = {
   DST: "text-teal-400 bg-teal-500/10 border-teal-500/30",
 }
 const FILTER_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DST"] as const
+/** The positions the roster panel lists as a NEED — skill only; see the note in `RosterPanel`. */
+const NEED_POSITIONS: string[] = ["QB", "RB", "WR", "TE"]
 
 /** Quick = the rounds people actually want to rehearse; Full = the whole roster. */
 const QUICK_ROUNDS = 8
@@ -646,14 +648,15 @@ export function MockDraft() {
               </div>
               <p className="mt-2 text-[11px] text-gray-600">
                 ADP is the market&apos;s average draft position for this format — a reference column, never
-                an input to the recommendations. {adpDepth} of {board.length} players are inside that
-                sample; the rest are shown with &ldquo;—&rdquo; because the sample never drafted them.
+                an input to the recommendations. {adpDepth} of {board.length}{" "}
+                players are inside that sample; the rest are shown with &ldquo;—&rdquo; because the
+                sample never drafted them.
               </p>
             </div>
           </div>
 
           <div className="flex flex-col gap-4">
-            <RosterPanel filled={filledRoster} openSlots={openSlots} />
+            <RosterPanel filled={filledRoster} openSlots={openSlots} config={config} />
             <PickLog picks={picks} byId={byId} mySlot={mySlot} log={log} size={size} />
           </div>
         </div>
@@ -688,13 +691,25 @@ function PosBadge({ pos, small }: { pos: string; small?: boolean }) {
 function RosterPanel({
   filled,
   openSlots,
+  config,
 }: {
   filled: FilledSlot[]
   openSlots: ReturnType<typeof openStarterSlots> | null
+  config: LeagueConfigMeta
 }) {
+  const hasKdst = config.roster.some(
+    (s) => !s.bench && (s.eligible.includes("K") || s.eligible.includes("DST")),
+  )
+  // ⚠️ SKILL POSITIONS ONLY, exactly as the live optimizer's panel does it. An open K or D/ST slot
+  // is technically a need from round 1 and is never one a drafter should act on — listing it beside
+  // "2× RB" invites the early kicker the recommendation engine deliberately defers. The note at the
+  // bottom of this panel is where K/DST are explained instead.
   const needs: string[] = []
   if (openSlots) {
-    for (const [pos, n] of Object.entries(openSlots.dedicated)) needs.push(n > 1 ? `${n}× ${pos}` : pos)
+    for (const [pos, n] of Object.entries(openSlots.dedicated)) {
+      if (!NEED_POSITIONS.includes(pos)) continue
+      needs.push(n > 1 ? `${n}× ${pos}` : pos)
+    }
     if (openSlots.flex.length) needs.push(`${openSlots.flex.length}× FLEX`)
   }
   return (
@@ -730,6 +745,13 @@ function RosterPanel({
           </div>
         ))}
       </div>
+      {hasKdst && (
+        <p className="mt-3 text-[11px] leading-snug text-gray-600">
+          K &amp; DST are projected too, but only as streaming tiers rather than precise ranks — so
+          they are not listed as a need above, they sit below the skill players on the board, and the
+          optimizer holds them back until your roster requires them. Expect them in your last picks.
+        </p>
+      )}
     </div>
   )
 }
@@ -809,7 +831,7 @@ function GradeCard({
         in this mock room on projected starter points, {vsMedian >= 0 ? "+" : ""}
         {vsMedian.toLocaleString()} against the room median. You filled {me.startersFilled} of{" "}
         {me.starterSlots} starter slots
-        {rounds < slotsPerTeam ? ` in a ${rounds}-of-${slotsPerTeam}-round quick mock` : ""}.
+        {rounds < slotsPerTeam ? ` over ${rounds} of this roster's ${slotsPerTeam} rounds` : ""}.
       </p>
 
       {/* ⚠️ NOT OPTIONAL, AND NOT BEHIND A CLICK — see GRADE_CIRCULARITY_NOTE. */}
@@ -822,21 +844,30 @@ function GradeCard({
           Your starters vs the room median, by position
         </h3>
         <div className="flex flex-wrap gap-1.5">
-          {positions.map((p) => {
-            const d = p.mine - p.roomMedian
-            return (
-              <span
-                key={p.pos}
-                className={`rounded border px-2 py-1 text-xs ${
-                  d >= 0
-                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                    : "border-amber-500/30 bg-amber-500/10 text-amber-300"
-                }`}
-              >
-                {p.pos} {p.mine.toLocaleString()} <span className="opacity-70">({d >= 0 ? "+" : ""}{d})</span>
-              </span>
-            )
-          })}
+          {/* A position NOBODY in the room has drafted yet is not a comparison — in a quick mock
+              that is every K and D/ST, and rendering "K 0 (+0)" in the same green as a real edge
+              says we measured something when we measured nothing. */}
+          {positions
+            .filter((p) => p.mine > 0 || p.roomMedian > 0)
+            .map((p) => {
+              const d = p.mine - p.roomMedian
+              return (
+                <span
+                  key={p.pos}
+                  className={`rounded border px-2 py-1 text-xs ${
+                    d >= 0
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                      : "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                  }`}
+                >
+                  {p.pos} {p.mine.toLocaleString()}{" "}
+                  <span className="opacity-70">
+                    ({d >= 0 ? "+" : ""}
+                    {d})
+                  </span>
+                </span>
+              )
+            })}
         </div>
       </div>
 
