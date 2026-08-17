@@ -1308,11 +1308,18 @@ def write_report(r: dict, controls: dict | None = None) -> Path:
         A("")
         vz = {w: t["totals"][w]["obs"]["var_z_pooled"] for w in ("FULL", "RECENT", "EARLIER")
               if w in t["totals"]}
-        A(f"1. **Same sign and near-identical size in two INDEPENDENT out-of-sample windows** — "
-          f"`Var(z)` = "
+        gap = (abs(vz["RECENT"] - vz["EARLIER"])
+               if {"RECENT", "EARLIER"} <= set(vz) else float("nan"))
+        A(f"1. **Same sign and similar size in the two DISJOINT windows** — `Var(z)` = "
           + ", ".join(f"{w} {x:.4f}" for w, x in vz.items())
-          + ". A noise artefact has no reason to reproduce to the third decimal across a "
-            "disjoint split.")
+          + (f". `RECENT` and `EARLIER` share no rows and differ by only {gap:.4f}."
+             if np.isfinite(gap) else ".")
+          + " ⚠️ **Weigh this honestly rather than rhetorically:** `FULL` is the UNION of the other "
+            "two and is therefore **not** a third independent reading; two disjoint windows landing "
+            "on the same side of 1 is a coin flip's worth of evidence on its own (`p` = 0.25); and "
+            "against a bootstrap SE on `Var(z)` of roughly 0.13, agreeing this closely is partly "
+            "luck. What it does rule out is the specific story that one unusual stretch is driving "
+            "the whole gap.")
         if oos.get("evaluable"):
             A(f"2. **The multiplier GENERALISES.** Fitted on EARLIER alone "
               f"(`ĉ` = {oos['c_hat_fit']:.4f}) and applied to RECENT, it moves `Var(z)` "

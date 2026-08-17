@@ -417,7 +417,7 @@ Read the two facts together:
 
 **What "real-looking" rests on — three readings that are not the pre-registered test, and do not substitute for it:**
 
-1. **Same sign and near-identical size in two INDEPENDENT out-of-sample windows** — `Var(z)` = FULL 1.1136, RECENT 1.1094, EARLIER 1.1157. A noise artefact has no reason to reproduce to the third decimal across a disjoint split.
+1. **Same sign and similar size in the two DISJOINT windows** — `Var(z)` = FULL 1.1136, RECENT 1.1094, EARLIER 1.1157. `RECENT` and `EARLIER` share no rows and differ by only 0.0063. ⚠️ **Weigh this honestly rather than rhetorically:** `FULL` is the UNION of the other two and is therefore **not** a third independent reading; two disjoint windows landing on the same side of 1 is a coin flip's worth of evidence on its own (`p` = 0.25); and against a bootstrap SE on `Var(z)` of roughly 0.13, agreeing this closely is partly luck. What it does rule out is the specific story that one unusual stretch is driving the whole gap.
 2. **The multiplier GENERALISES.** Fitted on EARLIER alone (`ĉ` = 1.0562) and applied to RECENT, it moves `Var(z)` 1.1094 → 0.9944. That is an out-of-sample read, not the in-sample ceiling.
 3. **A coherent mechanism** — §6: on the games both tiers priced, the morning model emits a NARROWER σ than the post-lineup model, which MH2.6 measured inside its null.
 
