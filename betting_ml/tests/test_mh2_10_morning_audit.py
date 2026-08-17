@@ -353,3 +353,34 @@ def test_the_contrast_block_cannot_influence_the_verdict():
     assert base["verdict"] == wrecked["verdict"]
     assert base["contrast"]["sigma_mean_post"] != wrecked["contrast"]["sigma_mean_post"]
     assert wrecked["contrast"]["contracts_nest"] is False
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 10. A SMOKE RUN MAY NEVER CLOBBER THE REAL REPORT
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+def test_a_smoke_run_writes_to_its_own_path_and_labels_itself(tmp_path, monkeypatch):
+    """RED-PROVABLE, and it bit for real during MH2.10.
+
+    A `--smoke` invocation run purely to check the report code still compiled OVERWROTE the real
+    served-population report with synthetic numbers. Nothing errored, and the output was
+    byte-plausible — same sections, same verdict vocabulary, a realistic-looking `ĉ` — so a stray
+    copy is indistinguishable from the audit by eye. That is the NF-W2c-CBS fixed-output-path
+    class: a runner that writes a fixed filename clobbers a prior run's artifact on any partial
+    re-run.
+
+    Two independent defences are asserted, because either alone can be edited away: the smoke
+    writes to a SCOPED filename, and the smoke report LABELS itself in its own text.
+    """
+    monkeypatch.setattr(M, "_ABL", tmp_path)
+    real = tmp_path / "mh2_10_morning_audit.md"
+    real.write_text("THE REAL REPORT")
+
+    r = M.run(smoke=True, reps=M.min_null_reps() + 1, with_power=False, with_games_needed=False,
+              windows=("FULL",), sigma_mde=1.10)
+    out = M.write_report(r)
+
+    assert out != real, "a smoke run wrote to the production report path"
+    assert real.read_text() == "THE REAL REPORT", "a smoke run clobbered the real report"
+    assert "SMOKE" in out.name
+    assert "NOT THE AUDIT" in out.read_text()

@@ -826,6 +826,50 @@ def control_sweep(*, n: int, mu_ref, sigma_ref, reps: int, seed: int,
     }
 
 
+def shape_artifact_reachability(*, n: int, mu_ref, sigma_ref, reps: int, seed: int,
+                                n_rep: int = 8, t_df: float = 5.0,
+                                scales=(1.06, 1.08)) -> dict:
+    """⭐ Is the SCALE-vs-SHAPE boundary in the right PLACE, or only in the source?
+
+    The clause-isolation guard proves `SHAPE_ARTIFACT` binds alone at the decision-rule level. That
+    is necessary but not sufficient: a discriminator could be reachable in principle and still sit
+    at a useless threshold. This probe drives the harness end to end on a world that is BOTH
+    heavy-tailed AND genuinely mis-scaled, and sweeps the true scale error across the boundary.
+
+    What it must show is a MONOTONE hand-over: at a scale error small enough that the heavy tail
+    can account for it, the verdict should be `SHAPE_ARTIFACT`; as the true error grows past what
+    the shape can explain, it must flip to `SIGMA_SCALE_DEFECT`. A discriminator that answered
+    `SHAPE_ARTIFACT` at every scale error would be a machine that can never blame σ — the mirror
+    image of the premise's error, and just as wrong.
+    """
+    from scipy.stats import t as tdist
+
+    def frame(rng, scale):
+        fr = clean_frame(n, rng, mu_ref=mu_ref, sigma_ref=sigma_ref)
+        e = tdist.rvs(t_df, size=n, random_state=rng)
+        e = e / np.std(e, ddof=0)
+        fr["y_total"] = np.round(fr["mu"].values + fr["sigma"].values * scale * e)
+        return fr
+
+    out = {}
+    for sc in scales:
+        labs = [run(frame=frame(np.random.default_rng(900 + i), sc), reps=reps,
+                    with_power=False, with_games_needed=False,
+                    windows=("FULL",))["verdict"]["verdict"] for i in range(n_rep)]
+        out[f"sigma_x{sc}"] = {"labels": {x: labs.count(x) for x in sorted(set(labs))},
+                               "shape_artifact_rate": float(np.mean(
+                                   [x == "SHAPE_ARTIFACT" for x in labs])),
+                               "sigma_defect_rate": float(np.mean(
+                                   [x == "SIGMA_SCALE_DEFECT" for x in labs]))}
+    rates = [out[f"sigma_x{sc}"]["sigma_defect_rate"] for sc in scales]
+    return {"t_df": t_df, "n_rows_per_frame": n, "reps": reps, "by_scale": out,
+            # the hand-over must be monotone in the TRUE scale error, or the boundary is arbitrary
+            "hands_over_monotonically": bool(all(a <= b for a, b in zip(rates, rates[1:]))),
+            "both_branches_reached": bool(
+                any(v["shape_artifact_rate"] > 0 for v in out.values())
+                and any(v["sigma_defect_rate"] > 0 for v in out.values()))}
+
+
 def _smoke_frame(seed: int) -> pd.DataFrame:
     """A tiny synthetic served frame — proves the harness end to end without touching S3."""
     rng = np.random.default_rng(seed)
@@ -861,6 +905,11 @@ def write_report(r: dict, controls: dict | None = None) -> Path:
     A = L.append
     A("# MH2.10 — morning-tier (`pre_lineup_v6`) served-calibration audit")
     A("")
+    if r.get("smoke"):
+        A("> ⛔⛔ **SYNTHETIC SMOKE OUTPUT — NOT THE AUDIT.** Every number below is drawn from a "
+          "generated frame and says nothing about the served model. Kept only to prove the report "
+          "path runs.")
+        A("")
     A(f"**Verdict: `{v['verdict']}`** — {v['reason']}.")
     A("")
     A(f"`best_alpha = 0` · deploy-held · Phase 2 fires: "
@@ -1261,12 +1310,20 @@ def write_report(r: dict, controls: dict | None = None) -> Path:
       "merging IS the deploy, with no gate between merge and serve.** `best_alpha = 0`.")
     A("")
     _ABL.mkdir(parents=True, exist_ok=True)
-    p = _ABL / "mh2_10_morning_audit.md"
+    # ⚠️ A RUNNER THAT WRITES A FIXED OUTPUT PATH CLOBBERS A PRIOR RUN'S ARTIFACT (NF-W2c-CBS), and
+    #    this one bit during MH2.10 itself: a `--smoke` invocation run purely to check that the
+    #    report code path still compiled OVERWROTE the real served-population report with synthetic
+    #    numbers. Nothing errored, and a `--smoke` report is byte-plausible — it has the same
+    #    sections, the same verdict vocabulary and a realistic-looking `ĉ`. Scoping the filename to
+    #    the run is the cure; the report also carries its own `smoke` banner so a stray copy cannot
+    #    be mistaken for the audit.
+    stem = "mh2_10_morning_audit" + ("_SMOKE" if r.get("smoke") else "")
+    p = _ABL / f"{stem}.md"
     p.write_text("\n".join(L))
     payload = dict(r)
     if controls:
         payload["controls"] = controls
-    (_ABL / "mh2_10_morning_audit.json").write_text(json.dumps(payload, indent=2, default=str))
+    (_ABL / f"{stem}.json").write_text(json.dumps(payload, indent=2, default=str))
     return p
 
 
@@ -1279,12 +1336,31 @@ def main() -> None:
     ap.add_argument("--acceptance", action="store_true",
                     help="ALSO measure the instrument's own operating characteristics (⏱ slow)")
     ap.add_argument("--control-reps", type=int, default=None)
+    ap.add_argument("--controls-from", type=str, default=None,
+                    help="reuse a PRIOR run's measured controls (⏱ the sweep is ~30 min, and "
+                         "re-running it to re-render prose would be pure waste). Reads the "
+                         "`controls` block of a previous result JSON.")
     ap.add_argument("--n-clean", type=int, default=N_CLEAN_CONTROL)
     ap.add_argument("--n-shape", type=int, default=N_SHAPE_CONTROL)
+    ap.add_argument("--reachability", action="store_true",
+                    help="run the scale-vs-shape BOUNDARY probe only, and print its JSON")
     a = ap.parse_args()
+
+    if a.reachability:
+        df = _smoke_frame(a.seed) if a.smoke else pull(Path(a.cache) if a.cache else None)
+        m = df[df["tier"] == TIER]
+        print(json.dumps(shape_artifact_reachability(
+            n=len(m), mu_ref=m["mu"].values, sigma_ref=m["sigma"].values,
+            reps=a.control_reps or N_NULL, seed=a.seed), indent=2))
+        return
 
     r = run(seed=a.seed, smoke=a.smoke, cache=Path(a.cache) if a.cache else None, reps=a.reps)
     controls = None
+    if a.controls_from:
+        controls = json.loads(Path(a.controls_from).read_text()).get("controls")
+        if not controls:
+            raise SystemExit(f"{STORY}: no `controls` block in {a.controls_from} — refusing to "
+                             f"render an operating-characteristics section from nothing.")
     if a.acceptance:
         t = r["morning"]["totals"]["FULL"]["obs"]
         df = _smoke_frame(a.seed) if a.smoke else pull(Path(a.cache) if a.cache else None)
