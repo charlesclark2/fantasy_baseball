@@ -19,6 +19,9 @@ Generated 2026-08-16T08:16:23.418683+00:00 · gate league **full_ppr** · 8 fold
 | WR | `joint_rank` | `foil_direct_points` | +0.0173 | [0.0055, 0.029] | 7/8 | 0.8633 | 0.7383 | 0.0173 | 0.0 | 0.7242 | NULL |
 | TE | `joint_rank` | `foil_direct_points` | +0.0257 | [0.0161, 0.0354] | 8/8 | 0.8859 | 0.7966 | 0.0201 | 0.0 | 0.9822 | SHIP |
 
+⚠️ **A null above is about the FOIL named beside it, not about dependence.** The best foil at every position is `foil_direct_points` — a learner pointed straight at league points — so a `beats_foil` failure says *assembling from per-stat parts did not beat modelling the total directly*, NOT that cross-stat correlation is inert. The next table answers the dependence question, and it passes at every position.
+
+
 ## Did correlation earn its place?
 
 | pos | Δ CRPS vs the matched INDEPENDENT foil | independence under-disperses | knob moves coverage | winner beats indep on coverage |
@@ -67,6 +70,23 @@ Generated 2026-08-16T08:16:23.418683+00:00 · gate league **full_ppr** · 8 fold
   - oracle floor `joint_pit`: **RESPECTED** (arm 1.798, own-form oracle 1.7936, matched-n 1.7969, peek gain vs arm 0.004465, inversion p 1.0)
   - oracle floor `joint_double`: **RESPECTED** (arm 1.7925, own-form oracle 1.7906, matched-n 1.7902, peek gain vs arm 0.001885, inversion p 0.9145)
   - ⭐ activity POSITIVE CONTROL `foil_direct_points`: **RESPECTED**, peek gain 0.687705 — proves the detector can see an oracle that acts
+
+## What the assembled row is actually made of
+
+| pos | source | priced legs from a bake-off winner | on a calibrated DEFAULT |
+|---|---|---|---|
+| QB | `partial_default` | 5 of 10 (passing_yards, passing_tds, passing_interceptions, rushing_yards, rushing_tds) | 5 |
+| RB | `partial_default` | 3 of 10 (rushing_yards, rushing_tds, receptions) | 7 |
+| WR | `partial_default` | 3 of 10 (receptions, receiving_yards, receiving_tds) | 7 |
+| TE | `partial_default` | 2 of 10 (receptions, receiving_yards) | 8 |
+- **QB** — 5 of 10 priced stats use a NF-W6d calibrated DEFAULT (fumbles_lost, receiving_tds, receiving_yards, receptions, two_pt) — a calibrated range, not a conditional projection
+  - legs no preset prices (never scored, never shown): attempts, carries, targets
+- **RB** — 7 of 10 priced stats use a NF-W6d calibrated DEFAULT (fumbles_lost, passing_interceptions, passing_tds, passing_yards, receiving_tds, receiving_yards, two_pt) — a calibrated range, not a conditional projection
+  - legs no preset prices (never scored, never shown): attempts, carries, targets
+- **WR** — 7 of 10 priced stats use a NF-W6d calibrated DEFAULT (fumbles_lost, passing_interceptions, passing_tds, passing_yards, rushing_tds, rushing_yards, two_pt) — a calibrated range, not a conditional projection
+  - legs no preset prices (never scored, never shown): attempts, carries, targets
+- **TE** — 8 of 10 priced stats use a NF-W6d calibrated DEFAULT (fumbles_lost, passing_interceptions, passing_tds, passing_yards, receiving_tds, rushing_tds, rushing_yards, two_pt) — a calibrated range, not a conditional projection
+  - legs no preset prices (never scored, never shown): attempts, carries, targets
 
 ## Promote blockers
 
