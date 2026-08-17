@@ -441,7 +441,15 @@ export function DraftOptimizer() {
       {board && config && (
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
           {/* LEFT: recommendations + available board */}
-          <div className="flex flex-col gap-4">
+          {/* ⚠️ `min-w-0` IS LOAD-BEARING, NOT TIDY-UP. A grid item's automatic minimum is its
+              MIN-CONTENT width, and `truncate` (white-space: nowrap) makes the min-content of the
+              recommendation rationale the FULL sentence — so the `1fr` track grows to fit it, the
+              grid overflows `max-w-6xl`, and the whole page gets a horizontal scrollbar with the
+              roster panel pushed off screen. Measured before the fix at a 1512px viewport:
+              scrollWidth 2129. ⛔ `min-w-0` on the flex child inside is NOT enough — that removes
+              the item's automatic minimum for FLEX layout, it does not reduce the grid track's
+              intrinsic minimum. Guarded by "a long recommendation reason never widens the page". */}
+          <div className="flex min-w-0 flex-col gap-4">
             {/* recommendations */}
             <div className="rounded-lg border border-[#262626] bg-[#0f0f0f] p-4">
               <div className="mb-3 flex items-center gap-2">
@@ -453,7 +461,11 @@ export function DraftOptimizer() {
                   points above the last startable player at the position), then adjusted for{" "}
                   <strong>your roster needs</strong> and <strong>positional tier cliffs</strong> (how
                   much value drops to the next player at that position if you wait). The green{" "}
-                  <span className="text-[#10b981]">+</span> is the roster-need boost. Not betting advice.
+                  <span className="text-[#10b981]">+</span> is the roster-need boost. A candidate whose only open
+                  slot is the <strong>FLEX</strong> is scored against what could replace him{" "}
+                  <em>in that seat</em> — a startable RB or WR — rather than against his own
+                  position&apos;s replacement, so two flex candidates are compared on projected
+                  points. Not betting advice.
                 </InfoTip>
               </div>
               {myTurn && onlyKdstLeft && (

@@ -3,6 +3,26 @@
     "week": "2026-08-17",
     "items": [
       {
+        "tag": "fixed",
+        "text": "Draft recommendations: a tight end no longer wins your FLEX seat unless he actually out-projects the running backs and receivers beside him. Value over replacement compares a player to the last startable player at HIS OWN position, which is exactly right for a slot only he can fill — and the wrong yardstick for a FLEX, which does not care which position walks into it. On this year's board, replacement level sits about 19 points lower at tight end than at running back or receiver, so every tight end carried that much of a head start into a comparison he does not deliver in your lineup. A FLEX-only candidate is now measured against what could actually replace him in that seat, which makes the comparison a comparison of projected points. Measured over 200 simulated drafts on the served board, it changes the top recommendation on 3 to 6 percent of picks, all of them in rounds three through seven, and in every single case the pick it replaces is a tight end at FLEX. Your dedicated tight end starter is untouched — taking the best one before the cliff is still the advice there. This is the shared engine, so the live Draft Optimizer changes with it."
+      },
+      {
+        "tag": "improved",
+        "text": "Mock draft: after the draft you can open every team's starting lineup, ranked by projected starter points, so you can see what the room actually built and judge for yourself whether it drafted like a draft room. Player names on the results screen and the roster panel open their player page in a new tab, and your roster now shows each player's bye week — amber when another player at the same position shares it, which is the clash that costs you a lineup slot."
+      },
+      {
+        "tag": "fixed",
+        "text": "Draft screens: a longer recommendation reason was widening the whole page, giving it a horizontal scrollbar and pushing the roster panel off the right edge. Fixed on both the mock draft and the live Draft Optimizer, and the reason itself is shorter now — it names the score and the player's published VOR, with the explanation moved into the panel's tooltip."
+      },
+      {
+        "tag": "fixed",
+        "text": "Mock draft: the two post-draft value lists were the wrong way round. \"Fell furthest past ADP\" was showing the players you reached for and \"Taken earliest vs ADP\" the ones who fell to you. Both now read as labelled, and the ADP column shows the player's own average draft position rather than his rank within it."
+      },
+      {
+        "tag": "improved",
+        "text": "The NFL menu is grouped by what you are trying to do — Rankings & research, Draft, My leagues — rather than one list of twelve. Mock Draft now sits directly beside the Draft Optimizer, which is the pairing it should always have had."
+      },
+      {
         "tag": "new",
         "text": "Mock Draft: practise a full draft against CPU opponents, any time of year. Pick your format, league size and draft slot, and the room drafts around you — each seat with its own habits, blending market ADP with our projections, so players we like and the market does not actually fall to you. You draft with the same recommendations and the same reasoning the live Draft Optimizer gives you, then see how your roster came out: projected starter points against the rest of the room, position by position, and which of your picks fell furthest past ADP. Quick eight-round or full-roster, and a Skip button when you do not want to wait on the clock."
       },

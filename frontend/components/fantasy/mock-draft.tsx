@@ -428,6 +428,17 @@ export function MockDraft() {
               >
                 Start mock draft
               </Button>
+              {/* ⭐ SAID ON THE SETUP SCREEN, WHICH IS THE ONLY PLACE IT IS ACTIONABLE — once the room
+                  is drafting, "you'd be better off on a laptop" is a complaint, not advice.
+                  ⚠️ RENDERED UNCONDITIONALLY, not behind a `sm:hidden`. A phone user is who it is
+                  for, but a desktop user reading it learns the same true thing, and a media-query
+                  variant would be invisible to every check that reads this page at one width. It is
+                  a statement about the tool, not a device sniff. */}
+              <p className="mt-1 text-[11px] leading-snug text-gray-600">
+                Best on a laptop or desktop. A draft board is a wide table beside a live
+                recommendation panel and your roster, and a phone can only show you one of the three
+                at a time — it works, but you will be scrolling between them on every pick.
+              </p>
             </div>
           )}
         </div>
@@ -508,7 +519,15 @@ export function MockDraft() {
 
       {board && config && (
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-          <div className="flex flex-col gap-4">
+          {/* ⚠️ `min-w-0` IS LOAD-BEARING, NOT TIDY-UP. A grid item's automatic minimum is its
+              MIN-CONTENT width, and `truncate` (white-space: nowrap) makes the min-content of the
+              recommendation rationale the FULL sentence — so the `1fr` track grows to fit it, the
+              grid overflows `max-w-6xl`, and the whole page gets a horizontal scrollbar with the
+              roster panel pushed off screen. Measured before the fix at a 1512px viewport:
+              scrollWidth 2129. ⛔ `min-w-0` on the flex child inside is NOT enough — that removes
+              the item's automatic minimum for FLEX layout, it does not reduce the grid track's
+              intrinsic minimum. Guarded by "a long recommendation reason never widens the page". */}
+          <div className="flex min-w-0 flex-col gap-4">
             {grade ? (
               <GradeCard grade={grade} rounds={rounds} slotsPerTeam={slotsPerTeam} onRestart={restart} />
             ) : (
@@ -521,7 +540,11 @@ export function MockDraft() {
                     Picks are ranked by <strong>VOR</strong> (Value Over Replacement — projected fantasy
                     points above the last startable player at the position), then adjusted for{" "}
                     <strong>your roster needs</strong> and <strong>positional tier cliffs</strong>. The same
-                    engine the live Draft Optimizer uses. Not betting advice.
+                    engine the live Draft Optimizer uses. A candidate whose only open
+                  slot is the <strong>FLEX</strong> is scored against what could replace him{" "}
+                  <em>in that seat</em> — a startable RB or WR — rather than against his own
+                  position&apos;s replacement, so two flex candidates are compared on projected
+                  points. Not betting advice.
                   </InfoTip>
                 </div>
                 <div className="flex flex-col gap-2">
@@ -721,6 +744,27 @@ function PosBadge({ pos, small }: { pos: string; small?: boolean }) {
   )
 }
 
+/** The player's bye week, amber when another player at the SAME position shares it — which is the
+ *  only bye clash the recommender actually penalises, and the only one that costs you a lineup slot
+ *  rather than merely a name. `null` renders an em dash rather than nothing, so a missing bye is
+ *  visible as missing instead of looking like week 0. */
+function ByeChip({ bye, pos, stacked }: { bye: number | null; pos: string; stacked: boolean }) {
+  const title =
+    bye == null
+      ? "no bye week on this player's row"
+      : stacked
+        ? `Bye week ${bye} — you hold another ${pos} on the same bye`
+        : `Bye week ${bye}`
+  return (
+    <span
+      title={title}
+      className={`shrink-0 text-[10px] tabular-nums ${stacked ? "text-amber-400/80" : "text-gray-600"}`}
+    >
+      {bye == null ? "—" : `BYE ${bye}`}
+    </span>
+  )
+}
+
 function RosterPanel({
   filled,
   openSlots,
@@ -745,6 +789,16 @@ function RosterPanel({
     }
     if (openSlots.flex.length) needs.push(`${openSlots.flex.length}× FLEX`)
   }
+  // ⭐ BYE STACKING, keyed EXACTLY as the recommender's own penalty is (`${pos}|${bye}`, over the
+  // whole roster including the bench — `myByes` in `draft-optimizer.ts`). Showing the week without
+  // showing the clash would be a number the user has to cross-reference by hand, and keying it any
+  // other way would mark players amber that the engine is not penalising, which is worse than not
+  // marking them at all.
+  const byeStack = new Map<string, number>()
+  for (const s of filled) {
+    const p = s.player
+    if (p?.bye != null) byeStack.set(`${p.pos}|${p.bye}`, (byeStack.get(`${p.pos}|${p.bye}`) ?? 0) + 1)
+  }
   return (
     <div className="rounded-lg border border-[#262626] bg-[#0f0f0f] p-4">
       <h2 className="mb-3 text-sm font-semibold text-white">Your team</h2>
@@ -768,6 +822,11 @@ function RosterPanel({
               <>
                 <PosBadge pos={s.player.pos} small />
                 <PlayerLink player={s.player} className="truncate text-sm text-white" />
+                <ByeChip
+                  bye={s.player.bye}
+                  pos={s.player.pos}
+                  stacked={(byeStack.get(`${s.player.pos}|${s.player.bye}`) ?? 0) > 1}
+                />
                 <span className="ml-auto text-xs text-gray-600">
                   {s.player.vor != null ? s.player.vor.toFixed(0) : "—"}
                 </span>
