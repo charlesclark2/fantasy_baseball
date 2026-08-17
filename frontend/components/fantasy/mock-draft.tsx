@@ -168,6 +168,13 @@ export function MockDraft() {
         const s = JSON.parse(raw) as MockState
         setPicks(s.picks ?? [])
         if (typeof s.seed === "number") setSeed(s.seed)
+        // ⚠️ THE LENGTH HAS TO COME BACK TOO, and it is easy to miss because it is a SETUP control
+        // rather than draft state. The storage key does not include it, so a restored full-roster
+        // mock would otherwise reopen as a quick one — with more picks already made than the quick
+        // length allows, which reads as "Complete · 120/96 picks" and grades a draft the user did
+        // not run. Derived from the stored round count against this roster rather than persisting
+        // the toggle, so it stays right if the config's roster size ever changes.
+        if (typeof s.rounds === "number" && slotsPerTeam > 0) setQuick(s.rounds < slotsPerTeam)
       } else {
         setPicks([])
       }
