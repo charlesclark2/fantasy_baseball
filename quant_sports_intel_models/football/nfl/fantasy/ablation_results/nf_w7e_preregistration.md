@@ -305,3 +305,115 @@ reader knows what was seen at the moment the registration was frozen.)*
   ⇒ `CONSTRAINT_REFUSED`, atom-cap CONFIRMED) and the record will say so.
 - ⚠️ `incumbent_reproduces` / `predecessor_reproduces` cannot pass at 300 draws by construction
   (as in NF-W7d's smoke); the identity is checked at 4000 draws in the decisive run.
+
+---
+
+## 12. POST-RUN FINDINGS (added AFTER the decisive run — 2026-08-17; run by the operator, 4,933 s)
+
+⛔ **Nothing in this section changes a gate, a threshold, an arm, or a verdict.** The run's result
+stands exactly as §§0–11 defined it: **SHIP at WR** (`mixall_learned`, +0.0034 CRPS vs the
+incumbent 8/8, +0.0018 vs NF-W7d's `mix_played` 7/8, DSR 0.985, PIT 0.0145) · **QB
+`CONSTRAINT_REFUSED`** on the PIT bar alone (every other clause green; +0.0064 vs the incumbent 8/8,
++0.0095 vs `mix_played` 8/8, DSR 0.9999, PIT 0.0648) · **RB `GENUINE_ABSENCE` against
+`mix_played`** (−0.0039, 1/8 — while beating the incumbent +0.0078 8/8) · **TE `GENUINE_ABSENCE`
+against `mix_played`** (−0.0005, CI95 [−0.0015, +0.0005], 4/8 — a TIE; +0.0016 vs the incumbent
+7/8). **Atom cap: `QB_BLOCKED_AT_THE_MARGINAL_LAYER` (CONFIRMED).** All three reproduction
+identity proofs exact — max gap **0.0 on 8/8 folds** for `single_copula` (vs NF-W7c), `mix_off`
+and `mix_played` (vs NF-W7d) at every position; `atom_is_sigma_invariant` gap 0.0.
+
+### 12.1 ⭐⭐ The two halves are NOT additive — the interaction is roughly HALF the split
+
+NF-W7d's attribution measured the split OVER Σ_played and the Σ population WITHOUT the split;
+the additive reading predicted the split over Σ_all would be worth the same +0.0149/+0.0161/
++0.0058/+0.0036. Measured, the whole 2×2:
+
+| pos | split over Σ_all (THE CLAIM) | split over Σ_played (NF-W7d) | ratio | Σ pop WITH split (`mix_played` − arm) | Σ pop WITHOUT split (NF-W7d) |
+|---|---|---|---|---|---|
+| QB | **+0.0064** (8/8) | +0.0149 | 0.43 | **+0.0095** (8/8) | −0.0180 |
+| RB | **+0.0078** (8/8) | +0.0161 | 0.48 | **−0.0039** (1/8) | −0.0044 |
+| WR | **+0.0034** (8/8) | +0.0058 | 0.59 | **+0.0018** (7/8) | −0.0042 |
+| TE | **+0.0016** (7/8) | +0.0036 | 0.44 | **−0.0005** (4/8) | −0.0015 |
+
+- ⭐ **The split is worth roughly HALF as much over Σ_all as over Σ_played, at every position.**
+  Σ_all already carries part of the availability co-movement (its ρ̄ is 1.2–1.8× the conditional
+  one), so an explicit Bernoulli split has less left to price. NF-W7d's "+0.0149 at QB" was a
+  statement about the split *conditional on* Σ_played — exactly what §12.1 there warned, now
+  measured.
+- ⭐ **The Σ-population sign is POSITION-SPECIFIC once the split is on.** With the split off, Σ_played
+  cost at all four positions (NF-W7d). With the split on, Σ_all is better only where the
+  availability ratio is largest (QB 1.8×, +0.0095) and at WR (+0.0018); at RB `mix_played` (Σ_played
+  + split) is the better construction (−0.0039, 1/8) and at TE the two tie. **NF-W7d's "Σ_played
+  was the costly half" was true of the split-OFF row and does not transfer to the split-ON row.**
+  A bundled comparison against the incumbent alone would have read RB and TE as clean wins
+  (+0.0078 8/8, +0.0016 7/8) — registering `mix_played` as a CONTEST foil is what makes the record
+  say "not the best construction available at RB" instead.
+
+### 12.2 ⭐ QB: the CRPS claim is earned, the calibration is not — and the smoke observation reproduced
+
+- Every clause is green at QB except PIT: the arm beats BOTH foils 8/8, DSR 0.9999, oracle floors
+  respected and ACTIVE, π permutation loses, coverage 0.831. Refused by the bar alone ⇒
+  `CONSTRAINT_REFUSED`, no data trigger (§8).
+- ⭐ **The all-rows Σ moved QB's PIT the WRONG way: 0.0595 (`mix_played`) → 0.0648 (+0.0053)**,
+  even though the assembled total carries MORE zero mass (0.302 vs 0.296 — vs a realized 0.516). The
+  decile vector is the same under-priced-atom shape ([0.162, 0.139, 0.117, …, 0.090], worst
+  decile 0). The smoke's §11.1 observation reproduced in direction at 4,000 draws (smaller
+  magnitude). Reading: Σ_all carries the availability co-movement AND the split installs an
+  explicit atom — the joint layer prices availability twice; CRPS rewards the sharper conditional
+  draw, PIT punishes the double-pricing. `assembled_comonotone` still posts the best PIT in the QB
+  field (0.0563) for the third run running and still loses CRPS by 0.11 — the §4 discipline
+  (PIT gates, never ranks) did real work again.
+- ⭐⭐ **THE ATOM-CAP CONFIRMATION, plainly:** the installed atom is Σ-invariant to the last digit
+  (0.267125 under Σ_all and Σ_played, max fold gap 0.0); the marginals ADMIT at most 0.2687 of
+  atom against a realized all-zero rate of 0.5162 (shortfall 0.2475, the clamp binding on 91.7% of
+  rows); and with every joint-layer knob now exercised — split on/off × Σ_all/Σ_played across
+  NF-W7c/W7d/W7e, plus the comonotone ceiling — the best PIT any real arm posts at QB is 0.064.
+  **QB is BLOCKED AT THE MARGINAL LAYER. No joint-layer story clears it. The QB roadmap moves to
+  the 52-cell substrate** — specifically the QB cells whose own zero mass is smaller than the
+  realized all-zero rate (they cap `1 − min_i P̂_i(0)`); a marginal that admits the atom is the
+  precondition for any assembled QB distribution to be calibrated.
+
+### 12.3 RB / TE: read WHICH FOIL the null is against (NF-W7c §11.4, again)
+
+`classify_null` names the foil. At RB and TE the binding foil is `mix_played` — NF-W7d's own arm —
+so `GENUINE_ABSENCE` says *"the all-rows Σ is not better than the active-rows Σ, with the split
+on, at this position"*; it does NOT say the split is dead (the split over Σ_all is +0.0078 8/8 at
+RB, +0.0016 7/8 at TE against the incumbent). TE is a **tie** (CI spans zero, 4/8), which the
+two-way state word cannot express (NF-W2e's three-way lesson). RB's DSR 0.0076 / TE's 0.0036 are
+negative-delta arithmetic (trial SRs all negative), not a field-dispersion artifact.
+
+### 12.4 WR: the first shippable assembled arm at WR (deploy-held)
+
+NF-W7c certified TE only. `mixall_learned` at WR clears every clause: +0.0034 vs the incumbent
+8/8, +0.0018 vs `mix_played` 7/8, PBO 0.0, DSR 0.985, BH-FDR pass at family size 4, coverage
+0.867 vs the 0.80 floor, PIT 0.0145 (perfect-calibration median 0.0135 at this n — i.e.
+indistinguishable from calibrated), oracle floor RESPECTED and active, degenerates and both
+permutations lose. Deploy-held: an NF-G0 challenger, served by nothing until governance promotes.
+
+### 12.5 What the successors are (registered FORWARD, never selected here)
+
+1. ⭐ **A MARGINAL-layer story for QB** on the 52-cell substrate — the cap `1 − min_i P̂_i(0)` is now
+   measured at 0.2687 vs a 0.516 realized atom; the cells that bind it are identifiable from the
+   served map (the leg with the least zero mass on each row). This is the ONLY route to a
+   calibrated assembled QB distribution.
+2. **The Σ population as an in-fold, per-position choice** — the 2×2 says the better joint
+   construction is Σ_all at QB/WR and Σ_played at RB (TE a tie). ⛔ Picking per position from this
+   record is post-hoc; a legitimate successor selects the population IN-FOLD (validation-chosen,
+   the NF-D20 shape) and scores it against both incumbents.
+3. **`mix_played` at RB (and TE)** — NF-W7d's arm is the better construction at RB by this record's
+   own measurement and can only ship through a fresh registration there (as NF-W7d §5 permits for a
+   report-only win) — but the honest count is that this line has now spent three stories on the
+   same folds, and a PM decision on whether a fourth is warranted belongs to the roadmap, not here.
+
+### 12.6 Anchors and controls, all green
+
+Reproduction exact ×3 at every position; `atom_is_sigma_invariant` gap 0.0; `mixture_is_active`
+(atom 0.26–0.39) and `mixture_preserves_marginals` (drift ≤ 0.0047 vs 0.01) pass on measurement;
+all four degenerates lose everywhere (nearest: `assembled_comonotone`, by 0.03–0.11); the label
+permutation and the π permutation lose everywhere; all per-form oracle floors RESPECTED (the
+learned-π peek acts: gains 0.0023–0.0146); the activity positive control peeks 0.69–1.04; the
+three inherited dependence clauses pass ×4. ⇒ every verdict above is a measurement, not an
+artifact of a harness that could not have seen the effect.
+
+Process note (recorded so it is not repeated): the decisive run was launched in-session after the
+smoke and STOPPED by the operator under the >2-minute rule; the operator ran it. A predecessor
+session having run its own decisive run is not a precedent.

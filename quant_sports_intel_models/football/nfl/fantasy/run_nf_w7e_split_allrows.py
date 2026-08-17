@@ -49,6 +49,7 @@ import json
 import logging
 import sys
 import time
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -848,6 +849,11 @@ def main(argv=None) -> int:
                     help="ignore the per-fold marginal-bank cache and refit")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    # cosmetic: the NF-W6d serving dispatch predicts through a numpy view of a frame the learner
+    # was fitted on with column names; sklearn warns once per predict call (~hundreds per fold)
+    # and drowns the run log. Behaviour is unchanged (added after the decisive run; nothing scored
+    # depends on it).
+    warnings.filterwarnings("ignore", message="X does not have valid feature names")
     suffix = "_smoke" if args.smoke else ""
     art = _PROJECT_ROOT / _ARTIFACT_REL.replace(".json", f"{suffix}.json")
 
