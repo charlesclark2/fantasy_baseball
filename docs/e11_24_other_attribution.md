@@ -238,6 +238,13 @@ just CI. No soak needed for any of them (all off the predict path), so this is g
 between serving flips.
 
 ### 4. Point dbt CI off the production warehouse — **the largest overnight waker, one line**
+> ✅ **CLOSED 2026-08-17 — implemented (08-10) AND now PROVEN under load.** `CI_WH` carries a real
+> occupying write (`ref_teams` INSERT, X-Small, 107 ms provisioning wait) and the last `ci_betting`
+> statement on `COMPUTE_WH` was **2026-08-10 05:53:51 UTC** — zero since. Verifier:
+> `uv run python scripts/verify_ci_warehouse_repoint.py --since-minutes 2900` → PROVEN. Full record
+> + the false-PASS bug found in the verifier's own clause (2):
+> `docs/e11_24_literal_zero_snowflake.md` → "CI_WH PROVEN UNDER LOAD".
+
 **41 overnight waits / 3 active days.** `dbt/profiles.yml` `ci:` target → a dedicated warehouse.
 No serving risk, no soak, no runtime gate.
 - Recommend a **dedicated `CI_WH`** (X-Small, `auto_suspend=60`). Requires an operator
@@ -254,6 +261,13 @@ third instance of promotion. Port the SCD-2 write off Snowflake; `scd2_upsert` i
 function behind all 8 generators, so it is one port for many callers.
 
 ### 6. Snowsight cost UI on `COMPUTE_WH` — ~14 overnight waits / 4 days
+> ✅ **CLOSED — fix applied and RECONFIRMED 2026-08-17 against behaviour, not just config.**
+> `CCL1196.default_warehouse = MONITOR_WH`; its last statement that ever occupied `COMPUTE_WH` was
+> **2026-08-08 07:19:50 UTC**, and 08-09 → 08-17 is **zero billable / zero waits** there (8 days).
+> ⚠️ It still shows 6–48 `COMPUTE_WH` statements/day, but all are `warehouse_size IS NULL` Snowsight
+> session bootstrap — cloud-services-only, cannot resume a warehouse. **Do not re-open target 6 on
+> that row count** (it is correction 1 of this document presenting again). No `ALTER USER` needed.
+
 Not a repo change: the `CCL1196` user's **default warehouse** is `COMPUTE_WH`, so opening the
 cost dashboard resumes production. Switch that user's default to `MONITOR_WH` (console/operator
 setting). Ironic and worth stating plainly: **reading the cost dashboard costs credits.**
