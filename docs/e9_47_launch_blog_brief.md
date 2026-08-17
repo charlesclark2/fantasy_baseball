@@ -18,10 +18,11 @@ reproduce path, and its honest caveat, per the story's instructions.
 
 ### 🥇 #1 — THE SELF-CORRECTION STORY (recommended primary hook)
 
-**The finding:** Nine days before launch, we audited our own board against nine seasons of actual
-outcomes and found it was running systematically low — not by a little, and not evenly across
-positions. We found the *mechanism* (it was the per-game rate, not games-missed), fixed it, re-ran
-the validation, and republished the board and the public track record in the open, the same week.
+**The finding:** The day before launch, we audited our own board against thirteen seasons of actual
+outcomes (2013–2025) and found it was running systematically low — not by a little, and not evenly
+across positions. We found the *mechanism* (it was the per-game rate, not games-missed), fixed it,
+re-ran the validation, and republished the board and the public track record in the open, the same
+week we're launching.
 
 **The exact numbers** (from `quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_tr2_level_recalibration_b.{md,json}`, harness `run_nf_tr2_level.py --window 5`):
 - On the top-156-per-season tier, our pooled bias moved from **−12.85** points/player to **+1.41**
@@ -296,11 +297,11 @@ don't know" or "this could just be noise" out loud; that's the brand, not a weak
 
 ## The hook (lead with this)
 
-**Primary: the self-correction story.** Nine days before today's launch, we ran a systematic audit
-of our own season projections against nine years of actual outcomes — and found our numbers were
+**Primary: the self-correction story.** The day before today's launch, we ran a systematic audit of
+our own season projections against thirteen years of actual outcomes — and found our numbers were
 running low, in a specific, findable way. We tracked it down (it was how we priced a player's
 per-game rate, not how often we expected him to play — a subtler bug than it sounds), fixed it,
-re-validated it against nine years of held-out seasons, and republished the board and our public
+re-validated it against thirteen years of held-out seasons, and republished the board and our public
 track record in the open, in the same week we're launching. That's the story: not "our model is
 right," but "here's what it means for us to catch ourselves being wrong, and show our work."
 
@@ -321,10 +322,10 @@ per game" framing is probably the most vivid single number).
    with the market. That page (`/fantasy/track-record`) is public, free, and requires no account.
    Frame this as "you don't have to trust us — you can go check."
 3. **A fantasy-football fact, as a cold open.** Everyone "knows" running backs are a riskier draft
-   pick than wide receivers — but a fresh look at nine seasons of nflverse data shows a top-24 RB and
-   a top-24 WR repeat their tier the following year at almost exactly the same rate (see FACTS
-   block). That's a good scene-setter for why a single-number projection is dishonest and a range is
-   the more useful thing to ship — which is what we did.
+   pick than wide receivers — but a fresh look at ten seasons of nflverse data (nine year-over-year
+   comparisons) shows a top-24 RB and a top-24 WR repeat their tier the following year at almost
+   exactly the same rate (see FACTS block). That's a good scene-setter for why a single-number
+   projection is dishonest and a range is the more useful thing to ship — which is what we did.
 
 ## What we built (the rollout — state these plainly, no superlatives)
 
