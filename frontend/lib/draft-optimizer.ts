@@ -826,12 +826,13 @@ function rationale(
   }
   if (level === 2) parts.push(`Fills your open ${pos} starter`)
   else if (level === 1) parts.push(`Fills an open FLEX (${pos}-eligible)`)
-  // The re-basing, in words, whenever it is big enough to matter to the score on screen.
+  // The re-basing, whenever it is big enough to matter to the score on screen. ⚠️ SHORT ON PURPOSE:
+  // it names the two numbers, and the WHY belongs in the panel's tooltip rather than repeated on
+  // every row — the first cut spelled the whole mechanism out here, which both buried the rest of
+  // the sentence and (with `truncate`) blew the page's width out. Numbers on the row, rule in the
+  // tooltip.
   if (level === 1 && seatAdj < -0.5)
-    parts.push(
-      `Scored against the FLEX seat's replacement — a startable RB/WR, ${Math.round(-seatAdj)} pts ` +
-        `above the ${pos} baseline his ${Math.round(vor)} VOR is measured from`,
-    )
+    parts.push(`Scored for the FLEX seat: ${Math.round(vor + seatAdj)}, not his ${Math.round(vor)} VOR`)
   if (lastInTier && dropoff > 0) parts.push(`Last of Tier ${tier} — ${Math.round(dropoff)} VOR cliff to the next ${pos}`)
   // ⚠️ QUOTES `urgency`, NOT `dropoff` — for a FLEX seat the bonus is the gap over the flex POOL, and
   // naming the (larger) within-position gap beside it would explain the score with a number the
