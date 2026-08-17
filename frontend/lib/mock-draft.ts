@@ -386,10 +386,29 @@ export interface TeamGrade {
 export interface PickValue {
   player: Player
   overallPick: number
-  marketRank: number | null
-  /** Market rank minus the pick it was actually made at. Positive = he was still there later than
-   *  the market says he goes. `null` outside the ADP sample, where there is no market view to
-   *  compare against — NOT zero, which would read as "went exactly at ADP". */
+  /** The player's OWN market ADP — the value, not his rank within the ADP order.
+   *
+   *  ⚠️ THESE TWO ARE NOT INTERCHANGEABLE and the first cut shipped the wrong one under an "ADP"
+   *  label. `marketOrder` returns a DENSE rank over the sampled players (1..226 on the 2026
+   *  full-PPR board) while the ADP values themselves run 1.7..180.3, so the rank drifts further
+   *  from the number the further down the board you go — a player whose ADP is 80 can sit at rank
+   *  94 and would have been shown as "ADP 94". The rank is the right currency for the CPU's
+   *  ordering (it has to place un-sampled players too); the VALUE is the right currency here,
+   *  because it is on the same scale as the pick number it is being compared against. */
+  adp: number | null
+  /** `overallPick − adp`.
+   *
+   *  POSITIVE = he was still on the board LATER than the market drafts him — he FELL to you.
+   *  NEGATIVE = you took him EARLIER than the market does — a reach.
+   *
+   *  ⚠️ THIS SIGN SHIPPED INVERTED (reported 2026-08-17). It was computed as `marketRank −
+   *  overallPick`, which is positive for a REACH, while the screen filed the positive list under
+   *  "fell furthest past ADP" — so both lists were exactly backwards. Live example: Jordyn Tyson
+   *  taken at #44 with an ADP of 94 is a fifty-pick reach, and he was presented as the draft's
+   *  biggest value. Nothing caught it because the guard asserted the lists RENDER, never which way
+   *  they point; `the value lists point the right way` is the assertion that was missing.
+   *
+   *  `null` outside the ADP sample — NOT zero, which would read as "went exactly at ADP". */
   vsMarket: number | null
 }
 
@@ -434,9 +453,8 @@ export function gradeDraft(args: {
   picks: Pick[]
   nTeams: number
   mySlot: number
-  market: Map<string, number>
 }): DraftGrade {
-  const { board, config, picks, nTeams, mySlot, market } = args
+  const { board, config, picks, nTeams, mySlot } = args
   const byId = new Map(board.map((p) => [p.id, p]))
 
   const teams: TeamGrade[] = []
@@ -472,19 +490,20 @@ export function gradeDraft(args: {
     positions.push({ pos, mine: Math.round(at(me)), roomMedian: Math.round(median(teams.map(at))) })
   }
 
-  // My picks, priced against the market order. Only rows inside the ADP sample can be priced.
+  // My picks, priced against the player's own ADP. Only rows inside the sample can be priced.
   const myPicks: PickValue[] = []
   picks.forEach((p, i) => {
     if (p.slot !== mySlot) return
     const player = byId.get(p.id)
     if (!player) return
-    const inSample = player.adp != null
-    const marketRank = inSample ? (market.get(p.id) ?? null) : null
+    const adp = player.adp ?? null
+    const overallPick = i + 1
     myPicks.push({
       player,
-      overallPick: i + 1,
-      marketRank,
-      vsMarket: marketRank == null ? null : Math.round(marketRank - (i + 1)),
+      overallPick,
+      adp,
+      // Pick MINUS ADP: later than the market ⇒ positive ⇒ he fell. See the note on `vsMarket`.
+      vsMarket: adp == null ? null : Math.round(overallPick - adp),
     })
   })
   const priced = myPicks.filter((p) => p.vsMarket != null)

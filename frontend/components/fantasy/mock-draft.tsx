@@ -316,8 +316,8 @@ export function MockDraft() {
 
   const grade: DraftGrade | null = useMemo(() => {
     if (!board || !config || !draftComplete) return null
-    return gradeDraft({ board, config, picks, nTeams: size, mySlot, market })
-  }, [board, config, draftComplete, picks, size, mySlot, market])
+    return gradeDraft({ board, config, picks, nTeams: size, mySlot })
+  }, [board, config, draftComplete, picks, size, mySlot])
 
   const available = useMemo(() => {
     const rows = (board ?? []).filter((p) => !draftedIds.has(p.id))
@@ -536,7 +536,7 @@ export function MockDraft() {
                       <PosBadge pos={r.player.pos} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="truncate text-sm font-medium text-white">{r.player.name}</span>
+                          <PlayerLink player={r.player} className="truncate text-sm font-medium text-white" />
                           <span className="text-xs text-gray-600">
                             {teamLabel(r.player)} · {r.player.pos}
                             {r.player.posRank}
@@ -615,12 +615,7 @@ export function MockDraft() {
                         <td className="py-1.5">
                           <div className="flex items-center gap-2">
                             <PosBadge pos={p.pos} small />
-                            <Link
-                              href={`/fantasy/player/${p.id}`}
-                              className="text-white hover:text-[#10b981] hover:underline"
-                            >
-                              {p.name}
-                            </Link>
+                            <PlayerLink player={p} className="text-white" />
                             <span className="text-xs text-gray-600">
                               {teamLabel(p)}
                               {p.posRank ? ` · ${p.pos}${p.posRank}` : ""}
@@ -683,6 +678,37 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+/** A player's name, linked to his page — ALWAYS in a new tab.
+ *
+ * ⭐ `target="_blank"` is the load-bearing part, not decoration. A mock draft is a live state
+ * machine you are two hours into; navigating away to read a bye week and coming back means a
+ * remount, a refetch and a re-run of the restore path, and there is no reason to make a user risk
+ * that to answer "who is this guy again?". The draft stays exactly where it was.
+ *
+ * `rel="noopener noreferrer"` because `target="_blank"` without it hands the opened page a live
+ * `window.opener` handle back into ours. */
+function PlayerLink({
+  player,
+  className = "",
+}: {
+  // ⚠️ Spelled out rather than `Pick<Player, …>`: this module imports a draft `Pick` type, which
+  // shadows the built-in utility type of the same name.
+  player: { id: string; name: string }
+  className?: string
+}) {
+  return (
+    <Link
+      href={`/fantasy/player/${player.id}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`${player.name} — open his player page in a new tab`}
+      className={`hover:text-[#10b981] hover:underline ${className}`}
+    >
+      {player.name}
+    </Link>
+  )
+}
+
 function PosBadge({ pos, small }: { pos: string; small?: boolean }) {
   return (
     <span
@@ -741,7 +767,7 @@ function RosterPanel({
             {s.player ? (
               <>
                 <PosBadge pos={s.player.pos} small />
-                <span className="truncate text-sm text-white">{s.player.name}</span>
+                <PlayerLink player={s.player} className="truncate text-sm text-white" />
                 <span className="ml-auto text-xs text-gray-600">
                   {s.player.vor != null ? s.player.vor.toFixed(0) : "—"}
                 </span>
@@ -797,7 +823,11 @@ function PickLog({
                   {p.slot === mySlot ? "You" : `T${p.slot}`}
                 </span>
                 {player && <PosBadge pos={player.pos} small />}
-                <span className="truncate text-gray-300">{player?.name ?? p.id}</span>
+                {player ? (
+                  <PlayerLink player={player} className="truncate text-gray-300" />
+                ) : (
+                  <span className="truncate text-gray-300">{p.id}</span>
+                )}
               </div>
               {p.slot !== mySlot && log[p.id] && (
                 <div className="ml-12 truncate text-[10px] text-gray-600">{log[p.id]}</div>
@@ -893,11 +923,81 @@ function GradeCard({
         </div>
       )}
 
+      <RoomRosters grade={grade} />
+
       <div className="mt-4 flex gap-2">
         <Button size="sm" onClick={onRestart} className="bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669]">
           Draft a new room
         </Button>
       </div>
+    </div>
+  )
+}
+
+/** Every seat's starting lineup after the mock.
+ *
+ * ⭐ THIS IS A DATA-QUALITY INSTRUMENT AS MUCH AS A FEATURE. The grade compares the user against
+ * these rosters, so if the room drafted badly — three quarterbacks, a kicker in round 3, a starter
+ * slot left empty — the comparison is against nonsense and the only number the results screen shows
+ * is quietly meaningless. Reading the rosters is how you check that; a rank on its own cannot tell
+ * you whether the field it ranks against is realistic.
+ *
+ * The data was already computed (`gradeDraft` fills every seat's lineup to score it) — this only
+ * renders what the grade was working from. */
+function RoomRosters({ grade }: { grade: DraftGrade }) {
+  const [open, setOpen] = useState(false)
+  const byPoints = [...grade.teams].sort((a, b) => b.starterPoints - a.starterPoints)
+  return (
+    <div className="mt-3">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="text-xs font-semibold uppercase tracking-wide text-gray-400 hover:text-white"
+      >
+        {open ? "▾" : "▸"} Every team&apos;s starting lineup ({grade.nTeams} teams)
+      </button>
+      {open && (
+        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {byPoints.map((t, i) => (
+            <div
+              key={t.slot}
+              className={`rounded-md border p-2.5 ${
+                t.isMe ? "border-[#10b981]/50 bg-[#10b981]/5" : "border-[#262626] bg-[#0a0a0a]"
+              }`}
+            >
+              <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                <span className={`text-xs font-semibold ${t.isMe ? "text-[#10b981]" : "text-gray-300"}`}>
+                  {i + 1}. {t.isMe ? "Your team" : `Team ${t.slot}`}
+                </span>
+                <span className="text-[10px] text-gray-500">
+                  {t.starterPoints.toLocaleString()} pts · {t.startersFilled}/{t.starterSlots}
+                </span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {t.roster
+                  .filter((s) => !s.bench)
+                  .map((s, j) => (
+                    <div key={j} className="flex items-center gap-1.5 text-[11px]">
+                      <span className="w-9 shrink-0 uppercase text-gray-600">{s.slotName}</span>
+                      {s.player ? (
+                        <>
+                          <PosBadge pos={s.player.pos} small />
+                          <PlayerLink player={s.player} className="truncate text-gray-300" />
+                          <span className="ml-auto shrink-0 text-gray-600">
+                            {s.player.pts != null ? s.player.pts.toFixed(0) : "—"}
+                          </span>
+                        </>
+                      ) : (
+                        // An empty STARTER slot is the loudest possible data-quality signal: a seat
+                        // that finished the draft unable to field a lineup. Never render it as blank.
+                        <span className="text-amber-400/80">— empty starter —</span>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -920,9 +1020,9 @@ function PickValueList({
         {rows.map((r) => (
           <div key={r.player.id} className="flex items-center gap-2 text-xs">
             <PosBadge pos={r.player.pos} small />
-            <span className="truncate text-gray-200">{r.player.name}</span>
+            <PlayerLink player={r.player} className="truncate text-gray-200" />
             <span className="ml-auto shrink-0 text-gray-500">
-              #{r.overallPick} · ADP {r.marketRank}
+              #{r.overallPick} · ADP {r.adp != null ? Math.round(r.adp) : "—"}
             </span>
           </div>
         ))}

@@ -3,10 +3,11 @@ import { FIXTURES, collectPageErrors, mockApi } from "../support/api-mock"
 import { signIn } from "../support/session"
 import { forbiddenPhrasesIn } from "../support/claim-denylist"
 import { expectNoNaN, expectNoPageErrors } from "../support/assertions"
-import { openEligibility, type LeagueConfigMeta, type Player } from "@/lib/draft-optimizer"
+import { openEligibility, slotOnClock, type LeagueConfigMeta, type Player } from "@/lib/draft-optimizer"
 import {
   GRADE_CIRCULARITY_NOTE,
   boardOrder,
+  gradeDraft,
   marketOrder,
   simulateCpuPicks,
   type Pick,
@@ -166,6 +167,61 @@ test.describe("the CPU opponents", () => {
       median,
       `the median board rank of an off-sample pick was ${median} — no better than drawing at random, so our projections are not being read`,
     ).toBeLessThan(100)
+  })
+
+  test("the post-draft value lists point the right way", async () => {
+    // ⭐ THE ASSERTION THAT WAS MISSING, AND IT COST A LIVE BUG. Both lists shipped INVERTED —
+    // `vsMarket` was computed as `marketRank − overallPick`, which is positive for a REACH, while
+    // the screen filed the positive list under "fell furthest past ADP". Reported off a real mock:
+    // Jordyn Tyson, taken at #44 with an ADP of 94, was presented as the draft's biggest value when
+    // he was a fifty-pick reach.
+    //
+    // Nothing caught it because the only assertion on this panel was that it RENDERS. A list that
+    // is exactly backwards renders perfectly, with plausible names and plausible numbers, and reads
+    // as a feature. So this test does not ask whether the lists exist — it plants one unambiguous
+    // steal and one unambiguous reach and demands each land in its OWN list.
+    const b = board()
+    const c = config()
+    const cheap = b.filter((p) => p.adp != null).sort((x, y) => (y.adp as number) - (x.adp as number))[0]
+    const elite = b.filter((p) => p.adp != null).sort((x, y) => (x.adp as number) - (y.adp as number))[0]
+    expect(cheap.adp as number, "the fixture's ADP spread is too narrow to tell a steal from a reach")
+      .toBeGreaterThan((elite.adp as number) + 50)
+
+    // A 12-team snake: slot 1 is on the clock at pick 1 and again at pick 24 (the turn).
+    const filler = b.filter((p) => p.id !== cheap.id && p.id !== elite.id).slice(0, 60)
+    const picks: Pick[] = []
+    for (let i = 0; i < 24; i++) {
+      const slot = slotOnClock(i + 1, 12)
+      // The ELITE player (ADP ~1) is taken at pick 24 — twenty-odd picks after the market takes him,
+      // so he unambiguously FELL. The LATE-ADP player is taken at pick 1, a huge reach.
+      const id = i === 0 ? cheap.id : i === 23 ? elite.id : filler[i].id
+      picks.push({ id, slot })
+    }
+
+    const grade = gradeDraft({ board: b, config: c, picks, nTeams: 12, mySlot: 1 })
+    const fell = grade.steals.map((s) => s.player.id)
+    const early = grade.reaches.map((s) => s.player.id)
+
+    expect(
+      fell,
+      `${elite.name} (ADP ${elite.adp}) was taken at pick 24 — he fell, and is missing from the fell-past-ADP list`,
+    ).toContain(elite.id)
+    expect(
+      early,
+      `${cheap.name} (ADP ${cheap.adp}) was taken at pick 1 — a reach, and is missing from the taken-early list`,
+    ).toContain(cheap.id)
+
+    // …and the mirror, which is what actually failed: neither may appear in the OTHER list.
+    expect(fell, "a reach is being presented as a value pick — the sign is inverted").not.toContain(cheap.id)
+    expect(early, "a value pick is being presented as a reach — the sign is inverted").not.toContain(elite.id)
+
+    // The reported number is the player's own ADP, not his rank within the ADP order. Those drift
+    // apart down the board (dense rank 1..226 against ADP values 1.7..180.3), so showing the rank
+    // under an "ADP" label is wrong by a growing margin — which is what shipped.
+    const eliteRow = grade.steals.find((s) => s.player.id === elite.id)
+    expect(eliteRow?.adp, "the value list is reporting something other than the player's own ADP").toBe(
+      elite.adp,
+    )
   })
 
   test("every CPU pick is legal for the roster that made it, and nobody is drafted twice", async () => {
