@@ -196,7 +196,15 @@ export type MockOptions = {
    *                `roster-report.ts` left the suite GREEN. ⛔ Do not fold this into `one`; the two
    *                states differ in exactly one field and that field is the whole distinction.
    */
-  leagues?: "none" | "one" | "overQuota" | "linked" | "drafted" | "predraft" | "partialRosters"
+  leagues?:
+    | "none"
+    | "one"
+    | "overQuota"
+    | "linked"
+    | "drafted"
+    | "predraft"
+    | "partialRosters"
+    | "lineupGap"
   /**
    * ⭐ G100-D0 — what `/subscription/status` reports for this caller.
    *
@@ -503,6 +511,37 @@ function leagueBoardBuild() {
   return buildBoard(FIXTURES.projectionsEntitled().players, FIXTURES.myTeams().leagues[0])
 }
 
+/**
+ * ⭐ THE STARTING LINEUP, DECLARED ONCE — NF-C6b.
+ *
+ * `linkedRoster` builds the roster from this and `linkedRosterStarters` reports it to the specs, so
+ * the fixture and the arithmetic a spec checks against it cannot drift apart. Two spellings of "who
+ * starts" would let a roster change silently invalidate an expected total while both still looked
+ * right — a spec would then assert a correct-looking sum about the wrong lineup.
+ *
+ * ⚠️ NONE OF THESE IS A TE, and that is load-bearing rather than incidental: the captured league
+ * carries `position_bonuses.TE.rec = 0.5`, so a TE STARTER would make the half-vs-standard gap
+ * `1.0 × rec` for that row instead of `0.5 × rec` and the ranking arithmetic below would be wrong.
+ * The TE stays on the bench (where it also keeps the bench table non-empty).
+ */
+const LINKED_STARTERS = [
+  // ⭐ The WR is the one `linkedRosterSubject` returns for the per-player arithmetic check.
+  { pos: "WR", needsReceptions: true },
+  { pos: "RB", needsReceptions: true },
+  { pos: "QB", needsReceptions: false },
+] as const
+
+/** The linked roster's STARTERS with the reception count each carries.
+ *
+ *  NF-C6b's team total moves by `0.5 × rec` for EVERY starter, not just the WR that
+ *  `linkedRosterSubject` returns — so the rollup's ranking gate needs the whole starting lineup. */
+export function linkedRosterStarters(): { name: string; rec: number }[] {
+  return LINKED_STARTERS.map((s) => {
+    const p = boardPlayerAt(s.pos, s.needsReceptions) as any
+    return { name: String(p.name), rec: Number(p.rec ?? 0) }
+  })
+}
+
 function linkedRoster(): unknown[] {
   const entry = (p: any, starter: boolean) => ({
     player_key: `e2e-${p.id}`,
@@ -512,10 +551,7 @@ function linkedRoster(): unknown[] {
     starter,
   })
   return [
-    // ⭐ The WR is the one the arithmetic check uses — non-TE, so no position bonus is in play.
-    entry(boardPlayerAt("WR", true), true),
-    entry(boardPlayerAt("RB", true), true),
-    entry(boardPlayerAt("QB", false), true),
+    ...LINKED_STARTERS.map((s) => entry(boardPlayerAt(s.pos, s.needsReceptions), true)),
     // A bench player, so BOTH roster tables render — `RosterTable` returns null on an empty list,
     // and a roster of starters only would leave the bench branch unexercised.
     entry(boardPlayerAt("TE", true), false),
@@ -808,6 +844,76 @@ function linkedLeaguePair(): any[] {
   ]
 }
 
+/** The two leagues in the `lineupGap` mode. Ids are stable for spec locators. */
+export const E2E_LINEUP_GAP_LEAGUES = {
+  /** Everything it owns is in the starting lineup — nothing on the bench to gain. */
+  set: { id: "e2e-league-set", name: "Lineup Set FC" },
+  /** A better roster, almost all of it benched by the platform. */
+  benched: { id: "e2e-league-benched", name: "Benched Talent FC" },
+} as const
+
+/**
+ * ⭐⭐ NF-C6b — THE FIXTURE THAT MAKES "RANKED BY BEST-POSSIBLE" A REAL ASSERTION.
+ *
+ * ══ THE VACUITY THIS EXISTS TO CLOSE ═══════════════════════════════════════════════════════════
+ *
+ * In the `linked` pair the half-PPR team out-totals its standard twin on BOTH readings, so it ranks
+ * first whether the summary sorts on as-set or on best-possible. A spec asserting "ranked by
+ * best-possible" against that fixture therefore passes for an implementation that ranks by as-set —
+ * it cannot tell the two apart, and the gate would be decorative.
+ *
+ * ══ HOW THIS ONE SEPARATES THEM ════════════════════════════════════════════════════════════════
+ *
+ * BOTH leagues carry the SAME scoring (the captured half-PPR config), so the scoring format is not
+ * a confound and the ONLY thing that differs is which players the platform reports as starters:
+ *
+ *   · Lineup Set FC   — a three-player roster (WR, RB, QB), ALL of them starting.
+ *                       as-set = WR+RB+QB · best-possible = WR+RB+QB · gap = 0
+ *   · Benched Talent  — the SAME three PLUS a TE, and ONLY the TE is flagged as a starter.
+ *                       as-set = TE (small) · best-possible = WR+RB+QB+TE (the largest here)
+ *
+ * ⇒ the two orderings are REVERSED: as-set ranks Lineup Set FC first, best-possible ranks Benched
+ * Talent FC first. One assertion now distinguishes them, and it also gives the gap a non-zero value
+ * to check on one card and a zero value on the other.
+ */
+function lineupGapLeaguePair(): any[] {
+  const base = FIXTURES.myTeams().leagues[0]
+  const entry = (p: any, starter: boolean) => ({
+    player_key: `e2e-gap-${p.id}`,
+    name: p.name,
+    position: p.pos,
+    team: p.team,
+    starter,
+  })
+  const wr = boardPlayerAt("WR", true)
+  const rb = boardPlayerAt("RB", true)
+  const qb = boardPlayerAt("QB", false)
+  const te = boardPlayerAt("TE", true)
+
+  return [
+    {
+      ...base,
+      league_id: E2E_LINEUP_GAP_LEAGUES.set.id,
+      name: E2E_LINEUP_GAP_LEAGUES.set.name,
+      source_team_key: "e2e-team-set",
+      source_team_name: "All In",
+      imported_roster: [entry(wr, true), entry(rb, true), entry(qb, true)],
+      roster_synced_at: "2026-08-10T12:00:00Z",
+    },
+    {
+      ...base,
+      league_id: E2E_LINEUP_GAP_LEAGUES.benched.id,
+      name: E2E_LINEUP_GAP_LEAGUES.benched.name,
+      source_team_key: "e2e-team-benched",
+      source_team_name: "Riding Pine",
+      // ⚠️ Only the TE starts. The three better players sit, which is exactly the pre-kickoff state
+      // the PM's decision is about: a strong roster behind a lineup nobody has set.
+      imported_roster: [entry(te, true), entry(wr, false), entry(rb, false), entry(qb, false)],
+      roster_synced_at: "2026-08-10T12:00:00Z",
+    },
+  ]
+}
+
 /**
  * ⭐ E9.64 — THE IMPORT PREVIEW: step 2 of the importer, "Review what we read".
  *
@@ -997,6 +1103,7 @@ function espnPreviewForPaste(posted: string): unknown | undefined {
 function leaguesFor(leagues: NonNullable<MockOptions["leagues"]>): any[] {
   if (leagues === "none") return []
   if (leagues === "linked") return linkedLeaguePair()
+  if (leagues === "lineupGap") return lineupGapLeaguePair()
   if (leagues === "drafted") return [draftedLeague()]
   if (leagues === "predraft") return [predraftLeague()]
   // NF-C6P3 — the PARTIAL-coverage state: some of the league's rosters held, not all. It is a real
@@ -1091,7 +1198,14 @@ function personalPayloadFor(
   // ⭐ NF-C6P2 — one league, fully drafted (or linked-but-undrafted). `saved_total` matches and
   // nothing is withheld, so no quota story leaks into the roster-report assertions (same reasoning
   // as `linked` below).
-  if (leagues === "drafted" || leagues === "predraft" || leagues === "partialRosters") {
+  // NF-C6b — `lineupGap` is a two-league mode like `linked`, and joins this branch for the same
+  // reason: both leagues are the caller's own, so no quota story leaks into the rollup assertions.
+  if (
+    leagues === "drafted" ||
+    leagues === "predraft" ||
+    leagues === "partialRosters" ||
+    leagues === "lineupGap"
+  ) {
     const only = leaguesFor(leagues)
     return pathname === "/fantasy/leagues"
       ? only

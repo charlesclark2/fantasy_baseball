@@ -3,10 +3,25 @@
 // NF-C6 Phase 1 — My Teams: a cross-league browse surface, one place to see every imported team's
 // roster scored under ITS OWN league's format.
 //
-// Composes what already exists: NF-C0's saved leagues + NF-C0c's roster name resolution, scored by
-// the SAME client-side `buildBoard` every other fantasy surface uses (see `useMyTeams`'s docstring
-// in fantasy-queries.ts for why the scoring cannot move server-side — the API Lambda bundles neither
-// pandas/numpy nor `quant_sports_intel_models`). No new model, no new scoring logic.
+// Composes what already exists: NF-C0's saved leagues + NF-C0c's roster name resolution. No new
+// model, no new scoring logic.
+//
+// ⚠️ THIS HEADER USED TO SAY THE SCORING HAPPENS HERE, IN THE BROWSER, VIA `buildBoard` — AND THAT
+// IT "CANNOT MOVE SERVER-SIDE". Both halves stopped being true at NF-EPIC 1 (`144fa808`), which
+// made the raw stat line paid, ported the scorer to `app/backend/services/league_scoring.py` and
+// moved the arithmetic there. This file was not updated with it, so the comment sat here asserting
+// the opposite of what the code does — and a false comment is worse than a false doc, because the
+// next reader takes it as the design (a stale doc costs a lookup; this one drives a rewrite).
+//
+// WHAT ACTUALLY HAPPENS: `/fantasy/nfl/my-teams` returns each league's roster ALREADY JOINED to a
+// board scored under THAT league's own config (`_scored_rosters` → `build_board(players, record)`,
+// one `build_board` per league). This component renders `RosterMatch.board` and does no arithmetic.
+//
+// ⛔ SO DO NOT ADD A PER-CARD `/fantasy/nfl/league-board` FAN-OUT TO "GET THE SCORING". The scores
+// are already on the rows this page receives; a fan-out would be N redundant round trips for numbers
+// it already has. What `/my-teams` omits is the FULL ~858-row BOARD (25 leagues × that is ~6 MB,
+// past Lambda's proxy-response cap) — not the roster's scores. `useMyTeams` sets `board: null` for
+// that reason alone; a page needing one league's whole board calls `useLeagueBoard`.
 //
 // ROS = the season projection (pre-kickoff, so "rest of season" is effectively the full season) —
 // labelled honestly, never faked into a per-game number (a per-game figure divided out of a season
@@ -27,8 +42,26 @@ import {
   SurfaceHeader,
   num,
 } from "@/components/fantasy/shared"
-import { EXPECTED_POINTS_LABEL } from "@/lib/fantasy-claim-copy"
+import {
+  EXPECTED_POINTS_LABEL,
+  PORTFOLIO_AS_SET_LABEL,
+  PORTFOLIO_BEST_LABEL,
+  PORTFOLIO_CAVEAT_FORMATS,
+  PORTFOLIO_CAVEAT_LINEUP,
+  PORTFOLIO_CAVEAT_SNAPSHOT,
+  PORTFOLIO_GAP_LABEL,
+  PORTFOLIO_GAP_NONE,
+  PORTFOLIO_GAP_NOTE,
+  PORTFOLIO_HEADING,
+  PORTFOLIO_NOTE,
+  PORTFOLIO_TOTAL_LABEL,
+  PORTFOLIO_UNDERSTATED_NOTE,
+  portfolioGapHeadline,
+  portfolioUnfilledNote,
+  portfolioUnscoredNote,
+} from "@/lib/fantasy-claim-copy"
 import type { RosterMatch } from "@/lib/league-scoring"
+import { GAP_EPSILON, portfolioRollup, teamRollup, type TeamRollup } from "@/lib/portfolio-rollup"
 
 export function MyTeams() {
   const { teams, isLoading, isError } = useMyTeams()
@@ -37,7 +70,7 @@ export function MyTeams() {
     <div className="mx-auto max-w-6xl px-4 py-8">
       <SurfaceHeader
         title="My Teams"
-        blurb="Every league you've imported, in one place — each roster scored under that league's own format. Projections are the rest-of-season figure (pre-kickoff, so this is effectively the full season)."
+        blurb="Every league you've imported, in one place — each roster scored under that league's own format, and every team totalled and ranked. Projections are the rest-of-season figure (pre-kickoff, so this is effectively the full season)."
       />
 
       {isError && (
@@ -58,10 +91,162 @@ export function MyTeams() {
 
       {!isError && teams !== null && teams.length > 0 && (
         <div className="space-y-6">
+          {/* NF-C6b — the aggregate glance, ABOVE the per-league detail. A portfolio's value is the
+              comparison; burying it under N roster tables is the list this page already was. */}
+          <PortfolioSummary teams={teams} />
           {teams.map((entry) => (
             <LeagueCard key={entry.league.league_id} entry={entry} />
           ))}
         </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * NF-C6b — every team with a total, ranked.
+ *
+ * ⚠️ A `<div>`, DELIBERATELY, not a `<section>`. `fantasy-my-teams.spec.ts` locates a league card as
+ * `page.locator("section").filter({ hasText: <league name> }).first()`, and this block names every
+ * league — so as a `<section>` it would sit ABOVE the cards in the DOM and every existing card
+ * assertion would silently rebind to this summary instead. The rendered result would look right and
+ * the spec would be asserting about the wrong element.
+ */
+function PortfolioSummary({ teams }: { teams: MyTeamEntry[] }) {
+  const rollup = portfolioRollup(teams)
+  // Below two teams there is no ranking to show — the per-league card still carries its own total.
+  if (!rollup) return null
+
+  return (
+    <div
+      data-testid="portfolio-summary"
+      className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.03] p-4"
+    >
+      <div className="text-base font-medium text-gray-100">{PORTFOLIO_HEADING}</div>
+      <p className="mt-1 text-xs text-gray-400">{PORTFOLIO_NOTE}</p>
+
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[520px] text-left text-[11px]">
+          <thead>
+            <tr className="text-gray-600">
+              <th className="py-1 pr-2 font-medium">#</th>
+              <th className="py-1 pr-2 font-medium">League</th>
+              <th className="py-1 pr-2 font-medium">Scoring</th>
+              {/* ⭐ BEST-POSSIBLE IS THE RANKED COLUMN and sits first of the three numbers, because
+                  the order is only legible if the figure it was sorted on leads. */}
+              <th className="py-1 pr-2 text-right font-medium">{PORTFOLIO_BEST_LABEL}</th>
+              <th className="py-1 pr-2 text-right font-medium">{PORTFOLIO_AS_SET_LABEL}</th>
+              <th className="py-1 pr-2 text-right font-medium">{PORTFOLIO_GAP_LABEL}</th>
+              <th className="py-1 pr-2 text-right font-medium">80% range</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rollup.teams.map((t) => (
+              <tr key={t.leagueId} data-testid="portfolio-row" className="border-t border-white/5">
+                <td className="py-1 pr-2 text-gray-500">{t.rank}</td>
+                <td className="py-1 pr-2 text-gray-200">
+                  {t.leagueName}
+                  {t.teamName && <span className="text-gray-500"> · {t.teamName}</span>}
+                </td>
+                <td className="py-1 pr-2 text-gray-500">{t.formatLabel}</td>
+                <td
+                  className="py-1 pr-2 text-right font-medium text-gray-100"
+                  data-testid="portfolio-best"
+                >
+                  {num(t.bestPossible)}
+                </td>
+                <td className="py-1 pr-2 text-right text-gray-400" data-testid="portfolio-as-set">
+                  {num(t.asSet)}
+                  {t.unscoredStarters > 0 && (
+                    <span className="text-amber-400" title={portfolioUnscoredNote(t.unscoredStarters)}>
+                      {" "}
+                      +{t.unscoredStarters}?
+                    </span>
+                  )}
+                </td>
+                <td
+                  className={`py-1 pr-2 text-right ${
+                    t.gap >= GAP_EPSILON ? "font-medium text-emerald-300" : "text-gray-600"
+                  }`}
+                  data-testid="portfolio-gap"
+                >
+                  {t.gap >= GAP_EPSILON ? `+${num(t.gap)}` : "—"}
+                </td>
+                <td className="py-1 pr-2 text-right">
+                  <RangeCell p10={t.p10} p90={t.p90} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ⭐ THE CAVEATS RENDER WITH THE TABLE, never behind a disclosure — a caveat behind a click is
+          a caveat that did not render (NF-C6P3's own finding). */}
+      <ul className="mt-3 space-y-1 text-[11px] text-gray-500">
+        {rollup.mixedFormats && <li>{PORTFOLIO_CAVEAT_FORMATS}</li>}
+        <li>{PORTFOLIO_CAVEAT_LINEUP}</li>
+        <li>{PORTFOLIO_CAVEAT_SNAPSHOT}</li>
+        {rollup.anyUnderstated && <li className="text-amber-400/80">{PORTFOLIO_UNDERSTATED_NOTE}</li>}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * NF-C6b — one team's two totals and the gap between them. Rendered even when there is no ranking
+ * (a single league still has meaningful totals), which is why this is separate from
+ * `PortfolioSummary`.
+ *
+ * ⭐ THE GAP LEADS. It is the only figure on this surface with no cross-league confound — both
+ * totals come from the SAME league's scoring, so their difference is unaffected by the scoring and
+ * roster-size differences that keep the ranking a rough guide — and it is the one number here a
+ * reader can act on.
+ */
+function TeamTotal({ rollup }: { rollup: TeamRollup }) {
+  const hasGap = rollup.gap >= GAP_EPSILON
+  return (
+    <div
+      data-testid="team-total"
+      className="mt-3 rounded border border-white/10 bg-white/[0.02] px-3 py-2"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div className="text-[11px] text-gray-500">
+          {PORTFOLIO_BEST_LABEL}
+          <span className="ml-2 text-sm font-medium text-gray-100" data-testid="team-best-value">
+            {num(rollup.bestPossible)}
+          </span>
+          <span className="ml-2 text-gray-500">
+            <RangeCell p10={rollup.p10} p90={rollup.p90} />
+          </span>
+        </div>
+        <div className="text-[11px] text-gray-500">
+          {PORTFOLIO_AS_SET_LABEL}
+          <span className="ml-2 text-sm text-gray-300" data-testid="team-as-set-value">
+            {num(rollup.asSet)}
+          </span>
+        </div>
+      </div>
+
+      {/* ⭐ THE HERO LINE — prominent, not a footnote. */}
+      <p
+        className={`mt-2 text-xs font-medium ${hasGap ? "text-emerald-300" : "text-gray-500"}`}
+        data-testid="team-gap"
+        title={PORTFOLIO_GAP_NOTE}
+      >
+        {hasGap ? portfolioGapHeadline(num(rollup.gap)) : PORTFOLIO_GAP_NONE}
+      </p>
+      <p className="mt-1 text-[11px] text-gray-600">{PORTFOLIO_TOTAL_LABEL}</p>
+
+      {rollup.unscoredStarters > 0 && (
+        <p className="mt-1 text-[11px] text-amber-400/80">
+          {portfolioUnscoredNote(rollup.unscoredStarters)}
+        </p>
+      )}
+      {rollup.unfilledSlots > 0 && (
+        <p className="mt-1 text-[11px] text-gray-600">
+          {portfolioUnfilledNote(rollup.unfilledSlots)}
+        </p>
       )}
     </div>
   )
@@ -79,6 +264,9 @@ function LeagueCard({ entry }: { entry: MyTeamEntry }) {
   const unmatchedCount = roster.length - matchedCount
   const starters = roster.filter((r) => r.roster.starter)
   const bench = roster.filter((r) => !r.roster.starter)
+  // NF-C6b — `null` when this team has no scoreable starters, which is a real state (pre-draft, or a
+  // platform that reported no lineup) and must not render as a fabricated 0.0.
+  const rollup = teamRollup(entry)
 
   return (
     <section className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
@@ -119,6 +307,7 @@ function LeagueCard({ entry }: { entry: MyTeamEntry }) {
 
       {linked && hasPlayers && (
         <>
+          {rollup && <TeamTotal rollup={rollup} />}
           <RosterTable label="Starters" rows={starters} />
           <RosterTable label="Bench" rows={bench} />
           {unmatchedCount > 0 && (
@@ -141,7 +330,10 @@ function LeagueCard({ entry }: { entry: MyTeamEntry }) {
 function RosterTable({ label, rows }: { label: string; rows: RosterMatch[] }) {
   if (rows.length === 0) return null
   return (
-    <div className="mt-4">
+    // NF-C6b — a stable hook so the rollup gate can sum THIS table rather than traversing the card's
+    // DOM shape. The team total's contract is "Σ of the rows in Starters", and a spec that located
+    // the wrong table would still find numbers and still add up to something.
+    <div className="mt-4" data-testid={`${label.toLowerCase()}-table`}>
       <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
         {label} · {rows.length}
       </div>

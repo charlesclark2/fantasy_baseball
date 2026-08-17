@@ -1375,6 +1375,89 @@ const CASES = [
     grep: "unresolvable name is counted rather than hidden",
   },
 
+  // ── NF-C6b: the cross-league portfolio rollup ────────────────────────────────────────────────
+  //
+  // Every one of these renders a plausible number. That is the point: a portfolio total is a single
+  // figure with no visible derivation, so the reader has no way to check it and the defect ships.
+  {
+    id: "portfolio-total-includes-bench",
+    shipped: "pre-emptive: the total that quietly counts the whole roster",
+    // ⭐ THE LIKELIEST WAY THIS GOES WRONG, and it is invisible on inspection: a bench-inclusive
+    // total is bigger, still plausible, still ranks the teams in a sensible-looking order, and
+    // disagrees with the Starters table directly beneath it only if someone adds the rows up.
+    detail: "Totals every rostered player instead of the platform's reported starters.",
+    file: "lib/portfolio-rollup.ts",
+    from: "roster.filter((r) => r.roster.starter)",
+    to: "roster",
+    grep: "sum of the starters",
+  },
+  {
+    id: "portfolio-ranked-backwards",
+    shipped: "pre-emptive: the ranking that sorts the wrong way",
+    // A reversed sort is a one-character defect that produces a perfectly ordered table naming the
+    // WEAKEST team first — and with two leagues there is no shape to the table that betrays it.
+    detail: "Ranks by ascending total, so the lowest-projecting team is presented as #1.",
+    file: "lib/portfolio-rollup.ts",
+    from: ".sort((a, b) => b.bestPossible - a.bestPossible || a.leagueName.localeCompare(b.leagueName))",
+    to: ".sort((a, b) => a.bestPossible - b.bestPossible || a.leagueName.localeCompare(b.leagueName))",
+    grep: "ranks the teams",
+  },
+  {
+    id: "portfolio-ranked-by-as-set",
+    shipped: "pre-emptive: ranking on the lineup instead of the roster",
+    // ⭐⭐ THE CASE THE WHOLE `lineupGap` FIXTURE EXISTS FOR, and the one that proves that fixture is
+    // not decorative. Ranking on as-set is a DEFENSIBLE-looking mistake — it is the figure the user
+    // can check — but pre-kickoff it ranks lineup-setting diligence rather than roster strength,
+    // which is the distinction the PM's Option-C decision turned on.
+    //
+    // ⚠️ Against the `linked` pair this break is INVISIBLE: the half-PPR team leads on both readings
+    // there, so the table is identical either way. Only the reversed `lineupGap` fixture separates
+    // them — if this case ever goes GREEN, that fixture has stopped discriminating and the
+    // "ordered by BEST-POSSIBLE" gate has quietly become vacuous.
+    detail: "Sorts the summary on the platform's lineup (as-set) rather than on best-possible.",
+    file: "lib/portfolio-rollup.ts",
+    from: ".sort((a, b) => b.bestPossible - a.bestPossible || a.leagueName.localeCompare(b.leagueName))",
+    to: ".sort((a, b) => b.asSet - a.asSet || a.leagueName.localeCompare(b.leagueName))",
+    grep: "ordered by BEST-POSSIBLE",
+  },
+  {
+    id: "portfolio-best-ignores-bench",
+    shipped: "pre-emptive: a 'best possible lineup' that never looks at the bench",
+    // The subtlest of the set. Feeding the optimizer only the players already starting makes
+    // best-possible collapse onto as-set, so the gap is always 0.0 and the surface silently reports
+    // that every lineup is already optimal — the exact opposite of the signal it exists to give,
+    // with two totals that agree and therefore look consistent rather than broken.
+    detail: "Runs the optimizer over the starters only, so it can never field a benched player.",
+    file: "lib/portfolio-rollup.ts",
+    from: "const { players } = toReportPlayers(roster)",
+    to: "const { players } = toReportPlayers(startersOf(roster))",
+    grep: "best-possible fields the bench",
+  },
+  {
+    id: "portfolio-formats-caveat-hidden",
+    shipped: "NF-C6P3's own finding — a caveat behind a hover is a caveat that did not render",
+    // ⭐⭐ THE MOST CONSEQUENTIAL OF THE FOUR. Without this line the table is read as "which of my
+    // rosters is best", which the numbers cannot support: a half-PPR total is larger than a
+    // standard one for the very same players. Moving it into a `title` is exactly how it would be
+    // lost in a tidy-up — the string is still there, still imported, still "on the page".
+    detail: "Moves the different-scoring-systems caveat into a tooltip instead of rendering it.",
+    file: "components/fantasy/my-teams.tsx",
+    from: "{rollup.mixedFormats && <li>{PORTFOLIO_CAVEAT_FORMATS}</li>}",
+    to: "{rollup.mixedFormats && <li title={PORTFOLIO_CAVEAT_FORMATS} />}",
+    grep: "caveats render with the table",
+  },
+  {
+    id: "portfolio-ranking-of-one",
+    shipped: "pre-emptive: a one-row 'ranking'",
+    // A single team ranked #1 of 1 dresses one number up as a comparison and invites the reader to
+    // think a field was considered. The per-league total is the honest half and stays either way.
+    detail: "Renders the cross-league ranking for an account with a single league.",
+    file: "lib/portfolio-rollup.ts",
+    from: "if (rollups.length < 2) return null",
+    to: "if (rollups.length < 1) return null",
+    grep: "no ranking",
+  },
+
   // ── league import: the review queue ─────────────────────────────────────────────────────────
   {
     id: "import-warnings-suppressed",
