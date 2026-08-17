@@ -544,6 +544,161 @@ def test_the_preregistration_is_committed_and_names_the_declared_field() -> None
     assert "QB ONLY" in text
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 7. The arm-attribution defect the SMOKE found — the clause must read the WINNER, not the primary
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+def _fold_block(*, scores: dict, per_leg_rel: dict, identity_gap: dict) -> dict:
+    """A minimal-but-REAL `run_position` output for one (fold, QB) — enough for `select_position` to
+    run its actual code path (INC-39: one test must exercise the real leg, not a monkeypatched one).
+    Only the three arm-keyed structures under test carry per-arm variation; everything else is
+    plausible and identical across arms so the assertions can only turn on the arm attribution."""
+    labels = list(scores)
+    pit = {lab: {"max_decile_dev": 0.02, "decile_counts": [10] * 10,
+                 "decile_freq": [0.1] * 10} for lab in QM.WATCHED}
+    # ⚠️ `n`, not `n_rows` — the real `_pooled_coverage` reads `KW.coverage80_dense`'s own key. The
+    # first cut of this fixture used `n_rows` and the REAL selection leg raised `KeyError: 'n'`,
+    # which is the point of not monkeypatching it away (INC-39).
+    cov = {lab: {"coverage": 0.86, "n": 700} for lab in QM.WATCHED}
+    # the comonotone degenerate must out-cover the independent foil, or the inherited dependence
+    # clauses fail for a reason unrelated to what these tests assert (NF-D17: isolate the clause)
+    cov["assembled_comonotone"] = {"coverage": 0.94, "n": 700}
+    cov["assembled_indep"] = {"coverage": 0.74, "n": 700}
+    return {
+        "scores": scores, "coverage": cov, "pit_flatness": pit,
+        "n_train": 12000, "n_test": 700, "atom_rate_train": 0.51, "atom_rate_test": 0.51,
+        "clamp": {a: {"mean_installed_atom": 0.51, "clamp_binding_share": 0.07,
+                      "mean_pi_hat": 0.49, "mean_pi_used": 0.49} for a in QM.REAL_ARMS},
+        "clamp_served": {"clamp_binding_share": 0.92, "mean_installed_atom": 0.26},
+        "marginal_drift": {"max_probability_drift": 0.001},
+        "targets": {a: {"mean": 0.8} for a in QM.REAL_ARMS},
+        "resplice_edges": {a: {"share_target_clipped": 0.0} for a in QM.REAL_ARMS},
+        "identities": {a: {
+            "zero_mass_hits_target": {"max_abs_gap": identity_gap[a], "holds": True},
+            "positive_law": {"max_drift_over_bound": 0.5, "evaluated": True, "holds": True},
+        } for a in QM.REAL_ARMS},
+        "matched_foil_no_op": {"max_abs_draw_gap": 0.0, "holds": True},
+        "per_leg_crps": {a: {
+            "by_leg": {leg: {"served_crps": 1.0, "recalibrated_crps": 1.0 + per_leg_rel[a],
+                             "delta": -per_leg_rel[a],
+                             "delta_by_pi_quartile": [0.1, 0.0, -0.1, -0.2], "priced": True}
+                       for leg in QM.LEGS},
+            "priced_legs": list(QM.LEGS),
+            "served_crps_sum_priced": float(QM.N_LEGS),
+            "recalibrated_crps_sum_priced": float(QM.N_LEGS) * (1.0 + per_leg_rel[a]),
+            "relative_change": per_leg_rel[a]} for a in QM.REAL_ARMS},
+        "leg_zero_mass_table": {leg: {"predicted_zero_mass": 0.3, "realized_zero_rate": 0.55,
+                                      "gap_realized_minus_predicted": 0.25} for leg in QM.LEGS},
+        "binding_leg_share_served": {"passing_yards": 1.0},
+        "binding_leg_share_recalibrated": {"attempts": 1.0},
+        "atom_cap": {"cap_served": 0.2658, "cap_recalibrated": 0.5431,
+                     "installed_atom_recalibrated": 0.51, "installed_atom_served": 0.26,
+                     "clamp_binding_share_recalibrated": 0.07,
+                     "clamp_binding_share_served": 0.92,
+                     "total_zero_mass_by_arm": {lab: 0.5 for lab in labels}},
+        "sigma_all_note": {},
+    }
+
+
+def _two_folds(*, winner_arm: str, per_leg_rel: dict, identity_gap: dict) -> list[dict]:
+    """Two folds whose CRPS makes `winner_arm` the unambiguous winner of the real-arm field."""
+    base = {lab: 3.0 for lab in QM.ALL_LABELS}
+    base.update({a: 2.9 for a in QM.REAL_ARMS})
+    base[winner_arm] = 2.5                       # the winner
+    base[QM.MATCHED_FOIL] = 2.8                  # the best contest foil, beaten
+    base[QM.INCUMBENT_FOIL] = 2.85
+    for d in QM.DEGENERATES:
+        base[d] = 6.0
+    out = []
+    for i in range(2):
+        s = {k: v + 0.001 * i for k, v in base.items()}
+        out.append({"label": f"f{i}", "n_test": 700, "bank_cache": "test",
+                    "positions": {"QB": _fold_block(scores=s, per_leg_rel=per_leg_rel,
+                                                    identity_gap=identity_gap)}})
+    return out
+
+
+@pytest.mark.parametrize("winner_arm", ["zm_conditional", "zm_floor", "zm_climatology", "zm_over"])
+def test_the_per_leg_clause_reads_the_SELECTED_arms_table_not_the_primarys(
+        winner_arm: str) -> None:
+    """⭐ THE DEFECT THE SMOKE FOUND. The first cut computed the per-leg table (and the two
+    target-dependent identities) for the PRIMARY arm only, while the gate reads them for the WINNER —
+    so a clause could report the primary's marginals while anchoring a different arm's. That is the
+    "an anchor that describes something other than what it anchors" defect (NF1.7 (a)), and it is
+    decisive here: the smoke measured the four arms moving the per-leg CRPS by +0.60% to +48.6%.
+
+    ISOLATING FIXTURE (NF-D17): only the WINNER's table degrades; every other arm's passes. So the
+    clause can only be False if it read the winner's — and only True if it read someone else's."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7f_qb_marginal as R
+    rel = {a: (0.05 if a == winner_arm else -0.05) for a in QM.REAL_ARMS}
+    gaps = {a: 0.0 for a in QM.REAL_ARMS}
+    sel = R.select_position(_two_folds(winner_arm=winner_arm, per_leg_rel=rel,
+                                      identity_gap=gaps), "QB")
+    assert sel is not None and sel["winner"] == winner_arm, sel
+    assert sel["per_leg_detail"]["arm_read"] == winner_arm
+    assert sel["per_leg_detail"]["relative_change"] == pytest.approx(0.05)
+    assert sel["anchors"]["per_leg_calibration_not_degraded"] is False, \
+        "the clause passed on a DEGRADING winner — it read another arm's table"
+    # …and the inverse: only the winner passing must make the clause pass
+    rel_ok = {a: (-0.05 if a == winner_arm else 0.05) for a in QM.REAL_ARMS}
+    sel_ok = R.select_position(_two_folds(winner_arm=winner_arm, per_leg_rel=rel_ok,
+                                         identity_gap=gaps), "QB")
+    assert sel_ok["anchors"]["per_leg_calibration_not_degraded"] is True, \
+        "the clause failed on a non-degrading winner — it read another arm's table"
+
+
+@pytest.mark.parametrize("winner_arm", ["zm_floor", "zm_over"])
+def test_the_zero_mass_identity_is_also_read_for_the_selected_arm(winner_arm: str) -> None:
+    """The same attribution property for a TARGET-DEPENDENT identity: only the winner's splice
+    misses its target, so the clause can only fire if it read the winner's."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7f_qb_marginal as R
+    rel = {a: -0.05 for a in QM.REAL_ARMS}
+    gaps = {a: (1.0 if a == winner_arm else 0.0) for a in QM.REAL_ARMS}
+    sel = R.select_position(_two_folds(winner_arm=winner_arm, per_leg_rel=rel,
+                                      identity_gap=gaps), "QB")
+    assert sel["transform_detail"]["identity_arm_read"] == winner_arm
+    assert sel["anchors"]["zero_mass_hits_target"] is False, \
+        "the identity passed on a winner whose splice missed its target — wrong arm read"
+
+
+def test_the_availability_decomposition_is_reported_for_every_arm() -> None:
+    """⭐ REPORTED, never gated. The smoke measured that the SIGN of the per-leg effect FLIPS with
+    availability (it helps where the player probably did not play, hurts where he probably did), so a
+    refusal that did not carry this would say "the parts got worse" without saying WHERE — the
+    difference between a null that names where the answer lives and one that just closes a door."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7f_qb_marginal as R
+    rel = {a: -0.01 * (i + 1) for i, a in enumerate(QM.REAL_ARMS)}
+    sel = R.select_position(_two_folds(winner_arm=QM.PRIMARY_ARM, per_leg_rel=rel,
+                                      identity_gap={a: 0.0 for a in QM.REAL_ARMS}), "QB")
+    d = sel["per_leg_detail"]
+    assert set(d["relative_change_by_arm"]) == set(QM.REAL_ARMS), d["relative_change_by_arm"]
+    assert len(d["delta_by_pi_quartile_priced"]) == 4, d["delta_by_pi_quartile_priced"]
+    # the decomposition must be a REPORT, not part of the gate
+    assert "delta_by_pi_quartile" not in " ".join(QM.ANCHOR_CHECKS + QM.STATISTICAL_CHECKS)
+
+
+def test_the_per_leg_table_helper_decomposes_by_availability() -> None:
+    """The helper itself: the priced sum is what the clause reads, and the quartile decomposition
+    must actually separate rows by π̂ (a decomposition that returned the same number in every bucket
+    would be reporting nothing)."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7f_qb_marginal as R
+    b = _banks(n=60)
+    # a target that raises the atom a lot → it should HELP rows whose realized value is 0 and HURT
+    # rows whose realized value is large, so a π̂ ordered with the realized value must separate them
+    y = np.zeros((60, QM.N_LEGS))
+    y[30:, :] = 50.0
+    pi = np.concatenate([np.full(30, 0.05), np.full(30, 0.95)])   # low π̂ ⇒ the zero rows
+    recal = QM.resplice_zero_mass(b, np.full(b.shape[:2], 0.90))
+    w = np.ones(QM.N_LEGS)
+    t = R._per_leg_table(b, recal, y, w, pi)
+    assert t["priced_legs"] == list(QM.LEGS)
+    q = t["by_leg"]["passing_yards"]["delta_by_pi_quartile"]
+    assert len(q) == 4 and all(v is not None for v in q), q
+    assert q[0] > 0 > q[-1], f"the decomposition does not separate by availability: {q}"
+    assert t["relative_change"] == pytest.approx(
+        (t["recalibrated_crps_sum_priced"] - t["served_crps_sum_priced"])
+        / t["served_crps_sum_priced"], rel=1e-6)
+
+
 def test_an_unknown_arm_is_refused_rather_than_silently_defaulted() -> None:
     b = _banks(n=4)
     with pytest.raises(KeyError, match="not in the pre-registered family"):

@@ -336,10 +336,71 @@ verdict.
 *(A path-proof smoke — 1 fold, 300 draws — may be run to prove the code path. Any constant changed in
 response to it is recorded HERE, before the decisive run, and never silently.)*
 
-- **None yet.** The smoke is an OPERATOR run (the >2-minute rule: the NF-W6d marginal dispatch is
-  ~370–570 s per fold on a cold cache).
+- **NO CONSTANT, GATE, ARM, BAR OR TOLERANCE CHANGED.** One HARNESS FIX is recorded in §11.3 below;
+  it changes which arm two clauses READ, never what they require.
 
-### 11.1 In-session PATH PROOF — synthetic frames, no lake, no dispatch
+### 11.2 Smoke OBSERVATIONS — operator run, 2026-08-17, 1 fold (2025H2), 300 draws, 409 s
+
+*(⛔ **NOT a verdict.** One fold cannot select: `select_position` requires ≥2, so the runner correctly
+produced no selection and the marginal-cap layer correctly returned `UNDEFINED` — that is the harness
+refusing to read a verdict from one fold, NOT the `CAP_NOT_LIFTED` state. Magnitudes at 300 draws are
+not evidence. Recorded so a reader knows what was seen when the registration was frozen.)*
+
+- ✅ **All three transform identities hold on REAL banks**: `zero_mass_hits_target` max gap **0.0**;
+  `matched_foil_no_op` max draw gap **0.0** on 701 QB rows; `positive_law` ratio **0.864** against a
+  bar of 1.0 (raw drift 0.090 against a resolution bound 0.182, 45.1% of cells evaluable).
+- ✅ **The mechanism ACTS, and the §6 pre-declared prediction landed to three decimals.** §6
+  predicted the installed atom would move "0.267 → ≈0.514 against a realized 0.5162". Measured:
+  atom cap **0.2658 → 0.5431**, installed atom **0.2641 → 0.5142** against a realized **0.5093**,
+  clamp binding share **0.9215 → 0.0728**, π̂ 0.4857 dragged to 0.7359 by the clamp → used at 0.4858
+  (essentially unclamped). Marginal drift 0.0012 vs the 0.01 tolerance.
+- ✅ **THE PREMISE IS CONFIRMED ON REAL DATA, and refined.** `QB|passing_yards` under-prices its own
+  zero by **+0.2581** (predicted 0.2983 vs realized 0.5563) and binds the row-wise minimum on
+  **72.2%** of rows — the hypothesised cell, and its gap is essentially the whole cap shortfall
+  (0.5093 − 0.2658 = 0.2435). Every other leg sits within ±0.05. ⭐ NOT predicted: `QB|attempts` is a
+  SECOND binding cell (25.1% of rows served, and the dominant one at 57.9% AFTER recalibration,
+  because raise-only cannot lower its slightly-over-priced 0.5500 vs 0.5378).
+- 📋 **The PIT direction, on one fold at 300 draws** (⛔ not evidence): `zm_conditional` **0.0312** ·
+  `zm_floor` 0.0341 · `zm_climatology` 0.0569 · `zm_over` 0.0826, against `mixall_learned` **0.0854**
+  and `single_copula` 0.0812. The under-priced-atom signature is gone from the first decile
+  (0.185 → 0.117). `assembled_comonotone` posts 0.0669 and loses CRPS by 0.07 — §4's discipline again.
+- ⚠️⚠️ **THE OBSERVATION THE DECISIVE RUN MUST BE READ AGAINST: every one of the four arms FAILS
+  `per_leg_calibration_not_degraded` on this fold.** Summed PRICED-leg CRPS vs served:
+  `zm_floor` **+0.60%** · `zm_conditional` **+1.35%** · `zm_over` **+5.21%** · `zm_climatology`
+  **+48.56%**. The damage is almost entirely `QB|passing_yards`, and the availability decomposition
+  says the effect's SIGN FLIPS with π̂ — mean Δ by π̂ quartile (positive = improved) for
+  `zm_conditional`: **+0.58 · −0.30 · −1.95 · −0.19**. Reading: raising a leg's atom helps where
+  availability is confidently LOW and hurts where the player probably PLAYED, because
+  `QB|passing_yards` is an LGBM on the champion feature set and already encodes availability
+  partially — so adding `q̂` on top **double-prices availability in the MARGINAL** (NF-W7e §12.2's
+  "the joint layer prices availability twice", one layer down).
+- ⛔ **THE BAR IS NOT MOVED.** §5 registered a tolerance of 0.0 AND the reading *"if the diagnosis is
+  right the legs IMPROVE; if it is wrong, this is where it shows."* The legs do not improve.
+  Re-reading either the tolerance or that sentence now would be the E2.1-r inversion in its most
+  literal form. On this evidence the LIKELY decisive outcome is `CONSTRAINT_REFUSED` on
+  `per_leg_calibration_not_degraded`, with `QB_STILL_BLOCKED_WITH_THE_CAP_LIFTED` — and §8 already
+  says what that means. What the decisive run buys is the 8-fold measurement, the reproduction
+  controls at 4,000 draws, and an ATTRIBUTED residual: the cap IS the blocker and lifting it DOES fix
+  the assembled calibration, but no registered target installs the atom without damaging the parts on
+  high-availability rows. That names where a successor must aim (a target conditioned on availability
+  CONFIDENCE, not on `q̂` alone) rather than closing a door.
+- ⚠️ `incumbent_reproduces` / `predecessor_reproduces` cannot pass at 300 draws by construction (as
+  in NF-W7d's and NF-W7e's smokes); both are checked at 4,000 draws in the decisive run.
+
+### 11.3 Recorded HARNESS FIX (⛔ not a constant, gate, arm, bar or tolerance change)
+
+The smoke exposed a real defect in the RUNNER, not in the registration: the per-leg table and the two
+TARGET-DEPENDENT identities (`zero_mass_hits_target`, `positive_law`) were computed for the PRIMARY
+arm only, while the gate reads them for the **WINNER**. With the four arms moving the per-leg CRPS by
++0.60% to +48.56%, which arm the clause reads is decisive — a clause describing something other than
+what it anchors is the NF1.7 (a) defect. Fixed: both are now computed **per real arm** and the
+selection reads the winner's (`per_leg_detail.arm_read` / `transform_detail.identity_arm_read` are
+carried on the record so the attribution is auditable). The target-independent no-op identity is still
+measured once. Two guards now RED-prove the attribution in both directions, and the availability
+decomposition is carried as a REPORTED field (never gated) so a refusal can name WHERE the per-leg
+effect lands. ⛔ No clause's requirement changed; no threshold moved.
+
+### 11.4 In-session PATH PROOF — synthetic frames, no lake, no dispatch
 
 ⛔ **NOT a verdict and not a score**: it exercises the code path on SYNTHETIC banks and frames, so
 nothing here is evidence about QB. Recorded because it is what found the transform's four defects.

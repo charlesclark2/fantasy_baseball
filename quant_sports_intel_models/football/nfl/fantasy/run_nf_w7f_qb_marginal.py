@@ -158,6 +158,40 @@ def predecessor_cap_baseline() -> dict:
     }
 
 
+def _per_leg_table(served: np.ndarray, recal: np.ndarray, y_leg: np.ndarray,
+                   weights: np.ndarray, pi_hat: np.ndarray) -> dict:
+    """Per-leg `crps_q199`, served vs recalibrated, plus ⭐ the AVAILABILITY DECOMPOSITION.
+
+    The summed PRICED figure is what `per_leg_calibration_not_degraded` reads. The decomposition by
+    π̂ quartile is REPORTED, never gated, and it exists because the smoke measured that the sign of
+    the per-leg effect FLIPS with availability: raising a leg's atom helps where the player probably
+    did not play and hurts where he probably did. Without it a refusal would say "the parts got
+    worse" and a successor would not know WHERE — which is the difference between a null that names
+    where the answer lives (NF-D18 / MARGIN2→3) and one that just closes a door."""
+    q = np.quantile(np.asarray(pi_hat, dtype=float), [0.0, 0.25, 0.50, 0.75, 1.0])
+    out: dict[str, dict] = {}
+    for i, leg in enumerate(QM.LEGS):
+        s_row = KW.crps_dense(served[:, i, :], y_leg[:, i])
+        r_row = KW.crps_dense(recal[:, i, :], y_leg[:, i])
+        d = np.asarray(s_row, dtype=float) - np.asarray(r_row, dtype=float)   # >0 ⇒ improved
+        buckets = []
+        for lo, hi in zip(q[:-1], q[1:]):
+            m = (pi_hat >= lo) & (pi_hat <= hi)
+            buckets.append(round(float(d[m].mean()), 5) if m.any() else None)
+        out[leg] = {"served_crps": round(float(np.mean(s_row)), 5),
+                    "recalibrated_crps": round(float(np.mean(r_row)), 5),
+                    "delta": round(float(np.mean(d)), 5),
+                    "delta_by_pi_quartile": buckets,
+                    "priced": bool(weights[i] != 0.0)}
+    priced = [leg for leg, v in out.items() if v["priced"]]
+    s_tot = sum(out[leg]["served_crps"] for leg in priced)
+    r_tot = sum(out[leg]["recalibrated_crps"] for leg in priced)
+    return {"by_leg": out, "priced_legs": priced,
+            "served_crps_sum_priced": round(s_tot, 5),
+            "recalibrated_crps_sum_priced": round(r_tot, 5),
+            "relative_change": round((r_tot - s_tot) / max(s_tot, 1e-9), 6)}
+
+
 # ── One fold × position ─────────────────────────────────────────────────────────────────────────
 def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, weights: np.ndarray, *,
                  draws: int, ctx_te: dict) -> dict:
@@ -210,10 +244,24 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, weights
             "marg": QM.marginal_zero_rate(raw),
         }
 
+    # ⭐ the realized leg values AS THE DRAW PATH REALIZES THEM (clip at 0, round integer legs) —
+    # the per-leg CRPS and the marginal's atom must be scored against the SAME event
+    y_leg = np.clip(raw_te, 0.0, None)
+    for i, leg in enumerate(QM.LEGS):
+        if leg in QM.INTEGER_LEGS:
+            y_leg[:, i] = np.rint(y_leg[:, i])
+
     banks: dict[str, np.ndarray] = {}
     clamps: dict[str, dict] = {}
     targets_summary: dict[str, dict] = {}
     edges: dict[str, dict] = {}
+    # ⛔ PER ARM, not just the primary. The identities depend on the arm's TARGET and the per-leg
+    # clause is read for the WINNER — a table computed only for the primary would describe a
+    # DIFFERENT arm than the gate anchors, which is the "an anchor that describes something other
+    # than what it anchors" defect (NF1.7 (a)). Found by the smoke: all four arms move the per-leg
+    # CRPS by different amounts (+0.60% to +48.6%), so which arm the clause reads is decisive.
+    identities: dict[str, dict] = {}
+    per_leg: dict[str, dict] = {}
     recal_primary: np.ndarray | None = None
     for arm in QM.REAL_ARMS:
         for prefix, inp in est_inputs.items():
@@ -229,6 +277,11 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, weights
             if not prefix:
                 clamps[arm] = note
                 edges[arm] = QM.resplice_edges(b_te, t)
+                identities[arm] = {
+                    "zero_mass_hits_target": QM.zero_mass_hits_target(b_te, t, recal),
+                    "positive_law": QM.positive_law_drift(b_te, recal),
+                }
+                per_leg[arm] = _per_leg_table(b_te, recal, y_leg, weights, inp["pi"])
                 targets_summary[arm] = {
                     "mean": round(float(t.mean()), 4), "sd": round(float(t.std()), 4),
                     "mean_priced": round(float(np.mean(t[:, weights != 0.0])), 4)
@@ -302,24 +355,9 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, weights
     pi_primary_used, _ = QM.clamp_pi(pi_primary, recal_primary)
     drift = QM.mixture_marginal_drift(recal_primary, pi=pi_primary_used, corr=sig_all)
 
-    # ── the three MEASURED identities of the transform + the premise diagnostic ─────────────────
-    identities = {
-        "zero_mass_hits_target": QM.zero_mass_hits_target(b_te, t_primary, recal_primary),
-        "positive_law": QM.positive_law_drift(b_te, recal_primary),
-        "matched_foil_no_op": QM.matched_foil_identity(b_te),
-    }
-    # per-leg CRPS, served vs recalibrated, on the realized value AS THE DRAW PATH REALIZES IT
-    y_leg = np.clip(raw_te, 0.0, None)
-    for i, leg in enumerate(QM.LEGS):
-        if leg in QM.INTEGER_LEGS:
-            y_leg[:, i] = np.rint(y_leg[:, i])
-    per_leg = {}
-    for i, leg in enumerate(QM.LEGS):
-        served_c = float(np.mean(KW.crps_dense(b_te[:, i, :], y_leg[:, i])))
-        recal_c = float(np.mean(KW.crps_dense(recal_primary[:, i, :], y_leg[:, i])))
-        per_leg[leg] = {"served_crps": round(served_c, 5), "recalibrated_crps": round(recal_c, 5),
-                        "delta": round(served_c - recal_c, 5),
-                        "priced": bool(weights[i] != 0.0)}
+    # the no-op identity is a property of the TRANSFORM itself (target-independent), so it is
+    # measured once; the two target-dependent identities are measured PER ARM above
+    no_op = QM.matched_foil_identity(b_te)
 
     zero_mass = {lab: round(float(np.mean(QM.total_zero_mass(banks[lab]))), 4)
                  for lab in (*QM.REAL_ARMS, *QM.CONTEST_FOILS, "zm_cond_copula",
@@ -330,8 +368,10 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, weights
         "atom_rate_train": round(QM.atom_rate(raw_tr), 4),
         "atom_rate_test": round(QM.atom_rate(raw_te), 4),
         "clamp": clamps, "clamp_served": clamp_served, "marginal_drift": drift,
-        "targets": targets_summary, "resplice_edges": edges, "identities": identities,
-        "per_leg_crps": per_leg,
+        "targets": targets_summary, "resplice_edges": edges,
+        # per-arm (the target-dependent identities + the per-leg table the gate reads for the
+        # WINNER), and the target-independent no-op measured once
+        "identities": identities, "matched_foil_no_op": no_op, "per_leg_crps": per_leg,
         # ⭐ THE PREMISE, MEASURED: which cell caps the atom, and by how much each leg under-prices
         # its own zero. NF-W7e named `QB|passing_yards` as the suspect off an 89-row serving proof.
         "leg_zero_mass_table": QM.leg_zero_mass_table(b_te, raw_te),
@@ -437,19 +477,33 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
     caps_served = _fold(("atom_cap", "cap_served"))
 
     # ── the transform's three identities, pooled over folds ─────────────────────────────────────
-    zm_gap = max(d["max_abs_gap"] for d in _fold(("identities", "zero_mass_hits_target")))
-    pl = _fold(("identities", "positive_law"))
+    # ⭐ the two TARGET-DEPENDENT identities are read for the WINNER (the arm the gate anchors),
+    # and the target-independent no-op once. A primary-only read would describe a different arm.
+    zm_gap = max(d["identities"][winner]["zero_mass_hits_target"]["max_abs_gap"] for d in
+                 (fr["positions"][position] for fr in usable))
+    pl = [fr["positions"][position]["identities"][winner]["positive_law"] for fr in usable]
     pl_drift = max(d["max_drift_over_bound"] for d in pl)
     pl_evaluated = all(d["evaluated"] for d in pl)
-    noop_gap = max(d["max_abs_draw_gap"] for d in _fold(("identities", "matched_foil_no_op")))
-    # per-leg calibration, pooled over the PRICED legs (the story may not buy the assembled atom
-    # by wrecking the parts) — a fraction of the served banks' own CRPS, so scales cannot hide
-    leg_tables = _fold(("per_leg_crps",))
-    priced = [leg for leg, v in leg_tables[0].items() if v["priced"]]
-    served_tot = float(np.mean([sum(t[leg]["served_crps"] for leg in priced) for t in leg_tables]))
-    recal_tot = float(np.mean([sum(t[leg]["recalibrated_crps"] for leg in priced)
-                               for t in leg_tables]))
+    noop_gap = max(d["max_abs_draw_gap"] for d in _fold(("matched_foil_no_op",)))
+    # per-leg calibration for the WINNER, pooled over the PRICED legs (the story may not buy the
+    # assembled atom by wrecking the parts) — a fraction of the served banks' own CRPS, so scales
+    # cannot hide a real degradation inside a yardage leg
+    leg_tables = [fr["positions"][position]["per_leg_crps"][winner] for fr in usable]
+    priced = list(leg_tables[0]["priced_legs"])
+    served_tot = float(np.mean([t["served_crps_sum_priced"] for t in leg_tables]))
+    recal_tot = float(np.mean([t["recalibrated_crps_sum_priced"] for t in leg_tables]))
     leg_frac = (recal_tot - served_tot) / max(served_tot, 1e-9)
+    # ⭐ the availability decomposition, pooled over folds and legs — REPORTED, never gated: it is
+    # what lets a refusal name WHERE the per-leg damage lands rather than only that it happened
+    n_q = len(leg_tables[0]["by_leg"][priced[0]]["delta_by_pi_quartile"])
+    leg_by_q = {
+        f"pi_quartile_{k + 1}": round(float(np.mean(
+            [v for t in leg_tables for leg in priced
+             if (v := t["by_leg"][leg]["delta_by_pi_quartile"][k]) is not None])), 5)
+        for k in range(n_q)}
+    leg_frac_by_arm = {a: round(float(np.mean(
+        [fr["positions"][position]["per_leg_crps"][a]["relative_change"] for fr in usable])), 6)
+        for a in QM.REAL_ARMS}
 
     base = predecessor_cap_baseline()
     cap_mean = float(np.mean(caps_recal))
@@ -584,16 +638,21 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
             "positive_law_evaluated": bool(pl_evaluated),
             "positive_law_last_fold": pl[-1],
             "max_matched_foil_draw_gap": round(float(noop_gap), 12),
+            "identity_arm_read": winner,
             "targets_last_fold": usable[-1]["positions"][position]["targets"],
             "resplice_edges_last_fold": usable[-1]["positions"][position]["resplice_edges"],
         },
         "per_leg_detail": {
+            "arm_read": winner,
             "priced_legs": priced,
             "served_crps_sum_priced": round(served_tot, 5),
             "recalibrated_crps_sum_priced": round(recal_tot, 5),
             "relative_change": round(float(leg_frac), 6),
             "tolerance": QM.MAX_PER_LEG_CRPS_DEGRADATION,
-            "by_leg_last_fold": leg_tables[-1],
+            # ⭐ REPORTED, never gated — where the per-leg effect lands, and how every arm fares
+            "delta_by_pi_quartile_priced": leg_by_q,
+            "relative_change_by_arm": leg_frac_by_arm,
+            "by_leg_last_fold": leg_tables[-1]["by_leg"],
         },
         "premise_detail": {
             "leg_zero_mass_table_last_fold":
@@ -858,10 +917,15 @@ def write_report(out: dict, path: Path) -> None:
               f"- resplice edges (last fold): {t['resplice_edges_last_fold']}", "",
               "### Per-leg calibration (the story must not buy the atom by wrecking the parts)", "",
               f"- priced legs {sel['per_leg_detail']['priced_legs']}",
-              f"- summed CRPS served {sel['per_leg_detail']['served_crps_sum_priced']} → "
-              f"recalibrated {sel['per_leg_detail']['recalibrated_crps_sum_priced']} "
-              f"(relative change {sel['per_leg_detail']['relative_change']}, tolerance "
-              f"{sel['per_leg_detail']['tolerance']})", "",
+              f"- read for the SELECTED arm `{sel['per_leg_detail']['arm_read']}`: summed CRPS "
+              f"served {sel['per_leg_detail']['served_crps_sum_priced']} → recalibrated "
+              f"{sel['per_leg_detail']['recalibrated_crps_sum_priced']} (relative change "
+              f"{sel['per_leg_detail']['relative_change']}, tolerance "
+              f"{sel['per_leg_detail']['tolerance']})",
+              f"- by arm: {sel['per_leg_detail']['relative_change_by_arm']}",
+              f"- ⭐ WHERE the per-leg effect lands (mean Δ by π̂ quartile, low→high availability; "
+              f"positive = the recalibration IMPROVED that bucket): "
+              f"{sel['per_leg_detail']['delta_by_pi_quartile_priced']}", "",
               "### The premise, measured — per-leg predicted vs realized zero mass (last fold)", "",
               "| leg | predicted P(0) | realized P(0) | gap |", "|---|---|---|---|"]
         for leg, row in sel["premise_detail"]["leg_zero_mass_table_last_fold"].items():
