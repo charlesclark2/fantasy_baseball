@@ -1261,7 +1261,8 @@ def write_report(r: dict, controls: dict | None = None) -> Path:
         A("⛔ Reporting that as \"the morning σ is fine\" would be false. ⛔ Reporting it as \"the "
           "morning σ is too small\" would be equally false — the pre-registered test does not "
           "support it. The honest statement is the third one: **the effect is real-looking, "
-          "consistent, material in size, and NOT DECLARABLE at 655 served games.**")
+          f"consistent, material in size, and NOT DECLARABLE at {t['n_totals_rows']:,} served "
+          "games.**")
         A("")
         A("**What \"real-looking\" rests on — three readings that are not the pre-registered test, "
           "and do not substitute for it:**")
