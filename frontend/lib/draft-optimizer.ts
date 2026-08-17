@@ -684,6 +684,71 @@ function rationale(
   return parts.join(" · ")
 }
 
+// ── roster assignment ──────────────────────────────────────────────────────────────────────────
+//
+// ⭐ THIS LIVES BESIDE `recommend` RATHER THAN IN A COMPONENT BECAUSE IT NOW HAS THREE CALLERS, AND
+// they must agree. It was local to `draft-optimizer.tsx` while the live tool was the only surface
+// that filled a roster. NF-C2.1 added two more readings of the same question — "which of a team's
+// slots are still open?" (the mock-draft CPU's legality check) and "what do this team's starters
+// project?" (the post-draft grade) — and a second implementation of slot assignment would let the
+// CPU believe a roster is full while the panel shows it open, or grade a team on a lineup the tool
+// would never have set. Same shape as `sortAvailable`: one rule, one function (E9.61).
+
+export interface FilledSlot {
+  slotName: string
+  eligible: string[]
+  player: Player | null
+  bench: boolean
+}
+
+/** Greedily fit `myPlayers` into `roster`: best-VOR-first into dedicated slots, then the most
+ *  restrictive flex, then the bench. Returns EVERY slot, filled or empty, in display order. */
+export function assignRoster(myPlayers: Player[], roster: RosterSlotDef[]): FilledSlot[] {
+  const pool = [...myPlayers].sort((a, b) => (b.vor ?? 0) - (a.vor ?? 0))
+  const used = new Set<string>()
+  const out: FilledSlot[] = []
+  // expand slots: dedicated (1 eligible) first, then flex (by eligibility size), then bench
+  const starters = roster.filter((s) => !s.bench)
+  const dedicated = starters.filter((s) => s.eligible.length === 1)
+  const flex = starters.filter((s) => s.eligible.length > 1).sort((a, b) => a.eligible.length - b.eligible.length)
+  const take = (eligible: string[]): Player | null => {
+    for (const p of pool) {
+      if (!used.has(p.id) && eligible.includes(p.pos)) {
+        used.add(p.id)
+        return p
+      }
+    }
+    return null
+  }
+  for (const grp of [dedicated, flex]) {
+    for (const s of grp) {
+      for (let i = 0; i < s.count; i++) {
+        out.push({ slotName: s.name, eligible: s.eligible, player: take(s.eligible), bench: false })
+      }
+    }
+  }
+  // leftovers → bench rows (bench accepts whatever the config's bench slots accept — for the roster
+  // fit-check; defaults to the skill positions).
+  const benchSlots = roster.filter((s) => s.bench)
+  const bench = benchSlots.reduce((a, s) => a + s.count, 0)
+  const benchEligible = benchSlots.length
+    ? Array.from(new Set(benchSlots.flatMap((s) => s.eligible)))
+    : ["QB", "RB", "WR", "TE"]
+  const leftover = pool.filter((p) => !used.has(p.id))
+  for (let i = 0; i < Math.max(bench, leftover.length); i++) {
+    out.push({ slotName: "BN", eligible: benchEligible, player: leftover[i] ?? null, bench: true })
+  }
+  return out
+}
+
+/** Positions a team's STILL-OPEN slots can accept (starters, flex and bench alike). Empty once the
+ *  roster is full, which is how a caller tells "no legal pick exists" from "anything goes". */
+export function openEligibility(myPlayers: Player[], roster: RosterSlotDef[]): Set<string> {
+  const s = new Set<string>()
+  for (const fs of assignRoster(myPlayers, roster)) if (!fs.player) fs.eligible.forEach((e) => s.add(e))
+  return s
+}
+
 // ── snake-draft helpers ────────────────────────────────────────────────────────────────────────
 export function overallPickFor(teamSlot: number, nTeams: number, round: number): number {
   if (round % 2 === 1) return (round - 1) * nTeams + teamSlot
