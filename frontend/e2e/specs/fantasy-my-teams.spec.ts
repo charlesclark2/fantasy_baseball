@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import {
+  E2E_LINEUP_GAP_LEAGUES,
   E2E_LINKED_LEAGUES,
   E2E_UNMATCHED_ROSTER_NAME,
   collectPageErrors,
@@ -14,8 +15,8 @@ import {
   PORTFOLIO_CAVEAT_FORMATS,
   PORTFOLIO_CAVEAT_LINEUP,
   PORTFOLIO_CAVEAT_SNAPSHOT,
+  PORTFOLIO_BEST_LABEL,
   PORTFOLIO_NOTE,
-  PORTFOLIO_TOTAL_LABEL,
 } from "@/lib/fantasy-claim-copy"
 
 /**
@@ -66,7 +67,7 @@ async function openMyTeams(
   page: Page,
   // `drafted` is the single-league post-draft fixture — NF-C6b uses it for the "one team gets a
   // total but no ranking" case, which `linked` (two leagues) structurally cannot express.
-  leagues: "linked" | "none" | "one" | "drafted" = "linked",
+  leagues: "linked" | "none" | "one" | "drafted" | "lineupGap" = "linked",
 ) {
   const errors = collectPageErrors(page)
   await signIn(page, { groups: ["subscriber"] })
@@ -195,24 +196,29 @@ test.describe("the portfolio rollup", () => {
     })
   }
 
-  /** The headline total on one card. */
-  async function teamTotal(page: Page, leagueName: string): Promise<number> {
-    const cell = leagueCard(page, leagueName).getByTestId("team-total-value")
-    await expect(cell, `${leagueName} rendered no team total`).toBeVisible()
+  /** One of the two figures on a card, by its test id. */
+  async function cardValue(page: Page, leagueName: string, testId: string): Promise<number> {
+    const cell = leagueCard(page, leagueName).getByTestId(testId)
+    await expect(cell, `${leagueName} rendered no ${testId}`).toBeVisible()
     const text = (await cell.innerText()).trim()
     const value = Number(text.replace(/,/g, ""))
-    expect(Number.isFinite(value), `${leagueName}'s total rendered as "${text}"`).toBe(true)
+    expect(Number.isFinite(value), `${leagueName}'s ${testId} rendered as "${text}"`).toBe(true)
     return value
   }
 
-  test("each team's total is exactly the sum of the starters shown on its own card", async ({
+  const asSetTotal = (page: Page, league: string) => cardValue(page, league, "team-as-set-value")
+  const bestTotal = (page: Page, league: string) => cardValue(page, league, "team-best-value")
+
+  test("each team's as-set total is exactly the sum of the starters shown on its own card", async ({
     page,
   }) => {
+    // ⭐ THE CHECKABLE HALF. As-set is the figure a reader can verify by adding up the table under
+    // it, and keeping that true is why as-set exists alongside best-possible at all.
     const { errors, mock } = await openMyTeams(page)
 
     for (const league of [E2E_LINKED_LEAGUES.half, E2E_LINKED_LEAGUES.standard]) {
       const points = await starterPoints(page, league.name)
-      const total = await teamTotal(page, league.name)
+      const total = await asSetTotal(page, league.name)
       const sum = points.reduce((a, b) => a + b, 0)
 
       // Tolerance 0.06: the server rounds each player's points to one decimal and the total is
@@ -220,14 +226,57 @@ test.describe("the portfolio rollup", () => {
       // not for a genuine difference. Anything larger would stop the check being arithmetic.
       expect(
         Math.abs(total - sum),
-        `${league.name} shows a total of ${total} over starters worth ${points.join(" + ")} = ` +
-          `${sum.toFixed(1)}. A total that includes the bench, or that fields our optimizer's ` +
-          `lineup instead of the platform's starters, lands here.`,
+        `${league.name} shows a current-starters total of ${total} over starters worth ` +
+          `${points.join(" + ")} = ${sum.toFixed(1)}. A total that includes the bench, or that ` +
+          `fields our optimizer's lineup instead of the platform's starters, lands here.`,
       ).toBeLessThanOrEqual(0.06)
     }
 
     await expectNoNaN(page)
     expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
+  test("best-possible fields the bench, and the gap is exactly what it adds", async ({ page }) => {
+    // ⭐ THE OTHER HALF, AND THE ONE THE RANKING USES. On the linked roster the optimizer can field
+    // every matched player — the three platform starters PLUS the benched TE — because the league
+    // starts ten and the roster holds four scoreable players. So best-possible is arithmetically
+    // as-set + that TE, and the gap IS the TE. An implementation that quietly reused the platform
+    // lineup for both figures produces a gap of 0 and fails here.
+    const { errors } = await openMyTeams(page)
+    const league = E2E_LINKED_LEAGUES.half
+
+    const benchRows = leagueCard(page, league.name).getByTestId("bench-table").locator("tbody tr")
+    await expect(benchRows.first(), "no bench rows rendered").toBeVisible()
+
+    // The bench holds the TE plus one deliberately unresolvable name; only the scoreable one can be
+    // fielded, so the gap is that single figure.
+    const benchTexts = await benchRows.locator("td:nth-child(4)").allInnerTexts()
+    const benchScoreable = benchTexts
+      .map((t) => Number(t.trim().replace(/,/g, "")))
+      .filter((v) => Number.isFinite(v))
+    expect(
+      benchScoreable.length,
+      "the bench carries no scoreable player, so this fixture cannot tell a best-possible lineup " +
+        "that fields the bench from one that does not",
+    ).toBe(1)
+
+    const asSet = await asSetTotal(page, league.name)
+    const best = await bestTotal(page, league.name)
+
+    expect(
+      Math.abs(best - asSet - benchScoreable[0]),
+      `best-possible ${best} minus current-starters ${asSet} should equal the one fieldable bench ` +
+        `player (${benchScoreable[0]}). A gap of 0 means both figures were built from the same ` +
+        `lineup and the optimizer never ran.`,
+    ).toBeLessThanOrEqual(0.06)
+
+    // And the hero line must actually state that gap, not merely compute it.
+    const gapLine = leagueCard(page, league.name).getByTestId("team-gap")
+    await expect(gapLine, "the bench gap is computed but never surfaced").toBeVisible()
+    await expect(gapLine).toContainText(/Leaving .* projected points on your bench/i)
+
+    await expectNoNaN(page)
     expectNoPageErrors(errors)
   })
 
@@ -259,14 +308,63 @@ test.describe("the portfolio rollup", () => {
     )
     await expect(rows.nth(1)).toContainText(E2E_LINKED_LEAGUES.standard.name)
 
-    const half = await teamTotal(page, E2E_LINKED_LEAGUES.half.name)
-    const standard = await teamTotal(page, E2E_LINKED_LEAGUES.standard.name)
+    const half = await asSetTotal(page, E2E_LINKED_LEAGUES.half.name)
+    const standard = await asSetTotal(page, E2E_LINKED_LEAGUES.standard.name)
     expect(
       Math.abs(half - standard - expectedGap),
       `the two teams totalled ${half} and ${standard}; with ${expectedGap.toFixed(1)} of ` +
         `reception scoring between them the gap should be ${expectedGap.toFixed(1)}. A gap of 0 ` +
         `means both were totalled on ONE board and the rows merely relabelled.`,
     ).toBeLessThanOrEqual(0.11)
+
+    await expectNoNaN(page)
+    expectNoPageErrors(errors)
+  })
+
+  test("the ranking is ordered by BEST-POSSIBLE, not by the lineup as set", async ({ page }) => {
+    // ⭐⭐ THE GATE THE `linked` FIXTURE CANNOT EXPRESS, and the reason `lineupGap` exists.
+    //
+    // In `linked` the half-PPR team leads on BOTH readings, so a summary that sorted on as-set
+    // would rank identically and this assertion would prove nothing. Here the two orderings are
+    // deliberately REVERSED: both leagues carry the same scoring, and the only difference is that
+    // "Benched Talent FC" holds a better roster with almost all of it benched.
+    //
+    //   as-set        → Lineup Set FC first  (it starts three good players; the other starts a TE)
+    //   best-possible → Benched Talent FC first (its roster is strictly the better one)
+    //
+    // So sorting on the wrong figure inverts the table, which is exactly what the PM's decision
+    // turned on: as-set would rank lineup-setting diligence rather than roster strength.
+    const { errors } = await openMyTeams(page, "lineupGap")
+
+    const rows = page.getByTestId("portfolio-summary").getByTestId("portfolio-row")
+    await expect
+      .poll(() => rows.count(), { message: "the summary never settled at two ranked teams" })
+      .toBe(2)
+
+    // NON-VACUITY: the two orderings must genuinely disagree in this fixture, or the assertion
+    // below is satisfied by either implementation.
+    const setBest = await bestTotal(page, E2E_LINEUP_GAP_LEAGUES.set.name)
+    const setAsSet = await asSetTotal(page, E2E_LINEUP_GAP_LEAGUES.set.name)
+    const benchedBest = await bestTotal(page, E2E_LINEUP_GAP_LEAGUES.benched.name)
+    const benchedAsSet = await asSetTotal(page, E2E_LINEUP_GAP_LEAGUES.benched.name)
+    expect(
+      benchedBest > setBest && benchedAsSet < setAsSet,
+      `this fixture no longer separates the two orderings (best-possible ${benchedBest} vs ` +
+        `${setBest}; as-set ${benchedAsSet} vs ${setAsSet}), so it cannot tell a summary ranked ` +
+        `on best-possible from one ranked on the lineup as set`,
+    ).toBe(true)
+
+    await expect(
+      rows.nth(0),
+      "the summary ranked the team with the better LINEUP first, not the better ROSTER — it is " +
+        "sorting on current starters instead of best-possible",
+    ).toContainText(E2E_LINEUP_GAP_LEAGUES.benched.name)
+    await expect(rows.nth(1)).toContainText(E2E_LINEUP_GAP_LEAGUES.set.name)
+
+    // The team with nothing on its bench must say so rather than printing a fabricated gap.
+    await expect(
+      leagueCard(page, E2E_LINEUP_GAP_LEAGUES.set.name).getByTestId("team-gap"),
+    ).toContainText(/already are our best lineup/i)
 
     await expectNoNaN(page)
     expectNoPageErrors(errors)
@@ -294,8 +392,8 @@ test.describe("the portfolio rollup", () => {
       PORTFOLIO_CAVEAT_SNAPSHOT,
     )
 
-    // The number must never appear without the label that says what it measures.
-    await expect(summary).toContainText(PORTFOLIO_TOTAL_LABEL)
+    // The ranked figure must never appear without the label that says what it measures.
+    await expect(summary).toContainText(PORTFOLIO_BEST_LABEL)
 
     const hits = forbiddenPhrasesIn(await page.locator("body").innerText())
     expect(hits, `the portfolio copy makes a forbidden claim: ${hits.join(", ")}`).toEqual([])

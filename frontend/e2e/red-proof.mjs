@@ -1398,9 +1398,40 @@ const CASES = [
     // WEAKEST team first — and with two leagues there is no shape to the table that betrays it.
     detail: "Ranks by ascending total, so the lowest-projecting team is presented as #1.",
     file: "lib/portfolio-rollup.ts",
-    from: ".sort((a, b) => b.total - a.total || a.leagueName.localeCompare(b.leagueName))",
-    to: ".sort((a, b) => a.total - b.total || a.leagueName.localeCompare(b.leagueName))",
+    from: ".sort((a, b) => b.bestPossible - a.bestPossible || a.leagueName.localeCompare(b.leagueName))",
+    to: ".sort((a, b) => a.bestPossible - b.bestPossible || a.leagueName.localeCompare(b.leagueName))",
     grep: "ranks the teams",
+  },
+  {
+    id: "portfolio-ranked-by-as-set",
+    shipped: "pre-emptive: ranking on the lineup instead of the roster",
+    // ⭐⭐ THE CASE THE WHOLE `lineupGap` FIXTURE EXISTS FOR, and the one that proves that fixture is
+    // not decorative. Ranking on as-set is a DEFENSIBLE-looking mistake — it is the figure the user
+    // can check — but pre-kickoff it ranks lineup-setting diligence rather than roster strength,
+    // which is the distinction the PM's Option-C decision turned on.
+    //
+    // ⚠️ Against the `linked` pair this break is INVISIBLE: the half-PPR team leads on both readings
+    // there, so the table is identical either way. Only the reversed `lineupGap` fixture separates
+    // them — if this case ever goes GREEN, that fixture has stopped discriminating and the
+    // "ordered by BEST-POSSIBLE" gate has quietly become vacuous.
+    detail: "Sorts the summary on the platform's lineup (as-set) rather than on best-possible.",
+    file: "lib/portfolio-rollup.ts",
+    from: ".sort((a, b) => b.bestPossible - a.bestPossible || a.leagueName.localeCompare(b.leagueName))",
+    to: ".sort((a, b) => b.asSet - a.asSet || a.leagueName.localeCompare(b.leagueName))",
+    grep: "ordered by BEST-POSSIBLE",
+  },
+  {
+    id: "portfolio-best-ignores-bench",
+    shipped: "pre-emptive: a 'best possible lineup' that never looks at the bench",
+    // The subtlest of the set. Feeding the optimizer only the players already starting makes
+    // best-possible collapse onto as-set, so the gap is always 0.0 and the surface silently reports
+    // that every lineup is already optimal — the exact opposite of the signal it exists to give,
+    // with two totals that agree and therefore look consistent rather than broken.
+    detail: "Runs the optimizer over the starters only, so it can never field a benched player.",
+    file: "lib/portfolio-rollup.ts",
+    from: "const { players } = toReportPlayers(roster)",
+    to: "const { players } = toReportPlayers(startersOf(roster))",
+    grep: "best-possible fields the bench",
   },
   {
     id: "portfolio-formats-caveat-hidden",

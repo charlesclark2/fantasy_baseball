@@ -44,17 +44,24 @@ import {
 } from "@/components/fantasy/shared"
 import {
   EXPECTED_POINTS_LABEL,
+  PORTFOLIO_AS_SET_LABEL,
+  PORTFOLIO_BEST_LABEL,
   PORTFOLIO_CAVEAT_FORMATS,
   PORTFOLIO_CAVEAT_LINEUP,
   PORTFOLIO_CAVEAT_SNAPSHOT,
+  PORTFOLIO_GAP_LABEL,
+  PORTFOLIO_GAP_NONE,
+  PORTFOLIO_GAP_NOTE,
   PORTFOLIO_HEADING,
   PORTFOLIO_NOTE,
   PORTFOLIO_TOTAL_LABEL,
   PORTFOLIO_UNDERSTATED_NOTE,
+  portfolioGapHeadline,
+  portfolioUnfilledNote,
   portfolioUnscoredNote,
 } from "@/lib/fantasy-claim-copy"
 import type { RosterMatch } from "@/lib/league-scoring"
-import { portfolioRollup, teamRollup, type TeamRollup } from "@/lib/portfolio-rollup"
+import { GAP_EPSILON, portfolioRollup, teamRollup, type TeamRollup } from "@/lib/portfolio-rollup"
 
 export function MyTeams() {
   const { teams, isLoading, isError } = useMyTeams()
@@ -125,8 +132,11 @@ function PortfolioSummary({ teams }: { teams: MyTeamEntry[] }) {
               <th className="py-1 pr-2 font-medium">#</th>
               <th className="py-1 pr-2 font-medium">League</th>
               <th className="py-1 pr-2 font-medium">Scoring</th>
-              <th className="py-1 pr-2 text-right font-medium">Starters</th>
-              <th className="py-1 pr-2 text-right font-medium">{PORTFOLIO_TOTAL_LABEL}</th>
+              {/* ⭐ BEST-POSSIBLE IS THE RANKED COLUMN and sits first of the three numbers, because
+                  the order is only legible if the figure it was sorted on leads. */}
+              <th className="py-1 pr-2 text-right font-medium">{PORTFOLIO_BEST_LABEL}</th>
+              <th className="py-1 pr-2 text-right font-medium">{PORTFOLIO_AS_SET_LABEL}</th>
+              <th className="py-1 pr-2 text-right font-medium">{PORTFOLIO_GAP_LABEL}</th>
               <th className="py-1 pr-2 text-right font-medium">80% range</th>
             </tr>
           </thead>
@@ -139,8 +149,14 @@ function PortfolioSummary({ teams }: { teams: MyTeamEntry[] }) {
                   {t.teamName && <span className="text-gray-500"> · {t.teamName}</span>}
                 </td>
                 <td className="py-1 pr-2 text-gray-500">{t.formatLabel}</td>
-                <td className="py-1 pr-2 text-right text-gray-500">
-                  {t.starters}
+                <td
+                  className="py-1 pr-2 text-right font-medium text-gray-100"
+                  data-testid="portfolio-best"
+                >
+                  {num(t.bestPossible)}
+                </td>
+                <td className="py-1 pr-2 text-right text-gray-400" data-testid="portfolio-as-set">
+                  {num(t.asSet)}
                   {t.unscoredStarters > 0 && (
                     <span className="text-amber-400" title={portfolioUnscoredNote(t.unscoredStarters)}>
                       {" "}
@@ -149,10 +165,12 @@ function PortfolioSummary({ teams }: { teams: MyTeamEntry[] }) {
                   )}
                 </td>
                 <td
-                  className="py-1 pr-2 text-right font-medium text-gray-100"
-                  data-testid="portfolio-total"
+                  className={`py-1 pr-2 text-right ${
+                    t.gap >= GAP_EPSILON ? "font-medium text-emerald-300" : "text-gray-600"
+                  }`}
+                  data-testid="portfolio-gap"
                 >
-                  {num(t.total)}
+                  {t.gap >= GAP_EPSILON ? `+${num(t.gap)}` : "—"}
                 </td>
                 <td className="py-1 pr-2 text-right">
                   <RangeCell p10={t.p10} p90={t.p90} />
@@ -175,28 +193,59 @@ function PortfolioSummary({ teams }: { teams: MyTeamEntry[] }) {
   )
 }
 
-/** NF-C6b — one team's total, on its own card. Rendered even when there is no ranking (a single
- *  league still has a meaningful total), which is why this is separate from `PortfolioSummary`. */
+/**
+ * NF-C6b — one team's two totals and the gap between them. Rendered even when there is no ranking
+ * (a single league still has meaningful totals), which is why this is separate from
+ * `PortfolioSummary`.
+ *
+ * ⭐ THE GAP LEADS. It is the only figure on this surface with no cross-league confound — both
+ * totals come from the SAME league's scoring, so their difference is unaffected by the scoring and
+ * roster-size differences that keep the ranking a rough guide — and it is the one number here a
+ * reader can act on.
+ */
 function TeamTotal({ rollup }: { rollup: TeamRollup }) {
+  const hasGap = rollup.gap >= GAP_EPSILON
   return (
     <div
       data-testid="team-total"
-      className="mt-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded border border-white/10 bg-white/[0.02] px-3 py-2"
+      className="mt-3 rounded border border-white/10 bg-white/[0.02] px-3 py-2"
     >
-      <div className="text-[11px] text-gray-500">
-        {PORTFOLIO_TOTAL_LABEL} · {rollup.starters} starters
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div className="text-[11px] text-gray-500">
+          {PORTFOLIO_BEST_LABEL}
+          <span className="ml-2 text-sm font-medium text-gray-100" data-testid="team-best-value">
+            {num(rollup.bestPossible)}
+          </span>
+          <span className="ml-2 text-gray-500">
+            <RangeCell p10={rollup.p10} p90={rollup.p90} />
+          </span>
+        </div>
+        <div className="text-[11px] text-gray-500">
+          {PORTFOLIO_AS_SET_LABEL}
+          <span className="ml-2 text-sm text-gray-300" data-testid="team-as-set-value">
+            {num(rollup.asSet)}
+          </span>
+        </div>
       </div>
-      <div className="flex items-baseline gap-2">
-        <span className="text-sm font-medium text-gray-100" data-testid="team-total-value">
-          {num(rollup.total)}
-        </span>
-        <span className="text-[11px] text-gray-500">
-          <RangeCell p10={rollup.p10} p90={rollup.p90} />
-        </span>
-      </div>
+
+      {/* ⭐ THE HERO LINE — prominent, not a footnote. */}
+      <p
+        className={`mt-2 text-xs font-medium ${hasGap ? "text-emerald-300" : "text-gray-500"}`}
+        data-testid="team-gap"
+        title={PORTFOLIO_GAP_NOTE}
+      >
+        {hasGap ? portfolioGapHeadline(num(rollup.gap)) : PORTFOLIO_GAP_NONE}
+      </p>
+      <p className="mt-1 text-[11px] text-gray-600">{PORTFOLIO_TOTAL_LABEL}</p>
+
       {rollup.unscoredStarters > 0 && (
-        <p className="w-full text-[11px] text-amber-400/80">
+        <p className="mt-1 text-[11px] text-amber-400/80">
           {portfolioUnscoredNote(rollup.unscoredStarters)}
+        </p>
+      )}
+      {rollup.unfilledSlots > 0 && (
+        <p className="mt-1 text-[11px] text-gray-600">
+          {portfolioUnfilledNote(rollup.unfilledSlots)}
         </p>
       )}
     </div>
