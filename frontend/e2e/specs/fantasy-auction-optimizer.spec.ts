@@ -506,6 +506,176 @@ test.describe("driving an auction", () => {
     expectNoPageErrors(errors)
   })
 
+  // ── recording a nomination that is not on the shortlist ───────────────────────────────────────
+  //
+  // ⭐ REPORTED LIVE 2026-08-17, and the shape is worth stating because it is not obvious from the
+  // code: an auction is driven by NOMINATIONS, and the room nominates whoever it likes. The
+  // shortlist panel only ever holds the few names that fit MY roster next, so the board table is
+  // where most of a real auction actually gets recorded — and it had no price entry at all. Both
+  // its buttons silently wrote a default, so a $3 sale went in the ledger at his value and every
+  // number downstream of the money (inflation, every max bid, every team's remaining) drifted from
+  // the auction actually happening in the room. Nothing on screen looked wrong.
+
+  /** Every board row, keyed by the player id the controls carry. */
+  async function boardRows(page: Page) {
+    return page.getByTestId("auction-board-max-bid").evaluateAll((cells) =>
+      cells.map((c) => {
+        const row = c.closest("tr")
+        return {
+          id: c.getAttribute("data-player") ?? "",
+          name: (row?.querySelector('a[href^="/fantasy/player/"]')?.textContent ?? "").trim(),
+        }
+      }),
+    )
+  }
+
+  /** `{ "3": "$160", ... }` — what the room panel says every team has left. */
+  async function roomRemaining(page: Page) {
+    return page.getByTestId("auction-room-team").evaluateAll((rows) =>
+      Object.fromEntries(
+        rows.map((r) => [
+          r.getAttribute("data-team"),
+          (r.querySelector('[data-testid="auction-room-remaining"]')?.textContent ?? "").trim(),
+        ]),
+      ),
+    )
+  }
+
+  /**
+   * Record a sale from the BOARD table. Returns the number the price box was SHOWING before
+   * anything was typed, so a test can prove its own typed price was not the default (the shape
+   * where a passing assertion says nothing).
+   */
+  async function recordFromBoard(
+    page: Page,
+    opts: { id: string; price?: number; team?: number },
+  ): Promise<number> {
+    const input = page.locator(`[data-testid="auction-price-input"][data-player="${opts.id}"]`)
+    await expect(input).toBeVisible()
+    const shown = Number(await input.getAttribute("placeholder"))
+    if (opts.price != null) await input.fill(String(opts.price))
+    if (opts.team == null) {
+      await page.locator(`[data-testid="auction-board-win-button"][data-player="${opts.id}"]`).click()
+    } else {
+      const row = page.locator(
+        `tr:has([data-testid="auction-price-input"][data-player="${opts.id}"])`,
+      )
+      await row.getByTestId("auction-rival-button").click()
+      await page.locator(`[data-testid="auction-rival-team"][data-team="${opts.team}"]`).click()
+      await expect(page.locator('[data-testid="auction-rival-team"]')).toHaveCount(0)
+    }
+    return shown
+  }
+
+  /** A board player who is deliberately NOT one of the shortlisted names. */
+  async function offShortlistTarget(page: Page, fromRank = 100) {
+    const rows = await boardRows(page)
+    expect(rows.length, "the board table is empty — nothing to nominate").toBeGreaterThan(fromRank)
+    const shortlist = new Set(
+      (await page.getByTestId("auction-candidate-name").allTextContents()).map((s) => s.trim()),
+    )
+    const target = rows.slice(fromRank).find((r) => r.name && !shortlist.has(r.name))
+    expect(target, "every board row is on the shortlist — this test cannot fail").toBeTruthy()
+    return target!
+  }
+
+  test("a nominated player found by search is recorded at what he actually sold for", async ({
+    page,
+  }) => {
+    const { errors } = await startAuction(page)
+    const target = await offShortlistTarget(page)
+
+    // The reported workflow, verbatim: search the room's nomination, then record it.
+    await page.getByLabel("Search players").fill(target.name)
+    await expect.poll(async () => (await boardRows(page)).length).toBeLessThan(50)
+
+    const shown = await recordFromBoard(page, { id: target.id, price: 41, team: 4 })
+    // ⚠️ ANTI-VACUITY. If the typed price happened to equal the default, a version that ignores
+    // typing entirely would pass this test — the fixture-cannot-fail shape.
+    expect(shown, "the typed price equals the default — this proves nothing").not.toBe(41)
+
+    await expect
+      .poll(async () => (await roomRemaining(page))["4"], {
+        message: "team 4 was not charged the price that was typed",
+      })
+      .toBe("$159")
+    const room = await roomRemaining(page)
+    expect(room["3"], "a team that bought nothing was charged").toBe("$200")
+
+    // ...and he leaves the board, because a sold player who stays biddable can be sold twice.
+    await expect(
+      page.locator(`[data-testid="auction-board-max-bid"][data-player="${target.id}"]`),
+    ).toHaveCount(0)
+
+    await expectNoNaN(page)
+    expectNoPageErrors(errors)
+  })
+
+  test("a player I win from the board charges my budget exactly what I typed", async ({ page }) => {
+    const { errors } = await startAuction(page)
+    const target = await offShortlistTarget(page)
+
+    await page.getByLabel("Search players").fill(target.name)
+    const shown = await recordFromBoard(page, { id: target.id, price: 37 })
+    expect(shown, "the typed price equals the default — this proves nothing").not.toBe(37)
+
+    await expect(page.getByTestId("auction-budget-remaining")).toHaveText("$163")
+    await expect(page.getByTestId("auction-roster")).toContainText(target.name)
+
+    await expectNoNaN(page)
+    expectNoPageErrors(errors)
+  })
+
+  test("an empty price box records the number the box was showing", async ({ page }) => {
+    // ⭐ THE TRUTHFUL-PLACEHOLDER PROPERTY. One box sits between two buttons, so if "I won" and
+    // "Sold" defaulted to different numbers the greyed-out figure would be right for at most one
+    // of them — an input that shows one number and writes another. Both therefore default to the
+    // same thing: what he is worth at today's prices.
+    //
+    // ⚠️ RUN AFTER SPENDING, deliberately. With a full budget the affordability cap is inert, so
+    // his value and my max bid are the SAME number and a placeholder showing either would pass.
+    // Draining the budget is what makes the two diverge and the assertion able to fail.
+    const { errors } = await startAuction(page)
+    await recordWin(page, 185)
+    await expect(page.getByTestId("auction-budget-remaining")).toHaveText("$15")
+
+    const target = await offShortlistTarget(page, 0)
+    const shown = await recordFromBoard(page, { id: target.id, team: 6 })
+    expect(shown, "nothing was showing in the price box").toBeGreaterThan(1)
+
+    await expect
+      .poll(async () => (await roomRemaining(page))["6"], {
+        message: "the recorded price is not the one the box was showing",
+      })
+      .toBe(`$${200 - shown}`)
+    expectNoPageErrors(errors)
+  })
+
+  test("the shortlist and the board share ONE price box", async ({ page }) => {
+    // The E9.61 rule on the number a user types: two surfaces offering the same action must not
+    // keep two ledgers of it. A price typed against a player is a fact about that player, so it
+    // must be the same box wherever he appears — otherwise a user types $3 in one place, clicks
+    // the button in the other, and records something they never entered.
+    const { errors } = await startAuction(page)
+    const name = (await page.getByTestId("auction-candidate-name").first().textContent())?.trim()
+    expect(name, "no shortlisted player to cross-check").toBeTruthy()
+
+    await page.getByLabel("Search players").fill(name!)
+    const rows = await boardRows(page)
+    const target = rows.find((r) => r.name === name)
+    expect(target, `${name} is on the shortlist but not on the board`).toBeTruthy()
+
+    await page
+      .locator(`tr [data-testid="auction-price-input"][data-player="${target!.id}"]`)
+      .fill("57")
+    await expect(
+      page.locator(
+        `[data-testid="auction-candidate"] [data-testid="auction-price-input"][data-player="${target!.id}"]`,
+      ),
+    ).toHaveValue("57")
+    expectNoPageErrors(errors)
+  })
+
   test("a mid-auction reload keeps the money and the roster", async ({ page }) => {
     // ⭐ THE REASON THE STATE IS PERSISTED AT ALL. An auction runs for two hours in a tab that gets
     // reloaded, backgrounded and killed; losing the MONEY at spot 12 is losing the session.

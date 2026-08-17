@@ -2224,6 +2224,61 @@ const CASES = [
     to: "            onSelect={() => onSell(myTeam === 1 ? 2 : 1)}",
     grep: "charged to the team that actually won it",
   },
+  {
+    id: "auction-board-sold-ignores-the-typed-price",
+    shipped: "NF-C5 — REAL, reported live 2026-08-17: the board could record WHO but not FOR HOW MUCH",
+    // ⭐ THE ACTUAL SHIPPED DEFECT, restored exactly. The board table's "Sold" wrote a default and
+    // there was no box to type in, so a nomination that is not on the shortlist — which is most of
+    // a real auction — went into the ledger at the tool's own valuation rather than at its price.
+    // Everything downstream of the money then drifts from the room: inflation, every max bid, and
+    // every team's remaining. Nothing on screen looks wrong, which is why it survived a live run.
+    detail: "Ignores the typed price and records the default.",
+    file: "components/fantasy/auction-optimizer.tsx",
+    from: "                                  sell(p.id, team, priceFor(p.id, defaultSalePrice(bid)))",
+    to: "                                  sell(p.id, team, defaultSalePrice(bid))",
+    grep: "recorded at what he actually sold for",
+  },
+  {
+    id: "auction-board-win-ignores-the-typed-price",
+    shipped: "NF-C5 — REAL, reported live 2026-08-17: the same gap on my own purchases",
+    // The other button, and a SEPARATE code path — worth its own case because the two were fixed
+    // together and could drift apart. Under-recording my own spend is the dangerous direction: it
+    // leaves the tool believing I have money I do not, which is exactly how a roster spot ends up
+    // unfundable at the end of an auction.
+    detail: "Ignores the typed price on my own win and records the default.",
+    file: "components/fantasy/auction-optimizer.tsx",
+    from: "                                  sell(p.id, myTeam, priceFor(p.id, defaultSalePrice(bid)))",
+    to: "                                  sell(p.id, myTeam, defaultSalePrice(bid))",
+    grep: "charges my budget exactly what I typed",
+  },
+  {
+    id: "auction-price-box-shows-what-it-does-not-write",
+    shipped: "NF-C5 — pre-emptive: the price box's placeholder is not what a blank record writes",
+    // ONE box sits between "I won" and "Sold", so the moment the two buttons default differently
+    // the greyed-out figure is right for at most one of them — an input that displays one number
+    // and writes another, with no error and nothing on screen to contradict it. `maxBid` is the
+    // plausible wrong choice (it is what the column beside it shows).
+    //
+    // ⚠️ Only visible once money has been spent: with a full budget the affordability cap is inert
+    // and the two numbers coincide, which is why the test drains the budget first.
+    detail: "Shows the max bid in the box while a blank record writes his value at today's prices.",
+    file: "components/fantasy/auction-optimizer.tsx",
+    from: "                                placeholder={String(defaultSalePrice(bid))}",
+    to: "                                placeholder={String(bid.maxBid)}",
+    grep: "records the number the box was showing",
+  },
+  {
+    id: "auction-board-keeps-its-own-price-ledger",
+    shipped: "NF-C5 — pre-emptive: the board and the shortlist keep two prices for one player",
+    // The E9.61 two-renderers rule on the number a user TYPES. A price is a fact about a player,
+    // so a second ledger keyed per-surface means typing $3 in one place and clicking the button in
+    // the other records something never entered — and the player appears on both surfaces at once.
+    detail: "Keys the board's price box per-surface, so the shortlist never sees what was typed.",
+    file: "components/fantasy/auction-optimizer.tsx",
+    from: "                                  setPrices((prev) => ({ ...prev, [p.id]: e.target.value }))",
+    to: '                                  setPrices((prev) => ({ ...prev, ["board:" + p.id]: e.target.value }))',
+    grep: "share ONE price box",
+  },
 ]
 
 /**
@@ -2281,7 +2336,11 @@ const CASES = [
 // G100-C2 adds ONE case (the multi-league picker reverting to `teams[0]`), RED-proven individually
 // (`-- league-picker`) for the same reason. So 125/119/6 → 126/120/6, and the next full run CONFIRMS
 // it.
-const RECORDED_BOARD = { total: 137, red: 131, notObservable: 6 }
+// NF-C5's follow-up (the board price box) adds FOUR cases, each RED-proven individually
+// (`-- auction-board`, `-- auction-price-box`) for the same reason every entry above records: a
+// production build per case does not belong in a session. So 137/131/6 → 141/135/6, and the next
+// full run CONFIRMS it. ⛔ A projection is not a measurement.
+const RECORDED_BOARD = { total: 141, red: 135, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

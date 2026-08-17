@@ -30,6 +30,7 @@ import { InfoTip } from "@/components/fantasy/shared"
 import { assignRoster, sortAvailable, type FilledSlot, type Player, type LeagueConfigMeta } from "@/lib/draft-optimizer"
 import {
   auctionBoard,
+  defaultSalePrice,
   formatInflation,
   formatMoney,
   formatMoneyRange,
@@ -473,10 +474,11 @@ export function AuctionOptimizer() {
                       <span className="text-xs text-gray-600">$</span>
                       <input
                         data-testid="auction-price-input"
+                        data-player={c.player.id}
                         inputMode="numeric"
                         aria-label={`Winning price for ${c.player.name}`}
                         value={prices[c.player.id] ?? ""}
-                        placeholder={String(Math.max(1, c.bid.maxBid))}
+                        placeholder={String(defaultSalePrice(c.bid))}
                         onChange={(e) =>
                           setPrices((p) => ({ ...p, [c.player.id]: e.target.value }))
                         }
@@ -486,7 +488,7 @@ export function AuctionOptimizer() {
                         data-testid="auction-win-button"
                         size="sm"
                         onClick={() =>
-                          sell(c.player.id, myTeam, priceFor(c.player.id, Math.max(1, c.bid.maxBid)))
+                          sell(c.player.id, myTeam, priceFor(c.player.id, defaultSalePrice(c.bid)))
                         }
                         // ⚠️ Only "I WON" is gated on eligibility — "Sold" (a rival's win) is not,
                         // and must not be: whether a player fits MY roster says nothing about
@@ -504,11 +506,7 @@ export function AuctionOptimizer() {
                         budgets={state.budgets}
                         myTeam={myTeam}
                         onSell={(team) =>
-                          sell(
-                            c.player.id,
-                            team,
-                            priceFor(c.player.id, Math.max(1, c.auction.value)),
-                          )
+                          sell(c.player.id, team, priceFor(c.player.id, defaultSalePrice(c.bid)))
                         }
                       />
                     </div>
@@ -556,6 +554,11 @@ export function AuctionOptimizer() {
                 league&apos;s dollars-per-point. It is what he is <em>worth</em>, not a forecast of
                 what he will <em>go for</em>.
               </p>
+              <p className="mb-2 text-[11px] leading-snug text-gray-600">
+                Someone nominated a name that isn&apos;t on the shortlist? Search for him, type what
+                he actually sold for, and record who won him. Leave the box empty and we record what
+                he is worth at today&apos;s prices — the greyed-out number.
+              </p>
               {/* The table scrolls inside its OWN box, so a wide row can never widen the page. */}
               <div className="max-h-[520px] overflow-y-auto overflow-x-auto">
                 <table className="w-full text-sm">
@@ -565,12 +568,14 @@ export function AuctionOptimizer() {
                       <th className="py-1.5 font-medium">Player</th>
                       <th className="py-1.5 text-right font-medium">Value</th>
                       <th className="py-1.5 text-right font-medium">Your max</th>
+                      <th className="py-1.5 text-right font-medium">Sold for</th>
                       <th className="py-1.5 pr-1 text-right font-medium"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {available.slice(0, 250).map((p) => {
                       const v = state.values.get(p.id)
+                      const bid = state.bidFor(p)
                       return (
                         <tr key={p.id} className="border-t border-[#171717] hover:bg-[#141414]">
                           <td className="py-1.5 pl-1 text-xs text-gray-600">
@@ -605,7 +610,31 @@ export function AuctionOptimizer() {
                             data-player={p.id}
                             className="py-1.5 text-right text-gray-400"
                           >
-                            {formatMoney(state.bidFor(p).maxBid)}
+                            {formatMoney(bid.maxBid)}
+                          </td>
+                          {/* ⭐ THE PRICE BOX, ON EVERY ROW. Reported live 2026-08-17: a nomination
+                              is very often NOT one of the top few names, so the only way to record
+                              it was this table — which had no price entry at all, silently writing
+                              a default. A recorded auction is "who, and for how much"; a surface
+                              that can record only the "who" is not a record of an auction.
+                              ⚠️ SAME `prices` state and SAME `priceFor` as the panel above, not a
+                              second price mechanism (E9.61). */}
+                          <td className="py-1.5 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <span className="text-xs text-gray-600">$</span>
+                              <input
+                                data-testid="auction-price-input"
+                                data-player={p.id}
+                                inputMode="numeric"
+                                aria-label={`Sale price for ${p.name}`}
+                                value={prices[p.id] ?? ""}
+                                placeholder={String(defaultSalePrice(bid))}
+                                onChange={(e) =>
+                                  setPrices((prev) => ({ ...prev, [p.id]: e.target.value }))
+                                }
+                                className="w-14 rounded border border-[#262626] bg-[#0a0a0a] px-1.5 py-1 text-base sm:text-xs text-white placeholder:text-gray-700"
+                              />
+                            </div>
                           </td>
                           {/* ⭐ BOTH OUTCOMES, FOR EVERY PLAYER. The recommendation panel only ever
                               lists the top few candidates for MY roster, so with "Sold" available
@@ -616,12 +645,16 @@ export function AuctionOptimizer() {
                           <td className="py-1.5 pr-1 text-right">
                             <div className="flex items-center justify-end gap-1">
                               <button
-                                onClick={() => sell(p.id, myTeam, Math.max(1, v?.value ?? 1))}
+                                data-testid="auction-board-win-button"
+                                data-player={p.id}
+                                onClick={() =>
+                                  sell(p.id, myTeam, priceFor(p.id, defaultSalePrice(bid)))
+                                }
                                 disabled={!state.openEligibility.has(p.pos)}
                                 className="rounded border border-[#2a2a2a] px-2 py-0.5 text-xs text-gray-400 hover:border-[#10b981] hover:text-[#10b981] disabled:opacity-30 disabled:hover:border-[#2a2a2a] disabled:hover:text-gray-400"
                                 title={
                                   state.openEligibility.has(p.pos)
-                                    ? `Record ${p.name} sold to you at his value`
+                                    ? `Record ${p.name} sold to you for the price shown`
                                     : "No open slot on your roster fits this position"
                                 }
                               >
@@ -630,7 +663,9 @@ export function AuctionOptimizer() {
                               <SoldToMenu
                                 budgets={state.budgets}
                                 myTeam={myTeam}
-                                onSell={(team) => sell(p.id, team, Math.max(1, v?.value ?? 1))}
+                                onSell={(team) =>
+                                  sell(p.id, team, priceFor(p.id, defaultSalePrice(bid)))
+                                }
                               />
                             </div>
                           </td>
