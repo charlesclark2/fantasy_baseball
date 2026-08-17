@@ -1,8 +1,8 @@
 # INC-45 — the box's K/DST lake read returned 0 rows, and the board froze mid-draft-season
 
-**Status:** code fixed + guarded. 🟥 The runtime gate (the automated publish succeeding on the box)
-is an operator step — CI and the laptop structurally cannot provide it, for the same reason NF-K1's
-fallback shipped unproven.
+**Status: RESOLVED + VERIFIED ON THE BOX, 2026-08-17.** `load_kdst_lake(2026)` returns 74 rows on
+the box, `sports_nfl_board_publish_job` succeeds, and the published artifact carries **K: 42,
+DST: 32** across 870 players (`generated_at` 20:21:06Z). The board is advancing again.
 
 **Sequence.** NF-K1 fixed a published board that carried ZERO K and ZERO D/ST by (1) making the
 K/DST read LOCAL-FIRST-THEN-LAKE and (2) adding a publish-time coverage guard that refuses to ship a
@@ -38,13 +38,37 @@ shape:
 | before — credentials via the legacy `s3_*` settings | **0** — `delta_scan` ignored them and went off to IMDS by itself (`DeltaKernel ObjectStoreError … PUT http://169.254.169.254/latest/api/token`) |
 | after — credentials via a `CREATE SECRET` | **74** (42 K + 32 D/ST) |
 
-⚠️ **What is proven here and what is not.** The dead channel is proven, and it is sufficient to
-produce exactly the observed symptom. Which ambient sub-cause bites on the box specifically —
-an empty-string AKID, an unreachable IMDS from the container, a region default — is **not** proven
-from a laptop, and this session had no box access (`ssm:SendCommand` / `ec2:DescribeInstances` are
-denied for `baseball-access-user`, as INC-40 records). The operator diagnostic below captures the
-raw pre-fix error so the record names the sub-cause instead of inferring it. The fix does not depend
-on which one it was: it stops relying on ambient resolution altogether.
+### ⭐ The sub-cause, MEASURED on the box — it is the REGION, not the credentials
+
+The laptop work above proved the channel is dead for *credentials*. The box then showed the same
+channel is dead for *region*, and that region is the half that actually bit:
+
+```
+INFO:botocore.credentials:Found credentials from IAM Role: credence-dagster-ec2-role
+[ALERT] NF1.6 K/DST lake read FAILED (IO Error: DeltaKernel ObjectStoreError (8): … Generic S3
+error: Error performing GET https://s3.us-east-1.amazonaws.com/credence-sports-lakehouse/nfl/
+fantasy/derived/kdst_projections/_delta_log/_last_checkpoint … Received redirect without LOCATION,
+this normally indicates an incorrectly configured region)
+ROWS: 0
+```
+
+Line 1 is `storage_options()`'s botocore chain resolving the instance role **correctly** — the
+credentials were never wrong, they were just handed somewhere nothing reads. `SET
+s3_region='us-east-2'` was ignored exactly like them, so delta-kernel-rs took the region from the
+container's ambient `AWS_DEFAULT_REGION=us-east-1` (what `.env.example` ships), asked **us-east-1**
+for a **us-east-2** bucket, and got a 301 with no `Location` on the very first `_delta_log`
+read — before touching a byte of data.
+
+⚠️ **And this half was structurally unreproducible off the box**, which is worth recording because
+it is why the laptop probes found the mechanism but not the trigger: the laptop's ambient
+`AWS_DEFAULT_REGION` is *also* `us-east-1`, and the read succeeds there anyway — a different
+object_store build resolves the redirect. So "it works on my machine at the same region" was true
+and meaningless.
+
+⛔ **Do NOT fix this by setting `AWS_DEFAULT_REGION=us-east-2` on the container.** It would work,
+and it would put the SNS clients (which default to us-east-1) on the wrong region — the documented
+paging landmine. Region belongs pinned **per resource, on the secret**, which is what the fix does
+and what `sports_dbt/profiles.yml` already did.
 
 ## The fix
 
@@ -85,7 +109,7 @@ this incident is evidence for it rather than against it:
   than a freshness check on a static file, and it is what turned this from a silent regression into
   a red job with a page. The board froze **because the guard did its job**.
 
-## 🟥 Operator steps
+## 🟥 Operator steps — ALL COMPLETED 2026-08-17 (kept as the runbook for the next occurrence)
 
 **1 — capture the pre-fix error (BOX).** Do this *before* deploying, so the record names the
 sub-cause rather than inferring it. Prints the raw exception the swallowed read hit:
@@ -138,3 +162,19 @@ print(d['generated_at']); print(collections.Counter(p['pos'] for p in d['players
 **PASS** = `K: 42`, `DST: 32`, ~868 players, and `generated_at` at the **schedule** time (~14:2x UTC)
 rather than the hand-run time from step 4. A 795-player board with no K/DST means the old artifact
 is still being served.
+
+---
+
+## Runtime-gate result (2026-08-17)
+
+| step | result |
+|---|---|
+| new code in the job-EXECUTING container (`dagster-codeloc`) | ✅ |
+| `load_kdst_lake(2026)` on the box | ✅ **74 rows**, no region error, IAM role still resolved |
+| `sports_nfl_board_publish_job` (launched from Dagit) | ✅ succeeded |
+| published artifact | ✅ **K: 42, DST: 32**, 870 players, `generated_at` 2026-08-17T20:21:06Z |
+
+The count reconciles exactly: offence 796 (the broken board's 795, +1 from two days of depth-chart /
+roster refresh) + 74 K/DST = 870. A manual Dagit launch is a complete gate for this defect — the
+schedule had been firing correctly every morning and it was the OP that failed, so the op is what
+needed proving.
