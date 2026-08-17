@@ -150,6 +150,15 @@ class LeagueConfig:
     superflex: bool = False
     description: str = ""
     format_version: str = CONFIG_FORMAT_VERSION
+    # ── NF-C5: how the league DRAFTS ──────────────────────────────────────────────────────────────
+    # "snake" (the default, and what every shipped preset is) or "auction". This changes NOTHING
+    # about scoring or value-over-replacement — a player is worth the same points either way — it
+    # changes only how that value is TRANSACTED, which is why it sits here beside `n_teams` rather
+    # than anywhere near `scoring`. `auction_budget` is the per-team budget in the league's own
+    # currency; it is meaningless (and ignored) under "snake", and defaults to $200 for an auction
+    # because that is the near-universal host default.
+    draft_type: str = "snake"
+    auction_budget: int = 200
     # ── NF-C0b: league rules CAPTURED FOR FIDELITY THAT THE ENGINE DELIBERATELY DOES NOT APPLY ────
     # A real league carries rules that are genuinely part of its identity but have NO effect on a
     # per-player season projection or on value-over-replacement — the motivating case is Sleeper's
@@ -193,7 +202,22 @@ class LeagueConfig:
                 raise ValueError(f"starter slot {s.name!r} has no eligible positions")
         if not any(not s.bench and s.count > 0 for s in self.roster):
             raise ValueError("config has no starting slots — nothing to rank against")
+        if self.draft_type not in ("snake", "auction"):
+            raise ValueError(
+                f"draft_type must be 'snake' or 'auction', got {self.draft_type!r}"
+            )
+        # ⚠️ Only enforced FOR an auction. A snake league carries the default budget as inert
+        # baggage, and refusing it there would fail configs that have no auction in them at all.
+        if self.draft_type == "auction" and self.auction_budget <= 0:
+            raise ValueError(
+                f"an auction league needs a positive auction_budget, got {self.auction_budget}"
+            )
         return self
+
+    def roster_spots(self) -> int:
+        """Total spots on ONE team — starters AND bench. The auction pool's reserve is built from
+        this (every spot costs at least the minimum bid), so bench depth is not free money."""
+        return sum(int(s.count) for s in self.roster)
 
     def to_dict(self) -> dict:
         return {
@@ -207,6 +231,11 @@ class LeagueConfig:
             "scoring": self.scoring.to_dict(),
             "roster": [s.to_dict() for s in self.roster],
             "captured_rules": dict(self.captured_rules),
+            # NF-C5. Always emitted (never conditional on being an auction) so a round-tripped
+            # config has ONE shape — a key that appears only sometimes is the shape a reader gets
+            # wrong (NF-C0's dropped-key class, on the serialize side).
+            "draft_type": self.draft_type,
+            "auction_budget": int(self.auction_budget),
         }
 
     @classmethod
@@ -222,6 +251,11 @@ class LeagueConfig:
             description=str(d.get("description", "")),
             format_version=str(d.get("format_version", CONFIG_FORMAT_VERSION)),
             captured_rules=dict(d.get("captured_rules") or {}),
+            # NF-C5 — absent on any config serialized before this shipped, and the safe default is
+            # "snake": every league that exists today is one, and reading an old config as an
+            # auction would invent a budget nobody set.
+            draft_type=str(d.get("draft_type") or "snake"),
+            auction_budget=int(d.get("auction_budget") or 200),
         ).validate()
 
     def with_overrides(self, **kwargs) -> "LeagueConfig":

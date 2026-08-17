@@ -28,6 +28,20 @@ from quant_sports_intel_models.fantasy_engine.league_config import (  # noqa: F4
     ScoringRules,
     SportProfile,
 )
+from quant_sports_intel_models.fantasy_engine.auction import (  # noqa: F401
+    DEFAULT_AUCTION_BUDGET,
+    DEFAULT_MIN_BID,
+    DRAFT_TYPES,
+    AuctionPool,
+    AuctionValue,
+    Inflation,
+    MaxBid,
+    auction_pool,
+    auction_values,
+    dollars_per_slot,
+    inflation,
+    max_bid,
+)
 from quant_sports_intel_models.fantasy_engine.draft import (  # noqa: F401
     OpenSlots,
     Recommendation,
@@ -69,4 +83,17 @@ __all__ = [
     "open_starter_slots",
     "assign_tiers",
     "picks_until_next",
+    # NF-C5 — auction values + the live budget/inflation math (sport-agnostic; MLB roto reuses it)
+    "auction_pool",
+    "auction_values",
+    "inflation",
+    "max_bid",
+    "dollars_per_slot",
+    "AuctionPool",
+    "AuctionValue",
+    "Inflation",
+    "MaxBid",
+    "DEFAULT_AUCTION_BUDGET",
+    "DEFAULT_MIN_BID",
+    "DRAFT_TYPES",
 ]
