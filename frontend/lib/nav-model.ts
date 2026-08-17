@@ -75,9 +75,24 @@ export const SPORTS: SportNav[] = [
       {
         surface: "fantasy",
         label: "Fantasy",
+        // ⭐⭐ GROUPED BY THE JOB, NOT BY BUILD ORDER (operator, 2026-08-17: "the navigation under
+        // NFL probably needs to be ordered or grouped in a more logical manner"). It had grown to
+        // twelve items in one undifferentiated list, which is past the point where a reader scans
+        // rather than reads — Draft Optimizer and Mock Draft sat four apart, and the five league
+        // items were interleaved with the boards.
+        //
+        // Three sections, in the order a user meets them: look something up, prepare for the draft,
+        // then manage the league they came out of it with. Track Record closes, unlabelled, because
+        // it is a proof asset rather than a tool and belongs to none of the three.
+        //
+        // ⚠️ THIS IS ORDER AND GROUPING ONLY. No `public`/`freeSignedIn`/`restrict` flag moves, and
+        // `isLocked` keys on `g.surface` rather than on a section, so nothing about who can open
+        // what changes. ⚠️ The MOBILE menu flattens sections (`nav.tsx` `flatMap`s them), so it
+        // inherits the new ORDER but shows no headers — which is why the order has to read sensibly
+        // on its own, and does.
         sections: [
           {
-            label: null,
+            label: "Rankings & research",
             items: [
               // ⭐ Order is PRODUCT order, not build order. Rankings leads because it is the actual
               // product — the projection re-scored for YOUR league's format and roster. Projections
@@ -100,12 +115,27 @@ export const SPORTS: SportNav[] = [
               // (not folded into Projections' own search box) because it is the entry point every
               // OTHER surface's Player cell links out to, so it needs to be reachable on its own.
               { label: "Player Search", href: "/fantasy/players", key: "fantasy-players", public: true },
-              { label: "Draft Optimizer", href: "/fantasy/draft", key: "fantasy-draft" },
-              // ⭐ NF-C2.1 — the PRACTICE half of the same engine: a full draft against CPU
-              // opponents, for the eleven months a year when nobody has a live draft to track.
-              // Sits directly under the live tool because it is the same screen rehearsed, and it
-              // is deliberately NOT `public`: it reads the same 403-ing gated board endpoints.
+            ],
+          },
+          {
+            // The two halves of the same engine, together: rehearse in the mock, then run the live
+            // board on draft night. They were four items apart, which is the single worst adjacency
+            // the old flat list had — Mock Draft is how a user discovers the optimizer exists.
+            label: "Draft",
+            items: [
+              // ⭐ NF-C2.1 — the PRACTICE half: a full draft against CPU opponents, for the eleven
+              // months a year when nobody has a live draft to track. Deliberately NOT `public`: it
+              // reads the same 403-ing gated board endpoints.
               { label: "Mock Draft", href: "/fantasy/mock-draft", key: "fantasy-mock-draft" },
+              { label: "Draft Optimizer", href: "/fantasy/draft", key: "fantasy-draft" },
+            ],
+          },
+          {
+            // Everything that needs a saved league. The PAYOFF leads and the two ways to set one up
+            // close — G100-C1's ordering, preserved deliberately: grouping the league items together
+            // was the ask, demoting the activation screen was not.
+            label: "My leagues",
+            items: [
               // ⭐ G100-C1 — the ACTIVATION screen: a free account's one personalized board, led by
               // the generic-vs-your-league delta. `freeSignedIn` because it survives the locked
               // fantasy surface (it IS the free tier's personalization) but needs an account.
@@ -129,6 +159,12 @@ export const SPORTS: SportNav[] = [
                 key: "fantasy-roster-report",
                 freeSignedIn: true,
               },
+              // NF-C6 — cross-league browse: every saved league's roster, scored under its own
+              // format, in one place. Deliberately NOT `fantasy_beta`-restricted like Import/League
+              // Settings below it: the endpoint reads at the standard fantasy gate (any subscriber),
+              // so this stays correct without a second nav edit whenever NF-C0's write side opens
+              // wider — today it just means an honest empty state for anyone without a saved league.
+              { label: "My Teams", href: "/fantasy/my-teams", key: "fantasy-my-teams" },
               // NF-C0 — platform import: pull the real league in from Sleeper/Yahoo. Sits ABOVE
               // the manual editor because it is the path most users should take; the editor stays
               // as the floor beneath it for every league we cannot reach compliantly.
@@ -149,12 +185,13 @@ export const SPORTS: SportNav[] = [
                 key: "fantasy-league-settings",
                 freeSignedIn: true,
               },
-              // NF-C6 — cross-league browse: every saved league's roster, scored under its own
-              // format, in one place. Deliberately NOT `fantasy_beta`-restricted like Import/League
-              // Settings above it: the endpoint reads at the standard fantasy gate (any subscriber),
-              // so this stays correct without a second nav edit whenever NF-C0's write side opens
-              // wider — today it just means an honest empty state for anyone without a saved league.
-              { label: "My Teams", href: "/fantasy/my-teams", key: "fantasy-my-teams" },
+            ],
+          },
+          {
+            // Unlabelled and last: a proof asset, not a tool, so it belongs to none of the three
+            // jobs above and a header over a single item would be noise.
+            label: null,
+            items: [
               // NF3.2 — the past-season "receipts" proof asset. `public: true`: it stays reachable
               // even for a caller not entitled to Fantasy, since none of its data is the paid
               // current-season projection (see nav-model.ts's `NavItem.public` doc).

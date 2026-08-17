@@ -474,6 +474,39 @@ test.describe("running a mock draft", () => {
     expectNoPageErrors(errors)
   })
 
+  test("every player on the roster panel carries his bye week", async ({ page }) => {
+    // ⭐ ASKED FOR OFF A REAL MOCK (operator, 2026-08-17). Bye weeks are the one roster fact a
+    // drafter cannot reconstruct from the board in front of them, and the panel is where a stack
+    // becomes visible before it becomes a lineup hole.
+    const { errors } = await startMock(page)
+    await expect(page.getByText(/You're on the clock/)).toBeVisible()
+
+    const panel = page.getByRole("heading", { name: "Your team" }).locator("xpath=..")
+    // Draft two players so the panel has filled slots to describe. (The mock opens on the user's
+    // turn at slot 1, so the first Draft click lands immediately.)
+    for (let i = 0; i < 2; i++) {
+      await page.getByRole("button", { name: "Draft", exact: true }).first().click({ timeout: 15_000 })
+      const skip = page.getByRole("button", { name: /Skip to my pick/ })
+      if (await skip.isVisible().catch(() => false)) await skip.click({ timeout: 4_000 }).catch(() => {})
+    }
+
+    // ⚠️ COUNT AGAINST THE FILLED SLOTS, not against a bare "is there a BYE anywhere". A single
+    // chip would satisfy the loose form while every other row went without, which is the shape a
+    // conditional render actually fails in.
+    await expect
+      .poll(
+        async () => {
+          const rows = await panel.locator("a[href^='/fantasy/player/']").count()
+          const byes = ((await panel.innerText()).match(/BYE \d+/g) ?? []).length
+          return rows > 0 && byes >= rows
+        },
+        { message: "a filled roster slot rendered without a bye week beside the player" },
+      )
+      .toBe(true)
+
+    expectNoPageErrors(errors)
+  })
+
   test("a full quick mock runs to completion and the roster grades", async ({ page }) => {
     const { errors } = await startMock(page)
     await playToTheEnd(page)

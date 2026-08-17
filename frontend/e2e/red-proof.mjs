@@ -2099,6 +2099,43 @@ const CASES = [
     to: "    const urgency = dropoff",
     grep: "gap over the FLEX POOL",
   },
+  {
+    id: "roster-panel-drops-the-bye-week",
+    shipped: "NF-C2.1 follow-up — pre-emptive: the roster panel stops showing bye weeks",
+    // The bye is the one roster fact a drafter cannot reconstruct from the board in front of them,
+    // and it is a single optional chip in a row that renders perfectly well without it — which is
+    // exactly the shape that gets dropped by a layout tidy-up and noticed by nobody.
+    detail: "Renders the roster rows without the bye chip.",
+    file: "components/fantasy/mock-draft.tsx",
+    from: "                <ByeChip\n",
+    to: "                <div hidden><ByeChip\n",
+    grep: "carries his bye week",
+  },
+  {
+    id: "nfl-menu-groups-lose-their-labels",
+    shipped: "NF-C2.1 follow-up — pre-emptive: the NFL menu falls back to one flat list",
+    // Twelve items in one undifferentiated column is where it started, and a section whose label
+    // goes null renders as an unheaded run of links that reads as a continuation of the group above
+    // it — visually plausible, and wrong.
+    detail: "Drops the Draft group's label, merging it into the group above.",
+    file: "lib/nav-model.ts",
+    from: '            label: "Draft",',
+    to: "            label: null,",
+    grep: "grouped by job",
+  },
+  {
+    id: "nav-surface-suppression-eats-a-real-header",
+    shipped: "NF-C2.1 follow-up — pre-emptive: the surface-header suppression widens by one word",
+    // ⭐ THE OVER-CORRECTION. Suppressing the surface label when the surface has ANY labelled
+    // section — instead of when it OPENS with one — reads as the same rule and deletes MLB's
+    // "Betting" header, which is the only heading its first six items have. The NFL assertions stay
+    // green throughout, so only the MLB control can catch it.
+    detail: "Suppresses the surface label whenever any section is labelled, not just the first.",
+    file: "components/nav.tsx",
+    from: "!locked && visibleSurfaces(sport).length === 1 && !!firstVisibleSection?.label",
+    to: "!locked && visibleSurfaces(sport).length === 1 && g.sections.some((s) => !!s.label)",
+    grep: "grouped by job",
+  },
 ]
 
 /**
@@ -2156,7 +2193,7 @@ const CASES = [
 // G100-C2 adds ONE case (the multi-league picker reverting to `teams[0]`), RED-proven individually
 // (`-- league-picker`) for the same reason. So 125/119/6 → 126/120/6, and the next full run CONFIRMS
 // it.
-const RECORDED_BOARD = { total: 133, red: 127, notObservable: 6 }
+const RECORDED_BOARD = { total: 136, red: 130, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
