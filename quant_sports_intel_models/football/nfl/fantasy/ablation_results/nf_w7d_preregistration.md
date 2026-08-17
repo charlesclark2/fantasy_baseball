@@ -372,3 +372,126 @@ observations is a structural finding the decisive run should be read against.)*
   degenerate on PIT (0.0669), which is the mechanism claim showing up exactly where it should. One
   fold is not evidence, `incumbent_reproduces` cannot pass at 300 draws by construction, and ⛔
   nothing here may be tuned in response (E2.1-r).
+
+---
+
+## 12. POST-RUN FINDINGS (added AFTER the decisive run — 2026-08-17)
+
+⛔ **Nothing in this section changes a gate, a threshold, an arm, or a verdict.** The run's result
+stands exactly as §§0–11 defined it: **QB NULL — `GENUINE_ABSENCE`**, winner `mix_learned`, best
+contest foil `single_copula`, Δ **−0.0031** CRPS (CI95 [−0.0066, +0.0005]), **1/8** folds, PIT
+0.0595 against the 0.05 bar. This records what the completed record explains and what it hands the
+next story.
+
+### 12.1 ⭐⭐ The null is about the BUNDLE; its two halves point in OPPOSITE directions
+
+The registered arm changes TWO things at once, and the matched foil separates them:
+
+| channel | measured by | QB | RB | WR | TE |
+|---|---|---|---|---|---|
+| the availability **SPLIT** | `mixture − mix_off` | **+0.0149** | **+0.0161** | **+0.0058** | **+0.0036** |
+| the **Σ POPULATION** (active-rows-only) | `mix_off − single_copula` | **−0.0180** | −0.0044 | −0.0042 | −0.0015 |
+| net vs the incumbent | | −0.0031 | +0.0117 | +0.0016 | +0.0021 |
+
+⭐ **The split is POSITIVE at all four positions; the Σ population is NEGATIVE at all four.** The
+bundle nets negative at QB only because QB's Σ penalty is ~4× any other position's — which is the
+§11.1 mechanism reappearing from the other side: QB has by far the largest gap between marginal and
+conditional dependence (ρ̄ ratio re-measured here at **1.79–1.85× across all 8 folds**), so
+restricting Σ to active rows is where QB loses the most information.
+
+⚠️ **Without `mix_off` in the field this story would have recorded a flat null and been WRONG about
+it.** The bundled Δ against the incumbent alone is −0.0031 — indistinguishable from "the mixture is
+inert" — when in fact one half is a clean, consistently-signed gain. This is NF-D15 (g′) paying for
+itself: a win (or a loss) must be attributed to its claimed channel, not to the bundle.
+
+⛔ **What this does NOT license.** `mixture with the ALL-ROWS Σ` was **not in the declared field**
+and is not measured here; the split's +0.0149 is measured *conditional on* Σ_played. Asserting that
+combination would win is exactly the post-hoc field construction MH2.2 forbids. It is a
+**successor**, registered forward.
+
+⚠️ And the report-only positions are DIAGNOSTIC: RB/WR/TE each beat the incumbent 8/8, but this
+record cannot ship them (§5), and at **n = 4 positions** the sign pattern is *consistent and
+suggestive*, not a fifth fold (NF-W7c §11.3's own caution, inherited).
+
+### 12.2 The null names the BUNDLE, not the channel — and this time the foil IS the hypothesis
+
+NF-W7c §11.4 warned that `classify_null` names the FOIL. Here the binding foil is
+`single_copula` — **the incumbent**, i.e. this story's own comparison — so unlike NF-W7c's QB null
+(which was against a direct-points learner and therefore an *architecture* verdict) this
+`GENUINE_ABSENCE` is genuinely on-hypothesis. It says: *the availability mixture AS REGISTERED does
+not beat the NF-W7c incumbent on average, and no sample size rescues a negative point estimate.*
+That is correct and the `retest_trigger: None` is correct.
+
+⛔ It does **not** say "availability separation is inert" — §12.1 measures that channel at +0.0149.
+The refinement this run adds to §11.4: a null can name the FOIL correctly and still be read wrongly
+if the ARM bundles two mechanisms. Read the attribution before repeating the state.
+
+### 12.3 ⭐ The PIT bar was never approachable — and the DECILE VECTOR says why
+
+- The mixture improved calibration in the gated direction, **like-for-like**: `single_copula`
+  0.0646 → `mix_learned` 0.0595. (⚠️ NF-W7c's headline 0.0888 is its *selected* arm `joint_double`;
+  comparing against it would overstate the gain. `single_copula` reproduces NF-W7c's `joint_rank`
+  to **0.0 across all 8 folds**.)
+- **No arm in the field could have cleared 0.05** — the best PIT anywhere is
+  `assembled_comonotone` at **0.0563**, and it is a DEGENERATE that loses CRPS by 0.106. ⭐ That is
+  the second run in a row in which the over-correlated degenerate wins the PIT table, and it is the
+  measured vindication of §4: had PIT been allowed to RANK, this story would have selected a
+  construction registered to lose.
+- The defect is real, not sampling noise: at n = 685/fold a perfectly calibrated predictive posts a
+  median max-decile deviation of 0.0212 and exceeds the bar with probability **0.0003**; the
+  observed value's calibrated-null p is **0.00025**. Both pooling conventions agree (per-fold mean
+  0.0595, row-pooled 0.0568), so nothing turns on the convention choice.
+- ⭐⭐ **§11.2's carded instrumentation gap paid off immediately.** The stored decile vector is
+  `[0.136, 0.157, 0.121, 0.110, 0.104, 0.085, 0.066, 0.065, 0.062, 0.093]` — **excess mass in the
+  LOW deciles, depletion through the upper-middle**, which is the signature of an **UNDER-PRICED
+  ZERO ATOM** (a realized zero draws its randomized PIT from U(0, P̂(0)), so too small a P̂(0)
+  compresses that mass toward 0). The ordering across the whole field tracks installed atom exactly
+  — low-3 mass 0.469 (`assembled_indep`, no atom) > 0.438 (`mix_off`) > 0.425 (`single_copula`) >
+  0.414 (`mix_learned`) > 0.383 (`assembled_comonotone`, the crudest and largest atom). NF-W7c had
+  to INFER this from arm ordering; here it is read off the statistic.
+  ⚠️ **Direction only.** A pooled simulation of "realized atom 0.516 against installed atom 0.267"
+  reproduces the SHAPE but over-states the magnitude (max dev 0.094 vs the observed 0.057), because
+  it ignores the per-row heterogeneity of the atom (a starter's bank carries almost none, a
+  backup's carries a lot). This is a direction finding, not a quantitative decomposition.
+
+### 12.4 ⭐⭐ Where the answer lives: the MARGINALS bound the mixture, and that is now measured
+
+The §11.1 smoke observation reproduced at full scale and is the most transferable thing here:
+
+- realized all-zero rate **0.516**; learned π̂ mean **0.486** (the availability model wants an atom
+  the right size);
+- the marginal-admissible floor clamps it, binding on **91.7%** of rows, so the atom actually
+  installed is **0.267** — barely half of what the target carries.
+
+⭐ **Each row's per-leg W6d banks already encode a per-row availability belief, and this mixture can
+only price the atom those banks already carry.** The mixture is not failing to model availability;
+it is being *capped* by the marginals it is contractually forbidden to refit. Combined with §12.3's
+decile signature — the residual defect IS under-priced zero mass — the two findings agree on where
+the lever is, and it is **not** in the joint layer this story owns.
+
+⛔ **This is not a licence to relax the clamp.** A mixture that installs more atom than its
+marginals admit is precisely the double-counting defect this registration exists to refuse, and the
+clause that refuses it was proven non-vacuous against a deliberately-built naive mixture.
+
+### 12.5 What the successors are (registered FORWARD, never selected here)
+
+1. ⭐ **The availability split over the ALL-ROWS Σ** — keep the channel that is positive 4/4, drop
+   the one that is negative 4/4. Not in this field, not measured, and it must be a FRESH coherent
+   registration (MH2.2), scored against this same reproduced incumbent.
+2. ⭐ **A MARGINAL-layer story**: a W6d cell whose own zero mass is smaller than the realized
+   all-zero rate is what caps every downstream atom. That is a different substrate and a different
+   registration — and §12.3/§12.4 now name it with a measured statistic rather than a hunch.
+3. **A conditional dependence shape with tail dependence.** A Gaussian copula has none by
+   construction; §11.1's original diagnosis survives this run untouched for the *conditional* half.
+
+### 12.6 Anchors and controls, all green — what the null can be trusted against
+
+`incumbent_reproduces` **exact (0.0, 8/8 folds)** · all four degenerates lose (nearest is
+`assembled_comonotone` at 2.6954 vs the winner's 2.5924) · the label permutation loses (4.7437) ·
+⭐ the **π permutation** loses (2.5970 vs 2.5924), so the per-row availability signal is doing real
+work even where the bundle nets negative · all three per-form oracle floors **RESPECTED and
+ACTIVE** (unlike NF-W7c, where every dependence oracle went INACTIVE — π is low-dimensional enough
+for a peek to act) · the activity positive control peeks 0.8618 · all three inherited dependence
+clauses pass · `mixture_is_active` and `mixture_preserves_marginals` both pass on measurement
+(atom 0.267, drift 0.00495 against a 0.01 tolerance). ⇒ the null is a measurement, not an artifact
+of a harness that could not have seen the effect.

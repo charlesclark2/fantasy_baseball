@@ -648,7 +648,12 @@ def write_report(out: dict, path: Path) -> None:
             f"{'SHIP' if g and g['ship'] else ('NULL' if g else '—')} |")
 
     L += ["", "## ⭐ The gate statistic — randomized-PIT decile flatness", "",
-          "NF-W7c refused QB on this clause alone (0.0888 against 0.05). The whole field is shown "
+          "⚠️ **Read the baseline like-for-like.** NF-W7c's QB record reports 0.0888, but that is "
+          "its SELECTED winner `joint_double`; the construction this story actually contests is its "
+          "pre-registered PRIMARY `joint_rank`, which NF-W7c §11.1 measured at 0.065 and which "
+          "appears below as `single_copula` (reproduced here to 1e-9). Comparing a mixture arm "
+          "against 0.0888 would overstate the gain by attributing another arm's miscalibration to "
+          "it. The whole field is shown "
           "because the bar is a **CONSTRAINT, not a ranking key**: the over-correlated degenerate "
           "`assembled_comonotone` posts a strong PIT precisely *because* perfect dependence is a "
           "crude availability factor, and it loses CRPS by a mile. A criterion a degenerate wins "
