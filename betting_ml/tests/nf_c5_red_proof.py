@@ -56,10 +56,24 @@ BREAKS: list[tuple[str, str, str, str, bool]] = [
         # go red. Kept in the code as defence-in-depth against a future change to `_pos`, and kept
         # here so the next reader knows which of the two is actually holding the line.
         "drop the (redundant) minimum-bid floor on a value",
-        "return max(pool.min_bid, int(round(pool.min_bid + rate * x)))",
-        "return int(round(pool.min_bid + rate * x))",
+        "return max(pool.min_bid, _round_half_up(pool.min_bid + rate * x))",
+        "return _round_half_up(pool.min_bid + rate * x)",
         "nothing — unreachable given the _pos clamp",
         False,
+    ),
+    (
+        "divide the surplus by the WHOLE board instead of the draftable set",
+        "    total_vor = sum(values[i] for i in draftable)",
+        "    total_vor = sum(values)",
+        "money is allocated to players nobody rosters; the auction opens off par",
+        True,
+    ),
+    (
+        "round half to EVEN (Python's default) instead of half up",
+        "    return int((x + 0.5) // 1)",
+        "    return int(round(x))",
+        "the exported value and the browser's live recompute drift by $1 on every half",
+        True,
     ),
     (
         "let a below-replacement VOR subtract from the pool",

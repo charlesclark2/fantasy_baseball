@@ -57,6 +57,24 @@ DEFAULT_AUCTION_BUDGET = 200
 DRAFT_TYPES = ("snake", "auction")
 
 
+def _round_half_up(x: float) -> int:
+    """⭐⭐ ROUND HALF UP, NOT PYTHON'S DEFAULT — and this is a cross-language correctness
+    requirement, not a style preference.
+
+    Python's built-in `round` is BANKER'S rounding (half to even): `round(2.5) == 2`. JavaScript's
+    `Math.round` is half UP: `Math.round(2.5) === 3`. `frontend/lib/auction-optimizer.ts`
+    re-implements this arithmetic to recompute live in the browser, so leaving each side on its
+    native rounding would make the two disagree by exactly $1 on every value that lands on a half —
+    a drift too small to notice by eye, on the number a user is about to bid real money against.
+
+    Every quantity rounded here is non-negative (`min_bid + rate * x` with a non-negative rate and a
+    clamped-non-negative VOR; `value * multiplier` likewise), so `floor(x + 0.5)` is exactly half-up
+    and needs no negative-number branch. The golden vectors pin the two implementations together;
+    this is what makes them agree in the first place.
+    """
+    return int((x + 0.5) // 1)
+
+
 @dataclass(frozen=True)
 class AuctionPool:
     """The three league-level money quantities every other number here is derived from."""
@@ -180,11 +198,35 @@ def auction_values(
         lows.append(_pos(lo) if lo is not None else v)
         highs.append(_pos(hi) if hi is not None else v)
 
-    total_vor = sum(values)
+    # ⭐⭐ THE DENOMINATOR IS THE DRAFTABLE SET, NOT THE WHOLE BOARD — and this is a correctness
+    # fix, not a tidy-up. Only `spots_total` players are ever BOUGHT, so only they can absorb the
+    # room's money. Dividing the surplus by the whole board's above-replacement value hands real
+    # dollars to players nobody will roster, and the players who ARE drafted then come out worth
+    # strictly less than the money chasing them.
+    #
+    # It was found by the face-validity check that inflation must read ~1.00 before a dollar is
+    # spent: on a board carrying 722 above-replacement players against 180 roster spots, the first
+    # cut priced the draftable 180 at 44% of the pool and the auction opened at 2.06x. On a
+    # normally-shaped board (above-replacement count ~= the startable population, comfortably under
+    # the roster spots) the eligible set is every positive-VOR player plus a tail of zeros, so this
+    # changes nothing at all — it makes the model right on the boards where it was wrong, and is
+    # inert on the ones where it was already right.
+    #
+    # The rate is still APPLIED to every row: a player outside the draftable set is honestly worth
+    # what the rate says he is worth, he simply is not part of the money's denominator. That keeps
+    # the conservation identity exact BY CONSTRUCTION on any board shape:
+    #     sum(value over the top `spots_total`) == reserve + surplus == pool
+    # which is in turn why inflation opens at exactly 1.00.
+    #
+    # ⚠️ The ordering must be DETERMINISTIC and identical to the TS port's. Python's `sorted` and
+    # JS's `Array.prototype.sort` are both stable, so ties fall back to the original row order on
+    # both sides.
+    draftable = sorted(range(len(values)), key=lambda i: -values[i])[: pool.spots_total]
+    total_vor = sum(values[i] for i in draftable)
     rate = (pool.surplus / total_vor) if total_vor > 0 else 0.0
 
     def price(x: float) -> int:
-        return max(pool.min_bid, int(round(pool.min_bid + rate * x)))
+        return max(pool.min_bid, _round_half_up(pool.min_bid + rate * x))
 
     out: list[AuctionValue] = []
     for i, pid in enumerate(ids):
@@ -305,7 +347,7 @@ def max_bid(
     """
     slots = max(0, int(open_slots))
     budget = max(0, int(budget_remaining))
-    inflated = max(min_bid, int(round(int(value) * float(inflation_multiplier))))
+    inflated = max(min_bid, _round_half_up(int(value) * float(inflation_multiplier)))
     if slots <= 0:
         return MaxBid(0, int(value), inflated, 0, 0, "roster_full")
     affordable = budget - int(min_bid) * (slots - 1)

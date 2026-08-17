@@ -71,6 +71,49 @@ def test_the_vectors_exercise_every_binding_branch():
     assert by_case["deflation_lowers_the_bid"]["maxBid"] < by_case["value_binds"]["maxBid"]
 
 
+def test_the_vectors_contain_a_pool_where_the_draftable_truncation_actually_binds():
+    """⭐ ANTI-VACUITY FOR THE FIX THAT MATTERS MOST, and it is not obvious.
+
+    Every large pool in the vectors has far more roster spots than the toy board has rows, so the
+    draftable-set truncation is INACTIVE in all of them — a TS port that dropped the truncation
+    entirely would reproduce every one of those vectors and still be wrong on any real board with
+    more above-replacement players than roster spots (the shipped E2E fixture: 722 against 180,
+    which opened the auction at 2.06x).
+
+    So at least one pool must be small enough that the truncation changes the answer. Proved by
+    computing the untruncated rate and demanding it DISAGREE, rather than by trusting the pool's
+    dimensions to imply it.
+    """
+    vectors = json.loads(BV.VECTORS_PATH.read_text())
+    board = vectors["board"]
+    positives = [max(0.0, r["vor"] or 0.0) for r in board]
+
+    discriminating = []
+    for p in vectors["pools"]:
+        spots = p["nTeams"] * p["rosterSpots"]
+        if spots >= len(board) or p["pool"]["surplus"] == 0:
+            continue  # truncation cannot bind, or there is no money to distribute
+        truncated = sum(sorted(positives, reverse=True)[:spots])
+        if truncated < sum(positives) - 1e-9:
+            discriminating.append(p)
+
+    assert discriminating, (
+        "no vector pool distinguishes the draftable-set truncation from a whole-board sum — the "
+        "TS side could drop it entirely and stay green"
+    )
+    # ...and confirm it moves a real, published number rather than a rounding artifact.
+    p = discriminating[0]
+    spots = p["nTeams"] * p["rosterSpots"]
+    surplus = p["pool"]["surplus"]
+    truncated_rate = surplus / sum(sorted(positives, reverse=True)[:spots])
+    whole_rate = surplus / sum(positives)
+    top = max(v["value"] for v in p["values"])
+    assert top == A._round_half_up(1 + truncated_rate * max(positives))
+    assert top != A._round_half_up(1 + whole_rate * max(positives)), (
+        "the two denominators round to the same dollar here — pick a pool where they do not"
+    )
+
+
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # 2. The pool and the values
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -323,6 +366,35 @@ def test_the_dollars_that_will_actually_be_spent_add_up_to_the_pool():
     )
 
 
+def test_the_identity_survives_a_board_with_far_more_good_players_than_roster_spots():
+    """⭐ THE DEFECT THE FACE-VALIDITY CHECK ACTUALLY CAUGHT, kept as its own regression.
+
+    The first cut divided the surplus by the WHOLE board's above-replacement value. On a board
+    carrying far more above-replacement players than the league has roster spots, most of the money
+    was allocated to players nobody will ever buy — the draftable 180 came out worth 44% of the pool
+    and the auction opened at an inflation of 2.06x, which would have told every user that prices
+    were double value before a single dollar was spent.
+
+    ⚠️ THIS SHAPE IS NOT HYPOTHETICAL — it is the shipped E2E board fixture (722 above-replacement
+    rows against 180 spots), and no unit of arithmetic on a normally-shaped board can see it.
+    """
+    pool = A.auction_pool(12, 15, 200)  # 180 roster spots
+    # 722 above-replacement players, near-flat — the fixture's real shape.
+    board = [
+        {"id": f"p{i}", "vor": 250.0 - (i * 60.0 / 722)} if i < 722 else {"id": f"p{i}", "vor": -1.0}
+        for i in range(858)
+    ]
+    values = sorted((v.value for v in A.auction_values(board, pool)), reverse=True)
+    drafted = sum(values[: pool.spots_total])
+    assert drafted == pytest.approx(pool.total, rel=0.01), (
+        f"the draftable board is worth ${drafted} against a ${pool.total} room — the surplus is "
+        f"leaking to players nobody will roster"
+    )
+    # ...which is the same statement as "the auction opens at par".
+    start = A.inflation(pool.total, values, pool.spots_total)
+    assert start.multiplier == pytest.approx(1.0, abs=0.02)
+
+
 def test_the_top_player_prices_in_the_band_a_real_auction_would_recognise():
     """The vectors are scale-free arithmetic on a 7-row toy and will happily price the best player
     in a $200 league at $1,228. Only a realistic board can say whether the DOLLARS are sane.
@@ -411,3 +483,61 @@ def test_only_an_auction_league_is_required_to_carry_a_positive_budget():
 
 def test_roster_spots_counts_the_bench_because_a_bench_spot_still_costs_a_dollar():
     assert _cfg().roster_spots() == 9  # 1 QB + 2 RB + 6 bench
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 7. The published fields, and who may read them
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+
+def test_the_exporter_stamps_the_auction_fields_on_every_row_additively():
+    """⚠️ ADDITIVE ONLY. The API Lambda has no CD (NF-C0), so the deployed client is always some
+    previous build; a dropped or renamed key blanks it with a 200 and no error anywhere. Assert the
+    NEW keys arrive AND that the ones the current client reads are untouched."""
+    from quant_sports_intel_models.football.nfl.fantasy import export_draft_board_json as EX
+
+    before = [
+        {"id": "a", "pos": "RB", "vor": 150.0, "vorP10": 90.0, "vorP90": 205.0, "ovrRank": 1},
+        {"id": "b", "pos": "WR", "vor": 40.0, "ovrRank": 2},
+        {"id": "gapfill", "pos": "K", "vor": None, "ovrRank": 3},
+    ]
+    rows = [dict(r) for r in before]
+    EX.attach_auction_values(rows, "half_ppr", 12)
+
+    for original, row in zip(before, rows):
+        for k, v in original.items():
+            assert row[k] == v, f"the exporter changed the existing field {k!r}"
+        assert {"aucVal", "aucLo", "aucHi"} <= set(row), "a published row carries no auction value"
+        assert row["aucLo"] <= row["aucVal"] <= row["aucHi"]
+    # ...including the gap-fill row, which must price rather than render blank on an auction board.
+    assert rows[-1]["aucVal"] == 1
+
+
+def test_a_locked_caller_never_receives_an_auction_dollar_value():
+    """⭐ AUCTION DOLLARS ARE A PAID FIELD, and this is the assertion that says so.
+
+    They are OUR valuation of OUR projections — `vor` rescaled into money — so a locked board that
+    carried them would hand over the model output the lock exists to withhold, in a different unit.
+    The board allowlist is IDENTITY + MARKET, so they are stripped automatically; this pins that
+    the automatic behaviour is the intended one rather than an accident nobody checked.
+
+    ⛔ THE FIX IF THIS EVER FAILS IS NOT TO ADD THEM TO THE ALLOWLIST. `aucVal` is derivable back
+    into `vor` by anyone who knows the pool.
+    """
+    from app.backend.services import entitlement
+
+    row = {
+        "id": "x", "name": "A Player", "pos": "RB", "team": "KC", "bye": 6, "adp": 4.2,
+        "pts": 300.0, "vor": 150.0, "ovrRank": 1, "posRank": 1,
+        "aucVal": 63, "aucLo": 38, "aucHi": 88,
+    }
+    (locked,) = entitlement.lock_board_rows([row])
+    for field in ("aucVal", "aucLo", "aucHi"):
+        assert field not in locked, f"a locked board leaked {field} — auction dollars are paid"
+    # ...and the row is still recognisably a player, or the free board stops being coherent.
+    assert locked["name"] == "A Player" and locked["adp"] == 4.2
+    # The lock chip is computed from the real payload, so the new fields must SHOW as withheld
+    # rather than silently vanishing (that is what turns them into a CTA instead of a hole).
+    assert {"aucVal", "aucLo", "aucHi"} <= set(
+        entitlement.locked_field_names([row], entitlement._PUBLIC_BOARD_FIELDS)
+    )

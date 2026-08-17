@@ -42,6 +42,12 @@
       "vor": 20.0,
       "vorP10": 44.0,
       "vorP90": 6.0
+    },
+    {
+      "id": "fringe",
+      "vor": 15.0,
+      "vorP10": 2.0,
+      "vorP90": 33.0
     }
   ],
   "pools": [
@@ -57,30 +63,30 @@
       "values": [
         {
           "id": "stud",
-          "value": 1228,
-          "low": 737,
-          "high": 1677,
-          "share": 0.555556
+          "value": 1163,
+          "low": 698,
+          "high": 1589,
+          "share": 0.526316
         },
         {
           "id": "mid",
-          "value": 492,
-          "low": 99,
-          "high": 1146,
-          "share": 0.222222
+          "value": 466,
+          "low": 94,
+          "high": 1086,
+          "share": 0.210526
         },
         {
           "id": "steady",
-          "value": 328,
-          "low": 246,
-          "high": 426,
-          "share": 0.148148
+          "value": 311,
+          "low": 233,
+          "high": 404,
+          "share": 0.140351
         },
         {
           "id": "replacement",
           "value": 1,
           "low": 1,
-          "high": 148,
+          "high": 140,
           "share": 0.0
         },
         {
@@ -99,10 +105,17 @@
         },
         {
           "id": "crossed",
-          "value": 165,
-          "low": 50,
-          "high": 361,
-          "share": 0.074074
+          "value": 156,
+          "low": 47,
+          "high": 342,
+          "share": 0.070175
+        },
+        {
+          "id": "fringe",
+          "value": 117,
+          "low": 16,
+          "high": 257,
+          "share": 0.052632
         }
       ]
     },
@@ -118,30 +131,30 @@
       "values": [
         {
           "id": "stud",
-          "value": 1334,
-          "low": 801,
-          "high": 1823,
-          "share": 0.555556
+          "value": 1264,
+          "low": 759,
+          "high": 1727,
+          "share": 0.526316
         },
         {
           "id": "mid",
-          "value": 534,
-          "low": 108,
-          "high": 1245,
-          "share": 0.222222
+          "value": 506,
+          "low": 102,
+          "high": 1180,
+          "share": 0.210526
         },
         {
           "id": "steady",
-          "value": 357,
-          "low": 268,
-          "high": 463,
-          "share": 0.148148
+          "value": 338,
+          "low": 254,
+          "high": 439,
+          "share": 0.140351
         },
         {
           "id": "replacement",
           "value": 1,
           "low": 1,
-          "high": 161,
+          "high": 153,
           "share": 0.0
         },
         {
@@ -160,10 +173,17 @@
         },
         {
           "id": "crossed",
-          "value": 179,
-          "low": 54,
-          "high": 392,
-          "share": 0.074074
+          "value": 169,
+          "low": 52,
+          "high": 372,
+          "share": 0.070175
+        },
+        {
+          "id": "fringe",
+          "value": 127,
+          "low": 18,
+          "high": 279,
+          "share": 0.052632
         }
       ]
     },
@@ -182,21 +202,21 @@
           "value": 1,
           "low": 1,
           "high": 1,
-          "share": 0.555556
+          "share": 0.526316
         },
         {
           "id": "mid",
           "value": 1,
           "low": 1,
           "high": 1,
-          "share": 0.222222
+          "share": 0.210526
         },
         {
           "id": "steady",
           "value": 1,
           "low": 1,
           "high": 1,
-          "share": 0.148148
+          "share": 0.140351
         },
         {
           "id": "replacement",
@@ -224,7 +244,82 @@
           "value": 1,
           "low": 1,
           "high": 1,
+          "share": 0.070175
+        },
+        {
+          "id": "fringe",
+          "value": 1,
+          "low": 1,
+          "high": 1,
+          "share": 0.052632
+        }
+      ]
+    },
+    {
+      "nTeams": 2,
+      "rosterSpots": 2,
+      "budget": 50,
+      "pool": {
+        "total": 100,
+        "reserve": 4,
+        "surplus": 96
+      },
+      "values": [
+        {
+          "id": "stud",
+          "value": 54,
+          "low": 33,
+          "high": 74,
+          "share": 0.555556
+        },
+        {
+          "id": "mid",
+          "value": 22,
+          "low": 5,
+          "high": 51,
+          "share": 0.222222
+        },
+        {
+          "id": "steady",
+          "value": 15,
+          "low": 12,
+          "high": 19,
+          "share": 0.148148
+        },
+        {
+          "id": "replacement",
+          "value": 1,
+          "low": 1,
+          "high": 7,
+          "share": 0.0
+        },
+        {
+          "id": "below",
+          "value": 1,
+          "low": 1,
+          "high": 1,
+          "share": 0.0
+        },
+        {
+          "id": "unprojected",
+          "value": 1,
+          "low": 1,
+          "high": 1,
+          "share": 0.0
+        },
+        {
+          "id": "crossed",
+          "value": 8,
+          "low": 3,
+          "high": 17,
           "share": 0.074074
+        },
+        {
+          "id": "fringe",
+          "value": 6,
+          "low": 2,
+          "high": 13,
+          "share": 0.055556
         }
       ]
     }
@@ -327,6 +422,30 @@
       "binding": "affordability"
     },
     {
+      "case": "half_with_even_floor_rounds_up",
+      "value": 45,
+      "inflationMultiplier": 0.5,
+      "budgetRemaining": 200,
+      "openSlots": 16,
+      "eligible": true,
+      "maxBid": 23,
+      "inflated": 23,
+      "affordable": 185,
+      "binding": "value"
+    },
+    {
+      "case": "half_with_odd_floor_is_unambiguous",
+      "value": 35,
+      "inflationMultiplier": 0.5,
+      "budgetRemaining": 200,
+      "openSlots": 16,
+      "eligible": true,
+      "maxBid": 18,
+      "inflated": 18,
+      "affordable": 185,
+      "binding": "value"
+    },
+    {
       "case": "no_slot_for_position",
       "value": 40,
       "inflationMultiplier": 1.0,
@@ -357,13 +476,14 @@
       "dollarsRemaining": 2400,
       "slotsRemaining": 192,
       "remainingValues": [
-        1228,
-        492,
-        328,
+        1163,
+        466,
+        311,
         1,
         1,
         1,
-        165
+        156,
+        117
       ],
       "multiplier": 1.083032,
       "valueRemaining": 2216
@@ -373,13 +493,14 @@
       "dollarsRemaining": 1000,
       "slotsRemaining": 120,
       "remainingValues": [
-        1228,
-        492,
-        328,
+        1163,
+        466,
+        311,
         1,
         1,
         1,
-        165
+        156,
+        117
       ],
       "multiplier": 0.451264,
       "valueRemaining": 2216
@@ -389,13 +510,14 @@
       "dollarsRemaining": 1800,
       "slotsRemaining": 120,
       "remainingValues": [
-        1228,
-        492,
-        328,
+        1163,
+        466,
+        311,
         1,
         1,
         1,
-        165
+        156,
+        117
       ],
       "multiplier": 0.812274,
       "valueRemaining": 2216
@@ -405,13 +527,14 @@
       "dollarsRemaining": 0,
       "slotsRemaining": 0,
       "remainingValues": [
-        1228,
-        492,
-        328,
+        1163,
+        466,
+        311,
         1,
         1,
         1,
-        165
+        156,
+        117
       ],
       "multiplier": 1.0,
       "valueRemaining": 0
@@ -421,13 +544,14 @@
       "dollarsRemaining": 500,
       "slotsRemaining": 999,
       "remainingValues": [
-        1228,
-        492,
-        328,
+        1163,
+        466,
+        311,
         1,
         1,
         1,
-        165
+        156,
+        117
       ],
       "multiplier": 0.225632,
       "valueRemaining": 2216

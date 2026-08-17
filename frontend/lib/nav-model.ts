@@ -128,6 +128,10 @@ export const SPORTS: SportNav[] = [
               // reads the same 403-ing gated board endpoints.
               { label: "Mock Draft", href: "/fantasy/mock-draft", key: "fantasy-mock-draft" },
               { label: "Draft Optimizer", href: "/fantasy/draft", key: "fantasy-draft" },
+              // ⭐ NF-C5 — the AUCTION half. Beside the snake tool because it is the same decision
+              // on draft night in a different format, not a separate product. Same gate: it reads
+              // the same 403-ing board endpoints, so it is never `public`.
+              { label: "Auction Optimizer", href: "/fantasy/auction", key: "fantasy-auction" },
             ],
           },
           {

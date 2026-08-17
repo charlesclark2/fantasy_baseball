@@ -43,6 +43,9 @@ VECTORS_PATH = Path(__file__).resolve().parent / "auction_vectors.json"
 #   * a BELOW-replacement player (negative vor → still the minimum, never below it)
 #   * a genuinely unprojected gap-fill row (vor is null → minimum, and must not blow up the sum)
 #   * a row whose p10/p90 arrive CROSSED (low > high) → the band must come back ordered
+#   * a FRINGE above-replacement player who exists only so the draftable-set truncation has
+#     something to exclude — with him the toy board carries FIVE positive-VOR rows against the
+#     4-spot pool below, so that pool's rate genuinely differs from the whole-board rate
 _BOARD = [
     {"id": "stud", "vor": 150.0, "vorP10": 90.0, "vorP90": 205.0},
     {"id": "mid", "vor": 60.0, "vorP10": 12.0, "vorP90": 140.0},
@@ -51,14 +54,24 @@ _BOARD = [
     {"id": "below", "vor": -25.0, "vorP10": -60.0, "vorP90": -4.0},
     {"id": "unprojected", "vor": None, "vorP10": None, "vorP90": None},
     {"id": "crossed", "vor": 20.0, "vorP10": 44.0, "vorP90": 6.0},
+    {"id": "fringe", "vor": 15.0, "vorP10": 2.0, "vorP90": 33.0},
 ]
 
-# (n_teams, roster_spots, budget). The third is the degenerate case the docstring promises to
-# handle: a budget that cannot even cover its own minimum bids ⇒ zero surplus ⇒ everyone at $1.
+# (n_teams, roster_spots, budget).
 _POOLS = [
     (12, 16, 200),
     (10, 20, 260),
+    # The degenerate case the docstring promises to handle: a budget that cannot even cover its own
+    # minimum bids ⇒ zero surplus ⇒ everyone at the minimum.
     (12, 16, 10),
+    # ⭐ ANTI-VACUITY, AND IT IS LOAD-BEARING. Every pool above has more roster spots (192, 200) than
+    # this board has rows (7), so the draftable-set truncation in `auction_values` is INACTIVE in all
+    # of them — a port that dropped the truncation entirely would match every vector and still be
+    # wrong on any board with more above-replacement players than roster spots (the exact defect the
+    # E2E fixture exposed: 722 of them against 180 spots, opening the auction at 2.06x).
+    # 2 teams x 2 spots = 4 draftable against FIVE positive-VOR rows, so the truncation
+    # BINDS here and only here — `fringe` is excluded from the denominator and the rate moves.
+    (2, 2, 50),
 ]
 
 # (label, value, inflation, budget_remaining, open_slots, eligible) probes for the never-strand
@@ -79,6 +92,14 @@ _BID_CASES = [
     # the never-strand edge: enough for this spot only if the others get nothing ⇒ refuse
     ("cannot_cover_minimums", 40, 1.0, 3, 9, True),
     ("exactly_covers_minimums", 40, 1.0, 9, 9, True),
+    # ⭐ PINS THE ROUNDING RULE, and nothing else in the vectors does. 45 x 0.5 = 22.5, whose FLOOR
+    # IS EVEN — so Python's default `round` (banker's, half-to-even) gives 22 while JS `Math.round`
+    # and our `_round_half_up` give 23. Without a case landing on a half with an even floor, the two
+    # implementations could use different rounding and match every vector, then disagree by $1 on
+    # real boards. (17.5 is included as the control: there the two rules AGREE, so a fixture built
+    # only from that value would prove nothing.)
+    ("half_with_even_floor_rounds_up", 45, 0.5, 200, 16, True),
+    ("half_with_odd_floor_is_unambiguous", 35, 0.5, 200, 16, True),
     ("no_slot_for_position", 40, 1.0, 150, 5, False),
     ("roster_full", 40, 1.0, 150, 0, True),
 ]
