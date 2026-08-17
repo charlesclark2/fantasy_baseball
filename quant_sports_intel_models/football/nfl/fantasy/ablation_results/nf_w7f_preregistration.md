@@ -507,5 +507,143 @@ because every one is the "a RED proof lies" family and none was visible from a g
 
 ## 12. POST-RUN FINDINGS
 
-*(To be added AFTER the decisive run, by the session that reads it. ⛔ Nothing in that section may
-change a gate, a threshold, an arm or a verdict.)*
+*Decisive run 2026-08-17, 8 folds × 4,000 draws, 3,365.9 s. ⛔ Nothing here changed a gate, a
+threshold, an arm or a verdict; the only post-run code change is a REPORTED field (§12.7).*
+
+**VERDICT: `NULL` / `CONSTRAINT_REFUSED` · `marginal_cap = QB_CLEARS_AT_THE_MARGINAL_LAYER` ·
+`retest_trigger = None` · `binding_half = anchor`.** Refused by exactly two clauses:
+`per_leg_calibration_not_degraded` (anchor) and `dsr_ok` (statistical). The other **15** anchors pass,
+all four per-form oracle floors are `RESPECTED`, and reproduction is **exact** — max abs gap `0.0` on
+8/8 folds for both the incumbent (`single_copula`) and NF-W7e's arm (`mixall_learned`), so every
+comparison below is on identical common random numbers.
+
+### 12.1 The thesis is VINDICATED — the marginal layer was QB's binding constraint
+
+| quantity | NF-W7e (served) | NF-W7f (winner `zm_floor`) |
+|---|---|---|
+| marginal-admissible atom cap | 0.2687 | **0.5481** (lift **+0.2794**, floor 0.012) |
+| installed Bernoulli atom | 0.2776 | **0.5176** vs realized **0.5162** |
+| clamp mean upward move on π̂ | 0.25271 | **0.00225** (**112×** smaller) |
+| clamp binding *share* | 0.917 | 0.917 ⚠️ see §12.7 |
+| assembled QB PIT (max-decile dev) | **0.0648** | **0.0281** |
+| folds clearing the 0.05 PIT bar | **0/8** (0.0489–0.0897) | **8/8** (0.0172–0.0343) |
+
+**A calibrated assembled QB distribution exists.** After three joint-layer stories could not get QB
+below 0.064, recalibrating one number per (row, leg) clears the bar on **every fold**, and the
+incumbent clears on **none**. The atom lands within **0.0014** of the realized all-zero rate.
+
+And it is not bought with the proper score: `zm_floor` **2.5645** beats the matched foil
+`mixall_learned` **2.5829** by **+0.0184 CRPS**, CI95 **[0.0032, 0.0336]** (excludes zero), **6/8**
+folds, **p = 0.0121**, with **PBO 0.0**, out-of-sample gap **0.0%**, contender spread 2.54%, and
+**100% of flip mass on the winner** (70/70 IS halves) — the most stable selection this line has
+produced. Coverage(80) **0.8299** clears its 0.80 floor. Degenerates lose by a mile on CRPS
+(6.54 / 7.84 / 10.44) *and* on PIT (0.40 / 0.54 / 0.76), which is what proves the PIT bar never
+became a selection criterion (NF1.8).
+
+### 12.2 ⭐ THE PRE-COMMITTED MECHANISM IS REFUTED BY THIS STORY'S OWN CAPTURES
+
+The decision to run recorded the headline as: *"no target derived from the availability ESTIMATE
+alone can do it without degrading the components, because `passing_yards` already prices availability
+internally — so it prices availability twice, and the sign flips with P(played)."* **Both halves of
+that clause are contradicted by the measurements taken to test them.**
+
+- **"Double-prices availability" — REFUTED.** The matched foil for that channel is `zm_climatology`,
+  the ROW-BLIND arm: identical re-splice machinery, availability content removed. The winner beats it
+  by **+1.1871 CRPS, 8/8 folds, p = 0.0** — the **largest positive channel in the story**. Removing
+  the availability content from the target is catastrophic, not corrective. (Channel table: the
+  recalibration channel is +0.0184 at p=0.0121; NF-W7e's own split channel reproduces at +0.0064,
+  8/8, p=0.0.)
+- **"The sign flips with P(played)" — REFUTED as stated.** Pooled over 8 folds and rows on fixed π̂
+  edges (all 10 buckets evaluable, 5,485 QB rows) the winner's decomposition is **`NON_MONOTONE`
+  with 6 sign changes**. The two buckets holding **57%** of all rows show almost nothing
+  (π̂ 0.0–0.1: 1,324 rows, **−0.16**; π̂ 0.9–1.0: 1,799 rows, **−0.03**); every large swing lives in
+  buckets of **102–176 rows** and alternates sign (+3.07 then −2.62 then −2.18). That is the
+  signature of thin-support noise, not an availability gradient. The one-fold quartile view that
+  produced the original claim had forced equal *counts* per bucket and lumped a nearly-empty middle
+  in with the top — the defect §11.5 removed, showing up in the conclusion it had produced.
+
+⇒ **The refusal is real; the stated reason for it was wrong.** This is the NF-D15 (g′) lesson in the
+null direction: a matched foil refutes a *stated mechanism*, not only a null.
+
+### 12.3 What the component damage actually is
+
+`per_leg_calibration_not_degraded` fails at **+0.3866%** against a tolerance of 0.0. Decomposed:
+
+- **It is one leg.** `passing_yards` pools **−0.1587**; every other priced leg is **≤ +0.0026** or
+  exactly **0.0** (`receptions`, `receiving_*`, `two_pt`, `rushing_tds` are untouched — their
+  buckets read `UNDEFINED` because the transform never moved them, which is the correct reading).
+- **It is sign-inconsistent across folds:** per-fold relative change
+  **[−1.25, −0.35, +0.74, +1.81, +0.32, +1.42, −0.29, +0.60] %** → degraded on **5 of 8** folds,
+  improved on 3, mean **+0.375%**, range −1.25% to +1.81%.
+
+⛔ **The bar STAYS at 0.0 and the refusal STANDS** (E2.1-r — the tolerance was registered *alongside*
+"if the diagnosis is right the legs IMPROVE", and the legs did not improve). Stating the measured
+shape of the refusing quantity is not re-reading the bar; it is the input the successor's forward
+registration needs, and it bears directly on the PM's open gate-vs-diagnostic question: a clause
+refusing a ship on a **+0.375% point estimate that is positive on 5 of 8 folds** is refusing on
+something not distinguishable from noise. That is a decision to make FORWARD, in NF-W7g's
+registration — never here.
+
+### 12.4 The DSR failure — and why field coherence is NOT the lever (measured, not asserted)
+
+`DSR = 0.0` at `observed_sr = 1.013`, from trial Sharpes **[−1.347, 1.013, −10.934, −2.408]** giving
+cross-trial dispersion **V = 27.147**: `zm_climatology`'s −10.934 dominates the deflation bar. That is
+the MH2.5 / NF-W6b-C / NCAAF-P2.1-S1 heterogeneous-field mechanism, and `PBO 0.0` with 100% flip mass
+on the winner says the *selection* is maximally stable — so DSR here is a statement about the FIELD.
+
+The obvious move is therefore a fresh registration over a coherent family (the three ROW-CONDITIONAL
+arms, excluding the row-blind one as a mechanistically different hypothesis). **Measured as a
+post-verdict DIAGNOSTIC (⛔ not a re-score; the shipped verdict is the 4-arm one):**
+
+| field | V | DSR |
+|---|---|---|
+| declared 4-arm (**the verdict**) | 27.147 | **0.0000** |
+| row-conditional 3-arm (diagnostic) | 3.066 | **0.1741** |
+
+**Coherence is not enough here.** V falls **8.8×** and DSR reaches only 0.174 against a 0.95 bar, so
+this case is *unlike* MARGIN2→3 / W7→W7b / W6b-C, where a coherent re-registration converted the
+refusal into a ship. The instrument's own reading agrees and is more informative than the field story:
+`DSR_UNREACHABLE` — *"field size is NOT a lever here — even a 2-arm field does not clear at this fold
+count and dispersion, so the only lever left is a lower-variance design."* The binding quantity is the
+per-fold noise in the delta (mean 0.0184, sd ≈ 0.0182, two negative folds). **A candidate
+variance-reduction lever exists and is neither more data nor a smaller field: more DRAWS**, since part
+of the per-fold spread is Monte-Carlo error in the CRPS estimates at 4,000 draws. ⛔ That must be
+registered FORWARD and is not a claim that it would clear.
+
+### 12.5 What the run tells the successor (correcting NF-W7g's carded premise)
+
+NF-W7g is carded as *"condition the zero target on availability CONFIDENCE, not the estimate"*. **That
+premise rests on the mechanism §12.2 refutes** — the availability content is worth +1.19 CRPS, and the
+residual damage is not availability-structured. Two measured targets replace it:
+
+1. ⭐ **The binding cell MOVED, and raise-only cannot reach it.** Pooled binding-leg share went
+   `passing_yards` 0.7091 / `attempts` 0.2634 (served) → **`attempts` 0.5724** / `passing_yards`
+   0.4245 (recalibrated). `attempts` already carries **more** zero mass than its realized rate, so no
+   raise-only target in this family can correct it — it is now the majority binding cell and it is
+   structurally out of reach of the whole NF-W7f mechanism. A successor that wants the cap higher must
+   be able to LOWER an over-priced atom, which is a different (and monotonicity-breaking) transform.
+2. **The residual `passing_yards` damage is thin-support noise, not a gradient** — concentrated in
+   ~7% of rows at intermediate π̂ with alternating sign. Chasing it with a π̂-threshold rule would be
+   mis-specified; the honest question is whether it is an effect at all.
+
+### 12.6 What this certifies, and what it does not
+
+QB now has a **calibrated** assembled distribution that also **beats** the incumbent and NF-W7e's arm
+on the proper score — but it is **NOT certified** and **NOT shippable**: the ship was refused, and a
+report-only result may never be re-classified into shippability (E2.1-r). ⛔ **NF-W8's four-position
+optimizer input remains blocked** — QB is uncertified here and RB is a separate story. `best_alpha = 0`,
+deploy-held; nothing serves either way. Per NF-W7c §4, a per-position-certified distribution must not
+feed a CROSS-POSITION ranking regardless.
+
+### 12.7 The one post-run code change (REPORTED-ONLY)
+
+⭐ **The clamp's binding SHARE is invariant to the level it binds at, and alone it is actively
+misleading.** The share reads **0.917 → 0.917** — identical to NF-W7e's — while the clamp's mean
+upward move on π̂ collapsed **0.25271 → 0.00225 (112×)** and the installed atom nearly doubled. Read
+alone, the headline row says "the clamp still binds on 91.7% of rows", i.e. *nothing changed*, when the
+constraint had effectively stopped mattering. The magnitude is now reported beside the share
+(`clamp_mean_upward_move_{served,winner}`), populated by `--rewrite-report` from the stored fold
+results — no re-run, and the verdict, gates, null state and every score are byte-identical after the
+re-render. This is the NF-D20 lesson one level over: **an ACTIVITY count is not a MAGNITUDE, and when
+a constraint moves, the share can stay fixed while the constraint stops binding in any way that
+matters.**

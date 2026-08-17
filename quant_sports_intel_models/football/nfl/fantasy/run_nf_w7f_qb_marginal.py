@@ -480,6 +480,15 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
     drifts = [d["max_probability_drift"] for d in _fold(("marginal_drift",))]
     clamp_binding = [fr["positions"][position]["clamp"][winner]["clamp_binding_share"]
                      for fr in usable]
+    # ⭐ THE BINDING *SHARE* IS THE WRONG STATISTIC ONCE THE CAP MOVES — it counts rows where the
+    # clamp was ACTIVE, not rows where it MATTERED, so it can stay byte-identical while the
+    # distortion collapses (measured here: 0.9006 → 0.9006 while the mean move on π̂ fell 0.2602 →
+    # 0.0022, a 118× reduction). Reporting the share alone reads as "nothing changed" and would
+    # make this record's headline actively misleading, so the MAGNITUDE is reported beside it
+    # (NF-D20: measure whether the mechanism could act, don't infer it from an activity count).
+    clamp_move = [fr["positions"][position]["clamp"][winner]["mean_upward_move"] for fr in usable]
+    clamp_move_served = [fr["positions"][position]["clamp_served"]["mean_upward_move"]
+                         for fr in usable]
     caps_recal = _fold(("atom_cap", "cap_recalibrated"))
     caps_served = _fold(("atom_cap", "cap_served"))
 
@@ -688,6 +697,8 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
             "mean_installed_atom": round(float(np.mean(atoms)), 4),
             "atom_by_fold": [round(float(a), 4) for a in atoms],
             "mean_clamp_binding_share": round(float(np.mean(clamp_binding)), 4),
+            "mean_clamp_upward_move": round(float(np.mean(clamp_move)), 5),
+            "mean_clamp_upward_move_served": round(float(np.mean(clamp_move_served)), 5),
             "clamp_binding_share_served": round(float(np.mean(
                 [fr["positions"][position]["clamp_served"]["clamp_binding_share"]
                  for fr in usable])), 4),
@@ -908,7 +919,7 @@ def marginal_cap_layer(selections: dict) -> dict:
             realized_atom=float("nan"), installed_atom=float("nan"),
             clamp_binding_share=float("nan"), binding_legs={}, pit_matched_foil=None)
     d, base = sel["atom_cap_detail"], sel["atom_cap_detail"]["predecessor_baseline"]
-    return QM.marginal_cap_verdict(
+    out = QM.marginal_cap_verdict(
         pit_by_arm={a: sel["pit_by_label"][a] for a in QM.REAL_ARMS},
         cap_mean=d["cap_recalibrated"],
         predecessor_cap_mean=(base["atom_cap_mean"] if base.get("available")
@@ -918,6 +929,14 @@ def marginal_cap_layer(selections: dict) -> dict:
         clamp_binding_share=sel["mixture_detail"]["mean_clamp_binding_share"],
         binding_legs=sel["premise_detail"]["binding_leg_share_served"],
         pit_matched_foil=sel["pit_by_label"].get(QM.MATCHED_FOIL))
+    # ⛔ REPORTED-ONLY, added AFTER the decisive run and changing no state (the verdict rule reads
+    # the cap lift and the PIT, never these): the clamp's MAGNITUDE, because its binding SHARE is
+    # invariant to the level it binds at and alone reads as "nothing changed". See the comment on
+    # `clamp_move` in `select_position`.
+    m = sel["mixture_detail"]
+    out["clamp_mean_upward_move_winner"] = m.get("mean_clamp_upward_move")
+    out["clamp_mean_upward_move_served"] = m.get("mean_clamp_upward_move_served")
+    return out
 
 
 def derive_verdict_layer(out: dict) -> dict:
@@ -990,8 +1009,11 @@ def write_report(out: dict, path: Path) -> None:
           f"| realized all-zero rate | {cap['realized_all_zero_rate']} |",
           f"| shortfall (realized − installed) | "
           f"{cap['atom_shortfall_installed_vs_realized']} |",
-          f"| clamp binding share (was {cap['clamp_binding_share_predecessor']}) | "
-          f"{cap['clamp_binding_share']} |",
+          f"| clamp binding SHARE (was {cap['clamp_binding_share_predecessor']}) | "
+          f"{cap['clamp_binding_share']} ⚠️ see below |",
+          f"| clamp mean upward move on π̂ — SERVED → winner | "
+          f"{cap.get('clamp_mean_upward_move_served')} → "
+          f"{cap.get('clamp_mean_upward_move_winner')} |",
           f"| PIT: best arm | `{cap['best_pit_arm']}` {cap['best_pit']} vs bar {cap['bar']} |",
           f"| PIT: matched foil (`{QM.MATCHED_FOIL}`) | {cap['pit_matched_foil']} |",
           f"| PIT moved by the recalibration | {cap['pit_moved_by_recalibration']} |", "",

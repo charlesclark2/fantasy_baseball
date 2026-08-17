@@ -583,8 +583,10 @@ def _fold_block(*, scores: dict, per_leg_rel: dict, identity_gap: dict) -> dict:
         "scores": scores, "coverage": cov, "pit_flatness": pit,
         "n_train": 12000, "n_test": 700, "atom_rate_train": 0.51, "atom_rate_test": 0.51,
         "clamp": {a: {"mean_installed_atom": 0.51, "clamp_binding_share": 0.07,
-                      "mean_pi_hat": 0.49, "mean_pi_used": 0.49} for a in QM.REAL_ARMS},
-        "clamp_served": {"clamp_binding_share": 0.92, "mean_installed_atom": 0.26},
+                      "mean_pi_hat": 0.49, "mean_pi_used": 0.49,
+                      "mean_upward_move": 0.002} for a in QM.REAL_ARMS},
+        "clamp_served": {"clamp_binding_share": 0.92, "mean_installed_atom": 0.26,
+                         "mean_upward_move": 0.26},
         "marginal_drift": {"max_probability_drift": 0.001},
         "targets": {a: {"mean": 0.8} for a in QM.REAL_ARMS},
         "resplice_edges": {a: {"share_target_clipped": 0.0} for a in QM.REAL_ARMS},
@@ -915,6 +917,39 @@ def test_a_mixed_statistical_and_anchor_failure_publishes_no_data_trigger() -> N
     pure = R.classify(sel, checks)
     assert pure["state"] == "CONSTRAINT_REFUSED" and pure["retest_trigger"] is None
     assert pure.get("binding_half") is None, pure.get("binding_half")
+
+
+def test_the_clamp_magnitude_is_reported_beside_its_binding_share() -> None:
+    """⭐ POST-RUN (§12.7). The decisive run measured the clamp's binding SHARE at 0.917 both before
+    and after — byte-identical to NF-W7e — while the mean upward move on π̂ collapsed 0.25271 →
+    0.00225 (112×) and the installed atom nearly doubled. An ACTIVITY count is not a MAGNITUDE: read
+    alone the share says "the clamp still binds on 91.7% of rows", i.e. nothing changed, when the
+    constraint had stopped mattering. So the magnitude must travel WITH the share, in the record's
+    headline table, or the record misleads its own reader (NF-D20, one level over)."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w7f_qb_marginal as R
+    sel = _sel()
+    m = sel["mixture_detail"]
+    assert "mean_clamp_upward_move" in m and "mean_clamp_upward_move_served" in m, sorted(m)
+    cap = R.marginal_cap_layer({"QB": sel})
+    assert cap["clamp_mean_upward_move_winner"] == m["mean_clamp_upward_move"]
+    assert cap["clamp_mean_upward_move_served"] == m["mean_clamp_upward_move_served"]
+    # and it must actually RENDER, next to the share — a field nobody prints is not a report
+    import inspect
+    src = "\n".join(ln for ln in inspect.getsource(R.write_report).splitlines()
+                     if not ln.lstrip().startswith("#"))
+    assert "clamp_mean_upward_move_served" in src and "clamp_mean_upward_move_winner" in src, \
+        "the clamp magnitude is computed but never rendered — the share would stand alone"
+    # ⛔ and it stays REPORTED: the cap verdict's STATE must not depend on it
+    base = QM.marginal_cap_verdict(
+        pit_by_arm={a: 0.03 for a in QM.REAL_ARMS}, cap_mean=0.55, predecessor_cap_mean=0.2687,
+        realized_atom=0.516, installed_atom=0.517, clamp_binding_share=0.917,
+        binding_legs={"passing_yards": 1.0}, pit_matched_foil=0.0648)
+    other = QM.marginal_cap_verdict(
+        pit_by_arm={a: 0.03 for a in QM.REAL_ARMS}, cap_mean=0.55, predecessor_cap_mean=0.2687,
+        realized_atom=0.516, installed_atom=0.517, clamp_binding_share=0.001,
+        binding_legs={"passing_yards": 1.0}, pit_matched_foil=0.0648)
+    assert base["state"] == other["state"], \
+        "the cap VERDICT moved with the clamp share — it must read the cap lift and the PIT only"
 
 
 def test_none_of_the_new_captures_reached_the_gate() -> None:
