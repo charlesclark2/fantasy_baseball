@@ -560,6 +560,58 @@ export const REPORT_TRADE_NOTE =
 export const REPORT_FIRST_WEEK_NOTE =
   "Built from the season projection expressed per game played, not from a week-by-week model — that one is still in the lab. It answers 'who are my best nine' rather than 'who has the best matchup'."
 
+// ══ NF-C6b — THE CROSS-LEAGUE PORTFOLIO ROLLUP'S COPY ════════════════════════════════════════════
+//
+// ⛔⛔ RANKING TEAMS ACROSS DIFFERENT LEAGUES ADDS A FAILURE MODE THE IN-LEAGUE COMPARISON DOES NOT
+// HAVE, and it is the whole reason this block exists separately. NF-C6P3 ranks teams inside ONE
+// league, where every total was produced by the SAME rules, so the order is a clean statement about
+// rosters. Here the totals come from DIFFERENT rule sets: a half-PPR league pays 0.5 a reception and
+// a standard league pays nothing, so the SAME players total more in one than the other. The order is
+// therefore NOT a roster-strength ranking, and a reader who is not told that will read it as one —
+// it is the single most misreadable thing on the surface.
+//
+// ⭐ THE CAVEATS RENDER WITH THE TABLE, NOT BEHIND A DISCLOSURE (NF-C6P3's rule, and NF-C6P3 itself
+// shipped a caveat behind a click that never rendered). A caveat behind a click is a caveat that did
+// not render.
+
+export const PORTFOLIO_HEADING = "Your teams, ranked"
+
+/** The label for the number itself. ⚠️ "Full-season" and "pre-kickoff" are both load-bearing: the
+ *  weekly model is not published, so there is no per-game or week-1 figure to show, and a season
+ *  total divided into a per-game rate would be false precision rather than a weekly projection. */
+export const PORTFOLIO_TOTAL_LABEL = "Full-season projected starting points (pre-kickoff)"
+
+/** ⚠️ THE SENTENCE THAT DEFINES WHAT IS BEING RANKED, and it does it in the FIRST clause — a reader
+ *  who stops after the heading must already know this is a points total and not a standing. */
+export const PORTFOLIO_NOTE =
+  "Each team's starters totalled on its own league's scoring — a ranking of full-season projected starting points (pre-kickoff), and nothing more. It is not a projected finish and not a chance of winning anything: those need a week-by-week schedule simulation we have not built."
+
+/** ⭐ Caveat 1 — THE ONE THAT IS UNIQUE TO THIS SURFACE. Without it the table reads as "which of my
+ *  rosters is best", which the numbers cannot support when the scoring differs between leagues. */
+export const PORTFOLIO_CAVEAT_FORMATS =
+  "Your leagues do not all score the same way, so these totals are not like-for-like. A league that pays for receptions produces a bigger number than one that does not, for the very same players. Read the order as which team projects the most points under its own rules — not as which roster is stronger."
+
+/** Caveat 2 — the lineup. ⚠️ DIFFERENT from the roster report's: that one fills every team with our
+ *  optimizer, this one totals the lineup the PLATFORM reports, so a stale or unset lineup is the
+ *  reader's own and we should not silently improve it. */
+export const PORTFOLIO_CAVEAT_LINEUP =
+  "We total the starters your platform reported, not the best lineup we could pick from your roster. If a lineup is out of date on the platform, it is out of date here too."
+
+/** Caveat 3 — the vintage. Same fact as the roster report's, said again here because this surface is
+ *  reachable without ever opening that one. */
+export const PORTFOLIO_CAVEAT_SNAPSHOT =
+  "These are the rosters as they stood when you imported each league. We do not re-read them, so a trade or a waiver claim since then is not in here."
+
+/** ⚠️ Shown only when it is true, and it concedes that the ORDER — not just the totals — may be
+ *  wrong. A team missing a starter's points can rank below one that is complete purely for that
+ *  reason, and a reader cannot recover that from the number itself. */
+export const PORTFOLIO_UNDERSTATED_NOTE =
+  "At least one team has a starter we could not match to a projection. Its points are missing from that team's total, so the total is understated and the order may be affected."
+
+/** The per-card total's own caveat when that card is the one missing a starter. */
+export const portfolioUnscoredNote = (n: number): string =>
+  `${n} ${n === 1 ? "starter is" : "starters are"} not matched to a projection, so this total is understated by whatever ${n === 1 ? "that player is" : "those players are"} worth.`
+
 // ── The empty states. Four different facts, four different messages ─────────────────────────────
 //
 // ⚠️ These must not be collapsed into one "nothing to show". "You have no league", "you have not

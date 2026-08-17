@@ -503,6 +503,37 @@ function leagueBoardBuild() {
   return buildBoard(FIXTURES.projectionsEntitled().players, FIXTURES.myTeams().leagues[0])
 }
 
+/**
+ * ⭐ THE STARTING LINEUP, DECLARED ONCE — NF-C6b.
+ *
+ * `linkedRoster` builds the roster from this and `linkedRosterStarters` reports it to the specs, so
+ * the fixture and the arithmetic a spec checks against it cannot drift apart. Two spellings of "who
+ * starts" would let a roster change silently invalidate an expected total while both still looked
+ * right — a spec would then assert a correct-looking sum about the wrong lineup.
+ *
+ * ⚠️ NONE OF THESE IS A TE, and that is load-bearing rather than incidental: the captured league
+ * carries `position_bonuses.TE.rec = 0.5`, so a TE STARTER would make the half-vs-standard gap
+ * `1.0 × rec` for that row instead of `0.5 × rec` and the ranking arithmetic below would be wrong.
+ * The TE stays on the bench (where it also keeps the bench table non-empty).
+ */
+const LINKED_STARTERS = [
+  // ⭐ The WR is the one `linkedRosterSubject` returns for the per-player arithmetic check.
+  { pos: "WR", needsReceptions: true },
+  { pos: "RB", needsReceptions: true },
+  { pos: "QB", needsReceptions: false },
+] as const
+
+/** The linked roster's STARTERS with the reception count each carries.
+ *
+ *  NF-C6b's team total moves by `0.5 × rec` for EVERY starter, not just the WR that
+ *  `linkedRosterSubject` returns — so the rollup's ranking gate needs the whole starting lineup. */
+export function linkedRosterStarters(): { name: string; rec: number }[] {
+  return LINKED_STARTERS.map((s) => {
+    const p = boardPlayerAt(s.pos, s.needsReceptions) as any
+    return { name: String(p.name), rec: Number(p.rec ?? 0) }
+  })
+}
+
 function linkedRoster(): unknown[] {
   const entry = (p: any, starter: boolean) => ({
     player_key: `e2e-${p.id}`,
@@ -512,10 +543,7 @@ function linkedRoster(): unknown[] {
     starter,
   })
   return [
-    // ⭐ The WR is the one the arithmetic check uses — non-TE, so no position bonus is in play.
-    entry(boardPlayerAt("WR", true), true),
-    entry(boardPlayerAt("RB", true), true),
-    entry(boardPlayerAt("QB", false), true),
+    ...LINKED_STARTERS.map((s) => entry(boardPlayerAt(s.pos, s.needsReceptions), true)),
     // A bench player, so BOTH roster tables render — `RosterTable` returns null on an empty list,
     // and a roster of starters only would leave the bench branch unexercised.
     entry(boardPlayerAt("TE", true), false),

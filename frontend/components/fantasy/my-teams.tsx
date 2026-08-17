@@ -42,8 +42,19 @@ import {
   SurfaceHeader,
   num,
 } from "@/components/fantasy/shared"
-import { EXPECTED_POINTS_LABEL } from "@/lib/fantasy-claim-copy"
+import {
+  EXPECTED_POINTS_LABEL,
+  PORTFOLIO_CAVEAT_FORMATS,
+  PORTFOLIO_CAVEAT_LINEUP,
+  PORTFOLIO_CAVEAT_SNAPSHOT,
+  PORTFOLIO_HEADING,
+  PORTFOLIO_NOTE,
+  PORTFOLIO_TOTAL_LABEL,
+  PORTFOLIO_UNDERSTATED_NOTE,
+  portfolioUnscoredNote,
+} from "@/lib/fantasy-claim-copy"
 import type { RosterMatch } from "@/lib/league-scoring"
+import { portfolioRollup, teamRollup, type TeamRollup } from "@/lib/portfolio-rollup"
 
 export function MyTeams() {
   const { teams, isLoading, isError } = useMyTeams()
@@ -52,7 +63,7 @@ export function MyTeams() {
     <div className="mx-auto max-w-6xl px-4 py-8">
       <SurfaceHeader
         title="My Teams"
-        blurb="Every league you've imported, in one place — each roster scored under that league's own format. Projections are the rest-of-season figure (pre-kickoff, so this is effectively the full season)."
+        blurb="Every league you've imported, in one place — each roster scored under that league's own format, and every team totalled and ranked. Projections are the rest-of-season figure (pre-kickoff, so this is effectively the full season)."
       />
 
       {isError && (
@@ -73,10 +84,120 @@ export function MyTeams() {
 
       {!isError && teams !== null && teams.length > 0 && (
         <div className="space-y-6">
+          {/* NF-C6b — the aggregate glance, ABOVE the per-league detail. A portfolio's value is the
+              comparison; burying it under N roster tables is the list this page already was. */}
+          <PortfolioSummary teams={teams} />
           {teams.map((entry) => (
             <LeagueCard key={entry.league.league_id} entry={entry} />
           ))}
         </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * NF-C6b — every team with a total, ranked.
+ *
+ * ⚠️ A `<div>`, DELIBERATELY, not a `<section>`. `fantasy-my-teams.spec.ts` locates a league card as
+ * `page.locator("section").filter({ hasText: <league name> }).first()`, and this block names every
+ * league — so as a `<section>` it would sit ABOVE the cards in the DOM and every existing card
+ * assertion would silently rebind to this summary instead. The rendered result would look right and
+ * the spec would be asserting about the wrong element.
+ */
+function PortfolioSummary({ teams }: { teams: MyTeamEntry[] }) {
+  const rollup = portfolioRollup(teams)
+  // Below two teams there is no ranking to show — the per-league card still carries its own total.
+  if (!rollup) return null
+
+  return (
+    <div
+      data-testid="portfolio-summary"
+      className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.03] p-4"
+    >
+      <div className="text-base font-medium text-gray-100">{PORTFOLIO_HEADING}</div>
+      <p className="mt-1 text-xs text-gray-400">{PORTFOLIO_NOTE}</p>
+
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[520px] text-left text-[11px]">
+          <thead>
+            <tr className="text-gray-600">
+              <th className="py-1 pr-2 font-medium">#</th>
+              <th className="py-1 pr-2 font-medium">League</th>
+              <th className="py-1 pr-2 font-medium">Scoring</th>
+              <th className="py-1 pr-2 text-right font-medium">Starters</th>
+              <th className="py-1 pr-2 text-right font-medium">{PORTFOLIO_TOTAL_LABEL}</th>
+              <th className="py-1 pr-2 text-right font-medium">80% range</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rollup.teams.map((t) => (
+              <tr key={t.leagueId} data-testid="portfolio-row" className="border-t border-white/5">
+                <td className="py-1 pr-2 text-gray-500">{t.rank}</td>
+                <td className="py-1 pr-2 text-gray-200">
+                  {t.leagueName}
+                  {t.teamName && <span className="text-gray-500"> · {t.teamName}</span>}
+                </td>
+                <td className="py-1 pr-2 text-gray-500">{t.formatLabel}</td>
+                <td className="py-1 pr-2 text-right text-gray-500">
+                  {t.starters}
+                  {t.unscoredStarters > 0 && (
+                    <span className="text-amber-400" title={portfolioUnscoredNote(t.unscoredStarters)}>
+                      {" "}
+                      +{t.unscoredStarters}?
+                    </span>
+                  )}
+                </td>
+                <td
+                  className="py-1 pr-2 text-right font-medium text-gray-100"
+                  data-testid="portfolio-total"
+                >
+                  {num(t.total)}
+                </td>
+                <td className="py-1 pr-2 text-right">
+                  <RangeCell p10={t.p10} p90={t.p90} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ⭐ THE CAVEATS RENDER WITH THE TABLE, never behind a disclosure — a caveat behind a click is
+          a caveat that did not render (NF-C6P3's own finding). */}
+      <ul className="mt-3 space-y-1 text-[11px] text-gray-500">
+        {rollup.mixedFormats && <li>{PORTFOLIO_CAVEAT_FORMATS}</li>}
+        <li>{PORTFOLIO_CAVEAT_LINEUP}</li>
+        <li>{PORTFOLIO_CAVEAT_SNAPSHOT}</li>
+        {rollup.anyUnderstated && <li className="text-amber-400/80">{PORTFOLIO_UNDERSTATED_NOTE}</li>}
+      </ul>
+    </div>
+  )
+}
+
+/** NF-C6b — one team's total, on its own card. Rendered even when there is no ranking (a single
+ *  league still has a meaningful total), which is why this is separate from `PortfolioSummary`. */
+function TeamTotal({ rollup }: { rollup: TeamRollup }) {
+  return (
+    <div
+      data-testid="team-total"
+      className="mt-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 rounded border border-white/10 bg-white/[0.02] px-3 py-2"
+    >
+      <div className="text-[11px] text-gray-500">
+        {PORTFOLIO_TOTAL_LABEL} · {rollup.starters} starters
+      </div>
+      <div className="flex items-baseline gap-2">
+        <span className="text-sm font-medium text-gray-100" data-testid="team-total-value">
+          {num(rollup.total)}
+        </span>
+        <span className="text-[11px] text-gray-500">
+          <RangeCell p10={rollup.p10} p90={rollup.p90} />
+        </span>
+      </div>
+      {rollup.unscoredStarters > 0 && (
+        <p className="w-full text-[11px] text-amber-400/80">
+          {portfolioUnscoredNote(rollup.unscoredStarters)}
+        </p>
       )}
     </div>
   )
@@ -94,6 +215,9 @@ function LeagueCard({ entry }: { entry: MyTeamEntry }) {
   const unmatchedCount = roster.length - matchedCount
   const starters = roster.filter((r) => r.roster.starter)
   const bench = roster.filter((r) => !r.roster.starter)
+  // NF-C6b — `null` when this team has no scoreable starters, which is a real state (pre-draft, or a
+  // platform that reported no lineup) and must not render as a fabricated 0.0.
+  const rollup = teamRollup(entry)
 
   return (
     <section className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
@@ -134,6 +258,7 @@ function LeagueCard({ entry }: { entry: MyTeamEntry }) {
 
       {linked && hasPlayers && (
         <>
+          {rollup && <TeamTotal rollup={rollup} />}
           <RosterTable label="Starters" rows={starters} />
           <RosterTable label="Bench" rows={bench} />
           {unmatchedCount > 0 && (
@@ -156,7 +281,10 @@ function LeagueCard({ entry }: { entry: MyTeamEntry }) {
 function RosterTable({ label, rows }: { label: string; rows: RosterMatch[] }) {
   if (rows.length === 0) return null
   return (
-    <div className="mt-4">
+    // NF-C6b — a stable hook so the rollup gate can sum THIS table rather than traversing the card's
+    // DOM shape. The team total's contract is "Σ of the rows in Starters", and a spec that located
+    // the wrong table would still find numbers and still add up to something.
+    <div className="mt-4" data-testid={`${label.toLowerCase()}-table`}>
       <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
         {label} · {rows.length}
       </div>
