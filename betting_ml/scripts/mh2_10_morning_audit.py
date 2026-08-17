@@ -1251,6 +1251,13 @@ def write_report(r: dict, controls: dict | None = None) -> Path:
           f"**{100 * (v['sigma_mde'] - 1):.0f}%**. The effect is smaller than the instrument's "
           f"resolution, so a non-detection here carries **no information against it**.")
         A("")
+        A("⭐ **And that MDE is the OPTIMISTIC one, so this label is the conservative call.** The "
+          "MDE curve is measured against the UNCORRECTED two-sided null band, while the verdict "
+          "requires clearing **BH** over the declared family — a strictly higher bar. The true "
+          "BH-corrected MDE is therefore LARGER than the figure quoted, which puts the observed "
+          "effect even further below resolution. Using the optimistic MDE makes `POWER_LIMITED` "
+          "*harder* to declare, not easier.")
+        A("")
         A("⛔ Reporting that as \"the morning σ is fine\" would be false. ⛔ Reporting it as \"the "
           "morning σ is too small\" would be equally false — the pre-registered test does not "
           "support it. The honest statement is the third one: **the effect is real-looking, "
