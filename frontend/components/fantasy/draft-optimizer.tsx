@@ -16,15 +16,16 @@ import { Button } from "@/components/ui/button"
 import { Picker } from "@/components/ui/picker"
 import { InfoTip } from "@/components/fantasy/shared"
 import {
+  assignRoster,
   recommend,
   rosterRequirements,
   openStarterSlots,
   picksUntilNext,
   slotOnClock,
   sortAvailable,
+  type FilledSlot,
   type Player,
   type LeagueConfigMeta,
-  type RosterSlotDef,
 } from "@/lib/draft-optimizer"
 import {
   FANTASY_SEASON,
@@ -72,51 +73,8 @@ const storageKey = (s: { configName: string; size: number; mySlot: number }) =>
 // The hooks themselves are shared with the NF3 browse surfaces (lib/fantasy-queries).
 const useManifest = useFantasyManifest
 
-// ── roster assignment for the "My Team" panel ───────────────────────────────────────────────────
-interface FilledSlot {
-  slotName: string
-  eligible: string[]
-  player: Player | null
-  bench: boolean
-}
-
-function assignRoster(myPlayers: Player[], roster: RosterSlotDef[]): FilledSlot[] {
-  const pool = [...myPlayers].sort((a, b) => (b.vor ?? 0) - (a.vor ?? 0))
-  const used = new Set<string>()
-  const out: FilledSlot[] = []
-  // expand slots: dedicated (1 eligible) first, then flex (by eligibility size), then bench
-  const starters = roster.filter((s) => !s.bench)
-  const dedicated = starters.filter((s) => s.eligible.length === 1)
-  const flex = starters.filter((s) => s.eligible.length > 1).sort((a, b) => a.eligible.length - b.eligible.length)
-  const take = (eligible: string[]): Player | null => {
-    for (const p of pool) {
-      if (!used.has(p.id) && eligible.includes(p.pos)) {
-        used.add(p.id)
-        return p
-      }
-    }
-    return null
-  }
-  for (const grp of [dedicated, flex]) {
-    for (const s of grp) {
-      for (let i = 0; i < s.count; i++) {
-        out.push({ slotName: s.name, eligible: s.eligible, player: take(s.eligible), bench: false })
-      }
-    }
-  }
-  // leftovers → bench rows (bench accepts whatever the config's bench slots accept — for the roster
-  // fit-check; defaults to the skill positions).
-  const benchSlots = roster.filter((s) => s.bench)
-  const bench = benchSlots.reduce((a, s) => a + s.count, 0)
-  const benchEligible = benchSlots.length
-    ? Array.from(new Set(benchSlots.flatMap((s) => s.eligible)))
-    : ["QB", "RB", "WR", "TE"]
-  const leftover = pool.filter((p) => !used.has(p.id))
-  for (let i = 0; i < Math.max(bench, leftover.length); i++) {
-    out.push({ slotName: "BN", eligible: benchEligible, player: leftover[i] ?? null, bench: true })
-  }
-  return out
-}
+// ⭐ `assignRoster` / `FilledSlot` moved to `lib/draft-optimizer` at NF-C2.1 — the mock draft's CPU
+// and its post-draft grade ask the same question, and a second copy would let them disagree.
 
 // ── main component ──────────────────────────────────────────────────────────────────────────────
 export function DraftOptimizer() {

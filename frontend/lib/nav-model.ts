@@ -101,6 +101,11 @@ export const SPORTS: SportNav[] = [
               // OTHER surface's Player cell links out to, so it needs to be reachable on its own.
               { label: "Player Search", href: "/fantasy/players", key: "fantasy-players", public: true },
               { label: "Draft Optimizer", href: "/fantasy/draft", key: "fantasy-draft" },
+              // ⭐ NF-C2.1 — the PRACTICE half of the same engine: a full draft against CPU
+              // opponents, for the eleven months a year when nobody has a live draft to track.
+              // Sits directly under the live tool because it is the same screen rehearsed, and it
+              // is deliberately NOT `public`: it reads the same 403-ing gated board endpoints.
+              { label: "Mock Draft", href: "/fantasy/mock-draft", key: "fantasy-mock-draft" },
               // ⭐ G100-C1 — the ACTIVATION screen: a free account's one personalized board, led by
               // the generic-vs-your-league delta. `freeSignedIn` because it survives the locked
               // fantasy surface (it IS the free tier's personalization) but needs an account.
