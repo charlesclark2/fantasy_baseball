@@ -222,56 +222,81 @@ async function startMock(page: Page) {
   return { errors, setupText }
 }
 
+/** The draft's phase, read in ONE round trip.
+ *
+ *  ⚠️ READ WITH `evaluate`, NOT WITH A COMPOSED LOCATOR, and the reason is measured rather than
+ *  stylistic. The previous cut waited on `myTurn.or(grade).or(skip).first()` and timed out on CI
+ *  **while the page snapshot in the failure artifact contained "You're on the clock"** — and while
+ *  the two sibling tests that wait on the very same text with a PLAIN locator passed in the same
+ *  run. So the text was there and the un-composed locator finds it; only the `or()`-composed one
+ *  reported nothing. Rather than litigate Playwright's composition semantics on a surface that has
+ *  three legitimate next states, ask the DOM once and branch on the answer.
+ *
+ *  The apostrophe is a character class because the copy is one editorial pass away from becoming a
+ *  typographic ’, which would silently make a `'`-spelled regex match nothing. */
+async function readPhase(page: Page): Promise<"graded" | "my-turn" | "cpu" | "unknown"> {
+  return page.evaluate(() => {
+    if (document.querySelector('[data-testid="mock-draft-grade"]')) return "graded" as const
+    const text = document.body.innerText
+    if (/You['’]re on the clock/.test(text)) return "my-turn" as const
+    if (/Skip to my pick/.test(text)) return "cpu" as const
+    return "unknown" as const
+  })
+}
+
 /** Drive the mock to completion: take the top recommendation on every turn, fast-forward the room
  *  in between.
  *
- *  ⚠️ EVERY WAIT HERE IS AUTO-RETRYING (`expect(...).toBeVisible()` on an `or`-ed locator), never a
- *  poll-and-sleep. The first cut of this was a 60-step loop that re-read three locators and slept
- *  200ms whenever it caught the page mid-render — fine on a laptop, and on a CI runner it was still
- *  looping when the 60s test timeout fired, which surfaces as the thoroughly unhelpful
- *  `locator.count: Target page, context or browser has been closed`. Waiting for the state the loop
- *  actually needs turns ~60 round trips into ~20 and cannot burn the budget on sleeps.
+ *  ⭐ A STATE MACHINE OVER ONE PHASE READ, re-entered every iteration — not "wait for my turn, then
+ *  wait for the fast-forward". Two separate waits stall: the fast-forward click can miss (the
+ *  button detaches when the room finishes a round underneath it), and the next iteration would then
+ *  be waiting for a turn that only the 70ms-per-pick reveal timer can deliver. Re-reading the phase
+ *  makes a missed click cost one iteration.
  *
- *  The single-shot `count()` reads that remain are BRANCHES taken after such a wait has already
- *  settled the page, not assertions — every claim about the outcome is made by the callers. */
+ *  ⚠️ ALSO NOT A POLL-AND-SLEEP. The first cut was a 60-step loop that re-read three locators and
+ *  slept 200ms whenever it caught the page mid-render — fine on a laptop, and still looping when
+ *  the 60s test timeout fired on a CI runner, which surfaces as the thoroughly unhelpful
+ *  `locator.count: Target page, context or browser has been closed`.
+ *
+ *  The bound is generous (~3 iterations per user pick) because it exists to stop a genuine hang
+ *  spinning, not to schedule the draft; the caller's assertion is what reports the outcome. */
 async function playToTheEnd(page: Page, rounds = 8) {
-  const grade = page.getByTestId("mock-draft-grade")
-  const myTurn = page.getByText(/You're on the clock/)
-  const skip = page.getByRole("button", { name: /Skip to my pick/ })
-
-  // ⭐ ONE WAIT THAT ACCEPTS ALL THREE STATES, RE-ENTERED EVERY ITERATION — not "wait for my turn,
-  // then wait for the fast-forward". The fast-forward click can miss (the button detaches when the
-  // room finishes a round underneath it, and the click is swallowed); with a separate wait per
-  // state, the next iteration would then be waiting for a turn only the 70ms-per-pick reveal timer
-  // could deliver. Accepting `skip` in the same wait makes a missed click cost one iteration.
-  //
-  // ⚠️ WHAT THIS DOES **NOT** FIX, stated because the obvious reading of the history is wrong.
-  // Stressing this file at `--workers=10` produces timeouts whose screenshots show the page in a
-  // perfectly good state — "You're on the clock", visible, at round 7. Ten concurrent browsers
-  // against one `next start` starve the renderer, so Playwright cannot get a query in edgewise
-  // while the app itself is fine. That is the stress rig over-driving the harness, NOT a defect in
-  // the loop or the component, and no rewrite of this function removes it. Measured: 0 failures at
-  // `--workers=2 --repeat-each=2` (the gate, and what CI runs), 1 of 32 at 8, 6 of 40 at 10. Judge
-  // this file at the gate's settings; do not chase the high-worker runs.
-  //
-  // The bound is generous (~3 iterations per user pick) because it exists to stop a genuine hang
-  // spinning, not to schedule the draft; the caller's assertion is what reports the outcome.
   for (let i = 0; i < rounds * 3 + 6; i++) {
-    await expect(myTurn.or(grade).or(skip).first()).toBeVisible()
-    if (await grade.count()) return
-    if (await myTurn.count()) {
+    await expect
+      .poll(() => readPhase(page), {
+        message: "the mock reached no recognisable state — not the user's turn, not graded, no fast-forward",
+        timeout: 30_000,
+      })
+      .not.toBe("unknown")
+
+    const phase = await readPhase(page)
+    if (phase === "graded") return
+    if (phase === "my-turn") {
       await page.getByRole("button", { name: "Draft", exact: true }).first().click()
       continue
     }
-    await skip.click().catch(() => {})
+    // A fast-forward click can miss — the button detaches when the room finishes a round underneath
+    // it. Swallowing it is safe because the loop simply re-reads the phase and tries again.
+    await page.getByRole("button", { name: /Skip to my pick/ }).click().catch(() => {})
   }
 }
 
 test.describe("running a mock draft", () => {
-  // ⏱️ The two tests that play a mock out drive ~96 picks through a real React state machine. That
-  // is comfortably inside the default 60s on a laptop and NOT on a 4-vCPU CI runner, where the
-  // first version of this file timed out mid-draft. `test.slow()` triples the budget for this file
-  // rather than raising the global timeout and hiding a genuine hang everywhere else.
+  // ⏱️ The two tests that play a mock out drive ~96 picks through a real React state machine.
+  // `test.slow()` triples this file's budget rather than raising the global timeout, which would
+  // hide a genuine hang everywhere else.
+  //
+  // ⚠️ THE BUDGET IS NOT WHAT MADE THIS FILE RED ON CI, and the distinction cost a round trip to
+  // find. Raising it 60s → 180s did NOT fix the CI failure: the draft was not running slowly, it
+  // was not running AT ALL — the failure artifact's page snapshot showed it still at Round 1 Pick 4
+  // after the full timeout, because the composed locator the loop waited on never matched (see
+  // `readPhase`). A budget increase makes a stall take longer to report; it never cures one.
+  //
+  // Measured, once the phase read was fixed: clean at `--workers=2 --repeat-each=3` (the gate, and
+  // what CI runs). At `--workers=8` on a laptop about 1 in 10 still exhausts the budget, with the
+  // teardown signature (`page.evaluate: Target page … has been closed`) rather than a stalled
+  // screen — eight browsers against one `next start` is the rig running out of machine, not the
+  // app. Judge this file at the gate's settings.
   test.slow()
 
   test("the CPU room picks before the user's turn, and its picks are explained", async ({ page }) => {
