@@ -4,7 +4,11 @@
 // comparable. Pure + synchronous → every pick recomputes instantly, no server round-trip.
 //
 //   score = vor + need_bonus            (need_bonus = 0 when the position's starter slots are full)
-//   need_bonus = NEED_W[level] * positional_dropoff   (VONA — value lost at the position if you wait)
+//   need_bonus = NEED_W[level] * urgency              (VONA — value lost at the slot if you wait)
+//
+// where `urgency` is measured over the pool that can actually fill the OPEN SLOT: within the
+// position for a DEDICATED starter, across the whole FLEX-eligible pool for a flex slot. See
+// `flexPoolDropoff` below — a within-position gap is the wrong denominator for a flex seat.
 //
 // ⭐ NF1.6: K and DST now carry a real (BASE) projection, so they ARE candidates. They need no
 // special-casing to stay out of the early rounds — their VOR is genuinely tiny (the best 2026 kicker
@@ -208,7 +212,9 @@ export function isFreeConfig(config: LeagueConfigMeta | undefined | null): boole
 }
 
 const NEED_W_DEDICATED = 1.0
-const NEED_W_FLEX = 0.4
+/** Exported for `scripts/measure-flex-urgency.mjs`, which reconstructs the pre-flex-pool ordering
+ *  from a `Recommendation` to count how often the rule below changes the top pick. */
+export const NEED_W_FLEX = 0.4
 const SURPLUS_BASE = 0.5
 const SURPLUS_OVER = 0.35
 const SURPLUS_CAP = 0.9
@@ -392,6 +398,12 @@ export interface Recommendation {
   score: number
   needLevel: number
   needBonus: number
+  /** The base the score is built on: plain VOR, except for a FLEX-only candidate, where it is
+   *  points over the FLEX SEAT's replacement (see the note in `recommend`). Exposed so the exact
+   *  pre-flex-seat ordering stays reconstructible from a `Recommendation` alone — that is what
+   *  `scripts/measure-flex-urgency.mjs` counts flips with, instead of keeping a forked copy of the
+   *  engine that could drift away from the one being measured. */
+  seatValue: number
   positionalDropoff: number
   tier: number
   isLastInTier: boolean
@@ -538,6 +550,122 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     }
   }
 
+  // ⭐⭐ FLEX URGENCY IS MEASURED OVER THE FLEX POOL, NOT WITHIN THE POSITION (operator, 2026-08-17,
+  // off a real mock draft: "it seemed to really be pushing for TEs to fill my FLEX spot, which seems
+  // unrealistic unless they're projected to outscore RBs and WRs").
+  //
+  // VONA asks "what do I lose at this SLOT if I wait?" — so the right denominator is whatever can
+  // still fill the slot next time. For a DEDICATED starter that is the next player at the same
+  // position, which is what `nextVor` measures. For a FLEX seat it is the next FLEX-ELIGIBLE player
+  // at ANY of its positions, and using the within-position gap there is a units error with a
+  // systematic direction: TE is the thinnest position on the board, so its cliffs are structurally
+  // the steepest, and the best available TE collected `0.4 x (a steep TE cliff)` for a seat a WR two
+  // VOR behind him would have filled almost as well.
+  //
+  // ⚠️⚠️ MEASURED, AND THE MEASUREMENT SAYS THIS HALF DOES NOTHING. `scripts/measure-flex-urgency.mjs`
+  // over 200 drafts x 15 rounds of the served 2026 full_ppr/12 board: reverting this rule on its own
+  // changes the #1 recommendation on 0 of 3,000 decision points. The flex bonus is capped by
+  // `NEED_W_FLEX` at ~5 VOR and the gaps it competes against are far wider, so it was never the
+  // mechanism behind the reported TE-for-FLEX push — the base re-basing below is. This is kept
+  // because it is the correct denominator for a flex seat and it is free, NOT because it fixed
+  // anything, and saying so is the point: a plausible mechanism that measured inert is a finding,
+  // and quietly banking it as the fix would have left the real one in place.
+  //
+  // ⛔ NOT a TE penalty, and not a weight change. `NEED_W_FLEX` is untouched; only the quantity it
+  // multiplies moves onto the pool the slot actually draws from. And the DEDICATED TE slot is
+  // unaffected: `needLevel` returns 2 there, so taking the best TE before the TE cliff is still the
+  // full-weight advice.
+  //
+  // ⚠️ The bonus is still awarded only to the best available player at each position (`idxInPos === 0`
+  // — the K/DST inversion fix above), which this rule does not weaken: within a position the pts and
+  // VOR orders are identical (`vor = pts - repl`, one `repl` per position), so a position's leader is
+  // the only member that can ever top the pool.
+  // ⭐⭐⭐ AND THE VALUE ITSELF IS RE-BASED ON THE SEAT, BECAUSE VOR IS NOT A FAIR FLEX COMPARATOR.
+  //
+  // This is the bigger half, and it is the one the measurement actually implicates. VOR is
+  // points-over-REPLACEMENT-AT-HIS-OWN-POSITION, which is exactly right for a DEDICATED slot — you
+  // must start a TE, so a TE's worth is against other TEs. It is the wrong unit for a FLEX seat,
+  // because the seat does not care which position walks into it: it collects POINTS.
+  //
+  // Measured on the served 2026 full_ppr/12 board, replacement is RB 150.1 / WR 148.3 / TE 130.4.
+  // That gap is structural, not noise: the twelve flex seats in a 12-team league are allocated to
+  // whichever position has the best next man, TE13 (130.4) never wins one, so TE replacement stays
+  // at TE12 while RB/WR replacement is pushed ~19 points deeper. Which means plain VOR hands every
+  // TE a ~19.7-point head start in a flex comparison he does not deliver in the lineup: Trey
+  // McBride (239.0 pts, VOR 108.7) outranks a WR projected for 257 points, and the WR is the one who
+  // scores more in the seat. That is precisely the operator's report — TEs pushed into FLEX in the
+  // middle rounds without projecting to outscore the RBs and WRs beside them.
+  //
+  // So a candidate whose ONLY open seat is a flex is scored against THE SEAT'S replacement: the best
+  // freely-available player who could fill it, i.e. `max(repl)` over the seat's eligible positions —
+  // a startable RB, not a startable TE. `pts - seatRepl` is then a common yardstick across the pool,
+  // and comparing two flex candidates becomes comparing projected points, which is the operator's
+  // own criterion.
+  //
+  // ⛔ NOT a change to VOR, and not a TE penalty. The published board, the rankings, every dedicated
+  // slot and every bench pick are untouched — `seatValue` returns plain VOR for level 0 and level 2,
+  // so this can only ever act on the one question it is about. A TE still wins a FLEX seat whenever
+  // he out-projects the flex pool, and the DEDICATED TE slot still gets the full-weight "take the
+  // best TE before the cliff" advice.
+  //
+  // MEASURED (`scripts/measure-flex-urgency.mjs`, 200 drafts x 15 rounds on the served board, run
+  // BOTH ways because my own picks change which states the draft reaches):
+  //
+  //   driving with the new rule   181 of 3,000 decision points flip (6.0%)
+  //   driving with the old rule   102 of 3,000 decision points flip (3.4%)
+  //   the displaced pick          a TE at a FLEX seat in 181 of 181 and 102 of 102
+  //   the round it happens in     3-7, and nowhere else
+  //
+  // Every flip carries a margin above 0.5 VOR, so none is an artifact of reading rounded fields
+  // back. A change whose entire measured effect is the reported symptom, in the rounds it was
+  // reported in, and nothing else.
+  const replOf: Record<string, number> = {}
+  for (const p of board) if (p.repl != null && !(p.pos in replOf)) replOf[p.pos] = p.repl
+  /** The replacement level of the best FLEX seat this position can still fill — `null` when it has
+   *  no open flex seat, which is every level-0 and level-2 candidate. `min` over the open seats
+   *  because the player gets to pick his best one; `max` within a seat because he can be displaced
+   *  by any eligible replacement-level player. */
+  const flexSeatRepl: Record<string, number> = {}
+  for (const pos of Object.keys(byPos)) {
+    if (needLevel(open, pos) !== 1) continue
+    let best = Infinity
+    for (const slot of open.flex) {
+      if (!slot.has(pos)) continue
+      let seat = -Infinity
+      for (const e of slot) if (replOf[e] != null) seat = Math.max(seat, replOf[e])
+      if (Number.isFinite(seat)) best = Math.min(best, seat)
+    }
+    if (Number.isFinite(best)) flexSeatRepl[pos] = best
+  }
+  /** What this player is worth in the seat he would actually occupy. Plain VOR everywhere except a
+   *  flex-only candidate, where the baseline moves onto the seat (see the note above). */
+  const seatValue = (p: Player): number =>
+    flexSeatRepl[p.pos] != null ? num(p.pts) - flexSeatRepl[p.pos] : num(p.vor)
+
+  const flexPoolDropoff: Record<string, number> = {}
+  for (const pos of Object.keys(byPos)) {
+    if (needLevel(open, pos) !== 1) continue
+    const mine = byPos[pos]
+    if (!mine.length) continue
+    // The pool is every position accepted by an open flex slot THIS position could also fill — so a
+    // superflex seat pulls QBs in, and a plain FLEX seat does not.
+    const pool = new Set<string>()
+    for (const slot of open.flex) if (slot.has(pos)) slot.forEach((e) => pool.add(e))
+    // Best value still available for this seat AFTER passing on `mine[0]`: the next man at his own
+    // position, or the leader at any other position the seat accepts. In `seatValue` units, so the
+    // cross-position comparison is on one yardstick.
+    let next = mine.length > 1 ? seatValue(mine[1]) : -Infinity
+    for (const other of pool) {
+      if (other === pos) continue
+      const rows = byPos[other]
+      if (rows?.length) next = Math.max(next, seatValue(rows[0]))
+    }
+    // Nothing else can fill the seat (the pool is down to one man) — fall back to the dedicated
+    // measure, whose own last-player fallback is `repl - pts`.
+    if (next === -Infinity) next = nextVor[mine[0].id] ?? 0
+    flexPoolDropoff[pos] = Math.max(0, seatValue(mine[0]) - next)
+  }
+
   const recs: Recommendation[] = []
   for (const p of available) {
     const vor = num(p.vor)
@@ -575,7 +703,13 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     // CONSTRUCTION — a worse player can no longer outrank a better one — while the best available at
     // a needed position keeps the full bonus even when he is below replacement, so a thin position
     // still gets filled.
-    const needBonus = idxInPos[p.id] === 0 ? needW * dropoff : 0
+    //
+    // ⭐ `urgency` is the gap over the pool that can fill the OPEN SLOT (see `flexPoolDropoff`):
+    // within-position for a dedicated starter, across the flex pool for a flex seat. `dropoff` stays
+    // the within-position number because the tier-cliff line below is a genuine statement about the
+    // position and is true regardless of which seat is open.
+    const urgency = level === 1 ? flexPoolDropoff[p.pos] ?? dropoff : dropoff
+    const needBonus = idxInPos[p.id] === 0 ? needW * urgency : 0
 
     const held = myCounts[p.pos] ?? 0
     const capacity =
@@ -588,7 +722,11 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     // bye-week stacking: penalize by how many I already hold at this position on the same bye week
     const byeConflict = p.bye != null ? myByes.get(`${p.pos}|${p.bye}`) ?? 0 : 0
     const byePen = byeConflict > 0 && vor > 0 ? BYE_PEN_FRAC * Math.min(byeConflict, BYE_CLUSTER_CAP) * vor : 0
-    const score = vor + needBonus - surplusPen - byePen
+    // ⭐ `seatValue`, not `vor` — see the note above. Identical to `vor` for every candidate except a
+    // flex-only one. (`surplusPen` is level-0-only and `byePen` scales a held-position stack, so both
+    // stay on `vor`: they are statements about the roster, not about the open seat.)
+    const base = seatValue(p)
+    const score = base + needBonus - surplusPen - byePen
 
     const rows = byPos[p.pos]
     const i = idxInPos[p.id]
@@ -607,13 +745,14 @@ export function recommend(args: RecommendArgs): Recommendation[] {
       score: Math.round(score * 10) / 10,
       needLevel: level,
       needBonus: Math.round(needBonus * 10) / 10,
+      seatValue: Math.round(base * 10) / 10,
       positionalDropoff: Math.round(dropoff * 10) / 10,
       tier: tierOf[p.id] ?? 1,
       isLastInTier: isLast,
       byeConflict,
       mustFill,
       deferred,
-      rationale: rationale(p.pos, level, needBonus, dropoff, isLast, tierOf[p.id] ?? 1, surplusPen, p.bye, byeConflict, mustFill, picksRemaining, openStarterCount),
+      rationale: rationale(p.pos, level, needBonus, dropoff, urgency, base - vor, vor, isLast, tierOf[p.id] ?? 1, surplusPen, p.bye, byeConflict, mustFill, picksRemaining, openStarterCount),
     })
   }
 
@@ -657,6 +796,17 @@ function rationale(
   level: number,
   needBonus: number,
   dropoff: number,
+  /** The gap the bonus was ACTUALLY computed from — see `urgency` at the call site. Equal to
+   *  `dropoff` for a dedicated starter; the flex-pool gap for a flex seat. Passed separately so the
+   *  sentence can never quote a number the score did not use. */
+  urgency: number,
+  /** `seatValue - vor` — how much the FLEX seat's own replacement re-bases this candidate. Always 0
+   *  outside a flex-only candidate; negative for a position whose replacement sits below the seat's
+   *  (TE, on every board measured so far). Stated in the sentence whenever it moves the score,
+   *  because the panel shows `score` and an unexplained gap between it and the player's published
+   *  VOR is exactly the kind of number a user is right not to trust. */
+  seatAdj: number,
+  vor: number,
   lastInTier: boolean,
   tier: number,
   surplusPen: number,
@@ -676,8 +826,22 @@ function rationale(
   }
   if (level === 2) parts.push(`Fills your open ${pos} starter`)
   else if (level === 1) parts.push(`Fills an open FLEX (${pos}-eligible)`)
+  // The re-basing, in words, whenever it is big enough to matter to the score on screen.
+  if (level === 1 && seatAdj < -0.5)
+    parts.push(
+      `Scored against the FLEX seat's replacement — a startable RB/WR, ${Math.round(-seatAdj)} pts ` +
+        `above the ${pos} baseline his ${Math.round(vor)} VOR is measured from`,
+    )
   if (lastInTier && dropoff > 0) parts.push(`Last of Tier ${tier} — ${Math.round(dropoff)} VOR cliff to the next ${pos}`)
-  else if (dropoff > 0 && needBonus > 0) parts.push(`+${Math.round(dropoff)} VOR over the next ${pos}`)
+  // ⚠️ QUOTES `urgency`, NOT `dropoff` — for a FLEX seat the bonus is the gap over the flex POOL, and
+  // naming the (larger) within-position gap beside it would explain the score with a number the
+  // score did not use. The wording names the pool too, so the two cases are not confusable.
+  else if (urgency > 0 && needBonus > 0)
+    parts.push(
+      level === 1
+        ? `+${Math.round(urgency)} VOR over the next FLEX-eligible player`
+        : `+${Math.round(urgency)} VOR over the next ${pos}`,
+    )
   if (surplusPen > 0) parts.push(`Depth pick — ${pos} starters already set`)
   if (byeConflict > 0 && bye != null) parts.push(`⚠ ${byeConflict} other ${pos} on bye ${bye}`)
   if (parts.length === 0) parts.push("Best value on the board (VOR)")
