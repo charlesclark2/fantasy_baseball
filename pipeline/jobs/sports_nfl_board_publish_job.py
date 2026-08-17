@@ -42,8 +42,13 @@ too — `generated_at` and `adp_as_of` are both undisturbed by a missing positio
 it: the exporter now falls back to the LAKE for K/DST (`run_league_board.load_kdst`), and
 `export_draft_board_json.assert_published_position_coverage` REFUSES to publish a board missing a
 whole projectable position — so this job now goes RED (and pages) rather than shipping the gap.
-⇒ a "NFL board publish FAILED at export + publish" page naming a missing position means the K/DST
-lake partition is genuinely absent, not that the board build broke; the remedy is in that message.
+⇒ a "NFL board publish FAILED at export + publish" page naming a missing position means the board
+build is fine and the K/DST data did not arrive — but ⛔ NOT necessarily that the lake partition is
+absent, which is what this note used to claim and what INC-45 then disproved. The partition was
+present and unchanged the whole time (74 rows since 2026-08-03); the box's READ of it returned
+nothing, because the credentials were being handed to a channel `delta_scan` ignores. So CHECK THE
+PARTITION rather than assuming either cause — an alert that names a suspected cause is diagnostic
+anchoring (INC-40), and this one anchored on the wrong half for a week of frozen boards.
 
 🚦 PRECONDITION (and it is the likely first failure on the box): the whole build chain reads the
 sports DuckDB, which is **gitignored and therefore absent from the `COPY . .` image**. The publish

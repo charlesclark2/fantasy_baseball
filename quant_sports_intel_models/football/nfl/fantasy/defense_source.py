@@ -511,21 +511,14 @@ def build_forward_defense(con, proj_season: int, *, config: DefenseConfig = SHIP
 def _read_lake(season: int):
     """Read the landed forward-defense Delta for `season` from S3 (the serving fast path). Returns a
     DataFrame or None if the table/partition is absent or the lake is unreachable."""
-    import duckdb
-
     from quant_sports_intel_models.football.nfl.ingest import s3io
 
     uri = s3io.table_uri(LAKE_SPORT, LAKE_SOURCE, tier=LAKE_TIER)
-    con = duckdb.connect()
+    # INC-45 — the SECRET channel; `delta_scan` ignores the `s3_*` settings this used to set, so
+    # off-laptop this read fell through to delta-kernel-rs's own ambient chain. ⚠️ note this
+    # reader SWALLOWS the failure and recomputes, so a broken channel here has no symptom at all.
+    con = s3io.duckdb_lake_connection()
     try:
-        con.execute("install delta; load delta; install httpfs; load httpfs;")
-        opts = s3io.storage_options()
-        con.execute(f"set s3_region='{opts.get('AWS_REGION', 'us-east-2')}';")
-        if opts.get("AWS_ACCESS_KEY_ID"):
-            con.execute(f"set s3_access_key_id='{opts['AWS_ACCESS_KEY_ID']}';")
-            con.execute(f"set s3_secret_access_key='{opts['AWS_SECRET_ACCESS_KEY']}';")
-            if opts.get("AWS_SESSION_TOKEN"):
-                con.execute(f"set s3_session_token='{opts['AWS_SESSION_TOKEN']}';")
         df = con.sql(f"select * from delta_scan('{uri}') where projection_season = {int(season)}").df()
         return df if not df.empty else None
     except Exception as exc:  # noqa: BLE001 — table absent / offline ⇒ caller computes
