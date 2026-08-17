@@ -322,12 +322,33 @@ export function Nav({
                 <div className="absolute left-0 top-full z-50 hidden w-56 rounded-md border border-[#262626] bg-[#0f0f0f] py-1 shadow-xl group-hover:block">
                   {visibleSurfaces(sport).map((g) => {
                     const locked = isLocked(g)
+                    // ⭐ TWO HEADERS DEEP IS ONE TOO MANY. The surface label answers "which product
+                    // is this?", which only earns a row when a sport has more than one surface —
+                    // MLB has Fantasy AND Betting, NFL has only Fantasy. Once that surface also
+                    // opens with a labelled SECTION (NF-C2.1 grouped the twelve NFL items into
+                    // three), the surface row is pure redundancy stacked directly on top of the
+                    // label doing the real work.
+                    //
+                    // ⚠️ KEYED ON THE FIRST VISIBLE SECTION, not on "has any labelled section", and
+                    // the difference is not cosmetic: MLB's Betting surface opens with an UNLABELLED
+                    // group (Dashboard, EV Tracker, Props…) and only labels its second ("Research"),
+                    // so the looser test would delete the only header those six items have. The
+                    // defect being fixed is an ADJACENCY, so the condition is one too.
+                    //
+                    // ⚠️ Never suppressed while LOCKED: that row also carries the lock icon, and the
+                    // locked branch below renders a flat list with no section labels to inherit it,
+                    // so hiding it there would drop the only signal that the surface is gated.
+                    const firstVisibleSection = g.sections.find((s) => visibleItems(s.items).length > 0)
+                    const redundantSurfaceLabel =
+                      !locked && visibleSurfaces(sport).length === 1 && !!firstVisibleSection?.label
                     return (
                       <div key={g.surface} className="py-1">
-                        <div className="flex items-center gap-1.5 px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
-                          {g.label}
-                          {locked && <Lock className="h-3 w-3 text-gray-500" />}
-                        </div>
+                        {!redundantSurfaceLabel && (
+                          <div className="flex items-center gap-1.5 px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-600">
+                            {g.label}
+                            {locked && <Lock className="h-3 w-3 text-gray-500" />}
+                          </div>
+                        )}
                         {locked ? (
                           <>
                             <Link

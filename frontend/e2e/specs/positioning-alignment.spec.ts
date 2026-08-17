@@ -522,6 +522,88 @@ test("the signed-in nav leads with fantasy and carries Track Record top-level", 
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
+// NF-C2.1 follow-up — the NFL menu is GROUPED, and the grouping is not stacked on a redundant
+// surface header
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// ⭐ REPORTED (operator, 2026-08-17): twelve NFL items in one flat list, with the two halves of the
+// draft engine four rows apart. Asserted in the BROWSER rather than against `nav-model.ts`, because
+// the failure that matters is a rendering one: `nav.tsx` suppresses the surface label when it would
+// stack on top of section labels, and a source-level read of the model cannot see whether that
+// suppression fired, fired too widely, or took the lock icon with it.
+test("the NFL menu is grouped by job, and MLB keeps its surface headers", async ({ page }) => {
+  // ⚠️ `entitled`, deliberately. The locked branch renders a FLAT list with no sections at all, so
+  // on the default (`free`) mock every clause below would pass or fail for a reason that has
+  // nothing to do with grouping.
+  await signIn(page, { groups: ["subscriber"] })
+  await mockApi(page, { entitlement: "entitled" })
+  await page.goto("/about")
+  await page.waitForLoadState("networkidle")
+
+  const nflTrigger = page.locator("[data-primary-nav] button").filter({ hasText: /^NFL/ }).first()
+  await expect(nflTrigger, "the signed-in sub-nav did not render — the seeded session did not take")
+    .toBeVisible()
+  await nflTrigger.hover()
+
+  // The dropdown is the trigger's sibling inside the hovered `group` wrapper.
+  const menu = nflTrigger.locator("xpath=..").locator("div.absolute")
+  await expect(menu.getByRole("link", { name: "Mock Draft" })).toBeVisible()
+  const text = await menu.innerText()
+  // ⚠️ WHOLE LINES, NOT SUBSTRINGS. The first cut asked whether the menu text CONTAINED "DRAFT",
+  // which "Mock Draft" and "Draft Optimizer" both satisfy — so the clause passed with every group
+  // label deleted and was caught only by the red proof. A section header is its own line.
+  const lines = text.split("\n").map((s) => s.trim().toUpperCase())
+
+  // The three groups, in order.
+  for (const label of ["RANKINGS & RESEARCH", "DRAFT", "MY LEAGUES"]) {
+    expect(lines, `the NFL menu has no "${label}" group — it is a flat list again`).toContain(label)
+  }
+  expect(lines.indexOf("RANKINGS & RESEARCH")).toBeLessThan(lines.indexOf("DRAFT"))
+  expect(lines.indexOf("DRAFT")).toBeLessThan(lines.indexOf("MY LEAGUES"))
+
+  // ⭐ THE ADJACENCY THAT MOTIVATED THE REGROUPING: the practice board and the live board are the
+  // two halves of one engine and were four rows apart. Asserted as adjacency, not as an index, so
+  // adding an item elsewhere in the menu does not fail this for the wrong reason.
+  const links = await menu.getByRole("link").evaluateAll((els) =>
+    els.map((e) => (e.textContent ?? "").trim()),
+  )
+  const mock = links.indexOf("Mock Draft")
+  const live = links.indexOf("Draft Optimizer")
+  expect(mock, "Mock Draft is missing from the NFL menu").toBeGreaterThanOrEqual(0)
+  expect(live, "Draft Optimizer is missing from the NFL menu").toBeGreaterThanOrEqual(0)
+  expect(
+    Math.abs(mock - live),
+    `Mock Draft and Draft Optimizer are ${Math.abs(mock - live)} rows apart: ${links.join(" / ")}`,
+  ).toBe(1)
+
+  // ⛔ AND THE SURFACE LABEL IS GONE — it was stacked directly on top of "RANKINGS & RESEARCH".
+  expect(
+    lines,
+    `the NFL menu still prints a redundant FANTASY header above its groups:\n${text}`,
+  ).not.toContain("FANTASY")
+
+  // ⭐ THE OTHER SIDE OF THE SUPPRESSION, and the clause that stops it becoming "never show a
+  // surface label". MLB's Betting surface OPENS with an unlabelled group — Dashboard, EV Tracker,
+  // Props and three more — and only labels its second ("Research"). Its "BETTING" header is
+  // therefore the only heading those six items have, and a suppression keyed on "has any labelled
+  // section" rather than on "OPENS with one" would silently delete it. Nothing about this menu
+  // changed in this story; that is exactly what makes it the control.
+  const mlbTrigger = page.locator("[data-primary-nav] button").filter({ hasText: /^MLB/ }).first()
+  await mlbTrigger.hover()
+  const mlbMenu = mlbTrigger.locator("xpath=..").locator("div.absolute")
+  await expect(mlbMenu.getByRole("link", { name: "Dashboard" })).toBeVisible()
+  const mlbText = (await mlbMenu.innerText()).toUpperCase()
+  expect(
+    mlbText.indexOf("BETTING"),
+    `the MLB menu lost the "Betting" header its first six items depend on:\n${mlbText}`,
+  ).toBeGreaterThanOrEqual(0)
+  expect(
+    mlbText.indexOf("BETTING"),
+    "the Betting header no longer leads its own menu",
+  ).toBeLessThan(mlbText.indexOf("DASHBOARD"))
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
 // AC 7 — the footer: fantasy-first, and an un-shipped product is never a link
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 test("the footer leads with fantasy and never links an unshipped product", async ({ page }) => {

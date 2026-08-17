@@ -2051,6 +2051,91 @@ const CASES = [
     to: "",
     grep: "roster grades",
   },
+  {
+    id: "flex-seat-scored-on-position-replacement",
+    shipped: "NF-C2.1 follow-up — the TE-for-FLEX push, reported off a real mock draft",
+    // ⚠️ NOT pre-emptive. This shipped, in the live Draft Optimizer as well as the mock: a flex-only
+    // candidate was scored on his own position's VOR, and TE replacement sits ~19 points below RB/WR
+    // replacement on the served board, so every TE carried that head start into a seat that only
+    // collects points. Measured over 200 drafts on the served board, the pick it displaced was a
+    // TE-at-FLEX in 181 of 181 cases.
+    //
+    // It survived because it is not a bug in any single number — every VOR was correct, the panel
+    // rendered, the reason read sensibly ("Fills an open FLEX (TE-eligible)"). It was a UNITS error,
+    // and the only thing that can catch a units error is a fixture that states the right answer
+    // independently: whichever player projects more POINTS.
+    detail: "Scores a flex-only candidate on his own position's VOR, exactly as it shipped.",
+    file: "lib/draft-optimizer.ts",
+    from: "    const base = seatValue(p)",
+    to: "    const base = vor",
+    grep: "does not win the FLEX seat",
+  },
+  {
+    id: "flex-seat-fix-became-a-te-penalty",
+    shipped: "NF-C2.1 follow-up — pre-emptive: the OVER-correction, and the likelier future edit",
+    // ⭐ THE OTHER DIRECTION, and the one a future session is more likely to reach for. "Stop
+    // recommending TEs at flex" is one line away from a blanket TE demotion, which would break the
+    // DEDICATED TE slot — where VOR is exactly the right unit, because TE-vs-TE is the whole
+    // question. This break re-bases every TE regardless of which seat is open; the flex assertions
+    // stay green, so only the dedicated-slot clause can catch it.
+    detail: "Re-bases a TE onto the flex seat even when it is his own dedicated starter slot.",
+    file: "lib/draft-optimizer.ts",
+    from: "    if (needLevel(open, pos) !== 1) continue\n    let best = Infinity",
+    to: "    if (needLevel(open, pos) === 0) continue\n    let best = Infinity",
+    grep: "DEDICATED TE starter is untouched",
+  },
+  {
+    id: "flex-urgency-uses-the-within-position-gap",
+    shipped: "NF-C2.1 follow-up — pre-emptive, and DECLARED INERT ON THE PICK",
+    // ⚠️ THIS IS THE HALF THAT MEASURED INERT, and recording that is the point. Reverting it changes
+    // the top recommendation on 0 of 3,000 decision points on the served board — the flex bonus is
+    // capped at a few VOR by `NEED_W_FLEX` and the gaps it competes with are far wider. A guard
+    // written against a flipped PICK would therefore be a clause that cannot fail, so the assertion
+    // is on the QUANTITY: the bonus must be paid on the gap over the flex pool (0.8 on the fixture),
+    // not the gap to the next man at the position (1.6).
+    detail: "Pays the flex need bonus on the within-position cliff, as it did before the change.",
+    file: "lib/draft-optimizer.ts",
+    from: "    const urgency = level === 1 ? flexPoolDropoff[p.pos] ?? dropoff : dropoff",
+    to: "    const urgency = dropoff",
+    grep: "gap over the FLEX POOL",
+  },
+  {
+    id: "roster-panel-drops-the-bye-week",
+    shipped: "NF-C2.1 follow-up — pre-emptive: the roster panel stops showing bye weeks",
+    // The bye is the one roster fact a drafter cannot reconstruct from the board in front of them,
+    // and it is a single optional chip in a row that renders perfectly well without it — which is
+    // exactly the shape that gets dropped by a layout tidy-up and noticed by nobody.
+    detail: "Renders the bye chip empty, exactly as a conditional render that stopped firing would.",
+    file: "components/fantasy/mock-draft.tsx",
+    from: "      {bye == null ? \"—\" : `BYE ${bye}`}",
+    to: "      {null}",
+    grep: "carries his bye week",
+  },
+  {
+    id: "nfl-menu-groups-lose-their-labels",
+    shipped: "NF-C2.1 follow-up — pre-emptive: the NFL menu falls back to one flat list",
+    // Twelve items in one undifferentiated column is where it started, and a section whose label
+    // goes null renders as an unheaded run of links that reads as a continuation of the group above
+    // it — visually plausible, and wrong.
+    detail: "Drops the Draft group's label, merging it into the group above.",
+    file: "lib/nav-model.ts",
+    from: '            label: "Draft",',
+    to: "            label: null,",
+    grep: "grouped by job",
+  },
+  {
+    id: "nav-surface-suppression-eats-a-real-header",
+    shipped: "NF-C2.1 follow-up — pre-emptive: the surface-header suppression widens by one word",
+    // ⭐ THE OVER-CORRECTION. Suppressing the surface label when the surface has ANY labelled
+    // section — instead of when it OPENS with one — reads as the same rule and deletes MLB's
+    // "Betting" header, which is the only heading its first six items have. The NFL assertions stay
+    // green throughout, so only the MLB control can catch it.
+    detail: "Suppresses the surface label whenever any section is labelled, not just the first.",
+    file: "components/nav.tsx",
+    from: "!locked && visibleSurfaces(sport).length === 1 && !!firstVisibleSection?.label",
+    to: "!locked && visibleSurfaces(sport).length === 1 && g.sections.some((s) => !!s.label)",
+    grep: "grouped by job",
+  },
 ]
 
 /**
@@ -2108,7 +2193,7 @@ const CASES = [
 // G100-C2 adds ONE case (the multi-league picker reverting to `teams[0]`), RED-proven individually
 // (`-- league-picker`) for the same reason. So 125/119/6 → 126/120/6, and the next full run CONFIRMS
 // it.
-const RECORDED_BOARD = { total: 130, red: 124, notObservable: 6 }
+const RECORDED_BOARD = { total: 136, red: 130, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
