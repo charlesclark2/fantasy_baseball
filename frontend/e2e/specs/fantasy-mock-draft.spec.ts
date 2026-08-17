@@ -309,11 +309,25 @@ async function playToTheEnd(page: Page, rounds = 8) {
       continue
     }
 
-    // A fast-forward click can miss — the button detaches when the room finishes a round underneath
-    // it. Swallowing it is safe because the loop simply re-reads the phase and tries again.
+    // ⭐⭐ THE RACE THAT MADE THIS FILE RED ON CI THREE TIMES, diagnosed from the failure trace:
+    //
+    //     Evaluate (readPhase)                                    → "cpu"
+    //     Click getByRole('button', { name: /Skip to my pick/ })   ← never returns
+    //     Close context { reason: Test timeout of 180000ms exceeded }
+    //
+    // The phase read said "cpu", and between that read and the click the room reached the user's
+    // turn — so the fast-forward button UNMOUNTED. Playwright's `click()` then waits for it to come
+    // back, and with no action timeout configured that wait is the whole test budget. The teardown
+    // screenshot showing "You're on the clock" (with the draft frozen at the pick it had reached)
+    // is the fingerprint: the app was fine and healthy the entire time, and the test was blocked on
+    // a control the app had correctly removed.
+    //
+    // ⇒ a SHORT bound, and swallow it. The button is either present right now or the state has
+    // already moved on, in which case the next loop iteration reads the new phase and acts on it.
+    // Anything longer is dead time multiplied by every fast-forward in the draft.
     await page
       .getByRole("button", { name: /Skip to my pick/ })
-      .click({ timeout: 15_000 })
+      .click({ timeout: 4_000 })
       .catch(() => {})
   }
 }
