@@ -1989,6 +1989,24 @@ const CASES = [
     grep: "switching leagues re-scores the whole page for the selected league",
   },
   {
+    id: "mock-value-lists-inverted",
+    shipped: "NF-C2.1 — the defect this SHIPPED with, reported off a real mock draft",
+    // ⚠️ NOT pre-emptive. This one went out. `vsMarket` was `marketRank - overallPick`, which is
+    // POSITIVE for a REACH, and the screen filed the positive list under "fell furthest past ADP" —
+    // so both lists were exactly backwards. Live example from the report: Jordyn Tyson, taken at
+    // #44 with an ADP of 94, presented as the draft's biggest value when he was a fifty-pick reach.
+    //
+    // It survived because the only assertion on that panel was that it RENDERS. An inverted list
+    // renders perfectly, with plausible names and plausible numbers, and reads as a feature — which
+    // is why the guard that replaced it plants one unambiguous steal and one unambiguous reach and
+    // demands each land in its own list.
+    detail: "Flips the sign of vsMarket, so steals and reaches swap places exactly as they shipped.",
+    file: "lib/mock-draft.ts",
+    from: "      vsMarket: adp == null ? null : Math.round(overallPick - adp),",
+    to: "      vsMarket: adp == null ? null : Math.round(adp - overallPick),",
+    grep: "point the right way",
+  },
+  {
     id: "mock-cpu-ignores-the-market",
     shipped: "NF-C2.1 — pre-emptive: the CPU room quietly stops reading ADP",
     // ⚠️ THE DEFECT WITH NO SYMPTOM. Every visible thing still works — the room picks, the log
@@ -2090,7 +2108,7 @@ const CASES = [
 // G100-C2 adds ONE case (the multi-league picker reverting to `teams[0]`), RED-proven individually
 // (`-- league-picker`) for the same reason. So 125/119/6 → 126/120/6, and the next full run CONFIRMS
 // it.
-const RECORDED_BOARD = { total: 129, red: 123, notObservable: 6 }
+const RECORDED_BOARD = { total: 130, red: 124, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
