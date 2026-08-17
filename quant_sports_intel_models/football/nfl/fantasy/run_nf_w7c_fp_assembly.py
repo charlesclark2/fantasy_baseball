@@ -112,6 +112,32 @@ def _marginals(train: pd.DataFrame, serve: pd.DataFrame, smap: dict) -> dict[str
     return banks
 
 
+def _marginals_for_two(train: pd.DataFrame, first: pd.DataFrame, second: pd.DataFrame,
+                       smap: dict) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """Marginals for TWO serve frames from ONE fit pass — exact, not approximate.
+
+    Every served form is row-independent given `train`, so predicting on `concat(first, second)`
+    yields byte-identical per-row banks to predicting on each separately. `serve_banks` slices
+    each cell to its position's rows with a boolean mask, which PRESERVES ORDER, and `first`
+    precedes `second` in the concatenation — so the split point for a cell is simply that
+    position's row count in `first`. Asserted, not assumed."""
+    combined = pd.concat([first, second], ignore_index=True)
+    banks = _marginals(train, combined, smap)
+    pos_first = first["position"].astype(str).to_numpy()
+    pos_second = second["position"].astype(str).to_numpy()
+    out_a: dict[str, np.ndarray] = {}
+    out_b: dict[str, np.ndarray] = {}
+    for cell, bank in banks.items():
+        pos = cell.split("|", 1)[0]
+        n_a = int((pos_first == pos).sum())
+        n_b = int((pos_second == pos).sum())
+        if len(bank) != n_a + n_b:
+            raise ValueError(f"{cell}: combined bank has {len(bank)} rows but the split expects "
+                             f"{n_a}+{n_b} — the serve concatenation and the slice disagree")
+        out_a[cell], out_b[cell] = bank[:n_a], bank[n_a:]
+    return out_a, out_b
+
+
 # ── One fold × position ─────────────────────────────────────────────────────────────────────────
 def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, smap: dict,
                  weights: np.ndarray, *, draws: int,
@@ -214,12 +240,21 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, smap: d
                                         tr_p["gw"].to_numpy()))
 
     # degenerates — SCORED, never reasoned about (NF1.8 / NF-D14)
-    med = float(np.quantile(tr_p[FA.TARGET].to_numpy(float), 0.5))
-    clim = np.quantile(tr_p[FA.TARGET].to_numpy(float), FA.EVAL_LEVELS)[None, :] \
-        * np.ones((len(te_p), 1))
+    #
+    # ⚠️ SMOKE AMENDMENT (2026-08-16, BEFORE the full run — recorded in the prereg §4). The first
+    # cut located `zero_width` at the train MEDIAN, and on a zero-heavy cohort the median IS 0:
+    # measured on the smoke's QB fold, `zero_width` scored 6.1409 — BYTE-IDENTICAL to
+    # `nihilist_zero`. Two anchors collapsing into one is not a wrong answer (both lose by a mile)
+    # but it is a SILENT LOSS OF EVIDENCE: the sharpness degenerate stops being a distinct test.
+    # The NF-D11/D14 conditional-median lesson, appearing in the anchor set. Locating it at the
+    # MEAN keeps it a point mass (maximally sharp — its whole purpose) while staying positive on a
+    # zero-heavy target, so the two degenerates test different things again.
+    pts_tr = tr_p[FA.TARGET].to_numpy(float)
+    loc = float(np.mean(pts_tr))
+    clim = np.quantile(pts_tr, FA.EVAL_LEVELS)[None, :] * np.ones((len(te_p), 1))
     banks["nihilist_zero"] = np.zeros((len(te_p), FA.N_LEVELS))
-    banks["zero_width"] = np.full_like(clim, med)
-    banks["max_width"] = med + 3.0 * (clim - med)
+    banks["zero_width"] = np.full_like(clim, loc)
+    banks["max_width"] = loc + 3.0 * (clim - loc)
 
     scores: dict[str, float] = {}
     for label, bank in banks.items():
@@ -263,12 +298,19 @@ def run_fold(fold: WP.Fold, feat: pd.DataFrame, smap: dict, *, draws: int) -> di
     # ⭐ ONE marginal build per fold, not one per position: `serve_banks` fits per (form, stat)
     # across every position and then slices, so these are position-INDEPENDENT. Building them
     # inside the position loop repeated the identical ~113 LightGBM fits 4× per fold.
+    #
+    # ⭐⭐ AND ONE BUILD FOR BOTH CONTEXTS. The test context and the residual-PIT context fit the
+    # SAME 27 (form, stat) combos on the SAME train frame — only the PREDICT frame differs — so
+    # building them separately paid for every fit twice (measured: 829.9s, 86% of a 968.1s fold).
+    # Every served form is row-INDEPENDENT given train (fits come from train/core; the serve frame
+    # enters only per row — `predict`, `apply_bank199`, a per-row `imp.transform`), so predicting
+    # on the concatenation and splitting is EXACT, not an approximation.
     t_m = time.time()
-    ctx_te = _marginals(train, test, smap)
     pit_frame = pit_window(train)
-    ctx_pit = _marginals(train, pit_frame, smap)     # fit on FULL train, predict on the window
-    log.info("[W7c] fold %s marginals in %.1fs (test %d rows, pit window %d of %d train rows)",
-             fold.label, time.time() - t_m, len(test), len(pit_frame), len(train))
+    ctx_te, ctx_pit = _marginals_for_two(train, test, pit_frame, smap)
+    log.info("[W7c] fold %s marginals in %.1fs (test %d rows, pit window %d of %d train rows, "
+             "ONE fit pass for both)", fold.label, time.time() - t_m, len(test), len(pit_frame),
+             len(train))
 
     out: dict[str, dict] = {}
     for position in FA.POSITIONS:
@@ -320,6 +362,18 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
     p_perm = M14.onesided_paired_pvalue(perm_lift)
     sd = float(np.nanstd(deltas, ddof=1))
 
+    # Per-form oracle floors, evaluated on the per-FOLD paired series (SMOKE AMENDMENT 2) so a
+    # numerical tie is separable from a real inversion. The FOIL's own oracle runs through the
+    # SAME evaluator as the POSITIVE CONTROL — it peeks at everything and is hugely active
+    # (measured 2.6128 → 1.7592 on the smoke), which is what proves the detector is not simply
+    # returning INACTIVE for everything (a two-sided check, NF1.8's degenerate discipline).
+    oracle_states = {a: FA.oracle_floor_state(mat[a], mat[f"oracle__{a}"], mat[f"matched_n__{a}"],
+                                              indep_by_fold=mat["assembled_indep"])
+                     for a in FA.REAL_ARMS}
+    oracle_control = {f: FA.oracle_floor_state(mat[f], mat[f"oracle__{f}"], mat[f],
+                                               indep_by_fold=mat["assembled_indep"])
+                      for f in FA.FOILS_WITH_ORACLE}
+
     anchors = {
         "degenerates_lose": bool(all(mean_s[d] > mean_s[winner] for d in FA.DEGENERATES)),
         "degenerate_detail": {d: round(float(mean_s[d]), 4) for d in FA.DEGENERATES},
@@ -329,10 +383,21 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
         # NF-D16 (g‴): each arm floored by the peeking version of ITS OWN form — the joint arms
         # NEST one another (Σ=I ⊂ one-factor ⊂ full), so one field-wide ceiling would veto a
         # legitimately-better nested form as a false metric inversion.
+        #
+        # ⭐ SMOKE AMENDMENT 2: THREE-state, not two. A VIOLATED arm still blocks; an INACTIVE one
+        # (the peek could not act — see `FA.oracle_floor_state`) is UNINFORMATIVE and blocks
+        # nothing, but is NAMED so the ceiling is visibly unevaluated rather than quietly passed.
         "oracle_floors_respected_at_matched_n": bool(all(
-            (mean_s[a] > mean_s[f"oracle__{a}"])
-            or (mean_s[f"oracle__{a}"] < mean_s[f"matched_n__{a}"])
-            for a in FA.REAL_ARMS)),
+            oracle_states[a]["state"] != FA.ORACLE_VIOLATED for a in FA.REAL_ARMS)),
+        # ⛔ never let INACTIVE read as a clean pass (NF-D20): the ceiling counts as EVALUATED
+        # only where a peek actually acted.
+        "oracle_ceiling_evaluated": bool(
+            any(oracle_states[a]["state"] == FA.ORACLE_RESPECTED for a in FA.REAL_ARMS)),
+        "winner_oracle_state": oracle_states[winner]["state"],
+        # ⛔ the UNAMENDED clause reported beside the amended one — pre-registered that the
+        # AMENDED one binds, but the reader can see exactly what the amendment changed (NF-D14)
+        "oracle_floors_respected_PRE_AMENDMENT": bool(all(
+            oracle_states[a]["pre_amendment_respected"] for a in FA.REAL_ARMS)),
         # only the foils that HAVE an oracle — `assembled_indep` estimates nothing, so it has
         # none, and inventing one would score a pass on nothing (NF1.7 (a))
         "foils_respect_own_oracle": bool(all(
@@ -371,10 +436,9 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
         "var_trials_sr": (round(float(np.var(np.asarray(trial_srs), ddof=1)), 5)
                           if len(trial_srs) > 1 else None),
         "anchors": anchors,
-        "oracle_detail": {a: {"arm": round(float(mean_s[a]), 4),
-                              "own_form_oracle": round(float(mean_s[f"oracle__{a}"]), 4),
-                              "matched_n": round(float(mean_s[f"matched_n__{a}"]), 4)}
-                          for a in FA.REAL_ARMS},
+        "oracle_detail": oracle_states,
+        # the positive control: an oracle that CAN act, scored by the identical evaluator
+        "oracle_activity_control": oracle_control,
         "permutation_detail": {"permuted_lift_vs_foil_mean": round(float(np.nanmean(perm_lift)), 4),
                                "permuted_lift_p_one_sided": p_perm},
         "coverage": {"winner_coverage_80": cov_w["coverage"], "n_rows": cov_w["n_rows"],
@@ -472,6 +536,14 @@ def derive_verdict_layer(out: dict) -> dict:
         "gate_league": GATE_LEAGUE,
         "declared_field_size": len(FA.REAL_ARMS),
         "promote_blockers": list(FA.PROMOTE_BLOCKERS),
+        # ⭐ SMOKE AMENDMENT 2 — an INACTIVE oracle floor blocks nothing (NF-D20: uninformative,
+        # never a fail) but must never read as a clean pass either, so any position whose ceiling
+        # went unevaluated is NAMED on the verdict itself, where a reader cannot miss it.
+        "positions_with_unevaluated_oracle_ceiling": sorted(
+            p for p, s in present.items()
+            if not s["anchors"]["oracle_ceiling_evaluated"]),
+        "winner_oracle_state": {p: s["anchors"]["winner_oracle_state"]
+                                for p, s in present.items()},
     }
     return out
 
@@ -501,6 +573,11 @@ def write_report(out: dict, path: Path) -> None:
             f"{s['coverage_by_label']['assembled_indep']['coverage']} | "
             f"{s['pit_flatness_winner_max_decile_dev']} | {s['pbo']} | {s['dsr']} | "
             f"{'SHIP' if g['ship'] else 'NULL'} |")
+    L += ["", "⚠️ **A null above is about the FOIL named beside it, not about dependence.** The best "
+          "foil at every position is `foil_direct_points` — a learner pointed straight at league "
+          "points — so a `beats_foil` failure says *assembling from per-stat parts did not beat "
+          "modelling the total directly*, NOT that cross-stat correlation is inert. The next table "
+          "answers the dependence question, and it passes at every position.", ""]
     L += ["", "## Did correlation earn its place?", "",
           "| pos | Δ CRPS vs the matched INDEPENDENT foil | independence under-disperses | "
           "knob moves coverage | winner beats indep on coverage |", "|---|---|---|---|---|"]
@@ -520,7 +597,39 @@ def write_report(out: dict, path: Path) -> None:
     for p, s in out["selections"].items():
         L.append(f"- **{p}** degenerates {s['anchors']['degenerate_detail']} vs winner "
                  f"{s['mean_crps'][s['winner']]}")
-        L.append(f"  - per-form oracle floors (NF-D16 g‴): {s['oracle_detail']}")
+        for a, o in s["oracle_detail"].items():
+            L.append(f"  - oracle floor `{a}`: **{o['state']}** (arm {o['arm']}, own-form oracle "
+                     f"{o['own_form_oracle']}, matched-n {o['matched_n']}, peek gain vs arm "
+                     f"{o['peek_gain_vs_arm']}, inversion p {o['inversion_p_one_sided']})")
+        for f_, o in s.get("oracle_activity_control", {}).items():
+            L.append(f"  - ⭐ activity POSITIVE CONTROL `{f_}`: **{o['state']}**, peek gain "
+                     f"{o['peek_gain_vs_arm']} — proves the detector can see an oracle that acts")
+        if not s["anchors"]["oracle_ceiling_evaluated"]:
+            L.append("  - ⚠️ every per-form oracle here is INACTIVE: the peek estimates Σ on the "
+                     "test block while its arm estimates it on the full train window, so the "
+                     "ceiling is NOT a ceiling. The floor is UNEVALUATED at this position — "
+                     "uninformative, not a pass (NF-D20 / NF-W6d).")
+    if v.get("positions_with_unevaluated_oracle_ceiling"):
+        L += ["", "⚠️ **Oracle ceiling unevaluated at**: "
+              + ", ".join(v["positions_with_unevaluated_oracle_ceiling"])
+              + " — these positions ship (or fail) WITHOUT that anchor's protection.", ""]
+    # ⭐ The labelling belongs IN the record, not only in the JSON: a promote blocker below points
+    # the consumer at `calibration_warning`, and a report that never SHOWS it asks a reader to
+    # trust a field they cannot see (the NF-W6d labelling carry, honoured at the report layer).
+    L += ["", "## What the assembled row is actually made of", "",
+          "| pos | source | priced legs from a bake-off winner | on a calibrated DEFAULT |",
+          "|---|---|---|---|"]
+    for p, lab in out.get("labelling", {}).items():
+        defaults = set(lab.get("default_priced_legs") or ())
+        won = [x for x in lab.get("priced_legs", ()) if x not in defaults]
+        L.append(f"| {p} | `{lab.get('source')}` | {len(won)} of {len(lab.get('priced_legs', ()))}"
+                 f" ({', '.join(won) or 'none'}) | {len(defaults)} |")
+    for p, lab in out.get("labelling", {}).items():
+        if lab.get("calibration_warning"):
+            L.append(f"- **{p}** — {lab['calibration_warning']}")
+        if lab.get("unpriced_legs"):
+            L.append(f"  - legs no preset prices (never scored, never shown): "
+                     f"{', '.join(lab['unpriced_legs'])}")
     L += ["", "## Promote blockers", ""] + [f"- {b}" for b in v["promote_blockers"]] + [""]
     path.write_text("\n".join(L))
 

@@ -88,10 +88,83 @@ field as a contest, not a foregone conclusion.
   `assembled_comonotone`. The comonotone arm is the over-correlated ceiling: it will trivially
   SATISFY the coverage floor, and it must still lose the metric (NF1.8 — a constraint a degenerate
   satisfies is fine; a criterion a degenerate wins is fatal).
-- **ANCHORS:** `permuted_direct`; and **per-form** oracle + matched-n controls for every arm and
-  foil. ⭐ Per-FORM is load-bearing: the joint forms NEST one another (Σ=I ⊂ one-factor ⊂ full), so
-  a single field-wide ceiling would veto a legitimately-better nested form as a false metric
-  inversion (NF-D16 (g‴)).
+
+  ⚠️ **SMOKE AMENDMENT (2026-08-16, BEFORE any full run / any decision).** `zero_width` was first
+  located at the train MEDIAN. The path-proof smoke measured it at **6.1409 on the QB fold —
+  byte-identical to `nihilist_zero`** — because QB league points have a train median of 0, so a
+  median-located point mass IS the all-zero bank. Both still lose by a wide margin, so no verdict
+  was affected; but two anchors collapsing into one is a silent loss of evidence — the sharpness
+  degenerate stops being a distinct test (the NF-D11/D14 conditional-median lesson, appearing in
+  the anchor set). It is now located at the train MEAN: still a point mass (maximally sharp, which
+  is its entire purpose) but positive on a zero-heavy target, so the two degenerates test
+  different things again. Recorded here rather than silently changed.
+
+- **ANCHORS:** `permuted_direct`; and **per-form** oracle + matched-n controls for every real arm,
+  plus an own-form oracle for `foil_direct_points`. ⭐ Per-FORM is load-bearing: the joint forms
+  NEST one another (Σ=I ⊂ one-factor ⊂ full), so a single field-wide ceiling would veto a
+  legitimately-better nested form as a false metric inversion (NF-D16 (g‴)).
+  ⛔ `assembled_indep` deliberately carries **NO** oracle: it estimates nothing, so a peek has
+  nothing to improve and its "oracle" would be byte-identical to the arm itself. An anchor that
+  cannot differ from what it anchors is décor, and scoring it as "respected" would be a pass on
+  nothing (NF1.7 (a) / NF1.9's "a mechanism that cannot act is a finding").
+
+  ⚠️⚠️ **SMOKE AMENDMENT 2 — THE ORACLE FLOOR IS NOW THREE-STATE (2026-08-16, BEFORE any full run
+  / any decision; the amendment is disclosed as SMOKE-INFORMED).**
+
+  The path-proof smoke measured **every** dependence oracle at or BELOW its own arm on the QB
+  fold — `joint_rank` +0.0002, `joint_factor` +0.0007, `joint_double` +0.0048, `joint_pit`
+  +0.0095, all in the ARM's favour — so the two-state clause
+  (`arm > oracle OR oracle < matched_n`) returned **False for all four arms** and would have
+  refused the story at every position regardless of how well the dependence performed.
+
+  **MECHANISM, measured not asserted.** This story's oracle peeks at Σ and nothing else, because
+  an oracle that also refit the marginals would be a DIFFERENT FAMILY (NF1.7 (b)). So it estimates
+  a 13×13 correlation on the ~701-row TEST block while its own arm estimates the same matrix on
+  ~12,622 TRAIN rows. **The peek's information gain is swamped by an ~18× sample-size loss, so the
+  "ceiling" lands BELOW the quantity it is meant to bound.** A peeking oracle is a floor only when
+  the peek's gain exceeds its sample-size loss — NF1.7 (b) facing the direction this story hit.
+  This is the NF-W6d finding verbatim ("a per-form oracle floor that TIES its matched control is
+  INACTIVE, not a refusal — an inactive anchor is UNINFORMATIVE (NF-D20), never a fail"), whose
+  own record cards the fix as belonging in the SHARED gate **because it recurs**. This is the
+  recurrence.
+
+  **THE AMENDED RULE.** `RESPECTED` — the peek beat its own arm or the matched-n control.
+  `VIOLATED` — it beat neither AND the arm's win over it is BOTH significant (α = 0.05, the level
+  this story's permutation clause already uses) AND **material**, defined as at least one tenth of
+  the CRPS that arm CLAIMS over the independent foil. `INACTIVE` — it beat neither and the
+  inversion is a tie. INACTIVE blocks nothing, is **never** scored as a pass (`respected is None`),
+  and is NAMED on the verdict (`positions_with_unevaluated_oracle_ceiling`) so a ship cannot
+  silently claim a protection it never had.
+
+  **WHY MATERIALITY AND NOT SIGNIFICANCE ALONE.** A paired test over folds calls an arbitrarily
+  TINY but CONSISTENT gap significant — a constant-offset series has zero paired variance, so
+  p → 0 on a 2e-4 difference nobody could act on. That is NF-W6's "the ceiling bands must refuse a
+  ceiling that is statistically DEMONSTRABLE but IMMATERIAL". The first cut of this amendment used
+  significance alone and was caught by its own fixture.
+
+  ⛔ **THE CLAUSE REMAINS FALSIFIABLE, AND IT ALREADY DISCRIMINATES ON THE REAL NUMBERS.** Under
+  the amended rule the three raw-scale arms read INACTIVE, but **`joint_pit` reads VIOLATED** — it
+  loses 0.0095 to its own ceiling while claiming only 0.061, i.e. ~15% of its claimed effect. The
+  amendment was NOT tuned until everything passed; the attenuated arm is still called out, and
+  `joint_pit` failing this way is consistent with NF-W7b's finding that residual-PIT estimates are
+  attenuated on zero-heavy discrete margins. A guard that could not fail would be the vacuous-guard
+  class this repo keeps re-learning (NF1.7 (a) / INC-38 / NF-D17).
+
+  **AUDITABILITY.** The UNAMENDED verdict is recorded beside the amended one
+  (`oracle_floors_respected_PRE_AMENDMENT`, and `pre_amendment_respected` per arm), the per-fold
+  contrasts are stored, and the whole verdict layer is re-derivable at zero refit cost
+  (`--rewrite-report`). The amended clause BINDS; the pre-amendment figure is reported so a reader
+  can reverse the decision (NF-D14 — report both, pre-register which binds).
+
+  ⚠️ **THE MATERIALITY FRACTION IS A DESIGN CHOICE MADE BEFORE THE 8-FOLD EVIDENCE EXISTS, AND
+  IT IS SMOKE-INFORMED.** One fold cannot say whether an inversion is CONSISTENT — the smoke's
+  significance is an artefact of replicating a single mean. Only the full run's per-fold series can
+  settle `joint_pit`, and it will do so under the rule fixed here, not one chosen afterwards.
+
+  ⭐ **ACTIVITY POSITIVE CONTROL.** `foil_direct_points`' own oracle peeks at EVERYTHING and
+  measured **2.6128 → 1.7592** on the same smoke. It runs through the IDENTICAL evaluator and must
+  read RESPECTED — which is what proves "inactive" is a measured property of the Σ channel rather
+  than a blanket excuse (NF1.8's two-sided degenerate discipline).
 
 ## 5. Pre-declared arm-movability (a statistic the arm cannot move is décor — NF-MARGIN2 / NF-D20)
 
@@ -165,3 +238,80 @@ Nothing here promotes, publishes or retrains. The serving path (`certified_arms`
 is FAIL-CLOSED on the record: an absent / smoke / wrong-story / NULL-verdict record is REFUSED, so
 a challenger cannot serve itself into existence. `PROMOTE_BLOCKERS` are carried onto the artifact
 and into the report.
+
+---
+
+## 11. POST-RUN FINDINGS (added AFTER the decisive run — 2026-08-16)
+
+⛔ **Nothing in this section changes a gate, a threshold, an arm, or a verdict.** The run's result
+stands exactly as the pre-registration and its two smoke amendments defined it. This records what
+the completed record explains, and what it hands the next story.
+
+### 11.1 The QB PIT-flatness refusal is an AVAILABILITY defect, not a copula defect
+
+QB is the only position failing the pre-registered PIT bar (winner 0.0888; even the best-calibrated
+representation in the field reaches only 0.0563 against a 0.05 bar), so **no arm in the declared
+field could have passed it** — a refusal structural to the field, not a selection accident. For
+scale: a *perfectly* calibrated model at these sample sizes (n ≈ 690) posts a median max-decile
+deviation of **0.0201** and exceeds 0.05 essentially never (4,000-draw simulation).
+
+⭐ **Every representation fails, including `foil_direct_points`, which contains no copula at all**
+(0.0959 — the WORST in the field). So the defect belongs to the target, not to the assembly.
+
+The mechanism, measured on the W6d matrix (84,553 rows): **QB's fitted correlation is mostly "did he
+play", not "how did he play".**
+
+| pos | all-zero rows | ρ̄ all rows | ρ̄ played-only | ratio | PIT (`joint_rank`) |
+|---|---|---|---|---|---|
+| QB | 53.9% | 0.239 | 0.127 | **1.88×** | 0.065 ✗ |
+| RB | 35.2% | 0.189 | 0.143 | 1.32× | 0.025 ✓ |
+| WR | 32.9% | 0.126 | 0.102 | 1.23× | 0.017 ✓ |
+| TE | 42.4% | 0.127 | 0.111 | 1.14× | 0.020 ✓ |
+
+⭐ **The RATIO orders the failure; the SIZE of the zero atom does not.** RB carries the largest
+joint-zero excess over independence (17.6× vs QB's 11.0×) and passes comfortably. What breaks
+calibration is the distance between the MARGINAL dependence and the CONDITIONAL-ON-PLAYING
+dependence — one Gaussian copula is being asked to carry a binary availability factor and a
+within-game co-movement at once, and it fits a compromise between them. A Gaussian copula also has
+**zero tail dependence by construction**, so at ρ̂ ≈ 0.24 it cannot reproduce a 53.9% joint-zero
+atom at all.
+
+That single mechanism explains the whole QB table: `assembled_comonotone` has the BEST PIT (0.0563)
+because perfect dependence is a crude availability factor — every leg goes to zero together — and
+the WORST CRPS (2.6954) because it destroys the within-game structure. `joint_double` compensates
+the attenuation enough to win CRPS while doubling noise and signs indiscriminately, so its
+calibration degrades. **CRPS and PIT rank almost inversely at QB and nowhere else.**
+
+**SUCCESSOR (not run here):** an explicit availability mixture — Bernoulli(plays) × a
+conditional-on-playing joint draw — with Σ estimated on played rows only. ⚠️ **NF-W4 already tested
+an availability mixture and returned a null ×4**, so this is not a free win; NF-W4's target was
+per-stat availability, and no prior story measured the ASSEMBLED total's joint-zero atom, which is
+the specific claim here. A legitimate successor registers a fresh coherent family (MH2 (a)) —
+⛔ never a re-run of this field.
+
+### 11.2 Instrumentation gap: a calibration statistic that discards its own direction
+
+The record stores only `max_decile_dev` — not the decile vector, not WHICH decile is off — and the
+PITs themselves are not stored, so the direction of miscalibration is **not recoverable without
+another run**. §11.1's mechanism was inferred from the arm ORDERING plus the raw matrix, not from
+the PIT shape. Storing ten floats per label per fold would have answered it directly. Any successor
+touching calibration should carry the decile vector.
+
+### 11.3 The assembly's value is POSITION-DEPENDENT — an architectural finding
+
+`foil_direct_points` (a learner pointed straight at league points) BEATS the assembly at QB
+(−0.0025) and RB (−0.0589) and LOSES at WR (+0.0173) and TE (+0.0257). The sign split falls exactly
+at the availability-ratio boundary in §11.1 (RB 1.32 / WR 1.23), which suggests the same
+availability contamination that breaks calibration also decides where assembling from parts is
+worth doing. ⚠️ **SUGGESTIVE ONLY at n = 4 positions** — QB and RB swap order on margin, so this is
+a hypothesis for a successor to register, not a finding of this story.
+
+### 11.4 What the nulls do and do not say
+
+⭐ `classify_null` names the FOIL, not the HYPOTHESIS. QB/RB's `GENUINE_ABSENCE` answers "does
+assembling from per-stat parts beat modelling the total directly?" — **NOT** "does cross-stat
+dependence help?". On the story's own mechanism all three dependence clauses pass at **all four**
+positions, and the assembly beats independent draws by +0.0565 to +0.1051 CRPS while lifting
+coverage from 0.738–0.797 to 0.813–0.886. Reading these nulls as "dependence is dead at QB/RB"
+inverts the result. (Sixth hand-correction of this classifier's phrasing in the vertical — the
+carded instrument fix inherits this shape.)
