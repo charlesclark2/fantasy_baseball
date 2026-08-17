@@ -549,14 +549,17 @@ test("the NFL menu is grouped by job, and MLB keeps its surface headers", async 
   const menu = nflTrigger.locator("xpath=..").locator("div.absolute")
   await expect(menu.getByRole("link", { name: "Mock Draft" })).toBeVisible()
   const text = await menu.innerText()
+  // ⚠️ WHOLE LINES, NOT SUBSTRINGS. The first cut asked whether the menu text CONTAINED "DRAFT",
+  // which "Mock Draft" and "Draft Optimizer" both satisfy — so the clause passed with every group
+  // label deleted and was caught only by the red proof. A section header is its own line.
+  const lines = text.split("\n").map((s) => s.trim().toUpperCase())
 
   // The three groups, in order.
-  const at = (s: string) => text.toUpperCase().indexOf(s)
   for (const label of ["RANKINGS & RESEARCH", "DRAFT", "MY LEAGUES"]) {
-    expect(at(label), `the NFL menu has no "${label}" group — it is a flat list again`)
-      .toBeGreaterThanOrEqual(0)
+    expect(lines, `the NFL menu has no "${label}" group — it is a flat list again`).toContain(label)
   }
-  expect(at("RANKINGS & RESEARCH")).toBeLessThan(at("MY LEAGUES"))
+  expect(lines.indexOf("RANKINGS & RESEARCH")).toBeLessThan(lines.indexOf("DRAFT"))
+  expect(lines.indexOf("DRAFT")).toBeLessThan(lines.indexOf("MY LEAGUES"))
 
   // ⭐ THE ADJACENCY THAT MOTIVATED THE REGROUPING: the practice board and the live board are the
   // two halves of one engine and were four rows apart. Asserted as adjacency, not as an index, so
@@ -575,9 +578,9 @@ test("the NFL menu is grouped by job, and MLB keeps its surface headers", async 
 
   // ⛔ AND THE SURFACE LABEL IS GONE — it was stacked directly on top of "RANKINGS & RESEARCH".
   expect(
-    at("\nFANTASY"),
+    lines,
     `the NFL menu still prints a redundant FANTASY header above its groups:\n${text}`,
-  ).toBe(-1)
+  ).not.toContain("FANTASY")
 
   // ⭐ THE OTHER SIDE OF THE SUPPRESSION, and the clause that stops it becoming "never show a
   // surface label". MLB's Betting surface OPENS with an unlabelled group — Dashboard, EV Tracker,

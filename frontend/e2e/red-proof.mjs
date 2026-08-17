@@ -2105,10 +2105,10 @@ const CASES = [
     // The bye is the one roster fact a drafter cannot reconstruct from the board in front of them,
     // and it is a single optional chip in a row that renders perfectly well without it — which is
     // exactly the shape that gets dropped by a layout tidy-up and noticed by nobody.
-    detail: "Renders the roster rows without the bye chip.",
+    detail: "Renders the bye chip empty, exactly as a conditional render that stopped firing would.",
     file: "components/fantasy/mock-draft.tsx",
-    from: "                <ByeChip\n",
-    to: "                <div hidden><ByeChip\n",
+    from: "      {bye == null ? \"—\" : `BYE ${bye}`}",
+    to: "      {null}",
     grep: "carries his bye week",
   },
   {
