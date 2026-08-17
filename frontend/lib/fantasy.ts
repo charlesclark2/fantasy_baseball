@@ -574,6 +574,21 @@ export interface MyTeamsPayload {
    *  `deploy.sh` runs, so every read uses `?? default` and the skew window renders an honest empty
    *  state rather than `undefined`. */
   rosters?: Record<string, RosterMatchRow[]>
+  // ── NF-K1, ADDITIVE ─────────────────────────────────────────────────────────────────────────
+  /** Which PROJECTABLE positions the served board ACTUALLY carries, read off the board's own rows.
+   *
+   *  🔴 This is what lets an unmatched roster row explain itself. On 2026-08-16 the published board
+   *  carried zero K and zero D/ST, so every rostered kicker and defence rendered "not matched" —
+   *  wording that points a reader at the name join, which was fine and simply had nothing to match
+   *  against. With this, "we have not published that position" is distinguishable from "we could
+   *  not find this player".
+   *
+   *  ⚠️ THREE STATES, AND `undefined` IS NOT `[]`. `undefined` = an older deployed API that does not
+   *  send the key (NF-C0 skew) OR a read the server could not make; `[]` = a board that genuinely
+   *  published no projectable position. Only a non-empty array licenses the "not published" wording
+   *  — on `undefined` the surface falls back to the plain, weaker sentence rather than asserting a
+   *  cause it cannot support. */
+  board_positions?: string[] | null
 }
 
 export function getMyTeams(token: string | null, season: number): Promise<MyTeamsPayload> {

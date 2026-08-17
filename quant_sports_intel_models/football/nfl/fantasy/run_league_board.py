@@ -113,11 +113,15 @@ def load_projection_local(artifacts_dir: Path, season: int,
 
 
 def load_kdst_local(artifacts_dir: Path, season: int) -> pd.DataFrame:
-    """NF1.6 — the K/DST BASE projection, from its own artifact lineage.
+    """NF1.6 — the K/DST BASE projection, from its own artifact lineage. LOCAL ONLY.
 
     Best-effort by design: a missing K/DST artifact must not cost the operator the offensive board,
     which is the draft-critical output. It logs loudly and the K/DST slots fall back to the
-    pre-NF1.6 "declared but unprojected" behaviour rather than failing the run."""
+    pre-NF1.6 "declared but unprojected" behaviour rather than failing the run.
+
+    ⚠️ CALLERS WANT `load_kdst`, NOT THIS. On its own this function is the NF-K1 defect: it is the
+    ONE artifact the box's publish chain READS but never WRITES, and it is gitignored, so on the box
+    "best-effort" meant "silently drop two positions from the published board". See `load_kdst`."""
     p = artifacts_dir / f"nfl_fantasy_kdst_projections_{season}.parquet"
     if not p.exists():
         log.warning("[ALERT] NF1.6 K/DST projection artifact NOT FOUND at %s — the board's K and DST "
@@ -144,6 +148,60 @@ def load_kdst_lake(season: int) -> pd.DataFrame:
         log.warning("[ALERT] NF1.6 K/DST lake read FAILED (%s) — the board's K and DST slots will "
                     "render UNPROJECTED", exc)
         return pd.DataFrame()
+
+
+def load_kdst(artifacts_dir: Path, season: int, *, from_lake: bool = False) -> pd.DataFrame:
+    """THE K/DST entry point every caller must use: LOCAL FIRST, then the LAKE.
+
+    🔴 NF-K1 — THIS IS THE CURE FOR A LIVE REGRESSION, and the mechanism is worth stating exactly,
+    because it is the THIRD instance of one class in this vertical (NF-INFRA1's two were
+    `sports.duckdb` and `ncaaf_nfl_rookie_projections.parquet`).
+
+    `nfl_fantasy_kdst_projections_<season>.parquet` is the ONLY artifact the box's board-publish
+    chain READS but never WRITES:
+
+        run_nf1_5 --mode build        → writes nf1_5_season_projections_<season>.parquet   ✅
+        run_league_board              → writes the board CSVs                              ✅
+        export_draft_board_json       → reads BOTH of the above, plus ↓
+        nfl_fantasy_kdst_projections_<season>.parquet   ← written by NOTHING in the chain  ❌
+
+    and `artifacts/.gitignore` ignores `*.parquet`, so it is ABSENT from the `COPY . .` image. On
+    the laptop it is on disk and everything works; on the box `load_kdst_local` warned once and
+    returned an empty frame, K and DST fell out of BOTH the boards and `projections.json`, and every
+    step still exited 0. Measured: the operator's 2026-08-15 laptop publish shipped 868 players with
+    42 K + 32 DST; the first automated `sports_nfl_board_publish_job` run (2026-08-16 07:15 PT,
+    `generated_at` 14:22:15Z) shipped 795 players with ZERO of either.
+
+    ⭐ THE FALLBACK IS TO THE LAKE, NOT TO A REBUILD. `run_kdst_projection --s3` already lands this
+    projection at `nfl/fantasy/derived/kdst_projections/season=<season>/`, so the data the box needs
+    is already there — it was only ever the local READ that was missing. Adding the model build to
+    the daily publish chain would instead put a heavy preseason fit (and a new failure mode) on a
+    cadence that has no need to refresh it: K/DST is a BASE preseason projection, not a daily one.
+
+    LOCAL-FIRST is deliberate: a laptop build stays byte-identical to what it produced before this
+    change, so this can only ever ADD a path that used to be an empty frame.
+
+    ⛔ AN EMPTY RETURN IS STILL POSSIBLE and is still non-fatal here (a lake outage must not cost the
+    operator the draft-critical offensive board). What makes that safe now is that it can no longer
+    reach users silently: `export_draft_board_json.assert_published_position_coverage` REFUSES to
+    publish a board missing a projectable position."""
+    if from_lake:
+        return load_kdst_lake(season)
+    p = artifacts_dir / f"nfl_fantasy_kdst_projections_{season}.parquet"
+    if p.is_file():
+        return pd.read_parquet(p)
+    log.warning("[ALERT] NF1.6 K/DST projection artifact NOT FOUND at %s (expected on the BOX — it "
+                "is gitignored, so it is absent from the deployed image) — falling back to the S3 "
+                "lake Delta. This is the NF-K1 path.", p)
+    kdf = load_kdst_lake(season)
+    if len(kdf):
+        log.info("NF-K1: K/DST recovered from the lake — %d row(s)", len(kdf))
+    else:
+        log.warning("[ALERT] NF-K1: the K/DST lake fallback ALSO returned nothing for season %s. "
+                    "K and DST will be UNPROJECTED, and the publish guard will refuse to ship "
+                    "that board. Run run_kdst_projection.py --projection-season %s --s3.",
+                    season, season)
+    return kdf
 
 
 def combine_projections(offense: pd.DataFrame, kdst: pd.DataFrame) -> pd.DataFrame:
@@ -460,8 +518,10 @@ def main(argv: list[str] | None = None) -> int:
     #    "not projected". Best-effort: a missing K/DST lineage logs loudly and leaves the offensive
     #    board (the draft-critical output) untouched.
     if not args.no_kdst:
-        kdst = (load_kdst_lake(season) if args.from_lake
-                else load_kdst_local(out_dir, season))
+        # NF-K1 — `load_kdst`, never `load_kdst_local`: on the box the local artifact is absent
+        # (gitignored, and nothing in the publish chain writes it), and the local-only read silently
+        # dropped both positions from every published board. See `load_kdst`.
+        kdst = load_kdst(out_dir, season, from_lake=args.from_lake)
         if len(kdst):
             proj = combine_projections(proj, kdst)
             log.info("NF1.6: folded in %d K/DST rows (%s)", len(kdst),

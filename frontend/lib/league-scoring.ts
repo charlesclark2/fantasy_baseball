@@ -15,7 +15,8 @@
 // through the identical interface they consume an imported or preset one — they cannot tell which.
 
 import type { LeagueConfig, ScoringRules } from "@/lib/league-config"
-import { STAT_FIELD, resolveScoring } from "@/lib/league-config"
+import { POSITIONS, STAT_FIELD, resolveScoring } from "@/lib/league-config"
+import type { UnmatchedCause } from "@/lib/fantasy-claim-copy"
 import type { Player } from "@/lib/draft-optimizer"
 import type { ProjectedPlayer } from "@/lib/fantasy"
 import type { ImportedPlayer } from "@/lib/fantasy-import"
@@ -377,6 +378,36 @@ export interface RosterMatch {
   /** The scored board row for this roster player, or `null` when no match was found in the current
    *  projection universe (an honest miss — see the module note above). */
   board: Player | null
+}
+
+/**
+ * 🔴 NF-K1 — WHY this roster row has no board row, in a form a surface can render.
+ *
+ * `RosterMatch.board === null` has three genuinely different causes and the surface rendered all
+ * three as "not matched" — see `fantasy-claim-copy`'s NF-K1 block for what that cost. This is the
+ * one place that decides which one applies, so the table cell, its tooltip and the card footnote
+ * cannot drift apart (the E9.61 "two renderers of one field are two rule sets" lesson).
+ *
+ * @param position    the roster row's position, as the platform reported it
+ * @param published   the PROJECTABLE positions the served board actually carries
+ *                    (`MyTeamsPayload.board_positions`). `null`/`undefined` = we do not know.
+ *
+ * ⚠️ THE `unknown` FALLBACK IS LOAD-BEARING, not a default-case formality. During the deploy skew
+ * an older API sends no `board_positions`; with an empty array standing in for that, EVERY
+ * unmatched row would claim "we have not published this position" — a confident, wrong,
+ * product-wide cause. Not knowing is reported as not knowing.
+ */
+export function classifyUnmatched(
+  position: string | null | undefined,
+  published: readonly string[] | null | undefined,
+): UnmatchedCause {
+  const pos = normalizePosition(position ?? "")
+  // A position we never project is decidable WITHOUT the server's help — `POSITIONS` is the
+  // client's mirror of the exporter's `PROJECTABLE`. An IDP or punter slot is answerable even on a
+  // skewed deploy, so it is settled before the unknown check.
+  if (!pos || !(POSITIONS as readonly string[]).includes(pos)) return "not-projected"
+  if (!published) return "unknown"
+  return published.includes(pos) ? "unresolved" : "not-published"
 }
 
 /** Join one imported roster onto an already-`buildBoard`'d array. */

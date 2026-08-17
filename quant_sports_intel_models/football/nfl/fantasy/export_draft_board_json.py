@@ -1211,6 +1211,109 @@ def assert_board_projection_source(df: pd.DataFrame, want: str, season: int) -> 
              _PROJECTION_LABEL[want])
 
 
+def _staged_position_coverage(blob: object) -> dict[str, int]:
+    """`{position -> count of rows carrying a real projection}` for one staged board/projections blob.
+
+    ⭐ "CARRYING A REAL PROJECTION" IS THE LOAD-BEARING HALF, and a presence-only count would make
+    this guard VACUOUS on exactly the artifact it exists to catch. `kdst_records` gap-fills a
+    DRAFTABLE-BUT-UNPROJECTED placeholder row for every (pos, team) the projection did not cover, so
+    a board that lost the whole K/DST projection still ships 32 K + 32 DST rows — with `pts: null`.
+    Counting rows would pass the broken board; counting PROJECTED rows fails it.
+
+    `projections.json` carries no placeholders (they exist only on the league boards), so its rows
+    are projected by construction and both readings agree there — which is why the same function
+    serves both files."""
+    rows = blob.get("players") if isinstance(blob, dict) else blob
+    out: dict[str, int] = collections.Counter()
+    if not isinstance(rows, list):
+        return dict(out)
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        pos = str(r.get("pos") or "")
+        # A board row prices its projection in `pts`; a projections.json row in `fpPpr`. A row that
+        # carries NEITHER is a placeholder (or a malformed row) and must not count as coverage.
+        projected = r.get("pts") if "pts" in r else r.get("fpPpr")
+        if pos and projected is not None:
+            out[pos] += 1
+    return dict(out)
+
+
+def assert_published_position_coverage(out_dir: Path, season: int) -> None:
+    """🔒 NF-K1 PUBLISH GUARD — REFUSE to ship a board that lost a whole PROJECTABLE position.
+
+    ⭐ IT READS THE STAGED FILES OFF DISK, not the in-memory records, and that is the entire point.
+    `betting_ml/tests/test_nf1_6_kdst_projection.py` has guarded the K/DST code PATH since NF1.6 and
+    was green throughout this regression; the E2E fixtures still carry 42 K + 32 DST, so no test in
+    the repo could see that production had neither. A guard on the code, on a fixture, or on a
+    record list in memory answers a different question from "what is about to be uploaded". This one
+    opens the bytes.
+
+    THE DEFECT IT CATCHES (measured, not hypothetical — NF-K1, 2026-08-16): the first automated
+    `sports_nfl_board_publish_job` run published `projections.json` with 795 players and ZERO K, ZERO
+    DST, because the gitignored K/DST artifact is absent from the box image and `load_kdst_local`
+    treated that as a warn-and-continue. Every step exited 0; `_verify_published` passed (it checks
+    `generated_at` + `adp_as_of`, neither of which a missing position disturbs); the failure reached
+    users as "not matched" beside every rostered kicker and defence.
+
+    ⛔ IT RAISES ON A DRY RUN TOO, not only on `--publish`. A board missing a projectable position is
+    defective whether or not it is uploaded, staging is where the operator can still act, and a guard
+    that only fires on the publish flag cannot be exercised by the operator who wants to check first.
+
+    ⛔ NO ESCAPE HATCH — no flag, and deliberately no env var (INC-39: an env backdoor left set turns
+    the guard off silently and permanently). If a future board legitimately should not carry a
+    position, that position leaves `PROJECTABLE`, which is a reviewable one-line diff rather than an
+    invisible runtime state.
+
+    The bar is ZERO, not a count threshold: any minimum would be an arbitrary number to argue about
+    and to tune, while "this position vanished" is exactly the failure that occurred.
+
+    ⚠️ SCOPE, stated because it is easy to over-read: this checks the files that WERE staged. A run
+    whose `projections.json` was skipped entirely (the exporter tolerates that by design — the boards
+    are the draft-critical output and the browse endpoint 404s until the blob lands) is judged on its
+    board files alone. That is deliberate: a missing FILE is a loud, visible 404, whereas a file
+    present with a position silently missing is the failure that reached users."""
+    staged = sorted(out_dir.glob("*.json"))
+    checked = [p for p in staged if p.name == "projections.json" or p.name.startswith("board_")]
+    if not checked:
+        # NF1.7 (a): a check that found nothing to check has not passed — it did not run.
+        raise SystemExit(
+            f"NF-K1 position-coverage guard found NO board/projections JSON in {out_dir} — there is "
+            "nothing to publish, and an empty export must never be reported as a clean one.")
+
+    problems: list[str] = []
+    for path in checked:
+        try:
+            blob = json.loads(path.read_text())
+        except Exception as exc:  # noqa: BLE001
+            problems.append(f"{path.name}: UNREADABLE ({type(exc).__name__}: {exc}) — an "
+                            "unverifiable artifact is a failure, never a pass")
+            continue
+        cov = _staged_position_coverage(blob)
+        missing = [p for p in PROJECTABLE if cov.get(p, 0) == 0]
+        if missing:
+            problems.append(
+                f"{path.name}: NO projected rows at {', '.join(missing)} "
+                f"(have {', '.join(f'{p}={cov.get(p, 0)}' for p in PROJECTABLE)})")
+
+    if problems:
+        raise SystemExit(
+            "🔴 NF-K1 PUBLISH REFUSED — the staged board is missing a whole PROJECTABLE position.\n\n"
+            + "\n".join(f"  - {p}" for p in problems)
+            + "\n\nNOTHING WAS PUBLISHED. The board currently serving from S3 is untouched, which is "
+            "the right outcome: a stale-but-complete board beats a fresh one that renders every "
+            "rostered kicker and defence as 'not matched'.\n\n"
+            "MOST LIKELY CAUSE (NF-K1): the K/DST projection did not load. It lives in its OWN "
+            "artifact lineage, which nothing in the publish chain rebuilds, and it is gitignored — "
+            f"so on the box it comes from the lake. Check the run log for '[ALERT] NF1.6 K/DST' and "
+            f"'NF-K1', then rebuild it if the lake partition is genuinely absent:\n"
+            f"  uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_kdst_projection "
+            f"--projection-season {season} --s3\n"
+            f"then re-run this export.")
+    log.info("NF-K1 position coverage OK — every PROJECTABLE position (%s) carries a projected row "
+             "in all %d staged board/projections file(s)", ", ".join(PROJECTABLE), len(checked))
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--season", type=int, default=2026)
@@ -1360,11 +1463,11 @@ def main(argv: list[str] | None = None) -> int:
         # NF1.6: fold the K/DST base projection into the browse surface so those positions are
         # BROWSABLE, not just draftable. Best-effort — a missing K/DST lineage logs loudly and leaves
         # the offensive projections intact (they are the draft-critical output).
-        from quant_sports_intel_models.football.nfl.fantasy.run_league_board import (
-            load_kdst_lake, load_kdst_local,
-        )
-        kdf = (load_kdst_lake(args.season) if args.from_lake
-               else load_kdst_local(_ARTIFACTS, args.season))
+        # NF-K1 — `load_kdst` is LOCAL-FIRST-THEN-LAKE. The previous local-only read is exactly how
+        # the 2026-08-16 automated publish shipped a board with ZERO K and ZERO DST: the artifact is
+        # gitignored, so it is absent from the box image, and nothing in the publish chain writes it.
+        from quant_sports_intel_models.football.nfl.fantasy.run_league_board import load_kdst
+        kdf = load_kdst(_ARTIFACTS, args.season, from_lake=args.from_lake)
         if len(kdf):
             pdf = pd.concat([pdf, kdf], ignore_index=True, sort=False)
             log.info("  projections: folded in %d NF1.6 K/DST rows", len(kdf))
@@ -1494,6 +1597,11 @@ def main(argv: list[str] | None = None) -> int:
     log.info("wrote manifest.json — %d configs, sizes %s, %d combos, %d player-rows total",
              len(configs_present), sorted(sizes_present), combos, total_rows)
     log.info("draft-board JSON staged in %s", out_dir)
+
+    # 🔒 NF-K1 — the LAST thing before the upload decision, and it reads what was just written to
+    # disk rather than anything held in memory. A whole projectable position going missing must
+    # fail the export, not reach users as "not matched" beside every kicker and defence.
+    assert_published_position_coverage(out_dir, args.season)
 
     # Upload to S3 for the server-side-gated /fantasy/nfl/* endpoints (E9.45) — gated behind
     # --publish (NF-D12). Without a bucket the boards are only staged locally (the API then

@@ -510,7 +510,34 @@ def nfl_my_teams(
         # proxy-response cap. A roster is ~20 rows per league. The one full board a page actually
         # needs comes from `/nfl/league-board`, one league at a time.
         "rosters": _scored_rosters(served, season),
+        # 🔴 NF-K1 — which PROJECTABLE positions the served board actually carries, so a roster row
+        # that matched nothing can say WHY. Additive (NF-C0): a deployed client that does not know
+        # this key keeps rendering exactly what it renders today.
+        #
+        # ⚠️ `null`, NOT `[]`, when the projections blob could not be read. An empty list is a real
+        # answer ("the board published no projectable position"), and conflating "we don't know"
+        # with "nothing is published" would make every unmatched row on a degraded read claim the
+        # board is missing that position — a confident wrong explanation is worse than none
+        # (NF1.7 (a)). The client renders the plain "not matched" wording when this is null.
+        "board_positions": _published_positions(season),
     }
+
+
+def _published_positions(season: int) -> list[str] | None:
+    """The PROJECTABLE positions the served board carries, or None if we could not read it.
+
+    Reads through the same memoized `_full_projections` the roster scorer uses, so this costs no
+    extra S3 GET. Best-effort for the same reason `_scored_rosters` is: an unreadable projections
+    blob must never take down the caller's league list."""
+    try:
+        projections = _full_projections(season)
+    except Exception:  # noqa: BLE001
+        logger.warning("could not load projections for %s; board positions unknown", season)
+        return None
+    players = (projections or {}).get("players")
+    if not players:
+        return None
+    return league_scoring.published_positions(players)
 
 
 def _scored_rosters(records: list[dict], season: int) -> dict[str, list[dict]]:
