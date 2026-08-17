@@ -12,6 +12,10 @@
       },
       {
         "tag": "fixed",
+        "text": "Draft screens: a longer recommendation reason was widening the whole page, giving it a horizontal scrollbar and pushing the roster panel off the right edge. Fixed on both the mock draft and the live Draft Optimizer, and the reason itself is shorter now — it names the score and the player's published VOR, with the explanation moved into the panel's tooltip."
+      },
+      {
+        "tag": "fixed",
         "text": "Mock draft: the two post-draft value lists were the wrong way round. \"Fell furthest past ADP\" was showing the players you reached for and \"Taken earliest vs ADP\" the ones who fell to you. Both now read as labelled, and the ADP column shows the player's own average draft position rather than his rank within it."
       },
       {

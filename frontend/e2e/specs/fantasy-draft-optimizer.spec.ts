@@ -259,17 +259,79 @@ test.describe("the FLEX seat is scored on points, not on a position's own replac
     // The re-basing moved his score by 20 points, so it has to be on screen: a panel that shows a
     // score 20 below the VOR the rest of the site publishes, with no explanation, is a number a
     // user is right not to trust.
+    // ⚠️ BOTH NUMBERS, not just the phrase. The row's job is to reconcile the score it shows (22)
+    // with the VOR the rest of the site publishes for the same player (42); a sentence that named
+    // the mechanism without them would explain nothing on the screen where it matters.
     expect(
       te.rationale,
       `te1 was re-based by ${Math.round((te.player.vor ?? 0) - te.seatValue)} points and the reason ` +
         `given was "${te.rationale}"`,
-    ).toContain("FLEX seat's replacement")
+    ).toContain("Scored for the FLEX seat: 22, not his 42 VOR")
     // ⛔ And the within-position cliff must NOT be quoted as the flex bonus's source: te1 sits 32
     // VOR above te2, and citing that gap beside a bonus computed from the flex pool would explain
     // the score with a number the score never touched.
     expect(te.rationale).not.toContain("VOR over the next TE")
   })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// LAYOUT — a long recommendation reason must not widen the page
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// ⭐ SHIPPED, ON DESKTOP, AND REPORTED (operator, 2026-08-17): the flex re-basing added a sentence
+// to the rationale and the whole draft screen grew a horizontal scrollbar with the roster panel
+// pushed off the right edge. Measured at a 1512px viewport before the fix: scrollWidth 2129.
+//
+// The cause is a CSS trap worth naming, because the code LOOKED correct: the rationale row already
+// carried `min-w-0 flex-1` and `truncate`, which is the usual answer. But a GRID item's automatic
+// minimum is its MIN-CONTENT width, `truncate` sets `white-space: nowrap`, and the min-content of
+// nowrap text is the whole sentence — so the `1fr` track grew to fit it. `min-w-0` on the flex child
+// removes the automatic minimum for FLEX layout; it does nothing to the grid track. The grid ITEM
+// needs `min-w-0` too.
+//
+// ⚠️ THE REASON TEXT IS INJECTED. On the committed fixture the real rationales are short enough to
+// fit, so a bare "the page does not scroll sideways" assertion would pass on a broken layout and
+// read as coverage — the vacuous shape this repo keeps finding. The guard plants a rationale long
+// enough to overflow and then asserts the page still does not scroll, which is the actual claim.
+for (const surface of [
+  { name: "the mock draft", path: "/fantasy/mock-draft", start: "Start mock draft" },
+  { name: "the live draft optimizer", path: "/fantasy/draft", start: "Start draft" },
+] as const) {
+  test(`a long recommendation reason never widens the page — ${surface.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: 1512, height: 900 })
+    const errors = collectPageErrors(page)
+    await signIn(page, { groups: ["subscriber"] })
+    await mockApi(page, { entitlement: "entitled", leagues: "none" })
+    await page.goto(surface.path)
+    await page.getByRole("button", { name: surface.start }).click()
+    await expect(page.locator("table tbody tr").first()).toBeVisible()
+
+    const injected = await page.evaluate(() => {
+      const LONG =
+        "Fills an open FLEX (RB-eligible) · Scored for the FLEX seat: 79, not his 92 VOR · " +
+        "+10 VOR over the next FLEX-eligible player · Last of Tier 2 — 18 VOR cliff to the next RB " +
+        "· ⚠ 2 other RB on bye 9"
+      const rows = Array.from(document.querySelectorAll("div.truncate.text-xs"))
+      rows.forEach((d) => ((d as HTMLElement).textContent = LONG))
+      return rows.length
+    })
+    expect(injected, "no rationale rows were found to lengthen — this test would assert on nothing")
+      .toBeGreaterThan(0)
+
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }))
+    expect(
+      scrollWidth,
+      `${surface.name} scrolls sideways with a long recommendation reason: ` +
+        `scrollWidth ${scrollWidth} vs viewport ${clientWidth}. The grid item holding the ` +
+        `recommendation panel needs min-w-0 — truncate makes its min-content the whole sentence.`,
+    ).toBeLessThanOrEqual(clientWidth + 1)
+
+    expectNoPageErrors(errors)
+  })
+}
 
 test.describe("setting up and starting a draft", () => {
   test("the board opens on the chosen league with real numbers and a clock at pick one", async ({
