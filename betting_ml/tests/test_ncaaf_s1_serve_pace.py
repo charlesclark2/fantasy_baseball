@@ -226,6 +226,47 @@ def test_a_post_p1_4_finalize_writes_to_its_own_paths_and_never_over_the_frozen_
     assert "post_p1_4 = contract in POST_P1_4_CONTRACTS" in src
 
 
+def test_a_board_only_publish_cannot_delete_the_calibration_section_from_the_report(tmp_path, monkeypatch):
+    """⭐ The routine publish (`--season X --s3`) computes NO calibration, and the report is written
+    to a FIXED path — so rendering only what THIS run produced silently deleted the whole held-out
+    calibration section, i.e. the gate evidence. It happened on the real S1-serve publish. The
+    section must be re-rendered from the persisted JSON and STAMPED as not-recomputed."""
+    from quant_sports_intel_models.football.ncaaf.models import run_season_simulation as rs
+
+    stored = {"seasons": [2016, 2017], "n_sims": 20000, "strength_sd_scale": 1.0,
+              "generated_at": "2026-08-17T18:00:00+00:00",
+              "expected_wins": {"n": 10, "mae": 1.64, "bias": 0.01, "corr": 0.66},
+              "conference_title": {"n": 8, "base_rate": 0.05, "brier": 0.044, "brier_ref": 0.046,
+                                   "brier_skill_score": 0.04, "mean_pred": 0.078, "reliability": []},
+              "national_title": {"n": 10, "base_rate": 0.01, "brier": 0.006, "brier_ref": 0.007,
+                                 "brier_skill_score": 0.13, "mean_pred": 0.01, "reliability": [],
+                                 "note": "thin"},
+              "champion_preseason_rank": [{"season": 2016, "champion": "X",
+                                           "champion_preseason_rank": 2,
+                                           "champion_preseason_p_natty": 0.09}]}
+    calib_json, report = tmp_path / "ncaaf_p1_5_calibration.json", tmp_path / "report.md"
+    calib_json.write_text(json.dumps(stored))
+    monkeypatch.setattr(rs, "_CALIB_JSON", calib_json)
+    monkeypatch.setattr(rs, "_REPORT_PATH", report)
+
+    rs.write_report(None, None)                      # ← a board-only publish: calib is None
+    text = report.read_text()
+    assert "Held-out calibration" in text, "a board-only publish deleted the gate evidence"
+    assert "0.04" in text and "1.64" in text, "the stored numbers must actually be rendered"
+    assert "NOT recomputed by this run" in text, "a re-rendered section must be stamped as stale"
+    assert "2026-08-17" in text, "…and stamped with WHEN it was computed"
+
+    # two-sided: a run that DID compute the calibration must not carry the stale banner
+    fresh = dict(stored, generated_at="2026-08-18T00:00:00+00:00")
+    rs.write_report(None, fresh)
+    assert "NOT recomputed by this run" not in report.read_text()
+
+    # …and with no stored calibration at all, the report is simply board-only (no crash)
+    calib_json.unlink()
+    rs.write_report(None, None)
+    assert "Held-out calibration" not in report.read_text()
+
+
 def test_the_s1b_registration_record_exists_and_names_the_served_representation():
     from pathlib import Path
     p = Path(_RESULTS_DIR) / "ncaaf_p2_1_s1b_registration.md"

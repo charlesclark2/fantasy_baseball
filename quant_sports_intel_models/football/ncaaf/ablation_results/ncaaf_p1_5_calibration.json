@@ -14,6 +14,7 @@
   ],
   "n_sims": 20000,
   "strength_sd_scale": 1.0,
+  "generated_at": "2026-08-17T18:57:32+00:00",
   "served": {
     "learner": "ridge",
     "contract": "strength_pace",

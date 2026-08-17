@@ -1,6 +1,6 @@
 # NCAAF-P1.5 — season-simulation futures (National Championship + conference titles)
 
-_Generated 2026-08-17T18:01:20.833684+00:00_
+_Generated 2026-08-17T18:57:35.367909+00:00_
 
 > ⚠️ **Product value, not an edge claim.** These are calibrated season-long title probabilities from a posterior-predictive Monte-Carlo on the P1.4 game model. Futures carry a HIGH hold (20–40%) and are brand/public-shaped; `best_alpha = 0` holds — an edge is only claimed if a de-vigged-vs-market number survives the deflation gate over teams×markets×seasons, which needs a historical futures capture that does not exist yet.
 
@@ -13,6 +13,8 @@ _Generated 2026-08-17T18:01:20.833684+00:00_
 ## Held-out calibration (2016–2026 pre-season, vs realized outcomes)
 
 _11 seasons (2016–2026), 20,000 sims each, strength_sd_scale 1.0. The P1.2 thin-seed season (2015, whose pre-season prior is fit on one prior season → near-flat noise) is dropped by default._
+
+> ⏳ **This section was NOT recomputed by this run** — it is re-rendered from `ncaaf_p1_5_calibration.json`, computed 2026-08-17T18:57:32+00:00. A board-only publish does not re-run the gate; pass `--calibrate` to refresh it.
 
 _Served model: `ridge` / `strength_pace` / form `strength_posterior` (σ₀_margin 15.6097); mean artifact `strength_pace`, 27 cols, pace ['pace_sum', 'pace_diff']. ⭐ This gate is a PRE-SEASON read, so the pace term is inert on every season by construction (measured: pace acted on NO season) — any movement vs the pre-S1-serve gate is the σ REFIT under the pace contract, not the pace term._
 

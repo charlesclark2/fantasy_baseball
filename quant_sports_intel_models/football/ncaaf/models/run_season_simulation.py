@@ -448,6 +448,9 @@ def run_calibration(seasons: list[int], cfg: SeasonSimConfig, *,
     natty_df = pd.DataFrame(natty_rows)
     result = {
         "seasons": seasons, "n_sims": cfg.n_sims, "strength_sd_scale": cfg.strength_sd_scale,
+        # read back by `_calibration_for_report` so a board-only publish can re-render this section
+        # and STAMP how old it is, instead of silently deleting it.
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "served": {
             "learner": params.learner, "contract": params.contract, "form": params.form,
             "sigma0_margin": round(float(params.sigma0_margin or params.sigma_margin), 4),
@@ -521,8 +524,37 @@ def _realized_team_wins(season: int, duckdb_path: Path, schema: str = _MARTS_SCH
 # Reporting
 # ══════════════════════════════════════════════════════════════════════════════════════
 
+_CALIB_JSON = _RESULTS_DIR / "ncaaf_p1_5_calibration.json"
+
+
 def board_to_frame(board: SeasonBoard) -> pd.DataFrame:
     return pd.DataFrame(board.teams)
+
+
+def _calibration_for_report(calib: dict | None) -> tuple[dict | None, bool]:
+    """The calibration block to RENDER, and whether this invocation actually computed it.
+
+    ⭐ A board-only run (`--season X --s3`, the routine publish) computes no calibration — and the
+    report is written to a FIXED path, so rendering only what this run produced silently DELETED
+    the entire held-out-calibration section, i.e. the story's gate evidence, on every publish. It
+    happened on the first real S1-serve publish.
+
+    The persisted `ncaaf_p1_5_calibration.json` is the durable record, so the report re-renders it
+    from there and STAMPS it as not-recomputed. Staleness is then visible on the page rather than
+    inferable from an absence (the NF-FRESH2 rule), and a partial run can no longer destroy a
+    fuller artifact (NF-W2c-CBS).
+    """
+    if calib is not None:
+        return calib, True
+    if not _CALIB_JSON.exists():
+        return None, False
+    try:
+        return json.loads(_CALIB_JSON.read_text()), False
+    except Exception as e:                              # noqa: BLE001 — degrade LOUDLY (E11.7)
+        log.warning("[ALERT] could not re-render the stored calibration from %s (%s: %s) — the "
+                    "report will omit that section; it is NOT evidence the gate was not run.",
+                    _CALIB_JSON, type(e).__name__, e)
+        return None, False
 
 
 def write_board_outputs(board: SeasonBoard, out_dir: Path, *, to_s3: bool = False) -> Path:
@@ -545,6 +577,7 @@ def write_board_outputs(board: SeasonBoard, out_dir: Path, *, to_s3: bool = Fals
 
 
 def write_report(board: SeasonBoard | None, calib: dict | None) -> None:
+    calib, calib_is_fresh = _calibration_for_report(calib)
     lines: list[str] = []
     a = lines.append
     a("# NCAAF-P1.5 — season-simulation futures (National Championship + conference titles)")
@@ -586,6 +619,12 @@ def write_report(board: SeasonBoard | None, calib: dict | None) -> None:
           f"strength_sd_scale {calib['strength_sd_scale']}. The P1.2 thin-seed season (2015, whose "
           "pre-season prior is fit on one prior season → near-flat noise) is dropped by default._")
         a("")
+        if not calib_is_fresh:
+            a(f"> ⏳ **This section was NOT recomputed by this run** — it is re-rendered from "
+              f"`{_CALIB_JSON.name}`"
+              + (f", computed {calib['generated_at']}" if calib.get("generated_at") else "")
+              + ". A board-only publish does not re-run the gate; pass `--calibrate` to refresh it.")
+            a("")
         srv = calib.get("served", {})
         if srv:
             ma = srv.get("mean_artifact")
@@ -755,8 +794,8 @@ def main(argv: list[str] | None = None) -> int:
         log.info("calibration over seasons %s (%d sims each)", seasons, args.n_sims)
         calib = run_calibration(seasons, cfg, duckdb_path=duckdb_path,
                                 loss_penalty=args.loss_penalty, use_pace=not args.no_pace)
-        (_RESULTS_DIR / "ncaaf_p1_5_calibration.json").write_text(json.dumps(calib, indent=2, default=float))
-        log.info("calibration → %s", _RESULTS_DIR / "ncaaf_p1_5_calibration.json")
+        _CALIB_JSON.write_text(json.dumps(calib, indent=2, default=float))
+        log.info("calibration → %s", _CALIB_JSON)
 
     if args.season is not None:
         board = run_board(args.season, args.as_of_week, cfg, duckdb_path=duckdb_path,

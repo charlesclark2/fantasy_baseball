@@ -146,6 +146,21 @@ are now closed by isolating clauses (NF-D17: an AND-composed wiring needs one fi
   callers together and the equality guard only proves they AGREE. Now paired with a clause that
   pins the arithmetic itself.
 
+### 4e. A third defect, found by the publish itself
+
+The operator's first real board publish (`--season 2026 --s3`) **silently deleted the entire
+held-out-calibration section from the tracked P1.5 report** — the story's own gate evidence. Cause:
+a board-only run computes no calibration, `write_report` rendered only what THAT invocation
+produced, and the report path is fixed. It would have recurred on every board refresh forever,
+and the deletion is invisible unless someone diffs the file.
+
+Fixed: the section is now re-rendered from the persisted `ncaaf_p1_5_calibration.json` and
+**stamped** `⏳ NOT recomputed by this run — computed <ISO timestamp>`. Staleness is visible on the
+page rather than inferable from an absence (NF-FRESH2), and a partial run can no longer destroy a
+fuller artifact (NF-W2c-CBS). ⚠️ Note this is the SECOND instance of that class in one story — the
+first was the finalize clobbering P1.4's calibration record (§ above). Both were fixed-output-path
+writes in a stage a later story reused; neither raised, and neither was visible in any test run.
+
 ## 6. Operator step (post-merge)
 
 Everything above is already built and committed. The only remaining action is the board publish:
