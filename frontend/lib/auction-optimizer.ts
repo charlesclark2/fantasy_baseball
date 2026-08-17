@@ -35,10 +35,23 @@ import {
  *  minimum, and every derivation below is written in terms of it. */
 export const DEFAULT_MIN_BID = 1
 
-/** The budget the published boards' `aucVal`/`aucLo`/`aucHi` are quoted at. ⚠️ Read
- *  `manifest.auctionBudget` in preference to this — it is what the exporter actually used, and a
- *  re-price that assumed the wrong base currency would be silently wrong rather than obviously so.
- *  This is the fallback for a manifest that predates the field. */
+/**
+ * The budget the published boards' `aucVal`/`aucLo`/`aucHi` are quoted at.
+ *
+ * ⭐ WHY THIS CLIENT RECOMPUTES RATHER THAN READING THE EXPORTED COLUMN, which is worth stating so
+ * the column does not read as dead code. The board is exported once, quoted at ONE budget; a real
+ * league can be on $100 or $300, and the values are not a linear rescale of each other (the
+ * minimum-bid reserve does not scale with the budget). So reading `aucVal` would be right only for
+ * a $200 league and quietly wrong for every other one.
+ *
+ * Recomputing from `vor` is exact at any budget and goes through the same formula the exporter
+ * used — pinned to it by `auction_vectors.json` — so at $200 the two agree by construction rather
+ * than by coincidence. The exported column remains the authoritative published value for any
+ * consumer that is not this client.
+ *
+ * ⚠️ `manifest.auctionBudget` is what the exporter ACTUALLY used; this is the fallback for a
+ * manifest that predates the field.
+ */
 export const DEFAULT_AUCTION_BUDGET = 200
 
 /**
