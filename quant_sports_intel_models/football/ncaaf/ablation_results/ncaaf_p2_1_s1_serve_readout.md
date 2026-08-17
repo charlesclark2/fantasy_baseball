@@ -168,8 +168,15 @@ Everything above is already built and committed. The only remaining action is th
 ```bash
 # LAPTOP, from the repo root, after the PR merges to dev
 AWS_DEFAULT_REGION=us-east-2 uv run python -m \
-    quant_sports_intel_models.football.ncaaf.models.run_season_simulation --season 2026 --s3
+    quant_sports_intel_models.football.ncaaf.models.run_season_simulation \
+    --season 2026 --n-sims 20000 --s3
 ```
+
+⚠️ **Pass `--n-sims 20000` explicitly.** The CLI default is **10,000**, but every P1.5 record — and
+the board table in this repo's report — is at 20,000. An earlier draft of this command omitted the
+flag and the first publish went out at the 10,000-sim default: not wrong, just a different
+Monte-Carlo precision from the documented convention, and the S3 board carries no `n_sims` column
+to tell them apart (the sim count is only in the LOCAL meta sidecar).
 
 To rebuild the served artifacts from scratch instead of taking the committed ones (also LAPTOP,
 ~30 s total; needs AWS for the CLV join):
