@@ -686,3 +686,82 @@ export const REPORT_UPGRADE_DETAIL =
   "This report is a snapshot of draft day. A membership keeps it current: your board re-scored as projections move, start/sit and waiver calls worked in your league's scoring rather than left to you, several leagues instead of one, and the ranges beside every number so you can see how much of a call is real."
 
 export const REPORT_UPGRADE_CTA = "See membership options"
+
+// ══ NF-K1 — WHY A ROSTER ROW HAS NO PROJECTION BESIDE IT ════════════════════════════════════════
+//
+// 🔴 THE ONE-WORD ANSWER COST TWO INVESTIGATIONS. Every unmatched row rendered the same "not
+// matched", and on 2026-08-16 the published board carried ZERO K and ZERO D/ST — so every rostered
+// kicker and defence wore wording that describes a NAME-RESOLUTION failure, pointing the reader
+// (and two sessions of debugging) straight at the NF-C6P3 D/ST franchise join. That join was
+// correct throughout; it simply had nothing to match against. One phrase was doing three jobs:
+//
+//   not-published  we did not ship that position on this board — OUR gap, nothing could have
+//                  matched, and no re-import will help. Only claimable when the server tells us
+//                  which positions the board carries (`board_positions`).
+//   unresolved     the position IS on the board and this particular name missed — the one case
+//                  where re-importing genuinely helps.
+//   not-projected  a position we do not project at all (IDP, punters, coaches). Working as
+//                  intended, and nothing for the reader to do.
+//   unknown        we cannot tell which of the above it is (an older API that sends no
+//                  `board_positions`, or a read the server could not make). Falls back to the
+//                  original wording — ⛔ a confident wrong cause is worse than an unspecific one,
+//                  which is exactly what "not matched" was on every kicker for a day.
+//
+// ⛔ NO CELL PROMISES A FIX IT CANNOT DELIVER. "Re-import" appears ONLY under `unresolved`; telling
+// a user to re-import a roster whose position we never published sends them round a loop that
+// cannot terminate.
+
+/** The four causes a roster row can have no projection for. */
+export type UnmatchedCause = "not-published" | "unresolved" | "not-projected" | "unknown"
+
+/** The short in-table label. Kept to a few words — it sits in a narrow numeric column beside the
+ *  points, and the full sentence lives in the tooltip/footnote below. */
+export const UNMATCHED_LABEL: Record<UnmatchedCause, string> = {
+  "not-published": "not published",
+  unresolved: "name not matched",
+  "not-projected": "not projected",
+  unknown: "not matched",
+}
+
+/** The explanation, one per cause. Rendered as the cell's title and in the per-card footnote. */
+export const UNMATCHED_DETAIL: Record<UnmatchedCause, string> = {
+  "not-published":
+    "We have not published a projection for this position on the current board, so there was nothing for this player to match against. This is a gap on our side, not a problem with your roster — re-importing will not change it.",
+  unresolved:
+    "We publish this position, but we could not match this particular name to a player on our board. Re-importing the league usually fixes it.",
+  "not-projected":
+    "We do not project this position, so there is no number to show. Your roster is fine; this slot is simply outside what we cover.",
+  unknown:
+    "We could not match this player to our board — either a name we could not resolve, or a player we do not project.",
+}
+
+/** The per-card footnote, assembled from the causes actually present on THIS roster.
+ *
+ *  ⚠️ It names the POSITIONS in the not-published case. "We have not published kickers" is
+ *  actionable reading; "some players are unmatched" is the sentence that hid a two-position outage
+ *  for a day. */
+export function unmatchedFootnote(
+  matched: number,
+  total: number,
+  causes: { cause: UnmatchedCause; positions: string[] }[],
+): string {
+  const head = `${matched} of ${total} rostered players matched to a season projection.`
+  const parts = causes.map(({ cause, positions }) => {
+    const posList = positions.filter(Boolean).join(" and ")
+    if (cause === "not-published") {
+      return posList
+        ? `We have not published ${posList} projections on the current board, so those slots could not match — that gap is ours, and re-importing will not fill it.`
+        : "Some positions are not on the current board, so those slots could not match."
+    }
+    if (cause === "unresolved") {
+      return "Some names did not resolve to a player on our board — re-importing the league usually fixes those."
+    }
+    if (cause === "not-projected") {
+      return posList
+        ? `We do not project ${posList}, so those slots have no number.`
+        : "Some slots are positions we do not project."
+    }
+    return "The rest are shown without one (a name we could not resolve, or a player we do not project)."
+  })
+  return [head, ...parts].join(" ")
+}

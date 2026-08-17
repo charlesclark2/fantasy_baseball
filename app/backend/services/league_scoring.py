@@ -618,6 +618,37 @@ def _join_key(name: str, pos: str | None, team: str | None) -> str:
     return f"{normalize_player_name(name)}|{position}"
 
 
+#: The positions the season projection is SUPPOSED to publish. Server-side mirror of the exporter's
+#: `export_draft_board_json.PROJECTABLE` and the client's `league-config.POSITIONS` — the three must
+#: agree, and `test_nf_k1_kdst_board_coverage.py` pins them to each other.
+PROJECTABLE_POSITIONS: tuple[str, ...] = ("QB", "RB", "WR", "TE", "K", "DST")
+
+
+def published_positions(board_players: list[dict]) -> list[str]:
+    """Which PROJECTABLE positions this board actually carries — read off the board, never declared.
+
+    🔴 NF-K1 — THIS EXISTS TO MAKE A NON-MATCH EXPLICABLE. A roster row that finds nothing on the
+    board has three genuinely different causes, and the surface rendered all three as the single
+    word "not matched":
+
+      1. the position is not on the board AT ALL  → nothing could have matched, and it is OUR gap
+      2. the position IS published, this name missed → a name-resolution failure on one player
+      3. we do not project that position at all     → an IDP/punter slot; working as intended
+
+    Cause 1 is the one that cost two investigations. On 2026-08-16 the published board carried ZERO
+    K and ZERO DST rows, so every rostered kicker and defence read "not matched" — which points a
+    reader straight at the NF-C6P3 D/ST franchise join (cause 2), a join that was perfectly fine and
+    simply had nothing to match against. The board KNOWS which positions it published; saying so is
+    what separates "we didn't ship this" from "we couldn't find your guy".
+
+    ⭐ DERIVED FROM THE ROWS, NOT FROM A CONSTANT. Returning `PROJECTABLE_POSITIONS` would restate
+    what the exporter INTENDED and would have reported K and DST as published throughout the outage
+    — the "documented ≠ actually served" class. A position counts as published only if a row exists
+    for it, so this can only ever describe the board in hand."""
+    seen = {normalize_position(p.get("pos")) for p in board_players if isinstance(p, dict)}
+    return [p for p in PROJECTABLE_POSITIONS if p in seen]
+
+
 def match_roster_to_board(roster: list[dict], board_players: list[dict]) -> list[dict]:
     """Join an imported roster onto an already-scored board, by normalized name + position.
 

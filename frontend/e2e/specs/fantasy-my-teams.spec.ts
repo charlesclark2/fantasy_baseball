@@ -2,6 +2,9 @@ import { expect, test, type Page } from "@playwright/test"
 import {
   E2E_LINEUP_GAP_LEAGUES,
   E2E_LINKED_LEAGUES,
+  E2E_ROSTERED_DST,
+  E2E_ROSTERED_IDP,
+  E2E_ROSTERED_KICKER,
   E2E_UNMATCHED_ROSTER_NAME,
   collectPageErrors,
   linkedRosterStarters,
@@ -67,7 +70,7 @@ async function openMyTeams(
   page: Page,
   // `drafted` is the single-league post-draft fixture — NF-C6b uses it for the "one team gets a
   // total but no ranking" case, which `linked` (two leagues) structurally cannot express.
-  leagues: "linked" | "none" | "one" | "drafted" | "lineupGap" = "linked",
+  leagues: "linked" | "none" | "one" | "drafted" | "lineupGap" | "kdstGap" = "linked",
 ) {
   const errors = collectPageErrors(page)
   await signIn(page, { groups: ["subscriber"] })
@@ -468,3 +471,113 @@ test.describe("the states a real account is actually in", () => {
   })
 })
 
+
+// ══ NF-K1 — WHY a row has no projection, not just THAT it has none ══════════════════════════════
+//
+// 🔴 THE REGRESSION THIS SUITE COULD NOT SEE. On 2026-08-16 the published board carried 795 players
+// and ZERO K, ZERO D/ST, so every rostered kicker and defence rendered the single word "not
+// matched" — wording that describes a NAME-RESOLUTION failure and duly sent two investigations at
+// the NF-C6P3 D/ST franchise join, which was working correctly and simply had nothing to match
+// against. The E2E fixtures still carried 42 K + 32 DST, so no spec here could reproduce it; the
+// `kdstGap` mode serves the board that actually shipped.
+//
+// ⭐ ALL FOUR CAUSES RENDER IN ONE PAGE, and that is deliberate: the defect was that ONE phrase
+// covered all of them, so a spec asserting them one at a time on separate fixtures would not have
+// shown the thing that was wrong.
+test.describe("an unmatched roster row says WHY", () => {
+  const causeOf = (page: Page, name: string) =>
+    page
+      .locator("tr")
+      .filter({ hasText: name })
+      .first()
+      .getByTestId("unmatched-cell")
+
+  test("a kicker and a defence on a board that published neither read 'not published'", async ({
+    page,
+  }) => {
+    const { errors } = await openMyTeams(page, "kdstGap")
+
+    for (const name of [E2E_ROSTERED_KICKER(), E2E_ROSTERED_DST]) {
+      const cell = causeOf(page, name)
+      await expect(
+        cell,
+        `${name} rendered no cause at all — the row is not being classified`,
+      ).toBeVisible()
+      await expect(
+        cell,
+        `${name} is on a position the board did not publish, but the surface blamed the name join`,
+      ).toHaveAttribute("data-cause", "not-published")
+      // ⛔ The exact wording that cost the investigations must be gone from these two cells.
+      await expect(cell).toHaveText(/not published/i)
+      await expect(cell).not.toHaveText(/^not matched$/i)
+    }
+
+    await expectNoNaN(page)
+    expectNoPageErrors(errors)
+  })
+
+  test("a name we could not resolve still reads as a name problem", async ({ page }) => {
+    // ⭐ THE CONTROL, and the half that makes the test above meaningful: a surface that relabelled
+    // EVERY unmatched row "not published" would pass the first test and be just as wrong. WR is a
+    // published position, so this row's failure genuinely is the name join.
+    const { errors } = await openMyTeams(page, "kdstGap")
+
+    const cell = causeOf(page, E2E_UNMATCHED_ROSTER_NAME)
+    await expect(cell).toHaveAttribute("data-cause", "unresolved")
+    await expect(cell).toHaveText(/name not matched/i)
+
+    await expectNoNaN(page)
+    expectNoPageErrors(errors)
+  })
+
+  test("a position we do not project says so, rather than implying something broke", async ({
+    page,
+  }) => {
+    const { errors } = await openMyTeams(page, "kdstGap")
+
+    const cell = causeOf(page, E2E_ROSTERED_IDP)
+    await expect(cell).toHaveAttribute("data-cause", "not-projected")
+    await expect(cell).toHaveText(/not projected/i)
+
+    await expectNoNaN(page)
+    expectNoPageErrors(errors)
+  })
+
+  test("the card footnote names the missing positions and does not send the user round a loop", async ({
+    page,
+  }) => {
+    // The footnote is where a reader who scanned past the cells finds out what happened. It must
+    // name the POSITIONS ("some players are unmatched" is the sentence that hid a two-position
+    // outage for a day) and must NOT prescribe a re-import for a gap a re-import cannot fix.
+    const { errors } = await openMyTeams(page, "kdstGap")
+
+    const note = page.getByTestId("unmatched-footnote").first()
+    await expect(note).toBeVisible()
+    await expect(note).toHaveText(/have not published/i)
+    await expect(note).toHaveText(/\bK\b|kicker/i)
+    await expect(note).toHaveText(/DST|D\/ST|defence|defense/i)
+    // ⚠️ SCOPED TO THE not-published CLAUSE, not the whole footnote. This roster carries an
+    // unresolved row TOO, and for that one "re-importing usually fixes those" is the correct and
+    // useful advice — a blanket scan over the footnote would forbid the sentence that helps, which
+    // is the negation-blind failure this suite has already paid for once. What must hold is that
+    // the clause about the UNPUBLISHED positions owns the gap and sends nobody round a loop.
+    const text = await note.innerText()
+    const notPublished = text.slice(text.search(/we have not published/i)).split(/(?<=\.)\s/)[0]
+    expect(notPublished, "the not-published clause did not render").toMatch(/have not published/i)
+    expect(
+      notPublished,
+      "the footnote tells the user to re-import to fix a position we never published",
+    ).not.toMatch(/usually fixes/i)
+    expect(
+      notPublished,
+      "the footnote does not say that a re-import will NOT fill this gap",
+    ).toMatch(/will not fill it/i)
+
+    const forbidden = forbiddenPhrasesIn(await note.innerText())
+    expect(forbidden, `denylisted phrasing in the unmatched footnote: ${forbidden.join(", ")}`)
+      .toEqual([])
+
+    await expectNoNaN(page)
+    expectNoPageErrors(errors)
+  })
+})

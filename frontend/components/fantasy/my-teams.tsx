@@ -59,12 +59,17 @@ import {
   portfolioGapHeadline,
   portfolioUnfilledNote,
   portfolioUnscoredNote,
+  UNMATCHED_DETAIL,
+  UNMATCHED_LABEL,
+  unmatchedFootnote,
+  type UnmatchedCause,
 } from "@/lib/fantasy-claim-copy"
 import type { RosterMatch } from "@/lib/league-scoring"
+import { classifyUnmatched } from "@/lib/league-scoring"
 import { GAP_EPSILON, portfolioRollup, teamRollup, type TeamRollup } from "@/lib/portfolio-rollup"
 
 export function MyTeams() {
-  const { teams, isLoading, isError } = useMyTeams()
+  const { teams, isLoading, isError, boardPositions } = useMyTeams()
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -95,7 +100,11 @@ export function MyTeams() {
               comparison; burying it under N roster tables is the list this page already was. */}
           <PortfolioSummary teams={teams} />
           {teams.map((entry) => (
-            <LeagueCard key={entry.league.league_id} entry={entry} />
+            <LeagueCard
+              key={entry.league.league_id}
+              entry={entry}
+              boardPositions={boardPositions}
+            />
           ))}
         </div>
       )}
@@ -257,7 +266,13 @@ function TeamTotal({ rollup }: { rollup: TeamRollup }) {
   )
 }
 
-function LeagueCard({ entry }: { entry: MyTeamEntry }) {
+function LeagueCard({
+  entry,
+  boardPositions,
+}: {
+  entry: MyTeamEntry
+  boardPositions: string[] | null
+}) {
   const { league, roster } = entry
   // NF-C6 fix: "linked" and "has any rostered players" are DIFFERENT states, and conflating them
   // produced a genuinely wrong message — a pre-draft league (ESPN/Sleeper both warn about this at
@@ -313,13 +328,13 @@ function LeagueCard({ entry }: { entry: MyTeamEntry }) {
       {linked && hasPlayers && (
         <>
           {rollup && <TeamTotal rollup={rollup} />}
-          <RosterTable label="Starters" rows={starters} />
-          <RosterTable label="Bench" rows={bench} />
+          <RosterTable label="Starters" rows={starters} boardPositions={boardPositions} />
+          <RosterTable label="Bench" rows={bench} boardPositions={boardPositions} />
           {unmatchedCount > 0 && (
-            <p className="mt-2 text-[11px] text-gray-600">
-              {matchedCount} of {roster.length} rostered players matched to a season projection; the
-              rest are shown without one (a name we could not resolve, or a player we do not
-              project).
+            // NF-K1 — the footnote now NAMES the cause (and the positions), instead of the one
+            // sentence that read as a name-resolution failure for every unmatched row.
+            <p className="mt-2 text-[11px] text-gray-600" data-testid="unmatched-footnote">
+              {unmatchedFootnote(matchedCount, roster.length, unmatchedCauses(roster, boardPositions))}
             </p>
           )}
           <p className="mt-3 text-[11px] text-gray-600">
@@ -332,7 +347,40 @@ function LeagueCard({ entry }: { entry: MyTeamEntry }) {
   )
 }
 
-function RosterTable({ label, rows }: { label: string; rows: RosterMatch[] }) {
+/**
+ * NF-K1 — the distinct causes present on ONE roster, each with the positions it applies to, in a
+ * stable order so the footnote reads the same way twice.
+ *
+ * ⚠️ Built from the SAME `classifyUnmatched` the table cells call. A footnote that counted causes
+ * its own way would be free to disagree with the cells right above it (E9.61).
+ */
+function unmatchedCauses(
+  roster: RosterMatch[],
+  boardPositions: string[] | null,
+): { cause: UnmatchedCause; positions: string[] }[] {
+  const order: UnmatchedCause[] = ["not-published", "unresolved", "not-projected", "unknown"]
+  const byCause = new Map<UnmatchedCause, Set<string>>()
+  for (const r of roster) {
+    if (r.board) continue
+    const cause = classifyUnmatched(r.roster.position, boardPositions)
+    const set = byCause.get(cause) ?? new Set<string>()
+    if (r.roster.position) set.add(r.roster.position)
+    byCause.set(cause, set)
+  }
+  return order
+    .filter((c) => byCause.has(c))
+    .map((cause) => ({ cause, positions: [...(byCause.get(cause) ?? [])].sort() }))
+}
+
+function RosterTable({
+  label,
+  rows,
+  boardPositions,
+}: {
+  label: string
+  rows: RosterMatch[]
+  boardPositions: string[] | null
+}) {
   if (rows.length === 0) return null
   return (
     // NF-C6b — a stable hook so the rollup gate can sum THIS table rather than traversing the card's
@@ -372,7 +420,20 @@ function RosterTable({ label, rows }: { label: string; rows: RosterMatch[] }) {
                   {r.roster.team ?? "—"}
                 </td>
                 <td className="py-1 pr-2 text-right text-gray-200">
-                  {r.board ? num(r.board.pts) : <span className="text-gray-600">not matched</span>}
+                  {r.board ? (
+                    num(r.board.pts)
+                  ) : (
+                    // NF-K1 — the cell says WHICH of the three reasons applies. The full sentence
+                    // is the title, so the cause is available on hover as well as in the footnote.
+                    <span
+                      className="text-gray-600"
+                      data-testid="unmatched-cell"
+                      data-cause={classifyUnmatched(r.roster.position, boardPositions)}
+                      title={UNMATCHED_DETAIL[classifyUnmatched(r.roster.position, boardPositions)]}
+                    >
+                      {UNMATCHED_LABEL[classifyUnmatched(r.roster.position, boardPositions)]}
+                    </span>
+                  )}
                 </td>
                 <td className="hidden py-1 pr-2 text-right sm:table-cell">
                   {r.board ? <RangeCell p10={r.board.ptsP10} p90={r.board.ptsP90} /> : "—"}

@@ -356,7 +356,13 @@ export function useMyTeams() {
     }))
   }, [query.data])
 
-  return { ...query, teams }
+  // NF-K1 — which PROJECTABLE positions the served board carries, so an unmatched roster row can
+  // say WHY. ⚠️ NOT `?? []`: undefined (an older API, or a read the server could not make) must
+  // stay undefined, because `[]` is the real answer "no position is published" and would make every
+  // unmatched row claim a cause we cannot support. See `classifyUnmatched`.
+  const boardPositions = query.data?.board_positions ?? null
+
+  return { ...query, teams, boardPositions }
 }
 
 /** A saved league is selected as `custom:<league_id>` in the same control as the shipped presets. */
