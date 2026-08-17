@@ -4,7 +4,7 @@
     "items": [
       {
         "tag": "added",
-        "text": "My Teams now totals each of your teams and ranks them. Every roster's starters are added up on that league's own scoring — a full-season projected starting-points total, before kickoff — and a summary at the top of the page puts your teams in order. Because your leagues do not all score the same way, those totals are not like-for-like: a league that pays for receptions produces a bigger number than one that does not, for the very same players. The page says so beside the table, along with the fact that we total the lineup your platform reported rather than the best one we could pick for you."
+        "text": "My Teams now shows what each of your teams is projected to score — twice. \"Your current starters\" totals the lineup your platform reports; \"your best possible lineup\" totals the best legal one we could field from the same roster. The difference is the headline: how many projected points you are leaving on your bench, league by league. Both figures are full-season projections before kickoff, scored on that league's own rules, so the bench number is unaffected by the differences between your leagues. A summary at the top orders your teams by their best possible lineup — a rough guide only, since your leagues neither score the same way nor start the same number of players, and the page says so beside the table."
       },
       {
         "tag": "added",
