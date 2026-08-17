@@ -30,6 +30,8 @@ DDL (created inline at startup if not exists):
     CREATE TABLE IF NOT EXISTS baseball_data.statsapi.player_profiles_raw (
         player_id              NUMBER        NOT NULL,
         full_name              TEXT,
+        first_name             TEXT,
+        last_name              TEXT,
         birth_date             DATE,
         height_inches          NUMBER,
         weight_lbs             NUMBER,
@@ -87,6 +89,14 @@ _DDL = f"""
 CREATE TABLE IF NOT EXISTS {TARGET_DB}.{TARGET_SCHEMA}.{TARGET_TABLE} (
     player_id              NUMBER        NOT NULL,
     full_name              TEXT,
+    -- E5.10 follow-up: StatsAPI /people has ALWAYS returned firstName/lastName; this ingest
+    -- simply discarded them. They are captured now because the downstream player-name
+    -- dimension needs NAME PARTS from a source that STATES them — splitting a full_name is
+    -- wrong for "Vladimir Guerrero Jr." and every multi-word surname (the NF-C0e / E9.61
+    -- name-mangling class). Existing rows carry NULL until re-fetched; the dimension builder
+    -- coalesces to its frozen archive meanwhile.
+    first_name             TEXT,
+    last_name              TEXT,
     birth_date             DATE,
     height_inches          NUMBER,
     weight_lbs             NUMBER,
@@ -95,6 +105,29 @@ CREATE TABLE IF NOT EXISTS {TARGET_DB}.{TARGET_SCHEMA}.{TARGET_TABLE} (
     last_fetched_at        TIMESTAMP_NTZ
 )
 """
+
+# Columns added AFTER the table was first created. `CREATE TABLE IF NOT EXISTS` is a no-op on an
+# existing table, so a plain DDL edit would never reach production — these ALTERs are how the new
+# columns actually land. Snowflake has no `ADD COLUMN IF NOT EXISTS`, so a duplicate-column error
+# is the expected steady state and is swallowed; anything else propagates.
+_ALTERS = (
+    f"ALTER TABLE {TARGET_DB}.{TARGET_SCHEMA}.{TARGET_TABLE} ADD COLUMN first_name TEXT",
+    f"ALTER TABLE {TARGET_DB}.{TARGET_SCHEMA}.{TARGET_TABLE} ADD COLUMN last_name TEXT",
+)
+
+
+def ensure_name_part_columns(conn) -> None:
+    """Add first_name/last_name to player_profiles_raw if they are not there yet (idempotent)."""
+    for stmt in _ALTERS:
+        try:
+            with conn.cursor() as cur:
+                cur.execute(stmt)
+            log.info("Added column via: %s", stmt.split("ADD COLUMN")[-1].strip())
+        except Exception as exc:  # noqa: BLE001
+            if "already exists" in str(exc).lower() or "duplicate" in str(exc).lower():
+                continue
+            raise
+
 
 # ── Snowflake connection ───────────────────────────────────────────────────────
 
@@ -157,6 +190,9 @@ def parse_person(p: dict) -> dict | None:
     return {
         "player_id":             str(pid),
         "full_name":             p.get("fullName") or "",
+        # ⛔ Taken verbatim from the payload — never derived by splitting fullName.
+        "first_name":            p.get("firstName") or "",
+        "last_name":             p.get("lastName") or "",
         "birth_date":            p.get("birthDate") or "",
         "height_inches":         str(parse_height_inches(height_raw)) if height_raw else "",
         "weight_lbs":            str(p.get("weight") or ""),
@@ -180,6 +216,8 @@ def insert_profiles(conn: snowflake.connector.SnowflakeConnection, profiles: lis
             CREATE TEMPORARY TABLE {tmp} (
                 player_id              VARCHAR,
                 full_name              VARCHAR,
+                first_name             VARCHAR,
+                last_name              VARCHAR,
                 birth_date             VARCHAR,
                 height_inches          VARCHAR,
                 weight_lbs             VARCHAR,
@@ -191,7 +229,7 @@ def insert_profiles(conn: snowflake.connector.SnowflakeConnection, profiles: lis
 
         cur.executemany(
             f"""INSERT INTO {tmp} VALUES (
-                %(player_id)s, %(full_name)s, %(birth_date)s,
+                %(player_id)s, %(full_name)s, %(first_name)s, %(last_name)s, %(birth_date)s,
                 %(height_inches)s, %(weight_lbs)s, %(primary_position_code)s,
                 %(active)s, %(last_fetched_at)s
             )""",
@@ -200,12 +238,14 @@ def insert_profiles(conn: snowflake.connector.SnowflakeConnection, profiles: lis
 
         cur.execute(f"""
             INSERT INTO {TARGET_DB}.{TARGET_SCHEMA}.{TARGET_TABLE} (
-                player_id, full_name, birth_date, height_inches, weight_lbs,
-                primary_position_code, active, last_fetched_at
+                player_id, full_name, first_name, last_name, birth_date, height_inches,
+                weight_lbs, primary_position_code, active, last_fetched_at
             )
             SELECT
                 TRY_TO_NUMBER(player_id),
                 full_name::TEXT,
+                NULLIF(first_name, '')::TEXT,
+                NULLIF(last_name, '')::TEXT,
                 TRY_TO_DATE(birth_date),
                 TRY_TO_NUMBER(height_inches),
                 TRY_TO_NUMBER(weight_lbs),
@@ -486,6 +526,9 @@ def main() -> None:
     try:
         with conn.cursor() as cur:
             cur.execute(_DDL)
+        # CREATE TABLE IF NOT EXISTS is a no-op on the live table, so the first_name/last_name
+        # columns only ever land through this ALTER path.
+        ensure_name_part_columns(conn)
         log.info("player_profiles table ready")
 
         if args.command == "backfill":

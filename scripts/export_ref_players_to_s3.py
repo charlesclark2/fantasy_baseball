@@ -1,23 +1,35 @@
 """
 export_ref_players_to_s3.py
 ---------------------------
-E11.1-W1 lakehouse gap-closer: export BASEBALL_DATA.SAVANT.REF_PLAYERS from
-Snowflake to S3 Parquet so the dbt-duckdb lakehouse build can resolve the
-player-name dimension.
+Seed the FROZEN HISTORICAL ARCHIVE layer of the player-name dimension.
 
-Closes the 2026-06-23 duckdb build failure: mart_pitch_hitter_profile and
-mart_pitch_pitcher_profile join the savant.ref_players source directly, but
-savant sources have no duckdb resolution (only stg_batter_pitches has a
-target.name=='duckdb' S3-read branch). Those two marts compiled to the
-Snowflake FQN `baseball_data.savant.ref_players` and failed with
-"Catalog baseball_data does not exist". stg_ref_players.sql now reads the
-Parquet this script writes when target.name == 'duckdb'.
+⛔ THIS IS NOT A LIVE WRITER, AND ITS SOURCE IS DEAD.
+   `baseball_data.savant.ref_players` has NO writer anywhere in this repo — no ingest, no dbt
+   model, no op (verified by a whole-repo grep, this story). Snowflake reports it
+   `last_altered = 2025-10-13` with `max(mlb_played_last) = 2025`. It is a one-time historical
+   load that will never advance again. Re-running this script CANNOT make the dimension fresher;
+   it only re-copies the same 25,900 rows.
 
-Writes a single Parquet file (the table is small, ~25.9k rows) to:
-  s3://baseball-betting-ml-artifacts/baseball/lakehouse/stg_ref_players/part-0.parquet
+WHAT CHANGED (E5.10 follow-up)
+------------------------------
+This script used to write `baseball/lakehouse/stg_ref_players/` — the prefix ~11 consumers read
+directly. Because nothing scheduled it, that prefix sat 53 days stale holding ZERO 2026 players,
+and a serving writer silently skipped 34 batters. The fix does NOT schedule this script (that
+would refresh an mtime over dead content and make an INC-41 freshness SLA read GREEN forever —
+the exact false-green INC-41 exists to prevent). Instead:
 
-Run ONCE before the next `dbtf run --target duckdb --select ... mart_pitch_*`.
-Re-run when ref_players changes (new players added — infrequent).
+  * this script now writes `baseball/lakehouse/stg_ref_players_archive/`, a prefix whose NAME
+    declares that it is frozen, so it can never again be mistaken for a live table;
+  * `scripts/build_ref_players_dimension.py` MERGES this archive under the LIVE
+    `player_profiles_raw` feed and writes the `stg_ref_players/` prefix every consumer reads.
+
+The archive still earns its place: measured over the whole Statcast history, it misses ZERO
+pre-2020 debutants while the live profiles feed misses 471 of them (profiles was backfilled from
+`mart_pitch_play_event WHERE game_year >= 2020`). Live fixes the present; the archive holds the
+past. Dropping either one regresses coverage.
+
+⇒ RUN THIS ONLY to (re-)seed the archive prefix — a fresh bucket, a restored environment, or a
+   one-off correction to the historical table. Routine freshness is `build_ref_players_dimension.py`.
 
 Usage:
   uv run python scripts/export_ref_players_to_s3.py
@@ -42,7 +54,9 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 load_dotenv()
 
 _S3_BUCKET = "baseball-betting-ml-artifacts"
-_S3_KEY = "baseball/lakehouse/stg_ref_players/part-0.parquet"
+# ⛔ The ARCHIVE prefix, deliberately NOT the live `stg_ref_players/` prefix consumers read.
+# Writing the live prefix from this dead source is the defect this story fixed.
+_S3_KEY = "baseball/lakehouse/stg_ref_players_archive/part-0.parquet"
 _SNOWFLAKE_TABLE = "BASEBALL_DATA.SAVANT.REF_PLAYERS"
 
 
@@ -90,7 +104,7 @@ def main():
         print("  dry-run — no S3 write")
         return
 
-    tmp_path = Path("/tmp/stg_ref_players.parquet")
+    tmp_path = Path("/tmp/stg_ref_players_archive.parquet")
     pq.write_table(pa.Table.from_pandas(df, preserve_index=False), str(tmp_path))
 
     # INC-16 (AWS re-host): pass explicit keys ONLY when present (local/static-cred dev); else
@@ -108,7 +122,8 @@ def main():
 
     print(f"\nExport complete. {len(df):,} rows.")
     print("\nNext step:")
-    print("  dbtf run --target duckdb --select stg_ref_players mart_pitch_hitter_profile mart_pitch_pitcher_profile")
+    print("  uv run python scripts/build_ref_players_dimension.py   "
+          "# merge this archive under the LIVE feed and publish stg_ref_players/")
 
 
 if __name__ == "__main__":

@@ -9,6 +9,12 @@ WITH ranked AS (
     SELECT
         player_id,
         full_name,
+        -- E5.10 follow-up: authoritative StatsAPI name PARTS (never split from full_name).
+        -- NULL on rows written before the ingest captured them; the ref_players dimension
+        -- coalesces to its frozen archive meanwhile. union_by_name in the read below means a
+        -- pre-change parquet file simply yields NULL rather than failing the build.
+        first_name,
+        last_name,
         birth_date,
         height_inches,
         weight_lbs,
@@ -25,6 +31,8 @@ WITH ranked AS (
 SELECT
     player_id,
     full_name,
+    first_name,
+    last_name,
     birth_date,
     -- Coerce out-of-range StatsAPI bio values to NULL (placeholder/zero rows from new
     -- player records). accepted_range skips NULLs; downstream clustering imputes.

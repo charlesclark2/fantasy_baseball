@@ -2395,6 +2395,74 @@ def reexport_player_profiles_op(context):
                 f"[player-profiles-mirror] send_alert failed (non-fatal): {alert_exc}")
 
 
+@op(ins={"start": In(Nothing)}, out=Out(Nothing))
+def build_ref_players_dimension_op(context):
+    """E5.10 follow-up — rebuild the stg_ref_players player-name dimension from LIVE sources.
+
+    THE DEFECT. ``stg_ref_players`` was written by ``scripts/export_ref_players_to_s3.py``, a job
+    whose own docstring said "Run ONCE", referenced by NO op, schedule or workflow. E5.10 found the
+    parquet 53 days stale with ZERO players at ``mlb_played_last = 2026``; the batter-TB writer
+    silently skipped 34 batters, and ~11 other consumers read the same frozen prefix.
+
+    ⭐ WHY THIS OP RUNS A NEW SCRIPT RATHER THAN SCHEDULING THE OLD EXPORT. The Snowflake source is
+    ITSELF dead: ``savant.ref_players`` has no writer anywhere in the repo and reports
+    ``last_altered = 2025-10-13`` (~308 days) with ``max(mlb_played_last) = 2025``. Scheduling the
+    old export would re-copy the same 25,900 rows on a timer — refreshing the object's mtime while
+    the content stayed 2025, and making any freshness SLA laid on top read GREEN forever. That is
+    the INC-41 false-green failure mode reached from the writer side. A scheduled writer only fixes
+    staleness when it has something live to write, so the builder merges the LIVE
+    ``player_profiles_raw`` feed over the frozen export (now parked at ``stg_ref_players_archive/``).
+
+    ⚠️ ORDERING IS LOAD-BEARING (INC-25). The builder reads the S3 ``player_profiles_raw`` MIRROR,
+    which ``reexport_player_profiles_op`` refreshes. Wired UPSTREAM of that leaf it would consume
+    the previous cycle's mirror — the exact "consumer built before its source refresh" shape that
+    took a slate down in INC-25 — so in ``weekly_player_profiles_job`` it fans out strictly AFTER
+    the re-export. It also runs in the DAILY job, because debutants appear daily while the profiles
+    writer is weekly: the daily pass still picks up new Statcast appearances (which is what moves
+    ``mlb_played_last``) from the previous night's mirror.
+
+    TIER — ALERT-loud-but-continue that really pages (E11.30: a tier enforced only by a docstring is
+    not enforced at all). NEVER HALT: this is a peripheral identity dimension. Nothing on the
+    predict/serving path gates on it — the two consuming marts are name-enrichment only, and the
+    serving writer that surfaced the bug already treats it as a FALLBACK behind the posted-lineup
+    feed. A failure must cost names, never a slate.
+
+    An unbound FAN-OUT LEAF with a finite ``timeout=`` — INC-32 applies even to a leaf, because
+    ``in_process_executor`` runs steps one at a time topologically, so a hung leaf stalls the job.
+
+    ⛔ UNGATED, deliberately: a flag-gated mirror freezes silently the moment the flag lapses, which
+    is the class of bug this op exists to close (cf. W7B_LAKEHOUSE_S3 documented-but-never-set).
+    """
+    try:
+        _run_script(context, "build_ref_players_dimension.py", [], timeout=1800)
+        context.log.info(
+            "[ref-players-dimension] rebuilt stg_ref_players from the live player_profiles feed "
+            "over the frozen archive."
+        )
+    except Exception as exc:  # noqa: BLE001 — ALERT tier; a name dimension must never stop the job.
+        msg = (
+            "build_ref_players_dimension_op failed; stg_ref_players is now serving whatever "
+            "vintage it last published and will NOT self-heal until this op next succeeds. "
+            "Consequences: newly-debuted players resolve to no name in mart_pitch_hitter_profile "
+            "/ mart_pitch_pitcher_profile, the batter/pitcher clustering scripts, the prop-name "
+            "bridges (build_batter_prop_substrate, edge_devig_props) and the zone-overlay name "
+            "lookups. NO slate is withheld and no prediction changes — names only. Note the "
+            "builder REFUSES to publish a dimension carrying fewer than 200 current-season "
+            "players, so a failure here may be that guard correctly refusing an archive-only "
+            "rebuild: check that player_profiles_raw and stg_batter_pitches are both current, and "
+            "that the stg_ref_players_archive/ prefix is seeded. "
+            f"Error: {exc}"
+        )
+        context.log.warning("[ALERT] " + msg)
+        try:
+            from pipeline.utils.alerting import send_alert
+            send_alert("stg_ref_players dimension rebuild failed", msg,
+                       severity="ERROR", dedup_key="ref_players_dimension_rebuild")
+        except Exception as alert_exc:  # noqa: BLE001 — a failed page must not fail the op
+            context.log.warning(
+                f"[ref-players-dimension] send_alert failed (non-fatal): {alert_exc}")
+
+
 # ── API cache warm (A0.3) ────────────────────────────────────────────────────
 
 @op(
