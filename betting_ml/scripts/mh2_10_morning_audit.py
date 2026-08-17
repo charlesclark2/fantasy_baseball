@@ -1287,12 +1287,25 @@ def write_report(r: dict, controls: dict | None = None) -> Path:
           "the one above it, and it is `POWER_LIMITED`.")
         A("")
         gn2 = t.get("games_needed") or {}
+        more_days = max(int(np.ceil(
+            (gn2["games_needed"] - t["n_served_rows"])
+            / max(t["n_served_rows"] / max(t["n_dates"], 1), 1))), 0) if gn2.get(
+            "games_needed") else None
         if gn2.get("games_needed"):
-            A(f"⭐ **The trigger is REACHABLE BY WAITING, which makes it a live re-test rather than "
-              f"a future note (MH2).** ≈{gn2['games_needed']:,} served morning games at the "
-              f"observed magnitude — ≈{max(int(np.ceil((gn2['games_needed'] - t['n_served_rows']) / max(t['n_served_rows'] / max(t['n_dates'], 1), 1))), 0):,} "
-              f"more days of serving. ⛔ No new modelling, no wider field, no different statistic "
-              f"is needed — only games.")
+            A(f"⭐ **The trigger is REACHABLE BY ACCUMULATION, which makes it a live re-test rather "
+              f"than a future note (MH2).** ≈{gn2['games_needed']:,} served morning games at the "
+              f"observed magnitude — ≈{more_days:,} more days of serving. ⛔ No new modelling, no "
+              f"wider field, no different statistic is needed — only games.")
+            A("")
+            A(f"⚠️ **But say the calendar part out loud, because \"reachable\" is doing a lot of "
+              f"work.** ≈{more_days:,} serving days is longer than the remainder of a regular "
+              f"season, so this re-test **crosses an off-season** — it is reachable, but not "
+              f"THIS year. And it is **conditional on `{MORNING_CHAMPION}` still being the served "
+              f"morning champion**: any retrain resets the era and the count starts again, because "
+              f"the population is defined by the champion, not by the calendar. ⇒ the honest "
+              f"trigger is *\"re-run when the served morning era reaches "
+              f"≈{gn2['games_needed']:,} games\"*, ⛔ never *\"re-run in "
+              f"{more_days:,} days\"*.")
             A("")
     A("### What a Phase 2 would have to be, if the re-test ever declares it")
     A("")
