@@ -6,10 +6,15 @@ models:
 
   - name: stg_ref_players
     description: >
-      Player-name dimension (savant.ref_players), resolvable on BOTH the Snowflake
-      and duckdb/S3 lakehouse targets. On duckdb it reads the Parquet written by
-      scripts/export_ref_players_to_s3.py; on Snowflake it is a passthrough view
-      over the source. Exists to let the duckdb-built mart_pitch_hitter_profile /
+      Player-name dimension, resolvable on BOTH the Snowflake and duckdb/S3 lakehouse
+      targets. On duckdb it reads the Parquet written by
+      scripts/build_ref_players_dimension.py, which merges the LIVE player_profiles_raw
+      feed over the FROZEN historical export (stg_ref_players_archive/, seeded by
+      scripts/export_ref_players_to_s3.py). Before this story the duckdb parquet was that
+      frozen export alone, on no schedule — 53 days stale with ZERO 2026 players (E5.10).
+      ⚠️ The Snowflake branch is a passthrough over savant.ref_players, which has NO writer
+      and has not advanced since 2025-10-13; it has no consumer today (both mart_pitch_*
+      marts are duckdb-only) and must not gain one without being repointed. Exists to let the duckdb-built mart_pitch_hitter_profile /
       mart_pitch_pitcher_profile resolve the name join without hitting the
       Snowflake-only `baseball_data.savant.ref_players` FQN. Grain is one row per
       player BUT mlb_bam_id is NOT unique (~1.2k legacy/non-MLB dup ids that never
@@ -24,11 +29,29 @@ models:
       - name: last_name
         description: Player last name.
       - name: player_name
-        description: Display name.
+        description: >
+          Display name. "Last, First" whenever first_name and last_name are both known
+          (the historical convention every consumer's normaliser expects). For a player the
+          live feed knows only by full name — a recent debutant whose StatsAPI name parts
+          have not been captured yet — this falls back to the "First Last" display form
+          rather than guessing a split, because splitting a full name is wrong for
+          "Vladimir Guerrero Jr." and every multi-word surname. betting_ml/utils/prop_edge.py
+          already normalises BOTH forms.
       - name: mlb_played_first
-        description: First MLB season the player appeared (float in source; cast downstream).
+        description: >
+          First MLB season the player appeared (float; cast downstream). Derived live from
+          min(game_year) over the player's Statcast appearances, falling back to the frozen
+          archive for players with none.
       - name: mlb_played_last
-        description: Last MLB season the player appeared (float in source; cast downstream).
+        description: >
+          Last MLB season the player appeared (float; cast downstream). Derived live from
+          max(game_year) over the player's Statcast appearances. This is the column E5.10
+          found frozen at 2025 for every player.
+      - name: built_at
+        description: >
+          UTC ISO timestamp stamped by build_ref_players_dimension.py at publish. The INC-41
+          freshness contract reads it from INSIDE the parquet — never an S3 LastModified,
+          which an atomic server-side copy refreshes even on unchanged data.
 
   # ── Odds API staging models ──────────────────────────────────────────────────
 

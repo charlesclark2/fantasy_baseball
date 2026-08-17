@@ -205,6 +205,37 @@ REGISTRY: tuple[FreshnessContract, ...] = (
         ),
         remediate="check the daily job's W8a step, then rebuild: run_w1_lakehouse.py --w8a-only",
     ),
+    FreshnessContract(
+        name="stg_ref_players",
+        ts_table="stg_ref_players",
+        # A genuine BUILD stamp written by build_ref_players_dimension.py at publish — NOT an
+        # inherited feed timestamp (the trap that got feature_pregame_game_features_raw REJECTED
+        # from this registry: its only temporal column recorded when the joined odds were
+        # captured, so it measured 40h stale on a healthy store).
+        ts_expr="max(try_cast(built_at as timestamp))",
+        # Rebuilt as a leaf of the 12:00 UTC daily job AND of the weekly profiles job. 30h admits
+        # a late or slow daily run — this leaf sits at the end of a long chain — while still
+        # catching the multi-DAY freeze class, which is the only class that has ever bitten here.
+        max_lag_minutes=30 * 60,
+        active_hours_utc=ALWAYS,
+        cadence="daily (leaf of the 12:00 UTC daily_ingestion_job) + weekly_player_profiles_job",
+        why=(
+            "the player-name dimension ~11 consumers read directly from S3 — the two mart_pitch_* "
+            "name-enrichment marts, the batter/pitcher clustering scripts, the prop name→id "
+            "bridges and the zone-overlay name lookups. This is the artifact whose silent rot "
+            "E5.10 found: no scheduled writer at all, 53 days stale, ZERO players at "
+            "mlb_played_last=2026, and a serving writer quietly skipping 34 batters. ⭐ THE POINT "
+            "OF THIS ENTRY IS THAT THE OLD FAILURE WAS INVISIBLE TO EVERY SOURCE-WATCHING CHECK: "
+            "the feed was fine, the marts built, nothing raised — only an assertion on the "
+            "DERIVED artifact can see it. Frozen = new players resolve to no name; no slate is "
+            "withheld and no prediction changes"
+        ),
+        remediate=(
+            "rebuild: uv run python scripts/build_ref_players_dimension.py — and if it REFUSES on "
+            "the current-season coverage floor, that is the guard working: check player_profiles_raw "
+            "and stg_batter_pitches are current and that the stg_ref_players_archive/ prefix exists"
+        ),
+    ),
 )
 
 

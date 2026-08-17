@@ -31,6 +31,13 @@ from dataclasses import dataclass, field
 # Mirrors `league_config.CONFIG_FORMAT_VERSION` — pinned by the parity test.
 CONFIG_FORMAT_VERSION = "1.0"
 
+# NF-C5. Mirrors `auction.DEFAULT_AUCTION_BUDGET`, pinned by the same parity test.
+# ⚠️ MIRRORED RATHER THAN IMPORTED, deliberately and consistently with the line above: this module
+# runs in the API Lambda, where pulling in the engine package would put its transitive imports on
+# the cold-start path (the PERF finding — a module-scope import cost every caller ~4s until it was
+# made lazy). A two-line constant with a parity test is the cheaper half of that trade.
+DEFAULT_AUCTION_BUDGET = 200
+
 # The canonical flex eligibilities the NFL presets use (`league_presets._FLEX_ELIG` /
 # `_SUPERFLEX_ELIG`). A platform slot name maps onto one of these; the ACTUAL eligibility always
 # travels in `RosterSlot.eligible`, never in the slot's name.
@@ -261,6 +268,19 @@ def build_config(
             for s in roster
         ],
         "captured_rules": dict(captured_rules or {}),
+        # ── NF-C5 — the DRAFT TYPE travels with the config ────────────────────────────────────
+        # ⚠️ REQUIRED HERE, not optional. The shared-contract invariant is that an imported config
+        # round-trips through `LeagueConfig.from_dict(...).to_dict()` BYTE-IDENTICALLY, and the
+        # engine now always emits these two keys — so omitting them here breaks the round-trip for
+        # every platform at once (which is exactly how this was caught).
+        #
+        # ⭐ HARDCODED TO SNAKE ON PURPOSE, AND IT IS AN HONEST DEFAULT RATHER THAN A GUESS. No
+        # platform adapter reads a draft type today, so inferring one would be inventing a fact
+        # about the user's league. Snake is what every imported league is until the user says
+        # otherwise on the auction surface, and a wrong "auction" here would attach a budget nobody
+        # set. When an adapter learns to read the real setting, it passes it through.
+        "draft_type": "snake",
+        "auction_budget": DEFAULT_AUCTION_BUDGET,
     }
 
 

@@ -2155,6 +2155,75 @@ const CASES = [
     to: "!locked && visibleSurfaces(sport).length === 1 && g.sections.some((s) => !!s.label)",
     grep: "grouped by job",
   },
+  {
+    id: "auction-strands-a-roster-spot",
+    shipped: "NF-C5 — pre-emptive: the max bid lets a user spend down to an unfillable roster",
+    // ⭐ THE ONE CORRECTNESS PROPERTY OF THE WHOLE TOOL. An empty starter slot scores zero, so a
+    // bid that consumes the money the remaining spots need is not a trade-off — it is a wrong
+    // answer, and it is invisible until the end of the auction when there is nothing to be done
+    // about it. Dropping the reserve leaves every other number on screen looking entirely normal.
+    detail: "Removes the reserve, so a single bid may consume every remaining dollar.",
+    file: "lib/auction-optimizer.ts",
+    from: "  const affordable = budget - minBid * (slots - 1)",
+    to: "  const affordable = budget",
+    grep: "strand a roster spot",
+  },
+  {
+    id: "auction-opens-off-par",
+    shipped: "NF-C5 — pre-emptive: the surplus is divided by the whole board, not the draftable set",
+    // ⭐ THE DEFECT THIS STORY ACTUALLY SHIPPED AND CAUGHT. Money allocated to players nobody will
+    // roster leaves the draftable set worth a fraction of the room, and the auction opens telling
+    // every user that prices are ~2x value before a dollar is spent. Measured on the real board
+    // fixture (722 above-replacement rows against 180 roster spots): 2.06x.
+    //
+    // ⚠️ NO UNIT OF ARITHMETIC ON A NORMALLY-SHAPED BOARD CAN SEE THIS — the eligible set and the
+    // whole board coincide there. Only the face-validity check against a real payload can.
+    detail: "Divides the surplus by every above-replacement row rather than the draftable set.",
+    file: "lib/auction-optimizer.ts",
+    from: "  const totalVor = draftable.reduce((a, i) => a + vals[i], 0)",
+    to: "  const totalVor = vals.reduce((a, b) => a + b, 0)",
+    grep: "prices at par",
+  },
+  {
+    id: "auction-inflation-reads-backwards",
+    shipped: "NF-C5 — pre-emptive: the inflation multiplier is inverted",
+    // The direction is the entire signal, and inverting it is the single most plausible mistake in
+    // the module: it turns "the room has overspent, what is left is cheap" into "prices are high",
+    // and every max bid moves the wrong way with it. Every number on screen stays finite and
+    // plausible, which is why a rendered-output scan cannot catch it and a directional test must.
+    detail: "Inverts the multiplier, so an overpaying room reads as an expensive one.",
+    file: "lib/auction-optimizer.ts",
+    from: "    multiplier: valueRemaining > 0 ? dollars / valueRemaining : 1,",
+    to: "    multiplier: valueRemaining > 0 ? valueRemaining / dollars : 1,",
+    grep: "overpaying deflates",
+  },
+  {
+    id: "auction-money-renders-as-zero",
+    shipped: "NF-C5 — pre-emptive: a missing dollar value renders as $0 instead of an em-dash",
+    // "We have no value for him" and "he is worth nothing" are different facts, and on an auction
+    // board the second one is an instruction. A `$0` beside a player is a plausible-looking number
+    // that nothing else on the page contradicts.
+    detail: "Makes the shared money formatter coerce a null to $0.",
+    file: "lib/auction-optimizer.ts",
+    from: '  v == null || !Number.isFinite(v) ? "—" : `$${Math.round(v)}`',
+    to: "  `$${Math.round(Number(v))}`",
+    grep: "em-dash",
+  },
+  {
+    id: "auction-sold-ignores-the-chosen-team",
+    shipped: "NF-C5 — REAL, reported live 2026-08-17: every rival win was charged to one team",
+    // ⭐ THE ACTUAL SHIPPED DEFECT, restored exactly: `Sold` hardcoded `myTeam === 1 ? 2 : 1`, so
+    // the room panel was wrong AND — past that team's roster size — its extra buys became invisible
+    // to `openSlots`, which is the denominator `inflation` divides by.
+    //
+    // ⚠️ The regression test uses TWO different rival teams on purpose. A single rival sale would
+    // pass just as well against the hardcoded version, which is the fixture-cannot-fail shape.
+    detail: "Ignores the team picked in the menu and charges the hardcoded one.",
+    file: "components/fantasy/auction-optimizer.tsx",
+    from: "            onSelect={() => onSell(b.team)}",
+    to: "            onSelect={() => onSell(myTeam === 1 ? 2 : 1)}",
+    grep: "charged to the team that actually won it",
+  },
 ]
 
 /**

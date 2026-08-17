@@ -79,6 +79,19 @@ class _LeagueFields(BaseModel):
     # scoring, etc.). Stored verbatim; never read by any scorer.
     captured_rules: dict[str, object] = Field(default_factory=dict)
 
+    # ── NF-C5 — how the league DRAFTS ─────────────────────────────────────────────────────────
+    # ⚠️ DECLARED HERE OR SILENTLY DROPPED. These models set no `extra="forbid"`, so a key the
+    # model does not declare is accepted, ignored and lost with a 200 and no error anywhere — the
+    # E8.6 silent-save class. `canonical.build_config` now emits both, so without these two lines
+    # every imported league would round-trip through the store having quietly lost its draft type.
+    #
+    # Neither affects scoring or value-over-replacement — a player is worth the same points either
+    # way — so they sit here beside `n_teams` and nothing in the scorer reads them. `auction_budget`
+    # is meaningless under "snake" and is carried as inert baggage rather than made conditional: a
+    # key that appears only sometimes is the shape a reader gets wrong.
+    draft_type: str = "snake"
+    auction_budget: int = 200
+
     # ── NF-C0 import provenance ───────────────────────────────────────────────────────────────
     # Where a league CAME FROM. Storage metadata in the same class as `created_at` — deliberately
     # NOT part of `LeagueConfig.to_dict()`, so the shared config contract is unchanged and an

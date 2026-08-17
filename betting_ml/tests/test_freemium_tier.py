@@ -634,6 +634,9 @@ _GATED_PAGES = [
     # NF-C2.1 — the mock draft reads the SAME 403-ing gated board endpoints as the live tool,
     # so a public wrapper here would render a permanently broken page, not a free one.
     "app/fantasy/mock-draft/page.tsx",
+    # NF-C5 — the auction optimizer reads the SAME gated board endpoints as the snake tool and is
+    # the same paid decision-support half by product decision.
+    "app/fantasy/auction/page.tsx",
     "app/fantasy/league-board/page.tsx",
     "app/fantasy/mlb/prospects/page.tsx",
 ]
@@ -674,7 +677,7 @@ def test_the_nav_marks_exactly_the_public_surfaces_public():
     for key in ("fantasy-rankings", "fantasy-projections", "fantasy-players"):
         line = next(ln for ln in code.splitlines() if f'key: "{key}"' in ln)
         assert "public: true" in line, f"{key} is a free surface but the nav still gates it"
-    for key in ("fantasy-league-board", "fantasy-draft", "fantasy-mock-draft",
+    for key in ("fantasy-league-board", "fantasy-draft", "fantasy-mock-draft", "fantasy-auction",
                 "fantasy-my-teams", "fantasy-import", "fantasy-league-settings"):
         lines = [ln for ln in code.splitlines() if f'key: "{key}"' in ln]
         if lines:
@@ -1159,6 +1162,12 @@ _ORDERING_MODULES = [
     # and the grade orders the room itself. Both are ordering, so both inherit the boundary.
     "lib/mock-draft.ts",
     "components/fantasy/mock-draft.tsx",
+    # NF-C5 — the auction optimizer orders twice over: the candidate list decides what to bid on,
+    # and the nomination panel orders who to put up. Both are ordering, so both inherit the
+    # boundary — and an auction VALUE derived from a full-slate rate would be worse than a
+    # mis-ordered board, because a user bids real money against it.
+    "lib/auction-optimizer.ts",
+    "components/fantasy/auction-optimizer.tsx",
 ]
 
 
