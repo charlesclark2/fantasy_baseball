@@ -101,6 +101,12 @@ live/in-game, derivatives, any pick or bet recommendation.
 
 ### 2a. The shipped P1.4 configuration
 
+> ⭐⭐ **SUPERSEDED 2026-08-17 by NCAAF-P2.1 S1-serve — read §2a′ below FIRST.** The served contract
+> is now **`strength_pace`** (`strength_only` ∪ the certified pace composites) and the served
+> artifacts are **`ncaaf_game_distribution_v2.json` + `ncaaf_game_mean_v2.json`**. Everything in
+> this §2a remains TRUE of the P1.4 record and of the frozen v1 artifact (which is still on disk and
+> still byte-reproducible) — it is simply no longer what serves.
+
 **`ridge / strength_only / strength_posterior`** — merged 2026-07-22, finalized on the operator run
 2026-07-23, verdict **`REFERENCE_STANDS`**.
 
@@ -137,6 +143,52 @@ collapsed knob**. Per-game σ_margin ranges 15.9 → 16.6. A season sim draws ea
 simulated season and must therefore call `sample_matchup(..., fixed_strength=True)` → **σ₀ only**, or the
 strength uncertainty is DOUBLE-COUNTED. The served params carry σ₀ and k separately for exactly this.
 Guard: `test_predictor_fixed_strength_narrows_to_game_noise_only`.
+
+### 2a′. ⭐ What serves TODAY — `ridge / strength_pace / strength_posterior` (S1-serve, 2026-08-17)
+
+NCAAF-P2.1 **S1** certified `pace` (+0.062 CRPS, 8/8 folds, per-fold DSR 0.998); **S1b** fixed the
+served representation as the 2-column composite. **S1-serve** deployed both.
+Read-out: [`../football/ncaaf/ablation_results/ncaaf_p2_1_s1_serve_readout.md`].
+
+| axis | shipped value | changed vs §2a? |
+|---|---|---|
+| learner | Ridge, `alpha = 10.0`, one per target | no |
+| feature contract | **`strength_pace`** = the 25 `strength_only` columns **+ `pace_sum`, `pace_diff`** (27) | ⭐ YES |
+| distributional form | `strength_posterior` | no |
+| served dispersion | `models/artifacts/ncaaf_game_distribution_v2.json` | ⭐ new file; v1 retained + frozen |
+| served **mean** | `models/artifacts/ncaaf_game_mean_v2.json` — a coefficient table | ⭐ **NEW ARTIFACT CLASS** |
+
+```
+version  ncaaf_game_distribution_v2     form           strength_posterior
+sigma_margin  16.08…                    sigma_total    16.64…      (was 16.75 under strength_only)
+sigma0_margin 15.61…                    k_margin       0.572…
+sigma0_total  16.19…                    k_total        0.571…
+```
+
+**μ IS NO LONGER IMPLICIT.** P1.4 shipped a dispersion artifact and *no* mean model: μ was rebuilt
+analytically by P1.5 and supplied by the caller everywhere else. That was safe only while the
+contract was `strength_only`. Serving a σ refit on pace residuals against a pace-free μ is the E7.9
+train/serve mismatch, so the mean is now persisted as a **coefficient table** (columns, train-mean
+impute vector, scaler mean/scale, ridge coef+intercept per target) — deliberately **not a pickle**
+(the MLB unpinned-sklearn `_loss` landmine); a coefficient table is version-proof and diffable.
+`ncaaf_game_predictor.load_served_pair()` **RAISES** if the dispersion and the mean were fitted on
+different contracts, so the mismatch cannot be assembled by accident.
+
+⭐ **A NULL feature contributes EXACTLY 0.0 to μ** (the scaler mean equals the NaN fill), so the
+pace term is **inert pre-season** — 100 % of week-1 team-week rows are NULL — and a week-1 board is
+byte-identical to the pre-S1-serve one (verified on the real 2026 board, not just in a unit test).
+Pace acts from week 2 (`--as-of-week ≥ 2`).
+
+**What measurably improved:** the served TOTAL distribution's PIT-flatness gate went **FAIL → PASS**
+(max-decile-dev 0.0218 → 0.0173) and σ_total tightened 16.75 → 16.64. The P1.5 season-board gate is
+**unchanged** (every leg inside seed noise) — correctly, since that board is a pre-season,
+margin-only read and pace is a total-axis in-season effect. `best_alpha = 0` is untouched
+(ATS 0.509 / O-U 0.513 vs a 0.5238 breakeven).
+
+⚠️ **The P1.4 SEARCH FIELD IS STILL THE FROZEN FOUR.** `strength_pace` lives in
+`POST_P1_4_CONTRACTS`, servable via `--contract` but outside `--stage bakeoff`'s sweep — pace was
+certified under its OWN registration (P2.1 → S1), never inside P1.4's deflation. Re-running the
+P1.4 bake-off or finalizing on `strength_only` reproduces the recorded record exactly (verified).
 
 ### 2b. Why it won — the bake-off, in one line
 
@@ -582,9 +634,17 @@ through `k²` rather than consuming it raw.
 - **9 of 10 national champions were pre-season TOP-4** on a market-blind board with no ranking input (the only
   miss: the 2025 Indiana shock).
 - Expected-wins **MAE 1.64**, bias ≈ 0 (the cleanest dense game-layer check).
-- Conference-title **Brier skill +0.05** (skillful); reliability well-calibrated with mild mid-bin
+- Conference-title **Brier skill +0.04** (skillful); reliability well-calibrated with mild mid-bin
   over-confidence. `--strength-sd-scale ≈ 1.3` marginally improves that, but the natty prefers 1.0 ⇒
   **1.0 ships** (draw straight from the posterior).
+  ⚠️ **Two corrections recorded 2026-08-17 (S1-serve re-run; neither is a model change).** (a) The
+  figure was **+0.05** on the July marts and is **+0.04** on today's rebuilt marts — a DATA-VINTAGE
+  difference, reproduced on unmodified `dev` with the frozen v1 artifact. (b) The gate had a real
+  defect: once 2026 entered the strength mart, its 136 conference-eligible teams were scored as
+  "did not win a title" (n 1257→1393, skill 0.0513→0.0272) — an **undecided outcome read as a
+  negative one**, indistinguishable from a regression. Fixed; a season with no decided conference
+  championships is now excluded from the leg with a loud ALERT, and the scored-season list is
+  recorded on the result. The natty leg always had this guard; the conference leg did not.
 
 ### 5g. Sub-model gates
 
@@ -632,7 +692,10 @@ run_team_strength.py             run_feature_matrix.py   run_season_simulation.p
  → s3 …/ncaaf/derived/            → s3 …/ncaaf/derived/     → s3 …/ncaaf/derived/
                                                               ▲
                         bakeoff_ncaaf_game.py --stage finalize ┘
-                        → models/artifacts/ncaaf_game_distribution_v1.json  (committed to git)
+                        → models/artifacts/ncaaf_game_distribution_v2.json  (σ — SERVES, committed)
+                        → models/artifacts/ncaaf_game_mean_v2.json          (μ — SERVES, committed)
+                        → models/artifacts/ncaaf_game_distribution_v1.json  (the frozen P1.4 record;
+                          still committed, still byte-reproducible, no longer served — §2a′)
 ```
 
 **Dagster jobs (all NCAAF-scoped, none on the MLB daily graph):**

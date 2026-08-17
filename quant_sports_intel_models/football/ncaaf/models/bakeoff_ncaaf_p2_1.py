@@ -85,6 +85,7 @@ from quant_sports_intel_models.football.ncaaf.models.p2_1_blocks import (  # noq
     BLOCKS,
     DECLARED_FIELD_SIZE,
     block_columns,
+    derive_pace_composites,
     eb_team_hfa_infold,
 )
 
@@ -249,10 +250,10 @@ def _simple_blocks(df: pd.DataFrame) -> pd.DataFrame:
     out["postseason_x_strength"] = post * smd
     out["postseason_x_abs_strength"] = post * smd.abs()
 
-    spp = [pd.to_numeric(out[f"{s}_seconds_per_play"], errors="coerce") for s in ("home", "away")]
-    out["pace_sum"] = spp[0] + spp[1]      # the TOTAL axis: slow+slow ⇒ fewer possessions
-    out["pace_diff"] = spp[0] - spp[1]
-    return out
+    # H9 pace composites — the SHARED derivation (`p2_1_blocks.derive_pace_composites`), which the
+    # P1.4 serving assemble also calls, so the served representation is byte-identical to the one
+    # S1 certified. ⛔ Do not re-implement it here.
+    return derive_pace_composites(out)
 
 
 def assemble(args) -> Path:

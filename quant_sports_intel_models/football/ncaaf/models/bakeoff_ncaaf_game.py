@@ -86,7 +86,7 @@ import warnings
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 _THREAD_CAP = os.environ.get("NCAAF_P1_4_THREADS", "").strip()
 if _THREAD_CAP:
@@ -129,6 +129,14 @@ from quant_sports_intel_models.football.ncaaf.models.ncaaf_game_distribution imp
     score_calibration,
     strength_posterior_sigma,
 )
+from quant_sports_intel_models.football.ncaaf.models.ncaaf_game_mean import (  # noqa: E402
+    NcaafGameMeanParams,
+    fit_mean_params,
+)
+from quant_sports_intel_models.football.ncaaf.models.p2_1_blocks import (  # noqa: E402
+    PACE_COMPOSITE_COLS,
+    derive_pace_composites,
+)
 
 # ---------------------------------------------------------------------------
 # Constants / paths
@@ -153,6 +161,24 @@ _DECISION_MD = _RESULTS_DIR / "ncaaf_p1_4_game_bakeoff.md"
 _CALIB_JSON = _RESULTS_DIR / "ncaaf_p1_4_calibration.json"
 _CALIB_MD = _RESULTS_DIR / "ncaaf_p1_4_calibration.md"
 _SERVED_JSON = _ARTIFACT_DIR / "ncaaf_game_distribution_v1.json"
+# NCAAF-P2.1-S1-serve: the served DISPERSION under a post-P1.4 contract, and the served MEAN that
+# has to travel with it (see `ncaaf_game_mean` — σ refitted on pace residuals must not be served
+# against a pace-free μ).
+_SERVED_JSON_V2 = _ARTIFACT_DIR / "ncaaf_game_distribution_v2.json"
+_SERVED_MEAN_JSON = _ARTIFACT_DIR / "ncaaf_game_mean_v2.json"
+# ⚠️ A post-P1.4 finalize gets its OWN calibration record. Writing to a FIXED output path would
+# overwrite the DECIDED P1.4 story's audit trail with a different contract's run (the NF-W2c-CBS
+# "a runner with hardcoded output paths clobbers a prior run's artifact" class — this actually
+# happened once during S1-serve and was caught by `git status` before the commit).
+_CALIB_JSON_S1 = _RESULTS_DIR / "ncaaf_s1_serve_calibration.json"
+_CALIB_MD_S1 = _RESULTS_DIR / "ncaaf_s1_serve_calibration.md"
+
+#: ⭐ THE SERVED PACE REPRESENTATION — S1b (`pace_axis`, the 2-column composite). S1 §3 measured it
+#: at +0.018 CRPS over the 8-column S1 primary: the six per-side LEVELS are an exact ratio identity
+#: with the composites, so they cost ridge penalty without adding span. The registration record is
+#: `ablation_results/ncaaf_p2_1_s1b_registration.md`. Whichever representation SERVES must be the
+#: one the mean map carries, so this constant is the single source of truth for both.
+SERVED_PACE_COLS: tuple[str, ...] = PACE_COMPOSITE_COLS
 
 _MARGIN = "label_home_margin"
 _TOTAL = "label_total_points"
@@ -343,10 +369,20 @@ def assemble_cache(args) -> Path:
     df = df[df["label_is_completed"] == True].reset_index(drop=True)  # noqa: E712 — train on played
     df = df[df[_YEAR] >= args.min_year_train].reset_index(drop=True)
     df["game_year"] = df[_YEAR].astype(int)   # the splitter's year_col alias
+    # NCAAF-P2.1-S1-serve: derive the pace composites here (the SHARED derivation P2.1's battery
+    # also calls, so the served representation is byte-identical to the certified one). They are
+    # appended at the END of the frame and held OUT of `full` / the importance ranking, so the four
+    # frozen P1.4 contracts resolve exactly as they did when P1.4 was decided.
+    df = derive_pace_composites(df)
     feat = feature_columns(df)
     assert_market_blind(feat, context=f"{_STORY} game matrix")
+    n_pace_ok = int(df["pace_sum"].notna().sum())
     print(f"  matrix: {len(df):,} completed games {int(df[_YEAR].min())}–{int(df[_YEAR].max())}  "
-          f"| {len(feat)} features | market-blind ✅  ({time.time() - t0:.0f}s)")
+          f"| {len(feat)} features ({len(base_feature_columns(feat))} in `full` + "
+          f"{len(PACE_COMPOSITE_COLS)} pace composites) | market-blind ✅  ({time.time() - t0:.0f}s)")
+    print(f"  pace composites: {n_pace_ok:,}/{len(df):,} rows non-null "
+          f"({100.0 * n_pace_ok / max(len(df), 1):.1f}%) — week-1 rows are NULL by construction "
+          "(the team-week rollup's honest empty row) ⇒ the served pace term is inert pre-season")
 
     for c in _CLOSE_COLS:
         df[c] = np.nan
@@ -489,7 +525,19 @@ _BUILDERS: dict[str, Callable[[dict | None], Candidate]] = {
     "ridge": _ridge, "lgbm": _lgbm, "xgb": _xgb, "catboost": _catboost, "ngboost_normal": _ngboost,
 }
 MODEL_CLASSES: tuple[str, ...] = tuple(_BUILDERS)
+
+#: ⛔ THE FROZEN P1.4 SEARCH FIELD. Every config P1.4 deflated came from this set; `--stage bakeoff`
+#: still sweeps exactly it, so re-running the bake-off reproduces the recorded record. A post-P1.4
+#: contract must NOT be added here (that would silently widen a decided search — the E2.1-r class).
 CONTRACTS: tuple[str, ...] = ("full", "strength_only", "clustered", "top_k")
+
+#: Contracts registered AFTER P1.4 decided, each by its own §0.5 story. Servable via `--contract`,
+#: never part of P1.4's deflation field.
+#:   `strength_pace` — NCAAF-P2.1 S1 (+S1b): `strength_only` ∪ the certified pace representation.
+POST_P1_4_CONTRACTS: tuple[str, ...] = ("strength_pace",)
+
+#: everything `--contract` accepts.
+ALL_CONTRACTS: tuple[str, ...] = CONTRACTS + POST_P1_4_CONTRACTS
 
 _N_JOBS: int | None = None
 _THREAD_PARAM = {"lgbm": "n_jobs", "xgb": "n_jobs", "catboost": "thread_count"}
@@ -567,17 +615,38 @@ def clustered_contract(X_tr: np.ndarray, feat_cols: list[str], ranking: list[str
     return kept
 
 
+def base_feature_columns(feat_cols: Sequence[str]) -> list[str]:
+    """`feat_cols` minus the post-P1.4 derived columns.
+
+    ⭐ The P1.4 record is FROZEN, so the pace composites must be invisible to every contract that
+    existed when it was decided: `full` is this list, and the in-fold importance RANKING (which
+    `top_k` and `clustered` are built from) is fitted on this list too — otherwise two extra columns
+    in the LightGBM fit would shift every gain and silently redefine two decided contracts.
+    """
+    return [c for c in feat_cols if c not in PACE_COMPOSITE_COLS]
+
+
 def resolve_contract(contract: str, X_tr, feat_cols, ranking, *, top_k=_DEFAULT_TOP_K) -> list[str]:
     if contract == "full":
-        return list(feat_cols)
+        return base_feature_columns(feat_cols)
     if contract == "strength_only":
         cols = [c for c in feat_cols if _is_strength(c)]
-        return cols or list(feat_cols)   # never empty
+        return cols or base_feature_columns(feat_cols)   # never empty
     if contract == "top_k":
         return ranking[: min(top_k, len(ranking))]
     if contract == "clustered":
         return clustered_contract(X_tr, feat_cols, ranking)
-    raise KeyError(f"unknown contract {contract!r}; known: {CONTRACTS}")
+    if contract == "strength_pace":
+        cols = [c for c in feat_cols if _is_strength(c)]
+        pace = [c for c in SERVED_PACE_COLS if c in feat_cols]
+        if len(pace) != len(SERVED_PACE_COLS):
+            raise KeyError(
+                f"contract 'strength_pace' needs {list(SERVED_PACE_COLS)} on the feature frame; "
+                f"found {pace}. Re-run `--assemble` (which derives the pace composites). A missing "
+                "pace column must RAISE — silently serving `strength_only` under a pace contract "
+                "would ship a σ fitted on pace residuals against a pace-free mean (NF1.7 a).")
+        return cols + pace
+    raise KeyError(f"unknown contract {contract!r}; known: {ALL_CONTRACTS}")
 
 
 # ---------------------------------------------------------------------------
@@ -644,7 +713,11 @@ def build_folds(df: pd.DataFrame, feat_cols: list[str], *, max_folds: int | None
             inner_mask = np.zeros(len(tr), dtype=bool)
             inner_mask[int(len(tr) * 0.85):] = True
         with _Step(f"fold {eval_year}: in-fold importance (LightGBM on margin)", indent=2):
-            ranking = infold_importance(X_tr, tr[_MARGIN].to_numpy(float), feat_cols)
+            # Over the BASE columns only — the post-P1.4 pace composites must not enter the fit, or
+            # every gain shifts and `top_k`/`clustered` stop reproducing P1.4's decided record.
+            base = base_feature_columns(feat_cols)
+            base_idx = [feat_cols.index(c) for c in base]
+            ranking = infold_importance(X_tr[:, base_idx], tr[_MARGIN].to_numpy(float), base)
         sv_impute = float(np.nanmedian(strength_variance(tr)))   # TRAIN-median fill (leakage-safe)
         sv_ev = strength_variance(ev, impute=sv_impute)
         sv_tr = strength_variance(tr, impute=sv_impute)
@@ -1183,6 +1256,33 @@ def _early_season_validation(oos: pd.DataFrame, df: pd.DataFrame, dists: dict, o
     return out
 
 
+def fit_served_mean(df: pd.DataFrame, feat_cols: list[str], mc: str, contract: str,
+                    *, top_k: int, notes: str = "") -> NcaafGameMeanParams:
+    """Fit the SERVED mean model — the same (learner, contract) as the dispersion, refit on ALL
+    cached rows — and return the persistable coefficient table.
+
+    ⭐ THE TRAIN/SERVE PAIRING (E7.9): σ is calibrated on the walk-forward OOS residuals of this
+    exact config and μ is this config's final refit. The two artifacts are written together and
+    `load_served_mean` refuses to pair a dispersion with a mean fitted on a DIFFERENT contract —
+    the mismatch the S1 read-out warned about (σ fitted on pace residuals, μ pace-free) cannot be
+    assembled by accident.
+    """
+    X, _, _ = _prepare_matrix(df, df.head(1), feat_cols)     # TRAIN-mean impute over all rows
+    base = base_feature_columns(feat_cols)
+    # only `top_k`/`clustered` consult the ranking; skip the LightGBM fit for the others
+    ranking = base if contract not in ("top_k", "clustered") else infold_importance(
+        X[:, [feat_cols.index(c) for c in base]], df[_MARGIN].to_numpy(float), base)
+    cols = resolve_contract(contract, X, feat_cols, ranking, top_k=top_k)
+    assert_market_blind(cols, context=f"{_STORY} served mean {mc}/{contract}")
+    idx = [feat_cols.index(c) for c in cols]
+    return fit_mean_params(
+        X[:, idx], df[_MARGIN].to_numpy(float), df[_TOTAL].to_numpy(float), cols,
+        learner=mc, contract=contract, alpha=float(build_candidate(mc).params.get("alpha", 10.0)),
+        pace_columns=[c for c in SERVED_PACE_COLS if c in cols],
+        n_train_rows=int(len(df)), train_seasons=sorted(int(s) for s in df[_YEAR].unique()),
+        fit_at=date.today().isoformat(), notes=notes)
+
+
 def stage_finalize(args) -> None:
     df, feat, meta = load_cache()
     mc = args.model_class or _REF_LEARNER
@@ -1275,11 +1375,42 @@ def stage_finalize(args) -> None:
         sigma0_margin=disp.sigma0_margin, k_margin=disp.k_margin,
         sigma0_total=disp.sigma0_total, k_total=disp.k_total, learner=mc, contract=contract,
         n_draws=10_000,
+        version=("ncaaf_game_distribution_v2" if contract in POST_P1_4_CONTRACTS
+                 else "ncaaf_game_distribution_v1"),
         notes=(f"NCAAF P1.4 joint (margin,total) distribution. learner={mc} contract={contract}. "
                "Held-out σ/ρ/dof/k calibrated on pooled OOS residuals (E13.6). For form="
                "strength_posterior the per-game σ propagates the P1.2 strength posterior "
                "(σ_g²=σ0²+k²·[home_sd²+away_sd²]); μ from the mean artifact at score time. "
                "Market-blind; best_alpha=0."))
+    # ── the served MEAN artifact (NCAAF-P2.1-S1-serve) ────────────────────────────────────
+    # μ stops being implicit. Fitted on the SAME (learner, contract) whose OOS residuals set σ
+    # above, so the two artifacts describe one model (E7.9). RAISES for a non-linear learner
+    # rather than writing a table that does not describe the served mean.
+    mean_params = fit_served_mean(
+        df, feat, mc, contract, top_k=args.top_k,
+        notes=(f"NCAAF served mean for {mc}/{contract}. Standardized ridge coefficients + the "
+               "TRAIN-mean impute vector; a NULL feature contributes EXACTLY 0 to μ (the scaler "
+               "mean equals the NaN fill), which is what makes the pace term inert on week-1 rows. "
+               "σ for this μ is the paired dispersion artifact. Market-blind; best_alpha=0."))
+    pace_report = {
+        "served_pace_columns": list(mean_params.pace_columns),
+        "raw_coefficients": {t: {c: round(mean_params.raw_coefficient(t, c), 6)
+                                 for c in mean_params.pace_columns} for t in ("margin", "total")},
+        "centers": {c: round(mean_params.center(c), 4) for c in mean_params.pace_columns},
+        "inert_when_null": True,
+    }
+    if mean_params.pace_columns:
+        print(f"\n  ── served pace term ({', '.join(mean_params.pace_columns)}) ──")
+        for t in ("margin", "total"):
+            terms = "  ".join(f"∂μ/∂{c} = {mean_params.raw_coefficient(t, c):+.4f}"
+                              for c in mean_params.pace_columns)
+            print(f"    {t:<7} {terms}   (pts per second-per-play)")
+        print("    NULL pace ⇒ contribution EXACTLY 0.0 ⇒ week-1 / pre-season output unchanged")
+
+    post_p1_4 = contract in POST_P1_4_CONTRACTS
+    served_json = _SERVED_JSON_V2 if post_p1_4 else _SERVED_JSON
+    calib_json = _CALIB_JSON_S1 if post_p1_4 else _CALIB_JSON
+    calib_md = _CALIB_MD_S1 if post_p1_4 else _CALIB_MD
     calib_doc = {"story": _STORY, "fit_at": date.today().isoformat(), "model_class": mc,
                  "contract": contract, "form": fm, "n_oos_games": int(len(oos)),
                  "served_params": params.to_dict(), "gate": metrics,
@@ -1287,17 +1418,25 @@ def stage_finalize(args) -> None:
                  "gate_pass": {"calib_floor": floor_ok, "pit_flat": pit_ok,
                                "early_season_floor": early_val.get("floor_ok"),
                                "cold_start_no_peek": early_val.get("cold_start_ok")},
-                 "clv_eval": clv, "market_blind": True}
+                 "clv_eval": clv, "market_blind": True,
+                 "served_artifacts": {"dispersion": served_json.name,
+                                      "mean": _SERVED_MEAN_JSON.name},
+                 "served_mean": {"n_columns": len(mean_params.columns),
+                                 "n_train_rows": mean_params.n_train_rows,
+                                 "alpha": mean_params.alpha, **pace_report}}
     if args.no_save:
         print("\n[--no-save] skipping artifact + calibration write.")
         return
     _ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
-    _SERVED_JSON.write_text(json.dumps(params.to_dict(), indent=2))
+    served_json.write_text(json.dumps(params.to_dict(), indent=2))
+    mean_params.save(_SERVED_MEAN_JSON)
     _RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    _CALIB_JSON.write_text(json.dumps(calib_doc, indent=2, default=float))
-    _CALIB_MD.write_text(_render_calib_md(calib_doc))
-    print(f"\n  served params → {_SERVED_JSON.relative_to(_PROJECT_ROOT)}")
-    print(f"  calibration   → {_CALIB_JSON.relative_to(_PROJECT_ROOT)}")
+    calib_json.write_text(json.dumps(calib_doc, indent=2, default=float))
+    calib_md.write_text(_render_calib_md(calib_doc))
+    print(f"\n  served params → {served_json.relative_to(_PROJECT_ROOT)}")
+    print(f"  served mean   → {_SERVED_MEAN_JSON.relative_to(_PROJECT_ROOT)} "
+          f"({len(mean_params.columns)} cols, {mean_params.n_train_rows:,} rows)")
+    print(f"  calibration   → {calib_json.relative_to(_PROJECT_ROOT)}")
     _ = meta
 
 
@@ -1371,7 +1510,9 @@ def main() -> None:
     ap.add_argument("--min-year-train", type=int, default=2015, help="feature floor (P1.2 emits 2015+).")
     ap.add_argument("--min-year-odds", type=int, default=2020, help="odds floor (P0.6).")
     ap.add_argument("--model-class", choices=list(MODEL_CLASSES))
-    ap.add_argument("--contract", choices=list(CONTRACTS))
+    # ⭐ ALL_CONTRACTS, not CONTRACTS: `--contract` can SERVE a post-P1.4 contract, while
+    # `--stage bakeoff`'s default sweep stays the frozen P1.4 field (see `POST_P1_4_CONTRACTS`).
+    ap.add_argument("--contract", choices=list(ALL_CONTRACTS))
     ap.add_argument("--form", choices=list(FORMS))
     ap.add_argument("--top-k", type=int, default=_DEFAULT_TOP_K)
     ap.add_argument("--n-trials", type=int, default=30)
