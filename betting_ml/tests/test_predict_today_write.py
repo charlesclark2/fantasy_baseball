@@ -1,10 +1,14 @@
-"""A1.12 — regression tests for production-write correctness in the scorer.
+"""Regression tests for production-write correctness in the scorer.
 
-Covers the two foot-guns the story fixes:
+A1.12 — the two foot-guns that story fixes:
   1. The post_lineup overwrite DELETE must be SCOPED to the supplied game_pks
      (a partial re-score must not wipe the rest of the slate's post_lineup rows).
   2. The write schema must resolve from TARGET_ENV via the shared resolver, so
      the two scorers and the app can't diverge (read prod / write dev).
+
+E11.24 (bottom of the file) — the SAME rule as (1), applied to `prediction_log`,
+where it had never been applied. Its clauses are kept separate from A1.12's so a
+failure names one story; nothing above this line was changed for E11.24.
 """
 
 import importlib.util
@@ -209,3 +213,243 @@ class TestPredictionColumnMigration:
         # All columns missing → every migration column gets an ALTER on the fq schema.
         assert len(cur.alters) == len(predict_today._PREDICTION_COLUMN_MIGRATIONS)
         assert all("baseball_data.betting_ml_dev.daily_model_predictions" in s for s in cur.alters)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# E11.24 — prediction_log overwrite scope
+#
+# The A1.12 rule above was applied to `daily_model_predictions` ONLY. `prediction_log`
+# kept a date-wide `DELETE ... WHERE prediction_date = '<date>'` while the lineup sensor
+# fires a SCOPED `--game-pks` run per completing lineup, so every scoped run wiped the
+# previous runs' rows and the log ended each day holding only the LAST batch.
+#
+# Measured on prod 2026-08-16 before the fix: prediction_log held 1-2 games/date against
+# 8-15 in daily_model_predictions (August avg 1.25 games/date vs ~10 historically), and
+# compute_model_health's 14-day h2h sample was 18 rows instead of ~180.
+#
+# These clauses are independently RED-provable: each fixture satisfies every OTHER
+# condition of the rule it tests, so only the named clause can flip the result.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+import re as _re
+
+
+class TestPredictionLogDeleteSql:
+    def test_full_slate_delete_is_date_wide(self):
+        sql = predict_today._prediction_log_delete_sql(None)
+        assert "baseball_data.config.prediction_log" in sql
+        assert "prediction_date = %(d)s" in sql
+        # A full-slate run keeps the date-wide overwrite (dropped/postponed cleanup).
+        assert "game_pk IN" not in sql
+
+    def test_scoped_delete_restricts_to_supplied_game_pks(self):
+        # THE regression: a subset run must not reach beyond its own games.
+        sql = predict_today._prediction_log_delete_sql([824998])
+        assert "game_pk IN (824998)" in sql
+        assert "prediction_date = %(d)s" in sql
+
+    def test_scoped_delete_lists_all_pks(self):
+        sql = predict_today._prediction_log_delete_sql([3, 1, 2])
+        assert "game_pk IN (3, 1, 2)" in sql
+
+    def test_empty_list_is_treated_as_full_slate(self):
+        # Must not emit `game_pk IN ()` (invalid SQL).
+        assert "game_pk IN" not in predict_today._prediction_log_delete_sql([])
+
+    def test_pks_are_coerced_to_int(self):
+        sql = predict_today._prediction_log_delete_sql(["824998", 824999])
+        assert "game_pk IN (824998, 824999)" in sql
+
+    def test_date_is_a_bound_parameter_not_an_inlined_literal(self):
+        """The pre-fix statement inlined the date with an f-string.
+
+        Two consequences, both real: an injection surface on a serving write, and one
+        DISTINCT query_text per date in query_history — which fragmented this statement
+        across the wake census's family buckets and is why it went unattributed.
+        """
+        for scope in (None, [1, 2]):
+            sql = predict_today._prediction_log_delete_sql(scope)
+            assert "%(d)s" in sql
+            # No quoted date literal anywhere in the emitted SQL.
+            assert not _re.search(r"'\d{4}-\d{2}-\d{2}'", sql)
+
+
+class _FakePredictionLogTable:
+    """In-memory stand-in that actually APPLIES the DELETE/INSERT.
+
+    A source-substring assertion cannot show that a sequence of scoped runs preserves the
+    slate — only replaying the real statement sequence against a table can, so this
+    interprets the two statement shapes `_prediction_log_delete_sql` can emit.
+    """
+
+    def __init__(self):
+        self.rows: list[dict] = []
+        self.rowcount = 0
+        self.deletes: list[str] = []
+
+    # -- cursor protocol -----------------------------------------------------
+    def execute(self, sql, params=None):
+        s = " ".join(sql.split())
+        if s.upper().startswith("CREATE TABLE"):
+            self.rowcount = 0
+            return
+        if not s.upper().startswith("DELETE"):
+            raise AssertionError(f"unexpected statement: {s[:80]}")
+        self.deletes.append(s)
+        assert params and "d" in params, "the DELETE must bind its date"
+        target_date = str(params["d"])
+        m = _re.search(r"game_pk IN \(([^)]*)\)", s)
+        pks = {int(p) for p in m.group(1).split(",")} if m else None
+        before = len(self.rows)
+        self.rows = [
+            r for r in self.rows
+            if not (str(r["prediction_date"]) == target_date
+                    and (pks is None or r["game_pk"] in pks))
+        ]
+        self.rowcount = before - len(self.rows)
+
+    def executemany(self, sql, rows):
+        assert "INSERT INTO baseball_data.config.prediction_log" in " ".join(sql.split())
+        self.rows.extend(rows)
+        self.rowcount = len(rows)
+
+    # -- connection protocol -------------------------------------------------
+    def cursor(self):
+        return self
+
+    def commit(self):
+        pass
+
+    def close(self):
+        pass
+
+    # -- helpers -------------------------------------------------------------
+    def games_on(self, d: str) -> set[int]:
+        return {r["game_pk"] for r in self.rows if str(r["prediction_date"]) == d}
+
+
+_DATE = "2026-08-16"
+
+
+def _output_rows(game_pks):
+    """Two markets per game — exactly the shape `main()` hands the writer."""
+    return [
+        {"game_key": str(pk), "market": mkt, "model_prob": 0.5,
+         "market_implied_prob": 0.5, "implied_kelly_fraction": 0.0}
+        for pk in game_pks for mkt in ("h2h", "totals")
+    ]
+
+
+class TestPredictionLogOverwriteSemantics:
+    """Behavioural replay — these are the clauses that go RED on the pre-fix source."""
+
+    def _write(self, monkeypatch, table, game_pks, scoped):
+        monkeypatch.setattr(predict_today, "get_snowflake_connection", lambda: table)
+        predict_today._write_prediction_log(
+            _output_rows(game_pks), _DATE,
+            scoped_game_pks=sorted(game_pks) if scoped else None,
+        )
+
+    def test_a_sequence_of_scoped_runs_preserves_the_whole_slate(self, monkeypatch):
+        """The measured production defect, replayed.
+
+        Morning scores the full slate; the lineup sensor then re-scores games one at a
+        time. Pre-fix each scoped run issued a date-wide DELETE, so the log finished the
+        day holding ONLY the last game (prod: 1-2 games/date against a 15-game slate).
+        """
+        slate = list(range(824000, 824015))  # 15 games, as on 2026-08-16
+        table = _FakePredictionLogTable()
+        self._write(monkeypatch, table, slate, scoped=False)          # morning, full slate
+        assert table.games_on(_DATE) == set(slate)
+
+        for pk in slate[:6]:                                          # sensor, one game each
+            self._write(monkeypatch, table, [pk], scoped=True)
+
+        assert table.games_on(_DATE) == set(slate), (
+            "a per-game post_lineup re-score wiped the rest of the slate's log rows"
+        )
+        assert len(table.rows) == 2 * len(slate)  # 2 markets/game, no duplicates
+
+    def test_a_scoped_run_deletes_only_the_keys_it_restores(self, monkeypatch):
+        """Row-count equivalence: the DELETE's reach == the INSERT's reach."""
+        table = _FakePredictionLogTable()
+        self._write(monkeypatch, table, [1, 2, 3], scoped=False)
+        assert len(table.rows) == 6
+        self._write(monkeypatch, table, [2], scoped=True)
+        assert table.rowcount == 2          # the INSERT restored what the DELETE cleared
+        assert table.deletes[-1].count("game_pk IN (2)") == 1
+        assert len(table.rows) == 6         # net zero — an upsert, not a truncate
+
+    def test_re_running_the_same_scoped_batch_is_idempotent(self, monkeypatch):
+        table = _FakePredictionLogTable()
+        self._write(monkeypatch, table, [1, 2], scoped=False)
+        for _ in range(3):
+            self._write(monkeypatch, table, [2], scoped=True)
+        assert len(table.rows) == 4
+        assert table.games_on(_DATE) == {1, 2}
+
+    def test_a_full_slate_run_still_clears_dropped_games(self, monkeypatch):
+        """The date-wide overwrite is PRESERVED for a full-slate run.
+
+        This is the clause that keeps the fix from over-reaching: a postponed game that
+        drops off the slate must still lose its stale row.
+        """
+        table = _FakePredictionLogTable()
+        self._write(monkeypatch, table, [1, 2, 3], scoped=False)
+        self._write(monkeypatch, table, [1, 2], scoped=False)   # game 3 postponed
+        assert table.games_on(_DATE) == {1, 2}
+        assert "game_pk IN" not in table.deletes[-1]
+
+    def test_a_scoped_run_does_not_touch_another_date(self, monkeypatch):
+        table = _FakePredictionLogTable()
+        table.rows.append({"prediction_date": "2026-08-15", "game_pk": 1, "market": "h2h"})
+        self._write(monkeypatch, table, [1], scoped=True)
+        assert table.games_on("2026-08-15") == {1}
+
+    def test_a_scoped_run_that_produced_no_rows_still_clears_only_its_own_games(
+        self, monkeypatch
+    ):
+        """A scored game with no loggable row (no odds) must not leave a stale row behind,
+        and must not reach the rest of the slate either."""
+        table = _FakePredictionLogTable()
+        self._write(monkeypatch, table, [1, 2, 3], scoped=False)
+        monkeypatch.setattr(predict_today, "get_snowflake_connection", lambda: table)
+        predict_today._write_prediction_log([], _DATE, scoped_game_pks=[2])
+        assert table.games_on(_DATE) == {1, 3}
+
+
+class TestPredictionLogScopeIsWiredFromMain:
+    """`_prediction_log_delete_sql` being correct is worthless if `main()` never scopes.
+
+    Guards the call site, not just the helper (the NF-C0e 'wired ≠ invoked' class).
+    """
+
+    _SRC = _SCORER_PATH.read_text()
+
+    @staticmethod
+    def _code_only(src: str) -> str:
+        # A comment mentioning the identifier must not satisfy these clauses (INC-38).
+        return "\n".join(l for l in src.splitlines() if not l.lstrip().startswith("#"))
+
+    def test_main_passes_a_scope_to_the_writer(self):
+        code = self._code_only(self._SRC)
+        assert _re.search(
+            r"_write_prediction_log\([^)]*scoped_game_pks\s*=\s*prediction_log_scope",
+            code, _re.S,
+        ), "main() must hand _write_prediction_log the scored game set"
+
+    def test_the_scope_is_none_only_for_an_unnarrowed_slate(self):
+        code = self._code_only(self._SRC)
+        assert "prediction_log_scope" in code and "slate_narrowed" in code
+        # Both narrowing filters must set the flag.
+        assert code.count("slate_narrowed = True") == 2, (
+            "both the --game-pks filter and the lineup-confirmed filter must mark the "
+            "slate narrowed, or one path keeps the date-wide DELETE"
+        )
+
+    def test_the_writer_no_longer_inlines_the_date(self):
+        code = self._code_only(self._SRC)
+        assert not _re.search(
+            r"DELETE FROM baseball_data\.config\.prediction_log[^\"']*"
+            r"WHERE prediction_date = '", code,
+        ), "the prediction_log DELETE must bind its date, not f-string it"
