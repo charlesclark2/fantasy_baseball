@@ -8,3 +8,6 @@
 # Per-season backfill summaries. The *_summary.json rule above does not match the backfill
 # naming (..._summary_<year>.json), which is how these escaped it.
 *_summary_*.json
+
+# NF-W7e per-fold marginal-bank cache (regenerable; ~70 MB/fold)
+nf_w7e_bank_cache/
