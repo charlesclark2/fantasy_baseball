@@ -309,7 +309,7 @@ async function playToTheEnd(page: Page, rounds = 8) {
       continue
     }
 
-    // ⭐⭐ THE RACE THAT MADE THIS FILE RED ON CI THREE TIMES, diagnosed from the failure trace:
+    // ⭐⭐ THE RACE THAT MADE THIS FILE RED ON CI, diagnosed from the failure trace:
     //
     //     Evaluate (readPhase)                                    → "cpu"
     //     Click getByRole('button', { name: /Skip to my pick/ })   ← never returns
@@ -333,21 +333,25 @@ async function playToTheEnd(page: Page, rounds = 8) {
 }
 
 test.describe("running a mock draft", () => {
-  // ⏱️ The two tests that play a mock out drive ~96 picks through a real React state machine.
-  // `test.slow()` triples this file's budget rather than raising the global timeout, which would
-  // hide a genuine hang everywhere else.
+  // ⏱️ One test here plays a mock out — ~96 picks through a real React state machine. `test.slow()`
+  // triples this file's budget rather than raising the global timeout, which would hide a genuine
+  // hang everywhere else.
   //
-  // ⚠️ THE BUDGET IS NOT WHAT MADE THIS FILE RED ON CI, and the distinction cost a round trip to
-  // find. Raising it 60s → 180s did NOT fix the CI failure: the draft was not running slowly, it
-  // was not running AT ALL — the failure artifact's page snapshot showed it still at Round 1 Pick 4
-  // after the full timeout, because the composed locator the loop waited on never matched (see
-  // `readPhase`). A budget increase makes a stall take longer to report; it never cures one.
+  // ⚠️ THE BUDGET WAS NEVER THE CURE, and saying so is the point of this note. This file went red
+  // on CI four times; raising the timeout 60s → 180s changed nothing, because the draft was not
+  // running slowly, it was not running at all. The cause is documented at the fast-forward click in
+  // `playToTheEnd`: an unbounded click on a control that had just unmounted, waiting out the entire
+  // test. A budget increase makes a stall take LONGER TO REPORT; it never cures one.
   //
-  // Measured, once the phase read was fixed: clean at `--workers=2 --repeat-each=3` (the gate, and
-  // what CI runs). At `--workers=8` on a laptop about 1 in 10 still exhausts the budget, with the
-  // teardown signature (`page.evaluate: Target page … has been closed`) rather than a stalled
-  // screen — eight browsers against one `next start` is the rig running out of machine, not the
-  // app. Judge this file at the gate's settings.
+  // ⭐ THE INSTRUMENT THAT ACTUALLY ANSWERED IT was the trace in the failure artifact
+  // (`gh api …/actions/artifacts/<id>/zip` → `trace.zip` → `0-trace.trace`, one JSON object per
+  // action). The screenshot gives you the END STATE and every reading of it was wrong; the trace
+  // names the ACTION that hung. Reach for it first next time.
+  //
+  // Measured after the fix: clean at `--workers=2 --repeat-each=3` (the gate, and what CI runs). At
+  // `--workers=8` on a laptop about 1 in 10 still exhausts the budget with the teardown signature —
+  // eight browsers against one `next start` is the rig running out of machine, not the app. Judge
+  // this file at the gate's settings.
   test.slow()
 
   test("the CPU room picks before the user's turn, and its picks are explained", async ({ page }) => {
