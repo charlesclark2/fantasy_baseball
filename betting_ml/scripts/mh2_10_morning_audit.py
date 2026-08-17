@@ -1207,6 +1207,21 @@ def write_report(r: dict, controls: dict | None = None) -> Path:
           f"⭐ `SIGMA_SCALE_DEFECT` {nc['sigma_defect_rate']:.3f} (bar {nc['sigma_defect_bar']}) "
           f"→ {'✅ PASSED' if nc['passed'] else '⛔ **FAILED**'}")
         A("")
+        pl_clean = nc["labels"].get("POWER_LIMITED", 0)
+        if pl_clean and v["verdict"] == "POWER_LIMITED":
+            A(f"⭐⭐ **READ THE VERDICT THROUGH THIS ROW — it is the sharpest thing this study "
+              f"measured.** A **perfectly calibrated** morning model at this `n` returns "
+              f"`POWER_LIMITED` **{pl_clean} times in {nc['n']}** — the same label the SERVED model "
+              f"got. ⇒ **the verdict LABEL does not distinguish the served morning model from a "
+              f"flawless one at {controls['n_rows_per_frame']:,} games.** That is not a failure of "
+              f"the instrument: it is the instrument correctly refusing to certify anything at a "
+              f"sample size where an 8% σ error would go undetected. Two consequences, and both "
+              f"cut against over-reading this study in EITHER direction — ⛔ the label may not be "
+              f"quoted as reassurance about the morning σ, and ⛔ it may not be quoted as suspicion "
+              f"either. The only quantity carrying information about the served model is the "
+              f"MAGNITUDE (`ĉ` = {sc['c_hat']:.4f}, against ≈1.00 for a clean frame), and its CI "
+              f"still includes 1.")
+            A("")
         dc = controls["discriminator_control_skewed_but_correctly_scaled"]
         A(f"### ⭐ The scale/shape discriminator control — {dc['n']} frames, σ **exactly right** "
           f"but the truth SKEWED (α = {dc['shape_alpha']})")
