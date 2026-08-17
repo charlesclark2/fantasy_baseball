@@ -2209,6 +2209,21 @@ const CASES = [
     to: "  `$${Math.round(Number(v))}`",
     grep: "em-dash",
   },
+  {
+    id: "auction-sold-ignores-the-chosen-team",
+    shipped: "NF-C5 — REAL, reported live 2026-08-17: every rival win was charged to one team",
+    // ⭐ THE ACTUAL SHIPPED DEFECT, restored exactly: `Sold` hardcoded `myTeam === 1 ? 2 : 1`, so
+    // the room panel was wrong AND — past that team's roster size — its extra buys became invisible
+    // to `openSlots`, which is the denominator `inflation` divides by.
+    //
+    // ⚠️ The regression test uses TWO different rival teams on purpose. A single rival sale would
+    // pass just as well against the hardcoded version, which is the fixture-cannot-fail shape.
+    detail: "Ignores the team picked in the menu and charges the hardcoded one.",
+    file: "components/fantasy/auction-optimizer.tsx",
+    from: "            onSelect={() => onSell(b.team)}",
+    to: "            onSelect={() => onSell(myTeam === 1 ? 2 : 1)}",
+    grep: "charged to the team that actually won it",
+  },
 ]
 
 /**

@@ -371,21 +371,75 @@ test.describe("driving an auction", () => {
     expectNoPageErrors(errors)
   })
 
+  /** Record a rival win through the "Sold" menu. ⚠️ Radix renders a BUTTON trigger plus a
+   *  portalled menu — `selectOption` is a no-op on it, so it is driven by trigger-click then
+   *  item-click, per the repo's Radix E2E rule. */
+  async function recordRivalWin(page: Page, team: number, price?: number, rowIndex = 0) {
+    const row = page.getByTestId("auction-candidate").nth(rowIndex)
+    const name = (await row.getByTestId("auction-candidate-name").textContent())?.trim() ?? ""
+    if (price != null) await row.getByTestId("auction-price-input").fill(String(price))
+    await row.getByTestId("auction-rival-button").click()
+    await page.locator(`[data-testid="auction-rival-team"][data-team="${team}"]`).click()
+    await expect(page.locator('[data-testid="auction-rival-team"]')).toHaveCount(0)
+    return name
+  }
+
   test("a rival's overpay moves the room's prices, not just their budget", async ({ page }) => {
     const { errors } = await startAuction(page)
     const mult = async () =>
       Number(((await page.getByTestId("auction-inflation").textContent()) ?? "").replace("x", ""))
     const before = await mult()
 
-    // Hand the top player to another team at a deliberate overpay.
-    const row = page.getByTestId("auction-candidate").first()
-    await row.getByTestId("auction-price-input").fill("120")
-    await row.getByTestId("auction-rival-button").click()
+    await recordRivalWin(page, 2, 120)
 
     await expect.poll(mult, { message: "an overpay did not move the room's prices" }).toBeLessThan(
       before,
     )
     await expectNoNaN(page)
+    expectNoPageErrors(errors)
+  })
+
+  test("a rival win is charged to the team that actually won it", async ({ page }) => {
+    // ⭐ THE DEFECT THIS REPLACES, reported live 2026-08-17. "Sold" hardcoded the buyer
+    // (`myTeam === 1 ? 2 : 1`), so EVERY rival purchase piled onto ONE team: the room panel was
+    // wrong, and past that team's roster size its extra buys became invisible to `openSlots` — the
+    // denominator `inflation` divides by.
+    //
+    // ⚠️ TWO DIFFERENT TEAMS ON PURPOSE. A single rival sale would pass just as well against the
+    // hardcoded version, which is the fixture-cannot-fail shape.
+    const { errors } = await startAuction(page)
+    await recordRivalWin(page, 3, 40)
+    await recordRivalWin(page, 5, 25)
+
+    const room = await page.getByTestId("auction-room-team").evaluateAll((rows) =>
+      Object.fromEntries(
+        rows.map((r) => [
+          r.getAttribute("data-team"),
+          (r.querySelector('[data-testid="auction-room-remaining"]')?.textContent ?? "").trim(),
+        ]),
+      ),
+    )
+    expect(room["3"], "team 3's money did not move").toBe("$160")
+    expect(room["5"], "team 5's money did not move").toBe("$175")
+    // ...and nobody else was charged. Team 2 is named explicitly because it was the hardcoded one.
+    expect(room["2"], "team 2 was charged for a sale it did not win").toBe("$200")
+    expect(room["4"]).toBe("$200")
+    expectNoPageErrors(errors)
+  })
+
+  test("a team with no open roster spot cannot be sold another player", async ({ page }) => {
+    // What makes the over-capacity state UNREACHABLE rather than merely clamped: a full team is
+    // not offered, so the room's slot count can never be credited with a purchase it cannot hold.
+    const { errors } = await startAuction(page)
+    await page.getByTestId("auction-candidate").first().getByTestId("auction-rival-button").click()
+    const items = page.locator('[data-testid="auction-rival-team"]')
+    await expect(items.first()).toBeVisible()
+    // Nobody is full at the start, so every rival is selectable — and I am NOT offered, because
+    // "I won" is the control for that and two ways to say the same thing is two rule sets.
+    const teams = await items.evaluateAll((els) => els.map((e) => e.getAttribute("data-team")))
+    expect(teams).not.toContain("1")
+    expect(teams.length).toBeGreaterThan(5)
+    for (const el of await items.all()) await expect(el).not.toBeDisabled()
     expectNoPageErrors(errors)
   })
 

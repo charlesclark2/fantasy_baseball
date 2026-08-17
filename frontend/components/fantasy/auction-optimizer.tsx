@@ -19,6 +19,13 @@ import Link from "next/link"
 import { RotateCcw, Undo2, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Picker } from "@/components/ui/picker"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { InfoTip } from "@/components/fantasy/shared"
 import { assignRoster, sortAvailable, type FilledSlot, type Player, type LeagueConfigMeta } from "@/lib/draft-optimizer"
 import {
@@ -29,6 +36,7 @@ import {
   openSlotsFor,
   rosterSpotsOf,
   type AuctionPick,
+  type TeamBudget,
 } from "@/lib/auction-optimizer"
 import {
   FANTASY_SEASON,
@@ -492,20 +500,17 @@ export function AuctionOptimizer() {
                       >
                         I won
                       </Button>
-                      <button
-                        data-testid="auction-rival-button"
-                        onClick={() =>
+                      <SoldToMenu
+                        budgets={state.budgets}
+                        myTeam={myTeam}
+                        onSell={(team) =>
                           sell(
                             c.player.id,
-                            myTeam === 1 ? 2 : 1,
+                            team,
                             priceFor(c.player.id, Math.max(1, c.auction.value)),
                           )
                         }
-                        title="Someone else won him — record the sale so the room's prices update"
-                        className="rounded border border-[#2a2a2a] px-2 py-1 text-xs text-gray-400 hover:border-[#10b981] hover:text-[#10b981]"
-                      >
-                        Sold
-                      </button>
+                      />
                     </div>
                   </div>
                 ))}
@@ -602,19 +607,32 @@ export function AuctionOptimizer() {
                           >
                             {formatMoney(state.bidFor(p).maxBid)}
                           </td>
+                          {/* ⭐ BOTH OUTCOMES, FOR EVERY PLAYER. The recommendation panel only ever
+                              lists the top few candidates for MY roster, so with "Sold" available
+                              there alone a rival buying anyone else could not be recorded AT ALL —
+                              and an unrecorded sale is a player who stays biddable and a room whose
+                              prices never move. Reported live 2026-08-17 alongside the team-
+                              attribution defect; they are the same gap seen from two sides. */}
                           <td className="py-1.5 pr-1 text-right">
-                            <button
-                              onClick={() => sell(p.id, myTeam, Math.max(1, v?.value ?? 1))}
-                              disabled={!state.openEligibility.has(p.pos)}
-                              className="rounded border border-[#2a2a2a] px-2 py-0.5 text-xs text-gray-400 hover:border-[#10b981] hover:text-[#10b981] disabled:opacity-30 disabled:hover:border-[#2a2a2a] disabled:hover:text-gray-400"
-                              title={
-                                state.openEligibility.has(p.pos)
-                                  ? `Record ${p.name} sold to you at his value`
-                                  : "No open slot on your roster fits this position"
-                              }
-                            >
-                              I won
-                            </button>
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => sell(p.id, myTeam, Math.max(1, v?.value ?? 1))}
+                                disabled={!state.openEligibility.has(p.pos)}
+                                className="rounded border border-[#2a2a2a] px-2 py-0.5 text-xs text-gray-400 hover:border-[#10b981] hover:text-[#10b981] disabled:opacity-30 disabled:hover:border-[#2a2a2a] disabled:hover:text-gray-400"
+                                title={
+                                  state.openEligibility.has(p.pos)
+                                    ? `Record ${p.name} sold to you at his value`
+                                    : "No open slot on your roster fits this position"
+                                }
+                              >
+                                I won
+                              </button>
+                              <SoldToMenu
+                                budgets={state.budgets}
+                                myTeam={myTeam}
+                                onSell={(team) => sell(p.id, team, Math.max(1, v?.value ?? 1))}
+                              />
+                            </div>
                           </td>
                         </tr>
                       )
@@ -650,6 +668,71 @@ export function AuctionOptimizer() {
 }
 
 // ── sub-components ──────────────────────────────────────────────────────────────────────────────
+/**
+ * "Sold" → pick the winning team → recorded.
+ *
+ * ⭐ WHY A MENU AND NOT A REMEMBERED SETTING. The first cut hardcoded the buyer
+ * (`myTeam === 1 ? 2 : 1`), so EVERY rival purchase piled onto one team: the room panel was wrong,
+ * and once that team passed its roster size its extra buys became invisible to `openSlots` — the
+ * denominator `inflation` divides by. Reported live 2026-08-17.
+ *
+ * A persistent "sold to team N" selector would fix the arithmetic and introduce a worse failure:
+ * it goes stale silently, and the next sale is attributed to whoever won the last one. Asking every
+ * time is one extra click on an action that already needs a deliberate price, and it cannot be
+ * wrong by omission.
+ *
+ * ⛔ A TEAM WITH NO OPEN SLOT IS NOT OFFERED. That is what makes the over-capacity state
+ * unreachable from the UI rather than merely clamped in the arithmetic; each team's remaining money
+ * is shown beside it so a mis-click is visible before it is made.
+ *
+ * ONE component for both the recommendation panel and the available-players table — two "record a
+ * sale" implementations would be two rule sets (E9.61).
+ */
+function SoldToMenu({
+  budgets,
+  myTeam,
+  onSell,
+  label = "Sold",
+}: {
+  budgets: TeamBudget[]
+  myTeam: number
+  onSell: (team: number) => void
+  label?: string
+}) {
+  const rivals = budgets.filter((b) => b.team !== myTeam)
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        data-testid="auction-rival-button"
+        title="Someone else won him — record the sale so the room's prices update"
+        className="rounded border border-[#2a2a2a] px-2 py-1 text-xs text-gray-400 hover:border-[#10b981] hover:text-[#10b981]"
+      >
+        {label}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[11rem] border-[#262626] bg-[#0f0f0f]">
+        <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-gray-500">
+          Sold to
+        </DropdownMenuLabel>
+        {rivals.map((b) => (
+          <DropdownMenuItem
+            key={b.team}
+            data-testid="auction-rival-team"
+            data-team={b.team}
+            disabled={b.openSlots === 0}
+            onSelect={() => onSell(b.team)}
+            className="flex justify-between gap-4 text-xs text-gray-300 focus:bg-[#1a1a1a] focus:text-white"
+          >
+            <span>Team {b.team}</span>
+            <span className="text-gray-500">
+              {b.openSlots === 0 ? "roster full" : `${formatMoney(b.remaining)} · ${b.openSlots} slots`}
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
@@ -788,7 +871,12 @@ function RoomPanel({
       <h2 className="mb-2 text-sm font-semibold text-white">The room</h2>
       <div className="flex flex-col gap-1">
         {budgets.map((b) => (
-          <div key={b.team} className="flex items-center gap-2 text-xs">
+          <div
+            key={b.team}
+            data-testid="auction-room-team"
+            data-team={b.team}
+            className="flex items-center gap-2 text-xs"
+          >
             <span className={`w-10 shrink-0 ${b.team === myTeam ? "text-[#10b981]" : "text-gray-500"}`}>
               T{b.team}
             </span>
@@ -799,7 +887,21 @@ function RoomPanel({
               />
             </div>
             <span className="w-16 shrink-0 text-right text-gray-400">
-              {formatMoney(b.remaining)}
+              {/* An overspend can only come from a hand-entered price, so it is SHOWN rather than
+                  silently absorbed — the arithmetic floors `remaining` at 0, and a floor nobody can
+                  see is indistinguishable from a real zero. */}
+              <span data-testid="auction-room-remaining">
+                {b.overspent ? (
+                  <span
+                    className="text-amber-400"
+                    title={`Recorded prices total ${formatMoney(b.spent)} — more than this team's budget. Check a price you entered.`}
+                  >
+                    over
+                  </span>
+                ) : (
+                  formatMoney(b.remaining)
+                )}
+              </span>
               <span className="text-gray-700">/{b.openSlots}</span>
             </span>
           </div>
