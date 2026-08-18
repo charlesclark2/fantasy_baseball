@@ -258,6 +258,22 @@ def test_rb_is_never_given_a_season_or_fold_retest_trigger():
     assert "field_remedy_admissible" in ns, "MH2.7: read the machine flag, never the prose"
 
 
+def test_a_negative_ceiling_is_never_reported_as_beating_its_foil():
+    """`bool(x or 0 > 0)` parses as `bool(x or (0 > 0))` — TRUE for a NEGATIVE delta. That would
+    hand `classify_null` a beats_foil it did not earn and invert the null state."""
+    folds = _field(3.0)
+    for fr in folds:                       # every active form now scores WORSE than the incumbent
+        for f in DC.ORACLE_FORMS:
+            fr["scores"][f"oracle__{f}"] = fr["scores"][DC.INCUMBENT] + 0.4
+            fr["scores"][f"matched_n__{f}"] = fr["scores"][DC.INCUMBENT] + 0.9
+    sel, dec = _decide(folds)
+    assert sel["mean_delta"] is not None and sel["mean_delta"] < 0
+    ns = DC.null_state(sel, dec, n_folds=len(folds))
+    assert ns["state"] == "GENUINE_ABSENCE", (
+        f"a negative ceiling classified as {ns['state']} — a negative point estimate is not "
+        "rescued by n (NF-D15 (g\u2033))")
+
+
 def test_classify_null_is_given_the_declared_field_size():
     src = _src(_MODULE)
     assert "declared_field_size=len(ORACLE_FORMS)" in src.replace(" ", ""), (

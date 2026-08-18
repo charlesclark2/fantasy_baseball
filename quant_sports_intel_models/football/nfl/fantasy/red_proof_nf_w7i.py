@@ -101,6 +101,12 @@ BREAKS: tuple[Break, ...] = (
           "pass",
           ("test_the_weighted_fit_refuses_a_mismatched_weight_vector",),
           "a mismatched weight vector is silently broadcast/truncated"),
+    Break("negative_delta_beats_foil", _MODULE,
+          'beats_foil=bool((sel.get("mean_delta") or 0.0) > 0),',
+          'beats_foil=bool(sel.get("mean_delta") or 0 > 0),',
+          ("test_a_negative_ceiling_is_never_reported_as_beating_its_foil",),
+          "operator-precedence: a NEGATIVE ceiling is reported as beating its foil, inverting "
+          "the null state"),
     Break("positive_control_cannot_refuse", _RUNNER,
           "            raise AssertionError(",
           "            _skip = (",

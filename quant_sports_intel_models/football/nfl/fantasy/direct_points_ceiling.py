@@ -501,7 +501,9 @@ def null_state(sel: dict, decision: dict, *, n_folds: int) -> dict:
             "(there is no measured contrast to classify)."), "field_remedy_admissible": None}
     v = cv_power.classify_null(
         metric=PRIMARY_METRIC, n_folds=n_folds, n_arms=len(ORACLE_FORMS),
-        beats_foil=bool(sel.get("mean_delta") or 0 > 0),
+        # ⛔ `bool(x or 0 > 0)` parses as `bool(x or (0 > 0))` and is TRUE for a NEGATIVE delta —
+        # it would tell the classifier a negative ceiling beat its foil, inverting the null state.
+        beats_foil=bool((sel.get("mean_delta") or 0.0) > 0),
         fold_wins=sel.get("fold_wins"), p_one_sided=sel.get("p_one_sided"),
         declared_field_size=len(ORACLE_FORMS))
     d = dataclasses.asdict(v) if dataclasses.is_dataclass(v) else (
