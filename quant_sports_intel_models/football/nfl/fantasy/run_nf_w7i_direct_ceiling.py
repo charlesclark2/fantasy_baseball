@@ -206,6 +206,8 @@ def write_report(out: dict, path: Path) -> None:
          f"| honest incumbent (`{DC.INCUMBENT}`, full-train) | {sel['mean_incumbent']} |",
          f"| best ACTIVE form | `{sel['best_form']}` |",
          f"| **ceiling** | **{sel['ceiling_pct']}%** |",
+         f"| **ceiling CI95 (band units)** | **{sel.get('ceiling_ci_pct')}** — the band comparison "
+         f"is a direct read, not an arithmetic exercise |",
          f"| paired Δ (CI95) | {sel['mean_delta']} {sel['ci95']} |",
          f"| folds won | {sel['fold_wins']}/{out['n_folds']} (clause requires "
          f"{sel['fold_clause']['required']}) |",
@@ -229,8 +231,13 @@ def write_report(out: dict, path: Path) -> None:
           f"> {sel['pbo_state']}", "",
           "## Null state", "",
           f"`{out['null_state'].get('state')}` · field-remedy admissible: "
-          f"`{out['null_state'].get('field_remedy_admissible')}`", "",
-          f"> {out['null_state'].get('retest_trigger_note')}", "",
+          f"`{out['null_state'].get('field_remedy_admissible')}`", ""]
+    ns = out["null_state"]
+    if ns.get("hand_corrected"):
+        L += [f"> ⚠️ **HAND-CORRECTED from `{ns['corrected_from']}`** (retained verbatim under "
+              f"`classify_null_raw`, NF-D20). {ns['reason']}", "",
+              f"> **Remedy:** {ns['remedy']}", ""]
+    L += [f"> {ns.get('retest_trigger_note')}", "",
           "## Mean CRPS by label", "", "| label | crps_q199 |", "|---|---|"]
     for k, v in sorted(sel["mean_crps"].items(), key=lambda kv: kv[1]):
         L.append(f"| `{k}` | {v} |")

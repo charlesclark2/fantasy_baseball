@@ -1,0 +1,501 @@
+{
+  "story": "NF-W7i",
+  "phase": "rb_direct_points_ceiling",
+  "smoke": false,
+  "generated_at": "2026-08-18T06:30:20.430923+00:00",
+  "seasons": [
+    2016,
+    2025
+  ],
+  "n_folds": 8,
+  "gate_league": "full_ppr",
+  "position": "RB",
+  "matrix_key": "26c34fbe778c9d87",
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 84553,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "attach_audit": {
+    "cache": "hit"
+  },
+  "predecessor": "NF-W7h",
+  "declared_field": {
+    "incumbent": "direct_points",
+    "oracle_forms": [
+      "direct_blockonly",
+      "direct_augmented",
+      "direct_upweighted",
+      "recal_block",
+      "climatology_block"
+    ],
+    "declared_field_size": 5,
+    "declared_field_size_source": "the five oracle FORMS pre-registered in \u00a73 \u2014 the headline is a MAX over them, so the multiplicity the selection actually spends is the form family (MH2 (a))",
+    "degenerates": [
+      "nihilist_zero",
+      "zero_width",
+      "max_width"
+    ],
+    "permutation": "permuted_direct",
+    "crossfit_k": 3,
+    "lambda_by_form": {
+      "direct_augmented": 1.0,
+      "direct_upweighted": 5.0
+    },
+    "ceiling_bands": [
+      2.0,
+      5.0
+    ]
+  },
+  "premise_correction": {
+    "nf_w7h_recorded_direct_oracle": 1.4933,
+    "construction": "KW.fit_direct_points(te_p, te_p, ...) \u2014 fit AND predicted on the test block, so every row saw its own label",
+    "reading": "a row-level in-sample MEMORISATION degenerate, not a ceiling \u2014 the NF-W6 pre-registration names exactly this ('a ROW-level peek is a zero-CRPS degenerate, not a ceiling'). It gated nothing in NF-W7h, but it cannot carry the ceiling claim this story exists to measure, which is why every peek here is CROSS-FIT."
+  },
+  "fold_results": [
+    {
+      "label": "2022H1",
+      "n": 1126,
+      "n_train": 13034,
+      "n_matched_window": 751,
+      "scores": {
+        "direct_points": 2.603659429553795,
+        "oracle__direct_blockonly": 2.7439303330169764,
+        "matched_n__direct_blockonly": 2.856957952202173,
+        "oracle__direct_augmented": 2.5979660661921464,
+        "matched_n__direct_augmented": 2.601572418385027,
+        "oracle__direct_upweighted": 2.662355490929415,
+        "matched_n__direct_upweighted": 2.6084128726964173,
+        "oracle__recal_block": 2.874344056886758,
+        "matched_n__recal_block": 2.9513360033398284,
+        "oracle__climatology_block": 3.7958006105125985,
+        "matched_n__climatology_block": 3.803453783125218,
+        "nihilist_zero": 5.572486678507993,
+        "zero_width": 5.947422500136955,
+        "max_width": 7.179353525428902,
+        "permuted_direct": 3.8177165761375926
+      },
+      "coverage_80_incumbent": {
+        "coverage": 0.7628774422735346,
+        "n": 1126,
+        "binomial_se": 0.011920399101642998,
+        "blocking_shortfall": true
+      }
+    },
+    {
+      "label": "2022H2",
+      "n": 1111,
+      "n_train": 14195,
+      "n_matched_window": 741,
+      "scores": {
+        "direct_points": 2.4011030581550963,
+        "oracle__direct_blockonly": 2.5682724675829,
+        "matched_n__direct_blockonly": 2.666783687306178,
+        "oracle__direct_augmented": 2.413344076369756,
+        "matched_n__direct_augmented": 2.4114009779467493,
+        "oracle__direct_upweighted": 2.46277350071274,
+        "matched_n__direct_upweighted": 2.43412479853647,
+        "oracle__recal_block": 2.6675328519848174,
+        "matched_n__recal_block": 2.7395812512369244,
+        "oracle__climatology_block": 3.5682710449185624,
+        "matched_n__climatology_block": 3.572571488405122,
+        "nihilist_zero": 5.361980198019801,
+        "zero_width": 5.649315466805574,
+        "max_width": 7.035621191238009,
+        "permuted_direct": 3.6586193295551874
+      },
+      "coverage_80_incumbent": {
+        "coverage": 0.801980198019802,
+        "n": 1111,
+        "binomial_se": 0.012000600045003751,
+        "blocking_shortfall": false
+      }
+    },
+    {
+      "label": "2023H1",
+      "n": 1057,
+      "n_train": 15285,
+      "n_matched_window": 705,
+      "scores": {
+        "direct_points": 2.454913227767861,
+        "oracle__direct_blockonly": 2.6790372074592126,
+        "matched_n__direct_blockonly": 2.665243989045102,
+        "oracle__direct_augmented": 2.44574674428185,
+        "matched_n__direct_augmented": 2.4568424108592524,
+        "oracle__direct_upweighted": 2.4901595042046654,
+        "matched_n__direct_upweighted": 2.467559175536477,
+        "oracle__recal_block": 2.6705417065398787,
+        "matched_n__recal_block": 2.7410868950766485,
+        "oracle__climatology_block": 3.6091250984915115,
+        "matched_n__climatology_block": 3.6130855196702534,
+        "nihilist_zero": 5.430671712393567,
+        "zero_width": 5.60650212224437,
+        "max_width": 7.077936145383178,
+        "permuted_direct": 3.6424252981100884
+      },
+      "coverage_80_incumbent": {
+        "coverage": 0.815515610217597,
+        "n": 1057,
+        "binomial_se": 0.012303325038417301,
+        "blocking_shortfall": false
+      }
+    },
+    {
+      "label": "2023H2",
+      "n": 1051,
+      "n_train": 16368,
+      "n_matched_window": 701,
+      "scores": {
+        "direct_points": 2.4312367427374277,
+        "oracle__direct_blockonly": 2.682877609748209,
+        "matched_n__direct_blockonly": 2.577549866772825,
+        "oracle__direct_augmented": 2.439914762480065,
+        "matched_n__direct_augmented": 2.4231604799988427,
+        "oracle__direct_upweighted": 2.470437490679604,
+        "matched_n__direct_upweighted": 2.423839626429947,
+        "oracle__recal_block": 2.70627774980668,
+        "matched_n__recal_block": 2.7624634163387634,
+        "oracle__climatology_block": 3.7694339858187225,
+        "matched_n__climatology_block": 3.7786450965579563,
+        "nihilist_zero": 5.683843958135109,
+        "zero_width": 5.894652683800655,
+        "max_width": 7.142068204742672,
+        "permuted_direct": 3.8348342332202536
+      },
+      "coverage_80_incumbent": {
+        "coverage": 0.8173168411037107,
+        "n": 1051,
+        "binomial_se": 0.012338393969512714,
+        "blocking_shortfall": false
+      }
+    },
+    {
+      "label": "2024H1",
+      "n": 1077,
+      "n_train": 17408,
+      "n_matched_window": 718,
+      "scores": {
+        "direct_points": 2.555983783806563,
+        "oracle__direct_blockonly": 2.6928872788686093,
+        "matched_n__direct_blockonly": 2.860209218012408,
+        "oracle__direct_augmented": 2.5502422800425713,
+        "matched_n__direct_augmented": 2.5615186998159953,
+        "oracle__direct_upweighted": 2.571929721998239,
+        "matched_n__direct_upweighted": 2.5693650544707936,
+        "oracle__recal_block": 2.8040451656826955,
+        "matched_n__recal_block": 2.888648989746705,
+        "oracle__climatology_block": 3.8991990633763067,
+        "matched_n__climatology_block": 3.906300112890358,
+        "nihilist_zero": 5.832609099350048,
+        "zero_width": 6.109419770715564,
+        "max_width": 7.211120660096921,
+        "permuted_direct": 3.911225327637476
+      },
+      "coverage_80_incumbent": {
+        "coverage": 0.7929433611884865,
+        "n": 1077,
+        "binomial_se": 0.012188552706720106,
+        "blocking_shortfall": false
+      }
+    },
+    {
+      "label": "2024H2",
+      "n": 1025,
+      "n_train": 18485,
+      "n_matched_window": 683,
+      "scores": {
+        "direct_points": 2.478011048150651,
+        "oracle__direct_blockonly": 2.6238247095029887,
+        "matched_n__direct_blockonly": 2.579342206604319,
+        "oracle__direct_augmented": 2.4667701164418023,
+        "matched_n__direct_augmented": 2.480949836209461,
+        "oracle__direct_upweighted": 2.491017109554121,
+        "matched_n__direct_upweighted": 2.4811492390632544,
+        "oracle__recal_block": 2.7504284395272767,
+        "matched_n__recal_block": 2.8197038290276137,
+        "oracle__climatology_block": 3.737182600808923,
+        "matched_n__climatology_block": 3.7424691003799486,
+        "nihilist_zero": 5.6163902439024405,
+        "zero_width": 5.816531616274237,
+        "max_width": 7.128606381677284,
+        "permuted_direct": 3.852558894103514
+      },
+      "coverage_80_incumbent": {
+        "coverage": 0.791219512195122,
+        "n": 1025,
+        "binomial_se": 0.012493900951088486,
+        "blocking_shortfall": false
+      }
+    },
+    {
+      "label": "2025H1",
+      "n": 1062,
+      "n_train": 19505,
+      "n_matched_window": 708,
+      "scores": {
+        "direct_points": 2.3943960885539224,
+        "oracle__direct_blockonly": 2.5651336999234946,
+        "matched_n__direct_blockonly": 2.7452694104668915,
+        "oracle__direct_augmented": 2.389509706165378,
+        "matched_n__direct_augmented": 2.3982272843757877,
+        "oracle__direct_upweighted": 2.3953728521265205,
+        "matched_n__direct_upweighted": 2.397159828296594,
+        "oracle__recal_block": 2.660997788964348,
+        "matched_n__recal_block": 2.7131694471467878,
+        "oracle__climatology_block": 3.773632035478712,
+        "matched_n__climatology_block": 3.7781205853183053,
+        "nihilist_zero": 5.538568738229755,
+        "zero_width": 5.9261963637697805,
+        "max_width": 7.14145821938573,
+        "permuted_direct": 3.801953365220492
+      },
+      "coverage_80_incumbent": {
+        "coverage": 0.8210922787193974,
+        "n": 1062,
+        "binomial_se": 0.012274328238644312,
+        "blocking_shortfall": false
+      }
+    },
+    {
+      "label": "2025H2",
+      "n": 1082,
+      "n_train": 20601,
+      "n_matched_window": 721,
+      "scores": {
+        "direct_points": 2.434651415246522,
+        "oracle__direct_blockonly": 2.640005204914523,
+        "matched_n__direct_blockonly": 2.548323486271724,
+        "oracle__direct_augmented": 2.4236277289284445,
+        "matched_n__direct_augmented": 2.4294136848848886,
+        "oracle__direct_upweighted": 2.433622248124686,
+        "matched_n__direct_upweighted": 2.429821510944016,
+        "oracle__recal_block": 2.740577848391834,
+        "matched_n__recal_block": 2.8139149237624608,
+        "oracle__climatology_block": 3.8365859125107984,
+        "matched_n__climatology_block": 3.8400132685609187,
+        "nihilist_zero": 5.722181146025878,
+        "zero_width": 5.921146106630683,
+        "max_width": 7.20127640180149,
+        "permuted_direct": 3.8886561784267335
+      },
+      "coverage_80_incumbent": {
+        "coverage": 0.821626617375231,
+        "n": 1082,
+        "binomial_se": 0.012160358006209633,
+        "blocking_shortfall": false
+      }
+    }
+  ],
+  "selection": {
+    "position": "RB",
+    "selection_metric": "crps_q199",
+    "n_rows": 8591,
+    "fold_labels": [
+      "2022H1",
+      "2022H2",
+      "2023H1",
+      "2023H2",
+      "2024H1",
+      "2024H2",
+      "2025H1",
+      "2025H2"
+    ],
+    "mean_crps": {
+      "direct_points": 2.46924,
+      "oracle__direct_blockonly": 2.6495,
+      "matched_n__direct_blockonly": 2.68746,
+      "oracle__direct_augmented": 2.46589,
+      "matched_n__direct_augmented": 2.47039,
+      "oracle__direct_upweighted": 2.49721,
+      "matched_n__direct_upweighted": 2.47643,
+      "oracle__recal_block": 2.73434,
+      "matched_n__recal_block": 2.80374,
+      "oracle__climatology_block": 3.74865,
+      "matched_n__climatology_block": 3.75433,
+      "nihilist_zero": 5.59484,
+      "zero_width": 5.8589,
+      "max_width": 7.13968,
+      "permuted_direct": 3.801
+    },
+    "incumbent": "direct_points",
+    "mean_incumbent": 2.46924,
+    "per_form": {
+      "direct_blockonly": {
+        "oracle_mean": 2.6495,
+        "matched_n_mean": 2.68746,
+        "mean_delta": -0.18025,
+        "ci95": [
+          -0.21569,
+          -0.14482
+        ],
+        "fold_wins": 0,
+        "ceiling_pct": -7.3,
+        "oracle_beats_matched_n": true,
+        "activity": "ACTIVE",
+        "peek_gain_vs_matched_n": 0.03796,
+        "p_one_sided": 1.0
+      },
+      "direct_augmented": {
+        "oracle_mean": 2.46589,
+        "matched_n_mean": 2.47039,
+        "mean_delta": 0.00335,
+        "ci95": [
+          -0.0041,
+          0.01081
+        ],
+        "fold_wins": 6,
+        "ceiling_pct": 0.136,
+        "oracle_beats_matched_n": true,
+        "activity": "ACTIVE",
+        "peek_gain_vs_matched_n": 0.0045,
+        "p_one_sided": 0.1613
+      },
+      "direct_upweighted": {
+        "oracle_mean": 2.49721,
+        "matched_n_mean": 2.47643,
+        "mean_delta": -0.02796,
+        "ci95": [
+          -0.04843,
+          -0.00749
+        ],
+        "fold_wins": 1,
+        "ceiling_pct": -1.132,
+        "oracle_beats_matched_n": false,
+        "activity": "INACTIVE",
+        "peek_gain_vs_matched_n": -0.02078,
+        "p_one_sided": 0.9928
+      },
+      "recal_block": {
+        "oracle_mean": 2.73434,
+        "matched_n_mean": 2.80374,
+        "mean_delta": -0.2651,
+        "ci95": [
+          -0.28651,
+          -0.24369
+        ],
+        "fold_wins": 0,
+        "ceiling_pct": -10.736,
+        "oracle_beats_matched_n": true,
+        "activity": "ACTIVE",
+        "peek_gain_vs_matched_n": 0.06939,
+        "p_one_sided": 1.0
+      },
+      "climatology_block": {
+        "oracle_mean": 3.74865,
+        "matched_n_mean": 3.75433,
+        "mean_delta": -1.27941,
+        "ci95": [
+          -1.36229,
+          -1.19653
+        ],
+        "fold_wins": 0,
+        "ceiling_pct": -51.814,
+        "oracle_beats_matched_n": true,
+        "activity": "ACTIVE",
+        "peek_gain_vs_matched_n": 0.00568,
+        "p_one_sided": 1.0
+      }
+    },
+    "active_forms": [
+      "direct_blockonly",
+      "direct_augmented",
+      "recal_block",
+      "climatology_block"
+    ],
+    "best_form": "direct_augmented",
+    "fold_clause": {
+      "required": 6,
+      "attainable": true,
+      "passes": true
+    },
+    "anchors": {
+      "nihilist_loses": true,
+      "zero_width_loses": true,
+      "max_width_loses": true,
+      "permutation_loses": true
+    },
+    "estimator_note": "MAX over the per-form cross-fit peeks vs the honest full-train incumbent. Every bias here favours a BUILD \u2014 selection over forms is upward-biased on the oracle side, the peek sees the future, and the headline block weight is the smoke sweep's most generous (ceiling-maximising) value \u2014 so a NO is CONSERVATIVE (the NF-W5/NF-W6 rule, declared before the run).",
+    "pbo": null,
+    "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field (the NF-W5/NF-W6 ceiling rule). DSR does not arise: no arm is selected and nothing is promoted.",
+    "deltas_by_fold": [
+      0.00569,
+      -0.01224,
+      0.00917,
+      -0.00868,
+      0.00574,
+      0.01124,
+      0.00489,
+      0.01102
+    ],
+    "mean_delta": 0.00335,
+    "ci95": [
+      -0.0041,
+      0.01081
+    ],
+    "fold_wins": 6,
+    "p_one_sided": 0.1613,
+    "ceiling_pct": 0.136,
+    "ceiling_ci_pct": [
+      -0.166,
+      0.438
+    ]
+  },
+  "fdr": {
+    "binding": {
+      "direct_augmented": false,
+      "direct_upweighted": false,
+      "direct_blockonly": false,
+      "recal_block": false,
+      "climatology_block": false
+    },
+    "cutoff": null,
+    "family_size": 5,
+    "n_rejected": 0,
+    "note": "BH at q=0.1 over the 5 declared oracle forms"
+  },
+  "decision": {
+    "answer": "NO",
+    "stat_ok": false,
+    "licensed_for_bakeoff": false,
+    "reason": "ceiling 0.14% on `direct_augmented` is not statistically demonstrable (CI-excludes-zero False, fold clause True, BH binding False) \u2014 NO regardless of magnitude",
+    "license_rule": "licensed iff answer \u2208 ('YES','MARGINAL') \u2227 stat_ok \u2014 the NF-W6d LICENSE_BANDS convention, declared before the run"
+  },
+  "null_state": {
+    "state": "MEASURED_IMMATERIAL",
+    "hand_corrected": true,
+    "corrected_from": "POWER_LIMITED",
+    "reason": "the 95% interval on the ceiling is [-0.166%, 0.438%] and its UPPER bound sits 4.57\u00d7 BELOW the 2.0% materiality band \u2014 the evidence RULES OUT a material ceiling rather than failing to detect one. This is a MEASUREMENT, not a power shortfall: more folds tighten the interval around a point estimate 14.7\u00d7 too small to reach the band.",
+    "remedy": "a DIFFERENT MECHANISM, never more data and never a smaller field \u2014 a bake-off confined to this form cannot pay, which is exactly the question the oracle gate was run to answer before funding one",
+    "retest_trigger": null,
+    "retest_trigger_note": "\u26d4 NO season/fold re-test trigger is published for RB \u2014 pre-registered scope guard. A ceiling below the band is a MEASUREMENT of the form's headroom, not a power shortfall, and more seasons cannot move it.",
+    "classify_null_raw": {
+      "state": "POWER_LIMITED",
+      "reason": "`crps_q199`: insufficient recorded statistics to certify the null as powered. Absent a detectability figure the honest default is POWER-LIMITED \u2014 a null is trustworthy only when something was computed to make it so.",
+      "retest_trigger": null,
+      "folds_have": 8,
+      "folds_needed": null,
+      "extra_seasons": null,
+      "max_field_size": null,
+      "detail": {
+        "n_folds": 8,
+        "n_arms": 5
+      },
+      "field_remedy_admissible": null
+    },
+    "field_remedy_admissible": null,
+    "field_remedy_note": "absent because no FIELD remedy was prescribed \u2014 the instrument emits the MH2.7 flag only where it recommends a field size, and this state does not (the machine flag is read, never the prose)."
+  },
+  "verdict": {
+    "story_verdict": "NO",
+    "position": "RB",
+    "ceiling_pct": 0.136,
+    "best_form": "direct_augmented",
+    "licensed_for_bakeoff": false,
+    "reason": "ceiling 0.14% on `direct_augmented` is not statistically demonstrable (CI-excludes-zero False, fold clause True, BH binding False) \u2014 NO regardless of magnitude",
+    "scope_note": "\u26d4 RB ONLY, DIRECT-POINTS form only, at the NF-W1 fold axis. This record certifies nothing about QB/WR/TE and licenses no assembly successor (NF-W7h measured assembly as LOSING at RB by 0.0263 CRPS).",
+    "promotes_nothing": true
+  },
+  "runtime_seconds": 1653.2,
+  "rewritten_at": "2026-08-18T06:41:06.256096+00:00"
+}
