@@ -125,7 +125,7 @@ BREAKS: list[tuple[str, str, str, str, str, str | None]] = [
     ("schedule: ships RUNNING (fires before the operator's P1.2 re-fit)", _S,
      "    default_status=DefaultScheduleStatus.STOPPED,  # ⛔ operator-gated — see module docstring",
      "    default_status=DefaultScheduleStatus.RUNNING,",
-     "ships_stopped", "DefaultScheduleStatus.STOPPED"),
+     "stopped", "DefaultScheduleStatus.STOPPED"),   # both the source scan AND the live object
     ("schedule: the cron starts in September and misses the 8/29 opener", _S,
      'NCAAF_PREDICTION_SNAPSHOT_CRON = "0 9 * 8-12,1 2"',
      'NCAAF_PREDICTION_SNAPSHOT_CRON = "0 9 * 9-12,1 2"',

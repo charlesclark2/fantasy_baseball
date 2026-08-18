@@ -27,6 +27,8 @@ No IO: every test builds its own frames, or reads the two COMMITTED served JSON 
 """
 from __future__ import annotations
 
+import ast
+import pathlib
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
@@ -397,10 +399,118 @@ def test_a_nonzero_best_alpha_is_refused():
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════
-# 5 — the schedule is wired (pinned on the COMPILED graph, not on source order)
+# 5 — the schedule is wired
 # ══════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⚠️ `pipeline/__init__.py` reads the dbt manifest AT IMPORT, and that manifest is gitignored — so
+# it is absent in the fast gate and in any fresh worktree (E11.23). The repo's cure is to import
+# `pipeline` INSIDE the test body and skip cleanly without it.
+#
+# ⭐ But a guard that only ever SKIPS in CI is barely a guard, and the two assertions that actually
+# carry the 8/29 deadline — "a fire lands before the opener" and "it lands inside the horizon" —
+# need no Dagster object at all: the cron and the horizon are module-level literals. So those read
+# the SOURCE (comment-stripped, so prose cannot satisfy them — INC-38) and run EVERYWHERE. Only
+# the checks that genuinely need the compiled graph are manifest-gated.
+
+_REPO = pathlib.Path(__file__).resolve().parents[2]
+_SCHEDULE_SRC = _REPO / "pipeline/schedules/sports_ncaaf_prediction_snapshot_schedules.py"
+_JOB_SRC = _REPO / "pipeline/jobs/sports_ncaaf_prediction_snapshot_job.py"
+
+
+def _code_only(path: pathlib.Path) -> str:
+    """Source with comment lines and the module docstring stripped — a guard a COMMENT can satisfy
+    is not a guard (INC-38: the fix's own explanatory prose made the first cut pass on deleted
+    code)."""
+    body = path.read_text().split('"""', 2)[-1]
+    return "\n".join(l for l in body.splitlines() if not l.strip().startswith("#"))
+
+
+def _literal(path: pathlib.Path, name: str):
+    """The value assigned to a module-level constant, read by AST without importing the module.
+
+    Handles both a plain literal and the `float(os.environ.get("X", "7"))` form: it returns the
+    LAST string/number constant in the assignment, which is the declared default. RAISES if the
+    name is absent — an unreadable constant is a refusal, not a pass (NF1.7 (a))."""
+    tree = ast.parse(path.read_text())
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == name for t in node.targets):
+            consts = [n.value for n in ast.walk(node.value)
+                      if isinstance(n, ast.Constant) and isinstance(n.value, (str, int, float))]
+            if not consts:
+                raise AssertionError(f"{name} in {path.name} has no literal to read")
+            return consts[-1]
+    raise AssertionError(f"{name} is not a module-level constant in {path.name}")
+
+
+def _skip_without_manifest():
+    """`pipeline/__init__.py` reads the dbt manifest at import (the E11.23 fast-gate rule)."""
+    if not (_REPO / "dbt/target/manifest.json").exists():
+        pytest.skip("dbt manifest absent — `pipeline` is not importable in the fast gate")
+
+
+# ── manifest-free: the two assertions that carry the deadline ────────────────────────────────
+
+def test_the_cron_is_weekly_and_in_season():
+    """Weekly, on ONE weekday, across the NCAAF season months (Aug-Dec + Jan for bowls/CFP)."""
+    cron = _literal(_SCHEDULE_SRC, "NCAAF_PREDICTION_SNAPSHOT_CRON")
+    minute, hour, dom, month, dow = cron.split()
+    assert dom == "*" and dow.isdigit(), f"must be a weekly day-of-week cron, got {cron!r}"
+    months = {int(m) for part in month.split(",")
+              for m in (range(int(part.split("-")[0]), int(part.split("-")[1]) + 1)
+                        if "-" in part else [part])}
+    assert {8, 9, 10, 11, 12, 1} <= months, f"the season months are not all covered: {months}"
+    assert int(hour) < 12, "fire in the morning, well ahead of the week's kickoffs"
+
+
+def test_the_cron_fires_before_the_2026_opener_and_within_the_horizon():
+    """⭐ THE DEADLINE ASSERTION. A schedule whose first fire lands AFTER 8/29 misses the opening
+    slate outright — and an opening-week prediction is precisely the one that cannot be taken
+    later. Both halves must hold: a fire before the opener, AND that fire close enough that the
+    horizon actually reaches it, or the opener falls through the gap between them.
+
+    Uses Dagster's OWN cron engine (the one that actually fires), never a third-party parser —
+    `croniter` is not installed on the box and would answer about a different engine (NF-FRESH2).
+    """
+    from dagster._utils.schedules import cron_string_iterator
+
+    cron = _literal(_SCHEDULE_SRC, "NCAAF_PREDICTION_SNAPSHOT_CRON")
+    horizon = float(_literal(_JOB_SRC, "SNAPSHOT_HORIZON_DAYS"))
+    it = cron_string_iterator(datetime(2026, 8, 1, tzinfo=UTC).timestamp(), cron,
+                              "America/Los_Angeles")
+    fires = [next(it) for _ in range(5)]
+    first_kickoff = datetime(2026, 8, 29, 16, tzinfo=UTC)
+    before = [f for f in fires if f.astimezone(UTC) < first_kickoff]
+    assert before, f"no fire before the 2026 opener; first fires were {fires}"
+    gap_days = (first_kickoff - before[-1].astimezone(UTC)).total_seconds() / 86400
+    assert gap_days <= horizon, (
+        f"the last pre-opener fire is {gap_days:.1f}d out but the horizon is {horizon}d — "
+        "the opening slate would fall through the gap")
+
+
+def test_the_schedule_declares_itself_stopped_in_source():
+    """⛔ STOPPED is deliberate and is the reason the operator's P1.2 re-fit can gate the first
+    snapshot. Asserted on comment-stripped SOURCE so it holds in the fast gate too, and again on
+    the live object below wherever the manifest exists."""
+    code = _code_only(_SCHEDULE_SRC)
+    assert "DefaultScheduleStatus.STOPPED" in code
+    assert "DefaultScheduleStatus.RUNNING" not in code
+
+
+def test_the_job_needs_no_paid_key_and_no_deploy_ephemeral_artifact():
+    """The op must not reach for a gitignored file. `sports.duckdb` and the strength/matrix parquet
+    are absent from the `COPY . .` image, so an op that reads one runs green while producing
+    nothing (NF-INFRA1 / NF-FRESH1). Everything comes from the lake + the two committed JSONs."""
+    code = _code_only(_JOB_SRC)
+    for forbidden in ("sports.duckdb", "SPORTS_DUCKDB_PATH", "ODDS_API_KEY", "CFBD_API_KEY",
+                      ".parquet"):
+        assert forbidden not in code, f"the snapshot op reaches for {forbidden!r}"
+
+
+# ── manifest-gated: the checks that genuinely need the COMPILED graph ────────────────────────
 
 def test_the_job_and_schedule_are_registered():
+    _skip_without_manifest()
     import pipeline.jobs as jobs
     import pipeline.schedules as schedules
 
@@ -409,9 +519,7 @@ def test_the_job_and_schedule_are_registered():
 
 
 def test_the_schedule_targets_the_job_and_ships_stopped():
-    """⛔ STOPPED is deliberate: the first snapshot must not fire until the operator's
-    close-to-kickoff P1.2 re-fit, or the pre-season cold start is frozen into a track record that
-    by design can never be rewritten."""
+    _skip_without_manifest()
     from dagster import DefaultScheduleStatus
 
     from pipeline.schedules.sports_ncaaf_prediction_snapshot_schedules import (
@@ -423,51 +531,11 @@ def test_the_schedule_targets_the_job_and_ships_stopped():
     assert sched.execution_timezone == "America/Los_Angeles"
 
 
-def test_the_cron_is_weekly_and_in_season():
-    """Weekly, on ONE weekday, across the NCAAF season months (Aug-Dec + Jan for bowls/CFP)."""
-    from pipeline.schedules.sports_ncaaf_prediction_snapshot_schedules import (
-        NCAAF_PREDICTION_SNAPSHOT_CRON as cron,
-    )
-
-    minute, hour, dom, month, dow = cron.split()
-    assert dom == "*" and dow.isdigit(), f"must be a weekly day-of-week cron, got {cron!r}"
-    months = {int(m) for part in month.split(",")
-              for m in (range(int(part.split("-")[0]), int(part.split("-")[1]) + 1)
-                        if "-" in part else [part])}
-    assert {8, 9, 10, 11, 12, 1} <= months, f"the season months are not all covered: {months}"
-    assert int(hour) < 12, "fire in the morning, well ahead of the week's kickoffs"
-
-
-def test_the_cron_fires_before_the_2026_opener():
-    """A schedule that first fires AFTER 8/29 would miss the opening slate outright — and an
-    opening-week prediction is precisely the one that cannot be taken later. Uses Dagster's OWN
-    cron engine (the one that actually fires), not a third-party parser (NF-FRESH2)."""
-    from dagster._utils.schedules import cron_string_iterator
-
-    from pipeline.schedules.sports_ncaaf_prediction_snapshot_schedules import (
-        NCAAF_PREDICTION_SNAPSHOT_CRON as cron,
-    )
-
-    start = datetime(2026, 8, 1, tzinfo=UTC).timestamp()
-    fires = [next(cron_string_iterator(start, cron, "America/Los_Angeles"))]
-    it = cron_string_iterator(start, cron, "America/Los_Angeles")
-    fires = [next(it) for _ in range(5)]
-    first_kickoff = datetime(2026, 8, 29, 16, tzinfo=UTC)
-    before = [f for f in fires if f.astimezone(UTC) < first_kickoff]
-    assert before, f"no fire before the 2026 opener; first fires were {fires}"
-    # ...and the last such fire must be inside the horizon, or the opener is snapshotted by nobody.
-    from pipeline.jobs.sports_ncaaf_prediction_snapshot_job import SNAPSHOT_HORIZON_DAYS
-
-    gap_days = (first_kickoff - before[-1].astimezone(UTC)).total_seconds() / 86400
-    assert gap_days <= SNAPSHOT_HORIZON_DAYS, (
-        f"the last pre-opener fire is {gap_days:.1f}d out but the horizon is "
-        f"{SNAPSHOT_HORIZON_DAYS}d — the opening slate would fall through the gap")
-
-
 def test_the_futures_leaf_is_downstream_of_the_game_snapshot_on_the_compiled_graph():
     """Pinned as a dependency EDGE, not as source order. The per-game snapshot is the
     deadline-critical, non-recoverable one; the futures board is a bonus that must never delay or
     fail it. A reorder that put futures first would not change any source-scanning test."""
+    _skip_without_manifest()
     from pipeline.jobs.sports_ncaaf_prediction_snapshot_job import (
         sports_ncaaf_prediction_snapshot_job as job,
     )
@@ -477,18 +545,3 @@ def test_the_futures_leaf_is_downstream_of_the_game_snapshot_on_the_compiled_gra
     futures = next(k for k in edges if "futures" in k)
     assert any("prediction_snapshot_op" in src for src in edges[futures]), (
         f"the futures op has no dependency on the game snapshot: {edges}")
-
-
-def test_the_job_needs_no_paid_key_and_no_deploy_ephemeral_artifact():
-    """The op must not reach for a gitignored file. `sports.duckdb` and the strength/matrix parquet
-    are absent from the `COPY . .` image, so an op that reads one runs green while producing
-    nothing (NF-INFRA1 / NF-FRESH1). Everything comes from the lake + the two committed JSONs."""
-    import pathlib
-
-    src = pathlib.Path("pipeline/jobs/sports_ncaaf_prediction_snapshot_job.py").read_text()
-    code = "\n".join(line for line in src.splitlines()
-                     if not line.strip().startswith("#") and not line.strip().startswith("*"))
-    body = code.split('"""', 2)[-1]           # strip the module docstring before scanning
-    for forbidden in ("sports.duckdb", "SPORTS_DUCKDB_PATH", "ODDS_API_KEY", "CFBD_API_KEY",
-                      ".parquet"):
-        assert forbidden not in body, f"the snapshot op reaches for {forbidden!r}"
