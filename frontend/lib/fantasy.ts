@@ -5,6 +5,7 @@
 // by hitting the raw asset URL.
 
 import { apiFetch, cdnFetch } from "@/lib/api"
+import type { BigBoardDoc, SavedBigBoard } from "@/lib/big-board"
 import type { FreshnessBlock, Manifest, Player } from "@/lib/draft-optimizer"
 
 // NF3 — the format-INDEPENDENT season projection: one row per projectable player, the raw
@@ -593,4 +594,49 @@ export interface MyTeamsPayload {
 
 export function getMyTeams(token: string | null, season: number): Promise<MyTeamsPayload> {
   return apiFetch(`/fantasy/nfl/my-teams?season=${season}`, {}, token)
+}
+
+// ── NF-C4: the CUSTOM BIG BOARD ──────────────────────────────────────────────────────────────────
+//
+// A user's own ranking of one published (config, size) board. Reads at `require_fantasy_access` —
+// the SAME gate as the draft and auction optimizers this surface sits beside — not the broader
+// personalization quota: a big board is the paid decision-support half.
+//
+// ⛔ ALWAYS TOKENED, NEVER THROUGH `cdnFetch`. Every response here is per-caller by construction, so
+// the CDN arm (which strips `Authorization` by design) would either 401 or, far worse, pin one
+// user's board into a shared cache entry. The asymmetry with the board/manifest fetchers above is
+// the point — see `getFullProjections` for the same rule on the paid projection.
+
+export interface CustomBoardsPayload {
+  boards: SavedBigBoard[]
+  /** The storage ceiling, served so the surface never hardcodes a number the server owns. OPTIONAL
+   *  for the usual reason (NF-C0/E8.6): `frontend/` deploys on merge and the API only on
+   *  `deploy.sh`, so during the skew window this key is simply absent and the caller reads it with
+   *  `?? null` and says nothing rather than quoting a guess. */
+  max_boards?: number | null
+}
+
+export function listCustomBoards(token: string | null): Promise<CustomBoardsPayload> {
+  return apiFetch(`/fantasy/nfl/custom-boards`, {}, token)
+}
+
+/** Upsert the caller's board for one (config, size). The server derives the storage key from those
+ *  two fields, so there is no id to pass and no way for two saves of one board to diverge. */
+export function saveCustomBoard(
+  token: string | null,
+  input: BigBoardDoc & { config: string; size: number },
+): Promise<SavedBigBoard> {
+  return apiFetch(
+    `/fantasy/nfl/custom-boards`,
+    { method: "PUT", body: JSON.stringify(input) },
+    token,
+  )
+}
+
+export function deleteCustomBoard(token: string | null, boardKey: string): Promise<void> {
+  return apiFetch(
+    `/fantasy/nfl/custom-boards/${encodeURIComponent(boardKey)}`,
+    { method: "DELETE" },
+    token,
+  )
 }

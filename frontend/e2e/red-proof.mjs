@@ -2296,6 +2296,92 @@ const CASES = [
     to: "  return lo === hi ? `$${lo}` : `$${lo}–$${hi}`",
     grep: "quoted in points",
   },
+
+  // ══ NF-C4 — the custom big board ══════════════════════════════════════════════════════════════
+  //
+  // Every case here is a defect that ships past `tsc` and `next build`: the page renders, the
+  // numbers are right, and the feature quietly does not work.
+  {
+    id: "drag-never-commits",
+    shipped: "NF-C4 — pre-emptive: the reorder that looks like it worked and did not",
+    // ⭐ THE MOST LIKELY WAY THIS FEATURE BREAKS, and the least visible. A pointer drag that never
+    // reaches its commit leaves the row exactly where it was — no error, no console warning, and a
+    // cursor that moved. The E2E harness produced this exact symptom once for an unrelated reason
+    // (`boundingBox()` is viewport-relative and does not scroll, so every event landed outside the
+    // 720px viewport), which is precisely why the assertion has to be the ORDER and not "a pointer
+    // event was dispatched".
+    detail: "The drag's move handler bails before it can reorder, so the board never changes.",
+    file: "components/fantasy/big-board.tsx",
+    from: "      if (!el) return",
+    to: "      if (el) return",
+    grep: "vs-us column",
+  },
+  {
+    id: "save-reports-success-before-the-server-answers",
+    shipped: "NF-C4 — pre-emptive: E8.6's silent-save class, on a draft-day board",
+    // ⭐ THE ONE THAT COSTS A USER THEIR DRAFT. An optimistic "✓ Saved" is the natural way to write
+    // this and it makes a REFUSED save indistinguishable from a stored one — the user closes the
+    // tab believing their board is safe. The refusal a real user meets is the shared 400 KB item
+    // budget, which answers 413; nothing else in the product would contradict a wrong "Saved".
+    detail: "Reports success without awaiting the write, so a refusal still renders as saved.",
+    file: "components/fantasy/big-board.tsx",
+    from: "      await saveBoard.mutateAsync({ ...doc, config: configName, size })",
+    to: "      void saveBoard.mutateAsync({ ...doc, config: configName, size }).catch(() => {})",
+    grep: "SERVER's explanation",
+  },
+  {
+    id: "save-error-loses-the-servers-sentence",
+    shipped: "NF-C4 — pre-emptive: a precise explanation replaced by a generic one",
+    // The refusal's whole value is that it says NOTHING WAS CHANGED — that is what turns "saving is
+    // broken" into "delete a board you no longer need". `apiFetch` goes to the trouble of preserving
+    // FastAPI's `detail` for exactly this; discarding it at the last step is the `lib/api.ts` lesson
+    // repeated one layer out.
+    detail: "Swallows the API's `detail` behind a fixed string.",
+    file: "components/fantasy/big-board.tsx",
+    from: 'message: e instanceof Error && e.message ? e.message : "Could not save this board.",',
+    to: 'message: "Could not save this board.",',
+    grep: "SERVER's explanation",
+  },
+  {
+    id: "saved-board-loads-order-only",
+    shipped: "NF-C4 — pre-emptive: two thirds of a saved board silently not restored",
+    // ⚠️ THE SHAPE THAT PASSES THE OBVIOUS TEST. "Reorder, save, reload, the order is right" stays
+    // green while the user's tier breaks and their target/avoid flags are gone — and a tag they set
+    // in August is exactly the thing they will not re-check on draft night.
+    detail: "Restores `order` and drops the tiers and tags.",
+    file: "components/fantasy/big-board.tsx",
+    from:
+      "      ? { order: stored.order ?? [], tier_breaks: stored.tier_breaks ?? [], tags: stored.tags ?? {} }",
+    to: "      ? { order: stored.order ?? [], tier_breaks: [], tags: {} }",
+    grep: "tiers and tags",
+  },
+  {
+    id: "board-overflows-the-page-on-a-phone",
+    shipped: "NF-C2.1 — the 2129px page, on the surface most likely to be read on a phone",
+    // ⭐ THE HALF THAT IS ACTUALLY LOAD-BEARING. The row grid declares a 720px minimum, so without
+    // its own scroll container that width reaches the document and the save bar leaves the screen.
+    // ⚠️ Its sibling token `min-w-0` is NOT load-bearing today and the source guard says so
+    // (`test_nf_c4_custom_big_board.py`): this container's parent is a block, so removing `min-w-0`
+    // alone is measurably inert. Breaking the token that can be SEEN is what makes this a proof
+    // rather than a restatement of the CSS.
+    detail: "Removes the board's own horizontal scroll container.",
+    file: "components/fantasy/big-board.tsx",
+    from: 'className="min-w-0 overflow-x-auto rounded-lg border border-[#262626] bg-[#0f0f0f]"',
+    to: 'className="min-w-0 rounded-lg border border-[#262626] bg-[#0f0f0f]"',
+    grep: "inside its own container",
+  },
+  {
+    id: "cheat-sheet-prints-our-numbers",
+    shipped: "NF-C4 — pre-emptive: second-guessing the user at the pick",
+    // The editing view exists to show our read beside theirs. The PRINTED sheet is read at 4.11,
+    // away from any caveat, and a projection beside a ranking they deliberately overrode invites
+    // them to re-litigate a decision they already made. The tier and the tag are the decisions.
+    detail: "Puts our projection back on the printed sheet.",
+    file: "components/fantasy/big-board.tsx",
+    from: '                    <span className="truncate">{r.player.name}</span>',
+    to: '                    <span className="truncate">{r.player.name} Proj {r.player.pts}</span>',
+    grep: "none of our numbers",
+  },
 ]
 
 /**
@@ -2358,7 +2444,7 @@ const CASES = [
 // `-- auction-quotes`) for the same reason every entry above records: a production build per case
 // does not belong in a session. So 137/131/6 → 142/136/6, and the next full run CONFIRMS it.
 // ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 142, red: 136, notObservable: 6 }
+const RECORDED_BOARD = { total: 148, red: 142, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

@@ -31,7 +31,7 @@ from app.backend.dependencies import (
     require_fantasy_access,
     require_personalized_league_access,
 )
-from app.backend.models.fantasy import League, LeagueSave
+from app.backend.models.fantasy import BigBoard, BigBoardSave, League, LeagueSave
 from app.backend.services import (
     dynamo,
     entitlement,
@@ -680,6 +680,128 @@ def _joined_league_rosters(record: dict, board_players: list[dict]) -> list[dict
             }
         )
     return out
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-C4 — the CUSTOM BIG BOARD
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# A user's own ranking of one published (config, size) board, saved so it survives a reload and is
+# there on draft day. Three routes, all on `router` — i.e. behind `require_fantasy_access`, the SAME
+# gate as the live draft and auction optimizers, which is the entitlement this surface was specified
+# at. (Not `personal_router`: that gate is the personalization QUOTA, which a free account has one
+# of; a custom big board is the paid decision-support half, like the optimizers it sits beside.)
+#
+# ⛔ THESE ARE PER-CALLER AND MUST NEVER REACH A SHARED CACHE. Same rule, and the same structural
+# reason, as the personalization endpoints: every request carries an `Authorization` header, so
+# `cost_guardrails.cache_control_for` answers `private, no-store` unconditionally. They must not be
+# added to the CDN allowlist (`frontend/app/api/public/[...path]/route.ts`), to `_PUBLIC_CACHE_RULES`
+# or to the degrade-mode floor — a saved board is paid personalization, and the floor's promise is
+# the FREE board plus the account, not this.
+#
+# ⚠️ The response is a NEW shape on a NEW path, so there is no NF-C0 additivity hazard here; the
+# hazard is on the way out — the deployed client must keep reading every key with `?? default`,
+# because `frontend/` ships on merge and this Lambda only on `deploy.sh`.
+
+_BOARD_KEY_RE = re.compile(r"^[A-Za-z0-9_:-]{1,60}\|(?:[2-9]|[12][0-9]|3[0-2])$")
+
+
+def _big_board_key(config: str, size: int) -> str:
+    """The DynamoDB map key for one (config, size) board.
+
+    ⭐ DERIVED HERE, NEVER ACCEPTED FROM THE CLIENT on a write. `config`/`size` are validated by
+    `BigBoardSave`, so the key is a function of two already-clean values and a caller cannot choose
+    the attribute name it lands on. `frontend/lib/big-board.ts::boardKey` computes the same string
+    for its local cache, but nothing here trusts it.
+    """
+    return f"{config}|{int(size)}"
+
+
+def _big_board_response(record: dict) -> dict:
+    """Serialize ONE stored board through the response model (row-by-row, per E9.49)."""
+    return BigBoard(**record).model_dump()
+
+
+@router.get("/nfl/custom-boards")
+def list_custom_boards(user_id: str = Depends(require_fantasy_access)):
+    """Every custom big board this caller has saved.
+
+    Returns an ENVELOPE rather than a bare list, so the surface can render the storage ceiling in
+    its own words instead of hardcoding a number the server owns (the one-thing-two-owners class).
+
+    ⚠️ Serialized one record at a time and a malformed one is SKIPPED: a single un-representable
+    stored board must never blank the whole collection (E9.49's `GET /bets` outage).
+    """
+    boards = []
+    for record in dynamo.list_fantasy_big_boards(user_id):
+        try:
+            boards.append(_big_board_response(record))
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "skipping unserializable stored big board %s", record.get("board_key")
+            )
+    return {"boards": boards, "max_boards": dynamo.MAX_BIG_BOARDS_PER_USER}
+
+
+@router.put("/nfl/custom-boards")
+def save_custom_board(
+    payload: BigBoardSave,
+    user_id: str = Depends(require_fantasy_access),
+):
+    """Create or overwrite the caller's board for one (config, size). Idempotent by that pair.
+
+    ⭐ A PUT WITH NO ID IN THE PATH, deliberately. The identity of a big board IS its (config, size)
+    — a user has one ranking per board, not a collection of them — so letting the client choose a
+    key would only create a way for two saves of the same board to land under different names and
+    for the surface to load whichever it happened to ask for.
+
+    ⭐ 413 IS A REAL, RENDERABLE ANSWER, NOT A FAILURE TO PAPER OVER. Every user's whole state shares
+    ONE 400 KB DynamoDB item (NF-C6P3), so a save that would overflow it is refused WHOLE and the
+    caller is told why — nothing is evicted and nothing is stored half-ranked. The `detail` is
+    written to be shown to a person, because the surface renders it verbatim in its save-status line
+    (E8.6: Saving… / ✓ Saved / a real error).
+    """
+    doc = payload.model_dump()
+    key = _big_board_key(doc["config"], doc["size"])
+    try:
+        record = dynamo.put_fantasy_big_board(user_id, key, doc)
+    except ValueError as e:
+        if str(e) == "too_many_boards":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"You can keep {dynamo.MAX_BIG_BOARDS_PER_USER} custom boards. "
+                    "Delete one you no longer need to save this."
+                ),
+            ) from e
+        if str(e) == "board_too_large":
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    "This board is too large to save alongside your other saved data. "
+                    "Nothing was changed — delete a custom board you no longer need and try again."
+                ),
+            ) from e
+        raise HTTPException(status_code=400, detail="Could not save this board") from e
+    return _big_board_response(record)
+
+
+@router.delete("/nfl/custom-boards/{board_key}", status_code=204)
+def delete_custom_board(board_key: str, user_id: str = Depends(require_fantasy_access)):
+    """Delete one saved board. 404 for a key the caller does not own.
+
+    The key is validated before it reaches storage — not because a map key can traverse a path
+    (it cannot), but because an unbounded caller-supplied attribute name is how an item grows keys
+    nothing will ever read, on a row whose size ceiling is the constraint this whole feature is
+    built around.
+    """
+    if not _BOARD_KEY_RE.match(board_key):
+        raise HTTPException(status_code=404, detail="Board not found")
+    try:
+        dynamo.delete_fantasy_big_board(user_id, board_key)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail="Board not found") from e
+    return None
 
 
 def _enforce_scoring_probe_guard(

@@ -210,6 +210,23 @@ export type MockOptions = {
     // all four "no projection" causes renderable at once.
     | "kdstGap"
   /**
+   * ⭐ NF-C4 — what `GET /fantasy/nfl/custom-boards` starts out holding for this caller.
+   *
+   *   "none"    — THE DEFAULT: no saved board. The state every user is in the first time they open
+   *               the surface, and the branch the empty status line has to handle.
+   *   "one"     — one already-saved board for `full_ppr`/12, so the LOAD path is exercised rather
+   *               than only the save path. Its `order` is deliberately a SHORT PREFIX (not a full
+   *               copy of the board), because that is the stored shape and a fixture holding all
+   *               858 ids would let a reader that ignores the tail pass.
+   *   "atCap"   — the per-user ceiling reached, so the "you are at the limit" notice is reachable.
+   *
+   * ⭐ AND IT IS STATEFUL WITHIN A PAGE SESSION. A `PUT` REPLACES the entry this store serves, so
+   * "save, reload, it is still there" is a real round trip rather than a canned response — the one
+   * assertion this feature actually has to make. A stubbed 200 that echoed the request would pass
+   * a client that never sent anything.
+   */
+  customBoards?: "none" | "one" | "atCap"
+  /**
    * ⭐ G100-D0 — what `/subscription/status` reports for this caller.
    *
    *   "none"     — THE DEFAULT. No access: the state a visitor is in when they click Subscribe,
@@ -414,6 +431,103 @@ function writeResponseFor(
     updated_at: "2026-08-09T12:00:00Z",
   }
 }
+
+/**
+ * ⭐ NF-C4 — the CUSTOM BIG BOARD store, and it is STATEFUL on purpose.
+ *
+ * Every other write in this harness echoes its request back. That is right for a league config (the
+ * editor re-reads what it typed) and WRONG here, because the single assertion this feature has to
+ * support is "reorder → save → RELOAD → it is still there". An echo would pass against a client
+ * that saved nothing at all and simply kept its own in-memory state — the most convincing vacuous
+ * guard available on a persistence feature.
+ *
+ * So the store lives for the life of one `mockApi` call: a `PUT` replaces the entry keyed on
+ * `config|size` (exactly as the server derives it), and the next `GET` serves it back.
+ *
+ * ⛔ IT DOES NOT MODEL THE ITEM BUDGET. The 413 is decided by the real writer against the real
+ * shared DynamoDB item and is asserted against the ASGI app in
+ * `betting_ml/tests/test_nf_c4_custom_big_board.py`; reproducing it here would be a browser test
+ * appearing to check storage limits, which is the same objection this file already records for the
+ * league-quota refusal. What the browser half tests is that a refusal is RENDERED, and it gets that
+ * from a spec-local route override with an explicit body.
+ */
+const MAX_CUSTOM_BOARDS = 12
+
+function initialCustomBoards(mode: NonNullable<MockOptions["customBoards"]>): any[] {
+  if (mode === "none") return []
+  // ⚠️ KEYED ON THE BOARD THE SURFACE ACTUALLY OPENS ON, not on `FREE_BOARD`. The big board defaults
+  // to `half_ppr`/12; the first cut of this fixture used the free preset (`full_ppr`), so the stored
+  // board matched no key the page ever asked for and the whole LOAD path went untested while every
+  // assertion about it still passed. A fixture that cannot be loaded is a vacuous test.
+  const DEFAULT_BOARD = { config: "half_ppr", size: 12 }
+  const one = {
+    board_key: `${DEFAULT_BOARD.config}|${DEFAULT_BOARD.size}`,
+    config: DEFAULT_BOARD.config,
+    size: DEFAULT_BOARD.size,
+    // ⭐ A SHORT PREFIX, NOT A WHOLE BOARD. The stored shape is "the rows the user has placed,
+    // everything else follows ours" — a fixture carrying all 858 ids would let a client that
+    // ignored the tail entirely look correct.
+    order: [] as string[],
+    tier_breaks: [] as string[],
+    tags: {} as Record<string, string>,
+    created_at: "2026-08-01T12:00:00Z",
+    updated_at: "2026-08-01T12:00:00Z",
+  }
+  if (mode === "atCap") {
+    return Array.from({ length: MAX_CUSTOM_BOARDS }, (_, i) => ({
+      ...one,
+      board_key: `preset_${i}|12`,
+      config: `preset_${i}`,
+    }))
+  }
+  // The saved board moves the board's THIRD row to the top and tags it, so a spec can assert the
+  // load path changed something rather than merely rendering our order back.
+  const board = FIXTURES.boardFree() as { id: string }[]
+  const moved = board[2]?.id ?? ""
+  return [{ ...one, order: [moved], tags: { [moved]: "target" }, tier_breaks: [moved] }]
+}
+
+function customBoardResponse(
+  store: any[],
+  pathname: string,
+  method: string,
+  postData: string | null,
+): unknown | undefined {
+  if (!pathname.startsWith("/fantasy/nfl/custom-boards")) return undefined
+
+  if (method === "GET") return { boards: store, max_boards: MAX_CUSTOM_BOARDS }
+
+  if (method === "PUT") {
+    let doc: Record<string, any> = {}
+    try {
+      doc = postData ? JSON.parse(postData) : {}
+    } catch {
+      doc = {}
+    }
+    // The SERVER derives the key from (config, size); mirroring that here is what makes a second
+    // save of the same board an overwrite rather than a second row.
+    const board_key = `${doc.config}|${doc.size}`
+    const saved = {
+      ...doc,
+      board_key,
+      created_at: "2026-08-01T12:00:00Z",
+      updated_at: "2026-08-09T12:00:00Z",
+    }
+    const at = store.findIndex((b) => b.board_key === board_key)
+    if (at >= 0) store[at] = saved
+    else store.unshift(saved)
+    return saved
+  }
+
+  if (method === "DELETE") {
+    const key = decodeURIComponent(pathname.split("/").pop() ?? "")
+    const at = store.findIndex((b) => b.board_key === key)
+    if (at >= 0) store.splice(at, 1)
+    return null
+  }
+  return undefined
+}
+
 
 function billingPayloadFor(
   pathname: string,
@@ -1371,6 +1485,9 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
   // moves. `entitled` is retained as a distinct name and resolves to the same payloads.
   const entitlement = options.entitlement ?? "free"
   const mock: ApiMock = { requested: [], unmatched: [], espnPastes: [] }
+  // NF-C4 — one store per `mockApi` call, so a save made in a spec survives that spec's reloads and
+  // cannot leak into the next one.
+  const customBoards = initialCustomBoards(options.customBoards ?? "none")
 
   /** Answer one intercepted call, given the canonical API path it resolves to. */
   const fulfil = async (route: Route, apiPath: string, search: string) => {
@@ -1538,6 +1655,24 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
         status: 202,
         contentType: "application/json",
         body: JSON.stringify({ status: "recorded" }),
+      })
+      return
+    }
+
+    // NF-C4 — the saved-board store. Ahead of `writeResponseFor` because it owns three METHODS on
+    // one path, and ahead of the read map because a `GET` here is served from mutated state rather
+    // than from a fixture.
+    const boardsBody = customBoardResponse(
+      customBoards,
+      apiPath,
+      route.request().method(),
+      route.request().postData(),
+    )
+    if (boardsBody !== undefined) {
+      await route.fulfill({
+        status: boardsBody === null ? 204 : 200,
+        contentType: "application/json",
+        body: boardsBody === null ? "" : JSON.stringify(boardsBody),
       })
       return
     }

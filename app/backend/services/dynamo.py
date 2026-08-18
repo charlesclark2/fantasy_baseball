@@ -646,6 +646,22 @@ MAX_LEAGUES_PER_USER = 25
 DYNAMO_ITEM_LIMIT_BYTES = 400 * 1024
 MAX_FANTASY_LEAGUES_BYTES = 260 * 1024
 
+# ── NF-C4: the budget is now SHARED, because there is a second fantasy attribute ────────────────
+#
+# ⚠️ THE NUMBER ABOVE DID NOT MOVE, AND THAT IS THE POINT. NF-C4 adds `fantasy_big_boards` to the
+# same row. If it had been given its own 260 KB claim the two together would be 520 KB — past the
+# 400 KB item ceiling — and the first user to fill both would have an unwritable row: no new league,
+# no bet, no preference, forever. So the 260 KB is re-declared as a JOINT ceiling over BOTH
+# attributes and each writer measures the OTHER one's bytes too.
+#
+# ⭐ THE CONSEQUENCE FOR LEAGUES IS DELIBERATE AND IS THE SAFE DIRECTION. A user carrying big boards
+# now reaches the league budget slightly sooner, and the league writer responds exactly as it always
+# has — by dropping the incoming league's `league_rosters` (an enhancement) and saying so. Nothing
+# is evicted, nothing already stored is touched, and the item cannot overflow. The alternative —
+# giving big boards a claim of their own — trades a visible, named degradation for a dead user row.
+MAX_FANTASY_BYTES = MAX_FANTASY_LEAGUES_BYTES
+_BIG_BOARDS_ATTR = "fantasy_big_boards"
+
 
 def _estimated_bytes(value) -> int:
     """A conservative stand-in for DynamoDB's item-size accounting.
@@ -678,7 +694,9 @@ def _fits_fantasy_budget(user_id: str, league_id: str, record: dict) -> bool:
         for league in list_fantasy_leagues(user_id)
         if str(league.get("league_id") or "") != league_id
     )
-    return others + _estimated_bytes(record) <= MAX_FANTASY_LEAGUES_BYTES
+    # NF-C4 — the SHARED claim: big boards live on the same row and count against the same ceiling.
+    others += _big_boards_bytes(user_id)
+    return others + _estimated_bytes(record) <= MAX_FANTASY_BYTES
 
 
 def list_fantasy_leagues(user_id: str) -> list[dict]:
@@ -800,6 +818,168 @@ def delete_fantasy_league(user_id: str, league_id: str) -> None:
         Key={"user_id": user_id},
         UpdateExpression="REMOVE #fl.#id",
         ExpressionAttributeNames={"#fl": "fantasy_leagues", "#id": league_id},
+    )
+
+
+# ── NF-C4: the CUSTOM BIG BOARD ──────────────────────────────────────────────
+#: How many distinct (config, size) boards one account may keep. A STORAGE ceiling in the same class
+#: as `MAX_LEAGUES_PER_USER`, not a product tier — big boards carry no entitlement quota, so unlike
+#: leagues there is no caller-supplied number to reconcile this with.
+MAX_BIG_BOARDS_PER_USER = 12
+
+
+# Per-user saved rankings of one published (config, size) board, stored as a
+# `fantasy_big_boards` map {board_key: doc} on the SAME user item as the leagues
+# above. Same "ride the users table" pattern, same shared 400 KB ceiling — and
+# the ceiling is why these functions look the way they do.
+#
+# ⭐⭐ WHAT AN OVERFLOW COSTS, AND THEREFORE WHY THE WRITE CAN REFUSE.
+# DynamoDB rejects the WHOLE `UpdateItem` when an item passes 400 KB, so a row at
+# the ceiling stops accepting every future write for that user: no league, no bet,
+# no preference. That is a dead account, not a degraded feature.
+#
+# ⭐ SO A BOARD THAT DOES NOT FIT IS REFUSED, WHOLE, AND THE USER IS TOLD.
+# Three options were available and two of them are worse:
+#   · EVICT another board to make room — mutates data the caller did not ask us to
+#     touch, on a write they experience as saving one thing. Ruled out; it is the
+#     same reasoning that made `put_fantasy_league` drop the INCOMING league's
+#     rosters rather than anyone else's.
+#   · TRUNCATE this board's own order — stores a ranking that still looks complete
+#     and is quietly short. A draft-day cheat sheet missing its bottom third is a
+#     plausible wrong answer, which is the exact class NF-C6P3 chose whole-team
+#     truncation to avoid, and here there is no "enhancement" half to shed: the
+#     ranking IS the board.
+#   · REFUSE, and say so. A save that fails LOUDLY is recoverable — the user can
+#     delete a board they no longer need. `put_fantasy_big_board` raises and the
+#     router turns it into a 413 the surface renders verbatim (E8.6: a save must
+#     show Saving… / Saved / a real error, never a phantom revert).
+# Nothing already stored is read-modify-written, so a refusal cannot lose data.
+
+
+def _big_boards_raw(user_id: str) -> dict:
+    """The raw `fantasy_big_boards` map. Non-raising: `{}` on any read failure.
+
+    ⚠️ A READ FAILURE THEREFORE LOOKS LIKE AN EMPTY ACCOUNT to the budget check, which would
+    PERMIT a write it should perhaps have refused. That is the same trade `_fits_fantasy_budget`
+    already documents and the same direction: the ceiling has a 140 KB reserve precisely so a
+    single mis-measured write cannot reach it, and failing a user's save over a transient read
+    problem is the worse outcome.
+    """
+    try:
+        resp = _users_table().get_item(Key={"user_id": user_id})
+        raw = resp.get("Item", {}).get(_BIG_BOARDS_ATTR) or {}
+        return raw if isinstance(raw, dict) else {}
+    except Exception:
+        logger.warning("dynamo.list_fantasy_big_boards failed for user=%s", user_id)
+        return {}
+
+
+def _big_boards_bytes(user_id: str, skip_key: str | None = None) -> int:
+    """Estimated bytes of every stored big board, optionally excluding the one being replaced."""
+    return sum(
+        _estimated_bytes(doc)
+        for key, doc in _big_boards_raw(user_id).items()
+        if key != skip_key
+    )
+
+
+def list_fantasy_big_boards(user_id: str) -> list[dict]:
+    """Every big board the user has saved, newest-updated first.
+
+    Non-raising, and each stored board is converted INDEPENDENTLY: one malformed row is SKIPPED,
+    never raised on (E9.49 — a single un-representable record must not blank the whole collection).
+    """
+    out: list[dict] = []
+    for board_key, doc in _big_boards_raw(user_id).items():
+        try:
+            item = _deep_from_dynamo(doc)
+            if not isinstance(item, dict):
+                continue
+            item["board_key"] = board_key
+            out.append(item)
+        except Exception:
+            logger.warning(
+                "dynamo.list_fantasy_big_boards: skipping malformed board %s for user=%s",
+                board_key, user_id,
+            )
+    out.sort(key=lambda c: str(c.get("updated_at") or ""), reverse=True)
+    return out
+
+
+def get_fantasy_big_board(user_id: str, board_key: str) -> dict | None:
+    for board in list_fantasy_big_boards(user_id):
+        if board.get("board_key") == board_key:
+            return board
+    return None
+
+
+def put_fantasy_big_board(user_id: str, board_key: str, doc: dict) -> dict:
+    """Create or overwrite ONE big board. Returns the stored record.
+
+    Raises `ValueError("too_many_boards")` when a NEW key would pass the per-user cap, and
+    `ValueError("board_too_large")` when it would not fit the shared item budget. Both are refusals
+    of the INCOMING write only — see the header above for why refusing beats evicting or truncating.
+
+    ⚠️ THE BUDGET IS CHECKED BEFORE THE WRITE, NOT AFTER, and it is measured over the WHOLE fantasy
+    claim (leagues + every other board), not just this attribute. Checking one attribute against its
+    own sub-limit is how two features that each stayed inside their own budget jointly killed a row.
+
+    Writes a SINGLE map entry (`SET #bb.#k = :doc`) rather than the whole map, so two tabs saving
+    different boards cannot clobber each other — the same shape `put_fantasy_league` uses, and the
+    reason the parent map is created first with an `attribute_not_exists` guard.
+    """
+    existing = get_fantasy_big_board(user_id, board_key)
+    stored = _big_boards_raw(user_id)
+    if existing is None and len(stored) >= MAX_BIG_BOARDS_PER_USER:
+        raise ValueError("too_many_boards")
+
+    now = _now_iso()
+    record = dict(doc)
+    record.pop("board_key", None)
+    record["created_at"] = (existing or {}).get("created_at") or now
+    record["updated_at"] = now
+
+    # The whole shared claim, with the record being REPLACED excluded from both halves.
+    footprint = _big_boards_bytes(user_id, skip_key=board_key) + sum(
+        _estimated_bytes(league) for league in list_fantasy_leagues(user_id)
+    )
+    if footprint + _estimated_bytes(record) > MAX_FANTASY_BYTES:
+        logger.warning(
+            "[METRIC] fantasy_big_board_refused_for_size=1 user=%s board=%s — the user item is "
+            "near its %d KB ceiling; nothing was written and nothing was evicted",
+            user_id, board_key, DYNAMO_ITEM_LIMIT_BYTES // 1024,
+        )
+        raise ValueError("board_too_large")
+
+    table = _users_table()
+    try:
+        table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET #bb = :empty",
+            ExpressionAttributeNames={"#bb": _BIG_BOARDS_ATTR},
+            ExpressionAttributeValues={":empty": {}},
+            ConditionExpression="attribute_not_exists(#bb)",
+        )
+    except Exception:
+        pass  # already present — the normal path
+
+    table.update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="SET #bb.#k = :doc",
+        ExpressionAttributeNames={"#bb": _BIG_BOARDS_ATTR, "#k": board_key},
+        ExpressionAttributeValues={":doc": _to_ddb(record)},
+    )
+    return {**record, "board_key": board_key}
+
+
+def delete_fantasy_big_board(user_id: str, board_key: str) -> None:
+    """Remove one big board. Raises ValueError('not_found') when the user does not own it."""
+    if get_fantasy_big_board(user_id, board_key) is None:
+        raise ValueError("not_found")
+    _users_table().update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="REMOVE #bb.#k",
+        ExpressionAttributeNames={"#bb": _BIG_BOARDS_ATTR, "#k": board_key},
     )
 
 
