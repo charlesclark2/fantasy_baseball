@@ -38,11 +38,13 @@ VECTORS_PATH = Path(__file__).resolve().parent / "auction_vectors.json"
 # A deliberately SMALL, hand-readable board whose arithmetic can be checked by eye. Every shape the
 # rules have to handle is present exactly once, so a vector that changes names the rule that broke:
 #   * a runaway stud (the whole top of the surplus)
-#   * a mid player with an ASYMMETRIC interval (the band must not be re-centred)
+#   * a mid player, kept from the retired-band era for its asymmetric interval
 #   * a replacement-level player (vor == 0 → exactly the minimum bid)
 #   * a BELOW-replacement player (negative vor → still the minimum, never below it)
 #   * a genuinely unprojected gap-fill row (vor is null → minimum, and must not blow up the sum)
-#   * a row whose p10/p90 arrive CROSSED (low > high) → the band must come back ordered
+#   * a row whose p10/p90 arrive CROSSED — retained ON PURPOSE after the dollar band was retired:
+#     the interval columns are now IGNORED, and a board that still carries a crossed one must
+#     price exactly like any other. It is the fixture that proves they are not read.
 #   * a FRINGE above-replacement player who exists only so the draftable-set truncation has
 #     something to exclude — with him the toy board carries FIVE positive-VOR rows against the
 #     4-spot pool below, so that pool's rate genuinely differs from the whole-board rate
@@ -141,8 +143,7 @@ def build() -> dict:
             "budget": budget,
             "pool": {"total": pool.total, "reserve": pool.reserve, "surplus": pool.surplus},
             "values": [
-                {"id": v.player_id, "value": v.value, "low": v.low, "high": v.high,
-                 "share": v.share}
+                {"id": v.player_id, "value": v.value, "share": v.share}
                 for v in vals
             ],
         })
