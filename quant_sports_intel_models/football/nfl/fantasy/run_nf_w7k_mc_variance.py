@@ -203,6 +203,29 @@ def derive_verdict_layer(out: dict) -> dict:
     seed_live = {"holds": not zero_spread, "zero_spread_cells": zero_spread,
                  "n_seeds": len(scores[primary][folds[0]])}
 
+    # ⛔ G0 AND G1 RAISE — they do not merely get recorded. The pre-registration calls both
+    # "RAISE", and a validity clause that only writes a field into the artifact is decorative: the
+    # run would go on to publish a decision derived from an object it had just failed to
+    # authenticate (the E11.30 "detected, nobody notified" class, one level over). A path proof
+    # is exempt because it deliberately scores at different draw counts than NF-W7f did, so its
+    # reproduction pin cannot hold by construction — and an exemption that silently covered a REAL
+    # run would be the more dangerous half, so it is keyed on the artifact's own `smoke` flag.
+    if not out.get("smoke"):
+        if not repro["reproduces"]:
+            raise ValueError(
+                f"G0 FAILED — the base-seed re-score does not reproduce NF-W7f's stored scores "
+                f"(max abs gap {repro['max_abs_gap']} over {repro['n_compared']} cells, tolerance "
+                f"{repro['tolerance']}). Every number below would describe a RE-DERIVATION rather "
+                f"than the object NF-W7f scored, so the run REFUSES rather than publishing a "
+                f"decision about the wrong object (prereg §3 G0).")
+        if not seed_live["holds"]:
+            raise ValueError(
+                f"G1 FAILED — {len(seed_live['zero_spread_cells'])} (fold, label) cells show ZERO "
+                f"across-seed spread, e.g. {seed_live['zero_spread_cells'][:3]}. A seed that does "
+                f"not reach the draws reports zero Monte-Carlo error, which would close QB's last "
+                f"lever on a measurement that never happened — the FALSE-STOP direction. REFUSED "
+                f"(prereg §3 G1).")
+
     # ── the field, exactly as `select_position` builds it ───────────────────────────────────────
     mean_by_label = {lab: float(np.mean([np.mean([scores[primary][f][s][lab]
                                                   for s in scores[primary][f]]) for f in folds]))

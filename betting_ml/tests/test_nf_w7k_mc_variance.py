@@ -393,7 +393,14 @@ class TestEndToEndVerdictLayer:
         run = _synthetic_run(mc_sd=2e-4)
         f0 = sorted(run["scores"]["4000"])[0]
         run["scores"]["4000"][f0][str(MV.BASE_SEED)]["zm_floor"] += 1e-6
-        repro = W7K.derive_verdict_layer(run)["verdict"]["checks"]["G0_reproduction_pin"]
+        # ⛔ a REAL run must REFUSE, not record-and-continue: publishing a decision derived from an
+        # object the run just failed to authenticate is the decorative-guard failure.
+        with pytest.raises(ValueError, match="G0 FAILED"):
+            W7K.derive_verdict_layer(dict(run, smoke=False))
+        # a path proof is exempt by construction (its draw counts are not NF-W7f's), and there the
+        # failure must still be RECORDED rather than silently dropped
+        repro = W7K.derive_verdict_layer(dict(run, smoke=True))["verdict"]["checks"][
+            "G0_reproduction_pin"]
         assert repro["reproduces"] is False and repro["max_abs_gap"] >= 1e-7
 
     def test_a_dead_seed_is_caught_by_G1_rather_than_reported_as_zero_mc_error(self):
@@ -408,7 +415,10 @@ class TestEndToEndVerdictLayer:
                 base = run["scores"][lvl][f][str(MV.BASE_SEED)]
                 for s in run["scores"][lvl][f]:
                     run["scores"][lvl][f][s] = dict(base)
-        live = W7K.derive_verdict_layer(run)["verdict"]["checks"]["G1_seed_is_live"]
+        with pytest.raises(ValueError, match="G1 FAILED"):
+            W7K.derive_verdict_layer(dict(run, smoke=False))
+        live = W7K.derive_verdict_layer(dict(run, smoke=True))["verdict"]["checks"][
+            "G1_seed_is_live"]
         assert live["holds"] is False and live["zero_spread_cells"]
 
     def test_a_large_injected_mc_error_moves_the_ceiling_above_the_observed_gate(self):

@@ -158,6 +158,14 @@ BREAKS: tuple[Break, ...] = (
            "test_a_dead_seed_is_caught_by_G1_rather_than_reported_as_zero_mc_error",),
           "⭐ a seed that never reaches the draws makes σ²_MC read 0 and the ceiling equal the "
           "observed gate — the lever gets closed on a measurement that never happened"),
+    Break("smoke_exemption_inverted_so_a_REAL_run_skips_the_raise", _RUNNER,
+          '    if not out.get("smoke"):',
+          '    if out.get("smoke"):',
+          ("TestEndToEndVerdictLayer::test_a_drifted_base_seed_fails_the_reproduction_pin",
+           "TestEndToEndVerdictLayer::"
+           "test_a_dead_seed_is_caught_by_G1_rather_than_reported_as_zero_mc_error"),
+          "⭐ THE DANGEROUS HALF of the path-proof exemption — inverted, a REAL run records a "
+          "failed G0/G1 and publishes a decision anyway, while only the smoke ever refuses"),
     Break("story_certifies_qb", _RUNNER,
           '        "certified_for_nf_w8": False,',
           '        "certified_for_nf_w8": True,',
