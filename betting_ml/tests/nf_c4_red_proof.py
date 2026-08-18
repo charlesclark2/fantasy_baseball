@@ -370,6 +370,23 @@ CASES = [
      '                            target="_blank"\n                            rel="noopener noreferrer"',
      "",
      "test_a_player_link_opens_in_a_new_tab_and_severs_the_opener"),
+
+    # 🐛 THE ONE THAT MADE THE FEATURE UNUSABLE. `setNote` runs on every keystroke; trimming there
+    # removes the space the user just typed before the next character can follow it.
+    ("normalise the note on every keystroke, eating every space typed", TS_LIB,
+     "  const raw = String(text ?? \"\").slice(0, MAX_NOTE_LEN)",
+     "  const raw = String(text ?? \"\").trim().slice(0, MAX_NOTE_LEN)",
+     "test_the_note_editor_does_not_normalise_on_every_keystroke"),
+
+    ("print the site footer's dead nav links under the cheat sheet", CSS,
+     "  body:has([data-printable-surface]) footer {",
+     "  body:has([data-printable-surface]) footer.never-matches {",
+     "test_the_site_footer_does_not_print"),
+
+    ("print the white-on-dark wordmark, i.e. nothing at all, on white paper", COMPONENT,
+     'src="/brand/black-logo-wordmark.svg"',
+     'src="/brand/white-logo-wordmark.svg"',
+     "test_the_printed_header_uses_the_mark_that_survives_white_paper"),
 ]
 
 FILES = {MODELS, DYNAMO, ROUTER, DEPS, TS_LIB, TS_API, COMPONENT, PAGE, CSS}

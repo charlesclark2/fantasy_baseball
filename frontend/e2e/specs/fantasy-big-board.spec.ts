@@ -18,6 +18,7 @@ import {
   setNote,
   setTag,
   toggleTierBreak,
+  trimNotes,
   type BigBoardDoc,
 } from "@/lib/big-board"
 import { sortAvailable, type Player } from "@/lib/draft-optimizer"
@@ -294,18 +295,36 @@ test.describe("the printed cheat sheet", () => {
 // ── the browser ─────────────────────────────────────────────────────────────────────────────────
 
 test.describe("notes, and the tiers we can seed", () => {
-  test("a note is trimmed, capped, and cleared by emptying it", () => {
+  test("typing a note KEEPS the spaces — setNote runs on every keystroke", () => {
+    // 🐛 THE DEPLOYED DEFECT: `setNote` trimmed, so the space a user typed was removed before the
+    // next character could follow it and a note came out as
+    // "jmarrchaseisherebecauseiwantawrhigher". This replays it the way it actually happens —
+    // one keystroke at a time — which is the only way to see it.
+    // ⚠️⚠️ THE LOOP HAS TO CLOSE THE FEEDBACK, and the red proof is what proved it: a first cut fed
+    // `typed.slice(0, i)` in each round and stayed GREEN with the trim restored, because the LAST
+    // call passes the whole string and the whole string has nothing to trim. The real box reads its
+    // value back OUT of the document — `value={note}` — so the trimmed value is what the next
+    // keystroke is appended to, and that is where the space is lost. Model the loop, not the input.
     const id = BOARD[0].id
-    let doc = setNote(EMPTY_DOC, id, "   sits above his ADP for me   ")
-    expect(doc.notes[id]).toBe("sits above his ADP for me")
+    const typed = "wr room is thin here"
+    let doc = EMPTY_DOC
+    for (const ch of typed) doc = setNote(doc, id, (doc.notes[id] ?? "") + ch)
+    expect(doc.notes[id]).toBe(typed)
+  })
 
-    doc = setNote(doc, id, "x".repeat(MAX_NOTE_LEN + 50))
+  test("a note is capped, normalised when typing stops, and cleared by emptying it", () => {
+    const id = BOARD[0].id
+    let doc = setNote(EMPTY_DOC, id, "x".repeat(MAX_NOTE_LEN + 50))
     expect(doc.notes[id].length).toBe(MAX_NOTE_LEN)
 
+    // The trim happens ONCE, where typing has stopped — never per keystroke (see above).
+    doc = trimNotes(setNote(doc, id, "   sits above his ADP for me   "))
+    expect(doc.notes[id]).toBe("sits above his ADP for me")
+
     // ⚠️ THE KEY IS REMOVED, not set to "". Every note is bytes in the one 400 KB item that holds
-    // all of this user's state, and an empty string is bytes that mean nothing.
-    doc = setNote(doc, id, "    ")
-    expect(id in doc.notes).toBe(false)
+    // all of this user's state, and an empty string is bytes that mean nothing. Both paths drop it.
+    expect(id in setNote(doc, id, "    ").notes).toBe(false)
+    expect(id in trimNotes({ ...doc, notes: { [id]: "   " } }).notes).toBe(false)
   })
 
   test("our seeded tiers are real groups, in ascending order, and none of them is empty", () => {
@@ -696,7 +715,12 @@ test.describe("driving the big board", () => {
     const who = (await rowName(page, 2).textContent())?.trim() ?? ""
 
     await row.getByTestId("big-board-note-toggle").click()
-    await row.getByTestId("big-board-note-input").fill("handcuff is undrafted in this league")
+    // ⚠️ `pressSequentially`, NOT `fill`. `fill` sets the whole value in ONE event, so it is
+    // structurally blind to a per-keystroke defect — which is exactly how the shipped `setNote`
+    // ate every space the user typed and this spec stayed green.
+    await row
+      .getByTestId("big-board-note-input")
+      .pressSequentially("handcuff is undrafted in this league")
     await row.getByTestId("big-board-note-done").click()
     await expect(row.getByTestId("big-board-note-text")).toHaveText(
       "handcuff is undrafted in this league",
@@ -743,7 +767,7 @@ test.describe("driving the big board", () => {
     const { errors } = await openBigBoard(page, { dropNotes: true })
     const row = page.getByTestId("big-board-row").nth(1)
     await row.getByTestId("big-board-note-toggle").click()
-    await row.getByTestId("big-board-note-input").fill("worth a round earlier than this")
+    await row.getByTestId("big-board-note-input").pressSequentially("worth a round earlier")
     await row.getByTestId("big-board-note-done").click()
 
     await page.getByTestId("big-board-save").click()
@@ -787,21 +811,40 @@ test.describe("driving the big board", () => {
     expectNoPageErrors(errors)
   })
 
-  test("the page chrome is marked so it never reaches the paper", async ({ page }) => {
-    // ⚠️ `window.print()` PRINTS THE PAGE. Asserted through the browser's own print media query
-    // rather than by reading class names — `matchMedia("print")` cannot be evaluated for layout, so
-    // the reachable rendered assertion is that the chrome carries a rule that applies only in print.
+  test("under the print medium the page is a cheat sheet and nothing else", async ({ page }) => {
+    // ⭐ THE REAL RENDERED ASSERTION. The first cut of this clause walked class NAMES looking for
+    // `print:hidden`, which tests that somebody typed a string — `emulateMedia` makes the browser
+    // apply the print stylesheet for real, so what is asserted here is computed layout.
     const { errors } = await openBigBoard(page)
-    const navHidden = await page.evaluate(() => {
-      const nav = document.querySelector("nav")
-      let el: HTMLElement | null = nav as HTMLElement | null
-      while (el) {
-        if (el.className && String(el.className).includes("print:hidden")) return true
-        el = el.parentElement
-      }
-      return false
-    })
-    expect(navHidden, "the nav bar would print above the cheat sheet").toBe(true)
+    await page.getByTestId("big-board-sheet-toggle").click()
+    await expect(page.getByTestId("big-board-cheat-sheet")).toBeVisible()
+
+    await page.emulateMedia({ media: "print" })
+
+    // Every piece of chrome, gone. The footer is the one reported off a real printout: it lives in
+    // the ROOT LAYOUT, so no class on this page could reach it.
+    for (const sel of ["nav", "footer"]) {
+      await expect(page.locator(sel).first()).toBeHidden()
+    }
+    for (const id of ["big-board-save", "big-board-legend", "big-board-print"]) {
+      await expect(page.getByTestId(id)).toBeHidden()
+    }
+
+    // ...and the sheet is still there, in ink rather than in the dark theme's grey.
+    const row = page.getByTestId("big-board-sheet-row").first()
+    await expect(row).toBeVisible()
+    expect(await row.evaluate((el) => getComputedStyle(el).color)).toBe("rgb(0, 0, 0)")
+
+    // The print-only header, with the mark that survives white paper.
+    // ⚠️ SCOPED TO THE SHEET. The nav carries the same `alt`, and it is the WHITE-on-dark file —
+    // the one that would print as nothing at all on white paper, so matching it here would be the
+    // assertion passing on precisely the wrong image.
+    const logo = page.getByTestId("big-board-cheat-sheet").locator("img")
+    await expect(logo).toBeVisible()
+    expect(await logo.getAttribute("src")).toContain("black-logo-wordmark")
+
+    await page.emulateMedia({ media: "screen" })
+    await expect(page.getByTestId("big-board-print")).toBeVisible()
     expectNoPageErrors(errors)
   })
 })
