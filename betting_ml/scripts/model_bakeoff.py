@@ -65,6 +65,10 @@ from betting_ml.utils.overfitting import pbo_cscv
 from betting_ml.utils.promotion_gate import (
     NOISE_FLOOR, PredictiveOutput, calibration_report,
 )
+from betting_ml.utils.margin_attribution import (
+    ARM_SEPARATOR, INCUMBENT_VARIANT, margin_decomposition,
+    render_margin_attribution_md, variant_effect_by_learner,
+)
 from betting_ml.utils.training_cache import get_cached_df
 
 _REPORT_DIR = PROJECT_ROOT / "quant_sports_intel_models" / "baseball" / "ablation_results"
@@ -457,20 +461,183 @@ def run_bakeoff(target: str, tier: str, *, seed: int, smoke: bool, refresh_cache
     return result
 
 
-def _write_report(result: dict, table: pd.DataFrame, winner_row) -> None:
+# ══════════════════════════════════════════════════════════════════════════════════════
+# MH1 — margin attribution: what did the CONTRACT buy, and what did the LEARNER SWAP buy?
+# ══════════════════════════════════════════════════════════════════════════════════════
+# This harness fixes (target × tier × contract) per run and varies only the LEARNER, so a single
+# run has no contract axis at all. The (contract × learner) grid is real but SPREAD ACROSS A PAIR
+# OF RUNS — a `--contract` variant run beside the tier-default run — and the comparison a reader
+# makes ("the re-pruned contract wins") is therefore made BY EYE, across two reports, with nothing
+# holding the learner fixed. That is strictly more exposed to E7.9's defect than E7.9 was: there,
+# at least one number was computed. Here nobody computed one.
+#
+# Both runs store their FULL per-learner table, so the same-learner reference arm is already on
+# disk and the decomposition needs no re-fitting — only the pairing.
+
+
+def _run_stem(target: str, tier: str, variant: str | None, smoke: bool) -> str:
+    """The one owner of the report/JSON stem. `_write_report` and the pairing MUST agree on it —
+    two spellings of a filename is how a pairing silently finds nothing and reports 'no counterpart'."""
+    return (f"bakeoff_{target}_{tier}" + (f"_{variant}" if variant else "")
+            + ("_smoke" if smoke else ""))
+
+
+def _load_run(target: str, tier: str, variant: str | None, smoke: bool) -> dict | None:
+    path = _JSON_DIR / f"{_run_stem(target, tier, variant, smoke)}.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except (ValueError, OSError):   # a corrupt sibling must not take down a report writer
+        return None
+
+
+def _arm_table(result: dict, variant: str | None) -> list[dict]:
+    """This run's non-floor candidates as `(variant × learner)` arms in the shared naming.
+
+    Floors are EXCLUDED: `floor_no_skill` / `floor_market` are reference baselines, not promotable
+    configurations, and a floor carries no contract semantics — pairing one across contracts would
+    manufacture a 'learner swap' out of two constants.
+    """
+    label = variant or INCUMBENT_VARIANT
+    metric = result["metric"]
+    return [{"arm": f"{label}{ARM_SEPARATOR}{r['candidate']}", "learner": r["candidate"],
+             f"{metric}_mean": r[f"{metric}_mean"]}
+            for r in result["table"] if not r["is_floor"]]
+
+
+def attribution_for_run(result: dict) -> dict:
+    """The margin-attribution block for one recorded run — emitted on EVERY report.
+
+    A run with no contract counterpart still emits a block carrying a NAMED reason. Silence would be
+    indistinguishable from 'attribution was checked and came back clean' (NF1.7 (a)).
+    """
+    target, tier = result["target"], result["tier"]
+    variant, metric, smoke = result.get("variant"), result["metric"], bool(result.get("smoke"))
+    base = {"leader_arm": None, "incumbent_arm": None, "metric": metric}
+
+    if not variant:
+        return {**base, "decomposition": {
+            "available": False,
+            "reason": ("this run scores a single contract, so it has NO contract axis — its "
+                       "margins are learner-vs-floor on fixed features and none of them is a "
+                       "feature effect to attribute"),
+        }}
+
+    inc = _load_run(target, tier, None, smoke)
+    if inc is None:
+        return {**base, "decomposition": {
+            "available": False,
+            "reason": (f"no incumbent-contract run recorded for {target}/{tier} — the variant "
+                       f"cannot be compared to the contract it is a variant OF"),
+        }}
+
+    # ⚠️ COMPARABILITY. Two runs on different seeds / fold counts / row caps are not a controlled
+    # contrast, and differencing them would attribute a DESIGN difference to the contract. Refuse
+    # with the mismatch named rather than emit a number the reader would trust.
+    mismatch = [k for k in ("seed", "n_folds", "smoke", "metric")
+                if bool(inc.get(k)) != bool(result.get(k)) or inc.get(k) != result.get(k)]
+    if mismatch:
+        return {**base, "decomposition": {
+            "available": False,
+            "reason": (f"the incumbent-contract run is not a controlled contrast — it differs on "
+                       f"{', '.join(mismatch)}; differencing them would credit a DESIGN difference "
+                       f"to the contract"),
+        }}
+
+    rows = _arm_table(inc, None) + _arm_table(result, variant)
+    incumbent_arm = f"{INCUMBENT_VARIANT}{ARM_SEPARATOR}{inc['winner']}"
+    leader_arm = f"{variant}{ARM_SEPARATOR}{result['winner']}"
+    decomp = margin_decomposition(rows, incumbent_arm, leader_arm, metric,
+                                  noise_floor=result.get("noise_floor"))
+    return {
+        "leader_arm": leader_arm,
+        "incumbent_arm": incumbent_arm,
+        "metric": metric,
+        "incumbent_contract": inc.get("contract"),
+        "incumbent_run_winner": inc["winner"],
+        "decomposition": decomp,
+        "variant_effect_by_learner": variant_effect_by_learner(rows, metric, [variant]),
+    }
+
+
+def _attribution_md(result: dict) -> list[str]:
+    att = result.get("margin_attribution") or attribution_for_run(result)
+    metric = att.get("metric", result["metric"])
+    lines = render_margin_attribution_md(
+        att["decomposition"], metric=metric,
+        leader_arm=att.get("leader_arm") or "(none)",
+        incumbent_arm=att.get("incumbent_arm") or "(none)",
+    )
+    ve = att.get("variant_effect_by_learner") or []
+    if att["decomposition"].get("available") and ve:
+        variant = result.get("variant")
+        lines += [f"### Contract effect holding the LEARNER FIXED (+ = `{variant}` better)", "",
+                  f"| learner | incumbent {metric} | {variant} |", "|---|---:|---:|"]
+        for r in ve:
+            d = r.get(variant)
+            lines.append(f"| `{r['learner']}` | {r['incumbent']:.4f} | "
+                         + (f"{d:+.4f} |" if d is not None else "— |"))
+        lines.append("")
+    return lines
+
+
+def rewrite_reports() -> list[str]:
+    """Re-emit every recorded bake-off report from its stored JSON — ⛔ NO RE-FITTING.
+
+    Every score is read off the recorded `table`; the pairing is the only new computation. Gates,
+    winners, tie-breaks, PBO and margins are re-emitted VERBATIM from the stored result — this
+    function must never recompute a decision, and `mh1_margin_attribution.py --check` proves it did
+    not.
+    """
+    written = []
+    for path in sorted(_JSON_DIR.glob("bakeoff_*.json")):
+        result = json.loads(path.read_text())
+        if not result.get("table"):
+            continue
+        result["margin_attribution"] = attribution_for_run(result)
+        path.write_text(json.dumps(result, indent=2, default=float))
+        _write_report(result, pd.DataFrame(result["table"]), None)
+        written.append(path.stem)
+    return written
+
+
+def _winner_reason_line(result: dict) -> str:
+    """The winner rationale, from what the run RECORDED — never reconstructed as if it had been.
+
+    ⚠️ Runs predating the `winner_reason` field are re-emitted by MH1, and inventing a rationale
+    string for them would put an unprovenanced claim in a report that looks recorded. The tie COUNT
+    and the noise floor ARE stored, so those are stated; the tie-break rationale is named as the
+    harness's standing rule and explicitly marked as not recorded by that run.
+    """
+    recorded = result.get("winner_reason")
+    if recorded:
+        return str(recorded)
+    n_tied, nf = int(result.get("winner_within_noise_tie") or 1), result.get("noise_floor")
+    if n_tied > 1:
+        return (f"tie within {nf} noise floor among {n_tied} candidates. _(This run predates the "
+                f"recorded `winner_reason` field; the tie-break is the harness's standing rule — "
+                f"best calibration — not a string this run stored.)_")
+    return (f"clear best on {result['metric']} (margin > {nf} noise floor). _(Reason string not "
+            f"recorded by this run.)_")
+
+
+def _write_report(result: dict, table: pd.DataFrame, winner_row=None) -> None:
     _REPORT_DIR.mkdir(parents=True, exist_ok=True); _JSON_DIR.mkdir(parents=True, exist_ok=True)
     t, tier, metric = result["target"], result["tier"], result["metric"]
-    stem = (f"bakeoff_{t}_{tier}" + (f"_{result['variant']}" if result.get("variant") else "")
-            + ("_smoke" if result["smoke"] else ""))
+    stem = _run_stem(t, tier, result.get("variant"), bool(result["smoke"]))
+    # MH1: every recorded run carries its attribution block — including the runs where the
+    # decomposition cannot act, which carry the NAMED reason instead of nothing.
+    result.setdefault("margin_attribution", attribution_for_run(result))
     (_JSON_DIR / f"{stem}.json").write_text(json.dumps(result, indent=2, default=float))
     lines = [
         f"# Model-Class Bake-off — {t} ({tier})  [E1.9 step 1]", "",
         f"- Honest metric: **{metric}** (lower=better) · {result['n_features']} feats · "
         f"{result['n_folds']} purged folds · seed {result['seed']}"
         + ("  ⚠️ **SMOKE** (capped rows/estimators — not a real result)" if result["smoke"] else ""),
-        f"- **Auto-winner: `{result['winner']}`** — {result['winner_reason']}",
+        f"- **Auto-winner: `{result['winner']}`** — " + _winner_reason_line(result),
     ]
-    if result["winner_within_noise_tie"] > 1:
+    if result["winner_within_noise_tie"] > 1 and result.get("tie_members"):
         lines.append(
             f"  - ⚖️ **Tie set** (within {result['noise_floor']} noise floor): "
             + ", ".join(f"`{m}`" for m in result["tie_members"])
@@ -497,6 +664,7 @@ def _write_report(result: dict, table: pd.DataFrame, winner_row) -> None:
         floor = "✅" if r.is_floor else ""
         lines.append(f"| {i} | `{r.candidate}` | {primary:.4f} | {nll:.4f} | "
                      f"{r.mae_mean:.4f} | {cal} | {floor} |")
+    lines += ["", *_attribution_md(result)]
     lines += ["",
               "Calibration = ECE (home_win) / PIT-KS (totals/run_diff), lower=better. Floors "
               "(no-skill, market) are reference baselines, NOT promotable candidates. Winner "
@@ -509,7 +677,10 @@ def _write_report(result: dict, table: pd.DataFrame, winner_row) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--target", choices=list(_TARGETS), required=True)
+    ap.add_argument("--rewrite-reports", action="store_true",
+                    help="MH1: re-emit every recorded report from stored arm JSON (adds the "
+                         "margin-attribution block). NO re-fitting; no gate is recomputed.")
+    ap.add_argument("--target", choices=list(_TARGETS), required=False)
     ap.add_argument("--tier", choices=list(_CONTRACTS), default="post_lineup")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--embargo-days", type=int, default=3)
@@ -518,6 +689,12 @@ def main() -> None:
     ap.add_argument("--contract", default=None,
                     help="Evaluate an explicit contract path (E1.9 re-prune variant) instead of the tier default.")
     args = ap.parse_args()
+    if args.rewrite_reports:
+        for stem in rewrite_reports():
+            print(f"re-emitted {stem}")
+        return
+    if not args.target:
+        ap.error("--target is required (or use --rewrite-reports)")
     run_bakeoff(args.target, args.tier, seed=args.seed, smoke=args.smoke,
                 refresh_cache=args.refresh_cache, embargo_days=args.embargo_days,
                 contract=args.contract)

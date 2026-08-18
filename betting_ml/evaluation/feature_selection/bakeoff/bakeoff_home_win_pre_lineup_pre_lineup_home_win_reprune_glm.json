@@ -87,5 +87,56 @@
     }
   ],
   "contract": "betting_ml/models/home_win/feature_columns_pre_lineup_home_win_reprune_glm.json",
-  "variant": "pre_lineup_home_win_reprune_glm"
+  "variant": "pre_lineup_home_win_reprune_glm",
+  "margin_attribution": {
+    "leader_arm": "pre_lineup_home_win_reprune_glm::glm_elasticnet",
+    "incumbent_arm": "incumbent::lightgbm",
+    "metric": "brier",
+    "incumbent_contract": "betting_ml/models/home_win/feature_columns_pre_lineup_home_win.json",
+    "incumbent_run_winner": "lightgbm",
+    "decomposition": {
+      "available": true,
+      "total": 0.002315,
+      "learner_swap": 0.00025,
+      "contract": 0.002065,
+      "learner_share": 0.1079,
+      "same_learner_reference_arm": "incumbent::glm_elasticnet",
+      "noise_floor": 0.002,
+      "share_is_meaningful": true,
+      "sign_flip": false,
+      "learner_dominates": false,
+      "components_within_noise": {
+        "total": false,
+        "learner_swap": true,
+        "contract": false
+      }
+    },
+    "variant_effect_by_learner": [
+      {
+        "learner": "stack_mean",
+        "incumbent": 0.2426,
+        "pre_lineup_home_win_reprune_glm": 0.0002
+      },
+      {
+        "learner": "glm_elasticnet",
+        "incumbent": 0.2433,
+        "pre_lineup_home_win_reprune_glm": 0.0021
+      },
+      {
+        "learner": "lightgbm",
+        "incumbent": 0.2435,
+        "pre_lineup_home_win_reprune_glm": -0.0011
+      },
+      {
+        "learner": "xgboost",
+        "incumbent": 0.2437,
+        "pre_lineup_home_win_reprune_glm": -0.0004
+      },
+      {
+        "learner": "catboost",
+        "incumbent": 0.2442,
+        "pre_lineup_home_win_reprune_glm": 0.001
+      }
+    ]
+  }
 }

@@ -1,6 +1,6 @@
 # MLB Edge-E7.9 — retrain bake-off: run_diff (pre_lineup)
 
-> ⚠️ **Not an edge claim.** `best_alpha = 0`. This decides whether the MiLB-MLE-corrected feature block and the newly-joined `eb_gb_pct` earn a retrained champion; it says nothing about win rate or ROI.
+> ⚠️ **Not an edge claim.** `best_alpha = 0`. This decides whether the MiLB-MLE-corrected feature block and the newly-joined `eb_gb_pct` earn a retrained champion; it says nothing about win rate or ROI. A CRPS improvement on `total_runs` is a PRICING/CALIBRATION improvement, never an edge, a win rate, or an ROI.
 
 **VERDICT: `INCUMBENT_STANDS`**
 
@@ -21,6 +21,8 @@ The gate compares leader-arm vs incumbent-arm, where an arm is (contract variant
 | **total reported margin** | +0.0053 | 100% |
 
 🚩 **77% of this margin is the LEARNER SWAP, not the features.** Do not read `+0.0053` as what the added columns bought — that figure is `+0.0012`.
+
+⚠️ **The share is not a reliable proportion here:** the total margin (`0.0053`) is inside this metric's noise floor (`0.02`), so the ratio divides by a quantity the gate itself treats as noise. Read the ABSOLUTE components, not the percentages.
 
 ### Feature effect holding the LEARNER FIXED (+ = variant better than the incumbent contract)
 

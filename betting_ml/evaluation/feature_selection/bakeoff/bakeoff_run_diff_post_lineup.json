@@ -75,5 +75,14 @@
       "n": 4857
     }
   ],
-  "contract": "betting_ml/models/run_differential/feature_columns_ngboost_pruned_clustered_deleaked_2026.json"
+  "contract": "betting_ml/models/run_differential/feature_columns_ngboost_pruned_clustered_deleaked_2026.json",
+  "margin_attribution": {
+    "leader_arm": null,
+    "incumbent_arm": null,
+    "metric": "crps",
+    "decomposition": {
+      "available": false,
+      "reason": "this run scores a single contract, so it has NO contract axis \u2014 its margins are learner-vs-floor on fixed features and none of them is a feature effect to attribute"
+    }
+  }
 }

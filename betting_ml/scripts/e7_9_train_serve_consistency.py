@@ -107,6 +107,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from betting_ml.utils.margin_attribution import (  # noqa: E402  (needs PROJECT_ROOT on sys.path)
+    margin_decomposition as _shared_margin_decomposition,
+)
+
 _ABL = PROJECT_ROOT / "quant_sports_intel_models/baseball/edge_program/ablation_results"
 _JSON_DIR = PROJECT_ROOT / "betting_ml/evaluation/feature_selection/bakeoff"
 
@@ -264,36 +268,29 @@ def calibration_tolerance(incumbent_pit_ks: float) -> float:
 # report now decomposes the margin before attributing it.
 
 
+# The keys the RECORDED E7.9 reports quote. MH1 adds keys beside these; it must never move one.
+_LEGACY_DECOMP_KEYS = ("available", "total", "learner_swap", "contract", "learner_share",
+                       "same_learner_reference_arm")
+
+
 def margin_decomposition(table_rows: list[dict], incumbent_arm: str, leader_arm: str,
-                         metric: str) -> dict:
+                         metric: str, *, noise_floor: float | None = None) -> dict:
     """Split (incumbent - leader) into the LEARNER-swap part and the CONTRACT part.
 
-    learner_swap = incumbent_arm - (incumbent contract × LEADER's learner)
-    contract     = (incumbent contract × leader's learner) - leader_arm
-    The two sum to the reported margin by construction. Returns NaNs (never raises) when the
-    same-learner reference arm is absent — a report must degrade, not crash.
+    ⭐ **MH1 (2026-08-17): THE IMPLEMENTATION MOVED TO `betting_ml.utils.margin_attribution` AND
+    THIS IS NOW A DELEGATION, NOT A COPY.** The defect this function was written for is generic —
+    `model_bakeoff.py` has the same `(contract × learner)` arm shape and the same leader-vs-incumbent
+    margin — so keeping a second implementation here would have been the repo's own
+    "one policy, N implementations" tax (NF-EPIC 1) on the very machinery that exists to keep a
+    report honest. Verified byte-identical on all three recorded E7.9 results before the swap.
+
+    `noise_floor` is MH1's addition: `learner_share` is a RATIO, and two of E7.9's own three margins
+    (0.0053 / 0.0127 crps against a 0.02 floor) sit INSIDE the noise floor, so their shares divide by
+    a quantity the gate itself calls noise. The share is still computed — the recorded numbers are
+    unchanged — but the report now says when it is not a reliable proportion.
     """
-    key = f"{metric}_mean"
-    scores = {r["arm"]: r[key] for r in table_rows}
-    leader_learner = leader_arm.partition("::")[2]
-    same_learner_ref = f"incumbent::{leader_learner}"
-    inc, lead = scores.get(incumbent_arm), scores.get(leader_arm)
-    ref = scores.get(same_learner_ref)
-    if inc is None or lead is None:
-        return {"available": False}
-    total = inc - lead
-    if ref is None:
-        return {"available": False, "total": round(total, 6)}
-    learner = inc - ref
-    contract = ref - lead
-    return {
-        "available": True,
-        "total": round(total, 6),
-        "learner_swap": round(learner, 6),
-        "contract": round(contract, 6),
-        "learner_share": (round(learner / total, 4) if total not in (0, None) else None),
-        "same_learner_reference_arm": same_learner_ref,
-    }
+    return _shared_margin_decomposition(table_rows, incumbent_arm, leader_arm, metric,
+                                        noise_floor=noise_floor)
 
 
 def _sharpe(series) -> float:
@@ -1147,7 +1144,8 @@ def run_retrain_bakeoff(target: str, tier: str, *, seed: int, smoke: bool,
         "gates": gates, "verdict": verdict,
         # Q1: never report a margin without its attribution.
         "margin_decomposition": margin_decomposition(
-            table.to_dict(orient="records"), incumbent_arm, str(best["arm"]), metric),
+            table.to_dict(orient="records"), incumbent_arm, str(best["arm"]), metric,
+            noise_floor=NOISE_FLOOR.get(metric)),
         "variant_effect_by_learner": variant_effect_by_learner(
             table.to_dict(orient="records"), metric),
         # Q2 provenance: which tolerance scored this run, and whether the verdict depends on it.
@@ -1406,10 +1404,22 @@ def _write_bakeoff_report(result: dict, table: pd.DataFrame) -> None:
           + (f"{1 - share:.0%} |" if share is not None else "— |"))
         a(f"| **total reported margin** | {md['total']:+.4f} | 100% |")
         a("")
-        if share is not None and share >= 0.5:
+        if md.get("sign_flip"):
+            a(f"🚩🚩 **SIGN FLIP — holding the learner fixed, the contract is WORSE** "
+              f"(`{md['contract']:+.4f}`). The reported margin is a learner-class effect that more "
+              f"than covers a contract effect pointing the other way.")
+        elif share is not None and share >= 0.5:
             a(f"🚩 **{share:.0%} of this margin is the LEARNER SWAP, not the features.** Do not read "
               f"`{md['total']:+.4f}` as what the added columns bought — that figure is "
               f"`{md['contract']:+.4f}`.")
+        # MH1: a share is a RATIO. Two of E7.9's own three margins sit inside the crps noise floor,
+        # so their percentages divide by a quantity the gate itself treats as noise.
+        if md.get("share_is_meaningful") is False:
+            a("")
+            a(f"⚠️ **The share is not a reliable proportion here:** the total margin "
+              f"(`{abs(md['total']):.4f}`) is inside this metric's noise floor "
+              f"(`{md['noise_floor']}`), so the ratio divides by a quantity the gate itself treats "
+              f"as noise. Read the ABSOLUTE components, not the percentages.")
     else:
         a("_Not available — the leader's learner has no incumbent-contract counterpart in this grid._")
     a("")
@@ -1500,6 +1510,8 @@ def rewrite_reports() -> list[str]:
     calibration amendment does NOT retro-apply — a run stored without a `calibration_tolerance` key
     was scored under the original 1e-9 tolerance and the report says so.
     """
+    from betting_ml.utils.promotion_gate import NOISE_FLOOR  # deferred: keeps import cost off the CLI
+
     written = []
     for path in sorted(_JSON_DIR.glob("e7_9_retrain_*.json")):
         result = json.loads(path.read_text())
@@ -1507,9 +1519,22 @@ def rewrite_reports() -> list[str]:
         if not rows:
             continue
         metric = result["metric"]
-        result.setdefault("margin_decomposition", margin_decomposition(
-            rows, result["incumbent_arm"], result["leader_arm"], metric))
-        result.setdefault("variant_effect_by_learner", variant_effect_by_learner(rows, metric))
+        # ⚠️ MH1: RECOMPUTE, do not `setdefault`. A stored pre-MH1 block would otherwise survive
+        # every future re-emit, and the harness would report on a quantity it stopped computing.
+        # The recompute is derived from the SAME stored table, so the numbers a report already
+        # quotes must not move — asserted here, at the write, not only in a test.
+        before = {k: (result.get("margin_decomposition") or {}).get(k)
+                  for k in _LEGACY_DECOMP_KEYS}
+        result["margin_decomposition"] = margin_decomposition(
+            rows, result["incumbent_arm"], result["leader_arm"], metric,
+            noise_floor=result.get("noise_floor", NOISE_FLOOR.get(metric)))
+        after = {k: result["margin_decomposition"].get(k) for k in _LEGACY_DECOMP_KEYS}
+        if any(v is not None for v in before.values()) and before != after:
+            raise SystemExit(
+                f"❌ MH1: re-emitting {result['target']}/{result['tier']} MOVED a recorded "
+                f"decomposition value: {before} → {after}. A re-emit is presentational; a changed "
+                f"number means the rewrite is recomputing something it must not.")
+        result["variant_effect_by_learner"] = variant_effect_by_learner(rows, metric)
         path.write_text(json.dumps(result, indent=2, default=float))
         _write_bakeoff_report(result, pd.DataFrame(rows))
         written.append(f"{result['target']}/{result['tier']}")

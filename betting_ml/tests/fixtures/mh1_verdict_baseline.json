@@ -1,0 +1,86 @@
+{
+  "ref": "2a7258610a79d470b82461fa8f43b7f5078386e8",
+  "results": {
+    "bakeoff_home_win_post_lineup.json": {
+      "legacy_margin_decomposition": {},
+      "n_fields": 18,
+      "sha256": "a289f3e05506542c32b79373006c4cb0bf1252b9ea36ee7dce815f7fbf710205"
+    },
+    "bakeoff_home_win_post_lineup_home_win_post_reprune_glm.json": {
+      "legacy_margin_decomposition": {},
+      "n_fields": 19,
+      "sha256": "a0d715e2a90d796b9b80d6bc7f57f677783a1105242e2295fdbdf2da43b67427"
+    },
+    "bakeoff_home_win_pre_lineup.json": {
+      "legacy_margin_decomposition": {},
+      "n_fields": 18,
+      "sha256": "65f98e3632876dee886497b1d9b526fdea440647e99d19df3ecbb76ecbf9db4d"
+    },
+    "bakeoff_home_win_pre_lineup_pre_lineup_home_win_reprune_glm.json": {
+      "legacy_margin_decomposition": {},
+      "n_fields": 19,
+      "sha256": "46d8a56b4b8493b064aae4b5575ecd5c0de6690d5b066d901db19551df89682d"
+    },
+    "bakeoff_run_diff_post_lineup.json": {
+      "legacy_margin_decomposition": {},
+      "n_fields": 13,
+      "sha256": "708d358009842d5398fcf78c1bd8086d68c089c01d516f1e2069d54b91c95f9b"
+    },
+    "bakeoff_run_diff_pre_lineup.json": {
+      "legacy_margin_decomposition": {},
+      "n_fields": 13,
+      "sha256": "ffcd33941c7a9c4297406df9ace9ae527d997b4fa91f8b6fe1e506e4e44d6a74"
+    },
+    "bakeoff_total_runs_post_lineup.json": {
+      "legacy_margin_decomposition": {},
+      "n_fields": 13,
+      "sha256": "cbeeec364594679251a4eadf1dedf0ae443a79265cb6f6db7b9d729b37b23fc2"
+    },
+    "bakeoff_total_runs_pre_lineup.json": {
+      "legacy_margin_decomposition": {},
+      "n_fields": 13,
+      "sha256": "24cc155ec1c9be09b83fb27b085122dc9379e05e40c120693e47b7a5af0fefe6"
+    },
+    "bakeoff_total_runs_pre_lineup_pre_lineup_total_runs_reprune_ngb.json": {
+      "legacy_margin_decomposition": {},
+      "n_fields": 19,
+      "sha256": "f63c2288ab4c99ba8b0ba7ebacfdf5a23433f7b56d2a00d647d8b236aafb4072"
+    },
+    "e7_9_retrain_run_diff_post_lineup.json": {
+      "legacy_margin_decomposition": {
+        "available": true,
+        "contract": 0.005924,
+        "learner_share": 0.5345,
+        "learner_swap": 0.006801,
+        "same_learner_reference_arm": "incumbent::glm_elasticnet",
+        "total": 0.012726
+      },
+      "n_fields": 27,
+      "sha256": "51f0ac26cfc168931fe272cb650e63db8e70a205b9bb8e9682fc28d51c830e64"
+    },
+    "e7_9_retrain_run_diff_pre_lineup.json": {
+      "legacy_margin_decomposition": {
+        "available": true,
+        "contract": 0.001234,
+        "learner_share": 0.7685,
+        "learner_swap": 0.004096,
+        "same_learner_reference_arm": "incumbent::glm_elasticnet",
+        "total": 0.00533
+      },
+      "n_fields": 27,
+      "sha256": "4ca634e061e2ce26e7d3ec4d8ed57c11315cc558c9ea0a6bf2b46892aa5e4b95"
+    },
+    "e7_9_retrain_total_runs_post_lineup.json": {
+      "legacy_margin_decomposition": {
+        "available": true,
+        "contract": 0.005329,
+        "learner_share": 0.7419,
+        "learner_swap": 0.015317,
+        "same_learner_reference_arm": "incumbent::glm_elasticnet",
+        "total": 0.020646
+      },
+      "n_fields": 27,
+      "sha256": "54d647353b2004b7ce616b3e158e59c9afe34e36e307b91553492bbb99dff8b6"
+    }
+  }
+}
