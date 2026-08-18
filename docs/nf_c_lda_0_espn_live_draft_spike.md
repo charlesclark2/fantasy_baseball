@@ -13,10 +13,14 @@ would misreport the result**, so they are graded separately.
 | # | Question | Verdict | Basis |
 |---|---|---|---|
 | 2 | Can we resolve ESPN's players to OUR ids? | ✅ **GO — MEASURED** | 172 real rostered players, **98.8%** resolved, **0.0% join failures** |
-| 1 | Can we reliably READ the live ESPN draft state? | 🟡 **CONDITIONAL GO — INSTRUMENTED, NOT OBSERVED** | probe built; a structured source is evidenced in committed payloads, the LIVE pick stream is unconfirmed |
+| 1 | Can we reliably READ the live ESPN draft state? | 🟢 **GO for the STATE read · 🟡 the LIVE PICK STREAM is still open** | **a real mock draft was captured 2026-08-18** (§10): tier B confirmed at 1.4 MB / score 407, tier A dead, pick stream is a binary WebSocket the probe could not read (now fixed) |
 
-**Overall: GO on the half that was the real risk, and the other half is one operator mock draft from
-a verdict.** The instrument that settles it is built, loadable and self-reporting.
+**Overall: GO.** The resolution half was the real risk and it is answered at full pool scale (§10.2).
+The read half is confirmed structured; one bounded unknown remains (does `picks[]` populate during
+an active draft) and the instrument to close it is fixed and in place.
+
+⚠️ **§10 supersedes parts of §1 and §5 below.** The original text is left standing rather than
+rewritten, so what was INFERRED before the capture and what was MEASURED after stay legible.
 
 ⚠️ **Why question 1 could not be closed in-session, stated plainly rather than buried.** ESPN's
 `robots.txt` carries `User-agent: anthropic-ai / Disallow: /`, and this repo's standing access
@@ -362,3 +366,149 @@ explicitly with what it buys.
 Nothing here deploys. The extension is not part of the Next.js app and does not go through Vercel or
 `infrastructure/lambda/deploy.sh`; it is loaded unpacked by hand. **No changelog entry** — nothing
 user-facing ships from a spike.
+
+---
+
+## 10. ⭐ POST-CAPTURE ADDENDUM (2026-08-18) — a real mock draft, and the full pool
+
+Everything above §10 was written **before** any ESPN page had been seen. This section records what
+the first real capture and the full player universe actually showed. Where it contradicts an earlier
+inference, it wins — and the earlier text is deliberately left in place so the difference between an
+inference and a measurement stays visible.
+
+### 10.1 What the live capture settled (question 1)
+
+Captured from an ESPN **mock draft**, 35 s after the room opened.
+
+| Finding | Result |
+|---|---|
+| **Tier B — structured network source** | ✅ **CONFIRMED.** One call scored **407** — `lm-api-reads.../leagues/{id}`, **1,468,409 bytes**, carrying `draftDetail.picks[180]`, `players[1027]`, `teams[12]`, full `settings` |
+| **Tier A — in-page state** | ❌ **DEAD.** The only scoring globals were `ensBootstraps` / `Bootstrapper` — Ensighten *analytics*, scoring 1 on an incidental key. There is no draft-state object on `window` |
+| **Tier C — DOM** | present (674 pick-like nodes) but unnecessary |
+| **Draft ORDER, pre-draft** | ✅ `picks[]` is **pre-allocated** — 12 teams × 15 rounds = 180 slots of `{id, teamId}`, so the order is readable *before* a pick happens |
+| **Live pick transport** | `wss://fantasydraft.espn.com/game-1/league-{id}/JOIN` — **25 frames, none readable** |
+| **"Who am I"** | 🟡 **strong candidate**: the room fetched `.../teams/14/draftSecurity`, i.e. the **request URL names the user's own team**. Passively observable. Needs a non-mock confirmation |
+
+**⭐ THE PROBE HAD A BLIND SPOT AND THE CAPTURE PROVED IT RATHER THAN HIDING IT.** 25 frames arrived
+on the draft socket and none were recorded, because `recordCall` `return`ed on anything that failed
+`JSON.parse`. The discriminator is what makes this a measurement rather than a guess: the *sibling*
+bamgrid socket on the same run recorded `bytes=367` with a parsed shape, so the wrapper worked and
+the **format** was the problem. Silence was indistinguishable from "no messages" — the NF1.7(a)
+shape, in the instrument itself. **Fixed** (§10.4).
+
+⚠️ **The capture is pre-draft.** `drafted: false, inProgress: false`, 35 s in, with a 2 MB loading
+animation still downloading. That fully explains the token results: `picks` ✅ but `playerId` /
+`overallPickNumber` ❔ — the 180 slots exist and are **empty**. **Whether `picks[]` populates with
+`playerId` during an active draft is the one remaining unknown**, and it needs a capture taken 30+
+picks in.
+
+### 10.2 ⛔ A MOCK LEAGUE IS DELETED WHEN THE DRAFT ENDS — this changes the design
+
+Measured: the league URL returns `LEAGUE_NOT_FOUND_DELETED` once the mock finishes. **Nothing can be
+re-queried afterwards.** Two consequences that outlive this spike:
+
+1. **The extension is the only thing that ever sees this data**, so it must capture *completely*
+   while the draft is live. A structural summary was the right call for "does a source exist"; it is
+   the wrong call now. Hence the pool extractor (§10.4).
+2. **Mock is nonetheless the only safe dev surface** — a real league drafts once a year — so the
+   assistant has to be debuggable from a single live pass. That is an argument for generous
+   development-time logging, and against any design that needs a second look at the same room.
+
+### 10.3 The full pool (question 2, at real scale)
+
+The pool is **league-independent**: `espn_source.fetch_espn_draftranks` reads
+`seasons/{year}/players?view=kona_player_info` with no league id, so the deleted mock is irrelevant.
+Reproduce with `measure_resolution.py --pool --with-crosswalk`:
+
+```
+POOL    11612 raw rows → 4549 in projectable positions
+BOARD   858 rows
+resolved 866/4549   (tier1 738 · tier3 128)
+⭐ BOARD COVERAGE: 855/858 = 99.7%
+⭐ tier1/tier3 DISAGREEMENTS: 0
+⛔ FALSE-MERGE COLLISIONS: 10   (MIXED id+name 6 · name-rung only 4 · id-rung only 0)
+```
+
+**(a) Board coverage 99.7%.** The pool contains 855 of the 858 players we project, so the assistant
+will have an ESPN row for essentially every board player. ⛔ The raw 866/4549 "match rate" is
+**meaningless and is deliberately not the headline** — the pool is five times the board, so most
+rows *should* be unmatched (NF-K1 cause 3).
+
+**(b) Zero tier1/tier3 disagreements across 4,549 rows** — the cross-validation from §2.2 holds at
+26× the fixture's scale.
+
+**(c) ⛔ 10 FALSE MERGES — the defect the 172-player fixture structurally could not show.** Two
+*different* ESPN players collapse onto one board row, because the suffix stripper folds `Jr.` away:
+
+| board row | collides |
+|---|---|
+| `Frank Gore` [RB BUF] | id-rung → **Frank Gore Jr.** (correct, the son on our board) · name-rung → retired **Frank Gore** |
+| `Davante Adams` [WR LAR] | id-rung → the real one · name-rung → a *different* `Davante Adams` |
+| `Kyle Williams` [WR NE] | **three** pool rows claim it |
+| `Ted Hurst` [WR TB] | `Ted Hurst` + `Ted Hurst III` |
+
+**⭐ Every collision involves the NAME rung; the stable-id rung produced none (0 of 10).** In the six
+MIXED cases the id rung resolved the *correct* player and the name rung attached an impostor to the
+same row. The fix is the resolver's own documented rule (b) — **AMBIGUITY IS AN UNRESOLVED, NOT A
+COIN FLIP**: a name key claimed by more than one pool row must resolve for *neither*, leaving the id
+rung to decide. Applied here that repairs all ten (six resolve correctly by id, four become honest
+misses). ⛔ It must be enforced on the **pool** side, not only the board side — the board's 858 keys
+are already collision-free.
+
+**(d) Two position-derivation edges.** Three board rows are absent from the pool, and none is a true
+absence:
+
+- **`Travis Hunter` derives as `CB`.** His `eligibleSlots` span offense *and* defense, so the vetted
+  `eligibleSlots` derivation returns CB while `defaultPositionId=3` correctly says WR. ⚠️ **This is
+  NF-C0 §4c's collision facing the other way**: that memo established `defaultPositionId` must not
+  be used because slot 4 is WR while position 4 is TE — correct for ordinary players, and **wrong for
+  a two-way player**. It silently drops one of the highest-profile names in the class.
+- **`Riley Nowakowski` / `Max Bredeson` derive as `RB`** where our board says TE — fullback/H-back
+  rows where ESPN and we genuinely *disagree* on position. Not a bug: the `name|pos` key cannot
+  survive a position disagreement, which is exactly what the resolver's tier **4a** (name + team,
+  position RELAXED) exists for. Another argument for the full ladder over two rungs.
+
+### 10.4 What was fixed in the probe
+
+1. **Binary / non-JSON WebSocket frames are decoded** (bounded prefix, both `ArrayBuffer` and `Blob`
+   carriers — a socket delivers either depending on `binaryType`, and decoding one loses half the
+   frames silently), and a frame that still cannot be read is **counted** rather than dropped.
+2. **Pool identity rows are extracted** (`id`, `fullName`, `proTeamId`, `defaultPositionId`,
+   `eligibleSlots`) so each ephemeral mock draft is self-sufficient. ⛔ Identity fields only —
+   `ownership`, `stats` and `draftRanksByRankType` are excluded by a guard.
+3. **⭐ A REDACTOR, shipped WITH the raw capture rather than after it.** Storing raw frames is the
+   first thing in this extension that *could* persist a secret, and the trigger is concrete: the
+   room fetches a `draftSecurity` **token**, so the socket handshake is a plausible carrier. GUIDs,
+   long opaque runs and self-labelled secret fields are redacted before anything is stored, and the
+   output is truncated to 400 chars. Verified two-sided: a real SWID GUID → `<guid>`, a JWT-ish run →
+   `<redacted>`, and **an honest pick event passes through unchanged** — a redactor that ate the
+   thing we are trying to see would be worse than none.
+
+The guard suite grew to **24 tests / 10 RED-proven clauses**. ⚠️ **Two of the new clauses were
+VACUOUS on their first run and the red proof caught both** — an `x in src` assertion stayed green
+when the branch was disabled (the token survived on another line: the #815 shape), and a
+`decodePrefix` call-count assertion stayed green when only one of the two carriers was unwired. Both
+now pin the discriminating predicate. That is the clearest evidence in this memo that a green suite
+is not evidence.
+
+### 10.5 ⚠️ A CORRECTION TO §5
+
+§5 stated: *"There is no local ESPN pool capture to measure that against (checked — the `espn_cache/`
+directory does not exist), so full-pool resolution is UNMEASURED."*
+
+**That was wrong.** Eight seasons of cache (2019–2026) had been sitting in the **main checkout**
+since 2026-07-26. The directory is gitignored (`.gitignore:119`), so it is absent from any fresh
+`git worktree` — and the check ran in a worktree. **This is the NF-INFRA1 landmine exactly**, walked
+into while writing a memo that cites NF-INFRA1. The lesson generalises past this spike: *"I checked
+and the file does not exist"* is not a claim about the repo when it is made from a worktree — it is a
+claim about the worktree. `measure_resolution.py --pool` therefore takes an explicit path and says so.
+
+### 10.6 What is still open
+
+| Open | How it closes |
+|---|---|
+| Does `picks[]` populate `playerId` during an active draft? | one capture taken **30+ picks in** |
+| What is in the draft socket's frames? | same capture — the decoder is now in place |
+| Is `teams/{id}/draftSecurity` really the user's own team? | a **non-mock** league confirms it |
+| Ambiguity rule on the name rung | build it into the server-side resolver (§2.4) |
+| Two-way players (`Travis Hunter`) | position derivation needs a `defaultPositionId` fallback when `eligibleSlots` spans both sides |

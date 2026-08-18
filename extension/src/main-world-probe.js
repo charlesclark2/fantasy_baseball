@@ -58,6 +58,8 @@
     globals: [],     // A — in-page JSON state
     network: [],     // B — calls the page already made
     dom: null,       // C — rendered text (last resort, flagged brittle)
+    pool: null,      // identity rows for the available pool (see extractPool)
+    poolSource: null,
     errors: []
   };
 
@@ -129,6 +131,64 @@
   // wrapped and failure is silent-but-recorded.
   var seenUrls = Object.create(null);
 
+  // ── REDACTION — required before ANY raw frame is kept ────────────────────────────────────────
+  // ⭐ ADDED WITH THE RAW-FRAME CAPTURE, NOT AFTER IT. The first capture showed the room fetching
+  // `.../teams/14/draftSecurity`, whose response is a draft-join TOKEN — so the draft socket's own
+  // handshake is a plausible carrier for that token, and "capture the raw frame" would otherwise be
+  // the first thing in this extension that could persist a secret. The §3(c) red line is about not
+  // coming into possession of credential material; a capture file we hand around is possession.
+  //
+  // So: redact token-shaped runs BEFORE anything is stored, and truncate hard. A pick event is
+  // small ints and short strings; anything long and high-entropy is not a pick.
+  var RAW_FRAME_LIMIT = 400;
+
+  function redact(text) {
+    if (typeof text !== "string") return null;
+    return text
+      // GUIDs (ESPN member SWIDs are exactly this shape — NF-C0: an identifier, but "not a
+      // credential is not a reason to keep one").
+      .replace(/\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?/gi, "<guid>")
+      // JWT-ish and long opaque runs — a token, never a pick field.
+      .replace(/\b[A-Za-z0-9_-]{24,}\b/g, "<redacted>")
+      // Anything self-labelled as a secret.
+      .replace(/("?(?:token|auth|secret|security|credential|session)"?\s*[:=]\s*)"[^"]*"/gi,
+               "$1\"<redacted>\"")
+      .slice(0, RAW_FRAME_LIMIT);
+  }
+
+  // ── POOL IDENTITY EXTRACTION ─────────────────────────────────────────────────────────────────
+  // ⭐ WHY THIS EXISTS: a MOCK league is DELETED the moment the draft ends (measured — the league
+  // URL returns `LEAGUE_NOT_FOUND_DELETED` afterwards), so nothing can be re-queried later. The
+  // probe is the only thing that ever sees this data, and a structural summary of the pool is not
+  // enough to measure whether we can RESOLVE it.
+  //
+  // ⛔ IDENTITY FIELDS ONLY — id / name / proTeam / slots. Deliberately NOT the whole payload:
+  // `ownership`, `stats`, `draftRanksByRankType` and every league-private object stay out. These
+  // five fields are ESPN's public player universe (the same for every league), which is what makes
+  // keeping them proportionate.
+  var POOL_LIMIT = 2000;
+
+  function extractPool(parsed) {
+    try {
+      var list = parsed && parsed.players;
+      if (!list || !list.length) return null;
+      var out = [];
+      for (var i = 0; i < list.length && i < POOL_LIMIT; i++) {
+        var e = list[i];
+        var pl = (e && e.player) ? e.player : e;      // draft room wraps; season endpoint does not
+        if (!pl || pl.id === undefined) continue;
+        out.push({
+          id: pl.id,
+          fullName: pl.fullName,
+          proTeamId: pl.proTeamId,
+          defaultPositionId: pl.defaultPositionId,
+          eligibleSlots: pl.eligibleSlots
+        });
+      }
+      return out.length ? out : null;
+    } catch (e) { note("extractPool", e); return null; }
+  }
+
   function recordCall(kind, url, bodyText) {
     try {
       if (!url) return;
@@ -143,11 +203,34 @@
       // Shape it once — repeat polls of the same endpoint add nothing but noise.
       if (entry.shape === null && bodyText) {
         var parsed = null;
-        try { parsed = JSON.parse(bodyText); } catch (e) { return; }
+        try { parsed = JSON.parse(bodyText); } catch (e) { parsed = null; }
+        if (parsed === null) {
+          // ⭐ THE FIRST CAPTURE'S BLIND SPOT. 25 frames arrived on the draft socket and NONE were
+          // recorded, because this branch used to `return` on anything that was not JSON — so a
+          // binary or custom-text pick protocol was indistinguishable from "no messages". The
+          // sibling bamgrid socket recorded `bytes=367` on the same run, which is what proved the
+          // wrapper worked and the FORMAT was the problem (NF1.7(a): a check that could not read is
+          // not a check that found nothing).
+          if (entry.rawSample === undefined) {
+            entry.rawSample = redact(bodyText);
+            entry.rawBytes = bodyText.length;
+            entry.rawIsString = true;
+          }
+          return;
+        }
         entry.score = scoreShape(parsed, 0, new WeakSet());
         entry.shape = summarize(parsed, 0);
         entry.bytes = bodyText.length;
+        if (findings.pool === null) {
+          var pool = extractPool(parsed);
+          if (pool) { findings.pool = pool; findings.poolSource = entry.url; }
+        }
+      } else if (entry.shape === null && bodyText === null && entry.nonTextFrames === undefined) {
+        // A frame arrived that was not a string at all (ArrayBuffer/Blob). Record THAT FACT —
+        // "we saw N frames we could not read" is a finding; silence is not.
+        entry.nonTextFrames = 0;
       }
+      if (bodyText === null && entry.nonTextFrames !== undefined) entry.nonTextFrames += 1;
     } catch (e) { note("recordCall", e); }
   }
 
@@ -170,6 +253,20 @@
       try { out[k] = summarize(v[k], depth + 1); } catch (e) { out[k] = "?"; }
     }
     return out;
+  }
+
+  function decodePrefix(buf) {
+    // Bounded, lossy-tolerant decode. A binary protocol still usually carries readable field names;
+    // what matters is seeing ENOUGH to identify the protocol, not reconstructing it here.
+    try {
+      var view = new Uint8Array(buf, 0, Math.min(buf.byteLength, RAW_FRAME_LIMIT));
+      if (typeof TextDecoder !== "undefined") {
+        return new TextDecoder("utf-8", { fatal: false }).decode(view);
+      }
+      var out = "";
+      for (var i = 0; i < view.length; i++) out += String.fromCharCode(view[i]);
+      return out;
+    } catch (e) { note("decodePrefix", e); return null; }
   }
 
   function installNetworkObservers() {
@@ -232,8 +329,19 @@
             ws.addEventListener("message", function (ev) {
               try {
                 var d = ev.data;
-                recordCall("websocket-msg", url, typeof d === "string" ? d : null);
-              } catch (e) {}
+                if (typeof d === "string") { recordCall("websocket-msg", url, d); return; }
+                // BINARY frame. Decode a bounded prefix so a custom/binary pick protocol is
+                // legible; a Blob is async, an ArrayBuffer is not, so both are handled.
+                if (d instanceof ArrayBuffer) {
+                  recordCall("websocket-msg", url, decodePrefix(d));
+                } else if (typeof Blob !== "undefined" && d instanceof Blob) {
+                  d.arrayBuffer().then(function (buf) {
+                    recordCall("websocket-msg", url, decodePrefix(buf));
+                  }, function () { recordCall("websocket-msg", url, null); });
+                } else {
+                  recordCall("websocket-msg", url, null);
+                }
+              } catch (e) { note("ws-message", e); }
             });
           } catch (e) { note("ws-observe", e); }
           return ws;

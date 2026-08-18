@@ -42,6 +42,19 @@ headers, which is the one place `Cookie:`/`Authorization:` appear.
 The capture is a **structural summary** (key names, shapes, small scalar samples) rather than the
 league payload, so it can be reasoned about without carrying somebody's private league around.
 
+## ⚠️ A mock league is DELETED when the draft ends
+
+Measured 2026-08-18: the league URL returns `LEAGUE_NOT_FOUND_DELETED` afterwards. **Nothing can be
+re-queried**, so the capture must be complete while the draft is live — that is why the probe
+extracts pool identity rows rather than only a structural summary. Take the capture **30+ picks in**,
+not at load: the first capture was 35 s old and its 180 pick slots were still empty.
+
+The player POOL, by contrast, is league-independent and survives:
+
+```bash
+uv run python -c "from quant_sports_intel_models.football.nfl.fantasy import espn_source as E; E.fetch_espn_draftranks(2026)"
+```
+
 ## What a capture settles
 
 The capture names which of three sources exists, in the story's priority order:
@@ -57,5 +70,10 @@ The capture names which of three sources exists, in the story's priority order:
 ```bash
 uv run python extension/tools/measure_resolution.py                    # name rung, no AWS needed
 AWS_DEFAULT_REGION=us-east-2 uv run python extension/tools/measure_resolution.py --with-crosswalk
+AWS_DEFAULT_REGION=us-east-2 uv run python extension/tools/measure_resolution.py --pool --with-crosswalk
 uv run python extension/tools/red_proof.py                             # prove the guard can fail
 ```
+
+⚠️ `--pool` reads `artifacts/espn_cache/espn_2026.json`, which is **gitignored** — so it is absent
+from a fresh `git worktree` even when the main checkout has it (NF-INFRA1; this spike walked into it).
+Pass an explicit path when running from a worktree.
