@@ -35,6 +35,8 @@ DEPS = REPO / "app/backend/dependencies.py"
 TS_LIB = REPO / "frontend/lib/big-board.ts"
 TS_API = REPO / "frontend/lib/fantasy.ts"
 COMPONENT = REPO / "frontend/components/fantasy/big-board.tsx"
+PAGE = REPO / "frontend/app/fantasy/big-board/page.tsx"
+CSS = REPO / "frontend/app/globals.css"
 SUITE = "betting_ml/tests/test_nf_c4_custom_big_board.py"
 
 #: `(label, file, anchor, replacement, the ONE test that must go red)`.
@@ -278,9 +280,116 @@ CASES = [
      "It is a description of the difference, not a\n                      score of it",
      "It is how much better your read is",
      "test_the_divergence_column_explains_itself_without_grading_the_difference"),
+
+    # ══ the live-surface corrections ═══════════════════════════════════════════════════════════
+    # Every case below breaks something the FIRST cut of this feature actually got wrong on the
+    # deployed page. They are the clauses most worth proving non-vacuous, because each one is
+    # guarding against a defect that has already happened once.
+
+    # ⭐ THE WIRED-≠-INVOKED HALF (NF-C0e). Deleting the legend's TEXT would also work, but this
+    # break leaves the component perfectly written and simply stops mounting it — which is the
+    # failure this repo keeps shipping and the one a text-only assertion cannot see.
+    ("define the icon legend but never render it", COMPONENT,
+     "          <IconLegend />",
+     "          {/* legend */}",
+     "test_every_row_control_is_explained_in_words_somewhere_a_phone_can_read"),
+
+    ("call the tier-break control a tag again", COMPONENT,
+     '<span className="text-right">Tier · tag · note</span>',
+     '<span className="text-right">Tag</span>',
+     "test_the_column_header_no_longer_calls_a_tier_break_a_tag"),
+
+    ("print a TIER 1 heading over a board with no tiers drawn", COMPONENT,
+     "              {hasTiers && (",
+     "              {true && (",
+     "test_the_sheet_does_not_invent_a_tier_the_user_never_drew"),
+
+    # ⚠️ THE TEMPTING WRONG IMPLEMENTATION, not a typo: `sections.length > 1` reads as equivalent
+    # and silently drops the heading from a board the user deliberately left as ONE tier.
+    ("infer the user's tiers from how many sections were built", COMPONENT,
+     '    <div className="mt-4" data-testid="big-board-cheat-sheet">',
+     '    <div className="mt-4" data-testid="big-board-cheat-sheet" data-n={sections.length}>',
+     "test_whether_the_user_has_tiers_is_not_derived_from_the_section_count"),
+
+    ("let the dark theme's grey text print as grey on white paper", CSS,
+     "    color: #000 !important;",
+     "    color: inherit;",
+     "test_the_print_stylesheet_turns_dark_theme_text_into_ink"),
+
+    ("print the nav bar above the cheat sheet", PAGE,
+     '        <div className="print:hidden">',
+     "        <div>",
+     "test_the_page_chrome_does_not_print"),
+
+    ("print a cheat sheet that does not say when it was printed", COMPONENT,
+     "printed {new Date().toLocaleDateString()}",
+     "printed recently",
+     "test_the_printed_sheet_names_the_league_and_the_day_it_was_printed"),
+
+    # 🐛 THE ACTUAL DEPLOYED DEFECT: the page read "our 2026board".
+    ("put the season back beside JSX text instead of inside the string", COMPONENT,
+     "            {`Start with our ${SEASON} board for your league",
+     "            Start with our {SEASON} board for your league",
+     "test_the_intro_does_not_depend_on_jsx_whitespace_around_an_expression"),
+
+    ("let the server and the textarea disagree about how long a note may be", MODELS,
+     "MAX_BIG_BOARD_NOTE_LEN = 200",
+     "MAX_BIG_BOARD_NOTE_LEN = 240",
+     "test_the_note_length_cap_is_one_number_with_one_owner"),
+
+    ("store a note the user cleared as an empty string", MODELS,
+     "            if not pid or len(pid) > MAX_PLAYER_ID_LEN or not note:",
+     "            if not pid or len(pid) > MAX_PLAYER_ID_LEN:",
+     "test_a_whitespace_only_note_is_dropped_rather_than_stored"),
+
+    ("stop truncating an over-long note", MODELS,
+     "            note = str(raw_note or \"\").strip()[:MAX_BIG_BOARD_NOTE_LEN]",
+     "            note = str(raw_note or \"\").strip()",
+     "test_an_over_long_note_is_truncated_not_refused"),
+
+    # ⭐ NOTES ARE THE ONLY FIELD THAT GROWS FROM TYPING. Weighing every field EXCEPT them is the
+    # plausible-looking bug — the board still "fits" and the shared item is the thing that breaks.
+    ("weigh every field except the notes against the item budget", DYNAMO,
+     "    if footprint + _estimated_bytes(record) > MAX_FANTASY_BYTES:",
+     "    if footprint + _estimated_bytes(\n"
+     "        {k: v for k, v in record.items() if k != \"notes\"}\n"
+     "    ) > MAX_FANTASY_BYTES:",
+     "test_notes_are_weighed_against_the_shared_item_budget_like_everything_else"),
+
+    ("make the new field required, so every board stored before it becomes unreadable", MODELS,
+     "    notes: dict[str, str] = Field(default_factory=dict)",
+     "    notes: dict[str, str]",
+     "test_a_board_stored_before_notes_existed_still_reads"),
+
+    ("trust the 200 and stop comparing it with what came back", COMPONENT,
+     "      const keptNotes = Object.keys(saved?.notes ?? {}).length",
+     "      const keptNotes = sentNotes",
+     "test_the_save_notices_a_backend_that_accepted_the_notes_and_stored_none"),
+
+    ("navigate to the player page in the same tab, discarding unsaved work", COMPONENT,
+     '                            target="_blank"\n                            rel="noopener noreferrer"',
+     "",
+     "test_a_player_link_opens_in_a_new_tab_and_severs_the_opener"),
+
+    # 🐛 THE ONE THAT MADE THE FEATURE UNUSABLE. `setNote` runs on every keystroke; trimming there
+    # removes the space the user just typed before the next character can follow it.
+    ("normalise the note on every keystroke, eating every space typed", TS_LIB,
+     "  const raw = String(text ?? \"\").slice(0, MAX_NOTE_LEN)",
+     "  const raw = String(text ?? \"\").trim().slice(0, MAX_NOTE_LEN)",
+     "test_the_note_editor_does_not_normalise_on_every_keystroke"),
+
+    ("print the site footer's dead nav links under the cheat sheet", CSS,
+     "  body:has([data-printable-surface]) footer {",
+     "  body:has([data-printable-surface]) footer.never-matches {",
+     "test_the_site_footer_does_not_print"),
+
+    ("print the white-on-dark wordmark, i.e. nothing at all, on white paper", COMPONENT,
+     'src="/brand/black-logo-wordmark.svg"',
+     'src="/brand/white-logo-wordmark.svg"',
+     "test_the_printed_header_uses_the_mark_that_survives_white_paper"),
 ]
 
-FILES = {MODELS, DYNAMO, ROUTER, DEPS, TS_LIB, TS_API, COMPONENT}
+FILES = {MODELS, DYNAMO, ROUTER, DEPS, TS_LIB, TS_API, COMPONENT, PAGE, CSS}
 
 
 def run(test_name: str) -> tuple[int, str]:

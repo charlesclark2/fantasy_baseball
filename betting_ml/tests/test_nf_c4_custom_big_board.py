@@ -686,10 +686,15 @@ def test_the_board_stores_no_model_output():
     because it holds none, and (b) is not a second copy of the paywalled data.
 
     Asserted on the STORAGE CONTRACT, which is the only place it can be enforced: the model declares
-    exactly five fields and none of them is one of ours.
+    exactly these fields and every one of them is the USER'S — an id, a tier break, a tag, a note
+    they typed — with none of ours among them.
+
+    ⚠️ EQUALITY, NOT A SUBSET CHECK. A field ADDED here is exactly how a projection would arrive on
+    the storage contract by accident, so a new field has to be argued for in this test rather than
+    passing silently.
     """
     fields = set(models.BigBoardSave.model_fields)
-    assert fields == {"config", "size", "order", "tier_breaks", "tags"}
+    assert fields == {"config", "size", "order", "tier_breaks", "tags", "notes"}
     for ours in ("pts", "vor", "adp", "ovrRank", "posRank", "ptsP10", "ptsP90"):
         assert ours not in fields
 
@@ -771,3 +776,278 @@ def test_the_cheat_sheet_prints_the_users_decisions_not_our_numbers():
     for ours in ("p.pts", "p.vor", "p.adp", "player.pts", "player.vor", "player.adp"):
         assert ours not in block, f"the printed cheat sheet renders {ours}"
     assert 'data-testid="big-board-sheet-row"' in block
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# 5. The live-surface corrections — notes, legible icons, real tiers, and a sheet fit to print
+#
+# Every clause below exists because the shipped surface was WRONG about it in a way no test caught:
+# reported from the deployed page, not from CI. They are grouped here rather than folded into the
+# sections above so the next reader can see what the first cut got wrong.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+
+
+def test_every_row_control_is_explained_in_words_somewhere_a_phone_can_read():
+    """⭐ AN ICON IS NOT A LABEL, AND THE SCISSORS PROVED IT. A star and a no-entry sign can be
+    inferred; a pair of scissors meaning "start a new tier here" cannot, and it sat in a column
+    headed "Tag" while not being a tag. Reported on the live board.
+
+    ⚠️ A `title` ALONE DOES NOT SATISFY THIS. There is no hover on a phone, which is exactly where a
+    draft board is read, so the explanation has to be rendered text.
+    """
+    src = _ts("components/fantasy/big-board.tsx")
+    legend = src[src.index("function IconLegend") : src.index("function IconToggle")]
+    for word in ("tier", "target", "avoid", "note", "drag"):
+        assert word in legend.lower(), f"the legend never says what the {word} control does"
+    assert 'data-testid="big-board-legend"' in legend
+    # ...and it is actually rendered. A component nobody mounts is the wired-≠-invoked class
+    # (NF-C0e), and it would satisfy every assertion above.
+    assert "<IconLegend />" in src, "the legend is defined but never rendered"
+
+
+def test_the_column_header_no_longer_calls_a_tier_break_a_tag():
+    """The other half of the same defect: three different kinds of control under one word. The
+    header names all three, so the column heading and the buttons under it agree."""
+    src = _ts("components/fantasy/big-board.tsx")
+    header = src[src.index("Our #") : src.index("{visible.length === 0")]
+    assert "Tier · tag · note" in header
+
+
+def test_the_sheet_does_not_invent_a_tier_the_user_never_drew():
+    """⭐ THE "EVERY PLAYER IS TIER 1" REPORT. With no breaks drawn, `cheatSheet` correctly returns
+    ONE section numbered 1 — and printing "TIER 1" over two hundred names reads as a broken tiering
+    rather than as "you have not drawn any". The heading is therefore conditional on the USER'S
+    document, and the state says so in words with the one-click way out beside it.
+    """
+    src = _ts("components/fantasy/big-board.tsx")
+    assert "const hasTiers = doc.tier_breaks.length > 0" in src, (
+        "whether the user has tiers is no longer read from their own document"
+    )
+    sheet = src[src.index("function CheatSheet") :]
+    assert "{hasTiers && (" in sheet, "the tier heading is rendered unconditionally"
+    assert 'data-testid="big-board-no-tiers"' in sheet
+
+
+def test_whether_the_user_has_tiers_is_not_derived_from_the_section_count():
+    """⚠️ THE TEMPTING WRONG TEST. `sections.length > 1` looks equivalent and is not: ONE section is
+    what BOTH "no tiers at all" and "one tier covering the whole board" produce, and the second is a
+    real, deliberate user state whose heading must print."""
+    src = _ts("components/fantasy/big-board.tsx")
+    sheet = src[src.index("function CheatSheet") :]
+    assert "sections.length" not in sheet, (
+        "the sheet infers the user's tiers from how many sections it happened to build"
+    )
+
+
+def test_the_print_stylesheet_turns_dark_theme_text_into_ink():
+    """⭐ BROWSERS DO NOT PRINT BACKGROUND COLOURS. On a dark-themed site that means every printed
+    page came out as pale grey on white — rendered, unreadable, and looking deliberate. One global
+    rule fixes it and cannot be missed by the next component added; a `print:text-black` per span
+    always can be.
+    """
+    css = (_FRONTEND / "app/globals.css").read_text()
+    block = css[css.index("@media print") :]
+    assert "color: #000 !important" in block, "printed text is not forced to ink"
+    assert "background: #fff !important" in block
+    # ⚠️ `!important` is load-bearing: Tailwind's colour utilities are single-class specificity and
+    # land later in the cascade, so without it every `text-gray-400` on the page wins.
+    assert "@page" in block and "margin" in block
+    assert "break-inside: avoid" in block, "a tier can still be split across two pages"
+
+
+def test_the_page_chrome_does_not_print():
+    """`window.print()` prints the PAGE, not the sheet. Before this, a printed cheat sheet opened
+    with the nav bar, the sign-out link, the format pickers and the save bar."""
+    page = _ts("app/fantasy/big-board/page.tsx")
+    nav = page[page.index("<div") : page.index("<BigBoard")]
+    assert "print:hidden" in nav, "the nav bar still prints above the cheat sheet"
+
+    src = _ts("components/fantasy/big-board.tsx")
+    editor = src[: src.index("function IconLegend")]
+    assert editor.count("print:hidden") >= 4, "the editing chrome still prints with the sheet"
+
+
+def test_the_printed_sheet_names_the_league_and_the_day_it_was_printed():
+    """On screen the league is in a picker two inches above the sheet. On paper there is no picker,
+    and a cheat sheet that does not say which league it is for is the one you take to the wrong
+    draft."""
+    src = _ts("components/fantasy/big-board.tsx")
+    sheet = src[src.index("function CheatSheet") :]
+    header = sheet[sheet.index("print:flex") :]
+    header = header[: header.index("</div>")]
+    assert "{title}" in header, "the print-only header does not name the board"
+    assert "toLocaleDateString" in header, "the printed sheet is undated"
+
+
+def test_the_intro_does_not_depend_on_jsx_whitespace_around_an_expression():
+    """🐛 THE DEPLOYED PAGE READ "our 2026board". A space between a JSX expression and the text after
+    it is whitespace the compiler is entitled to reason about; a template literal is not. This is
+    the source-level half — the E2E asserts the RENDERED sentence, which is the one that can fail
+    for a reason this clause cannot see.
+    """
+    src = _ts("components/fantasy/big-board.tsx")
+    intro = src[src.index("<h1") :]
+    intro = intro[: intro.index("</p>")]
+    assert "${SEASON}" in intro, "the season is a JSX child again, not part of the string"
+    # ⚠️ THE NEGATIVE HAS TO EXCLUDE THE INTERPOLATION ITSELF — `${SEASON}` CONTAINS `{SEASON}`, so
+    # a plain substring check here passes on nothing (this file's own vacuous-guard rule, caught
+    # while writing it). A bare `{SEASON}` not preceded by `$` is the JSX child we are forbidding.
+    assert re.search(r"(?<!\$)\{SEASON\}", intro) is None, (
+        "the season is rendered as a JSX child beside text again"
+    )
+
+
+def test_the_note_length_cap_is_one_number_with_one_owner():
+    """⚠️ THE SERVER OWNS IT; THE CLIENT MIRRORS IT. The textarea has to stop the user where the
+    server truncates, or a note is silently shortened after they have typed it — but two numbers for
+    one rule is this repo's most-repeated defect (INC-30 / INC-36 / INC-38), so they are pinned
+    equal here. Change one and this goes red."""
+    client = _ts("lib/big-board.ts")
+    m = re.search(r"export const MAX_NOTE_LEN = (\d+)", client)
+    assert m, "the client no longer declares a note cap"
+    assert int(m.group(1)) == models.MAX_BIG_BOARD_NOTE_LEN
+    assert "maxLength={MAX_NOTE_LEN}" in _ts("components/fantasy/big-board.tsx"), (
+        "the textarea does not enforce the cap it imports"
+    )
+
+
+def test_a_whitespace_only_note_is_dropped_rather_than_stored():
+    """An empty string is bytes in the shared item that mean nothing, and every reader would have to
+    treat it as absent anyway."""
+    saved = models.BigBoardSave(
+        config="half_ppr", size=12, notes={"a": "   ", "b": "\n", "c": "real"}
+    )
+    assert saved.notes == {"c": "real"}
+
+
+def test_an_over_long_note_is_truncated_not_refused():
+    """⚠️ THE DIRECTION MATTERS. A save refused because one note ran three characters long would
+    cost a user a whole curated board; the textarea already stops them at the same limit, so a note
+    arriving over-length is an out-of-date client rather than a person mid-sentence."""
+    long_note = "x" * (models.MAX_BIG_BOARD_NOTE_LEN + 500)
+    saved = models.BigBoardSave(config="half_ppr", size=12, notes={"a": long_note})
+    assert len(saved.notes["a"]) == models.MAX_BIG_BOARD_NOTE_LEN
+
+
+def test_notes_are_weighed_against_the_shared_item_budget_like_everything_else(table):
+    """⭐ NOTES ARE THE ONE FIELD THAT GROWS FROM TYPING ALONE — an id is ten fixed bytes, a note is
+    whatever a person writes. So the clause that matters is not a per-note cap but that the WHOLE
+    record is weighed: a board of notes too big for the shared item is refused WHOLE, and nothing is
+    written.
+
+    ⚠️ ISOLATING FIXTURE (NF-D17): the order is short and there are no tags, so the notes are the
+    only thing that can push this over — no other clause can be what refuses it.
+    """
+    doc = _board_doc(0)
+    doc["notes"] = {f"{i:010d}": "x" * models.MAX_BIG_BOARD_NOTE_LEN for i in range(2000)}
+    with pytest.raises(ValueError, match="board_too_large"):
+        dynamo.put_fantasy_big_board("u1", "half_ppr|12", doc)
+    assert table.writes == 0, "a refused board of notes still issued the write"
+    # ...and the control: the identical board with the notes removed is stored.
+    dynamo.put_fantasy_big_board("u1", "half_ppr|12", _board_doc(0))
+    assert table.writes == 1
+
+
+def test_a_board_stored_before_notes_existed_still_reads(table):
+    """E9.49, the same rule the write/read split exists for: a field added to the model must never
+    make an already-stored board unreadable. A record written by the previous version has no `notes`
+    key at all."""
+    legacy = {
+        "board_key": "half_ppr|12",
+        "config": "half_ppr",
+        "size": 12,
+        "order": ["a", "b"],
+        "tier_breaks": [],
+        "tags": {"a": "target"},
+    }
+    out = models.BigBoard(**legacy).model_dump()
+    assert out["notes"] == {}
+    assert out["order"] == ["a", "b"]
+
+
+def test_the_save_notices_a_backend_that_accepted_the_notes_and_stored_none():
+    """⭐ E8.6 / NF-C0, THE EXACT SHAPE THAT BIT E8.6: `frontend/` auto-deploys on merge while the API
+    Lambda ships only via a manual `deploy.sh`, and the request models do not set `extra="forbid"` —
+    so a backend that predates `notes` ACCEPTS the field, IGNORES it, and returns 200. The user
+    types a note, reads "✓ Saved", reloads, and it is gone with no error anywhere.
+
+    The response carries the stored record, so one comparison turns that phantom revert into a
+    sentence.
+    """
+    src = _ts("components/fantasy/big-board.tsx")
+    block = src[src.index("const onSave") : src.index("const resetBoard")]
+    assert "saved?.notes" in block and "doc.notes" in block, (
+        "the save never compares what came back with what it sent"
+    )
+    assert "warning:" in block
+    status = src[src.index('data-testid="big-board-save-status"') : src.index("<div className=\"ml-auto")]
+    assert "saveState.warning" in status, "the warning is computed but never rendered"
+
+
+def test_a_player_link_opens_in_a_new_tab_and_severs_the_opener():
+    """⭐ THIS BOARD HOLDS UNSAVED WORK IN COMPONENT STATE. Navigating away in the same tab throws
+    away every drag since the last save — and a player card is exactly the thing you glance at
+    mid-edit. `rel="noopener noreferrer"` because `target="_blank"` otherwise hands the opened page
+    a live `window.opener` handle back to this one.
+    """
+    src = _ts("components/fantasy/big-board.tsx")
+    link = src[src.index("/fantasy/player/") - 200 : src.index("/fantasy/player/") + 500]
+    assert 'target="_blank"' in link
+    assert "noopener" in link and "noreferrer" in link
+
+
+def test_the_note_editor_does_not_normalise_on_every_keystroke():
+    """🐛 THE DEPLOYED DEFECT, AND IT MADE THE FEATURE UNUSABLE. `setNote` runs on every keystroke,
+    and it trimmed — so the space a user typed was removed before the next character could follow
+    it, and a note came out as "jmarrchaseisherebecauseiwantawrhigher".
+
+    ⚠️ WHY NOTHING CAUGHT IT: the E2E drove the box with Playwright's `fill()`, which sets the whole
+    value in ONE event. A per-keystroke defect is structurally invisible to that — the spec now uses
+    `pressSequentially`, and the pure clause replays the value one character at a time.
+
+    The normalisation still happens; it happens ONCE, where typing has stopped.
+    """
+    lib = _ts("lib/big-board.ts")
+    body = lib[lib.index("export function setNote") : lib.index("export function trimNotes")]
+    assert ".trim()" not in body.split("if (!raw.trim())")[0], (
+        "setNote normalises the value it stores, on every keystroke"
+    )
+    assert "export function trimNotes" in lib
+
+    src = _ts("components/fantasy/big-board.tsx")
+    assert "edit(trimNotes)" in src, "closing the note editor never normalises what was typed"
+    assert "trimNotes(doc)" in src, "the save sends an un-normalised document"
+
+
+def test_the_site_footer_does_not_print():
+    """⚠️ REPORTED OFF A REAL PRINTOUT: a whole extra page of dead nav links under the cheat sheet.
+
+    `SiteFooter` is mounted in the ROOT LAYOUT, so it is a SIBLING of the page — there is no
+    `print:hidden` a page component could put on it, which is why this is a stylesheet rule keyed on
+    a marker the page renders rather than a class.
+    """
+    css = (_FRONTEND / "app/globals.css").read_text()
+    block = css[css.index("@media print") :]
+    # ⚠️ THE WHOLE RULE, NOT ITS WORDS. A first cut asserted that "footer" and "display: none" both
+    # appeared somewhere in the print block — which a rule whose SELECTOR had been broken still
+    # satisfies, and the red proof caught it staying green (this file's own vacuous-guard rule).
+    assert re.search(
+        r"body:has\(\[data-printable-surface\]\)\s+footer\s*\{[^}]*display:\s*none",
+        block,
+    ), "the site footer no longer has a print rule that reaches it"
+    assert "data-printable-surface" in _ts("components/fantasy/big-board.tsx"), (
+        "the rule keys on a marker the page never renders"
+    )
+
+
+def test_the_printed_header_uses_the_mark_that_survives_white_paper():
+    """⭐ NOT A STYLE PREFERENCE. The shipped wordmark is white-on-dark, and the entire reason this
+    stylesheet exists is that browsers do not print backgrounds — so the site's own mark would print
+    white on white paper, i.e. not at all. An `<img>` is also the one thing the global print colour
+    reset cannot reach (CSS does not cross into an external SVG), so it has to be the right FILE."""
+    src = _ts("components/fantasy/big-board.tsx")
+    sheet = src[src.index("function CheatSheet") :]
+    header = sheet[sheet.index("print:flex") :]
+    header = header[: header.index("</div>")]
+    assert "black-logo-wordmark" in header, "the printed sheet carries the white-on-dark mark"
+    assert "/brand/white-logo-wordmark" not in header

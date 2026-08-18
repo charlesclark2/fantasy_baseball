@@ -228,3 +228,54 @@
   border-radius: 8px;
   margin: 1rem 0;
 }
+
+/* ══ PRINT ═══════════════════════════════════════════════════════════════════════════════════
+   NF-C4. Added for the Custom Big Board's draft-day cheat sheet, but written for the whole app
+   because the defect is not local to it: this is a DARK-THEMED site, and browsers do not print
+   background colours. So every page printed before this rule came out as pale grey text on white
+   paper — technically rendered, not actually readable, and the failure looks like a design choice
+   rather than a bug. One rule fixes it everywhere and cannot be missed by the next component
+   someone adds (a `print:text-black` per span always can).
+
+   ⚠️ `!important` IS LOAD-BEARING HERE. Tailwind's colour utilities are single-class specificity
+   and land later in the cascade; without it, every `text-gray-400` on the page would win. */
+@media print {
+  @page {
+    margin: 0.45in;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  /* Ink, not screen colour. Backgrounds go transparent so a dark card does not print as a grey
+     block, and borders drop to a light grey that survives a laser printer. */
+  body,
+  body * {
+    color: #000 !important;
+    background-color: transparent !important;
+    border-color: #bbb !important;
+    box-shadow: none !important;
+  }
+
+  /* A tier block that splits across a page break is the one thing a cheat sheet must not do —
+     you read a tier as a group, and half of one at the foot of a page reads as the whole of it. */
+  .print-sheet [data-testid="big-board-sheet-tier"] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* ⭐ THE SITE FOOTER IS CHROME TOO, and it printed a whole extra page of dead links — reported
+     off a real printout. Scoped with `:has()` to pages that actually render a printable sheet,
+     rather than hidden site-wide: this story owns how the cheat sheet prints and does not own how
+     /privacy or a blog post prints. A browser without `:has()` degrades to today's behaviour
+     (the footer prints) rather than to something worse.
+
+     ⚠️ `SiteFooter` lives in the ROOT LAYOUT, so it is a SIBLING of the page — there is no
+     `print:hidden` a page component could put on it. That is why this is a stylesheet rule and not
+     a class, and why the rule keys on a marker the page renders (`[data-printable-surface]`). */
+  body:has([data-printable-surface]) footer {
+    display: none !important;
+  }
+}

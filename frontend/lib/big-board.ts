@@ -47,11 +47,24 @@
 // serve a stale points figure, and the stored document is worthless to anyone who does not already
 // have the (paid) board it references.
 
-import { sortAvailable, type Player } from "@/lib/draft-optimizer"
+import { positionTierMap, sortAvailable, type Player } from "@/lib/draft-optimizer"
 
-/** A row's user tag. Two states plus "untagged" — deliberately not a free-text note: a note is a
- *  different feature with a different size profile against the shared item budget. */
+/** A row's user tag. Two states plus "untagged". A tag is the DECISION ("I want him" / "I am
+ *  passing"); the reason lives in `notes`, which is a separate field with a very different size
+ *  profile against the shared item budget — see `MAX_NOTE_LEN`. */
 export type BoardTag = "target" | "avoid"
+
+/**
+ * The longest note we let a row carry, and the ONLY reason there is a limit: every note is bytes in
+ * the one 400 KB DynamoDB item that holds all of a user's state (NF-C6P3).
+ *
+ * ⚠️ THE SERVER OWNS THE REAL CAP (`MAX_BIG_BOARD_NOTE_LEN` in `app/backend/models/fantasy.py`) and
+ * truncates on save. This constant exists so the textarea stops the user at the same place instead
+ * of letting them type a paragraph that is silently shortened after the fact — the one-thing-two-
+ * owners class (INC-30/36/38) in its mild form. The two numbers are pinned equal by
+ * `test_nf_c4_custom_big_board.py`; change one and that guard goes red.
+ */
+export const MAX_NOTE_LEN = 200
 
 /**
  * One saved board, exactly as it travels on the wire and exactly as it is stored.
@@ -67,10 +80,21 @@ export interface BigBoardDoc {
   tier_breaks: string[]
   /** `{player id -> tag}`. Absent id ⇒ untagged. */
   tags: Record<string, BoardTag>
+  /** `{player id -> the user's own note}`. Absent id ⇒ no note. Empty strings are never stored —
+   *  a cleared note removes the key, so an untouched row costs nothing against the item budget. */
+  notes: Record<string, string>
 }
 
-/** A stored board as the API returns it: the document plus which board it belongs to. */
-export interface SavedBigBoard extends BigBoardDoc {
+/**
+ * A stored board as the API returns it: the document plus which board it belongs to.
+ *
+ * ⚠️ EVERY DOCUMENT FIELD IS OPTIONAL HERE, ON PURPOSE. This is a WIRE type, and the API Lambda
+ * ships only via a manual `deploy.sh` while `frontend/` auto-deploys on merge (NF-C0) — so a
+ * running backend can predate a field this client knows about, and a board stored before a field
+ * existed reads back without it. `Partial` makes the compiler insist every read is defaulted
+ * (`stored.notes ?? {}`) instead of letting `undefined` propagate into a render as a crash.
+ */
+export interface SavedBigBoard extends Partial<BigBoardDoc> {
   board_key: string
   config: string
   size: number
@@ -78,12 +102,17 @@ export interface SavedBigBoard extends BigBoardDoc {
   created_at?: string | null
 }
 
-export const EMPTY_DOC: BigBoardDoc = { order: [], tier_breaks: [], tags: {} }
+export const EMPTY_DOC: BigBoardDoc = { order: [], tier_breaks: [], tags: {}, notes: {} }
 
 /** Whether a document carries any user intent at all. Used to decide "Saved" vs "nothing to save"
  *  — an empty board is not a state worth spending a write (or a byte of the item budget) on. */
 export function isEmptyDoc(doc: BigBoardDoc): boolean {
-  return doc.order.length === 0 && doc.tier_breaks.length === 0 && Object.keys(doc.tags).length === 0
+  return (
+    doc.order.length === 0 &&
+    doc.tier_breaks.length === 0 &&
+    Object.keys(doc.tags).length === 0 &&
+    Object.keys(doc.notes ?? {}).length === 0
+  )
 }
 
 /**
@@ -183,6 +212,93 @@ export function setTag(doc: BigBoardDoc, id: string, tag: BoardTag | null): BigB
 }
 
 /**
+ * Set or clear a row's note. Whitespace-only is a CLEAR, and a cleared note deletes the key rather
+ * than storing `""` — an empty string is bytes in the shared item that mean nothing.
+ *
+ * ⛔⛔ DO NOT `.trim()` HERE. THIS RUNS ON EVERY KEYSTROKE. The first cut did, and the effect was
+ * that the space a user typed was removed before it could ever be followed by another character —
+ * so a note came out as "jmarrchaseisherebecauseiwantawrhigher". Reported on the live surface, and
+ * it is one of those bugs that is obvious the moment you type into the box and invisible everywhere
+ * else. ⚠️ IN PARTICULAR IT WAS INVISIBLE TO THE E2E, because Playwright's `fill()` sets the whole
+ * value in ONE event — a per-keystroke defect needs `pressSequentially` to reach it, which is now
+ * what the spec uses.
+ *
+ * Truncation stays (the box must not hold what the server will not store), and the whitespace-only
+ * CLEAR reads `.trim()` without applying it. Normalisation happens once, on `trimNotes`, when the
+ * editor closes and again before the save.
+ */
+export function setNote(doc: BigBoardDoc, id: string, text: string): BigBoardDoc {
+  const notes = { ...(doc.notes ?? {}) }
+  const raw = String(text ?? "").slice(0, MAX_NOTE_LEN)
+  if (!raw.trim()) delete notes[id]
+  else notes[id] = raw
+  return { ...doc, notes }
+}
+
+/**
+ * Normalise every note: trimmed, and gone if there is nothing left.
+ *
+ * ⭐ CALLED WHERE TYPING HAS STOPPED — when the editor closes, and again on the way to the server —
+ * never per keystroke (see `setNote`). It is what keeps the local document byte-identical to what
+ * the server stores, so a reload cannot appear to change a note the user never touched.
+ */
+export function trimNotes(doc: BigBoardDoc): BigBoardDoc {
+  const notes: Record<string, string> = {}
+  for (const [id, text] of Object.entries(doc.notes ?? {})) {
+    const clean = text.trim()
+    if (clean) notes[id] = clean
+  }
+  return { ...doc, notes }
+}
+
+/**
+ * OUR tier breaks for the top `depth` rows of this board — the ids that start a new group.
+ *
+ * ⭐ WHAT THIS IS FOR. A user who has drawn no tiers has a sheet that is one flat list of two
+ * hundred names, which is not what anyone reads at pick 4.11. This seeds their breaks from the
+ * shared gap-tiering (`positionTierMap` → `assignTiers`, the same function that tiers a position on
+ * the player page and drives the optimizer's tier-cliff line) applied to this board's own VOR
+ * ordering, so the starting point is a real measured grouping rather than an invention of this
+ * surface — and from there every break is theirs to move or delete.
+ *
+ * ⚠️ IT TIERS THE POOL, NOT THE WHOLE BOARD, AND THAT IS THE LOAD-BEARING ARGUMENT. `assignTiers`
+ * bounds a tier's size as a FRACTION of the pool it is given (4%–15%, its own docstring: "both
+ * bounds SCALE WITH THE POOL SIZE" to target ~7–25 tiers whatever `n` is). Handed all ~600
+ * draftable rows it therefore returns tiers of 24–90 players — measured: 6 tiers covering the top
+ * 200, ~35 players each, which is the whole of the first four rounds in one block and no more use
+ * on a cheat sheet than the single tier it replaced. Handed the depth the user is actually working
+ * at it returns groups you can read. So `depth` is a real parameter and not a convenience: seeding
+ * at 100 and at 300 legitimately gives different structures, because a tier is relative to the pool
+ * it is drawn from.
+ *
+ * ⚠️ TIERS ARE ASSIGNED ON VOR, THE BOARD IS ORDERED ON `ovrRank`, and the two need not agree
+ * row-for-row. So a break is emitted only where the tier number goes UP relative to the deepest
+ * tier seen so far: without that, a row whose VOR tier sits above its neighbour's would emit a
+ * break, then the next row another one, and the "tiers" would oscillate into groups of one.
+ *
+ * ⚠️ K/DST ARE EXCLUDED VIA THE EXPORTER'S OWN `lowPred` FLAG, not a hardcoded position list. The
+ * NF1.6 lesson is exactly this: K/DST stopped being null-VOR placeholders and a position list left
+ * behind in the code kept claiming otherwise.
+ */
+export function ourTierBreaks(board: Player[], depth: number): string[] {
+  const base = baseOrder(board)
+  const pool = base.slice(0, Math.max(1, Math.trunc(depth)))
+  const tiers = positionTierMap(
+    pool.filter((p) => p.lowPred !== true),
+    (p) => p.vor ?? 0,
+  )
+  const breaks: string[] = []
+  let deepest = 0
+  pool.forEach((p, i) => {
+    const t = tiers.get(p.id)
+    if (t == null) return
+    if (i > 0 && t > deepest) breaks.push(p.id)
+    deepest = Math.max(deepest, t)
+  })
+  return breaks
+}
+
+/**
  * `{player id -> the user's tier number}`, 1-based, in the order `rows` is already in.
  *
  * ⚠️ NOT `positionTierMap`. That one derives tiers from GAPS in our own numbers; this one is the
@@ -212,16 +328,25 @@ export function customTiers(rows: Player[], doc: BigBoardDoc): Map<string, numbe
 export function reconcile(
   board: Player[],
   doc: BigBoardDoc,
-): { doc: BigBoardDoc; droppedOrder: number; droppedTags: number; droppedBreaks: number } {
+): {
+  doc: BigBoardDoc
+  droppedOrder: number
+  droppedTags: number
+  droppedBreaks: number
+  droppedNotes: number
+} {
   const live = new Set(board.map((p) => p.id))
   const order = doc.order.filter((id) => live.has(id))
   const tier_breaks = doc.tier_breaks.filter((id) => live.has(id))
   const tags: Record<string, BoardTag> = {}
   for (const [id, t] of Object.entries(doc.tags)) if (live.has(id)) tags[id] = t
+  const notes: Record<string, string> = {}
+  for (const [id, n] of Object.entries(doc.notes ?? {})) if (live.has(id)) notes[id] = n
   return {
-    doc: { order, tier_breaks, tags },
+    doc: { order, tier_breaks, tags, notes },
     droppedOrder: doc.order.length - order.length,
     droppedTags: Object.keys(doc.tags).length - Object.keys(tags).length,
+    droppedNotes: Object.keys(doc.notes ?? {}).length - Object.keys(notes).length,
     droppedBreaks: doc.tier_breaks.length - tier_breaks.length,
   }
 }
@@ -250,7 +375,7 @@ export function divergence(board: Player[], doc: BigBoardDoc): Map<string, numbe
 /** One printed section of the draft-day cheat sheet: a user tier and the players in it. */
 export interface CheatSheetTier {
   tier: number
-  rows: { rank: number; player: Player; tag: BoardTag | null; moved: number }[]
+  rows: { rank: number; player: Player; tag: BoardTag | null; moved: number; note: string | null }[]
 }
 
 /**
@@ -273,6 +398,7 @@ export function cheatSheet(board: Player[], doc: BigBoardDoc, limit: number): Ch
       player: p,
       tag: doc.tags[p.id] ?? null,
       moved: moved.get(p.id) ?? 0,
+      note: doc.notes?.[p.id] ?? null,
     })
   })
   return out

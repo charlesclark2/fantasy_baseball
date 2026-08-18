@@ -868,6 +868,17 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
             # the recalibration with the availability split OFF (both at Σ_all — reference cell)
             "recalibration_without_split": round(
                 float(mean_s["single_copula"] - mean_s["zm_cond_copula"]), 4),
+            # ⭐ THE TWO CELLS ABOVE ARE NOT A MATCHED PAIR, and reading them as one attributes to
+            # the SPLIT what belongs to the TARGET: `recalibration_with_split` is measured on the
+            # SELECTED arm while `recalibration_without_split` can only be measured on the
+            # PRIMARY arm (it is the one the single-copula reference cell was built from). The
+            # matched cell below closes that gap — the primary target inside the SAME mixture — so
+            # the split channel can be read against a constant target (NF-D15: a matched foil must
+            # hold everything EXCEPT the claimed channel).
+            "recalibration_with_split__PRIMARY_ARM_MATCHED": round(
+                float(mean_s[RM.MATCHED_FOIL] - mean_s[RM.PRIMARY_ARM]), 4),
+            "recalibration_with_split__ARM": winner,
+            "recalibration_without_split__ARM": RM.PRIMARY_ARM,
             # ⭐ the SPLIT at a FIXED Σ_played — the clean channel at RB (§12 amendment)
             "split_at_fixed_sigma_played": round(
                 float(mean_s["mix_off"] - mean_s[RM.MATCHED_FOIL]), 4),
@@ -1020,6 +1031,33 @@ def classify(sel: dict, checks: dict) -> dict:
     return out
 
 
+def _subfield_label(d: dict) -> str:
+    """⭐ The trimmed sub-field must be NAMED for what it is wherever it is printed. When the trim
+    deletes the arm under test, calling it "coherent" in the table while the prose above calls it
+    non-registrable leaves the record contradicting itself — and a reader skimming the table takes
+    the friendlier word. One label, derived from the measurement, used at every render site."""
+    if d.get("coherent_subfield_is_registrable") is False:
+        return ("⛔ NON-REGISTRABLE sub-field — a V-SENSITIVITY, it deletes the arm under test")
+    return "COHERENT sub-field"
+
+
+# ⭐ `field_remedy_admissible` is a THREE-state flag and a bare `None` in a report reads as "not
+# computed" when it actually means the OPPOSITE of a missing measurement: cv_power returns None
+# from `_field_size_remedy` when `max_field < 2`, i.e. NO field size clears, so there is nothing to
+# be admissible ABOUT. Rendering the flag without its meaning invites a reader to go looking for a
+# smaller field that provably does not exist (MH2.7's own remedy-safety rule, at the render layer).
+_FIELD_REMEDY_GLOSS = {
+    None: (" — ⚠️ `None` here does NOT mean unmeasured: it means field size is NO LEVER AT ALL "
+           "(`max_field < 2`, i.e. not even a 2-arm field clears), so there is nothing to be "
+           "admissible about and ⛔ no field remedy may be read from this record"),
+    False: (" — the ≤N arithmetic sits BELOW the declared family, so the figure survives as "
+            "arithmetic while the IMPERATIVE is refused (MH2.7): you may PRE-REGISTER a family, "
+            "you may not DISCOVER one"),
+    True: (" — a pre-registered family at least this small exists, so the prescription can be "
+           "acted on WITHOUT re-cutting a field that has already been scored"),
+}
+
+
 def dsr_field_diagnostic(sel: dict) -> dict:
     """⭐ The FIELD half of the DSR 2×2 — computed only when `dsr_ok` fails, and REPORTED as a
     labelled diagnostic that names no remedy on its own (prereg §9).
@@ -1040,6 +1078,14 @@ def dsr_field_diagnostic(sel: dict) -> dict:
                 "declared_field_size": RM.DECLARED_FIELD_SIZE}
     v_declared = float(np.var(srs, ddof=1))
     drop = int(np.argmax(np.abs(srs - float(np.mean(srs)))))
+    # ⭐ WHICH arm the trim removes decides whether the sub-field is even READABLE. `V` is a sample
+    # variance, so the point it drops is the one FURTHEST FROM THE MEAN — and in a field of one
+    # winner among losers that point is the WINNER ITSELF. A sub-field formed by deleting the arm
+    # under test is not a family anyone could pre-register, so it can never support a MULTIPLICITY
+    # reading; naming it plainly is what stops a reader treating this row as "a 3-arm family would
+    # have cleared" (the MH2.2 laundering this diagnostic exists to forbid).
+    dropped_arm = RM.REAL_ARMS[drop]
+    dropped_is_winner = bool(dropped_arm == sel.get("winner"))
     trimmed = np.delete(srs, drop)
     v_coherent = float(np.var(trimmed, ddof=1)) if trimmed.size > 1 else float("nan")
     fold_deltas = np.asarray(sel["deltas_by_fold"], dtype=float)
@@ -1055,7 +1101,19 @@ def dsr_field_diagnostic(sel: dict) -> dict:
     ratio = (v_declared / v_coherent) if np.isfinite(v_coherent) and v_coherent > 1e-12 else None
     moved = (None if dsr_coherent is None or sel.get("dsr") is None
              else round(float(dsr_coherent - sel["dsr"]), 4))
-    if dsr_coherent is not None and dsr_coherent >= RM.DSR_MIN:
+    clears = dsr_coherent is not None and dsr_coherent >= RM.DSR_MIN
+    winner_note = (
+        f" ⚠️ AND THE TRIMMED ARM IS THE WINNER ITSELF (`{dropped_arm}`): the sub-field scored here "
+        f"is the declared family MINUS THE ARM UNDER TEST, which no pre-registration could ever "
+        f"declare, so this row is a SENSITIVITY OF V, not a registrable alternative field."
+        if dropped_is_winner else "")
+    if clears and dropped_is_winner:
+        lever = "UNRESOLVED_INADMISSIBLE_SUBFIELD"
+        reading = ("the only sub-field that clears is the one that DELETES THE ARM UNDER TEST, so "
+                   "this measurement cannot separate multiplicity from variance — a field you can "
+                   "only rescue by removing its winner is not evidence about field size at all. "
+                   "⛔ Read no remedy from this row." + winner_note)
+    elif clears:
         lever = "MULTIPLICITY"
         reading = ("a coherent sub-field CLEARS the bar ⇒ the declared field's heterogeneity is "
                    "what refuses this arm. ⛔ That is a HYPOTHESIS about the FIELD, not a licence "
@@ -1067,7 +1125,10 @@ def dsr_field_diagnostic(sel: dict) -> dict:
                    "clear ⇒ the binding quantity is PER-FOLD NOISE in the delta, not multiplicity "
                    "(NF-W7f measured exactly this: V fell 8.8× and DSR reached only 0.174). The "
                    "honest lever is a LOWER-VARIANCE design — more assembly draws / a sharper "
-                   "metric — ⛔ NOT more seasons and ⛔ NOT a field trim.")
+                   "metric — ⛔ NOT more seasons and ⛔ NOT a field trim." + winner_note
+                   + (" ⇒ the VARIANCE reading is A FORTIORI: even after deleting V's single "
+                      "largest contributor — a deletion no admissible registration could make — "
+                      "the bar is still not reached." if dropped_is_winner else ""))
     return {
         "evaluated": True, "lever": lever, "reading": reading,
         "declared_field_size": RM.DECLARED_FIELD_SIZE,
@@ -1093,7 +1154,9 @@ def dsr_field_diagnostic(sel: dict) -> dict:
         "v_declared_field": round(v_declared, 6),
         "v_coherent_subfield": (None if not np.isfinite(v_coherent) else round(v_coherent, 6)),
         "v_ratio_declared_over_coherent": (None if ratio is None else round(ratio, 3)),
-        "dropped_trial_index": drop, "dropped_trial_arm": RM.REAL_ARMS[drop],
+        "dropped_trial_index": drop, "dropped_trial_arm": dropped_arm,
+        "dropped_trial_is_the_winner": dropped_is_winner,
+        "coherent_subfield_is_registrable": (not dropped_is_winner),
         "observed_sr": obs, "trial_srs": [round(float(s), 3) for s in srs],
         "note": ("REPORTED as a diagnostic. The gate binds on the DECLARED 4-arm field; this row "
                  "exists so the record names WHICH lever binds rather than prescribing a reflex."),
@@ -1256,10 +1319,20 @@ def write_report(out: dict, path: Path) -> None:
               "| contrast | Δ |", "|---|---|"]
         for k, val in sel["attribution"].items():
             L.append(f"| {k} | {val} |")
+        a = sel["attribution"]
         L += ["", "> ⚠️ `vs_incumbent_construction_BUNDLED` differs in the SPLIT **and** the Σ "
               "population, because RB's pinned construction estimates Σ on ACTIVE rows while the "
               "incumbent uses all rows. `split_at_fixed_sigma_played` is the clean split channel "
               "here (the §12 pre-score amendment).", "",
+              "> ⛔ **`recalibration_with_split` and `recalibration_without_split` are NOT a matched "
+              f"pair** — the first is measured on the SELECTED arm "
+              f"(`{a.get('recalibration_with_split__ARM')}`), the second only on the PRIMARY arm "
+              f"(`{a.get('recalibration_without_split__ARM')}`), so differencing them attributes to "
+              "the SPLIT what belongs to the TARGET. Matched on the primary target, the "
+              "recalibration channel is "
+              f"**{a.get('recalibration_with_split__PRIMARY_ARM_MATCHED')}** WITH the split against "
+              f"**{a.get('recalibration_without_split')}** without it — i.e. essentially unchanged, "
+              "so the split does NOT modulate the recalibration; the TARGET does.", "",
               "### Mean CRPS by label", "", "| label | crps_q199 | PIT |", "|---|---|---|"]
         for lab, s in sorted(sel["mean_crps"].items(), key=lambda kv: kv[1]):
             L.append(f"| `{lab}` | {s} | {sel['pit_by_label'].get(lab, '—')} |")
@@ -1379,7 +1452,8 @@ def write_report(out: dict, path: Path) -> None:
                   f"- instrument's own reading (kept verbatim for audit): "
                   f"{n.get('instrument_verdict')}",
                   f"- retest trigger: {n.get('retest_trigger')}",
-                  f"- `field_remedy_admissible`: {n.get('field_remedy_admissible')}",
+                  f"- `field_remedy_admissible`: {n.get('field_remedy_admissible')}"
+                  + _FIELD_REMEDY_GLOSS.get(n.get("field_remedy_admissible"), ""),
                   f"- declared field size source: {n.get('declared_field_size_source')}", ""]
             if n.get("dsr_diagnostic"):
                 d = n["dsr_diagnostic"]
@@ -1387,7 +1461,7 @@ def write_report(out: dict, path: Path) -> None:
                       f"**`{d.get('lever')}`** — {d.get('reading')}", "",
                       f"- DSR on the DECLARED {d.get('declared_field_size')}-arm field: "
                       f"{d.get('dsr_declared_field')} (bar {d.get('dsr_bar')})",
-                      f"- DSR on a COHERENT sub-field (dropping the most extreme trial Sharpe, "
+                      f"- DSR on a {_subfield_label(d)} (dropping the most extreme trial Sharpe, "
                       f"`{d.get('dropped_trial_arm')}`): {d.get('dsr_coherent_subfield')} "
                       f"(moved {d.get('dsr_moved_by_coherence')})",
                       f"- cross-trial dispersion V: {d.get('v_declared_field')} → "
@@ -1397,7 +1471,7 @@ def write_report(out: dict, path: Path) -> None:
                       f"- {d.get('note')}", ""]
                 grid = d.get("dsr_2x2") or {}
                 if grid:
-                    L += ["| return series | declared field | coherent sub-field |",
+                    L += [f"| return series | declared field | {_subfield_label(d)} |",
                           "|---|---|---|",
                           f"| **per fold** (BINDS) | "
                           f"{grid.get('per_fold_series__declared_field')} | "

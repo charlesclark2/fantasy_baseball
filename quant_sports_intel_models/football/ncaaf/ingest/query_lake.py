@@ -65,3 +65,56 @@ def local(source: str, root: str, *, sport: str = "ncaaf", tier: str = "raw") ->
 def q(sql: str):
     """Run SQL against the lake; returns a pandas DataFrame. Use delta('<source>') in FROM."""
     return _connect().sql(sql).df()
+
+
+# ── "absent partition" vs "transient read failure" (the destructive-overwrite guard) ────────
+#
+# ⭐ ONE implementation, several callers. Every READ-MERGE-WRITE writer in this vertical
+# (`odds_recurring_capture`, `game_prediction_snapshot`) preserves what is already in the lake by
+# READING it first — so "I could not read it" must NEVER be indistinguishable from "there is
+# nothing there yet." The second is a licence to overwrite; the first is a bug that silently
+# deletes every prior week. A real CI flake (a read-after-write `delta_scan` hiccup on a partition
+# the same run had just written) proved that swallowing any read exception into `None` loses data.
+# Two renderers of this rule would be two rule sets (the E9.61 lesson), so it lives here.
+
+#: substrings that mean the Delta table/partition GENUINELY does not exist yet.
+MISSING_TABLE_MARKERS: tuple[str, ...] = ("InvalidTableLocationError", "Path does not exist")
+
+
+def is_missing_table_error(exc: Exception) -> bool:
+    """True only when `exc` means the Delta table/partition genuinely doesn't exist yet (a
+    source's first-ever write). Anything else — a network hiccup, an extension-load glitch, a
+    read-after-write visibility blip — must NOT be mistaken for "nothing's there yet"."""
+    msg = str(exc)
+    return any(marker in msg for marker in MISSING_TABLE_MARKERS)
+
+
+def query_or_missing(sql: str, *, retries: int = 2, retry_sleep: float = 0.15):
+    """Run a read-only lake SELECT. Returns the DataFrame, or `None` if the table/partition
+    genuinely doesn't exist yet. Any OTHER failure is retried a bounded number of times (a
+    transient `delta_scan` hiccup usually clears within one retry) and then RAISED — never
+    silently swallowed into "nothing there yet."
+
+    A caller that cannot CONFIRM what is already in the lake must fail loud, never guess "empty."
+    """
+    import time
+
+    last_exc: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            return q(sql)
+        except Exception as exc:  # noqa: BLE001 — inspected immediately below, never blindly swallowed
+            if is_missing_table_error(exc):
+                return None
+            last_exc = exc
+            if attempt < retries:
+                try:
+                    _connect().execute("LOAD delta")  # defensive re-affirm; cheap, idempotent
+                except Exception:  # noqa: BLE001 — best-effort; a persistent problem surfaces below
+                    pass
+                time.sleep(retry_sleep)
+    raise RuntimeError(
+        f"lake read failed {retries + 1}x and is NOT a missing-table error — refusing to treat "
+        f"this as 'nothing is there yet' (that would risk a destructive merge overwrite): "
+        f"{last_exc}"
+    ) from last_exc

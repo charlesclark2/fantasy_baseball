@@ -1,0 +1,337 @@
+{
+  "story": "NF-W7i",
+  "phase": "rb_direct_points_ceiling",
+  "smoke": true,
+  "generated_at": "2026-08-18T04:40:39.075534+00:00",
+  "seasons": [
+    2016,
+    2025
+  ],
+  "n_folds": 1,
+  "gate_league": "full_ppr",
+  "position": "RB",
+  "matrix_key": "26c34fbe778c9d87",
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 84553,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "attach_audit": {
+    "cache": "hit"
+  },
+  "predecessor": "NF-W7h",
+  "declared_field": {
+    "incumbent": "direct_points",
+    "oracle_forms": [
+      "direct_blockonly",
+      "direct_augmented",
+      "direct_upweighted",
+      "recal_block",
+      "climatology_block"
+    ],
+    "declared_field_size": 5,
+    "declared_field_size_source": "the five oracle FORMS pre-registered in \u00a73 \u2014 the headline is a MAX over them, so the multiplicity the selection actually spends is the form family (MH2 (a))",
+    "degenerates": [
+      "nihilist_zero",
+      "zero_width",
+      "max_width"
+    ],
+    "permutation": "permuted_direct",
+    "crossfit_k": 3,
+    "lambda_by_form": {
+      "direct_augmented": 1.0,
+      "direct_upweighted": 5.0
+    },
+    "ceiling_bands": [
+      2.0,
+      5.0
+    ]
+  },
+  "premise_correction": {
+    "nf_w7h_recorded_direct_oracle": 1.4933,
+    "construction": "KW.fit_direct_points(te_p, te_p, ...) \u2014 fit AND predicted on the test block, so every row saw its own label",
+    "reading": "a row-level in-sample MEMORISATION degenerate, not a ceiling \u2014 the NF-W6 pre-registration names exactly this ('a ROW-level peek is a zero-CRPS degenerate, not a ceiling'). It gated nothing in NF-W7h, but it cannot carry the ceiling claim this story exists to measure, which is why every peek here is CROSS-FIT."
+  },
+  "fold_results": [
+    {
+      "label": "2025H2",
+      "n": 1082,
+      "n_train": 20601,
+      "n_matched_window": 721,
+      "scores": {
+        "direct_points": 2.434651415246522,
+        "oracle__direct_blockonly": 2.640005204914523,
+        "matched_n__direct_blockonly": 2.548323486271724,
+        "oracle__direct_augmented": 2.4236277289284445,
+        "matched_n__direct_augmented": 2.4294136848848886,
+        "oracle__direct_upweighted": 2.433622248124686,
+        "matched_n__direct_upweighted": 2.429821510944016,
+        "oracle__recal_block": 2.740577848391834,
+        "matched_n__recal_block": 2.8139149237624608,
+        "oracle__climatology_block": 3.8365859125107984,
+        "matched_n__climatology_block": 3.8400132685609187,
+        "nihilist_zero": 5.722181146025878,
+        "zero_width": 5.921146106630683,
+        "max_width": 7.20127640180149,
+        "permuted_direct": 3.8886561784267335
+      },
+      "coverage_80_incumbent": {
+        "coverage": 0.821626617375231,
+        "n": 1082,
+        "binomial_se": 0.012160358006209633,
+        "blocking_shortfall": false
+      }
+    }
+  ],
+  "selection": {
+    "position": "RB",
+    "selection_metric": "crps_q199",
+    "n_rows": 1082,
+    "fold_labels": [
+      "2025H2"
+    ],
+    "mean_crps": {
+      "direct_points": 2.43465,
+      "oracle__direct_blockonly": 2.64001,
+      "matched_n__direct_blockonly": 2.54832,
+      "oracle__direct_augmented": 2.42363,
+      "matched_n__direct_augmented": 2.42941,
+      "oracle__direct_upweighted": 2.43362,
+      "matched_n__direct_upweighted": 2.42982,
+      "oracle__recal_block": 2.74058,
+      "matched_n__recal_block": 2.81391,
+      "oracle__climatology_block": 3.83659,
+      "matched_n__climatology_block": 3.84001,
+      "nihilist_zero": 5.72218,
+      "zero_width": 5.92115,
+      "max_width": 7.20128,
+      "permuted_direct": 3.88866
+    },
+    "incumbent": "direct_points",
+    "mean_incumbent": 2.43465,
+    "per_form": {
+      "direct_blockonly": {
+        "oracle_mean": 2.64001,
+        "matched_n_mean": 2.54832,
+        "mean_delta": -0.20535,
+        "ci95": [
+          null,
+          null
+        ],
+        "fold_wins": 0,
+        "ceiling_pct": -8.435,
+        "oracle_beats_matched_n": false,
+        "activity": "INACTIVE",
+        "peek_gain_vs_matched_n": -0.09168,
+        "p_one_sided": null
+      },
+      "direct_augmented": {
+        "oracle_mean": 2.42363,
+        "matched_n_mean": 2.42941,
+        "mean_delta": 0.01102,
+        "ci95": [
+          null,
+          null
+        ],
+        "fold_wins": 1,
+        "ceiling_pct": 0.453,
+        "oracle_beats_matched_n": true,
+        "activity": "ACTIVE",
+        "peek_gain_vs_matched_n": 0.00579,
+        "p_one_sided": null
+      },
+      "direct_upweighted": {
+        "oracle_mean": 2.43362,
+        "matched_n_mean": 2.42982,
+        "mean_delta": 0.00103,
+        "ci95": [
+          null,
+          null
+        ],
+        "fold_wins": 1,
+        "ceiling_pct": 0.042,
+        "oracle_beats_matched_n": false,
+        "activity": "INACTIVE",
+        "peek_gain_vs_matched_n": -0.0038,
+        "p_one_sided": null
+      },
+      "recal_block": {
+        "oracle_mean": 2.74058,
+        "matched_n_mean": 2.81391,
+        "mean_delta": -0.30593,
+        "ci95": [
+          null,
+          null
+        ],
+        "fold_wins": 0,
+        "ceiling_pct": -12.566,
+        "oracle_beats_matched_n": true,
+        "activity": "ACTIVE",
+        "peek_gain_vs_matched_n": 0.07334,
+        "p_one_sided": null
+      },
+      "climatology_block": {
+        "oracle_mean": 3.83659,
+        "matched_n_mean": 3.84001,
+        "mean_delta": -1.40193,
+        "ci95": [
+          null,
+          null
+        ],
+        "fold_wins": 0,
+        "ceiling_pct": -57.583,
+        "oracle_beats_matched_n": true,
+        "activity": "ACTIVE",
+        "peek_gain_vs_matched_n": 0.00343,
+        "p_one_sided": null
+      }
+    },
+    "active_forms": [
+      "direct_augmented",
+      "recal_block",
+      "climatology_block"
+    ],
+    "best_form": "direct_augmented",
+    "fold_clause": {
+      "required": null,
+      "attainable": false,
+      "passes": false
+    },
+    "anchors": {
+      "nihilist_loses": true,
+      "zero_width_loses": true,
+      "max_width_loses": true,
+      "permutation_loses": true
+    },
+    "estimator_note": "MAX over the per-form cross-fit peeks vs the honest full-train incumbent. Every bias here favours a BUILD \u2014 selection over forms is upward-biased on the oracle side, the peek sees the future, and the headline block weight is the smoke sweep's most generous (ceiling-maximising) value \u2014 so a NO is CONSERVATIVE (the NF-W5/NF-W6 rule, declared before the run).",
+    "pbo": null,
+    "pbo_state": "UNDEFINED \u2014 the ceiling is a pre-registered anchor contrast, not a searched field (the NF-W5/NF-W6 ceiling rule). DSR does not arise: no arm is selected and nothing is promoted.",
+    "deltas_by_fold": [
+      0.01102
+    ],
+    "mean_delta": 0.01102,
+    "ci95": [
+      null,
+      null
+    ],
+    "fold_wins": 1,
+    "p_one_sided": null,
+    "ceiling_pct": 0.453
+  },
+  "fdr": {
+    "binding": {},
+    "cutoff": null,
+    "family_size": 0,
+    "note": "no evaluable p-value in the family \u2014 BH UNDEFINED, fails closed"
+  },
+  "decision": {
+    "answer": "NO",
+    "stat_ok": false,
+    "licensed_for_bakeoff": false,
+    "reason": "ceiling 0.45% on `direct_augmented` is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding None) \u2014 NO regardless of magnitude",
+    "license_rule": "licensed iff answer \u2208 ('YES','MARGINAL') \u2227 stat_ok \u2014 the NF-W6d LICENSE_BANDS convention, declared before the run"
+  },
+  "null_state": {
+    "state": "UNDEFINED",
+    "reason": "`crps_q199`: 1 fold(s) < 4 \u2014 CSCV/PBO is UNDEFINED, so the \u00a70.5 deflation requirement was not EVALUATED, let alone failed. No effect size and no gate choice fixes this; only more folds do.",
+    "retest_trigger": null,
+    "folds_have": 1,
+    "folds_needed": 4,
+    "extra_seasons": 3,
+    "max_field_size": null,
+    "detail": {
+      "n_folds": 1,
+      "n_arms": 5
+    },
+    "field_remedy_admissible": null,
+    "retest_trigger_note": "\u26d4 NO season/fold re-test trigger is published for RB \u2014 pre-registered scope guard. A ceiling below the band is a MEASUREMENT of the form's headroom, not a power shortfall, and more seasons cannot move it."
+  },
+  "verdict": {
+    "story_verdict": "NO",
+    "position": "RB",
+    "ceiling_pct": 0.453,
+    "best_form": "direct_augmented",
+    "licensed_for_bakeoff": false,
+    "reason": "ceiling 0.45% on `direct_augmented` is not statistically demonstrable (CI-excludes-zero False, fold clause False, BH binding None) \u2014 NO regardless of magnitude",
+    "scope_note": "\u26d4 RB ONLY, DIRECT-POINTS form only, at the NF-W1 fold axis. This record certifies nothing about QB/WR/TE and licenses no assembly successor (NF-W7h measured assembly as LOSING at RB by 0.0263 CRPS).",
+    "promotes_nothing": true
+  },
+  "positive_control": {
+    "form": "direct_augmented",
+    "scale": 1.3,
+    "base_pct": 0.453,
+    "shifted_pct": 1.274,
+    "move_pct": 0.821,
+    "passes": true,
+    "gating_clause": "absolute peek advantage grows \u2265 2.0\u00d7 AND the ceiling WIDENS",
+    "abs_growth": 3.907,
+    "min_abs_growth": 2.0,
+    "ceiling_widened": true,
+    "legacy_clause": {
+      "rule": "relative ceiling moves \u2265 2.0 pct points",
+      "passes": false,
+      "measured_move_pct": 0.821,
+      "retained": "\u26d4 RETAINED AND SCORED though it FAILS \u2014 a pre-registered anchor that fails is left FAILING and DECOMPOSED, never re-labelled (NF-D20). Its failure is DIAGNOSED, not argued away: a multiplicative shift inflates the incumbent CRPS that is this ratio's DENOMINATOR, so the ratio understates sensitivity by construction."
+    },
+    "diagnosis": {
+      "incumbent_base": 2.43465,
+      "incumbent_shifted": 3.38045,
+      "denominator_inflation": 1.3885,
+      "reading": "the instrument is SENSITIVE \u2014 the gated form's absolute advantage grew, and the MORE sensitive form (direct_upweighted) reports a SMALLER real-data ceiling, an internal-consistency signal a blind instrument cannot produce (NF-D16 (g\u2034))"
+    },
+    "by_form": {
+      "direct_blockonly": {
+        "base_ceiling_pct": -8.435,
+        "shifted_ceiling_pct": -1.526,
+        "base_mean_delta": -0.20535,
+        "shifted_mean_delta": -0.05157,
+        "base_activity": "INACTIVE",
+        "shifted_activity": "ACTIVE",
+        "pct_move": 6.909,
+        "abs_delta_move": 0.15378
+      },
+      "direct_augmented": {
+        "base_ceiling_pct": 0.453,
+        "shifted_ceiling_pct": 1.274,
+        "base_mean_delta": 0.01102,
+        "shifted_mean_delta": 0.04306,
+        "base_activity": "ACTIVE",
+        "shifted_activity": "ACTIVE",
+        "pct_move": 0.821,
+        "abs_delta_move": 0.03204
+      },
+      "direct_upweighted": {
+        "base_ceiling_pct": 0.042,
+        "shifted_ceiling_pct": 1.723,
+        "base_mean_delta": 0.00103,
+        "shifted_mean_delta": 0.05825,
+        "base_activity": "INACTIVE",
+        "shifted_activity": "ACTIVE",
+        "pct_move": 1.681,
+        "abs_delta_move": 0.05722
+      },
+      "recal_block": {
+        "base_ceiling_pct": -12.566,
+        "shifted_ceiling_pct": -5.975,
+        "base_mean_delta": -0.30593,
+        "shifted_mean_delta": -0.20197,
+        "base_activity": "ACTIVE",
+        "shifted_activity": "ACTIVE",
+        "pct_move": 6.591,
+        "abs_delta_move": 0.10396
+      },
+      "climatology_block": {
+        "base_ceiling_pct": -57.583,
+        "shifted_ceiling_pct": -47.542,
+        "base_mean_delta": -1.40193,
+        "shifted_mean_delta": -1.60712,
+        "base_activity": "ACTIVE",
+        "shifted_activity": "ACTIVE",
+        "pct_move": 10.041,
+        "abs_delta_move": 0.20519
+      }
+    }
+  },
+  "runtime_seconds": 391.8
+}

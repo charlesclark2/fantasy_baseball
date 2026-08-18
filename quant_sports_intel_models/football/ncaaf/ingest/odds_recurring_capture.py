@@ -141,7 +141,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from . import s3io
+from . import query_lake, s3io
 from .handler import load_env
 from .odds_backfill import CREDITS_PER_CALL_PER_MARKET_REGION
 from .sources import (
@@ -208,53 +208,14 @@ def _new_kickoffs_to_capture(
 # exist yet (verified empirically: `IO Error: DeltaKernel InvalidTableLocationError (28): Invalid
 # table location: Path does not exist: "..."`). This is the ONLY error class that may be treated
 # as "nothing captured yet" — see `_q_or_missing`.
-_MISSING_TABLE_MARKERS = ("InvalidTableLocationError", "Path does not exist")
-
-
-def _is_missing_table_error(exc: Exception) -> bool:
-    """True only when `exc` means the Delta table/partition genuinely doesn't exist yet (a
-    season's first-ever run). Anything else — a network hiccup, an extension-load glitch, a
-    read-after-write visibility blip on a partition just written this same run — must NOT be
-    mistaken for "nothing's there yet"; see `_q_or_missing`."""
-    msg = str(exc)
-    return any(marker in msg for marker in _MISSING_TABLE_MARKERS)
-
-
-def _q_or_missing(sql: str, *, retries: int = 2, retry_sleep: float = 0.15):
-    """Run a read-only lake SELECT. Returns the DataFrame, or `None` if the table/partition
-    genuinely doesn't exist yet. Any OTHER failure is retried a bounded number of times (a
-    transient delta_scan hiccup — e.g. right after a partition was just written — usually clears
-    within one retry) and then RAISED — never silently swallowed into "nothing captured yet."
-
-    THE BUG THIS FIXES (a real data-loss fragility, caught by a CI-only flake): the previous
-    `_existing_raw_rows` wrapped its lake read in a bare `except Exception: return None`, and
-    `_merge_and_write` treats `None` as "fresh season, nothing to preserve" → writes ONLY the new
-    records. A transient read failure is therefore indistinguishable from "no partition yet," so
-    a flaky read of a partition this very run had just written (e.g. a read-after-write
-    visibility blip) silently took the destructive overwrite branch and dropped every prior week.
-    A caller that can't CONFIRM what's already in the lake must fail loud, never guess "empty."
-    """
-    from .query_lake import _connect, q
-
-    last_exc: Exception | None = None
-    for attempt in range(retries + 1):
-        try:
-            return q(sql)
-        except Exception as exc:  # noqa: BLE001 — inspected immediately below, never blindly swallowed
-            if _is_missing_table_error(exc):
-                return None
-            last_exc = exc
-            if attempt < retries:
-                try:
-                    _connect().execute("LOAD delta")  # defensive re-affirm; cheap, idempotent
-                except Exception:  # noqa: BLE001 — best-effort; a persistent problem still surfaces below
-                    pass
-                time.sleep(retry_sleep)
-    raise RuntimeError(
-        f"lake read failed {retries + 1}x and is NOT a missing-table error — refusing to treat "
-        f"this as 'nothing captured yet' (that would risk a destructive merge overwrite): "
-        f"{last_exc}"
-    ) from last_exc
+# ── absent-partition vs transient-read-failure ─────────────────────────────────────────────
+# ⭐ ONE implementation, promoted to `query_lake` (NCAAF-PS) so the second READ-MERGE-WRITE writer
+# in this vertical (`game_prediction_snapshot`) shares it rather than growing a second copy — two
+# renderers of one rule are two rule sets (E9.61). These names are kept as the module's own API
+# because `_merge_and_write`'s data-loss guarantee is documented in terms of them.
+_MISSING_TABLE_MARKERS = query_lake.MISSING_TABLE_MARKERS
+_is_missing_table_error = query_lake.is_missing_table_error
+_q_or_missing = query_lake.query_or_missing
 
 
 def _captured_commence_times(

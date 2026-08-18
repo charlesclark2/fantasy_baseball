@@ -6,18 +6,23 @@ import { signIn } from "../support/session"
 import { expectNoNaN, expectNoPageErrors } from "../support/assertions"
 import {
   EMPTY_DOC,
+  MAX_NOTE_LEN,
   applyDoc,
   baseOrder,
   cheatSheet,
   customTiers,
   divergence,
   moveTo,
+  ourTierBreaks,
   reconcile,
+  setNote,
   setTag,
   toggleTierBreak,
+  trimNotes,
   type BigBoardDoc,
 } from "@/lib/big-board"
 import { sortAvailable, type Player } from "@/lib/draft-optimizer"
+import { FANTASY_SEASON as SEASON } from "@/lib/fantasy-queries"
 
 /**
  * NF-C4 — THE CUSTOM BIG BOARD.
@@ -180,11 +185,16 @@ test.describe("the stored prefix reconstructs the user's board exactly", () => {
       order: [base[3], "retired-player", base[8]],
       tier_breaks: [base[8], "retired-player"],
       tags: { [base[3]]: "target", "retired-player": "avoid" },
+      notes: { [base[3]]: "mine", "retired-player": "gone" },
     }
     const rec = reconcile(BOARD, doc)
     expect(rec.droppedOrder).toBe(1)
     expect(rec.droppedBreaks).toBe(1)
     expect(rec.droppedTags).toBe(1)
+    // Counted SEPARATELY from tags. Folding them together would make "3 entries were dropped"
+    // unattributable, and the banner the user reads is built from these numbers.
+    expect(rec.droppedNotes).toBe(1)
+    expect(rec.doc.notes).toEqual({ [base[3]]: "mine" })
     expect(rec.doc.order).toEqual([base[3], base[8]])
     // The board itself is unchanged in length — a dropped saved id must not remove a live player.
     expect(applyDoc(BOARD, rec.doc).length).toBe(BOARD.length)
@@ -284,9 +294,113 @@ test.describe("the printed cheat sheet", () => {
 
 // ── the browser ─────────────────────────────────────────────────────────────────────────────────
 
+test.describe("notes, and the tiers we can seed", () => {
+  test("typing a note KEEPS the spaces — setNote runs on every keystroke", () => {
+    // 🐛 THE DEPLOYED DEFECT: `setNote` trimmed, so the space a user typed was removed before the
+    // next character could follow it and a note came out as
+    // "jmarrchaseisherebecauseiwantawrhigher". This replays it the way it actually happens —
+    // one keystroke at a time — which is the only way to see it.
+    // ⚠️⚠️ THE LOOP HAS TO CLOSE THE FEEDBACK, and the red proof is what proved it: a first cut fed
+    // `typed.slice(0, i)` in each round and stayed GREEN with the trim restored, because the LAST
+    // call passes the whole string and the whole string has nothing to trim. The real box reads its
+    // value back OUT of the document — `value={note}` — so the trimmed value is what the next
+    // keystroke is appended to, and that is where the space is lost. Model the loop, not the input.
+    const id = BOARD[0].id
+    const typed = "wr room is thin here"
+    let doc = EMPTY_DOC
+    for (const ch of typed) doc = setNote(doc, id, (doc.notes[id] ?? "") + ch)
+    expect(doc.notes[id]).toBe(typed)
+  })
+
+  test("a note is capped, normalised when typing stops, and cleared by emptying it", () => {
+    const id = BOARD[0].id
+    let doc = setNote(EMPTY_DOC, id, "x".repeat(MAX_NOTE_LEN + 50))
+    expect(doc.notes[id].length).toBe(MAX_NOTE_LEN)
+
+    // The trim happens ONCE, where typing has stopped — never per keystroke (see above).
+    doc = trimNotes(setNote(doc, id, "   sits above his ADP for me   "))
+    expect(doc.notes[id]).toBe("sits above his ADP for me")
+
+    // ⚠️ THE KEY IS REMOVED, not set to "". Every note is bytes in the one 400 KB item that holds
+    // all of this user's state, and an empty string is bytes that mean nothing. Both paths drop it.
+    expect(id in setNote(doc, id, "    ").notes).toBe(false)
+    expect(id in trimNotes({ ...doc, notes: { [id]: "   " } }).notes).toBe(false)
+  })
+
+  test("our seeded tiers are real groups, in ascending order, and none of them is empty", () => {
+    // ⭐ THE ANSWER TO "MY WHOLE SHEET SAYS TIER 1". This is what one click has to produce: a
+    // grouping a person can read at a draft table, not a break on every other row.
+    const breaks = ourTierBreaks(BOARD, 200)
+    expect(breaks.length).toBeGreaterThan(3)
+    expect(new Set(breaks).size).toBe(breaks.length)
+
+    const doc: BigBoardDoc = { ...EMPTY_DOC, tier_breaks: breaks }
+    const rows = applyDoc(BOARD, doc)
+    const tiers = customTiers(rows, doc)
+
+    // Monotone by construction — a tier number that went back down would mean the walk oscillated,
+    // which is precisely what the "only when it goes UP" rule in `ourTierBreaks` prevents.
+    let last = 0
+    const sizes = new Map<number, number>()
+    for (const r of rows) {
+      const t = tiers.get(r.id)!
+      expect(t).toBeGreaterThanOrEqual(last)
+      last = t
+      sizes.set(t, (sizes.get(t) ?? 0) + 1)
+    }
+    expect(sizes.size).toBe(breaks.length + 1)
+    for (const [, n] of sizes) expect(n).toBeGreaterThan(0)
+
+    // ⚠️ AND THE FIRST ROW IS NEVER A BREAK — a break above row 1 would produce a tier of nobody.
+    expect(breaks).not.toContain(rows[0].id)
+  })
+
+  test("the seeded tiers describe the pool they are drawn from, and stay readable", () => {
+    // ⭐ THE MEASUREMENT THAT DECIDED THE DESIGN. `assignTiers` bounds a tier as a FRACTION of the
+    // pool it is handed (4%–15%, by design, so the tier COUNT stays stable whatever n is). Handed
+    // the whole board it therefore returns groups of ~40 — the first four rounds in one block, no
+    // more use on a cheat sheet than the single tier it replaced. Handed the depth on screen it
+    // returns groups a person can read. So the depth is a real parameter, and this is what says so.
+    const sizeOf = (depth: number) => {
+      const doc: BigBoardDoc = { ...EMPTY_DOC, tier_breaks: ourTierBreaks(BOARD, depth) }
+      const rows = applyDoc(BOARD, doc)
+      const tiers = customTiers(rows, doc)
+      const counts = new Map<number, number>()
+      for (const p of rows.slice(0, depth)) {
+        const t = tiers.get(p.id)!
+        counts.set(t, (counts.get(t) ?? 0) + 1)
+      }
+      return [...counts.values()]
+    }
+
+    const shallow = sizeOf(100)
+    const whole = sizeOf(BOARD.length)
+    const biggest = (xs: number[]) => Math.max(...xs)
+    expect(biggest(shallow)).toBeLessThan(biggest(whole))
+    // A draft tier nobody can use is one that swallows a whole round or more. At the depth people
+    // actually curate, ours do not.
+    expect(biggest(shallow)).toBeLessThanOrEqual(20)
+    expect(shallow.length).toBeGreaterThanOrEqual(5)
+  })
+
+  test("the seeded tiers are OUR tiers, not this surface's invention", () => {
+    // Every break lands where the shared VOR-gap tiering says a group starts, so the user begins
+    // from the same structure the Rankings board and the optimizer already show them.
+    const breaks = new Set(ourTierBreaks(BOARD, 200))
+    const base = baseOrder(BOARD)
+    // A break is only ever placed on a row that is genuinely tiered — never on a K/DST or a
+    // below-replacement row, which is what `positionTierMap` refuses to tier at all.
+    for (const p of base) {
+      if (!breaks.has(p.id)) continue
+      expect(p.lowPred).not.toBe(true)
+      expect(p.vor ?? 0).toBeGreaterThan(0)
+    }
+  })
+})
+
 async function openBigBoard(
   page: Page,
-  opts: { customBoards?: "none" | "one" | "atCap" } = {},
+  opts: { customBoards?: "none" | "one" | "atCap"; dropNotes?: boolean } = {},
 ) {
   const errors = collectPageErrors(page)
   await signIn(page, { groups: ["subscriber"] })
@@ -294,6 +408,7 @@ async function openBigBoard(
     entitlement: "entitled",
     leagues: "none",
     customBoards: opts.customBoards ?? "none",
+    customBoardsDropNotes: opts.dropNotes ?? false,
   })
   await page.goto("/fantasy/big-board")
   await expect(page.getByRole("heading", { name: "My Big Board" })).toBeVisible()
@@ -562,6 +677,174 @@ test.describe("driving the big board", () => {
     await page.getByTestId("big-board-reset").click()
     await expect.poll(async () => (await rowName(page, 0).textContent())?.trim()).toBe(wasFirst)
     await expect(page.getByTestId("big-board-save-status")).toContainText("Unsaved changes")
+    expectNoPageErrors(errors)
+  })
+
+  // ══ the live-surface corrections ═════════════════════════════════════════════════════════════
+  // Each of these was WRONG on the deployed page and green in CI, which is the only reason they
+  // are worth their runtime: they assert RENDERED output, which is the half a source guard cannot
+  // see.
+
+  test("the opening sentence renders with its spaces intact", async ({ page }) => {
+    // 🐛 THE DEPLOYED PAGE READ "our 2026board". The season is interpolated inside the string now
+    // rather than sitting beside JSX text, and THIS is the assertion that can actually fail for
+    // that reason — the source guard can only see how it is written, not how it renders.
+    const { errors } = await openBigBoard(page)
+    await expect(page.getByText(`Start with our ${SEASON} board for your league`)).toBeVisible()
+    const intro = (await page.getByText("Start with our").first().textContent()) ?? ""
+    expect(intro).not.toMatch(/\d{4}board/)
+    expectNoPageErrors(errors)
+  })
+
+  test("every row control says what it does in words, not only as a glyph", async ({ page }) => {
+    // ⭐ THE SCISSORS. A star and a no-entry sign can be inferred; "a pair of scissors means start a
+    // new tier here" cannot, and a `title` is invisible on the phone where a draft board is read.
+    const { errors } = await openBigBoard(page)
+    const legend = page.getByTestId("big-board-legend")
+    await expect(legend).toBeVisible()
+    await expect(legend).toContainText("start a new tier")
+    await expect(legend).toContainText("target")
+    await expect(legend).toContainText("avoid")
+    await expect(legend).toContainText("note")
+    expectNoPageErrors(errors)
+  })
+
+  test("a note is written, saved, reloaded, and printed on the cheat sheet", async ({ page }) => {
+    const { errors } = await openBigBoard(page)
+    const row = page.getByTestId("big-board-row").nth(2)
+    const who = (await rowName(page, 2).textContent())?.trim() ?? ""
+
+    await row.getByTestId("big-board-note-toggle").click()
+    // ⚠️ `pressSequentially`, NOT `fill`. `fill` sets the whole value in ONE event, so it is
+    // structurally blind to a per-keystroke defect — which is exactly how the shipped `setNote`
+    // ate every space the user typed and this spec stayed green.
+    await row
+      .getByTestId("big-board-note-input")
+      .pressSequentially("handcuff is undrafted in this league")
+    await row.getByTestId("big-board-note-done").click()
+    await expect(row.getByTestId("big-board-note-text")).toHaveText(
+      "handcuff is undrafted in this league",
+    )
+
+    await page.getByTestId("big-board-save").click()
+    await expect(page.getByTestId("big-board-save-status")).toContainText("Saved")
+
+    // ⭐ A REAL ROUND TRIP. The mock stores what was PUT and serves it back on the next GET, so a
+    // client that never sent the notes fails here — which an echoing stub could not tell you.
+    await page.reload()
+    await expect(page.getByTestId("big-board-row").first()).toBeVisible()
+    await expect(
+      page.getByTestId("big-board-row").filter({ hasText: who }).first().getByTestId(
+        "big-board-note-text",
+      ),
+    ).toHaveText("handcuff is undrafted in this league")
+
+    // ...and a note is exactly the thing you want ON the sheet you carry to the table.
+    await page.getByTestId("big-board-sheet-toggle").click()
+    await expect(page.getByTestId("big-board-sheet-note").first()).toHaveText(
+      "handcuff is undrafted in this league",
+    )
+    expectNoPageErrors(errors)
+  })
+
+  test("a stored note loads with the board, not only one typed this session", async ({ page }) => {
+    // The `one` fixture carries a note. Without this, "notes survive a save" could pass while a
+    // stored note never rendered at all.
+    const { errors } = await openBigBoard(page, { customBoards: "one" })
+    await expect(
+      page.getByTestId("big-board-row").nth(0).getByTestId("big-board-note-text"),
+    ).toHaveText("my own read on him")
+    expectNoPageErrors(errors)
+  })
+
+  test("a backend that quietly dropped the notes is reported, not shown as saved", async ({
+    page,
+  }) => {
+    // ⭐ NF-C0 DEPLOY SKEW, WHICH IS GUARANTEED TO HAPPEN AT LEAST ONCE: `frontend/` auto-deploys on
+    // merge and the API Lambda ships only via a manual `deploy.sh`, and the request models do not
+    // forbid extra fields — so the older backend ACCEPTS `notes`, ignores them, and returns 200.
+    // Without the comparison this asserts, the user reads "✓ Saved", reloads, and the note is gone.
+    const { errors } = await openBigBoard(page, { dropNotes: true })
+    const row = page.getByTestId("big-board-row").nth(1)
+    await row.getByTestId("big-board-note-toggle").click()
+    await row.getByTestId("big-board-note-input").pressSequentially("worth a round earlier")
+    await row.getByTestId("big-board-note-done").click()
+
+    await page.getByTestId("big-board-save").click()
+    const status = page.getByTestId("big-board-save-status")
+    await expect(status).toContainText("notes were not")
+    // ⚠️ AND IT MUST NOT ALSO CLAIM SUCCESS. "✓ Saved" beside a warning is the message the user
+    // reads first, and it is the false half.
+    await expect(status).not.toContainText("✓ Saved")
+    expectNoPageErrors(errors)
+  })
+
+  test("the sheet does not claim a tier the user never drew, and offers ours in one click", async ({
+    page,
+  }) => {
+    // 🐛 REPORTED FROM THE PRINTED SHEET: every player under a single "TIER 1" heading, which reads
+    // as a broken tiering rather than as "you have not drawn any".
+    const { errors } = await openBigBoard(page)
+    await page.getByTestId("big-board-sheet-toggle").click()
+    await expect(page.getByTestId("big-board-cheat-sheet")).toBeVisible()
+    await expect(page.getByTestId("big-board-cheat-sheet")).not.toContainText("Tier 1")
+    await expect(page.getByTestId("big-board-no-tiers")).toBeVisible()
+
+    await page.getByTestId("big-board-sheet-seed-tiers").click()
+    // Our tiers are now the user's: several real groups, headed, on their sheet.
+    await expect(page.getByTestId("big-board-sheet-tier").first()).toContainText("Tier 1")
+    expect(await page.getByTestId("big-board-sheet-tier").count()).toBeGreaterThan(3)
+    await expect(page.getByTestId("big-board-no-tiers")).toHaveCount(0)
+    expectNoPageErrors(errors)
+  })
+
+  test("a player opens in a new tab, so a curated board is never navigated away from", async ({
+    page,
+  }) => {
+    // This board holds unsaved work in component state; a same-tab navigation throws away every
+    // drag since the last save.
+    const { errors } = await openBigBoard(page)
+    const link = rowName(page, 0)
+    await expect(link).toHaveAttribute("target", "_blank")
+    await expect(link).toHaveAttribute("rel", /noopener/)
+    await expect(link).toHaveAttribute("rel", /noreferrer/)
+    expectNoPageErrors(errors)
+  })
+
+  test("under the print medium the page is a cheat sheet and nothing else", async ({ page }) => {
+    // ⭐ THE REAL RENDERED ASSERTION. The first cut of this clause walked class NAMES looking for
+    // `print:hidden`, which tests that somebody typed a string — `emulateMedia` makes the browser
+    // apply the print stylesheet for real, so what is asserted here is computed layout.
+    const { errors } = await openBigBoard(page)
+    await page.getByTestId("big-board-sheet-toggle").click()
+    await expect(page.getByTestId("big-board-cheat-sheet")).toBeVisible()
+
+    await page.emulateMedia({ media: "print" })
+
+    // Every piece of chrome, gone. The footer is the one reported off a real printout: it lives in
+    // the ROOT LAYOUT, so no class on this page could reach it.
+    for (const sel of ["nav", "footer"]) {
+      await expect(page.locator(sel).first()).toBeHidden()
+    }
+    for (const id of ["big-board-save", "big-board-legend", "big-board-print"]) {
+      await expect(page.getByTestId(id)).toBeHidden()
+    }
+
+    // ...and the sheet is still there, in ink rather than in the dark theme's grey.
+    const row = page.getByTestId("big-board-sheet-row").first()
+    await expect(row).toBeVisible()
+    expect(await row.evaluate((el) => getComputedStyle(el).color)).toBe("rgb(0, 0, 0)")
+
+    // The print-only header, with the mark that survives white paper.
+    // ⚠️ SCOPED TO THE SHEET. The nav carries the same `alt`, and it is the WHITE-on-dark file —
+    // the one that would print as nothing at all on white paper, so matching it here would be the
+    // assertion passing on precisely the wrong image.
+    const logo = page.getByTestId("big-board-cheat-sheet").locator("img")
+    await expect(logo).toBeVisible()
+    expect(await logo.getAttribute("src")).toContain("black-logo-wordmark")
+
+    await page.emulateMedia({ media: "screen" })
+    await expect(page.getByTestId("big-board-print")).toBeVisible()
     expectNoPageErrors(errors)
   })
 })

@@ -1146,3 +1146,153 @@ def test_rewrite_report_targets_the_SMOKE_artifact_when_smoke_is_passed():
     assert "art.read_text()" in branch and "art.write_text" in branch
     assert "_ARTIFACT_REL" not in branch, \
         "the rewrite branch re-derives a path instead of using the resolved one"
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# THE DSR 2×2's OWN HONESTY — added after the full run, whose diagnostic trimmed the WINNER
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# `V` is a sample variance, so the trim drops the trial Sharpe FURTHEST FROM THE MEAN — and in a
+# field of one winner among losers that point is the WINNER ITSELF (measured on the 8-fold run:
+# trial SRs [-6.243, 2.768, -10.253, -6.700], mean -5.107, so `zm_floor` at 7.875 away is trimmed).
+# A sub-field formed by DELETING THE ARM UNDER TEST is not a family any pre-registration could
+# declare, so it can never support a MULTIPLICITY reading. Printing it as "a COHERENT sub-field"
+# next to a 0.9093 invites precisely the MH2.2 laundering the diagnostic exists to forbid — a
+# reader takes "a 3-arm family nearly cleared" and goes looking for one to register.
+
+
+def _load_record():
+    """The full-run record, when it is present. ⭐ Returns None rather than skipping so the guards
+    that do NOT need it still run: a record-dependent assertion must never be able to make a
+    source-level clause vacuous by being absent (NF1.7 (a))."""
+    f = _FANTASY / "ablation_results" / "nf_w7h_rb_marginal.json"
+    return json.loads(f.read_text()) if f.exists() else None
+
+
+def _dsr_sel(*, trial_srs, winner, deltas=None):
+    """A selection carrying only what `dsr_field_diagnostic` reads."""
+    return {"trial_srs": list(trial_srs), "observed_sr": float(trial_srs[1]), "winner": winner,
+            "deltas_by_fold": list(deltas if deltas is not None else [0.02] * 8),
+            "dsr": 0.0, "cscv_split_deltas": [], "cscv_split_trial_srs": []}
+
+
+def test_a_trim_that_deletes_the_arm_under_test_is_named_non_registrable():
+    """The isolating case: the winner IS the most extreme Sharpe (the full run's own shape)."""
+    d = R.dsr_field_diagnostic(_dsr_sel(trial_srs=[-6.243, 2.768, -10.253, -6.700],
+                                        winner=RM.REAL_ARMS[1]))
+    assert d["evaluated"] is True
+    assert d["dropped_trial_arm"] == RM.REAL_ARMS[1], (
+        "the trim must drop the point furthest from the MEAN of the trial Sharpes")
+    assert d["dropped_trial_is_the_winner"] is True
+    assert d["coherent_subfield_is_registrable"] is False, (
+        "a sub-field that deletes the arm under test is NOT registrable and the record must say so")
+    assert "NOT" in R._subfield_label(d) or "NON-REGISTRABLE" in R._subfield_label(d), (
+        "every render site must use the non-registrable label, or the table contradicts the prose")
+
+
+def test_a_trim_that_keeps_the_arm_under_test_stays_readable_as_a_field_question():
+    """The OTHER side of the same clause (NF-D17: one isolating fixture per branch). Here a LOSER
+    is the extreme point, so the trimmed field is a genuine field question and stays labelled as
+    one — proving the guard above is not simply asserting a constant."""
+    d = R.dsr_field_diagnostic(_dsr_sel(trial_srs=[0.5, 0.6, -14.0, 0.55], winner=RM.REAL_ARMS[1]))
+    assert d["dropped_trial_arm"] == RM.REAL_ARMS[2]
+    assert d["dropped_trial_is_the_winner"] is False
+    assert d["coherent_subfield_is_registrable"] is True
+    assert "NON-REGISTRABLE" not in R._subfield_label(d)
+
+
+def test_a_subfield_that_clears_only_by_deleting_the_winner_cannot_be_read_as_multiplicity():
+    """⭐ The dangerous branch. If the ONLY sub-field that clears is the one without the arm under
+    test, the measurement separates nothing — and reporting `MULTIPLICITY` there would hand a
+    future reader the exact prescription (re-register a coherent family) that this field cannot
+    support. Constructed so the trimmed field's DSR clears while the trim removes the winner."""
+    d = R.dsr_field_diagnostic(
+        _dsr_sel(trial_srs=[0.01, 40.0, 0.02, 0.03], winner=RM.REAL_ARMS[1],
+                 deltas=[0.9, 0.95, 0.88, 0.92, 0.9, 0.94, 0.91, 0.93]))
+    assert d["dropped_trial_is_the_winner"] is True
+    assert d["lever"] != "MULTIPLICITY", (
+        "a field rescued only by removing its own winner is not evidence about field size")
+    if d["dsr_coherent_subfield"] is not None and d["dsr_coherent_subfield"] >= RM.DSR_MIN:
+        assert d["lever"] == "UNRESOLVED_INADMISSIBLE_SUBFIELD"
+        assert "Read no remedy" in d["reading"]
+
+
+def test_the_variance_reading_is_stated_as_a_fortiori_when_the_winner_was_trimmed():
+    d = R.dsr_field_diagnostic(_dsr_sel(trial_srs=[-6.243, 2.768, -10.253, -6.700],
+                                        winner=RM.REAL_ARMS[1]))
+    assert d["lever"] == "VARIANCE"
+    assert "FORTIORI" in d["reading"].upper(), (
+        "when the trim already deleted V's largest contributor and the bar is STILL not reached, "
+        "the variance verdict is stronger than it looks and the record must say why")
+
+
+def test_the_attribution_2x2_is_matched_on_the_target_not_on_the_split():
+    """⭐ `recalibration_with_split` reads the SELECTED arm; `recalibration_without_split` can only
+    read the PRIMARY arm (the single-copula reference cell is built from it). Differencing them
+    attributes to the SPLIT what belongs to the TARGET — on the real run the matched cells are
+    -0.1087 (split on) against -0.1085 (split off), i.e. the split does not modulate the
+    recalibration at all, while the unmatched reading would have said it flips the sign."""
+    src = inspect.getsource(R)
+    assert '"recalibration_with_split__PRIMARY_ARM_MATCHED"' in src
+    assert 'mean_s[RM.MATCHED_FOIL] - mean_s[RM.PRIMARY_ARM]' in src, (
+        "the matched cell must hold the CONSTRUCTION of the with-split cell and swap only the "
+        "TARGET, or it is not a matched pair either")
+    rec = _load_record()
+    if rec is not None:
+        a = rec["selections"]["RB"]["attribution"]
+        assert a["recalibration_without_split__ARM"] == RM.PRIMARY_ARM
+        assert "recalibration_with_split__PRIMARY_ARM_MATCHED" in a
+
+
+def test_field_remedy_admissible_none_is_glossed_as_no_lever_not_as_unmeasured():
+    """`None` from `_field_size_remedy` means `max_field < 2` — NO field size clears. Printed bare
+    it reads as "not computed", which sends a reader hunting for a smaller field that provably does
+    not exist. The three states must each carry their meaning at the render site."""
+    assert set(R._FIELD_REMEDY_GLOSS) == {None, False, True}
+    assert "NO LEVER" in R._FIELD_REMEDY_GLOSS[None]
+    assert "NOT mean unmeasured" in R._FIELD_REMEDY_GLOSS[None]
+    assert "may not DISCOVER" in R._FIELD_REMEDY_GLOSS[False]
+
+
+# ── RED proofs for the four clauses above ──────────────────────────────────────────────────────
+
+def test_RED_a_winner_trim_reported_as_coherent_is_caught():
+    _red_proof(
+        _RUNNER,
+        '    dropped_is_winner = bool(dropped_arm == sel.get("winner"))',
+        '    dropped_is_winner = False',
+        test_a_trim_that_deletes_the_arm_under_test_is_named_non_registrable)
+
+
+def test_RED_a_label_that_ignores_registrability_is_caught():
+    _red_proof(
+        _RUNNER,
+        '        return ("⛔ NON-REGISTRABLE sub-field — a V-SENSITIVITY, it deletes the arm '
+        'under test")',
+        '        return "COHERENT sub-field"',
+        test_a_trim_that_deletes_the_arm_under_test_is_named_non_registrable)
+
+
+def test_RED_reading_multiplicity_off_a_winner_deleted_subfield_is_caught():
+    _red_proof(
+        _RUNNER,
+        '    if clears and dropped_is_winner:',
+        '    if False:',
+        test_a_subfield_that_clears_only_by_deleting_the_winner_cannot_be_read_as_multiplicity)
+
+
+def test_RED_dropping_the_matched_attribution_cell_is_caught():
+    _red_proof(
+        _RUNNER,
+        '            "recalibration_with_split__PRIMARY_ARM_MATCHED": round(\n'
+        '                float(mean_s[RM.MATCHED_FOIL] - mean_s[RM.PRIMARY_ARM]), 4),',
+        '            "recalibration_with_split__PRIMARY_ARM_UNMATCHED": None,',
+        test_the_attribution_2x2_is_matched_on_the_target_not_on_the_split)
+
+
+def test_RED_an_unglossed_field_remedy_flag_is_caught():
+    _red_proof(
+        _RUNNER,
+        '    None: (" — ⚠️ `None` here does NOT mean unmeasured: it means field size is NO LEVER '
+        'AT ALL "',
+        '    None: (" — unavailable "',
+        test_field_remedy_admissible_none_is_glossed_as_no_lever_not_as_unmeasured)
