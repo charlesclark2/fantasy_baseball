@@ -304,6 +304,21 @@ export function maxBid(
   }
 }
 
+/**
+ * What a BLANK price box records — ONE rule, shared by every surface that can record a sale.
+ *
+ * ⭐ It is deliberately the same number whoever won the player, because that is the only way a
+ * single placeholder can be TRUTHFUL: the number the box shows greyed-out is exactly the number
+ * that gets written. A per-button default (my max bid for "I won", his value for "Sold") reads
+ * fine in code and lies on screen — one input, two silently different outcomes.
+ *
+ * `inflated` is his value at today's prices, floored at the minimum bid. It is a claim about the
+ * PLAYER, not about my budget, which is what makes it answer both buttons. It can exceed what I
+ * have left; that is not clamped, because a clamp that cannot announce itself makes "recorded what
+ * you typed" and "recorded something else" pixel-identical (E9.62).
+ */
+export const defaultSalePrice = (bid: MaxBid): number => bid.inflated
+
 /** `$X left for Y slots = $Z/slot` — the single most-used number at an auction table. */
 export const dollarsPerSlot = (budgetRemaining: number, openSlots: number): number =>
   openSlots <= 0 ? 0 : Math.max(0, budgetRemaining) / Math.max(1, Math.floor(openSlots))
