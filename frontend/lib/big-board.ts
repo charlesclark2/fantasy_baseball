@@ -215,15 +215,39 @@ export function setTag(doc: BigBoardDoc, id: string, tag: BoardTag | null): BigB
  * Set or clear a row's note. Whitespace-only is a CLEAR, and a cleared note deletes the key rather
  * than storing `""` — an empty string is bytes in the shared item that mean nothing.
  *
- * Trimmed and truncated here as well as on the server. Not redundant: the server's truncation is
- * the authority, but a value the user can see in the box and cannot save is the silent-drop shape
- * (E8.6), so the client refuses to hold what it knows will not survive.
+ * ⛔⛔ DO NOT `.trim()` HERE. THIS RUNS ON EVERY KEYSTROKE. The first cut did, and the effect was
+ * that the space a user typed was removed before it could ever be followed by another character —
+ * so a note came out as "jmarrchaseisherebecauseiwantawrhigher". Reported on the live surface, and
+ * it is one of those bugs that is obvious the moment you type into the box and invisible everywhere
+ * else. ⚠️ IN PARTICULAR IT WAS INVISIBLE TO THE E2E, because Playwright's `fill()` sets the whole
+ * value in ONE event — a per-keystroke defect needs `pressSequentially` to reach it, which is now
+ * what the spec uses.
+ *
+ * Truncation stays (the box must not hold what the server will not store), and the whitespace-only
+ * CLEAR reads `.trim()` without applying it. Normalisation happens once, on `trimNotes`, when the
+ * editor closes and again before the save.
  */
 export function setNote(doc: BigBoardDoc, id: string, text: string): BigBoardDoc {
   const notes = { ...(doc.notes ?? {}) }
-  const clean = String(text ?? "").trim().slice(0, MAX_NOTE_LEN)
-  if (!clean) delete notes[id]
-  else notes[id] = clean
+  const raw = String(text ?? "").slice(0, MAX_NOTE_LEN)
+  if (!raw.trim()) delete notes[id]
+  else notes[id] = raw
+  return { ...doc, notes }
+}
+
+/**
+ * Normalise every note: trimmed, and gone if there is nothing left.
+ *
+ * ⭐ CALLED WHERE TYPING HAS STOPPED — when the editor closes, and again on the way to the server —
+ * never per keystroke (see `setNote`). It is what keeps the local document byte-identical to what
+ * the server stores, so a reload cannot appear to change a note the user never touched.
+ */
+export function trimNotes(doc: BigBoardDoc): BigBoardDoc {
+  const notes: Record<string, string> = {}
+  for (const [id, text] of Object.entries(doc.notes ?? {})) {
+    const clean = text.trim()
+    if (clean) notes[id] = clean
+  }
   return { ...doc, notes }
 }
 

@@ -994,3 +994,60 @@ def test_a_player_link_opens_in_a_new_tab_and_severs_the_opener():
     link = src[src.index("/fantasy/player/") - 200 : src.index("/fantasy/player/") + 500]
     assert 'target="_blank"' in link
     assert "noopener" in link and "noreferrer" in link
+
+
+def test_the_note_editor_does_not_normalise_on_every_keystroke():
+    """🐛 THE DEPLOYED DEFECT, AND IT MADE THE FEATURE UNUSABLE. `setNote` runs on every keystroke,
+    and it trimmed — so the space a user typed was removed before the next character could follow
+    it, and a note came out as "jmarrchaseisherebecauseiwantawrhigher".
+
+    ⚠️ WHY NOTHING CAUGHT IT: the E2E drove the box with Playwright's `fill()`, which sets the whole
+    value in ONE event. A per-keystroke defect is structurally invisible to that — the spec now uses
+    `pressSequentially`, and the pure clause replays the value one character at a time.
+
+    The normalisation still happens; it happens ONCE, where typing has stopped.
+    """
+    lib = _ts("lib/big-board.ts")
+    body = lib[lib.index("export function setNote") : lib.index("export function trimNotes")]
+    assert ".trim()" not in body.split("if (!raw.trim())")[0], (
+        "setNote normalises the value it stores, on every keystroke"
+    )
+    assert "export function trimNotes" in lib
+
+    src = _ts("components/fantasy/big-board.tsx")
+    assert "edit(trimNotes)" in src, "closing the note editor never normalises what was typed"
+    assert "trimNotes(doc)" in src, "the save sends an un-normalised document"
+
+
+def test_the_site_footer_does_not_print():
+    """⚠️ REPORTED OFF A REAL PRINTOUT: a whole extra page of dead nav links under the cheat sheet.
+
+    `SiteFooter` is mounted in the ROOT LAYOUT, so it is a SIBLING of the page — there is no
+    `print:hidden` a page component could put on it, which is why this is a stylesheet rule keyed on
+    a marker the page renders rather than a class.
+    """
+    css = (_FRONTEND / "app/globals.css").read_text()
+    block = css[css.index("@media print") :]
+    # ⚠️ THE WHOLE RULE, NOT ITS WORDS. A first cut asserted that "footer" and "display: none" both
+    # appeared somewhere in the print block — which a rule whose SELECTOR had been broken still
+    # satisfies, and the red proof caught it staying green (this file's own vacuous-guard rule).
+    assert re.search(
+        r"body:has\(\[data-printable-surface\]\)\s+footer\s*\{[^}]*display:\s*none",
+        block,
+    ), "the site footer no longer has a print rule that reaches it"
+    assert "data-printable-surface" in _ts("components/fantasy/big-board.tsx"), (
+        "the rule keys on a marker the page never renders"
+    )
+
+
+def test_the_printed_header_uses_the_mark_that_survives_white_paper():
+    """⭐ NOT A STYLE PREFERENCE. The shipped wordmark is white-on-dark, and the entire reason this
+    stylesheet exists is that browsers do not print backgrounds — so the site's own mark would print
+    white on white paper, i.e. not at all. An `<img>` is also the one thing the global print colour
+    reset cannot reach (CSS does not cross into an external SVG), so it has to be the right FILE."""
+    src = _ts("components/fantasy/big-board.tsx")
+    sheet = src[src.index("function CheatSheet") :]
+    header = sheet[sheet.index("print:flex") :]
+    header = header[: header.index("</div>")]
+    assert "black-logo-wordmark" in header, "the printed sheet carries the white-on-dark mark"
+    assert "/brand/white-logo-wordmark" not in header

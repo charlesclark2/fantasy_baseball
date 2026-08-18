@@ -265,4 +265,17 @@
     break-inside: avoid;
     page-break-inside: avoid;
   }
+
+  /* ⭐ THE SITE FOOTER IS CHROME TOO, and it printed a whole extra page of dead links — reported
+     off a real printout. Scoped with `:has()` to pages that actually render a printable sheet,
+     rather than hidden site-wide: this story owns how the cheat sheet prints and does not own how
+     /privacy or a blog post prints. A browser without `:has()` degrades to today's behaviour
+     (the footer prints) rather than to something worse.
+
+     ⚠️ `SiteFooter` lives in the ROOT LAYOUT, so it is a SIBLING of the page — there is no
+     `print:hidden` a page component could put on it. That is why this is a stylesheet rule and not
+     a class, and why the rule keys on a marker the page renders (`[data-printable-surface]`). */
+  body:has([data-printable-surface]) footer {
+    display: none !important;
+  }
 }
