@@ -30,7 +30,7 @@ import Link from "next/link"
 import { GripVertical, Printer, Search, Star, Ban, Scissors, RotateCcw, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Picker } from "@/components/ui/picker"
-import { InfoTip, PosBadge, num, teamLabel } from "@/components/fantasy/shared"
+import { ALL_ROWS, InfoTip, PosBadge, num, teamLabel } from "@/components/fantasy/shared"
 import { type LeagueConfigMeta, type Player } from "@/lib/draft-optimizer"
 import {
   EMPTY_DOC,
@@ -62,8 +62,13 @@ const SEASON = FANTASY_SEASON
 const FILTER_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DST"] as const
 /** How deep the board renders. A big board is a draft-day sheet, not a database view — and 858
  *  simultaneously-draggable rows is a real interaction cost on a phone. The depth is the user's
- *  choice and it bounds only the RENDER: the saved document and the ordering are untouched. */
-const DEPTHS = [100, 200, 300, 858] as const
+ *  choice and it bounds only the RENDER: the saved document and the ordering are untouched.
+ *
+ *  ⚠️ THE "WHOLE BOARD" OPTION IS A SENTINEL, NOT A NUMBER. Writing today's row count (858) here
+ *  would make the label a claim about the board rather than about the choice — and a wrong one the
+ *  first time an export lands on 870 rows, with nothing in the product to contradict it. `ALL_ROWS`
+ *  is the same sentinel the Projections pager already uses. */
+const DEPTHS = [100, 200, 300, ALL_ROWS] as const
 const DEFAULT_DEPTH = 200
 
 type SaveState =
@@ -167,10 +172,13 @@ export function BigBoard() {
   /** The rows on screen. A filter NARROWS what is shown; it never changes the ranking, so a row's
    *  number is always its place on the whole board — a "#3" that means "third of the WRs I have
    *  filtered to" would be a different number wearing the same label. */
+  /** The sentinel resolved against THIS board's real length — never a hardcoded row count. */
+  const shownDepth = depth === ALL_ROWS ? ordered.length : depth
+
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
     const rows = ordered
-      .slice(0, depth)
+      .slice(0, shownDepth)
       .map((p, i) => ({ player: p, index: i }))
       .filter(
         (r) =>
@@ -178,7 +186,7 @@ export function BigBoard() {
           (!q || r.player.name.toLowerCase().includes(q)),
       )
     return rows
-  }, [ordered, depth, posFilter, search])
+  }, [ordered, shownDepth, posFilter, search])
 
   // ── drag to reorder ───────────────────────────────────────────────────────────────────────────
   //
@@ -253,8 +261,8 @@ export function BigBoard() {
   }
 
   const sheet = useMemo(
-    () => (board ? cheatSheet(board, doc, depth) : []),
-    [board, doc, depth],
+    () => (board ? cheatSheet(board, doc, shownDepth) : []),
+    [board, doc, shownDepth],
   )
 
   const sheetText = useMemo(() => {
@@ -352,7 +360,7 @@ export function BigBoard() {
                 className="w-full rounded-md border border-[#262626] bg-[#0a0a0a] px-3 py-2 text-base text-white sm:text-sm"
                 options={DEPTHS.map((d) => ({
                   value: String(d),
-                  label: d >= 858 ? "Whole board" : `Top ${d}`,
+                  label: d === ALL_ROWS ? "Whole board" : `Top ${d}`,
                 }))}
               />
             </Field>
@@ -620,10 +628,10 @@ export function BigBoard() {
             </div>
           </div>
 
-          {ordered.length > depth && (
+          {ordered.length > shownDepth && (
             <p className="mt-2 text-xs text-gray-600">
-              Showing the top {depth} of {ordered.length}. Your saved board keeps every change you
-              make, whatever depth you are viewing.
+              Showing the top {shownDepth} of {ordered.length}. Your saved board keeps every change
+              you make, whatever depth you are viewing.
             </p>
           )}
         </>
@@ -633,7 +641,7 @@ export function BigBoard() {
         <CheatSheet
           sections={sheet}
           title={`${config?.label ?? configName} · ${size}-team · ${SEASON}`}
-          shown={Math.min(depth, ordered.length)}
+          shown={Math.min(shownDepth, ordered.length)}
           total={ordered.length}
           onCopy={copySheet}
           copied={copied}

@@ -241,6 +241,11 @@ CASES = [
     # phone-width page-overflow assertion. Measured: with only `min-w-0` gone, the E2E stays green,
     # because this container's parent is a block. Saying so here is what keeps the source clause
     # honest about what it is defending.
+    ("hardcode today's row count as the whole-board depth", COMPONENT,
+     "                  label: d === ALL_ROWS ? \"Whole board\" : `Top ${d}`,",
+     "                  label: d === 858 ? \"Whole board\" : `Top ${d}`,",
+     "test_the_board_depth_control_states_no_row_count_of_its_own"),
+
     ("drop the scroll container's overflow and its min-width tripwire", COMPONENT,
      'className="min-w-0 overflow-x-auto rounded-lg border border-[#262626] bg-[#0f0f0f]"',
      'className="rounded-lg border border-[#262626] bg-[#0f0f0f]"',

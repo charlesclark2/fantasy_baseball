@@ -123,6 +123,37 @@ def test_the_custom_board_routes_are_not_in_the_degrade_floor(prefix):
     )
 
 
+@pytest.mark.parametrize("prefix", [r[0] for r in cost_guardrails._PUBLIC_CACHE_RULES])
+def test_the_custom_board_routes_never_get_a_public_cache_header(prefix):
+    """⛔ A SHARED CACHE ENTRY HERE WOULD HAND ONE USER'S BOARD TO ANOTHER.
+
+    ⚠️ THE SAME PREFIX-COLLISION HAZARD AS THE DEGRADE FLOOR, with a worse consequence. Matching is
+    `== prefix or startswith(prefix + "/")` and `/fantasy/nfl/board` is a public-cached prefix, so a
+    route named `/fantasy/nfl/board/custom` would have inherited a 900s public TTL silently. It is
+    ALSO defended structurally — every request here carries `Authorization`, and
+    `cache_control_for` answers `private, no-store` unconditionally when it sees one — but a naming
+    accident should not have to rely on the second line of defence.
+    """
+    path = "/fantasy/nfl/custom-boards"
+    assert not (path == prefix or path.startswith(prefix + "/")), (
+        f"the custom-board route is covered by the public cache prefix {prefix!r}"
+    )
+    # ...and the structural guarantee, asserted rather than trusted.
+    assert (
+        cost_guardrails.cache_control_for(path, has_authorization=True, status_code=200)
+        == cost_guardrails.PRIVATE_CACHE_CONTROL
+    )
+
+
+def test_the_board_depth_control_states_no_row_count_of_its_own():
+    """A "Whole board" option written as today's row count (858) is a claim about the BOARD dressed
+    as a choice — and a wrong one the first time an export lands on 870 rows, with nothing in the
+    product to contradict it. The depth resolves against the board's own length."""
+    src = _ts("components/fantasy/big-board.tsx")
+    assert "858" not in src, "the board depth control hardcodes a row count"
+    assert "depth === ALL_ROWS ? ordered.length : depth" in src
+
+
 def test_the_custom_board_routes_are_not_in_the_public_cdn_allowlist():
     """A per-caller payload in a shared edge cache hands one user's board to another. The CDN route
     is an allowlist, so the assertion is simply that nothing added an entry."""
