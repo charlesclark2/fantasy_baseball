@@ -335,14 +335,52 @@ def write_report(manifest: dict) -> None:
         "real data: **all 25 served non-pace columns reproduce the P1.3 matrix to float noise "
         "(max |Δ| 6.75e-14) across 807 games**, at each game's own as-of week.",
         "",
-        "## ⏭️ The operator prerequisite (quality, not a blocker)",
+        "## ⏭️ The operator prerequisite — the P1.2 re-fit (✅ done 2026-08-18)",
         "",
-        "**Run the close-to-kickoff P1.2 RE-FIT before the first real snapshot.** Until fall-camp "
-        "covariates publish, the strength mart carries the pre-season COLD START — a 2025 "
-        "carry-forward, which is why the current 2026 board has Indiana leading. A snapshot is by "
-        "design immutable and cannot be retaken after kickoff, so firing before the re-fit would "
-        "freeze the cold start into the permanent forward record. The schedule therefore ships "
-        "`default_status=STOPPED`; enable it only after the re-fit.",
+        "A snapshot is immutable by design, so the season's P1.2 re-fit had to land BEFORE the "
+        "first one. It has. Recorded here because two things about it are easy to get wrong.",
+        "",
+        "**1. It is not one command.** P1.2 reads its covariates from the sports DuckDB MARTS "
+        "(`ncaaf_team_roster_continuity`, `ncaaf_team_coaching_change`), not from the lake. So "
+        "`run_team_strength` run against stale marts silently reproduces the cold start and looks "
+        "successful — which is exactly what happened on 2026-08-17 (the Delta log shows the "
+        "per-season writes; the output still had every covariate component at 0). The marts must "
+        "be rebuilt from the fresh lake FIRST — the INC-25 build-ordering class:",
+        "",
+        "```bash",
+        "cd quant_sports_intel_models/sports_dbt",
+        "AWS_DEFAULT_REGION=us-east-2 uv run python -m dbt.cli.main run \\",
+        "  --select ncaaf.staging --threads 1 --project-dir . --profiles-dir .   # ~70s",
+        "AWS_DEFAULT_REGION=us-east-2 uv run python -m dbt.cli.main run \\",
+        "  --select ncaaf.marts --project-dir . --profiles-dir .                 # ~20s",
+        "cd - && uv run python -m quant_sports_intel_models.football.ncaaf.models.run_team_strength --s3",
+        "```",
+        "",
+        "**2. Verify it TOOK, not merely that it ran** — the check that separates the two is "
+        "whether the covariate components are non-zero:",
+        "",
+        "```sql",
+        "select as_of_week,",
+        "  sum(case when covariate_component_roster_flux <> 0 then 1 else 0 end) roster_flux,",
+        "  sum(case when covariate_component_coaching     <> 0 then 1 else 0 end) coaching,",
+        "  count(*) teams",
+        "from delta_scan('.../ncaaf/derived/team_strength_week') where season = <season> group by 1",
+        "```",
+        "",
+        "0 / 0 / 138 is the cold start; 136 / 136 / 138 is a real re-fit.",
+        "",
+        "**What the re-fit actually fixed** (worth stating, because the P0.7 note described the "
+        "symptom differently): the cold start does not mis-ORDER the board so much as COMPRESS it "
+        "toward the mean. Ohio State went from +19.7 to **+40.4** over Ball State and the slate's "
+        "P(home win) span from 0.356-0.883 to **0.117-0.992**; the futures board sharpened from a "
+        "flat 7.4%/4.9% at the top to 12.4%/11.9%. Indiana still leads the strength board after "
+        "the re-fit, so \"Indiana leads\" was never the cold-start tell — compression was.",
+        "",
+        "**No train/serve mismatch:** the re-fit rewrote only 2026. Seasons 2024 and 2025 are "
+        "byte-identical across vintages (max |Δ| 0.0 over 2,144 / 2,176 rows), so the served P1.4 "
+        "ridge and σ — fitted on 2015-2025 — still describe their training data exactly. The "
+        "re-fit moved 2026 ONTO that manifold (covariates present, as in every training season), "
+        "not off it.",
         "",
     ]
     _REPORT_PATH.write_text("\n".join(lines) + "\n")
