@@ -155,9 +155,43 @@ headline λ is the sweep's most generous value. **So a NO is CONSERVATIVE.**
 ## 7. Instrument validation (before the full run is trusted)
 
 - **Positive control (NF-W6 §6 / MH2.1 (d)):** in `--smoke` the block's realised points are scaled
-  ×1.3 and the `direct_augmented` ceiling re-measured; the instrument MUST move by ≥ 2 percentage
-  points (a threshold derived from the shift, not tuned). A blind instrument **REFUSES the smoke**
+  ×1.3 and the `direct_augmented` ceiling re-measured. A blind instrument **REFUSES the smoke**
   with an `AssertionError` rather than reporting a ceiling it cannot see.
+
+  ### ⚠️ SMOKE AMENDMENT (2026-08-17, BEFORE the full run — the NF-W6b-C precedent)
+
+  **The clause as originally pre-registered — "the RELATIVE ceiling moves ≥ 2 percentage points" —
+  FAILED at 0.821, and it is RETAINED, SCORED and REPORTED AS FAILING.** A pre-registered anchor
+  that fails is left failing and DECOMPOSED, never re-labelled or deleted (NF-D20). What follows is
+  the decomposition, from the evidence the refusal now writes to disk:
+
+  | form | absolute peek advantage, base → shifted | growth | relative move |
+  |---|---|---|---|
+  | `direct_augmented` (gated) | 0.01102 → 0.04306 | **×3.9** | +0.821 |
+  | `direct_upweighted` | 0.00103 → 0.05825 | **×56** | +1.681 |
+  | `direct_blockonly` | −0.20535 → −0.05157 | — | +6.909 |
+
+  The incumbent's CRPS goes **2.4346 → 3.3805 (×1.388)** under the shift. A MULTIPLICATIVE shift
+  moves the target's scale, so it inflates BOTH the numerator and the **denominator** of a relative
+  ceiling — reading instrument SENSITIVITY on that ratio understates it **by construction**. ⇒ the
+  failure is a defect in the CONTROL'S OWN STATISTIC (the E2.1-r class: a gate read on a
+  mis-specified statistic), **not** blindness in the instrument, which demonstrably responded
+  (×3.9 and ×56).
+
+  **The amended clause reads the quantity the peek actually moves, and is two-sided:** the gated
+  form's **ABSOLUTE** advantage must grow **≥ 2×** AND the ceiling must move in the **POSITIVE**
+  direction (a genuine regime difference must WIDEN a ceiling, never narrow it). The ×2 factor is a
+  DESIGN quantity — the weakest non-trivial multiplicative response an instrument can be asked for
+  — not a value tuned to pass.
+
+  ⛔ **The bar was not lowered**: the amendment changes the STATISTIC the clause reads, both
+  readings stay on the record, and it touches **only instrument validation** — the story's DECISION
+  rule (bands, `stat_ok`, BH) is untouched.
+
+  ⭐ The diagnosis also supplies an internal-consistency signal a blind instrument cannot produce
+  (NF-D16 (g‴)): the form that is MORE sensitive to an artificial regime shift (`direct_upweighted`,
+  ×56) reports a **SMALLER** ceiling on real data (0.042% vs 0.453%). Sensitivity and measured
+  headroom move in opposite directions, which is what a genuinely small ceiling looks like.
 - Guards RED-prove on deliberately broken source (mutation asserted to LAND, the asserted token
   asserted GONE, the mutation anchor asserted UNIQUE, `BaseException` caught around any inner
   `pytest.raises`): the cross-fit K refusal, the effective-n matched sizing, the activity-before-

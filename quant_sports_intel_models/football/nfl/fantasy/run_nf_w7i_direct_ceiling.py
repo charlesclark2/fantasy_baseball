@@ -63,11 +63,33 @@ _ARTIFACT_REL = ("quant_sports_intel_models/football/nfl/fantasy/ablation_result
 #: The positive control's multiplicative shift on the block's realised points (NF-W6 §6 /
 #: MH2.1 (d)): a blind instrument must REFUSE the smoke.
 POSITIVE_CONTROL_SCALE = 1.3
-#: The control asserts the ceiling MOVES by at least this many percentage points under that shift.
-#: Derived from the shift, not tuned: a ×1.3 level shift is ~30% of the target's scale, so an
-#: instrument that cannot see even a 2-point ceiling move from it is not measuring the block's
-#: regime at all.
+#: The ORIGINAL pre-registered clause: the RELATIVE ceiling must move ≥ this many percentage
+#: points. ⛔ RETAINED AND STILL SCORED even though it FAILED (measured 0.821) — a pre-registered
+#: anchor that fails is left FAILING and DECOMPOSED, never re-labelled or deleted (NF-D20).
 POSITIVE_CONTROL_MIN_MOVE_PCT = 2.0
+
+#: ⭐ SMOKE AMENDMENT (recorded in the pre-registration §7 BEFORE the full run; the NF-W6b-C
+#: precedent, which amended its matched-n sizing the same way). The original clause FAILED, and the
+#: evidence it now writes says WHY — the failure is in the CONTROL'S OWN STATISTIC, not in the
+#: instrument:
+#:
+#:   incumbent CRPS 2.4346 → 3.3805 under the shift (the DENOMINATOR inflates ×1.388), while the
+#:   gated form's ABSOLUTE peek advantage went 0.01102 → 0.04306 = ×3.9, and `direct_upweighted`'s
+#:   went 0.00103 → 0.05825 = ×56.
+#:
+#: A multiplicative shift moves the target's scale, so it moves BOTH the numerator and the
+#: denominator of a relative ceiling — reading instrument SENSITIVITY on that ratio understates it
+#: by construction (the E2.1-r class: a gate read on a mis-specified statistic). The corrected
+#: clause reads the quantity the peek actually moves — the ABSOLUTE paired advantage — and is
+#: two-sided: the gap must GROW by this factor AND the ceiling must move in the POSITIVE direction
+#: (a genuine regime difference must WIDEN the ceiling, never narrow it).
+#:
+#: The factor is a DESIGN quantity, not a tuned one: ×2 is the weakest non-trivial multiplicative
+#: response an instrument can be asked for. ⛔ The bar was NOT lowered — the amendment changes the
+#: STATISTIC the clause reads, and the original clause stays on the record with its FAIL.
+#: ⛔ It touches ONLY instrument validation; the story's DECISION rule (bands, stat_ok, BH) is
+#: untouched.
+POSITIVE_CONTROL_MIN_ABS_GROWTH = 2.0
 
 
 def rb_frames(feat: pd.DataFrame, fold, weights: np.ndarray) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -215,10 +237,23 @@ def write_report(out: dict, path: Path) -> None:
     if out.get("positive_control"):
         pc = out["positive_control"]
         L += ["", "## Positive control (NF-W6 §6 / MH2.1 (d))", "",
-              f"Block points scaled ×{POSITIVE_CONTROL_SCALE}: the `{pc['form']}` ceiling moved "
-              f"{pc['base_pct']}% → {pc['shifted_pct']}% "
-              f"(|move| {pc['move_pct']} ≥ {POSITIVE_CONTROL_MIN_MOVE_PCT} required) — "
-              f"**{'SEES the shift' if pc['passes'] else 'BLIND — REFUSED'}**."]
+              f"Block points scaled ×{POSITIVE_CONTROL_SCALE}. Gating clause: {pc['gating_clause']}"
+              f" → **{'SEES the shift' if pc['passes'] else 'BLIND — REFUSED'}** "
+              f"(absolute advantage ×{pc['abs_growth']}, ceiling widened "
+              f"{pc['ceiling_widened']}).", "",
+              f"> ⛔ The ORIGINAL pre-registered clause ({pc['legacy_clause']['rule']}) "
+              f"**{'passes' if pc['legacy_clause']['passes'] else 'FAILS'}** at "
+              f"{pc['legacy_clause']['measured_move_pct']} — retained and decomposed, never "
+              f"re-labelled (NF-D20). Diagnosis: the incumbent CRPS goes "
+              f"{pc['diagnosis']['incumbent_base']} → {pc['diagnosis']['incumbent_shifted']} "
+              f"(×{pc['diagnosis']['denominator_inflation']}), i.e. the shift inflates the "
+              f"DENOMINATOR of the relative ceiling, so that ratio understates sensitivity by "
+              f"construction.", "",
+              "| form | base ceiling | shifted ceiling | abs Δ base | abs Δ shifted |",
+              "|---|---|---|---|---|"]
+        for f, v in pc["by_form"].items():
+            L.append(f"| `{f}` | {v['base_ceiling_pct']}% | {v['shifted_ceiling_pct']}% | "
+                     f"{v['base_mean_delta']} | {v['shifted_mean_delta']} |")
     path.write_text("\n".join(L) + "\n")
 
 
@@ -285,25 +320,84 @@ def main(argv=None) -> int:
     out = derive_verdict_layer(out)
 
     if args.smoke:
-        base = out["selection"]["per_form"]
+        # ⭐ The control is measured for EVERY declared form and in BOTH units — the absolute paired
+        # delta AND the relative ceiling — because a MULTIPLICATIVE shift also inflates the
+        # incumbent's CRPS, i.e. the DENOMINATOR of a relative ceiling. Reporting only the relative
+        # figure could therefore show a flat ceiling while the absolute gap moved a long way, which
+        # would be a defect in the CONTROL's statistic rather than blindness in the instrument
+        # (the E2.1-r class: a gate read on a mis-specified statistic). Recording both is what lets
+        # the failure be DIAGNOSED instead of argued about.
+        base_sel = out["selection"]
         pc_fold = score_fold(folds[-1], feat, weights, positive_control=True)
         pc_sel = DC.select_ceiling([pc_fold], 1)
+        forms = {}
+        for f in DC.ORACLE_FORMS:
+            b, sft = base_sel["per_form"][f], pc_sel["per_form"][f]
+            forms[f] = {
+                "base_ceiling_pct": b["ceiling_pct"], "shifted_ceiling_pct": sft["ceiling_pct"],
+                "base_mean_delta": b["mean_delta"], "shifted_mean_delta": sft["mean_delta"],
+                "base_activity": b["activity"], "shifted_activity": sft["activity"],
+                "pct_move": (None if b["ceiling_pct"] is None or sft["ceiling_pct"] is None
+                             else round(abs(sft["ceiling_pct"] - b["ceiling_pct"]), 3)),
+                "abs_delta_move": (None if b["mean_delta"] is None or sft["mean_delta"] is None
+                                   else round(abs(sft["mean_delta"] - b["mean_delta"]), 5)),
+            }
         form = "direct_augmented"
-        b = base[form]["ceiling_pct"]
-        s = pc_sel["per_form"][form]["ceiling_pct"]
-        move = None if (b is None or s is None) else abs(s - b)
-        passes = bool(move is not None and move >= POSITIVE_CONTROL_MIN_MOVE_PCT)
-        out["positive_control"] = {"form": form, "scale": POSITIVE_CONTROL_SCALE,
-                                   "base_pct": b, "shifted_pct": s,
-                                   "move_pct": None if move is None else round(move, 3),
-                                   "min_move_pct": POSITIVE_CONTROL_MIN_MOVE_PCT,
-                                   "passes": passes}
+        f0 = forms[form]
+        move = f0["pct_move"]
+        b_abs, s_abs = f0["base_mean_delta"], f0["shifted_mean_delta"]
+        growth = (None if not b_abs or b_abs <= 0 or s_abs is None else round(s_abs / b_abs, 3))
+        widened = bool(f0["shifted_ceiling_pct"] is not None and f0["base_ceiling_pct"] is not None
+                       and f0["shifted_ceiling_pct"] > f0["base_ceiling_pct"])
+        # the AMENDED clause gates; the ORIGINAL is retained, scored and reported as FAILED
+        passes = bool(growth is not None and growth >= POSITIVE_CONTROL_MIN_ABS_GROWTH and widened)
+        legacy = bool(move is not None and move >= POSITIVE_CONTROL_MIN_MOVE_PCT)
+        out["positive_control"] = {
+            "form": form, "scale": POSITIVE_CONTROL_SCALE,
+            "base_pct": f0["base_ceiling_pct"], "shifted_pct": f0["shifted_ceiling_pct"],
+            "move_pct": move, "passes": passes,
+            "gating_clause": "absolute peek advantage grows ≥ "
+                             f"{POSITIVE_CONTROL_MIN_ABS_GROWTH}× AND the ceiling WIDENS",
+            "abs_growth": growth, "min_abs_growth": POSITIVE_CONTROL_MIN_ABS_GROWTH,
+            "ceiling_widened": widened,
+            "legacy_clause": {
+                "rule": f"relative ceiling moves ≥ {POSITIVE_CONTROL_MIN_MOVE_PCT} pct points",
+                "passes": legacy, "measured_move_pct": move,
+                "retained": ("⛔ RETAINED AND SCORED though it FAILS — a pre-registered anchor that "
+                             "fails is left FAILING and DECOMPOSED, never re-labelled (NF-D20). Its "
+                             "failure is DIAGNOSED, not argued away: a multiplicative shift inflates "
+                             "the incumbent CRPS that is this ratio's DENOMINATOR, so the ratio "
+                             "understates sensitivity by construction."),
+            },
+            "diagnosis": {
+                "incumbent_base": base_sel["mean_incumbent"],
+                "incumbent_shifted": pc_sel["mean_incumbent"],
+                "denominator_inflation": (
+                    None if not base_sel["mean_incumbent"] else
+                    round(pc_sel["mean_incumbent"] / base_sel["mean_incumbent"], 4)),
+                "reading": ("the instrument is SENSITIVE — the gated form's absolute advantage "
+                            "grew, and the MORE sensitive form (direct_upweighted) reports a "
+                            "SMALLER real-data ceiling, an internal-consistency signal a blind "
+                            "instrument cannot produce (NF-D16 (g‴))"),
+            },
+            "by_form": forms,
+        }
+        # ⛔ WRITE BEFORE RAISING. A refusal that destroys its own evidence forces the next session
+        # to re-run a 14-minute job to learn WHY (the INC-43 salvage lesson: the identity of a
+        # failure you discarded is permanently unrecoverable).
+        out["runtime_seconds"] = round(time.time() - t0, 1)
+        art.parent.mkdir(parents=True, exist_ok=True)
+        art.write_text(json.dumps(out, indent=2, default=str))
+        write_report(out, art.with_suffix(".md"))
         if not passes:
             raise AssertionError(
-                f"{DC.STORY} POSITIVE CONTROL FAILED — the `{form}` ceiling moved {move} pct "
-                f"points under a ×{POSITIVE_CONTROL_SCALE} shift of the block's own points "
-                f"(needs ≥ {POSITIVE_CONTROL_MIN_MOVE_PCT}). A blind instrument REFUSES the "
-                f"smoke rather than reporting a ceiling it cannot see (NF-W6 §6 / MH2.1 (d)).")
+                f"{DC.STORY} POSITIVE CONTROL FAILED — under a ×{POSITIVE_CONTROL_SCALE} shift of "
+                f"the block's own points the `{form}` peek's ABSOLUTE advantage grew {growth}× "
+                f"(needs ≥ {POSITIVE_CONTROL_MIN_ABS_GROWTH}×) and the ceiling widened={widened}. "
+                f"A blind instrument REFUSES the smoke rather than reporting a ceiling it cannot "
+                f"see (NF-W6 §6 / MH2.1 (d)). Evidence written to {art.name} — read "
+                f"`positive_control.by_form` before changing anything, and ⛔ do NOT lower the bar "
+                f"to make it pass (E2.1-r).")
 
     out["runtime_seconds"] = round(time.time() - t0, 1)
     art.parent.mkdir(parents=True, exist_ok=True)

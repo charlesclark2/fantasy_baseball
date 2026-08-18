@@ -323,10 +323,56 @@ def test_the_story_is_deploy_held_and_writes_no_serving_surface():
 
 def test_the_positive_control_is_wired_and_fails_the_smoke_when_blind():
     src = _src(_RUNNER)
-    assert "POSITIVE_CONTROL_MIN_MOVE_PCT" in src
+    assert "POSITIVE_CONTROL_MIN_ABS_GROWTH" in src
     assert "raise AssertionError" in src, (
         "a blind instrument must REFUSE the smoke, not report a ceiling it cannot see")
     assert "positive_control=True" in src
+
+
+def test_the_failed_original_control_clause_is_retained_and_still_scored():
+    """NF-D20: a pre-registered anchor that FAILS is left failing and DECOMPOSED, never deleted or
+    re-labelled. The amendment changed which STATISTIC gates; it must not erase the original."""
+    src = _src(_RUNNER)
+    assert "POSITIVE_CONTROL_MIN_MOVE_PCT" in src, "the original clause was deleted, not retained"
+    # ⛔ the KEY the payload is written under — not a loose substring, which the report writer's
+    # own `pc['legacy_clause']` reference would satisfy even with the payload key renamed away
+    assert '"legacy_clause": {' in src, (
+        "the original clause must still be SCORED into the artifact, not merely referenced")
+    assert '"measured_move_pct": move' in src
+
+
+def test_the_control_gates_on_the_absolute_advantage_not_the_ratio():
+    """A multiplicative shift inflates the incumbent CRPS that is the relative ceiling's
+    DENOMINATOR, so reading sensitivity on that ratio understates it by construction.
+
+    ⛔ Asserts the GATING EXPRESSION itself, not that the words appear somewhere in the file — the
+    reported payload carries `abs_growth`/`ceiling_widened` regardless of what actually gates.
+    """
+    src = _src(_RUNNER)
+    gate = re.search(r"^\s*passes = .*$", src, re.M)
+    assert gate, "no `passes = …` gating assignment found"
+    expr = gate.group(0)
+    assert "growth" in expr and "MIN_ABS_GROWTH" in expr, (
+        f"the control gates on {expr.strip()!r} — sensitivity must be read on the ABSOLUTE peek "
+        "advantage, not the ratio the shift itself inflates")
+    assert "widened" in expr, (
+        "the amended clause must be TWO-SIDED — a regime difference must WIDEN a ceiling")
+
+
+def test_the_control_writes_its_evidence_before_it_raises():
+    """INC-43 salvage: a refusal that destroys its own evidence forces the next session to re-run a
+    14-minute job to learn why.
+
+    ⛔ Scoped to the SMOKE block. A file-wide index comparison is vacuous — `--rewrite-report`
+    writes a report near the top of `main`, so the naive check passes with the smoke block's write
+    deleted outright.
+    """
+    src = _src(_RUNNER)
+    block = src[src.index("if args.smoke:", src.index("def main(")):]
+    raise_at = block.index("if not passes:")
+    assert "write_report(" in block[:raise_at], (
+        "the smoke block raises WITHOUT writing its evidence first — the next session would have "
+        "to re-run the whole job to learn why the control failed")
 
 
 def test_the_runner_records_the_premise_correction_it_is_built_on():
