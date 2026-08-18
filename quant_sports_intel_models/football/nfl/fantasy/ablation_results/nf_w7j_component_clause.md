@@ -1,6 +1,6 @@
 # NF-W7j — the COMPONENT-CLAUSE decision + the served-cell audit
 
-Generated 2026-08-18T07:43:43.254455+00:00 · position **QB** · 8 folds · re-derived from NF-W7f's STORED fold results at ZERO refit
+Generated 2026-08-18T07:45:41.528414+00:00 · position **QB** · 8 folds · re-derived from NF-W7f's STORED fold results at ZERO refit
 
 ⚖️ `best_alpha = 0` · **DEPLOY-HELD** · research-only. ⛔ This story re-scores ONE clause; NF-W7f's scores are untouched and reproduce byte-identically (prereg §3).
 
@@ -22,7 +22,7 @@ Generated 2026-08-18T07:43:43.254455+00:00 · position **QB** · 8 folds · re-d
 
 **PASS** — the NF-W6d per-stat cells NF-W7f's recalibration degrades reach NO serving surface — not the published board, not the entitled stat line, not the scorer
 
-> This is the question NF-W7f §12.5b(3) left explicitly unresolved. It is answered by a transitive import-closure walk over the serving plane — ⛔ not by a grep over one file (INC-27) and not by argument.
+> This is the question NF-W7f §12.5b(3) left explicitly unresolved. It is answered by MEASUREMENT over the serving plane — a transitive import-closure walk AND a by-path artifact scan — ⛔ not by a grep over one file (INC-27) and not by argument.
 
 | serving-plane entry point | modules in closure | import hits | artifact-path hits |
 |---|---|---|---|

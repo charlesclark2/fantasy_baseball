@@ -498,8 +498,8 @@ def _md(payload: dict) -> str:
     L.append(f"**{'PASS' if a['passes'] else 'FAIL'}** — {a['reading']}")
     L.append("")
     L.append("> This is the question NF-W7f §12.5b(3) left explicitly unresolved. It is answered by "
-             "a transitive import-closure walk over the serving plane — ⛔ not by a grep over one "
-             "file (INC-27) and not by argument.")
+             "MEASUREMENT over the serving plane — a transitive import-closure walk AND a by-path "
+             "artifact scan — ⛔ not by a grep over one file (INC-27) and not by argument.")
     L.append("")
     L.append("| serving-plane entry point | modules in closure | import hits | artifact-path hits |")
     L.append("|---|---|---|---|")
