@@ -130,12 +130,53 @@ debutants.
   unwiring the daily pass — the cadence that keeps `mlb_played_last` current — stayed green. The
   clause was strengthened to the invariant it actually names.
 
+## ⚠️ Running the profiles backfill: the mirror step is not optional
+
+`ingest_player_profiles.py backfill` writes **Snowflake only**. The dimension builder reads the
+**S3 mirror**. Nothing between them re-exports, because `reexport_player_profiles_op` is a leaf of
+the *weekly* job — so a backfill followed immediately by a rebuild changes **nothing**, silently,
+and the builder correctly reports `live name parts available: False`.
+
+The first box run hit exactly this (the runbook omitted the middle step). The correct order is:
+
+```
+ingest_player_profiles.py --s3 backfill          # Snowflake
+export_w4_raw_to_s3.py --table player_profiles_raw   # ← the mirror. Do not skip.
+build_ref_players_dimension.py                   # reads the mirror
+```
+
+This is the INC-25 mirror-trail shape, and it is worth noting that it bit the *operator procedure*
+rather than the code — the pipeline wiring already orders these correctly; a hand-run sequence has
+no such graph to enforce it. Measured on 2026-08-17: with the mirror step, `first+last parts` goes
+**24,299 → 24,503**, and the 204 players that gain parts are *exactly* the 204 newly-resolved 2026
+debutants. Their `player_name` also flips from the `full_name` fallback ("Juan Brito") to the
+canonical archive convention ("Brito, Juan") — expected, and the downstream normaliser in
+`betting_ml/utils/prop_edge.py` handles both.
+
+### Two notes on the added columns
+
+* The mirror exporter is `SELECT *`, so it carries `first_name`/`last_name` with no change. It adds
+  only TEXT columns, so the nullable-NUMBER→DOUBLE mirror-poisoning class (the `SLOT_n_PLAYER_ID`
+  incident) is not in play here.
+* On the **Snowflake** target, `stg_statsapi_player_profiles` reads the `lakehouse_ext` external
+  table, whose column list is fixed — so that branch will not expose the new parts until the ext
+  table DDL is regenerated. Nothing reads them there today (the builder reads the parquet directly),
+  but a future Snowflake-target consumer of the name parts needs that regeneration first.
+
 ## Verification status
 
 Locally verified: the merge SQL against real S3, the coverage numbers above, `dbt compile`
 (1,516/1,516), the guards and serving-ops shards, and all 9 guard clauses RED-proven with unique
 anchors and non-vacuity baselines.
 
-**Not yet verified — the runtime gate.** CI mocks all IO, so the writer and the op only prove out on
-a real box run. The merge bar is CI-green **and** the archive seed → builder → consumer chain run
-once on the box with 2026 players confirmed at the consumer. See the operator steps in the PR.
+**Runtime gate PASSED on the box, 2026-08-17:**
+
+```
+players with mlb_played_last = 2026: 1,384      (was 0)
+[METRIC] ref_players_current_season_players=1384
+stg_ref_players   2026-08-17 23:15   lag 1m   SLA 1800   OK
+```
+
+The dimension published, the INC-41 contract read `built_at` from inside the parquet and scored OK,
+and the idempotent `ALTER`s landed `first_name`/`last_name` on the live Snowflake table. The one
+remaining step is the mirror re-export above, which moves `first+last parts` 24,299 → 24,503.

@@ -169,8 +169,16 @@ def build_sql(live_cols: set[str], *, current_season: int) -> str:
       played_first/last  derived from the game data → archive
     """
     # Only reference live name-part columns that actually exist in the parquet today.
-    live_first = "l.first_name" if "first_name" in live_cols else "cast(null as varchar)"
-    live_last = "l.last_name" if "last_name" in live_cols else "cast(null as varchar)"
+    # ⚠️ BARE column names, NOT `l.`-qualified: these are interpolated into the INNER `live`
+    # subquery, whose only table is {LIVE_PREFIX} — the `l` alias belongs to the OUTER join and is
+    # not in scope here. The first cut wrote `l.first_name` and bound fine for weeks, because the
+    # `cast(null as varchar)` fallback carries no alias and the pre-backfill smoke only ever
+    # exercised THAT branch. The aliased branch first ran in production, where it raised
+    # `Binder Error: Referenced table "l" not found`. A conditional whose other arm is never
+    # invoked is untested however green the suite looks (NF-C0e "wired ≠ invoked"), which is why
+    # test_ref_players_dimension_build.py now runs BOTH arms through real DuckDB.
+    live_first = "first_name" if "first_name" in live_cols else "cast(null as varchar)"
+    live_last = "last_name" if "last_name" in live_cols else "cast(null as varchar)"
 
     return f"""
     with live as (
