@@ -254,7 +254,8 @@ def derive_verdict_layer(out: dict) -> dict:
     # (one common absolute σ_MC) and reported beside the measured share, never instead of it.
     required = MV.required_mc_share_for_ceiling(base, winner, QM.DSR_MIN)
     ci = MV.bootstrap_ceiling_dsr(d_primary, winner)
-    decision = MV.decide(scaling, ceiling["ceiling"]["dsr"], ci, ceiling["rungs"], QM.DSR_MIN)
+    decision = MV.decide(scaling, ceiling["ceiling"]["dsr"], ci, ceiling["rungs"], QM.DSR_MIN,
+                         ceiling_unbounded=bool(ceiling["ceiling"].get("unbounded")))
 
     # ── the null state, from the shared instrument (declared field size, never discovered) ──────
     # ⛔ the OBSERVED row, not a projected one: `classify_null` must describe the null NF-W7f
@@ -426,8 +427,10 @@ def write_report(out: dict, path: Path) -> None:
     for r in v["ceiling"]["rungs"]:
         lab = r["label"]          # each rung names itself; the identity row is NOT a draw count
         ok = r["dsr"] is not None and r["dsr"] >= v["dsr_min"]
-        L.append(f"| {lab} | {_f(r['winner_sharpe'], 3)} | {_f(r['sr0'], 3)} | "
-                 f"{_f(r['dsr'])} | {'✅' if ok else '❌'} |")
+        sr = "**unbounded**" if r.get("unbounded") else _f(r["winner_sharpe"], 3)
+        dsr = "**unbounded**" if r.get("unbounded") else _f(r["dsr"])
+        mark = "✅" if (ok or r.get("unbounded")) else "❌"
+        L.append(f"| {lab} | {sr} | {_f(r['sr0'], 3)} | {dsr} | {mark} |")
     L += ["", f"- the **observed** row is the registered NO-OP identity (prereg §3.2): the "
               f"projection at the observed sds must return NF-W7f's recorded DSR exactly, and it "
               f"returns {_f(v['ceiling']['rungs'][0]['dsr'])}",

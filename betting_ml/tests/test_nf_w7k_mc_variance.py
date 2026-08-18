@@ -156,6 +156,51 @@ class TestDecompositionCannotManufactureAFalseStop:
         assert MV.SEEDS[0] == MV.BASE_SEED, "the BASE seed must be NF-W7f's, or nothing pins"
 
 
+class TestADegenerateCeilingIsUnboundedNotZero:
+    """⭐ FOUND BY A GLUE PROOF OVER THE LIVE PATH, not by the suite — and it is the FALSE-STOP in
+    its most damaging form. When `het_var` comes out ≤ 0 the ceiling's target sd is 0, and a
+    zero-dispersion series with a positive mean has an INFINITE Sharpe. Read through the ordinary
+    `sd > 1e-12 else 0.0` guard it reported Sharpe **0.0** — turning the single most favourable
+    case for the lever into the least favourable one, on exactly the folds where the lever is most
+    alive."""
+
+    def test_a_zero_target_sd_reports_unbounded_rather_than_a_sharpe_of_zero(self):
+        base = _w7f_deltas()
+        target = {a: float(v.std(ddof=1)) for a, v in base.items()}
+        target[_WINNER] = 0.0
+        g = MV.project_gate(base, target, _WINNER)
+        assert g["unbounded"] is True
+        assert g["winner_sharpe"] is None, "an unbounded Sharpe must not be rendered as a number"
+        assert g["dsr"] is None and _WINNER in g["degenerate_arms"]
+
+    def test_an_unbounded_ceiling_cannot_refuse_the_lever(self):
+        """⛔ The ceiling exists to REFUSE when it is bounded below the bar. An unbounded ceiling
+        is the opposite evidence, so it must never fall through to `MC_LEVER_EXHAUSTED`."""
+        d = MV.decide(_ok_scaling(), None, {"evaluable": True, "lo": 0.0, "hi": 0.1},
+                      _rungs([0.1, 0.97, 0.99]), 0.95, ceiling_unbounded=True)
+        assert d["verdict"] == "FUND_HIGH_DRAW_RUN" and d["fund_phase_b"] is True
+        assert d["d2"] == 64_000, "funding must still pick the smallest CLEARING ladder rung"
+
+    def test_the_monotonicity_assertion_tolerates_an_unbounded_rung(self):
+        """A rung at +∞ cannot violate monotonicity; it must be excluded from the comparison
+        rather than read as a 0 that would look like a collapse."""
+        base = _w7f_deltas()
+        dec = {a: {"mc_var": float(v.var(ddof=1)), "het_var": -1e-9} for a, v in base.items()}
+        rep = MV.ceiling_report(base, dec, _WINNER)      # must not raise
+        assert rep["ceiling"]["unbounded"] is True
+
+    def test_the_bootstrap_keeps_unbounded_resamples_at_the_supremum(self):
+        """⛔ Dropping unbounded resamples would discard exactly the samples most favourable to the
+        lever, biasing the CI's UPPER end — the end the decision reads — downward, by an amount
+        that GROWS with how alive the lever is."""
+        folds = [f"f{i}" for i in range(8)]
+        # every fold identical across seeds within itself and identical across folds ⇒ het ≤ 0
+        by_arm = {a: {f: [0.02, 0.02, 0.02, 0.02, 0.02] for f in folds} for a in _ARMS}
+        by_arm[_WINNER] = {f: [0.05, 0.05, 0.05, 0.05, 0.05] for f in folds}
+        ci = MV.bootstrap_ceiling_dsr(by_arm, _WINNER, n_boot=300)
+        assert ci["evaluable"] is True and ci["hi"] == pytest.approx(1.0)
+
+
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # The scaling law — the extrapolation the whole decision rests on
 # ══════════════════════════════════════════════════════════════════════════════════════════════

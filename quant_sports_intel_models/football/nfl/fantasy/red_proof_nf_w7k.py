@@ -79,6 +79,30 @@ BREAKS: tuple[Break, ...] = (
           "⭐ two seeds share an RNG stream ⇒ the across-seed spread reads ZERO ⇒ the lever is "
           "closed on a measurement that never happened (the FALSE STOP)"),
 
+    Break("degenerate_ceiling_read_as_a_sharpe_of_zero", _MV,
+          "    if winner in degenerate:",
+          "    if False:",
+          ("TestADegenerateCeilingIsUnboundedNotZero::"
+           "test_a_zero_target_sd_reports_unbounded_rather_than_a_sharpe_of_zero",
+           "TestADegenerateCeilingIsUnboundedNotZero::"
+           "test_the_monotonicity_assertion_tolerates_an_unbounded_rung"),
+          "⭐ THE FALSE STOP IN ITS MOST DAMAGING FORM — a zero-dispersion ceiling has an INFINITE "
+          "Sharpe, and reading it as 0.0 inverts the most favourable case into the least"),
+    Break("unbounded_ceiling_falls_through_to_a_refusal", _MV,
+          "    if ceiling_unbounded:",
+          "    if False:",
+          ("TestADegenerateCeilingIsUnboundedNotZero::"
+           "test_an_unbounded_ceiling_cannot_refuse_the_lever",),
+          "an unbounded ceiling is evidence the lever is ALIVE; falling through to "
+          "MC_LEVER_EXHAUSTED would close it on the opposite of what was measured"),
+    Break("bootstrap_drops_unbounded_resamples", _MV,
+          '        if g.get("unbounded"):\n            vals.append(1.0)\n        elif g["dsr"] is not None:',
+          '        if g["dsr"] is not None:',
+          ("TestADegenerateCeilingIsUnboundedNotZero::"
+           "test_the_bootstrap_keeps_unbounded_resamples_at_the_supremum",),
+          "discards exactly the resamples most favourable to the lever, biasing the CI's UPPER "
+          "end — the end the decision reads — downward"),
+
     # ── the registered identities ─────────────────────────────────────────────────────────────
     Break("rescale_moves_the_mean", _MV,
           "    return mu + (d - mu) * (target_sd / sd)",
@@ -132,8 +156,10 @@ BREAKS: tuple[Break, ...] = (
           "the ceiling is what NO draw count can beat, so a data trigger is the actively "
           "misleading direction NF-D18 names"),
     Break("d2_may_be_the_draw_count_that_already_failed", _MV,
-          '               if r.get("kind") == "ladder" and r["dsr"] is not None and r["dsr"] >= dsr_min),',
-          '               if r["dsr"] is not None and r["dsr"] >= dsr_min),',
+          '                     if r.get("kind") == "ladder" and r["dsr"] is not None\n'
+          '                     and r["dsr"] >= dsr_min), ladder[-1]))',
+          '                     if r["dsr"] is not None\n'
+          '                     and r["dsr"] >= dsr_min), ladder[-1]))',
           ("TestTheDecisionRule::test_d2_is_never_the_draw_count_that_already_failed",),
           "reading the identity/reconstruction rows as ladder rungs could 'fund' a re-run at "
           "exactly the 4,000 draws that already failed"),

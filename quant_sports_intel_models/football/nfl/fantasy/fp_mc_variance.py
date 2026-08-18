@@ -203,6 +203,14 @@ def project_gate(base_deltas: dict[str, np.ndarray], target_sd: dict[str, float]
         raise ValueError(f"target sds cover {sorted(target_sd)} but the arms are "
                          f"{sorted(base_deltas)} — every arm in the field must be projected, or "
                          f"`SR0` would mix projected and unprojected trials")
+    # ⚠️ A DEGENERATE TARGET SD IS UNBOUNDED, NOT ZERO — and conflating the two was a real defect a
+    # glue proof over the live path caught. When `het_var` comes out ≤ 0 the ceiling's target sd is
+    # 0, and a zero-dispersion series with a positive mean has an INFINITE Sharpe. Reading it
+    # through the usual `sd > 1e-12 else 0.0` guard silently reported Sharpe **0.0** — i.e. the
+    # single most favourable case for the lever was rendered as the least favourable one, which
+    # would have driven a FALSE STOP on exactly the folds where the lever is most alive. It is now
+    # named, and the caller decides what an unbounded ceiling means (it cannot REFUSE).
+    degenerate = sorted(a for a in target_sd if target_sd[a] <= 1e-15)
     proj = {a: rescale_to_sd(np.asarray(d, dtype=float), target_sd[a])
             for a, d in base_deltas.items()}
     srs = []
@@ -212,10 +220,23 @@ def project_gate(base_deltas: dict[str, np.ndarray], target_sd: dict[str, float]
         srs.append(float(np.nanmean(d)) / sd if sd > 1e-12 else 0.0)
     w = proj[winner]
     w_sd = float(np.nanstd(w, ddof=1))
+    if winner in degenerate:
+        return {
+            "dsr": None, "winner_sharpe": None, "sr0": sr0_of(srs), "unbounded": True,
+            "degenerate_arms": degenerate,
+            "reason": f"the projected dispersion of `{winner}` is zero, so its Sharpe is unbounded "
+                      f"— the ceiling is NOT bounded away from the bar and cannot refuse the "
+                      f"lever. ⛔ Reporting this as Sharpe 0 would invert the most favourable case "
+                      f"into the least favourable one.",
+            "trial_sharpes": {a: (float(np.nanmean(proj[a]))
+                                  / float(np.nanstd(proj[a], ddof=1))
+                                  if float(np.nanstd(proj[a], ddof=1)) > 1e-12 else 0.0)
+                              for a in sorted(proj)},
+            "target_sd": dict(target_sd), "p_one_sided": M14.onesided_paired_pvalue(w)}
     return {
         "dsr": M14.deflated_sharpe(w, np.asarray(srs)),
         "winner_sharpe": (float(np.nanmean(w)) / w_sd) if w_sd > 1e-12 else 0.0,
-        "sr0": sr0_of(srs),
+        "sr0": sr0_of(srs), "unbounded": False, "degenerate_arms": degenerate,
         "trial_sharpes": {a: (float(np.nanmean(proj[a]))
                               / float(np.nanstd(proj[a], ddof=1))
                               if float(np.nanstd(proj[a], ddof=1)) > 1e-12 else 0.0)
@@ -259,7 +280,9 @@ def ceiling_report(base_deltas: dict[str, np.ndarray], decomps: dict[str, dict],
             **project_gate(base_deltas, sd_ladder(decomps, math.inf), winner)}
     curve.append(ceil)
 
-    sharpes = [r["winner_sharpe"] for r in curve]
+    # an UNBOUNDED rung sits at +∞ by construction, so it can never violate monotonicity; it is
+    # excluded from the comparison rather than being read as a 0 that would look like a collapse
+    sharpes = [r["winner_sharpe"] for r in curve if r.get("winner_sharpe") is not None]
     if any(b < a - 1e-9 for a, b in zip(sharpes, sharpes[1:])):
         raise ValueError(f"the winner's projected Sharpe is not monotone in the draw count "
                          f"({sharpes}) — removing Monte-Carlo error can only raise |SR|, so this "
@@ -300,7 +323,13 @@ def bootstrap_ceiling_dsr(delta_by_fold_by_arm: dict[str, dict[str, list[float]]
             g = project_gate(base, sd_ladder(dec, math.inf), winner)
         except (ValueError, KeyError):
             continue
-        if g["dsr"] is not None:
+        # ⛔ an unbounded resample must NOT be dropped: dropping exactly the resamples most
+        # favourable to the lever would bias the CI's UPPER end — the end the decision reads —
+        # downward, and the bias would grow with how alive the lever is. DSR is a probability, so
+        # an unbounded Sharpe takes it to its supremum.
+        if g.get("unbounded"):
+            vals.append(1.0)
+        elif g["dsr"] is not None:
             vals.append(float(g["dsr"]))
     if len(vals) < 100:
         return {"evaluable": False, "n_effective": len(vals),
@@ -375,8 +404,22 @@ def required_mc_share_for_ceiling(base_deltas: dict[str, np.ndarray], winner: st
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # The pre-registered decision
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+def smallest_clearing_rung(rungs: list[dict], dsr_min: float,
+                           ladder: tuple[int, ...] = DRAW_LADDER) -> int:
+    """The smallest LADDER rung projected to clear the bar, else the registered cap.
+
+    ⛔ `kind == "ladder"` is load-bearing: the identity and reconstruction rows carry the CURRENT
+    draw count, so reading them as rungs could "fund" a re-run at exactly the count that already
+    failed — a no-op dressed as a remedy. One helper, two callers, so the two funding paths cannot
+    drift apart."""
+    return int(next((r["draws"] for r in rungs
+                     if r.get("kind") == "ladder" and r["dsr"] is not None
+                     and r["dsr"] >= dsr_min), ladder[-1]))
+
+
 def decide(scaling: dict, ceiling_dsr: float | None, ceiling_ci: dict, rungs: list[dict],
-           dsr_min: float, ladder: tuple[int, ...] = DRAW_LADDER) -> dict:
+           dsr_min: float, ladder: tuple[int, ...] = DRAW_LADDER,
+           ceiling_unbounded: bool = False) -> dict:
     """The prereg §3 rule, in order. G2 is a VALIDITY clause — it does not fail toward a verdict,
     it withholds one; only G3 decides."""
     if not scaling.get("evaluable") or not scaling.get("holds"):
@@ -395,6 +438,16 @@ def decide(scaling: dict, ceiling_dsr: float | None, ceiling_ci: dict, rungs: li
                 "reason": ceiling_ci.get("reason", "the ceiling CI could not be evaluated"),
                 "publishes_retest_trigger": False}
     hi = float(ceiling_ci["hi"])
+    if ceiling_unbounded:
+        d2 = smallest_clearing_rung(rungs, dsr_min, ladder)
+        return {
+            "verdict": "FUND_HIGH_DRAW_RUN", "fund_phase_b": True, "d2": int(d2),
+            "reason": f"the heterogeneity estimate is not distinguishable from zero, so the "
+                      f"CEILING is UNBOUNDED — no finite bar refuses it, and the lever cannot be "
+                      f"closed on this evidence. Phase B is funded at {int(d2):,} draws. ⛔ This "
+                      f"funds a MEASUREMENT, not a certification.",
+            "publishes_retest_trigger": False,
+        }
     if hi < dsr_min:
         return {
             "verdict": "MC_LEVER_EXHAUSTED", "fund_phase_b": False, "d2": None,
@@ -406,9 +459,7 @@ def decide(scaling: dict, ceiling_dsr: float | None, ceiling_ci: dict, rungs: li
                       f"set, ⛔ no draw / fold / season re-test trigger is published (NF-D18).",
             "publishes_retest_trigger": False,
         }
-    d2 = next((r["draws"] for r in rungs
-               if r.get("kind") == "ladder" and r["dsr"] is not None and r["dsr"] >= dsr_min),
-              ladder[-1])
+    d2 = smallest_clearing_rung(rungs, dsr_min, ladder)
     return {
         "verdict": "FUND_HIGH_DRAW_RUN", "fund_phase_b": True, "d2": int(d2),
         "reason": f"the ceiling DSR {ceiling_dsr} (CI95 upper {hi:.4f}) reaches the bar {dsr_min}, "
