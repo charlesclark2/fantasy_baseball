@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth-context"
 import { canAccess } from "@/lib/entitlements"
 import {
   createSavedLeague,
+  deleteCustomBoard,
   deleteSavedLeague,
   getFantasyBoard,
   getFantasyManifest,
@@ -21,10 +22,13 @@ import {
   getFullProjections,
   getLeagueBoard,
   getMyTeams as getMyTeamsPayload,
+  listCustomBoards,
   listSavedLeagues,
+  saveCustomBoard,
   updateSavedLeague,
 } from "@/lib/fantasy"
 import type {
+  CustomBoardsPayload,
   LeagueBoardPayload,
   LeagueSaveInput,
   MyTeamsPayload,
@@ -34,6 +38,7 @@ import type {
 import type { LeagueConfig } from "@/lib/league-config"
 import type { BuiltBoard, RosterMatch } from "@/lib/league-scoring"
 import type { Manifest, Player } from "@/lib/draft-optimizer"
+import type { BigBoardDoc } from "@/lib/big-board"
 import { freeSelection } from "@/lib/draft-optimizer"
 import {
   PROSPECT_SEASON,
@@ -366,6 +371,72 @@ export function useMyTeams() {
 }
 
 /** A saved league is selected as `custom:<league_id>` in the same control as the shipped presets. */
+// ── NF-C4: the CUSTOM BIG BOARD ─────────────────────────────────────────────────────────────────
+//
+// One saved ranking per (config, size). Cached as a LIST rather than per board because the surface
+// needs to know which boards exist (to offer them, and to say how many of the ceiling are used)
+// before it knows which one the user will open.
+//
+// ⚠️ `enabled` IS THE ENTITLEMENT, deliberately — same rule as `useFullProjections`. An unentitled
+// caller must not fire a request that 403s by design on every page load; the server is the real
+// gate, this only avoids the noise. And unlike the three dual-mode board hooks, the key carries NO
+// entitlement discriminator: this response is already per-user and `queryClient.clear()` runs on
+// sign-out, so there is no shape for one caller's boards to be served to another out of this cache.
+
+const CUSTOM_BOARDS_KEY = ["nfl-fantasy-custom-boards"] as const
+
+export function useCustomBoards() {
+  const { accessToken, groups } = useAuth()
+  const entitled = canAccess("fantasy", groups)
+  return useQuery<CustomBoardsPayload>({
+    queryKey: CUSTOM_BOARDS_KEY,
+    queryFn: () => listCustomBoards(accessToken),
+    enabled: !!accessToken && entitled,
+    staleTime: 60_000,
+    retry: false,
+  })
+}
+
+/**
+ * Save one board.
+ *
+ * ⛔ NO `onSuccess` CACHE INVALIDATION, and that is a correction rather than an omission. Refetching
+ * the list on every save would re-render the board the user is actively dragging from server state
+ * mid-interaction; the response already carries the stored record, so the caller merges it in. The
+ * list is refetched on mount, which is when it is actually read.
+ *
+ * The mutation's own `error` is what the surface renders in its status line — `apiFetch` preserves
+ * the API's `detail` string (see `lib/api.ts`), so a 413 arrives as the sentence the router wrote
+ * for a person rather than as a status code (E8.6).
+ */
+export function useSaveCustomBoard() {
+  const { accessToken } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: BigBoardDoc & { config: string; size: number }) =>
+      saveCustomBoard(accessToken, input),
+    onSuccess: (saved) => {
+      qc.setQueryData<CustomBoardsPayload>(CUSTOM_BOARDS_KEY, (prev) => {
+        const boards = (prev?.boards ?? []).filter((b) => b.board_key !== saved.board_key)
+        return { ...(prev ?? {}), boards: [saved, ...boards] }
+      })
+    },
+  })
+}
+
+export function useDeleteCustomBoard() {
+  const { accessToken } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (boardKey: string) => deleteCustomBoard(accessToken, boardKey),
+    onSuccess: (_v, boardKey) => {
+      qc.setQueryData<CustomBoardsPayload>(CUSTOM_BOARDS_KEY, (prev) =>
+        prev ? { ...prev, boards: prev.boards.filter((b) => b.board_key !== boardKey) } : prev,
+      )
+    },
+  })
+}
+
 export const CUSTOM_PREFIX = "custom:"
 export const isCustomSelection = (configName: string | null | undefined): boolean =>
   !!configName && configName.startsWith(CUSTOM_PREFIX)

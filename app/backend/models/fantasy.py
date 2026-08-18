@@ -18,6 +18,8 @@ extend, so that separation matters more here, not less.
 
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 # Bounds are deliberately generous — this is a floor for leagues we cannot import, so the goal is to
@@ -302,5 +304,128 @@ class League(_LeagueFields):
 
     league_id: str
     user_id: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-C4 — the CUSTOM BIG BOARD
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# A user's own ranking of one published (config, size) board: an explicit ORDER PREFIX, the tier
+# breaks they drew, and a target/avoid tag per player. See `frontend/lib/big-board.ts` for why the
+# order is a prefix rather than a full copy, and for the identity that makes the prefix exact.
+#
+# ⭐ IT STORES NO MODEL OUTPUT. Not one projection, VOR, ADP or rank is persisted — only player ids
+# and the user's own annotations. Three consequences worth stating, because they are what make this
+# feature cheap and safe at once:
+#   · a saved board can never serve a STALE number, because it holds none: it is re-joined to
+#     whatever board is published at read time;
+#   · the stored document is worth nothing to anyone who does not already have the (paid) board it
+#     references, so a big board is not a second copy of the paywalled data;
+#   · it is small, which is the constraint that actually binds (see `dynamo.MAX_FANTASY_BYTES`).
+#
+# ⚠️ BOUNDS, NOT TASTE. As with the league bounds above, these exist to keep a payload sane and to
+# stop one board from being able to consume the shared item on its own. They are set ABOVE the size
+# of any board we publish (858 rows on the 2026 export), so no real user can reach them by ranking
+# players — a payload that does is not a big board.
+MAX_BIG_BOARD_ORDER = 1000
+MAX_BIG_BOARD_TIER_BREAKS = 200
+MAX_BIG_BOARD_TAGS = 1000
+MAX_PLAYER_ID_LEN = 40
+#: ⚠️ HOW MANY BOARDS an account may keep is NOT here — it is a STORAGE ceiling and it lives beside
+#: its sibling `MAX_LEAGUES_PER_USER` in `services/dynamo.py`. One number, one owner: this repo's
+#: recurring defect is one logical thing with two owners (INC-30, INC-36, INC-38).
+
+BIG_BOARD_TAGS = ("target", "avoid")
+
+
+class _BigBoardFields(BaseModel):
+    """The shared field set — carries NO validators (the E9.49 rule stated in the module docstring:
+    a rule tightened for SAVES must never make an already-stored board unreadable)."""
+
+    config: str
+    size: int
+    order: list[str] = Field(default_factory=list)
+    tier_breaks: list[str] = Field(default_factory=list)
+    tags: dict[str, str] = Field(default_factory=dict)
+
+
+def _clean_ids(ids: list[str], limit: int) -> list[str]:
+    """De-duplicated, non-empty, length-bounded player ids, in order, capped at `limit`.
+
+    ⚠️ A DUPLICATE ID IS DROPPED RATHER THAN REJECTED, and that is the safe direction: `applyDoc`
+    would otherwise render one player twice — two rows for the same man, colliding on their React
+    key, one of which the user cannot act on. Silently correcting a shape no legitimate client
+    produces beats failing a save the user experiences as losing their work.
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in ids:
+        pid = str(raw or "").strip()
+        if not pid or len(pid) > MAX_PLAYER_ID_LEN or pid in seen:
+            continue
+        seen.add(pid)
+        out.append(pid)
+        if len(out) >= limit:
+            break
+    return out
+
+
+class BigBoardSave(_BigBoardFields):
+    """Inbound payload for `PUT /fantasy/nfl/custom-boards`. Every validator here applies to SAVES."""
+
+    @field_validator("config")
+    @classmethod
+    def _config_shape(cls, v: str) -> str:
+        v = str(v or "").strip()
+        # A preset name (`half_ppr`) or a saved-league selection (`custom:<uuid>`). Bounded and
+        # charset-restricted because it is half of a DynamoDB map key.
+        if not v or len(v) > 60 or not re.fullmatch(r"[A-Za-z0-9_:-]+", v):
+            raise ValueError("config is not a recognised board selection")
+        return v
+
+    @field_validator("size")
+    @classmethod
+    def _size_in_range(cls, v: int) -> int:
+        if not 2 <= int(v) <= 32:
+            raise ValueError("size must be between 2 and 32")
+        return int(v)
+
+    @field_validator("order")
+    @classmethod
+    def _bound_order(cls, v: list[str]) -> list[str]:
+        return _clean_ids(v, MAX_BIG_BOARD_ORDER)
+
+    @field_validator("tier_breaks")
+    @classmethod
+    def _bound_breaks(cls, v: list[str]) -> list[str]:
+        return _clean_ids(v, MAX_BIG_BOARD_TIER_BREAKS)
+
+    @field_validator("tags")
+    @classmethod
+    def _bound_tags(cls, v: dict[str, str]) -> dict[str, str]:
+        """Keep only recognised tags, capped.
+
+        ⚠️ AN UNRECOGNISED TAG IS DROPPED, NOT STORED. `extra="forbid"` is deliberately not set on
+        these models (see `_LeagueFields`), so an unknown VALUE would otherwise be persisted and
+        every consumer would have to defend against it forever. Two states is the contract.
+        """
+        out: dict[str, str] = {}
+        for raw_id, raw_tag in (v or {}).items():
+            pid = str(raw_id or "").strip()
+            tag = str(raw_tag or "").strip()
+            if not pid or len(pid) > MAX_PLAYER_ID_LEN or tag not in BIG_BOARD_TAGS:
+                continue
+            out[pid] = tag
+            if len(out) >= MAX_BIG_BOARD_TAGS:
+                break
+        return out
+
+
+class BigBoard(_BigBoardFields):
+    """Outbound representation of a stored board. NO validators, on purpose — see `League`."""
+
+    board_key: str
     created_at: str | None = None
     updated_at: str | None = None

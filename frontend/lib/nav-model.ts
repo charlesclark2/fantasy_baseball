@@ -132,6 +132,12 @@ export const SPORTS: SportNav[] = [
               // on draft night in a different format, not a separate product. Same gate: it reads
               // the same 403-ing board endpoints, so it is never `public`.
               { label: "Auction Optimizer", href: "/fantasy/auction", key: "fantasy-auction" },
+              // ⭐ NF-C4 — the PREPARATION half, and it belongs last of the three because it is
+              // what you do BEFORE either of the tools above and carry INTO them: our board, put
+              // into your own order, tiered and tagged, saved for draft day. Same gate as its two
+              // siblings: it reads the same 403-ing board endpoints plus a per-user saved-board
+              // endpoint, so it is never `public`.
+              { label: "My Big Board", href: "/fantasy/big-board", key: "fantasy-big-board" },
             ],
           },
           {
