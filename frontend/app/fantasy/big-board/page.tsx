@@ -19,8 +19,14 @@ export default function FantasyBigBoardPage() {
   const { email } = useAuth()
   return (
     <FantasyGuard>
-      <div className="min-h-screen bg-[#0a0a0a]">
-        <Nav authenticated activeLink="fantasy-big-board" userEmail={email} />
+      <div className="min-h-screen bg-[#0a0a0a] print:min-h-0 print:bg-white">
+        {/* ⚠️ THE NAV DOES NOT BELONG ON PAPER. `window.print()` prints the PAGE, so without this
+            the printed cheat sheet opens with a logo, a sign-out link and a row of section tabs —
+            reported on the live surface. Hidden HERE rather than inside `Nav`, because every other
+            page's print behaviour is not this story's to decide. */}
+        <div className="print:hidden">
+          <Nav authenticated activeLink="fantasy-big-board" userEmail={email} />
+        </div>
         <BigBoard />
       </div>
     </FantasyGuard>

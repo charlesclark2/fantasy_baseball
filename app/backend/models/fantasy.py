@@ -332,6 +332,19 @@ class League(_LeagueFields):
 MAX_BIG_BOARD_ORDER = 1000
 MAX_BIG_BOARD_TIER_BREAKS = 200
 MAX_BIG_BOARD_TAGS = 1000
+#: How many rows on one board may carry a note, and how long a note may be.
+#:
+#: ⭐ THE NOTE CAP IS THE ONE FIELD ON THIS MODEL THAT CAN GROW WITHOUT BOUND FROM TYPING ALONE — an
+#: id is ~10 bytes and fixed, a note is whatever a person writes. 300 x 200 chars is ~60 KB worst
+#: case, which one board could not spend even if it wanted to: `put_fantasy_big_board` weighs the
+#: WHOLE record against the shared 400 KB item budget (NF-C6P3) and refuses it outright. These caps
+#: are what stop a single board from being the thing that fills the item, so the refusal stays rare
+#: and lands on a board that is genuinely enormous rather than on a normal one.
+#:
+#: ⚠️ `MAX_BIG_BOARD_NOTE_LEN` is MIRRORED by `MAX_NOTE_LEN` in `frontend/lib/big-board.ts` so the
+#: textarea stops the user where the server would truncate. The two are pinned equal by a guard.
+MAX_BIG_BOARD_NOTES = 300
+MAX_BIG_BOARD_NOTE_LEN = 200
 MAX_PLAYER_ID_LEN = 40
 #: ⚠️ HOW MANY BOARDS an account may keep is NOT here — it is a STORAGE ceiling and it lives beside
 #: its sibling `MAX_LEAGUES_PER_USER` in `services/dynamo.py`. One number, one owner: this repo's
@@ -349,6 +362,9 @@ class _BigBoardFields(BaseModel):
     order: list[str] = Field(default_factory=list)
     tier_breaks: list[str] = Field(default_factory=list)
     tags: dict[str, str] = Field(default_factory=dict)
+    #: `{player id -> the user's own note}`. ADDITIVE (NF-C0): a client that predates this field
+    #: sends nothing and gets `{}` back, and a stored board written before it reads the same way.
+    notes: dict[str, str] = Field(default_factory=dict)
 
 
 def _clean_ids(ids: list[str], limit: int) -> list[str]:
@@ -419,6 +435,32 @@ class BigBoardSave(_BigBoardFields):
                 continue
             out[pid] = tag
             if len(out) >= MAX_BIG_BOARD_TAGS:
+                break
+        return out
+
+
+    @field_validator("notes")
+    @classmethod
+    def _bound_notes(cls, v: dict[str, str]) -> dict[str, str]:
+        """Trim, truncate and cap the user's notes.
+
+        ⚠️ TRUNCATED, NOT REJECTED — and the client is what makes that honest. A save refused
+        because one note ran three characters long would cost a user a whole curated board; the
+        textarea already stops them at the same limit, so a note reaching here over-length is a
+        client that is out of date rather than a person mid-sentence.
+
+        A whitespace-only note is DROPPED rather than stored as `""`: an empty string is bytes in
+        the shared item that carry no meaning, and every reader would have to treat it as absent
+        anyway.
+        """
+        out: dict[str, str] = {}
+        for raw_id, raw_note in (v or {}).items():
+            pid = str(raw_id or "").strip()
+            note = str(raw_note or "").strip()[:MAX_BIG_BOARD_NOTE_LEN]
+            if not pid or len(pid) > MAX_PLAYER_ID_LEN or not note:
+                continue
+            out[pid] = note
+            if len(out) >= MAX_BIG_BOARD_NOTES:
                 break
         return out
 

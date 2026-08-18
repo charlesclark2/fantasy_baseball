@@ -2325,7 +2325,7 @@ const CASES = [
     // budget, which answers 413; nothing else in the product would contradict a wrong "Saved".
     detail: "Reports success without awaiting the write, so a refusal still renders as saved.",
     file: "components/fantasy/big-board.tsx",
-    from: "      await saveBoard.mutateAsync({ ...doc, config: configName, size })",
+    from: "      const saved = await saveBoard.mutateAsync({ ...doc, config: configName, size })",
     to: "      void saveBoard.mutateAsync({ ...doc, config: configName, size }).catch(() => {})",
     grep: "SERVER's explanation",
   },
@@ -2364,8 +2364,9 @@ const CASES = [
     detail: "Restores `order` and drops the tiers and tags.",
     file: "components/fantasy/big-board.tsx",
     from:
-      "      ? { order: stored.order ?? [], tier_breaks: stored.tier_breaks ?? [], tags: stored.tags ?? {} }",
-    to: "      ? { order: stored.order ?? [], tier_breaks: [], tags: {} }",
+      "          order: stored.order ?? [],\n          tier_breaks: stored.tier_breaks ?? [],\n" +
+      "          tags: stored.tags ?? {},",
+    to: "          order: stored.order ?? [],\n          tier_breaks: [],\n          tags: {},",
     grep: "tiers and tags",
   },
   {
@@ -2391,9 +2392,78 @@ const CASES = [
     // them to re-litigate a decision they already made. The tier and the tag are the decisions.
     detail: "Puts our projection back on the printed sheet.",
     file: "components/fantasy/big-board.tsx",
-    from: '                    <span className="truncate">{r.player.name}</span>',
+    from: '                      <span className="truncate">{r.player.name}</span>',
     to: '                    <span className="truncate">{r.player.name} Proj {r.player.pts}</span>',
     grep: "none of our numbers",
+  },
+
+  // ── NF-C4 follow-up: the six defects the LIVE surface had that CI did not ────────────────────
+  {
+    id: "board-intro-loses-a-space",
+    shipped: "NF-C4 — reported live: the page read \"our 2026board\"",
+    // 🐛 A REAL, REPRODUCED COMPILER BEHAVIOUR, not a typo: the leading space of a JSX text node
+    // that begins immediately after an expression is trimmed, so `{SEASON} board` renders as
+    // "2026board". Measured in this harness — the JSX form fails this spec.
+    detail: "Puts the season back beside JSX text instead of inside the string.",
+    file: "components/fantasy/big-board.tsx",
+    from: "            {`Start with our ${SEASON} board for your league",
+    to: "            Start with our {SEASON} board for your league",
+    grep: "spaces intact",
+  },
+  {
+    id: "row-icons-explained-only-by-hover",
+    shipped: "NF-C4 — reported live: nobody can read the scissors",
+    // A star and a no-entry sign can be inferred. "Scissors = start a new tier here" cannot, and a
+    // `title` is invisible on the phone where a draft board is actually read.
+    detail: "Defines the icon legend and never mounts it.",
+    file: "components/fantasy/big-board.tsx",
+    from: "          <IconLegend />",
+    to: "          {/* legend */}",
+    grep: "in words, not only as a glyph",
+  },
+  {
+    id: "sheet-invents-a-tier-1",
+    shipped: "NF-C4 — reported live: every player printed under TIER 1",
+    // With no breaks drawn, every player IS in tier 1 — so the heading was true and read as a
+    // broken tiering. The fix is to stop claiming a tier the user never drew.
+    detail: "Prints a TIER heading over a board with no tiers drawn.",
+    file: "components/fantasy/big-board.tsx",
+    from: "              {hasTiers && (",
+    to: "              {true && (",
+    grep: "never drew",
+  },
+  {
+    id: "note-never-reaches-the-server",
+    shipped: "NF-C4 — pre-emptive: a note that survives the session and nothing else",
+    // The note renders, the save reports success, and the reload is empty — the silent-save shape
+    // E8.6 exists for, one field over.
+    detail: "Drops the notes from the save payload.",
+    file: "components/fantasy/big-board.tsx",
+    from: "      const saved = await saveBoard.mutateAsync({ ...doc, config: configName, size })",
+    to: "      const saved = await saveBoard.mutateAsync({ ...doc, notes: {}, config: configName, size })",
+    grep: "printed on the cheat sheet",
+  },
+  {
+    id: "dropped-notes-reported-as-saved",
+    shipped: "NF-C4 — pre-emptive: NF-C0 deploy skew on a field the backend ignores",
+    // `frontend/` auto-deploys on merge; the API Lambda ships only via `deploy.sh`. The older
+    // backend ACCEPTS `notes`, ignores them, returns 200 — and the user reads "✓ Saved".
+    detail: "Trusts the 200 instead of comparing it with what was sent.",
+    file: "components/fantasy/big-board.tsx",
+    from: "      const keptNotes = Object.keys(saved?.notes ?? {}).length",
+    to: "      const keptNotes = sentNotes",
+    grep: "quietly dropped the notes",
+  },
+  {
+    id: "player-link-navigates-away-from-unsaved-work",
+    shipped: "NF-C4 — pre-emptive: a click that discards a curated board",
+    // This surface holds unsaved work in component state, and a player card is exactly the thing
+    // you glance at mid-edit.
+    detail: "Opens the player page in the same tab.",
+    file: "components/fantasy/big-board.tsx",
+    from: '                            target="_blank"\n                            rel="noopener noreferrer"',
+    to: "",
+    grep: "opens in a new tab",
   },
 ]
 
@@ -2457,7 +2527,7 @@ const CASES = [
 // `-- auction-quotes`) for the same reason every entry above records: a production build per case
 // does not belong in a session. So 137/131/6 → 142/136/6, and the next full run CONFIRMS it.
 // ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 149, red: 143, notObservable: 6 }
+const RECORDED_BOARD = { total: 155, red: 149, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
