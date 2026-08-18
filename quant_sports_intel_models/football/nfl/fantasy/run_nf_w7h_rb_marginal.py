@@ -1164,6 +1164,18 @@ def derive_verdict_layer(out: dict) -> dict:
                        "(NF-W7c §4)."),
         "selection_key": RM.SELECTION_IS_CRPS_NOT_PIT,
         "rb_verdict_state": out["marginal_cap"]["state"],
+        # ⭐ THE STATE IS A MECHANISM READING, NOT A CERTIFICATE. `RB_RECALIBRATION_PAYS` says the
+        # cap moved, the calibration held and both contest foils lost — it says NOTHING about PBO,
+        # DSR, BH-FDR, the coverage floor or the anchor clauses, so it can co-occur with a FAILING
+        # gate (measured: it does, on a short-fold fixture). The pre-registration §7 certifies RB
+        # only on PAYS **with the full gate green**, so that conjunction is computed here rather
+        # than left for a reader to infer — a state read as a certificate is the NF1.8
+        # rank-read-as-a-verdict class.
+        "rb_certified": bool(out["marginal_cap"]["state"] == RM.RB_PAYS
+                             and RM.CAP_POSITION in ship),
+        "rb_certification_rule": ("certified for NF-W8 ONLY on RB_RECALIBRATION_PAYS with the FULL "
+                                  "gate green (prereg §7); the state alone is a mechanism reading, "
+                                  "never a certificate"),
         "joint_construction_held_fixed": RM.JOINT_CONSTRUCTION,
         "promote_blockers": list(RM.PROMOTE_BLOCKERS),
         "positions_with_unevaluated_oracle_ceiling": sorted(
@@ -1201,6 +1213,9 @@ def write_report(out: dict, path: Path) -> None:
 
     L += ["## RB verdict", "",
           f"**`{cap['state']}`** — {cap['reading']}", "",
+          f"> **Certified for NF-W8: {'YES' if v.get('rb_certified') else 'NO'}** — "
+          f"{v.get('rb_certification_rule')}. This run's full gate: "
+          f"{'GREEN' if RM.CAP_POSITION in v['ship_positions'] else 'NOT green'}.", "",
           "| quantity | value |", "|---|---|",
           f"| atom cap, SERVED marginals (NF-W7e recorded, RB) | "
           f"{cap['atom_cap_mean_predecessor']} |",

@@ -1087,3 +1087,23 @@ def test_the_split_series_is_UNEVALUABLE_rather_than_NaN_on_a_short_run():
                      _checks(dsr_ok=False))["dsr_diagnostic"]
     assert out["dsr_2x2"]["per_split_series__declared_field_REPORT_ONLY"] is None
     assert out["n_cscv_splits"] == 0
+
+
+def test_the_PAYS_state_is_not_a_certificate_unless_the_full_gate_is_green(tmp_path):
+    """⭐ `RB_RECALIBRATION_PAYS` reads the cap lift, the PIT and the two foils — it says NOTHING
+    about PBO, DSR, BH-FDR, the coverage floor or the anchor clauses, so it CAN co-occur with a
+    failing gate (it does, on a short-fold fixture). The pre-registration §7 certifies RB only on
+    PAYS *with the full gate green*, so the conjunction must be computed, not left to a reader —
+    a state read as a verdict is the NF1.8 rank-read-as-a-verdict class."""
+    out = R.derive_verdict_layer({"fold_results": _folds(), "n_folds": 3,
+                                  "generated_at": "x", "smoke": False})
+    assert out["marginal_cap"]["state"] == RM.RB_PAYS
+    assert out["gates"]["RB"]["ship"] is False, "fixture no longer separates state from gate"
+    assert out["verdict"]["rb_certified"] is False, \
+        "PAYS was read as a certificate while the gate was failing"
+    assert out["verdict"]["story_verdict"] == "NULL"
+    p = tmp_path / "r.md"
+    R.write_report(out, p)
+    text = p.read_text()
+    assert "Certified for NF-W8: NO" in text, \
+        "the record shows the PAYS state without saying it is not a certificate"
