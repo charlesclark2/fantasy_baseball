@@ -16,4 +16,25 @@
 | 6 | `lightgbm` | 0.2446 | 0.6821 | 0.4900 | 0.0348 |  |
 | 7 | `floor_no_skill` | 0.2491 | 0.6914 | 0.4980 | 0.0088 | ✅ |
 
+## ⚠️ Margin attribution — learner swap vs contract
+
+The gate compares `pre_lineup_home_win_reprune_glm::glm_elasticnet` against `incumbent::lightgbm`, where an arm is (contract variant × learner class). That is the right PROMOTION question and the gate is unchanged — but it CONFLATES the feature effect with a learner-class swap. Split against `incumbent::glm_elasticnet` (the incumbent contract under the LEADER's learner), + = better:
+
+| component | Δ brier | share of margin |
+|---|---:|---:|
+| **learner swap** (→ `glm_elasticnet`) | +0.0003 | 11% |
+| **contract** (the features this study is about) | +0.0021 | 89% |
+| **total reported margin** | +0.0023 | 100% |
+
+### Contract effect holding the LEARNER FIXED (+ = `pre_lineup_home_win_reprune_glm` better)
+
+| learner | incumbent brier | pre_lineup_home_win_reprune_glm |
+|---|---:|---:|
+| `stack_mean` | 0.2426 | +0.0002 |
+| `glm_elasticnet` | 0.2433 | +0.0021 |
+| `lightgbm` | 0.2435 | -0.0011 |
+| `xgboost` | 0.2437 | -0.0004 |
+| `catboost` | 0.2442 | +0.0010 |
+
+
 Calibration = ECE (home_win) / PIT-KS (totals/run_diff), lower=better. Floors (no-skill, market) are reference baselines, NOT promotable candidates. Winner feeds Optuna HPO (E1.9 step 2); offline scores are LOWER post-de-leak by design — the honest gate is forward/serving-parity + PBO/DSR, not raw offline metric.

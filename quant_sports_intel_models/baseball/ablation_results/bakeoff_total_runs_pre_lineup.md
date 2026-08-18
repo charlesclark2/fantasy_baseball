@@ -1,7 +1,7 @@
 # Model-Class Bake-off — total_runs (pre_lineup)  [E1.9 step 1]
 
 - Honest metric: **crps** (lower=better) · 87 feats · 3 purged folds · seed 42
-- **Winner: `glm_elasticnet`** (tie within 0.02 noise floor among 4 → broke on calibration)
+- **Auto-winner: `glm_elasticnet`** — tie within 0.02 noise floor among 4 candidates. _(This run predates the recorded `winner_reason` field; the tie-break is the harness's standing rule — best calibration — not a string this run stored.)_
 - PBO across slate (CSCV, E1.4): **0.543**  ⚠️ ≥ 0.2 (selection may be overfit)
 
 | rank | candidate | crps | nll | mae | calibration | floor? |
@@ -15,5 +15,10 @@
 | 7 | `xgboost` | 2.4468 | 3.0246 | 3.3797 | 0.1109 |  |
 | 8 | `floor_no_skill` | 2.4807 | 2.9065 | 3.5124 | 0.1081 | ✅ |
 | 9 | `lightgbm` | 2.6191 | 4.0115 | 3.3834 | 0.2030 |  |
+
+## ⚠️ Margin attribution — learner swap vs contract
+
+_Not available — this run scores a single contract, so it has NO contract axis — its margins are learner-vs-floor on fixed features and none of them is a feature effect to attribute._
+
 
 Calibration = ECE (home_win) / PIT-KS (totals/run_diff), lower=better. Floors (no-skill, market) are reference baselines, NOT promotable candidates. Winner feeds Optuna HPO (E1.9 step 2); offline scores are LOWER post-de-leak by design — the honest gate is forward/serving-parity + PBO/DSR, not raw offline metric.

@@ -18,4 +18,31 @@
 | 8 | `floor_no_skill` | 2.4807 | 2.9065 | 3.5124 | 0.1081 | ✅ |
 | 9 | `lightgbm` | 2.5313 | 3.2027 | 3.4408 | 0.1283 |  |
 
+## ⚠️ Margin attribution — learner swap vs contract
+
+The gate compares `pre_lineup_total_runs_reprune_ngb::ngboost_normal` against `incumbent::glm_elasticnet`, where an arm is (contract variant × learner class). That is the right PROMOTION question and the gate is unchanged — but it CONFLATES the feature effect with a learner-class swap. Split against `incumbent::ngboost_normal` (the incumbent contract under the LEADER's learner), + = better:
+
+| component | Δ crps | share of margin |
+|---|---:|---:|
+| **learner swap** (→ `ngboost_normal`) | +0.0037 | — |
+| **contract** (the features this study is about) | -0.0029 | — |
+| **total reported margin** | +0.0007 | — |
+
+🚩🚩 **SIGN FLIP — holding the learner fixed, the contract is WORSE, not better** (`-0.0029`). The reported `+0.0007` is a learner-class effect that more than covers a contract effect pointing the other way. Do NOT read this margin as evidence for the features.
+
+⚠️ **The share is not a reliable proportion here:** the total margin (`0.0007`) is inside this metric's noise floor (`0.02`), so the ratio divides by a quantity the gate itself treats as noise. Read the ABSOLUTE components, not the percentages.
+
+### Contract effect holding the LEARNER FIXED (+ = `pre_lineup_total_runs_reprune_ngb` better)
+
+| learner | incumbent crps | pre_lineup_total_runs_reprune_ngb |
+|---|---:|---:|
+| `ngboost_normal` | 2.3745 | -0.0029 |
+| `ngboost_lognormal` | 2.3768 | -0.0009 |
+| `glm_elasticnet` | 2.3781 | -0.0184 |
+| `catboost` | 2.3800 | -0.0102 |
+| `stack_mean` | 2.4131 | +0.0063 |
+| `xgboost` | 2.4468 | +0.0189 |
+| `lightgbm` | 2.6191 | +0.0878 |
+
+
 Calibration = ECE (home_win) / PIT-KS (totals/run_diff), lower=better. Floors (no-skill, market) are reference baselines, NOT promotable candidates. Winner feeds Optuna HPO (E1.9 step 2); offline scores are LOWER post-de-leak by design — the honest gate is forward/serving-parity + PBO/DSR, not raw offline metric.

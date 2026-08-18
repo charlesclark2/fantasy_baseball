@@ -1,6 +1,6 @@
 # MLB Edge-E7.9 — retrain bake-off: total_runs (post_lineup)
 
-> ⚠️ **Not an edge claim.** `best_alpha = 0`. This decides whether the MiLB-MLE-corrected feature block and the newly-joined `eb_gb_pct` earn a retrained champion; it says nothing about win rate or ROI.
+> ⚠️ **Not an edge claim.** `best_alpha = 0`. This decides whether the MiLB-MLE-corrected feature block and the newly-joined `eb_gb_pct` earn a retrained champion; it says nothing about win rate or ROI. A CRPS improvement on `total_runs` is a PRICING/CALIBRATION improvement, never an edge, a win rate, or an ROI.
 
 **VERDICT: `INCUMBENT_STANDS`**
 

@@ -93,5 +93,14 @@
       "n": 4857
     }
   ],
-  "contract": "betting_ml/models/total_runs/feature_columns_pre_lineup_total_runs.json"
+  "contract": "betting_ml/models/total_runs/feature_columns_pre_lineup_total_runs.json",
+  "margin_attribution": {
+    "leader_arm": null,
+    "incumbent_arm": null,
+    "metric": "crps",
+    "decomposition": {
+      "available": false,
+      "reason": "this run scores a single contract, so it has NO contract axis \u2014 its margins are learner-vs-floor on fixed features and none of them is a feature effect to attribute"
+    }
+  }
 }
