@@ -47,6 +47,30 @@ SCHOOL_ALIASES: dict[str, str] = {
     "miami florida": "miami",
     "texas am": "texas a m",
     "hawaii": "hawai i",
+
+    # ── MEASURED from the first live NCAAF probe (2025 wk11, 116 games / 5,034 rows). Every
+    # entry was VERIFIED to exist in the CFBD roster under the mapped name — the designed
+    # workflow: an unmatched school is reported, checked against CFBD, then keyed.
+    # (a) PFF appends "State" where CFBD does not. ⛔ NOT a blanket rule — measured, `Ohio` /
+    #     `Ohio State`, `Michigan` / `Michigan State` and `Florida` / `Florida State` ALL
+    #     coexist in CFBD as distinct schools, so stripping "State" wholesale would merge real
+    #     rivals. Only added where CFBD has the BASE and NOT the "State" form.
+    "central connecticut state": "central connecticut",
+    "grambling state": "grambling",
+    "mcneese state": "mcneese",
+    "sam houston state": "sam houston",
+    # (b) CFBD's preferred short/long form differs from PFF's.
+    "albany": "ualbany",
+    "appalachian state": "app state",
+    "southeastern louisiana": "se louisiana",
+    "st thomas": "st thomas mn",
+    "tennessee martin": "ut martin",
+    "liu": "long island",
+    "virginia military institute": "vmi",
+    "virginia lynchburg": "virginia of lynchburg",
+    # (c) A TYPO on PFF's side: "Rio Grand" for "Rio Grande". Aliased rather than fuzzy-matched
+    #     — a typo is a fact about the feed, and pinning it keeps the join exact.
+    "ut rio grand valley": "ut rio grande valley",
 }
 
 _PUNCT_RE = re.compile(r"[^a-z0-9]+")

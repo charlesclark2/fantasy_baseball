@@ -40,11 +40,14 @@ log = logging.getLogger("pff.probe")
 # before first contact, so the probe NORMALISES tolerantly and RECORDS which candidate hit —
 # a hardcoded guess that silently misses is the wrong-key class, and a probe is precisely where
 # the real names get discovered.
+# MEASURED against the live API 2026-08-18 — `player_id`, `player`, `position`, `franchise_id`
+# are the real keys; the alternates are kept as tolerant fallbacks.
 FIELD_CANDIDATES: dict[str, tuple[str, ...]] = {
     "pff_player_id": ("player_id", "playerId", "pff_player_id", "id"),
     "pff_player_name": ("player", "player_name", "playerName", "name"),
     "pff_team": ("team_name", "team", "teamName", "club"),
     "pff_position": ("position", "pos"),
+    "pff_franchise_id": ("franchise_id",),
     "routes": ("routes", "routes_run", "route_snaps"),
     "targets": ("targets", "tgt"),
     "attempts": ("attempts", "rush_attempts", "carries"),
@@ -143,13 +146,16 @@ def run_league(
     # 3. Crawl the probe facets
     frames: list[pd.DataFrame] = []
     field_hits: dict[str, str] = {}
+    entitlement: dict[str, list[str]] = {}
     for _, g in gdf.iterrows():
         gid = _row_game_id(g)
         if gid is None:
             continue
         for facet in fx.PROBE_FACETS:
             try:
-                rows = fx.fetch_facet(client, facet, gid)
+                rows, restricted = fx.fetch_facet_with_entitlement(client, facet, gid)
+                if restricted:
+                    entitlement.setdefault(facet.key, sorted(set(restricted)))
             except PFFClientError as exc:
                 log.warning("facet %s game=%s failed: %s", facet.key, gid, str(exc)[:160])
                 continue
@@ -161,6 +167,9 @@ def run_league(
     result["facet_rows"] = len(pff)
     result["field_name_hits"] = field_hits
     result["model_output_columns_stripped"] = fx.stripped_columns()
+    # ⭐ The entitlement verdict — the fields PFF says this SUBSCRIPTION TIER withholds.
+    result["restricted_fields_by_facet"] = entitlement
+    result["opportunity_field_availability"] = _opportunity_availability(pff, entitlement)
     if pff.empty:
         msg = f"PFF returned games but ZERO facet rows for {league} {season}"
         if strict:
@@ -169,6 +178,17 @@ def run_league(
         return result
     pff["season"], pff["league"] = season, league
     pff["week"] = pff["pff_game_id"].map(_week_lookup(gdf))
+    # Attach the team from the GAME — the facet rows do not carry one (see build_franchise_map).
+    fmap = build_franchise_map(games, league)
+    resolved_team = pff["pff_franchise_id"].astype("string").str.replace(
+        r"\.0$", "", regex=True).map(fmap)
+    pff["pff_team"] = pff["pff_team"].where(pff["pff_team"].notna(), resolved_team)
+    result["team_attach_rate"] = round(float(pff["pff_team"].notna().mean()), 4)
+    if result["team_attach_rate"] < 1.0:
+        log.warning(
+            "only %.1f%% of PFF rows got a team from the franchise map — the name rungs are "
+            "blind for the rest", 100 * result["team_attach_rate"],
+        )
 
     # 4. Resolution
     if league == "nfl":
@@ -197,7 +217,8 @@ def run_league(
     # The team key is league-specific and must match the one the PLAYER join used — see the
     # `team_key` note in `resolve_games` for the 0%-game-match bug this prevents.
     gres = resolve_games(
-        _game_frame(gdf, season), our[["game_id", "season", "week", "home_team", "away_team"]],
+        _game_frame(gdf, season, league),
+        our[["game_id", "season", "week", "home_team", "away_team"]],
         team_key=normalize_team if league == "nfl" else school_key,
     )
     result["game_match"] = {
@@ -216,6 +237,42 @@ def run_league(
         )
     result["_frame"] = resolved
     return result
+
+
+# The fields NF-W9-1/2/3 exist to consume. Availability of THESE — not row counts — is the
+# go/no-go, so the probe answers it explicitly rather than leaving it to be inferred.
+OPPORTUNITY_FIELDS: tuple[str, ...] = (
+    "routes", "route_rate", "avg_depth_of_target", "slot_rate", "slot_snaps", "wide_rate",
+    "inline_rate", "yprr", "pass_plays", "run_plays", "yards_after_contact", "yco_attempt",
+    "gap_attempts", "zone_attempts", "breakaway_attempts", "designed_yards", "elusive_rating",
+)
+
+
+def _opportunity_availability(pff: pd.DataFrame, entitlement: dict[str, list[str]]) -> dict:
+    """Which opportunity fields we actually GOT vs which PFF withheld.
+
+    A probe that reported only "N rows pulled" would call a tier-restricted payload a success:
+    the rows arrive, they simply carry none of the columns the downstream stories need.
+    """
+    present = {
+        f for f in OPPORTUNITY_FIELDS
+        if f in pff.columns and pff[f].notna().any()
+    } | {
+        f for f in OPPORTUNITY_FIELDS if f"raw_{f}" in pff.columns and pff[f"raw_{f}"].notna().any()
+    }
+    withheld = sorted({f for fields in entitlement.values() for f in fields
+                       if f in OPPORTUNITY_FIELDS})
+    return {
+        "available": sorted(present),
+        "withheld_by_tier": withheld,
+        "verdict": (
+            "NO_OPPORTUNITY_FIELDS — every field the downstream stories need is withheld by the "
+            "subscription tier; what remains duplicates nflverse/CFBD"
+            if not present and withheld else
+            "FULL" if present and not withheld else
+            "PARTIAL" if present else "UNKNOWN (no facet rows to judge)"
+        ),
+    }
 
 
 def _first_present(df: pd.DataFrame, names: tuple[str, ...]):
@@ -239,12 +296,65 @@ def _week_lookup(gdf: pd.DataFrame) -> dict:
     return {}
 
 
-def _game_frame(gdf: pd.DataFrame, season: int) -> pd.DataFrame:
+# Which key on PFF's team object names the team the way OUR side does. League-specific by
+# necessity, and measured: NFL `abbreviation` ("SF") matches nflverse's team codes, while NCAA
+# `city` ("Notre Dame") matches CFBD's school names — NCAA's `abbreviation` is "NOTRED", which
+# matches nothing on our side.
+TEAM_LABEL_KEYS: dict[str, tuple[str, ...]] = {
+    "nfl": ("abbreviation", "display_abbreviation", "slug"),
+    "ncaa": ("city", "mid_abbreviation", "nickname", "slug"),
+}
+
+
+def build_franchise_map(games: list[dict], league: str) -> dict:
+    """`{franchise_id: team label}` from the game list.
+
+    ⭐ THIS IS LOAD-BEARING, NOT A CONVENIENCE. **PFF's facet rows carry NO team name** — only
+    a `franchise_id` (measured live: `team`/`team_name` are absent from every facet row). So the
+    team a player played for is only knowable by joining back to the GAME. Without this map the
+    NCAAF school block is empty, every name rung is unusable, and the join scores a clean 0%
+    — which is exactly what the first live NCAAF run did before this existed.
+    """
+    keys = TEAM_LABEL_KEYS.get(league, TEAM_LABEL_KEYS["nfl"])
+    out: dict = {}
+    for g in games:
+        for side in ("home_team", "away_team"):
+            t = g.get(side)
+            if not isinstance(t, dict):
+                continue
+            fid = t.get("franchise_id") or g.get(f"{side.split('_')[0]}_franchise_id")
+            if fid is None:
+                continue
+            for k in keys:
+                if t.get(k):
+                    out[str(fid)] = t[k]
+                    break
+    return out
+
+
+def _team_label(v, league: str = "nfl") -> Any:
+    """PFF nests the team as `{"abbreviation": "NYJ", "nickname": "Jets", …}`.
+
+    Measured live: `home_team`/`away_team` are OBJECTS, not strings. Passing the dict straight
+    into the team key would stringify it and match nothing — a clean, total, and utterly
+    mysterious 0% game join, which is the exact failure this module keeps guarding against.
+    """
+    if isinstance(v, dict):
+        for k in TEAM_LABEL_KEYS.get(league, TEAM_LABEL_KEYS["nfl"]):
+            if v.get(k):
+                return v[k]
+        return pd.NA
+    return v
+
+
+def _game_frame(gdf: pd.DataFrame, season: int, league: str = "nfl") -> pd.DataFrame:
     out = pd.DataFrame({
         "season": gdf["season"] if "season" in gdf.columns else season,
         "week": gdf.get("week"),
-        "home_team": _col(gdf, ("home_team", "homeTeam", "home")),
-        "away_team": _col(gdf, ("away_team", "awayTeam", "away")),
+        "home_team": _col(gdf, ("home_team", "homeTeam", "home")).map(
+            lambda v: _team_label(v, league)),
+        "away_team": _col(gdf, ("away_team", "awayTeam", "away")).map(
+            lambda v: _team_label(v, league)),
     })
     return out
 

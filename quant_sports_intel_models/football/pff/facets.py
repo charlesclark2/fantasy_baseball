@@ -24,7 +24,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from .client import PFFClient, PFFClientError
+from .client import PFFClient, PFFClientError, PFFNotFoundError
 from .guards import assert_endpoint_allowed, strip_model_output_columns
 
 log = logging.getLogger("pff.facets")
@@ -32,12 +32,21 @@ log = logging.getLogger("pff.facets")
 GAMES_PATH = "/api/v1/games"
 FACET_PATH_TMPL = "/api/v1/facet/{unit}/{view}"
 
-# Units and views to PROBE. Confirmed by the operator: rushing/{summary,direction}. The rest are
-# candidates enumerated by symmetry — `discover_facets` decides which are real.
+# Units and views to PROBE. `discover_facets` decides which are real — and it earned its keep:
+# the symmetric guess included `receiving/direction` (404) and omitted `receiving/depth` and
+# `receiving/concept` (both real). MEASURED LIVE 2026-08-18 against NFL 2024 wk1 game 25907:
+#   ✅ rushing/{summary,direction}, receiving/{summary,depth,concept},
+#      passing/{summary,depth,concept}, defense/summary
+#   ❌ blocking/*, coverage/*, special_teams/*, receiving/direction, passing/direction (404)
 CANDIDATE_UNITS: tuple[str, ...] = (
     "rushing", "receiving", "passing", "blocking", "coverage", "defense", "special_teams",
 )
 CANDIDATE_VIEWS: tuple[str, ...] = ("summary", "direction", "depth", "concept")
+
+# PFF names the row list after the facet (`rushing_summary`, `rushing_direction_stats`), and
+# ships a SECOND list called `restricted` alongside it. `restricted` must never be mistaken for
+# the data — see `_rows`.
+RESTRICTED_KEY = "restricted"
 
 
 @dataclass(frozen=True)
@@ -60,7 +69,7 @@ PROBE_FACETS: tuple[Facet, ...] = (
     Facet("rushing", "summary"),
     Facet("rushing", "direction"),
     Facet("receiving", "summary"),
-    Facet("receiving", "direction"),
+    Facet("receiving", "depth"),      # `receiving/direction` does NOT exist (measured 404)
 )
 
 # ── facet → downstream signal ──────────────────────────────────────────────────────────────
@@ -110,10 +119,32 @@ def list_games(client: PFFClient, *, league: str, season: int, week: int) -> lis
 
 def fetch_facet(client: PFFClient, facet: Facet, game_id: Any) -> list[dict]:
     """One facet for one game, with PFF's model-output columns STRIPPED and the strip recorded."""
+    rows, _ = fetch_facet_with_entitlement(client, facet, game_id)
+    return rows
+
+
+def fetch_facet_with_entitlement(
+    client: PFFClient, facet: Facet, game_id: Any
+) -> tuple[list[dict], list[str]]:
+    """`(rows, restricted_fields)` for one facet.
+
+    ⭐ `restricted` IS THE HEADLINE, NOT METADATA. PFF returns, alongside the data, the list of
+    fields THIS SUBSCRIPTION TIER WITHHOLDS — and on the operator's account that list contains
+    every field NF-W9-1/2/3 exist to consume (`routes`, `avg_depth_of_target`, `slot_rate`,
+    `yards_after_contact`, `gap_attempts`, …). Without surfacing it, the probe would report a
+    cheerful "12 rows pulled" for a payload carrying nothing we do not already have from
+    nflverse — a feed that is present but empty of the thing we came for, which is precisely the
+    silent-failure shape this repo keeps getting bitten by.
+    """
     assert_endpoint_allowed(facet.path)
     payload = client.get(facet.path, {"game_id": game_id})
-    rows = _rows(payload, prefer=("players", "data", "rows", facet.unit))
-    return [_strip_row(r) for r in rows]
+    restricted = []
+    if isinstance(payload, dict):
+        r = payload.get(RESTRICTED_KEY)
+        if isinstance(r, list):
+            restricted = [str(x) for x in r]
+    rows = _rows(payload, prefer=(f"{facet.unit}_{facet.view}", "players", "data", "rows"))
+    return [_strip_row(r) for r in rows], restricted
 
 
 _STRIPPED_SEEN: set[str] = set()
@@ -156,8 +187,13 @@ def discover_facets(
                 cols = sorted({k for r in rows[:50] for k in r})
                 out[f.key] = {"available": True, "n_rows": len(rows), "columns": cols}
                 log.info("facet %s → %d rows, %d cols", f.key, len(rows), len(cols))
+            except PFFNotFoundError:
+                # PFF does not publish this facet — a finding, not a failure.
+                out[f.key] = {"available": False, "reason": "not_published_404"}
             except PFFClientError as exc:
-                out[f.key] = {"available": False, "error": str(exc)[:300]}
+                # We failed to FETCH it — a different fact, and one worth investigating.
+                out[f.key] = {"available": False, "reason": "fetch_failed",
+                              "error": str(exc)[:300]}
     return out
 
 
@@ -171,12 +207,17 @@ def _rows(payload: Any, *, prefer: tuple[str, ...] = ()) -> list[dict]:
     if isinstance(payload, list):
         return [r for r in payload if isinstance(r, dict)]
     if isinstance(payload, dict):
-        for k in (*prefer, "results", "items"):
+        for k in (*prefer, "results", "items", "games"):
             v = payload.get(k)
             if isinstance(v, list):
                 return [r for r in v if isinstance(r, dict)]
-        # A single-key envelope wrapping the list.
-        lists = [v for v in payload.values() if isinstance(v, list)]
+        # ⛔ `restricted` is a list of FIELD NAMES, not rows. Falling through to "the single
+        # list in the envelope" would hand the caller PFF's entitlement list as if it were data
+        # — strings, not dicts, so it would silently normalise to an all-NA frame.
+        lists = [
+            v for k, v in payload.items()
+            if isinstance(v, list) and k != RESTRICTED_KEY
+        ]
         if len(lists) == 1:
             return [r for r in lists[0] if isinstance(r, dict)]
         if not payload:

@@ -424,3 +424,145 @@ class TestGameJoinUsesTheLeagueCorrectTeamKey:
         assert "school_key" in src and "normalize_team" in src, (
             "run_league must choose BOTH keys by league — a single hardcoded key is the bug"
         )
+
+
+# ── what the LIVE API taught us (all of these were real failures, in this order) ────────────
+from quant_sports_intel_models.football.pff.client import PFFNotFoundError  # noqa: E402
+from quant_sports_intel_models.football.pff.facets import fetch_facet_with_entitlement  # noqa: E402
+from quant_sports_intel_models.football.pff.probe import (  # noqa: E402
+    TEAM_LABEL_KEYS, _team_label, build_franchise_map,
+)
+
+
+class TestClerkAuthMechanics:
+    """PFF uses Clerk: the `__session` cookie IS the JWT and it lives 60 SECONDS."""
+
+    def test_a_stateless_cookie_header_gets_the_handshake_and_is_named_as_such(self):
+        # The API 307s to clerk.pff.com to refresh the expired session. A client that does not
+        # persist cookies across that redirect loops until curl aborts — which reads as a
+        # network fault. The error must name the auth flow instead.
+        body = '<a href="https://clerk.pff.com/v1/client/handshake?__clerk_hs_reason=se">Redirect</a>'
+        with pytest.raises(PFFAuthError, match="handshake"):
+            _parse_response("u", 200, body)
+
+    def test_the_direct_session_does_NOT_also_set_a_cookie_header(self):
+        # PFF's jar is ~7 KB. Seeding the session jar AND setting an explicit Cookie header
+        # sends it twice → HTTP 431 with an EMPTY body → "unparseable JSON". Measured live.
+        #
+        # ⭐ Asserted on the REAL SESSION, not on `_headers()`. The first cut checked the helper
+        # and stayed green when the call site was broken back to `include_cookie=True` — the
+        # defect lives at the CALL SITE, so that is what the guard must read.
+        c = PFFClient(cookie="a=1; b=2", token="", transport="direct")
+        sess = c._session()
+        hdr = {k.lower(): v for k, v in dict(sess.headers).items()}
+        assert "cookie" not in hdr, (
+            "the session must not ALSO carry an explicit Cookie header — the jar already has it"
+        )
+        assert len(list(sess.cookies)) == 2, "the jar is what carries the credential"
+
+    def test_431_is_named_as_the_duplicate_cookie_it_almost_always_is(self):
+        with pytest.raises(PFFClientError, match="431"):
+            _parse_response("u", 431, "")
+
+    def test_cookie_values_containing_equals_are_not_truncated(self):
+        # JWT/base64 cookie values carry `=` padding; splitting on every `=` would silently
+        # truncate exactly the session token.
+        from quant_sports_intel_models.football.pff.client import _parse_cookie_header
+        assert _parse_cookie_header("__session=aa.bb==; x=1") == [("__session", "aa.bb=="), ("x", "1")]
+
+    def test_datadome_is_recognised_as_a_challenge_not_a_parse_failure(self):
+        # premium.pff.com is behind DataDome, not Cloudflare. Matching only CF markers would
+        # misfile the block and send the operator after the wrong problem.
+        with pytest.raises(PFFChallengeError):
+            _parse_response("u", 200, "<html>geo.captcha-delivery.com datadome</html>")
+
+
+class TestEntitlementIsAFirstClassFinding:
+    """PFF returns, beside the data, the list of fields THIS TIER WITHHOLDS."""
+
+    def test_restricted_is_never_mistaken_for_the_row_list(self):
+        # `restricted` is a list of FIELD NAMES sitting next to the data list. Treating it as
+        # rows would yield strings-not-dicts and normalise to an all-NA frame — data-shaped
+        # nonsense rather than an error.
+        #
+        # ⭐ NO `prefer` hit on purpose. With one, the lookup short-circuits before the
+        # "single list in the envelope" fallback and the guard passes without ever exercising
+        # the branch that can confuse the two lists — which is where the bug would live.
+        payload = {"restricted": ["routes", "yprr"],
+                   "some_unforeseen_facet_key": [{"player": "X", "attempts": 3}]}
+        assert fx._rows(payload) == [{"player": "X", "attempts": 3}]
+
+    def test_it_still_resolves_when_the_facet_key_IS_known(self):
+        payload = {"restricted": ["routes"], "rushing_summary": [{"player": "X"}]}
+        assert fx._rows(payload, prefer=("rushing_summary",)) == [{"player": "X"}]
+
+    def test_the_withheld_fields_are_returned_to_the_caller(self):
+        client = _StubClient({"restricted": ["routes", "avg_depth_of_target"],
+                              "receiving_summary": [{"player": "X", "targets": 4}]})
+        rows, restricted = fetch_facet_with_entitlement(
+            client, fx.Facet("receiving", "summary"), 1)
+        assert rows == [{"player": "X", "targets": 4}]
+        # Without this the probe reports "1 row pulled" for a payload missing everything we
+        # came for — a feed that is present but empty of the point.
+        assert restricted == ["routes", "avg_depth_of_target"]
+
+    def test_a_404_is_not_retried_and_is_distinguished_from_a_fetch_failure(self):
+        # PFF answers 404 with the body `"Internal server error"`. Retrying a discovery miss
+        # 3x triples our request count against a paid API for no information.
+        with pytest.raises(PFFNotFoundError):
+            _parse_response("u", 404, '"Internal server error"')
+
+
+class TestTeamComesFromTheGameNotTheFacetRow:
+    """PFF's facet rows carry NO team name — only `franchise_id` (measured live)."""
+
+    GAMES = [{
+        "id": 1, "season": 2024, "week": 1,
+        "home_team": {"franchise_id": 28, "abbreviation": "SF", "city": "San Francisco"},
+        "away_team": {"franchise_id": 22, "abbreviation": "NYJ", "city": "New York"},
+    }]
+
+    def test_the_franchise_map_supplies_the_team_the_rows_lack(self):
+        # Without this the NCAAF school block is empty and the join scores a clean 0% — which
+        # is exactly what the first live NCAAF run did.
+        assert build_franchise_map(self.GAMES, "nfl") == {"28": "SF", "22": "NYJ"}
+
+    def test_the_label_key_is_league_specific(self):
+        # NFL `abbreviation` matches nflverse codes; NCAA `abbreviation` is "NOTRED", which
+        # matches nothing on our side — CFBD wants `city` ("Notre Dame").
+        ncaa = [{"id": 1, "home_team": {"franchise_id": 258, "abbreviation": "NOTRED",
+                                        "city": "Notre Dame"}}]
+        assert build_franchise_map(ncaa, "ncaa") == {"258": "Notre Dame"}
+        assert build_franchise_map(ncaa, "nfl") == {"258": "NOTRED"}
+
+    def test_a_nested_team_object_is_never_stringified_into_the_join_key(self):
+        team = {"franchise_id": 28, "abbreviation": "SF", "city": "San Francisco"}
+        assert _team_label(team, "nfl") == "SF"
+        assert _team_label(team, "ncaa") == "San Francisco"
+
+    def test_both_leagues_are_registered(self):
+        assert set(TEAM_LABEL_KEYS) == {"nfl", "ncaa"}
+
+
+class TestSchoolAliasesAreMeasuredNotGuessed:
+    def test_the_state_suffix_aliases_that_were_verified_against_cfbd(self):
+        for pff_name, cfbd_key in [("Grambling State", "grambling"), ("McNeese State", "mcneese"),
+                                   ("Sam Houston State", "sam houston"),
+                                   ("Central Connecticut State", "central connecticut")]:
+            assert school_key(pff_name) == cfbd_key
+
+    def test_state_is_NOT_stripped_wholesale_because_real_rivals_would_merge(self):
+        # Measured: CFBD carries BOTH forms for these — a blanket rule would merge them.
+        for base in ("Ohio", "Michigan", "Florida"):
+            assert school_key(base) != school_key(f"{base} State")
+
+    def test_the_measured_long_short_form_aliases(self):
+        for pff_name, cfbd_key in [("Albany", "ualbany"), ("Appalachian State", "app state"),
+                                   ("Tennessee-Martin", "ut martin"), ("LIU", "long island"),
+                                   ("Virginia Military Institute", "vmi")]:
+            assert school_key(pff_name) == cfbd_key
+
+    def test_a_known_upstream_typo_is_pinned_rather_than_fuzzy_matched(self):
+        # PFF ships "Rio Grand" for "Rio Grande". A typo is a fact about the feed; pinning it
+        # keeps the join exact instead of loosening the threshold for everyone.
+        assert school_key("UT Rio Grand Valley") == school_key("UT Rio Grande Valley")
