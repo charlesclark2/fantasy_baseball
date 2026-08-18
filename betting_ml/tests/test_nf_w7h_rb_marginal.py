@@ -1029,3 +1029,21 @@ def test_the_per_leg_clause_reaches_the_gate_from_the_real_selection_leg():
     assert sel["per_leg_detail"]["degraded_folds"] == 3
     assert out["gates"]["RB"]["checks"]["per_leg_calibration_not_degraded"] is False
     assert out["gates"]["RB"]["ship"] is False
+
+
+def test_a_single_fold_path_proof_produces_no_verdict_and_still_renders(tmp_path):
+    """⭐ The SMOKE's own path. One fold cannot select (`select_position` refuses below 2), so the
+    run must produce NO verdict and still write a readable record — a path proof that crashes in
+    the report layer is a path proof that proved nothing, and a smoke that silently rendered a
+    verdict would be worse (E2.1-r: a path proof is never a result)."""
+    out = R.derive_verdict_layer({"fold_results": _folds()[:1], "n_folds": 1,
+                                  "generated_at": "x", "smoke": True})
+    assert out["selections"] == {} and out["unavailable_positions"] == ["RB"]
+    assert out["marginal_cap"]["state"] == RM.CAP_UNDEFINED
+    assert out["verdict"]["story_verdict"] == "NULL" and out["verdict"]["ship_positions"] == []
+    p = tmp_path / "smoke.md"
+    R.write_report(out, p)
+    text = p.read_text()
+    assert "PATH PROOF" in text and "NOT a verdict" in text, \
+        "a one-fold run does not announce itself as a path proof"
+    assert RM.CAP_UNDEFINED in text
