@@ -571,7 +571,11 @@ export function BigBoard() {
                         onChange={(e) => setRank(p.id, e.target.value)}
                         aria-label={`Rank for ${p.name}`}
                         data-testid="big-board-rank-input"
-                        className="w-full rounded border border-[#1f1f1f] bg-[#0a0a0a] px-1 py-0.5 text-center text-xs text-white"
+                        // ⚠️ `text-base` ON MOBILE IS NOT COSMETIC. A raw control under 16px makes
+                        // iOS auto-zoom on focus and mis-anchor any native picker on the page — the
+                        // defect `components/ui/picker.tsx` exists because of. Pinned by
+                        // `test_mobile_form_control_guard.py`, which is what caught this one.
+                        className="w-full rounded border border-[#1f1f1f] bg-[#0a0a0a] px-1 py-0.5 text-center text-base text-white sm:text-xs"
                       />
 
                       <div className="flex min-w-0 items-center gap-2">
