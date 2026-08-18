@@ -185,7 +185,24 @@ def load_schedule(season: int, as_of_week: int, *, duckdb_path: Path = _DEFAULT_
         df = con.sql(_SCHEDULE_SQL.format(schema=schema, season=season)).df()
     finally:
         con.close()
+    return schedule_from_frame(df, as_of_week)
 
+
+def schedule_from_frame(
+    df: pd.DataFrame, as_of_week: int, *, played: pd.Series | None = None,
+) -> tuple[list[ScheduledGame], dict[str, int], dict[int, bool]]:
+    """The PURE frame → (sim schedule, realized CCG winners, realized home wins) conversion.
+
+    Extracted from `load_schedule` (NCAAF-PS) so the DuckDB-mart caller and the LAKE-backed caller
+    (`game_prediction_snapshot.futures_schedule_from_lake`, which has no `sports.duckdb` to read on
+    the box) share ONE implementation. Two renderers of "which games does the sim simulate" would
+    be two rule sets (E9.61), and this one carries the double-count exclusions.
+
+    `played` optionally REPLACES the week-based played rule with an explicit boolean aligned to
+    `df` — a lake caller marks a game played by comparing its KICKOFF INSTANT to now, which is the
+    DATE-based discipline the whole vertical uses (CFBD `week` restarts at 1 in the postseason).
+    Omitted ⇒ the original `is_completed and season_order_week < as_of_week` rule, byte-identical.
+    """
     is_ccg = df["is_neutral_site"].astype(bool) & df["is_conference_game"].astype(bool) \
         & ~df["is_postseason"].astype(bool)
     ccg = df[is_ccg]
@@ -197,23 +214,26 @@ def load_schedule(season: int, as_of_week: int, *, duckdb_path: Path = _DEFAULT_
         conf = str(r.home_conference)
         realized_ccg[conf] = winner   # one CCG per conference; last write wins (there is one)
 
-    reg = df[~is_ccg & ~df["is_postseason"].astype(bool)].reset_index(drop=True)
+    keep = ~is_ccg & ~df["is_postseason"].astype(bool)
+    played_mask = None if played is None else played.astype(bool)[keep].reset_index(drop=True)
+    reg = df[keep].reset_index(drop=True)
     schedule: list[ScheduledGame] = []
     realized_home_win: dict[int, bool] = {}
-    for r in reg.itertuples(index=False):
-        played = bool(r.is_completed) and int(r.season_order_week) < as_of_week
+    for i, r in enumerate(reg.itertuples(index=False)):
+        played_i = (bool(r.is_completed) and int(r.season_order_week) < as_of_week
+                    if played_mask is None else bool(played_mask.iloc[i]))
         hw = None
         if not pd.isna(r.home_margin):
             realized_home_win[int(r.game_id)] = bool(r.home_margin > 0)
-        if played:
+        if played_i:
             if pd.isna(r.home_margin):
-                played = False  # scheduled-but-no-result → simulate it
+                played_i = False  # scheduled-but-no-result → simulate it
             else:
                 hw = bool(r.home_margin > 0)
         schedule.append(ScheduledGame(
             home_id=int(r.home_team_id), away_id=int(r.away_team_id),
             neutral=bool(r.is_neutral_site), is_conference_game=bool(r.is_conference_game),
-            played=played, home_win=hw,
+            played=played_i, home_win=hw,
         ))
     return schedule, realized_ccg, realized_home_win
 
