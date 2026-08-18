@@ -374,6 +374,13 @@ not evidence. Recorded so a reader knows what was seen when the registration was
   `QB|passing_yards` is an LGBM on the champion feature set and already encodes availability
   partially — so adding `q̂` on top **double-prices availability in the MARGINAL** (NF-W7e §12.2's
   "the joint layer prices availability twice", one layer down).
+  - ⛔⛔ **SUPERSEDED BY §12.2 — THIS READING IS REFUTED. Left in place UNEDITED, because a
+    pre-registration that is rewritten after its result is no longer a pre-registration; the point
+    of recording a one-fold diagnosis is that the decisive run can then overturn it, and it did.**
+    The row-blind matched foil LOSES by +1.1871 CRPS on 8/8 folds (p=0.0) and the decomposition on
+    FIXED edges is NON_MONOTONE with 6 sign changes. The quartile figures quoted above are a
+    per-fold *equal-count* bucketing of a BIMODAL π̂ — see §11.5 for why that cannot be pooled and
+    §12.2 for what replaced it.
 - ⛔ **THE BAR IS NOT MOVED.** §5 registered a tolerance of 0.0 AND the reading *"if the diagnosis is
   right the legs IMPROVE; if it is wrong, this is where it shows."* The legs do not improve.
   Re-reading either the tolerance or that sentence now would be the E2.1-r inversion in its most
@@ -510,6 +517,26 @@ because every one is the "a RED proof lies" family and none was visible from a g
 *Decisive run 2026-08-17, 8 folds × 4,000 draws, 3,365.9 s. ⛔ Nothing here changed a gate, a
 threshold, an arm or a verdict; the only post-run code change is a REPORTED field (§12.7).*
 
+### 12.0 ⭐ THE CORRECTED HEADLINE (supersedes the pre-committed one)
+
+The decision to run pre-committed a headline whose *causal* clause the run then refuted. The
+pre-committed text stays visible in §11.2 and is quoted in §12.2; **this is the sentence that should
+travel forward into the card, the roadmap and any summary:**
+
+> **The per-stat zero-mass CAP is the QB blocker — CONFIRMED** (the served marginals admit 0.2687
+> against a realized all-zero rate of 0.5162, with `QB|passing_yards` binding 71% of rows) — **and
+> lifting it DOES fix assembled QB calibration**: PIT 0.0648 → **0.0281**, clearing the 0.05 bar on
+> **8/8 folds where the incumbent clears 0/8**, while also BEATING the matched foil on the proper
+> score (+0.0184 CRPS, CI [0.0032, 0.0336], 6/8, p=0.0121, PBO 0.0, coverage 0.8299).
+> **The ship is refused by two clauses**: a component-CRPS cost of **+0.3866%** against a
+> pre-registered 0.0 tolerance — confined to ONE leg (`passing_yards`) and positive on only **5 of 8
+> folds** — and **DSR 0.0**.
+> ⛔ **The residual is NOT availability double-pricing.** The row-blind matched foil (identical
+> machinery, availability content stripped) **LOSES by +1.1871 CRPS on 8/8 folds, p=0.0**, and the
+> effect is **NON_MONOTONE in π̂ with 6 sign changes**, ~flat in the two buckets holding 57% of rows.
+> ⛔ **And field composition is NOT the DSR lever** — measured, not assumed: a coherent
+> row-conditional family cuts V 8.8× and DSR still reaches only 0.174 against a 0.95 bar.
+
 **VERDICT: `NULL` / `CONSTRAINT_REFUSED` · `marginal_cap = QB_CLEARS_AT_THE_MARGINAL_LAYER` ·
 `retest_trigger = None` · `binding_half = anchor`.** Refused by exactly two clauses:
 `per_leg_calibration_not_degraded` (anchor) and `dsr_ok` (statistical). The other **15** anchors pass,
@@ -616,15 +643,67 @@ NF-W7g is carded as *"condition the zero target on availability CONFIDENCE, not 
 premise rests on the mechanism §12.2 refutes** — the availability content is worth +1.19 CRPS, and the
 residual damage is not availability-structured. Two measured targets replace it:
 
-1. ⭐ **The binding cell MOVED, and raise-only cannot reach it.** Pooled binding-leg share went
-   `passing_yards` 0.7091 / `attempts` 0.2634 (served) → **`attempts` 0.5724** / `passing_yards`
-   0.4245 (recalibrated). `attempts` already carries **more** zero mass than its realized rate, so no
-   raise-only target in this family can correct it — it is now the majority binding cell and it is
-   structurally out of reach of the whole NF-W7f mechanism. A successor that wants the cap higher must
-   be able to LOWER an over-priced atom, which is a different (and monotonicity-breaking) transform.
+1. ⭐ **The binding cell MOVED — but it is a CEILING on future headroom, not today's obstacle.**
+   Pooled binding-leg share went `passing_yards` 0.7091 / `attempts` 0.2634 (served) → **`attempts`
+   0.5724** / `passing_yards` 0.4245 (recalibrated). `attempts` already carries **more** zero mass
+   than its realized rate, so no raise-only target in this family can correct it, and a successor
+   wanting a HIGHER cap would need a transform that can LOWER an over-priced atom (different, and
+   monotonicity-breaking). ⚠️ **Correction to an earlier framing of this same finding: that is not
+   the current constraint.** The cap now sits at 0.5481 against an installed atom of 0.5176 and the
+   clamp's mean move on π̂ is 0.00225 — i.e. **the cap is no longer binding and the atom is already
+   at the realized rate (0.5162)**. Nothing in this story needs a higher cap. Read `attempts` as the
+   documented limit on how much further this family could ever go, ⛔ not as the thing to fix next.
 2. **The residual `passing_yards` damage is thin-support noise, not a gradient** — concentrated in
    ~7% of rows at intermediate π̂ with alternating sign. Chasing it with a π̂-threshold rule would be
    mis-specified; the honest question is whether it is an effect at all.
+
+### 12.5b ⭐ NF-W7g, RE-AIMED (the carded premise is refuted; this is what the run points at)
+
+NF-W7g is carded as *"condition the zero target on availability CONFIDENCE, not the estimate — fire
+the correction only where the component model isn't already pricing zero."* **That premise is dead**
+(§12.2): the availability content is the largest positive channel in the story, and the residual is
+not availability-structured. A story built on it would be aimed at a mechanism this run refuted.
+
+**What the run actually leaves open is much narrower — and much closer to a ship.** The winning arm
+already produces a QB distribution that is calibrated on 8/8 folds AND beats both the incumbent and
+NF-W7e's arm on CRPS. Only two things stand between that and a certificate, and neither is a
+modelling idea:
+
+| blocker | measured | what it needs |
+|---|---|---|
+| `per_leg_calibration_not_degraded` | +0.3866% on one leg, positive on 5/8 folds | a **forward decision** on gate-vs-materiality (below) |
+| `dsr_ok` | DSR 0.0; coherence cuts V 8.8× and still only reaches 0.174 | a **lower-variance design** — MC error in the per-fold deltas |
+
+⇒ **The honest successor is a VARIANCE-REDUCTION RE-MEASUREMENT under a fresh registration, not a new
+mechanism.** Proposed shape (⛔ all of it to be pre-registered BEFORE any scoring):
+
+1. **Field:** the three ROW-CONDITIONAL arms (`zm_conditional`, `zm_floor`, `zm_over`) as the declared
+   family, on the mechanistic ground that a ROW-BLIND target is a different hypothesis about whether
+   the atom should be personalised at all. `zm_climatology` is RETAINED as a **reference foil** (it is
+   the availability-channel isolator and must stay scoreable) but is **not a trial**. ⚠️ **This must
+   DISCLOSE that NF-W7f already measured this exact field and that `zm_floor` won** — this is a
+   re-measurement, not a fresh search, and pretending otherwise would be the selection bias DSR
+   exists to deflate (MH2.2 / NCAAF-S1's disclosure precedent). ⛔ Note §12.4: the coherent field is
+   NOT expected to clear DSR on its own (0.174) — it is declared because it is the honest family,
+   not because it is a lever.
+2. **The actual lever — DRAWS.** Pre-register the draw count and a **measured** check that it works:
+   re-score one fold at two seeds and show the per-fold delta's seed-to-seed spread falls. ⛔ If the
+   MC component is small relative to the observed sd (0.0182), the design does not help and the
+   record must say so rather than quietly re-running.
+3. **The component clause — the PM's open question, decided FORWARD.** The PM's stated rule was:
+   keep it a hard gate **unless** the degraded component is not independently served/consumed.
+   ⭐ **That condition is MET, and it is checkable rather than arguable:** every consumer of
+   `stat_distribution_serving*` is an NF-W6/W7 **research runner** — there is no `app/backend` route,
+   no `scripts/` exporter, and `export_draft_board_json.py` does not reference the W6d cells at all.
+   The per-stat DISTRIBUTIONS are research substrate, not a served surface. ⚠️ Two caveats the
+   registration must state: (a) the NF-W6/W7 line itself consumes them, and NF-W8 intends to, so
+   "not consumed" is true of the SERVING plane only; (b) whether the served paid *stat line* is
+   derived from these same cells was NOT established here and must be resolved before relying on
+   this. If the clause is relaxed, its replacement threshold must come from a DESIGN quantity — e.g.
+   NF-W7c's shape, *significant AND ≥1/10 of the arm's claimed effect* — ⛔ never from NF-W7f's
+   observed +0.3866%, which would be reverse-engineering the bar to the answer (E2.1-r).
+4. **Out of scope:** a transform that LOWERS an over-priced atom. It is real and documented (§12.5),
+   but the cap is no longer binding, so it buys nothing now.
 
 ### 12.6 What this certifies, and what it does not
 
