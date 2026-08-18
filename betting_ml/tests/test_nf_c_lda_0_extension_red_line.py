@@ -150,3 +150,110 @@ def test_the_probe_really_does_wrap_rather_than_merely_abstain():
         "the fetch observer must read a CLONE — consuming the page's own response stream would "
         "break the draft room it is observing"
     )
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# Clause 4 — the RAW-CAPTURE invariants (added with the capability, not after it)
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# The probe originally stored only STRUCTURAL summaries, which is why it could not hold a secret by
+# construction. Capturing raw WebSocket frames removes that guarantee, so it has to be replaced by
+# an explicit one. The trigger is concrete, not hypothetical: the first real capture showed the room
+# fetching `.../teams/14/draftSecurity`, whose response is a draft-join TOKEN — so the draft socket's
+# own handshake is a plausible carrier for it, and a capture file is something we hand around.
+
+
+def test_a_raw_frame_is_only_ever_stored_through_the_redactor():
+    """⛔ THE LOAD-BEARING ONE. `rawSample` may be assigned from `redact(...)` and nothing else."""
+    body = _sources()["main-world-probe.js"]
+    assigns = re.findall(r"rawSample\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(", body)
+    assert assigns, "no rawSample assignment found — this clause would pass on nothing"
+    for callee in assigns:
+        assert callee == "redact", (
+            f"rawSample is assigned from {callee!r}, not redact(). A raw frame must never be "
+            "stored unredacted — the draft socket may carry the draftSecurity token."
+        )
+
+
+def test_the_redactor_covers_the_shapes_that_actually_appeared():
+    """Each pattern is pinned to something MEASURED, not imagined: the SWID GUID shape came out of
+    the real capture's `members[].id`, and the token/secret forms from `draftSecurity`."""
+    body = _sources()["main-world-probe.js"]
+    for needle, why in [
+        ("[0-9a-f]{8}-", "SWID GUID shape (seen in the real capture's members[].id)"),
+        ("{24,}", "long opaque runs — a token, never a pick field"),
+        ("security", "self-labelled secret fields (draftSecurity)"),
+    ]:
+        assert needle in body, f"redactor does not cover {why}"
+
+
+def test_the_raw_frame_capture_is_bounded():
+    """An unbounded raw capture is a payload capture wearing a different name."""
+    body = _sources()["main-world-probe.js"]
+    m = re.search(r"RAW_FRAME_LIMIT\s*=\s*(\d+)", body)
+    assert m, "no RAW_FRAME_LIMIT declared"
+    assert 0 < int(m.group(1)) <= 2000, f"RAW_FRAME_LIMIT={m.group(1)} is not a bound"
+    assert "slice(0, RAW_FRAME_LIMIT)" in body, "the limit is declared but never applied"
+
+
+#: Fields the pool extractor must NEVER carry. These are league-private or bulky; the five identity
+#: fields it does keep are ESPN's PUBLIC player universe (identical for every league), which is what
+#: makes keeping them proportionate. A pool extractor that grows one of these has quietly become a
+#: payload capture.
+FORBIDDEN_POOL_FIELDS = ("ownership", "stats", "draftRanksByRankType", "ratings",
+                         "notificationSettings")
+
+
+@pytest.mark.parametrize("field", FORBIDDEN_POOL_FIELDS)
+def test_the_pool_extractor_keeps_identity_fields_only(field: str):
+    body = _sources()["main-world-probe.js"]
+    m = re.search(r"function extractPool\([\s\S]*?\n  \}", body)
+    assert m, "extractPool not found — this clause would pass on nothing"
+    assert field not in m.group(0), (
+        f"extractPool carries {field!r}. It must keep identity fields only "
+        "(id / fullName / proTeamId / defaultPositionId / eligibleSlots)."
+    )
+
+
+def test_the_pool_extractor_is_bounded():
+    body = _sources()["main-world-probe.js"]
+    m = re.search(r"POOL_LIMIT\s*=\s*(\d+)", body)
+    assert m, "no POOL_LIMIT declared"
+    assert 0 < int(m.group(1)) <= 20000, f"POOL_LIMIT={m.group(1)} is not a bound"
+
+
+def test_binary_frames_are_DECODED_rather_than_dropped():
+    """⭐ HALF ONE of the first capture's actual defect.
+
+    25 frames arrived on the draft socket and NONE were recorded, because the JSON branch `return`ed
+    on anything unparseable — so a binary pick protocol was indistinguishable from "no messages"
+    (NF1.7(a)). This pins that `decodePrefix` is CALLED, not merely defined: "wired ≠ invoked"
+    (NF-C0e) is precisely how a decoder ships and never runs.
+    """
+    body = _sources()["main-world-probe.js"]
+    calls = len(re.findall(r"decodePrefix\s*\(", body)) - len(
+        re.findall(r"function\s+decodePrefix\s*\(", body))
+    # ⭐ >= 2, and that is a real invariant rather than a test convenience: a socket delivers binary
+    # as EITHER an ArrayBuffer or a Blob depending on `binaryType`, so a decoder wired to only one
+    # carrier still loses half the frames silently — the same defect in a narrower costume. (The red
+    # proof found this: removing just the ArrayBuffer call left a `>= 1` assertion green.)
+    assert calls >= 2, (
+        f"decodePrefix is called {calls}× — both binary carriers (ArrayBuffer and Blob) must "
+        "decode, or frames arriving as the other one are still dropped silently"
+    )
+
+
+def test_an_unreadable_frame_is_COUNTED_rather_than_dropped():
+    """⭐ HALF TWO, deliberately a SEPARATE clause (NF-D17: one isolating fixture per clause).
+
+    ⚠️ THE FIRST VERSION OF THIS TEST WAS VACUOUS AND THE RED PROOF CAUGHT IT. It asserted
+    `"nonTextFrames" in body`, which stayed GREEN when the branch was disabled to `else if (false)`,
+    because the token still occurred on the increment line — the #815 shape ("a break that lands but
+    does not move the ASSERTED PREDICATE"), and proof that an `x in src` guard is the weak form. It
+    now pins the DISCRIMINATING PREDICATE: the branch must actually test for an unreadable body.
+    """
+    body = _sources()["main-world-probe.js"]
+    assert re.search(r"else if \([^)]*bodyText === null[^)]*\)", body), (
+        "no branch discriminates on an unreadable (non-string) body — 'we saw N frames we could "
+        "not read' is a finding; silence is not"
+    )
+    assert re.search(r"nonTextFrames\s*\+=\s*1", body), "unreadable frames are never counted"

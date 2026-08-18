@@ -36,6 +36,15 @@ BOARD = (REPO / "quant_sports_intel_models/football/nfl/fantasy/artifacts"
          / "player_history_json/2026/projections.json")
 FIXTURE = REPO / "betting_ml/tests/fixtures/espn_league_642070_2025_drafted.json"
 
+#: ESPN's FULL player universe, cached by `espn_source.fetch_espn_draftranks`.
+#: ⚠️ GITIGNORED (`.gitignore:119` — `artifacts/*_cache/`), so it is ABSENT from any fresh
+#: `git worktree` even when it exists in the main checkout. That is the NF-INFRA1 landmine, and this
+#: spike walked straight into it: an earlier pass reported "no local ESPN pool capture — the
+#: directory does not exist", which was true of the worktree and FALSE of the main checkout, where
+#: eight seasons had been sitting since 2026-07-26. Hence `--pool` takes an explicit path.
+POOL_CACHE = (REPO / "quant_sports_intel_models/football/nfl/fantasy/artifacts"
+              / "espn_cache/espn_2026.json")
+
 
 def load_board() -> list[dict]:
     return json.loads(BOARD.read_text())["players"]
@@ -78,11 +87,121 @@ def espn_id_crosswalk() -> dict[str, set[str]] | None:
     return dict(out)
 
 
+def measure_pool(path: Path, *, with_crosswalk: bool) -> int:
+    """The FULL-POOL measurement — the population a live draft actually resolves against.
+
+    ⭐ WHY THIS EXISTS SEPARATELY FROM THE ROSTER MEASUREMENT. The roster fixture is 172 players:
+    the DRAFTED TOP of the pool. It cannot show the two defects that only appear at pool scale, and
+    both are real (measured 2026-08-18):
+
+      • FALSE MERGES — two DIFFERENT ESPN players collapsing onto ONE board row. The suffix
+        stripper folds "Frank Gore Jr." (BUF, the son, on our board) onto retired "Frank Gore".
+      • POSITION-DERIVATION EDGES — a TWO-WAY player's `eligibleSlots` span both sides of the ball,
+        so Travis Hunter derives as CB and drops out entirely.
+
+    ⛔ A RAW "match rate" over this population is MEANINGLESS and is deliberately not the headline:
+    the pool is ~4,500 fantasy-position rows against a board of 858, so most rows SHOULD be
+    unmatched (NF-K1 cause 3 — we do not project them). The decision-relevant figures are BOARD
+    COVERAGE (does the pool contain the players we project?) and the FALSE-MERGE count.
+    """
+    from app.backend.services import league_scoring as LS
+    from app.backend.services.platform_import import espn as E
+
+    if not path.exists():
+        print(f"pool cache not found: {path}\n"
+              "  → land it with:  uv run python -c \"from quant_sports_intel_models.football.nfl"
+              ".fantasy import espn_source as E; E.fetch_espn_draftranks(2026)\"\n"
+              "  ⚠️ it is GITIGNORED, so a fresh worktree will not have it even when the main "
+              "checkout does (NF-INFRA1).")
+        return 1
+
+    raw = json.loads(path.read_text())
+    pool = raw if isinstance(raw, list) else (raw.get("players") or [])
+    board = load_board()
+    by_key = {LS._join_key(p["name"], p["pos"], p.get("team")): p for p in board}
+    by_id = {p["id"]: p for p in board}
+    xw = espn_id_crosswalk() if with_crosswalk else None
+
+    rows = []
+    for entry in pool:
+        pl = entry.get("player") if isinstance(entry.get("player"), dict) else entry
+        # ⚠️ Position from `eligibleSlots`, NEVER `defaultPositionId` — NF-C0 §4c: slot 4 is WR while
+        # defaultPositionId 4 is TE, and reading the wrong one silently mis-positions real players.
+        pos = E._player_position(pl)
+        if pos not in LS.PROJECTABLE_POSITIONS:
+            continue
+        rows.append((str(pl.get("fullName") or ""), pos,
+                     E._PRO_TEAM_BY_ID.get(int(pl.get("proTeamId") or -1)), str(pl.get("id"))))
+
+    print(f"POOL    {len(pool)} raw rows → {len(rows)} in projectable positions "
+          f"{dict(collections.Counter(r[1] for r in rows))}")
+    print(f"BOARD   {len(board)} rows\n")
+
+    t1 = t3 = 0
+    claims: dict[str, list[tuple[str, str, str]]] = collections.defaultdict(list)
+    disagreements = []
+    for name, pos, team, pid in rows:
+        hit1 = None
+        if xw is not None:
+            gs = xw.get(pid) or set()
+            if len(gs) == 1:
+                hit1 = by_id.get(next(iter(gs)))
+        hit3 = by_key.get(LS._join_key(name, pos, team))
+        if hit1 and hit3 and hit1["id"] != hit3["id"]:
+            disagreements.append((name, hit1["name"], hit3["name"]))
+        hit = hit1 or hit3
+        if hit1:
+            t1 += 1
+        elif hit3:
+            t3 += 1
+        if hit:
+            claims[hit["id"]].append((name, pid, "tier1" if hit1 else "tier3"))
+
+    resolved = t1 + t3
+    print(f"resolved {resolved}/{len(rows)}  (tier1 {t1} · tier3 {t3})"
+          "   ← a LOW rate is CORRECT here: the board projects 858, the pool is far larger")
+    print(f"⭐ BOARD COVERAGE: {len(claims)}/{len(board)} = {len(claims)/len(board):.1%} "
+          "of the players we project are findable in the pool")
+    if xw is not None:
+        print(f"⭐ tier1/tier3 DISAGREEMENTS: {len(disagreements)}")
+        for d in disagreements[:10]:
+            print(f"     {d[0]}: id-path={d[1]!r} vs name-path={d[2]!r}")
+
+    collisions = {k: v for k, v in claims.items() if len(v) > 1}
+    print(f"\n⛔ FALSE-MERGE COLLISIONS (>1 pool player → the SAME board row): {len(collisions)}")
+    by_cause = collections.Counter()
+    for bid_, members in collisions.items():
+        tiers = {t for _, _, t in members}
+        cause = ("MIXED (id + name)" if tiers == {"tier1", "tier3"}
+                 else "name-rung only" if tiers == {"tier3"} else "id-rung only")
+        by_cause[cause] += 1
+        b = by_id[bid_]
+        print(f"   {b['name']:<26} [{b['pos']} {b['team']}]  {cause}")
+        for nm, pid, t in members:
+            print(f"       {t}  espn_id={pid:<10} {nm}")
+    for cause, k in sorted(by_cause.items()):
+        print(f"   → {cause}: {k}")
+    print("\n⭐ EVERY collision involves the NAME rung; the stable-id rung produces none. The fix is\n"
+          "   the resolver's own rule (b): AMBIGUITY IS AN UNRESOLVED, NOT A COIN FLIP — a name key\n"
+          "   claimed by >1 pool row must resolve for NEITHER, leaving the id rung to decide.")
+
+    missing = [p for p in board if p["id"] not in claims]
+    print(f"\nBoard rows the pool did NOT cover ({len(missing)}):")
+    for p in missing:
+        print(f"   {p['pos']:<4} {p['name']:<26} {p['team']}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--with-crosswalk", action="store_true",
                     help="also measure the tier-1 espn_id rung (needs lake/AWS access)")
+    ap.add_argument("--pool", nargs="?", const=str(POOL_CACHE), default=None, metavar="PATH",
+                    help="measure the FULL ESPN player universe instead of one league's roster "
+                         f"(default {POOL_CACHE})")
     args = ap.parse_args()
+    if args.pool:
+        return measure_pool(Path(args.pool), with_crosswalk=args.with_crosswalk)
 
     from app.backend.services import league_scoring as LS
 
