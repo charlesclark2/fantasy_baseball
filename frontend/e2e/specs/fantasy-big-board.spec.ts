@@ -408,6 +408,31 @@ test.describe("driving the big board", () => {
     expectNoPageErrors(errors)
   })
 
+  test("a failed read of the saved boards says so, and never says 'nothing saved'", async ({
+    page,
+  }) => {
+    // ⭐ E9.46's class, on the user's own data. "You have nothing saved" is a confident statement
+    // about their work that a 503 gives us no standing to make — and it is the one most likely to
+    // make someone rebuild a board that is sitting there intact.
+    const errors = collectPageErrors(page)
+    await signIn(page, { groups: ["subscriber"] })
+    await mockApi(page, {
+      entitlement: "entitled",
+      leagues: "none",
+      customBoards: "one",
+      fail: ["/fantasy/nfl/custom-boards"],
+    })
+    await page.goto("/fantasy/big-board")
+    await expect(page.getByTestId("big-board-row").first()).toBeVisible()
+
+    const status = page.getByTestId("big-board-save-status")
+    await expect(status).toContainText("couldn't load your saved boards")
+    await expect(status).not.toContainText("Nothing saved")
+    // ...and the board itself still renders, because ours is useful even when theirs is unreadable.
+    await expect(page.getByTestId("big-board-row").first()).toBeVisible()
+    expectNoPageErrors(errors)
+  })
+
   test("a saved board loads with its tiers and tags, not just its order", async ({ page }) => {
     // The `one` mode's stored board promotes the third row, tags it and puts a tier break on it —
     // so a client that read only `order` would fail this and pass the reorder test above.

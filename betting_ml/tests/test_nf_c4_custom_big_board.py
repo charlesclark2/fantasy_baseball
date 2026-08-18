@@ -632,6 +632,34 @@ def test_the_save_surface_renders_all_four_states():
         assert shown in block, f"the save-status line never renders {shown!r}"
 
 
+def test_an_unreadable_saved_board_list_is_not_reported_as_an_empty_one():
+    """⭐ E9.46's class, pointed at the user's OWN data. "You have nothing saved for this board" and
+    "we could not read what you have saved" are different facts, and only the first is ours to
+    state — a 503 gives us no standing to make it. Collapsing them tells someone their work is gone
+    on any transient read failure, which is the one message most likely to make them rebuild a board
+    that is sitting there intact.
+
+    The two branches are asserted separately, so a state that rendered the same words for both would
+    fail here even though it renders something for each."""
+    src = _ts("components/fantasy/big-board.tsx")
+    assert '"unreadable"' in src, "the failed-read state does not exist"
+    load = src[src.index("const loadedFor") : src.index("const edit = useCallback")]
+    # ⚠️ THE BRANCH, NOT THE NAME. A first cut asserted `"savedError" in load` and stayed GREEN with
+    # the branch disabled, because the identifier still appears in the effect's DEPENDENCY ARRAY —
+    # a guard satisfied by a declaration for a thing that no longer acts (the same shape that let
+    # the `SaveState` union satisfy the save-status clause). Found by the red proof.
+    assert "if (savedError)" in load, (
+        "the loader does not branch on a failed read — it falls through to an empty document"
+    )
+    idle = src[src.index('saveState.kind === "idle"') :]
+    idle = idle[: idle.index('saveState.kind === "dirty"')]
+    assert "Nothing saved" in idle, "the genuinely-empty branch stopped saying so"
+    unreadable = src[src.index('saveState.kind === "unreadable"') :]
+    unreadable = " ".join(unreadable[: unreadable.index("saveState.kind === \"dirty\"")].split())
+    assert "Nothing saved" not in unreadable, "a failed read still claims nothing is saved"
+    assert "Nothing has been lost" in unreadable
+
+
 def test_a_failed_save_renders_the_servers_own_sentence():
     """⚠️ NOT A GENERIC MESSAGE. `apiFetch` goes to the trouble of preserving FastAPI's `detail`
     precisely so a refusal arrives already written for a person and already saying that nothing was

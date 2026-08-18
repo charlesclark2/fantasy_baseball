@@ -2343,6 +2343,19 @@ const CASES = [
     grep: "SERVER's explanation",
   },
   {
+    id: "failed-read-reads-as-an-empty-account",
+    shipped: "E9.46's class — pre-emptive, and pointed at the user's OWN data",
+    // "You have nothing saved for this board" is a confident statement about someone's work that a
+    // 503 gives us no standing to make, and it is the message most likely to make them rebuild a
+    // board that is sitting there intact. Falling through on a failed read is the natural way to
+    // write the loader, and nothing else in the product would contradict the result.
+    detail: "Loads an empty document on a failed read, so an outage renders as 'nothing saved'.",
+    file: "components/fantasy/big-board.tsx",
+    from: '    if (savedError) {\n      setSaveState({ kind: "unreadable" })\n      return\n    }',
+    to: '    if (false) {\n      setSaveState({ kind: "unreadable" })\n      return\n    }',
+    grep: "never says 'nothing saved'",
+  },
+  {
     id: "saved-board-loads-order-only",
     shipped: "NF-C4 — pre-emptive: two thirds of a saved board silently not restored",
     // ⚠️ THE SHAPE THAT PASSES THE OBVIOUS TEST. "Reorder, save, reload, the order is right" stays
@@ -2444,7 +2457,7 @@ const CASES = [
 // `-- auction-quotes`) for the same reason every entry above records: a production build per case
 // does not belong in a session. So 137/131/6 → 142/136/6, and the next full run CONFIRMS it.
 // ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 148, red: 142, notObservable: 6 }
+const RECORDED_BOARD = { total: 149, red: 143, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

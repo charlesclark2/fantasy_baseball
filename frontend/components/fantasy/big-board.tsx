@@ -77,11 +77,15 @@ type SaveState =
   | { kind: "saving" }
   | { kind: "saved"; at: string }
   | { kind: "error"; message: string }
+  /** ⭐ DISTINCT FROM `idle`. "You have nothing saved" and "we could not read what you have saved"
+   *  are different facts, and only one of them is ours to state. Collapsing them tells a user their
+   *  work is gone on any transient read failure. */
+  | { kind: "unreadable" }
 
 export function BigBoard() {
   const { data: manifest, isLoading: manifestLoading, error: manifestError } = useFantasyManifest()
   const { data: savedLeagues } = useSavedLeagues()
-  const { data: savedBoards, isLoading: savedLoading } = useCustomBoards()
+  const { data: savedBoards, isLoading: savedLoading, isError: savedError } = useCustomBoards()
   const saveBoard = useSaveCustomBoard()
 
   const [configName, setConfigName] = useState<string>("")
@@ -139,6 +143,15 @@ export function BigBoard() {
   useEffect(() => {
     if (!board || !key || savedLoading) return
     if (loadedFor.current === key) return
+    // ⭐ A FAILED READ IS NOT AN EMPTY ACCOUNT (E9.46). Falling through here would load `EMPTY_DOC`
+    // and the status line would say "nothing saved for this board yet" — a confident statement about
+    // the user's own data that we are in no position to make, and the one most likely to make them
+    // start again from scratch over a saved board that is sitting there intact. The board still
+    // renders (it is ours, and it is useful); what changes is that we do not claim anything.
+    if (savedError) {
+      setSaveState({ kind: "unreadable" })
+      return
+    }
     loadedFor.current = key
     const next = stored
       ? { order: stored.order ?? [], tier_breaks: stored.tier_breaks ?? [], tags: stored.tags ?? {} }
@@ -150,7 +163,7 @@ export function BigBoard() {
     setDoc(rec.doc)
     setDropped(rec.droppedOrder + rec.droppedBreaks + rec.droppedTags)
     setSaveState({ kind: "idle" })
-  }, [board, key, savedLoading, stored])
+  }, [board, key, savedLoading, savedError, stored])
 
   const edit = useCallback((fn: (d: BigBoardDoc) => BigBoardDoc) => {
     setDoc((d) => {
@@ -387,6 +400,12 @@ export function BigBoard() {
           {saveState.kind === "idle" && (
             <span className="text-gray-500">
               {stored ? "Saved board loaded." : "Nothing saved for this board yet."}
+            </span>
+          )}
+          {saveState.kind === "unreadable" && (
+            <span className="text-amber-400">
+              We couldn&apos;t load your saved boards just now, so this is our order rather than
+              yours. Nothing has been lost — reload before you make changes.
             </span>
           )}
           {saveState.kind === "dirty" && (

@@ -204,6 +204,13 @@ CASES = [
      "test_a_board_too_large_to_store_answers_413_with_a_readable_sentence"),
 
     # ── the surface ────────────────────────────────────────────────────────────────────────────
+    # ⭐ E9.46 ON THE USER'S OWN DATA. Falling through on a failed read is the natural way to write
+    # the loader and it states, confidently, that their saved board does not exist.
+    ("report a failed read of the saved boards as an empty account", COMPONENT,
+     "    if (savedError) {\n      setSaveState({ kind: \"unreadable\" })\n      return\n    }",
+     "    if (false) {\n      setSaveState({ kind: \"unreadable\" })\n      return\n    }",
+     "test_an_unreadable_saved_board_list_is_not_reported_as_an_empty_one"),
+
     ("swallow the server's explanation behind a generic message", COMPONENT,
      'message: e instanceof Error && e.message ? e.message : "Could not save this board.",',
      'message: "Could not save this board.",',

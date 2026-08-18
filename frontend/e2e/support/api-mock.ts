@@ -1662,6 +1662,19 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
     // NF-C4 — the saved-board store. Ahead of `writeResponseFor` because it owns three METHODS on
     // one path, and ahead of the read map because a `GET` here is served from mutated state rather
     // than from a fixture.
+    //
+    // ⚠️ IT HONOURS `options.fail` ITSELF. The shared failure branch further down is unreachable for
+    // any path handled above it, so without this a spec asking for a failed read would silently get
+    // a healthy one — and the surface's whole point here is that "you have nothing saved" and "we
+    // could not read what you have saved" render differently (E9.46).
+    if (apiPath.startsWith("/fantasy/nfl/custom-boards") && options.fail?.includes(apiPath)) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ detail: "e2e: deliberate read failure" }),
+      })
+      return
+    }
     const boardsBody = customBoardResponse(
       customBoards,
       apiPath,
