@@ -27,6 +27,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import {
   GripVertical,
   Printer,
@@ -59,6 +60,7 @@ import {
   reconcile,
   setNote,
   setTag,
+  trimNotes,
   toggleTierBreak,
   type BigBoardDoc,
   type BoardTag,
@@ -282,7 +284,7 @@ export function BigBoard() {
     if (!configName) return
     setSaveState({ kind: "saving" })
     try {
-      const saved = await saveBoard.mutateAsync({ ...doc, config: configName, size })
+      const saved = await saveBoard.mutateAsync({ ...trimNotes(doc), config: configName, size })
       // ⭐ COMPARE WHAT CAME BACK WITH WHAT WE SENT. The API Lambda has NO CD (NF-C0): `frontend/`
       // auto-deploys on merge while the backend ships only via a manual `deploy.sh`, and the
       // request models do not set `extra="forbid"` — so a backend that predates the `notes` field
@@ -321,6 +323,13 @@ export function BigBoard() {
    * the whole of the first four rounds in one block and no more use on a cheat sheet than the
    * single tier it replaced. At the default depth of 200 it returns 14 groups of 8–27.
    */
+  /** Close the note editor, normalising what was typed. ⚠️ THE TRIM LIVES HERE, NOT IN `setNote` —
+   *  trimming per keystroke deletes the space the user just typed (see `lib/big-board.ts`). */
+  const closeNote = () => {
+    setNoteFor(null)
+    edit(trimNotes)
+  }
+
   const seedOurTiers = () =>
     edit((d) => (board ? { ...d, tier_breaks: ourTierBreaks(board, shownDepth) } : d))
 
@@ -374,7 +383,12 @@ export function BigBoard() {
   const maxBoards = savedBoards?.max_boards ?? null
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    // ⭐ `data-printable-surface` IS WHAT LETS THE STYLESHEET REACH THE SITE FOOTER. `SiteFooter`
+    // is mounted in the ROOT LAYOUT, so it is a sibling of this page and no `print:hidden` here can
+    // touch it; `globals.css` keys a `:has()` rule on this marker instead. It sits on the page
+    // ROOT rather than on the cheat sheet so that a Cmd+P from the editing view is covered too —
+    // the print flow is not only the Print button.
+    <div data-printable-surface className="mx-auto max-w-6xl px-4 py-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold text-white">My Big Board</h1>
@@ -777,7 +791,7 @@ export function BigBoard() {
                             onKeyDown={(e) => {
                               if (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey)) {
                                 e.preventDefault()
-                                setNoteFor(null)
+                                closeNote()
                               }
                             }}
                             placeholder={`Why ${p.name} sits here — for you, at the draft table.`}
@@ -787,7 +801,13 @@ export function BigBoard() {
                             className="w-full max-w-2xl rounded border border-[#262626] bg-[#0a0a0a] px-2 py-1 text-base text-gray-200 placeholder:text-gray-700 sm:text-xs"
                           />
                           <button
-                            onClick={() => setNoteFor(null)}
+                            // ⛔ NO `onBlur` CLOSE HERE. Blur fires BEFORE the click that caused
+                            // it, so closing on blur unmounts this button out from under its own
+                            // click — and any click elsewhere on the board would close the editor
+                            // mid-sentence. The save normalises the document anyway
+                            // (`trimNotes` in `onSave`), so nothing depends on the editor being
+                            // closed first.
+                            onClick={closeNote}
                             data-testid="big-board-note-done"
                             className="mt-0.5 shrink-0 rounded border border-[#262626] px-2 py-1 text-xs text-gray-400 hover:text-white"
                           >
@@ -1022,12 +1042,35 @@ function CheatSheet({
         </p>
       )}
 
-      <div className="print-sheet rounded-lg border border-[#262626] bg-[#0f0f0f] p-4 print:border-0 print:p-0">
+      <div
+        className="print-sheet rounded-lg border border-[#262626] bg-[#0f0f0f] p-4 print:border-0 print:p-0"
+      >
         {/* Print-only. On screen the league and format are in the picker two inches above; on
             paper there is no picker, and a cheat sheet that does not say which league it is for is
-            the one you pick up at the wrong draft. */}
-        <div className="mb-3 hidden items-baseline justify-between border-b border-black pb-1 print:flex">
-          <span className="text-sm font-semibold">{title} — my big board</span>
+            the one you pick up at the wrong draft.
+
+            ⚠️ THE LOGO IS THE `black-` VARIANT, and that is not a style preference: the shipped
+            wordmark is white-on-dark, and the whole reason this stylesheet exists is that browsers
+            do not print backgrounds — so the site's own mark would print white on white paper, i.e.
+            not at all. An <img> is also the one thing the global print colour reset cannot touch
+            (CSS does not reach inside an external SVG), which is exactly why it has to be the right
+            file rather than a recoloured one. */}
+        <div className="mb-3 hidden items-end justify-between border-b border-black pb-1 print:flex">
+          <span className="flex items-center gap-2">
+            <Image
+              src="/brand/black-logo-wordmark.svg"
+              alt="Credence Sports"
+              width={132}
+              height={33}
+              className="h-5 w-auto"
+              // ⚠️ EAGER. Its container is `display: none` until the print stylesheet applies, and
+              // a lazy image inside a hidden box has no reason to load — the one moment it is
+              // needed is the moment there is no time left to fetch it.
+              loading="eager"
+              unoptimized
+            />
+            <span className="text-sm font-semibold">{title} — my big board</span>
+          </span>
           <span className="text-[10px]">
             {shown} of {total} · printed {new Date().toLocaleDateString()} · credencesports.com
           </span>

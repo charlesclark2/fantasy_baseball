@@ -2470,6 +2470,31 @@ const CASES = [
     to: "",
     grep: "opens in a new tab",
   },
+  {
+    id: "note-loses-every-space-typed",
+    shipped: "NF-C4 — reported live: notes came out as one unreadable string",
+    // 🐛 `setNote` runs on EVERY KEYSTROKE. Trimming there removes the space the user just typed
+    // before the next character can follow it. ⚠️ The spec only reaches this with
+    // `pressSequentially` — `fill()` sets the whole value in one event and is blind to it, which
+    // is precisely why it shipped.
+    detail: "Normalises the note on every keystroke.",
+    file: "lib/big-board.ts",
+    from: '  const raw = String(text ?? "").slice(0, MAX_NOTE_LEN)',
+    to: '  const raw = String(text ?? "").trim().slice(0, MAX_NOTE_LEN)',
+    grep: "KEEPS the spaces",
+  },
+  {
+    id: "site-footer-prints-under-the-cheat-sheet",
+    shipped: "NF-C4 — reported off a real printout: a page of dead nav links",
+    // `SiteFooter` is mounted in the ROOT LAYOUT — a sibling of the page — so no class on the big
+    // board can reach it. Asserted under a REAL print medium (`emulateMedia`), not by reading
+    // class names.
+    detail: "Breaks the selector that reaches the root-layout footer.",
+    file: "app/globals.css",
+    from: "  body:has([data-printable-surface]) footer {",
+    to: "  body:has([data-printable-surface]) footer.never-matches {",
+    grep: "cheat sheet and nothing else",
+  },
 ]
 
 /**
@@ -2532,7 +2557,7 @@ const CASES = [
 // `-- auction-quotes`) for the same reason every entry above records: a production build per case
 // does not belong in a session. So 137/131/6 → 142/136/6, and the next full run CONFIRMS it.
 // ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 155, red: 149, notObservable: 6 }
+const RECORDED_BOARD = { total: 157, red: 151, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
