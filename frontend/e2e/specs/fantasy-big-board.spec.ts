@@ -300,10 +300,15 @@ test.describe("notes, and the tiers we can seed", () => {
     // next character could follow it and a note came out as
     // "jmarrchaseisherebecauseiwantawrhigher". This replays it the way it actually happens —
     // one keystroke at a time — which is the only way to see it.
+    // ⚠️⚠️ THE LOOP HAS TO CLOSE THE FEEDBACK, and the red proof is what proved it: a first cut fed
+    // `typed.slice(0, i)` in each round and stayed GREEN with the trim restored, because the LAST
+    // call passes the whole string and the whole string has nothing to trim. The real box reads its
+    // value back OUT of the document — `value={note}` — so the trimmed value is what the next
+    // keystroke is appended to, and that is where the space is lost. Model the loop, not the input.
     const id = BOARD[0].id
     const typed = "wr room is thin here"
     let doc = EMPTY_DOC
-    for (let i = 1; i <= typed.length; i++) doc = setNote(doc, id, typed.slice(0, i))
+    for (const ch of typed) doc = setNote(doc, id, (doc.notes[id] ?? "") + ch)
     expect(doc.notes[id]).toBe(typed)
   })
 
