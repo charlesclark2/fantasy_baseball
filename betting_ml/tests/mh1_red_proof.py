@@ -96,8 +96,8 @@ BREAKS = [
           ["test_the_harness_still_pairs_a_variant_run_with_its_incumbent_run_LIVE"]),
     Break("the harness stops refusing an uncontrolled contrast",
           "betting_ml/scripts/model_bakeoff.py",
-          '    mismatch = [k for k in ("seed", "n_folds", "smoke", "metric")',
-          '    mismatch = [k for k in ()',
+          '                if _cmp(inc, k) != _cmp(result, k)]',
+          '                if False]',
           ["test_the_harness_refuses_to_pair_two_runs_that_are_not_a_controlled_contrast"]),
     Break("a recorded pairing silently goes inactive",
           "betting_ml/evaluation/feature_selection/bakeoff/"

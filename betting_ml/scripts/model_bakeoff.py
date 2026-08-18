@@ -535,8 +535,11 @@ def attribution_for_run(result: dict) -> dict:
     # ⚠️ COMPARABILITY. Two runs on different seeds / fold counts / row caps are not a controlled
     # contrast, and differencing them would attribute a DESIGN difference to the contract. Refuse
     # with the mismatch named rather than emit a number the reader would trust.
+    def _cmp(d: dict, k: str):
+        return bool(d.get(k)) if k == "smoke" else d.get(k)
+
     mismatch = [k for k in ("seed", "n_folds", "smoke", "metric")
-                if bool(inc.get(k)) != bool(result.get(k)) or inc.get(k) != result.get(k)]
+                if _cmp(inc, k) != _cmp(result, k)]
     if mismatch:
         return {**base, "decomposition": {
             "available": False,
