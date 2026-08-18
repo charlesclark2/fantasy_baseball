@@ -420,6 +420,10 @@ def select_ceiling(fold_results: list[dict], n_folds: int) -> dict:
         "fold_wins": int((deltas > 0).sum()),
         "p_one_sided": M14.onesided_paired_pvalue(deltas),
         "ceiling_pct": None if m is None else round(100.0 * m / mean_inc, 3),
+        # ⭐ the interval in the SAME units as the bands, so "does the evidence rule out a MATERIAL
+        # ceiling?" is a direct read rather than an arithmetic exercise for the reader
+        "ceiling_ci_pct": [None if lo is None else round(100.0 * lo / mean_inc, 3),
+                           None if hi is None else round(100.0 * hi / mean_inc, 3)],
     })
     out["fold_clause"]["passes"] = clause.passes(out["fold_wins"])
     return out
@@ -519,4 +523,50 @@ def null_state(sel: dict, decision: dict, *, n_folds: int) -> dict:
         "⛔ NO season/fold re-test trigger is published for RB — pre-registered scope guard. A "
         "ceiling below the band is a MEASUREMENT of the form's headroom, not a power shortfall, "
         "and more seasons cannot move it.")
+
+    # ⭐⭐ HAND-CORRECTION (the Nth in this vertical; `classify_null` is a shared instrument and its
+    # DEFAULT branch is wrong for a BAND decision).
+    #
+    # `classify_null` answers "is the effect > 0?" and, given no detectability figure, FALLS THROUGH
+    # to POWER_LIMITED — its own reason says "insufficient recorded statistics to certify the null
+    # as powered". This story does not ask that question. It asks "is the ceiling ≥ the
+    # pre-registered MATERIALITY band?", and on that question the evidence is DECISIVE rather than
+    # thin: when the whole 95% interval lies BELOW the band, more folds tighten the interval around
+    # a point estimate that is already far too small, so no fold count can change the verdict.
+    #
+    # Publishing POWER_LIMITED here would read as "underpowered — buy more seasons" for a bar the
+    # data already exclude: the actively-misleading direction NF-D18 / MH2 (g″) forbid, and the very
+    # thing this story's scope guard was pre-registered to prevent.
+    # ⛔ The raw verdict is RETAINED verbatim under `classify_null_raw`, never overwritten (NF-D20).
+    # ⛔ NARROW BY DESIGN — it fires ONLY on the instrument's POWER fall-through. A decisive state
+    # must never be overwritten: `GENUINE_ABSENCE` (a NEGATIVE point estimate, which MH2 ranks
+    # ABOVE the power states precisely because no n rescues it), `INACTIVE` and `UNDEFINED` all
+    # carry strictly more information than "immaterial" and are left exactly as the instrument
+    # returned them. Caught by an existing guard, which fired when a first cut swallowed a
+    # GENUINE_ABSENCE.
+    hi_pct = (sel.get("ceiling_ci_pct") or [None, None])[1]
+    if d["state"] == "POWER_LIMITED" and hi_pct is not None and hi_pct < CEILING_BANDS[0]:
+        d = {
+            "state": "MEASURED_IMMATERIAL",
+            "hand_corrected": True,
+            "corrected_from": d["state"],
+            "reason": (
+                f"the 95% interval on the ceiling is [{sel['ceiling_ci_pct'][0]}%, {hi_pct}%] and "
+                f"its UPPER bound sits {round(CEILING_BANDS[0] / hi_pct, 2)}× BELOW the "
+                f"{CEILING_BANDS[0]}% materiality band — the evidence RULES OUT a material ceiling "
+                f"rather than failing to detect one. This is a MEASUREMENT, not a power shortfall: "
+                f"more folds tighten the interval around a point estimate {round(CEILING_BANDS[0] / (sel['ceiling_pct'] or 1), 1)}× "
+                f"too small to reach the band."),
+            "remedy": ("a DIFFERENT MECHANISM, never more data and never a smaller field — a "
+                       "bake-off confined to this form cannot pay, which is exactly the question "
+                       "the oracle gate was run to answer before funding one"),
+            "retest_trigger": None,
+            "retest_trigger_note": d["retest_trigger_note"],
+            "classify_null_raw": {k: v for k, v in d.items() if k != "retest_trigger_note"},
+            "field_remedy_admissible": d.get("field_remedy_admissible"),
+            "field_remedy_note": (
+                "absent because no FIELD remedy was prescribed — the instrument emits the MH2.7 "
+                "flag only where it recommends a field size, and this state does not (the machine "
+                "flag is read, never the prose)."),
+        }
     return d

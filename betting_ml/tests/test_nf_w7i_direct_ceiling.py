@@ -248,11 +248,19 @@ def test_select_refuses_a_field_with_no_scored_fold():
 
 
 # ── 7. The pre-registered SCOPE guard: RB gets no season/fold re-test trigger ───────────────────
-def test_rb_is_never_given_a_season_or_fold_retest_trigger():
+@pytest.mark.parametrize("pct,jitter,corrected", [(0.5, 0.0, True), (6.0, 0.5, False)])
+def test_rb_is_never_given_a_season_or_fold_retest_trigger(pct, jitter, corrected):
     """NF-W7h measured RB's DSR as variance-bound and unreachable at any n. A 'come back with more
-    seasons' trigger is the misleading direction NF-D18 / MH2 (g″) forbid."""
-    sel, dec = _decide(_field(0.5))
+    seasons' trigger is the misleading direction NF-D18 / MH2 (g″) forbid.
+
+    ⛔ BOTH branches are exercised — the hand-corrected one AND the raw `classify_null` one. The
+    hand-correction sets its own `retest_trigger`, so a fixture that only ever reaches the
+    corrected branch would leave the raw path's suppression untested (it went vacuous exactly this
+    way when the correction was added, and the RED proof caught it).
+    """
+    sel, dec = _decide(_field(pct, jitter=jitter))
     ns = DC.null_state(sel, dec, n_folds=8)
+    assert bool(ns.get("hand_corrected")) is corrected, "fixture did not reach the intended branch"
     assert ns["retest_trigger"] is None
     assert "NO season/fold re-test trigger" in ns["retest_trigger_note"]
     assert "field_remedy_admissible" in ns, "MH2.7: read the machine flag, never the prose"
@@ -272,6 +280,60 @@ def test_a_negative_ceiling_is_never_reported_as_beating_its_foil():
     assert ns["state"] == "GENUINE_ABSENCE", (
         f"a negative ceiling classified as {ns['state']} — a negative point estimate is not "
         "rescued by n (NF-D15 (g\u2033))")
+
+
+def test_a_ceiling_whose_whole_interval_is_below_the_band_is_not_power_limited():
+    """`classify_null` answers 'is the effect > 0?' and, with no detectability figure, FALLS
+    THROUGH to POWER_LIMITED. This story asks 'is the ceiling ≥ the materiality band?' — and when
+    the whole 95% interval lies BELOW that band the evidence is DECISIVE, not thin. Publishing
+    POWER_LIMITED would read as 'buy more seasons' for a bar the data already exclude (NF-D18 /
+    MH2 (g″)).
+
+    The fixture puts a TIGHT interval far below the band, so only the band comparison can decide.
+    """
+    sel, dec = _decide(_field(0.2, jitter=0.005))
+    hi = sel["ceiling_ci_pct"][1]
+    assert hi is not None and hi < DC.CEILING_BANDS[0], "fixture must sit wholly below the band"
+    ns = DC.null_state(sel, dec, n_folds=8)
+    assert ns["state"] == "MEASURED_IMMATERIAL", (
+        f"a ceiling whose whole interval is below the band classified as {ns['state']}")
+    assert ns["retest_trigger"] is None
+    assert "never more data" in ns["remedy"]
+
+
+def test_the_hand_correction_retains_the_instruments_raw_verdict():
+    """NF-D20: correcting an instrument's misclassification must never DESTROY what it said."""
+    sel, dec = _decide(_field(0.2, jitter=0.005))
+    ns = DC.null_state(sel, dec, n_folds=8)
+    assert ns["hand_corrected"] is True and ns["corrected_from"]
+    assert ns["classify_null_raw"]["state"] == ns["corrected_from"], (
+        "the raw classify_null verdict must be retained verbatim, not overwritten")
+
+
+def test_the_hand_correction_never_swallows_a_decisive_state():
+    """A NEGATIVE point estimate is GENUINE_ABSENCE, which MH2 ranks ABOVE the power states because
+    no n rescues it. That is strictly more informative than 'immaterial' and must survive."""
+    folds = _field(3.0)
+    for fr in folds:                       # drive every active form BELOW the incumbent
+        for f in DC.ORACLE_FORMS:
+            fr["scores"][f"oracle__{f}"] = fr["scores"][DC.INCUMBENT] + 0.4
+            fr["scores"][f"matched_n__{f}"] = fr["scores"][DC.INCUMBENT] + 0.9
+    sel, dec = _decide(folds)
+    assert sel["ceiling_ci_pct"][1] < DC.CEILING_BANDS[0], "fixture is below the band"
+    ns = DC.null_state(sel, dec, n_folds=len(folds))
+    assert ns["state"] == "GENUINE_ABSENCE" and ns.get("hand_corrected") is not True, (
+        f"the correction swallowed a decisive state → {ns['state']}")
+
+
+def test_a_ceiling_reaching_the_band_is_left_to_the_instrument():
+    """The correction must be NARROW: it fires only when the interval excludes the band. A ceiling
+    that could still be material keeps whatever classify_null said."""
+    sel, dec = _decide(_field(6.0, jitter=0.5))
+    hi = sel["ceiling_ci_pct"][1]
+    assert hi is not None and hi >= DC.CEILING_BANDS[0], "fixture must reach the band"
+    ns = DC.null_state(sel, dec, n_folds=8)
+    assert ns.get("hand_corrected") is not True, (
+        "the hand-correction fired on a ceiling that could still be material")
 
 
 def test_classify_null_is_given_the_declared_field_size():

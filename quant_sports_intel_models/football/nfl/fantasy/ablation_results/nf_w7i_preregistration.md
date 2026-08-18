@@ -148,6 +148,29 @@ over the 8 folds.
 - `cv_power.classify_null` is invoked with **`declared_field_size = 5`** and the machine flag
   **`field_remedy_admissible`** is read, never the prose (MH2.7).
 
+  ### ⚠️ POST-RUN HAND-CORRECTION of the null STATE (the Nth in this vertical)
+
+  On the full run `classify_null` returned **`POWER_LIMITED`** — by its own reason a DEFAULT
+  fall-through ("insufficient recorded statistics to certify the null as powered"), because the
+  instrument answers *"is the effect > 0?"* and was given no detectability figure. **This story does
+  not ask that question.** It asks *"is the ceiling ≥ the pre-registered materiality band?"*, and on
+  that question the evidence is **decisive rather than thin**: the 95% interval is
+  **[−0.166%, +0.438%]**, whose UPPER bound sits **4.57× BELOW** the 2% band (the point estimate is
+  14.7× too small). More folds tighten that interval around a point estimate that cannot reach the
+  band — so no fold count changes the verdict.
+
+  Publishing `POWER_LIMITED` would therefore read as *"underpowered, buy more seasons"* for a bar
+  the data already **exclude** — the actively-misleading direction NF-D18 / MH2 (g″) forbid, and
+  precisely what this story's scope guard was pre-registered to prevent. The state is hand-corrected
+  to **`MEASURED_IMMATERIAL`**, whose remedy is *a different mechanism, never more data and never a
+  smaller field*.
+
+  ⛔ **The raw verdict is RETAINED verbatim** under `classify_null_raw` (NF-D20), and the correction
+  is **narrow by design**: it fires ONLY on the instrument's `POWER_LIMITED` fall-through, so a
+  decisive state — `GENUINE_ABSENCE` (a NEGATIVE point estimate, which MH2 ranks ABOVE the power
+  states because no n rescues it), `INACTIVE`, `UNDEFINED` — is never overwritten. An existing guard
+  caught a first cut that swallowed a `GENUINE_ABSENCE`; both branches are now RED-proven.
+
 **Declared bias direction (the NF-W5/NF-W6 rule): every choice favours a BUILD** — the ceiling is a
 MAX over forms (upward-biased selection on the oracle side), the peek sees the future, and the
 headline λ is the sweep's most generous value. **So a NO is CONSERVATIVE.**
