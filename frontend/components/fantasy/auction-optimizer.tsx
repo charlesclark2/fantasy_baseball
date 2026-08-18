@@ -33,7 +33,7 @@ import {
   defaultSalePrice,
   formatInflation,
   formatMoney,
-  formatMoneyRange,
+  formatPointsRange,
   openSlotsFor,
   rosterSpotsOf,
   type AuctionPick,
@@ -455,8 +455,17 @@ export function AuctionOptimizer() {
                     </div>
                     <div className="text-right">
                       <div className="text-[10px] uppercase tracking-wide text-gray-600">Value</div>
-                      <div className="text-xs text-gray-300">
-                        {formatMoneyRange(c.auction.low, c.auction.high)}
+                      <div data-testid="auction-value" className="text-xs text-gray-300">
+                        {formatMoney(c.auction.value)}
+                      </div>
+                      {/* The projection's own uncertainty, in the units it is defined in. It used
+                          to be rendered as a DOLLAR range here, which was wrong — see
+                          `AuctionValue`. Points say what they mean. */}
+                      <div
+                        data-testid="auction-points-range"
+                        className="whitespace-nowrap text-[10px] text-gray-600"
+                      >
+                        {formatPointsRange(c.player.ptsP10, c.player.ptsP90)}
                       </div>
                     </div>
                     <div className="text-right">
@@ -549,10 +558,15 @@ export function AuctionOptimizer() {
                 </div>
               </div>
               <p className="mb-2 text-[11px] leading-snug text-gray-600">
-                <strong className="text-gray-500">Value</strong> is the range this player is worth in
-                a ${budget} league — his projection&apos;s own 80% interval priced at the
-                league&apos;s dollars-per-point. It is what he is <em>worth</em>, not a forecast of
-                what he will <em>go for</em>.
+                <strong className="text-gray-500">Value</strong> is this player&apos;s share of the
+                ${budget * size} in the room, after every roster spot is charged its $1 minimum —
+                shared out by how far each player is projected above the last startable player at
+                his position. Add up the values of the {size * slotsPerTeam} players who get bought
+                and you get the room&apos;s money back exactly. It is what he is <em>worth</em>, not
+                a forecast of what he will <em>go for</em>. Hover a value for the projection&apos;s
+                own 80% range, which is quoted in points: a dollar is a share of a fixed pot, so
+                that range cannot be carried into dollars without assuming how players&apos; seasons
+                move together, which we do not model.
               </p>
               <p className="mb-2 text-[11px] leading-snug text-gray-600">
                 Someone nominated a name that isn&apos;t on the shortlist? Search for him, type what
@@ -596,8 +610,11 @@ export function AuctionOptimizer() {
                               </span>
                             </div>
                           </td>
-                          <td className="whitespace-nowrap py-1.5 text-right text-gray-300">
-                            {formatMoneyRange(v?.low, v?.high)}
+                          <td
+                            className="whitespace-nowrap py-1.5 text-right text-gray-300"
+                            title={`Projected ${formatPointsRange(p.ptsP10, p.ptsP90)} (80% range)`}
+                          >
+                            {formatMoney(v?.value)}
                           </td>
                           {/* ⭐ THE SHARED `bidFor`, never an inline recompute. The first cut
                               did the arithmetic here and reached a DIFFERENT number than the panel

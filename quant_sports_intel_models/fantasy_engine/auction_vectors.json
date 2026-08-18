@@ -64,57 +64,41 @@
         {
           "id": "stud",
           "value": 1163,
-          "low": 698,
-          "high": 1589,
           "share": 0.526316
         },
         {
           "id": "mid",
           "value": 466,
-          "low": 94,
-          "high": 1086,
           "share": 0.210526
         },
         {
           "id": "steady",
           "value": 311,
-          "low": 233,
-          "high": 404,
           "share": 0.140351
         },
         {
           "id": "replacement",
           "value": 1,
-          "low": 1,
-          "high": 140,
           "share": 0.0
         },
         {
           "id": "below",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.0
         },
         {
           "id": "unprojected",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.0
         },
         {
           "id": "crossed",
           "value": 156,
-          "low": 47,
-          "high": 342,
           "share": 0.070175
         },
         {
           "id": "fringe",
           "value": 117,
-          "low": 16,
-          "high": 257,
           "share": 0.052632
         }
       ]
@@ -132,57 +116,41 @@
         {
           "id": "stud",
           "value": 1264,
-          "low": 759,
-          "high": 1727,
           "share": 0.526316
         },
         {
           "id": "mid",
           "value": 506,
-          "low": 102,
-          "high": 1180,
           "share": 0.210526
         },
         {
           "id": "steady",
           "value": 338,
-          "low": 254,
-          "high": 439,
           "share": 0.140351
         },
         {
           "id": "replacement",
           "value": 1,
-          "low": 1,
-          "high": 153,
           "share": 0.0
         },
         {
           "id": "below",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.0
         },
         {
           "id": "unprojected",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.0
         },
         {
           "id": "crossed",
           "value": 169,
-          "low": 52,
-          "high": 372,
           "share": 0.070175
         },
         {
           "id": "fringe",
           "value": 127,
-          "low": 18,
-          "high": 279,
           "share": 0.052632
         }
       ]
@@ -200,57 +168,41 @@
         {
           "id": "stud",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.526316
         },
         {
           "id": "mid",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.210526
         },
         {
           "id": "steady",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.140351
         },
         {
           "id": "replacement",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.0
         },
         {
           "id": "below",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.0
         },
         {
           "id": "unprojected",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.0
         },
         {
           "id": "crossed",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.070175
         },
         {
           "id": "fringe",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.052632
         }
       ]
@@ -268,57 +220,41 @@
         {
           "id": "stud",
           "value": 54,
-          "low": 33,
-          "high": 74,
           "share": 0.555556
         },
         {
           "id": "mid",
           "value": 22,
-          "low": 5,
-          "high": 51,
           "share": 0.222222
         },
         {
           "id": "steady",
           "value": 15,
-          "low": 12,
-          "high": 19,
           "share": 0.148148
         },
         {
           "id": "replacement",
           "value": 1,
-          "low": 1,
-          "high": 7,
           "share": 0.0
         },
         {
           "id": "below",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.0
         },
         {
           "id": "unprojected",
           "value": 1,
-          "low": 1,
-          "high": 1,
           "share": 0.0
         },
         {
           "id": "crossed",
           "value": 8,
-          "low": 3,
-          "high": 17,
           "share": 0.074074
         },
         {
           "id": "fringe",
           "value": 6,
-          "low": 2,
-          "high": 13,
           "share": 0.055556
         }
       ]

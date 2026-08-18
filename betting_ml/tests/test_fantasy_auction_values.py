@@ -167,43 +167,49 @@ def test_a_player_at_or_below_replacement_is_worth_exactly_the_minimum():
     assert vals["unprojected"].value == 1
 
 
-def test_the_band_comes_back_ordered_even_when_the_interval_arrives_crossed():
+def test_the_projection_interval_is_carried_on_the_board_and_never_priced():
+    """⭐ THE RETIRED DOLLAR BAND — and why this is a test rather than a deletion.
+
+    `aucLo`/`aucHi` priced the projection's 80% points interval through the league rate. Measured on
+    the SERVED 2026 half-PPR 12-team board ($2,400 in the room, 180 roster spots):
+
+        sum of the point values over the 180 spots = $2,404  (the pool, exactly)
+        sum of the LOW  edges                      = $  180  (7.5% — every one of the 870 was $1)
+        sum of the HIGH edges                      = $9,882  (412% of the money in the room)
+
+    A figure nobody can spend is not a price. The rows still CARRY `vorP10`/`vorP90` (other surfaces
+    read the points interval), so "we stopped pricing them" cannot be seen from the signature — it
+    has to be asserted. A CROSSED interval is used deliberately: if either column were read at all,
+    a p10 above the p90 could not price identically to no interval at all.
+    """
     pool = A.auction_pool(12, 16, 200)
-    (v,) = A.auction_values([{"id": "x", "vor": 20.0, "vorP10": 44.0, "vorP90": 6.0}], pool)
-    assert v.low <= v.value or v.low <= v.high
-    assert v.low <= v.high, "a crossed source interval rendered as a backwards $ band"
-
-
-def test_a_board_with_no_interval_columns_gives_a_degenerate_band_not_a_wrong_one():
-    pool = A.auction_pool(12, 16, 200)
-    (v,) = A.auction_values([{"id": "x", "vor": 50.0}], pool)
-    assert v.low == v.value == v.high
-
-
-def test_the_band_is_the_players_own_interval_priced_at_the_league_rate():
-    """⭐ THE RATE IS HELD FIXED ACROSS THE BAND. Re-deriving a rate from the p10 column would
-    answer "what if EVERY player simultaneously landed at his 10th percentile" — a world where the
-    money is unchanged, so the values barely move. The drafter's question is about ONE player."""
-    pool = A.auction_pool(12, 16, 200)
-    rows = [
-        {"id": "a", "vor": 100.0, "vorP10": 50.0, "vorP90": 150.0},
-        {"id": "b", "vor": 100.0, "vorP10": 50.0, "vorP90": 150.0},
-    ]
-    vals = A.auction_values(rows, pool)
-    rate = pool.surplus / 200.0  # sum of the two vors
-    assert vals[0].value == round(1 + rate * 100)
-    assert vals[0].low == round(1 + rate * 50)
-    assert vals[0].high == round(1 + rate * 150)
-
-
-def test_an_asymmetric_projection_interval_survives_as_an_asymmetric_dollar_band():
-    """The rookie/veteran bands are strongly skewed (NF1.7), and a band that got re-centred on the
-    way into dollars would quietly delete exactly the information it exists to carry."""
-    pool = A.auction_pool(12, 16, 200)
-    (v,) = A.auction_values(
-        [{"id": "skewed", "vor": 60.0, "vorP10": 55.0, "vorP90": 200.0}], pool
+    crossed = {"id": "x", "vor": 20.0, "vorP10": 44.0, "vorP90": 6.0}
+    wide = {"id": "x", "vor": 20.0, "vorP10": -500.0, "vorP90": 5000.0}
+    bare = {"id": "x", "vor": 20.0}
+    (a,), (b,), (c,) = (A.auction_values([r], pool) for r in (crossed, wide, bare))
+    assert a == b == c, "an interval column still moves the price"
+    assert not hasattr(a, "low") and not hasattr(a, "high"), (
+        "a dollar band is back on AuctionValue — see the docstring for the measurement that "
+        "retired it; a band needs a model of how players' seasons move together"
     )
-    assert (v.high - v.value) > 4 * (v.value - v.low)
+
+
+def test_a_dollar_value_is_a_share_of_the_pool_so_the_edges_could_not_have_been_prices():
+    """The arithmetic behind the retirement, in miniature and independent of any board file.
+
+    Values conserve: the players who get bought are worth the room's money, exactly. That is the
+    identity the whole model rests on — and it is precisely what an interval priced at the same rate
+    breaks, because the same money cannot simultaneously buy the p90 of everyone.
+    """
+    pool = A.auction_pool(2, 2, 50)  # 4 spots, $100 in the room
+    rows = [{"id": f"p{i}", "vor": v} for i, v in enumerate((100.0, 60.0, 30.0, 10.0, 5.0))]
+    vals = A.auction_values(rows, pool)
+    bought = sorted((v.value for v in vals), reverse=True)[: pool.spots_total]
+    assert sum(bought) == pool.total, "the conservation identity is what makes a value a price"
+
+    # ...and the shares that produce it sum to 1 over the same draftable set.
+    top_shares = sorted((v.share for v in vals), reverse=True)[: pool.spots_total]
+    assert abs(sum(top_shares) - 1.0) < 1e-6
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -523,8 +529,14 @@ def test_the_exporter_stamps_the_auction_fields_on_every_row_additively():
     for original, row in zip(before, rows):
         for k, v in original.items():
             assert row[k] == v, f"the exporter changed the existing field {k!r}"
-        assert {"aucVal", "aucLo", "aucHi"} <= set(row), "a published row carries no auction value"
-        assert row["aucLo"] <= row["aucVal"] <= row["aucHi"]
+        assert "aucVal" in row, "a published row carries no auction value"
+        assert isinstance(row["aucVal"], int) and row["aucVal"] >= 1
+        # 🩹 THE RETIRED BAND. `aucLo`/`aucHi` were published by the first cut and are gone; the
+        # rule above forbids dropping a published key, so this pins that they really are gone
+        # rather than left behind carrying a number nothing computes any more.
+        assert "aucLo" not in row and "aucHi" not in row, (
+            "the retired dollar band is being published again"
+        )
     # ...including the gap-fill row, which must price rather than render blank on an auction board.
     assert rows[-1]["aucVal"] == 1
 
@@ -573,15 +585,12 @@ def test_a_locked_caller_never_receives_an_auction_dollar_value():
     row = {
         "id": "x", "name": "A Player", "pos": "RB", "team": "KC", "bye": 6, "adp": 4.2,
         "pts": 300.0, "vor": 150.0, "ovrRank": 1, "posRank": 1,
-        "aucVal": 63, "aucLo": 38, "aucHi": 88,
+        "aucVal": 63,
     }
     (locked,) = entitlement.lock_board_rows([row])
-    for field in ("aucVal", "aucLo", "aucHi"):
-        assert field not in locked, f"a locked board leaked {field} — auction dollars are paid"
+    assert "aucVal" not in locked, "a locked board leaked aucVal — auction dollars are paid"
     # ...and the row is still recognisably a player, or the free board stops being coherent.
     assert locked["name"] == "A Player" and locked["adp"] == 4.2
     # The lock chip is computed from the real payload, so the new fields must SHOW as withheld
     # rather than silently vanishing (that is what turns them into a CTA instead of a hole).
-    assert {"aucVal", "aucLo", "aucHi"} <= set(
-        entitlement.locked_field_names([row], entitlement._PUBLIC_BOARD_FIELDS)
-    )
+    assert "aucVal" in entitlement.locked_field_names([row], entitlement._PUBLIC_BOARD_FIELDS)
