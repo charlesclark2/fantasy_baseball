@@ -424,6 +424,53 @@ bundled `single_copula − mix_played` contrast is still reported, but under the
 `DECLARED_FIELD_SIZE = 4` and the one-member BH family are all unchanged. It adds a reported
 column, not an arm.
 
+### SMOKE OBSERVATION 1 — the path proof's fold-scale premise reading (⛔ NO constant changed)
+
+Recorded from `nf_w7h_rb_marginal_smoke.{json,md}` (1 fold `2025H2`, 300 draws, 1,082 RB test rows,
+442.5s). ⛔ **It is a PATH PROOF, not a verdict** — one fold cannot select, the run reported
+`NULL (RB verdict: UNDEFINED)` exactly as this section requires, and **no constant in
+`fp_rb_marginal_calibration.py` was changed in response to it**. It is recorded because §0.2
+registered a *hypothesis* off a 126-row serving proof and promised a fold-scale measurement; the
+measurement is now available and it is partly adverse to that hypothesis. Hiding it would be
+choosing which of my own predictions to publish.
+
+**(a) ⭐ THE MECHANISM ACTS AT RB — `CAP_NOT_LIFTED` is unlikely.** This is the NF-W7b / NF-MARGIN2
+movability check (prove the knob turns *before* buying the full run), and it turns hard:
+
+| quantity | served | recalibrated | note |
+|---|---|---|---|
+| atom cap `mean_i min_j P̂_j(0)` | 0.3058 | **0.4248** | lift **0.1190**, vs the 0.0341 floor |
+| installed atom | 0.2672 | **0.3367** | against a realized all-zero rate of **0.3392** |
+| clamp binding share | 0.4159 | **0.0009** | the marginal-admissibility constraint stops binding |
+
+So the decisive run will test a live mechanism rather than a dead knob — the honest reason to spend
+the hour. (The served cap 0.3058 on this fold vs NF-W7e's 8-fold mean 0.3018 is ordinary fold
+variation, and `cap_was_lifted` is measured against the RECORDED 8-fold baseline, not this fold.)
+
+**(b) ⚠️ §0.2's magnitudes SHRINK at fold scale, and two of its four named cells FLIP SIGN.**
+`gap = realized − predicted`; positive = under-prices its zero and is repairable by a raise:
+
+| RB cell | 126-row serving proof (§0.2) | **1,082-row fold** | reading |
+|---|---|---|---|
+| `receptions` | −0.0923 | **+0.0037** | FLIPS — essentially calibrated |
+| `receiving_yards` | −0.0707 | **+0.0186** | FLIPS — mildly UNDER-prices |
+| `rushing_yards` | −0.0647 | **−0.0214** | same sign, ~3× smaller |
+| `carries` | −0.0588 | **−0.0272** | same sign, ~2× smaller |
+| `targets` | +0.0084 | **+0.0480** | now the LARGEST under-pricer |
+| `rushing_tds` | +0.0457 | −0.0128 | FLIPS the other way |
+
+⇒ **§0.2 over-stated the over-pricing**, which is a finding about the 126-row proof, not about RB:
+a single-week 126-row read is a noisy estimate of a per-cell zero mass, exactly as NF-W7f cautioned
+about its own 89-row QB reading. What survives is the *comparative* claim that motivated the
+caution — RB's cells sit within ~±0.05 of their realized zero rates while `QB|passing_yards` sat
+**+0.2211** out — so RB's repairable headroom really is an order of magnitude smaller than QB's,
+and the story remains a test of whether a SMALL, real correction pays on the proper score.
+
+⚠️ One fold, and the most recent one (`2025H2`); the decisive run reports all eight and the record's
+premise table is what should be read, not this. The binding cells on this fold were
+`carries` 0.383 / `receiving_yards` 0.331 / `rushing_yards` 0.149 / `targets` 0.132 — the
+opportunity/continuous cells, as the mechanism predicts.
+
 *(no further amendments)*
 
 ## 13. Promote blockers (inherited in full, plus this story's)
