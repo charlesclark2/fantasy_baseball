@@ -164,8 +164,10 @@ passed to `cv_power.classify_null(declared_field_size=…)` (§10).
 **Reference foils** — SCORED and REPORTED; they do NOT bind `beats_foil` and are EXCLUDED from the
 PBO/DSR trial field (MH2.1 (a) — a diagnostic anchor that joins the trial field sets the gate's own
 bar): `zm_cond_copula` (the primary's marginals under the incumbent's copula — the recalibration
-with the availability split OFF), `assembled_indep` (carries the three inherited dependence
-clauses), `foil_direct_points` (the ARCHITECTURE question, §11 — never this story's gate).
+with the availability split OFF), `mix_off` (Σ_played with the split OFF — see the §12 pre-score
+amendment; it is what makes the split channel cleanly isolable at RB), `assembled_indep` (carries
+the three inherited dependence clauses), `foil_direct_points` (the ARCHITECTURE question, §11 —
+never this story's gate).
 
 **Anchors**: the inherited degenerates (`nihilist_zero`, `zero_width`, `max_width`,
 `assembled_comonotone`), `permuted_direct`, `zm_permuted` (the primary's per-row `q̂` shuffled
@@ -397,7 +399,32 @@ AMENDMENT appended to this section naming the constant, the old and new value, a
 and a reason may be a CONSTRUCTION defect (a code path that raised, an identity that went RED),
 ⛔ never "the number came out badly" (E2.1-r).
 
-*(no amendments)*
+### PRE-SCORE AMENDMENT 1 — `mix_off` added to the REFERENCE foils (⛔ not the contest field)
+
+Recorded **before any run of any kind** (no smoke, no decisive — nothing has been scored). It is a
+CONSTRUCTION correction, which §12 explicitly admits, and it cannot be a response to a number
+because no number exists.
+
+**The defect.** NF-W7f could report a clean "split channel" as `single_copula − mix_played`, because
+at QB the pinned joint construction (`mixall_learned`) and the incumbent (`single_copula`) share the
+SAME Σ population (all rows) — so the pair differs only in the availability split. **At RB the
+pinned construction is `mix_played`, whose Σ is estimated on ACTIVE rows** (§2), so
+`single_copula − mix_played` differs in TWO things at once — the split AND the Σ population — and
+reporting it as "the split channel" would be a bundled contrast wearing a single channel's label
+(the NF-W7d bundled-null lesson, facing the attribution direction).
+
+**The correction.** `mix_off` — the incumbent's copula construction at **Σ_played, split OFF**
+(NF-W7d's own reference cell, recorded for RB) — joins the REFERENCE foils, so the split channel is
+isolated at a FIXED Σ as `mix_off − mix_played` (NF-W7e recorded RB's value at +0.0161). The
+bundled `single_copula − mix_played` contrast is still reported, but under the honest name
+`vs_incumbent_construction`, with the bundling stated.
+
+**Why this changes no gate and no multiplicity.** Reference foils are excluded from `beats_foil`
+(§3), from the PBO eligible set and from the DSR trial field by construction, so `ELIGIBLE`,
+`DECLARED_FIELD_SIZE = 4` and the one-member BH family are all unchanged. It adds a reported
+column, not an arm.
+
+*(no further amendments)*
 
 ## 13. Promote blockers (inherited in full, plus this story's)
 
