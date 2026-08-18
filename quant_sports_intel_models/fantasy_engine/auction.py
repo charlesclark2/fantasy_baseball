@@ -134,15 +134,48 @@ def auction_pool(
 
 @dataclass(frozen=True)
 class AuctionValue:
-    """One player's dollar value, with the honest band around it."""
+    """One player's dollar value.
+
+    ⭐⭐ THERE IS DELIBERATELY NO DOLLAR BAND HERE, AND THE REASON IS MEASURED, NOT STYLISTIC.
+
+    This shipped with a `low`/`high` priced off the projection's own 80% points interval, and it
+    was wrong in a way that is invisible one player at a time. An auction dollar is not a level, it
+    is a SHARE OF A FIXED POOL — the whole point of the design, and the conservation identity below
+    depends on it. Pricing a quantile through a rate and a replacement level computed for a
+    DIFFERENT world produces figures that are not on the dollar scale at all. Measured on the served
+    2026 half-PPR 12-team board (`board_half_ppr_12.json`, 870 rows, $2,400 in the room):
+
+        sum of the point values over the 180 roster spots  = $2,404   (100% of the pool ✅)
+        sum of the LOW  edges over the same 180            = $  180   (  7.5%)
+        sum of the HIGH edges over the same 180            = $9,882   ( 412%)
+
+    Nobody can spend $9,882 in a $2,400 room, so the high edge was never a price; and every one of
+    the 870 low edges was exactly $1, because a player's 10th-percentile SEASON TOTAL is below his
+    position's replacement level for every player on the board (the left tail of a season total is
+    availability — a player who misses ten games is worth the minimum, which is true and, being
+    true of everyone, tells a drafter nothing).
+
+    ⚠️ THE OBVIOUS REPAIRS BOTH FAIL, and the second one fails in an interesting way:
+
+    * A NARROWER quantile (p25/p75) shrinks the symptom and leaves the cause — each edge is still
+      priced against a rate and a replacement level belonging to another world.
+    * A COMMON-QUANTILE WORLD (re-run the whole allocation with everyone at p10, replacement
+      recomputed there) restores conservation — and is NOT ORDERED. Measured on the same board:
+      replacement collapses (RB 124.6 -> 5.5 points), which flattens the share distribution, so BOTH
+      the p10 world and the p90 world price the top players BELOW their point value (Gibbs: point
+      $113, p10 world $79, p90 world $61) and 82 rows land outside their own band. This is worth
+      recording because the module's original docstring reasoned the opposite from the armchair —
+      that a common-quantile world would "barely move the values."
+
+    ⇒ A dollar band would need a model of how players' outcomes move TOGETHER (perfect correlation
+    gives the unordered band, independence gives the $1 collapse, and the truth is in between). We
+    do not have one, so we do not publish one. The projection's uncertainty is published where it
+    is well-defined and correctly labelled: in POINTS, as `ptsP10`/`ptsP90`.
+    """
 
     player_id: str
     value: int
     """The point valuation, in whole dollars. Bids are whole dollars, so this is."""
-    low: int
-    """Value if the season lands at the projection's 10th percentile."""
-    high: int
-    """Value at the 90th percentile."""
     share: float
     """This player's share of the board's total above-replacement value. Kept because it is the
     only budget-INDEPENDENT quantity here: the same share re-prices at any budget."""
@@ -172,31 +205,18 @@ def auction_values(
 ) -> list[AuctionValue]:
     """Dollar-value every row of a board for one `pool`.
 
-    `rows` is any iterable of mappings carrying `id` (or `player_id`) and `vor`, optionally
-    `vorP10`/`vorP90` (or `vor_p10`/`vor_p90`). Pure: no IO, no ordering assumption, and the input
-    is not mutated.
+    `rows` is any iterable of mappings carrying `id` (or `player_id`) and `vor`. Pure: no IO, no
+    ordering assumption, and the input is not mutated.
 
-    ⭐ THE RATE IS A LEAGUE CONSTANT, AND BOTH BAND EDGES ARE PRICED AT IT. Re-deriving a separate
-    rate from the p10 column would answer a different question — "what if EVERY player simultaneously
-    landed at his 10th percentile", a world in which the money is unchanged and so the values barely
-    move at all. The question a drafter is asking is about ONE player: hold the league fixed, vary
-    him. That is this rate applied to his own interval.
+    The `vorP10`/`vorP90` columns are deliberately NOT read — see `AuctionValue` for the measurement
+    that retired the dollar band.
     """
     materialised = list(rows)
     values: list[float] = []
-    lows: list[float] = []
-    highs: list[float] = []
     ids: list[str] = []
     for r in materialised:
         ids.append(str(r.get("id", r.get("player_id", ""))))
-        v = _pos(r.get("vor"))
-        values.append(v)
-        # A board with no interval columns falls back to the point value on both edges, which
-        # renders as a degenerate band rather than a wrong one.
-        lo = r.get("vorP10", r.get("vor_p10"))
-        hi = r.get("vorP90", r.get("vor_p90"))
-        lows.append(_pos(lo) if lo is not None else v)
-        highs.append(_pos(hi) if hi is not None else v)
+        values.append(_pos(r.get("vor")))
 
     # ⭐⭐ THE DENOMINATOR IS THE DRAFTABLE SET, NOT THE WHOLE BOARD — and this is a correctness
     # fix, not a tidy-up. Only `spots_total` players are ever BOUGHT, so only they can absorb the
@@ -228,21 +248,14 @@ def auction_values(
     def price(x: float) -> int:
         return max(pool.min_bid, _round_half_up(pool.min_bid + rate * x))
 
-    out: list[AuctionValue] = []
-    for i, pid in enumerate(ids):
-        lo, hi = price(lows[i]), price(highs[i])
-        out.append(
-            AuctionValue(
-                player_id=pid,
-                value=price(values[i]),
-                # An interval that arrives crossed (or a rounding tie) must never render as a
-                # backwards band — order the two edges rather than trusting the source columns.
-                low=min(lo, hi),
-                high=max(lo, hi),
-                share=round(values[i] / total_vor, 6) if total_vor > 0 else 0.0,
-            )
+    return [
+        AuctionValue(
+            player_id=pid,
+            value=price(values[i]),
+            share=round(values[i] / total_vor, 6) if total_vor > 0 else 0.0,
         )
-    return out
+        for i, pid in enumerate(ids)
+    ]
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════════

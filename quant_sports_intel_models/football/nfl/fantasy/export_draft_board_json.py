@@ -1160,11 +1160,19 @@ def kdst_records(
 
 def attach_auction_values(recs: list[dict], config_name: str, n_teams: int,
                           budget: int = DEFAULT_AUCTION_BUDGET) -> int:
-    """NF-C5 — stamp `aucVal` / `aucLo` / `aucHi` on every record of ONE board, in place.
+    """NF-C5 — stamp `aucVal` on every record of ONE board, in place.
 
-    ⭐ ADDITIVE ONLY. Three NEW keys; nothing existing is removed, renamed or repurposed. The API
+    ⭐ ADDITIVE ONLY. A NEW key; nothing existing is removed, renamed or repurposed. The API
     Lambda has no CD (NF-C0), so the deployed client is always some previous build — a dropped or
     renamed key blanks it with a 200 and no error anywhere.
+
+    🩹 `aucLo`/`aucHi` WERE published by the first cut and are now GONE — see `AuctionValue` for the
+    measurement (the low edge was $1 for all 870 rows; the high edges summed to 412% of the room's
+    money, so they were never prices). Dropping a published key is exactly what the NF-C0 rule above
+    forbids, so this is deliberate and checked: NOTHING reads them. The app recomputes every dollar
+    figure client-side from `vor` through the shared TS port (a board is quoted at one budget and
+    converted to the user's), and a repo-wide grep finds no other consumer. Retiring two keys that
+    carry a wrong number beats keeping them alive to be believed.
 
     ⭐ WHY THE WHOLE BOARD AND NOT JUST THE SKILL ROWS. This runs AFTER the K/DST gap-fill rows are
     folded in, so every published row carries a value. A row the model could not project has
@@ -1179,8 +1187,6 @@ def attach_auction_values(recs: list[dict], config_name: str, n_teams: int,
     pool = auction_pool(n_teams, cfg.roster_spots(), budget)
     for rec, val in zip(recs, auction_values(recs, pool)):
         rec["aucVal"] = val.value
-        rec["aucLo"] = val.low
-        rec["aucHi"] = val.high
     return pool.total
 
 

@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "improved",
+        "text": "Auction Optimizer: one honest dollar value per player, and the projection's range where it belongs. Values shipped as a range — and the bottom of that range was $1 for every player on the board, Bijan Robinson and Ashton Jeanty included. That was arithmetically true and useless: the low end of a season projection is the season where a player gets hurt, and a player who misses ten games is worth the minimum, which is equally true of everybody. The top end was worse in a way that was harder to see — add up the high edges of the players who actually get bought and you get more than four times the money that exists in the room, so it was never a price either. An auction dollar is a share of a fixed pot rather than a level, so a projection's range cannot be converted into a range of prices without assuming how different players' seasons move together, and we do not model that. So the board now shows a single value — the players who get drafted add up to exactly the money in the room — and the projection's own 80% range is quoted in points, which is the unit it actually means something in."
+      },
+      {
+        "tag": "improved",
         "text": "Auction Optimizer: record any nomination, at the price it actually sold for. An auction is driven by nominations, and the room nominates whoever it likes — so most of a real auction gets recorded from the searchable board rather than from the handful of names shortlisted for your roster. Every row on that board now has a price box beside its two buttons: search the player who was just put up, type what he went for, and record whether you won him or which team did. Leave the box empty and we record what he is worth at today's prices — the greyed-out number the box is already showing, so what you see is what gets written. It is the same box wherever a player appears, so a price typed in one place is the price recorded in the other. Prices are what drive everything else on the screen: a sale recorded at the wrong number moves the inflation multiplier, every team's remaining money and every max bid with it."
       },
       {

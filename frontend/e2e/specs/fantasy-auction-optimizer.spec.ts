@@ -10,7 +10,7 @@ import {
   bidExplanation,
   dollarsPerSlot,
   formatMoney,
-  formatMoneyRange,
+  formatPointsRange,
   inflation,
   maxBid,
 } from "@/lib/auction-optimizer"
@@ -54,7 +54,7 @@ type Vectors = {
     rosterSpots: number
     budget: number
     pool: { total: number; reserve: number; surplus: number }
-    values: { id: string; value: number; low: number; high: number; share: number }[]
+    values: { id: string; value: number; share: number }[]
   }[]
   maxBids: {
     case: string
@@ -136,24 +136,37 @@ test.describe("the TS auction engine agrees with the Python authority", () => {
     }
   })
 
-  test("every player prices to the same dollar value and band", () => {
+  test("every player prices to the same dollar value", () => {
     const board = vectorBoard()
     for (const p of VECTORS.pools) {
       const got = auctionValues(board, auctionPool(p.nTeams, p.rosterSpots, p.budget))
       expect(got.length).toBe(p.values.length)
       for (let i = 0; i < got.length; i++) {
-        expect(
-          { id: got[i].id, value: got[i].value, low: got[i].low, high: got[i].high },
-          `${p.values[i].id} at $${p.budget}`,
-        ).toEqual({
+        expect({ id: got[i].id, value: got[i].value }, `${p.values[i].id} at $${p.budget}`).toEqual({
           id: p.values[i].id,
           value: p.values[i].value,
-          low: p.values[i].low,
-          high: p.values[i].high,
         })
         expect(got[i].share).toBeCloseTo(p.values[i].share, 6)
       }
     }
+  })
+
+  test("the interval columns are carried on the board and never priced", () => {
+    // ⭐ THE RETIRED DOLLAR BAND. `vorP10`/`vorP90` are still on `Player` (other surfaces read the
+    // points interval), so "we stopped pricing them" has to be asserted rather than assumed — a
+    // reader cannot tell from the type. The toy board carries a CROSSED interval (`crossed`:
+    // p10 44 > p90 6) precisely so this can be checked: strip every interval column and each
+    // player must price BYTE-IDENTICALLY, which is only true if they are not read at all.
+    const p = VECTORS.pools[0]
+    const pool = auctionPool(p.nTeams, p.rosterSpots, p.budget)
+    const withInterval = auctionValues(vectorBoard(), pool)
+    const stripped = auctionValues(
+      vectorBoard().map((pl) => ({ ...pl, vorP10: null, vorP90: null })),
+      pool,
+    )
+    expect(VECTORS.board.some((r) => r.vorP10 != null && r.vorP90 != null && r.vorP10 > r.vorP90),
+      "no crossed interval in the vectors — this test cannot fail").toBe(true)
+    expect(stripped).toEqual(withInterval)
   })
 
   test("every max bid, and the constraint that produced it, matches", () => {
@@ -275,10 +288,15 @@ test.describe("the shared money formatter", () => {
     expect(formatMoney(37.4)).toBe("$37")
   })
 
-  test("a degenerate band collapses to one figure instead of reading as a bug", () => {
-    expect(formatMoneyRange(12, 12)).toBe("$12")
-    expect(formatMoneyRange(8, 21)).toBe("$8–$21")
-    expect(formatMoneyRange(null, 21)).toBe("—")
+  test("the projection's interval is rendered in POINTS, never with a dollar sign", () => {
+    // ⭐ THE UNITS ARE THE ASSERTION. This replaced a `formatMoneyRange` that put a `$` in front of
+    // the same two numbers — and the edges were not prices (the low was $1 for all 870 rows of the
+    // served board, the highs summed to 412% of the room's money). Anything reintroducing a `$`
+    // here is reintroducing that claim.
+    expect(formatPointsRange(93, 312)).toBe("93–312 pts")
+    expect(formatPointsRange(12, 12)).toBe("12 pts")
+    expect(formatPointsRange(null, 21)).toBe("—")
+    expect(formatPointsRange(93, 312)).not.toContain("$")
   })
 })
 
@@ -673,6 +691,38 @@ test.describe("driving an auction", () => {
         `[data-testid="auction-candidate"] [data-testid="auction-price-input"][data-player="${target!.id}"]`,
       ),
     ).toHaveValue("57")
+    expectNoPageErrors(errors)
+  })
+
+  test("a value is ONE dollar figure, and the projection's range is quoted in points", async ({
+    page,
+  }) => {
+    // ⭐ THE RETIRED DOLLAR BAND, asserted on the rendered screen. Reported live 2026-08-17: every
+    // player showed a low edge of $1 — Bijan Robinson, Ashton Jeanty, everyone. That was TRUE
+    // arithmetic (a 10th-percentile season total is below replacement for every player on the
+    // board, because the left tail is availability) and useless as a price, and its other half was
+    // worse: the high edges summed to 412% of the money in the room. A dollar is a share of a
+    // FIXED pool, so an interval cannot be carried into dollars without a model of how players'
+    // seasons move together — which we do not have. The uncertainty is quoted in points instead.
+    const { errors } = await startAuction(page)
+
+    const values = await page.getByTestId("auction-value").allTextContents()
+    expect(values.length, "no values rendered — this test would assert on nothing").toBeGreaterThan(2)
+    for (const v of values) {
+      expect(v.trim(), "a dollar RANGE is back on the auction board").toMatch(/^\$\d+$/)
+    }
+    // ...and the top of the shortlist is not everybody's $1 floor, which is what the defect looked
+    // like from the outside.
+    expect(Number(values[0].replace("$", ""))).toBeGreaterThan(1)
+
+    const ranges = await page.getByTestId("auction-points-range").allTextContents()
+    expect(ranges.length).toBe(values.length)
+    for (const r of ranges) {
+      expect(r, "the projection's range is being quoted in dollars again").not.toContain("$")
+      expect(r.trim()).toMatch(/pts$|^—$/)
+    }
+
+    await expectNoNaN(page)
     expectNoPageErrors(errors)
   })
 
