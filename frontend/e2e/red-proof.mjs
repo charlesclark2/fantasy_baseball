@@ -2279,6 +2279,23 @@ const CASES = [
     to: '                                  setPrices((prev) => ({ ...prev, ["board:" + p.id]: e.target.value }))',
     grep: "share ONE price box",
   },
+  {
+    id: "auction-quotes-the-interval-in-dollars",
+    shipped: "NF-C5 — REAL, reported live 2026-08-17: every player's value band bottomed at $1",
+    // ⭐ THE SECOND SHIPPED DEFECT, restored at the point it becomes visible. The board published a
+    // dollar band priced off the projection's points interval; on the served 2026 board the low
+    // edge was $1 for ALL 870 rows and the high edges summed to 412% of the money in the room — a
+    // figure nobody can spend is not a price. The cause is structural: a dollar is a SHARE of a
+    // fixed pool, so a quantile priced through a rate belonging to another world is not on the
+    // dollar scale, and neither a narrower quantile nor a common-quantile world repairs it (the
+    // latter is not even ordered — measured). Putting a `$` back in front of the two numbers is
+    // exactly the claim that was withdrawn.
+    detail: "Re-quotes the projection's points interval as a dollar range.",
+    file: "lib/auction-optimizer.ts",
+    from: "  return lo === hi ? `${lo} pts` : `${lo}–${hi} pts`",
+    to: "  return lo === hi ? `$${lo}` : `$${lo}–$${hi}`",
+    grep: "quoted in points",
+  },
 ]
 
 /**
@@ -2336,11 +2353,12 @@ const CASES = [
 // G100-C2 adds ONE case (the multi-league picker reverting to `teams[0]`), RED-proven individually
 // (`-- league-picker`) for the same reason. So 125/119/6 → 126/120/6, and the next full run CONFIRMS
 // it.
-// NF-C5's follow-up (the board price box) adds FOUR cases, each RED-proven individually
-// (`-- auction-board`, `-- auction-price-box`) for the same reason every entry above records: a
-// production build per case does not belong in a session. So 137/131/6 → 141/135/6, and the next
-// full run CONFIRMS it. ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 141, red: 135, notObservable: 6 }
+// NF-C5's follow-ups add FIVE cases in total — four for the board price box, one for the retired
+// dollar band — each RED-proven individually (`-- auction-board`, `-- auction-price-box`,
+// `-- auction-quotes`) for the same reason every entry above records: a production build per case
+// does not belong in a session. So 137/131/6 → 142/136/6, and the next full run CONFIRMS it.
+// ⛔ A projection is not a measurement.
+const RECORDED_BOARD = { total: 142, red: 136, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

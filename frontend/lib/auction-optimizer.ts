@@ -115,13 +115,22 @@ export function auctionPool(
 export const rosterSpotsOf = (config: LeagueConfigMeta): number =>
   config.roster.reduce((a, s) => a + s.count, 0)
 
+/**
+ * One player's dollar value.
+ *
+ * ⭐⭐ NO DOLLAR BAND, AND THE REASON IS MEASURED — see `fantasy_engine/auction.py::AuctionValue`
+ * for the full record. In short: an auction dollar is a SHARE OF A FIXED POOL, so pricing the
+ * projection's points interval through a rate and a replacement level computed for a different
+ * world produces figures that are not on the dollar scale. On the served 2026 half-PPR 12-team
+ * board the point values summed to the $2,400 pool exactly, while the low edges were $1 for all
+ * 870 rows and the high edges summed to $9,882 — 412% of the money in the room.
+ *
+ * The projection's uncertainty is published where it is well-defined and correctly labelled: in
+ * POINTS, on `Player.ptsP10`/`ptsP90`.
+ */
 export interface AuctionValue {
   id: string
   value: number
-  /** Value if the season lands at the projection's 10th percentile. */
-  low: number
-  /** Value at the 90th percentile. */
-  high: number
   /** Share of the board's total above-replacement value — the only budget-INDEPENDENT quantity
    *  here, which is what lets one exported board be re-priced for any league's budget. */
   share: number
@@ -137,10 +146,7 @@ const pos = (v: number | null | undefined): number =>
 /**
  * Dollar-value every row of a board for one `pool`.
  *
- * ⭐ THE RATE IS A LEAGUE CONSTANT AND BOTH BAND EDGES ARE PRICED AT IT. Re-deriving a rate from
- * the p10 column would answer a different question — "what if EVERY player simultaneously landed at
- * his 10th percentile", a world where the money is unchanged so the values barely move. The
- * drafter's question is about ONE player: hold the league fixed, vary him.
+ * `vorP10`/`vorP90` are deliberately NOT read — see `AuctionValue` above.
  */
 export function auctionValues(board: Player[], pool: AuctionPool): AuctionValue[] {
   const vals = board.map((p) => pos(p.vor))
@@ -166,21 +172,11 @@ export function auctionValues(board: Player[], pool: AuctionPool): AuctionValue[
 
   const price = (x: number) => Math.max(pool.minBid, roundHalfUp(pool.minBid + rate * x))
 
-  return board.map((p, i) => {
-    const v = vals[i]
-    // A board with no interval columns falls back to the point value on both edges — a degenerate
-    // band rather than a wrong one.
-    const lo = price(p.vorP10 == null ? v : pos(p.vorP10))
-    const hi = price(p.vorP90 == null ? v : pos(p.vorP90))
-    return {
-      id: p.id,
-      value: price(v),
-      // An interval that arrives crossed must never render as a backwards band.
-      low: Math.min(lo, hi),
-      high: Math.max(lo, hi),
-      share: totalVor > 0 ? Math.round((v / totalVor) * 1e6) / 1e6 : 0,
-    }
-  })
+  return board.map((p, i) => ({
+    id: p.id,
+    value: price(vals[i]),
+    share: totalVor > 0 ? Math.round((vals[i] / totalVor) * 1e6) / 1e6 : 0,
+  }))
 }
 
 /** `{id -> value}` for O(1) lookup on every render. */
@@ -333,16 +329,22 @@ export const dollarsPerSlot = (budgetRemaining: number, openSlots: number): numb
 export const formatMoney = (v: number | null | undefined): string =>
   v == null || !Number.isFinite(v) ? "—" : `$${Math.round(v)}`
 
-/** A value RANGE. Collapses to a single figure when the band is degenerate (a board with no
- *  interval columns), because "$12–$12" reads as a bug rather than as an honest point value. */
-export const formatMoneyRange = (
+/**
+ * The projection's own 80% interval, in POINTS — which is where this uncertainty is well-defined.
+ *
+ * ⭐ THE UNITS ARE THE WHOLE POINT. The retired `formatMoneyRange` rendered the same interval with
+ * a `$` in front of it, and a dollar is a share of a fixed pool rather than a level, so the two
+ * edges were not prices (see `AuctionValue`). In points the interval means exactly what it says:
+ * eight seasons in ten land between these two numbers.
+ */
+export const formatPointsRange = (
   low: number | null | undefined,
   high: number | null | undefined,
 ): string => {
   if (low == null || high == null || !Number.isFinite(low) || !Number.isFinite(high)) return "—"
   const lo = Math.round(low)
   const hi = Math.round(high)
-  return lo === hi ? `$${lo}` : `$${lo}–$${hi}`
+  return lo === hi ? `${lo} pts` : `${lo}–${hi} pts`
 }
 
 /** The inflation multiplier as the room would say it. */
@@ -531,13 +533,7 @@ export function auctionBoard(args: AuctionArgs): AuctionBoard {
 
   const recs = recommend({ board, config, draftedIds, myPlayerIds, topN: Math.max(topN, 24) })
   const candidates: AuctionCandidate[] = recs.map((rec) => {
-    const v = values.get(rec.player.id) ?? {
-      id: rec.player.id,
-      value: pool.minBid,
-      low: pool.minBid,
-      high: pool.minBid,
-      share: 0,
-    }
+    const v = values.get(rec.player.id) ?? { id: rec.player.id, value: pool.minBid, share: 0 }
     const bid = bidFor(rec.player)
     return {
       player: rec.player,
