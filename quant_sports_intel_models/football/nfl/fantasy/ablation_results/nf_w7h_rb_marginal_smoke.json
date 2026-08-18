@@ -1,0 +1,3069 @@
+{
+  "story": "NF-W7h",
+  "phase": "rb_marginal_zero_mass_recalibration",
+  "smoke": true,
+  "generated_at": "2026-08-18T01:59:43.096949+00:00",
+  "seasons": [
+    2016,
+    2025
+  ],
+  "n_folds": 1,
+  "gate_league": "full_ppr",
+  "gate_positions": [
+    "RB"
+  ],
+  "matrix_key": "26c34fbe778c9d87",
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 84553,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "attach_audit": {
+    "n_rows": 84553,
+    "feed_dup_keys": 0,
+    "passing_interceptions_total": 4121.0,
+    "passing_interceptions_filled_zero_rows": 26835,
+    "fumbles_lost_total": 2383.0,
+    "fumbles_lost_filled_zero_rows": 26835,
+    "two_pt_total": 978.0,
+    "two_pt_filled_zero_rows": 26835
+  },
+  "served_map_sources": {
+    "QB|passing_tds": "nf_w6b",
+    "QB|passing_yards": "nf_w6b",
+    "QB|rushing_yards": "nf_w6b",
+    "RB|rushing_yards": "nf_w6b",
+    "TE|receiving_yards": "nf_w6b",
+    "WR|receiving_yards": "nf_w6b",
+    "RB|rushing_tds": "nf_w6b_c",
+    "RB|receiving_yards": "nf_w6d_c_default",
+    "QB|attempts": "nf_w6d_c_default",
+    "QB|passing_interceptions": "nf_w6d_b_ship",
+    "QB|carries": "nf_w6d_c_default",
+    "QB|rushing_tds": "nf_w6d_b_ship",
+    "QB|fumbles_lost": "nf_w6d_c_default",
+    "QB|two_pt": "nf_w6d_c_default",
+    "RB|carries": "nf_w6d_b_ship",
+    "RB|targets": "nf_w6d_c_default",
+    "RB|receptions": "nf_w6d_b_ship",
+    "RB|receiving_tds": "nf_w6d_c_default",
+    "RB|fumbles_lost": "nf_w6d_c_default",
+    "RB|two_pt": "nf_w6d_c_default",
+    "WR|targets": "nf_w6d_b_ship",
+    "WR|receptions": "nf_w6d_b_ship",
+    "WR|receiving_tds": "nf_w6d_b_ship",
+    "WR|fumbles_lost": "nf_w6d_c_default",
+    "WR|two_pt": "nf_w6d_c_default",
+    "TE|targets": "nf_w6d_b_ship",
+    "TE|receptions": "nf_w6d_b_ship",
+    "TE|receiving_tds": "nf_w6d_c_default",
+    "TE|fumbles_lost": "nf_w6d_c_default",
+    "TE|two_pt": "nf_w6d_c_default",
+    "QB|targets": "nf_w6d_c_default",
+    "QB|receptions": "nf_w6d_c_default",
+    "QB|receiving_yards": "nf_w6d_c_default",
+    "QB|receiving_tds": "nf_w6d_c_default",
+    "RB|attempts": "nf_w6d_c_default",
+    "RB|passing_yards": "nf_w6d_c_default",
+    "RB|passing_tds": "nf_w6d_c_default",
+    "RB|passing_interceptions": "nf_w6d_c_default",
+    "WR|attempts": "nf_w6d_c_default",
+    "WR|passing_yards": "nf_w6d_c_default",
+    "WR|passing_tds": "nf_w6d_c_default",
+    "WR|passing_interceptions": "nf_w6d_c_default",
+    "WR|carries": "nf_w6d_c_default",
+    "WR|rushing_yards": "nf_w6d_c_default",
+    "WR|rushing_tds": "nf_w6d_c_default",
+    "TE|attempts": "nf_w6d_c_default",
+    "TE|passing_yards": "nf_w6d_c_default",
+    "TE|passing_tds": "nf_w6d_c_default",
+    "TE|passing_interceptions": "nf_w6d_c_default",
+    "TE|carries": "nf_w6d_c_default",
+    "TE|rushing_yards": "nf_w6d_c_default",
+    "TE|rushing_tds": "nf_w6d_c_default"
+  },
+  "assembly_draws": 300,
+  "row_block": 256,
+  "seed": 20260818,
+  "seed_inherited_from": "NF-W7c via NF-W7d, NF-W7e and NF-W7f",
+  "avail_stream_offset": 1000000,
+  "joint_construction_held_fixed": "mix_played",
+  "pi_estimator": "mix_learned",
+  "transform_imported_from": "NF-W7f",
+  "cap_baseline": {
+    "available": true,
+    "position": "RB",
+    "source_path": "selections.RB.atom_cap_detail.cap_mean",
+    "atom_cap_mean": 0.3018,
+    "installed_atom": 0.2646,
+    "realized_all_zero_rate": 0.3359,
+    "clamp_binding_share": 0.4184,
+    "best_rb_pit": 0.0242,
+    "matches_preregistered_constants": true
+  },
+  "declared_field": {
+    "real_arms": [
+      "zm_conditional",
+      "zm_floor",
+      "zm_climatology",
+      "zm_over"
+    ],
+    "primary_arm": "zm_conditional",
+    "declared_field_size": 4,
+    "declared_field_size_source": "fp_rb_marginal_calibration.REAL_ARMS, committed in ablation_results/nf_w7h_preregistration.md \u00a73 before any score",
+    "contest_foils": [
+      "mix_played",
+      "single_copula"
+    ],
+    "matched_foil": "mix_played",
+    "reference_foils": [
+      "zm_cond_copula",
+      "mix_off",
+      "assembled_indep",
+      "foil_direct_points"
+    ],
+    "degenerates": [
+      "nihilist_zero",
+      "zero_width",
+      "max_width",
+      "assembled_comonotone"
+    ],
+    "anchors": [
+      "nihilist_zero",
+      "zero_width",
+      "max_width",
+      "assembled_comonotone",
+      "permuted_direct",
+      "zm_permuted",
+      "oracle__zm_conditional",
+      "oracle__zm_floor",
+      "oracle__zm_climatology",
+      "oracle__zm_over",
+      "matched_n__zm_conditional",
+      "matched_n__zm_floor",
+      "matched_n__zm_climatology",
+      "matched_n__zm_over",
+      "oracle__foil_direct_points"
+    ]
+  },
+  "labelling": {
+    "RB": {
+      "source": "partial_default",
+      "priced_legs": [
+        "passing_yards",
+        "passing_tds",
+        "passing_interceptions",
+        "rushing_yards",
+        "rushing_tds",
+        "receptions",
+        "receiving_yards",
+        "receiving_tds",
+        "fumbles_lost",
+        "two_pt"
+      ],
+      "unpriced_legs": [
+        "attempts",
+        "carries",
+        "targets"
+      ],
+      "leg_sources": {
+        "passing_yards": "nf_w6d_c_default",
+        "passing_tds": "nf_w6d_c_default",
+        "passing_interceptions": "nf_w6d_c_default",
+        "rushing_yards": "nf_w6b",
+        "rushing_tds": "nf_w6b_c",
+        "receptions": "nf_w6d_b_ship",
+        "receiving_yards": "nf_w6d_c_default",
+        "receiving_tds": "nf_w6d_c_default",
+        "fumbles_lost": "nf_w6d_c_default",
+        "two_pt": "nf_w6d_c_default"
+      },
+      "default_priced_legs": [
+        "fumbles_lost",
+        "passing_interceptions",
+        "passing_tds",
+        "passing_yards",
+        "receiving_tds",
+        "receiving_yards",
+        "two_pt"
+      ],
+      "calibration_warning": "7 of 10 priced stats use a NF-W6d calibrated DEFAULT (fumbles_lost, passing_interceptions, passing_tds, passing_yards, receiving_tds, receiving_yards, two_pt) \u2014 a calibrated range, not a conditional projection",
+      "leg_calibration_warnings": {}
+    }
+  },
+  "fold_results": [
+    {
+      "label": "2025H2",
+      "n_test": 4380,
+      "positions": {
+        "RB": {
+          "scores": {
+            "zm_conditional": 2.589693436644086,
+            "oracle__zm_conditional": 2.362418458052282,
+            "matched_n__zm_conditional": 2.5793170314967733,
+            "zm_floor": 2.4565729906406997,
+            "oracle__zm_floor": 2.2514636564614507,
+            "matched_n__zm_floor": 2.4537930652032673,
+            "zm_climatology": 3.021977090728263,
+            "oracle__zm_climatology": 2.9526367155626825,
+            "matched_n__zm_climatology": 3.0080871559247275,
+            "zm_over": 2.6242014089234686,
+            "oracle__zm_over": 2.3593257058621977,
+            "matched_n__zm_over": 2.587209127708616,
+            "mix_played": 2.483617592653897,
+            "single_copula": 2.4978151263870787,
+            "zm_cond_copula": 2.6042061817326907,
+            "mix_off": 2.497396926252859,
+            "assembled_indep": 2.555882984577397,
+            "assembled_comonotone": 2.621059759404916,
+            "zm_permuted": 3.277872738294893,
+            "foil_direct_points": 2.434651415246522,
+            "oracle__foil_direct_points": 1.4662897685504954,
+            "permuted_direct": 3.8886561784267335,
+            "nihilist_zero": 5.722181146025878,
+            "zero_width": 5.921146106630683,
+            "max_width": 7.20127640180149
+          },
+          "coverage": {
+            "zm_conditional": {
+              "coverage": 0.8724584103512015,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": false
+            },
+            "zm_floor": {
+              "coverage": 0.8807763401109058,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": false
+            },
+            "zm_climatology": {
+              "coverage": 0.8502772643253235,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": false
+            },
+            "zm_over": {
+              "coverage": 0.8280961182994455,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": false
+            },
+            "mix_played": {
+              "coverage": 0.8844731977818854,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": false
+            },
+            "single_copula": {
+              "coverage": 0.8909426987060998,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": false
+            },
+            "zm_cond_copula": {
+              "coverage": 0.878003696857671,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": false
+            },
+            "mix_off": {
+              "coverage": 0.8761552680221811,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": false
+            },
+            "assembled_indep": {
+              "coverage": 0.8086876155268022,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": false
+            },
+            "foil_direct_points": {
+              "coverage": 0.821626617375231,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": false
+            },
+            "nihilist_zero": {
+              "coverage": 0.35027726432532347,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": true
+            },
+            "zero_width": {
+              "coverage": 0.0,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": true
+            },
+            "max_width": {
+              "coverage": 0.9953789279112755,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": false
+            },
+            "assembled_comonotone": {
+              "coverage": 0.9131238447319778,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": false
+            },
+            "zm_permuted": {
+              "coverage": 0.8059149722735675,
+              "n": 1082,
+              "binomial_se": 0.012160358006209633,
+              "blocking_shortfall": false
+            }
+          },
+          "pit_flatness": {
+            "zm_conditional": {
+              "max_decile_dev": 0.044547134935304995,
+              "n": 1082,
+              "decile_counts": [
+                60,
+                77,
+                97,
+                97,
+                106,
+                144,
+                124,
+                112,
+                139,
+                126
+              ],
+              "decile_freq": [
+                0.0555,
+                0.0712,
+                0.0896,
+                0.0896,
+                0.098,
+                0.1331,
+                0.1146,
+                0.1035,
+                0.1285,
+                0.1165
+              ],
+              "worst_decile": 0
+            },
+            "zm_floor": {
+              "max_decile_dev": 0.03622920517560074,
+              "n": 1082,
+              "decile_counts": [
+                69,
+                96,
+                103,
+                110,
+                119,
+                132,
+                120,
+                122,
+                108,
+                103
+              ],
+              "decile_freq": [
+                0.0638,
+                0.0887,
+                0.0952,
+                0.1017,
+                0.11,
+                0.122,
+                0.1109,
+                0.1128,
+                0.0998,
+                0.0952
+              ],
+              "worst_decile": 0
+            },
+            "zm_climatology": {
+              "max_decile_dev": 0.04547134935304991,
+              "n": 1082,
+              "decile_counts": [
+                59,
+                82,
+                77,
+                121,
+                130,
+                109,
+                117,
+                114,
+                119,
+                154
+              ],
+              "decile_freq": [
+                0.0545,
+                0.0758,
+                0.0712,
+                0.1118,
+                0.1201,
+                0.1007,
+                0.1081,
+                0.1054,
+                0.11,
+                0.1423
+              ],
+              "worst_decile": 0
+            },
+            "zm_over": {
+              "max_decile_dev": 0.07744916820702402,
+              "n": 1082,
+              "decile_counts": [
+                52,
+                64,
+                80,
+                97,
+                91,
+                122,
+                118,
+                119,
+                147,
+                192
+              ],
+              "decile_freq": [
+                0.0481,
+                0.0591,
+                0.0739,
+                0.0896,
+                0.0841,
+                0.1128,
+                0.1091,
+                0.11,
+                0.1359,
+                0.1774
+              ],
+              "worst_decile": 9
+            },
+            "mix_played": {
+              "max_decile_dev": 0.026062846580406654,
+              "n": 1082,
+              "decile_counts": [
+                80,
+                114,
+                112,
+                136,
+                136,
+                117,
+                104,
+                96,
+                90,
+                97
+              ],
+              "decile_freq": [
+                0.0739,
+                0.1054,
+                0.1035,
+                0.1257,
+                0.1257,
+                0.1081,
+                0.0961,
+                0.0887,
+                0.0832,
+                0.0896
+              ],
+              "worst_decile": 0
+            },
+            "single_copula": {
+              "max_decile_dev": 0.03216266173752311,
+              "n": 1082,
+              "decile_counts": [
+                83,
+                112,
+                122,
+                143,
+                136,
+                103,
+                99,
+                99,
+                94,
+                91
+              ],
+              "decile_freq": [
+                0.0767,
+                0.1035,
+                0.1128,
+                0.1322,
+                0.1257,
+                0.0952,
+                0.0915,
+                0.0915,
+                0.0869,
+                0.0841
+              ],
+              "worst_decile": 3
+            },
+            "zm_cond_copula": {
+              "max_decile_dev": 0.04362292051756008,
+              "n": 1082,
+              "decile_counts": [
+                61,
+                82,
+                90,
+                110,
+                109,
+                141,
+                128,
+                122,
+                117,
+                122
+              ],
+              "decile_freq": [
+                0.0564,
+                0.0758,
+                0.0832,
+                0.1017,
+                0.1007,
+                0.1303,
+                0.1183,
+                0.1128,
+                0.1081,
+                0.1128
+              ],
+              "worst_decile": 0
+            },
+            "mix_off": {
+              "max_decile_dev": 0.03123844731977818,
+              "n": 1082,
+              "decile_counts": [
+                95,
+                138,
+                126,
+                142,
+                117,
+                97,
+                85,
+                93,
+                89,
+                100
+              ],
+              "decile_freq": [
+                0.0878,
+                0.1275,
+                0.1165,
+                0.1312,
+                0.1081,
+                0.0896,
+                0.0786,
+                0.086,
+                0.0823,
+                0.0924
+              ],
+              "worst_decile": 3
+            },
+            "assembled_indep": {
+              "max_decile_dev": 0.053419593345656186,
+              "n": 1082,
+              "decile_counts": [
+                166,
+                161,
+                146,
+                128,
+                72,
+                60,
+                67,
+                69,
+                77,
+                136
+              ],
+              "decile_freq": [
+                0.1534,
+                0.1488,
+                0.1349,
+                0.1183,
+                0.0665,
+                0.0555,
+                0.0619,
+                0.0638,
+                0.0712,
+                0.1257
+              ],
+              "worst_decile": 0
+            },
+            "foil_direct_points": {
+              "max_decile_dev": 0.09408502772643251,
+              "n": 1082,
+              "decile_counts": [
+                210,
+                145,
+                115,
+                94,
+                75,
+                71,
+                82,
+                91,
+                77,
+                122
+              ],
+              "decile_freq": [
+                0.1941,
+                0.134,
+                0.1063,
+                0.0869,
+                0.0693,
+                0.0656,
+                0.0758,
+                0.0841,
+                0.0712,
+                0.1128
+              ],
+              "worst_decile": 0
+            },
+            "nihilist_zero": {
+              "max_decile_dev": 0.5774491682070241,
+              "n": 1082,
+              "decile_counts": [
+                33,
+                27,
+                36,
+                41,
+                38,
+                42,
+                42,
+                48,
+                42,
+                733
+              ],
+              "decile_freq": [
+                0.0305,
+                0.025,
+                0.0333,
+                0.0379,
+                0.0351,
+                0.0388,
+                0.0388,
+                0.0444,
+                0.0388,
+                0.6774
+              ],
+              "worst_decile": 9
+            },
+            "zero_width": {
+              "max_decile_dev": 0.5312384473197782,
+              "n": 1082,
+              "decile_counts": [
+                683,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                399
+              ],
+              "decile_freq": [
+                0.6312,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.3688
+              ],
+              "worst_decile": 0
+            },
+            "max_width": {
+              "max_decile_dev": 0.32329020332717184,
+              "n": 1082,
+              "decile_counts": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                458,
+                391,
+                179,
+                49,
+                5
+              ],
+              "decile_freq": [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.4233,
+                0.3614,
+                0.1654,
+                0.0453,
+                0.0046
+              ],
+              "worst_decile": 5
+            },
+            "assembled_comonotone": {
+              "max_decile_dev": 0.042698706099815166,
+              "n": 1082,
+              "decile_counts": [
+                62,
+                93,
+                101,
+                106,
+                126,
+                117,
+                151,
+                132,
+                115,
+                79
+              ],
+              "decile_freq": [
+                0.0573,
+                0.086,
+                0.0933,
+                0.098,
+                0.1165,
+                0.1081,
+                0.1396,
+                0.122,
+                0.1063,
+                0.073
+              ],
+              "worst_decile": 0
+            },
+            "zm_permuted": {
+              "max_decile_dev": 0.08391866913123844,
+              "n": 1082,
+              "decile_counts": [
+                60,
+                88,
+                78,
+                108,
+                88,
+                108,
+                116,
+                93,
+                144,
+                199
+              ],
+              "decile_freq": [
+                0.0555,
+                0.0813,
+                0.0721,
+                0.0998,
+                0.0813,
+                0.0998,
+                0.1072,
+                0.086,
+                0.1331,
+                0.1839
+              ],
+              "worst_decile": 9
+            }
+          },
+          "n_train": 20601,
+          "n_test": 1082,
+          "atom_rate_train": 0.3506,
+          "atom_rate_test": 0.3392,
+          "clamp": {
+            "zm_conditional": {
+              "n_rows": 1082,
+              "clamp_binding_share": 0.0009,
+              "mean_pi_hat": 0.6633,
+              "mean_pi_used": 0.6633,
+              "mean_upward_move": 0.0,
+              "max_upward_move": 0.0011,
+              "mean_installed_atom": 0.3367
+            },
+            "zm_floor": {
+              "n_rows": 1082,
+              "clamp_binding_share": 0.4159,
+              "mean_pi_hat": 0.6633,
+              "mean_pi_used": 0.6643,
+              "mean_upward_move": 0.001,
+              "max_upward_move": 0.005,
+              "mean_installed_atom": 0.3357
+            },
+            "zm_climatology": {
+              "n_rows": 1082,
+              "clamp_binding_share": 0.3272,
+              "mean_pi_hat": 0.6633,
+              "mean_pi_used": 0.7265,
+              "mean_upward_move": 0.0632,
+              "max_upward_move": 0.4011,
+              "mean_installed_atom": 0.2735
+            },
+            "zm_over": {
+              "n_rows": 1082,
+              "clamp_binding_share": 0.0,
+              "mean_pi_hat": 0.6633,
+              "mean_pi_used": 0.6633,
+              "mean_upward_move": 0.0,
+              "max_upward_move": 0.0,
+              "mean_installed_atom": 0.3367
+            }
+          },
+          "clamp_served": {
+            "n_rows": 1082,
+            "clamp_binding_share": 0.4159,
+            "mean_pi_hat": 0.6633,
+            "mean_pi_used": 0.7328,
+            "mean_upward_move": 0.0695,
+            "max_upward_move": 0.4204,
+            "mean_installed_atom": 0.2672
+          },
+          "marginal_drift": {
+            "max_probability_drift": 0.00139,
+            "per_leg": {
+              "attempts": 0.0,
+              "passing_yards": 0.0,
+              "passing_tds": 0.0,
+              "passing_interceptions": 0.0,
+              "carries": 0.00139,
+              "rushing_yards": 0.00072,
+              "rushing_tds": 0.00087,
+              "targets": 0.00123,
+              "receptions": 0.00105,
+              "receiving_yards": 0.00126,
+              "receiving_tds": 0.00064,
+              "fumbles_lost": 0.0001,
+              "two_pt": 5e-05
+            },
+            "n_rows": 96,
+            "draws": 1000,
+            "tolerance": 0.01,
+            "units": "probability \u2014 sup |F_mixture \u2212 F_availability_off| per leg",
+            "preserved": true
+          },
+          "targets": {
+            "zm_conditional": {
+              "mean": 0.7818,
+              "sd": 0.2913,
+              "mean_priced": 0.8287,
+              "atom_cap_after": 0.4248
+            },
+            "zm_floor": {
+              "mean": 0.7899,
+              "sd": 0.2961,
+              "mean_priced": 0.8373,
+              "atom_cap_after": 0.3743
+            },
+            "zm_climatology": {
+              "mean": 0.7863,
+              "sd": 0.2407,
+              "mean_priced": 0.8323,
+              "atom_cap_after": 0.4703
+            },
+            "zm_over": {
+              "mean": 0.8217,
+              "sd": 0.2836,
+              "mean_priced": 0.8601,
+              "atom_cap_after": 0.5149
+            }
+          },
+          "resplice_edges": {
+            "zm_conditional": {
+              "share_no_atom_in_source": 0.0,
+              "share_target_below_source_ignored": 0.3733,
+              "share_target_clipped": 0.3354,
+              "mean_target": 0.7805,
+              "mean_source_zero_mass": 0.7829
+            },
+            "zm_floor": {
+              "share_no_atom_in_source": 0.0,
+              "share_target_below_source_ignored": 0.0,
+              "share_target_clipped": 0.0,
+              "mean_target": 0.7899,
+              "mean_source_zero_mass": 0.7829
+            },
+            "zm_climatology": {
+              "share_no_atom_in_source": 0.0,
+              "share_target_below_source_ignored": 0.3489,
+              "share_target_clipped": 0.3077,
+              "mean_target": 0.7852,
+              "mean_source_zero_mass": 0.7829
+            },
+            "zm_over": {
+              "share_no_atom_in_source": 0.0,
+              "share_target_below_source_ignored": 0.2129,
+              "share_target_clipped": 0.4949,
+              "mean_target": 0.8196,
+              "mean_source_zero_mass": 0.7829
+            }
+          },
+          "identities": {
+            "zm_conditional": {
+              "zero_mass_hits_target": {
+                "max_abs_gap": 0.0,
+                "holds": true,
+                "mean_installed": 0.8086,
+                "mean_requested": 0.8086
+              },
+              "positive_law": {
+                "max_probability_drift": 0.090452,
+                "mean_probability_drift": 0.00867,
+                "max_resolution_bound": 0.181818,
+                "max_drift_over_bound": 0.788945,
+                "evaluable_cell_share": 0.4417,
+                "min_conditional_knots": 10,
+                "tolerance_ratio": 1.0,
+                "evaluated": true,
+                "holds": true
+              }
+            },
+            "zm_floor": {
+              "zero_mass_hits_target": {
+                "max_abs_gap": 0.0,
+                "holds": true,
+                "mean_installed": 0.7897,
+                "mean_requested": 0.7897
+              },
+              "positive_law": {
+                "max_probability_drift": 0.080402,
+                "mean_probability_drift": 0.00261,
+                "max_resolution_bound": 0.181818,
+                "max_drift_over_bound": 0.819095,
+                "evaluable_cell_share": 0.4625,
+                "min_conditional_knots": 10,
+                "tolerance_ratio": 1.0,
+                "evaluated": true,
+                "holds": true
+              }
+            },
+            "zm_climatology": {
+              "zero_mass_hits_target": {
+                "max_abs_gap": 0.0,
+                "holds": true,
+                "mean_installed": 0.8332,
+                "mean_requested": 0.8332
+              },
+              "positive_law": {
+                "max_probability_drift": 0.040201,
+                "mean_probability_drift": 0.00489,
+                "max_resolution_bound": 0.181818,
+                "max_drift_over_bound": 0.592965,
+                "evaluable_cell_share": 0.4244,
+                "min_conditional_knots": 10,
+                "tolerance_ratio": 1.0,
+                "evaluated": true,
+                "holds": true
+              }
+            },
+            "zm_over": {
+              "zero_mass_hits_target": {
+                "max_abs_gap": 0.0,
+                "holds": true,
+                "mean_installed": 0.8343,
+                "mean_requested": 0.8343
+              },
+              "positive_law": {
+                "max_probability_drift": 0.090452,
+                "mean_probability_drift": 0.010232,
+                "max_resolution_bound": 0.181818,
+                "max_drift_over_bound": 0.788945,
+                "evaluable_cell_share": 0.3389,
+                "min_conditional_knots": 10,
+                "tolerance_ratio": 1.0,
+                "evaluated": true,
+                "holds": true
+              }
+            }
+          },
+          "matched_foil_no_op": {
+            "max_abs_draw_gap": 0.0,
+            "holds": true,
+            "n_rows": 1082,
+            "draws": 64
+          },
+          "per_leg_crps": {
+            "zm_conditional": {
+              "by_leg": {
+                "attempts": {
+                  "served_crps": 0.00277,
+                  "recalibrated_crps": 0.00277,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": false
+                },
+                "passing_yards": {
+                  "served_crps": 0.0,
+                  "recalibrated_crps": 0.0,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "passing_tds": {
+                  "served_crps": 0.0,
+                  "recalibrated_crps": 0.0,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "passing_interceptions": {
+                  "served_crps": 0.0,
+                  "recalibrated_crps": 0.0,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "carries": {
+                  "served_crps": 1.94569,
+                  "recalibrated_crps": 1.9776,
+                  "delta": -0.03191,
+                  "delta_by_availability": {
+                    "sums": [
+                      -0.495525,
+                      0.413594,
+                      -6.361353,
+                      2.383148,
+                      1.077909,
+                      0.67935,
+                      5.035546,
+                      -2.736446,
+                      -10.297464,
+                      -24.223304
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": false
+                },
+                "rushing_yards": {
+                  "served_crps": 10.54209,
+                  "recalibrated_crps": 10.77418,
+                  "delta": -0.23209,
+                  "delta_by_availability": {
+                    "sums": [
+                      -1.469602,
+                      4.018483,
+                      -25.762678,
+                      6.536904,
+                      -3.249096,
+                      5.742095,
+                      13.462026,
+                      -8.939705,
+                      -43.711526,
+                      -197.749253
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "rushing_tds": {
+                  "served_crps": 0.14451,
+                  "recalibrated_crps": 0.14992,
+                  "delta": -0.00542,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.008514,
+                      0.014881,
+                      0.113165,
+                      0.258687,
+                      0.120399,
+                      0.021923,
+                      0.048913,
+                      0.160891,
+                      -0.071538,
+                      -6.536
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "targets": {
+                  "served_crps": 0.63171,
+                  "recalibrated_crps": 0.64561,
+                  "delta": -0.0139,
+                  "delta_by_availability": {
+                    "sums": [
+                      -0.046951,
+                      1.58402,
+                      -0.404948,
+                      3.625269,
+                      0.164024,
+                      0.596322,
+                      -0.048096,
+                      -0.636528,
+                      -3.035979,
+                      -16.832044
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": false
+                },
+                "receptions": {
+                  "served_crps": 0.52453,
+                  "recalibrated_crps": 0.5388,
+                  "delta": -0.01426,
+                  "delta_by_availability": {
+                    "sums": [
+                      -0.010017,
+                      0.11224,
+                      -0.068683,
+                      0.535465,
+                      0.175312,
+                      0.561041,
+                      -0.056911,
+                      -0.497432,
+                      -1.988021,
+                      -14.193971
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "receiving_yards": {
+                  "served_crps": 6.27764,
+                  "recalibrated_crps": 5.7607,
+                  "delta": 0.51694,
+                  "delta_by_availability": {
+                    "sums": [
+                      45.30739,
+                      198.60981,
+                      157.08605,
+                      89.746376,
+                      52.023042,
+                      15.005806,
+                      1.545335,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "receiving_tds": {
+                  "served_crps": 0.04278,
+                  "recalibrated_crps": 0.04341,
+                  "delta": -0.00063,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.000452,
+                      0.002663,
+                      0.011005,
+                      0.015578,
+                      0.010251,
+                      0.000452,
+                      0.00593,
+                      0.007286,
+                      -0.290153,
+                      -0.444448
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "fumbles_lost": {
+                  "served_crps": 0.0231,
+                  "recalibrated_crps": 0.02318,
+                  "delta": -7e-05,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.000704,
+                      0.001558,
+                      -0.01593,
+                      0.006884,
+                      0.012513,
+                      0.004824,
+                      0.007739,
+                      -0.028844,
+                      0.036711,
+                      -0.105745
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "two_pt": {
+                  "served_crps": 0.0101,
+                  "recalibrated_crps": 0.01008,
+                  "delta": 2e-05,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.000101,
+                      0.001307,
+                      0.001307,
+                      0.001005,
+                      0.000905,
+                      0.001005,
+                      0.000553,
+                      0.016231,
+                      -0.005477
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                }
+              },
+              "priced_legs": [
+                "passing_yards",
+                "passing_tds",
+                "passing_interceptions",
+                "rushing_yards",
+                "rushing_tds",
+                "receptions",
+                "receiving_yards",
+                "receiving_tds",
+                "fumbles_lost",
+                "two_pt"
+              ],
+              "served_crps_sum_priced": 17.56475,
+              "recalibrated_crps_sum_priced": 17.30027,
+              "relative_change": -0.015057,
+              "priced_delta_by_availability": {
+                "sums": [
+                  43.837441,
+                  202.759735,
+                  131.364235,
+                  97.101201,
+                  49.093426,
+                  21.337046,
+                  15.014037,
+                  -9.297251,
+                  -46.008295,
+                  -219.034895
+                ],
+                "counts": [
+                  27,
+                  99,
+                  102,
+                  83,
+                  62,
+                  48,
+                  55,
+                  79,
+                  113,
+                  414
+                ]
+              }
+            },
+            "zm_floor": {
+              "by_leg": {
+                "attempts": {
+                  "served_crps": 0.00277,
+                  "recalibrated_crps": 0.00277,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": false
+                },
+                "passing_yards": {
+                  "served_crps": 0.0,
+                  "recalibrated_crps": 0.0,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "passing_tds": {
+                  "served_crps": 0.0,
+                  "recalibrated_crps": 0.0,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "passing_interceptions": {
+                  "served_crps": 0.0,
+                  "recalibrated_crps": 0.0,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "carries": {
+                  "served_crps": 1.94569,
+                  "recalibrated_crps": 1.94665,
+                  "delta": -0.00096,
+                  "delta_by_availability": {
+                    "sums": [
+                      -0.447637,
+                      0.313444,
+                      -5.107486,
+                      2.542061,
+                      1.269678,
+                      0.605168,
+                      3.264035,
+                      -0.88396,
+                      -2.379458,
+                      -0.212817
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": false
+                },
+                "rushing_yards": {
+                  "served_crps": 10.54209,
+                  "recalibrated_crps": 10.54968,
+                  "delta": -0.00759,
+                  "delta_by_availability": {
+                    "sums": [
+                      -1.256967,
+                      3.279265,
+                      -19.079235,
+                      5.684166,
+                      -0.316002,
+                      3.167062,
+                      6.650835,
+                      -2.717663,
+                      -5.232107,
+                      1.612028
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "rushing_tds": {
+                  "served_crps": 0.14451,
+                  "recalibrated_crps": 0.14451,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "targets": {
+                  "served_crps": 0.63171,
+                  "recalibrated_crps": 0.6275,
+                  "delta": 0.00421,
+                  "delta_by_availability": {
+                    "sums": [
+                      -0.037136,
+                      1.155494,
+                      -0.445114,
+                      3.092608,
+                      0.27047,
+                      0.656828,
+                      0.181136,
+                      0.152269,
+                      -0.359677,
+                      -0.110036
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": false
+                },
+                "receptions": {
+                  "served_crps": 0.52453,
+                  "recalibrated_crps": 0.52427,
+                  "delta": 0.00026,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.004667,
+                      0.038789,
+                      0.022193,
+                      0.14824,
+                      0.005344,
+                      0.064504,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "receiving_yards": {
+                  "served_crps": 6.27764,
+                  "recalibrated_crps": 5.90042,
+                  "delta": 0.37721,
+                  "delta_by_availability": {
+                    "sums": [
+                      44.551843,
+                      184.621806,
+                      126.733831,
+                      48.703473,
+                      3.534809,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "receiving_tds": {
+                  "served_crps": 0.04278,
+                  "recalibrated_crps": 0.04278,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "fumbles_lost": {
+                  "served_crps": 0.0231,
+                  "recalibrated_crps": 0.0231,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "two_pt": {
+                  "served_crps": 0.0101,
+                  "recalibrated_crps": 0.0101,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                }
+              },
+              "priced_legs": [
+                "passing_yards",
+                "passing_tds",
+                "passing_interceptions",
+                "rushing_yards",
+                "rushing_tds",
+                "receptions",
+                "receiving_yards",
+                "receiving_tds",
+                "fumbles_lost",
+                "two_pt"
+              ],
+              "served_crps_sum_priced": 17.56475,
+              "recalibrated_crps_sum_priced": 17.19486,
+              "relative_change": -0.021059,
+              "priced_delta_by_availability": {
+                "sums": [
+                  43.299542,
+                  187.93986,
+                  107.676789,
+                  54.53588,
+                  3.224151,
+                  3.231566,
+                  6.650835,
+                  -2.717663,
+                  -5.232107,
+                  1.612028
+                ],
+                "counts": [
+                  27,
+                  99,
+                  102,
+                  83,
+                  62,
+                  48,
+                  55,
+                  79,
+                  113,
+                  414
+                ]
+              }
+            },
+            "zm_climatology": {
+              "by_leg": {
+                "attempts": {
+                  "served_crps": 0.00277,
+                  "recalibrated_crps": 0.00277,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": false
+                },
+                "passing_yards": {
+                  "served_crps": 0.0,
+                  "recalibrated_crps": 0.0,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "passing_tds": {
+                  "served_crps": 0.0,
+                  "recalibrated_crps": 0.0,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "passing_interceptions": {
+                  "served_crps": 0.0,
+                  "recalibrated_crps": 0.0,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "carries": {
+                  "served_crps": 1.94569,
+                  "recalibrated_crps": 2.48536,
+                  "delta": -0.53967,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.059695,
+                      0.28828,
+                      4.464047,
+                      -6.745771,
+                      -47.844862,
+                      -534.142343
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": false
+                },
+                "rushing_yards": {
+                  "served_crps": 10.54209,
+                  "recalibrated_crps": 12.84858,
+                  "delta": -2.30649,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.490904,
+                      0.0,
+                      0.0,
+                      1.258024,
+                      11.35577,
+                      -23.307871,
+                      -167.048278,
+                      -2318.371044
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "rushing_tds": {
+                  "served_crps": 0.14451,
+                  "recalibrated_crps": 0.15734,
+                  "delta": -0.01283,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.07714,
+                      0.201891,
+                      0.075043,
+                      0.009402,
+                      0.045145,
+                      0.19741,
+                      -0.309374,
+                      -14.17581
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "targets": {
+                  "served_crps": 0.63171,
+                  "recalibrated_crps": 0.74974,
+                  "delta": -0.11803,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      -0.10622,
+                      1.953723,
+                      0.19472,
+                      0.692291,
+                      -0.128832,
+                      -2.184547,
+                      -8.512815,
+                      -119.613155
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": false
+                },
+                "receptions": {
+                  "served_crps": 0.52453,
+                  "recalibrated_crps": 0.6136,
+                  "delta": -0.08907,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.006846,
+                      0.014691,
+                      -0.022072,
+                      0.324933,
+                      -0.016871,
+                      -1.561709,
+                      -6.221343,
+                      -88.897637
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "receiving_yards": {
+                  "served_crps": 6.27764,
+                  "recalibrated_crps": 6.27764,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "receiving_tds": {
+                  "served_crps": 0.04278,
+                  "recalibrated_crps": 0.044,
+                  "delta": -0.00123,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.005176,
+                      0.010201,
+                      0.006382,
+                      0.000452,
+                      0.00593,
+                      0.014774,
+                      -0.340469,
+                      -1.028727
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "fumbles_lost": {
+                  "served_crps": 0.0231,
+                  "recalibrated_crps": 0.02331,
+                  "delta": -0.00021,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.002864,
+                      0.005025,
+                      0.008794,
+                      0.003116,
+                      0.006533,
+                      -0.037136,
+                      0.049648,
+                      -0.263216
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "two_pt": {
+                  "served_crps": 0.0101,
+                  "recalibrated_crps": 0.01011,
+                  "delta": -1e-05,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.001005,
+                      0.001055,
+                      0.000653,
+                      0.000905,
+                      0.001005,
+                      0.000553,
+                      0.016231,
+                      -0.035729
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                }
+              },
+              "priced_legs": [
+                "passing_yards",
+                "passing_tds",
+                "passing_interceptions",
+                "rushing_yards",
+                "rushing_tds",
+                "receptions",
+                "receiving_yards",
+                "receiving_tds",
+                "fumbles_lost",
+                "two_pt"
+              ],
+              "served_crps_sum_priced": 17.56475,
+              "recalibrated_crps_sum_priced": 19.97458,
+              "relative_change": 0.137197,
+              "priced_delta_by_availability": {
+                "sums": [
+                  0.0,
+                  0.0,
+                  0.583935,
+                  0.232863,
+                  0.068801,
+                  1.596832,
+                  11.397511,
+                  -24.693979,
+                  -173.853585,
+                  -2422.772162
+                ],
+                "counts": [
+                  27,
+                  99,
+                  102,
+                  83,
+                  62,
+                  48,
+                  55,
+                  79,
+                  113,
+                  414
+                ]
+              }
+            },
+            "zm_over": {
+              "by_leg": {
+                "attempts": {
+                  "served_crps": 0.00277,
+                  "recalibrated_crps": 0.00277,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": false
+                },
+                "passing_yards": {
+                  "served_crps": 0.0,
+                  "recalibrated_crps": 0.0,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "passing_tds": {
+                  "served_crps": 0.0,
+                  "recalibrated_crps": 0.0,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "passing_interceptions": {
+                  "served_crps": 0.0,
+                  "recalibrated_crps": 0.0,
+                  "delta": 0.0,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "carries": {
+                  "served_crps": 1.94569,
+                  "recalibrated_crps": 2.03871,
+                  "delta": -0.09302,
+                  "delta_by_availability": {
+                    "sums": [
+                      -1.494061,
+                      -0.274046,
+                      -32.956356,
+                      -8.555731,
+                      -1.909836,
+                      -1.359088,
+                      6.109147,
+                      -8.047869,
+                      -20.178155,
+                      -31.977872
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": false
+                },
+                "rushing_yards": {
+                  "served_crps": 10.54209,
+                  "recalibrated_crps": 11.00463,
+                  "delta": -0.46254,
+                  "delta_by_availability": {
+                    "sums": [
+                      -3.748068,
+                      4.316099,
+                      -120.914004,
+                      -33.301094,
+                      -20.532099,
+                      -3.555977,
+                      11.405507,
+                      -29.346066,
+                      -76.869148,
+                      -227.922029
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "rushing_tds": {
+                  "served_crps": 0.14451,
+                  "recalibrated_crps": 0.15023,
+                  "delta": -0.00572,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.014412,
+                      0.069435,
+                      0.133699,
+                      0.056219,
+                      0.201608,
+                      0.038598,
+                      0.029093,
+                      0.199023,
+                      -0.13913,
+                      -6.794859
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "targets": {
+                  "served_crps": 0.63171,
+                  "recalibrated_crps": 0.6567,
+                  "delta": -0.02499,
+                  "delta_by_availability": {
+                    "sums": [
+                      -0.229296,
+                      2.155829,
+                      -1.890905,
+                      1.289824,
+                      -0.670543,
+                      -0.51596,
+                      -1.69491,
+                      -2.19852,
+                      -4.376014,
+                      -18.908813
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": false
+                },
+                "receptions": {
+                  "served_crps": 0.52453,
+                  "recalibrated_crps": 0.54733,
+                  "delta": -0.02279,
+                  "delta_by_availability": {
+                    "sums": [
+                      -0.081213,
+                      0.312945,
+                      -0.956598,
+                      -0.838818,
+                      -1.502381,
+                      0.003132,
+                      -0.616876,
+                      -1.697256,
+                      -3.170841,
+                      -16.115901
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "receiving_yards": {
+                  "served_crps": 6.27764,
+                  "recalibrated_crps": 5.67276,
+                  "delta": 0.60488,
+                  "delta_by_availability": {
+                    "sums": [
+                      45.383417,
+                      209.789447,
+                      170.481407,
+                      100.094677,
+                      80.838076,
+                      33.324587,
+                      8.255099,
+                      6.312187,
+                      0.0,
+                      0.0
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "receiving_tds": {
+                  "served_crps": 0.04278,
+                  "recalibrated_crps": 0.0434,
+                  "delta": -0.00062,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.000754,
+                      0.005226,
+                      0.016985,
+                      0.026834,
+                      0.021357,
+                      0.006382,
+                      0.011106,
+                      0.014673,
+                      -0.312043,
+                      -0.467241
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "fumbles_lost": {
+                  "served_crps": 0.0231,
+                  "recalibrated_crps": 0.02316,
+                  "delta": -6e-05,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.000704,
+                      0.003769,
+                      -0.022211,
+                      0.012462,
+                      0.016884,
+                      0.007035,
+                      0.010452,
+                      -0.03593,
+                      0.042607,
+                      -0.096692
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                },
+                "two_pt": {
+                  "served_crps": 0.0101,
+                  "recalibrated_crps": 0.01008,
+                  "delta": 2e-05,
+                  "delta_by_availability": {
+                    "sums": [
+                      0.0,
+                      0.000101,
+                      0.001307,
+                      0.001307,
+                      0.001206,
+                      0.001156,
+                      0.001156,
+                      0.000553,
+                      0.016231,
+                      -0.003668
+                    ],
+                    "counts": [
+                      27,
+                      99,
+                      102,
+                      83,
+                      62,
+                      48,
+                      55,
+                      79,
+                      113,
+                      414
+                    ]
+                  },
+                  "priced": true
+                }
+              },
+              "priced_legs": [
+                "passing_yards",
+                "passing_tds",
+                "passing_interceptions",
+                "rushing_yards",
+                "rushing_tds",
+                "receptions",
+                "receiving_yards",
+                "receiving_tds",
+                "fumbles_lost",
+                "two_pt"
+              ],
+              "served_crps_sum_priced": 17.56475,
+              "recalibrated_crps_sum_priced": 17.45159,
+              "relative_change": -0.006442,
+              "priced_delta_by_availability": {
+                "sums": [
+                  41.570005,
+                  214.497022,
+                  48.740583,
+                  66.051586,
+                  59.044651,
+                  29.824913,
+                  19.095536,
+                  -24.552816,
+                  -80.432324,
+                  -251.40039
+                ],
+                "counts": [
+                  27,
+                  99,
+                  102,
+                  83,
+                  62,
+                  48,
+                  55,
+                  79,
+                  113,
+                  414
+                ]
+              }
+            }
+          },
+          "leg_zero_mass_table": {
+            "attempts": {
+              "predicted_zero_mass": 0.995,
+              "realized_zero_rate": 0.9972,
+              "gap_realized_minus_predicted": 0.0022
+            },
+            "passing_yards": {
+              "predicted_zero_mass": 0.995,
+              "realized_zero_rate": 1.0,
+              "gap_realized_minus_predicted": 0.005
+            },
+            "passing_tds": {
+              "predicted_zero_mass": 0.995,
+              "realized_zero_rate": 1.0,
+              "gap_realized_minus_predicted": 0.005
+            },
+            "passing_interceptions": {
+              "predicted_zero_mass": 0.995,
+              "realized_zero_rate": 1.0,
+              "gap_realized_minus_predicted": 0.005
+            },
+            "carries": {
+              "predicted_zero_mass": 0.42,
+              "realized_zero_rate": 0.3928,
+              "gap_realized_minus_predicted": -0.0272
+            },
+            "rushing_yards": {
+              "predicted_zero_mass": 0.4327,
+              "realized_zero_rate": 0.4113,
+              "gap_realized_minus_predicted": -0.0214
+            },
+            "rushing_tds": {
+              "predicted_zero_mass": 0.8622,
+              "realized_zero_rate": 0.8494,
+              "gap_realized_minus_predicted": -0.0128
+            },
+            "targets": {
+              "predicted_zero_mass": 0.4585,
+              "realized_zero_rate": 0.5065,
+              "gap_realized_minus_predicted": 0.048
+            },
+            "receptions": {
+              "predicted_zero_mass": 0.5481,
+              "realized_zero_rate": 0.5518,
+              "gap_realized_minus_predicted": 0.0037
+            },
+            "receiving_yards": {
+              "predicted_zero_mass": 0.56,
+              "realized_zero_rate": 0.5786,
+              "gap_realized_minus_predicted": 0.0186
+            },
+            "receiving_tds": {
+              "predicted_zero_mass": 0.9599,
+              "realized_zero_rate": 0.9584,
+              "gap_realized_minus_predicted": -0.0015
+            },
+            "fumbles_lost": {
+              "predicted_zero_mass": 0.9681,
+              "realized_zero_rate": 0.976,
+              "gap_realized_minus_predicted": 0.0079
+            },
+            "two_pt": {
+              "predicted_zero_mass": 0.9888,
+              "realized_zero_rate": 0.9898,
+              "gap_realized_minus_predicted": 0.001
+            }
+          },
+          "leg_zero_mass_table_recalibrated": {
+            "attempts": {
+              "predicted_zero_mass": 0.995,
+              "realized_zero_rate": 0.9972,
+              "gap_realized_minus_predicted": 0.0022
+            },
+            "passing_yards": {
+              "predicted_zero_mass": 0.995,
+              "realized_zero_rate": 1.0,
+              "gap_realized_minus_predicted": 0.005
+            },
+            "passing_tds": {
+              "predicted_zero_mass": 0.995,
+              "realized_zero_rate": 1.0,
+              "gap_realized_minus_predicted": 0.005
+            },
+            "passing_interceptions": {
+              "predicted_zero_mass": 0.995,
+              "realized_zero_rate": 1.0,
+              "gap_realized_minus_predicted": 0.005
+            },
+            "carries": {
+              "predicted_zero_mass": 0.4542,
+              "realized_zero_rate": 0.3928,
+              "gap_realized_minus_predicted": -0.0614
+            },
+            "rushing_yards": {
+              "predicted_zero_mass": 0.4776,
+              "realized_zero_rate": 0.4113,
+              "gap_realized_minus_predicted": -0.0663
+            },
+            "rushing_tds": {
+              "predicted_zero_mass": 0.8995,
+              "realized_zero_rate": 0.8494,
+              "gap_realized_minus_predicted": -0.0502
+            },
+            "targets": {
+              "predicted_zero_mass": 0.5163,
+              "realized_zero_rate": 0.5065,
+              "gap_realized_minus_predicted": -0.0098
+            },
+            "receptions": {
+              "predicted_zero_mass": 0.5945,
+              "realized_zero_rate": 0.5518,
+              "gap_realized_minus_predicted": -0.0427
+            },
+            "receiving_yards": {
+              "predicted_zero_mass": 0.6523,
+              "realized_zero_rate": 0.5786,
+              "gap_realized_minus_predicted": -0.0737
+            },
+            "receiving_tds": {
+              "predicted_zero_mass": 0.9688,
+              "realized_zero_rate": 0.9584,
+              "gap_realized_minus_predicted": -0.0104
+            },
+            "fumbles_lost": {
+              "predicted_zero_mass": 0.9767,
+              "realized_zero_rate": 0.976,
+              "gap_realized_minus_predicted": -0.0008
+            },
+            "two_pt": {
+              "predicted_zero_mass": 0.9924,
+              "realized_zero_rate": 0.9898,
+              "gap_realized_minus_predicted": -0.0026
+            }
+          },
+          "binding_leg_share_served": {
+            "carries": 0.3826,
+            "rushing_yards": 0.1488,
+            "targets": 0.1322,
+            "receptions": 0.0055,
+            "receiving_yards": 0.3309
+          },
+          "binding_leg_share_recalibrated": {
+            "carries": 0.6913,
+            "rushing_yards": 0.0961,
+            "targets": 0.1617,
+            "receptions": 0.0028,
+            "receiving_yards": 0.0481
+          },
+          "atom_cap": {
+            "cap_served": 0.3058,
+            "cap_recalibrated": 0.4248,
+            "installed_atom_recalibrated": 0.3367,
+            "installed_atom_served": 0.2672,
+            "clamp_binding_share_recalibrated": 0.0009,
+            "clamp_binding_share_served": 0.4159,
+            "total_zero_mass_by_arm": {
+              "zm_conditional": 0.39,
+              "zm_floor": 0.3589,
+              "zm_climatology": 0.3796,
+              "zm_over": 0.4668,
+              "mix_played": 0.2933,
+              "single_copula": 0.268,
+              "zm_cond_copula": 0.3675,
+              "mix_off": 0.2353,
+              "assembled_indep": 0.1677,
+              "assembled_comonotone": 0.306
+            }
+          },
+          "sigma_played_note": {
+            "estimator": "spearman_raw_ranks",
+            "n_rows": 13379,
+            "degenerate_legs": [],
+            "n_estimated_legs": 13,
+            "population": "active_rows_only",
+            "n_active": 13379,
+            "n_all": 20601,
+            "atom_rate": 0.3506
+          },
+          "sigma_all_note": {
+            "estimator": "spearman_raw_ranks",
+            "n_rows": 20601,
+            "degenerate_legs": [],
+            "n_estimated_legs": 13
+          }
+        }
+      },
+      "bank_cache": "miss"
+    }
+  ],
+  "runtime_seconds": 442.5,
+  "selections": {},
+  "unavailable_positions": [
+    "RB"
+  ],
+  "positions_not_run": [],
+  "fdr": {},
+  "gates": {},
+  "null_states": {},
+  "marginal_cap": {
+    "state": "UNDEFINED",
+    "cap_was_lifted": false,
+    "atom_cap_mean": null,
+    "atom_cap_mean_predecessor": null,
+    "cap_lift": null,
+    "min_cap_lift_required": 0.0341,
+    "min_cap_lift_derivation": "realized all-zero rate 0.3359 \u2212 NF-W7e's recorded RB atom cap 0.3018: the recalibration has turned the knob iff the recalibrated cap reaches the atom the population actually exhibits",
+    "installed_atom": null,
+    "realized_all_zero_rate": null,
+    "atom_shortfall_installed_vs_realized": null,
+    "clamp_binding_share": null,
+    "clamp_binding_share_predecessor": 0.4184,
+    "clamp_mean_upward_move": null,
+    "binding_leg_share": {},
+    "pit_by_arm": {},
+    "best_pit_arm": null,
+    "best_pit": null,
+    "bar": 0.05,
+    "pit_predecessor_already_cleared": 0.0242,
+    "pit_matched_foil": null,
+    "pit_moved_by_recalibration": null,
+    "beats_both_foils": null,
+    "reading": "the confirmation could not run \u2014 never read as a verdict (NF1.7 (a))"
+  },
+  "verdict": {
+    "story_verdict": "NULL",
+    "gate_positions": [
+      "RB"
+    ],
+    "ship_positions": [],
+    "null_positions": {},
+    "gate_league": "full_ppr",
+    "declared_field_size": 4,
+    "bh_family_size": 0,
+    "scope_note": "\u26d4 RB ONLY \u2014 QB/WR/TE were NOT scored here and this record certifies nothing about them (NF1.7 (a)). NF-W8's four-position optimizer input is a CROSS-POSITION ranking, so an RB certificate alone does not unblock it (NF-W7c \u00a74).",
+    "selection_key": "arms are RANKED on crps_q199; PIT flatness is a hard GATE clause on the selected arm and never a ranking key, because NF-W7c measured the over-correlated degenerate posting the best PIT in the QB field while posting the worst CRPS \u2014 a criterion a degenerate wins is fatal (NF1.8). The bar (0.05) and the statistic are NF-W7c's, unchanged.",
+    "rb_verdict_state": "UNDEFINED",
+    "rb_certified": false,
+    "rb_certification_rule": "certified for NF-W8 ONLY on RB_RECALIBRATION_PAYS with the FULL gate green (prereg \u00a77); the state alone is a mechanism reading, never a certificate",
+    "joint_construction_held_fixed": "mix_played",
+    "promote_blockers": [
+      "NF-W7h is DEPLOY-HELD: the RB marginal recalibration is an NF-G0 challenger and is served by nothing until governance promotes it",
+      "\u26d4 RB ONLY. This record certifies NOTHING about QB/WR/TE \u2014 they were not scored (NF1.7 (a))",
+      "\u26d4 A per-position-certified distribution may NOT feed a CROSS-POSITION ranking until every compared position is on the same generator AND the same level recalibration (NF-W7c \u00a74). NF-W8's four-position optimizer input IS a ranking, so an RB certificate alone does not unblock it \u2014 QB is calibrated but CONSTRAINT_REFUSED and TE is a GENUINE_ABSENCE",
+      "the recalibration CHANGES NF-W6d certified cells' marginals \u2014 a consumer reading the 52-cell substrate directly is reading the SERVED cells, not these; nothing here re-serves W6d",
+      "NF-W7c's promote blockers are INHERITED in full, and RB's labelling is materially WEAKER than QB's: NF-W7e recorded RB as `partial_default` with 7 of 10 priced stats using a NF-W6d calibrated DEFAULT \u2014 a calibrated range, not a conditional projection",
+      "a ship here does NOT re-open NF-W4's Layer B: availability enters as a component of the predictive's draw law and of its marginals' atom, never as a feature injected into a point/quantile learner",
+      "the recalibration is certified on the NF-W7c fold axis under the declared gate league \u2014 a league or a position outside that certification is not covered by this record"
+    ],
+    "positions_with_unevaluated_oracle_ceiling": [],
+    "winner_oracle_state": {}
+  },
+  "rewritten_at": "2026-08-18T02:02:22.517861+00:00"
+}

@@ -16,4 +16,9 @@
 | 6 | `catboost` | 0.2442 | 0.6814 | 0.4898 | 0.0141 |  |
 | 7 | `floor_no_skill` | 0.2491 | 0.6914 | 0.4980 | 0.0088 | ✅ |
 
+## ⚠️ Margin attribution — learner swap vs contract
+
+_Not available — this run scores a single contract, so it has NO contract axis — its margins are learner-vs-floor on fixed features and none of them is a feature effect to attribute._
+
+
 Calibration = ECE (home_win) / PIT-KS (totals/run_diff), lower=better. Floors (no-skill, market) are reference baselines, NOT promotable candidates. Winner feeds Optuna HPO (E1.9 step 2); offline scores are LOWER post-de-leak by design — the honest gate is forward/serving-parity + PBO/DSR, not raw offline metric.

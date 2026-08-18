@@ -313,7 +313,16 @@
     "learner_swap": 0.015317,
     "contract": 0.005329,
     "learner_share": 0.7419,
-    "same_learner_reference_arm": "incumbent::glm_elasticnet"
+    "same_learner_reference_arm": "incumbent::glm_elasticnet",
+    "noise_floor": 0.02,
+    "share_is_meaningful": true,
+    "sign_flip": false,
+    "learner_dominates": true,
+    "components_within_noise": {
+      "total": false,
+      "learner_swap": true,
+      "contract": true
+    }
   },
   "variant_effect_by_learner": [
     {

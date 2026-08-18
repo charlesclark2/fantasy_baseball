@@ -637,6 +637,10 @@ _GATED_PAGES = [
     # NF-C5 — the auction optimizer reads the SAME gated board endpoints as the snake tool and is
     # the same paid decision-support half by product decision.
     "app/fantasy/auction/page.tsx",
+    # NF-C4 — the custom big board reads the SAME gated board endpoints AND a per-user saved-board
+    # endpoint of its own, so a public wrapper would render a permanently broken page AND advertise
+    # storing a board to a caller with no entitlement to store one.
+    "app/fantasy/big-board/page.tsx",
     "app/fantasy/league-board/page.tsx",
     "app/fantasy/mlb/prospects/page.tsx",
 ]
@@ -678,6 +682,7 @@ def test_the_nav_marks_exactly_the_public_surfaces_public():
         line = next(ln for ln in code.splitlines() if f'key: "{key}"' in ln)
         assert "public: true" in line, f"{key} is a free surface but the nav still gates it"
     for key in ("fantasy-league-board", "fantasy-draft", "fantasy-mock-draft", "fantasy-auction",
+                "fantasy-big-board",
                 "fantasy-my-teams", "fantasy-import", "fantasy-league-settings"):
         lines = [ln for ln in code.splitlines() if f'key: "{key}"' in ln]
         if lines:
@@ -1168,6 +1173,11 @@ _ORDERING_MODULES = [
     # mis-ordered board, because a user bids real money against it.
     "lib/auction-optimizer.ts",
     "components/fantasy/auction-optimizer.tsx",
+    # NF-C4 — the custom big board orders the whole board and PRINTS the result. It is the surface
+    # where a full-slate rate would do the most damage: a cheat sheet is read at the pick, away
+    # from any caveat, and the user takes its order as their own.
+    "lib/big-board.ts",
+    "components/fantasy/big-board.tsx",
 ]
 
 
