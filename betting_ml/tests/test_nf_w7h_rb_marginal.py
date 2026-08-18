@@ -1047,3 +1047,43 @@ def test_a_single_fold_path_proof_produces_no_verdict_and_still_renders(tmp_path
     assert "PATH PROOF" in text and "NOT a verdict" in text, \
         "a one-fold run does not announce itself as a path proof"
     assert RM.CAP_UNDEFINED in text
+
+
+def test_the_dsr_2x2_reports_the_series_axis_and_says_which_row_binds():
+    """⭐ prereg §9 promised a 2×2 of {field} × {return-series}, and a promised column that nothing
+    computes is the wired-≠-invoked class (NF-C0e). The per-SPLIT row must be present, labelled
+    REPORT_ONLY, and must never be the binding row: CSCV half-splits reuse folds, so their Sharpe
+    is inflated by construction and reading it as the verdict would be the E2.1-r inversion
+    (re-reading a pre-registered gate on the better-looking series)."""
+    out = R.classify(_sel(dsr=0.1,
+                          cscv_split_deltas=[0.01, 0.02, -0.005, 0.03, 0.01, 0.02, 0.0, 0.015],
+                          cscv_split_trial_srs=[1.0, 0.9, 0.2, -3.0]),
+                     _checks(dsr_ok=False))["dsr_diagnostic"]
+    grid = out["dsr_2x2"]
+    for k in ("per_fold_series__declared_field", "per_fold_series__coherent_subfield",
+              "per_split_series__declared_field_REPORT_ONLY",
+              "per_split_series__coherent_subfield_REPORT_ONLY"):
+        assert k in grid, sorted(grid)
+    assert grid["binding_row"] == "per_fold_series"
+    assert grid["per_split_series__declared_field_REPORT_ONLY"] is not None
+    assert "INFLATED" in grid["note"] and "never what the gate decides" in grid["note"]
+    # …and it must RENDER, labelled — a grid nobody prints is not a report (NF-C0e)
+    src = "\n".join(ln for ln in inspect.getsource(R.write_report).splitlines()
+                    if not ln.lstrip().startswith("#"))
+    assert "per_split_series__declared_field_REPORT_ONLY" in src
+    assert "per_fold_series__declared_field" in src and "(BINDS)" in src
+
+
+def test_the_split_series_is_UNEVALUABLE_rather_than_NaN_on_a_short_run():
+    """A path proof has too few folds for CSCV. The series must come back EMPTY and its Sharpe 0.0
+    — never a warned-into-existence NaN that would silently poison the reported 2×2."""
+    import pandas as pd
+    mat = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [1.5, 2.5, 3.5]}, index=["f0", "f1", "f2"])
+    assert R._cscv_split_deltas(mat, "a", "b").size == 0
+    assert R._series_sharpe(np.asarray([])) == 0.0
+    assert R._series_sharpe(np.asarray([1.0])) == 0.0
+    assert R._series_sharpe(np.asarray([1.0, 1.0, 1.0])) == 0.0        # degenerate, not a div-by-0
+    out = R.classify(_sel(dsr=0.1, cscv_split_deltas=[], cscv_split_trial_srs=[0.0] * 4),
+                     _checks(dsr_ok=False))["dsr_diagnostic"]
+    assert out["dsr_2x2"]["per_split_series__declared_field_REPORT_ONLY"] is None
+    assert out["n_cscv_splits"] == 0

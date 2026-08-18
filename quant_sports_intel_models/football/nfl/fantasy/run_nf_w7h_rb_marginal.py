@@ -460,6 +460,38 @@ def _reproduction(usable: list[dict], position: str, foil: str,
         {k.split("|", 1)[1]: v for k, v in record.items() if k.split("|", 1)[0] == position})
 
 
+def _series_sharpe(d: np.ndarray) -> float:
+    """A return series' Sharpe, REFUSING an empty or degenerate series rather than warning its way
+    to a NaN that would silently poison the reported 2×2 (NF1.7 (a))."""
+    a = np.asarray(d, dtype=float)
+    if a.size < 2:
+        return 0.0
+    sd = float(np.nanstd(a, ddof=1))
+    return round(float(np.nanmean(a)) / sd, 3) if sd > 1e-12 else 0.0
+
+
+def _cscv_split_deltas(mat: pd.DataFrame, arm: str, foil: str) -> np.ndarray:
+    """(foil − arm) averaged over the OUT-OF-SAMPLE half of every CSCV split — the per-BUCKET return
+    series, built with the SAME half-split construction `NF18.deflate` uses for PBO.
+
+    ⛔ NOT an alternative gate. The splits reuse the same folds, so the observations are strongly
+    dependent and any Sharpe computed on them is optimistically inflated; the pre-registered gate
+    binds on the per-FOLD series. This exists so the record can say whether a DSR failure is a
+    property of the FIELD, of the SERIES definition, or of genuine per-fold noise (NCAAF-P2.1
+    measured a ~3× gap between the two series on identical folds) — a question the record cannot
+    answer without measuring it."""
+    import itertools
+    n = len(mat.index)
+    if n < 4 or arm not in mat.columns or foil not in mat.columns:
+        return np.asarray([], dtype=float)
+    out = []
+    for combo in itertools.combinations(range(n), n // 2):
+        os_idx = [i for i in range(n) if i not in combo]
+        blk = mat.iloc[os_idx]
+        out.append(float(blk[foil].mean() - blk[arm].mean()))
+    return np.asarray(out, dtype=float)
+
+
 def select_position(fold_results: list[dict], position: str) -> dict | None:
     usable = _usable(fold_results, position)
     if len(usable) < 2:
@@ -624,6 +656,16 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
         "atom_cap_served_by_fold": [round(float(c), 4) for c in caps_served],
     }
 
+    # ⭐ THE SERIES AXIS of the DSR 2×2 (prereg §9). PBO/CSCV wants MANY buckets; DSR wants LOW-NOISE
+    # INDEPENDENT observations — and NCAAF-P2.1 measured the same effect on the same folds moving a
+    # per-BUCKET Sharpe ~3× against its per-FOLD one, i.e. the series DEFINITION alone can decide the
+    # gate. So the split-level series is computed and REPORTED beside the per-fold one.
+    # ⛔ The per-FOLD series BINDS, by pre-registration. CSCV half-splits REUSE folds, so their
+    # observations are NOT independent and a DSR computed on them is INFLATED — reading the higher
+    # number as the verdict would be the E2.1-r inversion (re-reading a pre-registered gate on the
+    # better-looking series). It is a diagnostic that says WHICH lever binds, never a second gate.
+    split_deltas = _cscv_split_deltas(mat, winner, best_foil)
+
     base = cap_baseline()
     cap_mean = float(np.mean(caps_recal))
     cap_lift = (cap_mean - base["atom_cap_mean"]) if base["available"] else None
@@ -715,6 +757,13 @@ def select_position(fold_results: list[dict], position: str) -> dict | None:
         "pbo": defl.get("pbo"), "os_gap_pct": defl.get("os_gap_pct"),
         "contender_spread_pct": defl.get("contender_spread_pct"), "flips": defl.get("flips"),
         "dsr": dsr, "p_one_sided": pval, "trial_srs": [round(t, 3) for t in trial_srs],
+        # REPORTED-only; the per-fold series binds (see `_cscv_split_deltas`)
+        "cscv_split_deltas": [round(float(x), 6) for x in split_deltas],
+        # ⛔ an EMPTY split series (fewer than 4 folds — a path proof) must not be handed to
+        # `nanstd(ddof=1)`: it warns and returns NaN, and a NaN trial Sharpe would silently poison
+        # the reported 2×2 rather than leaving it UNEVALUABLE (NF1.7 (a)).
+        "cscv_split_trial_srs": [_series_sharpe(_cscv_split_deltas(mat, a, best_foil))
+                                 for a in RM.REAL_ARMS],
         "observed_sr": round(float(np.nanmean(deltas)) / sd, 3) if sd > 1e-12 else None,
         "var_trials_sr": (round(float(np.var(np.asarray(trial_srs), ddof=1)), 5)
                           if len(trial_srs) > 1 else None),
@@ -993,7 +1042,16 @@ def dsr_field_diagnostic(sel: dict) -> dict:
     drop = int(np.argmax(np.abs(srs - float(np.mean(srs)))))
     trimmed = np.delete(srs, drop)
     v_coherent = float(np.var(trimmed, ddof=1)) if trimmed.size > 1 else float("nan")
-    dsr_coherent = M14.deflated_sharpe(np.asarray(sel["deltas_by_fold"], dtype=float), trimmed)
+    fold_deltas = np.asarray(sel["deltas_by_fold"], dtype=float)
+    dsr_coherent = M14.deflated_sharpe(fold_deltas, trimmed)
+    # ── the SERIES axis, REPORTED only (the per-fold series binds — prereg §9) ─────────────────
+    split_d = np.asarray(sel.get("cscv_split_deltas") or [], dtype=float)
+    split_srs = np.asarray(sel.get("cscv_split_trial_srs") or [], dtype=float)
+    if split_d.size >= 4 and split_srs.size == srs.size:
+        dsr_split_declared = M14.deflated_sharpe(split_d, split_srs)
+        dsr_split_coherent = M14.deflated_sharpe(split_d, np.delete(split_srs, drop))
+    else:
+        dsr_split_declared = dsr_split_coherent = None
     ratio = (v_declared / v_coherent) if np.isfinite(v_coherent) and v_coherent > 1e-12 else None
     moved = (None if dsr_coherent is None or sel.get("dsr") is None
              else round(float(dsr_coherent - sel["dsr"]), 4))
@@ -1016,6 +1074,22 @@ def dsr_field_diagnostic(sel: dict) -> dict:
         "declared_field_size_source": RM.DECLARED_FIELD_SIZE_SOURCE,
         "dsr_declared_field": sel.get("dsr"), "dsr_coherent_subfield": dsr_coherent,
         "dsr_moved_by_coherence": moved, "dsr_bar": RM.DSR_MIN,
+        # ⭐ the full 2×2 (field × return-series). ⛔ The per-FOLD row BINDS by pre-registration;
+        # the per-SPLIT row is REPORTED because CSCV half-splits reuse folds, so its observations
+        # are dependent and its Sharpe is inflated — reading it as the verdict would be the E2.1-r
+        # inversion (re-reading a pre-registered gate on the better-looking series).
+        "dsr_2x2": {
+            "per_fold_series__declared_field": sel.get("dsr"),
+            "per_fold_series__coherent_subfield": dsr_coherent,
+            "per_split_series__declared_field_REPORT_ONLY": dsr_split_declared,
+            "per_split_series__coherent_subfield_REPORT_ONLY": dsr_split_coherent,
+            "binding_row": "per_fold_series",
+            "note": ("the per-FOLD series binds by pre-registration; CSCV half-splits reuse folds, "
+                     "so the per-SPLIT row is dependent-by-construction and INFLATED — it says "
+                     "whether the series DEFINITION matters (NCAAF-P2.1 measured a ~3× gap on "
+                     "identical folds), never what the gate decides"),
+        },
+        "n_cscv_splits": int(split_d.size),
         "v_declared_field": round(v_declared, 6),
         "v_coherent_subfield": (None if not np.isfinite(v_coherent) else round(v_coherent, 6)),
         "v_ratio_declared_over_coherent": (None if ratio is None else round(ratio, 3)),
@@ -1306,6 +1380,17 @@ def write_report(out: dict, path: Path) -> None:
                       f"{d.get('v_ratio_declared_over_coherent')}×)",
                       f"- observed SR {d.get('observed_sr')}; trial SRs {d.get('trial_srs')}",
                       f"- {d.get('note')}", ""]
+                grid = d.get("dsr_2x2") or {}
+                if grid:
+                    L += ["| return series | declared field | coherent sub-field |",
+                          "|---|---|---|",
+                          f"| **per fold** (BINDS) | "
+                          f"{grid.get('per_fold_series__declared_field')} | "
+                          f"{grid.get('per_fold_series__coherent_subfield')} |",
+                          f"| per CSCV split ({d.get('n_cscv_splits')} splits, REPORT-ONLY) | "
+                          f"{grid.get('per_split_series__declared_field_REPORT_ONLY')} | "
+                          f"{grid.get('per_split_series__coherent_subfield_REPORT_ONLY')} |", "",
+                          f"> {grid.get('note')}", ""]
 
     L += ["## Promote blockers", ""]
     L += [f"- {b}" for b in v["promote_blockers"]]
