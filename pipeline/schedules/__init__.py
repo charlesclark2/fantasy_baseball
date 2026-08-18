@@ -32,6 +32,12 @@ from pipeline.schedules.sports_rollforward_schedules import (
 # STOPPED (operator-gated, needs ODDS_API_KEY + CFBD_API_KEY) — ENABLE alongside the roll-forward
 # schedule before the Aug-29 opener (intended state in BOX_OPERATIONS.md §10).
 from pipeline.schedules.sports_odds_capture_schedules import sports_ncaaf_odds_capture_schedule
+# NCAAF-PS: the weekly PRE-KICKOFF prediction snapshot (Tue 09:00 PT, Aug-Jan). ⛔ default_status=
+# STOPPED (operator-gated) — enable only AFTER the close-to-kickoff P1.2 re-fit, or the pre-season
+# cold start gets frozen into a track record that by design can never be rewritten.
+from pipeline.schedules.sports_ncaaf_prediction_snapshot_schedules import (
+    sports_ncaaf_prediction_snapshot_schedule,
+)
 # E7.1 — daily MiLB incremental ingest. default_status=RUNNING (self-start; continuous capture of
 # the live 2026 season). Isolated single-op job; WARN-tier; free Stats API; Snowflake-free.
 # NF-W0a: NFL point-in-time forward capture. weather + metadata ship RUNNING (FREE, and a missed
@@ -63,6 +69,7 @@ all_schedules = [
     sports_nfl_roll_forward_schedule,
     sports_nfl_sleeper_injuries_schedule,
     sports_ncaaf_odds_capture_schedule,
+    sports_ncaaf_prediction_snapshot_schedule,
     sports_nfl_pit_weather_schedule,
     sports_nfl_pit_metadata_schedule,
     sports_nfl_pit_market_schedule,
