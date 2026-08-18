@@ -313,6 +313,17 @@ export function BigBoard() {
     }
   }
 
+  /**
+   * Seed the user's tier breaks from ours.
+   *
+   * ⚠️ IT TIERS THE DEPTH ON SCREEN, not the whole board — `assignTiers` sizes a tier as a fraction
+   * of the pool it is given, so handing it all 858 rows returns groups of 40 (measured), which is
+   * the whole of the first four rounds in one block and no more use on a cheat sheet than the
+   * single tier it replaced. At the default depth of 200 it returns 14 groups of 8–27.
+   */
+  const seedOurTiers = () =>
+    edit((d) => (board ? { ...d, tier_breaks: ourTierBreaks(board, shownDepth) } : d))
+
   const resetBoard = () => {
     edit(() => EMPTY_DOC)
     setSheetOpen(false)
@@ -488,7 +499,7 @@ export function BigBoard() {
               edits it, rather than from nothing. It writes the breaks into their document — they
               are the user's from that moment, and every one of them can be moved or removed. */}
           <button
-            onClick={() => edit((d) => (board ? { ...d, tier_breaks: ourTierBreaks(board) } : d))}
+            onClick={seedOurTiers}
             data-testid="big-board-seed-tiers"
             className="rounded-md border border-[#262626] px-3 py-1.5 text-xs text-gray-300 hover:border-[#3a3a3a] hover:text-white"
           >
@@ -821,7 +832,7 @@ export function BigBoard() {
           copied={copied}
           empty={isEmptyDoc(doc)}
           hasTiers={hasTiers}
-          onSeedTiers={() => edit((d) => (board ? { ...d, tier_breaks: ourTierBreaks(board) } : d))}
+          onSeedTiers={seedOurTiers}
         />
       )}
 

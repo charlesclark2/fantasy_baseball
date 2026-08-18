@@ -228,13 +228,24 @@ export function setNote(doc: BigBoardDoc, id: string, text: string): BigBoardDoc
 }
 
 /**
- * OUR tier breaks for this board — the ids that start a new tier when you walk our own order.
+ * OUR tier breaks for the top `depth` rows of this board — the ids that start a new group.
  *
  * ⭐ WHAT THIS IS FOR. A user who has drawn no tiers has a sheet that is one flat list of two
- * hundred names, which is not what anyone reads at pick 4.11. This seeds their tiers from the SAME
- * VOR-gap tiering the Rankings board and the draft optimizer already use (`positionTierMap` →
- * `assignTiers`), so the starting point is our published tier structure rather than an invention of
- * this surface — and from there every break is theirs to move or delete.
+ * hundred names, which is not what anyone reads at pick 4.11. This seeds their breaks from the
+ * shared gap-tiering (`positionTierMap` → `assignTiers`, the same function that tiers a position on
+ * the player page and drives the optimizer's tier-cliff line) applied to this board's own VOR
+ * ordering, so the starting point is a real measured grouping rather than an invention of this
+ * surface — and from there every break is theirs to move or delete.
+ *
+ * ⚠️ IT TIERS THE POOL, NOT THE WHOLE BOARD, AND THAT IS THE LOAD-BEARING ARGUMENT. `assignTiers`
+ * bounds a tier's size as a FRACTION of the pool it is given (4%–15%, its own docstring: "both
+ * bounds SCALE WITH THE POOL SIZE" to target ~7–25 tiers whatever `n` is). Handed all ~600
+ * draftable rows it therefore returns tiers of 24–90 players — measured: 6 tiers covering the top
+ * 200, ~35 players each, which is the whole of the first four rounds in one block and no more use
+ * on a cheat sheet than the single tier it replaced. Handed the depth the user is actually working
+ * at it returns groups you can read. So `depth` is a real parameter and not a convenience: seeding
+ * at 100 and at 300 legitimately gives different structures, because a tier is relative to the pool
+ * it is drawn from.
  *
  * ⚠️ TIERS ARE ASSIGNED ON VOR, THE BOARD IS ORDERED ON `ovrRank`, and the two need not agree
  * row-for-row. So a break is emitted only where the tier number goes UP relative to the deepest
@@ -245,15 +256,16 @@ export function setNote(doc: BigBoardDoc, id: string, text: string): BigBoardDoc
  * NF1.6 lesson is exactly this: K/DST stopped being null-VOR placeholders and a position list left
  * behind in the code kept claiming otherwise.
  */
-export function ourTierBreaks(board: Player[]): string[] {
+export function ourTierBreaks(board: Player[], depth: number): string[] {
   const base = baseOrder(board)
+  const pool = base.slice(0, Math.max(1, Math.trunc(depth)))
   const tiers = positionTierMap(
-    base.filter((p) => p.lowPred !== true),
+    pool.filter((p) => p.lowPred !== true),
     (p) => p.vor ?? 0,
   )
   const breaks: string[] = []
   let deepest = 0
-  base.forEach((p, i) => {
+  pool.forEach((p, i) => {
     const t = tiers.get(p.id)
     if (t == null) return
     if (i > 0 && t > deepest) breaks.push(p.id)

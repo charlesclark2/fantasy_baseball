@@ -311,7 +311,7 @@ test.describe("notes, and the tiers we can seed", () => {
   test("our seeded tiers are real groups, in ascending order, and none of them is empty", () => {
     // ⭐ THE ANSWER TO "MY WHOLE SHEET SAYS TIER 1". This is what one click has to produce: a
     // grouping a person can read at a draft table, not a break on every other row.
-    const breaks = ourTierBreaks(BOARD)
+    const breaks = ourTierBreaks(BOARD, 200)
     expect(breaks.length).toBeGreaterThan(3)
     expect(new Set(breaks).size).toBe(breaks.length)
 
@@ -336,10 +336,38 @@ test.describe("notes, and the tiers we can seed", () => {
     expect(breaks).not.toContain(rows[0].id)
   })
 
+  test("the seeded tiers describe the pool they are drawn from, and stay readable", () => {
+    // ⭐ THE MEASUREMENT THAT DECIDED THE DESIGN. `assignTiers` bounds a tier as a FRACTION of the
+    // pool it is handed (4%–15%, by design, so the tier COUNT stays stable whatever n is). Handed
+    // the whole board it therefore returns groups of ~40 — the first four rounds in one block, no
+    // more use on a cheat sheet than the single tier it replaced. Handed the depth on screen it
+    // returns groups a person can read. So the depth is a real parameter, and this is what says so.
+    const sizeOf = (depth: number) => {
+      const doc: BigBoardDoc = { ...EMPTY_DOC, tier_breaks: ourTierBreaks(BOARD, depth) }
+      const rows = applyDoc(BOARD, doc)
+      const tiers = customTiers(rows, doc)
+      const counts = new Map<number, number>()
+      for (const p of rows.slice(0, depth)) {
+        const t = tiers.get(p.id)!
+        counts.set(t, (counts.get(t) ?? 0) + 1)
+      }
+      return [...counts.values()]
+    }
+
+    const shallow = sizeOf(100)
+    const whole = sizeOf(BOARD.length)
+    const biggest = (xs: number[]) => Math.max(...xs)
+    expect(biggest(shallow)).toBeLessThan(biggest(whole))
+    // A draft tier nobody can use is one that swallows a whole round or more. At the depth people
+    // actually curate, ours do not.
+    expect(biggest(shallow)).toBeLessThanOrEqual(20)
+    expect(shallow.length).toBeGreaterThanOrEqual(5)
+  })
+
   test("the seeded tiers are OUR tiers, not this surface's invention", () => {
     // Every break lands where the shared VOR-gap tiering says a group starts, so the user begins
     // from the same structure the Rankings board and the optimizer already show them.
-    const breaks = new Set(ourTierBreaks(BOARD))
+    const breaks = new Set(ourTierBreaks(BOARD, 200))
     const base = baseOrder(BOARD)
     // A break is only ever placed on a row that is genuinely tiered — never on a K/DST or a
     // below-replacement row, which is what `positionTierMap` refuses to tier at all.
