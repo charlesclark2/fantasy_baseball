@@ -240,6 +240,34 @@ def test_the_served_plane_does_not_consume_the_per_stat_cells():
         assert detail["hits"] == [], f"{seed} consumes the per-stat cells: {detail['hits']}"
 
 
+def test_the_audit_also_scans_for_artifact_path_readers_not_only_imports():
+    """⭐ INC-27, facing the read side. An import closure cannot see a consumer that reads the W6d
+    artifact BY FILENAME with no import edge, so the audit carries a second leg."""
+    audit = R.served_cell_audit()
+    assert "artifact_tokens" in audit and audit["artifact_tokens"]
+    for seed, detail in audit["seeds"].items():
+        assert "artifact_hits" in detail, seed
+        assert detail["artifact_hits"] == [], f"{seed} reads the W6d artifact by path"
+
+
+def test_the_artifact_scan_has_its_own_positive_control_and_raises_when_vacuous(monkeypatch):
+    """A token that matches nothing makes the scan silently clean for every seed — so the leg needs
+    its own control, exactly as the import leg does (NF1.7 (a))."""
+    assert R.served_cell_audit()["artifact_scan_control"]["n_hits"] > 0
+    monkeypatch.setattr(CC, "ARTIFACT_TOKENS", ("a_token_no_module_contains",))
+    with pytest.raises(R.InvalidRun, match="ARTIFACT-SCAN CONTROL EMPTY"):
+        R.served_cell_audit()
+
+
+def test_an_artifact_path_reader_on_the_serving_plane_fails_the_audit(monkeypatch):
+    """The two-sided half: the artifact leg must be ABLE to fail, or a clean result proves nothing.
+    Pointing a token at something the serving plane really does contain must turn the audit FAIL."""
+    monkeypatch.setattr(CC, "ARTIFACT_TOKENS", CC.ARTIFACT_TOKENS + ("proj_pass_yds",))
+    audit = R.served_cell_audit()
+    assert audit["passes"] is False
+    assert any(v["artifact_hits"] for v in audit["seeds"].values())
+
+
 def test_the_serving_plane_seed_set_covers_producer_exporter_api_and_scorer():
     """A seed set that omits the thing that PRODUCES the stat line would audit the wrong plane."""
     seeds = " ".join(CC.SERVING_PLANE_SEEDS)

@@ -1,7 +1,7 @@
 {
  "story": "NF-W7j",
  "phase": "component_clause_decision",
- "generated_at": "2026-08-18T07:38:40.673307+00:00",
+ "generated_at": "2026-08-18T07:43:43.254455+00:00",
  "best_alpha": 0,
  "deploy_held": true,
  "refits_nothing": true,
@@ -12,23 +12,28 @@
   "seeds": {
    "quant_sports_intel_models.football.nfl.fantasy.export_draft_board_json": {
     "n_modules": 18,
-    "hits": []
+    "hits": [],
+    "artifact_hits": []
    },
    "quant_sports_intel_models.football.nfl.fantasy.season_projection": {
     "n_modules": 15,
-    "hits": []
+    "hits": [],
+    "artifact_hits": []
    },
    "app.backend.main": {
     "n_modules": 65,
-    "hits": []
+    "hits": [],
+    "artifact_hits": []
    },
    "app.backend.routers.fantasy": {
     "n_modules": 11,
-    "hits": []
+    "hits": [],
+    "artifact_hits": []
    },
    "quant_sports_intel_models.fantasy_engine.scoring": {
     "n_modules": 2,
-    "hits": []
+    "hits": [],
+    "artifact_hits": []
    }
   },
   "positive_controls": {
@@ -59,6 +64,15 @@
     ]
    }
   },
+  "artifact_scan_control": {
+   "module": "quant_sports_intel_models.football.nfl.fantasy.run_nf_w6d_serve_stat_distributions",
+   "n_hits": 2
+  },
+  "artifact_tokens": [
+   "nf_w6d_served_stat_distributions",
+   "nf_w6c_served_stat_distributions",
+   "weekly_stat_distribution"
+  ],
   "forbidden_substrings": [
    "stat_distribution_serving",
    "stat_distributions",

@@ -100,6 +100,23 @@ def _hits(closure: set[str]) -> list[str]:
                   if any(s in m for s in CC.FORBIDDEN_SUBSTRINGS))
 
 
+def _artifact_hits(closure: set[str], root: Path) -> list[str]:
+    """⭐ The SECOND leg (INC-27). An import closure is blind to a consumer that reads the W6d
+    artifact BY FILENAME with no import edge — so every source file that can run on this plane is
+    scanned for the artifact tokens too."""
+    out: list[str] = []
+    for mod in sorted(closure):
+        path = _module_path(mod, root)
+        if path is None:
+            continue
+        try:
+            src = path.read_text()
+        except (OSError, UnicodeDecodeError):
+            continue
+        out.extend(f"{mod}::{tok}" for tok in CC.ARTIFACT_TOKENS if tok in src)
+    return out
+
+
 def served_cell_audit(root: Path | None = None) -> dict:
     """Does the served paid stat line derive from the NF-W6d per-stat cells? (prereg §1)
 
@@ -142,13 +159,23 @@ def served_cell_audit(root: Path | None = None) -> dict:
         closure = import_closure(seed, root)
         if seed not in closure:
             raise InvalidRun(f"closure for {seed!r} does not contain the seed itself — walker broken")
-        seeds[seed] = {"n_modules": len(closure), "hits": _hits(closure)}
+        seeds[seed] = {"n_modules": len(closure), "hits": _hits(closure),
+                       "artifact_hits": _artifact_hits(closure, root)}
 
-    passes = all(not v["hits"] for v in seeds.values())
+    # the artifact-scan leg needs its OWN positive control, or an empty result proves nothing
+    ctrl_hits = _artifact_hits({CC.ARTIFACT_CONTROL_MODULE}, root)
+    if not ctrl_hits:
+        raise InvalidRun(
+            f"ARTIFACT-SCAN CONTROL EMPTY: {CC.ARTIFACT_CONTROL_MODULE!r} builds the W6d artifact and "
+            "MUST contain its token. An empty result means the scan is VACUOUS (NF1.7 (a))")
+
+    passes = all(not v["hits"] and not v["artifact_hits"] for v in seeds.values())
     return {
         "passes": passes,
         "seeds": seeds,
         "positive_controls": {k: {"n_hits": len(v), "hits": v} for k, v in controls.items()},
+        "artifact_scan_control": {"module": CC.ARTIFACT_CONTROL_MODULE, "n_hits": len(ctrl_hits)},
+        "artifact_tokens": list(CC.ARTIFACT_TOKENS),
         "forbidden_substrings": list(CC.FORBIDDEN_SUBSTRINGS),
         "reading": (
             "the NF-W6d per-stat cells NF-W7f's recalibration degrades reach NO serving surface — "
@@ -474,10 +501,18 @@ def _md(payload: dict) -> str:
              "a transitive import-closure walk over the serving plane — ⛔ not by a grep over one "
              "file (INC-27) and not by argument.")
     L.append("")
-    L.append("| serving-plane entry point | modules in closure | per-stat-cell hits |")
-    L.append("|---|---|---|")
+    L.append("| serving-plane entry point | modules in closure | import hits | artifact-path hits |")
+    L.append("|---|---|---|---|")
     for seed, v in a["seeds"].items():
-        L.append(f"| `{seed}` | {v['n_modules']} | {v['hits'] or '**none**'} |")
+        L.append(f"| `{seed}` | {v['n_modules']} | {v['hits'] or '**none**'} | "
+                 f"{v.get('artifact_hits') or '**none**'} |")
+    L.append("")
+    L.append("⭐ **Two LEGS, not one** (INC-27: grep for the PATH, not only the import). An import "
+             "closure is blind to a consumer that reads the W6d artifact BY FILENAME with no import "
+             "edge, so every source file that can run on this plane is ALSO scanned for "
+             f"`{a.get('artifact_tokens')}`. That leg carries its own positive control — the W6d "
+             f"serve builder, which must contain the token "
+             f"({a.get('artifact_scan_control', {}).get('n_hits')} hits) or the scan is vacuous.")
     L.append("")
     L.append("⭐ **The audit is two-sided** — a walker that resolves nothing returns an empty hit set "
              "for every seed, so a PASS would be indistinguishable from a broken audit (NF1.7 (a)). "

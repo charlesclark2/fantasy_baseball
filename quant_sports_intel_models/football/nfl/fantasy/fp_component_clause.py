@@ -93,6 +93,20 @@ FORBIDDEN_SUBSTRINGS: tuple[str, ...] = (
 #: broken walker.
 MIN_CLOSURE_MODULES: int = 5
 
+#: ⭐ THE SECOND LEG (INC-27: grep for the PATH, not only the import). An import closure cannot see a
+#: consumer that reads the W6d ARTIFACT by filename without importing the module — the exact shape
+#: INC-27 was written about, facing the read side. Every source file in a serving-plane closure is
+#: scanned for these tokens, so a by-path reader is caught even with no import edge.
+ARTIFACT_TOKENS: tuple[str, ...] = (
+    "nf_w6d_served_stat_distributions",
+    "nf_w6c_served_stat_distributions",
+    "weekly_stat_distribution",
+)
+
+#: The positive control for THAT leg: this file must contain the tokens, or the scan is vacuous.
+ARTIFACT_CONTROL_MODULE = (
+    "quant_sports_intel_models.football.nfl.fantasy.run_nf_w6d_serve_stat_distributions")
+
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # The reproduction pin (prereg §3) — the decision must be measured against the object W7f scored
 # ══════════════════════════════════════════════════════════════════════════════════════════════

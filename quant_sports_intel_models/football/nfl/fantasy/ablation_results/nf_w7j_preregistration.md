@@ -94,8 +94,15 @@ the paid stat line —
 `FORBIDDEN_SUBSTRINGS` (declared constant): `stat_distribution_serving`, `stat_distributions`,
 `fp_assembly`, `fp_qb_marginal`.
 
-**PASS** iff the transitive import closure of every seed contains **zero** module whose dotted name
-carries a forbidden substring.
+**PASS** iff **both legs** are clean:
+
+- **LEG 1 — imports.** The transitive import closure of every seed contains **zero** module whose
+  dotted name carries a `FORBIDDEN_SUBSTRINGS` entry.
+- **LEG 2 — artifact paths (INC-27, facing the read side; added §7.6).** Every source file in a
+  serving-plane closure is scanned for `ARTIFACT_TOKENS` (the W6d/W6c served-parquet basenames and
+  the registry target name), because an import closure is **structurally blind** to a consumer that
+  reads the artifact BY FILENAME with no import edge. Its own positive control is the W6d serve
+  builder, which must contain the token or the scan is vacuous.
 
 ### 1.2 ⭐ The audit is TWO-SIDED and must prove it is not vacuous (NF1.7 (a) / INC-38)
 
@@ -353,3 +360,18 @@ make available, and it lands on the side that makes the decision *less* convenie
 does not resolve whether the component cost is material. The clause declines to refuse because the
 harm is **not demonstrable**, and because condition A establishes that the harmed object reaches no
 served surface — ⛔ **not** because the harm was measured to be small.
+
+### 7.6 ⭐ AUDIT HARDENED — an import closure cannot see a BY-PATH reader (INC-27, read side)
+
+§1.1 as first committed had **one** leg: the import closure. That is exactly the gap INC-27 names
+(*"a Snowflake `access_history` zero-reader check CANNOT SEE DuckDB/S3 PATH readers — grep for the
+PATH STRING, not just the table name"*), facing the read side: a serving surface could read the W6d
+served parquet **by filename** with no import edge, and the closure would report a clean PASS.
+
+Checked by hand first (no non-research reader of `nf_w6{c,d}_served_stat_distributions` exists), then
+**made a guarded leg of the audit rather than left as a hand check** — a one-off grep is not a
+guard. Every source file in a serving-plane closure is now scanned for the artifact tokens, the leg
+carries its **own** positive control (the W6d serve builder, 2 hits) so an empty result cannot be
+vacuous, and its hits **reach the verdict** (a computed-but-ignored leg would be the NF-C0e
+wired-≠-invoked class). Measured: **0 artifact-path hits on all five seeds**. Three further RED
+breaks cover it — dropping the leg, removing its control, and computing it without letting it decide.

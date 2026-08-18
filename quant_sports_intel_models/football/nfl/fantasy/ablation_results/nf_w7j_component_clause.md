@@ -1,6 +1,6 @@
 # NF-W7j — the COMPONENT-CLAUSE decision + the served-cell audit
 
-Generated 2026-08-18T07:38:40.673307+00:00 · position **QB** · 8 folds · re-derived from NF-W7f's STORED fold results at ZERO refit
+Generated 2026-08-18T07:43:43.254455+00:00 · position **QB** · 8 folds · re-derived from NF-W7f's STORED fold results at ZERO refit
 
 ⚖️ `best_alpha = 0` · **DEPLOY-HELD** · research-only. ⛔ This story re-scores ONE clause; NF-W7f's scores are untouched and reproduce byte-identically (prereg §3).
 
@@ -24,13 +24,15 @@ Generated 2026-08-18T07:38:40.673307+00:00 · position **QB** · 8 folds · re-d
 
 > This is the question NF-W7f §12.5b(3) left explicitly unresolved. It is answered by a transitive import-closure walk over the serving plane — ⛔ not by a grep over one file (INC-27) and not by argument.
 
-| serving-plane entry point | modules in closure | per-stat-cell hits |
-|---|---|---|
-| `quant_sports_intel_models.football.nfl.fantasy.export_draft_board_json` | 18 | **none** |
-| `quant_sports_intel_models.football.nfl.fantasy.season_projection` | 15 | **none** |
-| `app.backend.main` | 65 | **none** |
-| `app.backend.routers.fantasy` | 11 | **none** |
-| `quant_sports_intel_models.fantasy_engine.scoring` | 2 | **none** |
+| serving-plane entry point | modules in closure | import hits | artifact-path hits |
+|---|---|---|---|
+| `quant_sports_intel_models.football.nfl.fantasy.export_draft_board_json` | 18 | **none** | **none** |
+| `quant_sports_intel_models.football.nfl.fantasy.season_projection` | 15 | **none** | **none** |
+| `app.backend.main` | 65 | **none** | **none** |
+| `app.backend.routers.fantasy` | 11 | **none** | **none** |
+| `quant_sports_intel_models.fantasy_engine.scoring` | 2 | **none** | **none** |
+
+⭐ **Two LEGS, not one** (INC-27: grep for the PATH, not only the import). An import closure is blind to a consumer that reads the W6d artifact BY FILENAME with no import edge, so every source file that can run on this plane is ALSO scanned for `['nf_w6d_served_stat_distributions', 'nf_w6c_served_stat_distributions', 'weekly_stat_distribution']`. That leg carries its own positive control — the W6d serve builder, which must contain the token (2 hits) or the scan is vacuous.
 
 ⭐ **The audit is two-sided** — a walker that resolves nothing returns an empty hit set for every seed, so a PASS would be indistinguishable from a broken audit (NF1.7 (a)). These KNOWN consumers must come back non-empty or the audit RAISES:
 
