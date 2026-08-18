@@ -1,6 +1,6 @@
 # NCAAF-P1.2 — conference/team-strength mixed-effects model
 
-**Model:** `ncaaf_team_strength_v1` · **generated:** 2026-07-24T07:20:25.589650+00:00
+**Model:** `ncaaf_team_strength_v1` · **generated:** 2026-08-18T06:16:37.043350+00:00
 **Seasons emitted:** 2015–2026 (23,130 team-week rows) · **seed (not emitted):** 2014
 
 > ⚠️ **This is a strength PRIOR, not an edge claim.** Every number below is measured against realized margins, never against a market price. No bet, no win rate, no ROI is implied or claimed; `best_alpha = 0` still holds. Whether this feature is worth anything against a closing line is P1.4's question, and P1.4 answers it under the §0.5 bake-off discipline (≥3 model classes, purged/embargoed CV, PBO/DSR).
@@ -65,9 +65,9 @@
 |:------------|------------------------:|---------------------------:|
 | carryover   |                   5.813 |                     21.011 |
 | talent      |                   3.298 |                     14.461 |
-| roster_flux |                   2.070 |                     27.363 |
-| coaching    |                   1.961 |                      8.910 |
-| unknown     |                   1.829 |                     28.564 |
+| coaching    |                   2.279 |                     11.043 |
+| roster_flux |                   2.096 |                     27.363 |
+| unknown     |                   1.668 |                     28.564 |
 
 **Largest roster/portal-driven pre-season adjustments (all seasons):**
 
@@ -109,16 +109,16 @@ Read this list, do not just count it: if the biggest movers are not teams whose 
 
 | team       | conference       |   strength_margin |   strength_margin_sd |   strength_offense |   strength_defense |
 |:-----------|:-----------------|------------------:|---------------------:|-------------------:|-------------------:|
-| Indiana    | Big Ten          |              8.95 |                 7.79 |               2.30 |               6.51 |
-| Ohio State | Big Ten          |              6.85 |                 7.68 |               1.61 |               5.11 |
-| Notre Dame | FBS Independents |              6.42 |                 7.66 |               1.47 |               4.83 |
-| Oregon     | Big Ten          |              5.79 |                 7.63 |               1.26 |               4.41 |
-| Miami      | ACC              |              5.39 |                 7.61 |               1.13 |               4.14 |
-| Texas Tech | Big 12           |              4.83 |                 7.59 |               0.95 |               3.78 |
-| Georgia    | SEC              |              4.06 |                 7.56 |               0.69 |               3.26 |
-| Ole Miss   | SEC              |              3.89 |                 7.55 |               0.63 |               3.15 |
-| Utah       | Big 12           |              3.26 |                 7.53 |               0.43 |               2.73 |
-| Iowa       | Big Ten          |              3.23 |                 7.53 |               0.42 |               2.71 |
+| Indiana    | Big Ten          |             21.22 |                 7.44 |               8.67 |              12.46 |
+| Ohio State | Big Ten          |             20.81 |                 7.44 |               9.68 |              11.02 |
+| Oregon     | Big Ten          |             18.71 |                 7.44 |               8.67 |               9.93 |
+| Notre Dame | FBS Independents |             17.67 |                 7.37 |               7.42 |              10.14 |
+| Texas Tech | Big 12           |             17.25 |                 7.36 |               7.90 |               9.30 |
+| Georgia    | SEC              |             15.77 |                 7.35 |               6.68 |               8.98 |
+| Miami      | ACC              |             14.87 |                 7.34 |               5.89 |               8.88 |
+| Texas A&M  | SEC              |             14.01 |                 7.34 |               6.54 |               7.43 |
+| Texas      | SEC              |             12.30 |                 7.32 |               5.71 |               6.54 |
+| Iowa       | Big Ten          |             12.28 |                 7.33 |               5.02 |               7.21 |
 
 **Cross-check:** the margin model and the offense/defense model are INDEPENDENT fits. `strength_offense + strength_defense` correlates with `strength_margin` at **0.999**. (Sum, not difference — defense is signed as points PREVENTED.) A low value here means the two fits disagree about who is good and neither should be trusted.
 
