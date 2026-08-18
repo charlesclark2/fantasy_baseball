@@ -323,6 +323,18 @@ def _f(x, n=4):
     return "—" if x is None else (f"{x:.{n}f}" if isinstance(x, float) else str(x))
 
 
+def _share(x):
+    """Render an MC share, flagging the >1 case for what it is.
+
+    A share above 1 is not "149% of the variance" — it is the arithmetic shadow of a NEGATIVE
+    heterogeneity estimate (`mc / (het + mc)` with `het < 0`). The raw number is kept, because
+    clamping it would hide exactly the reading that says the fold spread is no larger than draw
+    noise, but it is marked so a reader cannot take it for a proportion."""
+    if x is None:
+        return "—"
+    return f"{x:.4f}" + (" ⚠️ >1 ⇒ σ²_het < 0" if x > 1.0 else "")
+
+
 def write_report(out: dict, path: Path) -> None:
     v = out["verdict"]
     d, c = v["decision"], v["checks"]
@@ -343,9 +355,11 @@ def write_report(out: dict, path: Path) -> None:
          "| # | clause | measured | verdict |", "|---|---|---|---|"]
     repro, live, sc, ci = (c["G0_reproduction_pin"], c["G1_seed_is_live"],
                            c["G2_mc_variance_scales_as_one_over_draws"], c["G3_ceiling_ci"])
+    g0 = ("✅" if repro["reproduces"]
+          else ("❌ RAISE — UNEVALUABLE" if not repro["evaluable"] else "❌ RAISE"))
     L += [f"| G0 | reproduction pin vs NF-W7f's STORED scores | max abs gap "
           f"{_f(repro['max_abs_gap'], 12)} over {repro['n_compared']} cells "
-          f"(tol {repro['tolerance']}) | {'✅' if repro['reproduces'] else '❌ RAISE'} |",
+          f"(tol {repro['tolerance']}) | {g0} |",
           f"| G1 | the seed is live (across-seed sd > 0 everywhere) | "
           f"{len(live['zero_spread_cells'])} zero-spread cells | "
           f"{'✅' if live['holds'] else '❌ RAISE'} |",
@@ -371,11 +385,11 @@ def write_report(out: dict, path: Path) -> None:
         L.append(f"| `{a}` | {_f(de['mean_delta'], 5)} | "
                  f"{_f(math.sqrt(max(de['single_seed_var'], 0.0)), 5)} | {_f(de['mc_sd'], 5)} | "
                  f"{_f(de['het_sd'], 5) if de['het_sd'] is not None else '**negative**'} | "
-                 f"{_f(de['mc_share_of_single_seed_var'], 4)} |")
+                 f"{_share(de['mc_share_of_single_seed_var'])} |")
     dw = v["decomposition_primary"][w]
     L += ["", f"- the winner `{w}`'s one-seed sd decomposes as σ_MC {_f(dw['mc_sd'], 5)} vs "
               f"σ_het {_f(dw['het_sd'], 5) if dw['het_sd'] is not None else 'NEGATIVE'} "
-              f"— MC share **{_f(dw['mc_share_of_single_seed_var'], 4)}**",
+              f"— MC share **{_share(dw['mc_share_of_single_seed_var'])}**",
           f"- NF-W7f's published per-fold sd for this delta was 0.0182; measured here as "
           f"{_f(math.sqrt(max(dw['single_seed_var'], 0.0)), 5)}",
           "- ⚠️ `σ_het` is reported SIGNED and never clamped: a negative estimate would say the "
