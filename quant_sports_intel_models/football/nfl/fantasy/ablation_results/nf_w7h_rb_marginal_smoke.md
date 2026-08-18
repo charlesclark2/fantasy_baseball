@@ -14,16 +14,18 @@ Generated 2026-08-18T01:59:43.096949+00:00 · gate position **RB** · gate leagu
 
 **`UNDEFINED`** — the confirmation could not run — never read as a verdict (NF1.7 (a))
 
+> **Certified for NF-W8: NO** — certified for NF-W8 ONLY on RB_RECALIBRATION_PAYS with the FULL gate green (prereg §7); the state alone is a mechanism reading, never a certificate. This run's full gate: NOT green.
+
 | quantity | value |
 |---|---|
 | atom cap, SERVED marginals (NF-W7e recorded, RB) | None |
 | atom cap, RECALIBRATED | None |
 | cap lift (required ≥ 0.0341) | None |
 | — the floor's derivation | realized all-zero rate 0.3359 − NF-W7e's recorded RB atom cap 0.3018: the recalibration has turned the knob iff the recalibrated cap reaches the atom the population actually exhibits |
-| installed atom | nan |
-| realized all-zero rate | nan |
-| shortfall (realized − installed) | nan |
-| clamp binding SHARE (was 0.4184) | nan ⚠️ a share is not a magnitude — see the next row |
+| installed atom | None |
+| realized all-zero rate | None |
+| shortfall (realized − installed) | None |
+| clamp binding SHARE (was 0.4184) | None ⚠️ a share is not a magnitude — see the next row |
 | clamp mean UPWARD MOVE on π̂ (the magnitude) | None |
 | PIT: best arm | `None` None vs bar 0.05 |
 | PIT: matched foil (`mix_played`) | None |

@@ -3020,10 +3020,10 @@
     "cap_lift": null,
     "min_cap_lift_required": 0.0341,
     "min_cap_lift_derivation": "realized all-zero rate 0.3359 \u2212 NF-W7e's recorded RB atom cap 0.3018: the recalibration has turned the knob iff the recalibrated cap reaches the atom the population actually exhibits",
-    "installed_atom": NaN,
-    "realized_all_zero_rate": NaN,
-    "atom_shortfall_installed_vs_realized": NaN,
-    "clamp_binding_share": NaN,
+    "installed_atom": null,
+    "realized_all_zero_rate": null,
+    "atom_shortfall_installed_vs_realized": null,
+    "clamp_binding_share": null,
     "clamp_binding_share_predecessor": 0.4184,
     "clamp_mean_upward_move": null,
     "binding_leg_share": {},
@@ -3050,6 +3050,8 @@
     "scope_note": "\u26d4 RB ONLY \u2014 QB/WR/TE were NOT scored here and this record certifies nothing about them (NF1.7 (a)). NF-W8's four-position optimizer input is a CROSS-POSITION ranking, so an RB certificate alone does not unblock it (NF-W7c \u00a74).",
     "selection_key": "arms are RANKED on crps_q199; PIT flatness is a hard GATE clause on the selected arm and never a ranking key, because NF-W7c measured the over-correlated degenerate posting the best PIT in the QB field while posting the worst CRPS \u2014 a criterion a degenerate wins is fatal (NF1.8). The bar (0.05) and the statistic are NF-W7c's, unchanged.",
     "rb_verdict_state": "UNDEFINED",
+    "rb_certified": false,
+    "rb_certification_rule": "certified for NF-W8 ONLY on RB_RECALIBRATION_PAYS with the FULL gate green (prereg \u00a77); the state alone is a mechanism reading, never a certificate",
     "joint_construction_held_fixed": "mix_played",
     "promote_blockers": [
       "NF-W7h is DEPLOY-HELD: the RB marginal recalibration is an NF-G0 challenger and is served by nothing until governance promotes it",
@@ -3062,5 +3064,6 @@
     ],
     "positions_with_unevaluated_oracle_ceiling": [],
     "winner_oracle_state": {}
-  }
+  },
+  "rewritten_at": "2026-08-18T02:02:22.517861+00:00"
 }

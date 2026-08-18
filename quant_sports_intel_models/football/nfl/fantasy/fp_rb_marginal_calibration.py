@@ -442,6 +442,13 @@ CAP_UNDEFINED = "UNDEFINED"
 RB_STATES: tuple[str, ...] = (RB_PAYS, RB_NO_GAIN, RB_DAMAGED, CAP_INACTIVE, CAP_UNDEFINED)
 
 
+def _finite(x, nd: int = 4):
+    """A rounded float, or None when the quantity was never measured — so a record never prints a
+    bare `nan` that a reader must know to distrust (NF1.7 (a), on the reporting side)."""
+    v = float(x)
+    return round(v, nd) if np.isfinite(v) else None
+
+
 def rb_marginal_verdict(*, pit_by_arm: dict[str, float], cap_mean: float,
                         predecessor_cap_mean: float, realized_atom: float,
                         installed_atom: float, clamp_binding_share: float,
@@ -504,10 +511,13 @@ def rb_marginal_verdict(*, pit_by_arm: dict[str, float], cap_mean: float,
             f"realized all-zero rate {PREDECESSOR_REALIZED_ATOM} − NF-W7e's recorded RB atom cap "
             f"{PREDECESSOR_CAP_MEAN}: the recalibration has turned the knob iff the recalibrated "
             f"cap reaches the atom the population actually exhibits"),
-        "installed_atom": round(float(installed_atom), 4),
-        "realized_all_zero_rate": round(float(realized_atom), 4),
-        "atom_shortfall_installed_vs_realized": round(float(realized_atom - installed_atom), 4),
-        "clamp_binding_share": round(float(clamp_binding_share), 4),
+        # ⛔ a NON-FINITE quantity renders as None, never as a bare `nan`: an UNDEFINED run has not
+        # MEASURED these, and a record should say "not measured" rather than print a float-shaped
+        # token a reader has to know to distrust (NF1.7 (a), on the reporting side).
+        "installed_atom": _finite(installed_atom),
+        "realized_all_zero_rate": _finite(realized_atom),
+        "atom_shortfall_installed_vs_realized": _finite(realized_atom - installed_atom),
+        "clamp_binding_share": _finite(clamp_binding_share),
         "clamp_binding_share_predecessor": PREDECESSOR_CLAMP_BINDING_SHARE,
         # ⭐ the MAGNITUDE beside the SHARE (NF-W7f) — a share can be byte-identical while the
         # constraint stops mattering

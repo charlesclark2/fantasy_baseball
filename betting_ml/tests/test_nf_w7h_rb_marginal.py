@@ -1107,3 +1107,42 @@ def test_the_PAYS_state_is_not_a_certificate_unless_the_full_gate_is_green(tmp_p
     text = p.read_text()
     assert "Certified for NF-W8: NO" in text, \
         "the record shows the PAYS state without saying it is not a certificate"
+
+
+def test_an_unmeasured_quantity_renders_as_None_never_a_bare_nan():
+    """An UNDEFINED run has not MEASURED the cap quantities. A record should say "not measured"
+    rather than print a float-shaped `nan` a reader has to know to distrust (NF1.7 (a), on the
+    reporting side)."""
+    out = _verdict(pit_by_arm={}, cap_mean=float("nan"), realized_atom=float("nan"),
+                   installed_atom=float("nan"), clamp_binding_share=float("nan"))
+    assert out["state"] == RM.CAP_UNDEFINED
+    for k in ("installed_atom", "realized_all_zero_rate",
+              "atom_shortfall_installed_vs_realized", "clamp_binding_share",
+              "atom_cap_mean", "cap_lift"):
+        assert out[k] is None, f"{k} rendered {out[k]!r} rather than None"
+    # …and a measured run still reports the numbers
+    ok = _verdict()
+    assert ok["installed_atom"] == 0.33 and ok["clamp_binding_share"] == 0.05
+
+
+def test_rewrite_report_targets_the_SMOKE_artifact_when_smoke_is_passed():
+    """⛔ A `--rewrite-report` that ignored `--smoke` would re-derive the PATH PROOF's fold results
+    into the DECISIVE record's path — overwriting a decided run's audit trail with a one-fold
+    proof, and the two are indistinguishable once written (the "a story run must not write a
+    decided story's paths" class). Pinned by source: the suffix must be resolved BEFORE the
+    rewrite branch, and the branch must use that same `art`."""
+    src = inspect.getsource(R.main)
+    lines = [ln for ln in src.splitlines() if not ln.lstrip().startswith("#")]
+    body = "\n".join(lines)
+    i_suffix = body.index('suffix = "_smoke" if args.smoke else ""')
+    i_art = body.index("art = _PROJECT_ROOT / _ARTIFACT_REL.replace")
+    i_branch = body.index("if args.rewrite_report:")
+    assert i_suffix < i_art < i_branch, (
+        "the artifact path is resolved AFTER the rewrite branch — `--rewrite-report --smoke` would "
+        "target the decisive record")
+    assert 'f"{suffix}.json"' in body, "the suffix does not reach the artifact path"
+    # the branch must read and write the SAME `art` it resolved, never a second path
+    branch = body[i_branch:body.index("FA.assert_stat_key_map()")]
+    assert "art.read_text()" in branch and "art.write_text" in branch
+    assert "_ARTIFACT_REL" not in branch, \
+        "the rewrite branch re-derives a path instead of using the resolved one"
