@@ -419,8 +419,14 @@ def write_report(out: dict, path: Path) -> None:
           + (f" (σ_MC ≈ {_f(req['required_mc_sd'], 5)} against an observed one-seed sd of "
              f"{_f(req['winner_observed_sd'], 5)})" if req["required_mc_sd"] else ""),
           f"- **MEASURED share: {_f(meas, 4)}**",
-          f"- the best DSR anywhere on that sweep is {_f(req['max_dsr_over_sweep'])} — so even the "
-          f"most favourable assumed split barely reaches the bar",
+          # ⛔ the sentence must not assert a comparison the sweep did not make: with no clearing
+          # point there is no "barely reaches", and with no computable DSR there is no best at all
+          f"- the best DSR anywhere on that sweep is {_f(req['max_dsr_over_sweep'])}"
+          + ("" if req["max_dsr_over_sweep"] is None else
+             (f" — so even the most favourable assumed split only just reaches the bar "
+              f"{v['dsr_min']}" if req["threshold_exists"] else
+              f" — below the bar {v['dsr_min']} at EVERY assumed split, so under this "
+              f"assumption no draw count clears")),
           "", "| assumed MC share of winner variance | winner Sharpe | `SR0` | DSR |",
           "|---|---|---|---|"]
     for c in req["curve"]:
