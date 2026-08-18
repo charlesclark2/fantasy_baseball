@@ -32,10 +32,20 @@ so they are absent from the `COPY . .` image and deploy-ephemeral everywhere els
 an op that quietly depends on one is how a schedule runs green for 19 days over a frozen table.
 No CFBD key, no Odds-API key, no credits.
 
-⚠️ THE ONE QUALITY PREREQUISITE (operator, not code): the season's P1.2 RE-FIT. Until it runs with
-fall-camp covariates populated, the strength mart carries the pre-season COLD START (2025
-carry-forward — the 2026 board has Indiana leading), so the first real snapshot would freeze that
-into the permanent track record. Re-fit first; see the NCAAF-PS handoff.
+⚠️ THE ONE QUALITY PREREQUISITE (operator, not code): the season's P1.2 RE-FIT — ✅ DONE
+2026-08-18, and worth recording WHAT it fixed, because the cold start's real defect was not the one
+the P0.7 note described. Until the re-fit, the strength mart's covariates were all-zero, which does
+not mis-ORDER the board so much as COMPRESS it toward the mean: Ohio State was +19.7 over Ball State
+and P(home win) spanned only 0.356-0.883. With the covariates populated the same slate reads +40.4
+and 0.117-0.992 — realistic talent separation. (Indiana still leads the strength board afterwards,
+so "Indiana leads" was never the cold-start tell; compression was.) A snapshot is immutable by
+design, so the re-fit had to land first.
+
+⭐ AND THE RE-FIT IS NOT ONE COMMAND. P1.2 reads its covariates from the sports DuckDB MARTS, not
+from the lake — so `run_team_strength` against stale marts silently reproduces the cold start and
+looks successful (it did, once). The marts must be rebuilt from the fresh lake FIRST. See the
+report's operator section for the chain and the verification that distinguishes "it ran" from "it
+worked".
 """
 
 import os
