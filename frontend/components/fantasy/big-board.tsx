@@ -27,13 +27,26 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { GripVertical, Printer, Search, Star, Ban, Scissors, RotateCcw, Copy } from "lucide-react"
+import {
+  GripVertical,
+  Printer,
+  Search,
+  Star,
+  Ban,
+  Scissors,
+  RotateCcw,
+  Copy,
+  StickyNote,
+  Layers,
+  ExternalLink,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Picker } from "@/components/ui/picker"
 import { ALL_ROWS, InfoTip, PosBadge, num, teamLabel } from "@/components/fantasy/shared"
 import { type LeagueConfigMeta, type Player } from "@/lib/draft-optimizer"
 import {
   EMPTY_DOC,
+  MAX_NOTE_LEN,
   applyDoc,
   baseOrder,
   boardKey,
@@ -42,7 +55,9 @@ import {
   divergence,
   isEmptyDoc,
   moveTo,
+  ourTierBreaks,
   reconcile,
+  setNote,
   setTag,
   toggleTierBreak,
   type BigBoardDoc,
@@ -75,7 +90,9 @@ type SaveState =
   | { kind: "idle" }
   | { kind: "dirty" }
   | { kind: "saving" }
-  | { kind: "saved"; at: string }
+  /** `warning` is set when the write LANDED but did not come back carrying everything we sent —
+   *  see `onSave`. "Saved" and "saved except the part you just typed" are different facts. */
+  | { kind: "saved"; at: string; warning?: string }
   | { kind: "error"; message: string }
   /** ⭐ DISTINCT FROM `idle`. "You have nothing saved" and "we could not read what you have saved"
    *  are different facts, and only one of them is ours to state. Collapsing them tells a user their
@@ -97,6 +114,9 @@ export function BigBoard() {
   const [depth, setDepth] = useState<number>(DEFAULT_DEPTH)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [dragId, setDragId] = useState<string | null>(null)
+  /** Which row's note editor is open. One at a time — a board with two hundred textareas mounted is
+   *  a real interaction cost, and the note is a thing you write about ONE player. */
+  const [noteFor, setNoteFor] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [dropped, setDropped] = useState(0)
 
@@ -153,15 +173,23 @@ export function BigBoard() {
       return
     }
     loadedFor.current = key
+    // ⚠️ EVERY FIELD READ WITH `??`. The API Lambda ships only via a manual `deploy.sh` (NF-C0), so
+    // a board stored before a field existed — or returned by a backend that predates it — must read
+    // as "empty", never as `undefined` propagating into the render.
     const next = stored
-      ? { order: stored.order ?? [], tier_breaks: stored.tier_breaks ?? [], tags: stored.tags ?? {} }
+      ? {
+          order: stored.order ?? [],
+          tier_breaks: stored.tier_breaks ?? [],
+          tags: stored.tags ?? {},
+          notes: stored.notes ?? {},
+        }
       : EMPTY_DOC
     // Anything referring to a player we no longer publish is dropped HERE and COUNTED — a board
     // saved in August can legitimately lose rows to a re-export, and shortening someone's ranking
     // without saying so reads as "the tool lost my work".
     const rec = reconcile(board, next)
     setDoc(rec.doc)
-    setDropped(rec.droppedOrder + rec.droppedBreaks + rec.droppedTags)
+    setDropped(rec.droppedOrder + rec.droppedBreaks + rec.droppedTags + rec.droppedNotes)
     setSaveState({ kind: "idle" })
   }, [board, key, savedLoading, savedError, stored])
 
@@ -254,8 +282,25 @@ export function BigBoard() {
     if (!configName) return
     setSaveState({ kind: "saving" })
     try {
-      await saveBoard.mutateAsync({ ...doc, config: configName, size })
-      setSaveState({ kind: "saved", at: new Date().toLocaleTimeString() })
+      const saved = await saveBoard.mutateAsync({ ...doc, config: configName, size })
+      // ⭐ COMPARE WHAT CAME BACK WITH WHAT WE SENT. The API Lambda has NO CD (NF-C0): `frontend/`
+      // auto-deploys on merge while the backend ships only via a manual `deploy.sh`, and the
+      // request models do not set `extra="forbid"` — so a backend that predates the `notes` field
+      // ACCEPTS the field, IGNORES it and returns 200. That is the E8.6 silent-save defect exactly:
+      // the user types a note, sees "✓ Saved", reloads, and the note is gone with no error
+      // anywhere. The response already carries the stored record, so one comparison turns a phantom
+      // revert into a sentence. Keyed on "we sent notes and got none back" — not on a per-note
+      // diff, which would also fire on a legitimate truncation.
+      const sentNotes = Object.keys(doc.notes ?? {}).length
+      const keptNotes = Object.keys(saved?.notes ?? {}).length
+      setSaveState({
+        kind: "saved",
+        at: new Date().toLocaleTimeString(),
+        warning:
+          sentNotes > 0 && keptNotes === 0
+            ? "Your order and tags were saved, but your notes were not — this account is talking to a version of our API that does not store them yet. Please try again later."
+            : undefined,
+      })
     } catch (e) {
       // ⭐ THE SERVER'S OWN SENTENCE, VERBATIM. `apiFetch` preserves FastAPI's `detail`, so a
       // refusal to save (413 — the item budget) arrives already written for a person and already
@@ -268,6 +313,17 @@ export function BigBoard() {
     }
   }
 
+  /**
+   * Seed the user's tier breaks from ours.
+   *
+   * ⚠️ IT TIERS THE DEPTH ON SCREEN, not the whole board — `assignTiers` sizes a tier as a fraction
+   * of the pool it is given, so handing it all 858 rows returns groups of 40 (measured), which is
+   * the whole of the first four rounds in one block and no more use on a cheat sheet than the
+   * single tier it replaced. At the default depth of 200 it returns 14 groups of 8–27.
+   */
+  const seedOurTiers = () =>
+    edit((d) => (board ? { ...d, tier_breaks: ourTierBreaks(board, shownDepth) } : d))
+
   const resetBoard = () => {
     edit(() => EMPTY_DOC)
     setSheetOpen(false)
@@ -278,21 +334,29 @@ export function BigBoard() {
     [board, doc, shownDepth],
   )
 
+  /** Whether the user has drawn any tiers at all. ⚠️ READ FROM THE DOCUMENT, never from the number
+   *  of sections: with no breaks `cheatSheet` correctly returns ONE section numbered 1, and a
+   *  sheet that prints "TIER 1" over all two hundred names reads as a broken tiering rather than as
+   *  "you have not drawn any" — reported on the live surface. */
+  const hasTiers = doc.tier_breaks.length > 0
+
   const sheetText = useMemo(() => {
     const lines: string[] = [
       `${config?.label ?? configName} · ${size}-team · ${SEASON} — my big board`,
     ]
     for (const t of sheet) {
-      lines.push("", `TIER ${t.tier}`)
+      lines.push("")
+      if (hasTiers) lines.push(`TIER ${t.tier}`)
       for (const r of t.rows) {
         const tag = r.tag === "target" ? " [TARGET]" : r.tag === "avoid" ? " [AVOID]" : ""
         lines.push(
           `${String(r.rank).padStart(3)}. ${r.player.name} (${r.player.pos}, ${teamLabel(r.player)})${tag}`,
         )
+        if (r.note) lines.push(`     ${r.note}`)
       }
     }
     return lines.join("\n")
-  }, [sheet, config, configName, size])
+  }, [sheet, config, configName, size, hasTiers])
 
   const copySheet = async () => {
     try {
@@ -314,17 +378,14 @@ export function BigBoard() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold text-white">My Big Board</h1>
-          <p className="mt-1 max-w-2xl text-sm text-gray-400">
-            Start from our {SEASON} board for your league, then make it yours — drag players where
-            you want them, draw your own tier breaks, and flag who you are chasing and who you are
-            passing on. Our rank, projection and the market&apos;s ADP stay beside every row, so you
-            can always see where you have moved away from us.
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-gray-400 print:hidden">
+            {`Start with our ${SEASON} board for your league, then make it your own. Drag players up or down, draw your own tier breaks, flag who you are chasing and who you are passing on, and write yourself a note on anyone. Our rank, our projection and the market's ADP stay next to every row, so you can always see where you have moved away from us.`}
           </p>
         </div>
       </div>
 
       {/* ── board selection ───────────────────────────────────────────────────────────────── */}
-      <div className="mt-5 rounded-lg border border-[#262626] bg-[#0f0f0f] p-4">
+      <div className="mt-5 rounded-lg border border-[#262626] bg-[#0f0f0f] p-4 print:hidden">
         {manifestLoading && <p className="text-sm text-gray-500">Loading league presets…</p>}
         {manifestError && (
           <p className="text-sm text-rose-400">Could not load the {SEASON} draft boards.</p>
@@ -383,7 +444,7 @@ export function BigBoard() {
       </div>
 
       {/* ── save bar ──────────────────────────────────────────────────────────────────────── */}
-      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-[#262626] bg-[#0f0f0f] px-4 py-3">
+      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-[#262626] bg-[#0f0f0f] px-4 py-3 print:hidden">
         <Button
           onClick={onSave}
           disabled={saveState.kind === "saving" || !configName || !board}
@@ -412,8 +473,11 @@ export function BigBoard() {
             <span className="text-amber-400">Unsaved changes.</span>
           )}
           {saveState.kind === "saving" && <span className="text-gray-400">Saving…</span>}
-          {saveState.kind === "saved" && (
+          {saveState.kind === "saved" && !saveState.warning && (
             <span className="text-[#10b981]">✓ Saved at {saveState.at}</span>
+          )}
+          {saveState.kind === "saved" && saveState.warning && (
+            <span className="text-amber-400">⚠ {saveState.warning}</span>
           )}
           {saveState.kind === "error" && (
             <span className="text-rose-400">{saveState.message}</span>
@@ -428,6 +492,20 @@ export function BigBoard() {
             <Printer className="mr-1 inline h-3.5 w-3.5" />
             {sheetOpen ? "Back to editing" : "Cheat sheet"}
           </button>
+          {/* ⭐ THE ANSWER TO "MY WHOLE SHEET SAYS TIER 1". A board with no breaks drawn is one
+              flat list of two hundred names, which is not what anyone reads at a draft table. This
+              seeds the breaks from OUR published tier structure (the same VOR-gap tiering the
+              Rankings board and the optimizer use) so the user starts from a real grouping and
+              edits it, rather than from nothing. It writes the breaks into their document — they
+              are the user's from that moment, and every one of them can be moved or removed. */}
+          <button
+            onClick={seedOurTiers}
+            data-testid="big-board-seed-tiers"
+            className="rounded-md border border-[#262626] px-3 py-1.5 text-xs text-gray-300 hover:border-[#3a3a3a] hover:text-white"
+          >
+            <Layers className="mr-1 inline h-3.5 w-3.5" />
+            Use our tiers
+          </button>
           <button
             onClick={resetBoard}
             data-testid="big-board-reset"
@@ -440,14 +518,14 @@ export function BigBoard() {
       </div>
 
       {dropped > 0 && (
-        <p data-testid="big-board-dropped" className="mt-2 text-xs text-amber-400">
+        <p data-testid="big-board-dropped" className="mt-2 text-xs text-amber-400 print:hidden">
           {dropped} {dropped === 1 ? "entry" : "entries"} from your saved board referred to players
           who are no longer on the {SEASON} board, and have been dropped. Save to keep the tidied
           version.
         </p>
       )}
       {maxBoards != null && (savedBoards?.boards.length ?? 0) >= maxBoards && !stored && (
-        <p className="mt-2 text-xs text-amber-400">
+        <p className="mt-2 text-xs text-amber-400 print:hidden">
           You are keeping {maxBoards} custom boards, which is the limit. Saving this one will be
           refused until you delete another.
         </p>
@@ -458,7 +536,7 @@ export function BigBoard() {
       {board && !sheetOpen && (
         <>
           {/* ── filters ──────────────────────────────────────────────────────────────────── */}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2 print:hidden">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-600" />
               <input
@@ -492,6 +570,8 @@ export function BigBoard() {
             </span>
           </div>
 
+          <IconLegend />
+
           {/* ⚠️ THE WIDE BOARD SCROLLS INSIDE THIS CONTAINER, NEVER ON THE PAGE (NF-C2.1). The row
               grid below declares a 720px minimum, which is wider than a phone — so without
               `overflow-x-auto` here that width propagates to the document and the WHOLE PAGE gets a
@@ -511,8 +591,8 @@ export function BigBoard() {
               data-testid="big-board-scroller"
               className="min-w-0 overflow-x-auto rounded-lg border border-[#262626] bg-[#0f0f0f]"
             >
-              <div className="min-w-[720px]">
-                <div className="grid grid-cols-[36px_44px_1fr_56px_64px_56px_56px_64px_92px] items-center gap-2 border-b border-[#1f1f1f] px-3 py-2 text-[10px] uppercase tracking-wide text-gray-600">
+              <div className="min-w-[780px]">
+                <div className="grid grid-cols-[32px_44px_1fr_52px_58px_52px_52px_58px_120px] items-center gap-2 border-b border-[#1f1f1f] px-3 py-2 text-[10px] uppercase tracking-wide text-gray-600">
                   <span />
                   <span>My #</span>
                   <span>Player</span>
@@ -528,7 +608,7 @@ export function BigBoard() {
                       score of it — we have no way to know which of us is right about any one player.
                     </InfoTip>
                   </span>
-                  <span className="text-right">Tag</span>
+                  <span className="text-right">Tier · tag · note</span>
                 </div>
 
                 {visible.length === 0 && (
@@ -542,108 +622,190 @@ export function BigBoard() {
                   const isBreak = doc.tier_breaks.includes(p.id)
                   const delta = moved.get(p.id) ?? 0
                   const tag = doc.tags[p.id] ?? null
+                  const note = doc.notes?.[p.id] ?? ""
+                  const editing = noteFor === p.id
                   return (
+                    // ⚠️ THE WRAPPER CARRIES `data-row-index`, NOT THE GRID. A row can be two
+                    // elements tall (its note sits under it), and the drag handler resolves a drop
+                    // target with `elementFromPoint(...).closest("[data-row-index]")` — so if the
+                    // index lived on the grid alone, dragging over an open note would resolve to
+                    // nothing and the row under the cursor would silently not be the drop target.
                     <div
                       key={p.id}
                       data-testid="big-board-row"
                       data-row-index={index}
                       data-player-id={p.id}
                       data-tier={tier}
-                      className={`grid grid-cols-[36px_44px_1fr_56px_64px_56px_56px_64px_92px] items-center gap-2 px-3 py-1.5 text-sm ${
+                      className={`${
                         isBreak ? "border-t-2 border-t-[#10b981]/40" : "border-t border-t-[#161616]"
                       } ${dragId === p.id ? "bg-[#10b981]/10" : ""} ${
                         tag === "avoid" ? "opacity-60" : ""
                       }`}
                     >
-                      <button
-                        onPointerDown={startDrag(p.id)}
-                        data-testid="big-board-drag-handle"
-                        aria-label={`Drag ${p.name}`}
-                        className="cursor-grab touch-none text-gray-600 hover:text-gray-300"
-                      >
-                        <GripVertical className="h-4 w-4" />
-                      </button>
-
-                      <input
-                        type="number"
-                        min={1}
-                        value={index + 1}
-                        onChange={(e) => setRank(p.id, e.target.value)}
-                        aria-label={`Rank for ${p.name}`}
-                        data-testid="big-board-rank-input"
-                        // ⚠️ `text-base` ON MOBILE IS NOT COSMETIC. A raw control under 16px makes
-                        // iOS auto-zoom on focus and mis-anchor any native picker on the page — the
-                        // defect `components/ui/picker.tsx` exists because of. Pinned by
-                        // `test_mobile_form_control_guard.py`, which is what caught this one.
-                        className="w-full rounded border border-[#1f1f1f] bg-[#0a0a0a] px-1 py-0.5 text-center text-base text-white sm:text-xs"
-                      />
-
-                      <div className="flex min-w-0 items-center gap-2">
-                        <PosBadge pos={p.pos} />
-                        <Link
-                          href={`/fantasy/player/${encodeURIComponent(p.id)}`}
-                          data-testid="big-board-player-name"
-                          className="truncate text-white hover:text-sky-300"
+                      <div className="grid grid-cols-[32px_44px_1fr_52px_58px_52px_52px_58px_120px] items-center gap-2 px-3 py-1.5 text-sm">
+                        <button
+                          onPointerDown={startDrag(p.id)}
+                          data-testid="big-board-drag-handle"
+                          aria-label={`Drag ${p.name}`}
+                          className="cursor-grab touch-none text-gray-600 hover:text-gray-300"
                         >
-                          {p.name}
-                        </Link>
-                        <span className="whitespace-nowrap text-xs text-gray-600">
-                          {teamLabel(p)}
-                          {p.bye != null ? ` · Bye ${p.bye}` : ""}
+                          <GripVertical className="h-4 w-4" />
+                        </button>
+
+                        <input
+                          type="number"
+                          min={1}
+                          value={index + 1}
+                          onChange={(e) => setRank(p.id, e.target.value)}
+                          aria-label={`Rank for ${p.name}`}
+                          data-testid="big-board-rank-input"
+                          // ⚠️ `text-base` ON MOBILE IS NOT COSMETIC. A raw control under 16px makes
+                          // iOS auto-zoom on focus and mis-anchor any native picker on the page — the
+                          // defect `components/ui/picker.tsx` exists because of. Pinned by
+                          // `test_mobile_form_control_guard.py`, which is what caught this one.
+                          className="w-full rounded border border-[#1f1f1f] bg-[#0a0a0a] px-1 py-0.5 text-center text-base text-white sm:text-xs"
+                        />
+
+                        <div className="flex min-w-0 items-center gap-2">
+                          <PosBadge pos={p.pos} />
+                          {/* ⭐ A NEW TAB, DELIBERATELY. This board holds unsaved work in component
+                              state; navigating away in the same tab throws away every drag since
+                              the last save, and a player card is something you glance at mid-edit.
+                              `rel="noopener noreferrer"` because `target="_blank"` otherwise hands
+                              the opened page a live `window.opener` handle back to this one. */}
+                          <Link
+                            href={`/fantasy/player/${encodeURIComponent(p.id)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`Open ${p.name} in a new tab`}
+                            data-testid="big-board-player-name"
+                            className="group flex min-w-0 items-center gap-1 truncate text-white hover:text-sky-300"
+                          >
+                            <span className="truncate">{p.name}</span>
+                            <ExternalLink className="h-3 w-3 shrink-0 text-gray-700 group-hover:text-sky-300" />
+                          </Link>
+                          <span className="whitespace-nowrap text-xs text-gray-600">
+                            {teamLabel(p)}
+                            {p.bye != null ? ` · Bye ${p.bye}` : ""}
+                          </span>
+                          <span className="whitespace-nowrap rounded border border-[#262626] px-1 text-[10px] text-gray-500">
+                            T{tier}
+                          </span>
+                        </div>
+
+                        <span
+                          data-testid="big-board-our-rank"
+                          className="text-right text-xs text-gray-400"
+                        >
+                          {ourRank.get(p.id) ?? "—"}
                         </span>
-                        <span className="whitespace-nowrap rounded border border-[#262626] px-1 text-[10px] text-gray-500">
-                          T{tier}
+                        <span className="text-right text-xs text-gray-300">{num(p.pts, 0)}</span>
+                        <span className="text-right text-xs text-gray-400">{num(p.vor, 0)}</span>
+                        <span className="text-right text-xs text-gray-500">{num(p.adp, 1)}</span>
+                        <span
+                          data-testid="big-board-delta"
+                          className={`text-right text-xs ${
+                            delta > 0
+                              ? "text-sky-400"
+                              : delta < 0
+                                ? "text-amber-400"
+                                : "text-gray-700"
+                          }`}
+                        >
+                          {delta === 0 ? "—" : delta > 0 ? `+${delta}` : String(delta)}
                         </span>
+
+                        <div className="flex items-center justify-end gap-1">
+                          <IconToggle
+                            on={isBreak}
+                            onClick={() => edit((d) => toggleTierBreak(d, p.id))}
+                            testId="big-board-tier-break"
+                            label={`Start a new tier at ${p.name}`}
+                            title="Start a new tier here"
+                            onClass="border-[#10b981]/50 text-[#10b981]"
+                          >
+                            <Scissors className="h-3.5 w-3.5" />
+                          </IconToggle>
+                          <IconToggle
+                            on={tag === "target"}
+                            onClick={() =>
+                              edit((d) => setTag(d, p.id, tag === "target" ? null : "target"))
+                            }
+                            testId="big-board-target"
+                            label={`Target ${p.name}`}
+                            title="Target — someone you are chasing"
+                            onClass="border-sky-500/50 text-sky-400"
+                          >
+                            <Star className="h-3.5 w-3.5" />
+                          </IconToggle>
+                          <IconToggle
+                            on={tag === "avoid"}
+                            onClick={() =>
+                              edit((d) => setTag(d, p.id, tag === "avoid" ? null : "avoid"))
+                            }
+                            testId="big-board-avoid"
+                            label={`Avoid ${p.name}`}
+                            title="Avoid — someone you are passing on"
+                            onClass="border-rose-500/50 text-rose-400"
+                          >
+                            <Ban className="h-3.5 w-3.5" />
+                          </IconToggle>
+                          <IconToggle
+                            on={!!note}
+                            onClick={() => setNoteFor((cur) => (cur === p.id ? null : p.id))}
+                            testId="big-board-note-toggle"
+                            label={note ? `Edit your note on ${p.name}` : `Add a note on ${p.name}`}
+                            title="Your own note on this player"
+                            onClass="border-amber-500/50 text-amber-400"
+                          >
+                            <StickyNote className="h-3.5 w-3.5" />
+                          </IconToggle>
+                        </div>
                       </div>
 
-                      <span data-testid="big-board-our-rank" className="text-right text-xs text-gray-400">
-                        {ourRank.get(p.id) ?? "—"}
-                      </span>
-                      <span className="text-right text-xs text-gray-300">{num(p.pts, 0)}</span>
-                      <span className="text-right text-xs text-gray-400">{num(p.vor, 0)}</span>
-                      <span className="text-right text-xs text-gray-500">{num(p.adp, 1)}</span>
-                      <span
-                        data-testid="big-board-delta"
-                        className={`text-right text-xs ${
-                          delta > 0 ? "text-sky-400" : delta < 0 ? "text-amber-400" : "text-gray-700"
-                        }`}
-                      >
-                        {delta === 0 ? "—" : delta > 0 ? `+${delta}` : String(delta)}
-                      </span>
-
-                      <div className="flex items-center justify-end gap-1">
-                        <IconToggle
-                          on={isBreak}
-                          onClick={() => edit((d) => toggleTierBreak(d, p.id))}
-                          testId="big-board-tier-break"
-                          label={`Tier break above ${p.name}`}
-                          onClass="border-[#10b981]/50 text-[#10b981]"
+                      {/* The note: an editor while it is open, otherwise the text itself. It is
+                          rendered under the row rather than inside the grid because a note is a
+                          sentence and the grid is a table of numbers — squeezing it into a cell
+                          would either truncate it or make every row as tall as its longest note. */}
+                      {editing && (
+                        <div className="flex items-start gap-2 px-3 pb-2 pl-[76px]">
+                          <textarea
+                            autoFocus
+                            value={note}
+                            maxLength={MAX_NOTE_LEN}
+                            onChange={(e) => edit((d) => setNote(d, p.id, e.target.value))}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey)) {
+                                e.preventDefault()
+                                setNoteFor(null)
+                              }
+                            }}
+                            placeholder={`Why ${p.name} sits here — for you, at the draft table.`}
+                            aria-label={`Your note on ${p.name}`}
+                            data-testid="big-board-note-input"
+                            rows={2}
+                            className="w-full max-w-2xl rounded border border-[#262626] bg-[#0a0a0a] px-2 py-1 text-base text-gray-200 placeholder:text-gray-700 sm:text-xs"
+                          />
+                          <button
+                            onClick={() => setNoteFor(null)}
+                            data-testid="big-board-note-done"
+                            className="mt-0.5 shrink-0 rounded border border-[#262626] px-2 py-1 text-xs text-gray-400 hover:text-white"
+                          >
+                            Done
+                          </button>
+                          <span className="mt-1.5 shrink-0 text-[10px] text-gray-700">
+                            {note.length}/{MAX_NOTE_LEN}
+                          </span>
+                        </div>
+                      )}
+                      {!editing && note && (
+                        <p
+                          data-testid="big-board-note-text"
+                          className="px-3 pb-1.5 pl-[76px] text-xs italic text-amber-400/80"
                         >
-                          <Scissors className="h-3.5 w-3.5" />
-                        </IconToggle>
-                        <IconToggle
-                          on={tag === "target"}
-                          onClick={() =>
-                            edit((d) => setTag(d, p.id, tag === "target" ? null : "target"))
-                          }
-                          testId="big-board-target"
-                          label={`Target ${p.name}`}
-                          onClass="border-sky-500/50 text-sky-400"
-                        >
-                          <Star className="h-3.5 w-3.5" />
-                        </IconToggle>
-                        <IconToggle
-                          on={tag === "avoid"}
-                          onClick={() =>
-                            edit((d) => setTag(d, p.id, tag === "avoid" ? null : "avoid"))
-                          }
-                          testId="big-board-avoid"
-                          label={`Avoid ${p.name}`}
-                          onClass="border-rose-500/50 text-rose-400"
-                        >
-                          <Ban className="h-3.5 w-3.5" />
-                        </IconToggle>
-                      </div>
+                          {note}
+                        </p>
+                      )}
                     </div>
                   )
                 })}
@@ -669,6 +831,8 @@ export function BigBoard() {
           onCopy={copySheet}
           copied={copied}
           empty={isEmptyDoc(doc)}
+          hasTiers={hasTiers}
+          onSeedTiers={seedOurTiers}
         />
       )}
 
@@ -690,11 +854,52 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+/**
+ * What the four buttons on every row mean, in words.
+ *
+ * ⭐ THIS EXISTS BECAUSE THE ICONS ARE NOT SELF-EXPLANATORY, and one of them genuinely is not
+ * guessable: a pair of scissors is a tier CUT, which nobody reads off the glyph, and it sat in a
+ * column headed "Tag" while not being a tag at all. Reported on the live surface — a star and a no-
+ * entry sign can be inferred and the scissors could not. A `title` alone would not have fixed it:
+ * there is no hover on a phone, which is where a draft board is read.
+ */
+function IconLegend() {
+  return (
+    <div
+      data-testid="big-board-legend"
+      className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500 print:hidden"
+    >
+      <span className="text-gray-600">What the buttons on each row do:</span>
+      <span className="inline-flex items-center gap-1">
+        <Scissors className="h-3 w-3 text-[#10b981]" />
+        start a new tier at this player
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <Star className="h-3 w-3 text-sky-400" />
+        target — someone you are chasing
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <Ban className="h-3 w-3 text-rose-400" />
+        avoid — someone you are passing on
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <StickyNote className="h-3 w-3 text-amber-400" />
+        write yourself a note
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <GripVertical className="h-3 w-3 text-gray-600" />
+        drag to move, or type a rank
+      </span>
+    </div>
+  )
+}
+
 function IconToggle({
   on,
   onClick,
   testId,
   label,
+  title,
   onClass,
   children,
 }: {
@@ -702,6 +907,10 @@ function IconToggle({
   onClick: () => void
   testId: string
   label: string
+  /** The hover explanation. ⚠️ A `title` is a MOUSE affordance and nothing else — it is why the
+   *  legend above the board exists rather than being the whole answer: on a phone there is no
+   *  hover, and an icon whose only explanation is a tooltip is an unexplained icon there. */
+  title?: string
   onClass: string
   children: React.ReactNode
 }) {
@@ -712,6 +921,7 @@ function IconToggle({
       data-on={on ? "true" : "false"}
       aria-pressed={on}
       aria-label={label}
+      title={title ?? label}
       className={`rounded border px-1.5 py-1 ${
         on ? onClass : "border-[#1f1f1f] text-gray-700 hover:text-gray-400"
       }`}
@@ -722,13 +932,27 @@ function IconToggle({
 }
 
 /**
- * The draft-day sheet: the user's tiers, in their order, with their tags — and deliberately WITHOUT
- * our numbers.
+ * The draft-day sheet: the user's tiers, in their order, with their tags and their notes — and
+ * deliberately WITHOUT our numbers.
  *
  * ⭐ THE NUMBERS ARE LEFT OFF ON PURPOSE. The editing view exists to show our read beside theirs;
  * this one is what gets printed and read at pick 4.11, where a column of projections beside a
  * ranking the user has already overridden is noise that invites second-guessing a decision they
- * made deliberately. The tag and the tier are the decisions; those are what print.
+ * made deliberately. The tier, the tag and their own note are the decisions; those are what print.
+ *
+ * ══ PRINTING ══════════════════════════════════════════════════════════════════════════════════
+ *
+ * ⚠️ `window.print()` PRINTS THE PAGE, NOT THIS COMPONENT. The first cut relied on the screen
+ * layout being good enough on paper and it was not: the nav bar, the format pickers and the save
+ * bar all printed, the dark-on-dark text came out as pale grey on white, and the sheet paginated
+ * mid-tier. So the chrome is `print:hidden` at every one of its sources, the colour reset lives in
+ * `globals.css` under `@media print` (one rule, rather than a `print:text-black` on every span
+ * that would silently miss the next one added), and each tier block is `break-inside-avoid` so a
+ * group stays on one page.
+ *
+ * ⭐ AND THE SHEET PRINTS ITS OWN HEADER. The browser's is a URL and a timestamp; ours is the
+ * league, the format and the date the board was printed — the three things that tell you, weeks
+ * later at a table with two sheets in front of you, which board this is.
  */
 function CheatSheet({
   sections,
@@ -738,6 +962,8 @@ function CheatSheet({
   onCopy,
   copied,
   empty,
+  hasTiers,
+  onSeedTiers,
 }: {
   sections: ReturnType<typeof cheatSheet>
   title: string
@@ -746,6 +972,10 @@ function CheatSheet({
   onCopy: () => void
   copied: boolean
   empty: boolean
+  /** Whether the user has drawn ANY tier breaks. Not derivable from `sections.length` — one
+   *  section is what both "no tiers" and "one enormous tier" look like. */
+  hasTiers: boolean
+  onSeedTiers: () => void
 }) {
   return (
     <div className="mt-4" data-testid="big-board-cheat-sheet">
@@ -771,33 +1001,77 @@ function CheatSheet({
         </span>
       </div>
 
-      <div className="rounded-lg border border-[#262626] bg-[#0f0f0f] p-4 print:border-0 print:bg-white print:text-black">
-        <h2 className="text-sm font-semibold text-white print:text-black">{title} — my big board</h2>
-        <div className="mt-3 grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* ⭐ "YOU HAVE NOT DRAWN ANY TIERS" IS A STATE, NOT AN ERROR — and it must not look like one.
+          With no breaks every player is in tier 1, which printed as a single "TIER 1" heading over
+          the whole sheet and read as a broken tiering. The heading is dropped, the fact is stated,
+          and the one-click way out is right here rather than back on the board. */}
+      {!hasTiers && (
+        <p
+          data-testid="big-board-no-tiers"
+          className="mb-3 text-xs text-gray-500 print:hidden"
+        >
+          You haven&apos;t drawn any tiers, so this prints as one continuous list.{" "}
+          <button
+            onClick={onSeedTiers}
+            data-testid="big-board-sheet-seed-tiers"
+            className="text-sky-400 underline underline-offset-2 hover:text-sky-300"
+          >
+            Start from our tiers
+          </button>{" "}
+          and move them where you want, or draw your own with the scissors on any row.
+        </p>
+      )}
+
+      <div className="print-sheet rounded-lg border border-[#262626] bg-[#0f0f0f] p-4 print:border-0 print:p-0">
+        {/* Print-only. On screen the league and format are in the picker two inches above; on
+            paper there is no picker, and a cheat sheet that does not say which league it is for is
+            the one you pick up at the wrong draft. */}
+        <div className="mb-3 hidden items-baseline justify-between border-b border-black pb-1 print:flex">
+          <span className="text-sm font-semibold">{title} — my big board</span>
+          <span className="text-[10px]">
+            {shown} of {total} · printed {new Date().toLocaleDateString()} · credencesports.com
+          </span>
+        </div>
+
+        <h2 className="text-sm font-semibold text-white print:hidden">{title} — my big board</h2>
+
+        {/* Two columns on paper: a 200-row sheet is 5 pages in one column and 3 in two, and a
+            draft sheet you have to turn over twice is one you stop reading. */}
+        <div className="mt-3 grid min-w-0 grid-cols-1 gap-4 print:mt-0 print:block print:columns-2 print:gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {sections.map((s) => (
-            <div key={s.tier} data-testid="big-board-sheet-tier" className="min-w-0">
-              <div className="mb-1 border-b border-[#262626] pb-1 text-[11px] font-semibold uppercase tracking-wide text-[#10b981] print:text-black">
-                Tier {s.tier}
-              </div>
+            <div
+              key={s.tier}
+              data-testid="big-board-sheet-tier"
+              className="min-w-0 break-inside-avoid"
+            >
+              {hasTiers && (
+                <div className="mb-1 border-b border-[#262626] pb-1 text-[11px] font-semibold uppercase tracking-wide text-[#10b981] print:border-black">
+                  Tier {s.tier}
+                </div>
+              )}
               <ol className="space-y-0.5">
                 {s.rows.map((r) => (
                   <li
                     key={r.player.id}
                     data-testid="big-board-sheet-row"
-                    className="flex min-w-0 items-baseline gap-1.5 text-xs text-gray-300 print:text-black"
+                    className="break-inside-avoid text-xs text-gray-300"
                   >
-                    <span className="w-6 shrink-0 text-right text-gray-600 print:text-black">
-                      {r.rank}
+                    <span className="flex min-w-0 items-baseline gap-1.5">
+                      <span className="w-6 shrink-0 text-right text-gray-600">{r.rank}</span>
+                      <span className="truncate">{r.player.name}</span>
+                      <span className="shrink-0 text-gray-600">
+                        {r.player.pos} · {teamLabel(r.player)}
+                      </span>
+                      {r.tag === "target" && <span className="shrink-0 text-sky-400">★</span>}
+                      {r.tag === "avoid" && <span className="shrink-0 text-rose-400">✕</span>}
                     </span>
-                    <span className="truncate">{r.player.name}</span>
-                    <span className="shrink-0 text-gray-600 print:text-black">
-                      {r.player.pos} · {teamLabel(r.player)}
-                    </span>
-                    {r.tag === "target" && (
-                      <span className="shrink-0 text-sky-400 print:text-black">★</span>
-                    )}
-                    {r.tag === "avoid" && (
-                      <span className="shrink-0 text-rose-400 print:text-black">✕</span>
+                    {r.note && (
+                      <span
+                        data-testid="big-board-sheet-note"
+                        className="ml-[30px] block text-[11px] italic text-amber-400/80"
+                      >
+                        {r.note}
+                      </span>
                     )}
                   </li>
                 ))}
@@ -812,7 +1086,7 @@ function CheatSheet({
 
 function HonestNote() {
   return (
-    <p className="mx-auto mt-8 max-w-3xl text-center text-[11px] leading-relaxed text-gray-600">
+    <p className="mx-auto mt-8 max-w-3xl text-center text-[11px] leading-relaxed text-gray-600 print:mt-4 print:text-black">
       The order you start from is our {SEASON} projection scored for your league, and everything you
       change from it is yours. We keep our rank, our projection and the market&apos;s ADP beside
       every row so the difference is visible — but a difference is not a verdict: we have no way to

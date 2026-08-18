@@ -227,6 +227,16 @@ export type MockOptions = {
    */
   customBoards?: "none" | "one" | "atCap"
   /**
+   * ⭐ NF-C4 — THE DEPLOY-SKEW MODE, and it is not a curiosity: it is guaranteed to happen in prod.
+   *
+   * The API Lambda has NO CD (NF-C0) — `frontend/` auto-deploys on merge and the backend ships only
+   * via a manual `deploy.sh` — and the request models do not set `extra="forbid"`. So a backend
+   * that predates a newly-added field ACCEPTS it, IGNORES it and returns 200. With this set, the
+   * PUT handler echoes the saved board back with `notes` stripped, which is exactly what that
+   * backend does, and the surface has to say so rather than showing "✓ Saved".
+   */
+  customBoardsDropNotes?: boolean
+  /**
    * ⭐ G100-D0 — what `/subscription/status` reports for this caller.
    *
    *   "none"     — THE DEFAULT. No access: the state a visitor is in when they click Subscribe,
@@ -470,6 +480,7 @@ function initialCustomBoards(mode: NonNullable<MockOptions["customBoards"]>): an
     order: [] as string[],
     tier_breaks: [] as string[],
     tags: {} as Record<string, string>,
+    notes: {} as Record<string, string>,
     created_at: "2026-08-01T12:00:00Z",
     updated_at: "2026-08-01T12:00:00Z",
   }
@@ -484,7 +495,17 @@ function initialCustomBoards(mode: NonNullable<MockOptions["customBoards"]>): an
   // load path changed something rather than merely rendering our order back.
   const board = FIXTURES.boardFree() as { id: string }[]
   const moved = board[2]?.id ?? ""
-  return [{ ...one, order: [moved], tags: { [moved]: "target" }, tier_breaks: [moved] }]
+  return [
+    {
+      ...one,
+      order: [moved],
+      tags: { [moved]: "target" },
+      tier_breaks: [moved],
+      // ⚠️ A NOTE IN THE STORED FIXTURE, so the LOAD path for notes is exercised and not merely the
+      // save path. Without one, "notes survive a save" could pass while a stored note never renders.
+      notes: { [moved]: "my own read on him" },
+    },
+  ]
 }
 
 function customBoardResponse(
@@ -492,6 +513,7 @@ function customBoardResponse(
   pathname: string,
   method: string,
   postData: string | null,
+  dropNotes = false,
 ): unknown | undefined {
   if (!pathname.startsWith("/fantasy/nfl/custom-boards")) return undefined
 
@@ -507,6 +529,7 @@ function customBoardResponse(
     // The SERVER derives the key from (config, size); mirroring that here is what makes a second
     // save of the same board an overwrite rather than a second row.
     const board_key = `${doc.config}|${doc.size}`
+    if (dropNotes) delete doc.notes
     const saved = {
       ...doc,
       board_key,
@@ -1680,6 +1703,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
       apiPath,
       route.request().method(),
       route.request().postData(),
+      options.customBoardsDropNotes ?? false,
     )
     if (boardsBody !== undefined) {
       await route.fulfill({
