@@ -1,0 +1,217 @@
+{
+ "story": "NF-W7j",
+ "phase": "component_clause_decision",
+ "generated_at": "2026-08-18T07:45:41.528414+00:00",
+ "best_alpha": 0,
+ "deploy_held": true,
+ "refits_nothing": true,
+ "source_record": "nf_w7f_qb_marginal.json",
+ "source_generated_at": "2026-08-17T23:16:14.801743+00:00",
+ "served_cell_audit": {
+  "passes": true,
+  "seeds": {
+   "quant_sports_intel_models.football.nfl.fantasy.export_draft_board_json": {
+    "n_modules": 18,
+    "hits": [],
+    "artifact_hits": []
+   },
+   "quant_sports_intel_models.football.nfl.fantasy.season_projection": {
+    "n_modules": 15,
+    "hits": [],
+    "artifact_hits": []
+   },
+   "app.backend.main": {
+    "n_modules": 65,
+    "hits": [],
+    "artifact_hits": []
+   },
+   "app.backend.routers.fantasy": {
+    "n_modules": 11,
+    "hits": [],
+    "artifact_hits": []
+   },
+   "quant_sports_intel_models.fantasy_engine.scoring": {
+    "n_modules": 2,
+    "hits": [],
+    "artifact_hits": []
+   }
+  },
+  "positive_controls": {
+   "quant_sports_intel_models.football.nfl.fantasy.run_nf_w7f_qb_marginal": {
+    "n_hits": 10,
+    "hits": [
+     "quant_sports_intel_models.football.nfl.fantasy.fp_assembly",
+     "quant_sports_intel_models.football.nfl.fantasy.fp_qb_marginal_calibration",
+     "quant_sports_intel_models.football.nfl.fantasy.run_nf_w6c_serve_stat_distributions",
+     "quant_sports_intel_models.football.nfl.fantasy.run_nf_w6d_serve_stat_distributions",
+     "quant_sports_intel_models.football.nfl.fantasy.run_nf_w7c_fp_assembly",
+     "quant_sports_intel_models.football.nfl.fantasy.stat_distribution_serving",
+     "quant_sports_intel_models.football.nfl.fantasy.stat_distribution_serving_d",
+     "quant_sports_intel_models.football.nfl.fantasy.stat_distributions",
+     "quant_sports_intel_models.football.nfl.fantasy.stat_distributions_c",
+     "quant_sports_intel_models.football.nfl.fantasy.stat_distributions_d"
+    ]
+   },
+   "quant_sports_intel_models.football.nfl.fantasy.fp_assembly": {
+    "n_hits": 6,
+    "hits": [
+     "quant_sports_intel_models.football.nfl.fantasy.fp_assembly",
+     "quant_sports_intel_models.football.nfl.fantasy.stat_distribution_serving",
+     "quant_sports_intel_models.football.nfl.fantasy.stat_distribution_serving_d",
+     "quant_sports_intel_models.football.nfl.fantasy.stat_distributions",
+     "quant_sports_intel_models.football.nfl.fantasy.stat_distributions_c",
+     "quant_sports_intel_models.football.nfl.fantasy.stat_distributions_d"
+    ]
+   }
+  },
+  "artifact_scan_control": {
+   "module": "quant_sports_intel_models.football.nfl.fantasy.run_nf_w6d_serve_stat_distributions",
+   "n_hits": 2
+  },
+  "artifact_tokens": [
+   "nf_w6d_served_stat_distributions",
+   "nf_w6c_served_stat_distributions",
+   "weekly_stat_distribution"
+  ],
+  "forbidden_substrings": [
+   "stat_distribution_serving",
+   "stat_distributions",
+   "fp_assembly",
+   "fp_qb_marginal"
+  ],
+  "reading": "the NF-W6d per-stat cells NF-W7f's recalibration degrades reach NO serving surface \u2014 not the published board, not the entitled stat line, not the scorer"
+ },
+ "component_clause": {
+  "raw": {
+   "clause": "per_leg_calibration_not_degraded",
+   "tolerance": 0.0,
+   "relative_change": 0.003866,
+   "refuses": true
+  },
+  "decided": {
+   "clause": "per_leg_calibration_not_materially_degraded",
+   "refuses": false,
+   "fails_closed_to_raw": false,
+   "conditions": {
+    "A_served_cell_audit_passes": true,
+    "B_demonstrable": false,
+    "C_material_primary_relative": true,
+    "D_claimed_effect_well_defined": true
+   },
+   "demonstrable_detail": {
+    "instrument": "nf1_1_model.onesided_paired_pvalue (the harness's own, by identity)",
+    "alpha": 0.05,
+    "p_one_sided": 0.1611,
+    "per_fold_relative_change": [
+     -0.01249,
+     -0.003508,
+     0.007389,
+     0.018102,
+     0.003166,
+     0.01418,
+     -0.002869,
+     0.006013
+    ],
+    "folds_degraded": 5,
+    "n_folds": 8,
+    "mean": 0.003748,
+    "ci95": [
+     -0.004575,
+     0.01207
+    ]
+   },
+   "materiality_detail": {
+    "materiality_fraction": 0.1,
+    "primary_unit": "relative (dimensionless): a 10-leg SUM and a 1-number total share no absolute scale, so the dimensionless form is the comparable one",
+    "assembled_relative_effect": 0.007124,
+    "band_relative": 0.000712,
+    "component_relative_change": 0.003866,
+    "point_estimate_in_band_units": 5.4269,
+    "ci95_in_band_units": [
+     -6.4216,
+     16.9438
+    ],
+    "band_state": "UNDECIDED_MAGNITUDE",
+    "sensitivity_absolute": {
+     "component_absolute_change_crps": 0.13909,
+     "band_absolute_crps": 0.00184,
+     "material": true
+    },
+    "units_agree": true
+   }
+  }
+ },
+ "rescored": {
+  "gate": {
+   "beats_foil": true,
+   "fold_consistency": true,
+   "pbo_ok": true,
+   "dsr_ok": false,
+   "fdr_ok": true,
+   "coverage_floor_ok": true,
+   "pit_flat_ok": true,
+   "degenerates_lose": true,
+   "permutation_behaves": true,
+   "oracle_floors_respected": true,
+   "mixture_is_active": true,
+   "mixture_preserves_marginals": true,
+   "incumbent_reproduces": true,
+   "predecessor_reproduces": true,
+   "zero_mass_hits_target": true,
+   "positive_law_preserved": true,
+   "matched_foil_identity": true,
+   "cap_was_lifted": true,
+   "independence_under_disperses": true,
+   "dependence_moves_coverage": true,
+   "beats_indep_on_coverage": true,
+   "per_leg_calibration_not_materially_degraded": true
+  },
+  "failing_clauses": [
+   "dsr_ok"
+  ],
+  "failing_anchor_clauses": [],
+  "failing_statistical_clauses": [
+   "dsr_ok"
+  ],
+  "full_gate_green": false,
+  "certification_requires_full_gate": true,
+  "certified_for_nf_w8": false,
+  "verdict": "QB_REFUSED",
+  "null_state": {
+   "state": "DSR_UNREACHABLE",
+   "reason": "`nf_w7j_component_clause|QB`: the winner's per-fold Sharpe 1.013 sits at or BELOW the 4-arm field's deflated benchmark SR0 5.482, so DSR is unreachable at ANY fold count \u2014 `n` scales a positive gap, it cannot create one. The remedy is a SMALLER, PRE-REGISTERED field, not more seasons \u2014 and \u26d4 only if such a field was pre-registered; this is NOT a licence to re-cut a field you have already scored (MH2.7). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+   "retest_trigger": "field size is NOT a lever here \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)",
+   "field_remedy_admissible": null,
+   "declared_field_size_source": "fp_qb_marginal_calibration.REAL_ARMS (4), committed in NF-W7f's prereg \u00a73 before any score and CARRIED UNCHANGED here \u2014 \u26d4 NF-W7j declares no new field and trims none (MH2.2)",
+   "field_shrink_flag": {
+    "proposed_field_size": null,
+    "declared_family_size": 4,
+    "status": "SUSPECT \u2014 NOT ADVICE",
+    "note": "the instrument suggests a smaller field, but this story's family of 4 arms was PRE-REGISTERED as the minimum \u00a70.5 field (\u22653 classes + a direct-learned foil). \u26d4 Shrinking below it would be a POST-HOC field, which is the selection bias DSR exists to deflate (MH2.2). Treat this remedy as SUSPECT, not as advice: you may PRE-REGISTER a family, you may not DISCOVER one."
+   }
+  }
+ },
+ "reproduction": {
+  "pins": {
+   "per_leg_relative_change": 0.003866,
+   "per_leg_relative_change_winner_by_fold_mean": 0.003748,
+   "per_leg_tolerance": 0.0,
+   "mean_delta": 0.0184,
+   "ci95_lo": 0.0032,
+   "ci95_hi": 0.0336,
+   "matched_foil_mean_crps": 2.5829
+  },
+  "tolerance": 1e-09,
+  "failing_clauses": [
+   "dsr_ok",
+   "per_leg_calibration_not_degraded"
+  ],
+  "n_gate_clauses": 22
+ },
+ "promote_blockers": [
+  "NF-W7j decides ONE clause and audits ONE condition; it re-scores nothing and refits nothing \u2014 NF-W7f's scores stand byte-identical",
+  "the component-clause decision CANNOT certify QB on its own: `dsr_ok` is a second, independent refusal, out of scope here (prereg \u00a70.1)",
+  "the served-cell audit licenses the relaxation for the SERVING plane only \u2014 the NF-W6/W7 research line consumes the cells and NF-W8 intends to (prereg \u00a71.3)",
+  "NF-W7f's and NF-W7c's promote blockers are inherited in full, including NF-W7c \u00a74's rule that a per-position-certified distribution may not feed a CROSS-POSITION ranking"
+ ]
+}
