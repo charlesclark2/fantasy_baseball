@@ -2406,8 +2406,13 @@ const CASES = [
     // "2026board". Measured in this harness — the JSX form fails this spec.
     detail: "Puts the season back beside JSX text instead of inside the string.",
     file: "components/fantasy/big-board.tsx",
-    from: "            {`Start with our ${SEASON} board for your league",
-    to: "            Start with our {SEASON} board for your league",
+    // ⚠️ THE WHOLE LINE, not its opening: a partial swap leaves the template literal's closing
+    // backtick behind, the build fails to parse, and the case reports BUILD-CAUGHT — which
+    // proves the compiler noticed, not that the SUITE would have.
+    from:
+      "            {`Start with our ${SEASON} board for your league, then make it your own. Drag players up or down, draw your own tier breaks, flag who you are chasing and who you are passing on, and write yourself a note on anyone. Our rank, our projection and the market's ADP stay next to every row, so you can always see where you have moved away from us.`}",
+    to:
+      "            Start with our {SEASON} board for your league, then make it your own. Drag players up or down, draw your own tier breaks, flag who you are chasing and who you are passing on, and write yourself a note on anyone. Our rank, our projection and the market&apos;s ADP stay next to every row, so you can always see where you have moved away from us.",
     grep: "spaces intact",
   },
   {
