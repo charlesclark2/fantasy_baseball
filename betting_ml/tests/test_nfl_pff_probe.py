@@ -424,3 +424,334 @@ class TestGameJoinUsesTheLeagueCorrectTeamKey:
         assert "school_key" in src and "normalize_team" in src, (
             "run_league must choose BOTH keys by league — a single hardcoded key is the bug"
         )
+
+
+# ── what the LIVE API taught us (all of these were real failures, in this order) ────────────
+from quant_sports_intel_models.football.pff.client import PFFNotFoundError  # noqa: E402
+from quant_sports_intel_models.football.pff.facets import fetch_facet_with_entitlement  # noqa: E402
+from quant_sports_intel_models.football.pff.probe import (  # noqa: E402
+    TEAM_LABEL_KEYS, _team_label, build_franchise_map,
+)
+
+
+class TestClerkAuthMechanics:
+    """PFF uses Clerk: the `__session` cookie IS the JWT and it lives 60 SECONDS."""
+
+    def test_a_stateless_cookie_header_gets_the_handshake_and_is_named_as_such(self):
+        # The API 307s to clerk.pff.com to refresh the expired session. A client that does not
+        # persist cookies across that redirect loops until curl aborts — which reads as a
+        # network fault. The error must name the auth flow instead.
+        body = '<a href="https://clerk.pff.com/v1/client/handshake?__clerk_hs_reason=se">Redirect</a>'
+        with pytest.raises(PFFAuthError, match="handshake"):
+            _parse_response("u", 200, body)
+
+    def test_the_direct_session_does_NOT_also_set_a_cookie_header(self):
+        # PFF's jar is ~7 KB. Seeding the session jar AND setting an explicit Cookie header
+        # sends it twice → HTTP 431 with an EMPTY body → "unparseable JSON". Measured live.
+        #
+        # ⭐ Asserted on the REAL SESSION, not on `_headers()`. The first cut checked the helper
+        # and stayed green when the call site was broken back to `include_cookie=True` — the
+        # defect lives at the CALL SITE, so that is what the guard must read.
+        c = PFFClient(cookie="a=1; b=2", token="", transport="direct")
+        sess = c._session()
+        hdr = {k.lower(): v for k, v in dict(sess.headers).items()}
+        assert "cookie" not in hdr, (
+            "the session must not ALSO carry an explicit Cookie header — the jar already has it"
+        )
+        assert len(list(sess.cookies)) == 2, "the jar is what carries the credential"
+
+    def test_431_is_named_as_the_duplicate_cookie_it_almost_always_is(self):
+        with pytest.raises(PFFClientError, match="431"):
+            _parse_response("u", 431, "")
+
+    def test_cookie_values_containing_equals_are_not_truncated(self):
+        # JWT/base64 cookie values carry `=` padding; splitting on every `=` would silently
+        # truncate exactly the session token.
+        from quant_sports_intel_models.football.pff.client import _parse_cookie_header
+        assert _parse_cookie_header("__session=aa.bb==; x=1") == [("__session", "aa.bb=="), ("x", "1")]
+
+    def test_datadome_is_recognised_as_a_challenge_not_a_parse_failure(self):
+        # premium.pff.com is behind DataDome, not Cloudflare. Matching only CF markers would
+        # misfile the block and send the operator after the wrong problem.
+        with pytest.raises(PFFChallengeError):
+            _parse_response("u", 200, "<html>geo.captcha-delivery.com datadome</html>")
+
+
+class TestEntitlementIsAFirstClassFinding:
+    """PFF returns, beside the data, the list of fields THIS TIER WITHHOLDS."""
+
+    def test_restricted_is_never_mistaken_for_the_row_list(self):
+        # `restricted` is a list of FIELD NAMES sitting next to the data list. Treating it as
+        # rows would yield strings-not-dicts and normalise to an all-NA frame — data-shaped
+        # nonsense rather than an error.
+        #
+        # ⭐ NO `prefer` hit on purpose. With one, the lookup short-circuits before the
+        # "single list in the envelope" fallback and the guard passes without ever exercising
+        # the branch that can confuse the two lists — which is where the bug would live.
+        payload = {"restricted": ["routes", "yprr"],
+                   "some_unforeseen_facet_key": [{"player": "X", "attempts": 3}]}
+        assert fx._rows(payload) == [{"player": "X", "attempts": 3}]
+
+    def test_it_still_resolves_when_the_facet_key_IS_known(self):
+        payload = {"restricted": ["routes"], "rushing_summary": [{"player": "X"}]}
+        assert fx._rows(payload, prefer=("rushing_summary",)) == [{"player": "X"}]
+
+    def test_the_withheld_fields_are_returned_to_the_caller(self):
+        client = _StubClient({"restricted": ["routes", "avg_depth_of_target"],
+                              "receiving_summary": [{"player": "X", "targets": 4}]})
+        rows, restricted = fetch_facet_with_entitlement(
+            client, fx.Facet("receiving", "summary"), 1)
+        assert rows == [{"player": "X", "targets": 4}]
+        # Without this the probe reports "1 row pulled" for a payload missing everything we
+        # came for — a feed that is present but empty of the point.
+        assert restricted == ["routes", "avg_depth_of_target"]
+
+    def test_a_404_is_not_retried_and_is_distinguished_from_a_fetch_failure(self):
+        # PFF answers 404 with the body `"Internal server error"`. Retrying a discovery miss
+        # 3x triples our request count against a paid API for no information.
+        with pytest.raises(PFFNotFoundError):
+            _parse_response("u", 404, '"Internal server error"')
+
+
+class TestTeamComesFromTheGameNotTheFacetRow:
+    """PFF's facet rows carry NO team name — only `franchise_id` (measured live)."""
+
+    GAMES = [{
+        "id": 1, "season": 2024, "week": 1,
+        "home_team": {"franchise_id": 28, "abbreviation": "SF", "city": "San Francisco"},
+        "away_team": {"franchise_id": 22, "abbreviation": "NYJ", "city": "New York"},
+    }]
+
+    def test_the_franchise_map_supplies_the_team_the_rows_lack(self):
+        # Without this the NCAAF school block is empty and the join scores a clean 0% — which
+        # is exactly what the first live NCAAF run did.
+        assert build_franchise_map(self.GAMES, "nfl") == {"28": "SF", "22": "NYJ"}
+
+    def test_the_label_key_is_league_specific(self):
+        # NFL `abbreviation` matches nflverse codes; NCAA `abbreviation` is "NOTRED", which
+        # matches nothing on our side — CFBD wants `city` ("Notre Dame").
+        ncaa = [{"id": 1, "home_team": {"franchise_id": 258, "abbreviation": "NOTRED",
+                                        "city": "Notre Dame"}}]
+        assert build_franchise_map(ncaa, "ncaa") == {"258": "Notre Dame"}
+        assert build_franchise_map(ncaa, "nfl") == {"258": "NOTRED"}
+
+    def test_a_nested_team_object_is_never_stringified_into_the_join_key(self):
+        team = {"franchise_id": 28, "abbreviation": "SF", "city": "San Francisco"}
+        assert _team_label(team, "nfl") == "SF"
+        assert _team_label(team, "ncaa") == "San Francisco"
+
+    def test_both_leagues_are_registered(self):
+        assert set(TEAM_LABEL_KEYS) == {"nfl", "ncaa"}
+
+
+class TestSchoolAliasesAreMeasuredNotGuessed:
+    def test_the_state_suffix_aliases_that_were_verified_against_cfbd(self):
+        for pff_name, cfbd_key in [("Grambling State", "grambling"), ("McNeese State", "mcneese"),
+                                   ("Sam Houston State", "sam houston"),
+                                   ("Central Connecticut State", "central connecticut")]:
+            assert school_key(pff_name) == cfbd_key
+
+    def test_state_is_NOT_stripped_wholesale_because_real_rivals_would_merge(self):
+        # Measured: CFBD carries BOTH forms for these — a blanket rule would merge them.
+        for base in ("Ohio", "Michigan", "Florida"):
+            assert school_key(base) != school_key(f"{base} State")
+
+    def test_the_measured_long_short_form_aliases(self):
+        for pff_name, cfbd_key in [("Albany", "ualbany"), ("Appalachian State", "app state"),
+                                   ("Tennessee-Martin", "ut martin"), ("LIU", "long island"),
+                                   ("Virginia Military Institute", "vmi")]:
+            assert school_key(pff_name) == cfbd_key
+
+    def test_a_known_upstream_typo_is_pinned_rather_than_fuzzy_matched(self):
+        # PFF ships "Rio Grand" for "Rio Grande". A typo is a fact about the feed; pinning it
+        # keeps the join exact instead of loosening the threshold for everyone.
+        assert school_key("UT Rio Grand Valley") == school_key("UT Rio Grande Valley")
+
+
+class TestTheEntitlementMisreadingCannotRecur:
+    """NF-W9-0 concluded `restricted` was a subscription paywall and recommended killing three
+    stories. It was wrong — a CSV export on the SAME account carries all 28 fields. These pin the
+    corrected reading into the artifact so the next reader cannot re-derive the wrong one."""
+
+    def test_the_verdict_does_not_claim_a_tier_paywall(self):
+        from quant_sports_intel_models.football.pff.probe import _opportunity_availability
+        out = _opportunity_availability(
+            pd.DataFrame({"targets": [1]}), {"receiving/summary": ["routes", "avg_depth_of_target"]}
+        )
+        v = out["verdict"].lower()
+        assert "in_this_response" in v, "the verdict must describe the RESPONSE, not the account"
+        for claim in ("withheld by the subscription", "subscription tier;"):
+            assert claim not in v, f"the retracted tier claim {claim!r} must not return"
+
+    def test_the_verdict_points_at_the_export_path(self):
+        from quant_sports_intel_models.football.pff.probe import _opportunity_availability
+        out = _opportunity_availability(pd.DataFrame({"targets": [1]}),
+                                        {"receiving/summary": ["routes"]})
+        assert "export" in out["verdict"].lower(), (
+            "a reader hitting this verdict must be sent to the export path, not to a purchase"
+        )
+
+    def test_the_full_field_set_is_still_reported_as_absent_here(self):
+        # The measurement itself was never wrong — only the inference. This endpoint really does
+        # omit them, and the probe must keep saying so.
+        from quant_sports_intel_models.football.pff.probe import _opportunity_availability
+        out = _opportunity_availability(pd.DataFrame({"targets": [1]}),
+                                        {"receiving/summary": ["routes"]})
+        assert out["available"] == [] and out["withheld_by_tier"] == ["routes"]
+
+
+class TestTheExportPath:
+    """`&export=true` on the season-aggregate query returns the FULL field set as CSV.
+
+    This is the answer the story spent a pass failing to find: the fields were never paywalled,
+    they were one query parameter away.
+    """
+
+    # A verbatim slice of a REAL operator export — not a hand-written fixture. NF-C0e's rule:
+    # a fixture derived from our own assumptions cannot disconfirm them.
+    REAL = (
+        "player,player_id,position,team_name,avg_depth_of_target,aimed_passes,dropbacks,"
+        "passing_snaps,epa,grades_offense,grades_pass,attempts,ypa\n"
+        "Bo Nix,97790,QB,DEN,8,562,679,718,0.11,76.9,75,612,6.4\n"
+        "Aaron Rodgers,2241,QB,PIT,6.4,460,542,574,0.02,68.7,69.5,498,6.7\n"
+        "Brandon Allen,10835,QB,TEN,3.4,28,31,32,-0.79,36.4,37.1,30,2.4\n"
+    )
+
+    def test_the_export_carries_the_fields_the_json_omits(self):
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        rows = parse_csv(self.REAL)
+        for f in ("avg_depth_of_target", "aimed_passes", "dropbacks", "passing_snaps", "epa"):
+            assert rows[0][f] is not None, f"{f} must survive the export parse"
+
+    def test_a_blank_cell_stays_None_rather_than_becoming_a_fabricated_zero(self):
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        rows = parse_csv("player,attempts,avg_depth_of_target\nX,0,\n")
+        assert rows[0]["avg_depth_of_target"] is None, (
+            "a QB with no attempts has an EMPTY adot, not 0.0 — coercing invents data"
+        )
+
+    def test_the_raw_stats_guard_does_real_work_on_the_export(self):
+        # The JSON path never carried grades, so the guard was untested against real grade
+        # columns until now. The export genuinely contains them.
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        kept, dropped = g.strip_model_output_columns(list(parse_csv(self.REAL)[0].keys()))
+        assert dropped == ["grades_offense", "grades_pass"]
+        assert "avg_depth_of_target" in kept and "dropbacks" in kept
+
+    def test_player_id_is_preserved_so_entity_resolution_is_unchanged(self):
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        rows = parse_csv(self.REAL)
+        # 2241 is the id the live probe matched to gsis 00-0023459 at tier 1.
+        assert rows[1]["player"] == "Aaron Rodgers" and rows[1]["player_id"] == 2241
+
+    def test_get_export_sends_export_true(self):
+        seen = {}
+
+        class C(PFFClient):
+            def get(self, path, params=None, *, expect="json"):
+                seen.update(params or {})
+                assert expect == "csv"
+                return TestTheExportPath.REAL
+
+        rows = C(cookie="a=1", transport="direct").get_export("/api/v1/facet/passing/summary",
+                                                              {"league": "nfl", "season": 2025})
+        assert seen["export"] == "true", "the export flag IS the feature"
+        assert len(rows) == 3
+
+    def test_an_html_login_page_is_not_parsed_as_a_one_row_csv(self):
+        # A CSV parser turns an expired-session HTML page into nonsense rows rather than
+        # raising, so the CSV path must keep the auth checks the JSON path has.
+        #
+        # ⭐ THE FIXTURE CONTAINS A COMMA ON PURPOSE. A comma-less page also trips the CSV
+        # branch's own "no delimited header" check, so it passes whether or not the auth
+        # checks run first — it cannot isolate the clause under test. With a comma, ONLY the
+        # auth check can catch it, which is the property being guarded.
+        login = ("<html><body><h1>Sign in</h1>"
+                 "<p>Welcome back, please log in.</p>"
+                 "<input type=password></body></html>")
+        assert "," in login.splitlines()[0], "the fixture must be able to parse as a CSV header"
+        with pytest.raises(PFFAuthError):
+            _parse_response("u", 200, login, expect="csv")
+
+    def test_a_week_list_is_joined_so_one_call_covers_a_season(self):
+        seen = {}
+
+        class C(PFFClient):
+            def get(self, path, params=None, *, expect="json"):
+                seen.update(params or {})
+                return TestTheExportPath.REAL
+
+        fx.fetch_facet_export(C(cookie="a=1", transport="direct"),
+                              fx.Facet("passing", "summary"),
+                              league="nfl", season=2025, weeks=range(1, 19))
+        assert seen["week"] == ",".join(str(w) for w in range(1, 19))
+        assert "division" not in seen, "division is NCAA-only; the NFL query must omit it"
+
+
+class TestRoutesUnblocksNFW91:
+    """The receiving export carries `routes` — the field NF-W9-1 turns on.
+
+    Header taken VERBATIM from a real operator export (2026-08-19), so this is a contract test
+    against PFF's actual output rather than against our expectations of it.
+    """
+
+    HEADER = (
+        "player,player_id,position,team_name,player_game_count,avg_depth_of_target,"
+        "avoided_tackles,caught_percent,contested_catch_rate,contested_receptions,"
+        "contested_targets,declined_penalties,drop_rate,drops,epa,first_downs,franchise_id,"
+        "fumbles,grades_hands_drop,grades_hands_fumble,grades_offense,grades_pass_block,"
+        "grades_pass_route,inline_rate,inline_snaps,interceptions,longest,pass_block_rate,"
+        "pass_blocks,pass_plays,penalties,positive_epa_percent,receptions,route_rate,routes,"
+        "slot_rate,slot_snaps,targeted_qb_rating,targets,touchdowns,wide_rate,wide_snaps,yards,"
+        "yards_after_catch,yards_after_catch_per_reception,yards_per_reception,yprr"
+    )
+    ROWS = (
+        HEADER + "\n"
+        # a full-time receiver, a blocking tackle, and a low-usage back — the three states
+        "Ja'Marr Chase,84270,WR,CIN,16,8.9,23,68.7,54.5,18,33,2,4.6,6,0.01,73,7,1,83.9,63.4,"
+        "90.1,,90.1,0.0,0,7,64,0.0,0,669,2,47.2,125,94.5,632,32.6,218,90.3,182,8,66.5,445,1412,"
+        "648,5.2,11.3,2.23\n"
+        "Jake Matthews,8641,T,ATL,17,6.0,0,0.0,,0,0,0,100.0,1,0.04,0,2,0,28.0,,69.7,82.4,42.0,"
+        "0.0,0,0,0,99.8,609,610,7,46.7,0,0.2,1,0.0,0,39.6,1,0,0.0,0,0,0,,,0.0\n"
+        "Julius Chestnut,109239,HB,TEN,7,9.0,0,0.0,,0,0,0,,0,-0.16,0,31,0,,75.7,60.8,26.3,52.2,"
+        "0.0,0,0,0,13.6,3,22,0,40.9,0,86.4,19,0.0,0,39.6,2,0,9.1,2,0,0,,,0.0\n"
+    )
+
+    def test_routes_is_present(self):
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        assert "routes" in parse_csv(self.ROWS)[0], (
+            "routes is THE field NF-W9-1 turns on; without it the story has no substrate"
+        )
+
+    @pytest.mark.parametrize("field", [
+        "routes", "route_rate", "pass_plays", "avg_depth_of_target", "slot_rate", "slot_snaps",
+        "wide_rate", "wide_snaps", "inline_rate", "yprr", "yards_after_catch", "avoided_tackles",
+    ])
+    def test_every_opportunity_field_survives_the_guard(self, field):
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        kept, _ = g.strip_model_output_columns(list(parse_csv(self.ROWS)[0].keys()))
+        assert field in kept
+
+    def test_routes_separates_states_that_nflverse_collapses_into_one_zero(self):
+        # THE measured claim. A tackle on the field for 610 pass plays ran 1 route; a back on
+        # the field for 22 ran 19 and saw 2 targets. nflverse has snaps and targets, so both
+        # are a bare zero there. `routes` is what makes them different events.
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        by = {r["player"]: r for r in parse_csv(self.ROWS)}
+        blocker, runner = by["Jake Matthews"], by["Julius Chestnut"]
+        assert blocker["pass_plays"] > 500 and blocker["routes"] <= 1
+        assert runner["pass_plays"] < 50 and runner["routes"] > 10
+        # route PARTICIPATION is what distinguishes them, not snap count
+        assert blocker["routes"] / blocker["pass_plays"] < 0.01
+        assert runner["routes"] / runner["pass_plays"] > 0.50
+
+    def test_the_grades_are_still_stripped_from_the_richest_payload(self):
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        _, dropped = g.strip_model_output_columns(list(parse_csv(self.ROWS)[0].keys()))
+        assert dropped == ["grades_hands_drop", "grades_hands_fumble", "grades_offense",
+                           "grades_pass_block", "grades_pass_route"]
+
+    def test_the_signal_map_records_confirmed_fields_not_hoped_for_ones(self):
+        entry = fx.SIGNAL_MAP["NF-W9-1 zero-atom opportunity"]
+        assert "fields_confirmed" in entry, "post-verification the map states what was MEASURED"
+        assert "routes" in entry["fields_confirmed"]
