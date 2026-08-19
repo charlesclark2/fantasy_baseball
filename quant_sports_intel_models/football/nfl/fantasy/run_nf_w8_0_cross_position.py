@@ -153,9 +153,17 @@ def build_position_banks(position: str, tr_p: pd.DataFrame, te_p: pd.DataFrame,
 
 
 def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, weights: np.ndarray, *,
-                 draws: int, ctx_te: dict) -> tuple[dict, pd.DataFrame | None]:
+                 draws: int, ctx_te: dict, point_reader=None,
+                 bank_detail=None) -> tuple[dict, pd.DataFrame | None]:
     """One (fold, position): the pinned generators, their CRPS (for the reproduction pins), the
-    ranking points, and the per-row frame the derive layer fits recalibrations on."""
+    ranking points, and the per-row frame the derive layer fits recalibrations on.
+
+    `point_reader` / `bank_detail` are NF-W8-0b's opt-in hooks, OFF by default: ⛔ `None`
+    reproduces NF-W8-0's registered ranking point EXACTLY (`XP.bank_point` — the truncated
+    199-level grid mean). A successor registering a different READ of the SAME certified bank
+    passes its reader here rather than forking this function, so the GENERATORS keep exactly one
+    code path (NF-W7d) and the reproduction pins cannot drift; the incumbent grid-mean columns
+    are then emitted BESIDE the new point for disclosure."""
     tr_p = train.loc[train["position"].astype(str) == position].reset_index(drop=True)
     te_p = test.loc[test["position"].astype(str) == position].reset_index(drop=True)
     if len(te_p) == 0 or len(tr_p) < FA.MIN_ESTIMATION_ROWS:
@@ -185,15 +193,19 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, weights
         scores[label] = float(np.mean(KW.crps_dense(bank, y_te)))
 
     bank_c = np.sort(np.asarray(banks[consumed], float), axis=1)
+    read = XP.bank_point if point_reader is None else point_reader
     rows = pd.DataFrame({
         "season": te_p["season"].to_numpy(), "week": te_p["week"].to_numpy(),
         "gw": te_p["gw"].to_numpy(), "gsis_id": te_p["gsis_id"].astype(str).to_numpy(),
         "position": position, "y": y_te,
-        "point_consumed": XP.bank_point(banks[consumed]),
-        "point_swap": XP.bank_point(banks[swap]),
+        "point_consumed": read(banks[consumed]),
+        "point_swap": read(banks[swap]),
         "p10": bank_c[:, _QIDX[0.10]], "p50": bank_c[:, _QIDX[0.50]],
         "p90": bank_c[:, _QIDX[0.90]],
     })
+    if point_reader is not None:                 # the incumbent read, kept BESIDE for disclosure
+        rows["point_consumed_gridmean"] = XP.bank_point(banks[consumed])
+        rows["point_swap_gridmean"] = XP.bank_point(banks[swap])
     summary = {
         # ⛔ FULL PRECISION — the reproduction pins compare these against the predecessor
         # records at 1e-9; a round(…, 6) here caps every pin at ~5e-7 and the decisive run
@@ -206,11 +218,19 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, weights
         "bias_swap": XP.bias_detail(rows["point_swap"].to_numpy(), y_te),
         "calibration_slope": XP.calibration_slope(rows["point_consumed"].to_numpy(), y_te),
     }
+    if point_reader is not None:
+        summary["point_reader"] = getattr(point_reader, "__qualname__", str(point_reader))
+        summary["bias_gridmean"] = XP.bias_detail(
+            rows["point_consumed_gridmean"].to_numpy(), y_te)
+        if bank_detail is not None:
+            summary["bank_detail"] = {"consumed": bank_detail(banks[consumed]),
+                                      "swap": bank_detail(banks[swap])}
     return summary, rows
 
 
 def run_fold(fold: WP.Fold, feat: pd.DataFrame, smap: dict, *, draws: int, matrix_key: str,
-             rows_dir: Path, rebuild_banks: bool = False) -> dict:
+             rows_dir: Path, rebuild_banks: bool = False, point_reader=None,
+             bank_detail=None) -> dict:
     t0 = time.time()
     train, test = feat.loc[fold.train_idx], feat.loc[fold.test_idx]
     cfg = LP.get_preset(GATE_LEAGUE)
@@ -222,7 +242,8 @@ def run_fold(fold: WP.Fold, feat: pd.DataFrame, smap: dict, *, draws: int, matri
         FA.assert_assembly_is_priceable(cfg, position)
         t_p = time.time()
         summary, rows = run_position(position, train, test, FA.leg_weights(cfg, position),
-                                     draws=draws, ctx_te=ctx_te)
+                                     draws=draws, ctx_te=ctx_te, point_reader=point_reader,
+                                     bank_detail=bank_detail)
         out[position] = summary
         if rows is not None:
             fold_rows.append(rows)
@@ -397,7 +418,12 @@ def _weekly_displacement(fold_df: pd.DataFrame, pts_a: np.ndarray, pts_b: np.nda
                                          if other_moves else None)}
 
 
-def derive_verdict_layer(out: dict) -> dict:  # noqa: C901 — the pre-registered derivation
+def derive_verdict_layer(out: dict, *,
+                         swap_floor_ppr: float | None = None) -> dict:  # noqa: C901
+    """The pre-registered derivation. `swap_floor_ppr` is NF-W8-0's registered SUCCESSOR
+    rule (§12.3c), OPT-IN and OFF by default — ⛔ `None` reproduces NF-W8-0's decided
+    behaviour EXACTLY; a successor registering a design-derived materiality floor passes
+    it through to `XP.swap_clause` (see `fp_tail_point.materiality_floor`)."""
     fold_results = out["fold_results"]
     labels = sorted(fr["label"] for fr in fold_results)
     skipped = {fr["label"]: [p for p, b in fr["positions"].items() if b.get("skipped")]
@@ -530,8 +556,9 @@ def derive_verdict_layer(out: dict) -> dict:  # noqa: C901 — the pre-registere
                     a_f.append(float((XP.apply_level_add(pc, tbl_c)
                                       - XP.apply_level_add(ps, tbl_s)).mean()))
             before[p], after[p] = np.asarray(b_f), np.asarray(a_f)
-        swap = XP.swap_clause(before, after)
+        swap = XP.swap_clause(before, after, floor_ppr=swap_floor_ppr)
         swap["arm_used"] = arm_for_swap
+        swap["materiality_floor_ppr"] = swap_floor_ppr
         clauses["swap_clause"] = swap["passes"]
 
     # `banks_untouched` — the PIT-preservation identity, measured at input-write time and

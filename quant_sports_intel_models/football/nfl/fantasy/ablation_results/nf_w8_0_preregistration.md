@@ -391,3 +391,30 @@ The 4-position input parquets under `identity` with `cross_rankable: false`, the
 disclosure, the Option-B caveat on QB rows, and every promote blocker in force. The weekly
 optimizer is NOT unblocked for raw-point cross-position use; §12.5(3) names the one bounded
 consumption a PM may elect. 🚩 The §1 second-reader flag remains OPEN.
+
+### §12.7 Successor registrations landed (appended 2026-08-19; §1–§9 and §12.0–§12.6 untouched)
+
+§12.5's successors (1) and (2) are registered forward, TOGETHER, as **NF-W8-0b — the
+tail-completed cross-position ranking point**:
+`ablation_results/nf_w8_0b_preregistration.md` (module `fp_tail_point.py`, runner
+`run_nf_w8_0b_tail_point.py`, guards `betting_ml/tests/test_nf_w8_0b_tail_point.py`, RED proof
+`red_proof_nf_w8_0b.py`).
+
+- **(1) the tail-completed point** — `0.995·gridmean + ∫_0^0.0025 Q + ∫_0.9975^1 Q`, the two
+  beyond-grid integrals in the NF-MARGIN exponential mean-excess form whose scale is read
+  DETERMINISTICALLY off the certified bank's own [0.975, 0.995] spacing. ⛔ Not fitted: neither
+  `MC.fit_tail_betas` nor `M3.fit_eq_tail` may supply it, because (a) §12.3a's non-stationarity
+  floor applies to any outcome-fitted quantity and (b) NF-MARGIN2 measured the fitted exponential
+  UNDER-extending at QB/WR — the position under test.
+- **(2) the swap-clause materiality floor** — `active := |pooled shift| > 2×SE AND ≥ the MEDIAN
+  of family A's own 6 pairwise MDEs`, a design quantity read off this run's own resolution. On
+  §12.3c's RECORDED shifts the min/median/max MDE give the IDENTICAL activity set (QB active;
+  RB/WR/TE inactive), so the summary statistic is not outcome-determining there; the sensitivity
+  band is reported on the successor's own numbers regardless.
+
+⛔ **NF-W8-0's record is DECIDED and is NOT re-run, re-derived or re-read by the successor.** The
+successor reaches NF-W8-0's harness through three OPTIONAL hooks (`point_reader`, `bank_detail`,
+`swap_floor_ppr`), each defaulting to this story's registered behaviour EXACTLY — pinned by
+`TestPredecessorDefaultsUnchanged` and RED-proven — and its runner is REFUSED AT IMPORT if its
+own artifact paths would collide with this story's. §12.5(3), the PM decision on bounded
+VOR-space consumption under the disclosed gap, remains OPEN and is not touched by NF-W8-0b.
