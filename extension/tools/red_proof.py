@@ -78,6 +78,21 @@ CASES = [
     ("the sensitive-key scrub is never applied",
      PROBE, "      if (SENSITIVE_KEYS.test(k)) { out[k] = \"<omitted>\"; continue; }", "      ;",
      "test_sensitive_keys_are_omitted_from_a_summarized_body"),
+    ("frames recorded once again (per-frame call removed)",
+     PROBE, "          recordFramePattern(entry, bodyText);   // ⭐ EVERY frame, not just the first",
+     "          ;",
+     "test_every_frame_is_pattern_recorded_not_just_the_first"),
+    ("frame-pattern overflow dropped silently",
+     PROBE, "        entry.framePatternOverflow = (entry.framePatternOverflow || 0) + 1;", "        ;",
+     "test_frame_pattern_capture_is_bounded_and_reports_its_overflow"),
+    ("a frame example bypasses the redactor",
+     PROBE, "      entry.framePatterns[pat] = { count: 1, example: redact(text) };",
+     "      entry.framePatterns[pat] = { count: 1, example: text };",
+     "test_a_stored_frame_example_goes_through_the_redactor"),
+    ("a re-polled body is frozen again",
+     PROBE, "      } else if (entry.shape !== null && bodyText && bodyText.length !== entry.bytes) {",
+     "      } else if (false) {",
+     "test_a_changed_body_is_reshaped_rather_than_frozen"),
 ]
 
 

@@ -352,3 +352,55 @@ def test_sensitive_keys_are_omitted_from_a_summarized_body():
     assert re.search(r"SENSITIVE_KEYS\.test\(k\)", body), (
         "the scrub is declared but never applied inside summarize()"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# Clause 6 — FIRST-OBSERVATION-ONLY cannot see a protocol
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# Everything else records content ONCE per URL and then only increments `count`. Right for "does a
+# structured source EXIST", wrong for "does the state EVOLVE" — a capture at pick 30 would carry the
+# byte-identical join frame and the byte-identical empty `picks[]` as one at pick 0, so capturing
+# "at a couple of points" adds nothing but bigger counters.
+
+
+def test_every_frame_is_pattern_recorded_not_just_the_first():
+    body = _sources()["main-world-probe.js"]
+    calls = len(re.findall(r"recordFramePattern\s*\(", body)) - len(
+        re.findall(r"function\s+recordFramePattern\s*\(", body))
+    assert calls >= 1, "recordFramePattern is defined but never CALLED (wired ≠ invoked)"
+    # It must sit on the non-JSON path, AFTER the once-only rawSample block, or it inherits the
+    # very first-observation-only limit it exists to remove.
+    assert re.search(r"entry\.rawSample = redact\(bodyText\);[\s\S]{0,200}?recordFramePattern", body), (
+        "recordFramePattern is not called on the per-frame path"
+    )
+
+
+def test_frame_pattern_capture_is_bounded_and_reports_its_overflow():
+    """⛔ Unbounded frame capture is a capture of the whole draft. But a SILENT cap re-creates the
+    blind spot at the boundary, so the overflow is counted (NF1.7(a))."""
+    body = _sources()["main-world-probe.js"]
+    m = re.search(r"FRAME_PATTERN_LIMIT\s*=\s*(\d+)", body)
+    assert m and 0 < int(m.group(1)) <= 100, "FRAME_PATTERN_LIMIT is missing or not a bound"
+    assert "framePatternOverflow" in body, (
+        "frames past the cap are dropped silently — an unrecorded frame CLASS is the blind spot "
+        "this section exists to remove"
+    )
+
+
+def test_a_stored_frame_example_goes_through_the_redactor():
+    body = _sources()["main-world-probe.js"]
+    m = re.search(r"function recordFramePattern\([\s\S]*?\n  \}", body)
+    assert m, "recordFramePattern not found"
+    assert re.search(r"example:\s*redact\(", m.group(0)), (
+        "a stored frame example bypasses the redactor"
+    )
+
+
+def test_a_changed_body_is_reshaped_rather_than_frozen():
+    """The only way to see `picks[]` fill if the room RE-POLLS instead of pushing over the socket."""
+    body = _sources()["main-world-probe.js"]
+    assert "shapeLatest" in body, "a re-polled endpoint's newer body is never shaped"
+    assert re.search(r"bodyText\.length !== entry\.bytes", body), (
+        "the re-shape is not gated on a cheap length change — it would re-parse 1.4 MB every poll"
+    )

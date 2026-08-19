@@ -231,6 +231,50 @@
     } catch (e) { note("extractPool", e); return null; }
   }
 
+  // ── ROLLING FRAME PATTERNS — because first-observation-only cannot see a PROTOCOL ────────────
+  //
+  // ⭐ THE DEFECT THIS CLOSES, and it would have cost a whole mock draft. Everything above records
+  // content ONCE per URL (`entry.shape === null`, `entry.rawSample === undefined`) and only
+  // increments `count` thereafter. That was right for "does a structured source EXIST" and is wrong
+  // for "does the state EVOLVE": a capture taken at pick 30 would carry the byte-identical
+  // `"AUTODRAFT 14 false"` join frame and the byte-identical empty `picks[]` as one taken at pick 0.
+  // Capturing "at a couple of points" therefore adds nothing — the second capture is the first one
+  // with bigger counters.
+  //
+  // ⛔ But keeping EVERY frame is not the answer either: a draft room heartbeats, and an unbounded
+  // frame log is both a size problem and a capture of the whole draft. So keep DISTINCT PROTOCOL
+  // PATTERNS — digits collapsed to `#` — with ONE redacted literal example and a count each. That
+  // yields "these are the N kinds of message this socket sends, here is one of each", which is the
+  // question ("what is the pick protocol?"), at a bounded size.
+  var FRAME_PATTERN_LIMIT = 12;
+
+  function framePattern(text) {
+    return String(text)
+      .replace(/\d+/g, "#")                       // 4429805 / team ids / pick numbers
+      .replace(/[A-Za-z0-9_-]{24,}/g, "*")        // opaque ids
+      .trim()
+      .slice(0, 120);
+  }
+
+  function recordFramePattern(entry, text) {
+    try {
+      if (typeof text !== "string" || !text.length) return;
+      if (!entry.framePatterns) entry.framePatterns = {};
+      var pat = framePattern(text);
+      if (!pat) return;
+      var seen = entry.framePatterns[pat];
+      if (seen) { seen.count += 1; return; }
+      // ⛔ Bounded. Past the cap, count the overflow rather than silently dropping it — an
+      // unrecorded frame class is exactly the blind spot this whole section exists to remove.
+      var keys = Object.keys(entry.framePatterns);
+      if (keys.length >= FRAME_PATTERN_LIMIT) {
+        entry.framePatternOverflow = (entry.framePatternOverflow || 0) + 1;
+        return;
+      }
+      entry.framePatterns[pat] = { count: 1, example: redact(text) };
+    } catch (e) { note("framePattern", e); }
+  }
+
   function recordCall(kind, url, bodyText) {
     try {
       if (!url) return;
@@ -260,6 +304,7 @@
             entry.rawBytes = bodyText.length;
             entry.rawIsString = true;
           }
+          recordFramePattern(entry, bodyText);   // ⭐ EVERY frame, not just the first
           return;
         }
         entry.score = scoreShape(parsed, 0, new WeakSet());
@@ -269,6 +314,16 @@
           var pool = extractPool(parsed);
           if (pool) { findings.pool = pool; findings.poolSource = entry.url; }
         }
+      } else if (entry.shape !== null && bodyText && bodyText.length !== entry.bytes) {
+        // The SAME endpoint answered differently — the only way to see `picks[]` fill up if the
+        // room re-polls rather than pushing over the socket. Gated on a LENGTH change so the common
+        // "identical re-poll" case costs one integer compare, not a 1.4 MB re-parse.
+        try {
+          var reparsed = JSON.parse(bodyText);
+          entry.shapeLatest = summarize(reparsed, 0);
+          entry.latestBytes = bodyText.length;
+          entry.reshapedAt = new Date().toISOString();
+        } catch (e) { note("reshape", e); }
       } else if (entry.shape === null && bodyText === null && entry.nonTextFrames === undefined) {
         // A frame arrived that was not a string at all (ArrayBuffer/Blob). Record THAT FACT —
         // "we saw N frames we could not read" is a finding; silence is not.
