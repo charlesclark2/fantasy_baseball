@@ -28,7 +28,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, Sequence
 
-from quant_sports_intel_models.fantasy_engine.league_config import LeagueConfig
+from quant_sports_intel_models.fantasy_engine.league_config import LeagueConfig, draftable_slot_count
 
 # Need weights (in VONA-points): a candidate that fills an OPEN DEDICATED starter slot gets the full
 # positional drop-off as a bonus; one that only fills a FLEX/superflex spot gets a fraction; a position
@@ -37,9 +37,11 @@ NEED_W_DEDICATED = 1.0
 NEED_W_FLEX = 0.4
 # Surplus (bench-depth) penalty as a fraction of VOR, applied when a pick fills NO open starter slot:
 #   base           — any bench pick is discounted vs a need-filler,
-#   + over-capacity — extra when I already hold as many as I could ever START at the position (dedicated
-#                     + flex-eligible slots) → a 2nd QB in a 1-QB league is punished hard, so it stops
-#                     out-ranking RB/WR depth once my starters are set.
+#   + over-capacity — extra because a pick that fills no open slot is BY DEFINITION one I already hold
+#                     as many of as I could ever start (see the note at the call site) → a 2nd QB in a
+#                     1-QB league, or a 2nd TE behind a filled flex, stops out-ranking RB/WR depth.
+# The two always apply together: they are kept as separate named constants so the ratio a bench pick
+# retains (1 - 0.85 = 15% of VOR) stays legible, and because both are pinned in the TS engine.
 SURPLUS_BASE = 0.5
 SURPLUS_OVER = 0.35
 SURPLUS_CAP = 0.9
@@ -375,7 +377,11 @@ def recommend(
     # signature is unchanged and no caller has to be taught to pass draft state.
     # ⚠️ It RANKS, never FILTERS — if no filler exists at all the caller still gets its best options.
     # ⚠️ LOCK-STEP: mirrored in `frontend/lib/draft-optimizer.ts` (the shipping engine).
-    total_slots = sum(s.count for s in config.roster)
+    # ⛔ DRAFTABLE slots, not every slot: an IR/taxi spot is roster depth NO PICK CAN REACH, so
+    # counting it inflates `picks_remaining` and fires this constraint that many picks LATE
+    # (see `RESERVE_SLOT_NAMES` — on a real ESPN league with 2 IR spots it first bound with the
+    # roster already full, i.e. never in time, and the draft ended with D/ST and K unfilled).
+    total_slots = draftable_slot_count(config.roster)
     picks_remaining = total_slots - len(list(my_player_ids or []))
     open_starter_count = sum(open_slots.dedicated.values()) + len(open_slots.flex)
     must_fill_now = open_starter_count > 0 and picks_remaining <= open_starter_count
@@ -392,9 +398,6 @@ def recommend(
     #: player_id of the BEST AVAILABLE player at each position — the only one that earns the scarcity
     #: bonus (see the note at `need_bonus` below). Keyed off the same pts-descending order as tiers.
     pos_best: dict[str, str] = {}
-    my_counts: dict[str, int] = {}
-    for p in my_positions:
-        my_counts[p] = my_counts.get(p, 0) + 1
     for pos, rows in pos_players.items():
         rows.sort(key=lambda r: _fnum(r.get("league_points")), reverse=True)
         tiers = assign_tiers([_fnum(r.get("league_points")) for r in rows], k=tier_k)
@@ -547,12 +550,21 @@ def recommend(
         # surplus damping: this pick fills NO open starter slot (level 0) → it's bench depth. Discount it
         # vs a need-filler, and punish it HARDER once I already hold everything I could ever start at the
         # position (so a 2nd QB / 2nd TE stops out-ranking RB/WR depth once my starters are set).
-        held = my_counts.get(pos, 0)
-        capacity = req.dedicated.get(pos, 0) + sum(n for elig, n in req.flex if pos in elig)
+        # ⭐ `level == 0` ALREADY MEANS "I cannot start another one of these" — `need_level` returns 0
+        # only when every dedicated slot at the position is filled AND no open flex seat is eligible
+        # for it. So at the one moment this penalty applies, the "I still have room" case cannot
+        # arise, and the discount is unconditionally the hard one.
+        #
+        # ⚠️ IT USED TO BE A BINARY on `held >= capacity`, where `capacity` summed EVERY flex seat the
+        # position was eligible for — INCLUDING seats already filled by somebody else. A user holding
+        # one TE with an RB in the flex therefore read as "capacity 2, held 1 ⇒ still has room" and
+        # his backup TE kept 50% of its VOR while his bench RB kept 15%. Measured on the live 2026
+        # mock: a 3.3x boost handed to a second TE that no lineup could ever start, which is why the
+        # depth phase of that draft came back tight ends. The light branch was reachable ONLY through
+        # that miscount, so correcting it REMOVES the branch rather than re-tuning it.
         surplus_pen = 0.0
         if level == 0 and vor > 0:
-            frac = SURPLUS_BASE + (SURPLUS_OVER if held >= capacity else 0.0)
-            surplus_pen = min(SURPLUS_CAP, frac) * vor
+            surplus_pen = min(SURPLUS_CAP, SURPLUS_BASE + SURPLUS_OVER) * vor
         # bye-week stacking: penalize by how many I already start/hold at this position on the same bye
         bye = row.get("bye")
         bye_conflict = my_byes.get((pos, int(bye)), 0) if bye is not None else 0
