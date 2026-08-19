@@ -1887,9 +1887,18 @@ def _prediction_log_delete_sql(scoped_game_pks: list[int] | None) -> str:
     So: when this run scored a strict SUBSET of the slate, scope the DELETE to the games
     that run owns. A full-slate run (``scoped_game_pks`` falsy) keeps the date-wide
     overwrite so dropped/postponed games are still cleaned up. game_pks are ints, so
-    inlining them is injection-safe; the date is BOUND (the previous inlined literal both
-    reopened an injection surface and fragmented query_history into one distinct
-    query_text per date, which is what hid this statement from the wake census).
+    inlining them is injection-safe; the date is BOUND rather than f-strung, which closes
+    the injection surface.
+
+    ⚠️ The bind does NOT collapse this statement's ``query_history`` fragmentation, and an
+    earlier revision of this docstring wrongly claimed it did. The Snowflake connector
+    defaults to ``paramstyle='pyformat'`` = CLIENT-side binding, so the value is escaped
+    and interpolated before the text is sent and ``query_text`` still carries a date
+    LITERAL (measured post-deploy: ``... WHERE prediction_date = '2026-08-17'``). The
+    scoped form also inlines its game_pk list, so distinct texts per day went 1 -> 7-9.
+    ⇒ any wake/waker census over this statement MUST normalise date and number literals
+    before ``GROUP BY query_text`` (the E11.24 census rule), or it will scatter this
+    family into ``other`` exactly as it did before.
 
     ⚠️ This is a deliberate SEMANTICS CHANGE, not a refactor — a scoped run now deletes
     strictly fewer rows than before. That is the fix.
