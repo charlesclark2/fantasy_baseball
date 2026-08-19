@@ -174,8 +174,25 @@ class PFFClient:
                 "captured response. This client never attempts to bypass authentication."
             )
 
+    # ── the export path: the SAME endpoint plus `export=true`, returning CSV ───────────────
+    def get_export(self, path: str, params: dict[str, Any] | None = None) -> list[dict]:
+        """GET `path` with `export=true` and parse the CSV rows.
+
+        ⭐ THIS IS THE FULL FIELD SET, AND IT IS ONE PARAMETER AWAY FROM THE REDUCED ONE.
+        `/api/v1/facet/passing/summary?league=nfl&season=2025&week=1,…,18` returns 19 basic JSON
+        fields; the identical URL plus `&export=true` returns a 44-column CSV carrying every
+        field the JSON reports in its `restricted` array — `avg_depth_of_target`, `dropbacks`,
+        `passing_snaps`, `epa`, `btt_rate`, and the grades. NF-W9-0 spent a whole pass concluding
+        the account was paywalled out of those fields; it was one query parameter.
+
+        The RAW-STATS-ONLY guard matters MORE here, not less: the export genuinely contains PFF's
+        grade columns, so this is the first path on which the strip does real work.
+        """
+        payload = self.get(path, {**(params or {}), "export": "true"}, expect="csv")
+        return parse_csv(payload)
+
     # ── the one fetch entry point ──────────────────────────────────────────────────────────
-    def get(self, path: str, params: dict[str, Any] | None = None) -> Any:
+    def get(self, path: str, params: dict[str, Any] | None = None, *, expect: str = "json") -> Any:
         """GET a PFF API path and return parsed JSON. Raises on ANY failure.
 
         `path` is guard-checked FIRST: a model-output endpoint is refused before a credential
@@ -188,8 +205,8 @@ class PFFClient:
             return self._get_sample(path, params)
         self._require_credential(path)
         if self.transport == "flaresolverr":
-            return self._get_flaresolverr(path, params)
-        return self._get_direct(path, params)
+            return self._get_flaresolverr(path, params, expect=expect)
+        return self._get_direct(path, params, expect=expect)
 
     def _url(self, path: str, params: dict) -> str:
         url = path if path.startswith("http") else f"{self.api_base}/{path.lstrip('/')}"
@@ -220,14 +237,14 @@ class PFFClient:
         self._sess = s
         return s
 
-    def _get_direct(self, path: str, params: dict) -> Any:
+    def _get_direct(self, path: str, params: dict, *, expect: str = "json") -> Any:
         url = self._url(path, params)
         last: Exception | None = None
         for attempt in range(1, _MAX_RETRIES + 1):
             try:
                 # allow_redirects=True is REQUIRED: it is how the Clerk handshake completes.
                 r = self._session().get(url, timeout=_TIMEOUT_S, allow_redirects=True)
-                return _parse_response(url, r.status_code, r.text)
+                return _parse_response(url, r.status_code, r.text, expect=expect)
             except (PFFAuthError, PFFChallengeError, PFFNotFoundError):
                 # None is retryable: a challenge re-answers identically, an auth failure needs a
                 # new credential, and a 404 is a fact about the endpoint.
@@ -239,7 +256,7 @@ class PFFClient:
                     time.sleep(_RETRY_DELAYS[attempt - 1])
         raise PFFClientError(f"All {_MAX_RETRIES} direct attempts failed for {url}") from last
 
-    def _get_flaresolverr(self, path: str, params: dict) -> Any:
+    def _get_flaresolverr(self, path: str, params: dict, *, expect: str = "json") -> Any:
         from curl_cffi import requests
 
         if not self.flaresolverr_url:
@@ -269,7 +286,8 @@ class PFFClient:
         if data.get("status") != "ok":
             raise PFFClientError(f"FlareSolverr did not solve {url}: {data.get('message')}")
         sol = data.get("solution", {}) or {}
-        return _parse_response(url, int(sol.get("status") or 0), sol.get("response", ""))
+        return _parse_response(url, int(sol.get("status") or 0), sol.get("response", ""),
+                               expect=expect)
 
     def _get_sample(self, path: str, params: dict) -> Any:
         """Read an operator-captured response for `path`+`params` off disk.
@@ -321,7 +339,34 @@ def _cookie_header_to_list(cookie_header: str, domain: str | None) -> list[dict]
     return out
 
 
-def _parse_response(url: str, status: int, body: str) -> Any:
+def parse_csv(text: str) -> list[dict]:
+    """PFF's export CSV → row dicts, with numerics coerced and blanks left as None.
+
+    Blank cells are common and meaningful in the export (a QB with no attempts has an empty
+    `avg_depth_of_target`, not a zero) — coercing them to 0.0 would invent data, so they stay
+    None and become NaN downstream rather than a real-looking number.
+    """
+    import csv as _csv
+    import io
+
+    rows: list[dict] = []
+    for raw in _csv.DictReader(io.StringIO(text)):
+        row: dict[str, Any] = {}
+        for k, v in raw.items():
+            if k is None:
+                continue
+            if v is None or v == "":
+                row[k] = None
+                continue
+            try:
+                row[k] = int(v) if v.lstrip("-").isdigit() else float(v)
+            except ValueError:
+                row[k] = v
+        rows.append(row)
+    return rows
+
+
+def _parse_response(url: str, status: int, body: str, *, expect: str = "json") -> Any:
     """Turn a raw response into JSON, or raise the error that NAMES what went wrong.
 
     The ordering matters. An expired PFF session does not reliably return 401 — it very often
@@ -365,13 +410,27 @@ def _parse_response(url: str, status: int, body: str) -> Any:
             "60s, so the API 307s to clerk.pff.com to refresh it — the client must FOLLOW that "
             "redirect with a cookie-persisting session. See PFFClient._session."
         )
-    if text[:1] not in "{[":
-        # The classic expired-session shape: HTTP 200 + the login page.
-        if _looks_like_login(text):
-            raise PFFAuthError(
-                f"{url} returned an HTML login page with HTTP {status} — the session is not "
-                "authenticated. Re-capture PFF_AUTH_TOKEN/PFF_COOKIE while logged in."
+    if _looks_like_login(text):
+        # ⭐ HOISTED ABOVE THE FORMAT BRANCH ON PURPOSE. This check used to sit inside the JSON
+        # arm, so a CSV request that received an expired-session login page returned the HTML
+        # *as data* — a CSV parser turns it into nonsense rows instead of raising, which is the
+        # silent-failure shape this module exists to refuse. EVERY auth/challenge check must
+        # precede the format branch; only format-specific validation belongs below it.
+        raise PFFAuthError(
+            f"{url} returned an HTML login page with HTTP {status} — the session is not "
+            "authenticated. Re-capture PFF_AUTH_TOKEN/PFF_COOKIE while logged in."
+        )
+    if expect == "csv":
+        # A CSV export must not be validated as JSON — but the auth/challenge checks above
+        # have already run, so an unauthenticated response can never reach the parser.
+        if not text or "," not in text.splitlines()[0]:
+            raise PFFClientError(
+                f"{url} was requested as a CSV export but returned no comma-delimited header "
+                f"(first 200 chars: {text[:200]!r})"
             )
+        return text
+    if text[:1] not in "{[":
+        # A login page was already caught above; anything else non-JSON is a genuine surprise.
         raise PFFClientError(
             f"{url} returned non-JSON with HTTP {status} (first 200 chars: {text[:200]!r})"
         )

@@ -1,6 +1,36 @@
 # NF-W9-0 — PFF data-access feasibility spike
 
-> ## ⚠️ CORRECTION (2026-08-18, after the operator produced a CSV export)
+> ## ✅ RESOLVED (2026-08-18) — the answer is `&export=true`
+>
+> **VERDICT: GO. NF-W9-1/2/3 are unblocked.**
+>
+> The full field set is one query parameter away. The identical endpoint, identical params, plus
+> `&export=true`, returns a 44-column **CSV** instead of the 19-field JSON:
+>
+> ```
+> https://premium.pff.com/api/v1/facet/passing/summary?league=nfl&season=2025&week=1,…,18&export=true
+> ```
+>
+> It carries every field the JSON reports as `restricted` — `avg_depth_of_target`,
+> `aimed_passes`, `dropbacks`, `passing_snaps`, `epa`, `pressure_to_sack_rate`, and the grades.
+> Validated against a real operator export: 44 columns parse, `player_id` is preserved (so the
+> 100% NFL entity resolution is unchanged), blanks stay `None` rather than becoming fabricated
+> zeros, and the raw-stats guard strips exactly the 4 `grades_*` columns.
+>
+> **And `week=` takes a LIST**, so a whole season is ONE request: ~1 call per (league, season,
+> facet) — or one per week for weekly grain — against the 2,176 per-game calls first sized, and
+> against the manual CSV downloads this story set out to replace. No Selenium, no browser
+> automation, no bulk download.
+>
+> Implemented as `client.get_export()` / `facets.fetch_facet_export()`.
+>
+> **⚠️ STILL TO CONFIRM:** that the *receiving* export carries `routes` (the single field
+> NF-W9-1 turns on). Passing exports `aimed_passes` and `dropbacks` — its opportunity
+> denominators — so the shape is strongly indicated but not measured. One request settles it.
+>
+> ---
+>
+> ### The earlier retraction, kept for the record
 >
 > **The "the subscription tier withholds every field" verdict below is RETRACTED.** It was wrong.
 >

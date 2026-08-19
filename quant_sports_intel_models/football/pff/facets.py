@@ -109,6 +109,44 @@ SIGNAL_MAP: dict[str, dict[str, Any]] = {
 }
 
 
+def fetch_facet_export(
+    client: PFFClient,
+    facet: Facet,
+    *,
+    league: str,
+    season: int,
+    weeks: Iterable[int],
+    division: str | None = None,
+) -> list[dict]:
+    """One facet's FULL field set for a whole season, in ONE request.
+
+    ⭐ THIS IS THE PATH THAT ACTUALLY DELIVERS THE STORY. `&export=true` on the season-aggregate
+    query returns the complete CSV — every field the plain JSON reports as `restricted`. And
+    because `week=` takes a LIST, a whole season is a single call: ~1 request per (league,
+    season, facet) instead of the 2,176 per-game JSON calls first sized, and instead of the
+    manual CSV downloads this story set out to replace.
+
+    Pass a single week to get weekly grain (the granularity NF-W9-1 wants for a zero-atom
+    opportunity model) — still one request per week, not per game.
+
+    `division` is NCAA-only (`fbs`); the NFL query takes no division.
+    """
+    params: dict[str, Any] = {
+        "league": league,
+        "season": season,
+        "week": ",".join(str(w) for w in weeks),
+    }
+    if division:
+        params["division"] = division
+    rows = client.get_export(facet.path, params)
+    stripped = [_strip_row(r) for r in rows]
+    log.info(
+        "PFF export %s league=%s season=%s → %d row(s), %d col(s) after the raw-stats guard",
+        facet.key, league, season, len(stripped), len(stripped[0]) if stripped else 0,
+    )
+    return stripped
+
+
 def list_games(client: PFFClient, *, league: str, season: int, week: int) -> list[dict]:
     """The game list for one (league, season, week). Raises rather than returning `[]` blindly."""
     payload = client.get(GAMES_PATH, {"league": league, "season": season, "week": week})

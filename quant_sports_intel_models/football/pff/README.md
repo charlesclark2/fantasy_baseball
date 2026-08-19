@@ -2,10 +2,18 @@
 
 Research only. `best_alpha = 0`. No serving path, nothing published.
 
-> ⚠️ **The current subscription tier withholds every field NF-W9-1/2/3 need** (`routes`,
-> `avg_depth_of_target`, `yards_after_contact`, …). See the feasibility write-up. The probe
-> below still runs end to end and is the instrument to **re-run against an upgraded
-> credential** — `opportunity_field_availability` flips on its own if the fields unlock.
+> ✅ **Use `&export=true`.** The plain JSON facet endpoints return a REDUCED field set; the same
+> URL plus `&export=true` returns the full 44-column CSV (`routes`, `avg_depth_of_target`,
+> `dropbacks`, …). `week=` accepts a list, so one request covers a season.
+>
+> ```bash
+> # the whole 2025 NFL passing season, one call, full fields
+> curl -b "$PFF_COOKIE" -L \
+>   'https://premium.pff.com/api/v1/facet/passing/summary?league=nfl&season=2025&week=1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18&export=true'
+> ```
+>
+> In code: `client.get_export(path, params)` or `facets.fetch_facet_export(client, facet,
+> league=…, season=…, weeks=…)`. NCAA additionally takes `division="fbs"`.
 
 ## What the operator must supply
 

@@ -598,3 +598,91 @@ class TestTheEntitlementMisreadingCannotRecur:
         out = _opportunity_availability(pd.DataFrame({"targets": [1]}),
                                         {"receiving/summary": ["routes"]})
         assert out["available"] == [] and out["withheld_by_tier"] == ["routes"]
+
+
+class TestTheExportPath:
+    """`&export=true` on the season-aggregate query returns the FULL field set as CSV.
+
+    This is the answer the story spent a pass failing to find: the fields were never paywalled,
+    they were one query parameter away.
+    """
+
+    # A verbatim slice of a REAL operator export — not a hand-written fixture. NF-C0e's rule:
+    # a fixture derived from our own assumptions cannot disconfirm them.
+    REAL = (
+        "player,player_id,position,team_name,avg_depth_of_target,aimed_passes,dropbacks,"
+        "passing_snaps,epa,grades_offense,grades_pass,attempts,ypa\n"
+        "Bo Nix,97790,QB,DEN,8,562,679,718,0.11,76.9,75,612,6.4\n"
+        "Aaron Rodgers,2241,QB,PIT,6.4,460,542,574,0.02,68.7,69.5,498,6.7\n"
+        "Brandon Allen,10835,QB,TEN,3.4,28,31,32,-0.79,36.4,37.1,30,2.4\n"
+    )
+
+    def test_the_export_carries_the_fields_the_json_omits(self):
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        rows = parse_csv(self.REAL)
+        for f in ("avg_depth_of_target", "aimed_passes", "dropbacks", "passing_snaps", "epa"):
+            assert rows[0][f] is not None, f"{f} must survive the export parse"
+
+    def test_a_blank_cell_stays_None_rather_than_becoming_a_fabricated_zero(self):
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        rows = parse_csv("player,attempts,avg_depth_of_target\nX,0,\n")
+        assert rows[0]["avg_depth_of_target"] is None, (
+            "a QB with no attempts has an EMPTY adot, not 0.0 — coercing invents data"
+        )
+
+    def test_the_raw_stats_guard_does_real_work_on_the_export(self):
+        # The JSON path never carried grades, so the guard was untested against real grade
+        # columns until now. The export genuinely contains them.
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        kept, dropped = g.strip_model_output_columns(list(parse_csv(self.REAL)[0].keys()))
+        assert dropped == ["grades_offense", "grades_pass"]
+        assert "avg_depth_of_target" in kept and "dropbacks" in kept
+
+    def test_player_id_is_preserved_so_entity_resolution_is_unchanged(self):
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        rows = parse_csv(self.REAL)
+        # 2241 is the id the live probe matched to gsis 00-0023459 at tier 1.
+        assert rows[1]["player"] == "Aaron Rodgers" and rows[1]["player_id"] == 2241
+
+    def test_get_export_sends_export_true(self):
+        seen = {}
+
+        class C(PFFClient):
+            def get(self, path, params=None, *, expect="json"):
+                seen.update(params or {})
+                assert expect == "csv"
+                return TestTheExportPath.REAL
+
+        rows = C(cookie="a=1", transport="direct").get_export("/api/v1/facet/passing/summary",
+                                                              {"league": "nfl", "season": 2025})
+        assert seen["export"] == "true", "the export flag IS the feature"
+        assert len(rows) == 3
+
+    def test_an_html_login_page_is_not_parsed_as_a_one_row_csv(self):
+        # A CSV parser turns an expired-session HTML page into nonsense rows rather than
+        # raising, so the CSV path must keep the auth checks the JSON path has.
+        #
+        # ⭐ THE FIXTURE CONTAINS A COMMA ON PURPOSE. A comma-less page also trips the CSV
+        # branch's own "no delimited header" check, so it passes whether or not the auth
+        # checks run first — it cannot isolate the clause under test. With a comma, ONLY the
+        # auth check can catch it, which is the property being guarded.
+        login = ("<html><body><h1>Sign in</h1>"
+                 "<p>Welcome back, please log in.</p>"
+                 "<input type=password></body></html>")
+        assert "," in login.splitlines()[0], "the fixture must be able to parse as a CSV header"
+        with pytest.raises(PFFAuthError):
+            _parse_response("u", 200, login, expect="csv")
+
+    def test_a_week_list_is_joined_so_one_call_covers_a_season(self):
+        seen = {}
+
+        class C(PFFClient):
+            def get(self, path, params=None, *, expect="json"):
+                seen.update(params or {})
+                return TestTheExportPath.REAL
+
+        fx.fetch_facet_export(C(cookie="a=1", transport="direct"),
+                              fx.Facet("passing", "summary"),
+                              league="nfl", season=2025, weeks=range(1, 19))
+        assert seen["week"] == ",".join(str(w) for w in range(1, 19))
+        assert "division" not in seen, "division is NCAA-only; the NFL query must omit it"
