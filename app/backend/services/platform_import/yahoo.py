@@ -39,12 +39,18 @@ from typing import Iterator
 
 from app.backend.services.platform_import import canonical as C
 from app.backend.services.platform_import.http import PlatformHTTPError, get_json
+from app.backend.services.platform_import.yahoo_oauth import YahooNotEntitled
 
 BASE_URL = "https://fantasysports.yahooapis.com/fantasy/v2"
 PLATFORM = "yahoo"
 
 ATTRIBUTION = "Fantasy data provided by Yahoo Fantasy"
 ATTRIBUTION_URL = "https://football.fantasysports.yahoo.com/"
+
+# Yahoo's `oauth_problem` for "valid token, but this app may not read Fantasy data" (MEASURED
+# 2026-08-19: every `/fantasy/v2/*` resource returned it while `openid/v1/userinfo` returned 200 for
+# the same token). It arrives as a bare 401, so the body is the only discriminator.
+_NOT_ENTITLED = "additional_authorization_required"
 
 # `{game_key}.l.{league_id}` — e.g. `461.l.1000`. Validated before any URL is built (SSRF guard).
 _LEAGUE_KEY_RE = re.compile(r"^[0-9]{1,6}\.l\.[0-9]{1,12}$")
@@ -221,7 +227,19 @@ def _get(path: str, access_token: str) -> object:
     """
     joiner = "&" if "?" in path else "?"
     url = f"{BASE_URL}{path}{joiner}format=json"
-    return get_json(url, headers={"Authorization": f"Bearer {access_token}"})
+    try:
+        return get_json(url, headers={"Authorization": f"Bearer {access_token}"})
+    except PlatformHTTPError as e:
+        # ⭐ A 401 here has TWO causes that Yahoo spells identically in the status line and
+        # distinguishes only in the body. `additional_authorization_required` means the APP lacks
+        # Fantasy data access — telling that user to reconnect loops them through the consent
+        # screen on a fault only the operator can clear. See `YahooNotEntitled`.
+        if e.status == 401 and _NOT_ENTITLED in (e.body or ""):
+            raise YahooNotEntitled(
+                "Yahoo import is not available yet — our application does not have access to "
+                "Yahoo's fantasy data. Reconnecting will not help; this is ours to fix."
+            ) from e
+        raise
 
 
 def list_leagues(access_token: str, game_key: str = "nfl") -> list[dict]:

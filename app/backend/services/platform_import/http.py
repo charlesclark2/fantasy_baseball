@@ -55,9 +55,13 @@ class PlatformHTTPError(RuntimeError):
     "the platform said no" is never confused with "the user's input was malformed".
     """
 
-    def __init__(self, message: str, status: int | None = None):
+    def __init__(self, message: str, status: int | None = None, body: str = ""):
         super().__init__(message)
         self.status = status
+        # A short snippet of the upstream body. Yahoo distinguishes "this user's grant is gone" from
+        # "this APP is not entitled to Fantasy data" ONLY in the body (`oauth_problem=…`) — both are
+        # a bare 401 — so a status-only exception cannot tell a caller which one it is.
+        self.body = body
 
 
 def _request(
@@ -124,7 +128,9 @@ def get_json(
             "the platform is rate-limiting us; try again shortly", status=status
         )
     if status == 401:
-        raise PlatformHTTPError("not authorized for this league", status=401)
+        raise PlatformHTTPError(
+            "not authorized for this league", status=401, body=body[:400].decode("utf-8", "replace")
+        )
     if status == 404:
         raise PlatformHTTPError("not found", status=404)
     if status >= 400:

@@ -1,101 +1,105 @@
 # NF-C0-Yahoo-SPIKE — GO/NO-GO memo
 
-**Verdict: ⛔ NO-GO for user traffic today.** Do **not** set `YAHOO_IMPORT_ENABLED=1` yet.
-**One blocker is infrastructure and takes one command; three are compliance gaps against the signed
-agreement; and the payload reconciliation — the thing the spike was chartered to prove — is still
-unrun, because it is gated behind the infrastructure blocker.**
+**Verdict: ⛔ NO-GO for user traffic.** Do not set `YAHOO_IMPORT_ENABLED=1`.
+**But the reason changed during the spike, and the new one is much better news:** OAuth is now
+**proven working end-to-end in production**, and the remaining blocker is a single, precisely-named
+Yahoo-side entitlement — not anything wrong with our code.
 
-Probed live **2026-08-19** against the real approved credentials. Everything below labelled
-MEASURED was executed against Yahoo's live endpoints or the live AWS account; nothing was read off
-a spec or inferred from the previous session's notes.
+Probed live **2026-08-19** with the real approved credentials and a real consent by the operator.
+Everything labelled MEASURED was executed against Yahoo's live endpoints or the live AWS account.
 
 ---
 
 ## The one-paragraph version
 
-Our half of the integration is in better shape than the NF-C0 handoff assumed: the SSM secrets are
-present **and provably correct**, the IAM grant is right, and the redirect URI matches Yahoo
-byte-for-byte — all three verified two-sided, without needing anyone's consent. What is broken is
-the return leg: **the OAuth callback route 401s at the API Gateway before the Lambda is ever
-invoked** (the NF3.2 landmine, live and unfixed), so a user who consents on Yahoo's screen is
-redirected into an "Unauthorized" JSON page and the grant is never stored. Nobody could have
-completed a connect at any point since NF-C0 shipped. Separately, three delivery constraints of the
-signed agreement are not met by the code as it stands — most materially, we durably persist every
-team's roster in a user's league with no retention bound and no deletion on disconnect.
+The operator completed a real consent and the browser returned to `…/fantasy/import?yahoo=connected`
+— which only happens after the **deployed Lambda** verified the signed `state`, exchanged the code,
+Fernet-encrypted the refresh token and wrote it to DynamoDB. **The entire 3-legged handshake works
+in production**, including the runtime SSM read and the IAM grant. Then every Fantasy resource
+returned a bare **401** carrying `oauth_problem="additional_authorization_required"`, while Yahoo's
+own `openid/v1/userinfo` returned **200** for the *same token*. That control is what makes this
+unambiguous: the token is fine, the account is fine, and **our app simply does not carry Yahoo
+Fantasy Sports data access.** So the payload reconciliation still cannot run — but for a reason we
+can now name in one line and hand to Yahoo, rather than an unknown.
+
+⭐ **This is exactly the scenario `yahoo_oauth.is_enabled()` was built to prevent**, and it held: the
+docstring predicted "the handshake would succeed and every Fantasy endpoint would 401 — the user
+grants a permission that buys them nothing." That is precisely what happened, and it only happened
+because the probe bypasses the availability gate. Had `YAHOO_IMPORT_ENABLED=1` been set, real users
+would have hit it. **That is the single strongest argument for leaving the flag off.**
 
 ---
 
-## 1. OAuth 2.0 handshake — ⚠️ PARTIAL (both ends verified; the middle is blocked)
+## 1. OAuth 2.0 handshake — ✅ **WORKS**, proven end-to-end in production
 
-| Leg | Result | How it was established |
+| Leg | Result | How |
 |---|---|---|
-| Client credentials in SSM | ✅ **present and CORRECT** | MEASURED, two-sided: the real secret returns `INVALID_AUTHORIZATION_CODE` ("your client is fine, that code isn't"); a deliberately wrong secret returns `INVALID_CLIENT_SECRET`. The endpoint discriminates, so this is a pass, not an absence of failure. |
-| Lambda IAM → SSM | ✅ correct | `credence-yahoo-oauth-ssm-read` grants `ssm:GetParameter` on `/credence/prod/yahoo_*` + `kms:Decrypt` via SSM. |
-| Redirect URI registration | ✅ **matches byte-for-byte** | MEASURED, two-sided: the registered URI returns Yahoo's real 63 KB sign-in page; a wrong URI **and a trailing-slash variant** both return an 8.5 KB error page reading *"Developers: Please specify a valid request and submit again."* This eliminates what the setup guide calls the single most common way this setup goes wrong. |
-| Authorize → consent → **callback** | ⛔ **BLOCKED** | The callback 401s at the gateway. See §2. |
-| code → token exchange | ⏳ unrun | Needs a real code, which needs the callback (or a manual copy out of the address bar — see the runbook). |
-| refresh | ⏳ unrun | Same. The code path is correct by inspection and the refresh-token **rotation** write-back is already handled. |
-| **Granted scopes** | ⚠️ **there is no scope to record** | Yahoo's Fantasy permission is a property of the **approved app**, not of the request or the token — no `scope` parameter is sent and no `scope` field comes back. The honest answer to "what scopes were granted" is "read access, provisioned server-side on approval". |
-| **Token lifetime** | ⏳ unrun (documented 3600s; the code defaults to 3600 with a 60s safety margin) | The harness prints the real value on the first successful exchange. |
+| Client credentials in SSM | ✅ present and **CORRECT** | MEASURED, two-sided: the real secret returns `INVALID_AUTHORIZATION_CODE`; a wrong one returns `INVALID_CLIENT_SECRET`. |
+| Lambda IAM → SSM **at runtime** | ✅ **proven** | The deployed callback read all three parameters and completed the exchange. Not an inspection of the policy — the real Lambda did it. |
+| Redirect URI registration | ✅ **byte-for-byte** | MEASURED, two-sided: a wrong URI *and a trailing-slash variant* both return Yahoo's "Developers: Please specify a valid request" page; the registered one returns the real sign-in page. |
+| authorize → consent → callback | ✅ **works** | Operator consented; browser returned `?yahoo=connected`. A garbage code now returns **302** (the failure redirect) where it returned 401 before the route fix. |
+| code → token exchange | ✅ **works** | Done by the deployed Lambda. |
+| encrypted token storage | ✅ **works** | Fernet ciphertext + `expires_at` + `connected_at` present in `credence-prod-dynamo-users`. |
+| **refresh** | ✅ **works** | MEASURED via the shipping `refresh_access_token`: returned a new access token, **no rotation on this refresh** (the write-back path is still required — Yahoo *may* rotate). |
+| **token lifetime** | ✅ **3600s (60 min)** | MEASURED — and independently corroborated by the stored record (`expires_at − connected_at = 3540s`, i.e. 3600 less the code's deliberate 60s safety margin). |
+| **granted scopes** | ⚠️ **there is no scope to record** | Yahoo sends no `scope` parameter and returns no `scope` field for Fantasy. The token carries **OpenID Connect** permission (userinfo returns 200) and **not** Fantasy. Permission is a property of the approved **app**, so "what scopes were granted" has no per-request answer — which is exactly why the gap below was invisible until a Fantasy call was made. |
 
-⚠️ **Whether Yahoo has actually approved our Fantasy access is still UNCONFIRMED.** The signed
-agreement (2026-08-14, effective 08-15) is strong evidence it landed, but the only proof is a real
-token reading a real league. Note the failure modes are **indistinguishable**: an unapproved app and
-an account with no NFL league both produce an empty league list. The harness says so explicitly
-rather than reporting the empty list as a result.
+## 2. ⛔ THE BLOCKER — our app has no Fantasy Sports entitlement
 
-## 2. ⛔ BLOCKER 1 — the OAuth callback is not reachable (NF3.2)
-
-**MEASURED:**
+**MEASURED, with the control that makes it decisive:**
 
 ```
-GET https://api.credencesports.com/fantasy/import/yahoo/callback?code=…&state=…
-  → HTTP 401  {"message":"Unauthorized"}          ← the GATEWAY authorizer's body, not FastAPI's
-GET https://api.credencesports.com/subscription/public-pricing   (a known --authorization-type NONE route)
-  → HTTP 200                                       ← the two-sided control
+GET https://api.login.yahoo.com/openid/v1/userinfo            → 200  {"sub":…,"name":…}   ← token is VALID
+GET https://fantasysports.yahooapis.com/fantasy/v2/game/nfl   → 401
+GET …/fantasy/v2/users;use_login=1/games                      → 401
+GET …/fantasy/v2/users;use_login=1/games;game_keys=nfl/leagues→ 401
+     WWW-Authenticate: OAuth oauth_problem="additional_authorization_required", realm="yahooapis.com"
 ```
 
-The HTTP API (`8dhmehjak7`) has **16 routes**; `GET /fantasy/import/yahoo/callback` is not among
-them, so it falls to the catch-all `ANY /{proxy+}`, which carries the Cognito JWT authorizer
-(`maqziq`). The callback is entered by the **user's browser** on a redirect from Yahoo and therefore
-carries no bearer token — it is refused before the Lambda runs.
+Same token, same second. A valid token that reads the user's Yahoo profile and cannot read any
+Fantasy resource is **an app-entitlement fault**, not a token, URL, account or empty-league problem
+— all four of which were candidate explanations before the control was run.
 
-This is exactly the landmine CLAUDE.md documents ("a route that is genuinely public IN CODE still
-returns 401 at the gateway"), and the backend was written correctly for it: the callback is mounted
-on a separate `public_router` and authenticates itself with the HMAC-signed `state`. Only the
-gateway route was never created. **Fix = one command (operator step O1).**
+**This is the setup guide's open question, now answered.** The 2026-08-01 session found there is no
+"Fantasy Sports" checkbox on the app-creation form and *inferred* that access would be provisioned
+server-side on approval. **The measurement says it has not been.** The signed agreement (2026-08-14)
+evidently did not, by itself, attach Fantasy read access to app `qnVLbJOd`.
 
-Consequence worth stating plainly: **Yahoo import has never been completable by anyone**, and
-flipping `YAHOO_IMPORT_ENABLED=1` without O1 would ship a button that sends users to Yahoo, takes a
-real permission grant from them, and drops it on the floor — strictly worse than the current honest
-"coming soon".
+**⚠️ A granted permission set is bound at consent time**, so enabling the permission will require a
+**fresh consent** — the existing grant will not silently acquire it.
 
-## 3. Endpoint payloads reconcile? — ⏳ **NOT YET VERIFIED** (this is the honest answer)
+### What the previous blocker was, and its status
+The API Gateway callback route (`GET /fantasy/import/yahoo/callback` falling to `ANY /{proxy+}` and
+its JWT authorizer → 401 before the Lambda ran, NF3.2) — **✅ CLOSED.** The operator created it with
+`--authorization-type NONE`; the route is live, auto-deploy is on, and the 401 is now a 302.
 
-This is the question the spike exists to answer and it **cannot be answered without a token**. Every
-Fantasy v2 resource is OAuth-gated (`/game/nfl` unauthenticated → 401, MEASURED), so there is no
-read-only path to a real payload, and writing another hand-authored fixture would restate the
-parser's own assumptions rather than test them (NF-C0e).
+## 3. Endpoint payloads reconcile? — ⏳ **STILL UNVERIFIED**, now for a named reason
 
-What was done instead: **`scripts/probe_yahoo_fantasy_live.py`**, which turns the remaining work
-into one operator command. It drives the **shipping adapter functions** (not a copy) against a live
-token and reports, field by field:
+Blocked behind §2: no Fantasy resource returns data, so there is no payload to reconcile. Everything
+needed to answer it in one command is built and now **exercised as far as Yahoo permits** —
+`scripts/probe_yahoo_fantasy_live.py` ran the real OAuth path end-to-end, which is how §1 and §2
+were established. The moment the entitlement lands:
 
-* every `stat_id` Yahoo actually sent vs `STAT_ID_MAP` — **listing each unmapped id with its weight
-  and its human name**, flagged `⚠️ SCORES` when the weight is non-zero (an unmapped rule that
-  actually scores is the defect that matters; an unmapped rule at 0.0 is noise);
-* every roster-position token vs `ROSTER_SLOT_MAP`;
-* the `import_league()` verdict — teams parsed, players per team, starters, whether `is_owner`
-  resolved, draft picks, warnings — with five **named failure conditions** that decide the payload
-  half of GO/NO-GO (empty teams, no players, no `is_owner`, empty roster, no core scoring term).
+    …probe_yahoo_fantasy_live.py --authorize-url        # fresh consent (required — see §2)
+    …probe_yahoo_fantasy_live.py --from-stored-grant nf-c0-yahoo-spike
+    …probe_yahoo_fantasy_live.py --forget nf-c0-yahoo-spike
 
-🔒 It writes a **shape report** — key skeletons, stat ids, counts — with player names, team names
-and manager nicknames redacted, so running the probe does not itself create a store of Yahoo Fantasy
-Information (§2.c.vii). `--keep-values` exists for a genuine parsing dead end and warns.
+It drives the **shipping adapter** (not a copy) and reports every `stat_id`/roster token the parser
+does not know — flagged `⚠️ SCORES` when the weight is non-zero — plus five named pass/fail
+conditions (empty teams, no players, no `is_owner`, empty roster, no core scoring term). It writes a
+value-**redacted** shape report, so running it does not itself create a store of Yahoo Fantasy
+Information (§2.c.vii).
 
-⚠️ **Run it against ≥2 independently-sourced leagues** (NF-C0e): a single league cannot disconfirm a
-wrong key map, and Yahoo emits variant shapes (PPR/half/standard, coarse vs fine buckets, IDP,
-multi-position, auction vs snake).
+⚠️ Run it on **≥2 independently-sourced leagues** (NF-C0e): one league cannot disconfirm a wrong key
+map, and Yahoo emits variant shapes (PPR/half/standard, coarse vs fine buckets, IDP, multi-position,
+auction vs snake).
+
+⭐ **`--from-stored-grant` exists because of a real trap this spike hit:** the deployed callback
+**spends** the single-use code the instant Yahoo redirects, so on the very run that *proves the
+handshake works*, `--callback-url` reports "no code in that URL". The grant is in DynamoDB; resume
+from there. ⭐ And `--forget` exists because a successful consent leaves a **real, live Yahoo grant
+in the production users table** under a synthetic id no UI would ever show — it has been deleted for
+this run.
 
 ## 4. Rate limiting + single account — ✅ now honoured (2 defects found and FIXED)
 
@@ -139,11 +143,20 @@ multi-position, auction vs snake).
    reconnect" would ask the user to fix something only the operator can, and would bury a broken
    deploy behind a message that reads like routine token churn.
 2. **`http.py` — 999/429 recognition and a bounded backoff** (§4 above).
-3. **`fantasy_import._handle_platform_error`** — classifies the whole rate-limit set, not just 429.
-4. **`betting_ml/tests/test_nf_c0_yahoo_spike.py`** — 12 tests, **all 7 guard clauses RED-proven**
+3. **`YahooNotEntitled` — an unentitled app is no longer reported as the user's problem.** MEASURED
+   in §2: both "this app cannot read Fantasy data" and "this user's grant is dead" arrive as a bare
+   401 and differ **only in the response body**. The old code mapped both to *"Your connection to
+   that platform is no longer authorized"*, which invites a **reconnect that cannot possibly work** —
+   re-consenting grants the same non-Fantasy permission again, so the user loops through Yahoo's
+   consent screen forever on a fault only the operator can clear. `PlatformHTTPError` now carries the
+   401 body, `yahoo._get` classifies on `oauth_problem`, and the entitlement case becomes a **503
+   "not available yet"**. Verified against the live endpoint: `YahooNotEntitled` → HTTP 503. The
+   two-sided half is guarded — a genuinely dead grant still reads as a 401.
+4. **`fantasy_import._handle_platform_error`** — classifies the whole rate-limit set, not just 429.
+5. **`betting_ml/tests/test_nf_c0_yahoo_spike.py`** — 15 tests, **all 10 guard clauses RED-proven**
    against deliberately broken source (each mutation anchor asserted unique and asserted to have
    landed, per the repo's own red-proof-lies lessons).
-5. **`scripts/probe_yahoo_fantasy_live.py`** — the live reconciliation harness (§3).
+6. **`scripts/probe_yahoo_fantasy_live.py`** — the live harness (§3), now with `--from-stored-grant` and `--forget`.
 
 ⛔ **What was deliberately NOT built:** the compliance gaps B2–B4. Retention/deletion and
 attribution placement are product and legal decisions with real user-visible consequences — deleting
@@ -154,11 +167,19 @@ they are specified here for the operator to decide, not resolved unilaterally in
 
 | # | Blocker | Owner | Cost |
 |---|---|---|---|
-| **B1** | Callback route 401s at the gateway | operator (O1) | one CLI command |
+| ~~B1~~ | ~~Callback route 401s at the gateway~~ | ~~operator~~ | ✅ **DONE** |
+| **B1′** | **Our Yahoo app has no Fantasy Sports data access** (`additional_authorization_required`) | **operator → Yahoo** | unknown — Yahoo's to grant; then a **fresh consent** |
 | **B2** | Yahoo rosters persisted with no retention bound; disconnect deletes only the token | PM decision, then a small backend change | needs a decision on *what* disconnect should delete |
 | **B3** | Attribution on the ~7 post-save surfaces, not just the preview | frontend | small, mechanical (a shared component keyed on `source_platform === "yahoo"`) |
 | **B4** | Privacy policy silent on league import | PM/legal copy | one section |
-| **B5** | Payload reconciliation unrun; ≥2 real leagues | operator + this session's harness | ~10 min once B1 is done |
+| **B5** | Payload reconciliation unrun; needs ≥2 real leagues | operator + the harness | ~10 min once B1′ clears |
 
-**B1 and B5 are the spike's own remaining scope.** B2–B4 are delivery constraints of the signed
-agreement and are the reason this is a NO-GO rather than a "flip it after the route is fixed".
+**B1′ is now the critical path and it is not ours to close.** Concretely, for the operator: open the
+YDN app (`developer.yahoo.com/apps/`, App ID `qnVLbJOd`) and check whether **Fantasy Sports → Read**
+now appears under API Permissions — it was absent at creation and may only become selectable once
+access is provisioned. If it is not there, the agreement is signed but the entitlement was never
+attached to the app, and that is the question to put to Yahoo, quoting the exact string:
+`oauth_problem="additional_authorization_required"` on `/fantasy/v2/game/nfl` with a token whose
+`openid/v1/userinfo` returns 200.
+
+B2–B4 remain independent of B1′ and must close before user traffic regardless.

@@ -153,6 +153,64 @@ class TestThrottlingIsRecognisedAndBackedOff:
         assert calls["n"] == 1
 
 
+# The VERBATIM body Yahoo returns from every `/fantasy/v2/*` resource when the token is valid but
+# the app has no Fantasy entitlement (captured 2026-08-19; `openid/v1/userinfo` returned 200 for the
+# SAME token in the same run, which is what proves it is an entitlement fault and not a dead token).
+NOT_ENTITLED_BODY = (
+    '{"error":{"lang":"en-US","description":"Please provide valid credentials. OAuth '
+    'oauth_problem=\\"additional_authorization_required\\", realm=\\"yahooapis.com\\""}}'
+)
+# The other 401 a Fantasy resource returns: a genuinely dead/foreign grant.
+DEAD_GRANT_BODY = (
+    '{"error":{"lang":"en-US","description":"Please provide valid credentials. OAuth '
+    'oauth_problem=\\"token_expired\\", realm=\\"yahooapis.com\\""}}'
+)
+
+
+class TestAnUnentitledAppIsNotReportedAsTheUsersProblem:
+    """⭐ MEASURED: a valid token + no Fantasy entitlement = a bare 401 on every Fantasy resource.
+
+    Both 401s look identical in the status line and differ ONLY in the body. Before this, both
+    reached the user as "Your connection to that platform is no longer authorized" — which invites
+    a RECONNECT that cannot possibly help, because re-consenting grants the same non-Fantasy
+    permission again. The user would loop through Yahoo's consent screen on a fault only the
+    operator can clear.
+    """
+
+    def _raise(self, monkeypatch, body: str):
+        def fake_get_json(url, **_):
+            raise PlatformHTTPError("not authorized for this league", status=401, body=body)
+
+        monkeypatch.setattr("app.backend.services.platform_import.yahoo.get_json", fake_get_json)
+
+    def test_an_unentitled_app_says_so_and_does_not_ask_for_a_reconnect(self, monkeypatch):
+        from app.backend.services.platform_import import yahoo
+
+        self._raise(monkeypatch, NOT_ENTITLED_BODY)
+        with pytest.raises(yahoo_oauth.YahooNotEntitled) as e:
+            yahoo.list_leagues("tok")
+        assert "reconnect" not in str(e.value).lower() or "will not help" in str(e.value).lower()
+        # 503 "not available yet", NOT 401 "reauthorize" — the operator owns this, not the user.
+        assert fantasy_import._handle_platform_error(e.value).status_code == 503
+
+    def test_a_genuinely_dead_grant_STILL_reads_as_a_401(self, monkeypatch):
+        """The two-sided half: the new branch must not swallow the 401 that really does mean
+        'reconnect', or every expired grant would be misreported as our provisioning problem."""
+        from app.backend.services.platform_import import yahoo
+
+        self._raise(monkeypatch, DEAD_GRANT_BODY)
+        with pytest.raises(PlatformHTTPError) as e:
+            yahoo.list_leagues("tok")
+        assert not isinstance(e.value, yahoo_oauth.YahooNotEntitled)
+        assert fantasy_import._handle_platform_error(e.value).status_code == 401
+
+    def test_the_401_body_actually_reaches_the_caller(self):
+        """The classification is only possible because `get_json` carries the body. A 401 raised
+        without one would silently fall back to the old behaviour for BOTH causes."""
+        assert PlatformHTTPError("x", status=401, body="abc").body == "abc"
+        assert PlatformHTTPError("x", status=401).body == ""
+
+
 class TestYahooDataNeverReachesTrainingOrTheLLM:
     """§1.c / §2.c.xii / §3.e — Yahoo Fantasy Information may not feed model training or any AI tool.
 

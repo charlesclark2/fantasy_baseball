@@ -85,6 +85,23 @@ class YahooNotConfigured(RuntimeError):
     """
 
 
+class YahooNotEntitled(YahooNotConfigured):
+    """Our Yahoo app is authenticated but has NO Fantasy Sports data access.
+
+    ⭐ MEASURED 2026-08-19 and it is a state the code could not previously express. With a perfectly
+    valid access token (Yahoo's own `openid/v1/userinfo` returns 200 for it), EVERY Fantasy resource
+    answers a bare **401** carrying `oauth_problem="additional_authorization_required"`.
+
+    That 401 previously fell through to "Your connection to that platform is no longer authorized",
+    which invites the user to RECONNECT — an action that can never fix it, because re-consenting
+    grants the same non-Fantasy permission again. The user would loop through Yahoo's consent screen
+    forever on a fault only the operator can clear (the app's API permissions / Yahoo's approval).
+
+    It subclasses `YahooNotConfigured` deliberately: the user-facing truth is the same ("Yahoo import
+    is not available yet") and the 503 mapping is inherited, so a future router edit cannot lose it.
+    """
+
+
 class YahooAuthError(RuntimeError):
     """The user's Yahoo grant is missing, expired or was revoked → they must reconnect."""
 
@@ -356,6 +373,7 @@ __all__ = [
     "TOKEN_URL",
     "YahooAuthError",
     "YahooNotConfigured",
+    "YahooNotEntitled",
     "authorize_url",
     "client_credentials",
     "is_enabled",
