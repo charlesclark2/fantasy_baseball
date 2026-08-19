@@ -265,16 +265,39 @@ def _basic_auth_header() -> dict[str, str]:
     return {"Authorization": f"Basic {blob}"}
 
 
+# The `error` codes Yahoo returns when the USER's grant is the thing that is gone — measured live,
+# lowercased at the comparison because the two legs disagree on casing (see `_token_call`). A code
+# NOT in this set is a fault on our side or Yahoo's, and must not be reported as "reconnect".
+_USER_GRANT_ERRORS = frozenset(
+    {
+        "invalid_grant",
+        "invalid_refresh_token",
+        "invalid_authorization_code",
+    }
+)
+
+
 def _token_call(form: dict[str, str]) -> dict:
     status, payload = post_form(TOKEN_URL, form, headers=_basic_auth_header())
     if not isinstance(payload, dict):
         raise PlatformHTTPError("Yahoo returned an unreadable token response", status=status)
     if status >= 400 or "access_token" not in payload:
         detail = str(payload.get("error_description") or payload.get("error") or f"HTTP {status}")
-        # `invalid_grant` specifically means the user's grant is gone (revoked, or the code was
-        # already spent) — a reconnect fixes it, so it is an auth error rather than a platform fault.
-        if str(payload.get("error") or "") in ("invalid_grant", "INVALID_REFRESH_TOKEN"):
+        code = str(payload.get("error") or "").strip().lower()
+        # ⭐ MEASURED AGAINST THE LIVE ENDPOINT 2026-08-19 (NF-C0-Yahoo-SPIKE), not read off the
+        # OAuth2 RFC — and the two legs do NOT agree, which is exactly why the first cut was wrong:
+        #   * refresh_token leg, dead token  -> {"error": "invalid_grant"}            (RFC spelling)
+        #   * authorization_code leg, spent  -> {"error": "INVALID_AUTHORIZATION_CODE"}  (Yahoo's own)
+        #   * either leg, wrong secret       -> {"error": "INVALID_CLIENT_SECRET"}
+        # Only the first two are the USER's grant. `INVALID_AUTHORIZATION_CODE` was previously
+        # unmapped, so the ordinary "the consent screen sat open past the code's lifetime, or the
+        # callback was replayed" case surfaced as a 502 "the platform could not be reached" —
+        # blaming Yahoo for a state a reconnect fixes.
+        if code in _USER_GRANT_ERRORS:
             raise YahooAuthError("Your Yahoo connection has expired. Please reconnect.")
+        # ⛔ A REJECTED CLIENT SECRET IS DELIBERATELY *NOT* AN AUTH ERROR. It is OUR credential, so
+        # "please reconnect" would ask the user to fix something only the operator can, and would
+        # bury a broken deploy behind a message that reads like normal token churn.
         raise PlatformHTTPError(f"Yahoo rejected the token request: {detail}", status=status)
     return payload
 
