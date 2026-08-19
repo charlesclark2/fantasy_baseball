@@ -128,13 +128,24 @@ def fetch_facet_with_entitlement(
 ) -> tuple[list[dict], list[str]]:
     """`(rows, restricted_fields)` for one facet.
 
-    ⭐ `restricted` IS THE HEADLINE, NOT METADATA. PFF returns, alongside the data, the list of
-    fields THIS SUBSCRIPTION TIER WITHHOLDS — and on the operator's account that list contains
-    every field NF-W9-1/2/3 exist to consume (`routes`, `avg_depth_of_target`, `slot_rate`,
-    `yards_after_contact`, `gap_attempts`, …). Without surfacing it, the probe would report a
-    cheerful "12 rows pulled" for a payload carrying nothing we do not already have from
-    nflverse — a feed that is present but empty of the thing we came for, which is precisely the
-    silent-failure shape this repo keeps getting bitten by.
+    ⭐ `restricted` NAMES THE FIELDS THIS RESPONSE OMITS — surfacing it is what stops the probe
+    reporting a cheerful "12 rows pulled" for a payload carrying nothing we do not already have
+    from nflverse (present, but empty of the thing we came for).
+
+    ⚠️⚠️ IT IS **NOT** AN ACCOUNT ENTITLEMENT, AND READING IT AS ONE COST THIS STORY ITS HEADLINE.
+    NF-W9-0 first concluded "the subscription tier withholds every field NF-W9-1/2/3 need" and
+    recommended not carding them. That was WRONG: a CSV exported from the PFF UI on the SAME
+    account contains all 28 of the 28 fields this endpoint called `restricted`, grades included.
+    The `/api/v1/facet/*` JSON API simply serves a REDUCED field set — measured identically on
+    NFL per-game, NFL season-aggregate and NCAA season-aggregate — while the CSV export serves
+    the full one.
+
+    ⭐ THE TELL, FOR NEXT TIME: the list contained `grades_offense`. PFF's entire consumer product
+    IS the grades, so "the tier withholds them" was never plausible — the evidence to falsify the
+    reading was inside the very list being read. A field named `restricted` is a NAME, not a
+    measurement; before building a verdict on what a vendor's field MEANS, find a second,
+    independent path to the same data and compare (here: the CSV). This is the repo's
+    documented-vs-actually-served class, one level in — the documentation was ours.
     """
     assert_endpoint_allowed(facet.path)
     payload = client.get(facet.path, {"game_id": game_id})

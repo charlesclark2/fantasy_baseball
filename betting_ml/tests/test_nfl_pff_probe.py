@@ -566,3 +566,35 @@ class TestSchoolAliasesAreMeasuredNotGuessed:
         # PFF ships "Rio Grand" for "Rio Grande". A typo is a fact about the feed; pinning it
         # keeps the join exact instead of loosening the threshold for everyone.
         assert school_key("UT Rio Grand Valley") == school_key("UT Rio Grande Valley")
+
+
+class TestTheEntitlementMisreadingCannotRecur:
+    """NF-W9-0 concluded `restricted` was a subscription paywall and recommended killing three
+    stories. It was wrong — a CSV export on the SAME account carries all 28 fields. These pin the
+    corrected reading into the artifact so the next reader cannot re-derive the wrong one."""
+
+    def test_the_verdict_does_not_claim_a_tier_paywall(self):
+        from quant_sports_intel_models.football.pff.probe import _opportunity_availability
+        out = _opportunity_availability(
+            pd.DataFrame({"targets": [1]}), {"receiving/summary": ["routes", "avg_depth_of_target"]}
+        )
+        v = out["verdict"].lower()
+        assert "in_this_response" in v, "the verdict must describe the RESPONSE, not the account"
+        for claim in ("withheld by the subscription", "subscription tier;"):
+            assert claim not in v, f"the retracted tier claim {claim!r} must not return"
+
+    def test_the_verdict_points_at_the_export_path(self):
+        from quant_sports_intel_models.football.pff.probe import _opportunity_availability
+        out = _opportunity_availability(pd.DataFrame({"targets": [1]}),
+                                        {"receiving/summary": ["routes"]})
+        assert "export" in out["verdict"].lower(), (
+            "a reader hitting this verdict must be sent to the export path, not to a purchase"
+        )
+
+    def test_the_full_field_set_is_still_reported_as_absent_here(self):
+        # The measurement itself was never wrong — only the inference. This endpoint really does
+        # omit them, and the probe must keep saying so.
+        from quant_sports_intel_models.football.pff.probe import _opportunity_availability
+        out = _opportunity_availability(pd.DataFrame({"targets": [1]}),
+                                        {"receiving/summary": ["routes"]})
+        assert out["available"] == [] and out["withheld_by_tier"] == ["routes"]

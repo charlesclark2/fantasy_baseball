@@ -266,8 +266,14 @@ def _opportunity_availability(pff: pd.DataFrame, entitlement: dict[str, list[str
         "available": sorted(present),
         "withheld_by_tier": withheld,
         "verdict": (
-            "NO_OPPORTUNITY_FIELDS — every field the downstream stories need is withheld by the "
-            "subscription tier; what remains duplicates nflverse/CFBD"
+            # ⚠️ Deliberately says NOT_IN_THIS_RESPONSE, not "withheld by tier". The tier reading
+            # was measured WRONG (a CSV export on the same account carries all of them) — see
+            # facets.fetch_facet_with_entitlement. Naming the response, not the subscription,
+            # keeps the artifact honest about what was actually observed.
+            "NO_OPPORTUNITY_FIELDS_IN_THIS_RESPONSE — this endpoint omits every field the "
+            "downstream stories need. ⚠️ This is a property of the RESPONSE, not proof of an "
+            "account entitlement: the CSV export on the same account carries them. Find the "
+            "export path before concluding anything about the subscription."
             if not present and withheld else
             "FULL" if present and not withheld else
             "PARTIAL" if present else "UNKNOWN (no facet rows to judge)"

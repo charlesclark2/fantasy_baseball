@@ -1,5 +1,47 @@
 # NF-W9-0 — PFF data-access feasibility spike
 
+> ## ⚠️ CORRECTION (2026-08-18, after the operator produced a CSV export)
+>
+> **The "the subscription tier withholds every field" verdict below is RETRACTED.** It was wrong.
+>
+> The operator's `passing_summary.csv`, exported from the PFF UI on the same account, contains
+> **all 28 of the 28 fields** the per-game JSON listed as `restricted` — `avg_depth_of_target`,
+> `aimed_passes`, `dropbacks`, `passing_snaps`, `epa`, `btt_rate`, and every `grades_*` column.
+> The account HAS the data.
+>
+> `restricted` is therefore **not an account entitlement**. It is a per-response field set: the
+> `/api/v1/facet/*` JSON API serves a REDUCED set, and the CSV export serves the full one.
+> Measured across three query shapes, the reduction is universal and identical:
+>
+> | Path | `routes` / `adot` / grades |
+> |---|---|
+> | NFL per-game JSON (`?game_id=`) | ✗ |
+> | NFL season-aggregate JSON (`?league=&season=&week=`) | ✗ (adds only 4 metadata fields) |
+> | NCAA season-aggregate JSON | ✗ |
+> | **NFL CSV export (UI)** | ✅ all 28 |
+>
+> **The tell I should have caught and didn't:** the `restricted` list contained `grades_offense`
+> and `grades_pass`. PFF's entire consumer product *is* the grades — a premium subscription that
+> withholds them is not a plausible reading, and I had the evidence to falsify my own conclusion
+> at the moment I formed it. I treated a field named `restricted` as self-explanatory instead of
+> testing what it meant. Everything measured below is accurate; the INFERENCE drawn from it was
+> not, and it was the load-bearing one.
+>
+> **Corrected status:**
+> * §2 (entity resolution) — **unaffected and still a GO.** NFL 100%/100%, NCAAF 97.1%/100%,
+>   `SAME_ID_SPACE` confirmed. That work stands entirely.
+> * §3 (auth mechanics) — **unaffected.** Clerk, 60s JWT, handshake, 431, DataDome all hold.
+> * §1 + §6 (entitlement + "do not card NF-W9-1/2/3") — **RETRACTED.** The stories are not
+>   blocked by a paywall.
+> * **OPEN:** which path serves the full field set. The export request has not yet been captured
+>   (the first attempt caught Clerk's `/touch` heartbeat, which fires every ~50s regardless of
+>   what is clicked). Until it is, the automated ingest has no target — an ENGINEERING task,
+>   likely small, not a purchase decision.
+>
+> Read §1 and §6 below as the superseded record of how the wrong call was reached, not as
+> guidance.
+
+
 **Verdict: the join is a GO; the DATA is a NO-GO on the current subscription tier.**
 
 Both halves are now **measured against the live PFF API** (2026-08-18, operator credential).
@@ -10,7 +52,7 @@ They point opposite ways, and that split is the deliverable:
 | Can we authenticate and pull? | ✅ **YES** | 32 NFL + 116 NCAAF games, 6,279 facet rows pulled live |
 | Can we join PFF to our ids? | ✅ **YES, essentially perfectly** | NFL **100%** players / **100%** games; NCAAF **97.1%** / **100%** |
 | Is nflverse's `pff_id` PFF's `player_id`? | ✅ **CONFIRMED — same id space** | 99.72% of live PFF ids found in our map |
-| **Do we get the fields NF-W9-1/2/3 need?** | ⛔ **NO — every one is withheld by tier** | 17 opportunity fields, **0 available** |
+| **Do we get the fields NF-W9-1/2/3 need?** | ⚠️ **YES on the account, NOT on the JSON API** | the CSV export carries all 28; the JSON API serves a reduced set — see the correction above |
 
 ⇒ **The blocker is not engineering and not entity resolution. It is ENTITLEMENT**, which makes
 this a subscription/PM decision rather than a build task. Research only; `best_alpha = 0`.
@@ -175,15 +217,28 @@ grades". Live, it stripped `grades_offense`, `grades_pass_route`, `grades_hands_
 every facet. Matching is **whole-token, not substring**, so `downgrade` and `franchise_id`
 survive (the NF-W7 `'temp' ⊂ 'attempt'` trap).
 
-## 6. Recommendation
+## 6. Recommendation ⚠️ SUPERSEDED — see the correction at the top
 
-1. **Do not card NF-W9-1/2/3 against the current subscription.** Every field they consume is
-   withheld; what is available duplicates nflverse/CFBD, so the work would produce a null for a
-   data reason, not a modelling one.
-2. **The decision is a purchase, not a build.** If PFF sells a tier that unpaywalls `routes` /
-   `adot` / `yards_after_contact`, re-run this exact probe against the upgraded credential —
-   the client, crawler, resolution and guards all stand, and `opportunity_field_availability`
-   flips from `NO_OPPORTUNITY_FIELDS` to `FULL` on its own.
+~~1. **Do not card NF-W9-1/2/3 against the current subscription.**~~ **RETRACTED.** The account
+   has the fields; the CSV export carries all 28. The stories are not paywalled.
+~~2. **The decision is a purchase, not a build.**~~ **RETRACTED — it is the opposite.** It is a
+   build: find the path that serves the full field set.
+
+**Corrected next steps:**
+
+1. **Capture the CSV export request.** The full data is demonstrably reachable on this account;
+   we simply have not identified the endpoint. Easiest route is the browser's own download
+   history (`chrome://downloads` records each file's source URL) rather than DevTools, where
+   Clerk's `/touch` heartbeat dominates the log. If clicking Download produces no request to
+   `premium.pff.com` at all, the CSV is built client-side — which would mean the page receives
+   the full data from a call we have not yet seen (plausibly a Phoenix LiveView WebSocket; the
+   `_premium_key` cookie is a Phoenix signed session, and LiveView traffic never appears under
+   the XHR filter).
+2. **Then re-point the crawler at that path.** The client, resolution, guards and match rates
+   all stand unchanged — only the fetch URL moves.
+3. **Prefer the season-aggregate query shape regardless.** `week=` accepts a list, so one call
+   covers a season and one call per week gives weekly grain — ~17 requests per season per facet
+   instead of the 2,176 per-game calls originally sized.
 3. **The entity-resolution work is banked either way.** NFL 100% / NCAAF 97.1% is reusable for
    any future PFF-shaped feed, and the id-space confirmation retires a standing unknown.
 4. Meanwhile the routes-shaped gap in NF-W9-1 stays open. Worth a separate look at whether any
