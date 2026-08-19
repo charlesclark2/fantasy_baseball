@@ -577,9 +577,51 @@ def derive_verdict_layer(out: dict) -> dict:  # noqa: C901 — the pre-registere
         winner_clauses=provisional if winner is not None else None,
         swap_state=swap["state"] if swap else None)
 
+    out["reproduction"] = repro
+    out["family_a"] = family_a
+    out["identity_bias"] = {"pooled": pooled_identity_bias, "by_fold": bias_by_pos}
+    out["recal"] = {
+        "evaluable_folds": evaluable, "n_evaluable": len(evaluable),
+        "affine_eligibility": affine_elig,
+        "range_by_arm": {a: {k: v for k, v in d.items() if k != "range_by_fold"}
+                         | {"range_by_fold": [round(float(x), 4) for x in d["range_by_fold"]]}
+                         for a, d in range_by_arm.items()},
+        "rmse_pooled": {a: {p: _pooled_rmse(a, p) for p in XP.POSITIONS}
+                        for a in XP.ALL_POINT_LABELS},
+        "winner": winner, "winner_clauses": clauses,
+        "p_reduces_gap_one_sided": p_gap, "pbo": pbo, "dsr": dsr,
+        "deflate_detail": {k: deflate_detail.get(k) for k in
+                           ("pbo", "os_gap_pct", "contender_spread_pct", "flips")},
+        "oracle_ceiling": {
+            "note": ("`level_add_oracle` peeks the test fold's own mean error — its RMSE "
+                     "improvement is the CEILING of the level channel (NF-D16 (e)); never a "
+                     "trial"),
+            "rmse_pooled": {p: _pooled_rmse("level_add_oracle", p) for p in XP.POSITIONS}},
+        "trailing3_sensitivity_note": ("report-only (prereg §4): trailing-3 δs are recorded in "
+                                       "the recal tables; ⛔ never selected here"),
+    }
+    out["swap_verification"] = swap
+    out["board_decomposition"] = board_decomp
+    out["skipped"] = skipped
+    out["verdict"] = verdict
+    out["qb_consumption"] = {
+        "decision": XP.QB_CONSUMPTION, "rationale": XP.QB_CONSUMPTION_RATIONALE,
+        "caveat": XP.QB_CONSUMPTION_CAVEAT}
+    out["second_reader"] = XP.SECOND_READER
+    out["promote_blockers"] = list(XP.PROMOTE_BLOCKERS)
+
+    # ── the deliverable: the 4-position VOR-ranked input (prereg §7) ────────────────────────────
+    out = _write_input(out, rows_by_fold, recal_tables, range_by_arm, pooled_identity_bias,
+                       cfg, profile)
+
     # ── null classification, per the vertical's rule ────────────────────────────────────────────
+    # ⛔ AFTER `_write_input`, deliberately: `banks_untouched` is MEASURED there, and a
+    # classification computed from the provisional clause set lists a pending (None) clause as
+    # failing — the decisive run's first record did exactly that (banks_untouched appeared among
+    # failing anchors while its final value was True). The failing lists must describe the FINAL
+    # clause values (`clauses` is the same dict `_write_input` mutates).
     classification: dict | None = None
-    if verdict["state"] == XP.V_UNREPAIRED and winner is not None:
+    if out["verdict"]["state"] == XP.V_UNREPAIRED and winner is not None:
         failing = [c for c in XP.ARM_CLAUSES
                    if clauses.get(c) is False or (clauses.get(c) is None and c != "swap_clause")]
         anchor_fail = [c for c in failing if c in XP.ANCHOR_CLAUSES]
@@ -622,43 +664,7 @@ def derive_verdict_layer(out: dict) -> dict:  # noqa: C901 — the pre-registere
                      "field_remedy_admissible") if hasattr(instrument, "detail") else None},
                 len(XP.REAL_ARMS))
 
-    out["reproduction"] = repro
-    out["family_a"] = family_a
-    out["identity_bias"] = {"pooled": pooled_identity_bias, "by_fold": bias_by_pos}
-    out["recal"] = {
-        "evaluable_folds": evaluable, "n_evaluable": len(evaluable),
-        "affine_eligibility": affine_elig,
-        "range_by_arm": {a: {k: v for k, v in d.items() if k != "range_by_fold"}
-                         | {"range_by_fold": [round(float(x), 4) for x in d["range_by_fold"]]}
-                         for a, d in range_by_arm.items()},
-        "rmse_pooled": {a: {p: _pooled_rmse(a, p) for p in XP.POSITIONS}
-                        for a in XP.ALL_POINT_LABELS},
-        "winner": winner, "winner_clauses": clauses,
-        "p_reduces_gap_one_sided": p_gap, "pbo": pbo, "dsr": dsr,
-        "deflate_detail": {k: deflate_detail.get(k) for k in
-                           ("pbo", "os_gap_pct", "contender_spread_pct", "flips")},
-        "oracle_ceiling": {
-            "note": ("`level_add_oracle` peeks the test fold's own mean error — its RMSE "
-                     "improvement is the CEILING of the level channel (NF-D16 (e)); never a "
-                     "trial"),
-            "rmse_pooled": {p: _pooled_rmse("level_add_oracle", p) for p in XP.POSITIONS}},
-        "trailing3_sensitivity_note": ("report-only (prereg §4): trailing-3 δs are recorded in "
-                                       "the recal tables; ⛔ never selected here"),
-    }
-    out["swap_verification"] = swap
-    out["board_decomposition"] = board_decomp
-    out["skipped"] = skipped
-    out["verdict"] = verdict
     out["classification"] = classification
-    out["qb_consumption"] = {
-        "decision": XP.QB_CONSUMPTION, "rationale": XP.QB_CONSUMPTION_RATIONALE,
-        "caveat": XP.QB_CONSUMPTION_CAVEAT}
-    out["second_reader"] = XP.SECOND_READER
-    out["promote_blockers"] = list(XP.PROMOTE_BLOCKERS)
-
-    # ── the deliverable: the 4-position VOR-ranked input (prereg §7) ────────────────────────────
-    out = _write_input(out, rows_by_fold, recal_tables, range_by_arm, pooled_identity_bias,
-                       cfg, profile)
     return out
 
 

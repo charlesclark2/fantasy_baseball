@@ -295,3 +295,99 @@ nothing until governance promotes.
 - `gap_detected` at 8 folds resolves pairwise gaps down to roughly the stated MDE only; a smaller
   real artifact survives at every position equally and cancels in within-position VOR, but not in
   FLEX allocation — the disclosure column exists for exactly this.
+
+---
+
+## §12 POST-RUN FINDINGS (appended 2026-08-19 after the decisive 8-fold run; §1–§9 untouched)
+
+Decisive run: operator laptop, 8 folds × 4000 draws, 3,150 s. Record:
+`nf_w8_0_cross_position.{json,md}` (re-derived once via `--rewrite-report` — §12.4).
+
+### §12.0 Headline — VERDICT `LEVEL_GAP_DETECTED_UNREPAIRED`
+
+**The level gap is real, it is a QB story, and it is attributable to code-of-origin — and no
+registered arm is admissible, so the hybrid ships NOT-cross-rankable as-is** (input = `identity`,
+`cross_rankable: false`, per-row `level_gap_disclosure`). All four reproduction pins hit at
+**0.0 over 8 folds** — the consumed generators are byte-identical to their certified records
+(the smoke's full-precision fix earned its keep).
+
+### §12.1 The measurement (family A)
+
+Pooled identity bias (point − realized, Σerr/Σn): **QB −0.470** · RB −0.254 · TE −0.151 ·
+WR −0.109 PPR. Two pairs survive BH(q=0.10): **QB|WR −0.359 (p=0.0016)** and **QB|TE −0.319
+(p=0.0021)**; the RB pairs and WR|TE do not (MDEs 0.17–0.33 PPR — bounded nulls, not absences).
+Every bias is negative (the common component cancels in every cross-position use); the
+ARTIFACT is the differential, concentrated at QB. **The §6 swap check attributes it to the
+generator, not the population: on the SAME rows, the QB assembly reads 0.371 PPR below the
+direct-points construction** — nearly the whole QB-vs-WR/TE gap — while direct-points at QB
+carries the same small bias (−0.10) as the WR/TE generators do.
+
+### §12.2 The refusal (three clauses; the anchor binds)
+
+Winner `level_affine` (identity range 0.4888 → 0.3884; affine slopes all > 0, eligible; the
+NF1.8 tie discipline was not needed — flips 88.6% on the affine, os_gap 0.0%, PBO 0.0857).
+Failing: `reduces_gap` (**p=0.0512 vs the 0.05 bar — by 0.0012; the bar stays, E2.1-r**),
+`dsr_ok` (0.9138 vs 0.95), and `swap_clause` (§12.3c). Classification:
+**CONSTRAINT_REFUSED, binding_half=anchor, NO data trigger** (NF-D18) — the instrument's own
+POWER_LIMITED "+2 folds for DSR" is recorded verbatim but cannot rescue an anchor refusal.
+
+### §12.3 The findings that outlive the story
+
+- **(a) A trailing-constant chases a moving target.** The peeking oracle zeroes the range
+  (ceiling = full removal); the real arms capture only **~20%** of it. The
+  `position_mean_point` anchor names why: the cross-position range of prior-vs-fold y-level
+  drift is **0.511 PPR — the same magnitude as the artifact itself** (0.4888). Any
+  prior-history-fitted per-position constant faces a non-stationarity floor comparable to what
+  it corrects (the NF-TR2b shape, measured here as an anchor rather than suffered as a
+  surprise).
+- **(b) ⭐ THE MERGED VOR BOARD IS STRUCTURALLY SHIELDED FROM THIS PARTICULAR ARTIFACT.** A
+  uniform QB level shift cancels EXACTLY in VOR (QB's own replacement absorbs it) and QB is not
+  FLEX-eligible in the gate league, so it cannot move the flex allocation — the board
+  decomposition measured the QB level component at **exactly 0.000 rank moves** (total ≡
+  ordering-only at QB). The detected gap corrupts **raw-point cross-position surfaces**
+  (start/sit comparisons, lineup totals, any points display comparing QB to others), NOT the
+  VOR interleave. ⚠️ League-shape caveat: a SUPERFLEX league (QB flex-eligible) loses the
+  shield; the flex-eligible positions' own pairwise gaps are all below MDE here.
+- **(c) The swap clause refused on 0.037/0.095-PPR shifts (WR/TE)** — precisely-estimated
+  (SE 0.011/0.013 ⇒ ACTIVE at 2×SE) but an order of magnitude below family A's own MDE and
+  below the recal's own estimation noise, while **QB — the position family A indicted —
+  collapsed decisively (0.371 → 0.074, p<1e-4)**. The activity rule has no MATERIALITY floor —
+  the NF-W6 "demonstrable ≠ material" lesson, on a clause of this story's own design. ⛔ The
+  clause stands as registered (E2.1-r); a successor registers `active := 2×SE AND ≥ a
+  design-derived PPR floor`.
+- **(d) The QB Option-B registration is UNAFFECTED.** The gap is a property of the
+  RANKING-POINT READ (the grid mean of a calibrated distribution truncates the outer 0.5%
+  tails, and QB's tail is heaviest), not of QB's calibration — PIT was never touched
+  (`banks_untouched` True). Direct-points at QB reads −0.10 like everyone else, so the
+  mechanism HYPOTHESIS (untested here) is tail-mass differential between the assembled and
+  9-knot representations under the same grid read.
+
+### §12.4 A record-accuracy defect, found and fixed post-run (reported-only)
+
+The first record's classification listed `banks_untouched` among the failing anchors while its
+final value was True: the classification was computed from the PROVISIONAL clause set, before
+`_write_input` measured the identity. Fixed (classification now computed after the measured
+clause set; `--rewrite-report`, zero refit) — **verdict, winner, every range and every pin
+byte-identical; only the failing lists corrected.** Guarded:
+`TestCommittedRecordConsistency` asserts on the committed record that no clause listed as
+failing is finally True.
+
+### §12.5 Successors (forward registrations only — nothing here was selected)
+
+1. **NF-W8-0b — the tail-completed ranking point.** Replace the truncated grid mean with a
+   tail-completed E[Y] (the NF-MARGIN exponential mean-excess machinery beyond the grid ends) —
+   a DETERMINISTIC transform of the certified bank: no fitting, so nothing to chase across
+   folds (§12.3a does not apply), and PIT untouched by construction. Hypothesis: closes most of
+   the QB differential. Decided by re-running family A on the new point under a fresh
+   registration.
+2. A swap-clause **materiality floor** (§12.3c), registered before any re-run.
+3. A **PM decision** (not a certification): whether the weekly optimizer may consume the
+   VOR-space ranking as-is under the disclosed gap, given §12.3b's structural shield — with the
+   raw-point surfaces staying blocked either way.
+
+### §12.6 What ships from this record
+
+The 4-position input parquets under `identity` with `cross_rankable: false`, the per-row
+disclosure, the Option-B caveat on QB rows, and every promote blocker in force. The weekly
+optimizer is NOT unblocked for raw-point cross-position use; §12.5(3) names the one bounded
+consumption a PM may elect. 🚩 The §1 second-reader flag remains OPEN.

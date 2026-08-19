@@ -7,6 +7,7 @@ state at import, touches no network.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -510,6 +511,40 @@ class TestGateComputationSourceInspection:
         start = code.index('"scores": {')
         stmt = code[start:start + 80]
         assert "float(v)" in stmt and "round(" not in stmt
+
+
+class TestCommittedRecordConsistency:
+    """The decisive run's first record listed `banks_untouched` among the failing anchors while
+    its FINAL clause value was True — the classification had been computed from the PROVISIONAL
+    clause set, before `_write_input` measured the identity. This invariant re-checks the
+    committed record on every run: a clause the classification calls failing must not be finally
+    True."""
+
+    _REC = _ROOT / ("quant_sports_intel_models/football/nfl/fantasy/ablation_results/"
+                    "nf_w8_0_cross_position.json")
+
+    def test_classification_failing_lists_match_final_clauses(self):
+        assert self._REC.exists(), "the decisive record must be committed beside this guard"
+        rec = json.loads(self._REC.read_text())
+        assert rec["story"] == XP.STORY and not rec.get("smoke")   # non-vacuity: the real record
+        cls = rec.get("classification")
+        clauses = rec["recal"]["winner_clauses"]
+        assert cls is not None and clauses, "an UNREPAIRED record must carry both"
+        listed = (cls.get("failing_anchor_checks", [])
+                  + cls.get("failing_statistical_checks", []))
+        assert listed, "a CONSTRAINT_REFUSED classification with no named clause is vacuous"
+        for c in listed:
+            assert clauses.get(c) is not True, (
+                f"`{c}` is listed as failing but its final clause value is True — the "
+                f"classification was computed from a provisional clause set")
+
+    def test_verdict_and_classification_agree_on_the_record(self):
+        rec = json.loads(self._REC.read_text())
+        assert rec["verdict"]["state"] == XP.V_UNREPAIRED
+        assert rec["classification"]["state"] == "CONSTRAINT_REFUSED"
+        assert rec["classification"]["retest_trigger"] is None     # NF-D18: no data trigger
+        assert rec["input"]["shipped_arm"] == XP.INCUMBENT
+        assert rec["input"]["cross_rankable"] is False
 
 
 class TestFoldRangeAndHelpers:
