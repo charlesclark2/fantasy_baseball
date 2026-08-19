@@ -512,3 +512,71 @@ claim about the worktree. `measure_resolution.py --pool` therefore takes an expl
 | Is `teams/{id}/draftSecurity` really the user's own team? | a **non-mock** league confirms it |
 | Ambiguity rule on the name rung | build it into the server-side resolver (§2.4) |
 | Two-way players (`Travis Hunter`) | position derivation needs a `defaultPositionId` fallback when `eligibleSlots` spans both sides |
+
+---
+
+## 11. SECOND CAPTURE (2026-08-19) — the draftable pool, and a CORRECTION to §10.3
+
+A second mock capture was taken. **The draft again never started** (`drafted:false, inProgress:false`,
+`picks[180]` still `{id, teamId}`, and the `fantasydraft.espn.com` socket **absent entirely** — the
+client only opens it once a draft is live). So §10.6's first row is **still open**. Two things landed
+anyway, and one of them corrects §10.3.
+
+### 11.1 ⚠️ CORRECTION — the 10 false merges DO NOT occur in a real draft room
+
+§10.3(c) reported 10 false-merge collisions and treated them as a defect the assistant would hit.
+Measured against the **actual draftable pool** the probe extracted (1,027 rows, the population a
+draft room really offers):
+
+```
+POOL    1027 rows → 1026 in projectable positions
+⭐ BOARD COVERAGE            850/858 = 99.1%
+⭐ tier1/tier3 DISAGREEMENTS   0
+⛔ FALSE-MERGE COLLISIONS      0        ← was 10 against the 11,612-row season universe
+```
+
+**The mechanism, verified rather than assumed:** ESPN's draft room ships **exactly one of each
+colliding pair**. `Frank Gore Jr.` is present and retired `Frank Gore` is absent; `Kevin Coleman Jr.`
+present, `Kevin Coleman` absent; `Ted Hurst III` present, `Ted Hurst` absent. The duplicates that
+caused every merge live only in the full season universe, which a draft room does not offer.
+
+⇒ **The false-merge risk is materially LOWER than §10.3 implied.** The ambiguity rule (resolver rule
+(b)) remains correct defensive design and should still be built — a pool is a curated list that can
+change, and 0 collisions in **one** league's pool is not a proof about all of them (NF-C0e) — but it
+is **not the urgent defect §10.3 made it sound like**. ⭐ The general lesson: *measuring against a
+larger population is not the same as measuring against the right one.* The 11,612-row universe
+over-stated a risk the 1,027-row draft room does not carry.
+
+### 11.2 ⭐ `Travis Hunter` IS the top resolution defect, and it is confirmed live
+
+Exactly **one** of the 1,027 draftable rows is dropped by the position derivation, and it is Travis
+Hunter (§10.3(d)): a two-way player's `eligibleSlots` span both sides of the ball, so he derives as
+`CB`. He is a premium pick, he is in the real draft pool, and the assistant would show nothing for
+him. **This — not the collisions — is the resolution defect the overlay must fix**, via a
+`defaultPositionId` fallback when `eligibleSlots` spans offense and defense.
+
+### 11.3 A SECOND probe blind spot, found by the probe's own error log
+
+The capture's `errors` array carried:
+
+> `xhr-load: Failed to read the 'responseText' property from 'XMLHttpRequest': The value is only
+> accessible if the object's 'responseType' is '' or 'text' (was 'json')`
+
+`responseText` **throws** when the page set `responseType = "json"`, so **every XHR the app declared
+as JSON was silently missed** — the WebSocket blind spot in a second costume: *a reader that handles
+one representation reports silence for all the others.* Now fixed (text branch guarded on
+`responseType`, a `json` branch reading `.response`, and a declared-JSON-but-unreadable call recorded
+as a fact rather than dropped).
+
+⭐ **It surfaced only because the probe records what it could not read.** That is the concrete
+argument for the `errors` array over a bare `try/catch`, and the second time in this spike that
+"record the thing you failed to read" turned an invisible gap into a one-line finding (NF1.7(a)).
+
+### 11.4 Capture instructions were the real problem
+
+Two captures, neither during an active draft. The instruction said "let 30+ picks happen", which is
+not actionable in an ESPN mock: you join a **lobby**, wait out a countdown, and only then does the
+room open the draft socket and begin populating `picks[]`. **The capture must be taken while picks
+are visibly being made** — the readout is worth checking first: `DRAFT STATE: inProgress=True` and a
+`fantasydraft.espn.com` socket in the frame list are the two preconditions for the capture to answer
+anything §10.6 asks.

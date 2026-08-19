@@ -257,3 +257,23 @@ def test_an_unreadable_frame_is_COUNTED_rather_than_dropped():
         "not read' is a finding; silence is not"
     )
     assert re.search(r"nonTextFrames\s*\+=\s*1", body), "unreadable frames are never counted"
+
+
+def test_the_xhr_observer_handles_every_response_representation():
+    """⭐ THE SECOND BLIND SPOT, found by the probe's own error log.
+
+    `responseText` THROWS when the page set `responseType = "json"` — the DOM spec makes it readable
+    only for "" and "text". The first deep capture recorded exactly that, meaning every XHR the app
+    declared as JSON was silently missed. Same defect as the WebSocket blind spot in another
+    costume: a reader that handles one representation reports silence for all the others.
+
+    Pins BOTH branches, because handling only the text one is what shipped and looked fine.
+    """
+    body = _sources()["main-world-probe.js"]
+    assert re.search(r'responseType', body), "the observer never inspects responseType"
+    assert re.search(r'rt === "json"', body), (
+        "no branch reads a responseType='json' body via `.response` — those calls are still dropped"
+    )
+    assert re.search(r'rt === ""\s*\|\|\s*rt === "text"', body), (
+        "the text branch no longer guards on responseType, so responseText can throw again"
+    )
