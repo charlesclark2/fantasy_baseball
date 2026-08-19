@@ -131,9 +131,17 @@ cp betting_ml/utils/game_day.py "$PACKAGE_DIR/betting_ml/utils/game_day.py"
 # module would resolve locally and `ModuleNotFoundError` only in prod — CI mocks IO but it does not
 # mock the zip. `test_nf_c_lda_1_lambda_import_weight.py` fails the build if the backend imports
 # something this list does not carry, or if a carried module stops being stdlib-only.
+#
+# 🪤 `quant_sports_intel_models` IS A PEP 420 NAMESPACE PACKAGE — it has NO `__init__.py`, by design
+# (`import quant_sports_intel_models` resolves with `__file__ is None` and a `_NamespacePath`). The
+# first cut of this step copied one anyway and the deploy died on `cp: No such file or directory`.
+# ⛔ DO NOT "FIX" THAT BY GENERATING AN EMPTY `__init__.py` HERE: both layouts import correctly
+# (measured, in a clean interpreter with only the package dir on `sys.path`), but generating one
+# would make the DEPLOYED tree differ from the tree every test imports through — and the whole point
+# of copying source rather than re-declaring it is that the thing we ship is the thing we tested.
+# The directory alone is sufficient, so only `fantasy_engine` needs its own (real) `__init__.py`.
 echo "Copying the stdlib-only fantasy engine (NF-C-LDA-1 draft optimizer)..."
 mkdir -p "$PACKAGE_DIR/quant_sports_intel_models/fantasy_engine"
-cp quant_sports_intel_models/__init__.py "$PACKAGE_DIR/quant_sports_intel_models/__init__.py"
 for _m in __init__ league_config draft; do
   cp "quant_sports_intel_models/fantasy_engine/${_m}.py" \
      "$PACKAGE_DIR/quant_sports_intel_models/fantasy_engine/${_m}.py"

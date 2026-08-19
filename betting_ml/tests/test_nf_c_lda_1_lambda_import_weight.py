@@ -192,3 +192,121 @@ def test_the_endpoint_imports_the_engine_lazily():
                 assert not any(n.startswith("quant_sports_intel_models") for n in names), (
                     f"{rel} imports the engine at MODULE scope"
                 )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# The copy steps must actually RUN — the clause that was missing
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# 🔴 THE DEFECT THIS EXISTS FOR (2026-08-19, caught by the operator on the first real deploy).
+# Everything above checked the copy LIST — that it names the modules the backend imports, and that
+# those modules are stdlib-only. Nothing checked that the paths `deploy.sh` copies EXIST, so step 3c
+# shipped with `cp quant_sports_intel_models/__init__.py`, a file that does not exist:
+# `quant_sports_intel_models` is a PEP 420 NAMESPACE package. `set -euo pipefail` aborted the deploy
+# at `cp: No such file or directory` — the safe direction, nothing was uploaded — but the endpoint
+# could not ship until someone hit it by hand.
+#
+# It got there because the check was written against the file's absence with `cat … 2>/dev/null`,
+# which prints nothing for an EMPTY file and nothing for a MISSING one. The two are
+# indistinguishable at the point of measurement, and the wrong reading was the plausible one. Same
+# family as every "a check that could not run is not a check that passed" lesson, one level down: a
+# MEASUREMENT whose two outcomes look identical is not a measurement (NF1.7(a)).
+#
+# ⭐ SO THIS RUNS THE REAL COPY STEPS instead of parsing them. A regex over `cp` lines would have to
+# re-implement shell quoting, `${_m}` expansion and the `[ -f … ] &&` guards — i.e. it would be a
+# second, weaker copy of bash. Executing the section fails in EXACTLY the way the deploy failed.
+_SECTION_START = "# ── 3b."
+_SECTION_END = "# ── 4."
+
+
+def _copy_section() -> str:
+    body = DEPLOY.read_text()
+    start, end = body.index(_SECTION_START), body.index(_SECTION_END)
+    assert start < end, "deploy.sh's copy steps are no longer between markers 3b and 4"
+    return body[start:end]
+
+
+def test_the_deploy_copy_steps_only_copy(tmp_path):
+    """⚠️ NON-VACUITY + SAFETY, BEFORE EXECUTING ANYTHING. The clause below runs this shell for
+    real, so it must first be true that the section is nothing but directory creation and copying —
+    otherwise a future edit could make this test execute something surprising, and a section that
+    had shrunk to nothing would make the execution clause pass on no work at all."""
+    # ⚠️ LOGICAL commands, not physical lines: a `cp src \\\n   dst` spans two lines, and judging
+    # the second one on its own reads the DESTINATION as a command of its own. (Caught by this
+    # clause failing on the real script — which is the shape a safety check should fail in.)
+    section = _copy_section().replace("\\\n", " ")
+    commands = [
+        line.strip() for line in section.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    assert commands, "deploy.sh's copy section is empty — the clause below would run nothing"
+    assert sum(1 for c in commands if c.startswith("cp ") or " cp " in c) >= 4, (
+        f"expected several cp lines, found: {commands}"
+    )
+    allowed = ("cp ", "mkdir ", "echo ", "for ", "done", "[ -f")
+    for c in commands:
+        assert any(c.startswith(a) for a in allowed), (
+            f"deploy.sh's copy section runs {c!r}, which is not a copy — this test executes this "
+            "section, so it may only ever create directories and copy files"
+        )
+
+
+def test_every_path_the_deploy_copies_actually_exists(tmp_path):
+    """Run `deploy.sh`'s copy steps for real against a throwaway PACKAGE_DIR.
+
+    ⭐ AND THEN IMPORT OUT OF THE RESULT. Copying successfully is necessary but not sufficient: the
+    question the deploy is really asking is whether the RESULTING TREE can serve the endpoint. So
+    the tree is imported from in a clean interpreter with only that directory on `sys.path`, which
+    also pins the namespace-package resolution the fix relies on (there is no
+    `quant_sports_intel_models/__init__.py`, and there must not be one).
+    """
+    pkg = tmp_path / "package"
+    pkg.mkdir()
+    script = "set -euo pipefail\nPACKAGE_DIR=" + str(pkg) + "\n" + _copy_section()
+    run = subprocess.run(["bash", "-c", script], cwd=REPO, capture_output=True, text=True,
+                         timeout=120)
+    assert run.returncode == 0, (
+        "deploy.sh's copy steps FAILED — this is exactly what an operator sees on a real deploy:\n"
+        f"{run.stdout}\n{run.stderr}"
+    )
+
+    engine = pkg / "quant_sports_intel_models" / "fantasy_engine"
+    assert engine.is_dir(), "the engine directory was not created"
+    for name in _deploy_copied_modules() | {"__init__"}:
+        assert (engine / f"{name}.py").is_file(), f"{name}.py did not reach the package"
+    assert not (pkg / "quant_sports_intel_models" / "__init__.py").exists(), (
+        "an `__init__.py` was generated for the namespace package — the deployed tree would then "
+        "differ from the tree every test imports through (deploy.sh step 3c says why)"
+    )
+
+    code = textwrap.dedent(
+        """
+        import json, sys
+        import quant_sports_intel_models as q
+        import quant_sports_intel_models.fantasy_engine.draft as d
+        from quant_sports_intel_models.fantasy_engine.league_config import LeagueConfig
+        print(json.dumps({
+            "from_package": d.__file__.startswith(sys.argv[1]),
+            "recommend": callable(d.recommend),
+            "config": hasattr(LeagueConfig, "from_dict"),
+            "namespace": getattr(q, "__file__", None) is None,
+            "heavy": sorted(m for m in %r if m in sys.modules),
+        }))
+        """
+        % (HEAVY,)
+    )
+    # ⛔ cwd OUTSIDE the repo and PYTHONPATH set to the package alone, or the import would resolve
+    # against the checkout and prove nothing about what was copied.
+    proved = subprocess.run(
+        [sys.executable, "-c", code, str(pkg)],
+        cwd=tmp_path, capture_output=True, text=True, timeout=180,
+        env={"PATH": "/usr/bin:/bin", "PYTHONPATH": str(pkg), "HOME": str(tmp_path)},
+    )
+    assert proved.returncode == 0, f"the copied tree does not import:\n{proved.stderr[-2000:]}"
+    import json as _json
+
+    out = _json.loads(proved.stdout.strip().splitlines()[-1])
+    assert out["from_package"], "the import resolved somewhere other than the copied package"
+    assert out["recommend"] and out["config"], "the copied engine is not usable"
+    assert out["namespace"], "the copied tree is not a namespace package"
+    assert out["heavy"] == [], f"the copied tree pulls in {out['heavy']}"
