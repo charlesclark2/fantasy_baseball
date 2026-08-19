@@ -6,14 +6,21 @@
 |---|---|
 | **YDN app created** | ✅ 2026-08-01 — App ID **`qnVLbJOd`**, name "Credence Sports", confidential client, redirect URI `https://api.credencesports.com/fantasy/import/yahoo/callback` |
 | **Access application submitted** | ✅ 2026-08-01 via `sports.yahoo.com/developer/access/` (App ID supplied; read-only; Small <1,000 users) |
-| **Yahoo approval** | ⏳ **PENDING — no SLA published; the latency is entirely Yahoo's** |
-| **SSM parameters written** | ⛔ **NOT YET** — blocked on `aws sso login --profile AdministratorAccess-769392325318` (see step 3) |
-| **Lambda IAM grant** | ⛔ Not yet (step 4) |
+| **Yahoo approval** | ✅ Agreement signed 2026-08-14, effective 08-15 (US + CA, READ-ONLY). ⚠️ *Fantasy data access itself is still UNPROVEN in code* — the only proof is a real token reading a real league (NF-C0-Yahoo-SPIKE) |
+| **SSM parameters written** | ✅ **DONE** — all three present (2026-08-01), and the client secret is **MEASURED CORRECT** 2026-08-19: the real secret returns `INVALID_AUTHORIZATION_CODE` where a wrong one returns `INVALID_CLIENT_SECRET` |
+| **Lambda IAM grant** | ✅ **DONE** — `credence-yahoo-oauth-ssm-read` on `credence-prod-lambda-execution-role`, verified 2026-08-19 |
+| **Redirect URI** | ✅ **MEASURED byte-for-byte correct** 2026-08-19 (a wrong URI *and a trailing-slash variant* both return Yahoo's "Developers: Please specify a valid request" page; the registered one returns the real sign-in page) |
+| **API Gateway callback route** | ⛔ **MISSING — THE BLOCKER.** `GET /fantasy/import/yahoo/callback` is not a route, so it falls to `ANY /{proxy+}` and its JWT authorizer → **401 before the Lambda runs** (NF3.2). No user can complete a connect until this is created with `--authorization-type NONE`. See `nf_c0_yahoo_spike_memo.md` §2 |
+| **`YAHOO_IMPORT_ENABLED`** | ⛔ not set on the Lambda (correct — this is the deliberate GO flip, and it must NOT be flipped before the route above exists) |
 
-⏰ **CHASE TRIGGER: if Yahoo has not replied by 2026-08-15, Yahoo import will NOT be ready for the
-operator's 2026-08-22 draft.** That is the operationally meaningful deadline, not an arbitrary one —
-so treat 8/15 as the date to follow up, and plan the draft-window GTM on **Sleeper import + the
-NF-C0b manual editor**, both of which are live and need nothing from Yahoo.
+⏰ **CHASE TRIGGER (RESOLVED): Yahoo replied — the agreement was signed 2026-08-14, effective
+08-15.** The remaining gap is ours, not Yahoo's: the gateway callback route (above) plus three
+compliance gaps against the signed agreement. Draft-window GTM stays on **Sleeper import + the
+NF-C0b manual editor**, both live and needing nothing from Yahoo.
+
+📄 **The live-verification status, the compliance audit and the remaining blockers now live in
+`docs/nf_c0_yahoo_spike_memo.md` (NF-C0-Yahoo-SPIKE, 2026-08-19).** Read that before acting on the
+steps below — steps 3 and 4 are already done.
 
 ---
 
@@ -240,3 +247,10 @@ That gap shaped the code rather than being left to chance:
 **Expect to shake out one or two parsing details on the first real Yahoo league** — that is a
 15-minute fix once a payload is in hand, and the preview-before-save flow means a mis-read is
 visible on screen before it ever becomes a saved league.
+
+⭐ **NF-C0-Yahoo-SPIKE built the tool that does exactly that in one command:**
+`scripts/probe_yahoo_fantasy_live.py` drives the SHIPPING adapter against a real token and prints
+every `stat_id` and roster token Yahoo sent that the parser does not know, plus five named
+pass/fail conditions. It still has NOT been run — it needs the gateway route (or a code copied by
+hand out of the address bar). Run it against **≥2 independently-sourced leagues**: one league
+cannot disconfirm a wrong key map (NF-C0e).
