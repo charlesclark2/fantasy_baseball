@@ -61,6 +61,9 @@ CASES = [
      PROBE, "                  recordCall(\"websocket-msg\", url, decodePrefix(d));",
      "                  recordCall(\"websocket-msg\", url, null);",
      "test_binary_frames_are_DECODED_rather_than_dropped"),
+    ("xhr observer stops handling responseType='json'",
+     PROBE, '              } else if (rt === "json") {', '              } else if (false) {',
+     "test_the_xhr_observer_handles_every_response_representation"),
 ]
 
 

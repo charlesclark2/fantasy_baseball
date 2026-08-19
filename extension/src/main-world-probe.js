@@ -308,8 +308,33 @@
             try {
               var ct = "";
               try { ct = self.getResponseHeader("content-type") || ""; } catch (e) {}
-              var body = (ct.indexOf("json") !== -1 && typeof self.responseText === "string")
-                ? self.responseText : null;
+              // ⚠️ `responseText` THROWS when the page set `responseType = "json"` (or arraybuffer
+              // /blob): the DOM spec makes it readable only for "" and "text". The first deep
+              // capture recorded exactly that as
+              //   "Failed to read the 'responseText' property ... (was 'json')"
+              // — so every XHR the app declared as JSON was being MISSED, which is the same defect
+              // as the WebSocket blind spot in a second costume: a reader that can only handle one
+              // representation reports silence for all the others.
+              //
+              // ⭐ It surfaced ONLY because the probe records what it could not read. That is the
+              // whole argument for the `errors` array over a bare try/catch (NF1.7(a)).
+              var body = null;
+              var rt = "";
+              try { rt = self.responseType || ""; } catch (e) {}
+              if (rt === "" || rt === "text") {
+                try {
+                  if (typeof self.responseText === "string") body = self.responseText;
+                } catch (e) { note("xhr-responseText", e); }
+              } else if (rt === "json") {
+                // Already parsed by the browser — re-serialize so the one shaping path downstream
+                // stays the single implementation (⛔ never a second summarizer that could drift).
+                try { body = JSON.stringify(self.response); } catch (e) { note("xhr-json", e); }
+              }
+              if (body === null && ct.indexOf("json") !== -1) {
+                // Declared JSON but unreadable in every representation — RECORD THE FACT.
+                recordCall("xhr", self.__credence_url, null);
+                return;
+              }
               recordCall("xhr", self.__credence_url, body);
             } catch (e) { note("xhr-load", e); }
           });
