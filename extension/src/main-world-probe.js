@@ -131,6 +131,48 @@
   // wrapped and failure is silent-but-recorded.
   var seenUrls = Object.create(null);
 
+  // ══ HOST ALLOWLIST — THE STRUCTURAL CURE, AND IT EXISTS BECAUSE A PREMISE WAS REFUTED ═══════
+  //
+  // ⛔ `docs/nf_c0_espn_access_probe.md` §3(d) argued the paste flow is safe because a response
+  // BODY is *"structurally incapable"* of carrying `espn_s2` — the browser attaches the cookie to
+  // the REQUEST and "it is never echoed into the response body". That was verified against the
+  // LEAGUE endpoint (`?view=mSettings`) and it is TRUE THERE.
+  //
+  // ⚠️ IT IS FALSE FOR THE DRAFT ROOM AS A WHOLE. A real capture (2026-08-19) showed the room also
+  // calling `registerdisney.go.com/.../guest/{SWID}`, whose response body carries the user's
+  // **`s2`** field plus `firstName`, `lastName`, `email`, `dateOfBirth`, `gender` and `swid`. The
+  // credential VALUE escaped only because `summarize` truncates strings over 200 chars — a size
+  // decision, NOT a credential guard. The PII did not escape; it was captured verbatim.
+  //
+  // ⇒ "observe everything the page requests" is NOT a safe design, because the page requests things
+  // that have nothing to do with drafting. The cure is an ALLOWLIST of hosts whose bodies may be
+  // read at all — deliberately an allowlist and not a denylist, the opposite of `pruneEspnPayload`'s
+  // choice, and for the opposite reason: pruning had to survive DEPLOY SKEW (an unknown field must
+  // pass through), whereas here an unknown HOST is exactly what must not be read.
+  //
+  // Everything off the list still records URL + count, so the network picture stays complete — we
+  // simply never look at the body.
+  var BODY_CAPTURE_HOSTS = [
+    "lm-api-reads.fantasy.espn.com",   // league + draft state (the score-407 payload)
+    "fantasydraft.espn.com"            // the live draft socket
+  ];
+
+  function bodyCaptureAllowed(url) {
+    try {
+      var host = new URL(String(url), location.href).hostname;
+      for (var i = 0; i < BODY_CAPTURE_HOSTS.length; i++) {
+        if (host === BODY_CAPTURE_HOSTS[i]) return true;
+      }
+      return false;
+    } catch (e) { return false; }   // unparseable ⇒ refuse (fail CLOSED)
+  }
+
+  //: Keys whose VALUE is never draft state. Defence in depth behind the allowlist: if an allowed
+  //: host ever starts returning a profile block, the value is dropped rather than summarized.
+  var SENSITIVE_KEYS = new RegExp(
+    "^(s2|espn_s2|swid|email|parentEmail|firstName|lastName|middleName|dateOfBirth|gender" +
+    "|username|phone|phones|addresses|token|authorization|password|displayName)$", "i");
+
   // ── REDACTION — required before ANY raw frame is kept ────────────────────────────────────────
   // ⭐ ADDED WITH THE RAW-FRAME CAPTURE, NOT AFTER IT. The first capture showed the room fetching
   // `.../teams/14/draftSecurity`, whose response is a draft-join TOKEN — so the draft socket's own
@@ -193,6 +235,8 @@
     try {
       if (!url) return;
       var short = String(url).split("?")[0];
+      // ⛔ OFF-ALLOWLIST: record that the call happened, never what came back.
+      if (!bodyCaptureAllowed(url)) bodyText = null;
       var key = kind + " " + short;
       var entry = seenUrls[key];
       if (!entry) {
@@ -250,6 +294,7 @@
     var out = {}, n = 0;
     for (var k in v) {
       if (n++ >= 40) { out.__truncated__ = true; break; }
+      if (SENSITIVE_KEYS.test(k)) { out[k] = "<omitted>"; continue; }
       try { out[k] = summarize(v[k], depth + 1); } catch (e) { out[k] = "?"; }
     }
     return out;
