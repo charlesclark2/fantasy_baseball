@@ -195,6 +195,14 @@
       // Anything self-labelled as a secret.
       .replace(/("?(?:token|auth|secret|security|credential|session)"?\s*[:=]\s*)"[^"]*"/gi,
                "$1\"<redacted>\"")
+      // ⚠️ A LINE-PROTOCOL handshake, which the JSON-shaped rule above cannot see. Measured: the
+      // draft socket's first frames include
+      //     TOKEN 1:<leagueId>:<teamId>:<swid>:-1049606073
+      // where the last field is the `draftSecurity` join token. The GUID rule caught the swid, but
+      // the token is a SHORT SIGNED INTEGER — under every length threshold — so it survived. Redact
+      // the whole argument list of a secret-bearing COMMAND, keeping the verb so the protocol shape
+      // is still legible.
+      .replace(/^\s*(TOKEN|AUTH|AUTHORIZE|SECURITY|CREDENTIAL)\b.*/gim, "$1 <redacted>")
       .slice(0, RAW_FRAME_LIMIT);
   }
 
@@ -280,7 +288,16 @@
       if (!url) return;
       var short = String(url).split("?")[0];
       // ⛔ OFF-ALLOWLIST: record that the call happened, never what came back.
-      if (!bodyCaptureAllowed(url)) bodyText = null;
+      // ⚠️ `refused` is tracked SEPARATELY from "we could not read it". Without it, an allowlist
+      // refusal fell through to the `nonTextFrames` counter and a real capture showed
+      // `registerdisney.go.com … nonTextFrames: 1` — which reads as "ESPN sent us binary" when the
+      // truth is "we declined to look". A record that states the wrong REASON is worse than a
+      // sparse one, because the next reader debugs the wrong thing.
+      var refused = !bodyCaptureAllowed(url);
+      if (refused) {
+        bodyText = null;
+        entry.bodyNotRead = "off-allowlist";
+      }
       var key = kind + " " + short;
       var entry = seenUrls[key];
       if (!entry) {
@@ -324,12 +341,15 @@
           entry.latestBytes = bodyText.length;
           entry.reshapedAt = new Date().toISOString();
         } catch (e) { note("reshape", e); }
-      } else if (entry.shape === null && bodyText === null && entry.nonTextFrames === undefined) {
+      } else if (!refused && entry.shape === null && bodyText === null
+                 && entry.nonTextFrames === undefined) {
         // A frame arrived that was not a string at all (ArrayBuffer/Blob). Record THAT FACT —
         // "we saw N frames we could not read" is a finding; silence is not.
         entry.nonTextFrames = 0;
       }
-      if (bodyText === null && entry.nonTextFrames !== undefined) entry.nonTextFrames += 1;
+      if (!refused && bodyText === null && entry.nonTextFrames !== undefined) {
+        entry.nonTextFrames += 1;
+      }
     } catch (e) { note("recordCall", e); }
   }
 

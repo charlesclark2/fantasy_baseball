@@ -13,11 +13,11 @@ would misreport the result**, so they are graded separately.
 | # | Question | Verdict | Basis |
 |---|---|---|---|
 | 2 | Can we resolve ESPN's players to OUR ids? | ✅ **GO — MEASURED** | 172 real rostered players, **98.8%** resolved, **0.0% join failures** |
-| 1 | Can we reliably READ the live ESPN draft state? | 🟢 **GO for the STATE read · 🟡 the LIVE PICK STREAM is still open** | **a real mock draft was captured 2026-08-18** (§10): tier B confirmed at 1.4 MB / score 407, tier A dead, pick stream is a binary WebSocket the probe could not read (now fixed) |
+| 1 | Can we reliably READ the live ESPN draft state? | 🟢 **GO — CLOSED 2026-08-19 (§14)** | a live 30-pick draft was captured: the socket protocol is plain text and **fully decoded**; `SELECTED <teamId> <playerId> <slot>` is the pick event |
 
-**Overall: GO.** The resolution half was the real risk and it is answered at full pool scale (§10.2).
-The read half is confirmed structured; one bounded unknown remains (does `picks[]` populate during
-an active draft) and the instrument to close it is fixed and in place.
+**Overall: GO — both questions are now answered against live data (§14).** Resolution is measured at
+full pool scale (§11.1); the live read is decoded end-to-end. The remaining work is product design,
+not feasibility.
 
 ⚠️ **§10 supersedes parts of §1 and §5 below.** The original text is left standing rather than
 rewritten, so what was INFERRED before the capture and what was MEASURED after stay legible.
@@ -727,3 +727,94 @@ pushing over the socket, a changed body is now re-shaped into `shapeLatest`. It 
 **One capture, taken while picks are visibly being made** — not two, and not at the lobby. The
 readout should show `inProgress=True` and a `fantasydraft.espn.com` entry before it is worth taking.
 Guard suite: 38 tests, 19 RED-proven clauses.
+
+---
+
+## 14. ✅ Q1 CLOSED (2026-08-19) — the live draft protocol, decoded
+
+A capture taken at **pick 30** of a live mock draft. `framePatterns` (§13) did exactly what it was
+built for: 110 frames on `wss://fantasydraft.espn.com/game-1/league-{id}/JOIN` collapsed to **12
+protocol patterns**, each with one redacted example. The counts reconcile exactly to 110.
+
+### 14.1 The protocol
+
+| frame | count | meaning |
+|---|---|---|
+| `SELECTING <teamId> <ms>` | 29 | **whose pick it is now**, and the time allowed |
+| `SELECTED <teamId> <playerId> <slot>` | 26 | **a PICK — who took whom** |
+| `SELECTED <teamId> <playerId> <slot> <swid>` | 2 | the same, for **the user's own** pick |
+| `AUTOSUGGEST <playerId>` | 29 | ESPN's own suggestion for the pick on the clock |
+| `CLOCK <n> <ms> [teamId]` | 13 | countdown tick |
+| `PONG PING%<ts>` | 6 | heartbeat |
+| `STATE <n>` / `JOINED <teamId> <swid>` / `AUTODRAFT <teamId> <bool>` | 3 | session lifecycle |
+| `INIT …` / `TOKEN …` | 2 | handshake (⚠️ §14.4) |
+
+**28 `SELECTED` frames + 1 in flight at pick 30 — self-consistent.** Every item the story asked for
+in item 3 is now readable:
+
+* **drafted players (pick #, drafting team)** — the ordered `SELECTED` stream; pick number is its
+  ordinal, `teamId` is the drafter, `playerId` is the ESPN id we resolve at **tier 1**;
+* **whose pick it is now** — `SELECTING`;
+* **the user's roster** — `SELECTED` where `teamId` matches the URL's own `teamId`, corroborated by
+  the trailing SWID that appears **only on the user's own picks**;
+* **the available pool** — the 1,027-row `players[]` snapshot minus everything `SELECTED`.
+
+### 14.2 ⭐ The live state comes ENTIRELY from the socket — the payload is a one-shot snapshot
+
+`draftDetail` still reads `drafted:false, inProgress:false` with 180 empty `{id, teamId}` slots, and
+the league endpoint's `count` is **1**. It was fetched once at load and never re-polled, so **`picks[]`
+never populates**. §13's `shapeLatest` proves this is a real finding rather than a missed re-poll: it
+*did* fire on a different endpoint (`seasons/2026`, `latestBytes` 5,336) and did **not** fire here.
+
+⇒ **The overlay's architecture is settled: seed from the league payload (pool, teams, draft order,
+settings), then apply `SELECTED` deltas from the socket.** That is how ESPN's own client works, and
+a design that polled the league endpoint for picks would read a permanently pre-draft snapshot — a
+silent, plausible-looking wrong answer.
+
+### 14.3 The allowlist worked, verified on live data
+
+`registerdisney.go.com`, `fan.api.espn.com`, `consent-api.onetrust.com` and `log.go.com` all now
+record `shape: null` with **no PII** — against a capture from the same room that previously leaked
+name, email, DOB and SWID (§12). The §12 fix is confirmed in production conditions, not just in a
+unit test.
+
+Two blemishes it exposed, both fixed here:
+
+1. **A refusal was mislabelled as an unreadable body.** Off-allowlist calls showed
+   `nonTextFrames: 1`, which reads as *"ESPN sent binary"* when the truth is *"we declined to look"*.
+   A record that states the wrong REASON is worse than a sparse one — the next reader debugs the
+   wrong thing. Now `bodyNotRead: "off-allowlist"`.
+2. **Over-redaction, benign:** the sensitive-key scrub fires on a *player's* `firstName`/`lastName`.
+   Harmless — `fullName` is what resolution uses and it survives — but worth knowing before someone
+   reports it as a bug.
+
+### 14.4 ⚠️ A residual leak the capture caught: the line-protocol handshake
+
+The socket's opening frame is:
+
+```
+TOKEN 1:<leagueId>:<teamId>:<swid>:-1049606073
+```
+
+whose last field is the **`draftSecurity` join token**. The GUID rule caught the swid; **the token is
+a short signed integer**, under every length threshold, and it survived into the capture. The
+JSON-shaped `"token": "…"` rule could never have caught it — this is a **line protocol**, a shape the
+redactor had no rule for.
+
+Fixed: a secret-bearing **command** is redacted whole (`TOKEN <redacted>`), keeping the verb so the
+protocol stays legible. ⭐ Guarded **two-sided**, and that side matters more: a redactor that also ate
+`SELECTED <teamId> <playerId>` would silently destroy the one frame class this spike exists to read.
+The test asserts `SELECTED`/`SELECTING`/`AUTOSUGGEST` never appear in the redactor.
+
+Severity of what leaked: a draft-join token for a mock league that is deleted when the draft ends —
+low, and not `espn_s2`. But it is the **third** time a capture has carried something the design did
+not expect (PII §12, this token, and the `responseType` blind spot §11.3), which is the argument for
+the allowlist being structural rather than a list of patches.
+
+### 14.5 What is left, and it is not feasibility
+
+Nothing in the read path is unknown. Remaining items are product decisions, carried into the overlay
+story: the ambiguity rule on the name rung (§11.1), the `Travis Hunter` two-way position fallback
+(§11.2), and the standing policy question on originating requests (§7).
+
+Guard suite: **41 tests, 22 RED-proven clauses.**
