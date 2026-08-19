@@ -423,13 +423,54 @@ GATE/AC: an audited, immutable, leakage-verified odds substrate; a written+versi
 GATE/AC: the fusion ladder selected on deflated ΔCRPS vs market-only; the game model provably untouched; survivor → a fused decision-time posterior for P2.3/transparency; null → recorded. Operator handoff + branch + PR → `dev`.
 ```
 ```
-▶ NCAAF-P2.5 — TOTAL / JOINT-DISTRIBUTION SHAPE REPAIR (the mildly non-flat total PIT is the clearest model-level target)   [Model · 🧭 OPUS · 🔬 §0.5 · post-P1.4 · from the doc §4 · SUBSUMES P2.1's H14/H15]   🟢 READY
+▶ NCAAF-P2.5 — TOTAL / JOINT-DISTRIBUTION SHAPE REPAIR (the mildly non-flat total PIT is the clearest model-level target)   [Model · 🧭 OPUS · 🔬 §0.5 · post-P1.4 · from the doc §4 · SUBSUMES P2.1's H14/H15]   ✅ **DONE 2026-08-19 — `REFERENCE_STANDS` (null, `CONSTRAINT_REFUSED`)**
 🌿 FIRST ACTION: `git checkout dev && git pull && git checkout -b ncaaf-p2-5-dist-shape` (⛔ never `dev`/`main`, ⛔ never `git add -A`; CLAUDE.md 🌿.)
 🎯 WHY: P1.4's total leg meets the 80% coverage floor but the total PIT is mildly NON-FLAT (PITdev 0.0218) — coverage-pass ≠ correct shape. Wrong tail thickness / skew / heteroskedasticity / margin-total covariance is a pure CALIBRATION defect that hurts the distributional PRODUCT (the P3.2 curves, the honest intervals) REGARDLESS of edge → product-valuable under best_alpha=0.
 🔬 DO (§0.5): pre-register the distribution candidates (doc §4.1): bivariate Gaussian w/ conditional heteroskedasticity · bivariate Student-t · skew-t/skew-normal · Gaussian/regime mixture · copula w/ independent marginals · separate home/away score dists → transform to margin+total · quantile/distributional-boosting foil · discrete-score simulation (football scores mass at 3/7/10/14 — the key-number effect). PLUS a conditional-variance sub-model: log σ²_margin=X_var·γ, log σ²_total=Z_var·η (drivers: pace/mismatch/favorite-size/explosiveness/QB-uncertainty/early-season/weather — ⚠️ weather-forecast availability is a DATA PREREQ, confirm first). Select on total-CRPS + PIT-flatness + tail-CRPS + joint-calibration under purged CV, FULL set deflated (PBO/DSR/FDR). E2.1-r discipline: a coverage-TARGET degenerate must LOSE; oracle floor; discrete-count PIT must be RANDOMIZED (the E2.1-r inclusive-bound trap).
 🔒 HONEST: best_alpha=0 — improves probability SHAPE/honesty, not edge. ⚠️ SUBSUMES P2.1's H14 (key-number/discrete margin) + H15 (heteroscedastic/skewed margin) → they are REMOVED from P2.1's battery (see the P2.1 cross-ref) to avoid DOUBLE-COUNTING in deflation.
 GATE/AC: the distribution + conditional-variance candidates selected on deflated total-CRPS + PIT-flatness (beat P1.4's shape); survivor → re-point P1.4/P1.5; null → P1.4 shape stands, recorded. Operator handoff + branch + PR → `dev`.
 ```
+```
+```
+📌 **NCAAF-P2.5 RESULT (2026-08-19) — `REFERENCE_STANDS`; the served P1.4/S1 shape stands.** 10-arm
+coherent shape field over a FROZEN mean (the served `ridge/strength_pace` μ), 8 season-forward purged
+folds / 6,024 OOS games. Read-out `ablation_results/ncaaf_p2_5_readout.md`; pre-registration
+`…_preregistration.md` (locked before scoring, 8 amendments all made pre-decisive-run); machine record
+`…_distribution_shape.json`; harness `models/bakeoff_ncaaf_p2_5.py` + `models/p2_5_shapes.py`; 34
+fast-gate guards, **all 33 deliberate breaks RED-proven** (`ncaaf_p2_5_red_proof.py`).
+⚠️ **THE CARD'S PREMISE WAS STALE:** the quoted total `PITdev 0.0218` is P1.4's SUPERSEDED
+`strength_only` contract; what SERVES (`strength_pace`) is **0.0173 and PIT-flat**, and P1.4's failure
+was `pit_mean_dev` 0.0263 — a LOCATION defect S1's pace term already largely repaired. The foil is the
+SERVED config, proven by a reproduction gate (pooled σ refit **δ = 0.0000** on both axes).
+⭐ **THE MECHANISM IS REAL AND MEASURED, AND IT IS SKEW — NOT TAIL WEIGHT.** The total's residual is
+right-skewed (fitted skew-normal **α ≈ +2.12** on the total vs +1.02 on the margin); modelling it cuts
+the total PIT deviation **0.0170 → 0.0065 (−62%)** and the joint PIT 0.0130 → 0.0097 while improving
+CRPS. `skew_t`'s total ν pins at its **60.0 upper bound** (the Normal limit) and `student_t` ALONE is a
+**TIE** — heavy tails do nothing; the asymmetry is the whole effect. ⭐ **Cross-vertical: MLB
+MH2.6/MH2.8 found the SAME defect in served `total_runs` and reached the SAME refusal shape** ⇒ a
+SYMMETRIC predictive is a suspect default for any scoring total.
+❌ **WHY NOTHING SHIPPED:** the three skew/non-parametric arms buy the body at a measurable cost in the
+TAILS and fail the threshold-weighted clause C5 (+0.004…+0.008 tail-CRPS) — a plain-CRPS read would
+have shown three clean winners. The best-CRPS arm `key_number` (+0.0287, 7/8 folds, PBO 0.000, BH-clear
+at p=0.0049) fails **DSR 0.311 vs 0.95**: its per-fold Sharpe **1.243 sits BELOW SR0 1.497**, so
+`DSR_UNREACHABLE` — ⛔ **no fold count clears it** and the instrument confirms **field size is NOT the
+lever** ("even a 2-arm field does not clear"). The only lever is a LOWER-VARIANCE design. It is also
+not floor-verified (C8): its own-form peek is a peeking **MLE** while the metric is **CRPS**, and its
+scale reaches the predictive through a non-Gaussian lattice transform.
+📉 **CLEAN ATTRIBUTABLE NEGATIVES worth not re-testing:** (1) the story's headline conditional-variance
+sub-model `cond_het` LOSES (−0.0351, **0/8 folds**) and its matched PERMUTATION anchor (drivers shuffled
+against residuals) **BEATS it by 0.0058** ⇒ the registered drivers carry NO variance information beyond
+the marginal and cost a real overfitting penalty at n≈736 — and `cond_het` NESTS the incumbent, so this
+is not a specification accident; (2) the per-side count form `home_away` OVER-covers (0.868) even with
+ρ_sides freed; (3) a distributional booster is KNOT-LIMITED at this n (an α-quantile needs a leaf ≥1/α
+rows).
+🌦️ **DATA PREREQ ANSWERED — WEATHER IS ABSENT** (0 of 207 matrix columns match
+`weather|temp|wind|precip|humid`; absent from both inventories) ⇒ dropped, not fabricated, and guarded.
+**📌 This also settles P2.1's H10 (WEATHER), which carries the same "confirm availability first"
+condition — it is not available.** H14/H15 remain subsumed here and stay OUT of P2.1's battery.
+🔒 `best_alpha = 0`, market-blind, **deploy-held — NO re-point is owed; the served artifacts are
+unchanged.** A successor must be a FRESH registration (⛔ never a re-cut of this field): a
+lower-variance design · a skew arm that does not pay in the tails · a CRPS-optimal per-form ceiling.
 ```
 ▶ NCAAF-P2.6 — LATENT OFFENSE/DEFENSE/PACE/ST + DYNAMIC STATE-SPACE STRENGTH (re-architect the scalar engine; incl. cold-start init)   [Model · 🧭 OPUS · 🔬 §0.5 · post-P1.2/P1.4 · from the doc §3/§9.1/§6.1]   🟢 READY
 🌿 FIRST ACTION: `git checkout dev && git pull && git checkout -b ncaaf-p2-6-latent-states` (⛔ never `dev`/`main`, ⛔ never `git add -A`; CLAUDE.md 🌿.)
