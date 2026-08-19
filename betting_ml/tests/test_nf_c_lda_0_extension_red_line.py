@@ -324,8 +324,16 @@ def test_an_off_allowlist_response_body_is_discarded_before_it_is_read():
     """The allowlist must be applied at the TOP of `recordCall`, before any shaping. Declaring it
     and not consulting it is the 'wired ≠ invoked' class (NF-C0e)."""
     body = _sources()["main-world-probe.js"]
-    assert re.search(r"if \(!bodyCaptureAllowed\(url\)\) bodyText = null;", body), (
-        "recordCall does not discard off-allowlist bodies — the allowlist is declared but not applied"
+    # ⚠️ RE-ANCHORED (not deleted) when the refusal grew a `refused` flag so an off-allowlist
+    # body could be told apart from an unreadable one. The PROPERTY is unchanged — an
+    # off-allowlist body must be discarded before any shaping — so the clause is re-pointed at
+    # the new implementation rather than dropped (E9.60: re-anchoring an existing property is
+    # fine; deleting it because its spelling moved is how coverage silently disappears).
+    assert re.search(r"var refused = !bodyCaptureAllowed\(url\);", body), (
+        "recordCall does not consult the allowlist — it is declared but not applied"
+    )
+    assert re.search(r"if \(refused\) \{[\s\S]{0,160}?bodyText = null;", body), (
+        "an off-allowlist body is not discarded before shaping"
     )
 
 
@@ -403,4 +411,54 @@ def test_a_changed_body_is_reshaped_rather_than_frozen():
     assert "shapeLatest" in body, "a re-polled endpoint's newer body is never shaped"
     assert re.search(r"bodyText\.length !== entry\.bytes", body), (
         "the re-shape is not gated on a cheap length change — it would re-parse 1.4 MB every poll"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# Clause 7 — the LINE-PROTOCOL handshake, and honest refusal accounting
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+
+
+def test_a_line_protocol_secret_command_is_redacted_whole():
+    """⚠️ MEASURED LEAK, not a hypothetical. The draft socket opens with
+
+        TOKEN 1:<leagueId>:<teamId>:<swid>:-1049606073
+
+    whose last field is the `draftSecurity` join token. The GUID rule caught the swid; the token is a
+    SHORT SIGNED INTEGER, under every length threshold, and survived into a capture. The JSON-shaped
+    `"token": "..."` rule cannot see a LINE protocol at all.
+    """
+    body = _sources()["main-world-probe.js"]
+    assert re.search(r"TOKEN\|AUTH", body), (
+        "the redactor has no rule for a line-protocol secret COMMAND — a short token survives"
+    )
+
+
+def test_the_redactor_does_not_eat_a_pick_event():
+    """⭐ THE TWO-SIDED HALF, and the one that matters most. A redactor that also removed
+    `SELECTED <teamId> <playerId>` would be worse than none: it would silently destroy the single
+    frame class this entire spike exists to read."""
+    body = _sources()["main-world-probe.js"]
+    m = re.search(r"function redact\(text\) \{[\s\S]*?\n  \}", body)
+    assert m, "redact() not found"
+    src = m.group(0)
+    for verb in ("SELECTED", "SELECTING", "AUTOSUGGEST"):
+        assert verb not in src, (
+            f"{verb} appears in the redactor — the pick/clock stream must pass through UNCHANGED"
+        )
+
+
+def test_an_off_allowlist_body_is_recorded_as_REFUSED_not_as_unreadable():
+    """A record that states the wrong REASON is worse than a sparse one.
+
+    A real capture showed `registerdisney.go.com … nonTextFrames: 1`, which reads as "ESPN sent
+    binary" when the truth is "we declined to look" — the next reader debugs the wrong thing.
+    """
+    body = _sources()["main-world-probe.js"]
+    assert "bodyNotRead" in body, "an allowlist refusal is not distinguished from an unreadable body"
+    assert re.search(r"!refused && entry\.shape === null", body), (
+        "a refused body still falls through to the nonTextFrames counter"
+    )
+    assert re.search(r"if \(!refused && bodyText === null", body), (
+        "a refused body still increments the unreadable-frame counter"
     )
