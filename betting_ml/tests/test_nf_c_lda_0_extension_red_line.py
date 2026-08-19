@@ -277,3 +277,78 @@ def test_the_xhr_observer_handles_every_response_representation():
     assert re.search(r'rt === ""\s*\|\|\s*rt === "text"', body), (
         "the text branch no longer guards on responseType, so responseText can throw again"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# Clause 5 — the HOST ALLOWLIST. A refuted premise, not a tidy-up.
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+#
+# NF-C0 §3(d) argued the paste flow is safe because a response BODY is "structurally incapable" of
+# carrying `espn_s2`. Verified against the LEAGUE endpoint, that is true. A real draft-room capture
+# (2026-08-19) REFUTED it for the room as a whole: `registerdisney.go.com/.../guest/{SWID}` returns
+# `s2` in its body alongside the user's name, email, DOB and SWID. The credential VALUE escaped only
+# because `summarize` truncates strings over 200 chars — a SIZE decision, not a credential guard.
+#
+# ⇒ "observe everything the page requests" is unsafe, because a draft room requests things that have
+# nothing to do with drafting.
+
+#: Hosts observed carrying PII/credential material in a real capture. None may ever be readable.
+KNOWN_PII_HOSTS = ("registerdisney.go.com", "fan.api.espn.com", "consent-api.onetrust.com",
+                   "log.go.com", "bamgrid.com")
+
+
+def _allowlist() -> list[str]:
+    body = _sources()["main-world-probe.js"]
+    m = re.search(r"var BODY_CAPTURE_HOSTS = \[(.*?)\];", body, flags=re.S)
+    assert m, "no BODY_CAPTURE_HOSTS declared — every clause below would pass on nothing"
+    return re.findall(r'"([^"]+)"', m.group(1))
+
+
+def test_the_body_allowlist_is_narrow_and_non_empty():
+    hosts = _allowlist()
+    assert hosts, "empty allowlist — the probe would read nothing, which is not the invariant"
+    assert len(hosts) <= 3, f"allowlist has grown to {hosts} — each entry is a host we read bodies from"
+    for h in hosts:
+        assert "espn.com" in h, f"{h!r} is not an ESPN host"
+
+
+@pytest.mark.parametrize("host", KNOWN_PII_HOSTS)
+def test_hosts_observed_carrying_pii_are_not_readable(host: str):
+    """⭐ THE TWO-SIDED HALF. An allowlist that merely EXISTS proves nothing; these are the hosts a
+    real capture caught carrying `s2`, email, DOB and SWID, and they must be refused by name."""
+    for entry in _allowlist():
+        assert host not in entry, f"{host!r} is on the body allowlist — it carries PII"
+
+
+def test_an_off_allowlist_response_body_is_discarded_before_it_is_read():
+    """The allowlist must be applied at the TOP of `recordCall`, before any shaping. Declaring it
+    and not consulting it is the 'wired ≠ invoked' class (NF-C0e)."""
+    body = _sources()["main-world-probe.js"]
+    assert re.search(r"if \(!bodyCaptureAllowed\(url\)\) bodyText = null;", body), (
+        "recordCall does not discard off-allowlist bodies — the allowlist is declared but not applied"
+    )
+
+
+def test_the_allowlist_fails_closed_on_an_unparseable_url():
+    body = _sources()["main-world-probe.js"]
+    m = re.search(r"function bodyCaptureAllowed\(url\) \{[\s\S]*?\n  \}", body)
+    assert m, "bodyCaptureAllowed not found"
+    assert re.search(r"catch \([^)]*\) \{ return false;", m.group(0)), (
+        "bodyCaptureAllowed does not fail CLOSED — an unparseable URL must be refused, not allowed"
+    )
+    assert "hostname" in m.group(0), (
+        "the check is not on hostname — a substring match would let "
+        "https://evil.com/lm-api-reads.fantasy.espn.com through"
+    )
+
+
+def test_sensitive_keys_are_omitted_from_a_summarized_body():
+    """Defence in depth BEHIND the allowlist: if an allowed host ever starts returning a profile
+    block, the value is dropped rather than summarized."""
+    body = _sources()["main-world-probe.js"]
+    assert "SENSITIVE_KEYS" in body, "no sensitive-key scrub declared"
+    for key in ("s2", "swid", "email", "dateOfBirth"):
+        assert key in body, f"sensitive-key scrub does not cover {key!r}"
+    assert re.search(r"SENSITIVE_KEYS\.test\(k\)", body), (
+        "the scrub is declared but never applied inside summarize()"
+    )

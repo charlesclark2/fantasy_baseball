@@ -64,6 +64,20 @@ CASES = [
     ("xhr observer stops handling responseType='json'",
      PROBE, '              } else if (rt === "json") {', '              } else if (false) {',
      "test_the_xhr_observer_handles_every_response_representation"),
+    ("a PII host is added to the body allowlist",
+     PROBE, '    "fantasydraft.espn.com"            // the live draft socket',
+     '    "fantasydraft.espn.com", "registerdisney.go.com"',
+     "test_hosts_observed_carrying_pii_are_not_readable[registerdisney.go.com]"),
+    ("the allowlist is declared but never applied",
+     PROBE, "      if (!bodyCaptureAllowed(url)) bodyText = null;", "      ;",
+     "test_an_off_allowlist_response_body_is_discarded_before_it_is_read"),
+    ("the allowlist fails OPEN on an unparseable url",
+     PROBE, "    } catch (e) { return false; }   // unparseable ⇒ refuse (fail CLOSED)",
+     "    } catch (e) { return true; }",
+     "test_the_allowlist_fails_closed_on_an_unparseable_url"),
+    ("the sensitive-key scrub is never applied",
+     PROBE, "      if (SENSITIVE_KEYS.test(k)) { out[k] = \"<omitted>\"; continue; }", "      ;",
+     "test_sensitive_keys_are_omitted_from_a_summarized_body"),
 ]
 
 
