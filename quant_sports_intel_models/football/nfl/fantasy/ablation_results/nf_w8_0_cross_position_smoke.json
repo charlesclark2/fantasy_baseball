@@ -1,0 +1,608 @@
+{
+  "story": "NF-W8-0",
+  "phase": "cross_position_comparability",
+  "smoke": true,
+  "generated_at": "2026-08-19T07:03:31.279385+00:00",
+  "seasons": [
+    2016,
+    2025
+  ],
+  "n_folds": 1,
+  "gate_league": "full_ppr",
+  "matrix_key": "26c34fbe778c9d87",
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 84553,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "attach_audit": {
+    "n_rows": 84553,
+    "feed_dup_keys": 0,
+    "passing_interceptions_total": 4121.0,
+    "passing_interceptions_filled_zero_rows": 26835,
+    "fumbles_lost_total": 2383.0,
+    "fumbles_lost_filled_zero_rows": 26835,
+    "two_pt_total": 978.0,
+    "two_pt_filled_zero_rows": 26835
+  },
+  "served_map_sources": {
+    "QB|passing_tds": "nf_w6b",
+    "QB|passing_yards": "nf_w6b",
+    "QB|rushing_yards": "nf_w6b",
+    "RB|rushing_yards": "nf_w6b",
+    "TE|receiving_yards": "nf_w6b",
+    "WR|receiving_yards": "nf_w6b",
+    "RB|rushing_tds": "nf_w6b_c",
+    "RB|receiving_yards": "nf_w6d_c_default",
+    "QB|attempts": "nf_w6d_c_default",
+    "QB|passing_interceptions": "nf_w6d_b_ship",
+    "QB|carries": "nf_w6d_c_default",
+    "QB|rushing_tds": "nf_w6d_b_ship",
+    "QB|fumbles_lost": "nf_w6d_c_default",
+    "QB|two_pt": "nf_w6d_c_default",
+    "RB|carries": "nf_w6d_b_ship",
+    "RB|targets": "nf_w6d_c_default",
+    "RB|receptions": "nf_w6d_b_ship",
+    "RB|receiving_tds": "nf_w6d_c_default",
+    "RB|fumbles_lost": "nf_w6d_c_default",
+    "RB|two_pt": "nf_w6d_c_default",
+    "WR|targets": "nf_w6d_b_ship",
+    "WR|receptions": "nf_w6d_b_ship",
+    "WR|receiving_tds": "nf_w6d_b_ship",
+    "WR|fumbles_lost": "nf_w6d_c_default",
+    "WR|two_pt": "nf_w6d_c_default",
+    "TE|targets": "nf_w6d_b_ship",
+    "TE|receptions": "nf_w6d_b_ship",
+    "TE|receiving_tds": "nf_w6d_c_default",
+    "TE|fumbles_lost": "nf_w6d_c_default",
+    "TE|two_pt": "nf_w6d_c_default",
+    "QB|targets": "nf_w6d_c_default",
+    "QB|receptions": "nf_w6d_c_default",
+    "QB|receiving_yards": "nf_w6d_c_default",
+    "QB|receiving_tds": "nf_w6d_c_default",
+    "RB|attempts": "nf_w6d_c_default",
+    "RB|passing_yards": "nf_w6d_c_default",
+    "RB|passing_tds": "nf_w6d_c_default",
+    "RB|passing_interceptions": "nf_w6d_c_default",
+    "WR|attempts": "nf_w6d_c_default",
+    "WR|passing_yards": "nf_w6d_c_default",
+    "WR|passing_tds": "nf_w6d_c_default",
+    "WR|passing_interceptions": "nf_w6d_c_default",
+    "WR|carries": "nf_w6d_c_default",
+    "WR|rushing_yards": "nf_w6d_c_default",
+    "WR|rushing_tds": "nf_w6d_c_default",
+    "TE|attempts": "nf_w6d_c_default",
+    "TE|passing_yards": "nf_w6d_c_default",
+    "TE|passing_tds": "nf_w6d_c_default",
+    "TE|passing_interceptions": "nf_w6d_c_default",
+    "TE|carries": "nf_w6d_c_default",
+    "TE|rushing_yards": "nf_w6d_c_default",
+    "TE|rushing_tds": "nf_w6d_c_default"
+  },
+  "assembly_draws": 300,
+  "seed": 20260818,
+  "consumed_generators": {
+    "QB": "qb_zm_floor",
+    "RB": "rb_direct",
+    "WR": "wr_mixall",
+    "TE": "te_single_copula"
+  },
+  "swap_generators": {
+    "QB": "direct_points",
+    "RB": "single_copula",
+    "WR": "direct_points",
+    "TE": "direct_points"
+  },
+  "declared_field": {
+    "incumbent": "identity",
+    "real_arms": [
+      "level_add",
+      "level_affine"
+    ],
+    "anchors": [
+      "zero_point",
+      "position_mean_point",
+      "level_add_permuted",
+      "level_add_oracle"
+    ],
+    "declared_field_size": 2
+  },
+  "input_dir": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w80/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0_input_smoke",
+  "fold_results": [
+    {
+      "label": "2025H2",
+      "n_test": 4380,
+      "positions": {
+        "QB": {
+          "scores": {
+            "direct_points": 2.612798,
+            "zm_floor": 2.621472
+          },
+          "consumed": "zm_floor",
+          "swap": "direct_points",
+          "n_train": 12622,
+          "n_test": 701,
+          "bias_identity": {
+            "n": 701,
+            "sum_err": -220.3766924844728,
+            "bias": -0.3143747396354819,
+            "sd_err": 6.359194552218721
+          },
+          "bias_swap": {
+            "n": 701,
+            "sum_err": 113.54621891519857,
+            "bias": 0.16197748775349297,
+            "sd_err": 6.247740667777142
+          },
+          "calibration_slope": {
+            "slope": 0.9598,
+            "intercept": 0.5463,
+            "n": 701
+          }
+        },
+        "RB": {
+          "scores": {
+            "direct_points": 2.434651,
+            "single_copula": 2.497815
+          },
+          "consumed": "direct_points",
+          "swap": "single_copula",
+          "n_train": 20601,
+          "n_test": 1082,
+          "bias_identity": {
+            "n": 1082,
+            "sum_err": -417.41870828878984,
+            "bias": -0.38578438843695917,
+            "sd_err": 5.56546634188391
+          },
+          "bias_swap": {
+            "n": 1082,
+            "sum_err": -335.94880006100595,
+            "bias": -0.3104887246404861,
+            "sd_err": 5.676650347721098
+          },
+          "calibration_slope": {
+            "slope": 1.1197,
+            "intercept": -0.2524,
+            "n": 1082
+          }
+        },
+        "WR": {
+          "scores": {
+            "direct_points": 2.488365,
+            "mixall_learned": 2.474293
+          },
+          "consumed": "mixall_learned",
+          "swap": "direct_points",
+          "n_train": 29162,
+          "n_test": 1622,
+          "bias_identity": {
+            "n": 1622,
+            "sum_err": 240.49623359859785,
+            "bias": 0.14827141405585564,
+            "sd_err": 5.416036562282406
+          },
+          "bias_swap": {
+            "n": 1622,
+            "sum_err": 325.3680232553835,
+            "bias": 0.2005968084188554,
+            "sd_err": 5.43030723275203
+          },
+          "calibration_slope": {
+            "slope": 0.987,
+            "intercept": -0.0822,
+            "n": 1622
+          }
+        },
+        "TE": {
+          "scores": {
+            "direct_points": 1.807656,
+            "single_copula": 1.772233
+          },
+          "consumed": "single_copula",
+          "swap": "direct_points",
+          "n_train": 16922,
+          "n_test": 975,
+          "bias_identity": {
+            "n": 975,
+            "sum_err": -133.8404444644523,
+            "bias": -0.1372722507327716,
+            "sd_err": 4.171319676234156
+          },
+          "bias_swap": {
+            "n": 975,
+            "sum_err": -169.82699923813678,
+            "bias": -0.17418153768014027,
+            "sd_err": 4.219281255360955
+          },
+          "calibration_slope": {
+            "slope": 1.0731,
+            "intercept": -0.1189,
+            "n": 975
+          }
+        }
+      },
+      "bank_cache": "miss",
+      "rows_path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w80/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0_rows_smoke/2025H2.parquet"
+    }
+  ],
+  "runtime_seconds": 426.0,
+  "reproduction": {
+    "QB": {
+      "reproduces": false,
+      "n_folds_compared": 1,
+      "max_abs_gap": 0.012521760128856751,
+      "tolerance": 1e-09,
+      "per_fold_abs_gap": {
+        "2025H2": 0.012521760128856751
+      }
+    },
+    "RB": {
+      "reproduces": false,
+      "n_folds_compared": 1,
+      "max_abs_gap": 4.1524652205637835e-07,
+      "tolerance": 1e-09,
+      "per_fold_abs_gap": {
+        "2025H2": 4.1524652205637835e-07
+      }
+    },
+    "WR": {
+      "reproduces": false,
+      "n_folds_compared": 1,
+      "max_abs_gap": 0.006520035730808171,
+      "tolerance": 1e-09,
+      "per_fold_abs_gap": {
+        "2025H2": 0.006520035730808171
+      }
+    },
+    "TE": {
+      "reproduces": false,
+      "n_folds_compared": 1,
+      "max_abs_gap": 0.0029736470725385544,
+      "tolerance": 1e-09,
+      "per_fold_abs_gap": {
+        "2025H2": 0.0029736470725385544
+      }
+    }
+  },
+  "family_a": {
+    "pairs": {
+      "QB|RB": {
+        "n_folds": 1,
+        "gap": null,
+        "p_two_sided": null,
+        "se": null,
+        "mde_ppr": null,
+        "bh_rejected": false
+      },
+      "QB|WR": {
+        "n_folds": 1,
+        "gap": null,
+        "p_two_sided": null,
+        "se": null,
+        "mde_ppr": null,
+        "bh_rejected": false
+      },
+      "QB|TE": {
+        "n_folds": 1,
+        "gap": null,
+        "p_two_sided": null,
+        "se": null,
+        "mde_ppr": null,
+        "bh_rejected": false
+      },
+      "RB|WR": {
+        "n_folds": 1,
+        "gap": null,
+        "p_two_sided": null,
+        "se": null,
+        "mde_ppr": null,
+        "bh_rejected": false
+      },
+      "RB|TE": {
+        "n_folds": 1,
+        "gap": null,
+        "p_two_sided": null,
+        "se": null,
+        "mde_ppr": null,
+        "bh_rejected": false
+      },
+      "WR|TE": {
+        "n_folds": 1,
+        "gap": null,
+        "p_two_sided": null,
+        "se": null,
+        "mde_ppr": null,
+        "bh_rejected": false
+      }
+    },
+    "bh_q": 0.1,
+    "n_pairs_evaluable": 0,
+    "gap_detected": null,
+    "max_mde_ppr": null
+  },
+  "identity_bias": {
+    "pooled": {
+      "QB": {
+        "n": 701,
+        "bias_pooled": -0.3143747396354819,
+        "bias_fold_mean": -0.3143747396354819
+      },
+      "RB": {
+        "n": 1082,
+        "bias_pooled": -0.38578438843695917,
+        "bias_fold_mean": -0.38578438843695917
+      },
+      "WR": {
+        "n": 1622,
+        "bias_pooled": 0.14827141405585564,
+        "bias_fold_mean": 0.14827141405585564
+      },
+      "TE": {
+        "n": 975,
+        "bias_pooled": -0.1372722507327716,
+        "bias_fold_mean": -0.1372722507327716
+      }
+    },
+    "by_fold": {
+      "QB": [
+        -0.3143747396354819
+      ],
+      "RB": [
+        -0.38578438843695917
+      ],
+      "WR": [
+        0.14827141405585564
+      ],
+      "TE": [
+        -0.1372722507327716
+      ]
+    }
+  },
+  "recal": {
+    "evaluable_folds": [],
+    "n_evaluable": 0,
+    "affine_eligibility": {
+      "eligible": true,
+      "violations": []
+    },
+    "range_by_arm": {
+      "identity": {
+        "pooled": null,
+        "eligible": true,
+        "range_by_fold": []
+      },
+      "level_add": {
+        "pooled": null,
+        "eligible": true,
+        "range_by_fold": []
+      },
+      "level_affine": {
+        "pooled": null,
+        "eligible": true,
+        "range_by_fold": []
+      },
+      "zero_point": {
+        "pooled": null,
+        "eligible": true,
+        "range_by_fold": []
+      },
+      "position_mean_point": {
+        "pooled": null,
+        "eligible": true,
+        "range_by_fold": []
+      },
+      "level_add_permuted": {
+        "pooled": null,
+        "eligible": true,
+        "range_by_fold": []
+      },
+      "level_add_oracle": {
+        "pooled": null,
+        "eligible": true,
+        "range_by_fold": []
+      }
+    },
+    "rmse_pooled": {
+      "identity": {
+        "QB": null,
+        "RB": null,
+        "WR": null,
+        "TE": null
+      },
+      "level_add": {
+        "QB": null,
+        "RB": null,
+        "WR": null,
+        "TE": null
+      },
+      "level_affine": {
+        "QB": null,
+        "RB": null,
+        "WR": null,
+        "TE": null
+      },
+      "zero_point": {
+        "QB": null,
+        "RB": null,
+        "WR": null,
+        "TE": null
+      },
+      "position_mean_point": {
+        "QB": null,
+        "RB": null,
+        "WR": null,
+        "TE": null
+      },
+      "level_add_permuted": {
+        "QB": null,
+        "RB": null,
+        "WR": null,
+        "TE": null
+      },
+      "level_add_oracle": {
+        "QB": null,
+        "RB": null,
+        "WR": null,
+        "TE": null
+      }
+    },
+    "winner": null,
+    "winner_clauses": {
+      "banks_untouched": true
+    },
+    "p_reduces_gap_one_sided": null,
+    "pbo": null,
+    "dsr": null,
+    "deflate_detail": {
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": null
+    },
+    "oracle_ceiling": {
+      "note": "`level_add_oracle` peeks the test fold's own mean error \u2014 its RMSE improvement is the CEILING of the level channel (NF-D16 (e)); never a trial",
+      "rmse_pooled": {
+        "QB": null,
+        "RB": null,
+        "WR": null,
+        "TE": null
+      }
+    },
+    "trailing3_sensitivity_note": "report-only (prereg \u00a74): trailing-3 \u03b4s are recorded in the recal tables; \u26d4 never selected here"
+  },
+  "swap_verification": null,
+  "board_decomposition": {},
+  "skipped": {
+    "2025H2": []
+  },
+  "verdict": {
+    "state": "UNDEFINED",
+    "reason": "a reproduction pin failed, a position was skipped, or family A could not evaluate \u2014 the harness did not run; never read as any verdict (NF1.7 (a))",
+    "gap_detected": null,
+    "max_mde_ppr": null,
+    "winner": null,
+    "swap_state": null,
+    "qb_consumption": "OPTION_B_RECALIBRATED",
+    "second_reader": {
+      "requested": true,
+      "scope": "the \u00a71 QB consumption registration \u2014 whether NF-W8 may consume a calibrated-but-dsr-uncertified distribution under a registered-forward Option B (inherits NF-W7j's open governance flag)",
+      "status": "OPEN \u2014 unsigned until a governance second reader signs the prereg \u00a71"
+    }
+  },
+  "classification": null,
+  "qb_consumption": {
+    "decision": "OPTION_B_RECALIBRATED",
+    "rationale": "dsr_ok is a SHIPPING gate, not a CONSUMPTION bar for a projection consumer: the fantasy vertical gates consumption on calibration + the product metric, not betting-posture deflation. NF-W7f's `zm_floor` is the only QB construction on record clearing the PIT bar (0.0281, 8/8 folds vs the incumbent's 0/8) AND the best-scoring (+0.0184 CRPS vs the matched foil, p=0.0121, PBO 0.0; +0.0189 vs direct-points); its dsr_ok refusal deflated a search whose flip mass was 100% on the winner, and every remedy is measured closed (NF-W7j DSR_UNREACHABLE \u2014 field size is no lever; NF-W7k MC_LEVER_EXHAUSTED \u2014 a 325x draw-noise shortfall). Every alternative consumption is strictly worse on BOTH axes.",
+    "caveat": "WEAKER FOOTING, carried by every consumer of QB rows: QB is the only position not through the full certification gate WR (DSR 0.9852) and TE (0.9822) cleared and RB was registered against. The un-certified residual is deflation-adjusted ARM SELECTION within the zm family \u2014 not calibration (a per-fold measurement) and not the sign of the improvement. QB rows are 'calibrated + best-on-record, consumed under Option B; not certification-equivalent'."
+  },
+  "second_reader": {
+    "requested": true,
+    "scope": "the \u00a71 QB consumption registration \u2014 whether NF-W8 may consume a calibrated-but-dsr-uncertified distribution under a registered-forward Option B (inherits NF-W7j's open governance flag)",
+    "status": "OPEN \u2014 unsigned until a governance second reader signs the prereg \u00a71"
+  },
+  "promote_blockers": [
+    "NF-W8-0 is DEPLOY-HELD: the cross-position input is an NF-G0 challenger consumed by nothing until governance promotes it",
+    "every QB row carries the \u00a71 Option-B caveat: calibrated + best-on-record, consumed under a registered-forward PM decision \u2014 NOT certification-equivalent to WR/TE/RB, and the ship bar was never relaxed (E2.1-r)",
+    "NF-W7c's promote blockers are INHERITED in full: an assembled row whose source is not `bakeoff_all_priced_legs` carries a NF-W6d calibrated DEFAULT among the legs this league prices (`calibration_warning`), and a league pricing a SKILL_UNMODELED_KEYS term has a real coverage gap",
+    "K/DST are OUT OF SCOPE \u2014 the input is declared 4-position; the NF-W7 K/DST weekly models join in a successor's registration, never by silent extension",
+    "the layer corrects LEVEL (and uniform affine scale) only; a rank-dependent generator artifact is a successor's fresh registration"
+  ],
+  "input": {
+    "dir": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w80/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0_input_smoke",
+    "shipped_arm": "identity",
+    "schema": [
+      "season",
+      "week",
+      "gw",
+      "gsis_id",
+      "position",
+      "generator",
+      "point_raw",
+      "point_recal",
+      "recal_arm",
+      "point_vs_bank_offset",
+      "p10",
+      "p50",
+      "p90",
+      "replacement_points",
+      "vor",
+      "overall_rank",
+      "positional_rank",
+      "level_gap_disclosure",
+      "qb_option_b",
+      "calibration_warning"
+    ],
+    "banks_untouched": true,
+    "max_quantile_drift": 0.0,
+    "cross_rankable": false,
+    "fold_summaries": {
+      "2025H2": {
+        "n_rows": 4380,
+        "vor_top3_sample": [
+          {
+            "gw": 166,
+            "gsis_id": "00-0033280",
+            "position": "RB",
+            "vor": 10.971174813874853
+          },
+          {
+            "gw": 166,
+            "gsis_id": "00-0036223",
+            "position": "RB",
+            "vor": 9.467624902606861
+          },
+          {
+            "gw": 166,
+            "gsis_id": "00-0036963",
+            "position": "WR",
+            "vor": 8.843164319098971
+          },
+          {
+            "gw": 167,
+            "gsis_id": "00-0033280",
+            "position": "RB",
+            "vor": 10.482074339620352
+          },
+          {
+            "gw": 167,
+            "gsis_id": "00-0039040",
+            "position": "RB",
+            "vor": 9.860812734008997
+          },
+          {
+            "gw": 167,
+            "gsis_id": "00-0036900",
+            "position": "WR",
+            "vor": 7.8475524909802825
+          },
+          {
+            "gw": 168,
+            "gsis_id": "00-0033280",
+            "position": "RB",
+            "vor": 10.275875691046968
+          },
+          {
+            "gw": 168,
+            "gsis_id": "00-0038542",
+            "position": "RB",
+            "vor": 8.899694852756985
+          },
+          {
+            "gw": 168,
+            "gsis_id": "00-0039139",
+            "position": "RB",
+            "vor": 8.776312076932461
+          }
+        ],
+        "replacement_by_week_mean": {
+          "QB": 14.715,
+          "RB": 9.481,
+          "WR": 9.557,
+          "TE": 8.444
+        }
+      }
+    }
+  }
+}
