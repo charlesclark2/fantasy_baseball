@@ -580,3 +580,99 @@ room open the draft socket and begin populating `picks[]`. **The capture must be
 are visibly being made** — the readout is worth checking first: `DRAFT STATE: inProgress=True` and a
 `fantasydraft.espn.com` socket in the frame list are the two preconditions for the capture to answer
 anything §10.6 asks.
+
+---
+
+## 12. 🚨 A REFUTED COMPLIANCE PREMISE (2026-08-19) — a response body CAN carry `espn_s2`
+
+A third capture, taken as the draft room opened, contained something the previous two did not — and
+it overturns a claim this spike (and NF-C0 before it) leaned on.
+
+### 12.1 What NF-C0 §3(d) claimed, and where it is false
+
+> "`espn_s2` is an HTTP **cookie**. The browser holds it and attaches it to the request; **it is
+> never echoed into the response body**. A paste of the body is therefore *structurally incapable*
+> of carrying the session credential — not 'unlikely to', **incapable**."
+
+That was verified against the **league** endpoint (`?view=mSettings`) and **it is true there**. It is
+**false for the draft room as a whole.** The room also calls:
+
+```
+https://registerdisney.go.com/jgc/v8/client/ESPN-ONESITE.WEB-PROD/guest/{SWID}
+```
+
+whose response body carries `data.s2` — a 360-character value — alongside `swid`, `firstName`,
+`lastName`, `email`, `dateOfBirth`, `gender` and `username`.
+
+⚠️ **The credential VALUE did not escape, and that was LUCK, not design.** `summarize` renders any
+string over 200 chars as `str(N)`, so `s2` was stored as `'str(360)'`. That truncation exists for
+**size**, not as a credential guard — the probe had no rule that would have stopped it, and a
+shorter token would have been captured verbatim. **The PII was captured verbatim.**
+
+### 12.2 Scope of the refutation — stated carefully, because it is narrower than it sounds
+
+- ⛔ **The general claim is dead**: "an ESPN response body cannot carry the session credential" is
+  false, and should not be repeated.
+- ✅ **The NF-C0f paste flow is NOT broken.** It is scoped to one hand-fetched league URL, and that
+  endpoint's body genuinely does not carry `s2` (re-confirmed here — the score-407 league payload
+  contains no credential material). The paste flow's guarantee comes from *which endpoint* it reads,
+  not from a property of ESPN bodies in general. **That distinction is now load-bearing and was
+  previously implicit.**
+- ⛔ **The extension's design WAS broken**, because "observe everything the page requests" spans
+  every endpoint a draft room happens to touch — including an identity service.
+
+### 12.3 The cure: a host ALLOWLIST, failing closed
+
+Response bodies are now readable from **two hosts only** — `lm-api-reads.fantasy.espn.com` and
+`fantasydraft.espn.com`. Everything else records URL + count, never a body, so the network picture
+stays complete while the contents stay unread.
+
+⭐ **Deliberately an allowlist, which is the OPPOSITE of `pruneEspnPayload`'s denylist — and for the
+opposite reason.** Pruning had to survive **deploy skew**, so an unknown field must pass through
+untouched. Here an unknown **host** is exactly what must not be read. Same repo, same shape of
+decision, opposite correct answer, because the thing being protected against is different.
+
+Matching is on `hostname` (a substring test would admit
+`https://evil.com/lm-api-reads.fantasy.espn.com`) and an unparseable URL **fails closed**. Behind it
+sits a sensitive-key scrub (`s2`, `swid`, `email`, `dateOfBirth`, …) as defence in depth, in case an
+allowed host ever starts returning a profile block. Guard: 6 new clauses, all RED-proven, including
+a two-sided one naming each PII host observed in the wild.
+
+### 12.4 Handling of the affected capture
+
+The capture was **git-ignored and never committed** (verified). It was **deleted**. The only artifact
+retained is the 1,027-row player pool extracted from it, which is player identity only and contains
+no PII (verified). ⚠️ The operator pasted the capture into a working session, so its contents should
+be treated as exposed regardless of the file being removed.
+
+### 12.5 ⭐ THE WEBSOCKET IS PLAIN TEXT — the §10.1 blind spot is fixed and confirmed
+
+The same capture carried the first readable draft-socket frame:
+
+```
+wss://fantasydraft.espn.com/game-1/league-{id}/JOIN   ×6
+rawSample: "AUTODRAFT 14 false\n"
+```
+
+The draft protocol is **line-oriented plain text**, not binary — `COMMAND <teamId> <value>`. §10.1
+recorded 25 unreadable frames; they were never binary, they simply were not JSON, and the old code
+returned early on a parse failure. **The §10.4 fix works.** Pick events on this socket should be
+readable directly, which is the last technical unknown in the live-read path.
+
+### 12.6 And a cleaner "who am I" than `draftSecurity`
+
+The draft-room URL itself is:
+
+```
+https://fantasy.espn.com/football/draft?leagueId=…&seasonId=2026&teamId=14&memberId={SWID}
+```
+
+It names **`teamId` and `memberId` directly** — no inference from a security-token request needed.
+⚠️ Note `memberId` is a SWID GUID: NF-C0's rule applies unchanged — *use it to identify the team,
+then drop it; never log it.*
+
+### 12.7 Still open
+
+`drafted:false, inProgress:false` again — this capture is the room **opening**, so `picks[]` remains
+180 empty `{id, teamId}` slots. Whether it populates `playerId` mid-draft is still the one unanswered
+question, and it now needs a capture taken **while picks are visibly being made**.
