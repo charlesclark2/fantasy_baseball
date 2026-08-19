@@ -466,10 +466,14 @@ def decide(scaling: dict, ceiling_dsr: float | None, ceiling_ci: dict, rungs: li
             "verdict": "MC_LEVER_EXHAUSTED", "fund_phase_b": False, "d2": None,
             "reason": f"the CEILING deflated Sharpe — the gate with ALL Monte-Carlo error removed, "
                       f"which no draw count can beat — is {ceiling_dsr} with CI95 upper end {hi:.4f}, "
-                      f"below the bar {dsr_min}. ⇒ NO draw count clears `dsr_ok`. The lower-variance "
-                      f"lever is EXHAUSTED, and because the shortfall is a property of the winner's "
-                      f"season-to-season heterogeneity against a benchmark the winner itself helps "
-                      f"set, ⛔ no draw / fold / season re-test trigger is published (NF-D18).",
+                      f"below the bar {dsr_min}. ⇒ NO draw count clears `dsr_ok`: the DRAW-COUNT "
+                      f"lever is EXHAUSTED, and ⛔ no draw / fold / season re-test trigger is "
+                      f"published (NF-D18). ⚠️ SCOPE — this closes the DRAW lever, NOT every "
+                      f"conceivable lower-variance design. The residual variance is what remains "
+                      f"once draw noise is removed, and this design CANNOT split it further: "
+                      f"across-fold varies the test ROWS and the SEASON together, so it mixes true "
+                      f"season-to-season heterogeneity with finite-test-row sampling error. A "
+                      f"row-count or sharper-metric lever is UNTESTED here, not refuted.",
             "publishes_retest_trigger": False,
         }
     d2 = smallest_clearing_rung(rungs, dsr_min, ladder)

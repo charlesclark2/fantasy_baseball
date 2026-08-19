@@ -147,9 +147,9 @@ BREAKS: tuple[Break, ...] = (
           ("TestTheDecisionRule::test_an_unevaluable_ceiling_ci_withholds_a_verdict",),
           "a CI that could not be computed is neither a pass nor a refusal (NF1.7 (a))"),
     Break("exhausted_verdict_publishes_a_data_retest_trigger", _MV,
-          '                      f"set, ⛔ no draw / fold / season re-test trigger is published (NF-D18).",\n'
+          '                      f"row-count or sharper-metric lever is UNTESTED here, not refuted.",\n'
           '            "publishes_retest_trigger": False,',
-          '                      f"set. Re-test after +4 more seasons.",\n'
+          '                      f"lever is dead. Re-test after +4 more seasons.",\n'
           '            "publishes_retest_trigger": True,',
           ("TestTheDecisionRule::"
            "test_a_ceiling_below_the_bar_closes_the_lever_and_publishes_no_retest_trigger",),

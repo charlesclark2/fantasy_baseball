@@ -371,10 +371,15 @@ def write_report(out: dict, path: Path) -> None:
           f"[{_f(ci.get('lo'))}, {_f(ci.get('hi'))}] vs bar {v['dsr_min']} | "
           f"{'✅ FUND' if d['fund_phase_b'] else '❌ ' + d['verdict']} |", ""]
 
-    L += ["## §1 The variance decomposition — Monte-Carlo error vs season-to-season heterogeneity",
+    L += ["## §1 The variance decomposition — Monte-Carlo error vs everything else",
           "", "> `σ²_MC` is the WITHIN-fold, ACROSS-seed variance of the paired delta at "
           f"{out['draws_primary']:,} draws — the error NF-W7f's published per-fold numbers actually "
-          "carry. `σ_het` is what is left after removing it: genuine season-to-season signal. "
+          "carry. `σ_het` is what is LEFT once draw noise is removed. ⚠️ It is named `het` for "
+          "brevity but it is **not purely season-to-season signal**: across-fold varies the test "
+          "ROWS and the SEASON together, so this design cannot split true heterogeneity from "
+          "finite-test-row sampling error. That does not affect the verdict — the ceiling removes "
+          "`σ²_MC` and nothing else, which is exactly the draw-count question — but it does bound "
+          "what the verdict CLOSES (see §4). "
           "⭐ Common random numbers are preserved within a (fold, seed), exactly as NF-W7f does, so "
           "this is the Monte-Carlo error of the PAIRED quantity the gate reads — not the much "
           "larger and irrelevant error of either score alone.", "",
@@ -476,6 +481,26 @@ def write_report(out: dict, path: Path) -> None:
               "draw / fold / season re-test trigger of its own: the ceiling is what no draw count "
               "can beat, so a trigger would be the NF-D18 misleading direction.", ""]
 
+    dwn = v["decomposition_primary"][w]
+    L += ["", "## §4 ⚠️ What this verdict closes, and what it does NOT", "",
+          "A ceiling argument is only as wide as the term it removes, and this one removes "
+          "**draw noise and nothing else**. Stating the boundary explicitly so a future reader "
+          "cannot over-read the verdict name:", "",
+          "**CLOSED — the draw-count lever.** More draws shrink `σ²_MC`; `σ²_MC` is "
+          f"{_share(dwn['mc_share_of_single_seed_var'])} of the winner's per-fold variance, and "
+          f"the ceiling that removes ALL of it still reads DSR "
+          f"{_f(v['ceiling']['ceiling']['dsr'])} against a bar of {v['dsr_min']}. No draw count "
+          "clears `dsr_ok`. ⛔ This is a DETERMINISTIC bound, not a power statement — no `n` and "
+          "no re-run overturns it, which is why no re-test trigger is published (NF-D18).", "",
+          "**NOT CLOSED — the row-count and metric levers.** `classify_null`'s own text names "
+          "*\"more rows per fold / a sharper metric\"* alongside more draws. Those are DIFFERENT "
+          "terms and this run did not test them: the residual `σ_het` mixes true season-to-season "
+          "heterogeneity with finite-test-row sampling error, and separating them needs PER-ROW "
+          "deltas, which this artifact does not store. ⇒ a successor wanting the row lever must "
+          "capture per-row CRPS; it is UNTESTED here, ⛔ not refuted.", "",
+          "⚠️ And the row lever is not free even in principle: for a FIXED corpus, more rows per "
+          "fold means FEWER folds, and fold count enters DSR through `√(n−1)`. It is a trade to be "
+          "measured, not a lever to be assumed.", ""]
     L += ["## ⭐ Flagged for a 2nd reader (governance)", "",
           "A DSR gate re-read is governance-adjacent. Protections, all registered BEFORE any score "
           "existed (prereg §5): the bar is unchanged at "
