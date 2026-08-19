@@ -501,6 +501,16 @@ class TestGateComputationSourceInspection:
         stmt = code[start:start + 200]
         assert "XP.DSR_MIN" in stmt and "bool(" in stmt
 
+    def test_pin_scores_are_stored_at_full_precision(self):
+        """The 2026-08-19 smoke's catch: a round(…, 6) on the stored scores caps every
+        reproduction pin at ~5e-7 against the 1e-9 tolerance — RB's draw-independent
+        construction reproduced to exactly the rounding, and the decisive run would have
+        returned UNDEFINED at all four positions. The scores the pins read must be raw."""
+        code = self._code()
+        start = code.index('"scores": {')
+        stmt = code[start:start + 80]
+        assert "float(v)" in stmt and "round(" not in stmt
+
 
 class TestFoldRangeAndHelpers:
     def test_fold_range(self):

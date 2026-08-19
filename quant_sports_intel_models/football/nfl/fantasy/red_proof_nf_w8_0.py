@@ -124,6 +124,13 @@ BREAKS: tuple[Break, ...] = (
           ("TestGateComputationSourceInspection::test_dsr_clause_is_computed_not_asserted",),
           "the DSR gate is a literal True — the house §0.5 bar silently removed"),
 
+    Break("pin_scores_rounded_below_the_tolerance", _RUNNER,
+          '        "scores": {k: float(v) for k, v in scores.items()},',
+          '        "scores": {k: round(v, 6) for k, v in scores.items()},',
+          ("TestGateComputationSourceInspection::test_pin_scores_are_stored_at_full_precision",),
+          "the smoke's real catch, re-armed: rounding the stored scores caps every reproduction "
+          "pin at ~5e-7 against 1e-9 — the decisive run returns UNDEFINED at every position"),
+
     # ── the PIT-preservation identity at the artifact ───────────────────────────────────────────
     Break("writer_shifts_the_band_with_the_point", _RUNNER,
           '        w["point_vs_bank_offset"] = w["point_recal"] - w["point_raw"]',

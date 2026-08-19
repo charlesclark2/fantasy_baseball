@@ -195,7 +195,11 @@ def run_position(position: str, train: pd.DataFrame, test: pd.DataFrame, weights
         "p90": bank_c[:, _QIDX[0.90]],
     })
     summary = {
-        "scores": {k: round(v, 6) for k, v in scores.items()},
+        # ⛔ FULL PRECISION — the reproduction pins compare these against the predecessor
+        # records at 1e-9; a round(…, 6) here caps every pin at ~5e-7 and the decisive run
+        # returns UNDEFINED at all four positions (caught by the smoke: RB's draw-independent
+        # construction reproduced to 4.15e-7 = exactly the rounding, not a real gap)
+        "scores": {k: float(v) for k, v in scores.items()},
         "consumed": consumed, "swap": swap,
         "n_train": int(len(tr_p)), "n_test": int(len(te_p)),
         "bias_identity": XP.bias_detail(rows["point_consumed"].to_numpy(), y_te),
