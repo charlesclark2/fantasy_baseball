@@ -1,0 +1,1719 @@
+{
+  "story": "NF-W7k",
+  "phase": "monte_carlo_variance_gate",
+  "smoke": false,
+  "generated_at": "2026-08-19T05:38:04.042532+00:00",
+  "position": "QB",
+  "gate_league": "full_ppr",
+  "seasons": [
+    2016,
+    2025
+  ],
+  "n_folds": 8,
+  "matrix_key": "26c34fbe778c9d87",
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 84553,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "base_seed": 20260818,
+  "seeds": [
+    20260818,
+    27260821,
+    34260824,
+    41260827,
+    48260830
+  ],
+  "n_seeds": 5,
+  "seed_stride": 7000003,
+  "draws_primary": 4000,
+  "draws_control": 1000,
+  "row_block": 256,
+  "scored_labels": [
+    "zm_conditional",
+    "zm_floor",
+    "zm_climatology",
+    "zm_over",
+    "mixall_learned",
+    "single_copula"
+  ],
+  "declared_field": {
+    "real_arms": [
+      "zm_conditional",
+      "zm_floor",
+      "zm_climatology",
+      "zm_over"
+    ],
+    "contest_foils": [
+      "mixall_learned",
+      "single_copula"
+    ]
+  },
+  "fold_meta": {
+    "2022H1": {
+      "n_test": 674,
+      "n_train": 7803,
+      "bank_cache": "miss"
+    },
+    "2022H2": {
+      "n_test": 685,
+      "n_train": 8517,
+      "bank_cache": "miss"
+    },
+    "2023H1": {
+      "n_test": 683,
+      "n_train": 9169,
+      "bank_cache": "miss"
+    },
+    "2023H2": {
+      "n_test": 710,
+      "n_train": 9867,
+      "bank_cache": "miss"
+    },
+    "2024H1": {
+      "n_test": 685,
+      "n_train": 10554,
+      "bank_cache": "miss"
+    },
+    "2024H2": {
+      "n_test": 676,
+      "n_train": 11258,
+      "bank_cache": "miss"
+    },
+    "2025H1": {
+      "n_test": 671,
+      "n_train": 11920,
+      "bank_cache": "hit"
+    },
+    "2025H2": {
+      "n_test": 701,
+      "n_train": 12622,
+      "bank_cache": "hit"
+    }
+  },
+  "scores": {
+    "4000": {
+      "2022H1": {
+        "20260818": {
+          "zm_conditional": 2.477895644950761,
+          "zm_floor": 2.419520761990327,
+          "zm_climatology": 3.6739846804831813,
+          "zm_over": 2.527199271592222,
+          "mixall_learned": 2.456949772129959,
+          "single_copula": 2.462854067351129
+        },
+        "27260821": {
+          "zm_conditional": 2.476443422732,
+          "zm_floor": 2.4187921997729815,
+          "zm_climatology": 3.6692999047983044,
+          "zm_over": 2.5252897216957235,
+          "mixall_learned": 2.455635161935628,
+          "single_copula": 2.461812900940987
+        },
+        "34260824": {
+          "zm_conditional": 2.477460707280567,
+          "zm_floor": 2.4200136282803673,
+          "zm_climatology": 3.6768154006301197,
+          "zm_over": 2.5265245512662435,
+          "mixall_learned": 2.458572611345801,
+          "single_copula": 2.463639539207096
+        },
+        "41260827": {
+          "zm_conditional": 2.477329080862749,
+          "zm_floor": 2.4202649729615056,
+          "zm_climatology": 3.6731891208330425,
+          "zm_over": 2.525614764559749,
+          "mixall_learned": 2.4583684150796707,
+          "single_copula": 2.4646112638330293
+        },
+        "48260830": {
+          "zm_conditional": 2.4775528558504556,
+          "zm_floor": 2.418832696652366,
+          "zm_climatology": 3.67215241873723,
+          "zm_over": 2.526032062768312,
+          "mixall_learned": 2.456870686197372,
+          "single_copula": 2.4634377839238044
+        }
+      },
+      "2022H2": {
+        "20260818": {
+          "zm_conditional": 2.620143234305231,
+          "zm_floor": 2.562311404976239,
+          "zm_climatology": 3.6891407184969514,
+          "zm_over": 2.6829990798617143,
+          "mixall_learned": 2.600529437615762,
+          "single_copula": 2.6061257321035862
+        },
+        "27260821": {
+          "zm_conditional": 2.619677689767206,
+          "zm_floor": 2.56276066654719,
+          "zm_climatology": 3.684510839100232,
+          "zm_over": 2.683419793977638,
+          "mixall_learned": 2.5977908040781266,
+          "single_copula": 2.6053838531473046
+        },
+        "34260824": {
+          "zm_conditional": 2.6194579212680185,
+          "zm_floor": 2.559330635174864,
+          "zm_climatology": 3.6897002963448244,
+          "zm_over": 2.6826531301871293,
+          "mixall_learned": 2.5974075384402906,
+          "single_copula": 2.6028032056630903
+        },
+        "41260827": {
+          "zm_conditional": 2.6178415659984404,
+          "zm_floor": 2.5596147972997203,
+          "zm_climatology": 3.685493520179746,
+          "zm_over": 2.682653472083697,
+          "mixall_learned": 2.598862812014697,
+          "single_copula": 2.605139248569945
+        },
+        "48260830": {
+          "zm_conditional": 2.6173638086103117,
+          "zm_floor": 2.560263551613654,
+          "zm_climatology": 3.6847077666245704,
+          "zm_over": 2.6807388586010807,
+          "mixall_learned": 2.5971819892762977,
+          "single_copula": 2.6035316783184155
+        }
+      },
+      "2023H1": {
+        "20260818": {
+          "zm_conditional": 2.477458154592747,
+          "zm_floor": 2.417360028673504,
+          "zm_climatology": 3.650705138002149,
+          "zm_over": 2.5283356133292703,
+          "mixall_learned": 2.439023045866048,
+          "single_copula": 2.4456071353207327
+        },
+        "27260821": {
+          "zm_conditional": 2.476946191222557,
+          "zm_floor": 2.417367077685586,
+          "zm_climatology": 3.648718350727277,
+          "zm_over": 2.5269501042414646,
+          "mixall_learned": 2.4395226926992715,
+          "single_copula": 2.444722741200627
+        },
+        "34260824": {
+          "zm_conditional": 2.4708959583325667,
+          "zm_floor": 2.4118664144542588,
+          "zm_climatology": 3.645496420821212,
+          "zm_over": 2.521764353223447,
+          "mixall_learned": 2.4338761520944368,
+          "single_copula": 2.4398256753970022
+        },
+        "41260827": {
+          "zm_conditional": 2.472734762715563,
+          "zm_floor": 2.412985917363265,
+          "zm_climatology": 3.6470653669186603,
+          "zm_over": 2.52341569632878,
+          "mixall_learned": 2.4339942765874993,
+          "single_copula": 2.43987680780701
+        },
+        "48260830": {
+          "zm_conditional": 2.474366301274416,
+          "zm_floor": 2.4139567459892985,
+          "zm_climatology": 3.6494967802390423,
+          "zm_over": 2.5249951868818625,
+          "mixall_learned": 2.434383950663583,
+          "single_copula": 2.4411704276303277
+        }
+      },
+      "2023H2": {
+        "20260818": {
+          "zm_conditional": 2.671343936034653,
+          "zm_floor": 2.5894550548779014,
+          "zm_climatology": 3.706335528490495,
+          "zm_over": 2.77482937551266,
+          "mixall_learned": 2.5799365462552415,
+          "single_copula": 2.585369207170337
+        },
+        "27260821": {
+          "zm_conditional": 2.6658963973362932,
+          "zm_floor": 2.584648921811871,
+          "zm_climatology": 3.6995803180570213,
+          "zm_over": 2.7706400898076153,
+          "mixall_learned": 2.5765730702472838,
+          "single_copula": 2.5841201253442043
+        },
+        "34260824": {
+          "zm_conditional": 2.6694178259483445,
+          "zm_floor": 2.5877589008755217,
+          "zm_climatology": 3.706261374280182,
+          "zm_over": 2.774993000074536,
+          "mixall_learned": 2.5793821788745763,
+          "single_copula": 2.586147982398804
+        },
+        "41260827": {
+          "zm_conditional": 2.66796417034351,
+          "zm_floor": 2.585867139863363,
+          "zm_climatology": 3.6969823613845825,
+          "zm_over": 2.7722600391530166,
+          "mixall_learned": 2.576126338666294,
+          "single_copula": 2.581441718960326
+        },
+        "48260830": {
+          "zm_conditional": 2.6695123426242695,
+          "zm_floor": 2.5870492190355447,
+          "zm_climatology": 3.7000884639740628,
+          "zm_over": 2.773976304775158,
+          "mixall_learned": 2.579244412099067,
+          "single_copula": 2.585734523060076
+        }
+      },
+      "2024H1": {
+        "20260818": {
+          "zm_conditional": 2.457953692023149,
+          "zm_floor": 2.3973084073156343,
+          "zm_climatology": 3.6416714723445627,
+          "zm_over": 2.527297151372446,
+          "mixall_learned": 2.4245149802013253,
+          "single_copula": 2.431306739066542
+        },
+        "27260821": {
+          "zm_conditional": 2.45944881090689,
+          "zm_floor": 2.4011418793172137,
+          "zm_climatology": 3.6415661878929426,
+          "zm_over": 2.527755446676039,
+          "mixall_learned": 2.4265471750724608,
+          "single_copula": 2.431918993543947
+        },
+        "34260824": {
+          "zm_conditional": 2.4584402512812416,
+          "zm_floor": 2.3998495580638832,
+          "zm_climatology": 3.639445825210223,
+          "zm_over": 2.526886603400029,
+          "mixall_learned": 2.425663282906013,
+          "single_copula": 2.4321113298771695
+        },
+        "41260827": {
+          "zm_conditional": 2.456634715680259,
+          "zm_floor": 2.39835719342423,
+          "zm_climatology": 3.6388782370507267,
+          "zm_over": 2.524769125249226,
+          "mixall_learned": 2.423722848286506,
+          "single_copula": 2.430284499453275
+        },
+        "48260830": {
+          "zm_conditional": 2.454946383299856,
+          "zm_floor": 2.3948779764257573,
+          "zm_climatology": 3.638551361880277,
+          "zm_over": 2.5224023027870928,
+          "mixall_learned": 2.4190902650464654,
+          "single_copula": 2.4256852768663775
+        }
+      },
+      "2024H2": {
+        "20260818": {
+          "zm_conditional": 2.9193560699964163,
+          "zm_floor": 2.822171257708377,
+          "zm_climatology": 4.094228746133601,
+          "zm_over": 3.0035484093862266,
+          "mixall_learned": 2.815202463841936,
+          "single_copula": 2.820803878044045
+        },
+        "27260821": {
+          "zm_conditional": 2.919126957737144,
+          "zm_floor": 2.8227511579061355,
+          "zm_climatology": 4.094866794112409,
+          "zm_over": 3.0036172635174947,
+          "mixall_learned": 2.8145871006161953,
+          "single_copula": 2.822062678383893
+        },
+        "34260824": {
+          "zm_conditional": 2.9144087578399587,
+          "zm_floor": 2.817487094467624,
+          "zm_climatology": 4.096632264212354,
+          "zm_over": 2.999652609142554,
+          "mixall_learned": 2.809107740340019,
+          "single_copula": 2.815149614702677
+        },
+        "41260827": {
+          "zm_conditional": 2.915911214746155,
+          "zm_floor": 2.82006770427936,
+          "zm_climatology": 4.092745313916027,
+          "zm_over": 3.001432740550938,
+          "mixall_learned": 2.8144755776938983,
+          "single_copula": 2.8203784013829174
+        },
+        "48260830": {
+          "zm_conditional": 2.92131524341211,
+          "zm_floor": 2.82606264841851,
+          "zm_climatology": 4.094615376318615,
+          "zm_over": 3.005885250563806,
+          "mixall_learned": 2.818924744914862,
+          "single_copula": 2.8257002480470303
+        }
+      },
+      "2025H1": {
+        "20260818": {
+          "zm_conditional": 2.7801299963088018,
+          "zm_floor": 2.698843281718902,
+          "zm_climatology": 3.9773838948249107,
+          "zm_over": 2.861314851747156,
+          "mixall_learned": 2.7227365902169143,
+          "single_copula": 2.729502248731402
+        },
+        "27260821": {
+          "zm_conditional": 2.7757625232296608,
+          "zm_floor": 2.695419253522217,
+          "zm_climatology": 3.9694390175636847,
+          "zm_over": 2.8585056114269056,
+          "mixall_learned": 2.7186872440428487,
+          "single_copula": 2.726536406104345
+        },
+        "34260824": {
+          "zm_conditional": 2.7782746104034306,
+          "zm_floor": 2.695437698370903,
+          "zm_climatology": 3.977706367273003,
+          "zm_over": 2.8600451383489256,
+          "mixall_learned": 2.71939446966837,
+          "single_copula": 2.726252987115435
+        },
+        "41260827": {
+          "zm_conditional": 2.77976158625655,
+          "zm_floor": 2.695993542680213,
+          "zm_climatology": 3.977090581930874,
+          "zm_over": 2.8601215472397747,
+          "mixall_learned": 2.7186258891787225,
+          "single_copula": 2.7252933865533078
+        },
+        "48260830": {
+          "zm_conditional": 2.7771620334912366,
+          "zm_floor": 2.696346931163827,
+          "zm_climatology": 3.9763583135426304,
+          "zm_over": 2.857032004793394,
+          "mixall_learned": 2.718369602951585,
+          "single_copula": 2.726002162100596
+        }
+      },
+      "2025H2": {
+        "20260818": {
+          "zm_conditional": 2.6333613404837584,
+          "zm_floor": 2.608950239871143,
+          "zm_climatology": 3.579150045241986,
+          "zm_over": 2.707994449419592,
+          "mixall_learned": 2.6241665347180994,
+          "single_copula": 2.6327360563060527
+        },
+        "27260821": {
+          "zm_conditional": 2.6367046994453407,
+          "zm_floor": 2.6096462105966713,
+          "zm_climatology": 3.586852536350398,
+          "zm_over": 2.7114477272707265,
+          "mixall_learned": 2.623866859723479,
+          "single_copula": 2.63124384520105
+        },
+        "34260824": {
+          "zm_conditional": 2.639807578565287,
+          "zm_floor": 2.6122830518149387,
+          "zm_climatology": 3.5867161798844642,
+          "zm_over": 2.7139227801715666,
+          "mixall_learned": 2.627413972780683,
+          "single_copula": 2.6376681512398985
+        },
+        "41260827": {
+          "zm_conditional": 2.6354438473533603,
+          "zm_floor": 2.6111887262908446,
+          "zm_climatology": 3.578734091227358,
+          "zm_over": 2.7087570337976734,
+          "mixall_learned": 2.62545146689006,
+          "single_copula": 2.633868675393193
+        },
+        "48260830": {
+          "zm_conditional": 2.6353424414088655,
+          "zm_floor": 2.6099968834209837,
+          "zm_climatology": 3.5865515247580837,
+          "zm_over": 2.7097923518870144,
+          "mixall_learned": 2.625738709273027,
+          "single_copula": 2.6343380783931947
+        }
+      }
+    },
+    "1000": {
+      "2022H1": {
+        "20260818": {
+          "zm_conditional": 2.4774095702214645,
+          "zm_floor": 2.418450155867043,
+          "zm_climatology": 3.6777591229756155,
+          "zm_over": 2.525943248873075,
+          "mixall_learned": 2.460176349761604,
+          "single_copula": 2.4669822379617807
+        },
+        "27260821": {
+          "zm_conditional": 2.4757345083417164,
+          "zm_floor": 2.4189957868218084,
+          "zm_climatology": 3.666061164275673,
+          "zm_over": 2.523187997468894,
+          "mixall_learned": 2.4567100959484267,
+          "single_copula": 2.4638781336322464
+        },
+        "34260824": {
+          "zm_conditional": 2.476249832141114,
+          "zm_floor": 2.4169165538977166,
+          "zm_climatology": 3.682936539415784,
+          "zm_over": 2.5267134407642344,
+          "mixall_learned": 2.454064296630883,
+          "single_copula": 2.4601409003632035
+        },
+        "41260827": {
+          "zm_conditional": 2.4743242048215763,
+          "zm_floor": 2.416040902543324,
+          "zm_climatology": 3.6760031220211413,
+          "zm_over": 2.523270247579253,
+          "mixall_learned": 2.452478891387018,
+          "single_copula": 2.4574329254061196
+        },
+        "48260830": {
+          "zm_conditional": 2.477913066466699,
+          "zm_floor": 2.420173485883975,
+          "zm_climatology": 3.672401679674192,
+          "zm_over": 2.5256509528069113,
+          "mixall_learned": 2.4570757499950426,
+          "single_copula": 2.4647259543889017
+        }
+      },
+      "2022H2": {
+        "20260818": {
+          "zm_conditional": 2.6223039105524695,
+          "zm_floor": 2.5628896598908524,
+          "zm_climatology": 3.688480625204688,
+          "zm_over": 2.686634294288112,
+          "mixall_learned": 2.601225937692909,
+          "single_copula": 2.609417152390829
+        },
+        "27260821": {
+          "zm_conditional": 2.617869171064011,
+          "zm_floor": 2.560944694376121,
+          "zm_climatology": 3.676438493577806,
+          "zm_over": 2.680629121647227,
+          "mixall_learned": 2.5991714459939574,
+          "single_copula": 2.605415932704555
+        },
+        "34260824": {
+          "zm_conditional": 2.6235935123058387,
+          "zm_floor": 2.5624033228789878,
+          "zm_climatology": 3.694384656961758,
+          "zm_over": 2.6872899350493955,
+          "mixall_learned": 2.601489013188758,
+          "single_copula": 2.610967836049455
+        },
+        "41260827": {
+          "zm_conditional": 2.6184958227451385,
+          "zm_floor": 2.5611755363830477,
+          "zm_climatology": 3.688252728279882,
+          "zm_over": 2.6808860640612213,
+          "mixall_learned": 2.5984679399436605,
+          "single_copula": 2.603781161183873
+        },
+        "48260830": {
+          "zm_conditional": 2.618469492096165,
+          "zm_floor": 2.5608123603539394,
+          "zm_climatology": 3.6855882004858977,
+          "zm_over": 2.683536249148393,
+          "mixall_learned": 2.60272032978076,
+          "single_copula": 2.6088666652283092
+        }
+      },
+      "2023H1": {
+        "20260818": {
+          "zm_conditional": 2.4703041009371907,
+          "zm_floor": 2.412258523870966,
+          "zm_climatology": 3.6478033435918684,
+          "zm_over": 2.5226103792173875,
+          "mixall_learned": 2.43555780191266,
+          "single_copula": 2.4418650337190106
+        },
+        "27260821": {
+          "zm_conditional": 2.4735932559315685,
+          "zm_floor": 2.41350245943571,
+          "zm_climatology": 3.6517412467016444,
+          "zm_over": 2.5257234711658074,
+          "mixall_learned": 2.4344529899474225,
+          "single_copula": 2.441825626461193
+        },
+        "34260824": {
+          "zm_conditional": 2.4888443808444434,
+          "zm_floor": 2.4279037291750725,
+          "zm_climatology": 3.6668369444130624,
+          "zm_over": 2.53773629064836,
+          "mixall_learned": 2.451059399656404,
+          "single_copula": 2.452607781324561
+        },
+        "41260827": {
+          "zm_conditional": 2.4741374046497393,
+          "zm_floor": 2.4137085232827062,
+          "zm_climatology": 3.6525811541873305,
+          "zm_over": 2.524866737845107,
+          "mixall_learned": 2.436387093580208,
+          "single_copula": 2.4421452874425014
+        },
+        "48260830": {
+          "zm_conditional": 2.481169344679205,
+          "zm_floor": 2.4197220592167072,
+          "zm_climatology": 3.6514281260764956,
+          "zm_over": 2.530647766595193,
+          "mixall_learned": 2.4385259845127,
+          "single_copula": 2.4428289794196747
+        }
+      },
+      "2023H2": {
+        "20260818": {
+          "zm_conditional": 2.6706942973139443,
+          "zm_floor": 2.587477942427655,
+          "zm_climatology": 3.710401096910469,
+          "zm_over": 2.7734000656905646,
+          "mixall_learned": 2.5812764306851306,
+          "single_copula": 2.5891269893468136
+        },
+        "27260821": {
+          "zm_conditional": 2.6752272517971116,
+          "zm_floor": 2.5921672286777393,
+          "zm_climatology": 3.7011489598734175,
+          "zm_over": 2.77887725980903,
+          "mixall_learned": 2.581363040658928,
+          "single_copula": 2.5877142518166205
+        },
+        "34260824": {
+          "zm_conditional": 2.66952450172737,
+          "zm_floor": 2.589280921055437,
+          "zm_climatology": 3.7058589368489816,
+          "zm_over": 2.773990371402602,
+          "mixall_learned": 2.58053757671095,
+          "single_copula": 2.587256586371643
+        },
+        "41260827": {
+          "zm_conditional": 2.669341289340225,
+          "zm_floor": 2.587858809730682,
+          "zm_climatology": 3.699402729612228,
+          "zm_over": 2.775035230830229,
+          "mixall_learned": 2.5793164015075076,
+          "single_copula": 2.5882508890658062
+        },
+        "48260830": {
+          "zm_conditional": 2.6668185301354743,
+          "zm_floor": 2.584932477458001,
+          "zm_climatology": 3.700196728004524,
+          "zm_over": 2.7710108826816056,
+          "mixall_learned": 2.57407719217767,
+          "single_copula": 2.5822790794645876
+        }
+      },
+      "2024H1": {
+        "20260818": {
+          "zm_conditional": 2.4582030843789213,
+          "zm_floor": 2.396503069886912,
+          "zm_climatology": 3.6415136545103914,
+          "zm_over": 2.5302247776059015,
+          "mixall_learned": 2.425275432355028,
+          "single_copula": 2.4338883750857714
+        },
+        "27260821": {
+          "zm_conditional": 2.4603043693035165,
+          "zm_floor": 2.4018694033192616,
+          "zm_climatology": 3.6417144548113676,
+          "zm_over": 2.5283636573178017,
+          "mixall_learned": 2.430339699575697,
+          "single_copula": 2.4349417068660655
+        },
+        "34260824": {
+          "zm_conditional": 2.455604261767978,
+          "zm_floor": 2.3950357569026037,
+          "zm_climatology": 3.645945658630444,
+          "zm_over": 2.5252170109596452,
+          "mixall_learned": 2.42142304797005,
+          "single_copula": 2.4283491744715957
+        },
+        "41260827": {
+          "zm_conditional": 2.457649226780053,
+          "zm_floor": 2.398257823677565,
+          "zm_climatology": 3.6455968951147573,
+          "zm_over": 2.528233894680852,
+          "mixall_learned": 2.4260704728662508,
+          "single_copula": 2.433148589096709
+        },
+        "48260830": {
+          "zm_conditional": 2.460078229638558,
+          "zm_floor": 2.400491725104852,
+          "zm_climatology": 3.643844125504976,
+          "zm_over": 2.5286826246721295,
+          "mixall_learned": 2.4285524409218584,
+          "single_copula": 2.433692774732074
+        }
+      },
+      "2024H2": {
+        "20260818": {
+          "zm_conditional": 2.909037811205325,
+          "zm_floor": 2.8123328846947255,
+          "zm_climatology": 4.094168651453412,
+          "zm_over": 2.9942189030659714,
+          "mixall_learned": 2.8027074612263716,
+          "single_copula": 2.813047748837755
+        },
+        "27260821": {
+          "zm_conditional": 2.922246356301256,
+          "zm_floor": 2.82703121198066,
+          "zm_climatology": 4.094294170934042,
+          "zm_over": 3.0069076136729693,
+          "mixall_learned": 2.824231038828415,
+          "single_copula": 2.8281609395561578
+        },
+        "34260824": {
+          "zm_conditional": 2.923214008284942,
+          "zm_floor": 2.827138615496529,
+          "zm_climatology": 4.097164399182174,
+          "zm_over": 3.009336556037406,
+          "mixall_learned": 2.8213417233689118,
+          "single_copula": 2.828803951901848
+        },
+        "41260827": {
+          "zm_conditional": 2.9206714570462426,
+          "zm_floor": 2.8223663852251892,
+          "zm_climatology": 4.104305778842149,
+          "zm_over": 3.006280048224865,
+          "mixall_learned": 2.815850666428829,
+          "single_copula": 2.8223036211492696
+        },
+        "48260830": {
+          "zm_conditional": 2.922338368317548,
+          "zm_floor": 2.8243259830656284,
+          "zm_climatology": 4.097139116108072,
+          "zm_over": 3.004709698726835,
+          "mixall_learned": 2.818759480276499,
+          "single_copula": 2.825152358505092
+        }
+      },
+      "2025H1": {
+        "20260818": {
+          "zm_conditional": 2.7780854670077004,
+          "zm_floor": 2.695445778129702,
+          "zm_climatology": 3.9721730786926903,
+          "zm_over": 2.8601426313365095,
+          "mixall_learned": 2.7173821452109506,
+          "single_copula": 2.725216150909238
+        },
+        "27260821": {
+          "zm_conditional": 2.780748892572679,
+          "zm_floor": 2.6977289642378377,
+          "zm_climatology": 3.9800790323074184,
+          "zm_over": 2.8607684093537804,
+          "mixall_learned": 2.7216928344914497,
+          "single_copula": 2.728750187794886
+        },
+        "34260824": {
+          "zm_conditional": 2.779028335367614,
+          "zm_floor": 2.6980167551527385,
+          "zm_climatology": 3.9776162783248017,
+          "zm_over": 2.8576932596093148,
+          "mixall_learned": 2.7193531231011794,
+          "single_copula": 2.726196103877441
+        },
+        "41260827": {
+          "zm_conditional": 2.7840106342382067,
+          "zm_floor": 2.6986592951590045,
+          "zm_climatology": 3.983620067934112,
+          "zm_over": 2.865190783079749,
+          "mixall_learned": 2.721515906073834,
+          "single_copula": 2.7292440394758946
+        },
+        "48260830": {
+          "zm_conditional": 2.790270386888077,
+          "zm_floor": 2.7092504579514904,
+          "zm_climatology": 3.9858257939321278,
+          "zm_over": 2.870228881356276,
+          "mixall_learned": 2.7320577378498765,
+          "single_copula": 2.7380927757958267
+        }
+      },
+      "2025H2": {
+        "20260818": {
+          "zm_conditional": 2.628086070381558,
+          "zm_floor": 2.603571849118005,
+          "zm_climatology": 3.574047993608342,
+          "zm_over": 2.701748116034935,
+          "mixall_learned": 2.6224938160051177,
+          "single_copula": 2.6314584336495055
+        },
+        "27260821": {
+          "zm_conditional": 2.636031214585505,
+          "zm_floor": 2.6134985533505453,
+          "zm_climatology": 3.574825245861404,
+          "zm_over": 2.709717170615812,
+          "mixall_learned": 2.627361433532982,
+          "single_copula": 2.6369950125613735
+        },
+        "34260824": {
+          "zm_conditional": 2.6390863885109064,
+          "zm_floor": 2.6111780947472134,
+          "zm_climatology": 3.5953732580160684,
+          "zm_over": 2.711896126478119,
+          "mixall_learned": 2.6270497216990196,
+          "single_copula": 2.63402712487902
+        },
+        "41260827": {
+          "zm_conditional": 2.6499444686276856,
+          "zm_floor": 2.6230771444971843,
+          "zm_climatology": 3.601206354372822,
+          "zm_over": 2.7225470545282193,
+          "mixall_learned": 2.6383239697330714,
+          "single_copula": 2.6433848072722332
+        },
+        "48260830": {
+          "zm_conditional": 2.6361287268110885,
+          "zm_floor": 2.6110022527411436,
+          "zm_climatology": 3.5791574794367365,
+          "zm_over": 2.7088036104184074,
+          "mixall_learned": 2.6249744902449352,
+          "single_copula": 2.6312513183743267
+        }
+      }
+    }
+  },
+  "runtime_seconds": 2896.1,
+  "verdict": {
+    "story_verdict": "MC_LEVER_EXHAUSTED",
+    "certified_for_nf_w8": false,
+    "decision": {
+      "verdict": "MC_LEVER_EXHAUSTED",
+      "fund_phase_b": false,
+      "d2": null,
+      "reason": "the CEILING deflated Sharpe \u2014 the gate with ALL Monte-Carlo error removed, which no draw count can beat \u2014 is 0.0 with CI95 upper end 0.0003, below the bar 0.95. \u21d2 NO draw count clears `dsr_ok`: the DRAW-COUNT lever is EXHAUSTED, and \u26d4 no draw / fold / season re-test trigger is published (NF-D18). \u26a0\ufe0f SCOPE \u2014 this closes the DRAW lever, NOT every conceivable lower-variance design. The residual variance is what remains once draw noise is removed, and this design CANNOT split it further: across-fold varies the test ROWS and the SEASON together, so it mixes true season-to-season heterogeneity with finite-test-row sampling error. A row-count or sharper-metric lever is UNTESTED here, not refuted.",
+      "publishes_retest_trigger": false
+    },
+    "winner": "zm_floor",
+    "best_foil": "mixall_learned",
+    "mean_crps_by_label": {
+      "zm_conditional": 2.6286748681480034,
+      "zm_floor": 2.5636050358169173,
+      "zm_climatology": 3.7504727225198007,
+      "zm_over": 2.7006866217167476,
+      "mixall_learned": 2.581662985263259,
+      "single_copula": 2.5883049818463544
+    },
+    "checks": {
+      "G0_reproduction_pin": {
+        "evaluable": true,
+        "n_compared": 48,
+        "max_abs_gap": 0.0,
+        "tolerance": 1e-09,
+        "reproduces": true,
+        "per_fold_max_gap": {
+          "2022H1": 0.0,
+          "2022H2": 0.0,
+          "2023H1": 0.0,
+          "2023H2": 0.0,
+          "2024H1": 0.0,
+          "2024H2": 0.0,
+          "2025H1": 0.0,
+          "2025H2": 0.0
+        }
+      },
+      "G1_seed_is_live": {
+        "holds": true,
+        "zero_spread_cells": [],
+        "n_seeds": 5
+      },
+      "G2_mc_variance_scales_as_one_over_draws": {
+        "evaluable": true,
+        "ratio": 3.4538791573886067,
+        "expected": 4.0,
+        "band": [
+          2.0,
+          8.0
+        ],
+        "holds": true,
+        "mc_var_control": 3.3834978331565516e-06,
+        "mc_var_primary": 9.796225284600667e-07,
+        "draws_control": 1000,
+        "draws_primary": 4000
+      },
+      "G2_by_arm": {
+        "zm_conditional": {
+          "evaluable": true,
+          "ratio": 3.058017964937666,
+          "expected": 4.0,
+          "band": [
+            2.0,
+            8.0
+          ],
+          "holds": true,
+          "mc_var_control": 5.748960923576204e-06,
+          "mc_var_primary": 1.8799630968464205e-06,
+          "draws_control": 1000,
+          "draws_primary": 4000
+        },
+        "zm_floor": {
+          "evaluable": true,
+          "ratio": 3.4538791573886067,
+          "expected": 4.0,
+          "band": [
+            2.0,
+            8.0
+          ],
+          "holds": true,
+          "mc_var_control": 3.3834978331565516e-06,
+          "mc_var_primary": 9.796225284600667e-07,
+          "draws_control": 1000,
+          "draws_primary": 4000
+        },
+        "zm_climatology": {
+          "evaluable": true,
+          "ratio": 4.075795857606451,
+          "expected": 4.0,
+          "band": [
+            2.0,
+            8.0
+          ],
+          "holds": true,
+          "mc_var_control": 3.7855929864408965e-05,
+          "mc_var_primary": 9.28798477327081e-06,
+          "draws_control": 1000,
+          "draws_primary": 4000
+        },
+        "zm_over": {
+          "evaluable": true,
+          "ratio": 4.085225902758469,
+          "expected": 4.0,
+          "band": [
+            2.0,
+            8.0
+          ],
+          "holds": true,
+          "mc_var_control": 7.140187460656486e-06,
+          "mc_var_primary": 1.7478072524300832e-06,
+          "draws_control": 1000,
+          "draws_primary": 4000
+        }
+      },
+      "G3_ceiling_ci": {
+        "evaluable": true,
+        "n_effective": 2000,
+        "n_boot": 2000,
+        "lo": 0.0,
+        "median": 0.0,
+        "hi": 0.0003024999999999863
+      }
+    },
+    "required_mc_share_sensitivity": {
+      "assumption": "one COMMON absolute Monte-Carlo sd across the declared arms",
+      "winner_observed_sd": 0.01815170762669908,
+      "threshold_exists": true,
+      "required_mc_share_of_winner_var": 0.9979496664903047,
+      "required_mc_sd": 0.018133089551283732,
+      "max_dsr_over_sweep": 0.9512,
+      "grid_points": 200,
+      "refine_steps": 30,
+      "curve": [
+        {
+          "mc_sd": 9.066777959536192e-05,
+          "mc_share_of_winner_var": 2.4950025000000005e-05,
+          "dsr": 0.0,
+          "winner_sharpe": 1.0132708471131429,
+          "sr0": 5.481851417648879
+        },
+        {
+          "mc_sd": 0.0015413522531211527,
+          "mc_share_of_winner_var": 0.0072105572250000015,
+          "dsr": 0.0,
+          "winner_sharpe": 1.0169311596161943,
+          "sr0": 5.483253112726035
+        },
+        {
+          "mc_sd": 0.002992036726646943,
+          "mc_share_of_winner_var": 0.027170577225000003,
+          "dsr": 0.0,
+          "winner_sharpe": 1.0273106282907947,
+          "sr0": 5.487211952316477
+        },
+        {
+          "mc_sd": 0.004442721200172734,
+          "mc_share_of_winner_var": 0.059905010025,
+          "dsr": 0.0,
+          "winner_sharpe": 1.0450432409674024,
+          "sr0": 5.493923717107669
+        },
+        {
+          "mc_sd": 0.005893405673698524,
+          "mc_share_of_winner_var": 0.10541385562499998,
+          "dsr": 0.0,
+          "winner_sharpe": 1.0712949214570098,
+          "sr0": 5.503750624617714
+        },
+        {
+          "mc_sd": 0.0073440901472243145,
+          "mc_share_of_winner_var": 0.16369711402499998,
+          "dsr": 0.0,
+          "winner_sharpe": 1.107996355993757,
+          "sr0": 5.5172977206867815
+        },
+        {
+          "mc_sd": 0.008794774620750106,
+          "mc_share_of_winner_var": 0.234754785225,
+          "dsr": 0.0,
+          "winner_sharpe": 1.15829669868257,
+          "sr0": 5.535563008532184
+        },
+        {
+          "mc_sd": 0.010245459094275898,
+          "mc_share_of_winner_var": 0.3185868692250001,
+          "dsr": 0.0,
+          "winner_sharpe": 1.2274812890985043,
+          "sr0": 5.560244355389754
+        },
+        {
+          "mc_sd": 0.011696143567801687,
+          "mc_share_of_winner_var": 0.41519336602499995,
+          "dsr": 0.0,
+          "winner_sharpe": 1.3249942223653683,
+          "sr0": 5.594424630962796
+        },
+        {
+          "mc_sd": 0.013146828041327479,
+          "mc_share_of_winner_var": 0.5245742756250001,
+          "dsr": 0.0,
+          "winner_sharpe": 1.4695311331932013,
+          "sr0": 5.644324312943617
+        },
+        {
+          "mc_sd": 0.014597512514853268,
+          "mc_share_of_winner_var": 0.646729598025,
+          "dsr": 0.0,
+          "winner_sharpe": 1.7047727845475904,
+          "sr0": 5.724828449401628
+        },
+        {
+          "mc_sd": 0.01604819698837906,
+          "mc_share_of_winner_var": 0.7816593332250001,
+          "dsr": 0.0,
+          "winner_sharpe": 2.1684669815916227,
+          "sr0": 5.884500688107588
+        },
+        {
+          "mc_sd": 0.01749888146190485,
+          "mc_share_of_winner_var": 0.9293634812249999,
+          "dsr": 0.0032,
+          "winner_sharpe": 3.812461670353438,
+          "sr0": 6.483652890494577
+        }
+      ]
+    },
+    "decomposition_primary": {
+      "zm_conditional": {
+        "folds": [
+          "2022H1",
+          "2022H2",
+          "2023H1",
+          "2023H2",
+          "2024H1",
+          "2024H2",
+          "2025H1",
+          "2025H2"
+        ],
+        "n_seeds": 5,
+        "per_fold_across_seed_var": {
+          "2022H1": 1.0784025497326403e-06,
+          "2022H2": 1.8797413349737931e-06,
+          "2023H1": 1.3619216399340733e-06,
+          "2023H2": 1.0598733138836731e-06,
+          "2024H1": 1.6880180889059415e-06,
+          "2024H2": 2.5560492178300083e-06,
+          "2025H1": 2.5776424422564376e-06,
+          "2025H2": 2.8380561872547972e-06
+        },
+        "per_fold_across_seed_sd": {
+          "2022H1": 0.0010384616265094442,
+          "2022H2": 0.0013710365914058578,
+          "2023H1": 0.0011670139844637995,
+          "2023H2": 0.0010295014880434478,
+          "2024H1": 0.0012992375028861897,
+          "2024H2": 0.0015987649038648579,
+          "2025H1": 0.0016055037970233634,
+          "2025H2": 0.0016846531355904685
+        },
+        "seed_mean_by_fold": {
+          "2022H1": -0.020057012997620395,
+          "2022H2": -0.020542327704806684,
+          "2023H1": -0.03832025004540229,
+          "2023H2": -0.09057442522892156,
+          "2024H1": -0.03357706033572496,
+          "2024H2": -0.10356412326497466,
+          "2025H1": -0.05865539072624788,
+          "2025H2": -0.010804472774252716
+        },
+        "mc_var": 1.8799630968464205e-06,
+        "mc_sd": 0.0013711174628187113,
+        "between_var": 0.0011750914442384551,
+        "between_sd": 0.034279606827361,
+        "het_var": 0.0011747154516190859,
+        "het_sd": 0.03427412218597416,
+        "het_var_is_negative": false,
+        "single_seed_var": 0.0011765954147159323,
+        "mc_share_of_single_seed_var": 0.0015977991018266068,
+        "mean_delta": -0.047011882884743894
+      },
+      "zm_floor": {
+        "folds": [
+          "2022H1",
+          "2022H2",
+          "2023H1",
+          "2023H2",
+          "2024H1",
+          "2024H2",
+          "2025H1",
+          "2025H2"
+        ],
+        "n_seeds": 5,
+        "per_fold_across_seed_var": {
+          "2022H1": 4.445434599083485e-07,
+          "2022H2": 2.5855911747014837e-06,
+          "2023H1": 5.24423280241161e-07,
+          "2023H2": 7.621520847250719e-07,
+          "2024H1": 1.16133062546767e-06,
+          "2024H2": 1.2377790474057535e-06,
+          "2025H1": 6.890091604005846e-07,
+          "2025H2": 4.321513948304611e-07
+        },
+        "per_fold_across_seed_sd": {
+          "2022H1": 0.0006667409241289667,
+          "2022H2": 0.0016079773551581763,
+          "2023H1": 0.0007241707535113256,
+          "2023H2": 0.0008730132213919053,
+          "2024H1": 0.001077650511746582,
+          "2024H2": 0.001112555188476398,
+          "2025H1": 0.0008300657566726775,
+          "2025H2": 0.0006573822288672406
+        },
+        "seed_mean_by_fold": {
+          "2022H1": 0.037794477406176606,
+          "2022H2": 0.037498305162701404,
+          "2023H1": 0.021452786748985275,
+          "2023H2": -0.008703338064347843,
+          "2024H1": 0.02560070739321043,
+          "2024H2": -0.007248447074619069,
+          "2025H1": 0.023154617720475733,
+          "2025H2": 0.014914486278153394
+        },
+        "mc_var": 9.796225284600667e-07,
+        "mc_sd": 0.0009897588233807601,
+        "between_var": 0.00031833052661951717,
+        "between_sd": 0.017841819599455577,
+        "het_var": 0.00031813460211382513,
+        "het_sd": 0.017836328156709418,
+        "het_var_is_negative": false,
+        "single_seed_var": 0.0003191142246422852,
+        "mc_share_of_single_seed_var": 0.0030698178044497575,
+        "mean_delta": 0.018057949446341988
+      },
+      "zm_climatology": {
+        "folds": [
+          "2022H1",
+          "2022H2",
+          "2023H1",
+          "2023H2",
+          "2024H1",
+          "2024H2",
+          "2025H1",
+          "2025H2"
+        ],
+        "n_seeds": 5,
+        "per_fold_across_seed_var": {
+          "2022H1": 3.319689182858556e-06,
+          "2022H2": 5.476378510182256e-06,
+          "2023H1": 4.713382376084037e-06,
+          "2023H2": 8.515849640247319e-06,
+          "2024H1": 4.960867596544422e-06,
+          "2024H2": 1.9771047589793845e-05,
+          "2025H1": 1.1185703153932572e-05,
+          "2025H2": 1.6360960136523475e-05
+        },
+        "per_fold_across_seed_sd": {
+          "2022H1": 0.0018220014222987194,
+          "2022H2": 0.0023401663424171917,
+          "2023H1": 0.0021710325598857418,
+          "2023H2": 0.002918192872352223,
+          "2024H1": 0.002227300517789286,
+          "2024H2": 0.004446464616950622,
+          "2025H1": 0.003344503424117334,
+          "2025H2": 0.00404486837072895
+        },
+        "seed_mean_by_fold": {
+          "2022H1": -1.2158089757586894,
+          "2022H2": -1.0883561118642302,
+          "2023H1": -1.2121363877595006,
+          "2023H2": -1.123597100008776,
+          "2024H1": -1.2161149065731922,
+          "2024H2": -1.2801581734572192,
+          "2025H1": -1.2560328758153325,
+          "2025H2": -0.9582733668153882
+        },
+        "mc_var": 9.28798477327081e-06,
+        "mc_sd": 0.0030476195256742286,
+        "between_var": 0.011310398276606527,
+        "between_sd": 0.10635035625989471,
+        "het_var": 0.011308540679651874,
+        "het_sd": 0.10634162251748783,
+        "het_var_is_negative": false,
+        "single_seed_var": 0.011317828664425144,
+        "mc_share_of_single_seed_var": 0.0008206507669148009,
+        "mean_delta": -1.1688097372565411
+      },
+      "zm_over": {
+        "folds": [
+          "2022H1",
+          "2022H2",
+          "2023H1",
+          "2023H2",
+          "2024H1",
+          "2024H2",
+          "2025H1",
+          "2025H2"
+        ],
+        "n_seeds": 5,
+        "per_fold_across_seed_var": {
+          "2022H1": 1.5202599354302801e-06,
+          "2022H2": 1.6728963070361873e-06,
+          "2023H1": 1.639374981158734e-06,
+          "2023H2": 6.435334563455027e-07,
+          "2024H1": 1.1090659654798105e-06,
+          "2024H2": 2.2873013289346075e-06,
+          "2025H1": 1.5943927356301626e-06,
+          "2025H2": 3.5156333094253802e-06
+        },
+        "per_fold_across_seed_sd": {
+          "2022H1": 0.0012329882138245605,
+          "2022H2": 0.001293404927714514,
+          "2023H1": 0.0012803807953725072,
+          "2023H2": 0.0008022053704292328,
+          "2024H1": 0.0010531220088288965,
+          "2024H2": 0.0015123826661710348,
+          "2025H1": 0.0012626926528772403,
+          "2025H2": 0.0018750022158454587
+        },
+        "seed_mean_by_fold": {
+          "2022H1": -0.06885274503876389,
+          "2022H2": -0.08413835065721713,
+          "2023H1": -0.08893216721879718,
+          "2023H2": -0.19508725263610477,
+          "2024H1": -0.10191441559441242,
+          "2024H2": -0.18836772915082162,
+          "2025H1": -0.1398410714995431,
+          "2025H2": -0.08505535983224491
+        },
+        "mc_var": 1.7478072524300832e-06,
+        "mc_sd": 0.001322046615074553,
+        "between_var": 0.002444829969549908,
+        "between_sd": 0.04944522190818753,
+        "het_var": 0.002444480408099422,
+        "het_sd": 0.04944168694633529,
+        "het_var_is_negative": false,
+        "single_seed_var": 0.002446228215351852,
+        "mc_share_of_single_seed_var": 0.000714490676487716,
+        "mean_delta": -0.11902363645348814
+      }
+    },
+    "decomposition_control": {
+      "zm_conditional": {
+        "folds": [
+          "2022H1",
+          "2022H2",
+          "2023H1",
+          "2023H2",
+          "2024H1",
+          "2024H2",
+          "2025H1",
+          "2025H2"
+        ],
+        "n_seeds": 5,
+        "per_fold_across_seed_var": {
+          "2022H1": 4.309050466320745e-06,
+          "2022H2": 6.064889407069752e-06,
+          "2023H1": 8.17578080771073e-06,
+          "2023H2": 4.685543937355577e-06,
+          "2024H1": 2.5391958663143104e-06,
+          "2024H2": 1.020779520490217e-05,
+          "2025H1": 2.7263589958335315e-06,
+          "2025H2": 7.2830727031028116e-06
+        },
+        "per_fold_across_seed_sd": {
+          "2022H1": 0.0020758252494660393,
+          "2022H2": 0.0024626996177101565,
+          "2023H1": 0.0028593322310831123,
+          "2023H2": 0.0021646117290072086,
+          "2024H1": 0.001593485445906021,
+          "2024H2": 0.0031949640381234608,
+          "2025H1": 0.0016511689785826075,
+          "2025H2": 0.00269871686234455
+        },
+        "seed_mean_by_fold": {
+          "2022H1": -0.02022515965391909,
+          "2022H2": -0.019531448432715502,
+          "2023H1": -0.03841304348655052,
+          "2023H2": -0.09100704571478771,
+          "2024H1": -0.032035615636028594,
+          "2024H2": -0.10292352620525733,
+          "2025H1": -0.06002839386939742,
+          "2025H2": -0.009814687540323507
+        },
+        "mc_var": 5.748960923576204e-06,
+        "mc_sd": 0.002397699089455598,
+        "between_var": 0.0011978741131941724,
+        "between_sd": 0.03461031801636865,
+        "het_var": 0.0011967243210094572,
+        "het_sd": 0.0345937034879103,
+        "het_var_is_negative": false,
+        "single_seed_var": 0.0012024732819330335,
+        "mc_share_of_single_seed_var": 0.00478094691163073,
+        "mean_delta": -0.04674736506737246
+      },
+      "zm_floor": {
+        "folds": [
+          "2022H1",
+          "2022H2",
+          "2023H1",
+          "2023H2",
+          "2024H1",
+          "2024H2",
+          "2025H1",
+          "2025H2"
+        ],
+        "n_seeds": 5,
+        "per_fold_across_seed_var": {
+          "2022H1": 4.584090777805325e-06,
+          "2022H2": 3.1033500578188503e-06,
+          "2023H1": 3.6382787436625077e-06,
+          "2023H2": 3.699917595097925e-06,
+          "2024H1": 8.519999877514822e-07,
+          "2024H2": 5.964789004896612e-06,
+          "2025H1": 1.0010376484471292e-06,
+          "2025H2": 4.224518849772581e-06
+        },
+        "per_fold_across_seed_sd": {
+          "2022H1": 0.0021410489900526154,
+          "2022H2": 0.0017616327817734463,
+          "2023H1": 0.0019074272577643708,
+          "2023H2": 0.001923516985913544,
+          "2024H1": 0.0009230384541022558,
+          "2024H2": 0.002442291752616098,
+          "2025H1": 0.00100051868970406,
+          "2025H2": 0.0020553634349604892
+        },
+        "seed_mean_by_fold": {
+          "2022H1": 0.037985699741821574,
+          "2022H2": 0.03896981854341934,
+          "2023H1": 0.021777594925646414,
+          "2023H2": -0.00902934752186546,
+          "2024H1": 0.027900662959538015,
+          "2024H2": -0.006060942066741149,
+          "2025H1": 0.022580099219303394,
+          "2025H2": 0.015575107352206885
+        },
+        "mc_var": 3.3834978331565516e-06,
+        "mc_sd": 0.0018394286703094936,
+        "between_var": 0.0003262524886038109,
+        "between_sd": 0.018062460757156288,
+        "het_var": 0.0003255757890371796,
+        "het_sd": 0.018043718825042125,
+        "het_var_is_negative": false,
+        "single_seed_var": 0.00032895928687033617,
+        "mc_share_of_single_seed_var": 0.010285460749099338,
+        "mean_delta": 0.018712336644166126
+      },
+      "zm_climatology": {
+        "folds": [
+          "2022H1",
+          "2022H2",
+          "2023H1",
+          "2023H2",
+          "2024H1",
+          "2024H2",
+          "2025H1",
+          "2025H2"
+        ],
+        "n_seeds": 5,
+        "per_fold_across_seed_var": {
+          "2022H1": 5.662885344903105e-05,
+          "2022H2": 3.738061932676621e-05,
+          "2023H1": 4.796081428702669e-06,
+          "2023H2": 1.6384399448554485e-05,
+          "2024H1": 2.433778037329098e-05,
+          "2024H2": 7.954184192912574e-05,
+          "2025H1": 1.0956368697593457e-05,
+          "2025H2": 7.28214942622071e-05
+        },
+        "per_fold_across_seed_sd": {
+          "2022H1": 0.007525214511828288,
+          "2022H2": 0.006113969195765237,
+          "2023H1": 0.002189995759973674,
+          "2023H2": 0.004047764747185103,
+          "2024H1": 0.004933333596392097,
+          "2024H2": 0.008918623320284681,
+          "2025H1": 0.003310040588511485,
+          "2025H2": 0.008533551093314383
+        },
+        "seed_mean_by_fold": {
+          "2022H1": -1.2189312489278863,
+          "2022H2": -1.0860140075819973,
+          "2023H1": -1.2148815090722014,
+          "2023H2": -1.1240875619018869,
+          "2024H1": -1.2173907389766103,
+          "2024H2": -1.2808363492781645,
+          "2025H1": -1.2574625008927718,
+          "2025H2": -0.9568813800160495
+        },
+        "mc_var": 3.7855929864408965e-05,
+        "mc_sd": 0.006152717274863925,
+        "between_var": 0.01159549791981084,
+        "between_sd": 0.10768239373180204,
+        "het_var": 0.011587926733837958,
+        "het_sd": 0.10764723282016105,
+        "het_var_is_negative": false,
+        "single_seed_var": 0.011625782663702367,
+        "mc_share_of_single_seed_var": 0.00325620484740365,
+        "mean_delta": -1.1695606620809462
+      },
+      "zm_over": {
+        "folds": [
+          "2022H1",
+          "2022H2",
+          "2023H1",
+          "2023H2",
+          "2024H1",
+          "2024H2",
+          "2025H1",
+          "2025H2"
+        ],
+        "n_seeds": 5,
+        "per_fold_across_seed_var": {
+          "2022H1": 8.352553431330937e-06,
+          "2022H2": 5.242634391956998e-06,
+          "2023H1": 6.072084614098389e-06,
+          "2023H2": 5.2835081018855754e-06,
+          "2024H1": 7.76809492515394e-06,
+          "2024H2": 1.2589823990254413e-05,
+          "2025H1": 6.81538906108059e-06,
+          "2025H2": 4.997411169491044e-06
+        },
+        "per_fold_across_seed_sd": {
+          "2022H1": 0.0028900784472624505,
+          "2022H2": 0.002289679975882437,
+          "2023H1": 0.002464160022015289,
+          "2023H2": 0.0022985882845532766,
+          "2024H1": 0.0027871302311076067,
+          "2024H2": 0.0035482141973469435,
+          "2025H1": 0.002610630012292165,
+          "2025H2": 0.0022354890224492367
+        },
+        "seed_mean_by_fold": {
+          "2022H1": -0.06885210075387863,
+          "2022H2": -0.08318019951886076,
+          "2023H1": -0.08912027517249213,
+          "2023H2": -0.19514863373476893,
+          "2024H1": -0.10181217430948912,
+          "2024H2": -0.18771248991980408,
+          "2025H1": -0.14040444360166796,
+          "2025H2": -0.08290172937207334
+        },
+        "mc_var": 7.140187460656486e-06,
+        "mc_sd": 0.002672112920640983,
+        "between_var": 0.002466616729596327,
+        "between_sd": 0.049665045349786274,
+        "het_var": 0.0024651886921041957,
+        "het_sd": 0.049650666582677375,
+        "het_var_is_negative": false,
+        "single_seed_var": 0.002472328879564852,
+        "mc_share_of_single_seed_var": 0.002888041117698391,
+        "mean_delta": -0.11864150579787937
+      }
+    },
+    "ceiling": {
+      "rungs": [
+        {
+          "label": "observed (no-op identity)",
+          "draws": 4000,
+          "k": null,
+          "kind": "identity",
+          "dsr": 0.0,
+          "winner_sharpe": 1.0132582064678126,
+          "sr0": 5.481846571796659,
+          "unbounded": false,
+          "degenerate_arms": [],
+          "trial_sharpes": {
+            "zm_climatology": -10.934243899498743,
+            "zm_conditional": -1.3467264688055858,
+            "zm_floor": 1.0132582064678126,
+            "zm_over": -2.407715652786801
+          },
+          "target_sd": {
+            "zm_conditional": 0.03476788963151976,
+            "zm_floor": 0.01815170762669908,
+            "zm_climatology": 0.10688371481270373,
+            "zm_over": 0.049344428933909654
+          },
+          "p_one_sided": 0.0121
+        },
+        {
+          "label": "4,000 (reconstructed)",
+          "draws": 4000,
+          "k": 1.0,
+          "kind": "reconstruction",
+          "dsr": 0.0,
+          "winner_sharpe": 1.029590521456211,
+          "sr0": 5.510476614612224,
+          "unbounded": false,
+          "degenerate_arms": [],
+          "trial_sharpes": {
+            "zm_climatology": -10.985472445537617,
+            "zm_conditional": -1.3650361424201156,
+            "zm_floor": 1.029590521456211,
+            "zm_over": -2.4021207669049263
+          },
+          "target_sd": {
+            "zm_conditional": 0.03430153662324666,
+            "zm_floor": 0.01786376848938334,
+            "zm_climatology": 0.1063852840595218,
+            "zm_over": 0.049459359229086786
+          },
+          "p_one_sided": 0.0113
+        },
+        {
+          "label": "16,000 draws",
+          "draws": 16000,
+          "k": 4.0,
+          "kind": "ladder",
+          "dsr": 0.0,
+          "winner_sharpe": 1.0307778177834586,
+          "sr0": 5.5123846614128,
+          "unbounded": false,
+          "degenerate_arms": [],
+          "trial_sharpes": {
+            "zm_climatology": -10.988854720575446,
+            "zm_conditional": -1.365854773318843,
+            "zm_floor": 1.0307778177834586,
+            "zm_over": -2.402764635522337
+          },
+          "target_sd": {
+            "zm_conditional": 0.03428097785059956,
+            "zm_floor": 0.017843192196071313,
+            "zm_climatology": 0.10635253958343069,
+            "zm_over": 0.04944610560916329
+          },
+          "p_one_sided": 0.0112
+        },
+        {
+          "label": "64,000 draws",
+          "draws": 64000,
+          "k": 16.0,
+          "kind": "ladder",
+          "dsr": 0.0,
+          "winner_sharpe": 1.0310752842137934,
+          "sr0": 5.512862082135136,
+          "unbounded": false,
+          "degenerate_arms": [],
+          "trial_sharpes": {
+            "zm_climatology": -10.989700777583135,
+            "zm_conditional": -1.366059661277159,
+            "zm_floor": 1.0310752842137934,
+            "zm_over": -2.4029256835915462
+          },
+          "target_sd": {
+            "zm_conditional": 0.034275836230683546,
+            "zm_floor": 0.017838044414168665,
+            "zm_climatology": 0.10634435188904111,
+            "zm_over": 0.049442791649063456
+          },
+          "p_one_sided": 0.0112
+        },
+        {
+          "label": "256,000 draws",
+          "draws": 256000,
+          "k": 64.0,
+          "kind": "ladder",
+          "dsr": 0.0,
+          "winner_sharpe": 1.031149691069548,
+          "sr0": 5.51298146291965,
+          "unbounded": false,
+          "degenerate_arms": [],
+          "trial_sharpes": {
+            "zm_climatology": -10.989912322371124,
+            "zm_conditional": -1.3661108976752288,
+            "zm_floor": 1.031149691069548,
+            "zm_over": -2.4029659506689938
+          },
+          "target_sd": {
+            "zm_conditional": 0.034274550705187576,
+            "zm_floor": 0.017836757236555985,
+            "zm_climatology": 0.1063423048669435,
+            "zm_over": 0.04944196312433135
+          },
+          "p_one_sided": 0.0112
+        },
+        {
+          "label": "ceiling (\u221e draws)",
+          "draws": null,
+          "k": Infinity,
+          "kind": "ceiling",
+          "dsr": 0.0,
+          "winner_sharpe": 1.0311744969347094,
+          "sr0": 5.5130212587913,
+          "unbounded": false,
+          "degenerate_arms": [],
+          "trial_sharpes": {
+            "zm_climatology": -10.989982840015234,
+            "zm_conditional": -1.366127977755767,
+            "zm_floor": 1.0311744969347094,
+            "zm_over": -2.4029793734780007
+          },
+          "target_sd": {
+            "zm_conditional": 0.03427412218597416,
+            "zm_floor": 0.017836328156709418,
+            "zm_climatology": 0.10634162251748783,
+            "zm_over": 0.04944168694633529
+          },
+          "p_one_sided": 0.0112
+        }
+      ],
+      "identity": {
+        "label": "observed (no-op identity)",
+        "draws": 4000,
+        "k": null,
+        "kind": "identity",
+        "dsr": 0.0,
+        "winner_sharpe": 1.0132582064678126,
+        "sr0": 5.481846571796659,
+        "unbounded": false,
+        "degenerate_arms": [],
+        "trial_sharpes": {
+          "zm_climatology": -10.934243899498743,
+          "zm_conditional": -1.3467264688055858,
+          "zm_floor": 1.0132582064678126,
+          "zm_over": -2.407715652786801
+        },
+        "target_sd": {
+          "zm_conditional": 0.03476788963151976,
+          "zm_floor": 0.01815170762669908,
+          "zm_climatology": 0.10688371481270373,
+          "zm_over": 0.049344428933909654
+        },
+        "p_one_sided": 0.0121
+      },
+      "ceiling": {
+        "label": "ceiling (\u221e draws)",
+        "draws": null,
+        "k": Infinity,
+        "kind": "ceiling",
+        "dsr": 0.0,
+        "winner_sharpe": 1.0311744969347094,
+        "sr0": 5.5130212587913,
+        "unbounded": false,
+        "degenerate_arms": [],
+        "trial_sharpes": {
+          "zm_climatology": -10.989982840015234,
+          "zm_conditional": -1.366127977755767,
+          "zm_floor": 1.0311744969347094,
+          "zm_over": -2.4029793734780007
+        },
+        "target_sd": {
+          "zm_conditional": 0.03427412218597416,
+          "zm_floor": 0.017836328156709418,
+          "zm_climatology": 0.10634162251748783,
+          "zm_over": 0.04944168694633529
+        },
+        "p_one_sided": 0.0112
+      },
+      "observed_sd": {
+        "zm_conditional": 0.03476788963151976,
+        "zm_floor": 0.01815170762669908,
+        "zm_climatology": 0.10688371481270373,
+        "zm_over": 0.049344428933909654
+      },
+      "reconstruction": {
+        "zm_climatology": {
+          "observed_sd": 0.10688371481270373,
+          "reconstructed_sd": 0.1063852840595218
+        },
+        "zm_conditional": {
+          "observed_sd": 0.03476788963151976,
+          "reconstructed_sd": 0.03430153662324666
+        },
+        "zm_floor": {
+          "observed_sd": 0.01815170762669908,
+          "reconstructed_sd": 0.01786376848938334
+        },
+        "zm_over": {
+          "observed_sd": 0.049344428933909654,
+          "reconstructed_sd": 0.049459359229086786
+        }
+      }
+    },
+    "base_seed_deltas": {
+      "zm_conditional": [
+        -0.02094587282080207,
+        -0.01961379668946872,
+        -0.038435108726698974,
+        -0.09140738977941165,
+        -0.033438711821823563,
+        -0.1041536061544801,
+        -0.05739340609188748,
+        -0.009194805765659009
+      ],
+      "zm_floor": [
+        0.037429010139631735,
+        0.03821803263952317,
+        0.021663017192544043,
+        -0.009518508622659905,
+        0.02720657288569095,
+        -0.00696879386644067,
+        0.02389330849801219,
+        0.015216294846956302
+      ],
+      "zm_climatology": [
+        -1.2170349083532224,
+        -1.0886112808811892,
+        -1.2116820921361011,
+        -1.1263989822352536,
+        -1.2171564921432374,
+        -1.2790262822916652,
+        -1.2546473046079964,
+        -0.9549835105238866
+      ],
+      "zm_over": [
+        -0.07024949946226311,
+        -0.0824696422459521,
+        -0.08931256746322225,
+        -0.19489282925741858,
+        -0.10278217117112076,
+        -0.1883459455442904,
+        -0.13857826153024178,
+        -0.08382791470149265
+      ]
+    },
+    "null_state": {
+      "state": "DSR_UNREACHABLE",
+      "reason": "`nf_w7k_mc_variance|QB`: the winner's per-fold Sharpe 1.013 sits at or BELOW the 4-arm field's deflated benchmark SR0 5.482, so DSR is unreachable at ANY fold count \u2014 `n` scales a positive gap, it cannot create one. The remedy is a SMALLER, PRE-REGISTERED field, not more seasons \u2014 and \u26d4 only if such a field was pre-registered; this is NOT a licence to re-cut a field you have already scored (MH2.7). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+      "retest_trigger": "field size is NOT a lever here \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)",
+      "field_remedy_admissible": null,
+      "declared_field_size_source": "fp_qb_marginal_calibration.REAL_ARMS, committed in ablation_results/nf_w7f_preregistration.md \u00a73 before any score",
+      "instrument_verdict": {
+        "state": "DSR_UNREACHABLE",
+        "reason": "`nf_w7k_mc_variance|QB`: the winner's per-fold Sharpe 1.013 sits at or BELOW the 4-arm field's deflated benchmark SR0 5.482, so DSR is unreachable at ANY fold count \u2014 `n` scales a positive gap, it cannot create one. The remedy is a SMALLER, PRE-REGISTERED field, not more seasons \u2014 and \u26d4 only if such a field was pre-registered; this is NOT a licence to re-cut a field you have already scored (MH2.7). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+        "retest_trigger": "field size is NOT a lever here \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)"
+      },
+      "field_shrink_flag": {
+        "proposed_field_size": null,
+        "declared_family_size": 4,
+        "status": "SUSPECT \u2014 NOT ADVICE",
+        "note": "the instrument suggests a smaller field, but this story's family of 4 arms was PRE-REGISTERED as the minimum \u00a70.5 field (\u22653 classes + a direct-learned foil). \u26d4 Shrinking below it would be a POST-HOC field, which is the selection bias DSR exists to deflate (MH2.2). Treat this remedy as SUSPECT, not as advice: you may PRE-REGISTER a family, you may not DISCOVER one."
+      }
+    },
+    "dsr_min": 0.95,
+    "promote_blockers": [
+      "NF-W7k decides whether an expensive re-measurement is FUNDED. It certifies nothing, re-scores no other clause and does not re-open NF-W7f's or NF-W7j's verdicts",
+      "the certification bar is UNCHANGED \u2014 the full NF-W7f gate including `dsr_ok` stands (E2.1-r); WR and TE cleared it and RB was held to it",
+      "the field is UNCHANGED \u2014 no arm was trimmed after scoring (MH2.2)",
+      "\u26d4 QB ONLY. Nothing here certifies RB / WR / TE, and NF-W7c \u00a74's rule still binds: a per-position-certified distribution may not feed a CROSS-POSITION ranking",
+      "NF-W7f's and NF-W7j's promote blockers are inherited in full"
+    ]
+  },
+  "rewritten_at": "2026-08-19T05:52:26.213109+00:00"
+}
