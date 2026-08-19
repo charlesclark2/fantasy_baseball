@@ -1,0 +1,5 @@
+# Captures describe a REAL league. The structural summary is deliberately small, but it is still
+# somebody's draft room — keep it local and hand it over deliberately, never by committing it.
+*
+!.gitignore
+!README.md

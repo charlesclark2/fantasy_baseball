@@ -215,7 +215,100 @@ Two harness defects were caught by the harness's own checks and are worth carryi
   The bill only moves when COMPUTE_WH suspends for longer stretches, which this cannot
   cause. Book **zero** credit on wait-count.
 - **The value delivered is correctness** — restoring ~90% of a monitoring table — plus
-  code quality (bound parameter, logged path, the census fragmentation closed).
+  code quality (bound parameter, logged path). ⚠️ The claim that the bind "closed the
+  census fragmentation" is **retracted** — see §6.3; it did the opposite.
 - **The card's premise was wrong**, and cheaply checkable: "a per-date loop" was a
   reading of the source, and one `query_history` cut (sessions vs DELETEs) refuted it.
   Pre-flighting a card against the running system stays the cheapest step in the story.
+
+
+---
+
+## 6. Post-soak verification (2026-08-19, measured on `MONITOR_WH`)
+
+PR #885 merged to `dev` 2026-08-17 (`f2b89612`) and reached the box with the `dev→main`
+promotion. Three post-deploy slates are now in retention. All reads below ran on
+**`MONITOR_WH`**, so the measurement did not wake the warehouse being measured.
+
+### 6.1 The wake lever — the predicted NULL is CONFIRMED
+
+Per-day (never aggregated across the deploy date), COMPUTE_WH, `warehouse_size is not null`:
+
+| UTC day | execs | sessions | waits | scoped-form stmts |
+|---|---|---|---|---|
+| 08-10 | 9 | 9 | 7 | 0 |
+| 08-11 | 7 | 7 | 6 | 0 |
+| 08-12 | 9 | 9 | 6 | 0 |
+| 08-13 | 10 | 10 | 8 | 0 |
+| 08-14 | 9 | 9 | 6 | 0 |
+| 08-15 | 14 | 14 | 12 | 0 |
+| 08-16 | 8 | 8 | 7 | 0 |
+| **08-17** (deploy) | 10 | 10 | **9** | **7** |
+| **08-18** | 8 | 8 | **7** | **6** |
+
+Pre-deploy waits 6-12 (mean ~7.4); post-deploy **9 and 7**. **Executions HOLD and waits
+HOLD** — the working-gate signature does not apply here because there was never a gate to
+work: this was pre-registered as a null and it read as a null. ⛔ Book zero wake credit.
+
+Both measurement days were structurally normal (08-17 an 11-game slate, 08-18 a 15-game
+slate; execution counts inside the pre-deploy 7-14 range), so this is not an outage day
+faking a volume delta.
+
+**Why no `n` of soak days could change this** — the DELETE is its session's **first
+warehouse-occupying statement on 100% of days, before and after** (65/65 pre, 18/18 post).
+Every DELETE is its own OS process, so removing or merging the statement only promotes its
+own INSERT to pay the resume. The null is structural, not underpowered. (Note 08-05..08-09
+show `waits = 0` on 7-12 executions: before #675/#662 moved the surrounding reads to S3,
+something else in the process paid the resume. The DELETE *inherited* the waker role — the
+queue thesis, #679, visible in the data.)
+
+### 6.2 The real fix — CONFIRMED in production over a 3-day soak
+
+`prediction_log` distinct games per date vs `daily_model_predictions`:
+
+| date | dmp games | log games | log rows | retained |
+|---|---|---|---|---|
+| 08-11 | 15 | 1 | 2 | 6.7% |
+| 08-12 | 15 | 1 | 2 | 6.7% |
+| 08-13 | 9 | 2 | 4 | 22.2% |
+| 08-14 | 14 | 2 | 4 | 14.3% |
+| 08-15 | 15 | 1 | 2 | 6.7% |
+| **08-16** | 15 | **15** | 30 | **100%** |
+| **08-17** | 11 | **11** | 22 | **100%** |
+| **08-18** | 15 | **15** | 30 | **100%** |
+
+Pre-fix retention 6.7-25%; post-fix **100% on every slate**, at the full 2 rows/game.
+The scoped and full-slate paths are both visible in `query_history` as designed — a
+date-wide DELETE for the full-slate morning run, `AND game_pk IN (...)` for each sensor
+re-score.
+
+### 6.3 ⚠️ Retraction — the bind did NOT close the census fragmentation
+
+§5 originally credited the fix with "the census fragmentation closed". **Measured false.**
+The Snowflake Python connector defaults to `paramstyle='pyformat'` = **client-side**
+binding, so the value is escaped and interpolated into the text before it is sent, and
+`query_history` still shows a date **literal**:
+
+```
+DELETE FROM baseball_data.config.prediction_log WHERE prediction_date = '2026-08-17'
+DELETE FROM baseball_data.config.prediction_log WHERE prediction_date = '2026-08-17' AND game_pk IN (823589, 824478)
+```
+
+The injection half of the claim stands (the connector escapes the value; an f-string did
+not). The census half is the reverse of what was written: distinct `query_text` per day
+went **1 → 7-9**, because the scoped form inlines its game_pk list. ⇒ a future waker board
+over this family **must** normalise date *and number* literals before `GROUP BY
+query_text` — the scoped fix makes that normalisation more load-bearing, not less. The
+guards (`test_date_is_a_bound_parameter_not_an_inlined_literal`,
+`test_the_writer_no_longer_inlines_the_date`) are unaffected: they assert the API-level
+bind, which is real.
+
+### 6.4 Still open (not this story)
+
+- ⛔ **History is forward-only.** 08-02..08-15 still hold 1-2 games/date. As of 08-19,
+  `compute_model_health`'s 14-day window (08-05..08-18) contains **3 good days of 14**;
+  it self-heals ~2026-08-30. A backfill from `daily_model_predictions` is feasible and
+  separately carded.
+- **`_backfill_outcomes()`** remains the live lever in this file — 36% of billable
+  COMPUTE_WH elapsed, 0 waits (an ACTIVE-MINUTES lever, not a wake lever), and verbatim
+  duplicated by the daily `backfill_prediction_log` op. Separate card.
