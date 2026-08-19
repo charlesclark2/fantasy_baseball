@@ -557,10 +557,10 @@ def derive_verdict_layer(out: dict) -> dict:  # noqa: C901 — the pre-registere
             }
 
     harness_ok = bool(all_reproduce and not any_skipped and len(labels) >= 1)
-    gap_detected = family_a["gap_detected"] if harness_ok else None
-    if winner is not None and len(evaluable) < 4:
-        winner = None                            # prereg §5.4: <4 evaluable folds ⇒ UNDEFINED
+    if len(evaluable) < 4:                       # prereg §5.4: <4 evaluable folds ⇒ UNDEFINED
+        winner = None
         harness_ok = False
+    gap_detected = family_a["gap_detected"] if harness_ok else None
 
     # PROVISIONAL verdict: `banks_untouched` is measured AT WRITE TIME (below), so the shipped-arm
     # decision is taken with it PENDING; the FINAL verdict is recomputed from the measured value
@@ -722,7 +722,11 @@ def _write_input(out: dict, rows_by_fold: dict[str, pd.DataFrame], recal_tables:
                                 pooled_identity_bias, cfg, profile)
     out["input"] = {"dir": str(input_dir), "shipped_arm": shipped,
                     "schema": list(XP.INPUT_SCHEMA), "banks_untouched": banks_untouched,
-                    "max_quantile_drift": max_q_drift, "fold_summaries": summaries}
+                    "max_quantile_drift": max_q_drift,
+                    # prereg §5.3: an UNREPAIRED (or UNDEFINED) verdict flags the input
+                    # not-cross-rankable — per-position use stays valid, the merged VOR does not
+                    "cross_rankable": out["verdict"]["state"] in (XP.V_COMPARABLE, XP.V_REMOVED),
+                    "fold_summaries": summaries}
     return out
 
 

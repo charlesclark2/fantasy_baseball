@@ -357,8 +357,9 @@ class TestDeriveEndToEnd:
         # the swap clause genuinely exercised: ≥2 active positions (fixture-inertness guard)
         assert out["swap_verification"]["n_active_positions"] >= 2
         assert out["recal"]["winner_clauses"]["swap_clause"] is True
-        # PIT preservation identity
+        # PIT preservation identity + the prereg §5.3 flag
         assert out["input"]["banks_untouched"] is True
+        assert out["input"]["cross_rankable"] is True
         # the input parquets exist with the schema and the disclosures
         files = sorted(Path(out["input"]["dir"]).glob("*.parquet"))
         assert len(files) == 8
@@ -387,6 +388,7 @@ class TestDeriveEndToEnd:
         out = R.derive_verdict_layer(_out_shell(_fold_results(rows, tmp_path), tmp_path))
         assert all(not r["reproduces"] for r in out["reproduction"].values())
         assert out["verdict"]["state"] == XP.V_UNDEFINED
+        assert out["input"]["cross_rankable"] is False   # an UNDEFINED input is never rankable
 
     def test_recal_is_fit_on_prior_folds_only(self, tmp_path):
         # the bias exists ONLY in the last fold: a prior-only fit must see δ≈0 there while the
