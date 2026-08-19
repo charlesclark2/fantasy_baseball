@@ -56,6 +56,19 @@ DRAWS_CONTROL = 1000
 DRAW_LEVELS: tuple[int, ...] = (DRAWS_PRIMARY, DRAWS_CONTROL)
 
 #: the registered admissible band for `σ²_MC(1000) / σ²_MC(4000)` — nominal 4.0
+#:
+#: ⭐ WHY [2, 8], MEASURED RATHER THAN ASSERTED. Each `σ²_MC` pools `n_folds × (n_seeds − 1)` df,
+#: so the observed ratio is `true_ratio × F(df, df)` and the band's meaning depends entirely on
+#: the DESIGN. At this story's design — 8 folds × 5 seeds = **32 df** — a true 1/D law lands in
+#: this band **94.6%** of the time (90% of observations fall in [2.22, 7.22]), so the band is a
+#: real test that a correct law passes and a flat one (ratio ≈ 1) fails.
+#:
+#: ⚠️ AND THE COROLLARY THAT MATTERS FOR ANY SMALLER PROBE: at 2 folds × 2 seeds = **2 df**, a
+#: true ratio of 4 produces observations spanning **[0.21, 76.0]** and lands in band only **33%**
+#: of the time. A cheap pre-flight at that size is therefore UNINFORMATIVE about G2 — it cannot
+#: distinguish a broken law from a correct one, and reading its scatter as evidence against the
+#: extrapolation would be the "measurement whose resolution is below the effect" error (MH2's
+#: underpowered ≠ absent, one statistic over). Judge G2 only at the registered design.
 SCALING_BAND: tuple[float, float] = (2.0, 8.0)
 #: the registered Phase-B draw ladder and its cap (prereg §3)
 DRAW_LADDER: tuple[int, ...] = (16_000, 64_000, 256_000)

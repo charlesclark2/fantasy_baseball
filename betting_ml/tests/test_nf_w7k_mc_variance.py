@@ -213,6 +213,24 @@ class TestScalingLawIsMeasuredNotAssumed:
         assert not MV.scaling_check(1.05e-6, 1000, 1.0e-6, 4000)["holds"], "ratio 1.05 is flat"
         assert not MV.scaling_check(5.0e-5, 1000, 1.0e-6, 4000)["holds"], "ratio 50 is not 1/D"
 
+    def test_the_registered_band_is_a_real_test_at_the_registered_design(self):
+        """⭐ A BAND IS ONLY MEANINGFUL AGAINST A df. Each `σ²_MC` pools `n_folds × (n_seeds − 1)`
+        df, so the observed ratio is `true_ratio × F(df, df)`. At this story's 8 folds × 5 seeds
+        (32 df) the band must ADMIT a correct 1/D law comfortably and REJECT a flat one — a band
+        that failed either way would be decoration."""
+        from scipy.stats import f as F
+
+        df = 8 * (MV.N_SEEDS - 1)
+        lo, hi = MV.SCALING_BAND
+        p_true_law = F.cdf(hi / 4.0, df, df) - F.cdf(lo / 4.0, df, df)
+        p_flat_law = F.cdf(hi / 1.0, df, df) - F.cdf(lo / 1.0, df, df)
+        assert p_true_law > 0.9, (
+            f"a correct 1/D law only lands in band {p_true_law:.3f} of the time at {df} df — the "
+            f"clause would refuse valid runs")
+        assert p_flat_law < 0.1, (
+            f"a FLAT law (ratio 1, i.e. no 1/D scaling at all) lands in band {p_flat_law:.3f} of "
+            f"the time — the clause could not detect the failure it exists to catch")
+
     def test_a_zero_primary_variance_is_unevaluable_and_never_scored_as_holding(self):
         """NF1.7 (a) — a ratio that could not be computed is not a pass."""
         s = MV.scaling_check(1.0e-6, 1000, 0.0, 4000)
