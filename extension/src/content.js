@@ -1,109 +1,97 @@
-// NF-C-LDA-0 — ISOLATED-world half of the read probe.
+// NF-C-LDA-1 — the ISOLATED-world ORCHESTRATOR: take the reader's draft state, keep the verdict
+// current, ask the background for advice when (and only when) the advice could have changed, and
+// render.
 //
-// Receives the MAIN world's findings and renders a small status readout with a "copy capture"
-// button, so the operator's mock draft produces a FILE we can reason about afterwards.
+// ⛔ IT ORIGINATES NOTHING. No `fetch`, no `WebSocket`, no `XMLHttpRequest` — it talks to the
+// background worker over `chrome.runtime` and to the page's MAIN world over `postMessage`. The
+// background is the only script with network access and it can only reach `api.credencesports.com`
+// (see `background.js` for why the contexts are split rather than the rule being a convention).
 //
-// ⚠️ THIS IS A PROBE READOUT, NOT THE RECOMMENDATION OVERLAY. The overlay is explicitly out of
-// this spike's scope and is designed OFF this spike's verdict; per the epic its recommendations
-// come from OUR API running the SAME optimizer (one ranker), never a copy bundled here. Nothing
-// in this file ranks, scores, or advises — it reports what the page exposed.
-//
-// It also sends nothing anywhere: no `fetch`, no host beyond the ESPN tab, no storage. The capture
-// reaches us only if the operator copies it and hands it over — the same user-mediated shape as
-// the §3(d) paste flow.
+// ⭐ THE VERDICT IS RE-RENDERED ON A CLOCK, NOT ONLY ON AN EVENT. That is the difference between
+// an overlay that can report a break and one that cannot: a stream that STOPS produces no event by
+// definition, so anything that only redraws on arrival goes quiet exactly when it most needs to
+// speak (NF1.7(a), on a UI).
 (function () {
   "use strict";
 
-  var CHANNEL = "__credence_draft_probe__";
-  var latest = null;
+  var DRAFT_CHANNEL = "__credence_draft_state__";
+  var SEASON = 2026;
+
+  var draft = null;
+  var lastAdviceKey = null;
+  var view = {
+    verdict: { level: "blocked", headline: "Waiting for the draft page…", detail: "", gaps: [] },
+    pickNumber: null,
+    onTheClockIsMe: null,
+    data: null,
+    message: null
+  };
+
+  function refreshVerdict() {
+    view.verdict = self.CredenceDraftState.verdict(draft, Date.now());
+    view.pickNumber = self.CredenceDraftState.currentOverallPick(draft);
+    view.onTheClockIsMe = self.CredenceDraftState.onTheClockIsMe(draft);
+    self.CredenceOverlay.render(view);
+  }
+
+  function askForAdvice() {
+    if (!draft) return;
+    // ⛔ NEVER WHILE BLOCKED. Asking for a recommendation we could not attach to a pick would spend
+    // a paid request to produce advice the overlay is not going to show.
+    if (view.verdict.level === "blocked") return;
+
+    var key = self.CredenceDraftState.adviceKey(draft);
+    if (key === lastAdviceKey) return;      // nothing that could change the advice has moved
+    lastAdviceKey = key;
+
+    var state = self.CredenceDraftState.requestState(draft, 8);
+    try {
+      chrome.runtime.sendMessage(
+        { type: "CREDENCE_RECOMMEND", state: state, season: SEASON },
+        function (res) {
+          if (chrome.runtime.lastError) {
+            view.message = "Extension was reloaded — refresh this page.";
+            refreshVerdict();
+            return;
+          }
+          if (!res || !res.ok) {
+            // ⭐ A FAILED FETCH MUST NOT LEAVE STALE ADVICE ON SCREEN LOOKING CURRENT. Keeping the
+            // last successful recommendation while the pick number moves on is precisely the
+            // "confidently stale" shape this story is against — so the data is cleared and the
+            // named reason is shown in its place.
+            if (res && res.reason === "busy") { lastAdviceKey = null; return; }
+            view.data = null;
+            view.message = (res && res.message) || "Couldn’t reach Credence.";
+            lastAdviceKey = null;           // let the next tick retry
+            refreshVerdict();
+            return;
+          }
+          view.data = res.data;
+          view.message = null;
+          refreshVerdict();
+        }
+      );
+    } catch (e) {
+      view.message = "Extension context is gone — refresh this page.";
+      refreshVerdict();
+    }
+  }
 
   window.addEventListener("message", function (ev) {
     if (ev.source !== window) return;
     var d = ev.data;
-    if (!d || d.__channel !== CHANNEL) return;
-    latest = d.payload;
-    render(latest);
+    if (!d || d.__channel !== DRAFT_CHANNEL) return;
+    draft = d.payload;
+    refreshVerdict();
+    askForAdvice();
   });
 
-  // ── BREAK DETECTION ───────────────────────────────────────────────────────────────────────────
-  // ⭐ The spike's question 5. The requirement is that the extension can tell "ESPN changed and we
-  // can no longer read it" from "we read it fine and there is nothing to say" — because those two
-  // are otherwise pixel-identical to a user, and the failure mode is showing stale or empty state
-  // as if it were live (the E9.46/NF-K1 "a confidently wrong number renders perfectly" class).
-  //
-  // So the verdict is derived from what was ACTUALLY observed, never assumed, and an unreadable
-  // state is a NAMED state rather than an empty one (NF1.7(a): a check that could not run is not
-  // a pass).
-  function verdict(f) {
-    if (!f) return { level: "unknown", label: "probe has not reported yet" };
-    var bestGlobal = (f.globals && f.globals[0]) || null;
-    var netHits = (f.network || []).filter(function (n) { return n.score > 0; });
-    if (netHits.length) {
-      return { level: "ok", label: "structured source: " + netHits.length +
-               " draft-shaped response(s) observed", detail: netHits[0].url };
-    }
-    if (bestGlobal && bestGlobal.score >= 3) {
-      return { level: "ok", label: "structured source: in-page state at " + bestGlobal.path,
-               detail: "score " + bestGlobal.score };
-    }
-    if (f.dom && f.dom.pickLikeNodes > 0) {
-      return { level: "degraded", label: "DOM-text only — brittle, no structured source found",
-               detail: f.dom.pickLikeNodes + " pick-like nodes" };
-    }
-    return { level: "blocked", label: "cannot read this draft right now", detail: "no source found" };
-  }
+  // The heartbeat. Cheap (a verdict is arithmetic over an object we already hold) and the only
+  // thing that can notice a stream which stopped.
+  setInterval(function () {
+    refreshVerdict();
+    askForAdvice();
+  }, 3000);
 
-  var box = null;
-  function ensureBox() {
-    if (box) return box;
-    box = document.createElement("div");
-    box.id = "credence-draft-probe";
-    box.setAttribute("style", [
-      "position:fixed", "right:12px", "bottom:12px", "z-index:2147483647",
-      "max-width:340px", "font:12px/1.45 ui-sans-serif,system-ui,sans-serif",
-      "background:#111827", "color:#f9fafb", "border:1px solid #374151",
-      "border-radius:10px", "padding:10px 12px", "box-shadow:0 6px 24px rgba(0,0,0,.35)"
-    ].join(";"));
-    document.documentElement.appendChild(box);
-    return box;
-  }
-
-  function render(f) {
-    var v = verdict(f);
-    var el = ensureBox();
-    var colour = v.level === "ok" ? "#34d399" : v.level === "degraded" ? "#fbbf24" : "#f87171";
-    el.textContent = "";
-
-    var h = document.createElement("div");
-    h.setAttribute("style", "font-weight:600;margin-bottom:4px;color:" + colour);
-    h.textContent = "Credence read probe — " + v.level.toUpperCase();
-    el.appendChild(h);
-
-    var p = document.createElement("div");
-    p.setAttribute("style", "margin-bottom:6px;");
-    p.textContent = v.label + (v.detail ? " (" + v.detail + ")" : "");
-    el.appendChild(p);
-
-    var stats = document.createElement("div");
-    stats.setAttribute("style", "color:#9ca3af;margin-bottom:8px;");
-    stats.textContent = "globals " + ((f.globals || []).length) +
-      " · network " + ((f.network || []).length) +
-      " · dom-nodes " + ((f.dom && f.dom.pickLikeNodes) || 0);
-    el.appendChild(stats);
-
-    var btn = document.createElement("button");
-    btn.setAttribute("style",
-      "background:#2563eb;color:#fff;border:0;border-radius:6px;padding:5px 9px;cursor:pointer;font:inherit");
-    btn.textContent = "Copy capture JSON";
-    btn.addEventListener("click", function () {
-      var text = JSON.stringify(latest, null, 2);
-      navigator.clipboard.writeText(text).then(
-        function () { btn.textContent = "Copied (" + text.length + " bytes)"; },
-        function () { btn.textContent = "Copy failed — see console"; console.log(text); }
-      );
-    });
-    el.appendChild(btn);
-  }
-
-  render(null);
+  refreshVerdict();
 })();

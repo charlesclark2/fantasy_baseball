@@ -114,6 +114,31 @@ cp betting_ml/__init__.py "$PACKAGE_DIR/betting_ml/__init__.py"
 cp betting_ml/utils/__init__.py "$PACKAGE_DIR/betting_ml/utils/__init__.py"
 cp betting_ml/utils/game_day.py "$PACKAGE_DIR/betting_ml/utils/game_day.py"
 
+# ── 3c. Copy the STDLIB-ONLY half of the fantasy engine (NF-C-LDA-1) ─────────
+# The live-draft assistant (`/fantasy/nfl/draft-assistant`) runs the SAME optimizer the web app
+# runs — `fantasy_engine.draft.recommend` — because a second ranker in the Lambda (or in the
+# browser extension) would be free to drift from the one users already draft with, and a draft
+# assistant that recommends a different player from the website is the worst version of that
+# (E9.61). Pinned byte-for-byte by `betting_ml/tests/test_nf_c_lda_1_optimizer_parity.py`.
+#
+# ⭐ SAME PATTERN AS 3b: lift the stdlib-only modules out of a heavy package rather than pip-install
+# the package. `draft.py` and `league_config.py` import nothing but `math`/`dataclasses`/`typing`,
+# and `fantasy_engine/__init__.py` re-exports LAZILY (PEP 562) so importing `.draft` no longer drags
+# in `scoring`/`vor` and therefore pandas+numpy — which this bundle does not carry and could not
+# afford (it already sits near the size cap).
+#
+# ⚠️ THE COPY LIST IS THE CONTRACT. A backend import of any OTHER `quant_sports_intel_models`
+# module would resolve locally and `ModuleNotFoundError` only in prod — CI mocks IO but it does not
+# mock the zip. `test_nf_c_lda_1_lambda_import_weight.py` fails the build if the backend imports
+# something this list does not carry, or if a carried module stops being stdlib-only.
+echo "Copying the stdlib-only fantasy engine (NF-C-LDA-1 draft optimizer)..."
+mkdir -p "$PACKAGE_DIR/quant_sports_intel_models/fantasy_engine"
+cp quant_sports_intel_models/__init__.py "$PACKAGE_DIR/quant_sports_intel_models/__init__.py"
+for _m in __init__ league_config draft; do
+  cp "quant_sports_intel_models/fantasy_engine/${_m}.py" \
+     "$PACKAGE_DIR/quant_sports_intel_models/fantasy_engine/${_m}.py"
+done
+
 # ── 4. Zip the package ────────────────────────────────────────────────────────
 # Prune bytecode caches / dist-info that pip may leave behind — smaller zip = faster,
 # more reliable upload (every KB off the 59 MB package lowers the multipart-drop risk).

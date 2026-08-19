@@ -414,6 +414,28 @@ authorizer sits in front of the Lambda entirely and rejects an unauthenticated r
 Mangum/FastAPI ever sees it (see NF3.2: `fantasy_public.router` shipped correct at the app layer
 but still 401'd until this API Gateway route was added).
 
+#### NF-C-LDA-1 — the live-draft assistant — ⛔ **NO ROUTE, DELIBERATELY** (2026-08-19)
+
+`POST /fantasy/nfl/draft-assistant` (the ESPN draft-room overlay's server half) needs **no API
+Gateway change at all**, and that is worth stating because the story it shipped in assumed the
+opposite.
+
+The model above is: **the catch-all `ANY /{proxy+}` carries the Cognito JWT authorizer, and an
+explicit route EXEMPTS a path from it.** NF3.2's lesson is about a route that must be reachable
+ANONYMOUSLY. This one is the mirror case — it is paid-gated (`require_fantasy_access`) and the
+caller is a browser extension holding the user's own Cognito token, so it *wants* the catch-all's
+authorizer as a free extra layer in front of the Lambda.
+
+⛔ **Creating `--authorization-type NONE` for it would STRIP a layer of defence rather than add
+one.** Do not add it to the route list, to `_DEGRADE_ALLOWED_PREFIXES`, to the CDN allowlist, or to
+`_PUBLIC_CACHE_RULES`: it is per-caller by construction, and `cost_guardrails.cache_control_for`
+answers `private, no-store` unconditionally because every request carries an `Authorization` header.
+
+⚠️ It DOES need `./infrastructure/lambda/deploy.sh` — the API Lambda has no CD, so merging the PR
+does not ship it. `deploy.sh` gained a step 3c copying the three stdlib-only `fantasy_engine`
+modules the endpoint imports; without them the route `ModuleNotFoundError`s in prod while passing
+every local test.
+
 #### G100-C0 — the two email-OTP routes — ✅ APPLIED + VERIFIED LIVE 2026-08-10
 
 Passwordless sign-in. Public by necessity, not by preference: a caller signing in has no
