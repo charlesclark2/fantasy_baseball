@@ -34,6 +34,9 @@
   "use strict";
 
   var CHANNEL = "__credence_draft_probe__";
+  //: A SEPARATE channel from the probe readout: the overlay consumes live state, the probe capture
+  //: is a diagnostic. Keeping them apart means a future change to one cannot widen the other.
+  var DRAFT_CHANNEL = "__credence_draft_state__";
   var MAX_SAMPLE = 3;
   var MAX_STR = 200;
 
@@ -283,6 +286,139 @@
     } catch (e) { note("framePattern", e); }
   }
 
+  // ══ NF-C-LDA-1 — THE LIVE READ: A SEED, THEN SOCKET DELTAS ═══════════════════════════════════
+  //
+  // ⭐ THE ARCHITECTURE IS MEASURED, NOT CHOSEN. NF-C-LDA-0 proved the league payload is fetched
+  // ONCE at load (`count: 1`) and never re-polled, so `draftDetail.picks[]` NEVER populates — it
+  // stays 180 empty `{id, teamId}` slots for the whole draft. A design that polled that endpoint
+  // for picks would read a permanently PRE-DRAFT snapshot: no error, no empty screen, just
+  // confident advice about a draft that stopped four rounds ago. So:
+  //
+  //     SEED from the league payload (pool, teams, settings, draft order)
+  //     APPLY `SELECTED` deltas from wss://fantasydraft.espn.com
+  //
+  // which is how ESPN's own client works.
+  //
+  // ⛔ THE PARSED VERBS ARE AN ALLOWLIST, AND ONLY PARSED EVENTS CROSS TO THE ISOLATED WORLD.
+  // The socket's opening frame is `TOKEN 1:<leagueId>:<teamId>:<swid>:<draftSecurity>` — a
+  // line-protocol secret that every JSON-shaped rule in this file is structurally blind to (it is
+  // the THIRD unexpected thing a capture carried, after the registerdisney PII and the
+  // `responseType` blind spot). Forwarding raw frames and filtering downstream would put that
+  // token one bug away from the overlay, and later from the wire. Instead: a frame is parsed into
+  // a typed event or DROPPED, and only the four verbs below produce one.
+  var DRAFT_VERBS = { SELECTED: 1, SELECTING: 1, AUTOSUGGEST: 1, CLOCK: 1 };
+
+  var draft = {
+    // Seed
+    pool: null,            // [{id, fullName, proTeamId, defaultPositionId, eligibleSlots}]
+    poolSource: null,
+    settings: null,        // rosterSettings + scoringSettings + size — translated SERVER-side
+    teams: null,           // [{id, name}] for labelling only
+    seededAt: null,
+    // Deltas
+    picks: [],             // [{team, player, slot, mine}] in socket order
+    onTheClockTeam: null,
+    autosuggest: null,
+    lastEventAt: null,
+    socketOpen: false,
+    socketUrl: null,
+    // Identity
+    myTeam: null,          // from the draft-room URL — see below
+    leagueId: null,
+    // ⭐ Counted so a silence is EXPLICABLE: "we saw 412 frames and none was a pick" is a finding;
+    // "no picks" alone is indistinguishable from a socket that never opened.
+    framesSeen: 0,
+    framesParsed: 0,
+    framesDropped: 0
+  };
+
+  // ⭐ WHO AM I — from the draft-room URL, which carries `teamId=14&memberId={SWID}`. That is the
+  // cleanest answer the spike found (cleaner than inferring it from the `draftSecurity` request),
+  // and it needs no credential: `teamId` IS the answer, so the SWID beside it is read past, never
+  // stored. NF-C0's rule — "not a credential is not a reason to keep one".
+  function readIdentityFromUrl() {
+    try {
+      var q = new URLSearchParams(location.search);
+      var team = q.get("teamId");
+      var league = q.get("leagueId");
+      if (team) draft.myTeam = String(team);
+      if (league) draft.leagueId = String(league);
+    } catch (e) { note("readIdentity", e); }
+  }
+
+  //: Identity fields only — the same five `extractPool` keeps, for the same reason: they are
+  //: ESPN's PUBLIC player universe (identical in every league), which is what makes forwarding
+  //: them proportionate. `ownership`, `stats`, `draftRanksByRankType` and every league-private
+  //: object stay out.
+  function seedFromLeaguePayload(parsed, sourceUrl) {
+    try {
+      if (!parsed || typeof parsed !== "object") return;
+      var pool = extractPool(parsed);
+      if (pool && (!draft.pool || pool.length > draft.pool.length)) {
+        draft.pool = pool;
+        draft.poolSource = sourceUrl;
+        draft.seededAt = new Date().toISOString();
+      }
+      var settings = parsed.settings;
+      if (settings && typeof settings === "object" && !draft.settings) {
+        // ⛔ THREE SUB-OBJECTS, NOT `settings`. The whole block also carries `acquisitionSettings`,
+        // `draftSettings`, `isPublic`, member-facing names… none of which the league translation
+        // reads. Narrowing here means the wire payload cannot carry what this never collected.
+        draft.settings = {
+          name: typeof settings.name === "string" ? settings.name.slice(0, 80) : undefined,
+          size: settings.size,
+          rosterSettings: settings.rosterSettings,
+          scoringSettings: settings.scoringSettings
+        };
+      }
+      if (Array.isArray(parsed.teams) && !draft.teams) {
+        // ⛔ id + name ONLY. `teams` carries `owners` (member SWIDs) and `primaryOwner`; a team
+        // label is all an overlay needs, and a GUID identifies a real ESPN account.
+        draft.teams = parsed.teams.slice(0, 40).map(function (t) {
+          var nm = t && (t.name || [t.location, t.nickname].filter(Boolean).join(" "));
+          return { id: String(t && t.id), name: String(nm || "").slice(0, 60) };
+        });
+      }
+    } catch (e) { note("seed", e); }
+  }
+
+  function applyDraftFrame(text) {
+    try {
+      if (typeof text !== "string" || !text.length) return;
+      draft.framesSeen += 1;
+      var parts = text.trim().split(/\s+/);
+      var verb = parts[0];
+      if (!DRAFT_VERBS[verb]) { draft.framesDropped += 1; return; }
+      draft.framesParsed += 1;
+      draft.lastEventAt = new Date().toISOString();
+      if (verb === "SELECTED" && parts.length >= 3) {
+        // `SELECTED <teamId> <playerId> <slot> [<swid>]`. ⭐ A FIFTH FIELD APPEARS ONLY ON THE
+        // USER'S OWN PICK — kept as the BOOLEAN `mine` and never as the SWID itself. That is a
+        // free corroboration of the URL's `teamId`, at zero identity cost.
+        draft.picks.push({
+          team: String(parts[1]),
+          player: String(parts[2]),
+          slot: parts.length > 3 ? String(parts[3]) : null,
+          mine: parts.length > 4
+        });
+        // A pick ends the previous team's turn; `SELECTING` re-sets it a moment later.
+        draft.onTheClockTeam = null;
+      } else if (verb === "SELECTING" && parts.length >= 2) {
+        draft.onTheClockTeam = String(parts[1]);
+      } else if (verb === "AUTOSUGGEST" && parts.length >= 2) {
+        // ESPN's OWN suggestion. Read so the overlay can say whether our pick differs from the
+        // house's; never presented as ours.
+        draft.autosuggest = String(parts[1]);
+      }
+    } catch (e) { note("applyDraftFrame", e); }
+  }
+
+  function publishDraft() {
+    try {
+      window.postMessage({ __channel: DRAFT_CHANNEL, payload: draft }, "*");
+    } catch (e) { note("publishDraft", e); }
+  }
+
   function recordCall(kind, url, bodyText) {
     try {
       if (!url) return;
@@ -293,11 +429,17 @@
       // `registerdisney.go.com … nonTextFrames: 1` — which reads as "ESPN sent us binary" when the
       // truth is "we declined to look". A record that states the wrong REASON is worse than a
       // sparse one, because the next reader debugs the wrong thing.
-      var refused = !bodyCaptureAllowed(url);
-      if (refused) {
-        bodyText = null;
-        entry.bodyNotRead = "off-allowlist";
-      }
+      //
+      // 🔴 NF-C-LDA-1 FIX — THIS BRANCH USED TO RUN BEFORE `entry` EXISTED. It read
+      // `entry.bodyNotRead = ...` above the `var entry = seenUrls[key]` line; `var` hoists the
+      // NAME but not the assignment, so `entry` was `undefined` and the write threw a TypeError
+      // that the function's own outer try/catch swallowed. The security property held — the body
+      // was never read, because the throw aborted everything — but the DOCUMENTED one did not:
+      // "everything off the list still records URL + count" was false, off-allowlist calls were
+      // recorded NOWHERE, and `test_an_off_allowlist_body_is_recorded_as_REFUSED_not_as_unreadable`
+      // passed anyway because it asserts on the SOURCE (the string `bodyNotRead` is present) rather
+      // than on BEHAVIOUR. It failed in the safe direction, and it was invisible for the same
+      // reason so many things in this repo are: the guard read the code, not the result (NF-C4).
       var key = kind + " " + short;
       var entry = seenUrls[key];
       if (!entry) {
@@ -305,6 +447,11 @@
         findings.network.push(entry);
       }
       entry.count += 1;
+      var refused = !bodyCaptureAllowed(url);
+      if (refused) {
+        bodyText = null;
+        entry.bodyNotRead = "off-allowlist";
+      }
       // Shape it once — repeat polls of the same endpoint add nothing but noise.
       if (entry.shape === null && bodyText) {
         var parsed = null;
@@ -322,6 +469,9 @@
             entry.rawIsString = true;
           }
           recordFramePattern(entry, bodyText);   // ⭐ EVERY frame, not just the first
+          // NF-C-LDA-1 — the draft socket is line-oriented plain text, so this branch (originally
+          // "we could not parse it as JSON") is where the LIVE PICK STREAM arrives.
+          applyDraftFrame(bodyText);
           return;
         }
         entry.score = scoreShape(parsed, 0, new WeakSet());
@@ -331,6 +481,15 @@
           var pool = extractPool(parsed);
           if (pool) { findings.pool = pool; findings.poolSource = entry.url; }
         }
+        seedFromLeaguePayload(parsed, entry.url);   // NF-C-LDA-1 — the overlay's seed
+      } else if (entry.shape === null && bodyText && entry.rawIsString) {
+        // ⚠️ A SHAPED-ONCE ENDPOINT STILL STREAMS. The `entry.shape === null && bodyText` branch
+        // above fires only for the FIRST frame of a text endpoint; every frame after it used to
+        // reach `recordFramePattern` and nothing else. For a capture that was right (patterns are
+        // the finding); for a LIVE overlay it would mean the state froze after ONE pick — the exact
+        // "confidently stale" failure this story is shaped against.
+        recordFramePattern(entry, bodyText);
+        applyDraftFrame(bodyText);
       } else if (entry.shape !== null && bodyText && bodyText.length !== entry.bytes) {
         // The SAME endpoint answered differently — the only way to see `picks[]` fill up if the
         // room re-polls rather than pushing over the socket. Gated on a LENGTH change so the common
@@ -471,6 +630,11 @@
           var ws = protocols === undefined ? new OrigWS(url) : new OrigWS(url, protocols);
           try {
             recordCall("websocket-open", url, null);
+            if (bodyCaptureAllowed(url)) {
+              draft.socketOpen = true;
+              draft.socketUrl = String(url).split("?")[0];
+              ws.addEventListener("close", function () { draft.socketOpen = false; publishDraft(); });
+            }
             ws.addEventListener("message", function (ev) {
               try {
                 var d = ev.data;
@@ -525,9 +689,11 @@
       findings.dom = scanDom();
       findings.observedAt = new Date().toISOString();
       window.postMessage({ __channel: CHANNEL, payload: findings }, "*");
+      publishDraft();
     } catch (e) { note("publish", e); }
   }
 
+  readIdentityFromUrl();              // NF-C-LDA-1 — `teamId` from the draft-room URL.
   installNetworkObservers();          // FIRST — before the app can make its opening calls.
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", publish);
@@ -541,4 +707,10 @@
     publish();
     if (++ticks > 120) clearInterval(timer);   // ~10 min at 5s, then stop.
   }, 5000);
+  // ⭐ THE DRAFT STATE TICKS FASTER AND NEVER STOPS. The probe's own readout is a diagnostic that
+  // has said everything it has to say within ten minutes; a DRAFT runs for two hours and a stale
+  // overlay is the failure this story exists to prevent, so this one is cheap (a postMessage of an
+  // already-built object) and unbounded. `applyDraftFrame` also publishes implicitly via the next
+  // tick rather than per frame, so a burst of clock ticks cannot flood the isolated world.
+  setInterval(publishDraft, 1000);
 })();

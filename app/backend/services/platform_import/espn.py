@@ -555,17 +555,53 @@ _WHOSE_TEAM_NOTE = (
 )
 
 
+#: ESPN's `defaultPositionId` numbering — a SECOND, DIFFERENT numbering from the lineup slots above
+#: (id 4 is TIGHT END; slot 4 is WIDE RECEIVER). Mirrors `espn_source._POS`, which is the same table
+#: read against the same feed.
+#:
+#: ⛔ IT IS A TIE-BREAK ONLY, NEVER A SOURCE. See `_player_position` — it may only CHOOSE AMONG
+#: positions `eligibleSlots` already established, so the NF-C0 §4c trap (reading a position id
+#: against the slot map, which labelled Kittle and Andrews WR and left Mahomes with no position at
+#: all) is structurally out of reach: for an ordinary player the derived set is a singleton and this
+#: table is never consulted. An id absent here yields no opinion, and the slot derivation stands.
+_POSITION_BY_DEFAULT_ID: dict[int, str] = {1: "QB", 2: "RB", 3: "WR", 4: "TE", 5: "K", 16: "DST"}
+
+
 def _player_position(player: dict) -> str | None:
-    """A player's real position, from `eligibleSlots` ∩ the verified single-position slots."""
+    """A player's real position, from `eligibleSlots` ∩ the verified single-position slots.
+
+    🔴 NF-C-LDA-1 — THE TWO-WAY-PLAYER FIX, and it is the top resolution defect the live-draft spike
+    measured. A two-way player's `eligibleSlots` span BOTH sides of the ball, so the derived set is
+    not a singleton and the old code returned the ALPHABETICALLY first member. Measured on the real
+    2025 ESPN pool, `Travis Hunter` (`defaultPositionId` 3 = WR, slots `[3,4,5,23,7,20,21,12,14,15]`
+    ⇒ {WR, CB, DB, DP}) derived as **CB** and was dropped from the board join entirely — exactly one
+    of 1,027 draftable rows, and a premium pick, so the assistant would have shown nothing for him.
+
+    ⭐ THE TIE-BREAK IS ESPN'S OWN PRIMARY DESIGNATION, and it is applied ONLY when the derived set
+    has more than one member. `defaultPositionId` is the WRONG source for an ordinary player
+    (NF-C0 §4c) and the RIGHT one here — the same collision facing the other way — so it is used as
+    a chooser, never as a lookup. It cannot introduce a position `eligibleSlots` does not support.
+
+    ⚠️ BLAST RADIUS, MEASURED rather than argued (7 seasons of the real ESPN pool, 45,541 rows with
+    a derivable position): **3 rows change**, all genuinely multi-eligible —
+    2019 Tremon Smith CB→RB, 2020 Cordarrelle Patterson RB→WR, 2025 Travis Hunter CB→WR. The 19,383
+    single-position rows are untouched BY CONSTRUCTION, and no IDP row moves.
+    """
     slots = player.get("eligibleSlots")
     if not isinstance(slots, list):
         return None
     found = sorted(
         {_POSITION_BY_SLOT[s] for s in (_as_int(x, default=-1) for x in slots) if s in _POSITION_BY_SLOT}
     )
-    # A multi-eligible player (rare) is reported as the lowest-id primary slot, which is ESPN's own
-    # ordering; returning one of several true positions beats returning nothing.
-    return found[0] if found else None
+    if not found:
+        return None
+    if len(found) > 1:
+        primary = _POSITION_BY_DEFAULT_ID.get(_as_int(player.get("defaultPositionId"), default=-1))
+        if primary in found:
+            return primary
+    # Still ambiguous (a multi-eligible player ESPN gives no usable primary for): return one of
+    # several TRUE positions rather than nothing.
+    return found[0]
 
 
 def translate_teams(payload: dict) -> tuple[list[ImportedTeam], list[str]]:

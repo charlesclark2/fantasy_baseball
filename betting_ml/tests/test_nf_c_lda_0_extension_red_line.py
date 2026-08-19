@@ -42,12 +42,60 @@ def _strip_comments(src: str) -> str:
     `document.cookie`"). Without stripping, the comment explaining the rule would TRIP the rule —
     the INC-38 lesson in its most literal form, facing the false-POSITIVE direction.
     """
-    src = re.sub(r"//[^\n]*", "", src)
+    # 🪤 `(?<!:)` — a naive `//[^\n]*` also eats the `//` inside a URL LITERAL, turning
+    # `"https://api.credencesports.com"` into `"https:`. No clause here reads a URL today, so it
+    # never bit; NF-C-LDA-1's suite does, and it did. Closed on both copies rather than one.
+    src = re.sub(r"(?<!:)//[^\n]*", "", src)
     return re.sub(r"/\*.*?\*/", "", src, flags=re.S)
 
 
+#: ⭐ THE ESPN-CONTEXT SCRIPTS — the ones this file's invariant is ABOUT.
+#:
+#: ⚠️ RE-ANCHORED BY NF-C-LDA-1, NOT WEAKENED, AND THE DISTINCTION IS THE POINT. The spike could
+#: state its rule as "this extension issues no requests at all", because it had nothing to ask
+#: anyone. The overlay must ask OUR API for a recommendation, so the rule is kept where it actually
+#: bites — by SEPARATING THE CONTEXTS rather than by relaxing the token list:
+#:
+#:   * these files run on the ESPN tab (page or isolated world). They may ORIGINATE NOTHING, so a
+#:     request carrying the user's `espn_s2` is not merely forbidden — the code that could see an
+#:     ESPN page cannot make one.
+#:   * `background.js` has NO ESPN page context and NO ESPN host permission, and may reach exactly
+#:     one host (`api.credencesports.com`). `test_nf_c_lda_1_extension_wire.py` pins that half.
+#:   * `credence-auth.js` runs only on our OWN origin and never touches an ESPN page.
+#:
+#: A file added to `src/` therefore has to be classified DELIBERATELY. The exhaustiveness clause
+#: below fails if a new one is neither listed here nor in the off-ESPN set — an unclassified script
+#: must not silently fall out of both suites (INC-38: a per-caller rule fails exactly where its
+#: registry is incomplete).
+ESPN_CONTEXT_SOURCES = ("main-world-probe.js", "content.js", "draft-state.js", "overlay.js")
+OFF_ESPN_SOURCES = ("background.js", "credence-auth.js", "wire.js")
+
+
 def _sources() -> dict[str, str]:
-    return {p.name: _strip_comments(p.read_text()) for p in sorted(SRC_DIR.glob("*.js"))}
+    """The ESPN-context scripts only — see `ESPN_CONTEXT_SOURCES`."""
+    return {
+        p.name: _strip_comments(p.read_text())
+        for p in sorted(SRC_DIR.glob("*.js"))
+        if p.name in ESPN_CONTEXT_SOURCES
+    }
+
+
+def test_every_extension_source_is_classified_by_context():
+    """⚠️ THE REGISTRY'S OWN COMPLETENESS. `_sources()` filters by name, so a NEW script that
+    nobody classified would be silently exempt from every clause in this file — the guard would
+    still be green and would be guarding less. Both sets are asserted non-empty for the same
+    reason (a check that could not run is not a check that passed)."""
+    on_disk = {p.name for p in SRC_DIR.glob("*.js")}
+    classified = set(ESPN_CONTEXT_SOURCES) | set(OFF_ESPN_SOURCES)
+    assert on_disk, "no extension sources on disk"
+    assert set(ESPN_CONTEXT_SOURCES) <= on_disk, "an ESPN-context script named here is missing"
+    assert set(OFF_ESPN_SOURCES) <= on_disk, "an off-ESPN script named here is missing"
+    unclassified = on_disk - classified
+    assert not unclassified, (
+        f"{sorted(unclassified)} is in extension/src/ and belongs to neither context. Add it to "
+        "ESPN_CONTEXT_SOURCES (may originate nothing) or OFF_ESPN_SOURCES (pinned by "
+        "test_nf_c_lda_1_extension_wire.py) — never to neither."
+    )
 
 
 def test_the_extension_sources_exist_and_are_non_empty():
@@ -56,7 +104,7 @@ def test_the_extension_sources_exist_and_are_non_empty():
     rather than through the assertion (NF1.7(a))."""
     srcs = _sources()
     assert srcs, "no extension sources found — every red-line clause below would pass vacuously"
-    assert {"main-world-probe.js", "content.js"} <= set(srcs)
+    assert set(ESPN_CONTEXT_SOURCES) == set(srcs)
     for name, body in srcs.items():
         assert len(body.strip()) > 200, f"{name} is too small to be the real source"
 
@@ -83,13 +131,23 @@ def test_the_manifest_host_scope_is_narrow():
     manifest = json.loads(MANIFEST.read_text())
     hosts = list(manifest.get("host_permissions") or [])
     assert hosts, "no host_permissions — the probe could not run, so the scope clause is vacuous"
+    #: ⚠️ RE-ANCHORED BY NF-C-LDA-1. The overlay must reach our own API, so the clause moves from
+    #: "every host is ESPN" to "every host is EITHER the ESPN draft room OR our own API" — an
+    #: exhaustive two-way classification, not a relaxation: anything matching neither still fails,
+    #: and the ESPN half is unchanged (still the draft PATH, never espn.com at large).
+    OUR_API = "https://api.credencesports.com/*"
+    espn_hosts = 0
     for h in hosts:
         assert "<all_urls>" not in h, f"host permission {h!r} is unbounded"
         assert not h.startswith("*://"), f"host permission {h!r} spans every scheme/host"
-        assert "espn.com" in h, f"host permission {h!r} reaches beyond ESPN"
+        if h == OUR_API:
+            continue
+        assert "espn.com" in h, f"host permission {h!r} is neither ESPN nor our own API"
         assert "/football/draft" in h, (
-            f"host permission {h!r} is broader than the draft room this spike reads"
+            f"host permission {h!r} is broader than the draft room this reads"
         )
+        espn_hosts += 1
+    assert espn_hosts, "no ESPN host permission — the two-way classification would be vacuous"
 
 
 # ── Clause 2: no source may READ a credential ────────────────────────────────────────────────

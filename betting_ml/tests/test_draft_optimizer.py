@@ -423,7 +423,10 @@ def test_when_the_reserve_binds_every_filler_outranks_every_non_filler():
         "a non-filler outranked a required filler while the reserve constraint was binding"
     )
     # …and the recommendation must SAY why it stopped offering the better-scoring bench players.
-    assert "MUST fill a starter" in recs[0].rationale
+    # ⚠️ RE-ANCHORED (not dropped) by NF-C-LDA-1: the wording moved to the shipping TS engine's
+    # spelling ("\u26a0 Must fill a starter") when the two were put back in lock-step. The PROPERTY
+    # — the sentence names the reserve constraint — is unchanged (E9.60).
+    assert "Must fill a starter" in recs[0].rationale
 
 
 # ── low-predictability positions (K/DST) are deferred until the roster requires them ──────────────

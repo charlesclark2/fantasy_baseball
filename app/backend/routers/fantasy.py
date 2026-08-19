@@ -31,8 +31,15 @@ from app.backend.dependencies import (
     require_fantasy_access,
     require_personalized_league_access,
 )
-from app.backend.models.fantasy import BigBoard, BigBoardSave, League, LeagueSave
+from app.backend.models.fantasy import (
+    BigBoard,
+    BigBoardSave,
+    DraftAssistantRequest,
+    League,
+    LeagueSave,
+)
 from app.backend.services import (
+    draft_assistant,
     dynamo,
     entitlement,
     league_scoring,
@@ -947,3 +954,152 @@ def delete_league(league_id: str, user_id: str = Depends(require_personalized_le
     except ValueError as e:
         raise HTTPException(status_code=404, detail="League not found") from e
     return None
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-C-LDA-1 — THE LIVE DRAFT ASSISTANT
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# The server half of the ESPN draft-room overlay. The Chrome extension observes the live draft
+# (`extension/`) and posts a normalized state here; this returns the recommendation.
+#
+# 🔒 ON `router`, so it inherits the blanket `require_fantasy_access` — the same paid gate as the
+# custom big board and the auction optimizer, which is the tier this surface was specified at. The
+# extension therefore cannot show a recommendation to an unentitled account no matter what its own
+# UI does, which is the point: a client-side gate on a paid feature is not a gate (E9.45).
+#
+# ⚠️ NO GATEWAY CHANGE IS NEEDED, AND THAT IS WORTH STATING because the story anticipated one.
+# NF3.2's rule is that a route is only reachable ANONYMOUSLY once its API Gateway authorizer is set
+# to NONE — the catch-all `ANY /{proxy+}` carries the Cognito JWT authorizer and an explicit route
+# EXEMPTS a path from it. This route is the opposite case: it REQUIRES a token, so it wants the
+# catch-all's authorizer and must NOT get an explicit `--authorization-type NONE` route. Adding one
+# would strip a layer of defence rather than add one. (`infrastructure/aws_resources.md`.)
+#
+# ⚠️ IT SHIPS ONLY VIA `infrastructure/lambda/deploy.sh` (NF-C0: the API Lambda has no CD), and
+# `deploy.sh` step 3c must carry `fantasy_engine/{__init__,draft,league_config}.py` or the import
+# below `ModuleNotFoundError`s in prod while passing every local test.
+#
+# ⛔ PER-CALLER: never add this path to the CDN allowlist, `_PUBLIC_CACHE_RULES`, or the degrade
+# floor. It is safe today for a structural reason rather than a remembered one — every request
+# carries an `Authorization` header and `cost_guardrails.cache_control_for` answers
+# `private, no-store` unconditionally when it sees one.
+
+
+def _draft_league_config(payload: DraftAssistantRequest, request: Request, user_id: str) -> dict:
+    """The league this draft is being ranked against, as a `LeagueConfig`-shaped dict.
+
+    Either one of the caller's SAVED leagues (quota-enforced exactly as `/nfl/league-board` does —
+    ownership alone is not sufficient, or a lapsed subscriber could keep pulling personalized
+    boards one id at a time), or the draft room's own settings block translated by the SHIPPED ESPN
+    adapter.
+
+    ⭐ THE SETTINGS PATH REUSES `parse_settings_payload` RATHER THAN A NEW TRANSLATOR — the same
+    function the paste import calls, so a league read through the extension and the same league
+    pasted by hand produce the identical config. It also brings `assert_no_credentials` with it,
+    which is a real backstop and not a formality: it runs BEFORE any parsing, so if the extension
+    ever regressed into forwarding something credential-shaped, the request is refused here too.
+    """
+    if payload.league_id:
+        records = [
+            r for r in dynamo.list_fantasy_leagues(user_id)
+            if str(r.get("sport") or "nfl") == "nfl"
+        ]
+        quota = entitlement.personalized_league_quota(entitlement.resolve_entitlement(request))
+        served = entitlement.leagues_within_quota(records, quota)
+        record = next(
+            (r for r in served if str(r.get("league_id") or "") == payload.league_id), None
+        )
+        if record is None:
+            # 404, not 403: an id the caller does not own must be indistinguishable from one that
+            # does not exist.
+            raise HTTPException(status_code=404, detail="League not found")
+        return record
+
+    from app.backend.services.platform_import import espn as espn_import
+
+    try:
+        imported = espn_import.parse_settings_payload(
+            json.dumps({"settings": payload.espn_settings}), season=payload.season
+        )
+    except espn_import.EspnInputError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return imported.config
+
+
+@router.post("/nfl/draft-assistant")
+def nfl_draft_assistant(
+    payload: DraftAssistantRequest,
+    request: Request,
+    user_id: str = Depends(require_fantasy_access),
+):
+    """Rank the caller's next pick in a LIVE ESPN draft.
+
+    ⭐⭐ THE RESPONSE ALWAYS NAMES THE PICK IT REASONED ABOUT, and that is a FEATURE of this story
+    rather than a nicety. A draft assistant fails in a once-a-year two-hour window, and its failure
+    mode is that the read goes stale: the overlay keeps rendering a recommendation that was true
+    four picks ago. "We cannot read your draft" and "nothing has happened yet" are otherwise
+    PIXEL-IDENTICAL, so `state.overall_pick` / `state.picks_seen` / `state.on_the_clock_team` are
+    echoed back verbatim for the overlay to display. A user comparing "reasoning about pick 31" with
+    the pick number on ESPN's own screen can see a freeze in one glance; nothing inferable would do
+    that.
+
+    ⚠️ `resolution` IS PART OF THE ANSWER, NOT DIAGNOSTICS. A player we could not resolve is not
+    recommendable, and a non-match has three genuinely different causes (NF-K1). The report keeps
+    them apart so "we do not project this player" never renders the same as "our join broke".
+
+    Honest framing: this ranks a projection under the league's own scoring. It is not a market
+    edge and makes no win-rate claim — `best_alpha = 0`.
+    """
+    record = _draft_league_config(payload, request, user_id)
+
+    projections = _full_projections(payload.season)
+    if projections is None:
+        # ⚠️ A REAL FAILURE, deliberately — the mirror of `_scored_rosters`' best-effort rule. There
+        # the league LIST is the response and a missing projection must not blank it; here the
+        # recommendation IS the response, so an unreadable board must surface as something the
+        # overlay can report ("we couldn't score your league"), never as an empty board that reads
+        # like sound advice about nobody.
+        raise HTTPException(status_code=404, detail="Fantasy projections not found")
+
+    board = league_scoring.build_board(
+        projections.get("players") or [], record, projection_fields.STAT_FIELD
+    )
+
+    # ⭐ WHOSE PICKS ARE MINE IS DERIVED HERE, from `my_team` — never sent as a second list. The
+    # extension reads its own team id from the draft-room URL; asking it to also partition the pick
+    # stream would be a rule the two surfaces could disagree about.
+    drafted = [p.player for p in payload.picks]
+    mine = [p.player for p in payload.picks if payload.my_team and p.team == payload.my_team]
+
+    from quant_sports_intel_models.fantasy_engine.league_config import LeagueConfig
+
+    result = draft_assistant.recommend_for_state(
+        board=board,
+        config=LeagueConfig.from_dict(record),
+        pool=[p.model_dump() for p in payload.pool],
+        drafted_espn_ids=drafted,
+        my_espn_ids=mine,
+        top_n=payload.top_n,
+    )
+    result["season"] = payload.season
+    result["league"] = {
+        "name": str(record.get("name") or "Your league"),
+        "n_teams": int(record.get("n_teams") or 0),
+        "source": "saved" if payload.league_id else "espn_settings",
+    }
+    result["state"] = {
+        "overall_pick": payload.overall_pick,
+        "on_the_clock_team": payload.on_the_clock_team,
+        "on_the_clock_is_me": bool(
+            payload.my_team and payload.on_the_clock_team == payload.my_team
+        ),
+        "my_team": payload.my_team,
+        "picks_seen": len(payload.picks),
+        "pool_size": len(payload.pool),
+        # ⚠️ NAMED, not implied. With no `my_team` the roster is empty for a REASON, and a roster
+        # that is empty because we could not identify the caller's team must not be presented as a
+        # roster that is empty because they have not picked yet — that is the same
+        # "broken looks like quiet" failure the pick echo above exists to remove (NF1.7(a)).
+        "my_team_known": bool(payload.my_team),
+    }
+    return result
