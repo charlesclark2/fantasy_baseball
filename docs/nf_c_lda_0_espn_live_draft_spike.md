@@ -676,3 +676,54 @@ then drop it; never log it.*
 `drafted:false, inProgress:false` again — this capture is the room **opening**, so `picks[]` remains
 180 empty `{id, teamId}` slots. Whether it populates `playerId` mid-draft is still the one unanswered
 question, and it now needs a capture taken **while picks are visibly being made**.
+
+---
+
+## 13. FIRST-OBSERVATION-ONLY — why "capture at a couple of points" would have wasted a draft
+
+The operator asked whether the next attempt should simply capture the JSON at two moments. **It would
+have produced nothing**, and the reason is a design decision in the probe rather than anything about
+ESPN.
+
+`recordCall` guards content on `entry.shape === null` and `entry.rawSample === undefined`, so a URL's
+body is shaped **once** and every later occurrence only increments `count`. A capture at pick 30 would
+therefore carry the byte-identical `"AUTODRAFT 14 false"` join frame and the byte-identical empty
+`picks[]` as one taken at pick 0 — the same file with bigger counters.
+
+⭐ **That was the RIGHT call for the question the probe was built to answer** ("does a structured
+source exist?", where repeat polls are noise) and the wrong one for the question that is left ("does
+the state evolve?"). Worth stating because it is not a bug in the usual sense: the instrument was
+correct for its original purpose and had to be re-pointed when the purpose moved.
+
+### 13.1 The fix, and why not "just keep every frame"
+
+Keeping every frame is not the answer either — a draft room heartbeats, so an unbounded frame log is
+both a size problem and a capture of somebody's entire draft. Instead the probe now keeps **distinct
+protocol PATTERNS**: digits collapse to `#`, long opaque tokens to `*`, and each pattern stores one
+**redacted literal example** plus a count.
+
+Measured on synthetic frames — 9 frames collapse to 5 patterns:
+
+```
+x1  "AUTODRAFT # false"
+x1  "AUTODRAFT # true"
+x3  "PICK # #"
+x3  "CLOCK #"
+x1  "SELECTED # team# round#"
+```
+
+That answers the actual question — *what kinds of message does this socket send, and what does one of
+each look like* — at a bounded size (cap 12, and the overflow is **counted**, because a silent cap
+re-creates the blind spot at the boundary). Verified two-sided: a real pick example survives
+redaction unchanged.
+
+A second change covers the other route: if the room **re-polls** the league endpoint rather than
+pushing over the socket, a changed body is now re-shaped into `shapeLatest`. It is gated on a cheap
+**length** comparison, so the common identical-re-poll case costs one integer compare rather than a
+1.4 MB re-parse.
+
+### 13.2 What the next capture should be
+
+**One capture, taken while picks are visibly being made** — not two, and not at the lobby. The
+readout should show `inProgress=True` and a `fantasydraft.espn.com` entry before it is worth taking.
+Guard suite: 38 tests, 19 RED-proven clauses.
