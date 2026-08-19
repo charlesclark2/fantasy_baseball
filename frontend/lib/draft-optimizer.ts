@@ -227,6 +227,21 @@ export interface RosterRequirements {
   bench: number
 }
 
+/** Roster slots that hold players you CANNOT SPEND A DRAFT PICK ON — injured-reserve and (Sleeper)
+ *  taxi spots. All three platform adapters emit these under canonical names, so keying on the name
+ *  is a statement about OUR vocabulary, not a vendor's.
+ *
+ *  ⚠️ LOCK-STEP: mirrored in `quant_sports_intel_models/fantasy_engine/league_config.py`
+ *  (`RESERVE_SLOT_NAMES` / `draftable_slot_count`), where the full rationale lives.
+ */
+export const RESERVE_SLOT_NAMES: ReadonlySet<string> = new Set(["IR", "TAXI"])
+
+/** How many players a team actually DRAFTS — every roster slot except the reserve ones. Counting an
+ *  IR spot inflates `picksRemaining` and fires the reserve constraint that many picks LATE. */
+export function draftableSlotCount(roster: RosterSlotDef[]): number {
+  return roster.reduce((a, s) => a + (RESERVE_SLOT_NAMES.has(s.name.toUpperCase()) ? 0 : s.count), 0)
+}
+
 export function rosterRequirements(roster: RosterSlotDef[]): RosterRequirements {
   const dedicated: Record<string, number> = {}
   const flex: { eligible: Set<string>; count: number }[] = []
@@ -524,14 +539,13 @@ export function recommend(args: RecommendArgs): Recommendation[] {
   //
   // ⚠️ It RANKS, never FILTERS. If no filler exists at all (a position exhausted), the caller still
   // gets its best available options rather than an empty list.
-  const totalSlots = config.roster.reduce((a, s) => a + s.count, 0)
+  // ⛔ DRAFTABLE slots, not every slot — see `draftableSlotCount`.
+  const totalSlots = draftableSlotCount(config.roster)
   const picksRemaining = totalSlots - myPlayerIds.length
   const openStarterCount =
     Object.values(open.dedicated).reduce((a, n) => a + n, 0) + open.flex.length
   const mustFillNow = openStarterCount > 0 && picksRemaining <= openStarterCount
 
-  const myCounts: Record<string, number> = {}
-  for (const p of myPositions) myCounts[p] = (myCounts[p] ?? 0) + 1
 
   // per-position available lists (points-descending) → tiers + next-available VOR
   const byPos: Record<string, Player[]> = {}
@@ -711,13 +725,19 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     const urgency = level === 1 ? flexPoolDropoff[p.pos] ?? dropoff : dropoff
     const needBonus = idxInPos[p.id] === 0 ? needW * urgency : 0
 
-    const held = myCounts[p.pos] ?? 0
-    const capacity =
-      (req.dedicated[p.pos] ?? 0) + req.flex.reduce((a, f) => a + (f.eligible.has(p.pos) ? f.count : 0), 0)
+    // ⭐ `level === 0` ALREADY MEANS "I cannot start another one of these" — `needLevel` returns 0
+    // only when every dedicated slot at the position is filled AND no open flex seat is eligible for
+    // it. So where this penalty applies, the "I still have room" case cannot arise and the discount
+    // is unconditionally the hard one.
+    //
+    // ⚠️ IT USED TO BE A BINARY on `held >= capacity`, where `capacity` summed EVERY flex seat the
+    // position was eligible for — INCLUDING seats already filled by somebody else. Holding one TE
+    // with an RB in the flex read as "capacity 2, held 1 ⇒ still has room", so a backup TE kept 50%
+    // of its VOR while a bench RB kept 15%: a 3.3x boost for a player no lineup could start. The
+    // light branch was reachable ONLY through that miscount, so the fix removes it.
     let surplusPen = 0
     if (level === 0 && vor > 0) {
-      const frac = SURPLUS_BASE + (held >= capacity ? SURPLUS_OVER : 0)
-      surplusPen = Math.min(SURPLUS_CAP, frac) * vor
+      surplusPen = Math.min(SURPLUS_CAP, SURPLUS_BASE + SURPLUS_OVER) * vor
     }
     // bye-week stacking: penalize by how many I already hold at this position on the same bye week
     const byeConflict = p.bye != null ? myByes.get(`${p.pos}|${p.bye}`) ?? 0 : 0

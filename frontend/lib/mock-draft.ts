@@ -35,6 +35,7 @@
 
 import {
   assignRoster,
+  draftableSlotCount,
   openEligibility,
   openStarterSlots,
   needLevel,
@@ -230,7 +231,10 @@ export function cpuPick(args: CpuPickArgs): CpuChoice | null {
 
   const req = rosterRequirements(config.roster)
   const open = openStarterSlots(mine.map((p) => p.pos), req)
-  const totalSlots = config.roster.reduce((a, s) => a + s.count, 0)
+  // ⛔ DRAFTABLE slots, not every slot: an IR/taxi spot is roster depth NO PICK CAN REACH, so
+  // counting it fires this constraint that many picks LATE — and `defaultRoster()` ships 3 IR
+  // spots, so every custom league had it. See `draftableSlotCount`.
+  const totalSlots = draftableSlotCount(config.roster)
   const picksRemaining = totalSlots - mine.length
   const openStarterCount = Object.values(open.dedicated).reduce((a, n) => a + n, 0) + open.flex.length
   const mustFillNow = openStarterCount > 0 && picksRemaining <= openStarterCount

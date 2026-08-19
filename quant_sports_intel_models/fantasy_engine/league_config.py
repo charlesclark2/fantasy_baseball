@@ -13,6 +13,7 @@ roster `eligible` positions are arbitrary strings, and `position_bonuses` covers
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 
 CONFIG_FORMAT_VERSION = "1.0"
@@ -61,6 +62,37 @@ class ScoringRules:
                 for pos, bonus in (d.get("position_bonuses") or {}).items()
             },
         )
+
+
+#: Roster slots that hold players you CANNOT SPEND A DRAFT PICK ON — injured-reserve and (Sleeper)
+#: taxi spots. All three platform adapters already emit these under canonical names, so keying on the
+#: name is a statement about OUR vocabulary, not about a vendor's.
+#:
+#: ⭐ WHY THIS EXISTS AS A SEPARATE IDEA FROM `bench`. `bench=True` means "creates no starter demand"
+#: — correct for BN *and* IR, and that is all replacement-level cares about. But the draft optimizer's
+#: reserve constraint asks a different question: HOW MANY PICKS DO I HAVE LEFT? An IR spot is bench
+#: depth that no pick can ever reach, so counting it inflates the answer, and the constraint —
+#: which binds only when `picks_remaining <= open_starter_count` — fires that many picks LATE.
+#:
+#: Measured on the live 2026 ESPN mock that surfaced this (9 starters + 6 bench + 2 IR): the roster
+#: counted as 17 against ESPN's own limit of 15, so `must_fill` first turned true with the roster
+#: ALREADY FULL — i.e. never in time. The user reached the final two picks with D/ST and K both
+#: empty and was recommended a backup QB and five tight ends, which is the exact illegal-roster
+#: ending the reserve constraint was written to make impossible.
+#:
+#: ⚠️ ERR TOWARD COUNTING A SLOT. An unrecognised slot stays draftable: over-counting only delays a
+#: constraint that is inert with slack, whereas under-counting fires it EARLY and would force K/DST
+#: on a user who still had picks to spare — distorting normal drafting, which the constraint
+#: explicitly must not do.
+RESERVE_SLOT_NAMES = frozenset({"IR", "TAXI"})
+
+
+def draftable_slot_count(roster: "Sequence[RosterSlot]") -> int:
+    """How many players a team actually DRAFTS — every roster slot except the reserve ones.
+
+    ⚠️ LOCK-STEP: mirrored in `frontend/lib/draft-optimizer.ts` (`draftableSlotCount`).
+    """
+    return sum(s.count for s in roster if s.name.upper() not in RESERVE_SLOT_NAMES)
 
 
 @dataclass(frozen=True)

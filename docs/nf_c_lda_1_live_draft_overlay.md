@@ -244,3 +244,91 @@ The standing policy question the spike deliberately left open is **unchanged and
 whether the extension may ever issue its *own* authenticated ESPN call. This story did not decide
 it, did not need it, and is built so that answering "no" costs nothing. ⛔ It is a deliberate
 decision with the operator, never a refactor.
+
+---
+
+## 8. What the first live draft found (2026-08-19)
+
+The overlay ran a full 15-round ESPN mock end to end — the runtime gate the CI suites structurally
+cannot reach. The **read** held (856 of 1,027 players matched, the pick counter tracked ESPN's own,
+no stale-advice window), and the **ranking** was wrong twice. Both defects were in
+`fantasy_engine/draft.py` *and* `frontend/lib/draft-optimizer.ts`, i.e. they had been shipping on the
+website the whole time; the parity harness had faithfully kept the two engines identical, defects
+included. **Parity proves agreement, never correctness** — that is why the fixes carry their own
+guard file (`test_nf_c_lda_1_roster_constraints.py`) rather than relying on the parity fixture.
+
+### 8.1 An IR spot is not a pick
+
+K/DST are deliberately `deferred` — sunk below every real candidate — and lifted back by the reserve
+constraint the moment `picks_remaining <= open_starter_count`. That composition is what makes
+absolute deferral safe, so the constraint is load-bearing, not a nicety.
+
+`translate_roster` maps ESPN slot 21 (**IR**) to bench depth, and the pick count summed *every* slot:
+
+```
+ESPN's own roster limit in that draft room: 15
+  IR counted (as shipped)  roster=17   13 picks made → 4 left, 2 mandatory open → must_fill = False
+  IR counted (as shipped)  roster=17   15 picks made → 2 left, 2 mandatory open → must_fill = True
+  IR excluded (fixed)      roster=15   13 picks made → 2 left, 2 mandatory open → must_fill = True
+```
+
+It first turned true with the roster **already full** — never in time. The user reached his final two
+picks with D/ST and K empty and was shown a backup QB and five tight ends.
+
+⭐ **Blast radius is wider than the imports.** `defaultRoster()` ships **3 IR spots**, so every custom
+league made in the app had the constraint firing three picks late too. Its docstring — "IR is a BENCH
+slot, so — correctly — it adds no starter demand and cannot move replacement level" — is true of
+*replacement* and silently false of the *pick count*. That is exactly the distinction
+`RESERVE_SLOT_NAMES` now draws.
+
+⚠️ The error direction is deliberate: an unrecognised slot stays **draftable**. Over-counting delays
+a constraint that is inert while there is slack; under-counting fires it early and forces K/DST on a
+user with picks to spare, which the constraint explicitly must not do.
+
+### 8.2 A filled flex seat is not capacity
+
+Bench depth is discounted because it fills no open slot, and the discount hardened on
+`held >= capacity`, where `capacity` summed **every flex seat the position was eligible for** —
+including one already filled by somebody else:
+
+```
+roster QB1 RB3 WR2 TE1, flex already filled by an RB
+  QB: hold 1, capacity 1 → 85% penalty → a bench QB keeps 15% of its VOR
+  RB: hold 3, capacity 3 → 85% penalty → a bench RB keeps 15%
+  TE: hold 1, capacity 2 → 50% penalty → a bench TE keeps 50%   ← the seat is NOT available
+```
+
+A backup TE kept **3.3×** the credit of a bench back no lineup could bench him for.
+
+⭐ The fix is a **removal, not a re-tune**: `level == 0` already means "no open slot takes this
+position", so the "I still have room" case cannot arise where the penalty applies. The light branch
+was reachable *only* through the miscount. Measured on the depth phase of that draft's state, the
+top-25 went from 12 WR / 8 RB / 4 TE / 1 QB to 10 RB / 8 WR / 5 QB / 2 TE, ordered strictly by VOR
+(Gibbs 193 now leads Chase 110; the two TEs fall to ranks 17 and 21).
+
+### 8.3 One rule, five owners
+
+The reserve constraint had **three** implementations (Python engine, TS engine, mock-draft CPU) and
+all three carried the defect — the repo's recurring one-logical-rule-many-owners shape (INC-30,
+INC-36, INC-38). The registry is now pinned, and its exhaustiveness sweep earned its keep on the
+first run by finding a **fourth and fifth**: `auction-optimizer.ts::rosterSpotsOf` and
+`league_config.roster_spots()`, which answer the same question for the auction reserve and answer it
+the same wrong way.
+
+⚠️ **The auction is deliberately NOT fixed here.** An IR spot cannot be bought at auction either, so
+the reserve is over-stated by `n_teams × IR × min_bid` — measured on the default 12-team/$200 roster,
+$216 against $180, understating every player's dollar surplus by **1.62%**. Correcting it re-prices
+every published auction value and needs `build_auction_vectors.py` re-run and the artifacts
+republished. It is recorded in `_KNOWN_DEFERRED`, with a clause that fails if the deferral outlives
+the defect, and carded as a follow-on rather than smuggled in as a ride-along.
+
+### 8.4 Not fixed, and why
+
+* **Injury status.** The board carries a projected-games figure, but for the rookie the operator
+  flagged it reads **13.6** — a generic availability prior — inside an 18.5–330.9 interval, i.e. "no
+  idea", not "he is hurt". The NF-W2 injury line (SHIP ×4) is a *weekly, in-season* designation feed;
+  a preseason board needs a return-timeline input we do not ingest. Carded.
+* **Strategy toggles** (skip a backup QB/TE). Most of the observed symptom was §8.2, so the right
+  order is to fix the mechanics first and re-judge whether the preference is still wanted. Carded.
+* **Capturing finished drafts.** A new persistence surface, not a patch: today the extension sends
+  state and stores nothing, and storing it crosses the line the red lines were drawn around. Carded.
