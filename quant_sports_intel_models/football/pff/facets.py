@@ -74,22 +74,34 @@ PROBE_FACETS: tuple[Facet, ...] = (
 
 # ── facet → downstream signal ──────────────────────────────────────────────────────────────
 # WHY each downstream story needs PFF at all, stated as the quantity we cannot already get.
+# ⭐ CONFIRMED AGAINST A REAL `&export=true` PULL (2026-08-19). `fields_confirmed` are columns
+# VERIFIED PRESENT in the operator's export, not fields we hope exist.
 SIGNAL_MAP: dict[str, dict[str, Any]] = {
     "NF-W9-1 zero-atom opportunity": {
         "facets": ["receiving/summary", "rushing/summary"],
-        "fields_sought": ["routes", "snaps", "targets", "adot", "slot_rate", "wide_rate"],
+        "fields_confirmed": [
+            "routes", "route_rate", "pass_plays", "avg_depth_of_target",
+            "slot_rate", "slot_snaps", "wide_rate", "wide_snaps", "inline_rate", "yprr",
+        ],
         "why": (
             "The blocking constraint measured across NF-W6d/W7c-f is that our per-stat zero atom "
             "is MARGINAL — we cannot distinguish 'inactive', 'active but ran no routes' and 'ran "
             "routes, no target'. nflverse gives targets and snap COUNTS but not ROUTES RUN, so "
-            "those three states collapse into one zero. Routes is the field that splits them, and "
-            "it is the single most decision-relevant thing in this probe."
+            "those three states collapse into one zero.\n\n"
+            "MEASURED on the real export: `pass_plays` + `routes` + `targets` decompose it. Route "
+            "participation spans 0.2% (Jake Matthews, a tackle: 610 pass plays, 1 route — on the "
+            "field and structurally un-targetable) to 98.6% (a full-time receiver), and among "
+            "actual route-runners targets-per-route spans 0.056 to 0.288, a 5x spread. Those are "
+            "different events that currently collapse to one zero, so this factorises P(target) "
+            "into P(on field) x P(runs a route | on field) x P(targeted | route) — the first two "
+            "of which nflverse cannot express at all."
         ),
     },
     "NF-W9-2 RB volume": {
         "facets": ["rushing/summary", "rushing/direction", "receiving/summary"],
-        "fields_sought": [
-            "attempts", "yards_after_contact", "elusive_events", "gap_direction", "designed_runs",
+        "fields_confirmed": [
+            "yards_after_contact", "yco_attempt", "gap_attempts", "zone_attempts",
+            "breakaway_attempts", "designed_yards", "elusive_rating", "avoided_tackles",
         ],
         "why": (
             "RB volume modelling wants the DIRECTIONAL/gap split and contact-adjusted yardage that "
@@ -98,8 +110,8 @@ SIGNAL_MAP: dict[str, dict[str, Any]] = {
         ),
     },
     "NF-W9-3 college charting": {
-        "facets": ["receiving/summary", "receiving/direction", "rushing/summary"],
-        "fields_sought": ["routes", "adot", "slot_rate", "targets", "snaps"],
+        "facets": ["receiving/summary", "receiving/depth", "rushing/summary"],
+        "fields_confirmed": ["routes", "avg_depth_of_target", "slot_rate", "pass_plays"],
         "why": (
             "CFBD has NO charting layer at all — no routes, no aDOT, no alignment. If PFF's NCAA "
             "facets carry them, this is net-new substrate for the college→NFL feeder; if they do "

@@ -1,8 +1,9 @@
 # NF-W9-0 — PFF data-access feasibility spike
 
-> ## ✅ RESOLVED (2026-08-18) — the answer is `&export=true`
+> ## ✅ RESOLVED — GO. The answer is `&export=true`, and `routes` is confirmed.
 >
-> **VERDICT: GO. NF-W9-1/2/3 are unblocked.**
+> **VERDICT: GO. NF-W9-1/2/3 are unblocked, on the current subscription, with no browser
+> automation and no manual downloads.**
 >
 > The full field set is one query parameter away. The identical endpoint, identical params, plus
 > `&export=true`, returns a 44-column **CSV** instead of the 19-field JSON:
@@ -24,9 +25,32 @@
 >
 > Implemented as `client.get_export()` / `facets.fetch_facet_export()`.
 >
-> **⚠️ STILL TO CONFIRM:** that the *receiving* export carries `routes` (the single field
-> NF-W9-1 turns on). Passing exports `aimed_passes` and `dropbacks` — its opportunity
-> denominators — so the shape is strongly indicated but not measured. One request settles it.
+> ### ✅ `routes` CONFIRMED (2026-08-19) — NF-W9-1 has its substrate
+>
+> The receiving export carries **47 columns**, including every opportunity field: `routes`,
+> `route_rate`, `pass_plays`, `avg_depth_of_target`, `slot_rate`/`slot_snaps`,
+> `wide_rate`/`wide_snaps`, `inline_rate`/`inline_snaps`, `yprr`, `yards_after_catch`,
+> `avoided_tackles`, `contested_targets`.
+>
+> **And it does the job NF-W9-1 needs.** Measured on the real export, `pass_plays` + `routes` +
+> `targets` decompose the zero atom that NF-W6d/W7c–f identified as marginal:
+>
+> | player | pass plays | routes | route % | targets | tgt/route |
+> |---|---|---|---|---|---|
+> | Ja'Marr Chase (WR) | 669 | 632 | 94.5% | 182 | 0.288 |
+> | Jake Matthews (T) | 610 | **1** | **0.2%** | 1 | — |
+> | Julius Chestnut (HB) | 22 | 19 | 86.4% | 2 | 0.105 |
+> | Andre Baccellia (WR) | 72 | 71 | 98.6% | 4 | 0.056 |
+>
+> A tackle on the field for 610 pass plays who ran **one** route, and a back who ran 19 routes
+> and drew 2 targets, are **both a bare zero in nflverse** — which has snaps and targets but no
+> routes. They are different events. Route participation spans 0.2%→98.6% and, among actual
+> route-runners, targets-per-route spans 0.056→0.288 (a 5× spread). So this factorises
+> P(target) into **P(on field) × P(runs a route | on field) × P(targeted | route)**, the first
+> two of which nflverse cannot express at all.
+>
+> `rushing/summary` likewise confirms NF-W9-2's list: `yards_after_contact`, `yco_attempt`,
+> `gap_attempts`, `zone_attempts`, `breakaway_attempts`, `designed_yards`, `elusive_rating`.
 >
 > ---
 >
@@ -82,7 +106,7 @@ They point opposite ways, and that split is the deliverable:
 | Can we authenticate and pull? | ✅ **YES** | 32 NFL + 116 NCAAF games, 6,279 facet rows pulled live |
 | Can we join PFF to our ids? | ✅ **YES, essentially perfectly** | NFL **100%** players / **100%** games; NCAAF **97.1%** / **100%** |
 | Is nflverse's `pff_id` PFF's `player_id`? | ✅ **CONFIRMED — same id space** | 99.72% of live PFF ids found in our map |
-| **Do we get the fields NF-W9-1/2/3 need?** | ⚠️ **YES on the account, NOT on the JSON API** | the CSV export carries all 28; the JSON API serves a reduced set — see the correction above |
+| **Do we get the fields NF-W9-1/2/3 need?** | ✅ **YES — via `&export=true`** | receiving export = 47 cols incl. `routes`, `route_rate`, `pass_plays`, `adot`, `slot/wide/inline` splits, `yprr` |
 
 ⇒ **The blocker is not engineering and not entity resolution. It is ENTITLEMENT**, which makes
 this a subscription/PM decision rather than a build task. Research only; `best_alpha = 0`.

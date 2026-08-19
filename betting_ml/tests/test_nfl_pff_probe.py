@@ -686,3 +686,72 @@ class TestTheExportPath:
                               league="nfl", season=2025, weeks=range(1, 19))
         assert seen["week"] == ",".join(str(w) for w in range(1, 19))
         assert "division" not in seen, "division is NCAA-only; the NFL query must omit it"
+
+
+class TestRoutesUnblocksNFW91:
+    """The receiving export carries `routes` — the field NF-W9-1 turns on.
+
+    Header taken VERBATIM from a real operator export (2026-08-19), so this is a contract test
+    against PFF's actual output rather than against our expectations of it.
+    """
+
+    HEADER = (
+        "player,player_id,position,team_name,player_game_count,avg_depth_of_target,"
+        "avoided_tackles,caught_percent,contested_catch_rate,contested_receptions,"
+        "contested_targets,declined_penalties,drop_rate,drops,epa,first_downs,franchise_id,"
+        "fumbles,grades_hands_drop,grades_hands_fumble,grades_offense,grades_pass_block,"
+        "grades_pass_route,inline_rate,inline_snaps,interceptions,longest,pass_block_rate,"
+        "pass_blocks,pass_plays,penalties,positive_epa_percent,receptions,route_rate,routes,"
+        "slot_rate,slot_snaps,targeted_qb_rating,targets,touchdowns,wide_rate,wide_snaps,yards,"
+        "yards_after_catch,yards_after_catch_per_reception,yards_per_reception,yprr"
+    )
+    ROWS = (
+        HEADER + "\n"
+        # a full-time receiver, a blocking tackle, and a low-usage back — the three states
+        "Ja'Marr Chase,84270,WR,CIN,16,8.9,23,68.7,54.5,18,33,2,4.6,6,0.01,73,7,1,83.9,63.4,"
+        "90.1,,90.1,0.0,0,7,64,0.0,0,669,2,47.2,125,94.5,632,32.6,218,90.3,182,8,66.5,445,1412,"
+        "648,5.2,11.3,2.23\n"
+        "Jake Matthews,8641,T,ATL,17,6.0,0,0.0,,0,0,0,100.0,1,0.04,0,2,0,28.0,,69.7,82.4,42.0,"
+        "0.0,0,0,0,99.8,609,610,7,46.7,0,0.2,1,0.0,0,39.6,1,0,0.0,0,0,0,,,0.0\n"
+        "Julius Chestnut,109239,HB,TEN,7,9.0,0,0.0,,0,0,0,,0,-0.16,0,31,0,,75.7,60.8,26.3,52.2,"
+        "0.0,0,0,0,13.6,3,22,0,40.9,0,86.4,19,0.0,0,39.6,2,0,9.1,2,0,0,,,0.0\n"
+    )
+
+    def test_routes_is_present(self):
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        assert "routes" in parse_csv(self.ROWS)[0], (
+            "routes is THE field NF-W9-1 turns on; without it the story has no substrate"
+        )
+
+    @pytest.mark.parametrize("field", [
+        "routes", "route_rate", "pass_plays", "avg_depth_of_target", "slot_rate", "slot_snaps",
+        "wide_rate", "wide_snaps", "inline_rate", "yprr", "yards_after_catch", "avoided_tackles",
+    ])
+    def test_every_opportunity_field_survives_the_guard(self, field):
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        kept, _ = g.strip_model_output_columns(list(parse_csv(self.ROWS)[0].keys()))
+        assert field in kept
+
+    def test_routes_separates_states_that_nflverse_collapses_into_one_zero(self):
+        # THE measured claim. A tackle on the field for 610 pass plays ran 1 route; a back on
+        # the field for 22 ran 19 and saw 2 targets. nflverse has snaps and targets, so both
+        # are a bare zero there. `routes` is what makes them different events.
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        by = {r["player"]: r for r in parse_csv(self.ROWS)}
+        blocker, runner = by["Jake Matthews"], by["Julius Chestnut"]
+        assert blocker["pass_plays"] > 500 and blocker["routes"] <= 1
+        assert runner["pass_plays"] < 50 and runner["routes"] > 10
+        # route PARTICIPATION is what distinguishes them, not snap count
+        assert blocker["routes"] / blocker["pass_plays"] < 0.01
+        assert runner["routes"] / runner["pass_plays"] > 0.50
+
+    def test_the_grades_are_still_stripped_from_the_richest_payload(self):
+        from quant_sports_intel_models.football.pff.client import parse_csv
+        _, dropped = g.strip_model_output_columns(list(parse_csv(self.ROWS)[0].keys()))
+        assert dropped == ["grades_hands_drop", "grades_hands_fumble", "grades_offense",
+                           "grades_pass_block", "grades_pass_route"]
+
+    def test_the_signal_map_records_confirmed_fields_not_hoped_for_ones(self):
+        entry = fx.SIGNAL_MAP["NF-W9-1 zero-atom opportunity"]
+        assert "fields_confirmed" in entry, "post-verification the map states what was MEASURED"
+        assert "routes" in entry["fields_confirmed"]
