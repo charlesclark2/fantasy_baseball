@@ -711,6 +711,12 @@ def _load_best_alpha() -> float:
     return 0.5
 
 
+# ⚠️ E11.24 P1 — THIS TWIN STILL TARGETS THE RETIRED SNOWFLAKE `prediction_log`.
+# The live scorer is `scripts/predict_today.py`; that table moved to S3 parquet
+# (`scripts/utils/prediction_log_store`) and the Snowflake copy is frozen. This module is
+# invoked only by the deprecated Streamlit UI, which is why it was left alone rather than
+# migrated — but running it WOULD write to a table nothing reads any more, so treat these
+# statements as dead, not as a second live writer (the repo's half-alive-path trap).
 _CREATE_PREDICTION_LOG = """
 CREATE TABLE IF NOT EXISTS baseball_data.config.prediction_log (
     prediction_date           DATE        NOT NULL,

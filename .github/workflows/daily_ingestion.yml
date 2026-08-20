@@ -283,6 +283,11 @@ jobs:
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
           SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          # E11.24 P1 — the prediction_log READ is DuckDB-over-S3 now; the Snowflake vars
+          # above remain only for the model_health_log write.
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
           TARGET_ENV: prod
         run: uv run python compute_model_health.py
 
@@ -301,11 +306,10 @@ jobs:
           chmod 600 /tmp/snowflake_rsa_key.pem
 
       - name: Backfill prediction_log outcomes and CLV
-        working-directory: scripts
+        # E11.24 P1 — Snowflake-FREE: prediction_log lives in S3 and the enrichment is
+        # DuckDB-over-S3. AWS creds only; the Snowflake key written above is unused here.
         env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-          SNOWFLAKE_PRIVATE_KEY_PATH: /tmp/snowflake_rsa_key.pem
-          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-        run: uv run backfill_prediction_log.py
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+        run: uv run python scripts/backfill_prediction_log.py

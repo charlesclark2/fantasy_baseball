@@ -160,6 +160,21 @@ def _view_sql(table: str) -> str:
         # Delta table (ACID, single-writer) is authoritative. delta_scan latency is on
         # par with read_parquet (spike §2).
         return delta_scan_view_sql(table)
+    if table == "prediction_log":
+        # E11.24 P1 — prediction_log is APPEND-AND-DEDUP (one part file per writer batch),
+        # so a plain `SELECT *` glob would count every superseded snapshot. Its dedup body
+        # has exactly ONE definition, in the store module; imported lazily because that
+        # module imports THIS one. A reader that reaches prediction_log through
+        # register_views() therefore gets the dedup for free.
+        # ⚠️ DuckDB binds a parquet view at CREATE time, so this raises while the prefix is
+        # still empty (i.e. before the one-time history migration). Readers that must
+        # tolerate an empty table call prediction_log_store.register_view(), which
+        # degrades to an empty typed relation instead.
+        try:
+            from scripts.utils.prediction_log_store import view_sql as _pred_log_view_sql
+        except ImportError:  # pragma: no cover — lean image layout
+            from utils.prediction_log_store import view_sql as _pred_log_view_sql
+        return _pred_log_view_sql()
     if table in _TYPED_VIEWS:
         return _TYPED_VIEWS[table].format(loc=f"{LAKEHOUSE}/{table}/**/*.parquet")
     return (

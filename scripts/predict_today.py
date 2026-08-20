@@ -114,10 +114,13 @@ _BACKFILL_BATCH: dict | None = None
 # When --s3 is passed, set_s3_mode(True) flips the data_loader feature/mart reads
 # onto the S3 lakehouse (DuckDB) and _PREDICT_S3_MODE (here) flips this script's
 # direct AUX reads (bullpen OOD / Bovada ML / meta-serve / posterior provenance /
-# best_alpha / range-date resolution) onto the same DuckDB-over-S3 helper. WRITES
-# (daily_model_predictions, prediction_log) stay on Snowflake — W7b is the READ
-# path; writes are long-tail (handled in a later wave). The Snowflake path is a
-# byte-for-byte instant rollback (omit --s3 / _PREDICT_S3_MODE=False).
+# best_alpha / range-date resolution) onto the same DuckDB-over-S3 helper. The
+# daily_model_predictions WRITE stays on Snowflake — W7b is the READ path; that write
+# is long-tail (handled in a later wave). The Snowflake path is a byte-for-byte instant
+# rollback (omit --s3 / _PREDICT_S3_MODE=False).
+# ⚠️ prediction_log is NO LONGER one of those writes: E11.24 P1 moved the whole table to
+# S3, so its write is UNCONDITIONALLY S3 and does not depend on --s3 / _PREDICT_S3_MODE
+# (there is no Snowflake table left to fall back to).
 # ---------------------------------------------------------------------------
 _PREDICT_S3_MODE: bool = False
 _AUX_DUCK_CONN = None  # lazily-created, view-registered DuckDB connection for the aux reads
@@ -1839,85 +1842,45 @@ def _load_best_alpha() -> float:
     return 0.5
 
 
-_CREATE_PREDICTION_LOG = """
-CREATE TABLE IF NOT EXISTS baseball_data.config.prediction_log (
-    prediction_date           DATE        NOT NULL,
-    game_pk                   INTEGER     NOT NULL,
-    market                    VARCHAR(20) NOT NULL,
-    model_prob                FLOAT,
-    market_prob_at_prediction FLOAT,
-    closing_market_prob       FLOAT,
-    actual_outcome            INTEGER,
-    decimal_odds              FLOAT,
-    ev                        FLOAT,
-    kelly_fraction            FLOAT,
-    model_version             VARCHAR(20),
-    loaded_at                 TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
-)
-"""
+# ---------------------------------------------------------------------------
+# prediction_log  (E11.24 P1 — the whole table now lives in S3, not Snowflake)
+#
+# WHAT MOVED, AND WHY IT WAS SAFE
+#   prediction_log is MONITORING substrate. `daily_model_predictions` is the SERVING
+#   artifact and is untouched; prediction_log's only live reader is
+#   `compute_model_health.py` (the other, app/pages/4_Model_Performance.py, is the
+#   deprecated Streamlit UI). So there is no serving blast radius here.
+#
+#   Three burns died with the move: the per-run `DELETE FROM ... WHERE prediction_date`
+#   (the #2 COMPUTE_WH waker — structurally irreducible in place, because the lineup
+#   sensor fires ~8-14 scoped predict runs per slate), the six unbounded UPDATE sweeps
+#   `_backfill_outcomes()` re-ran on EVERY predict invocation (36% of all billable
+#   COMPUTE_WH elapsed), and compute_model_health's daily read.
+#
+#   The overwrite semantics — full-slate = date-wide, scoped `--game-pks` = only the
+#   games that run owns (the #885 fix, without which a slate's log ends the day holding
+#   1-2 games of 15) — are PRESERVED EXACTLY; they now live in
+#   `scripts/utils/prediction_log_store`, which expresses them as append-and-dedup rather
+#   than DELETE+INSERT. See that module for why append (overlapping jobs) and for the
+#   ownership-marker row that reproduces "this run owns the game and logged nothing".
+#
+# TIER CHANGE (deliberate, E11.7): the prediction_log write is now WARN-tier.
+#   It used to be able to take the slate down: an exception here propagated out of
+#   `main()` and `predict_today` is HALT-tier, so a monitoring-substrate write could
+#   withhold every prediction. That was a mis-tiering (E11.7: peripheral monitoring is
+#   WARN, never HALT) and it is not one this migration should inherit. A failure now
+#   prints a loud `[ALERT]` to stderr and emits `[METRIC] prediction_log_write_ok=0` —
+#   never a silent pass (the swallowed-error class), and keyed so a monitor can page.
+# ---------------------------------------------------------------------------
 
-_INSERT_PREDICTION_LOG = """
-INSERT INTO baseball_data.config.prediction_log (
-    prediction_date, game_pk, market, model_prob, market_prob_at_prediction,
-    closing_market_prob, actual_outcome, decimal_odds, ev, kelly_fraction,
-    model_version
-) VALUES (
-    %(prediction_date)s, %(game_pk)s, %(market)s, %(model_prob)s,
-    %(market_prob_at_prediction)s, %(closing_market_prob)s, %(actual_outcome)s,
-    %(decimal_odds)s, %(ev)s, %(kelly_fraction)s, %(model_version)s
-)
-"""
 
+def _prediction_log_rows(output_rows: list[dict], prediction_date: str) -> list[dict]:
+    """Project this run's scored rows onto the prediction_log column contract.
 
-def _prediction_log_delete_sql(scoped_game_pks: list[int] | None) -> str:
-    """Build the overwrite DELETE for the prediction_log write.
-
-    E11.24 — the A1.12 rule, applied to prediction_log (it had only ever been
-    applied to ``daily_model_predictions``, see ``_post_lineup_delete_sql``).
-
-    The lineup sensor fires ``predict_today --game-pks <newly confirmed>`` once per
-    completing lineup, so a slate produces ~8-14 separate scoped runs. Each one issued
-    a **date-wide** ``DELETE ... WHERE prediction_date = <date>`` and then inserted only
-    ITS games — so every run wiped the previous runs' rows and the log ended each day
-    holding just the LAST batch. Measured 2026-08-16: prediction_log carried 1-2 games
-    per date against 8-15 in ``daily_model_predictions`` (avg 1.25 games/date across
-    August vs ~10 historically), and ``compute_model_health``'s 14-day h2h sample was
-    18 rows instead of ~180.
-
-    So: when this run scored a strict SUBSET of the slate, scope the DELETE to the games
-    that run owns. A full-slate run (``scoped_game_pks`` falsy) keeps the date-wide
-    overwrite so dropped/postponed games are still cleaned up. game_pks are ints, so
-    inlining them is injection-safe; the date is BOUND rather than f-strung, which closes
-    the injection surface.
-
-    ⚠️ The bind does NOT collapse this statement's ``query_history`` fragmentation, and an
-    earlier revision of this docstring wrongly claimed it did. The Snowflake connector
-    defaults to ``paramstyle='pyformat'`` = CLIENT-side binding, so the value is escaped
-    and interpolated before the text is sent and ``query_text`` still carries a date
-    LITERAL (measured post-deploy: ``... WHERE prediction_date = '2026-08-17'``). The
-    scoped form also inlines its game_pk list, so distinct texts per day went 1 -> 7-9.
-    ⇒ any wake/waker census over this statement MUST normalise date and number literals
-    before ``GROUP BY query_text`` (the E11.24 census rule), or it will scatter this
-    family into ``other`` exactly as it did before.
-
-    ⚠️ This is a deliberate SEMANTICS CHANGE, not a refactor — a scoped run now deletes
-    strictly fewer rows than before. That is the fix.
+    PURE — no IO — so the derived columns (`decimal_odds`, `ev`) are unit-testable. The
+    arithmetic is unchanged from the Snowflake writer.
     """
-    base = ("DELETE FROM baseball_data.config.prediction_log "
-            "WHERE prediction_date = %(d)s")
-    if scoped_game_pks:
-        pk_list = ", ".join(str(int(pk)) for pk in scoped_game_pks)
-        return f"{base} AND game_pk IN ({pk_list})"
-    return base
-
-
-def _write_prediction_log(
-    output_rows: list[dict],
-    prediction_date: str,
-    scoped_game_pks: list[int] | None = None,
-) -> None:
-    rows = []
-    pred_date = date.fromisoformat(prediction_date)
+    rows: list[dict] = []
     for r in output_rows:
         mkt_prob = r.get("market_implied_prob")
         model_prob = r.get("model_prob")
@@ -1927,15 +1890,11 @@ def _write_prediction_log(
         else:
             decimal_odds = None
             ev = None
-        try:
-            game_pk = int(r["game_key"])
-        except (ValueError, TypeError):
-            game_pk = None
         rows.append({
-            "prediction_date":           pred_date,
-            "game_pk":                   game_pk,
+            "prediction_date":           prediction_date,
+            "game_pk":                   r.get("game_key"),
             "market":                    r.get("market"),
-            "model_prob":                r.get("model_prob"),
+            "model_prob":                model_prob,
             "market_prob_at_prediction": mkt_prob,
             "closing_market_prob":       None,
             "actual_outcome":            None,
@@ -1944,154 +1903,36 @@ def _write_prediction_log(
             "kelly_fraction":            r.get("implied_kelly_fraction"),
             "model_version":             MODEL_VERSION,
         })
-    conn = get_snowflake_connection()
+    return rows
+
+
+def _write_prediction_log(
+    output_rows: list[dict],
+    prediction_date: str,
+    scoped_game_pks: list[int] | None = None,
+) -> None:
+    from scripts.utils import prediction_log_store as _pred_log
+
+    rows = _prediction_log_rows(output_rows, prediction_date)
     try:
-        cur = conn.cursor()
-        cur.execute(_CREATE_PREDICTION_LOG)
-        cur.execute(
-            _prediction_log_delete_sql(scoped_game_pks),
-            {"d": prediction_date},
+        result = _pred_log.write_rows(
+            rows, prediction_date, scoped_game_pks=scoped_game_pks
         )
-        _deleted = cur.rowcount
-        if rows:
-            cur.executemany(_INSERT_PREDICTION_LOG, rows)
-        conn.commit()
-        _scope = (f"game_pks {scoped_game_pks} (scoped overwrite)"
-                  if scoped_game_pks else "(full-slate overwrite)")
-        print(f"\nWrote {len(rows)} rows to prediction_log for {prediction_date} "
-              f"{_scope}; cleared {_deleted} prior row(s)")
-    finally:
-        conn.close()
+    except Exception as exc:  # noqa: BLE001 — WARN-tier: monitoring must not HALT the slate
+        print(f"[ALERT] prediction_log S3 write FAILED for {prediction_date}: {exc}",
+              file=sys.stderr, flush=True)
+        print("[METRIC] prediction_log_write_ok=0", file=sys.stderr, flush=True)
+        return
 
-
-_BACKFILL_OUTCOME_H2H_SQL = """
-UPDATE baseball_data.config.prediction_log pl
-SET actual_outcome = CASE WHEN mgr.home_team_won THEN 1.0 ELSE 0.0 END
-FROM baseball_data.betting.mart_game_results mgr
-WHERE pl.game_pk = mgr.game_pk
-  AND pl.market = 'h2h'
-  AND pl.actual_outcome IS NULL
-"""
-
-_BACKFILL_OUTCOME_TOTALS_SQL = """
-UPDATE baseball_data.config.prediction_log pl
-SET actual_outcome = CASE
-    WHEN (mgr.home_final_score + mgr.away_final_score) > fpof.total_line_consensus THEN 1.0
-    WHEN (mgr.home_final_score + mgr.away_final_score) < fpof.total_line_consensus THEN 0.0
-    ELSE NULL
-END
-FROM baseball_data.betting.mart_game_results mgr
-JOIN baseball_data.betting_features.feature_pregame_odds_features fpof
-    ON mgr.game_pk = fpof.game_pk
-WHERE pl.game_pk = mgr.game_pk
-  AND pl.market = 'totals'
-  AND pl.actual_outcome IS NULL
-  AND fpof.total_line_consensus IS NOT NULL
-"""
-
-_BACKFILL_CLOSING_H2H_SQL = """
-UPDATE baseball_data.config.prediction_log pl
-SET closing_market_prob = c.closing_prob
-FROM (
-    SELECT bridge.game_pk, AVG(1.0 / moe.outcome_price_decimal) AS closing_prob
-    FROM baseball_data.betting.mart_odds_outcomes moe
-    JOIN baseball_data.betting.mart_game_odds_bridge bridge ON moe.event_id = bridge.event_id
-    JOIN (
-        SELECT bridge2.game_pk, MAX(moe2.ingestion_ts) AS last_ts
-        FROM baseball_data.betting.mart_odds_outcomes moe2
-        JOIN baseball_data.betting.mart_game_odds_bridge bridge2 ON moe2.event_id = bridge2.event_id
-        WHERE moe2.market_key = 'h2h'
-          AND moe2.ingestion_ts < moe2.commence_time
-        GROUP BY bridge2.game_pk
-    ) ls ON bridge.game_pk = ls.game_pk AND moe.ingestion_ts = ls.last_ts
-    WHERE moe.market_key = 'h2h'
-      AND moe.is_home_outcome = TRUE
-      AND moe.outcome_price_decimal > 0
-    GROUP BY bridge.game_pk
-) c
-WHERE pl.game_pk = c.game_pk
-  AND pl.market = 'h2h'
-  AND pl.closing_market_prob IS NULL
-"""
-
-_BACKFILL_CLOSING_TOTALS_SQL = """
-UPDATE baseball_data.config.prediction_log pl
-SET closing_market_prob = c.closing_prob
-FROM (
-    SELECT bridge.game_pk, AVG(1.0 / moe.outcome_price_decimal) AS closing_prob
-    FROM baseball_data.betting.mart_odds_outcomes moe
-    JOIN baseball_data.betting.mart_game_odds_bridge bridge ON moe.event_id = bridge.event_id
-    JOIN (
-        SELECT bridge2.game_pk, MAX(moe2.ingestion_ts) AS last_ts
-        FROM baseball_data.betting.mart_odds_outcomes moe2
-        JOIN baseball_data.betting.mart_game_odds_bridge bridge2 ON moe2.event_id = bridge2.event_id
-        WHERE moe2.market_key = 'totals'
-          AND moe2.ingestion_ts < moe2.commence_time
-        GROUP BY bridge2.game_pk
-    ) ls ON bridge.game_pk = ls.game_pk AND moe.ingestion_ts = ls.last_ts
-    WHERE moe.market_key = 'totals'
-      AND moe.outcome_name = 'Over'
-      AND moe.outcome_price_decimal > 0
-    GROUP BY bridge.game_pk
-) c
-WHERE pl.game_pk = c.game_pk
-  AND pl.market = 'totals'
-  AND pl.closing_market_prob IS NULL
-"""
-
-_BACKFILL_CLOSING_H2H_FALLBACK_SQL = """
-UPDATE baseball_data.config.prediction_log pl
-SET closing_market_prob = c.closing_prob
-FROM (
-    SELECT bridge.game_pk, AVG(1.0 / moe.outcome_price_decimal) AS closing_prob
-    FROM baseball_data.betting.mart_odds_outcomes moe
-    JOIN baseball_data.betting.mart_game_odds_bridge bridge ON moe.event_id = bridge.event_id
-    WHERE moe.market_key = 'h2h'
-      AND moe.is_home_outcome = TRUE
-      AND moe.outcome_price_decimal > 0
-    GROUP BY bridge.game_pk
-) c
-WHERE pl.game_pk = c.game_pk
-  AND pl.market = 'h2h'
-  AND pl.closing_market_prob IS NULL
-"""
-
-_BACKFILL_CLOSING_TOTALS_FALLBACK_SQL = """
-UPDATE baseball_data.config.prediction_log pl
-SET closing_market_prob = c.closing_prob
-FROM (
-    SELECT bridge.game_pk, AVG(1.0 / moe.outcome_price_decimal) AS closing_prob
-    FROM baseball_data.betting.mart_odds_outcomes moe
-    JOIN baseball_data.betting.mart_game_odds_bridge bridge ON moe.event_id = bridge.event_id
-    WHERE moe.market_key = 'totals'
-      AND moe.outcome_name = 'Over'
-      AND moe.outcome_price_decimal > 0
-    GROUP BY bridge.game_pk
-) c
-WHERE pl.game_pk = c.game_pk
-  AND pl.market = 'totals'
-  AND pl.closing_market_prob IS NULL
-"""
-
-
-def _backfill_outcomes() -> None:
-    """Backfill actual_outcome and closing_market_prob for settled games."""
-    steps = [
-        ("actual_outcome h2h",              _BACKFILL_OUTCOME_H2H_SQL),
-        ("actual_outcome totals",           _BACKFILL_OUTCOME_TOTALS_SQL),
-        ("closing_market_prob h2h",         _BACKFILL_CLOSING_H2H_SQL),
-        ("closing_market_prob totals",      _BACKFILL_CLOSING_TOTALS_SQL),
-        ("closing_market_prob h2h fallback",    _BACKFILL_CLOSING_H2H_FALLBACK_SQL),
-        ("closing_market_prob totals fallback", _BACKFILL_CLOSING_TOTALS_FALLBACK_SQL),
-    ]
-    conn = get_snowflake_connection()
-    try:
-        cur = conn.cursor()
-        for label, sql in steps:
-            cur.execute(sql)
-            print(f"  Backfill [{label}]: {cur.rowcount or 0} row(s) updated")
-    finally:
-        conn.close()
+    scope = (f"game_pks {sorted(scoped_game_pks)} (scoped batch)"
+             if result["scoped"] else "(full-slate overwrite)")
+    print(f"\nWrote {result['data_rows']} rows to prediction_log (S3) for {prediction_date} "
+          f"{scope}; {result['markers']} ownership marker(s), "
+          f"cleared {result['cleared_parts']} prior part file(s) -> {result['key']}")
+    if result["dropped_game_keys"]:
+        print(f"[ALERT] prediction_log dropped {len(result['dropped_game_keys'])} row(s) with an "
+              f"un-coercible game_pk: {result['dropped_game_keys']}", file=sys.stderr, flush=True)
+    print("[METRIC] prediction_log_write_ok=1", file=sys.stderr, flush=True)
 
 
 def _parse_args() -> argparse.Namespace:
@@ -2290,9 +2131,9 @@ def main(target_date: str, args) -> None:
     # was written as post_lineup / lineup_confirmed regardless of real status.
     # Gated on --lineup-confirmed so the morning (projected-lineup) run is unaffected.
     # E11.24 — did THIS run score a strict SUBSET of the slate? A subset run must not
-    # issue a date-wide prediction_log DELETE (see _prediction_log_delete_sql): the
-    # lineup sensor fires per newly-confirmed game, so a date-wide overwrite leaves the
-    # log holding only the LAST batch's games. Set by either narrowing filter below.
+    # issue a date-wide prediction_log overwrite (see prediction_log_store.write_rows):
+    # the lineup sensor fires per newly-confirmed game, so a date-wide overwrite leaves
+    # the log holding only the LAST batch's games. Set by either narrowing filter below.
     slate_narrowed = False
     if args.lineup_confirmed:
         lineup_cols = ("home_has_full_lineup", "away_has_full_lineup")
@@ -2737,7 +2578,7 @@ def main(target_date: str, args) -> None:
     n_h2h = sum(1 for r in output_rows if r["market"] == "h2h")
     n_tot = sum(1 for r in output_rows if r["market"] == "totals")
     if output_rows:
-        print(f"\n{len(output_rows)} output rows ({n_h2h} h2h, {n_tot} totals) ready for Snowflake logging.")
+        print(f"\n{len(output_rows)} output rows ({n_h2h} h2h, {n_tot} totals) ready for logging.")
     else:
         print("\n0 output rows (no odds available — picks table above uses model probabilities only).")
 
@@ -2746,7 +2587,16 @@ def main(target_date: str, args) -> None:
     if not args.no_log_snowflake and not args.dry_run:
         _write_prediction_log(output_rows, target_date,
                               scoped_game_pks=prediction_log_scope)
-        _backfill_outcomes()
+        # E11.24 P1 — `_backfill_outcomes()` USED to run here, on EVERY predict
+        # invocation (morning + each of the ~8-14 scoped lineup re-scores), issuing six
+        # unbounded UPDATE sweeps over the whole table. It was REDUNDANT — the nightly
+        # `backfill_prediction_log` op already covers every row — and it was WRONG:
+        # because the sweeps only fill NULLs and were fired MID-SLATE, a game's
+        # `closing_market_prob` was frozen from whatever snapshots existed at that
+        # moment, hours before the actual close. Measured on game 822859 (2026-08-18):
+        # the stored value 0.605935 corresponds to an ~18:00-21:00 UTC snapshot; the true
+        # last pre-game price was 0.592235. Enrichment now happens ONCE, in the daily op,
+        # and only for dates strictly before today — so the value it writes is the close.
 
     if args.dry_run:
         print(f"\n[--dry-run] Skipping ALL Snowflake writes "
@@ -2791,7 +2641,8 @@ if __name__ == "__main__":
     if getattr(_args, "s3", False):
         _set_predict_s3_mode(True)
         print("[E11.1-W7b] --s3 ENABLED: feature/mart/odds READS via DuckDB-over-S3 "
-              "(lakehouse parquet); WRITES remain on Snowflake.")
+              "(lakehouse parquet); the daily_model_predictions WRITE remains on Snowflake "
+              "(prediction_log is S3 on every path since E11.24 P1).")
     _dates = _resolve_target_dates(_args)
     _failures: list[str] = []
     # E13.11 — batch a multi-date --is-backfill run: features pulled once → local parquet,

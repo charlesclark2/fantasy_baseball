@@ -26,6 +26,7 @@ Usage (CI):
 from __future__ import annotations
 
 import argparse
+import ast
 import sys
 from pathlib import Path
 
@@ -127,14 +128,79 @@ def shard_files(shard: str, repo_root: Path | None = None) -> list[Path]:
     return [p for p in all_test_files(repo_root) if shard_of(p) == shard]
 
 
+#: The marker whose files the SLOW gate needs. Kept as a constant so the guard test and this
+#: scanner cannot disagree about which word they are looking for.
+SLOW_MARKER = "slow"
+
+
+def _uses_marker(path: Path, marker: str) -> bool:
+    """True when `path` mentions `pytest.mark.<marker>` in ANY form.
+
+    ⭐ AST, NOT GREP, and the difference is the whole safety argument. The three forms a slow test
+    can arrive in — a `@pytest.mark.slow` decorator, a module-level `pytestmark = pytest.mark.slow`,
+    and `pytest.param(..., marks=pytest.mark.slow)` — all parse to the same attribute chain, so one
+    check covers every one of them. A regex would have to enumerate the spellings and would miss the
+    next one somebody invents.
+
+    ⚠️ A syntax error returns True, deliberately. This function decides whether a file is HANDED to
+    the slow gate; an unparseable file must be handed over (where pytest reports the error) rather
+    than silently dropped from the run.
+    """
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (SyntaxError, UnicodeDecodeError, OSError):
+        return True
+    for node in ast.walk(tree):
+        # `pytest.mark.slow` → Attribute(attr='slow', value=Attribute(attr='mark', ...))
+        if (
+            isinstance(node, ast.Attribute)
+            and node.attr == marker
+            and isinstance(node.value, ast.Attribute)
+            and node.value.attr == "mark"
+        ):
+            return True
+    return False
+
+
+def slow_files(repo_root: Path | None = None) -> list[Path]:
+    """Every test file that carries a `slow` marker, repo-relative, sorted.
+
+    ⭐ WHY THE SLOW GATE NEEDS THIS. `pytest -m "slow and not research"` with no path arguments
+    collects `testpaths` — measured 2026-08-20, that is **10,659 tests imported to find 79**, and
+    xdist pays it ONCE PER WORKER (the duplicated-collection cost `docs/ci_fast_gate_profile.md`
+    documents). Handing pytest only the files that carry the marker drops collection from 11.04s to
+    1.30s and the whole gate's wall clock by 36% (106.8s → 68.8s locally), with the SAME 79 tests
+    selected by the SAME `-m` expression.
+
+    ⚠️ THE `-m` EXPRESSION REMAINS THE SELECTOR. This list only narrows what is IMPORTED; it never
+    decides what RUNS. So a file that lands here without a slow test costs a little import time and
+    changes no result, while a file with a slow test that is missing here would silently escape the
+    gate — which is why the scan is derived from the marker itself rather than maintained by hand,
+    and why `test_fast_gate_hygiene.py` pins it.
+    """
+    root = repo_root or _REPO_ROOT
+    return [p for p in all_test_files(root) if _uses_marker(root / p, SLOW_MARKER)]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--shard", help="print this shard's pytest targets, space-separated")
     ap.add_argument("--list", action="store_true", help="print every shard name")
+    ap.add_argument("--slow-paths", action="store_true",
+                    help="print the pytest targets for the SLOW gate, space-separated")
     args = ap.parse_args()
 
     if args.list:
         print("\n".join(SHARD_NAMES))
+        return
+    if args.slow_paths:
+        files = slow_files()
+        if not files:
+            # Same reasoning as the empty-shard guard below: no arguments makes pytest fall back to
+            # `testpaths`, so an empty list would quietly restore the slow, whole-suite collection
+            # this flag exists to remove — a silent regression rather than a failure.
+            raise SystemExit("no test file carries a slow marker — the scanner is broken")
+        print(" ".join(p.as_posix() for p in files))
         return
     if not args.shard:
         ap.error("pass --shard <name> or --list")
