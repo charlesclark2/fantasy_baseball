@@ -571,6 +571,44 @@ class TestDerive0bEndToEnd:
         for pos in XP.POSITIONS:                     # both reads of the same banks, per position
             assert f"| {pos} |" in txt
 
+    def test_a_rendered_retest_trigger_is_always_scoped_to_the_family_it_describes(
+            self, tmp_path, pins_pass):
+        """⛔ NF-D18: `classify_null`'s trigger describes FAMILY B (the fitted contest). Family A's
+        null is arithmetically bounded, not underpowered. A record that prints `+2 folds` with no
+        scoping invites a reader to apply it to family A — so the renderer must carry the warning
+        wherever it carries the number."""
+        bias = {"QB": -1.2, "RB": -0.2, "WR": 0.0, "TE": 0.0}
+        out = R0B.derive_0b(_out_shell(
+            _fold_results(_make_rows(bias, bias), tmp_path), tmp_path))
+        # ⛔ INJECT the trigger rather than hoping a synthetic field reaches one — a guard that
+        # SKIPS when the branch is unreached proves nothing (it is the vacuous-guard class in a
+        # skip's clothing, and this test skipped on first write).
+        out["classification"] = dict(out.get("classification") or {}) | {
+            "state": "POWER_LIMITED", "retest_trigger": "+2 folds for the DSR gate"}
+        path = tmp_path / "scoped.md"
+        R0B.write_report(out, path)
+        txt = path.read_text()
+        assert "+2 folds for the DSR gate" in txt, "non-vacuity: the trigger must be rendered"
+        assert "FAMILY B ONLY" in txt, "a trigger was rendered with no family scoping"
+        assert "ARITHMETICALLY BOUNDED" in txt
+
+        # and the negative half: no trigger ⇒ no warning (the note must not be unconditional
+        # boilerplate, or it would read as scoping a trigger that isn't there)
+        out["classification"] = {"state": "CONSTRAINT_REFUSED", "retest_trigger": None}
+        path2 = tmp_path / "unscoped.md"
+        R0B.write_report(out, path2)
+        assert "FAMILY B ONLY" not in path2.read_text()
+
+    def test_the_report_carries_the_bound_in_the_row_pooled_convention(self, tmp_path, pins_pass):
+        flat = {p: 0.05 for p in XP.POSITIONS}
+        out = R0B.derive_0b(_out_shell(
+            _fold_results(_make_rows(flat, flat), tmp_path), tmp_path))
+        path = tmp_path / "bound.md"
+        R0B.write_report(out, path)
+        txt = path.read_text()
+        assert "ROW-POOLED completion deltas" in txt and "MEAN OF FOLD MEANS" in txt
+        assert str(out["completion_delta_pooled_spread"]) in txt
+
     def test_the_report_renders_on_an_UNDEFINED_path_proof(self, tmp_path, monkeypatch):
         monkeypatch.setattr(R, "_generator_record_scores", lambda position: {"F1": 2.02})
         flat = {p: 0.05 for p in XP.POSITIONS}
@@ -653,3 +691,130 @@ class TestRegistrationAndArtifactHygiene:
         for banned in ("import boto3", "boto3.client(", "import dagster", '"--publish"',
                        "'--publish'"):
             assert banned not in src, f"{banned} in a deploy-held research runner"
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# §7 — the COMMITTED decisive record (NF-W8-0 §12.4's record-accuracy defect class)
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+_RECORD = (_ROOT / "quant_sports_intel_models/football/nfl/fantasy/ablation_results/"
+           "nf_w8_0b_tail_point.json")
+
+
+@pytest.mark.skipif(not _RECORD.exists(), reason="the decisive record is not committed here")
+class TestCommittedRecordConsistency:
+    """Assertions on the RECORD as committed. NF-W8-0 §12.4 shipped a record whose classification
+    listed a clause as failing while its final value was True — a record-accuracy defect that no
+    code test could see, because the defect lived in the artifact."""
+
+    @pytest.fixture(scope="class")
+    def rec(self):
+        import json
+        return json.loads(_RECORD.read_text())
+
+    def test_it_is_the_decisive_run_not_a_path_proof(self, rec):
+        assert rec["smoke"] is False and rec["n_folds"] >= 4
+        assert rec["story"] == TP.STORY
+
+    def test_cross_rankable_has_exactly_one_definition(self, rec):
+        assert rec["cross_rankable"] is (rec["verdict_0b"]["state"] == TP.V_CLOSES)
+        assert rec["input"]["cross_rankable"] == rec["cross_rankable"]
+        assert rec["verdict_0b"]["state"] in TP.VERDICT_STATES
+
+    def test_a_verdict_was_only_reached_because_every_pin_reproduced(self, rec):
+        """A verdict other than UNDEFINED asserts the generators ARE their certified records."""
+        if rec["verdict_0b"]["state"] != TP.V_UNDEFINED:
+            for pos, r in rec["reproduction"].items():
+                assert r["reproduces"] is True, f"{pos} did not reproduce yet a verdict was read"
+                assert r["max_abs_gap"] <= XP.REPRODUCTION_TOLERANCE
+
+    def test_the_certified_banks_passed_through_untouched(self, rec):
+        assert rec["input"]["banks_untouched"] is True
+        assert rec["input"]["max_quantile_drift"] == 0.0
+
+    def test_the_materiality_floor_reached_the_clause(self, rec):
+        fl = rec["materiality_floor"]
+        assert fl["statistic"] == TP.SWAP_FLOOR_STATISTIC
+        acts = [d["activity"] for d in (rec.get("swap_verification") or {}).get("detail", {}).values()
+                if d["activity"].get("active") is not None]
+        assert acts, "no evaluable position — this guard would pass on nothing"
+        for a in acts:
+            assert "material" in a and "materiality_floor_ppr" in a
+
+    def test_no_clause_listed_as_failing_is_finally_true(self, rec):
+        """NF-W8-0 §12.4 verbatim: the failing lists must describe the FINAL clause values."""
+        c = rec.get("classification") or {}
+        clauses = rec["recal"]["winner_clauses"]
+        for key in ("failing_anchor_checks", "failing_statistical_checks"):
+            for name in c.get(key) or []:
+                assert clauses.get(name) is not True, f"{name} listed failing but is finally True"
+
+    def test_a_published_retest_trigger_rests_only_on_statistical_clauses(self, rec):
+        """⭐ NF-D18: a trigger beside an ANCHOR/constraint refusal is actively misleading — more
+        data makes such a refusal MORE certain, never less."""
+        c = rec.get("classification") or {}
+        if c.get("retest_trigger"):
+            clauses = rec["recal"]["winner_clauses"]
+            failing_anchors = [n for n in XP.ANCHOR_CLAUSES if clauses.get(n) is False]
+            assert not failing_anchors, (
+                f"a retest trigger is published while anchor clauses {failing_anchors} fail")
+
+    def test_the_committed_report_scopes_its_published_trigger(self, rec):
+        """The .md is the human-facing artifact; the scoping must be IN it, not only in the
+        preregistration a reader may never open."""
+        md = _RECORD.with_suffix(".md")
+        assert md.exists()
+        txt = md.read_text()
+        trig = (rec.get("classification") or {}).get("retest_trigger")
+        if trig:
+            assert "FAMILY B ONLY" in txt and "ARITHMETICALLY BOUNDED" in txt
+        assert "ROW-POOLED completion deltas" in txt, "the bound must be stated in the record"
+
+    def test_the_family_a_family_is_the_six_declared_pairs(self, rec):
+        assert len(rec["family_a"]["pairs"]) == 6
+        assert rec["family_a"]["bh_q"] == XP.BH_Q
+        for d in rec["family_a"]["pairs"].values():
+            assert d["mde_ppr"] is not None, "a null must state its MDE (MH2.6)"
+
+    def test_the_record_carries_BOTH_reads_of_the_same_banks(self, rec):
+        assert set(rec["gridmean_bias_by_position"]) == set(XP.POSITIONS)
+        assert set(rec["tail_completion_by_position"]) == set(XP.POSITIONS)
+
+    def test_the_deterministic_bound_the_headline_rests_on(self, rec):
+        """⭐ §12.1's identity: a pair's movement is EXACTLY the difference of its two positions'
+        ROW-POOLED completion deltas, so the whole mechanism is bounded by their spread.
+
+        ⚠️ The convention is load-bearing and is why this guard exists. Stated from
+        `tail_completion_by_position` — a MEAN OF FOLD MEANS — the identity is only approximate
+        and the implied bound (0.0167) is WRONG: RB|WR moves 0.0193. Pooled over rows it is exact
+        to 1e-17 (NF1.8: pool over rows, never a mean of fold means)."""
+        assert set(rec["completion_delta_pooled"]) == set(XP.POSITIONS)
+        gm = rec["gridmean_bias_by_position"]
+        tc = {p: rec["identity_bias"]["pooled"][p]["bias_pooled"] for p in XP.POSITIONS}
+        # the deltas at FULL precision — the record stores them rounded to 6dp, which is coarser
+        # than the identity itself (the residual is ~1e-17, the rounding ~4e-7)
+        exact = {p: tc[p] - gm[p] for p in XP.POSITIONS}
+        spread = max(exact.values()) - min(exact.values())
+        for p in XP.POSITIONS:                      # the STORED value must be that, rounded
+            assert rec["completion_delta_pooled"][p] == pytest.approx(exact[p], abs=1e-6)
+        assert rec["completion_delta_pooled_spread"] == pytest.approx(spread, abs=1e-6)
+        worst = 0.0
+        for a in XP.POSITIONS:
+            for b in XP.POSITIONS:
+                if a >= b:
+                    continue
+                moved = (tc[a] - tc[b]) - (gm[a] - gm[b])
+                # ⭐ the identity, exact — not an approximation with slack
+                assert moved == pytest.approx(exact[a] - exact[b], abs=1e-12), f"{a}|{b}"
+                worst = max(worst, abs(moved))
+        assert worst <= spread + 1e-12, "no pair may move more than the spread — that IS the bound"
+
+    def test_the_two_pooling_conventions_are_reported_and_differ(self, rec):
+        """Both conventions are in the record BECAUSE they differ enough to change a headline —
+        a reader must not pick up the fold-mean figure and state the bound from it."""
+        pooled = rec["completion_delta_pooled"]
+        fold_mean = {p: rec["tail_completion_by_position"][p]["mean_completion_delta_ppr"]
+                     for p in XP.POSITIONS}
+        assert pooled != fold_mean
+        sp_p = max(pooled.values()) - min(pooled.values())
+        sp_f = max(fold_mean.values()) - min(fold_mean.values())
+        assert abs(sp_p - sp_f) > 1e-4, "if the conventions agreed this guard would be vacuous"

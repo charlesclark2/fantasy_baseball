@@ -193,6 +193,20 @@ def derive_0b(out: dict) -> dict:
                                   if "bias_gridmean" in fr["positions"].get(pos, {})])), 4)
         for pos in XP.POSITIONS
         if any("bias_gridmean" in fr["positions"].get(pos, {}) for fr in out["fold_results"])}
+    # ⭐ THE ROW-POOLED completion delta — the ONLY convention under which the headline identity
+    # (a pair's movement == the difference of its two positions' deltas) is EXACT. The per-fold
+    # `bank_detail` means above are a MEAN OF FOLD MEANS and differ by up to 0.002 PPR, which is
+    # enough to make a bound stated from them WRONG (NF1.8: pool over rows, never a mean of fold
+    # means — caught here by the bound guard, on this story's own headline).
+    out["completion_delta_pooled"] = {
+        pos: round(float(out["identity_bias"]["pooled"][pos]["bias_pooled"]
+                         - out["gridmean_bias_by_position"][pos]), 6)
+        for pos in XP.POSITIONS
+        if out["identity_bias"]["pooled"].get(pos, {}).get("bias_pooled") is not None
+        and pos in out["gridmean_bias_by_position"]}
+    if out["completion_delta_pooled"]:
+        v = list(out["completion_delta_pooled"].values())
+        out["completion_delta_pooled_spread"] = round(float(max(v) - min(v)), 6)
 
     v0b = TP.tail_point_verdict(
         predecessor_verdict=out["verdict"],
@@ -243,6 +257,8 @@ def write_report(out: dict, path: Path) -> None:
         gm = out.get("gridmean_bias_by_position", {}).get(pos)
         tc = out["identity_bias"]["pooled"].get(pos, {}).get("bias_pooled")
         d = out.get("tail_completion_by_position", {}).get(pos, {}).get("mean_completion_delta_ppr")
+        # round for DISPLAY only — the stored record keeps full precision (the pins read it)
+        tc = None if tc is None else round(float(tc), 4)
         L.append(f"| {pos} | {gm} | {tc} | {d} |")
     L += ["", "## Reproduction pins (the consumed generators, by identity)", "",
           "| pos | generator | reproduces | folds | max gap |", "|---|---|---|---|---|"]
@@ -258,6 +274,15 @@ def write_report(out: dict, path: Path) -> None:
     for name, d in fa["pairs"].items():
         L.append(f"| {name} | {d['gap']} | {d['se']} | {d['p_two_sided']} | "
                  f"{d['bh_rejected']} | {d['mde_ppr']} |")
+    if out.get("completion_delta_pooled"):
+        cd = out["completion_delta_pooled"]
+        L += ["",
+              f"⭐ **The bound.** A pair's movement vs the grid-mean read is EXACTLY the "
+              f"difference of its two positions' ROW-POOLED completion deltas "
+              f"({' · '.join(f'{k} {v:+.4f}' for k, v in cd.items())}), so the whole mechanism is "
+              f"bounded by their SPREAD: **{out['completion_delta_pooled_spread']} PPR**. ⚠️ The "
+              f"convention is load-bearing — the per-fold means in `tail_completion_by_position` "
+              f"are a MEAN OF FOLD MEANS and imply a different (wrong) bound (NF1.8)."]
     L += ["", "## §6 swap clause under the registered MATERIALITY FLOOR", "",
           f"- floor: **{fl['floor_ppr']} PPR** (`{fl['statistic']}` over {fl['n_pairs']} pairs) "
           f"· sensitivity band {fl.get('sensitivity_band')}",
@@ -271,8 +296,17 @@ def write_report(out: dict, path: Path) -> None:
           "| arm | pooled cross-position bias range (PPR) |", "|---|---|"]
     for arm, d in out["recal"]["range_by_arm"].items():
         L.append(f"| `{arm}` | {d['pooled']} |")
-    L += ["", "## Null classification", "", f"- {out.get('classification')}",
-          "", "## The input", "",
+    L += ["", "## Null classification", "", f"- {out.get('classification')}"]
+    if (out.get("classification") or {}).get("retest_trigger"):
+        L += ["",
+              "⚠️⚠️ **THE TRIGGER ABOVE DESCRIBES FAMILY B ONLY (the FITTED recalibration "
+              "contest) AND IS NOT FAMILY A'S STATUS.** Family A — this story's gate — asks "
+              "whether the DETERMINISTIC point closes the gap, and its answer is "
+              "ARITHMETICALLY BOUNDED, not underpowered: the completion delta is a deterministic "
+              "function of each certified bank and no fold count can widen its cross-position "
+              "spread. Reading a fold trigger onto family A would be the NF-D18 "
+              "misleading-trigger class."]
+    L += ["", "## The input", "",
           f"- dir: `{out.get('input', {}).get('dir')}` · shipped arm "
           f"`{out.get('input', {}).get('shipped_arm')}` · banks_untouched "
           f"{out.get('input', {}).get('banks_untouched')} (max quantile drift "
