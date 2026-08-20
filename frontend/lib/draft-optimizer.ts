@@ -299,6 +299,14 @@ const BENCH_ORDER_DAMPING = 0.85
  * re-measurement, not a preference.
  * ⚠️ LOCK-STEP: `BENCH_RERANK_SHORTLIST` in `quant_sports_intel_models/fantasy_engine/draft.py`.
  */
+/** NF-C7c — the bench cohort's three depth STATES, as sort keys (lower sorts first). A boolean
+ *  cannot express them: "short of the target", "no target at all" and "at or over the target" are
+ *  three different instructions, and the middle must not be folded into either neighbour.
+ *  ⚠️ LOCK-STEP: `DEPTH_*` in `quant_sports_intel_models/fantasy_engine/draft.py`. */
+const DEPTH_SHORT = -1
+const DEPTH_NEUTRAL = 0
+const DEPTH_SATISFIED = 1
+
 const BENCH_RERANK_SHORTLIST = 40
 
 /** Where a bench candidate SITS relative to a need-filler — the retired rule, in VOR units, so the
@@ -708,6 +716,7 @@ export interface Recommendation {
    *  candidate whenever no target is set, so the whole feature is inert until it is asked for, and
    *  `0` for anything that fills an open starter slot (the lineup is already asking for those). */
   depthShort: number
+  depthTier: number
   /** ⭐ NF-C7 — the weeks I would actually get points out of him, given who I already hold at his
    *  position, their byes and absence, and his own. `0` for a candidate who fills an open starter
    *  slot (he starts by definition, so the question is moot). Rendered, because it is the whole
@@ -1085,9 +1094,22 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     // lineup, and letting a preference speak there would re-weight the very needs it must rank
     // below.
     let depthShort = 0
+    let depthTier: number = DEPTH_NEUTRAL
     const depthTarget = depthTargets?.[p.pos] ?? 0
+    const depthHeld = myRowsByPos[p.pos]?.length ?? 0
     if (level === 0 && depthTarget > 0) {
-      depthShort = Math.max(0, depthTarget - (myRowsByPos[p.pos]?.length ?? 0))
+      depthShort = Math.max(0, depthTarget - depthHeld)
+      // ⭐ NF-C7c — THE TARGET IS TWO-SIDED. NF-C7 shipped it as a FLOOR only: a position you were
+      // short of got promoted, and one you had already satisfied was left NEUTRAL. Users read the
+      // control as a CAP ("I want ONE quarterback") — which is what the label says — and the
+      // measured consequence was that setting `QB: 1` while holding one quarterback changed the
+      // panel by NOTHING: five of six late-round suggestions stayed backup QBs.
+      //
+      // ⚠️ THREE STATES, NOT TWO, AND THE MIDDLE ONE IS LOAD-BEARING. A position with NO target
+      // stays NEUTRAL — neither asked for nor declined. Folding "no target" into "satisfied" would
+      // demote every position the user never mentioned the moment they set a target on ONE, so
+      // naming a QB target would quietly push down every running back on the board.
+      depthTier = depthShort > 0 ? DEPTH_SHORT : DEPTH_SATISFIED
     }
     // bye-week stacking: penalize by how many I already hold at this position on the same bye week
     const byeConflict = p.bye != null ? myByes.get(`${p.pos}|${p.bye}`) ?? 0 : 0
@@ -1122,6 +1144,7 @@ export function recommend(args: RecommendArgs): Recommendation[] {
       // base — and the re-rank below PERMUTES those values across the cohort into insurance order.
       orderValue: Math.round((level === 0 ? benchOrderValue(vor) - byePen : score) * 10) / 10,
       depthShort,
+      depthTier,
       expectedStarts: level === 0 ? Math.round(insuranceOf(p).starts * 10) / 10 : 0,
       positionalDropoff: Math.round(dropoff * 10) / 10,
       tier: tierOf[p.id] ?? 1,
@@ -1129,7 +1152,7 @@ export function recommend(args: RecommendArgs): Recommendation[] {
       byeConflict,
       mustFill,
       deferred,
-      rationale: rationale(p.pos, level, needBonus, dropoff, urgency, base - vor, vor, isLast, tierOf[p.id] ?? 1, p.bye, byeConflict, mustFill, picksRemaining, openStarterCount, base, depthShort, depthTarget),
+      rationale: rationale(p.pos, level, needBonus, dropoff, urgency, base - vor, vor, isLast, tierOf[p.id] ?? 1, p.bye, byeConflict, mustFill, picksRemaining, openStarterCount, base, depthShort, depthTarget, depthTier, depthHeld),
     })
   }
 
@@ -1216,7 +1239,7 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     // STANDS — the correct fallback, not a new rule.
     const ranked = [...cohort].sort(
       (a, b) =>
-        Number(b.depthShort > 0) - Number(a.depthShort > 0) ||
+        a.depthTier - b.depthTier ||
         b.score - a.score ||
         b.orderValue - a.orderValue ||
         (a.player.id < b.player.id ? -1 : a.player.id > b.player.id ? 1 : 0),
@@ -1235,7 +1258,7 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     if (a.deferred !== b.deferred) return a.deferred ? 1 : -1
     return (
       b.orderValue - a.orderValue ||
-      Number(b.depthShort > 0) - Number(a.depthShort > 0) ||
+      a.depthTier - b.depthTier ||
       b.score - a.score ||
       (a.player.id < b.player.id ? -1 : a.player.id > b.player.id ? 1 : 0)
     )
@@ -1272,6 +1295,8 @@ function rationale(
   seatValueOut = 0,
   depthShort = 0,
   depthTarget = 0,
+  depthTier: number = DEPTH_NEUTRAL,
+  depthHeld = 0,
 ): string {
   const parts: string[] = []
   // Leads the sentence when it applies: this is no longer a value judgement the user can weigh, so
@@ -1298,6 +1323,14 @@ function rationale(
     parts.push(`Bench depth — worth ${Math.round(seatValueOut)} as cover, not his ${Math.round(vor)} VOR`)
   if (depthShort > 0)
     parts.push(`You asked for ${depthTarget} ${pos}${depthTarget === 1 ? "" : "s"} — ${depthShort} short`)
+  // ⭐ NF-C7c — the CAP half. A demotion the user cannot see reads as the tool ignoring good players
+  // for no reason, which is exactly how the floor-only version was experienced: a target was set,
+  // nothing changed on screen, and there was nothing to point at.
+  else if (depthTier === DEPTH_SATISFIED)
+    parts.push(
+      `Ranked below other bench picks — you asked for ${depthTarget} ` +
+        `${pos}${depthTarget === 1 ? "" : "s"} and have ${depthHeld}`,
+    )
   if (lastInTier && dropoff > 0) parts.push(`Last of Tier ${tier} — ${Math.round(dropoff)} VOR cliff to the next ${pos}`)
   // ⚠️ QUOTES `urgency`, NOT `dropoff` — for a FLEX seat the bonus is the gap over the flex POOL, and
   // naming the (larger) within-position gap beside it would explain the score with a number the
