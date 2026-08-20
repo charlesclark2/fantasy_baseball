@@ -57,6 +57,7 @@ for (const [name, sc] of Object.entries(scenarios)) {
     seatValue: r.seatValue,
     orderValue: r.orderValue,
     depthShort: r.depthShort,
+    depthTier: r.depthTier,
     expectedStarts: r.expectedStarts,
     positionalDropoff: r.positionalDropoff,
     tier: r.tier,

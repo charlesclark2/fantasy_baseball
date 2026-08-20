@@ -3,6 +3,10 @@
     "week": "2026-08-17",
     "items": [
       {
+        "tag": "fixed",
+        "text": "Depth targets now work in both directions. Setting a position to a number you have already reached moves it DOWN the list, so telling us you want one quarterback stops us suggesting backup quarterbacks late in a draft — previously a target only ever pushed a position you were short of UP, so setting it to what you already had changed nothing. A position you leave at 0 is untouched either way: 0 means no opinion, not none wanted, and a target on one position never moves the others. Your league's required starters still come first — a target can never leave you unable to fill a lineup spot."
+      },
+      {
         "tag": "improved",
         "text": "Depth targets are now a saved setting, and the browser extension reads them. Set a default for every league under Settings → Fantasy Defaults, or give one league its own under League Settings — a league's own targets win, and a league you have not set keeps using your default. Previously they lived only in the browser you typed them into, which meant two leagues with the same scoring quietly shared one setting, nothing followed you to another device, and the live draft assistant in the extension could not see them at all. Wherever targets are in force we now say which screen they came from, so you always know where to change them. Your league's required starters still come first: a depth target can never leave you unable to fill a lineup spot."
       },

@@ -98,6 +98,14 @@ BENCH_ORDER_DAMPING = 0.85
 #: exactly the shape the shortlist enforces.
 #:
 #: ⚠️ NOT a tuned knob: 40 is the number the study measured, carried over verbatim. Moving it is a
+#: NF-C7c — the bench cohort's three depth STATES, as sort keys (lower sorts first). A plain
+#: boolean cannot express them: "short of the target", "no target at all" and "at or over the
+#: target" are three different instructions, and the middle one must not be folded into either
+#: neighbour (see the note at the computation site).
+DEPTH_SHORT = -1
+DEPTH_NEUTRAL = 0
+DEPTH_SATISFIED = 1
+
 #: re-measurement, not a preference. ⚠️ LOCK-STEP: `BENCH_RERANK_SHORTLIST` in the TS.
 BENCH_RERANK_SHORTLIST = 40
 
@@ -595,6 +603,7 @@ class Recommendation:
     #: anything filling an open starter slot (the lineup already asks for those).
     #: ⚠️ LOCK-STEP: `depthShort` in the TS.
     depth_short: int
+    depth_tier: int
     #: NF-C7 — the weeks I would actually have to start him, given who I already hold at his
     #: position and their byes/absence. `SEASON_WEEKS` when he walks into a seat on merit; 0 for a
     #: candidate who fills an open starter slot (he starts by definition, so the question is moot).
@@ -936,8 +945,25 @@ def recommend(
         # lineup, and letting a preference speak there would re-weight the very needs it must rank
         # below.
         depth_short = 0
+        depth_tier = DEPTH_NEUTRAL
         if level == 0 and depth_targets:
-            depth_short = max(0, int(depth_targets.get(pos, 0)) - len(my_rows_by_pos.get(pos, ())))
+            target = int(depth_targets.get(pos, 0))
+            depth_short = max(0, target - len(my_rows_by_pos.get(pos, ())))
+            # ⭐ NF-C7c — THE TARGET IS TWO-SIDED. NF-C7 shipped it as a FLOOR only: a position you
+            # were short of got promoted, and one you had already satisfied was left NEUTRAL. Users
+            # read the control as a CAP ("I want ONE quarterback"), which is what the label says, and
+            # the measured consequence was that setting `QB: 1` while holding one quarterback changed
+            # the panel by NOTHING — five of six late-round suggestions stayed backup QBs.
+            #
+            # ⚠️ THREE STATES, NOT TWO, AND THE MIDDLE ONE IS LOAD-BEARING. A position with NO target
+            # must stay NEUTRAL — it is neither asked for nor declined. Collapsing "no target" into
+            # "satisfied" would demote every position the user never mentioned the moment they set a
+            # target on ONE, which is the opposite of a preference: naming a QB target would quietly
+            # push down every running back on the board.
+            if depth_short > 0:
+                depth_tier = DEPTH_SHORT
+            elif target > 0:
+                depth_tier = DEPTH_SATISFIED
         # bye-week stacking: penalize by how many I already start/hold at this position on the same bye
         bye = row.get("bye")
         bye_conflict = my_byes.get((pos, int(bye)), 0) if bye is not None else 0
@@ -983,6 +1009,7 @@ def recommend(
                 bench_order_value(vor) - bye_pen if level == 0 else score
             ),
             depth_short=depth_short,
+            depth_tier=depth_tier,
             expected_starts=(_js_round1(insurance_of(row, pos)[1]) if level == 0 else 0.0),
             tier=tier,
             is_last_in_tier=bool(last_in_tier),
@@ -996,7 +1023,8 @@ def recommend(
             rationale=_rationale(pos, level, need_bonus, dropoff, urgency, base - vor, vor,
                                  last_in_tier, tier, bye, bye_conflict, must_fill,
                                  picks_remaining, open_starter_count, base, depth_short,
-                                 depth_targets.get(pos, 0) if depth_targets else 0),
+                                 depth_targets.get(pos, 0) if depth_targets else 0,
+                                 depth_tier, len(my_rows_by_pos.get(pos, ()))),
         ))
 
     # ── the ordering, in three keys ───────────────────────────────────────────────────────────────
@@ -1074,7 +1102,7 @@ def recommend(
         # candidate's OWN placement value means insurance decides, and WHERE INSURANCE IS
         # INDIFFERENT THE RETIRED ORDERING STANDS — the correct fallback, not a new rule.
         ranked = sorted(cohort,
-                        key=lambda r: (r.depth_short <= 0, -r.score, -r.order_value, r.player_id))
+                        key=lambda r: (r.depth_tier, -r.score, -r.order_value, r.player_id))
         for rec, slot_value in zip(ranked, slots):
             rec.order_value = slot_value
 
@@ -1084,14 +1112,15 @@ def recommend(
     # ordering, so a tie resolves the same way the cohort was ranked.
     # ⚠️ LOCK-STEP: the same comparator chain in `frontend/lib/draft-optimizer.ts`.
     recs.sort(key=lambda r: (not r.must_fill, r.deferred, -r.order_value,
-                             r.depth_short <= 0, -r.score, r.player_id))
+                             r.depth_tier, -r.score, r.player_id))
 
     return recs[:top_n]
 
 
 def _rationale(pos, level, need_bonus, dropoff, urgency, seat_adj, vor, last_in_tier, tier,
                bye=None, bye_conflict=0, must_fill=False, picks_remaining=0,
-               open_starter_count=0, seat_value=0.0, depth_short=0, depth_target=0) -> str:
+               open_starter_count=0, seat_value=0.0, depth_short=0, depth_target=0,
+               depth_tier=DEPTH_NEUTRAL, depth_held=0) -> str:
     """The plain-language sentence shown beside a recommendation.
 
     ⚠️ LOCK-STEP, AND THE WORDING IS PART OF IT: `rationale()` in
@@ -1128,6 +1157,14 @@ def _rationale(pos, level, need_bonus, dropoff, urgency, seat_adj, vor, last_in_
     if depth_short > 0:
         parts.append(f"You asked for {depth_target} {pos}"
                      f"{'' if depth_target == 1 else 's'} \u2014 {depth_short} short")
+    # ⭐ NF-C7c — the CAP half. A demotion the user cannot see reads as the tool ignoring good
+    # players for no reason, which is exactly how the floor-only version was experienced: a target
+    # was set, nothing changed on screen, and there was nothing to point at. Saying so makes the
+    # preference visible AND tells them which number to change.
+    elif depth_tier == DEPTH_SATISFIED:
+        parts.append(f"Ranked below other bench picks \u2014 you asked for "
+                     f"{depth_target} {pos}{'' if depth_target == 1 else 's'} and have "
+                     f"{depth_held}")
     if last_in_tier and dropoff > 0:
         parts.append(f"Last of Tier {tier} \u2014 {_js_round(dropoff)} VOR cliff to the next {pos}")
     # ⚠️ QUOTES `urgency`, NOT `dropoff` — for a FLEX seat the bonus is the gap over the flex POOL,

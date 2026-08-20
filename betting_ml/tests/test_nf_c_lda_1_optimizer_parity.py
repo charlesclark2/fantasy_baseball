@@ -94,6 +94,7 @@ def _python_recommendations(source: dict, scenario: dict) -> list[dict]:
             "seatValue": r.seat_value,
             "orderValue": r.order_value,
             "depthShort": r.depth_short,
+            "depthTier": r.depth_tier,
             "expectedStarts": r.expected_starts,
             "positionalDropoff": r.positional_dropoff,
             "tier": r.tier,
@@ -132,6 +133,19 @@ def test_the_parity_fixture_is_populated_and_exercises_the_engine(parity):
     # Both clauses are ANTI-VACUITY, not behaviour: they assert the fixture REACHES the two NF-C7
     # mechanisms, so the byte-equality test below is actually pinning them. Without these the two
     # engines could agree on depth targets by never once setting one (NF1.7(a)).
+    # ⭐ NF-C7c — the CAP tier must be REACHED by the fixture, not merely agreed upon. A position
+    # the roster has already satisfied is the ONLY state producing `depthTier == 1`; without a
+    # scenario that reaches it, both engines would "agree" about a rule neither ever runs — the
+    # vacuous-guard class this suite exists to prevent.
+    assert any(r["depthTier"] == 1 for r in flat), (
+        "no scenario reaches a SATISFIED depth target — the cap half is unexercised"
+    )
+    assert any(r["depthTier"] == -1 for r in flat), (
+        "no scenario reaches a SHORT depth target — the floor half is unexercised"
+    )
+    assert any(r["depthTier"] == 0 for r in flat), (
+        "no scenario leaves a position NEUTRAL — a target on one position must not move the others"
+    )
     assert any(r["depthShort"] > 0 for r in flat), (
         "no scenario sets a DEPTH TARGET that fires — regenerate the input fixture with "
         "betting_ml/tests/fixtures/_gen_nf_c_lda_1_parity_input.py"
