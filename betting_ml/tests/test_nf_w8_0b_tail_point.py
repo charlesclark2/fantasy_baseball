@@ -551,6 +551,35 @@ class TestDerive0bEndToEnd:
         with pytest.raises(ValueError, match="one field, one rule set"):
             R0B.derive_0b(_out_shell(_fold_results(_make_rows(flat, flat), tmp_path), tmp_path))
 
+    @pytest.mark.parametrize("bias,label", [
+        ({"QB": 0.05, "RB": 0.05, "WR": 0.05, "TE": 0.05}, "closed"),
+        ({"QB": -1.2, "RB": -0.2, "WR": 0.0, "TE": 0.0}, "persisting"),
+    ])
+    def test_the_report_renders_on_every_verdict_it_can_reach(self, tmp_path, pins_pass,
+                                                             bias, label):
+        """⛔ A report renderer that raises would waste the operator's ~50-minute decisive run
+        AFTER every fold had been scored — the record is written last. So the renderer is
+        exercised on each verdict shape, not just the happy one."""
+        out = R0B.derive_0b(_out_shell(
+            _fold_results(_make_rows(bias, bias), tmp_path), tmp_path))
+        path = tmp_path / f"report_{label}.md"
+        R0B.write_report(out, path)
+        txt = path.read_text()
+        assert out["verdict_0b"]["state"] in txt
+        assert "cross_rankable" in txt and "Reproduction pins" in txt
+        assert str(out["materiality_floor"]["floor_ppr"]) in txt
+        for pos in XP.POSITIONS:                     # both reads of the same banks, per position
+            assert f"| {pos} |" in txt
+
+    def test_the_report_renders_on_an_UNDEFINED_path_proof(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(R, "_generator_record_scores", lambda position: {"F1": 2.02})
+        flat = {p: 0.05 for p in XP.POSITIONS}
+        out = R0B.derive_0b(_out_shell(
+            _fold_results(_make_rows(flat, flat, folds=1), tmp_path), tmp_path))
+        path = tmp_path / "report_undefined.md"
+        R0B.write_report(out, path)
+        assert TP.V_UNDEFINED in path.read_text()
+
     def test_the_written_input_carries_the_certified_quantiles_byte_identically(self, tmp_path,
                                                                                 pins_pass):
         """`banks_untouched`: this story changes only how a POINT is READ. A writer that shifted
