@@ -629,7 +629,16 @@ def get_fantasy_prefs(user_id: str) -> dict:
         resp = _users_table().get_item(Key={"user_id": user_id})
         prefs = resp.get("Item", {}).get("fantasy_prefs")
         if prefs:
-            return _from_dynamo(prefs)
+            # ⭐ `_deep_from_dynamo`, NOT `_from_dynamo` — and the difference is a shipped bug.
+            # `_from_dynamo` converts Decimal only at the TOP level of the map it is given. The
+            # counts here live TWO levels down (`fantasy_prefs.depth_targets.RB`), so a shallow
+            # convert returns them as `Decimal`, and `sanitize_depth_targets` tests
+            # `isinstance(v, (int, float))` — which `Decimal` is NEITHER. Every count was silently
+            # dropped on READ while the WRITE landed correctly, so a saved default survived in the
+            # react-query cache and vanished on the next refetch (measured: ~60s, the staleTime, or
+            # any sign-out). `portfolio` above gets away with `_from_dynamo` only because its
+            # numbers are one level deep; `list_fantasy_leagues` already uses the deep converter.
+            return _deep_from_dynamo(prefs)
     except Exception:
         logger.warning("dynamo.get_fantasy_prefs failed for user=%s", user_id)
     return {}
