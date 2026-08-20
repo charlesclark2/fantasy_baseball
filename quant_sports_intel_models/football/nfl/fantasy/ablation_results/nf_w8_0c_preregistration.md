@@ -376,3 +376,206 @@ and no deliberate break — the NF-D17 shape (a clause inside a conjunction whos
 can observe). It is now a three-state function (False when the arm did not act on some fold —
 NF-D20; False when a non-QB bank moved; **None, never True**, when there is no fold to read), with
 one isolating fixture and one RED break per clause.
+
+---
+
+## §12 POST-RUN FINDINGS (appended 2026-08-20 after the decisive 8-fold run; §1–§11 untouched)
+
+Record: `ablation_results/nf_w8_0c_qb_body.{json,md}` · 8 folds × 4 positions · 4000 draws · 3109.3 s.
+⚖️ `best_alpha = 0` · DEPLOY-HELD · this record promotes nothing and writes no optimizer input.
+
+### §12.0 Headline — VERDICT `QB_BODY_GAP_PERSISTS` · `cross_rankable: false`
+
+All seven §7 reproduction pins reproduce at **exactly 0.0**, including `this story's assembly ≡ the
+certified path` (crps gap 0.0, point gap 0.0) and QB `zm_floor`'s CRPS **and** PIT vs NF-W7f.
+
+⚠️ **The registered fall-through prose is WRONG-IN-FACT on this run and is kept VERBATIM.** The
+`V_PERSISTS` string reads *"the QB body gap survives every registered arm"*. It does not. The
+winner `cond_shift` **closes** it — `gap_closed_under_winner: true`, and neither QB|WR (−0.0546,
+p = 0.47) nor QB|TE (−0.0032, p = 0.97) survives BH under it, against −0.3621 / −0.3106 (both BH
+✓) under `identity`. The refusal is **`dsr_ok` ALONE**; the other seven clauses all pass. The state
+is not re-labelled (E2.1-r) — the correction is recorded here, where a reader will meet it.
+
+This is the **fourth consecutive QB/RB story refused by `dsr_ok` alone** (NF-W7f, NF-W7h, NF-W7j,
+now NF-W8-0c), and §12.5 measures — for the first time in the line — *why*.
+
+⚠️ **A GOVERNANCE POINT THE PM MUST SEE, because the result landed exactly in the gap between two
+statements of the same acceptance criterion.** The story card's informal AC reads *"if an arm closes
+the QB body gap WITHOUT breaking QB's PIT/CRPS → the hybrid is cross-rankable"* — and on that
+reading this run **passes**: the gap closes, PIT is preserved (7/7 folds, and the winner's 0.0273 is
+*better* than the incumbent's 0.0297), and CRPS is not harmed (2.5804 vs 2.5852). The pre-registered
+verdict rule (§6) is **stricter**: it requires ALL of `ARM_CLAUSES`, which includes `dsr_ok`. The
+registered rule **binds** — it was committed before any scoring run, and re-reading an acceptance
+bar after seeing a result is the E2.1-r inversion this program exists to avoid. So the verdict is
+`QB_BODY_GAP_PERSISTS` and `cross_rankable` stays **false**.
+
+⛔ This is recorded as a **disclosure, not a request** to relax the gate: it is stated because a
+reader holding the card would otherwise conclude the AC was met and the flag was wrongly withheld.
+If the PM wants the looser reading to govern a *consumption* decision, that is the NF-W7j precedent —
+`dsr_ok` is a SHIPPING gate, and a consumer may act under a registered-forward, caveated,
+second-reader-flagged decision **without** relaxing the ship bar. That is a forward decision on the
+open QB Option-B question (§12.7), never a re-certification of this run.
+
+### §12.1 Family A — the mechanism is measured, and it is ONE per-stat cell
+
+The §3.1 identity holds against the artifact: max identity residual **1.17e-15**, max linearity
+residual **8.88e-16** (tolerance 1e-8), over 5,485 rows × 8 folds.
+
+| channel | PPR | share of the model channel |
+|---|---|---|
+| total QB level bias | **−0.4237** | — |
+| ├ READ (tail-completed point vs grid mean) | +0.0039 | — |
+| └ MODEL | −0.4276 | 100% |
+|   ├ availability | −0.0182 | 4.3% |
+|   └ conditional level | **−0.4094** | **95.7%** |
+
+Per leg, **`passing_yards` carries −0.3975 of the −0.4276 = 93%**, and is the **only** leg above the
+0.05 PPR materiality floor (next largest: `passing_tds` +0.0274). Its own split is availability
+−0.0097 / conditional **−0.3878**.
+
+⇒ **The QB body gap is not an assembly-layer defect at all. It is the conditional level of ONE
+NF-W6d per-stat cell — QB | `passing_yards`** — the same cell NF-W7d/NF-W7f already named as QB's
+binding marginal-layer constraint. Family A converts "the assembly is under-leveled" into a
+one-cell address.
+
+⭐ **Two independent methods converge on the same cell.** NF-W7f reached QB | `passing_yards` from
+the *calibration* side (that cell's recorded predicted P(0) = 0.33 against a realized 0.556 — it
+under-prices its own zero atom). Family A reaches it from the *level* side, with no knowledge of
+that result: an exact additive identity over the served assembly puts 93% of the model channel
+there. A defect two unrelated instruments independently localise to one cell is a much stronger
+successor pointer than either reading alone.
+
+### §12.2 The band decomposition re-closes the tail from an independent direction
+
+Row-pooled grid-mean gap **−0.3512 PPR**. (NF-W8-0b §12.2 records −0.3505 for this construction
+pair; the 0.0007 PPR difference is a pooling-convention difference between two records, not a
+reproduction failure — every *registered* pin reproduces at exactly 0.0. Convention here: pooled
+over ROWS, per NF1.8.)
+
+- the top band **0.900–0.995 contributes +0.0270 PPR = −7.7%** — it moves the **other way**;
+- levels **0.300–0.895 carry ~92%**, and the single largest band is 0.800–0.895 at **28.0%**.
+
+⛔ NF-W8-0b bounded the tail channel DETERMINISTICALLY at 0.0193 PPR (~19× short). A completely
+independent decomposition now agrees, with the extreme band signed against the gap. **The tail
+lever is closed and is not to be re-opened.**
+
+### §12.3 Family B — an arm that closes the gap, refused by the deflation gate alone
+
+7 evaluable folds. 2022H1 is not evaluable **by registration, not by defect**: it is the first
+fold, so there are no prior OOF rows to fit on and every arm is identity by construction (§4). All
+14 arms built and acted on all 8 folds.
+
+Winner **`cond_shift`** (pooled bias −0.4571 → **−0.1059**, a **77% reduction**, one-sided
+**p = 0.0153**), with:
+
+| clause | value |
+|---|---|
+| `pit_preserved` | ✅ PIT 0.0273 vs the inherited 0.05 bar; **7/7** folds clear |
+| `no_crps_harm` | ✅ CRPS 2.5804 vs identity 2.5852 (better; p_harm 0.854) |
+| `reduces_bias` | ✅ p = 0.0153 |
+| `beats_permuted` | ✅ 0.1059 vs the permuted foil's 0.1548 |
+| `degenerates_lose` | ✅ climatology CRPS 4.6057, nihilist 6.5301 vs 2.5804 |
+| `banks_move_deliberately` | ✅ |
+| `pbo_ok` | ✅ **PBO 0.0** |
+| **`dsr_ok`** | ❌ **DSR 0.1654** vs the 0.95 bar — the sole refusal |
+
+Anchors behaved as registered: **`over_cond_shift` LOST** (|bias| 0.2450 vs best real 0.0193) ⇒ the
+magnitude hypothesis is **not** refuted and the fit does not under-correct (NF-D20 / NF-D14 (g′)).
+
+Three readings the leaderboard alone does not give:
+
+- ⭐ **`avail_relevel` is a MEASURED INACTIVE mechanism (NF-D20).** Its own per-form peeking oracle's
+  ceiling is **−0.0018 PPR** — an oracle that *sees the realized outcomes* cannot reduce the bias at
+  all through the availability channel. The clamp binds on **88–95% of rows every fold**, so π is
+  pinned at `pi_floor` by the marginal zero masses and raising it only un-covers ZERO mass. The
+  mixture-weight channel is not weak; it is structurally unable to act on the level. That is a
+  finding, not a failure — and it independently corroborates §12.1's 4.3% availability share.
+- ⭐ **The tie-break is load-bearing, and the flip distribution disagrees with it.** `leg_scale` has
+  the smallest pooled |bias| (**0.0193**) but SE ≈ 0.104, so `cond_shift` (0.1059) falls inside the
+  registered tie band and the **simplicity order** selected it (§4). Yet the flip distribution puts
+  **77.1% of IS-half wins on `leg_scale`** and only **8.6% on `cond_shift`** — and per NF1.8 the flip
+  distribution is the cheapest and most informative of the three deflation reads. ⛔ Not re-read
+  here (E2.1-r); recorded as the successor's registration question (§12.6).
+- **`leg_scale` "captured 104.7%" of its own form's ceiling** (arm |bias| 0.0193 vs its oracle's
+  0.0391). ⛔ **This is NOT a metric inversion.** With pooled-bias SEs of ~0.104 (arm) and ~0.067
+  (oracle) the 0.0198 difference is ~0.2 SE: the anchor pair **TIES**, which per NF-W6d means the
+  per-form ceiling is **INACTIVE / unresolved at this n**, never a refusal. No clause turned on it.
+
+### §12.4 Family C — a genuine architecture disagreement NEITHER side can claim
+
+`ARCHITECTURE_DISAGREEMENT_UNRESOLVED`:
+
+| axis | assembly (`zm_floor`) | `direct_points` | verdict |
+|---|---|---|---|
+| PIT (0.05 bar) | 0.0297 — **7/7 folds clear** | 0.0991 — **0/7 clear** | assembly wins decisively |
+| CRPS | 2.5852 | 2.6011 | **TIE** (mean Δ +0.0159, p = 0.091) |
+| level bias | −0.4571 | **−0.0990** | `direct_points` wins (p = 0.0063) |
+
+⭐ And the sharpest fact in the record: **`direct_points` closes the cross-position gap too**
+(QB|WR −0.0251, QB|TE +0.0264, neither BH). So **both** candidate QB points close it, and the only
+thing separating them is which axis you refuse to lose. The assembled QB is the **only PIT-clearing
+QB distribution on record**; `direct_points` is the better-leveled *point* that is not a calibrated
+distribution at all. The trade is **disclosed, not resolved** — the consumption call is a PM
+decision and this story ships nothing.
+
+### §12.5 ⭐ WHY the deflation gate refuses it — measured, and the lever is NOT the field
+
+`classify_null(declared_field_size=4, degenerates_excluded_from_v=True)` → **`DSR_UNREACHABLE`**:
+the winner's per-fold Sharpe **1.064** sits **below** the 4-arm field's deflated benchmark
+**SR0 1.665**. `n` enters DSR only through `√(n−1)`, which scales a positive gap but cannot create
+one ⇒ **no fold count clears this**. ⛔ No season/fold re-test trigger is published (NF-D18).
+
+MH2.7's guard fired exactly as designed: the instrument's "smaller field" remedy is stamped
+**SUSPECT — NOT ADVICE**, because 4 is the declared §0.5 minimum (≥3 classes + a direct-learned
+foil). We do not shrink it. And the instrument overrode the field instinct outright — *"even a
+2-arm field does not clear at this fold count and dispersion."* ⇒ this is **NF-W7f's counterexample
+shape, not NCAAF-S1's: field coherence is NOT the lever here.**
+
+**What the lever is, measured.** The winner improves |bias| on **6 of 7 folds** (mean +0.2159 PPR,
+SD 0.2029 → Sharpe 1.064); the one loss is 2024H1, where identity was only −0.130 and the fitted
+δ = 0.854 overshot to +0.285. So the improvement's fold-scale noise is inherited from the
+**target's** fold-scale noise — and that decomposes cleanly:
+
+| quantity | value |
+|---|---|
+| observed fold-to-fold SD of the QB level bias | **0.2607** PPR |
+| mean *within-fold* sampling SE at ~685 QB rows/fold | **0.2329** PPR |
+| ⇒ excess (genuine between-fold) SD | **≈ 0.117** PPR |
+
+⭐ **~80% of the fold-scale variance in the quantity being corrected is pure sampling noise at ~685
+rows per fold**, not regime variation. The per-fold improvement is a deterministic function of that
+noisily-measured bias, so **rows-per-fold is the identified lever** — not more seasons, not a
+smaller field, and (contrary to the first reading this decomposition overturned) **not drift-
+tracking**: the sign is stable at **8/8 folds negative**; only the magnitude is noisily measured.
+
+⚠️ Registered bounds on that claim: (a) the lever is *identified*, **not sized** — no projected DSR
+is asserted here, because projecting one is a measurement (NF-W7k's `fp_mc_variance` ceiling method
+is the instrument) and belongs to the successor's registration, not to a post-hoc paragraph; (b)
+rows-per-fold trades against fold count on a fixed window and DSR takes fold count through
+`√(n−1)`, so the design is a thing to **measure, not assume**; (c) NF-W7k already closed the **draw**
+lever for QB deterministically — this is the **row** lever it explicitly left open.
+
+### §12.6 Successors (forward registrations only — nothing here is selected)
+
+1. ⭐ **The substrate (the strongest lead).** §12.1 localises 93% of the model channel to
+   QB | `passing_yards`'s conditional level — a per-stat NF-W6d cell, the same layer NF-W7d/NF-W7f
+   found binding at QB. A fix there is a **marginal-layer** fix carrying a per-stat re-certification
+   cost, not an assembly-layer patch.
+2. **A lower-variance design for this same contest** — a paired per-row bias statistic and/or more
+   rows per fold, sized by a measured ceiling first (§12.5's bounds apply).
+3. **The flip distribution's arm.** `leg_scale` carries 77% of the flip mass and the smallest pooled
+   bias while the registered tie-break chose otherwise. A fresh registration may declare its form
+   primary — ⛔ a FORWARD registration, never a re-cut of this field (MH2.2) — and it inherits the
+   per-leg marginal-drift disclosure §4 already registers.
+
+### §12.7 What ships from this record
+
+**Nothing.** `cross_rankable` stays **false**; raw-point cross-position surfaces and superflex stay
+BLOCKED; NF-W8-0b's shipped input is untouched and no optimizer input is written. NF-W8-0's VOR
+shield stands unchanged — a uniform per-position level artifact cancels in VOR/rank space, so a
+VOR-ranked board is structurally immune, and the block is on the raw-point surfaces and superflex
+where QB is cross-pooled. Every §10 limitation and every inherited promote blocker survives intact.
+
+The **QB Option-B second reader stays OPEN**, and now has two more facts to weigh: the assembled QB
+is the only PIT-clearing QB distribution on record, and its level defect is confined to a single
+per-stat cell.
