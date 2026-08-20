@@ -388,5 +388,14 @@ def daily_ingestion_job():
     s19b = update_pipeline_status(start=s19n)
     s20 = check_prediction_coverage(start=s19b)
     s21 = dbt_mart_prediction_clv(start=s20)
-    s22 = compute_model_health(start=s21)
-    backfill_prediction_log(start=s22)
+    # E11.24 P1 — INC-25 ORDERING FIX (this pair was the WRONG way round).
+    # `backfill_prediction_log` is the op that WRITES yesterday's actual_outcome /
+    # closing_market_prob into the S3 prediction_log; `compute_model_health` READS that
+    # same table over its rolling 14-day window. Running the reader FIRST meant the
+    # health metric was always computed one enrichment cycle behind its own producer —
+    # the exact "a consumer must be rebuilt DOWNSTREAM of the refresh that feeds it, in
+    # the SAME run" rule INC-25 exists for. Now: enrich, then measure.
+    # Both are monitoring-only and terminal (nothing depends on either), so the swap
+    # cannot reach the serving path.
+    s22 = backfill_prediction_log(start=s21)
+    compute_model_health(start=s22)

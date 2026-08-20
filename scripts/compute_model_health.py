@@ -6,15 +6,29 @@ prediction target and write a row to baseball_data.betting_ml.model_health_log.
 
 Exits non-zero if ECE > 0.04 (2× the elasticnet baseline of 0.0202).
 
+E11.24 P1 — the prediction_log READ is now DuckDB-over-S3, not Snowflake. This is the
+only live reader of that table (the other, app/pages/4_Model_Performance.py, is the
+deprecated Streamlit UI), which is what made migrating the whole table safe.
+
+⚠️ RESIDUAL, STATED PLAINLY: the model_health_log WRITE is still Snowflake, so this
+script still RESUMES COMPUTE_WH once a day. The success metric for E11.24 P1 is "does
+COMPUTE_WH suspend across 14:00-03:00 UTC", and this write is one of the statements that
+can keep it awake — removing one waker only promotes the next (#679: wake is a queue).
+Measured while migrating: `model_health_log` has ZERO readers anywhere in the repo (only
+its own writer and its DDL), so flipping it to S3 is nearly free — but it is a SECOND
+table migration and therefore a separate, explicit decision, not something this story
+took on its own authority.
+
 Usage:
     uv run python scripts/compute_model_health.py
     uv run python scripts/compute_model_health.py --target home_win
     uv run python scripts/compute_model_health.py --target home_win --date 2026-05-01
 
-Snowflake auth env vars (same pattern as other scripts):
+Snowflake auth env vars (for the model_health_log WRITE only):
     SNOWFLAKE_ACCOUNT, SNOWFLAKE_USER, SNOWFLAKE_WAREHOUSE
     SNOWFLAKE_PRIVATE_KEY_PATH  (preferred)  or  SNOWFLAKE_PASSWORD
     SNOWFLAKE_ROLE              (optional)
+AWS creds (default chain) for the prediction_log read.
 """
 
 from __future__ import annotations
@@ -22,7 +36,15 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import sys
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    # `_run_script` invokes this by ABSOLUTE path, so sys.path[0] is scripts/, not the
+    # repo root — `from scripts.utils import ...` would not resolve without this.
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 from dotenv import load_dotenv
 
@@ -53,10 +75,6 @@ def _get_connection() -> snowflake.connector.SnowflakeConnection:
     # file-path→password resolver KeyError'd on the box. Delegate to the shared
     # PATH-if-exists→inline→password resolver. Queries are fully-qualified, so the default
     # schema is immaterial. See CLAUDE.md INC-22 landmine.
-    import sys as _sys
-    _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if _root not in _sys.path:
-        _sys.path.insert(0, _root)
     from betting_ml.utils.data_loader import get_snowflake_connection
     return get_snowflake_connection(schema=_ML_SCHEMA_NAME)
 
@@ -87,6 +105,44 @@ def compute_brier(probs: np.ndarray, outcomes: np.ndarray) -> float:
 
 
 # ---------------------------------------------------------------------------
+# prediction_log read  (E11.24 P1 — DuckDB over S3, Snowflake-free)
+# ---------------------------------------------------------------------------
+
+
+def _fetch_prediction_log(market: str, window_start: date, run_date: date,
+                          model_version: str | None) -> list[tuple[float, float]]:
+    """Rolling-window (model_prob, actual_outcome) pairs from the S3 prediction_log.
+
+    The view registered by `prediction_log_store` collapses the append-per-batch part
+    files to one row per (prediction_date, game_pk, market) — a raw glob would count every
+    superseded snapshot and silently inflate `sample_n`. It also degrades to an EMPTY
+    typed relation when the prefix holds no parquet yet, so a pre-migration run reports
+    "no rows" (and skips its write) instead of crashing a monitoring op.
+    """
+    from scripts.utils import prediction_log_store as pred_log
+
+    sql = """
+        SELECT model_prob, actual_outcome
+        FROM prediction_log
+        WHERE market = $market
+          AND prediction_date >= $start
+          AND prediction_date <  $end
+          AND actual_outcome IS NOT NULL
+          AND model_prob IS NOT NULL
+    """
+    params = {"market": market, "start": window_start, "end": run_date}
+    if model_version:
+        sql += "          AND model_version = $version\n"
+        params["version"] = model_version
+
+    conn = pred_log.connect()
+    try:
+        return [(float(r[0]), float(r[1])) for r in conn.execute(sql, params).fetchall()]
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -107,37 +163,7 @@ def run(target: str, run_date: date, model_version: str | None = None) -> None:
     log.info("Fetching prediction_log rows for target=%s version=%s window=[%s, %s]",
              target, model_version or "all", window_start, run_date)
 
-    if model_version:
-        fetch_sql = """
-            SELECT model_prob, actual_outcome
-            FROM baseball_data.config.prediction_log
-            WHERE market = %s
-              AND prediction_date >= %s
-              AND prediction_date < %s
-              AND actual_outcome IS NOT NULL
-              AND model_prob IS NOT NULL
-              AND model_version = %s
-        """
-        fetch_params = (market, window_start.isoformat(), run_date.isoformat(), model_version)
-    else:
-        fetch_sql = """
-            SELECT model_prob, actual_outcome
-            FROM baseball_data.config.prediction_log
-            WHERE market = %s
-              AND prediction_date >= %s
-              AND prediction_date < %s
-              AND actual_outcome IS NOT NULL
-              AND model_prob IS NOT NULL
-        """
-        fetch_params = (market, window_start.isoformat(), run_date.isoformat())
-
-    con = _get_connection()
-    try:
-        cur = con.cursor()
-        cur.execute(fetch_sql, fetch_params)
-        rows = cur.fetchall()
-    finally:
-        con.close()
+    rows = _fetch_prediction_log(market, window_start, run_date, model_version)
 
     sample_n = len(rows)
     log.info("Fetched %d prediction_log rows with outcomes", sample_n)
