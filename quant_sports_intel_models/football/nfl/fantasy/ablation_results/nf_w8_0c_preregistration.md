@@ -421,6 +421,13 @@ NF-W6d per-stat cell — QB | `passing_yards`** — the same cell NF-W7d/NF-W7f 
 binding marginal-layer constraint. Family A converts "the assembly is under-leveled" into a
 one-cell address.
 
+⭐ **Two independent methods converge on the same cell.** NF-W7f reached QB | `passing_yards` from
+the *calibration* side (that cell's recorded predicted P(0) = 0.33 against a realized 0.556 — it
+under-prices its own zero atom). Family A reaches it from the *level* side, with no knowledge of
+that result: an exact additive identity over the served assembly puts 93% of the model channel
+there. A defect two unrelated instruments independently localise to one cell is a much stronger
+successor pointer than either reading alone.
+
 ### §12.2 The band decomposition re-closes the tail from an independent direction
 
 Row-pooled grid-mean gap **−0.3512 PPR**. (NF-W8-0b §12.2 records −0.3505 for this construction
