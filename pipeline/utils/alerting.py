@@ -124,8 +124,20 @@ def send_alert(
     body = f"severity: {severity}\n\n{message}\n"
     try:
         import boto3
+        from botocore.config import Config
 
-        boto3.client("sns", region_name=_region()).publish(
+        # E11.26 — a BOUNDED publish. botocore's defaults are connect/read 60s with legacy-mode
+        # retries (up to 5 attempts), so an unreachable or throttling SNS could stall a caller for
+        # ~5 minutes. That is worst on the path that matters most: this function is called from
+        # inside ops precisely WHEN they are already failing and slow (the intraday tick's
+        # per-leg failure page), so an unbounded page compounds the very overrun it is reporting.
+        # Retries are kept (a page must survive a transient throttle), just capped.
+        _sns_cfg = Config(
+            connect_timeout=5,
+            read_timeout=10,
+            retries={"max_attempts": 3, "mode": "standard"},
+        )
+        boto3.client("sns", region_name=_region(), config=_sns_cfg).publish(
             TopicArn=arn, Subject=full_subject, Message=body
         )
         _LAST_SENT[key] = now

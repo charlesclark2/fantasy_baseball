@@ -41,7 +41,9 @@ def test_intraday_schedule_rebuilds_lineups_wide_after_games_and_before_refresh(
     # written as literal call args or as loop items.
     i_w3 = body.index('"--w3pre-only"')
     i_w7 = body.index('"--w7b-only"')
-    i_refresh = body.index('"refresh_w1_external_tables.py")')
+    # E11.26 re-anchor: the refresh call gained `timeout=_TICK_LEG_TIMEOUT`, so the trailing `)`
+    # is no longer adjacent. The ORDERING invariant this test exists for is untouched.
+    i_refresh = body.index('"refresh_w1_external_tables.py"')
     assert i_w3 < i_w7 < i_refresh, "order must be --w3pre-only → --w7b-only → refresh"
 
 
