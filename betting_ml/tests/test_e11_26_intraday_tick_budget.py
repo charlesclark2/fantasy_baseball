@@ -364,6 +364,41 @@ def test_the_dagster_instance_actually_enforces_the_concurrency_group():
     )
 
 
+def test_the_documented_page_severity_matches_the_sensors_actual_tier_set():
+    """E11.26 follow-up. The op docstring and CLAUDE.md's tier row state that a failure of this job
+    pages at ERROR. That is a claim about `run_failure_alert_sensor._HALT_TIER_JOBS`, which lives in
+    a different file and can change without anyone re-reading the prose — the "a tier label enforced
+    only by a docstring is not enforced at all" class (E11.30). Pin the two together.
+
+    Source-inspection, not import: the sensor lives under `pipeline`, which the fast gate must not
+    import."""
+    sensor_src = (_REPO / "pipeline" / "sensors" / "run_failure_alert_sensor.py").read_text()
+    tree = ast.parse(sensor_src)
+    halt = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "_HALT_TIER_JOBS" for t in node.targets
+        ):
+            halt = ast.literal_eval(node.value)
+    assert halt, "_HALT_TIER_JOBS not found in run_failure_alert_sensor.py"
+
+    docstring = _func(_OPS, "intraday_schedule_capture").body[0].value.value
+    if "intraday_schedule_job" in halt:
+        pytest.fail(
+            "intraday_schedule_job was added to _HALT_TIER_JOBS, so its failures now page CRITICAL "
+            "— update the ERROR claim in intraday_schedule_capture's docstring and CLAUDE.md's "
+            "op-tier row (and this guard) in the same change"
+        )
+    assert "**ERROR**" in docstring, (
+        "the docstring must state the severity the sensor actually uses (ERROR, because "
+        "intraday_schedule_job is not in _HALT_TIER_JOBS)"
+    )
+    assert "not CRITICAL" in docstring or "NOT CRITICAL" in docstring, (
+        "the docstring must say explicitly that this is NOT CRITICAL — the op being HALT-tier "
+        "invites exactly that misreading (it was wrong in the first cut of this story)"
+    )
+
+
 def test_the_sns_publish_is_bounded():
     """The page fires exactly when the tick is already failing and slow, so an unbounded publish
     (botocore defaults: 60s connect + 60s read, up to 5 attempts) compounds the overrun it reports."""

@@ -544,7 +544,13 @@ def intraday_schedule_capture(context: OpExecutionContext) -> None:
     1800s default (which IS this job's own 30-minute cadence, so it bounded nothing useful). A
     timeout is a CLEAN LOUD FAILURE in both tiers, never a swallow:
       * the ingest leg raises out of the op → the job fails → `run_failure_alert_sensor` pages
-        CRITICAL (HALT-tier: a stale schedule builds the whole slate on the wrong universe, INC-37);
+        (⚠️ at **ERROR**, not CRITICAL: that sensor monitors every job but reserves CRITICAL for the
+        four names in its `_HALT_TIER_JOBS` set, and `intraday_schedule_job` is deliberately not one
+        of them. The HALT tier is about this OP's behaviour — it raises rather than swallowing — not
+        about the page's severity. ERROR is the right level for a 30-minute tick: a single missed
+        capture is not slate-fatal because the next tick is 30 minutes away, and the slate-fatal
+        version of this failure is `ingest_statsapi_schedule` inside the DAILY job, which INC-37
+        moved to `s6` and which IS in `_HALT_TIER_JOBS`);
       * a rebuild leg's timeout is caught per-leg, recorded in `_legs_failed`, and paged CRITICAL
         through the INC-41 `send_alert` path — the OTHER leg still runs, which is the independence
         INC-41 exists to preserve and which a run-level termination would destroy.
