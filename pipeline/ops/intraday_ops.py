@@ -5,6 +5,10 @@ import sys
 from dagster import In, Nothing, OpExecutionContext, Out, SkipReason, op
 
 from betting_ml.monitoring.alert_text import exc_digest  # INC-42 — page the TAIL, not the head
+from betting_ml.monitoring.intraday_tick_budget import (  # E11.26 — cadence-derived tick budget
+    LEG_TIMEOUT_SECONDS as _TICK_LEG_TIMEOUT,
+)
+from betting_ml.utils.bounded_subprocess import run_bounded  # E11.26 — kills the process GROUP
 from betting_ml.utils.game_day import current_game_date_iso  # INC-22 — canonical US baseball-day
 from pipeline.ops._dbt_exec import _run_dbt
 
@@ -32,9 +36,20 @@ def _run_script(context: OpExecutionContext, script: str, args: list[str] | None
     env = {**os.environ, "DAGSTER_JOB_NAME": context.job_name}
     context.log.info(f"Running: {' '.join(cmd)} (timeout {timeout}s)")
     try:
-        result = subprocess.run(cmd, env=env, capture_output=True, text=True, cwd=APP_DIR, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        raise Exception(f"{os.path.basename(script)} exceeded {timeout}s hard timeout and was killed")
+        # E11.26 — run_bounded, not subprocess.run: it starts the child in its OWN process group
+        # and kills the GROUP on expiry (and on a Dagster run-monitoring termination, which the
+        # new `dagster/max_runtime` ceiling makes a routine path). subprocess.run kills only the
+        # direct child, so an orphaned grandchild kept burning one of the box's two vCPUs — a
+        # pinned box starves the Dagster daemon, which is the compounding half of INC-32.
+        result = run_bounded(cmd, env=env, cwd=APP_DIR, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        # INC-42 — the diagnosis is at the TAIL of the child's output, so surface it rather than
+        # raising a bare "it timed out" that pages identically for every cause.
+        tail = ((exc.stdout or "") + (exc.stderr or ""))[-2000:]
+        raise Exception(
+            f"{os.path.basename(script)} exceeded {timeout}s hard timeout and its process group "
+            f"was KILLED (E11.26 tick budget)\n(output tail)\n{tail}"
+        ) from exc
     if result.stdout:
         context.log.info(result.stdout)
     if result.stderr:
@@ -189,7 +204,7 @@ def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
     for _flag, _what in (("--w3pre-only", "game-state + odds flatten"),
                          ("--w7b-only", "lineups_wide / probable_pitchers")):
         try:
-            _run_script(context, "run_w1_lakehouse.py", [_flag])
+            _run_script(context, "run_w1_lakehouse.py", [_flag], timeout=_TICK_LEG_TIMEOUT)
         except Exception as exc:  # noqa: BLE001 — ALERT-loud-but-continue, per leg
             # INC-42 — ⛔ NOT `str(exc)[:300]`. `_run_script` raises with the child's ENTIRE
             # traceback, whose payload (the exception type + message) is at the TAIL, so a head
@@ -210,7 +225,7 @@ def _schedule_lakehouse_intraday(context: OpExecutionContext) -> None:
                 "the SF ext tables intraday post-W7b-2; the --w3pre/--w7b S3 parquet is the read source."
             )
         else:
-            _run_script(context, "refresh_w1_external_tables.py")
+            _run_script(context, "refresh_w1_external_tables.py", timeout=_TICK_LEG_TIMEOUT)
     except Exception as exc:  # ALERT-loud-but-continue — never crash the schedule capture op
         _legs_failed.append(("refresh_w1_external_tables", exc_digest(exc)))  # INC-42 (tail, not head)
         context.log.warning(f"⚠️ external-table refresh FAILED: {exc}")
@@ -522,6 +537,18 @@ def intraday_public_betting_capture(context: OpExecutionContext) -> None:
 
 @op(out=Out(Nothing))
 def intraday_schedule_capture(context: OpExecutionContext) -> None:
+    """E11.7 tier: **HALT** for the schedule ingest, **ALERT-loud-but-continue** for the lakehouse
+    legs it fans into (`_schedule_lakehouse_intraday`) — the split INC-37 and INC-41 established.
+
+    E11.26 — every leg is capped at the cadence-derived `LEG_TIMEOUT_SECONDS`, not the module's
+    1800s default (which IS this job's own 30-minute cadence, so it bounded nothing useful). A
+    timeout is a CLEAN LOUD FAILURE in both tiers, never a swallow:
+      * the ingest leg raises out of the op → the job fails → `run_failure_alert_sensor` pages
+        CRITICAL (HALT-tier: a stale schedule builds the whole slate on the wrong universe, INC-37);
+      * a rebuild leg's timeout is caught per-leg, recorded in `_legs_failed`, and paged CRITICAL
+        through the INC-41 `send_alert` path — the OTHER leg still runs, which is the independence
+        INC-41 exists to preserve and which a run-level termination would destroy.
+    """
     # INC-37 — --lookahead-days 3: run_schedule iterates WHOLE months, so on the last day of a
     # month `--end-date today` fetches ONLY that month and the captured blob holds ZERO games for
     # the 1st of the next month. The daily lakehouse build then flattens a schedule that stops at
@@ -543,7 +570,7 @@ def intraday_schedule_capture(context: OpExecutionContext) -> None:
         "--lookahead-days", "3",
         "--lookback-days", "3",
         "--capture-reason", "intraday_gameday",
-    ])
+    ], timeout=_TICK_LEG_TIMEOUT)
     # Propagate the freshly-captured native snapshot to the S3 lakehouse so prod's
     # game-state (stg_statsapi_games) stops lagging a full ingest cycle behind native —
     # the Preview-stuck root cause. Gated/ALERT-tier no-op until the operator enables it.
@@ -587,4 +614,4 @@ def intraday_lineup_rebuild(context: OpExecutionContext) -> None:
         "stg_statsapi_lineups_wide",
         "stg_statsapi_probable_pitchers",
         "--target", "baseball_betting_and_fantasy",
-    ])
+    ], timeout=_TICK_LEG_TIMEOUT)
