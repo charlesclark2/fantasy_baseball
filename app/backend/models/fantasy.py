@@ -471,3 +471,123 @@ class BigBoard(_BigBoardFields):
     board_key: str
     created_at: str | None = None
     updated_at: str | None = None
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-C-LDA-1 — the LIVE DRAFT ASSISTANT request
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# What the Chrome extension sends us from an ESPN draft room. Two properties are load-bearing and
+# both are enforced here rather than trusted:
+#
+#   1. ⛔ IT IS NORMALIZED DATA ONLY — the identity fields ESPN publishes for each player, plus who
+#      took whom. NO session cookie, NO request headers, NO raw response bodies. The extension's own
+#      wire serializer builds this shape from an allowlist (`extension/src/wire.js`), and these
+#      models are the second, server-side statement of the same contract: an unknown field is
+#      REJECTED, not stored (`extra="forbid"`, deliberately unlike the league models — a draft
+#      request is transient, so there is no deploy-skew reason to accept unknown keys, and refusing
+#      them is what makes "we only ever receive these fields" checkable).
+#
+#   2. ⭐ POSITION AND TEAM ARE NOT ACCEPTED FROM THE CLIENT. The pool rows carry ESPN's raw
+#      `defaultPositionId`/`eligibleSlots`/`proTeamId` and the SERVER derives from them, using the
+#      same `platform_import.espn._player_position` the paste import uses. Deriving in the browser
+#      would be a second position derivation, and the two-way-player fix (`Travis Hunter`) would
+#      have landed on the server while the overlay kept the old answer.
+
+#: A real ESPN draftable pool measured 1,027 rows; the whole player universe is ~11,600. Generous
+#: enough for either, and a bound on what reaches the join.
+MAX_DRAFT_POOL = 4000
+#: A 12-team league drafts 180-240 players; 32 teams x 40 slots is 1,280.
+MAX_DRAFT_PICKS = 1500
+
+
+class DraftPoolEntry(BaseModel):
+    """One player ESPN published in the draft room's pool — identity fields only."""
+
+    model_config = {"extra": "forbid"}
+
+    id: str
+    fullName: str = ""
+    proTeamId: int | None = None
+    defaultPositionId: int | None = None
+    eligibleSlots: list[int] = Field(default_factory=list)
+
+    @field_validator("id", mode="before")
+    @classmethod
+    def _coerce_id(cls, v):
+        # ESPN player ids are integers in the payload and strings everywhere in our join.
+        return "" if v is None else str(v)
+
+    @field_validator("eligibleSlots")
+    @classmethod
+    def _bound_slots(cls, v: list[int]) -> list[int]:
+        return v[:40]
+
+
+class DraftPick(BaseModel):
+    """One `SELECTED <teamId> <playerId>` frame from the live draft socket, in pick order."""
+
+    model_config = {"extra": "forbid"}
+
+    team: str
+    player: str
+
+    @field_validator("team", "player", mode="before")
+    @classmethod
+    def _coerce(cls, v):
+        return "" if v is None else str(v)
+
+
+class DraftAssistantRequest(BaseModel):
+    """A live draft state → a recommendation.
+
+    ⚠️ `league_id` XOR `espn_settings`: the caller either names one of their own SAVED leagues, or
+    hands us the draft room's own settings block, which we translate with the SHIPPED ESPN adapter
+    (`parse_settings_payload`, `assert_no_credentials` included). A mock draft has no saved league,
+    and mock is the only surface a draft tool can be developed against — a real league drafts once a
+    year — so the settings path is not a convenience, it is what makes this debuggable at all.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    season: int = Field(default=2026, ge=2000, le=2100)
+    league_id: str | None = None
+    espn_settings: dict | None = None
+
+    pool: list[DraftPoolEntry] = Field(default_factory=list)
+    picks: list[DraftPick] = Field(default_factory=list)
+    #: ESPN's team id for the CALLER's own team, read from the draft-room URL (`teamId=`). Without
+    #: it we can rank the board but cannot fill a roster, so the response says so rather than
+    #: silently recommending as though the roster were empty.
+    my_team: str | None = None
+    #: Whose pick it is now (`SELECTING <teamId>`), and which overall pick that is. ⭐ ECHOED BACK
+    #: in the response so the overlay can SHOW which pick the advice is about — a frozen read then
+    #: looks frozen instead of looking like a quiet draft (see the router's docstring).
+    on_the_clock_team: str | None = None
+    overall_pick: int | None = Field(default=None, ge=0, le=10000)
+    top_n: int = Field(default=8, ge=1, le=50)
+
+    @field_validator("pool")
+    @classmethod
+    def _bound_pool(cls, v: list[DraftPoolEntry]) -> list[DraftPoolEntry]:
+        if len(v) > MAX_DRAFT_POOL:
+            raise ValueError(f"pool is larger than {MAX_DRAFT_POOL} rows")
+        return v
+
+    @field_validator("picks")
+    @classmethod
+    def _bound_picks(cls, v: list[DraftPick]) -> list[DraftPick]:
+        if len(v) > MAX_DRAFT_PICKS:
+            raise ValueError(f"more than {MAX_DRAFT_PICKS} picks")
+        return v
+
+    @field_validator("my_team", "on_the_clock_team", "league_id", mode="before")
+    @classmethod
+    def _coerce_optional(cls, v):
+        return None if v is None else str(v)
+
+    @model_validator(mode="after")
+    def _needs_exactly_one_league_source(self):
+        if bool(self.league_id) == bool(self.espn_settings):
+            raise ValueError("provide exactly one of league_id or espn_settings")
+        return self

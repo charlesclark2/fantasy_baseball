@@ -1,0 +1,998 @@
+{
+  "story": "NCAAF-P2.5",
+  "decided_at": "2026-08-19",
+  "smoke": false,
+  "verdict": "REFERENCE_STANDS",
+  "survivors": [],
+  "best_arm": "key_number",
+  "n_folds": 8,
+  "fold_years": [
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "declared_field_size": 10,
+  "n_trials": 10,
+  "var_trials_sr_real_arms_only": 0.903946,
+  "run_validity": {
+    "reproduction_check": {
+      "served_record": "ncaaf_s1_serve_calibration.json",
+      "status": "PASS",
+      "n_oos_pooled": 6024,
+      "n_oos_served": 6024,
+      "refit": {
+        "sigma_margin": 16.0848,
+        "sigma_total": 16.6424,
+        "rho": 0.054
+      },
+      "served": {
+        "sigma_margin": 16.0848,
+        "sigma_total": 16.6424,
+        "rho": 0.054
+      },
+      "delta": {
+        "sigma_margin": 0.0,
+        "sigma_total": 0.0
+      },
+      "tol_points": 0.25,
+      "note": "a FAIL means the foil is not the served config \u2014 most likely a stale feature cache \u2014 and the whole leaderboard would be a comparison against a stranger."
+    },
+    "anchors": {
+      "expectations": {
+        "permute": "must LOSE to cond_het (it destroys the conditional structure while preserving the marginal); it lands at/near the incumbent, and beating cond_het would mean the conditional-variance channel is not real",
+        "zero_width": "must LOSE the metric AND FAIL the coverage floor (maximally sharp)",
+        "max_width": "must SATISFY the coverage floor and LOSE the metric \u2014 the NF1.8 proof that the floor is a CONSTRAINT a degenerate satisfies, not a criterion it wins",
+        "coverage_target": "must SATISFY the coverage constraint and LOSE the metric \u2014 the E2.1-r proof that calib_80 is a FLOOR and never a target"
+      },
+      "per_form_oracle": {
+        "incumbent": {
+          "pooled_crps_total": 9.40526,
+          "own_form_peeking_oracle": 9.39892,
+          "self_consistency_crps": 9.56473,
+          "gap": 0.00634,
+          "state": "OK"
+        },
+        "cond_het": {
+          "pooled_crps_total": 9.44038,
+          "own_form_peeking_oracle": 9.36747,
+          "self_consistency_crps": 9.70178,
+          "gap": 0.07291,
+          "state": "OK"
+        },
+        "student_t": {
+          "pooled_crps_total": 9.40623,
+          "own_form_peeking_oracle": 9.39989,
+          "self_consistency_crps": 9.52287,
+          "gap": 0.00634,
+          "state": "OK"
+        },
+        "skew_normal": {
+          "pooled_crps_total": 9.39268,
+          "own_form_peeking_oracle": 9.3805,
+          "self_consistency_crps": 9.55535,
+          "gap": 0.01218,
+          "state": "OK"
+        },
+        "skew_t": {
+          "pooled_crps_total": 9.39313,
+          "own_form_peeking_oracle": 9.3807,
+          "self_consistency_crps": 9.52432,
+          "gap": 0.01243,
+          "state": "OK"
+        },
+        "mixture": {
+          "pooled_crps_total": 9.40697,
+          "own_form_peeking_oracle": 9.38732,
+          "self_consistency_crps": 9.58575,
+          "gap": 0.01965,
+          "state": "OK"
+        },
+        "copula": {
+          "pooled_crps_total": 9.39622,
+          "own_form_peeking_oracle": 9.38134,
+          "self_consistency_crps": 9.58377,
+          "gap": 0.01488,
+          "state": "OK"
+        },
+        "home_away": {
+          "pooled_crps_total": 9.46567,
+          "own_form_peeking_oracle": 9.455,
+          "self_consistency_crps": 11.01667,
+          "gap": 0.01067,
+          "state": "OK"
+        },
+        "key_number": {
+          "pooled_crps_total": 9.37661,
+          "own_form_peeking_oracle": 9.38077,
+          "self_consistency_crps": 9.31785,
+          "gap": -0.00416,
+          "state": "BEATEN"
+        },
+        "quantile_boost": {
+          "pooled_crps_total": 9.43566,
+          "own_form_peeking_oracle": 9.21659,
+          "self_consistency_crps": 9.83632,
+          "gap": 0.21907,
+          "state": "OK"
+        },
+        "permute": {
+          "pooled_crps_total": 9.43463,
+          "own_form_peeking_oracle": 9.42929,
+          "self_consistency_crps": 9.48436,
+          "gap": 0.00534,
+          "state": "OK"
+        },
+        "zero_width": {
+          "pooled_crps_total": 11.83017,
+          "own_form_peeking_oracle": 11.82974,
+          "self_consistency_crps": 1.69184,
+          "gap": 0.00043,
+          "state": "INACTIVE_TIE"
+        },
+        "max_width": {
+          "pooled_crps_total": 14.01781,
+          "own_form_peeking_oracle": 13.86013,
+          "self_consistency_crps": 28.69419,
+          "gap": 0.15768,
+          "state": "OK"
+        },
+        "coverage_target": {
+          "pooled_crps_total": 9.404,
+          "own_form_peeking_oracle": 9.39868,
+          "self_consistency_crps": 9.46337,
+          "gap": 0.00532,
+          "state": "OK"
+        }
+      },
+      "oracle_beaten_arms": [
+        "key_number"
+      ],
+      "oracle_floor_ok": false,
+      "oracle_floor_ok_field_sanity": true,
+      "permute": {
+        "permute_crps": 9.43463,
+        "cond_het_crps": 9.44038,
+        "permute_minus_cond_het": -0.00575,
+        "loses_to_cond_het": false,
+        "tie": false,
+        "reading": "a TIE means the conditional-variance channel carries no information beyond the marginal \u2014 which is a finding about the DRIVERS, not a broken anchor"
+      },
+      "zero_width": {
+        "pooled_crps_total": 11.83017,
+        "total_calib_80": 0.1819,
+        "margin_calib_80": 0.1972,
+        "satisfies_coverage_floor": false,
+        "loses_the_metric": true
+      },
+      "max_width": {
+        "pooled_crps_total": 14.01781,
+        "total_calib_80": 0.999,
+        "margin_calib_80": 0.9998,
+        "satisfies_coverage_floor": true,
+        "loses_the_metric": true
+      },
+      "coverage_target": {
+        "pooled_crps_total": 9.404,
+        "total_calib_80": 0.8013,
+        "margin_calib_80": 0.7981,
+        "satisfies_coverage_floor": true,
+        "loses_the_metric": false,
+        "clauses": {
+          "C1_total_pit_flat": {
+            "ok": true,
+            "pit_dev": 0.0178,
+            "pit_mean_dev": 0.0149
+          },
+          "C2_total_pit_repaired": {
+            "ok": false,
+            "foil": 0.017,
+            "arm": 0.0178,
+            "improvement": -0.0008,
+            "required": 0.001
+          },
+          "C3_margin_pit_flat": {
+            "ok": true,
+            "pit_dev": 0.0072
+          },
+          "C4_coverage_floor": {
+            "ok": true,
+            "total": 0.8013,
+            "margin": 0.7981,
+            "floor": 0.78
+          },
+          "C5_tail_crps": {
+            "ok": true,
+            "arm": 5.49366,
+            "foil": 5.49348
+          },
+          "C6_joint_calibration": {
+            "ok": true,
+            "arm": 0.0127,
+            "foil": 0.013
+          },
+          "C7_mean_preserved": {
+            "ok": true,
+            "max_abs_shift": 0.0273,
+            "tol": 0.15
+          },
+          "all_ok": false
+        },
+        "ships_under_the_full_rule": false
+      },
+      "measurement_valid": true,
+      "selection_hygiene": {
+        "coverage_target_satisfies_floor": true,
+        "coverage_target_loses_crps": false,
+        "coverage_target_wins_the_selection": false,
+        "ok": true,
+        "note": "the pre-registered wording was 'must LOSE the metric'. Reported verbatim above as `coverage_target_loses_crps`; the BINDING reading is `coverage_target_wins_the_selection`, because the selection is the full ship rule (CRPS primary + C1..C7), not the CRPS number alone. A pure \u03c3-rescale carries NO shape change and therefore cannot satisfy C2 \u2014 which is exactly the proof that coverage is a floor and never a target."
+      },
+      "mechanism_findings": {
+        "conditional_variance_channel_is_real": false,
+        "permute_minus_cond_het": -0.00575,
+        "reading": "REPORTED, never a validity gate. `permute` is `cond_het` with the driver rows SHUFFLED against the residuals: it destroys the conditional structure and leaves the marginal untouched. If the shuffled fit BEATS the real one, the registered variance drivers carry no information beyond the marginal and the real fit is paying an overfitting cost for them \u2014 a clean NEGATIVE result about the drivers, not a broken measurement."
+      },
+      "all_anchors_behaved": true
+    },
+    "valid": true
+  },
+  "deflation": {
+    "pbo": 0.0,
+    "pbo_gate": 0.2,
+    "pbo_pass": true,
+    "n_buckets": 32,
+    "n_cscv_combos": 1000,
+    "dsr_gate": 0.95,
+    "bh_alpha": 0.05,
+    "bh_cutoff": 0.005556
+  },
+  "pbo_companions": {
+    "contender_spread_crps": 0.08906,
+    "contender_spread_pct_of_foil": 0.9469,
+    "fold_flip_distribution": {
+      "incumbent": 0,
+      "cond_het": 0,
+      "student_t": 1,
+      "skew_normal": 1,
+      "skew_t": 0,
+      "mixture": 0,
+      "copula": 0,
+      "home_away": 0,
+      "key_number": 6,
+      "quantile_boost": 0
+    },
+    "reading": "E2.1-r: a HIGH PBO over a field whose candidates genuinely TIE is the NULL \u2014 'which tied candidate wins is noise' \u2014 not evidence of overfitting; a high PBO with a WIDE spread IS overfitting. The SPREAD is the discriminator, so it is reported beside the flip distribution."
+  },
+  "foil": {
+    "arm": "incumbent",
+    "pooled_crps_total": 9.40526,
+    "pooled": {
+      "n": 6024,
+      "total_pit_dev": 0.017,
+      "total_pit_mean_dev": 0.0147,
+      "total_pit_flat": true,
+      "total_calib_80": 0.8073,
+      "margin_pit_dev": 0.0089,
+      "margin_pit_flat": true,
+      "margin_calib_80": 0.7983,
+      "h2h_brier": 0.1814,
+      "joint_home_pts_pit_dev": 0.0116,
+      "joint_away_pts_pit_dev": 0.013,
+      "joint_joint_pit_dev": 0.013,
+      "joint_home_pts_pit_flat": true,
+      "joint_away_pts_pit_flat": true
+    },
+    "pooled_tail_crps_total": 5.49348
+  },
+  "arms": {
+    "cond_het": {
+      "arm": "cond_het",
+      "doc_item": "bivariate Gaussian w/ conditional heteroskedasticity",
+      "pooled_crps_total": 9.44038,
+      "gain_vs_foil": -0.03512,
+      "tie_with_foil": false,
+      "nests_foil": true,
+      "collapse_at": "\u03b3 = the log_strength_var term alone",
+      "fold_wins": 0,
+      "n_folds": 8,
+      "sharpe": -1.2449,
+      "series_skew": -0.5798,
+      "series_kurt": 2.6582,
+      "dsr": 0.0,
+      "sr0": 1.4971,
+      "p_one_sided": 0.995143,
+      "bh_pass": false,
+      "clauses": {
+        "C1_total_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0148,
+          "pit_mean_dev": 0.014
+        },
+        "C2_total_pit_repaired": {
+          "ok": true,
+          "foil": 0.017,
+          "arm": 0.0148,
+          "improvement": 0.0022,
+          "required": 0.001
+        },
+        "C3_margin_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0099
+        },
+        "C4_coverage_floor": {
+          "ok": true,
+          "total": 0.8025,
+          "margin": 0.803,
+          "floor": 0.78
+        },
+        "C5_tail_crps": {
+          "ok": false,
+          "arm": 5.53973,
+          "foil": 5.49348
+        },
+        "C6_joint_calibration": {
+          "ok": false,
+          "arm": 0.0157,
+          "foil": 0.013
+        },
+        "C7_mean_preserved": {
+          "ok": true,
+          "max_abs_shift": 0.0312,
+          "tol": 0.15
+        },
+        "all_ok": false,
+        "C8_own_form_floor": {
+          "ok": true,
+          "state": "OK",
+          "gap": 0.07291
+        }
+      },
+      "fitted_params_fold1": {
+        "rho": 0.0147,
+        "n_drivers": 17,
+        "sigma_total_p10_p90": [
+          15.32,
+          21.85
+        ],
+        "gamma_l2": 0.36308
+      }
+    },
+    "student_t": {
+      "arm": "student_t",
+      "doc_item": "bivariate Student-t",
+      "pooled_crps_total": 9.40623,
+      "gain_vs_foil": -0.00097,
+      "tie_with_foil": true,
+      "nests_foil": true,
+      "collapse_at": "dof \u2192 \u221e",
+      "fold_wins": 4,
+      "n_folds": 8,
+      "sharpe": -0.1568,
+      "series_skew": 0.0988,
+      "series_kurt": 1.537,
+      "dsr": 0.0,
+      "sr0": 1.4971,
+      "p_one_sided": 0.664644,
+      "bh_pass": false,
+      "clauses": {
+        "C1_total_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0189,
+          "pit_mean_dev": 0.015
+        },
+        "C2_total_pit_repaired": {
+          "ok": false,
+          "foil": 0.017,
+          "arm": 0.0189,
+          "improvement": -0.0019,
+          "required": 0.001
+        },
+        "C3_margin_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0069
+        },
+        "C4_coverage_floor": {
+          "ok": true,
+          "total": 0.7995,
+          "margin": 0.7943,
+          "floor": 0.78
+        },
+        "C5_tail_crps": {
+          "ok": true,
+          "arm": 5.48824,
+          "foil": 5.49348
+        },
+        "C6_joint_calibration": {
+          "ok": false,
+          "arm": 0.0142,
+          "foil": 0.013
+        },
+        "C7_mean_preserved": {
+          "ok": true,
+          "max_abs_shift": 0.0263,
+          "tol": 0.15
+        },
+        "all_ok": false,
+        "C8_own_form_floor": {
+          "ok": true,
+          "state": "OK",
+          "gap": 0.00634
+        }
+      },
+      "fitted_params_fold1": {
+        "dof": 28.119,
+        "dof_margin": 20.247,
+        "dof_total": 39.051,
+        "rho": 0.0235,
+        "collapse_at": "dof\u2192\u221e"
+      }
+    },
+    "skew_normal": {
+      "arm": "skew_normal",
+      "doc_item": "skew-normal",
+      "pooled_crps_total": 9.39268,
+      "gain_vs_foil": 0.01258,
+      "tie_with_foil": false,
+      "nests_foil": true,
+      "collapse_at": "alpha = 0",
+      "fold_wins": 6,
+      "n_folds": 8,
+      "sharpe": 0.6483,
+      "series_skew": 1.1095,
+      "series_kurt": 4.0342,
+      "dsr": 0.0021,
+      "sr0": 1.4971,
+      "p_one_sided": 0.054667,
+      "bh_pass": false,
+      "clauses": {
+        "C1_total_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0065,
+          "pit_mean_dev": 0.0068
+        },
+        "C2_total_pit_repaired": {
+          "ok": true,
+          "foil": 0.017,
+          "arm": 0.0065,
+          "improvement": 0.0105,
+          "required": 0.001
+        },
+        "C3_margin_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0066
+        },
+        "C4_coverage_floor": {
+          "ok": true,
+          "total": 0.8006,
+          "margin": 0.799,
+          "floor": 0.78
+        },
+        "C5_tail_crps": {
+          "ok": false,
+          "arm": 5.49912,
+          "foil": 5.49348
+        },
+        "C6_joint_calibration": {
+          "ok": true,
+          "arm": 0.0097,
+          "foil": 0.013
+        },
+        "C7_mean_preserved": {
+          "ok": true,
+          "max_abs_shift": 0.0328,
+          "tol": 0.15
+        },
+        "all_ok": false,
+        "C8_own_form_floor": {
+          "ok": true,
+          "state": "OK",
+          "gap": 0.01218
+        }
+      },
+      "fitted_params_fold1": {
+        "rho_normal_scores": 0.0196,
+        "margin_params": {
+          "family": "skew_normal",
+          "alpha": 1.0248,
+          "collapse_at": "alpha=0"
+        },
+        "total_params": {
+          "family": "skew_normal",
+          "alpha": 2.1197,
+          "collapse_at": "alpha=0"
+        }
+      }
+    },
+    "skew_t": {
+      "arm": "skew_t",
+      "doc_item": "skew-t",
+      "pooled_crps_total": 9.39313,
+      "gain_vs_foil": 0.01213,
+      "tie_with_foil": false,
+      "nests_foil": true,
+      "collapse_at": "alpha = 0 and dof \u2192 \u221e",
+      "fold_wins": 6,
+      "n_folds": 8,
+      "sharpe": 0.6547,
+      "series_skew": 0.9718,
+      "series_kurt": 4.0692,
+      "dsr": 0.0036,
+      "sr0": 1.4971,
+      "p_one_sided": 0.053248,
+      "bh_pass": false,
+      "clauses": {
+        "C1_total_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0071,
+          "pit_mean_dev": 0.007
+        },
+        "C2_total_pit_repaired": {
+          "ok": true,
+          "foil": 0.017,
+          "arm": 0.0071,
+          "improvement": 0.0099,
+          "required": 0.001
+        },
+        "C3_margin_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0072
+        },
+        "C4_coverage_floor": {
+          "ok": true,
+          "total": 0.798,
+          "margin": 0.794,
+          "floor": 0.78
+        },
+        "C5_tail_crps": {
+          "ok": false,
+          "arm": 5.4975,
+          "foil": 5.49348
+        },
+        "C6_joint_calibration": {
+          "ok": true,
+          "arm": 0.0097,
+          "foil": 0.013
+        },
+        "C7_mean_preserved": {
+          "ok": true,
+          "max_abs_shift": 0.0334,
+          "tol": 0.15
+        },
+        "all_ok": false,
+        "C8_own_form_floor": {
+          "ok": true,
+          "state": "OK",
+          "gap": 0.01243
+        }
+      },
+      "fitted_params_fold1": {
+        "rho_normal_scores": 0.0196,
+        "margin_params": {
+          "family": "skew_t",
+          "alpha": 0.5578,
+          "dof": 16.898,
+          "collapse_at": "alpha=0 and dof\u2192\u221e"
+        },
+        "total_params": {
+          "family": "skew_t",
+          "alpha": 1.9872,
+          "dof": 60.0,
+          "collapse_at": "alpha=0 and dof\u2192\u221e"
+        }
+      }
+    },
+    "mixture": {
+      "arm": "mixture",
+      "doc_item": "Gaussian / regime mixture",
+      "pooled_crps_total": 9.40697,
+      "gain_vs_foil": -0.00171,
+      "tie_with_foil": false,
+      "nests_foil": true,
+      "collapse_at": "shift = 0 and s1 = s2",
+      "fold_wins": 2,
+      "n_folds": 8,
+      "sharpe": -0.3039,
+      "series_skew": 1.7944,
+      "series_kurt": 6.7326,
+      "dsr": 0.0001,
+      "sr0": 1.4971,
+      "p_one_sided": 0.790744,
+      "bh_pass": false,
+      "clauses": {
+        "C1_total_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0116,
+          "pit_mean_dev": 0.0113
+        },
+        "C2_total_pit_repaired": {
+          "ok": true,
+          "foil": 0.017,
+          "arm": 0.0116,
+          "improvement": 0.0054,
+          "required": 0.001
+        },
+        "C3_margin_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0092
+        },
+        "C4_coverage_floor": {
+          "ok": true,
+          "total": 0.8079,
+          "margin": 0.794,
+          "floor": 0.78
+        },
+        "C5_tail_crps": {
+          "ok": false,
+          "arm": 5.49508,
+          "foil": 5.49348
+        },
+        "C6_joint_calibration": {
+          "ok": true,
+          "arm": 0.0127,
+          "foil": 0.013
+        },
+        "C7_mean_preserved": {
+          "ok": true,
+          "max_abs_shift": 0.0355,
+          "tol": 0.15
+        },
+        "all_ok": false,
+        "C8_own_form_floor": {
+          "ok": true,
+          "state": "OK",
+          "gap": 0.01965
+        }
+      },
+      "fitted_params_fold1": {
+        "rho_normal_scores": 0.0196,
+        "margin_params": {
+          "family": "mixture",
+          "w1": 0.1697,
+          "shift": -0.0002,
+          "s1": 0.5777,
+          "s2": 1.0004,
+          "collapse_at": "shift=0 and s1=s2 (one component)"
+        },
+        "total_params": {
+          "family": "mixture",
+          "w1": 0.7292,
+          "shift": 1.8486,
+          "s1": 1.834,
+          "s2": 1.0116,
+          "collapse_at": "shift=0 and s1=s2 (one component)"
+        }
+      }
+    },
+    "copula": {
+      "arm": "copula",
+      "doc_item": "copula w/ independent (non-parametric) marginals",
+      "pooled_crps_total": 9.39622,
+      "gain_vs_foil": 0.00904,
+      "tie_with_foil": false,
+      "nests_foil": false,
+      "collapse_at": "the empirical marginal happens to be Normal",
+      "fold_wins": 6,
+      "n_folds": 8,
+      "sharpe": 0.5446,
+      "series_skew": 1.1635,
+      "series_kurt": 3.9578,
+      "dsr": 0.0007,
+      "sr0": 1.4971,
+      "p_one_sided": 0.08369,
+      "bh_pass": false,
+      "clauses": {
+        "C1_total_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0092,
+          "pit_mean_dev": 0.0072
+        },
+        "C2_total_pit_repaired": {
+          "ok": true,
+          "foil": 0.017,
+          "arm": 0.0092,
+          "improvement": 0.0078,
+          "required": 0.001
+        },
+        "C3_margin_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.007
+        },
+        "C4_coverage_floor": {
+          "ok": true,
+          "total": 0.8063,
+          "margin": 0.8035,
+          "floor": 0.78
+        },
+        "C5_tail_crps": {
+          "ok": false,
+          "arm": 5.50121,
+          "foil": 5.49348
+        },
+        "C6_joint_calibration": {
+          "ok": true,
+          "arm": 0.0095,
+          "foil": 0.013
+        },
+        "C7_mean_preserved": {
+          "ok": true,
+          "max_abs_shift": 0.0289,
+          "tol": 0.15
+        },
+        "all_ok": false,
+        "C8_own_form_floor": {
+          "ok": true,
+          "state": "OK",
+          "gap": 0.01488
+        }
+      },
+      "fitted_params_fold1": {
+        "rho_normal_scores": 0.0196,
+        "margin_params": {
+          "family": "empirical",
+          "n_fit": 736
+        },
+        "total_params": {
+          "family": "empirical",
+          "n_fit": 736
+        }
+      }
+    },
+    "home_away": {
+      "arm": "home_away",
+      "doc_item": "separate home/away score distributions \u2192 transform",
+      "pooled_crps_total": 9.46567,
+      "gain_vs_foil": -0.06041,
+      "tie_with_foil": false,
+      "nests_foil": false,
+      "collapse_at": "r \u2192 \u221e with rho_sides = 0 (the P1.4 `count` form)",
+      "fold_wins": 1,
+      "n_folds": 8,
+      "sharpe": -1.4738,
+      "series_skew": 0.9625,
+      "series_kurt": 4.7155,
+      "dsr": 0.0,
+      "sr0": 1.4971,
+      "p_one_sided": 0.997902,
+      "bh_pass": false,
+      "clauses": {
+        "C1_total_pit_flat": {
+          "ok": false,
+          "pit_dev": 0.0382,
+          "pit_mean_dev": 0.0074
+        },
+        "C2_total_pit_repaired": {
+          "ok": false,
+          "foil": 0.017,
+          "arm": 0.0382,
+          "improvement": -0.0212,
+          "required": 0.001
+        },
+        "C3_margin_pit_flat": {
+          "ok": false,
+          "pit_dev": 0.0309
+        },
+        "C4_coverage_floor": {
+          "ok": true,
+          "total": 0.8684,
+          "margin": 0.8654,
+          "floor": 0.78
+        },
+        "C5_tail_crps": {
+          "ok": false,
+          "arm": 5.58181,
+          "foil": 5.49348
+        },
+        "C6_joint_calibration": {
+          "ok": false,
+          "arm": 0.0344,
+          "foil": 0.013
+        },
+        "C7_mean_preserved": {
+          "ok": true,
+          "max_abs_shift": 0.0308,
+          "tol": 0.15
+        },
+        "all_ok": false,
+        "C8_own_form_floor": {
+          "ok": true,
+          "state": "OK",
+          "gap": 0.01067
+        }
+      },
+      "fitted_params_fold1": {
+        "r_home": 5.8,
+        "r_away": 4.0,
+        "rho_sides": 0.1016,
+        "note": "P1.4's `count` form FORCED rho_sides=0; this arm fits it"
+      }
+    },
+    "key_number": {
+      "arm": "key_number",
+      "doc_item": "discrete-score simulation (mass at 3/7/10/14)",
+      "pooled_crps_total": 9.37661,
+      "gain_vs_foil": 0.02865,
+      "tie_with_foil": false,
+      "nests_foil": false,
+      "collapse_at": "a flat empirical lattice",
+      "fold_wins": 7,
+      "n_folds": 8,
+      "sharpe": 1.2429,
+      "series_skew": -0.0839,
+      "series_kurt": 4.4681,
+      "dsr": 0.3114,
+      "sr0": 1.4971,
+      "p_one_sided": 0.004894,
+      "bh_pass": true,
+      "clauses": {
+        "C1_total_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0124,
+          "pit_mean_dev": 0.0107
+        },
+        "C2_total_pit_repaired": {
+          "ok": true,
+          "foil": 0.017,
+          "arm": 0.0124,
+          "improvement": 0.0046,
+          "required": 0.001
+        },
+        "C3_margin_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0102
+        },
+        "C4_coverage_floor": {
+          "ok": true,
+          "total": 0.8041,
+          "margin": 0.8044,
+          "floor": 0.78
+        },
+        "C5_tail_crps": {
+          "ok": true,
+          "arm": 5.48063,
+          "foil": 5.49348
+        },
+        "C6_joint_calibration": {
+          "ok": true,
+          "arm": 0.0129,
+          "foil": 0.013
+        },
+        "C7_mean_preserved": {
+          "ok": true,
+          "max_abs_shift": 0.1273,
+          "tol": 0.15
+        },
+        "all_ok": false,
+        "C8_own_form_floor": {
+          "ok": false,
+          "state": "BEATEN",
+          "gap": -0.00416
+        }
+      },
+      "fitted_params_fold1": {
+        "rho_sides": 0.0196,
+        "lattice_key_mass_home": 0.2663,
+        "lattice_nonkey_mass_home": 0.0051
+      }
+    },
+    "quantile_boost": {
+      "arm": "quantile_boost",
+      "doc_item": "quantile / distributional-boosting foil",
+      "pooled_crps_total": 9.43566,
+      "gain_vs_foil": -0.0304,
+      "tie_with_foil": false,
+      "nests_foil": false,
+      "collapse_at": "constant quantiles \u21d2 a homoscedastic empirical marginal",
+      "fold_wins": 2,
+      "n_folds": 8,
+      "sharpe": -0.9007,
+      "series_skew": 0.6022,
+      "series_kurt": 2.7138,
+      "dsr": 0.0,
+      "sr0": 1.4971,
+      "p_one_sided": 0.980882,
+      "bh_pass": false,
+      "clauses": {
+        "C1_total_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0139,
+          "pit_mean_dev": 0.0076
+        },
+        "C2_total_pit_repaired": {
+          "ok": true,
+          "foil": 0.017,
+          "arm": 0.0139,
+          "improvement": 0.0031,
+          "required": 0.001
+        },
+        "C3_margin_pit_flat": {
+          "ok": true,
+          "pit_dev": 0.0119
+        },
+        "C4_coverage_floor": {
+          "ok": true,
+          "total": 0.7835,
+          "margin": 0.7812,
+          "floor": 0.78
+        },
+        "C5_tail_crps": {
+          "ok": false,
+          "arm": 5.53595,
+          "foil": 5.49348
+        },
+        "C6_joint_calibration": {
+          "ok": true,
+          "arm": 0.0122,
+          "foil": 0.013
+        },
+        "C7_mean_preserved": {
+          "ok": true,
+          "max_abs_shift": 0.0243,
+          "tol": 0.15
+        },
+        "all_ok": false,
+        "C8_own_form_floor": {
+          "ok": true,
+          "state": "OK",
+          "gap": 0.21907
+        }
+      },
+      "fitted_params_fold1": {
+        "rho_normal_scores": 0.0196,
+        "n_levels": 11,
+        "n_fit_rows": 736,
+        "median_iqr_total": 55.331
+      }
+    }
+  },
+  "null_classification": {
+    "best_arm": "key_number",
+    "instrument_state": "DSR_UNREACHABLE",
+    "instrument_reason": "`crps_total`: the winner's per-fold Sharpe 1.243 sits at or BELOW the 9-arm field's deflated benchmark SR0 1.446, so DSR is unreachable at ANY fold count \u2014 `n` scales a positive gap, it cannot create one. The remedy is a SMALLER, PRE-REGISTERED field, not more seasons \u2014 and \u26d4 only if such a field was pre-registered; this is NOT a licence to re-cut a field you have already scored (MH2.7). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+    "instrument_retest_trigger": "field size is NOT a lever here \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)",
+    "instrument_detail": {
+      "n_folds": 8,
+      "n_arms": 9,
+      "observed_sr": 1.2429,
+      "sr0": 1.4459,
+      "var_trials_sr": 0.9039455174926483,
+      "degenerates_excluded_from_v": true,
+      "declared_field_size": 10,
+      "declared_field_size_source": "stated",
+      "field_remedy_admissible": null
+    },
+    "constraint_clauses_failed": [
+      "C8_own_form_floor"
+    ],
+    "binding_half": "constraint",
+    "recorded_state": "CONSTRAINT_REFUSED",
+    "why_recorded_state": "the refusal is caused by a pre-registered SHIP CLAUSE, not by the statistic \u2014 no fold count moves a clause, so a `POWER_LIMITED`-style 'more seasons' trigger would be actively misleading (NF-D18). The instrument's own state is preserved above.",
+    "declared_field_size": 10,
+    "field_remedy_admissible": null
+  },
+  "weather_drivers_absent": "no weather feed exists in the NCAAF lakehouse (0 of 207 matrix columns match weather|temp|wind|precip|humid; absent from both inventories) \u21d2 the card's weather-driven variance terms are DROPPED, not fabricated. `game_venue_is_dome` / `game_venue_elevation_m` are registered as PARTIAL environment proxies and labelled as such.",
+  "driver_names": [
+    "pace_sum",
+    "pace_diff",
+    "abs_strength_margin_diff",
+    "abs_adj_net_ppa_diff",
+    "home_off_explosiveness",
+    "away_off_explosiveness",
+    "home_qb_starter_changed_recent",
+    "away_qb_starter_changed_recent",
+    "home_qb_starts_prior",
+    "away_qb_starts_prior",
+    "season_order_week",
+    "home_games_played",
+    "away_games_played",
+    "game_venue_is_dome",
+    "game_venue_elevation_m",
+    "abs_mu_margin",
+    "log_strength_var"
+  ],
+  "honest_frame": "best_alpha = 0 \u2014 this story can only improve the SHAPE/honesty of a probability, never claim an edge. Market-blind. NCAAF is not served, so a survivor is a research-artifact re-point, never a deploy."
+}

@@ -1,12 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "Credence Draft Read Probe (NF-C-LDA-0 spike)",
-  "version": "0.0.1",
-  "description": "FEASIBILITY SPIKE. Read-only probe that reports whether the live ESPN draft state is machine-readable. Ships no recommendations and sends nothing anywhere.",
-  "permissions": [],
+  "name": "Credence Draft Assistant",
+  "version": "0.1.0",
+  "description": "Shows Credence's pick recommendation on your live ESPN draft board. Reads the draft you are already in; never signs in as you, and never sends ESPN anything.",
+  "permissions": ["storage"],
   "host_permissions": [
-    "https://fantasy.espn.com/football/draft*"
+    "https://fantasy.espn.com/football/draft*",
+    "https://api.credencesports.com/*"
   ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
   "content_scripts": [
     {
       "matches": ["https://fantasy.espn.com/football/draft*"],
@@ -17,7 +21,17 @@
     },
     {
       "matches": ["https://fantasy.espn.com/football/draft*"],
-      "js": ["src/content.js"],
+      "js": ["src/draft-state.js", "src/overlay.js", "src/content.js"],
+      "world": "ISOLATED",
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://credencesports.com/*",
+        "https://www.credencesports.com/*"
+      ],
+      "js": ["src/credence-auth.js"],
       "world": "ISOLATED",
       "run_at": "document_idle",
       "all_frames": false

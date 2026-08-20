@@ -50,7 +50,7 @@ from pydantic import BaseModel, Field
 from app.backend.dependencies import require_personalized_league_access
 from app.backend.services import dynamo, fantasy_import_telemetry
 from app.backend.services.platform_import import PLATFORMS, espn, sleeper, yahoo, yahoo_oauth
-from app.backend.services.platform_import.http import PlatformHTTPError
+from app.backend.services.platform_import.http import RATE_LIMIT_STATUSES, PlatformHTTPError
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,10 @@ def _handle_platform_error(e: Exception) -> HTTPException:
             return HTTPException(
                 status_code=401, detail="Your connection to that platform is no longer authorized."
             )
-        if e.status == 429:
+        if e.status in RATE_LIMIT_STATUSES:
+            # ⚠️ `in`, not `== 429`: Yahoo throttles with HTTP **999** (measured live 2026-08-19),
+            # which used to fall through to the 502 below and told the user the platform was
+            # unreachable when it was simply asking us to slow down.
             return HTTPException(
                 status_code=429, detail="That platform is rate-limiting us. Try again shortly."
             )

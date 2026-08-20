@@ -6,14 +6,25 @@
 |---|---|
 | **YDN app created** | ✅ 2026-08-01 — App ID **`qnVLbJOd`**, name "Credence Sports", confidential client, redirect URI `https://api.credencesports.com/fantasy/import/yahoo/callback` |
 | **Access application submitted** | ✅ 2026-08-01 via `sports.yahoo.com/developer/access/` (App ID supplied; read-only; Small <1,000 users) |
-| **Yahoo approval** | ⏳ **PENDING — no SLA published; the latency is entirely Yahoo's** |
-| **SSM parameters written** | ⛔ **NOT YET** — blocked on `aws sso login --profile AdministratorAccess-769392325318` (see step 3) |
-| **Lambda IAM grant** | ⛔ Not yet (step 4) |
+| **Yahoo approval** | ✅ Agreement signed 2026-08-14, effective 08-15 (US + CA, READ-ONLY). ⚠️ *Fantasy data access itself is still UNPROVEN in code* — the only proof is a real token reading a real league (NF-C0-Yahoo-SPIKE) |
+| **SSM parameters written** | ✅ **DONE** — all three present (2026-08-01), and the client secret is **MEASURED CORRECT** 2026-08-19: the real secret returns `INVALID_AUTHORIZATION_CODE` where a wrong one returns `INVALID_CLIENT_SECRET` |
+| **Lambda IAM grant** | ✅ **DONE** — `credence-yahoo-oauth-ssm-read` on `credence-prod-lambda-execution-role`, verified 2026-08-19 |
+| **Redirect URI** | ✅ **MEASURED byte-for-byte correct** 2026-08-19 (a wrong URI *and a trailing-slash variant* both return Yahoo's "Developers: Please specify a valid request" page; the registered one returns the real sign-in page) |
+| **API Gateway callback route** | ✅ **CREATED 2026-08-19** (`--authorization-type NONE`; auto-deploy on). A garbage code now returns 302, not 401 |
+| **3-legged OAuth end-to-end** | ✅ **PROVEN IN PRODUCTION 2026-08-19** — a real consent returned `?yahoo=connected`, i.e. the deployed Lambda read SSM, verified the signed `state`, exchanged the code and stored an encrypted grant. Refresh works; **access-token lifetime 3600s** |
+| **Fantasy Sports data access** | ⛔ **MISSING — THE BLOCKER.** Every `/fantasy/v2/*` resource returns 401 `oauth_problem="additional_authorization_required"` while `openid/v1/userinfo` returns **200 for the same token** ⇒ the token is valid and the APP is not entitled. Signing the agreement did NOT attach Fantasy access to app `qnVLbJOd`. Re-enabling it needs a **fresh consent** (permissions bind at consent time). See `nf_c0_yahoo_spike_memo.md` §2 |
+| **`YAHOO_IMPORT_ENABLED`** | ⛔ not set on the Lambda (correct — this is the deliberate GO flip, and it must NOT be flipped before the route above exists) |
 
-⏰ **CHASE TRIGGER: if Yahoo has not replied by 2026-08-15, Yahoo import will NOT be ready for the
-operator's 2026-08-22 draft.** That is the operationally meaningful deadline, not an arbitrary one —
-so treat 8/15 as the date to follow up, and plan the draft-window GTM on **Sleeper import + the
-NF-C0b manual editor**, both of which are live and need nothing from Yahoo.
+⏰ **CHASE TRIGGER (RE-ARMED, and now with a precise question to ask): Yahoo signed the agreement
+2026-08-14, but our app still has no Fantasy data access** — measured 2026-08-19. Ask Yahoo why
+app `qnVLbJOd` returns `oauth_problem="additional_authorization_required"` on `/fantasy/v2/game/nfl`
+for a token whose `openid/v1/userinfo` returns 200. Everything else on our side is proven working;
+what remains besides this is three compliance gaps against the signed agreement. Draft-window GTM stays on **Sleeper import + the
+NF-C0b manual editor**, both live and needing nothing from Yahoo.
+
+📄 **The live-verification status, the compliance audit and the remaining blockers now live in
+`docs/nf_c0_yahoo_spike_memo.md` (NF-C0-Yahoo-SPIKE, 2026-08-19).** Read that before acting on the
+steps below — steps 3 and 4 are already done.
 
 ---
 
@@ -59,7 +70,7 @@ You need a Yahoo account (any personal one is fine) and to accept Yahoo's develo
    | **Description** | `Fantasy league import for Credence Sports — reads a user's own league settings and rosters to produce personalised draft rankings.` |
    | **Home Page URL** | `https://www.credencesports.com` |
    | **Redirect URI(s)** | Both lines below — see the ⚠️ under this table |
-   | **API Permissions** | Tick **OpenID Connect Permissions** (Profile only if sub-options appear; leave Email unchecked). ⚠️ See the note below — there is NO "Fantasy Sports" option here any more |
+   | **API Permissions** | Tick **OpenID Connect Permissions** (Profile only if sub-options appear; leave Email unchecked). ⚠️ See the note below — there was NO "Fantasy Sports" option here at creation. ⭐ **RE-CHECK THIS NOW:** the 2026-08-19 probe proved the app holds OpenID and NOT Fantasy, so if a Fantasy Sports → Read option has appeared post-approval, ticking it (then re-consenting) is the fix |
    | **OAuth Client Type** | **Confidential Client** (this is a server-side app; the secret lives in SSM, never in a browser) |
 
    **Redirect URIs — paste both, one per line:**
@@ -240,3 +251,10 @@ That gap shaped the code rather than being left to chance:
 **Expect to shake out one or two parsing details on the first real Yahoo league** — that is a
 15-minute fix once a payload is in hand, and the preview-before-save flow means a mis-read is
 visible on screen before it ever becomes a saved league.
+
+⭐ **NF-C0-Yahoo-SPIKE built the tool that does exactly that in one command:**
+`scripts/probe_yahoo_fantasy_live.py` drives the SHIPPING adapter against a real token and prints
+every `stat_id` and roster token Yahoo sent that the parser does not know, plus five named
+pass/fail conditions. It still has NOT been run — it needs the gateway route (or a code copied by
+hand out of the address bar). Run it against **≥2 independently-sourced leagues**: one league
+cannot disconfirm a wrong key map (NF-C0e).

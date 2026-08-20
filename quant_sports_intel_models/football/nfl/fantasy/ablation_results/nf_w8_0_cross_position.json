@@ -1,0 +1,2146 @@
+{
+  "story": "NF-W8-0",
+  "phase": "cross_position_comparability",
+  "smoke": false,
+  "generated_at": "2026-08-19T22:54:26.143702+00:00",
+  "seasons": [
+    2016,
+    2025
+  ],
+  "n_folds": 8,
+  "gate_league": "full_ppr",
+  "matrix_key": "26c34fbe778c9d87",
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 84553,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "attach_audit": {
+    "cache": "hit"
+  },
+  "served_map_sources": {
+    "QB|passing_tds": "nf_w6b",
+    "QB|passing_yards": "nf_w6b",
+    "QB|rushing_yards": "nf_w6b",
+    "RB|rushing_yards": "nf_w6b",
+    "TE|receiving_yards": "nf_w6b",
+    "WR|receiving_yards": "nf_w6b",
+    "RB|rushing_tds": "nf_w6b_c",
+    "RB|receiving_yards": "nf_w6d_c_default",
+    "QB|attempts": "nf_w6d_c_default",
+    "QB|passing_interceptions": "nf_w6d_b_ship",
+    "QB|carries": "nf_w6d_c_default",
+    "QB|rushing_tds": "nf_w6d_b_ship",
+    "QB|fumbles_lost": "nf_w6d_c_default",
+    "QB|two_pt": "nf_w6d_c_default",
+    "RB|carries": "nf_w6d_b_ship",
+    "RB|targets": "nf_w6d_c_default",
+    "RB|receptions": "nf_w6d_b_ship",
+    "RB|receiving_tds": "nf_w6d_c_default",
+    "RB|fumbles_lost": "nf_w6d_c_default",
+    "RB|two_pt": "nf_w6d_c_default",
+    "WR|targets": "nf_w6d_b_ship",
+    "WR|receptions": "nf_w6d_b_ship",
+    "WR|receiving_tds": "nf_w6d_b_ship",
+    "WR|fumbles_lost": "nf_w6d_c_default",
+    "WR|two_pt": "nf_w6d_c_default",
+    "TE|targets": "nf_w6d_b_ship",
+    "TE|receptions": "nf_w6d_b_ship",
+    "TE|receiving_tds": "nf_w6d_c_default",
+    "TE|fumbles_lost": "nf_w6d_c_default",
+    "TE|two_pt": "nf_w6d_c_default",
+    "QB|targets": "nf_w6d_c_default",
+    "QB|receptions": "nf_w6d_c_default",
+    "QB|receiving_yards": "nf_w6d_c_default",
+    "QB|receiving_tds": "nf_w6d_c_default",
+    "RB|attempts": "nf_w6d_c_default",
+    "RB|passing_yards": "nf_w6d_c_default",
+    "RB|passing_tds": "nf_w6d_c_default",
+    "RB|passing_interceptions": "nf_w6d_c_default",
+    "WR|attempts": "nf_w6d_c_default",
+    "WR|passing_yards": "nf_w6d_c_default",
+    "WR|passing_tds": "nf_w6d_c_default",
+    "WR|passing_interceptions": "nf_w6d_c_default",
+    "WR|carries": "nf_w6d_c_default",
+    "WR|rushing_yards": "nf_w6d_c_default",
+    "WR|rushing_tds": "nf_w6d_c_default",
+    "TE|attempts": "nf_w6d_c_default",
+    "TE|passing_yards": "nf_w6d_c_default",
+    "TE|passing_tds": "nf_w6d_c_default",
+    "TE|passing_interceptions": "nf_w6d_c_default",
+    "TE|carries": "nf_w6d_c_default",
+    "TE|rushing_yards": "nf_w6d_c_default",
+    "TE|rushing_tds": "nf_w6d_c_default"
+  },
+  "assembly_draws": 4000,
+  "seed": 20260818,
+  "consumed_generators": {
+    "QB": "qb_zm_floor",
+    "RB": "rb_direct",
+    "WR": "wr_mixall",
+    "TE": "te_single_copula"
+  },
+  "swap_generators": {
+    "QB": "direct_points",
+    "RB": "single_copula",
+    "WR": "direct_points",
+    "TE": "direct_points"
+  },
+  "declared_field": {
+    "incumbent": "identity",
+    "real_arms": [
+      "level_add",
+      "level_affine"
+    ],
+    "anchors": [
+      "zero_point",
+      "position_mean_point",
+      "level_add_permuted",
+      "level_add_oracle"
+    ],
+    "declared_field_size": 2
+  },
+  "input_dir": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w80/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0_input",
+  "fold_results": [
+    {
+      "label": "2022H1",
+      "n_test": 4387,
+      "positions": {
+        "QB": {
+          "scores": {
+            "direct_points": 2.4594782651199436,
+            "zm_floor": 2.419520761990327
+          },
+          "consumed": "zm_floor",
+          "swap": "direct_points",
+          "n_train": 7803,
+          "n_test": 674,
+          "bias_identity": {
+            "n": 674,
+            "sum_err": -155.91781085495268,
+            "bias": -0.23133206358301583,
+            "sd_err": 5.896291843924935
+          },
+          "bias_swap": {
+            "n": 674,
+            "sum_err": -14.95929493189572,
+            "bias": -0.022194799602219168,
+            "sd_err": 5.893990514600149
+          },
+          "calibration_slope": {
+            "slope": 0.9557,
+            "intercept": 0.5136,
+            "n": 674
+          }
+        },
+        "RB": {
+          "scores": {
+            "direct_points": 2.603659429553795,
+            "single_copula": 2.6398626999566304
+          },
+          "consumed": "direct_points",
+          "swap": "single_copula",
+          "n_train": 13034,
+          "n_test": 1126,
+          "bias_identity": {
+            "n": 1126,
+            "sum_err": -313.6264299496278,
+            "bias": -0.2785314653193852,
+            "sd_err": 5.812378469255252
+          },
+          "bias_swap": {
+            "n": 1126,
+            "sum_err": -193.205898720091,
+            "bias": -0.1715860557016794,
+            "sd_err": 5.86557973403926
+          },
+          "calibration_slope": {
+            "slope": 1.1384,
+            "intercept": -0.4518,
+            "n": 1126
+          }
+        },
+        "WR": {
+          "scores": {
+            "direct_points": 2.687304578053839,
+            "mixall_learned": 2.669850921704446
+          },
+          "consumed": "mixall_learned",
+          "swap": "direct_points",
+          "n_train": 17905,
+          "n_test": 1636,
+          "bias_identity": {
+            "n": 1636,
+            "sum_err": 9.62341560064003,
+            "bias": 0.005882283374474346,
+            "sd_err": 5.771436774167012
+          },
+          "bias_swap": {
+            "n": 1636,
+            "sum_err": 145.9767344737329,
+            "bias": 0.0892278328079052,
+            "sd_err": 5.771055943577388
+          },
+          "calibration_slope": {
+            "slope": 1.0606,
+            "intercept": -0.3397,
+            "n": 1636
+          }
+        },
+        "TE": {
+          "scores": {
+            "direct_points": 1.861891803492399,
+            "single_copula": 1.8563999404151743
+          },
+          "consumed": "single_copula",
+          "swap": "direct_points",
+          "n_train": 10231,
+          "n_test": 951,
+          "bias_identity": {
+            "n": 951,
+            "sum_err": 21.645133044043657,
+            "bias": 0.022760392265030134,
+            "sd_err": 4.223017280777745
+          },
+          "bias_swap": {
+            "n": 951,
+            "sum_err": -154.96333877939963,
+            "bias": -0.1629477799993687,
+            "sd_err": 4.178150453285157
+          },
+          "calibration_slope": {
+            "slope": 0.985,
+            "intercept": 0.0288,
+            "n": 951
+          }
+        }
+      },
+      "bank_cache": "miss",
+      "rows_path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w80/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0_rows/2022H1.parquet"
+    },
+    {
+      "label": "2022H2",
+      "n_test": 4299,
+      "positions": {
+        "QB": {
+          "scores": {
+            "direct_points": 2.609262503509874,
+            "zm_floor": 2.562311404976239
+          },
+          "consumed": "zm_floor",
+          "swap": "direct_points",
+          "n_train": 8517,
+          "n_test": 685,
+          "bias_identity": {
+            "n": 685,
+            "sum_err": -290.6245684287037,
+            "bias": -0.42426944296161123,
+            "sd_err": 5.915425457864948
+          },
+          "bias_swap": {
+            "n": 685,
+            "sum_err": -60.33076373779869,
+            "bias": -0.08807410764642144,
+            "sd_err": 5.939696209383497
+          },
+          "calibration_slope": {
+            "slope": 0.9607,
+            "intercept": 0.6547,
+            "n": 685
+          }
+        },
+        "RB": {
+          "scores": {
+            "direct_points": 2.4011030581550963,
+            "single_copula": 2.4593099890235153
+          },
+          "consumed": "direct_points",
+          "swap": "single_copula",
+          "n_train": 14195,
+          "n_test": 1111,
+          "bias_identity": {
+            "n": 1111,
+            "sum_err": -139.19243462586292,
+            "bias": -0.12528571973525016,
+            "sd_err": 5.24304471075708
+          },
+          "bias_swap": {
+            "n": 1111,
+            "sum_err": -42.38540872369083,
+            "bias": -0.03815068291961371,
+            "sd_err": 5.327811037809081
+          },
+          "calibration_slope": {
+            "slope": 1.0703,
+            "intercept": -0.2426,
+            "n": 1111
+          }
+        },
+        "WR": {
+          "scores": {
+            "direct_points": 2.6760220266487424,
+            "mixall_learned": 2.6509646478617674
+          },
+          "consumed": "mixall_learned",
+          "swap": "direct_points",
+          "n_train": 19586,
+          "n_test": 1551,
+          "bias_identity": {
+            "n": 1551,
+            "sum_err": -303.4511198767076,
+            "bias": -0.19564869108749683,
+            "sd_err": 5.726569671222636
+          },
+          "bias_swap": {
+            "n": 1551,
+            "sum_err": -215.79048949636106,
+            "bias": -0.13912990941093556,
+            "sd_err": 5.741029654984539
+          },
+          "calibration_slope": {
+            "slope": 1.0414,
+            "intercept": -0.0313,
+            "n": 1551
+          }
+        },
+        "TE": {
+          "scores": {
+            "direct_points": 1.82826386694871,
+            "single_copula": 1.8052829086817543
+          },
+          "consumed": "single_copula",
+          "swap": "direct_points",
+          "n_train": 11189,
+          "n_test": 952,
+          "bias_identity": {
+            "n": 952,
+            "sum_err": -140.03308736583674,
+            "bias": -0.14709357916579488,
+            "sd_err": 4.319203759234743
+          },
+          "bias_swap": {
+            "n": 952,
+            "sum_err": -206.966258652822,
+            "bias": -0.21740153219834243,
+            "sd_err": 4.299114000145519
+          },
+          "calibration_slope": {
+            "slope": 0.9903,
+            "intercept": 0.1784,
+            "n": 952
+          }
+        }
+      },
+      "bank_cache": "miss",
+      "rows_path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w80/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0_rows/2022H2.parquet"
+    },
+    {
+      "label": "2023H1",
+      "n_test": 4264,
+      "positions": {
+        "QB": {
+          "scores": {
+            "direct_points": 2.4360891503195363,
+            "zm_floor": 2.417360028673504
+          },
+          "consumed": "zm_floor",
+          "swap": "direct_points",
+          "n_train": 9169,
+          "n_test": 683,
+          "bias_identity": {
+            "n": 683,
+            "sum_err": -251.35651516276224,
+            "bias": -0.36801832381077926,
+            "sd_err": 5.79111056771297
+          },
+          "bias_swap": {
+            "n": 683,
+            "sum_err": -56.040431807908675,
+            "bias": -0.08205041260308737,
+            "sd_err": 5.759003499947015
+          },
+          "calibration_slope": {
+            "slope": 0.9791,
+            "intercept": 0.4951,
+            "n": 683
+          }
+        },
+        "RB": {
+          "scores": {
+            "direct_points": 2.454913227767861,
+            "single_copula": 2.5056735601797118
+          },
+          "consumed": "direct_points",
+          "swap": "single_copula",
+          "n_train": 15285,
+          "n_test": 1057,
+          "bias_identity": {
+            "n": 1057,
+            "sum_err": -189.85539814639338,
+            "bias": -0.1796172167893977,
+            "sd_err": 5.552943759394416
+          },
+          "bias_swap": {
+            "n": 1057,
+            "sum_err": -188.57463522635578,
+            "bias": -0.17840552055473582,
+            "sd_err": 5.626696424727884
+          },
+          "calibration_slope": {
+            "slope": 1.1136,
+            "intercept": -0.4161,
+            "n": 1057
+          }
+        },
+        "WR": {
+          "scores": {
+            "direct_points": 2.635782271387417,
+            "mixall_learned": 2.5963488806509325
+          },
+          "consumed": "mixall_learned",
+          "swap": "direct_points",
+          "n_train": 21114,
+          "n_test": 1590,
+          "bias_identity": {
+            "n": 1590,
+            "sum_err": -357.6863146678503,
+            "bias": -0.22495994633198133,
+            "sd_err": 5.683489569700872
+          },
+          "bias_swap": {
+            "n": 1590,
+            "sum_err": -232.30460729243885,
+            "bias": -0.14610352659901815,
+            "sd_err": 5.739636540112532
+          },
+          "calibration_slope": {
+            "slope": 1.1315,
+            "intercept": -0.5097,
+            "n": 1590
+          }
+        },
+        "TE": {
+          "scores": {
+            "direct_points": 1.7431396035058206,
+            "single_copula": 1.7046271526600403
+          },
+          "consumed": "single_copula",
+          "swap": "direct_points",
+          "n_train": 12122,
+          "n_test": 934,
+          "bias_identity": {
+            "n": 934,
+            "sum_err": -72.66679136506161,
+            "bias": -0.07780170381698245,
+            "sd_err": 4.012564524824389
+          },
+          "bias_swap": {
+            "n": 934,
+            "sum_err": -194.58774746488535,
+            "bias": -0.20833805938424557,
+            "sd_err": 4.059988093520365
+          },
+          "calibration_slope": {
+            "slope": 1.14,
+            "intercept": -0.3826,
+            "n": 934
+          }
+        }
+      },
+      "bank_cache": "miss",
+      "rows_path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w80/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0_rows/2023H1.parquet"
+    },
+    {
+      "label": "2023H2",
+      "n_test": 4337,
+      "positions": {
+        "QB": {
+          "scores": {
+            "direct_points": 2.564365781005117,
+            "zm_floor": 2.5894550548779014
+          },
+          "consumed": "zm_floor",
+          "swap": "direct_points",
+          "n_train": 9867,
+          "n_test": 710,
+          "bias_identity": {
+            "n": 710,
+            "sum_err": -542.0238011889865,
+            "bias": -0.7634138044915302,
+            "sd_err": 6.000743730778647
+          },
+          "bias_swap": {
+            "n": 710,
+            "sum_err": -261.9901104940839,
+            "bias": -0.36900015562547034,
+            "sd_err": 5.946773262974965
+          },
+          "calibration_slope": {
+            "slope": 1.0107,
+            "intercept": 0.7045,
+            "n": 710
+          }
+        },
+        "RB": {
+          "scores": {
+            "direct_points": 2.4312367427374277,
+            "single_copula": 2.513175437698466
+          },
+          "consumed": "direct_points",
+          "swap": "single_copula",
+          "n_train": 16368,
+          "n_test": 1051,
+          "bias_identity": {
+            "n": 1051,
+            "sum_err": -262.83862863973735,
+            "bias": -0.2500843279160203,
+            "sd_err": 5.3584833061911175
+          },
+          "bias_swap": {
+            "n": 1051,
+            "sum_err": -169.35976413789408,
+            "bias": -0.16114154532625508,
+            "sd_err": 5.463615563545591
+          },
+          "calibration_slope": {
+            "slope": 1.1526,
+            "intercept": -0.5787,
+            "n": 1051
+          }
+        },
+        "WR": {
+          "scores": {
+            "direct_points": 2.6210845333189554,
+            "mixall_learned": 2.628284177533932
+          },
+          "consumed": "mixall_learned",
+          "swap": "direct_points",
+          "n_train": 22705,
+          "n_test": 1634,
+          "bias_identity": {
+            "n": 1634,
+            "sum_err": -253.50689421940277,
+            "bias": -0.15514497810244968,
+            "sd_err": 5.790033328750695
+          },
+          "bias_swap": {
+            "n": 1634,
+            "sum_err": -169.45758029833303,
+            "bias": -0.10370720948490393,
+            "sd_err": 5.754622050572564
+          },
+          "calibration_slope": {
+            "slope": 1.0707,
+            "intercept": -0.2206,
+            "n": 1634
+          }
+        },
+        "TE": {
+          "scores": {
+            "direct_points": 1.7221780840234326,
+            "single_copula": 1.7033447970218796
+          },
+          "consumed": "single_copula",
+          "swap": "direct_points",
+          "n_train": 13072,
+          "n_test": 942,
+          "bias_identity": {
+            "n": 942,
+            "sum_err": -228.09219753262119,
+            "bias": -0.24213609079896092,
+            "sd_err": 3.8958740134062824
+          },
+          "bias_swap": {
+            "n": 942,
+            "sum_err": -307.7340465339015,
+            "bias": -0.3266815780614666,
+            "sd_err": 3.8928223337527323
+          },
+          "calibration_slope": {
+            "slope": 1.0346,
+            "intercept": 0.1317,
+            "n": 942
+          }
+        }
+      },
+      "bank_cache": "miss",
+      "rows_path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w80/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0_rows/2023H2.parquet"
+    },
+    {
+      "label": "2024H1",
+      "n_test": 4365,
+      "positions": {
+        "QB": {
+          "scores": {
+            "direct_points": 2.3983840156678706,
+            "zm_floor": 2.3973084073156343
+          },
+          "consumed": "zm_floor",
+          "swap": "direct_points",
+          "n_train": 10554,
+          "n_test": 685,
+          "bias_identity": {
+            "n": 685,
+            "sum_err": -122.54877096026469,
+            "bias": -0.1789033152704594,
+            "sd_err": 5.710484103381542
+          },
+          "bias_swap": {
+            "n": 685,
+            "sum_err": 126.41812863171955,
+            "bias": 0.18455201260105045,
+            "sd_err": 5.665215144866609
+          },
+          "calibration_slope": {
+            "slope": 0.951,
+            "intercept": 0.4908,
+            "n": 685
+          }
+        },
+        "RB": {
+          "scores": {
+            "direct_points": 2.555983783806563,
+            "single_copula": 2.655011754454542
+          },
+          "consumed": "direct_points",
+          "swap": "single_copula",
+          "n_train": 17408,
+          "n_test": 1077,
+          "bias_identity": {
+            "n": 1077,
+            "sum_err": -473.49616076826607,
+            "bias": -0.4396436033131533,
+            "sd_err": 5.659292684733732
+          },
+          "bias_swap": {
+            "n": 1077,
+            "sum_err": -496.7900115311419,
+            "bias": -0.46127206270301013,
+            "sd_err": 5.77098248279894
+          },
+          "calibration_slope": {
+            "slope": 1.1368,
+            "intercept": -0.297,
+            "n": 1077
+          }
+        },
+        "WR": {
+          "scores": {
+            "direct_points": 2.6851696079586636,
+            "mixall_learned": 2.6641318094332043
+          },
+          "consumed": "mixall_learned",
+          "swap": "direct_points",
+          "n_train": 24310,
+          "n_test": 1622,
+          "bias_identity": {
+            "n": 1622,
+            "sum_err": -126.08661348363208,
+            "bias": -0.07773527341777563,
+            "sd_err": 5.771643472769628
+          },
+          "bias_swap": {
+            "n": 1622,
+            "sum_err": -125.592635271968,
+            "bias": -0.0774307245819778,
+            "sd_err": 5.788647869442578
+          },
+          "calibration_slope": {
+            "slope": 1.0284,
+            "intercept": -0.0768,
+            "n": 1622
+          }
+        },
+        "TE": {
+          "scores": {
+            "direct_points": 1.7456410470509938,
+            "single_copula": 1.7254311956851345
+          },
+          "consumed": "single_copula",
+          "swap": "direct_points",
+          "n_train": 14003,
+          "n_test": 981,
+          "bias_identity": {
+            "n": 981,
+            "sum_err": -99.53827002510928,
+            "bias": -0.10146612642722659,
+            "sd_err": 4.073058410052176
+          },
+          "bias_swap": {
+            "n": 981,
+            "sum_err": -218.9506128176743,
+            "bias": -0.22319124650119707,
+            "sd_err": 4.062694489949011
+          },
+          "calibration_slope": {
+            "slope": 1.0829,
+            "intercept": -0.1626,
+            "n": 981
+          }
+        }
+      },
+      "bank_cache": "miss",
+      "rows_path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w80/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0_rows/2024H1.parquet"
+    },
+    {
+      "label": "2024H2",
+      "n_test": 4212,
+      "positions": {
+        "QB": {
+          "scores": {
+            "direct_points": 2.831954408981073,
+            "zm_floor": 2.822171257708377
+          },
+          "consumed": "zm_floor",
+          "swap": "direct_points",
+          "n_train": 11258,
+          "n_test": 676,
+          "bias_identity": {
+            "n": 676,
+            "sum_err": -613.6976196265357,
+            "bias": -0.9078367154238693,
+            "sd_err": 6.694704200080177
+          },
+          "bias_swap": {
+            "n": 676,
+            "sum_err": -376.36827587330447,
+            "bias": -0.5567578045463084,
+            "sd_err": 6.694003467114811
+          },
+          "calibration_slope": {
+            "slope": 1.0482,
+            "intercept": 0.6188,
+            "n": 676
+          }
+        },
+        "RB": {
+          "scores": {
+            "direct_points": 2.478011048150651,
+            "single_copula": 2.5087202386944694
+          },
+          "consumed": "direct_points",
+          "swap": "single_copula",
+          "n_train": 18485,
+          "n_test": 1025,
+          "bias_identity": {
+            "n": 1025,
+            "sum_err": -190.43176374716828,
+            "bias": -0.1857870865826032,
+            "sd_err": 5.45226515928832
+          },
+          "bias_swap": {
+            "n": 1025,
+            "sum_err": -184.64267761761516,
+            "bias": -0.18013919767572212,
+            "sd_err": 5.506817952267198
+          },
+          "calibration_slope": {
+            "slope": 1.0892,
+            "intercept": -0.2969,
+            "n": 1025
+          }
+        },
+        "WR": {
+          "scores": {
+            "direct_points": 2.6507446107893755,
+            "mixall_learned": 2.6225562362212416
+          },
+          "consumed": "mixall_learned",
+          "swap": "direct_points",
+          "n_train": 25959,
+          "n_test": 1563,
+          "bias_identity": {
+            "n": 1563,
+            "sum_err": -657.8061431442381,
+            "bias": -0.4208612560103891,
+            "sd_err": 5.830960307578193
+          },
+          "bias_swap": {
+            "n": 1563,
+            "sum_err": -637.0668639568922,
+            "bias": -0.4075923633761307,
+            "sd_err": 5.877541772763995
+          },
+          "calibration_slope": {
+            "slope": 1.1918,
+            "intercept": -0.6281,
+            "n": 1563
+          }
+        },
+        "TE": {
+          "scores": {
+            "direct_points": 1.838344083590432,
+            "single_copula": 1.8120251745506861
+          },
+          "consumed": "single_copula",
+          "swap": "direct_points",
+          "n_train": 14978,
+          "n_test": 948,
+          "bias_identity": {
+            "n": 948,
+            "sum_err": -220.55737505541651,
+            "bias": -0.23265545891921574,
+            "sd_err": 4.307601864529137
+          },
+          "bias_swap": {
+            "n": 948,
+            "sum_err": -297.524889492024,
+            "bias": -0.3138448201392658,
+            "sd_err": 4.313253505410105
+          },
+          "calibration_slope": {
+            "slope": 1.0917,
+            "intercept": -0.0787,
+            "n": 948
+          }
+        }
+      },
+      "bank_cache": "miss",
+      "rows_path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w80/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0_rows/2024H2.parquet"
+    },
+    {
+      "label": "2025H1",
+      "n_test": 4308,
+      "positions": {
+        "QB": {
+          "scores": {
+            "direct_points": 2.7549520822177347,
+            "zm_floor": 2.698843281718902
+          },
+          "consumed": "zm_floor",
+          "swap": "direct_points",
+          "n_train": 11920,
+          "n_test": 671,
+          "bias_identity": {
+            "n": 671,
+            "sum_err": -385.2341455002853,
+            "bias": -0.5741194418782195,
+            "sd_err": 6.429848523779775
+          },
+          "bias_swap": {
+            "n": 671,
+            "sum_err": -121.5037179270218,
+            "bias": -0.1810785662101666,
+            "sd_err": 6.453276306164114
+          },
+          "calibration_slope": {
+            "slope": 0.9896,
+            "intercept": 0.6399,
+            "n": 671
+          }
+        },
+        "RB": {
+          "scores": {
+            "direct_points": 2.3943960885539224,
+            "single_copula": 2.459689395374826
+          },
+          "consumed": "direct_points",
+          "swap": "single_copula",
+          "n_train": 19505,
+          "n_test": 1062,
+          "bias_identity": {
+            "n": 1062,
+            "sum_err": -192.41622157602376,
+            "bias": -0.18118288283994705,
+            "sd_err": 5.430843408715188
+          },
+          "bias_swap": {
+            "n": 1062,
+            "sum_err": -188.36847270999152,
+            "bias": -0.17737144322974718,
+            "sd_err": 5.51943256285028
+          },
+          "calibration_slope": {
+            "slope": 1.0998,
+            "intercept": -0.3532,
+            "n": 1062
+          }
+        },
+        "WR": {
+          "scores": {
+            "direct_points": 2.543122932095425,
+            "mixall_learned": 2.5221685571961565
+          },
+          "consumed": "mixall_learned",
+          "swap": "direct_points",
+          "n_train": 27505,
+          "n_test": 1609,
+          "bias_identity": {
+            "n": 1609,
+            "sum_err": 33.52194223882833,
+            "bias": 0.020834022522578204,
+            "sd_err": 5.507755679099898
+          },
+          "bias_swap": {
+            "n": 1609,
+            "sum_err": 59.58148160381889,
+            "bias": 0.03703013151262827,
+            "sd_err": 5.507657305191908
+          },
+          "calibration_slope": {
+            "slope": 1.0335,
+            "intercept": -0.203,
+            "n": 1609
+          }
+        },
+        "TE": {
+          "scores": {
+            "direct_points": 1.9181616006402329,
+            "single_copula": 1.8771374362414075
+          },
+          "consumed": "single_copula",
+          "swap": "direct_points",
+          "n_train": 15919,
+          "n_test": 966,
+          "bias_identity": {
+            "n": 966,
+            "sum_err": -289.1534699604699,
+            "bias": -0.29933071424479285,
+            "sd_err": 4.426140713013968
+          },
+          "bias_swap": {
+            "n": 966,
+            "sum_err": -414.5460870583904,
+            "bias": -0.4291367360852903,
+            "sd_err": 4.469890921231882
+          },
+          "calibration_slope": {
+            "slope": 1.0875,
+            "intercept": -0.0048,
+            "n": 966
+          }
+        }
+      },
+      "bank_cache": "miss",
+      "rows_path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w80/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0_rows/2025H1.parquet"
+    },
+    {
+      "label": "2025H2",
+      "n_test": 4380,
+      "positions": {
+        "QB": {
+          "scores": {
+            "direct_points": 2.612798153102158,
+            "zm_floor": 2.608950239871143
+          },
+          "consumed": "zm_floor",
+          "swap": "direct_points",
+          "n_train": 12622,
+          "n_test": 701,
+          "bias_identity": {
+            "n": 701,
+            "sum_err": -216.20963527574173,
+            "bias": -0.30843029283272716,
+            "sd_err": 6.347510127447134
+          },
+          "bias_swap": {
+            "n": 701,
+            "sum_err": 113.54621891519857,
+            "bias": 0.16197748775349297,
+            "sd_err": 6.247740667777142
+          },
+          "calibration_slope": {
+            "slope": 0.965,
+            "intercept": 0.5104,
+            "n": 701
+          }
+        },
+        "RB": {
+          "scores": {
+            "direct_points": 2.434651415246522,
+            "single_copula": 2.4908285848213008
+          },
+          "consumed": "direct_points",
+          "swap": "single_copula",
+          "n_train": 20601,
+          "n_test": 1082,
+          "bias_identity": {
+            "n": 1082,
+            "sum_err": -417.41870828878984,
+            "bias": -0.38578438843695917,
+            "sd_err": 5.56546634188391
+          },
+          "bias_swap": {
+            "n": 1082,
+            "sum_err": -328.0287294750424,
+            "bias": -0.3031688812153811,
+            "sd_err": 5.672026863834788
+          },
+          "calibration_slope": {
+            "slope": 1.1197,
+            "intercept": -0.2524,
+            "n": 1082
+          }
+        },
+        "WR": {
+          "scores": {
+            "direct_points": 2.488364563443118,
+            "mixall_learned": 2.4677729642691917
+          },
+          "consumed": "mixall_learned",
+          "swap": "direct_points",
+          "n_train": 29162,
+          "n_test": 1622,
+          "bias_identity": {
+            "n": 1622,
+            "sum_err": 258.8043674372501,
+            "bias": 0.1595587962005241,
+            "sd_err": 5.411628513391315
+          },
+          "bias_swap": {
+            "n": 1622,
+            "sum_err": 325.3680232553835,
+            "bias": 0.2005968084188554,
+            "sd_err": 5.43030723275203
+          },
+          "calibration_slope": {
+            "slope": 0.9907,
+            "intercept": -0.1123,
+            "n": 1622
+          }
+        },
+        "TE": {
+          "scores": {
+            "direct_points": 1.8076559015435376,
+            "single_copula": 1.7752066470725385
+          },
+          "consumed": "single_copula",
+          "swap": "direct_points",
+          "n_train": 16922,
+          "n_test": 975,
+          "bias_identity": {
+            "n": 975,
+            "sum_err": -126.60002927912339,
+            "bias": -0.12984618387602398,
+            "sd_err": 4.181863126950967
+          },
+          "bias_swap": {
+            "n": 975,
+            "sum_err": -169.82699923813678,
+            "bias": -0.17418153768014027,
+            "sd_err": 4.219281255360955
+          },
+          "calibration_slope": {
+            "slope": 1.0746,
+            "intercept": -0.132,
+            "n": 975
+          }
+        }
+      },
+      "bank_cache": "hit",
+      "rows_path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w80/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0_rows/2025H2.parquet"
+    }
+  ],
+  "runtime_seconds": 3150.1,
+  "reproduction": {
+    "QB": {
+      "reproduces": true,
+      "n_folds_compared": 8,
+      "max_abs_gap": 0.0,
+      "tolerance": 1e-09,
+      "per_fold_abs_gap": {
+        "2022H1": 0.0,
+        "2022H2": 0.0,
+        "2023H1": 0.0,
+        "2023H2": 0.0,
+        "2024H1": 0.0,
+        "2024H2": 0.0,
+        "2025H1": 0.0,
+        "2025H2": 0.0
+      }
+    },
+    "RB": {
+      "reproduces": true,
+      "n_folds_compared": 8,
+      "max_abs_gap": 0.0,
+      "tolerance": 1e-09,
+      "per_fold_abs_gap": {
+        "2022H1": 0.0,
+        "2022H2": 0.0,
+        "2023H1": 0.0,
+        "2023H2": 0.0,
+        "2024H1": 0.0,
+        "2024H2": 0.0,
+        "2025H1": 0.0,
+        "2025H2": 0.0
+      }
+    },
+    "WR": {
+      "reproduces": true,
+      "n_folds_compared": 8,
+      "max_abs_gap": 0.0,
+      "tolerance": 1e-09,
+      "per_fold_abs_gap": {
+        "2022H1": 0.0,
+        "2022H2": 0.0,
+        "2023H1": 0.0,
+        "2023H2": 0.0,
+        "2024H1": 0.0,
+        "2024H2": 0.0,
+        "2025H1": 0.0,
+        "2025H2": 0.0
+      }
+    },
+    "TE": {
+      "reproduces": true,
+      "n_folds_compared": 8,
+      "max_abs_gap": 0.0,
+      "tolerance": 1e-09,
+      "per_fold_abs_gap": {
+        "2022H1": 0.0,
+        "2022H2": 0.0,
+        "2023H1": 0.0,
+        "2023H2": 0.0,
+        "2024H1": 0.0,
+        "2024H2": 0.0,
+        "2025H1": 0.0,
+        "2025H2": 0.0
+      }
+    }
+  },
+  "family_a": {
+    "pairs": {
+      "QB|RB": {
+        "n_folds": 8,
+        "gap": -0.2163,
+        "se": 0.117,
+        "p_two_sided": 0.106867,
+        "mde_ppr": 0.3277,
+        "bh_rejected": false
+      },
+      "QB|WR": {
+        "n_folds": 8,
+        "gap": -0.3585,
+        "se": 0.0721,
+        "p_two_sided": 0.001613,
+        "mde_ppr": 0.202,
+        "bh_rejected": true
+      },
+      "QB|TE": {
+        "n_folds": 8,
+        "gap": -0.3186,
+        "se": 0.0674,
+        "p_two_sided": 0.002145,
+        "mde_ppr": 0.1889,
+        "bh_rejected": true
+      },
+      "RB|WR": {
+        "n_folds": 8,
+        "gap": -0.1422,
+        "se": 0.0906,
+        "p_two_sided": 0.16038,
+        "mde_ppr": 0.2538,
+        "bh_rejected": false
+      },
+      "RB|TE": {
+        "n_folds": 8,
+        "gap": -0.1023,
+        "se": 0.0618,
+        "p_two_sided": 0.141943,
+        "mde_ppr": 0.1732,
+        "bh_rejected": false
+      },
+      "WR|TE": {
+        "n_folds": 8,
+        "gap": 0.0399,
+        "se": 0.0656,
+        "p_two_sided": 0.562177,
+        "mde_ppr": 0.1839,
+        "bh_rejected": false
+      }
+    },
+    "bh_q": 0.1,
+    "n_pairs_evaluable": 6,
+    "gap_detected": true,
+    "max_mde_ppr": 0.3277
+  },
+  "identity_bias": {
+    "pooled": {
+      "QB": {
+        "n": 5485,
+        "bias_pooled": -0.4699385354600242,
+        "bias_fold_mean": -0.4695404250315265
+      },
+      "RB": {
+        "n": 8591,
+        "bias_pooled": -0.25366962469350124,
+        "bias_fold_mean": -0.2532395863665895
+      },
+      "WR": {
+        "n": 12827,
+        "bias_pooled": -0.10887872145592208,
+        "bias_fold_mean": -0.11100938035656449
+      },
+      "TE": {
+        "n": 7649,
+        "bias_pooled": -0.15099961923644856,
+        "bias_fold_mean": -0.1509461831229959
+      }
+    },
+    "by_fold": {
+      "QB": [
+        -0.23133206358301583,
+        -0.42426944296161123,
+        -0.36801832381077926,
+        -0.7634138044915302,
+        -0.1789033152704594,
+        -0.9078367154238693,
+        -0.5741194418782195,
+        -0.30843029283272716
+      ],
+      "RB": [
+        -0.2785314653193852,
+        -0.12528571973525016,
+        -0.1796172167893977,
+        -0.2500843279160203,
+        -0.4396436033131533,
+        -0.1857870865826032,
+        -0.18118288283994705,
+        -0.38578438843695917
+      ],
+      "WR": [
+        0.005882283374474346,
+        -0.19564869108749683,
+        -0.22495994633198133,
+        -0.15514497810244968,
+        -0.07773527341777563,
+        -0.4208612560103891,
+        0.020834022522578204,
+        0.1595587962005241
+      ],
+      "TE": [
+        0.022760392265030134,
+        -0.14709357916579488,
+        -0.07780170381698245,
+        -0.24213609079896092,
+        -0.10146612642722659,
+        -0.23265545891921574,
+        -0.29933071424479285,
+        -0.12984618387602398
+      ]
+    }
+  },
+  "recal": {
+    "evaluable_folds": [
+      "2022H2",
+      "2023H1",
+      "2023H2",
+      "2024H1",
+      "2024H2",
+      "2025H1",
+      "2025H2"
+    ],
+    "n_evaluable": 7,
+    "affine_eligibility": {
+      "eligible": true,
+      "violations": []
+    },
+    "range_by_arm": {
+      "identity": {
+        "pooled": 0.4888,
+        "eligible": true,
+        "range_by_fold": [
+          0.299,
+          0.2902,
+          0.6083,
+          0.3619,
+          0.722,
+          0.595,
+          0.5453
+        ]
+      },
+      "level_add": {
+        "pooled": 0.403,
+        "eligible": true,
+        "range_by_fold": [
+          0.3548,
+          0.1556,
+          0.4029,
+          0.5029,
+          0.58,
+          0.3667,
+          0.4584
+        ]
+      },
+      "level_affine": {
+        "pooled": 0.3884,
+        "eligible": true,
+        "range_by_fold": [
+          0.3498,
+          0.1497,
+          0.3646,
+          0.4813,
+          0.5911,
+          0.354,
+          0.428
+        ]
+      },
+      "zero_point": {
+        "pooled": 2.9892,
+        "eligible": true,
+        "range_by_fold": [
+          2.9159,
+          3.0783,
+          2.8103,
+          3.2558,
+          3.2732,
+          3.1512,
+          2.4401
+        ]
+      },
+      "position_mean_point": {
+        "pooled": 0.511,
+        "eligible": true,
+        "range_by_fold": [
+          0.4942,
+          0.2585,
+          0.4292,
+          0.4321,
+          0.446,
+          0.652,
+          0.8652
+        ]
+      },
+      "level_add_permuted": {
+        "pooled": 0.5665,
+        "eligible": true,
+        "range_by_fold": [
+          0.3026,
+          0.4164,
+          0.6679,
+          0.6476,
+          0.8173,
+          0.5118,
+          0.6018
+        ]
+      },
+      "level_add_oracle": {
+        "pooled": 0.0,
+        "eligible": true,
+        "range_by_fold": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "rmse_pooled": {
+      "identity": {
+        "QB": 6.1574,
+        "RB": 5.4718,
+        "WR": 5.6787,
+        "TE": 4.1797
+      },
+      "level_add": {
+        "QB": 6.139,
+        "RB": 5.4665,
+        "WR": 5.6782,
+        "TE": 4.1771
+      },
+      "level_affine": {
+        "QB": 6.1394,
+        "RB": 5.4421,
+        "WR": 5.671,
+        "TE": 4.1732
+      },
+      "zero_point": {
+        "QB": 11.2656,
+        "RB": 9.4008,
+        "WR": 9.2211,
+        "TE": 6.4602
+      },
+      "position_mean_point": {
+        "QB": 9.2101,
+        "RB": 7.5578,
+        "WR": 7.3807,
+        "TE": 5.4304
+      },
+      "level_add_permuted": {
+        "QB": 6.1427,
+        "RB": 5.4675,
+        "WR": 5.6784,
+        "TE": 4.182
+      },
+      "level_add_oracle": {
+        "QB": 6.1321,
+        "RB": 5.465,
+        "WR": 5.6747,
+        "TE": 4.1753
+      }
+    },
+    "winner": "level_affine",
+    "winner_clauses": {
+      "reduces_gap": false,
+      "beats_permuted": true,
+      "no_rmse_harm": true,
+      "degenerates_lose": true,
+      "pbo_ok": true,
+      "dsr_ok": false,
+      "swap_clause": false,
+      "banks_untouched": true
+    },
+    "p_reduces_gap_one_sided": 0.051196924504800734,
+    "pbo": 0.0857,
+    "dsr": 0.9138,
+    "deflate_detail": {
+      "pbo": 0.0857,
+      "os_gap_pct": 0.0,
+      "contender_spread_pct": 25.87,
+      "flips": [
+        {
+          "config": "level_affine",
+          "IS-half wins": 31,
+          "share": 0.886,
+          "full-sample IS80": 0.388,
+          "\u0394 vs best %": 0.0
+        },
+        {
+          "config": "identity",
+          "IS-half wins": 3,
+          "share": 0.086,
+          "full-sample IS80": 0.489,
+          "\u0394 vs best %": 25.87
+        },
+        {
+          "config": "level_add",
+          "IS-half wins": 1,
+          "share": 0.029,
+          "full-sample IS80": 0.403,
+          "\u0394 vs best %": 3.78
+        }
+      ]
+    },
+    "oracle_ceiling": {
+      "note": "`level_add_oracle` peeks the test fold's own mean error \u2014 its RMSE improvement is the CEILING of the level channel (NF-D16 (e)); never a trial",
+      "rmse_pooled": {
+        "QB": 6.1321,
+        "RB": 5.465,
+        "WR": 5.6747,
+        "TE": 4.1753
+      }
+    },
+    "trailing3_sensitivity_note": "report-only (prereg \u00a74): trailing-3 \u03b4s are recorded in the recal tables; \u26d4 never selected here"
+  },
+  "swap_verification": {
+    "detail": {
+      "QB": {
+        "activity": {
+          "active": true,
+          "pooled_shift": -0.3707,
+          "se": 0.0217,
+          "threshold": 0.0434,
+          "n_folds": 7
+        },
+        "mean_abs_before": 0.3707,
+        "mean_abs_after": 0.0738,
+        "p_one_sided": 2.2157511503362315e-07,
+        "passes": true
+      },
+      "RB": {
+        "activity": {
+          "active": false,
+          "pooled_shift": -0.0354,
+          "se": 0.0183,
+          "threshold": 0.0366,
+          "n_folds": 7
+        }
+      },
+      "WR": {
+        "activity": {
+          "active": true,
+          "pooled_shift": -0.0368,
+          "se": 0.0106,
+          "threshold": 0.0212,
+          "n_folds": 7
+        },
+        "mean_abs_before": 0.0368,
+        "mean_abs_after": 0.0332,
+        "p_one_sided": 0.42310167475402816,
+        "passes": false
+      },
+      "TE": {
+        "activity": {
+          "active": true,
+          "pooled_shift": 0.0946,
+          "se": 0.0126,
+          "threshold": 0.0252,
+          "n_folds": 7
+        },
+        "mean_abs_before": 0.0946,
+        "mean_abs_after": 0.0448,
+        "p_one_sided": 0.06011228106145872,
+        "passes": false
+      }
+    },
+    "n_active_positions": 3,
+    "state": "FAIL",
+    "passes": false,
+    "arm_used": "level_affine"
+  },
+  "board_decomposition": {
+    "QB": {
+      "fold": "2025H2",
+      "level_shift": -0.4704,
+      "total": {
+        "own_mean_abs_rank_move": 15.321,
+        "other_mean_abs_rank_move": 1.536
+      },
+      "ordering_only": {
+        "own_mean_abs_rank_move": 15.321,
+        "other_mean_abs_rank_move": 1.536
+      }
+    },
+    "RB": {
+      "fold": "2025H2",
+      "level_shift": -0.0826,
+      "total": {
+        "own_mean_abs_rank_move": 27.244,
+        "other_mean_abs_rank_move": 7.915
+      },
+      "ordering_only": {
+        "own_mean_abs_rank_move": 25.923,
+        "other_mean_abs_rank_move": 7.633
+      }
+    },
+    "WR": {
+      "fold": "2025H2",
+      "level_shift": -0.041,
+      "total": {
+        "own_mean_abs_rank_move": 12.776,
+        "other_mean_abs_rank_move": 3.264
+      },
+      "ordering_only": {
+        "own_mean_abs_rank_move": 12.77,
+        "other_mean_abs_rank_move": 3.292
+      }
+    },
+    "TE": {
+      "fold": "2025H2",
+      "level_shift": 0.0443,
+      "total": {
+        "own_mean_abs_rank_move": 12.112,
+        "other_mean_abs_rank_move": 1.94
+      },
+      "ordering_only": {
+        "own_mean_abs_rank_move": 12.112,
+        "other_mean_abs_rank_move": 1.94
+      }
+    }
+  },
+  "skipped": {
+    "2022H1": [],
+    "2022H2": [],
+    "2023H1": [],
+    "2023H2": [],
+    "2024H1": [],
+    "2024H2": [],
+    "2025H1": [],
+    "2025H2": []
+  },
+  "verdict": {
+    "state": "LEVEL_GAP_DETECTED_UNREPAIRED",
+    "reason": "the level gap is real and no registered arm is admissible (winner=level_affine, failing=['reduces_gap', 'swap_clause', 'dsr_ok'], unevaluable=[]) \u2014 the hybrid is NOT cross-rankable as-is; the input ships as `identity` with the per-position gap DISCLOSED (`level_gap_disclosure`) and flagged not-cross-rankable",
+    "gap_detected": true,
+    "max_mde_ppr": 0.3277,
+    "winner": "level_affine",
+    "swap_state": "FAIL",
+    "qb_consumption": "OPTION_B_RECALIBRATED",
+    "second_reader": {
+      "requested": true,
+      "scope": "the \u00a71 QB consumption registration \u2014 whether NF-W8 may consume a calibrated-but-dsr-uncertified distribution under a registered-forward Option B (inherits NF-W7j's open governance flag)",
+      "status": "OPEN \u2014 unsigned until a governance second reader signs the prereg \u00a71"
+    }
+  },
+  "classification": {
+    "state": "CONSTRAINT_REFUSED",
+    "binding_half": "anchor",
+    "failing_anchor_checks": [
+      "swap_clause"
+    ],
+    "failing_statistical_checks": [
+      "reduces_gap",
+      "dsr_ok"
+    ],
+    "retest_trigger": null,
+    "reason": "the refusal rests on anchor/constraint clauses \u2014 more data makes the refusal MORE certain, never less (NF-D18); no data trigger is published",
+    "instrument_verdict": {
+      "state": "POWER_LIMITED",
+      "reason": "`cross_position_bias_range`: the effect is positive and every gate is REACHABLE, but this design cannot resolve it \u2014 DSR alone needs 9 folds against 7 (the BH-FDR requirement is separate and may be larger). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+      "retest_trigger": "+2 folds for the DSR gate \u2014 field size is NOT a lever here \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)"
+    }
+  },
+  "qb_consumption": {
+    "decision": "OPTION_B_RECALIBRATED",
+    "rationale": "dsr_ok is a SHIPPING gate, not a CONSUMPTION bar for a projection consumer: the fantasy vertical gates consumption on calibration + the product metric, not betting-posture deflation. NF-W7f's `zm_floor` is the only QB construction on record clearing the PIT bar (0.0281, 8/8 folds vs the incumbent's 0/8) AND the best-scoring (+0.0184 CRPS vs the matched foil, p=0.0121, PBO 0.0; +0.0189 vs direct-points); its dsr_ok refusal deflated a search whose flip mass was 100% on the winner, and every remedy is measured closed (NF-W7j DSR_UNREACHABLE \u2014 field size is no lever; NF-W7k MC_LEVER_EXHAUSTED \u2014 a 325x draw-noise shortfall). Every alternative consumption is strictly worse on BOTH axes.",
+    "caveat": "WEAKER FOOTING, carried by every consumer of QB rows: QB is the only position not through the full certification gate WR (DSR 0.9852) and TE (0.9822) cleared and RB was registered against. The un-certified residual is deflation-adjusted ARM SELECTION within the zm family \u2014 not calibration (a per-fold measurement) and not the sign of the improvement. QB rows are 'calibrated + best-on-record, consumed under Option B; not certification-equivalent'."
+  },
+  "second_reader": {
+    "requested": true,
+    "scope": "the \u00a71 QB consumption registration \u2014 whether NF-W8 may consume a calibrated-but-dsr-uncertified distribution under a registered-forward Option B (inherits NF-W7j's open governance flag)",
+    "status": "OPEN \u2014 unsigned until a governance second reader signs the prereg \u00a71"
+  },
+  "promote_blockers": [
+    "NF-W8-0 is DEPLOY-HELD: the cross-position input is an NF-G0 challenger consumed by nothing until governance promotes it",
+    "every QB row carries the \u00a71 Option-B caveat: calibrated + best-on-record, consumed under a registered-forward PM decision \u2014 NOT certification-equivalent to WR/TE/RB, and the ship bar was never relaxed (E2.1-r)",
+    "NF-W7c's promote blockers are INHERITED in full: an assembled row whose source is not `bakeoff_all_priced_legs` carries a NF-W6d calibrated DEFAULT among the legs this league prices (`calibration_warning`), and a league pricing a SKILL_UNMODELED_KEYS term has a real coverage gap",
+    "K/DST are OUT OF SCOPE \u2014 the input is declared 4-position; the NF-W7 K/DST weekly models join in a successor's registration, never by silent extension",
+    "the layer corrects LEVEL (and uniform affine scale) only; a rank-dependent generator artifact is a successor's fresh registration"
+  ],
+  "input": {
+    "dir": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w80/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0_input",
+    "shipped_arm": "identity",
+    "schema": [
+      "season",
+      "week",
+      "gw",
+      "gsis_id",
+      "position",
+      "generator",
+      "point_raw",
+      "point_recal",
+      "recal_arm",
+      "point_vs_bank_offset",
+      "p10",
+      "p50",
+      "p90",
+      "replacement_points",
+      "vor",
+      "overall_rank",
+      "positional_rank",
+      "level_gap_disclosure",
+      "qb_option_b",
+      "calibration_warning"
+    ],
+    "banks_untouched": true,
+    "max_quantile_drift": 0.0,
+    "cross_rankable": false,
+    "fold_summaries": {
+      "2022H1": {
+        "n_rows": 4387,
+        "vor_top3_sample": [
+          {
+            "gw": 103,
+            "gsis_id": "00-0036223",
+            "position": "RB",
+            "vor": 7.952346870582913
+          },
+          {
+            "gw": 103,
+            "gsis_id": "00-0034753",
+            "position": "TE",
+            "vor": 7.467939238563549
+          },
+          {
+            "gw": 103,
+            "gsis_id": "00-0033699",
+            "position": "RB",
+            "vor": 7.031256887296449
+          },
+          {
+            "gw": 104,
+            "gsis_id": "00-0036223",
+            "position": "RB",
+            "vor": 7.990523216768624
+          },
+          {
+            "gw": 104,
+            "gsis_id": "00-0034857",
+            "position": "QB",
+            "vor": 6.793107396260293
+          },
+          {
+            "gw": 104,
+            "gsis_id": "00-0034383",
+            "position": "TE",
+            "vor": 6.543377272978736
+          },
+          {
+            "gw": 105,
+            "gsis_id": "00-0030506",
+            "position": "TE",
+            "vor": 8.358238489102625
+          },
+          {
+            "gw": 105,
+            "gsis_id": "00-0036389",
+            "position": "QB",
+            "vor": 7.734190900159195
+          },
+          {
+            "gw": 105,
+            "gsis_id": "00-0031381",
+            "position": "WR",
+            "vor": 6.474454344217785
+          }
+        ],
+        "replacement_by_week_mean": {
+          "QB": 16.01,
+          "RB": 9.809,
+          "WR": 9.973,
+          "TE": 7.972
+        }
+      },
+      "2022H2": {
+        "n_rows": 4299,
+        "vor_top3_sample": [
+          {
+            "gw": 112,
+            "gsis_id": "00-0030506",
+            "position": "TE",
+            "vor": 10.14487380984444
+          },
+          {
+            "gw": 112,
+            "gsis_id": "00-0036945",
+            "position": "QB",
+            "vor": 10.04960553104193
+          },
+          {
+            "gw": 112,
+            "gsis_id": "00-0033699",
+            "position": "RB",
+            "vor": 8.89667153755461
+          },
+          {
+            "gw": 113,
+            "gsis_id": "00-0036322",
+            "position": "WR",
+            "vor": 10.238623067068914
+          },
+          {
+            "gw": 113,
+            "gsis_id": "00-0036945",
+            "position": "QB",
+            "vor": 10.00709738134613
+          },
+          {
+            "gw": 113,
+            "gsis_id": "00-0033699",
+            "position": "RB",
+            "vor": 9.83400979647195
+          },
+          {
+            "gw": 114,
+            "gsis_id": "00-0036322",
+            "position": "WR",
+            "vor": 8.919585375583289
+          },
+          {
+            "gw": 114,
+            "gsis_id": "00-0030506",
+            "position": "TE",
+            "vor": 8.294441212317068
+          },
+          {
+            "gw": 114,
+            "gsis_id": "00-0035662",
+            "position": "WR",
+            "vor": 7.76900449168734
+          }
+        ],
+        "replacement_by_week_mean": {
+          "QB": 15.03,
+          "RB": 9.49,
+          "WR": 9.446,
+          "TE": 7.28
+        }
+      },
+      "2023H1": {
+        "n_rows": 4264,
+        "vor_top3_sample": [
+          {
+            "gw": 121,
+            "gsis_id": "00-0030506",
+            "position": "TE",
+            "vor": 9.21704377941337
+          },
+          {
+            "gw": 121,
+            "gsis_id": "00-0036358",
+            "position": "WR",
+            "vor": 6.550543141556863
+          },
+          {
+            "gw": 121,
+            "gsis_id": "00-0036912",
+            "position": "WR",
+            "vor": 6.52043557778136
+          },
+          {
+            "gw": 122,
+            "gsis_id": "00-0033280",
+            "position": "RB",
+            "vor": 7.996854196215409
+          },
+          {
+            "gw": 122,
+            "gsis_id": "00-0036322",
+            "position": "WR",
+            "vor": 6.406275622632286
+          },
+          {
+            "gw": 122,
+            "gsis_id": "00-0036358",
+            "position": "WR",
+            "vor": 6.19272946674668
+          },
+          {
+            "gw": 123,
+            "gsis_id": "00-0033280",
+            "position": "RB",
+            "vor": 9.993301566626219
+          },
+          {
+            "gw": 123,
+            "gsis_id": "00-0033040",
+            "position": "WR",
+            "vor": 6.468851178462877
+          },
+          {
+            "gw": 123,
+            "gsis_id": "00-0034844",
+            "position": "RB",
+            "vor": 6.211230719686785
+          }
+        ],
+        "replacement_by_week_mean": {
+          "QB": 15.402,
+          "RB": 9.251,
+          "WR": 9.57,
+          "TE": 7.498
+        }
+      },
+      "2023H2": {
+        "n_rows": 4337,
+        "vor_top3_sample": [
+          {
+            "gw": 130,
+            "gsis_id": "00-0031588",
+            "position": "WR",
+            "vor": 10.456755679087793
+          },
+          {
+            "gw": 130,
+            "gsis_id": "00-0036358",
+            "position": "WR",
+            "vor": 9.112046920643794
+          },
+          {
+            "gw": 130,
+            "gsis_id": "00-0036900",
+            "position": "WR",
+            "vor": 8.074505125715037
+          },
+          {
+            "gw": 131,
+            "gsis_id": "00-0033280",
+            "position": "RB",
+            "vor": 10.981945523990925
+          },
+          {
+            "gw": 131,
+            "gsis_id": "00-0035229",
+            "position": "TE",
+            "vor": 8.40775426806826
+          },
+          {
+            "gw": 131,
+            "gsis_id": "00-0031588",
+            "position": "WR",
+            "vor": 8.318095023676003
+          },
+          {
+            "gw": 132,
+            "gsis_id": "00-0033280",
+            "position": "RB",
+            "vor": 11.376246933888241
+          },
+          {
+            "gw": 132,
+            "gsis_id": "00-0033288",
+            "position": "TE",
+            "vor": 7.192445613150911
+          },
+          {
+            "gw": 132,
+            "gsis_id": "00-0035229",
+            "position": "TE",
+            "vor": 6.9421255951736285
+          }
+        ],
+        "replacement_by_week_mean": {
+          "QB": 14.447,
+          "RB": 9.727,
+          "WR": 9.772,
+          "TE": 7.601
+        }
+      },
+      "2024H1": {
+        "n_rows": 4365,
+        "vor_top3_sample": [
+          {
+            "gw": 139,
+            "gsis_id": "00-0033040",
+            "position": "WR",
+            "vor": 8.886080849388074
+          },
+          {
+            "gw": 139,
+            "gsis_id": "00-0033881",
+            "position": "TE",
+            "vor": 8.424603331870925
+          },
+          {
+            "gw": 139,
+            "gsis_id": "00-0036963",
+            "position": "WR",
+            "vor": 8.000492714354783
+          },
+          {
+            "gw": 140,
+            "gsis_id": "00-0034796",
+            "position": "QB",
+            "vor": 8.696434252659758
+          },
+          {
+            "gw": 140,
+            "gsis_id": "00-0034857",
+            "position": "QB",
+            "vor": 8.377327238076186
+          },
+          {
+            "gw": 140,
+            "gsis_id": "00-0033040",
+            "position": "WR",
+            "vor": 6.585560977255138
+          },
+          {
+            "gw": 141,
+            "gsis_id": "00-0033906",
+            "position": "RB",
+            "vor": 9.217977583286899
+          },
+          {
+            "gw": 141,
+            "gsis_id": "00-0036358",
+            "position": "WR",
+            "vor": 7.512092195415191
+          },
+          {
+            "gw": 141,
+            "gsis_id": "00-0039040",
+            "position": "RB",
+            "vor": 7.117770429885656
+          }
+        ],
+        "replacement_by_week_mean": {
+          "QB": 15.724,
+          "RB": 9.703,
+          "WR": 9.841,
+          "TE": 7.495
+        }
+      },
+      "2024H2": {
+        "n_rows": 4212,
+        "vor_top3_sample": [
+          {
+            "gw": 148,
+            "gsis_id": "00-0037840",
+            "position": "RB",
+            "vor": 11.317835065683386
+          },
+          {
+            "gw": 148,
+            "gsis_id": "00-0036358",
+            "position": "WR",
+            "vor": 9.209954059963406
+          },
+          {
+            "gw": 148,
+            "gsis_id": "00-0036322",
+            "position": "WR",
+            "vor": 8.430118734225273
+          },
+          {
+            "gw": 149,
+            "gsis_id": "00-0037840",
+            "position": "RB",
+            "vor": 10.934722753222102
+          },
+          {
+            "gw": 149,
+            "gsis_id": "00-0030506",
+            "position": "TE",
+            "vor": 8.134189217087398
+          },
+          {
+            "gw": 149,
+            "gsis_id": "00-0038542",
+            "position": "RB",
+            "vor": 7.67630414268165
+          },
+          {
+            "gw": 150,
+            "gsis_id": "00-0037840",
+            "position": "RB",
+            "vor": 8.807319668903524
+          },
+          {
+            "gw": 150,
+            "gsis_id": "00-0034844",
+            "position": "RB",
+            "vor": 8.736231975366472
+          },
+          {
+            "gw": 150,
+            "gsis_id": "00-0033280",
+            "position": "RB",
+            "vor": 8.345564956561848
+          }
+        ],
+        "replacement_by_week_mean": {
+          "QB": 15.198,
+          "RB": 9.563,
+          "WR": 9.799,
+          "TE": 7.947
+        }
+      },
+      "2025H1": {
+        "n_rows": 4308,
+        "vor_top3_sample": [
+          {
+            "gw": 157,
+            "gsis_id": "00-0039139",
+            "position": "RB",
+            "vor": 7.521046222393029
+          },
+          {
+            "gw": 157,
+            "gsis_id": "00-0039338",
+            "position": "TE",
+            "vor": 6.996573898942803
+          },
+          {
+            "gw": 157,
+            "gsis_id": "00-0036900",
+            "position": "WR",
+            "vor": 6.989516696408428
+          },
+          {
+            "gw": 158,
+            "gsis_id": "00-0038542",
+            "position": "RB",
+            "vor": 8.108514702886994
+          },
+          {
+            "gw": 158,
+            "gsis_id": "00-0039139",
+            "position": "RB",
+            "vor": 6.585467460569545
+          },
+          {
+            "gw": 158,
+            "gsis_id": "00-0032764",
+            "position": "RB",
+            "vor": 6.382010577721266
+          },
+          {
+            "gw": 159,
+            "gsis_id": "00-0038542",
+            "position": "RB",
+            "vor": 7.4855408882906325
+          },
+          {
+            "gw": 159,
+            "gsis_id": "00-0039040",
+            "position": "RB",
+            "vor": 6.833992668957869
+          },
+          {
+            "gw": 159,
+            "gsis_id": "00-0034796",
+            "position": "QB",
+            "vor": 6.815706496406541
+          }
+        ],
+        "replacement_by_week_mean": {
+          "QB": 15.787,
+          "RB": 9.728,
+          "WR": 10.022,
+          "TE": 8.313
+        }
+      },
+      "2025H2": {
+        "n_rows": 4380,
+        "vor_top3_sample": [
+          {
+            "gw": 166,
+            "gsis_id": "00-0033280",
+            "position": "RB",
+            "vor": 10.971174813874853
+          },
+          {
+            "gw": 166,
+            "gsis_id": "00-0036223",
+            "position": "RB",
+            "vor": 9.467624902606861
+          },
+          {
+            "gw": 166,
+            "gsis_id": "00-0036963",
+            "position": "WR",
+            "vor": 8.408648205467157
+          },
+          {
+            "gw": 167,
+            "gsis_id": "00-0033280",
+            "position": "RB",
+            "vor": 10.482074339620352
+          },
+          {
+            "gw": 167,
+            "gsis_id": "00-0039040",
+            "position": "RB",
+            "vor": 9.860812734008997
+          },
+          {
+            "gw": 167,
+            "gsis_id": "00-0036900",
+            "position": "WR",
+            "vor": 7.714815499365535
+          },
+          {
+            "gw": 168,
+            "gsis_id": "00-0033280",
+            "position": "RB",
+            "vor": 10.192301233758762
+          },
+          {
+            "gw": 168,
+            "gsis_id": "00-0038542",
+            "position": "RB",
+            "vor": 8.81612039546878
+          },
+          {
+            "gw": 168,
+            "gsis_id": "00-0039139",
+            "position": "RB",
+            "vor": 8.692737619644255
+          }
+        ],
+        "replacement_by_week_mean": {
+          "QB": 14.791,
+          "RB": 9.484,
+          "WR": 9.586,
+          "TE": 8.422
+        }
+      }
+    }
+  },
+  "rewritten_at": "2026-08-19T23:05:59.276514+00:00"
+}
