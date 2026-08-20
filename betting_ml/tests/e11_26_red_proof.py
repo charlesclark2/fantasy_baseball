@@ -149,6 +149,19 @@ BREAKS = [
      "test_intraday_schedule_rebuilds_lineups_wide_after_games_and_before_refresh",
      '"refresh_w1_external_tables.py", timeout=_TICK_LEG_TIMEOUT)'),
 
+    # ── the documented page severity must track the sensor's real tier set ──────────────────
+    ("the docstring reverts to claiming a CRITICAL page", OPS,
+     "        (⚠️ at **ERROR**, not CRITICAL:",
+     "        (at CRITICAL:",
+     f"{TEST}::test_the_documented_page_severity_matches_the_sensors_actual_tier_set",
+     "at **ERROR**, not CRITICAL"),
+    ("intraday_schedule_job joins _HALT_TIER_JOBS without the prose being updated",
+     "pipeline/sensors/run_failure_alert_sensor.py",
+     '    "w1_parity_job",            # lakehouse parity gates the S3-served marts\n}',
+     '    "w1_parity_job",            # lakehouse parity gates the S3-served marts\n'
+     '    "intraday_schedule_job",\n}',
+     f"{TEST}::test_the_documented_page_severity_matches_the_sensors_actual_tier_set", None),
+
     # ── the alerting path stays bounded ──────────────────────────────────────────────────────
     ("the SNS publish reverts to botocore's ~5-minute defaults", ALERTING,
      '        boto3.client("sns", region_name=_region(), config=_sns_cfg).publish(',
