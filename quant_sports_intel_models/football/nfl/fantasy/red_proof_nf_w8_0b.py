@@ -194,6 +194,20 @@ BREAKS: tuple[Break, ...] = (
           ("TestDerive0bEndToEnd::"
            "test_an_unformable_floor_raises_rather_than_silently_dropping_the_rule",),
           "an unformable floor degrades to the predecessor's rule instead of refusing"),
+    Break("path_proof_fallback_drops_to_the_predecessors_no_floor_rule", _R0B,
+          '        floor = floor | {"floor_ppr": float("inf"), '
+          '"unformable_on_a_path_proof": True,',
+          '        floor = floor | {"floor_ppr": 0.0, "unformable_on_a_path_proof": True,',
+          ("TestDerive0bEndToEnd::"
+           "test_the_smoke_path_proof_makes_the_clause_UNEVALUABLE_not_the_predecessors_rule",),
+          "⭐ the `--smoke` path proof's unformable-floor fallback degrades to floor-0 — which "
+          "IS the predecessor's no-floor rule, wearing this story's name (NF1.7 (a))"),
+    Break("verdict_reachable_guard_lets_a_decisive_run_take_the_path_proof_fallback", _R0B,
+          "    verdict_reachable = (len(rows_by_fold) - 1) >= 4",
+          "    verdict_reachable = False",
+          ("TestDerive0bEndToEnd::"
+           "test_an_unformable_floor_on_a_run_that_WOULD_reach_a_verdict_still_raises",),
+          "a run that CAN decide silently takes the path-proof relaxation instead of refusing"),
     Break("writer_shifts_the_band_with_the_point", _W80,
           '        w["point_vs_bank_offset"] = w["point_recal"] - w["point_raw"]',
           '        w["point_vs_bank_offset"] = (w["point_recal"] - w["point_raw"]); '

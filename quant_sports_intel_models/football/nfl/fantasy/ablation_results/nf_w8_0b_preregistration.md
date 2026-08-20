@@ -180,6 +180,17 @@ materiality filter); and a floor that could not be FORMED is `None` and **RAISES
 silently floor-0, which would restore the predecessor's no-floor rule under this story's name
 (NF1.7 (a)).
 
+**The path-proof clause** (registered 2026-08-19, still BEFORE any scoring run — amended into §5
+while the story was pre-run, and the commit history is the audit trail). A run with **fewer than
+4 evaluable folds is UNDEFINED BY CONSTRUCTION** (§6.4) and reaches no verdict — that is exactly
+the `--smoke` path proof, where family A has one observation per position and every pairwise MDE
+is therefore `None`, so the floor cannot be formed. Raising there would defeat the path proof;
+falling back to floor-0 or `None` would restore the predecessor's rule. **The registered
+resolution is an INFINITE floor**, which deactivates every position ⇒ `INACTIVE_EVERYWHERE` ⇒ the
+clause neither passes nor refuses, recorded as `unformable_on_a_path_proof`. ⛔ The relaxation is
+gated on `verdict_reachable` and may **never** reach a run that can decide — that case still
+RAISES. Both halves are RED-proven.
+
 ---
 
 ## §6 The verdict rule + the ONE definition of `cross_rankable` (fixed in advance)

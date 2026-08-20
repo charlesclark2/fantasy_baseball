@@ -491,6 +491,46 @@ class TestDerive0bEndToEnd:
         with pytest.raises(ValueError, match="one field, one rule set"):
             R0B._assert_family_a_agrees(pre, bad)
 
+    def test_the_smoke_path_proof_makes_the_clause_UNEVALUABLE_not_the_predecessors_rule(
+            self, tmp_path, monkeypatch):
+        """⭐ The `--smoke` path proof runs ONE fold, so every family-A pair has a single
+        observation, every MDE is None, and the floor cannot be FORMED. The run is UNDEFINED by
+        construction and reaches no verdict, so it must not RAISE (that would defeat the path
+        proof) — but it must also NOT fall back to floor-0 / None, either of which restores the
+        predecessor's no-floor rule under this story's name. The registered resolution is an
+        INFINITE floor ⇒ INACTIVE_EVERYWHERE ⇒ the clause neither passes nor refuses."""
+        monkeypatch.setattr(R, "_generator_record_scores", lambda position: {"F1": 2.02})
+        flat = {p: 0.05 for p in XP.POSITIONS}
+        rows = _make_rows(flat, flat, folds=1)          # ⭐ ONE fold — the real `--smoke` shape
+        out = R0B.derive_0b(_out_shell(_fold_results(rows, tmp_path), tmp_path))
+        assert out["family_a"]["gap_detected"] is None, "1 fold ⇒ family A cannot evaluate"
+        assert out["verdict_0b"]["state"] == TP.V_UNDEFINED
+        assert out["cross_rankable"] is False
+        fl = out["materiality_floor"]
+        assert fl["unformable_on_a_path_proof"] is True
+        assert fl["floor_ppr"] == float("inf"), \
+            "⛔ never 0 and never None — either IS the predecessor's no-floor rule"
+
+    def test_an_infinite_floor_deactivates_every_position(self):
+        """The property the path-proof fallback relies on: an infinite floor cannot let any
+        position be ACTIVE, so the clause is UNEVALUABLE rather than silently permissive."""
+        before = {p: np.full(7, 5.0) + np.random.default_rng(11).normal(0, 0.01, 7)
+                  for p in XP.POSITIONS}
+        after = {p: v * 0.1 for p, v in before.items()}
+        assert XP.swap_clause(before, after)["state"] == "PASS"      # non-vacuity: it CAN pass
+        inf_floored = XP.swap_clause(before, after, floor_ppr=float("inf"))
+        assert inf_floored["state"] == XP.SWAP_INACTIVE_EVERYWHERE
+        assert inf_floored["passes"] is None
+
+    def test_an_unformable_floor_on_a_run_that_WOULD_reach_a_verdict_still_raises(
+            self, tmp_path, pins_pass, monkeypatch):
+        """The path-proof relaxation above must not reach a run that can actually decide."""
+        monkeypatch.setattr(TP, "materiality_floor",
+                            lambda fa, **k: {"floor_ppr": None, "note": "synthetic: no pairs"})
+        flat = {p: 0.05 for p in XP.POSITIONS}
+        with pytest.raises(ValueError, match="could not be formed"):
+            R0B.derive_0b(_out_shell(_fold_results(_make_rows(flat, flat), tmp_path), tmp_path))
+
     def test_the_family_a_agreement_check_is_actually_INVOKED_by_the_derivation(
             self, tmp_path, pins_pass, monkeypatch):
         """NF-C0e (wired ≠ invoked): testing `_assert_family_a_agrees` directly proves the

@@ -137,10 +137,24 @@ def derive_0b(out: dict) -> dict:
     rows_by_fold = W80._load_rows(out["fold_results"])
     pre_a = family_a_on_stored_rows(rows_by_fold)
     floor = TP.materiality_floor(pre_a)
+    # a run with <4 evaluable folds is UNDEFINED BY CONSTRUCTION (prereg §5.4 / §6.4) and reaches
+    # no verdict — that is exactly the `--smoke` path proof, where family A has one fold per
+    # position and every pairwise MDE is therefore None
+    verdict_reachable = (len(rows_by_fold) - 1) >= 4
     if floor["floor_ppr"] is None:
-        # NF1.7 (a): a floor that could not be FORMED is never floor-0 (which would silently
-        # restore the predecessor's no-floor rule under this story's name)
-        raise ValueError(f"the §6 materiality floor could not be formed: {floor['note']}")
+        if verdict_reachable:
+            # NF1.7 (a): on a run that WOULD reach a verdict, a floor that could not be FORMED is
+            # never floor-0 and never None — either would silently restore the predecessor's
+            # no-floor rule under this story's name
+            raise ValueError(f"the §6 materiality floor could not be formed: {floor['note']}")
+        # on a path proof the clause is made UNEVALUABLE (an INFINITE floor deactivates every
+        # position ⇒ INACTIVE_EVERYWHERE ⇒ the clause neither passes nor refuses) — ⛔ still NOT
+        # floor-0 and NOT None, so the predecessor's rule cannot leak in through the smoke
+        floor = floor | {"floor_ppr": float("inf"), "unformable_on_a_path_proof": True,
+                         "note": (f"{floor['note']} — this run is UNDEFINED by construction "
+                                  f"(<4 evaluable folds), so the clause is made UNEVALUABLE "
+                                  f"with an infinite floor rather than dropped to the "
+                                  f"predecessor's no-floor rule")}
 
     out = W80.derive_verdict_layer(out, swap_floor_ppr=float(floor["floor_ppr"]))
     _assert_family_a_agrees(pre_a, out["family_a"])
