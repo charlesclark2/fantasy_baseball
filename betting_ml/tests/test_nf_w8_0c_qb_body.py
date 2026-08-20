@@ -565,6 +565,16 @@ class TestRunnerDiscipline:
             assert any(isinstance(x, ast.Raise) for x in ast.walk(loop)), (
                 "the oracle loop must RAISE on a ceiling that could not be formed")
 
+    def test_the_smoke_keeps_enough_folds_for_an_arm_to_be_fitted_at_all(self):
+        """Prereg §4 makes fold 1 identity BY CONSTRUCTION, so a one-fold path proof exercises
+        NONE of the declared field — a smoke that cannot see the arms is the NF1.7 (a) shape
+        applied to the proof itself."""
+        src = _strip_comments(_RUNNER.read_text())
+        m = re.search(r"folds = folds\[-(\d+):\]", src)
+        assert m, "the smoke's fold slice was not found — the guard would pass on nothing"
+        assert int(m.group(1)) >= 2, (
+            "a single-fold smoke leaves every arm at identity by construction")
+
     def test_the_classification_scope_note_names_family_b_only(self):
         src = _strip_comments(_RUNNER.read_text())
         assert "FAMILY B ONLY" in src and "misleading-trigger" in src, (

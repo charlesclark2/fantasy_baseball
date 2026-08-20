@@ -885,7 +885,13 @@ def main(argv=None) -> int:
     smap = SDSD.served_map(gate_p, bake_p, def_p)
     folds = WP.build_folds(feat)
     if args.smoke:
-        folds = folds[-1:]
+        # ⭐ TWO folds, not one. Every arm's parameters are fitted on PRIOR folds' OOF rows, so on
+        # a single fold every arm is identity BY CONSTRUCTION (prereg §4) and the path proof would
+        # exercise none of them — the shape a smoke exists to catch. The second fold makes the
+        # whole arm path real. It is also nearly free in net terms: the per-fold marginal-bank
+        # cache is keyed on (matrix, fold, served map) and NOT on the draw count, so the decisive
+        # run inherits both folds' banks from this proof.
+        folds = folds[-2:]
     draws = 300 if args.smoke else FA.ASSEMBLY_DRAWS
     matrix_key = W6DA.w6d_matrix_key(SEASONS)
     log.info("NF-W8-0c: %d folds × %d positions, %d draws%s [QB body field: %s]", len(folds),

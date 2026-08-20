@@ -266,6 +266,12 @@ BREAKS: tuple[Break, ...] = (
           "⭐ half the DECLARED field never reaches the scoring layer — a field scored with arms "
           "silently absent is not the declared field (MH2/NF1.7 (a)), and only a NON-VACUITY "
           "assertion in the path proof can see it"),
+    Break("the_smoke_shrinks_to_a_single_fold_where_every_arm_is_identity", _RUN,
+          "        folds = folds[-2:]",
+          "        folds = folds[-1:]",
+          (f"{_R}::test_the_smoke_keeps_enough_folds_for_an_arm_to_be_fitted_at_all",),
+          "the path proof shrinks to ONE fold, where every arm is identity BY CONSTRUCTION — it "
+          "would then exercise none of the declared field (NF1.7 (a), on the smoke itself)"),
     Break("the_runner_starts_writing_an_optimizer_input", _RUN,
           "_ROWS_DIR = Path(__file__).resolve().parent / \"artifacts\" / \"nf_w8_0c_rows\"",
           "_ROWS_DIR = _INPUT_DIR = Path(__file__).resolve().parent / \"artifacts\" / "
