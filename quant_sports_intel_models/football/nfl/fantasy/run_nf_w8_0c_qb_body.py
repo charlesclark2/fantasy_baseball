@@ -32,7 +32,7 @@ PIPELINE (target `league_fantasy_points`, gate league `full_ppr`, NF-W7c's 8-fol
 
 RUN (OPERATOR — LAPTOP; reads the S3 NFL lake read-only, writes local artifacts):
 
-    # path proof: 1 fold, few draws (artifact _smoke) — no verdict
+    # path proof: the last TWO folds, few draws (artifact _smoke) — no verdict
     uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_nf_w8_0c_qb_body --smoke
 
     # the decisive run (>2 min — OPERATOR; dominated by the W6d marginal dispatch per fold)
@@ -856,8 +856,9 @@ def write_report(out: dict, path: Path) -> None:  # noqa: C901
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="NF-W8-0c — the QB body-level comparison (§0.5)")
     ap.add_argument("--smoke", action="store_true",
-                    help="path proof: 1 fold, few draws (artifact _smoke) — no verdict "
-                         "(the reproduction pins cannot hit at smoke draws)")
+                    help="path proof: the last TWO folds, few draws (artifact _smoke) — no "
+                         "verdict (the pins cannot hit at smoke draws). Two, not one: on a "
+                         "single fold every arm is identity BY CONSTRUCTION (prereg §4)")
     ap.add_argument("--rewrite-report", action="store_true",
                     help="re-derive every verdict from the stored per-fold summaries (zero refit)")
     ap.add_argument("--rebuild-cache", action="store_true", help="rebuild the W6d matrix cache")
