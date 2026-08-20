@@ -23,8 +23,10 @@ import { Picker } from "@/components/ui/picker"
 import { InfoTip } from "@/components/fantasy/shared"
 import { DepthTargetsField } from "@/components/fantasy/depth-targets-field"
 import {
+  DEPTH_TARGET_SOURCE_LABEL,
   NO_DEPTH_TARGETS,
   loadDepthTargets,
+  resolveDepthTargets,
   saveDepthTargets,
   type DepthTargets,
 } from "@/lib/depth-targets"
@@ -57,6 +59,7 @@ import {
   isCustomSelection,
   useFantasyManifest,
   useResolvedBoard,
+  useFantasyPreferences,
   useSavedLeagues,
 } from "@/lib/fantasy-queries"
 
@@ -100,6 +103,7 @@ const storageKey = (s: { configName: string; size: number; mySlot: number }) =>
 export function MockDraft() {
   const { data: manifest, isLoading: manifestLoading, error: manifestError } = useFantasyManifest()
   const { data: savedLeagues } = useSavedLeagues()
+  const accountPrefs = useFantasyPreferences()
 
   const [started, setStarted] = useState(false)
   const [configName, setConfigName] = useState<string>("")
@@ -112,7 +116,7 @@ export function MockDraft() {
   // NF-C7 — the SAME preference, the SAME storage key as the live draft tool (`lib/depth-targets`),
   // so a user who sets a target on one surface finds it applied on the other. Two copies of this
   // would be two rule sets (E9.61).
-  const [depthTargets, setDepthTargets] = useState<DepthTargets>(NO_DEPTH_TARGETS)
+  const [localDepthTargets, setLocalDepthTargets] = useState<DepthTargets>(NO_DEPTH_TARGETS)
   const [log, setLog] = useState<Record<string, string>>({}) // playerId -> the CPU's stated reason
   const [search, setSearch] = useState("")
   const [posFilter, setPosFilter] = useState<string>("ALL")
@@ -304,18 +308,33 @@ export function MockDraft() {
     setSeed(randomSeed())
   }, [])
 
+  const { targets: depthTargets, source: depthTargetSource } = useMemo(
+    () =>
+      resolveDepthTargets({
+        league: selectedLeague ? (selectedLeague.depth_targets ?? null) : null,
+        account: accountPrefs.data?.depth_targets ?? null,
+        local: localDepthTargets,
+      }),
+    [selectedLeague, accountPrefs.data, localDepthTargets],
+  )
+
   const recs = useMemo(() => {
     if (!board || !config) return []
     return recommend({ board, config, draftedIds, myPlayerIds, depthTargets, topN: 6 })
   }, [board, config, draftedIds, myPlayerIds, depthTargets])
 
+  // NF-C7b — the LOCAL value is the last resort: a saved league carries its own targets and an
+  // account default sits beneath that. `resolveDepthTargets` owns the order; this component must
+  // not re-state it (E9.61 — two renderers of one field become two rule sets).
   useEffect(() => {
-    setDepthTargets(loadDepthTargets(SEASON, configName))
+    setLocalDepthTargets(loadDepthTargets(SEASON, configName))
   }, [configName])
 
+  // ⚠️ Editing here only ever writes the LOCAL value — a saved league's targets belong to the
+  // league and are edited on /fantasy/league-settings.
   const updateDepthTargets = useCallback(
     (next: DepthTargets) => {
-      setDepthTargets(next)
+      setLocalDepthTargets(next)
       saveDepthTargets(SEASON, configName, next)
     },
     [configName],
@@ -445,11 +464,29 @@ export function MockDraft() {
                   />
                 </Field>
               </div>
-              <DepthTargetsField
-                config={config}
-                targets={depthTargets}
-                onChange={updateDepthTargets}
-              />
+              {depthTargetSource === "league" || depthTargetSource === "account" ? (
+                <p className="text-xs text-gray-400">
+                  Depth targets {DEPTH_TARGET_SOURCE_LABEL[depthTargetSource]}:{" "}
+                  <span className="text-gray-200">
+                    {Object.entries(depthTargets)
+                      .map(([pos, n]) => `${n} ${pos}`)
+                      .join(", ") || "none"}
+                  </span>
+                  .{" "}
+                  <a
+                    className="underline hover:text-gray-200"
+                    href={depthTargetSource === "league" ? "/fantasy/league-settings" : "/settings"}
+                  >
+                    Change
+                  </a>
+                </p>
+              ) : (
+                <DepthTargetsField
+                  config={config}
+                  targets={depthTargets}
+                  onChange={updateDepthTargets}
+                />
+              )}
               <Button
                 onClick={() => setStarted(true)}
                 className="mt-2 bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669]"

@@ -13,6 +13,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useAuth } from "@/lib/auth-context"
 import { canAccess } from "@/lib/entitlements"
 import {
+  getFantasyPreferences,
+  saveFantasyPreferences,
   createSavedLeague,
   deleteCustomBoard,
   deleteSavedLeague,
@@ -28,6 +30,7 @@ import {
   updateSavedLeague,
 } from "@/lib/fantasy"
 import type {
+  FantasyPreferences,
   CustomBoardsPayload,
   LeagueBoardPayload,
   LeagueSaveInput,
@@ -217,6 +220,41 @@ export function useSaveLeague() {
         ? updateSavedLeague(accessToken, leagueId, config)
         : createSavedLeague(accessToken, config),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["nfl-fantasy-leagues"] }),
+  })
+}
+
+/**
+ * NF-C7b — the caller's ACCOUNT-level fantasy defaults (today: depth targets).
+ *
+ * ⚠️ A FAILED READ MUST NOT READ AS "no default". `data` is undefined both while loading and on
+ * error, and a consumer that treats undefined as `{}` would silently draft against no targets and
+ * show a board that looks fine. Consumers read `isLoading`/`isError` and say so — the honest-empty-
+ * state rule (PERF): a coverage panel that renders an optimistic default on an upstream outage is
+ * making a claim it cannot support.
+ */
+export function useFantasyPreferences() {
+  const { accessToken } = useAuth()
+  return useQuery<FantasyPreferences>({
+    queryKey: ["nfl-fantasy-preferences"],
+    queryFn: () => getFantasyPreferences(accessToken),
+    enabled: !!accessToken,
+    staleTime: 60_000,
+    retry: false,
+  })
+}
+
+export function useSaveFantasyPreferences() {
+  const { accessToken } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (prefs: FantasyPreferences) => saveFantasyPreferences(accessToken, prefs),
+    onSuccess: (saved) => {
+      // Seed the cache with what the SERVER stored so a dropped field surfaces immediately rather
+      // than at the next reload (E8.6). Invalidating the LEAGUE list too: a changed account default
+      // changes the effective targets of every league that inherits it.
+      qc.setQueryData(["nfl-fantasy-preferences"], saved)
+      qc.invalidateQueries({ queryKey: ["nfl-fantasy-leagues"] })
+    },
   })
 }
 

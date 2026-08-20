@@ -207,6 +207,8 @@ def recommend_for_state(
     drafted_espn_ids: Iterable[str],
     my_espn_ids: Iterable[str],
     top_n: int = DEFAULT_TOP_N,
+    depth_targets: dict[str, int] | None = None,
+    depth_targets_source: str = "none",
 ) -> dict[str, Any]:
     """Rank MY next pick from a live ESPN draft state.
 
@@ -235,6 +237,10 @@ def recommend_for_state(
         drafted_ids=drafted_ids,
         my_player_ids=my_ids,
         top_n=max(1, min(int(top_n or DEFAULT_TOP_N), MAX_TOP_N)),
+        # NF-C7b — the caller's per-position depth targets, resolved from the SAVED LEAGUE (or the
+        # account default) by `services.depth_targets`. Nothing new is sent by the extension: the
+        # league record was already being fetched to build the board, so this arrived with it.
+        depth_targets=depth_targets or None,
     )
 
     by_id = {str(r.get("id")): r for r in players}
@@ -279,4 +285,13 @@ def recommend_for_state(
             for pid in my_ids
         ],
         "resolution": resolution["report"],
+        # ⭐ NF-C7b — WHAT WE APPLIED AND WHERE IT CAME FROM. A league target of `{"QB": 2}` and an
+        # account default of `{"QB": 2}` produce a PIXEL-IDENTICAL recommendation, so a user who
+        # wants to change it has no way to tell which screen to open. Echoing the source is the
+        # same discipline as `state.overall_pick` above: two different causes that render the same
+        # are indistinguishable until something names them.
+        "depth_targets": {
+            "applied": dict(depth_targets or {}),
+            "source": depth_targets_source,
+        },
     }

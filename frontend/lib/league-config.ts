@@ -36,6 +36,10 @@ export interface LeagueConfig {
   /** League rules captured for fidelity that the engine deliberately does NOT apply (median
    *  scoring, etc.). Nothing in scoring/VOR reads this — see the Python field's docstring. */
   captured_rules: Record<string, unknown>
+  /** NF-C7b — how many of each position the user wants to finish the draft holding, for THIS
+   *  league. `undefined`/absent means "never set" and inherits the account default;
+   *  `{}` means "cleared for this league" and does not. `lib/depth-targets.ts` owns that rule. */
+  depth_targets?: Record<string, number> | null
 }
 
 export const CONFIG_FORMAT_VERSION = "1.0"

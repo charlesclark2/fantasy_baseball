@@ -518,6 +518,26 @@ export function listSavedLeagues(token: string | null): Promise<SavedLeague[]> {
   return apiFetch(`/fantasy/leagues`, {}, token)
 }
 
+// ── NF-C7b: ACCOUNT-level fantasy defaults ───────────────────────────────────────────────────────
+export interface FantasyPreferences {
+  depth_targets: Record<string, number>
+}
+
+export function getFantasyPreferences(token: string | null): Promise<FantasyPreferences> {
+  return apiFetch(`/fantasy/preferences`, {}, token)
+}
+
+/** ⚠️ RESOLVES TO WHAT THE SERVER STORED, not to what was sent — and callers compare the two.
+ *  These models set no `extra="forbid"`, so a backend that predates a field accepts it, ignores it
+ *  and returns 200: the user watches their setting save and then vanish on reload with no error
+ *  anywhere (E8.6). Echoing the stored value is what makes that visible instead of silent. */
+export function saveFantasyPreferences(
+  token: string | null,
+  prefs: FantasyPreferences,
+): Promise<FantasyPreferences> {
+  return apiFetch(`/fantasy/preferences`, { method: "PUT", body: JSON.stringify(prefs) }, token)
+}
+
 export function createSavedLeague(
   token: string | null,
   cfg: LeagueSaveInput,
