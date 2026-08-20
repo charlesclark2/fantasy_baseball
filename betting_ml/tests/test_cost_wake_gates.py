@@ -145,7 +145,11 @@ class TestTickSfFreeStep3:
 
     def test_ext_refresh_is_gated_not_removed(self):
         body = INTRADAY[INTRADAY.find("def _schedule_lakehouse_intraday"):INTRADAY.find("def _w6_lakehouse_intraday")]
-        assert "if _tick_sf_free():" in body and 'refresh_w1_external_tables.py")' in body, (
+        # E11.26 re-anchor: the call gained an explicit `timeout=_TICK_LEG_TIMEOUT`, so the old
+        # `...py")` anchor (which incidentally asserted "no further arguments") no longer matches.
+        # The property under test — gated on _tick_sf_free, present in the else-branch — is
+        # unchanged, so the anchor moves onto the new implementation rather than being weakened.
+        assert "if _tick_sf_free():" in body and 'refresh_w1_external_tables.py"' in body, (
             "the tick's refresh_w1_external_tables must be gated on _tick_sf_free() (else-run), not "
             "hardcoded-removed — removing it unconditionally breaks pre-flip boxes that still read SF."
         )
