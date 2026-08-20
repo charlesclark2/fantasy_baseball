@@ -1,0 +1,3557 @@
+{
+  "story": "NF-W8-0c",
+  "predecessors": [
+    "NF-W8-0",
+    "NF-W8-0b"
+  ],
+  "phase": "qb_body_relevel",
+  "smoke": true,
+  "generated_at": "2026-08-20T05:15:53.215870+00:00",
+  "seasons": [
+    2016,
+    2025
+  ],
+  "n_folds": 2,
+  "gate_league": "full_ppr",
+  "matrix_key": "26c34fbe778c9d87",
+  "pit_audit": {
+    "weeks_checked": 175,
+    "records_checked": 84553,
+    "weeks_dropped": [],
+    "rows_dropped": 0
+  },
+  "attach_audit": {
+    "cache": "hit"
+  },
+  "served_map_sources": {
+    "QB|passing_tds": "nf_w6b",
+    "QB|passing_yards": "nf_w6b",
+    "QB|rushing_yards": "nf_w6b",
+    "RB|rushing_yards": "nf_w6b",
+    "TE|receiving_yards": "nf_w6b",
+    "WR|receiving_yards": "nf_w6b",
+    "RB|rushing_tds": "nf_w6b_c",
+    "RB|receiving_yards": "nf_w6d_c_default",
+    "QB|attempts": "nf_w6d_c_default",
+    "QB|passing_interceptions": "nf_w6d_b_ship",
+    "QB|carries": "nf_w6d_c_default",
+    "QB|rushing_tds": "nf_w6d_b_ship",
+    "QB|fumbles_lost": "nf_w6d_c_default",
+    "QB|two_pt": "nf_w6d_c_default",
+    "RB|carries": "nf_w6d_b_ship",
+    "RB|targets": "nf_w6d_c_default",
+    "RB|receptions": "nf_w6d_b_ship",
+    "RB|receiving_tds": "nf_w6d_c_default",
+    "RB|fumbles_lost": "nf_w6d_c_default",
+    "RB|two_pt": "nf_w6d_c_default",
+    "WR|targets": "nf_w6d_b_ship",
+    "WR|receptions": "nf_w6d_b_ship",
+    "WR|receiving_tds": "nf_w6d_b_ship",
+    "WR|fumbles_lost": "nf_w6d_c_default",
+    "WR|two_pt": "nf_w6d_c_default",
+    "TE|targets": "nf_w6d_b_ship",
+    "TE|receptions": "nf_w6d_b_ship",
+    "TE|receiving_tds": "nf_w6d_c_default",
+    "TE|fumbles_lost": "nf_w6d_c_default",
+    "TE|two_pt": "nf_w6d_c_default",
+    "QB|targets": "nf_w6d_c_default",
+    "QB|receptions": "nf_w6d_c_default",
+    "QB|receiving_yards": "nf_w6d_c_default",
+    "QB|receiving_tds": "nf_w6d_c_default",
+    "RB|attempts": "nf_w6d_c_default",
+    "RB|passing_yards": "nf_w6d_c_default",
+    "RB|passing_tds": "nf_w6d_c_default",
+    "RB|passing_interceptions": "nf_w6d_c_default",
+    "WR|attempts": "nf_w6d_c_default",
+    "WR|passing_yards": "nf_w6d_c_default",
+    "WR|passing_tds": "nf_w6d_c_default",
+    "WR|passing_interceptions": "nf_w6d_c_default",
+    "WR|carries": "nf_w6d_c_default",
+    "WR|rushing_yards": "nf_w6d_c_default",
+    "WR|rushing_tds": "nf_w6d_c_default",
+    "TE|attempts": "nf_w6d_c_default",
+    "TE|passing_yards": "nf_w6d_c_default",
+    "TE|passing_tds": "nf_w6d_c_default",
+    "TE|passing_interceptions": "nf_w6d_c_default",
+    "TE|carries": "nf_w6d_c_default",
+    "TE|rushing_yards": "nf_w6d_c_default",
+    "TE|rushing_tds": "nf_w6d_c_default"
+  },
+  "assembly_draws": 300,
+  "seed": 20260818,
+  "point_reader": "tail_completed_point",
+  "consumed_generators": {
+    "QB": "qb_zm_floor",
+    "RB": "rb_direct",
+    "WR": "wr_mixall",
+    "TE": "te_single_copula"
+  },
+  "fold_results": [
+    {
+      "label": "2025H1",
+      "n_test": 4308,
+      "positions": {
+        "QB": {
+          "scores": {
+            "direct_points": 2.7549520822177347,
+            "zm_floor": 2.7049097468300296
+          },
+          "consumed": "zm_floor",
+          "swap": "direct_points",
+          "n_train": 11920,
+          "n_test": 671,
+          "bias_identity": {
+            "n": 671,
+            "sum_err": -361.2363532100519,
+            "bias": -0.538355220879362,
+            "sd_err": 6.448772560070275
+          },
+          "bias_swap": {
+            "n": 671,
+            "sum_err": -99.19663626908032,
+            "bias": -0.14783403318789912,
+            "sd_err": 6.453824341335517
+          },
+          "calibration_slope": {
+            "slope": 0.9828,
+            "intercept": 0.6484,
+            "n": 671
+          },
+          "point_reader": "tail_completed_point",
+          "bias_gridmean": {
+            "n": 671,
+            "sum_err": -389.0498817931183,
+            "bias": -0.5798060831492076,
+            "sd_err": 6.449806049707903
+          },
+          "bank_detail": {
+            "consumed": {
+              "n": 671,
+              "mean_gridmean": 6.345023,
+              "mean_point_tc": 6.386473,
+              "mean_delta": 0.041451,
+              "mean_reweight_term": -0.031725,
+              "mean_hi_tail": 0.077336,
+              "mean_lo_tail": -0.00416,
+              "mean_beta_hi": 3.841775,
+              "mean_beta_lo": 0.658484,
+              "flat_hi_share": 0.0015,
+              "flat_lo_share": 0.225,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 6.387916,
+                "inner_hi=0.975": 6.386473,
+                "inner_hi=0.99": 6.384559,
+                "registered": "inner_hi=0.975"
+              }
+            },
+            "swap": {
+              "n": 671,
+              "mean_gridmean": 6.74375,
+              "mean_point_tc": 6.776995,
+              "mean_delta": 0.033245,
+              "mean_reweight_term": -0.033719,
+              "mean_hi_tail": 0.066891,
+              "mean_lo_tail": 7.2e-05,
+              "mean_beta_hi": 2.91896,
+              "mean_beta_lo": 0.160129,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 0.766,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 6.776912,
+                "inner_hi=0.975": 6.776995,
+                "inner_hi=0.99": 6.777054,
+                "registered": "inner_hi=0.975"
+              }
+            }
+          }
+        },
+        "RB": {
+          "scores": {
+            "direct_points": 2.3943960885539224,
+            "single_copula": 2.472455118445548
+          },
+          "consumed": "direct_points",
+          "swap": "single_copula",
+          "n_train": 19505,
+          "n_test": 1062,
+          "bias_identity": {
+            "n": 1062,
+            "sum_err": -155.82216285256152,
+            "bias": -0.1467252004261408,
+            "sd_err": 5.431456496495717
+          },
+          "bias_swap": {
+            "n": 1062,
+            "sum_err": -148.1182223391446,
+            "bias": -0.13947101915173693,
+            "sd_err": 5.5406026789828235
+          },
+          "calibration_slope": {
+            "slope": 1.1006,
+            "intercept": -0.3957,
+            "n": 1062
+          },
+          "point_reader": "tail_completed_point",
+          "bias_gridmean": {
+            "n": 1062,
+            "sum_err": -192.41622157602376,
+            "bias": -0.18118288283994705,
+            "sd_err": 5.430843408715188
+          },
+          "bank_detail": {
+            "consumed": {
+              "n": 1062,
+              "mean_gridmean": 5.354561,
+              "mean_point_tc": 5.389019,
+              "mean_delta": 0.034458,
+              "mean_reweight_term": -0.026773,
+              "mean_hi_tail": 0.061277,
+              "mean_lo_tail": -4.6e-05,
+              "mean_beta_hi": 2.641249,
+              "mean_beta_lo": 0.010906,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 0.7919,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 5.388969,
+                "inner_hi=0.975": 5.389019,
+                "inner_hi=0.99": 5.389065,
+                "registered": "inner_hi=0.975"
+              }
+            },
+            "swap": {
+              "n": 1062,
+              "mean_gridmean": 5.346258,
+              "mean_point_tc": 5.396273,
+              "mean_delta": 0.050015,
+              "mean_reweight_term": -0.026731,
+              "mean_hi_tail": 0.079015,
+              "mean_lo_tail": -0.002269,
+              "mean_beta_hi": 3.784211,
+              "mean_beta_lo": 0.33536,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 0.4915,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 5.39733,
+                "inner_hi=0.975": 5.396273,
+                "inner_hi=0.99": 5.394694,
+                "registered": "inner_hi=0.975"
+              }
+            }
+          }
+        },
+        "WR": {
+          "scores": {
+            "direct_points": 2.543122932095425,
+            "mixall_learned": 2.525647726557712
+          },
+          "consumed": "mixall_learned",
+          "swap": "direct_points",
+          "n_train": 27505,
+          "n_test": 1609,
+          "bias_identity": {
+            "n": 1609,
+            "sum_err": 101.3729463089523,
+            "bias": 0.06300369565503561,
+            "sd_err": 5.511837167674719
+          },
+          "bias_swap": {
+            "n": 1609,
+            "sum_err": 125.23624267041582,
+            "bias": 0.07783483074606329,
+            "sd_err": 5.5079260648562505
+          },
+          "calibration_slope": {
+            "slope": 1.0257,
+            "intercept": -0.204,
+            "n": 1609
+          },
+          "point_reader": "tail_completed_point",
+          "bias_gridmean": {
+            "n": 1609,
+            "sum_err": 25.216708747853446,
+            "bias": 0.015672286356652236,
+            "sd_err": 5.511494741056867
+          },
+          "bank_detail": {
+            "consumed": {
+              "n": 1609,
+              "mean_gridmean": 5.430278,
+              "mean_point_tc": 5.477609,
+              "mean_delta": 0.047331,
+              "mean_reweight_term": -0.027151,
+              "mean_hi_tail": 0.074975,
+              "mean_lo_tail": -0.000492,
+              "mean_beta_hi": 3.452074,
+              "mean_beta_lo": 0.093409,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 0.8515,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 5.478679,
+                "inner_hi=0.975": 5.477609,
+                "inner_hi=0.99": 5.475854,
+                "registered": "inner_hi=0.975"
+              }
+            },
+            "swap": {
+              "n": 1609,
+              "mean_gridmean": 5.451635,
+              "mean_point_tc": 5.49244,
+              "mean_delta": 0.040805,
+              "mean_reweight_term": -0.027258,
+              "mean_hi_tail": 0.068063,
+              "mean_lo_tail": 0.0,
+              "mean_beta_hi": 3.116807,
+              "mean_beta_lo": 0.0,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 1.0,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 5.492406,
+                "inner_hi=0.975": 5.49244,
+                "inner_hi=0.99": 5.49244,
+                "registered": "inner_hi=0.975"
+              }
+            }
+          }
+        },
+        "TE": {
+          "scores": {
+            "direct_points": 1.9181616006402329,
+            "single_copula": 1.8753372889457578
+          },
+          "consumed": "single_copula",
+          "swap": "direct_points",
+          "n_train": 15919,
+          "n_test": 966,
+          "bias_identity": {
+            "n": 966,
+            "sum_err": -260.18989665912517,
+            "bias": -0.2693477191088252,
+            "sd_err": 4.4076810076321555
+          },
+          "bias_swap": {
+            "n": 966,
+            "sum_err": -387.03980925698954,
+            "bias": -0.4006623284233846,
+            "sd_err": 4.4699451209406735
+          },
+          "calibration_slope": {
+            "slope": 1.0889,
+            "intercept": -0.0423,
+            "n": 966
+          },
+          "point_reader": "tail_completed_point",
+          "bias_gridmean": {
+            "n": 966,
+            "sum_err": -294.3251070221324,
+            "bias": -0.3046843757993089,
+            "sd_err": 4.407806663697408
+          },
+          "bank_detail": {
+            "consumed": {
+              "n": 966,
+              "mean_gridmean": 3.468918,
+              "mean_point_tc": 3.504255,
+              "mean_delta": 0.035337,
+              "mean_reweight_term": -0.017345,
+              "mean_hi_tail": 0.053406,
+              "mean_lo_tail": -0.000724,
+              "mean_beta_hi": 2.55656,
+              "mean_beta_lo": 0.098206,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 0.8219,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 3.505214,
+                "inner_hi=0.975": 3.504255,
+                "inner_hi=0.99": 3.502716,
+                "registered": "inner_hi=0.975"
+              }
+            },
+            "swap": {
+              "n": 966,
+              "mean_gridmean": 3.344466,
+              "mean_point_tc": 3.37294,
+              "mean_delta": 0.028474,
+              "mean_reweight_term": -0.016722,
+              "mean_hi_tail": 0.045197,
+              "mean_lo_tail": -0.0,
+              "mean_beta_hi": 2.112829,
+              "mean_beta_lo": 2.5e-05,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 0.999,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 3.372939,
+                "inner_hi=0.975": 3.37294,
+                "inner_hi=0.99": 3.37294,
+                "registered": "inner_hi=0.975"
+              }
+            }
+          }
+        }
+      },
+      "qb": {
+        "arms": {
+          "identity": {
+            "crps": 2.7049097468300296,
+            "pit": {
+              "max_decile_dev": 0.03263785394932936,
+              "n": 671,
+              "decile_counts": [
+                75,
+                79,
+                61,
+                53,
+                75,
+                57,
+                60,
+                64,
+                58,
+                89
+              ],
+              "decile_freq": [
+                0.1118,
+                0.1177,
+                0.0909,
+                0.079,
+                0.1118,
+                0.0849,
+                0.0894,
+                0.0954,
+                0.0864,
+                0.1326
+              ],
+              "worst_decile": 9
+            },
+            "coverage": {
+              "coverage": 0.8152011922503726,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -361.2363532100519,
+              "bias": -0.538355220879362,
+              "sd_err": 6.448772560070275
+            },
+            "params": {
+              "eligible": true
+            },
+            "acts": true
+          },
+          "cond_shift": {
+            "crps": 2.7049097468300296,
+            "pit": {
+              "max_decile_dev": 0.03263785394932936,
+              "n": 671,
+              "decile_counts": [
+                75,
+                79,
+                61,
+                53,
+                75,
+                57,
+                60,
+                64,
+                58,
+                89
+              ],
+              "decile_freq": [
+                0.1118,
+                0.1177,
+                0.0909,
+                0.079,
+                0.1118,
+                0.0849,
+                0.0894,
+                0.0954,
+                0.0864,
+                0.1326
+              ],
+              "worst_decile": 9
+            },
+            "coverage": {
+              "coverage": 0.8152011922503726,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -361.2363532100519,
+              "bias": -0.538355220879362,
+              "sd_err": 6.448772560070275
+            },
+            "params": {
+              "eligible": false,
+              "reason": "fewer than 50 prior OOF rows \u2014 identity by construction (prereg \u00a74)"
+            },
+            "acts": false
+          },
+          "cond_scale": {
+            "crps": 2.7049097468300296,
+            "pit": {
+              "max_decile_dev": 0.03263785394932936,
+              "n": 671,
+              "decile_counts": [
+                75,
+                79,
+                61,
+                53,
+                75,
+                57,
+                60,
+                64,
+                58,
+                89
+              ],
+              "decile_freq": [
+                0.1118,
+                0.1177,
+                0.0909,
+                0.079,
+                0.1118,
+                0.0849,
+                0.0894,
+                0.0954,
+                0.0864,
+                0.1326
+              ],
+              "worst_decile": 9
+            },
+            "coverage": {
+              "coverage": 0.8152011922503726,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -361.2363532100519,
+              "bias": -0.538355220879362,
+              "sd_err": 6.448772560070275
+            },
+            "params": {
+              "eligible": false,
+              "reason": "fewer than 50 prior OOF rows \u2014 identity by construction (prereg \u00a74)"
+            },
+            "acts": false
+          },
+          "avail_relevel": {
+            "crps": 2.7049097468300296,
+            "pit": {
+              "max_decile_dev": 0.03263785394932936,
+              "n": 671,
+              "decile_counts": [
+                75,
+                79,
+                61,
+                53,
+                75,
+                57,
+                60,
+                64,
+                58,
+                89
+              ],
+              "decile_freq": [
+                0.1118,
+                0.1177,
+                0.0909,
+                0.079,
+                0.1118,
+                0.0849,
+                0.0894,
+                0.0954,
+                0.0864,
+                0.1326
+              ],
+              "worst_decile": 9
+            },
+            "coverage": {
+              "coverage": 0.8152011922503726,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -361.2363532100519,
+              "bias": -0.538355220879362,
+              "sd_err": 6.448772560070275
+            },
+            "params": {
+              "eligible": false,
+              "reason": "fewer than 50 prior OOF rows \u2014 identity by construction (prereg \u00a74)"
+            },
+            "acts": false
+          },
+          "leg_scale": {
+            "crps": 2.7049097468300296,
+            "pit": {
+              "max_decile_dev": 0.03263785394932936,
+              "n": 671,
+              "decile_counts": [
+                75,
+                79,
+                61,
+                53,
+                75,
+                57,
+                60,
+                64,
+                58,
+                89
+              ],
+              "decile_freq": [
+                0.1118,
+                0.1177,
+                0.0909,
+                0.079,
+                0.1118,
+                0.0849,
+                0.0894,
+                0.0954,
+                0.0864,
+                0.1326
+              ],
+              "worst_decile": 9
+            },
+            "coverage": {
+              "coverage": 0.8152011922503726,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -361.2363532100519,
+              "bias": -0.538355220879362,
+              "sd_err": 6.448772560070275
+            },
+            "params": {
+              "eligible": false,
+              "reason": "fewer than 50 prior OOF rows \u2014 identity by construction (prereg \u00a74)"
+            },
+            "acts": false
+          },
+          "oracle_cond_shift": {
+            "crps": 2.7006471868636415,
+            "pit": {
+              "max_decile_dev": 0.02369597615499254,
+              "n": 671,
+              "decile_counts": [
+                83,
+                79,
+                66,
+                58,
+                67,
+                65,
+                59,
+                57,
+                63,
+                74
+              ],
+              "decile_freq": [
+                0.1237,
+                0.1177,
+                0.0984,
+                0.0864,
+                0.0999,
+                0.0969,
+                0.0879,
+                0.0849,
+                0.0939,
+                0.1103
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.8301043219076006,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -0.8288657406134519,
+              "bias": -0.00123526936007966,
+              "sd_err": 6.459008073249496
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 671,
+              "delta": 1.0834966005315376,
+              "mean_pi_prior": 0.49686839867818405
+            },
+            "acts": true
+          },
+          "oracle_cond_scale": {
+            "crps": 2.6965017092311983,
+            "pit": {
+              "max_decile_dev": 0.019523099850968714,
+              "n": 671,
+              "decile_counts": [
+                78,
+                80,
+                62,
+                60,
+                68,
+                64,
+                63,
+                54,
+                63,
+                79
+              ],
+              "decile_freq": [
+                0.1162,
+                0.1192,
+                0.0924,
+                0.0894,
+                0.1013,
+                0.0954,
+                0.0939,
+                0.0805,
+                0.0939,
+                0.1177
+              ],
+              "worst_decile": 7
+            },
+            "coverage": {
+              "coverage": 0.827123695976155,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -113.72667317368028,
+              "bias": -0.16948833557925527,
+              "sd_err": 6.468762423952695
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 671,
+              "kappa": 1.0842961659338488
+            },
+            "acts": true,
+            "marginal_drift": {
+              "mean_abs_relative_drift": {
+                "attempts": 0.0,
+                "passing_yards": 0.08429616593384881,
+                "passing_tds": 0.08429616593384878,
+                "passing_interceptions": 0.08429616593384882,
+                "carries": 0.0,
+                "rushing_yards": 0.08429616593384881,
+                "rushing_tds": 0.08429616593384881,
+                "targets": 0.0,
+                "receptions": 0.08429616593384881,
+                "receiving_yards": 0.08429616593384881,
+                "receiving_tds": 0.0,
+                "fumbles_lost": 0.08429616593384881,
+                "two_pt": 0.08429616593384881
+              },
+              "max_leg": "passing_interceptions",
+              "max_drift": 0.08429616593384882
+            }
+          },
+          "oracle_avail_relevel": {
+            "crps": 2.7022600113954858,
+            "pit": {
+              "max_decile_dev": 0.028166915052160957,
+              "n": 671,
+              "decile_counts": [
+                75,
+                76,
+                64,
+                54,
+                75,
+                57,
+                62,
+                61,
+                61,
+                86
+              ],
+              "decile_freq": [
+                0.1118,
+                0.1133,
+                0.0954,
+                0.0805,
+                0.1118,
+                0.0849,
+                0.0924,
+                0.0909,
+                0.0909,
+                0.1282
+              ],
+              "worst_decile": 9
+            },
+            "coverage": {
+              "coverage": 0.812220566318927,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -362.75889158419,
+              "bias": -0.5406242795591505,
+              "sd_err": 6.443039097232677
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 671,
+              "delta_pi": 0.041884100982261946,
+              "mean_pi_prior": 0.49686839867818405,
+              "clamp": {
+                "n_rows": 671,
+                "clamp_binding_share": 0.0,
+                "mean_pi_hat": 0.528,
+                "mean_pi_used": 0.528,
+                "mean_upward_move": 0.0,
+                "max_upward_move": 0.0,
+                "mean_installed_atom": 0.472
+              },
+              "mean_pi_moved": 0.031152699745280232
+            },
+            "acts": true
+          },
+          "oracle_leg_scale": {
+            "crps": 2.697100496612075,
+            "pit": {
+              "max_decile_dev": 0.02220566318926974,
+              "n": 671,
+              "decile_counts": [
+                76,
+                82,
+                60,
+                59,
+                70,
+                63,
+                59,
+                60,
+                61,
+                81
+              ],
+              "decile_freq": [
+                0.1133,
+                0.1222,
+                0.0894,
+                0.0879,
+                0.1043,
+                0.0939,
+                0.0879,
+                0.0894,
+                0.0909,
+                0.1207
+              ],
+              "worst_decile": 1
+            },
+            "coverage": {
+              "coverage": 0.8241430700447094,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -177.99302891968256,
+              "bias": -0.26526531880727655,
+              "sd_err": 6.4573059927610785
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 671,
+              "kappa": [
+                1.0,
+                1.0778020537344382,
+                1.0633716500480326,
+                0.9023231081125993,
+                1.0,
+                0.9626149583012623,
+                0.9916461325800838,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                0.7976643553516501,
+                1.3410596026490063
+              ],
+              "out_of_band_legs": [],
+              "immaterial_legs": [
+                "receptions",
+                "receiving_yards",
+                "receiving_tds"
+              ],
+              "priced_legs": [
+                "passing_yards",
+                "passing_tds",
+                "passing_interceptions",
+                "rushing_yards",
+                "rushing_tds",
+                "receptions",
+                "receiving_yards",
+                "receiving_tds",
+                "fumbles_lost",
+                "two_pt"
+              ]
+            },
+            "acts": true,
+            "marginal_drift": {
+              "mean_abs_relative_drift": {
+                "attempts": 0.0,
+                "passing_yards": 0.07780205373443816,
+                "passing_tds": 0.0633716500480326,
+                "passing_interceptions": 0.09767689188740071,
+                "carries": 0.0,
+                "rushing_yards": 0.03738504169873768,
+                "rushing_tds": 0.008353867419916177,
+                "targets": 0.0,
+                "receptions": 0.0,
+                "receiving_yards": 0.0,
+                "receiving_tds": 0.0,
+                "fumbles_lost": 0.20233564464834983,
+                "two_pt": 0.34105960264900625
+              },
+              "max_leg": "two_pt",
+              "max_drift": 0.34105960264900625
+            }
+          },
+          "over_cond_shift": {
+            "crps": 2.7049097468300296,
+            "pit": {
+              "max_decile_dev": 0.03263785394932936,
+              "n": 671,
+              "decile_counts": [
+                75,
+                79,
+                61,
+                53,
+                75,
+                57,
+                60,
+                64,
+                58,
+                89
+              ],
+              "decile_freq": [
+                0.1118,
+                0.1177,
+                0.0909,
+                0.079,
+                0.1118,
+                0.0849,
+                0.0894,
+                0.0954,
+                0.0864,
+                0.1326
+              ],
+              "worst_decile": 9
+            },
+            "coverage": {
+              "coverage": 0.8152011922503726,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -361.2363532100519,
+              "bias": -0.538355220879362,
+              "sd_err": 6.448772560070275
+            },
+            "params": {
+              "eligible": false,
+              "reason": "`cond_shift` is ineligible this fold, so its \u00d72 anchor cannot be formed"
+            },
+            "acts": false
+          },
+          "permuted_leg_scale": {
+            "crps": 2.7049097468300296,
+            "pit": {
+              "max_decile_dev": 0.03263785394932936,
+              "n": 671,
+              "decile_counts": [
+                75,
+                79,
+                61,
+                53,
+                75,
+                57,
+                60,
+                64,
+                58,
+                89
+              ],
+              "decile_freq": [
+                0.1118,
+                0.1177,
+                0.0909,
+                0.079,
+                0.1118,
+                0.0849,
+                0.0894,
+                0.0954,
+                0.0864,
+                0.1326
+              ],
+              "worst_decile": 9
+            },
+            "coverage": {
+              "coverage": 0.8152011922503726,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -361.2363532100519,
+              "bias": -0.538355220879362,
+              "sd_err": 6.448772560070275
+            },
+            "params": {
+              "eligible": false,
+              "reason": "`leg_scale` is ineligible this fold, so its permuted anchor cannot be formed"
+            },
+            "acts": false
+          },
+          "climatology_bank": {
+            "crps": 2.7049097468300296,
+            "pit": {
+              "max_decile_dev": 0.03263785394932936,
+              "n": 671,
+              "decile_counts": [
+                75,
+                79,
+                61,
+                53,
+                75,
+                57,
+                60,
+                64,
+                58,
+                89
+              ],
+              "decile_freq": [
+                0.1118,
+                0.1177,
+                0.0909,
+                0.079,
+                0.1118,
+                0.0849,
+                0.0894,
+                0.0954,
+                0.0864,
+                0.1326
+              ],
+              "worst_decile": 9
+            },
+            "coverage": {
+              "coverage": 0.8152011922503726,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -361.2363532100519,
+              "bias": -0.538355220879362,
+              "sd_err": 6.448772560070275
+            },
+            "params": {
+              "eligible": false,
+              "reason": "no prior realized rows \u2014 the climatology anchor could not be formed on this fold"
+            },
+            "acts": false
+          },
+          "nihilist_zero": {
+            "crps": 6.952727272727272,
+            "pit": {
+              "max_decile_dev": 0.40670640834575267,
+              "n": 671,
+              "decile_counts": [
+                48,
+                36,
+                47,
+                30,
+                37,
+                33,
+                31,
+                38,
+                31,
+                340
+              ],
+              "decile_freq": [
+                0.0715,
+                0.0537,
+                0.07,
+                0.0447,
+                0.0551,
+                0.0492,
+                0.0462,
+                0.0566,
+                0.0462,
+                0.5067
+              ],
+              "worst_decile": 9
+            },
+            "coverage": {
+              "coverage": 0.5156482861400894,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": true
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -4646.56,
+              "bias": -6.924828614008942,
+              "sd_err": 9.640300697862585
+            },
+            "params": {
+              "eligible": true
+            },
+            "acts": true
+          },
+          "direct_points": {
+            "crps": 2.7549520822177347,
+            "pit": {
+              "max_decile_dev": 0.11907600596125187,
+              "n": 671,
+              "decile_counts": [
+                147,
+                92,
+                90,
+                72,
+                67,
+                29,
+                25,
+                37,
+                32,
+                80
+              ],
+              "decile_freq": [
+                0.2191,
+                0.1371,
+                0.1341,
+                0.1073,
+                0.0999,
+                0.0432,
+                0.0373,
+                0.0551,
+                0.0477,
+                0.1192
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.7853949329359166,
+              "n": 671,
+              "binomial_se": 0.015441828729643661,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 671,
+              "sum_err": -99.19663626908032,
+              "bias": -0.14783403318789912,
+              "sd_err": 6.453824341335517
+            },
+            "params": {
+              "eligible": true
+            },
+            "acts": true
+          }
+        },
+        "decomposition": {
+          "n": 671,
+          "total_bias_ppr": -0.5383552208793612,
+          "read_channel_ppr": -0.016068630404199702,
+          "model_channel_ppr": -0.5222865904751621,
+          "linearity_residual": 0.0,
+          "identity_residual": 6.661338147750939e-16,
+          "identity_holds": true,
+          "pi_bar": 0.49686839867818405,
+          "active_rate": 0.4932935916542474,
+          "legs": {
+            "attempts": {
+              "weight": 0.0,
+              "leg_mean": 8.634197714853453,
+              "realized_mean": 13.086438152011922,
+              "contribution_ppr": -0.0,
+              "availability_part_ppr": 0.0,
+              "conditional_part_ppr": -0.0,
+              "priced": false
+            },
+            "passing_yards": {
+              "weight": 0.04,
+              "leg_mean": 86.10142998062838,
+              "realized_mean": 92.80029806259314,
+              "contribution_ppr": -0.26795472327859043,
+              "availability_part_ppr": 0.02477887484771157,
+              "conditional_part_ppr": -0.292733598126302,
+              "priced": true
+            },
+            "passing_tds": {
+              "weight": 4.0,
+              "leg_mean": 0.5998410332836562,
+              "realized_mean": 0.6378539493293591,
+              "contribution_ppr": -0.15205166418281157,
+              "availability_part_ppr": 0.01726264696835089,
+              "conditional_part_ppr": -0.16931431115116227,
+              "priced": true
+            },
+            "passing_interceptions": {
+              "weight": -2.0,
+              "leg_mean": 0.2989468455042225,
+              "realized_mean": 0.2697466467958271,
+              "contribution_ppr": -0.05840039741679082,
+              "availability_part_ppr": -0.004301651245823614,
+              "conditional_part_ppr": -0.05409874617096723,
+              "priced": true
+            },
+            "carries": {
+              "weight": 0.0,
+              "leg_mean": 1.6262394436164929,
+              "realized_mean": 1.7362146050670642,
+              "contribution_ppr": -0.0,
+              "availability_part_ppr": 0.0,
+              "conditional_part_ppr": -0.0,
+              "priced": false
+            },
+            "rushing_yards": {
+              "weight": 0.1,
+              "leg_mean": 7.813726010736893,
+              "realized_mean": 7.521609538002981,
+              "contribution_ppr": 0.02921164727339125,
+              "availability_part_ppr": 0.005621722512562184,
+              "conditional_part_ppr": 0.023589924760829082,
+              "priced": true
+            },
+            "rushing_tds": {
+              "weight": 6.0,
+              "leg_mean": 0.08265772478887233,
+              "realized_mean": 0.08196721311475409,
+              "contribution_ppr": 0.004143070044709429,
+              "availability_part_ppr": 0.003568173173548097,
+              "conditional_part_ppr": 0.0005748968711613512,
+              "priced": true
+            },
+            "targets": {
+              "weight": 0.0,
+              "leg_mean": 0.012493790362642821,
+              "realized_mean": 0.013412816691505217,
+              "contribution_ppr": -0.0,
+              "availability_part_ppr": 0.0,
+              "conditional_part_ppr": -0.0,
+              "priced": false
+            },
+            "receptions": {
+              "weight": 1.0,
+              "leg_mean": 0.007242921013412816,
+              "realized_mean": 0.011922503725782414,
+              "contribution_ppr": -0.004679582712369598,
+              "availability_part_ppr": 5.21104682476223e-05,
+              "conditional_part_ppr": -0.004731693180617221,
+              "priced": true
+            },
+            "receiving_yards": {
+              "weight": 0.1,
+              "leg_mean": 0.030138625792171296,
+              "realized_mean": 0.07600596125186289,
+              "contribution_ppr": -0.00458673354596916,
+              "availability_part_ppr": 2.168376404300847e-05,
+              "conditional_part_ppr": -0.004608417310012169,
+              "priced": true
+            },
+            "receiving_tds": {
+              "weight": 6.0,
+              "leg_mean": 0.0,
+              "realized_mean": 0.0014903129657228018,
+              "contribution_ppr": -0.00894187779433681,
+              "availability_part_ppr": 0.0,
+              "conditional_part_ppr": -0.00894187779433681,
+              "priced": true
+            },
+            "fumbles_lost": {
+              "weight": -2.0,
+              "leg_mean": 0.09528564331843019,
+              "realized_mean": 0.07600596125186289,
+              "contribution_ppr": -0.0385593641331346,
+              "availability_part_ppr": -0.0013710986165399771,
+              "conditional_part_ppr": -0.03718826551659463,
+              "priced": true
+            },
+            "two_pt": {
+              "weight": 2.0,
+              "leg_mean": 0.03000496770988574,
+              "realized_mean": 0.040238450074515646,
+              "contribution_ppr": -0.02046696472925981,
+              "availability_part_ppr": 0.00043175202773064296,
+              "conditional_part_ppr": -0.020898716756990447,
+              "priced": true
+            }
+          },
+          "availability_channel_ppr": 0.046064213899830425,
+          "conditional_channel_ppr": -0.5683508043749924
+        },
+        "bands": {
+          "n_rows": 671,
+          "gridmean_gap_ppr": -0.39872751693904085,
+          "bands": [
+            {
+              "level_lo": 0.005,
+              "level_hi": 0.095,
+              "n_levels": 19,
+              "contribution_ppr": -0.0005688741402106907,
+              "share": 0.001426724056011571
+            },
+            {
+              "level_lo": 0.1,
+              "level_hi": 0.195,
+              "n_levels": 20,
+              "contribution_ppr": -0.006593815407155617,
+              "share": 0.0165371466152503
+            },
+            {
+              "level_lo": 0.2,
+              "level_hi": 0.295,
+              "n_levels": 20,
+              "contribution_ppr": -0.03239530885415111,
+              "share": 0.0812467348700788
+            },
+            {
+              "level_lo": 0.3,
+              "level_hi": 0.395,
+              "n_levels": 20,
+              "contribution_ppr": -0.0418002522835186,
+              "share": 0.10483412984489154
+            },
+            {
+              "level_lo": 0.4,
+              "level_hi": 0.495,
+              "n_levels": 20,
+              "contribution_ppr": -0.042647792931227405,
+              "share": 0.10695974348253366
+            },
+            {
+              "level_lo": 0.5,
+              "level_hi": 0.595,
+              "n_levels": 20,
+              "contribution_ppr": -0.046477049447282696,
+              "share": 0.11656343611315971
+            },
+            {
+              "level_lo": 0.6,
+              "level_hi": 0.695,
+              "n_levels": 20,
+              "contribution_ppr": -0.06414545602651842,
+              "share": 0.1608754181776856
+            },
+            {
+              "level_lo": 0.7,
+              "level_hi": 0.795,
+              "n_levels": 20,
+              "contribution_ppr": -0.07867206697441295,
+              "share": 0.19730784466134718
+            },
+            {
+              "level_lo": 0.8,
+              "level_hi": 0.895,
+              "n_levels": 20,
+              "contribution_ppr": -0.10170751462656326,
+              "share": 0.25508024980907634
+            },
+            {
+              "level_lo": 0.9,
+              "level_hi": 0.995,
+              "n_levels": 20,
+              "contribution_ppr": 0.016280613751999823,
+              "share": -0.040831427630034556
+            }
+          ],
+          "band_sum_residual": 5.551115123125783e-17,
+          "identity_holds": true
+        },
+        "clamp": {
+          "n_rows": 671,
+          "clamp_binding_share": 0.9434,
+          "mean_pi_hat": 0.4945,
+          "mean_pi_used": 0.4969,
+          "mean_upward_move": 0.0024,
+          "max_upward_move": 0.005,
+          "mean_installed_atom": 0.5031
+        },
+        "identity_matches_certified": {
+          "certified_crps": 2.7049097468300296,
+          "rederived_crps": 2.7049097468300296,
+          "crps_gap": 0.0,
+          "point_gap": 0.0,
+          "matches": true,
+          "comparator_certified_crps": 2.7549520822177347,
+          "comparator_crps_gap": 0.0
+        },
+        "n_test": 671,
+        "priced_legs": [
+          "passing_yards",
+          "passing_tds",
+          "passing_interceptions",
+          "rushing_yards",
+          "rushing_tds",
+          "receptions",
+          "receiving_yards",
+          "receiving_tds",
+          "fumbles_lost",
+          "two_pt"
+        ]
+      },
+      "bank_cache": "miss",
+      "rows_path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w8-0c/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0c_rows_smoke/2025H1.parquet"
+    },
+    {
+      "label": "2025H2",
+      "n_test": 4380,
+      "positions": {
+        "QB": {
+          "scores": {
+            "direct_points": 2.612798153102158,
+            "zm_floor": 2.6214723114360132
+          },
+          "consumed": "zm_floor",
+          "swap": "direct_points",
+          "n_train": 12622,
+          "n_test": 701,
+          "bias_identity": {
+            "n": 701,
+            "sum_err": -192.09513059957368,
+            "bias": -0.2740301435086643,
+            "sd_err": 6.359836420249513
+          },
+          "bias_swap": {
+            "n": 701,
+            "sum_err": 138.38554608948954,
+            "bias": 0.19741162066974258,
+            "sd_err": 6.248213556300151
+          },
+          "calibration_slope": {
+            "slope": 0.96,
+            "intercept": 0.5061,
+            "n": 701
+          },
+          "point_reader": "tail_completed_point",
+          "bias_gridmean": {
+            "n": 701,
+            "sum_err": -220.3766924844728,
+            "bias": -0.3143747396354819,
+            "sd_err": 6.359194552218721
+          },
+          "bank_detail": {
+            "consumed": {
+              "n": 701,
+              "mean_gridmean": 5.767223,
+              "mean_point_tc": 5.807568,
+              "mean_delta": 0.040345,
+              "mean_reweight_term": -0.028836,
+              "mean_hi_tail": 0.074422,
+              "mean_lo_tail": -0.005242,
+              "mean_beta_hi": 3.69667,
+              "mean_beta_lo": 0.706697,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 0.1826,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 5.809248,
+                "inner_hi=0.975": 5.807568,
+                "inner_hi=0.99": 5.805495,
+                "registered": "inner_hi=0.975"
+              }
+            },
+            "swap": {
+              "n": 701,
+              "mean_gridmean": 6.243575,
+              "mean_point_tc": 6.279009,
+              "mean_delta": 0.035434,
+              "mean_reweight_term": -0.031218,
+              "mean_hi_tail": 0.066747,
+              "mean_lo_tail": -9.5e-05,
+              "mean_beta_hi": 2.934886,
+              "mean_beta_lo": 0.137018,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 0.7917,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 6.278934,
+                "inner_hi=0.975": 6.279009,
+                "inner_hi=0.99": 6.279066,
+                "registered": "inner_hi=0.975"
+              }
+            }
+          }
+        },
+        "RB": {
+          "scores": {
+            "direct_points": 2.434651415246522,
+            "single_copula": 2.4978151263870787
+          },
+          "consumed": "direct_points",
+          "swap": "single_copula",
+          "n_train": 20601,
+          "n_test": 1082,
+          "bias_identity": {
+            "n": 1082,
+            "sum_err": -381.28761786033164,
+            "bias": -0.35239151373413274,
+            "sd_err": 5.565932129269225
+          },
+          "bias_swap": {
+            "n": 1082,
+            "sum_err": -282.7898033768802,
+            "bias": -0.2613584134721628,
+            "sd_err": 5.675798257962783
+          },
+          "calibration_slope": {
+            "slope": 1.1204,
+            "intercept": -0.2936,
+            "n": 1082
+          },
+          "point_reader": "tail_completed_point",
+          "bias_gridmean": {
+            "n": 1082,
+            "sum_err": -417.41870828878984,
+            "bias": -0.38578438843695917,
+            "sd_err": 5.56546634188391
+          },
+          "bank_detail": {
+            "consumed": {
+              "n": 1082,
+              "mean_gridmean": 5.330667,
+              "mean_point_tc": 5.36406,
+              "mean_delta": 0.033393,
+              "mean_reweight_term": -0.026653,
+              "mean_hi_tail": 0.06005,
+              "mean_lo_tail": -4e-06,
+              "mean_beta_hi": 2.6078,
+              "mean_beta_lo": 0.000927,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 0.8429,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 5.364002,
+                "inner_hi=0.975": 5.36406,
+                "inner_hi=0.99": 5.364063,
+                "registered": "inner_hi=0.975"
+              }
+            },
+            "swap": {
+              "n": 1082,
+              "mean_gridmean": 5.405962,
+              "mean_point_tc": 5.455093,
+              "mean_delta": 0.04913,
+              "mean_reweight_term": -0.02703,
+              "mean_hi_tail": 0.07807,
+              "mean_lo_tail": -0.00191,
+              "mean_beta_hi": 3.676548,
+              "mean_beta_lo": 0.27408,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 0.5536,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 5.456214,
+                "inner_hi=0.975": 5.455093,
+                "inner_hi=0.99": 5.453232,
+                "registered": "inner_hi=0.975"
+              }
+            }
+          }
+        },
+        "WR": {
+          "scores": {
+            "direct_points": 2.488364563443118,
+            "mixall_learned": 2.4742926144316693
+          },
+          "consumed": "mixall_learned",
+          "swap": "direct_points",
+          "n_train": 29162,
+          "n_test": 1622,
+          "bias_identity": {
+            "n": 1622,
+            "sum_err": 313.89822215371584,
+            "bias": 0.19352541439809853,
+            "sd_err": 5.415908853392942
+          },
+          "bias_swap": {
+            "n": 1622,
+            "sum_err": 393.14603979660336,
+            "bias": 0.24238350172416975,
+            "sd_err": 5.430244531064676
+          },
+          "calibration_slope": {
+            "slope": 0.9872,
+            "intercept": -0.1279,
+            "n": 1622
+          },
+          "point_reader": "tail_completed_point",
+          "bias_gridmean": {
+            "n": 1622,
+            "sum_err": 240.49623359859785,
+            "bias": 0.14827141405585564,
+            "sd_err": 5.416036562282406
+          },
+          "bank_detail": {
+            "consumed": {
+              "n": 1622,
+              "mean_gridmean": 5.066101,
+              "mean_point_tc": 5.111355,
+              "mean_delta": 0.045254,
+              "mean_reweight_term": -0.025331,
+              "mean_hi_tail": 0.071041,
+              "mean_lo_tail": -0.000457,
+              "mean_beta_hi": 3.269426,
+              "mean_beta_lo": 0.080104,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 0.8564,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 5.112525,
+                "inner_hi=0.975": 5.111355,
+                "inner_hi=0.99": 5.109792,
+                "registered": "inner_hi=0.975"
+              }
+            },
+            "swap": {
+              "n": 1622,
+              "mean_gridmean": 5.118427,
+              "mean_point_tc": 5.160213,
+              "mean_delta": 0.041787,
+              "mean_reweight_term": -0.025592,
+              "mean_hi_tail": 0.06738,
+              "mean_lo_tail": -2e-06,
+              "mean_beta_hi": 3.187479,
+              "mean_beta_lo": 0.000364,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 0.9901,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 5.160192,
+                "inner_hi=0.975": 5.160213,
+                "inner_hi=0.99": 5.160215,
+                "registered": "inner_hi=0.975"
+              }
+            }
+          }
+        },
+        "TE": {
+          "scores": {
+            "direct_points": 1.8076559015435376,
+            "single_copula": 1.7722329902143152
+          },
+          "consumed": "single_copula",
+          "swap": "direct_points",
+          "n_train": 16922,
+          "n_test": 975,
+          "bias_identity": {
+            "n": 975,
+            "sum_err": -101.09116441117662,
+            "bias": -0.10368324554992474,
+            "sd_err": 4.171372332384566
+          },
+          "bias_swap": {
+            "n": 975,
+            "sum_err": -142.03664808739586,
+            "bias": -0.14567861342297012,
+            "sd_err": 4.219479042059717
+          },
+          "calibration_slope": {
+            "slope": 1.0717,
+            "intercept": -0.1501,
+            "n": 975
+          },
+          "point_reader": "tail_completed_point",
+          "bias_gridmean": {
+            "n": 975,
+            "sum_err": -133.8404444644523,
+            "bias": -0.1372722507327716,
+            "sd_err": 4.171319676234156
+          },
+          "bank_detail": {
+            "consumed": {
+              "n": 975,
+              "mean_gridmean": 3.504266,
+              "mean_point_tc": 3.537855,
+              "mean_delta": 0.033589,
+              "mean_reweight_term": -0.017521,
+              "mean_hi_tail": 0.052108,
+              "mean_lo_tail": -0.000998,
+              "mean_beta_hi": 2.437222,
+              "mean_beta_lo": 0.138092,
+              "flat_hi_share": 0.001,
+              "flat_lo_share": 0.7887,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 3.538847,
+                "inner_hi=0.975": 3.537855,
+                "inner_hi=0.99": 3.536535,
+                "registered": "inner_hi=0.975"
+              }
+            },
+            "swap": {
+              "n": 975,
+              "mean_gridmean": 3.467357,
+              "mean_point_tc": 3.49586,
+              "mean_delta": 0.028503,
+              "mean_reweight_term": -0.017337,
+              "mean_hi_tail": 0.04584,
+              "mean_lo_tail": 0.0,
+              "mean_beta_hi": 2.109834,
+              "mean_beta_lo": 0.0,
+              "flat_hi_share": 0.0,
+              "flat_lo_share": 1.0,
+              "inner_hi": 0.975,
+              "anchor_sensitivity": {
+                "inner_hi=0.95": 3.49586,
+                "inner_hi=0.975": 3.49586,
+                "inner_hi=0.99": 3.49586,
+                "registered": "inner_hi=0.975"
+              }
+            }
+          }
+        }
+      },
+      "qb": {
+        "arms": {
+          "identity": {
+            "crps": 2.6214723114360132,
+            "pit": {
+              "max_decile_dev": 0.03409415121255349,
+              "n": 701,
+              "decile_counts": [
+                94,
+                51,
+                63,
+                75,
+                74,
+                58,
+                76,
+                69,
+                54,
+                87
+              ],
+              "decile_freq": [
+                0.1341,
+                0.0728,
+                0.0899,
+                0.107,
+                0.1056,
+                0.0827,
+                0.1084,
+                0.0984,
+                0.077,
+                0.1241
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.8059914407988588,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": -192.09513059957368,
+              "bias": -0.2740301435086643,
+              "sd_err": 6.359836420249513
+            },
+            "params": {
+              "eligible": true
+            },
+            "acts": true
+          },
+          "cond_shift": {
+            "crps": 2.630201966364579,
+            "pit": {
+              "max_decile_dev": 0.045506419400855924,
+              "n": 701,
+              "decile_counts": [
+                102,
+                50,
+                74,
+                75,
+                70,
+                58,
+                74,
+                72,
+                56,
+                70
+              ],
+              "decile_freq": [
+                0.1455,
+                0.0713,
+                0.1056,
+                0.107,
+                0.0999,
+                0.0827,
+                0.1056,
+                0.1027,
+                0.0799,
+                0.0999
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.8159771754636234,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": 178.56998969127696,
+              "bias": 0.2547360765924065,
+              "sd_err": 6.3755068433585995
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 671,
+              "delta": 1.0834966005315376,
+              "mean_pi_prior": 0.49686839867818405
+            },
+            "acts": true
+          },
+          "cond_scale": {
+            "crps": 2.622887912043547,
+            "pit": {
+              "max_decile_dev": 0.03409415121255349,
+              "n": 701,
+              "decile_counts": [
+                94,
+                55,
+                70,
+                71,
+                75,
+                60,
+                76,
+                66,
+                59,
+                75
+              ],
+              "decile_freq": [
+                0.1341,
+                0.0785,
+                0.0999,
+                0.1013,
+                0.107,
+                0.0856,
+                0.1084,
+                0.0942,
+                0.0842,
+                0.107
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.8231098430813124,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": 39.457445389909225,
+              "bias": 0.05628736860186765,
+              "sd_err": 6.383063295174203
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 671,
+              "kappa": 1.0842961659338488
+            },
+            "acts": true,
+            "marginal_drift": {
+              "mean_abs_relative_drift": {
+                "attempts": 0.0,
+                "passing_yards": 0.08429616593384882,
+                "passing_tds": 0.08429616593384882,
+                "passing_interceptions": 0.0842961659338488,
+                "carries": 0.0,
+                "rushing_yards": 0.0842961659338488,
+                "rushing_tds": 0.08429616593384881,
+                "targets": 0.0,
+                "receptions": 0.0842961659338488,
+                "receiving_yards": 0.0842961659338488,
+                "receiving_tds": 0.0,
+                "fumbles_lost": 0.08429616593384881,
+                "two_pt": 0.0842961659338488
+              },
+              "max_leg": "passing_yards",
+              "max_drift": 0.08429616593384882
+            }
+          },
+          "avail_relevel": {
+            "crps": 2.622016136402862,
+            "pit": {
+              "max_decile_dev": 0.03266761768901569,
+              "n": 701,
+              "decile_counts": [
+                93,
+                54,
+                63,
+                75,
+                71,
+                63,
+                75,
+                69,
+                51,
+                87
+              ],
+              "decile_freq": [
+                0.1327,
+                0.077,
+                0.0899,
+                0.107,
+                0.1013,
+                0.0899,
+                0.107,
+                0.0984,
+                0.0728,
+                0.1241
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.797432239657632,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": -194.4475393372008,
+              "bias": -0.2773859334339526,
+              "sd_err": 6.3589245997775805
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 671,
+              "delta_pi": 0.041884100982261946,
+              "mean_pi_prior": 0.49686839867818405,
+              "clamp": {
+                "n_rows": 701,
+                "clamp_binding_share": 0.0,
+                "mean_pi_hat": 0.5207,
+                "mean_pi_used": 0.5207,
+                "mean_upward_move": 0.0,
+                "max_upward_move": 0.0,
+                "mean_installed_atom": 0.4793
+              },
+              "mean_pi_moved": 0.032801217742389595
+            },
+            "acts": true
+          },
+          "leg_scale": {
+            "crps": 2.6182060021668923,
+            "pit": {
+              "max_decile_dev": 0.03409415121255349,
+              "n": 701,
+              "decile_counts": [
+                94,
+                55,
+                67,
+                74,
+                75,
+                57,
+                78,
+                67,
+                58,
+                76
+              ],
+              "decile_freq": [
+                0.1341,
+                0.0785,
+                0.0956,
+                0.1056,
+                0.107,
+                0.0813,
+                0.1113,
+                0.0956,
+                0.0827,
+                0.1084
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.8216833095577746,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": -16.1661365251868,
+              "bias": -0.023061535699267905,
+              "sd_err": 6.368461537919762
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 671,
+              "kappa": [
+                1.0,
+                1.0778020537344382,
+                1.0633716500480326,
+                0.9023231081125993,
+                1.0,
+                0.9626149583012623,
+                0.9916461325800838,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                0.7976643553516501,
+                1.3410596026490063
+              ],
+              "out_of_band_legs": [],
+              "immaterial_legs": [
+                "receptions",
+                "receiving_yards",
+                "receiving_tds"
+              ],
+              "priced_legs": [
+                "passing_yards",
+                "passing_tds",
+                "passing_interceptions",
+                "rushing_yards",
+                "rushing_tds",
+                "receptions",
+                "receiving_yards",
+                "receiving_tds",
+                "fumbles_lost",
+                "two_pt"
+              ]
+            },
+            "acts": true,
+            "marginal_drift": {
+              "mean_abs_relative_drift": {
+                "attempts": 0.0,
+                "passing_yards": 0.07780205373443817,
+                "passing_tds": 0.0633716500480326,
+                "passing_interceptions": 0.0976768918874007,
+                "carries": 0.0,
+                "rushing_yards": 0.03738504169873769,
+                "rushing_tds": 0.008353867419916176,
+                "targets": 0.0,
+                "receptions": 0.0,
+                "receiving_yards": 0.0,
+                "receiving_tds": 0.0,
+                "fumbles_lost": 0.20233564464834985,
+                "two_pt": 0.3410596026490062
+              },
+              "max_leg": "two_pt",
+              "max_drift": 0.3410596026490062
+            }
+          },
+          "oracle_cond_shift": {
+            "crps": 2.6216521467873664,
+            "pit": {
+              "max_decile_dev": 0.038373751783166904,
+              "n": 701,
+              "decile_counts": [
+                97,
+                53,
+                68,
+                72,
+                77,
+                53,
+                79,
+                68,
+                54,
+                80
+              ],
+              "decile_freq": [
+                0.1384,
+                0.0756,
+                0.097,
+                0.1027,
+                0.1098,
+                0.0756,
+                0.1127,
+                0.097,
+                0.077,
+                0.1141
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.81169757489301,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": 0.0625062142213153,
+              "bias": 8.916721001614167e-05,
+              "sd_err": 6.364571342660965
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 701,
+              "delta": 0.5616382957435835,
+              "mean_pi_prior": 0.48791214129346516
+            },
+            "acts": true
+          },
+          "oracle_cond_scale": {
+            "crps": 2.6200256222386704,
+            "pit": {
+              "max_decile_dev": 0.03409415121255349,
+              "n": 701,
+              "decile_counts": [
+                94,
+                55,
+                64,
+                74,
+                75,
+                58,
+                78,
+                66,
+                54,
+                83
+              ],
+              "decile_freq": [
+                0.1341,
+                0.0785,
+                0.0913,
+                0.1056,
+                0.107,
+                0.0827,
+                0.1113,
+                0.0942,
+                0.077,
+                0.1184
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.81169757489301,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": -62.38146909392432,
+              "bias": -0.08898925691002044,
+              "sd_err": 6.3699323724696555
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 701,
+              "kappa": 1.047185011627535
+            },
+            "acts": true,
+            "marginal_drift": {
+              "mean_abs_relative_drift": {
+                "attempts": 0.0,
+                "passing_yards": 0.047185011627534974,
+                "passing_tds": 0.04718501162753495,
+                "passing_interceptions": 0.047185011627534953,
+                "carries": 0.0,
+                "rushing_yards": 0.04718501162753496,
+                "rushing_tds": 0.04718501162753497,
+                "targets": 0.0,
+                "receptions": 0.047185011627534974,
+                "receiving_yards": 0.047185011627534974,
+                "receiving_tds": 0.0,
+                "fumbles_lost": 0.04718501162753497,
+                "two_pt": 0.04718501162753496
+              },
+              "max_leg": "passing_yards",
+              "max_drift": 0.047185011627534974
+            }
+          },
+          "oracle_avail_relevel": {
+            "crps": 2.621880511150838,
+            "pit": {
+              "max_decile_dev": 0.035520684736091296,
+              "n": 701,
+              "decile_counts": [
+                95,
+                52,
+                64,
+                74,
+                71,
+                61,
+                75,
+                70,
+                54,
+                85
+              ],
+              "decile_freq": [
+                0.1355,
+                0.0742,
+                0.0913,
+                0.1056,
+                0.1013,
+                0.087,
+                0.107,
+                0.0999,
+                0.077,
+                0.1213
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.8031383737517832,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": -193.0857564910619,
+              "bias": -0.27544330455215676,
+              "sd_err": 6.3603638328600836
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 701,
+              "delta_pi": 0.023022140060147637,
+              "mean_pi_prior": 0.48791214129346516,
+              "clamp": {
+                "n_rows": 701,
+                "clamp_binding_share": 0.0,
+                "mean_pi_hat": 0.506,
+                "mean_pi_used": 0.506,
+                "mean_upward_move": 0.0,
+                "max_upward_move": 0.0,
+                "mean_installed_atom": 0.494
+              },
+              "mean_pi_moved": 0.018119848668473455
+            },
+            "acts": true
+          },
+          "oracle_leg_scale": {
+            "crps": 2.6198602306434227,
+            "pit": {
+              "max_decile_dev": 0.03409415121255349,
+              "n": 701,
+              "decile_counts": [
+                94,
+                55,
+                70,
+                72,
+                74,
+                58,
+                76,
+                67,
+                60,
+                75
+              ],
+              "decile_freq": [
+                0.1341,
+                0.0785,
+                0.0999,
+                0.1027,
+                0.1056,
+                0.0827,
+                0.1084,
+                0.0956,
+                0.0856,
+                0.107
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.8231098430813124,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": 5.784329571226067,
+              "bias": 0.00825154004454503,
+              "sd_err": 6.373081152947741
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 701,
+              "kappa": [
+                1.0,
+                1.0952551656183327,
+                0.9607319862752582,
+                0.9816134336538939,
+                1.0,
+                0.990197436461082,
+                1.0555666201951799,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                0.9499472251541581,
+                0.8017103153393904
+              ],
+              "out_of_band_legs": [],
+              "immaterial_legs": [
+                "receptions",
+                "receiving_yards",
+                "receiving_tds"
+              ],
+              "priced_legs": [
+                "passing_yards",
+                "passing_tds",
+                "passing_interceptions",
+                "rushing_yards",
+                "rushing_tds",
+                "receptions",
+                "receiving_yards",
+                "receiving_tds",
+                "fumbles_lost",
+                "two_pt"
+              ]
+            },
+            "acts": true,
+            "marginal_drift": {
+              "mean_abs_relative_drift": {
+                "attempts": 0.0,
+                "passing_yards": 0.0952551656183327,
+                "passing_tds": 0.03926801372474177,
+                "passing_interceptions": 0.018386566346106144,
+                "carries": 0.0,
+                "rushing_yards": 0.009802563538917952,
+                "rushing_tds": 0.05556662019517989,
+                "targets": 0.0,
+                "receptions": 0.0,
+                "receiving_yards": 0.0,
+                "receiving_tds": 0.0,
+                "fumbles_lost": 0.050052774845841926,
+                "two_pt": 0.19828968466060956
+              },
+              "max_leg": "two_pt",
+              "max_drift": 0.19828968466060956
+            }
+          },
+          "over_cond_shift": {
+            "crps": 2.673290223819906,
+            "pit": {
+              "max_decile_dev": 0.06119828815977174,
+              "n": 701,
+              "decile_counts": [
+                113,
+                57,
+                71,
+                74,
+                69,
+                65,
+                72,
+                67,
+                51,
+                62
+              ],
+              "decile_freq": [
+                0.1612,
+                0.0813,
+                0.1013,
+                0.1056,
+                0.0984,
+                0.0927,
+                0.1027,
+                0.0956,
+                0.0728,
+                0.0884
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.8131241084165478,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": 549.0381773079938,
+              "bias": 0.7832213656319456,
+              "sd_err": 6.4182309136298485
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 671,
+              "delta": 2.1669932010630752,
+              "mean_pi_prior": 0.49686839867818405,
+              "over_scale": 2.0
+            },
+            "acts": true
+          },
+          "permuted_leg_scale": {
+            "crps": 2.6769144548790833,
+            "pit": {
+              "max_decile_dev": 0.03980028530670471,
+              "n": 701,
+              "decile_counts": [
+                98,
+                64,
+                69,
+                76,
+                79,
+                67,
+                72,
+                53,
+                57,
+                66
+              ],
+              "decile_freq": [
+                0.1398,
+                0.0913,
+                0.0984,
+                0.1084,
+                0.1127,
+                0.0956,
+                0.1027,
+                0.0756,
+                0.0813,
+                0.0942
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.8302425106990015,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": 508.8511668698251,
+              "bias": 0.7258932480311342,
+              "sd_err": 6.483649123126466
+            },
+            "params": {
+              "eligible": true,
+              "n_prior": 671,
+              "kappa": [
+                1.0,
+                1.3410596026490063,
+                1.0778020537344382,
+                1.0633716500480326,
+                1.0,
+                0.9023231081125993,
+                0.9626149583012623,
+                1.0,
+                0.9916461325800838,
+                1.0,
+                1.0,
+                1.0,
+                0.7976643553516501
+              ],
+              "out_of_band_legs": [],
+              "immaterial_legs": [
+                "receptions",
+                "receiving_yards",
+                "receiving_tds"
+              ],
+              "priced_legs": [
+                "passing_yards",
+                "passing_tds",
+                "passing_interceptions",
+                "rushing_yards",
+                "rushing_tds",
+                "receptions",
+                "receiving_yards",
+                "receiving_tds",
+                "fumbles_lost",
+                "two_pt"
+              ],
+              "permuted": true
+            },
+            "acts": true,
+            "marginal_drift": {
+              "mean_abs_relative_drift": {
+                "attempts": 0.0,
+                "passing_yards": 0.34105960264900625,
+                "passing_tds": 0.07780205373443816,
+                "passing_interceptions": 0.06337165004803258,
+                "carries": 0.0,
+                "rushing_yards": 0.09767689188740071,
+                "rushing_tds": 0.03738504169873769,
+                "targets": 0.0,
+                "receptions": 0.008353867419916172,
+                "receiving_yards": 0.0,
+                "receiving_tds": 0.0,
+                "fumbles_lost": 0.0,
+                "two_pt": 0.20233564464834985
+              },
+              "max_leg": "passing_yards",
+              "max_drift": 0.34105960264900625
+            }
+          },
+          "climatology_bank": {
+            "crps": 4.453261461587537,
+            "pit": {
+              "max_decile_dev": 0.03152639087018545,
+              "n": 701,
+              "decile_counts": [
+                71,
+                69,
+                72,
+                76,
+                74,
+                77,
+                80,
+                67,
+                67,
+                48
+              ],
+              "decile_freq": [
+                0.1013,
+                0.0984,
+                0.1027,
+                0.1084,
+                0.1056,
+                0.1098,
+                0.1141,
+                0.0956,
+                0.0956,
+                0.0685
+              ],
+              "worst_decile": 9
+            },
+            "coverage": {
+              "coverage": 0.8958630527817404,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": 574.1329979188506,
+              "bias": 0.8190199685005002,
+              "sd_err": 9.015678518998868
+            },
+            "params": {
+              "eligible": true
+            },
+            "acts": true
+          },
+          "nihilist_zero": {
+            "crps": 6.1409415121255355,
+            "pit": {
+              "max_decile_dev": 0.3878744650499286,
+              "n": 701,
+              "decile_counts": [
+                56,
+                29,
+                41,
+                38,
+                37,
+                37,
+                38,
+                48,
+                35,
+                342
+              ],
+              "decile_freq": [
+                0.0799,
+                0.0414,
+                0.0585,
+                0.0542,
+                0.0528,
+                0.0528,
+                0.0542,
+                0.0685,
+                0.0499,
+                0.4879
+              ],
+              "worst_decile": 9
+            },
+            "coverage": {
+              "coverage": 0.5221112696148359,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": true
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": -4263.200000000001,
+              "bias": -6.081597717546363,
+              "sd_err": 9.015678518998868
+            },
+            "params": {
+              "eligible": true
+            },
+            "acts": true
+          },
+          "direct_points": {
+            "crps": 2.612798153102158,
+            "pit": {
+              "max_decile_dev": 0.11398002853067046,
+              "n": 701,
+              "decile_counts": [
+                150,
+                92,
+                111,
+                74,
+                65,
+                28,
+                36,
+                46,
+                31,
+                68
+              ],
+              "decile_freq": [
+                0.214,
+                0.1312,
+                0.1583,
+                0.1056,
+                0.0927,
+                0.0399,
+                0.0514,
+                0.0656,
+                0.0442,
+                0.097
+              ],
+              "worst_decile": 0
+            },
+            "coverage": {
+              "coverage": 0.8088445078459344,
+              "n": 701,
+              "binomial_se": 0.015107791492009961,
+              "blocking_shortfall": false
+            },
+            "bias": {
+              "n": 701,
+              "sum_err": 138.38554608948954,
+              "bias": 0.19741162066974258,
+              "sd_err": 6.248213556300151
+            },
+            "params": {
+              "eligible": true
+            },
+            "acts": true
+          }
+        },
+        "decomposition": {
+          "n": 701,
+          "total_bias_ppr": -0.2740301435086643,
+          "read_channel_ppr": -0.01600032404842988,
+          "model_channel_ppr": -0.25802981946023407,
+          "linearity_residual": 0.0,
+          "identity_residual": -3.3306690738754696e-16,
+          "identity_holds": true,
+          "pi_bar": 0.48791214129346516,
+          "active_rate": 0.49072753209700426,
+          "legs": {
+            "attempts": {
+              "weight": 0.0,
+              "leg_mean": 8.627750832144555,
+              "realized_mean": 12.320970042796006,
+              "contribution_ppr": -0.0,
+              "availability_part_ppr": -0.0,
+              "conditional_part_ppr": -0.0,
+              "priced": false
+            },
+            "passing_yards": {
+              "weight": 0.04,
+              "leg_mean": 78.16754679882085,
+              "realized_mean": 85.61340941512125,
+              "contribution_ppr": -0.2978345046520161,
+              "availability_part_ppr": -0.018041952537536477,
+              "conditional_part_ppr": -0.27979255211447956,
+              "priced": true
+            },
+            "passing_tds": {
+              "weight": 4.0,
+              "leg_mean": 0.5612696148359485,
+              "realized_mean": 0.5392296718972895,
+              "contribution_ppr": 0.08815977175463585,
+              "availability_part_ppr": -0.012954736545197958,
+              "conditional_part_ppr": 0.10111450829983369,
+              "priced": true
+            },
+            "passing_interceptions": {
+              "weight": -2.0,
+              "leg_mean": 0.2862910128388017,
+              "realized_mean": 0.2810271041369472,
+              "contribution_ppr": -0.010527817403709006,
+              "availability_part_ppr": 0.0033039599405969996,
+              "conditional_part_ppr": -0.013831777344306002,
+              "priced": true
+            },
+            "carries": {
+              "weight": 0.0,
+              "leg_mean": 1.4424441274369948,
+              "realized_mean": 1.5720399429386591,
+              "contribution_ppr": -0.0,
+              "availability_part_ppr": -0.0,
+              "conditional_part_ppr": -0.0,
+              "priced": false
+            },
+            "rushing_yards": {
+              "weight": 0.1,
+              "leg_mean": 6.840232988245772,
+              "realized_mean": 6.773181169757489,
+              "contribution_ppr": 0.006705181848828268,
+              "availability_part_ppr": -0.0039470075489654215,
+              "conditional_part_ppr": 0.010652189397793665,
+              "priced": true
+            },
+            "rushing_tds": {
+              "weight": 6.0,
+              "leg_mean": 0.07162624821683311,
+              "realized_mean": 0.07560627674750357,
+              "contribution_ppr": -0.023880171184022775,
+              "availability_part_ppr": -0.0024798220432115507,
+              "conditional_part_ppr": -0.021400349140811226,
+              "priced": true
+            },
+            "targets": {
+              "weight": 0.0,
+              "leg_mean": 0.012534474560152161,
+              "realized_mean": 0.02710413694721826,
+              "contribution_ppr": -0.0,
+              "availability_part_ppr": -0.0,
+              "conditional_part_ppr": -0.0,
+              "priced": false
+            },
+            "receptions": {
+              "weight": 1.0,
+              "leg_mean": 0.0075320970042796,
+              "realized_mean": 0.017118402282453638,
+              "contribution_ppr": -0.00958630527817404,
+              "availability_part_ppr": -4.3462326190523084e-05,
+              "conditional_part_ppr": -0.009542842951983514,
+              "priced": true
+            },
+            "receiving_yards": {
+              "weight": 0.1,
+              "leg_mean": 0.030757277842285057,
+              "realized_mean": 0.11126961483594865,
+              "contribution_ppr": -0.00805123369936636,
+              "availability_part_ppr": -1.7747817660266536e-05,
+              "conditional_part_ppr": -0.008033485881706092,
+              "priced": true
+            },
+            "receiving_tds": {
+              "weight": 6.0,
+              "leg_mean": 0.0,
+              "realized_mean": 0.0014265335235378032,
+              "contribution_ppr": -0.008559201141226819,
+              "availability_part_ppr": -0.0,
+              "conditional_part_ppr": -0.008559201141226819,
+              "priced": true
+            },
+            "fumbles_lost": {
+              "weight": -2.0,
+              "leg_mean": 0.08559676652401332,
+              "realized_mean": 0.08131241084165478,
+              "contribution_ppr": -0.008568711364717096,
+              "availability_part_ppr": 0.0009878350173681896,
+              "conditional_part_ppr": -0.009556546382085291,
+              "priced": true
+            },
+            "two_pt": {
+              "weight": 2.0,
+              "leg_mean": 0.03558725630052306,
+              "realized_mean": 0.028530670470756064,
+              "contribution_ppr": 0.014113171659533998,
+              "availability_part_ppr": -0.00041069703183064995,
+              "conditional_part_ppr": 0.01452386869136464,
+              "priced": true
+            }
+          },
+          "availability_channel_ppr": -0.033603630892627655,
+          "conditional_channel_ppr": -0.22442618856760652
+        },
+        "bands": {
+          "n_rows": 701,
+          "gridmean_gap_ppr": -0.4763522273889749,
+          "bands": [
+            {
+              "level_lo": 0.005,
+              "level_hi": 0.095,
+              "n_levels": 19,
+              "contribution_ppr": -0.013949682493493869,
+              "share": 0.02928438598882204
+            },
+            {
+              "level_lo": 0.1,
+              "level_hi": 0.195,
+              "n_levels": 20,
+              "contribution_ppr": -0.018069920138735537,
+              "share": 0.03793394698242942
+            },
+            {
+              "level_lo": 0.2,
+              "level_hi": 0.295,
+              "n_levels": 20,
+              "contribution_ppr": -0.038493040012144285,
+              "share": 0.08080793538666929
+            },
+            {
+              "level_lo": 0.3,
+              "level_hi": 0.395,
+              "n_levels": 20,
+              "contribution_ppr": -0.04602343174138134,
+              "share": 0.096616388242056
+            },
+            {
+              "level_lo": 0.4,
+              "level_hi": 0.495,
+              "n_levels": 20,
+              "contribution_ppr": -0.047847841730179044,
+              "share": 0.1004463482672202
+            },
+            {
+              "level_lo": 0.5,
+              "level_hi": 0.595,
+              "n_levels": 20,
+              "contribution_ppr": -0.0424777261642958,
+              "share": 0.08917293490392303
+            },
+            {
+              "level_lo": 0.6,
+              "level_hi": 0.695,
+              "n_levels": 20,
+              "contribution_ppr": -0.049980720579086875,
+              "share": 0.1049238729354657
+            },
+            {
+              "level_lo": 0.7,
+              "level_hi": 0.795,
+              "n_levels": 20,
+              "contribution_ppr": -0.07029614102465936,
+              "share": 0.1475717693396186
+            },
+            {
+              "level_lo": 0.8,
+              "level_hi": 0.895,
+              "n_levels": 20,
+              "contribution_ppr": -0.11618288305013152,
+              "share": 0.24390120664904558
+            },
+            {
+              "level_lo": 0.9,
+              "level_hi": 0.995,
+              "n_levels": 20,
+              "contribution_ppr": -0.0330308404548673,
+              "share": 0.06934121130475016
+            }
+          ],
+          "band_sum_residual": 0.0,
+          "identity_holds": true
+        },
+        "clamp": {
+          "n_rows": 701,
+          "clamp_binding_share": 0.9215,
+          "mean_pi_hat": 0.4857,
+          "mean_pi_used": 0.4879,
+          "mean_upward_move": 0.0022,
+          "max_upward_move": 0.005,
+          "mean_installed_atom": 0.5121
+        },
+        "identity_matches_certified": {
+          "certified_crps": 2.6214723114360132,
+          "rederived_crps": 2.6214723114360132,
+          "crps_gap": 0.0,
+          "point_gap": 0.0,
+          "matches": true,
+          "comparator_certified_crps": 2.612798153102158,
+          "comparator_crps_gap": 0.0
+        },
+        "n_test": 701,
+        "priced_legs": [
+          "passing_yards",
+          "passing_tds",
+          "passing_interceptions",
+          "rushing_yards",
+          "rushing_tds",
+          "receptions",
+          "receiving_yards",
+          "receiving_tds",
+          "fumbles_lost",
+          "two_pt"
+        ]
+      },
+      "bank_cache": "miss",
+      "rows_path": "/Users/charlesclark/Documents/machine_learning/baseball_betting/nf-w8-0c/quant_sports_intel_models/football/nfl/fantasy/artifacts/nf_w8_0c_rows_smoke/2025H2.parquet"
+    }
+  ],
+  "runtime_seconds": 927.9,
+  "pins": {
+    "consumed_generators": {
+      "QB": {
+        "reproduces": false,
+        "n_folds_compared": 2,
+        "max_abs_gap": 0.012522071564870174,
+        "tolerance": 1e-09,
+        "per_fold_abs_gap": {
+          "2025H1": 0.006066465111127517,
+          "2025H2": 0.012522071564870174
+        }
+      },
+      "RB": {
+        "reproduces": true,
+        "n_folds_compared": 2,
+        "max_abs_gap": 0.0,
+        "tolerance": 1e-09,
+        "per_fold_abs_gap": {
+          "2025H1": 0.0,
+          "2025H2": 0.0
+        }
+      },
+      "WR": {
+        "reproduces": false,
+        "n_folds_compared": 2,
+        "max_abs_gap": 0.006519650162477575,
+        "tolerance": 1e-09,
+        "per_fold_abs_gap": {
+          "2025H1": 0.0034791693615554564,
+          "2025H2": 0.006519650162477575
+        }
+      },
+      "TE": {
+        "reproduces": false,
+        "n_folds_compared": 2,
+        "max_abs_gap": 0.0029736568582232614,
+        "tolerance": 1e-09,
+        "per_fold_abs_gap": {
+          "2025H1": 0.001800147295649701,
+          "2025H2": 0.0029736568582232614
+        }
+      }
+    },
+    "qb_incumbent_matches_w7f": {
+      "reproduces": false,
+      "n_folds_compared": 2,
+      "max_abs_crps_gap": 0.012522071564870174,
+      "max_abs_pit_gap": 0.004279600570613412
+    },
+    "non_qb_bias_matches_w8_0b": {
+      "reproduces": false,
+      "n_folds_compared": 2,
+      "max_abs_gap_by_position": {
+        "QB": 0.009824730843515317,
+        "RB": 0.0,
+        "WR": 0.015758869119072233,
+        "TE": 0.009998586409554575
+      },
+      "max_abs_gap": 0.015758869119072233
+    },
+    "identity_assembly_is_byte_identical": {
+      "matches": true,
+      "max_crps_gap": 0.0,
+      "max_point_gap": 0.0
+    }
+  },
+  "family_a": {
+    "mechanism": {
+      "n": 1372,
+      "n_folds": 2,
+      "pooled": {
+        "total_bias_ppr": -0.40330283076503276,
+        "read_channel_ppr": -0.016033730436710896,
+        "model_channel_ppr": -0.38726910032832207,
+        "availability_channel_ppr": 0.005359287369573053,
+        "conditional_channel_ppr": -0.3926283876978951,
+        "linearity_residual": 0.0
+      },
+      "fold_mean": {
+        "total_bias_ppr": -0.4061926821940127,
+        "read_channel_ppr": -0.01603447722631479,
+        "model_channel_ppr": -0.3901582049676981
+      },
+      "max_abs_identity_residual": 6.661338147750939e-16,
+      "max_abs_linearity_residual": 0.0,
+      "identity_holds": true,
+      "legs": {
+        "attempts": {
+          "contribution_ppr": 0.0,
+          "availability_part_ppr": 0.0,
+          "conditional_part_ppr": 0.0,
+          "weight": 0.0,
+          "priced": false,
+          "material": false
+        },
+        "passing_yards": {
+          "contribution_ppr": -0.2832212879599107,
+          "availability_part_ppr": 0.002900303421283813,
+          "conditional_part_ppr": -0.2861215913811945,
+          "weight": 0.04,
+          "priced": true,
+          "material": true
+        },
+        "passing_tds": {
+          "contribution_ppr": -0.029319727891156586,
+          "availability_part_ppr": 0.001823590231472068,
+          "conditional_part_ppr": -0.031143318122628626,
+          "weight": 4.0,
+          "priced": true,
+          "material": false
+        },
+        "passing_interceptions": {
+          "contribution_ppr": -0.03394071914480076,
+          "availability_part_ppr": -0.00041569392681424787,
+          "conditional_part_ppr": -0.03352502521798653,
+          "weight": -2.0,
+          "priced": true,
+          "material": false
+        },
+        "carries": {
+          "contribution_ppr": 0.0,
+          "availability_part_ppr": 0.0,
+          "conditional_part_ppr": 0.0,
+          "weight": 0.0,
+          "priced": false,
+          "material": false
+        },
+        "rushing_yards": {
+          "contribution_ppr": 0.01771235262133684,
+          "availability_part_ppr": 0.0007327430860819715,
+          "conditional_part_ppr": 0.016979609535254864,
+          "weight": 0.1,
+          "priced": true,
+          "material": false
+        },
+        "rushing_tds": {
+          "contribution_ppr": -0.01017492711370258,
+          "availability_part_ppr": 0.0004780531684835829,
+          "conditional_part_ppr": -0.010652980282186152,
+          "weight": 6.0,
+          "priced": true,
+          "material": false
+        },
+        "targets": {
+          "contribution_ppr": 0.0,
+          "availability_part_ppr": 0.0,
+          "conditional_part_ppr": 0.0,
+          "weight": 0.0,
+          "priced": false,
+          "material": false
+        },
+        "receptions": {
+          "contribution_ppr": -0.0071865889212828,
+          "availability_part_ppr": 3.2791789610771716e-06,
+          "conditional_part_ppr": -0.007189868100243877,
+          "weight": 1.0,
+          "priced": true,
+          "material": false
+        },
+        "receiving_yards": {
+          "contribution_ppr": -0.0063568608109337635,
+          "availability_part_ppr": 1.5368698928657734e-06,
+          "conditional_part_ppr": -0.0063583976808266295,
+          "weight": 0.1,
+          "priced": true,
+          "material": false
+        },
+        "receiving_tds": {
+          "contribution_ppr": -0.008746355685131196,
+          "availability_part_ppr": 0.0,
+          "conditional_part_ppr": -0.008746355685131196,
+          "weight": 6.0,
+          "priced": true,
+          "material": false
+        },
+        "fumbles_lost": {
+          "contribution_ppr": -0.023236151603498543,
+          "availability_part_ppr": -0.0001658417088361689,
+          "conditional_part_ppr": -0.02307030989466238,
+          "weight": -2.0,
+          "priced": true,
+          "material": false
+        },
+        "two_pt": {
+          "contribution_ppr": -0.0027988338192419825,
+          "availability_part_ppr": 1.3170490480873351e-06,
+          "conditional_part_ppr": -0.0028001508682900704,
+          "weight": 2.0,
+          "priced": true,
+          "material": false
+        }
+      },
+      "material_channels": [
+        "conditional_channel_ppr"
+      ]
+    },
+    "bands": {
+      "n_rows": 1372,
+      "n_folds": 2,
+      "gridmean_gap_ppr": -0.438388538823446,
+      "bands": [
+        {
+          "level_lo": 0.005,
+          "level_hi": 0.095,
+          "contribution_ppr": -0.007405569953367766,
+          "share": 0.016892708858773888
+        },
+        {
+          "level_lo": 0.1,
+          "level_hi": 0.195,
+          "contribution_ppr": -0.012457335390273345,
+          "share": 0.028416197703768756
+        },
+        {
+          "level_lo": 0.2,
+          "level_hi": 0.295,
+          "contribution_ppr": -0.03551084059012284,
+          "share": 0.08100312267612514
+        },
+        {
+          "level_lo": 0.3,
+          "level_hi": 0.395,
+          "contribution_ppr": -0.043958013799525734,
+          "share": 0.10027181348650432
+        },
+        {
+          "level_lo": 0.4,
+          "level_hi": 0.495,
+          "contribution_ppr": -0.04530466917617281,
+          "share": 0.1033436441969085
+        },
+        {
+          "level_lo": 0.5,
+          "level_hi": 0.595,
+          "contribution_ppr": -0.04443366342587322,
+          "share": 0.10135680906513883
+        },
+        {
+          "level_lo": 0.6,
+          "level_hi": 0.695,
+          "contribution_ppr": -0.056908226034791363,
+          "share": 0.12981230345921577
+        },
+        {
+          "level_lo": 0.7,
+          "level_hi": 0.795,
+          "contribution_ppr": -0.07439253046510007,
+          "share": 0.16969542740500448
+        },
+        {
+          "level_lo": 0.8,
+          "level_hi": 0.895,
+          "contribution_ppr": -0.1091034572394797,
+          "share": 0.24887388144839112
+        },
+        {
+          "level_lo": 0.9,
+          "level_hi": 0.995,
+          "contribution_ppr": -0.00891423274873914,
+          "share": 0.02033409170016921
+        }
+      ],
+      "band_sum_residual": 0.0
+    },
+    "note": "family A is a MEASUREMENT with no gate: the mechanism split is an EXACT additive identity and the band split sums exactly to the grid-mean gap. Both are deterministic functions of the certified banks, so NF-W8-0 \u00a712.3a's non-stationarity floor cannot apply to either, and no fold count changes them in kind.",
+    "tail_lever_closed": {
+      "bound_ppr": 0.0193,
+      "note": "\u26d4 NF-W8-0b bounded the tail-completion mechanism DETERMINISTICALLY at a 0.0193 PPR cross-position spread \u2014 ~19\u00d7 short of the artifact. It is not re-read here."
+    }
+  },
+  "family_b": {
+    "evaluable_folds": [
+      "2025H2"
+    ],
+    "n_evaluable": 1,
+    "bias_by_arm": {
+      "identity": {
+        "pooled": -0.2740301435086643,
+        "abs_pooled": 0.2740301435086643,
+        "fold_mean": -0.2740301435086643,
+        "se": null,
+        "n": 701
+      },
+      "cond_shift": {
+        "pooled": 0.2547360765924065,
+        "abs_pooled": 0.2547360765924065,
+        "fold_mean": 0.2547360765924065,
+        "se": null,
+        "n": 701
+      },
+      "cond_scale": {
+        "pooled": 0.05628736860186765,
+        "abs_pooled": 0.05628736860186765,
+        "fold_mean": 0.05628736860186765,
+        "se": null,
+        "n": 701
+      },
+      "avail_relevel": {
+        "pooled": -0.2773859334339526,
+        "abs_pooled": 0.2773859334339526,
+        "fold_mean": -0.2773859334339526,
+        "se": null,
+        "n": 701
+      },
+      "leg_scale": {
+        "pooled": -0.023061535699267905,
+        "abs_pooled": 0.023061535699267905,
+        "fold_mean": -0.023061535699267905,
+        "se": null,
+        "n": 701
+      },
+      "oracle_cond_shift": {
+        "pooled": 8.916721001614167e-05,
+        "abs_pooled": 8.916721001614167e-05,
+        "fold_mean": 8.916721001614167e-05,
+        "se": null,
+        "n": 701
+      },
+      "oracle_cond_scale": {
+        "pooled": -0.08898925691002044,
+        "abs_pooled": 0.08898925691002044,
+        "fold_mean": -0.08898925691002044,
+        "se": null,
+        "n": 701
+      },
+      "oracle_avail_relevel": {
+        "pooled": -0.27544330455215676,
+        "abs_pooled": 0.27544330455215676,
+        "fold_mean": -0.27544330455215676,
+        "se": null,
+        "n": 701
+      },
+      "oracle_leg_scale": {
+        "pooled": 0.00825154004454503,
+        "abs_pooled": 0.00825154004454503,
+        "fold_mean": 0.00825154004454503,
+        "se": null,
+        "n": 701
+      },
+      "over_cond_shift": {
+        "pooled": 0.7832213656319456,
+        "abs_pooled": 0.7832213656319456,
+        "fold_mean": 0.7832213656319456,
+        "se": null,
+        "n": 701
+      },
+      "permuted_leg_scale": {
+        "pooled": 0.7258932480311342,
+        "abs_pooled": 0.7258932480311342,
+        "fold_mean": 0.7258932480311342,
+        "se": null,
+        "n": 701
+      },
+      "climatology_bank": {
+        "pooled": 0.8190199685005002,
+        "abs_pooled": 0.8190199685005002,
+        "fold_mean": 0.8190199685005002,
+        "se": null,
+        "n": 701
+      },
+      "nihilist_zero": {
+        "pooled": -6.081597717546363,
+        "abs_pooled": 6.081597717546363,
+        "fold_mean": -6.081597717546363,
+        "se": null,
+        "n": 701
+      },
+      "direct_points": {
+        "pooled": 0.19741162066974258,
+        "abs_pooled": 0.19741162066974258,
+        "fold_mean": 0.19741162066974258,
+        "se": null,
+        "n": 701
+      }
+    },
+    "crps_pooled": {
+      "identity": 2.6214723114360132,
+      "cond_shift": 2.630201966364579,
+      "cond_scale": 2.622887912043547,
+      "avail_relevel": 2.622016136402862,
+      "leg_scale": 2.6182060021668923,
+      "oracle_cond_shift": 2.6216521467873664,
+      "oracle_cond_scale": 2.6200256222386704,
+      "oracle_avail_relevel": 2.621880511150838,
+      "oracle_leg_scale": 2.6198602306434227,
+      "over_cond_shift": 2.673290223819906,
+      "permuted_leg_scale": 2.6769144548790833,
+      "climatology_bank": 4.453261461587537,
+      "nihilist_zero": 6.1409415121255355,
+      "direct_points": 2.612798153102158
+    },
+    "pit_pooled": {
+      "identity": 0.03409415121255349,
+      "cond_shift": 0.045506419400855924,
+      "cond_scale": 0.03409415121255349,
+      "avail_relevel": 0.03266761768901569,
+      "leg_scale": 0.03409415121255349,
+      "oracle_cond_shift": 0.038373751783166904,
+      "oracle_cond_scale": 0.03409415121255349,
+      "oracle_avail_relevel": 0.035520684736091296,
+      "oracle_leg_scale": 0.03409415121255349,
+      "over_cond_shift": 0.06119828815977174,
+      "permuted_leg_scale": 0.03980028530670471,
+      "climatology_bank": 0.03152639087018545,
+      "nihilist_zero": 0.3878744650499286,
+      "direct_points": 0.11398002853067046
+    },
+    "pit_folds_clearing": {
+      "identity": 1,
+      "cond_shift": 1,
+      "cond_scale": 1,
+      "avail_relevel": 1,
+      "leg_scale": 1,
+      "oracle_cond_shift": 1,
+      "oracle_cond_scale": 1,
+      "oracle_avail_relevel": 1,
+      "oracle_leg_scale": 1,
+      "over_cond_shift": 0,
+      "permuted_leg_scale": 1,
+      "climatology_bank": 1,
+      "nihilist_zero": 0,
+      "direct_points": 0
+    },
+    "pit_bar": 0.05,
+    "arm_constraints": {
+      "cond_shift": {
+        "pit_preserved": true,
+        "no_crps_harm": true,
+        "p_crps_harm": null
+      },
+      "cond_scale": {
+        "pit_preserved": true,
+        "no_crps_harm": true,
+        "p_crps_harm": null
+      },
+      "avail_relevel": {
+        "pit_preserved": true,
+        "no_crps_harm": true,
+        "p_crps_harm": null
+      },
+      "leg_scale": {
+        "pit_preserved": true,
+        "no_crps_harm": true,
+        "p_crps_harm": null
+      }
+    },
+    "winner": null,
+    "winner_clauses": {},
+    "p_reduces_bias_one_sided": null,
+    "pbo": null,
+    "dsr": null,
+    "deflate_detail": {
+      "pbo": null,
+      "os_gap_pct": null,
+      "contender_spread_pct": null,
+      "flips": null
+    },
+    "oracle_ceilings": {
+      "cond_shift": {
+        "oracle": "oracle_cond_shift",
+        "oracle_abs_bias": 8.916721001614167e-05,
+        "arm_abs_bias": 0.2547360765924065,
+        "ceiling_ppr": 0.27394097629864816,
+        "captured_fraction": 0.07043147460795919,
+        "note": "one ceiling PER FORM: the forms NEST (`cond_scale` \u2282 `leg_scale`), so a single field-wide ceiling would veto a legitimately-better nested form as a false inversion (NF-D16 (g\u2034))"
+      },
+      "cond_scale": {
+        "oracle": "oracle_cond_scale",
+        "oracle_abs_bias": 0.08898925691002044,
+        "arm_abs_bias": 0.05628736860186765,
+        "ceiling_ppr": 0.18504088659864384,
+        "captured_fraction": 1.17672790543359,
+        "note": "one ceiling PER FORM: the forms NEST (`cond_scale` \u2282 `leg_scale`), so a single field-wide ceiling would veto a legitimately-better nested form as a false inversion (NF-D16 (g\u2034))"
+      },
+      "avail_relevel": {
+        "oracle": "oracle_avail_relevel",
+        "oracle_abs_bias": 0.27544330455215676,
+        "arm_abs_bias": 0.2773859334339526,
+        "ceiling_ppr": -0.0014131610434924835,
+        "captured_fraction": 2.374669143861234,
+        "note": "one ceiling PER FORM: the forms NEST (`cond_scale` \u2282 `leg_scale`), so a single field-wide ceiling would veto a legitimately-better nested form as a false inversion (NF-D16 (g\u2034))"
+      },
+      "leg_scale": {
+        "oracle": "oracle_leg_scale",
+        "oracle_abs_bias": 0.00825154004454503,
+        "arm_abs_bias": 0.023061535699267905,
+        "ceiling_ppr": 0.26577860346411925,
+        "captured_fraction": 0.9442769453157946,
+        "note": "one ceiling PER FORM: the forms NEST (`cond_scale` \u2282 `leg_scale`), so a single field-wide ceiling would veto a legitimately-better nested form as a false inversion (NF-D16 (g\u2034))"
+      }
+    },
+    "over_anchor": {
+      "registered_to": "LOSE",
+      "abs_pooled": 0.7832213656319456,
+      "best_real_abs_pooled": 0.023061535699267905,
+      "lost_as_registered": true,
+      "note": "\u26d4 if this anchor WINS it is left FAILING and DECOMPOSED, never re-labelled: that is a refuted MAGNITUDE hypothesis (the fit UNDER-corrects), obtainable only because the anchor was SCORED (NF-D20 / NF-D14 (g\u2032))"
+    },
+    "declared_field": {
+      "incumbent": "identity",
+      "real_arms": [
+        "cond_shift",
+        "cond_scale",
+        "avail_relevel",
+        "leg_scale"
+      ],
+      "anchors": [
+        "oracle_cond_shift",
+        "oracle_cond_scale",
+        "oracle_avail_relevel",
+        "oracle_leg_scale",
+        "over_cond_shift",
+        "permuted_leg_scale",
+        "climatology_bank",
+        "nihilist_zero"
+      ],
+      "declared_field_size": 4,
+      "comparator_excluded": "direct_points"
+    }
+  },
+  "family_c": null,
+  "family_a_prime": {
+    "identity": {
+      "pairs": {
+        "QB|RB": {
+          "n_folds": 2,
+          "gap": -0.1566,
+          "se": 0.235,
+          "p_two_sided": 0.625721,
+          "mde_ppr": 0.6584,
+          "bh_rejected": false
+        },
+        "QB|WR": {
+          "n_folds": 2,
+          "gap": -0.5345,
+          "se": 0.0669,
+          "p_two_sided": 0.079278,
+          "mde_ppr": 0.1874,
+          "bh_rejected": false
+        },
+        "QB|TE": {
+          "n_folds": 2,
+          "gap": -0.2197,
+          "se": 0.0493,
+          "p_two_sided": 0.140625,
+          "mde_ppr": 0.1382,
+          "bh_rejected": false
+        },
+        "RB|WR": {
+          "n_folds": 2,
+          "gap": -0.3778,
+          "se": 0.1681,
+          "p_two_sided": 0.266493,
+          "mde_ppr": 0.4709,
+          "bh_rejected": false
+        },
+        "RB|TE": {
+          "n_folds": 2,
+          "gap": -0.063,
+          "se": 0.1857,
+          "p_two_sided": 0.791611,
+          "mde_ppr": 0.5202,
+          "bh_rejected": false
+        },
+        "WR|TE": {
+          "n_folds": 2,
+          "gap": 0.3148,
+          "se": 0.0176,
+          "p_two_sided": 0.0355,
+          "mde_ppr": 0.0492,
+          "bh_rejected": false
+        }
+      },
+      "bh_q": 0.1,
+      "n_pairs_evaluable": 6,
+      "gap_detected": false,
+      "max_mde_ppr": 0.6584
+    },
+    "direct_points": {
+      "pairs": {
+        "QB|RB": {
+          "n_folds": 2,
+          "gap": 0.2743,
+          "se": 0.2755,
+          "p_two_sided": 0.501284,
+          "mde_ppr": 0.7717,
+          "bh_rejected": false
+        },
+        "QB|WR": {
+          "n_folds": 2,
+          "gap": -0.1035,
+          "se": 0.1074,
+          "p_two_sided": 0.511733,
+          "mde_ppr": 0.3008,
+          "bh_rejected": false
+        },
+        "QB|TE": {
+          "n_folds": 2,
+          "gap": 0.2113,
+          "se": 0.0898,
+          "p_two_sided": 0.255804,
+          "mde_ppr": 0.2516,
+          "bh_rejected": false
+        },
+        "RB|WR": {
+          "n_folds": 2,
+          "gap": -0.3778,
+          "se": 0.1681,
+          "p_two_sided": 0.266493,
+          "mde_ppr": 0.4709,
+          "bh_rejected": false
+        },
+        "RB|TE": {
+          "n_folds": 2,
+          "gap": -0.063,
+          "se": 0.1857,
+          "p_two_sided": 0.791611,
+          "mde_ppr": 0.5202,
+          "bh_rejected": false
+        },
+        "WR|TE": {
+          "n_folds": 2,
+          "gap": 0.3148,
+          "se": 0.0176,
+          "p_two_sided": 0.0355,
+          "mde_ppr": 0.0492,
+          "bh_rejected": false
+        }
+      },
+      "bh_q": 0.1,
+      "n_pairs_evaluable": 6,
+      "gap_detected": false,
+      "max_mde_ppr": 0.7717
+    }
+  },
+  "gap_closed_under_winner": null,
+  "gap_closed_under_comparator": true,
+  "skipped": {
+    "2025H1": [],
+    "2025H2": []
+  },
+  "verdict": {
+    "state": "UNDEFINED",
+    "cross_rankable": false,
+    "reason": "a reproduction pin failed, a position was skipped, or fewer than 4 evaluable folds \u2014 the harness DID NOT RUN and this is never read as any verdict (NF1.7 (a))",
+    "max_mde_ppr": 0.6584
+  },
+  "cross_rankable": false,
+  "qb_consumption": {
+    "decision": "OPTION_B_RECALIBRATED",
+    "caveat": "WEAKER FOOTING, carried by every consumer of QB rows: QB is the only position not through the full certification gate WR (DSR 0.9852) and TE (0.9822) cleared and RB was registered against. The un-certified residual is deflation-adjusted ARM SELECTION within the zm family \u2014 not calibration (a per-fold measurement) and not the sign of the improvement. QB rows are 'calibrated + best-on-record, consumed under Option B; not certification-equivalent'."
+  },
+  "second_reader": {
+    "requested": true,
+    "scope": "the \u00a71 QB consumption registration \u2014 whether NF-W8 may consume a calibrated-but-dsr-uncertified distribution under a registered-forward Option B (inherits NF-W7j's open governance flag)",
+    "status": "OPEN \u2014 unsigned until a governance second reader signs the prereg \u00a71"
+  },
+  "promote_blockers": [
+    "NF-W8-0 is DEPLOY-HELD: the cross-position input is an NF-G0 challenger consumed by nothing until governance promotes it",
+    "every QB row carries the \u00a71 Option-B caveat: calibrated + best-on-record, consumed under a registered-forward PM decision \u2014 NOT certification-equivalent to WR/TE/RB, and the ship bar was never relaxed (E2.1-r)",
+    "NF-W7c's promote blockers are INHERITED in full: an assembled row whose source is not `bakeoff_all_priced_legs` carries a NF-W6d calibrated DEFAULT among the legs this league prices (`calibration_warning`), and a league pricing a SKILL_UNMODELED_KEYS term has a real coverage gap",
+    "K/DST are OUT OF SCOPE \u2014 the input is declared 4-position; the NF-W7 K/DST weekly models join in a successor's registration, never by silent extension",
+    "the layer corrects LEVEL (and uniform affine scale) only; a rank-dependent generator artifact is a successor's fresh registration",
+    "the tail completion is a DETERMINISTIC read of the certified bank \u2014 it re-certifies NO position: NF-W7f's QB Option-B caveat, NF-W7c's calibrated-default disclosure and every per-position certification scope are inherited UNCHANGED",
+    "`cross_rankable: true` licenses the RAW-POINT cross-position surfaces and a superflex board at the stated MDE only; it is not a claim about a rank-dependent (within-position non-uniform) generator artifact, which stays out of scope for a successor's registration",
+    "NF-W8-0c writes NO optimizer input \u2014 NF-W8-0b's shipped input stands untouched; regenerating it under a repaired QB generator is a SUCCESSOR's step, never a side effect of this run",
+    "`leg_scale` and `cond_scale` re-level a CERTIFIED per-stat marginal (NF-W6d): their per-leg marginal drift is measured and disclosed, and an admissible win under either form trades a per-stat certification scope for an assembled level",
+    "family C is a CONSUMPTION comparison, never a re-certification: `direct_points` at QB is not a certified QB distribution and this story does not make it one",
+    "the four arms correct a LEVEL (and a uniform per-leg scale); a rank-dependent or covariate-dependent generator artifact stays out of scope for a successor's registration"
+  ],
+  "classification": null,
+  "classification_scope": "\u26a0\ufe0f\u26a0\ufe0f ANY TRIGGER ABOVE DESCRIBES FAMILY B ONLY \u2014 the FITTED repair contest. Family A is a DETERMINISTIC decomposition (an exact identity; no fold count changes it in kind) and family A\u2032's bar is INHERITED. Reading a fold trigger onto either would be the NF-D18 misleading-trigger class."
+}
