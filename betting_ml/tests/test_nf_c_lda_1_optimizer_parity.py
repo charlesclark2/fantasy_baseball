@@ -79,6 +79,9 @@ def _python_recommendations(source: dict, scenario: dict) -> list[dict]:
         config=LeagueConfig.from_dict(source["config"]),
         drafted_ids=scenario["drafted"],
         my_player_ids=scenario["mine"],
+        # NF-C7 — `None` on every pre-NF-C7 scenario, which is the shape a caller that has never
+        # heard of depth targets sends, so those scenarios keep pinning the INERT path too.
+        depth_targets=scenario.get("depthTargets"),
         top_n=scenario.get("topN", 8),
     )
     return [
@@ -89,6 +92,9 @@ def _python_recommendations(source: dict, scenario: dict) -> list[dict]:
             "needLevel": r.need_level,
             "needBonus": r.need_bonus,
             "seatValue": r.seat_value,
+            "orderValue": r.order_value,
+            "depthShort": r.depth_short,
+            "expectedStarts": r.expected_starts,
             "positionalDropoff": r.positional_dropoff,
             "tier": r.tier,
             "isLastInTier": r.is_last_in_tier,
@@ -122,6 +128,24 @@ def test_the_parity_fixture_is_populated_and_exercises_the_engine(parity):
     assert any(r["needLevel"] == 1 for r in flat), "no state reaches a FLEX seat (NF-C2.1)"
     assert any(r["needLevel"] == 0 for r in flat), "no state reaches a surplus/bench pick"
     assert any(r["mustFill"] for r in flat), "no state reaches the reserve constraint"
+    # ── NF-C7 ──────────────────────────────────────────────────────────────────────────────────
+    # Both clauses are ANTI-VACUITY, not behaviour: they assert the fixture REACHES the two NF-C7
+    # mechanisms, so the byte-equality test below is actually pinning them. Without these the two
+    # engines could agree on depth targets by never once setting one (NF1.7(a)).
+    assert any(r["depthShort"] > 0 for r in flat), (
+        "no scenario sets a DEPTH TARGET that fires — regenerate the input fixture with "
+        "betting_ml/tests/fixtures/_gen_nf_c_lda_1_parity_input.py"
+    )
+    assert any(r["needLevel"] == 0 and r["expectedStarts"] > 0 for r in flat), (
+        "no bench candidate has a non-zero expected-start count, so the insurance rule is unpinned"
+    )
+    assert any(r["needLevel"] == 0 and abs(r["seatValue"] - r["score"]) < 1e-9 and r["score"] >= 0
+               for r in flat), "no bench candidate is scored on its insurance value alone"
+    # The NF-C7 sort key DIVERGES from `score` for a bench candidate — if the fixture never reaches a
+    # state where it does, the byte-equality clause below is agreeing about an untaken branch.
+    assert any(r["needLevel"] == 0 and abs(r["orderValue"] - r["score"]) > 1e-9 for r in flat), (
+        "no bench candidate's sort key differs from its score — the NF-C7 placement rule is unpinned"
+    )
     assert len({r["tier"] for r in flat}) > 1, "every row is one tier — NF-D19 sizing untested"
 
 
@@ -179,6 +203,10 @@ def test_the_engine_row_adapter_supplies_every_field_the_engine_reads(parity):
         "player_id", "player_name", "position", "team_id", "vor", "league_points",
         "replacement_points", "positional_rank", "overall_rank", "bye", "is_rookie",
         "vor_p10", "vor_p90", "low_pred",
+        # NF-C7 — expected games played, the input to the bench seat's insurance value. A missing
+        # key here is a SILENT ZERO: every bench candidate would price as worthless cover and the
+        # panel would look plausible while ranking depth by nothing at all.
+        "games",
     ):
         assert field in row, f"engine_row drops {field!r}, which the optimizer reads"
     assert row["player_id"] is not None and row["league_points"] is not None

@@ -15,6 +15,13 @@ import { RotateCcw, Undo2, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Picker } from "@/components/ui/picker"
 import { InfoTip } from "@/components/fantasy/shared"
+import { DepthTargetsField } from "@/components/fantasy/depth-targets-field"
+import {
+  NO_DEPTH_TARGETS,
+  loadDepthTargets,
+  saveDepthTargets,
+  type DepthTargets,
+} from "@/lib/depth-targets"
 import {
   assignRoster,
   recommend,
@@ -85,6 +92,10 @@ export function DraftOptimizer() {
   const [size, setSize] = useState<number>(12)
   const [mySlot, setMySlot] = useState<number>(1)
   const [picks, setPicks] = useState<Pick[]>([])
+  // NF-C7 — a PREFERENCE, so it is per-league-format and lives in localStorage beside the picks
+  // rather than on the saved league (a league's identity does not include how many backup
+  // quarterbacks its drafter likes — see `lib/depth-targets`).
+  const [depthTargets, setDepthTargets] = useState<DepthTargets>(NO_DEPTH_TARGETS)
   const [search, setSearch] = useState("")
   const [posFilter, setPosFilter] = useState<string>("ALL")
   const [sortCol, setSortCol] = useState<"ovrRank" | "pts" | "vor">("ovrRank")
@@ -162,6 +173,21 @@ export function DraftOptimizer() {
     }
   }, [started, configName, size, mySlot, picks])
 
+  // NF-C7 — read the stored targets whenever the league format changes, so a superflex room and a
+  // 1QB room keep their own answers. ⚠️ NOT keyed on the draft slot: re-picking a slot is not a
+  // change of mind about wanting a backup tight end.
+  useEffect(() => {
+    setDepthTargets(loadDepthTargets(SEASON, configName))
+  }, [configName])
+
+  const updateDepthTargets = useCallback(
+    (next: DepthTargets) => {
+      setDepthTargets(next)
+      saveDepthTargets(SEASON, configName, next)
+    },
+    [configName],
+  )
+
   const draftedIds = useMemo(() => new Set(picks.map((p) => p.id)), [picks])
   const myPlayerIds = useMemo(() => picks.filter((p) => p.slot === mySlot).map((p) => p.id), [picks, mySlot])
   const byId = useMemo(() => {
@@ -186,8 +212,8 @@ export function DraftOptimizer() {
 
   const recs = useMemo(() => {
     if (!board || !config) return []
-    return recommend({ board, config, draftedIds, myPlayerIds, topN: 6 })
-  }, [board, config, draftedIds, myPlayerIds])
+    return recommend({ board, config, draftedIds, myPlayerIds, depthTargets, topN: 6 })
+  }, [board, config, draftedIds, myPlayerIds, depthTargets])
 
   const myPlayers = useMemo(() => myPlayerIds.map((id) => byId.get(id)).filter(Boolean) as Player[], [myPlayerIds, byId])
   const filledRoster = useMemo(() => (config ? assignRoster(myPlayers, config.roster) : []), [myPlayers, config])
@@ -335,6 +361,11 @@ export function DraftOptimizer() {
                   />
                 </Field>
               </div>
+              <DepthTargetsField
+                config={config}
+                targets={depthTargets}
+                onChange={updateDepthTargets}
+              />
               <Button
                 onClick={() => setStarted(true)}
                 className="mt-2 bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669]"
@@ -497,9 +528,20 @@ export function DraftOptimizer() {
                     </div>
                     <div className="text-right">
                       <div className="text-sm font-semibold text-white">{r.score.toFixed(0)}</div>
+                      {/* ⭐ NF-C7 — a BENCH row's `score` is his INSURANCE value, not his VOR, so the
+                          sub-line names the two things that produced it: the VOR he can be looked up
+                          under, and the weeks he'd actually be started. Without the second number the
+                          headline is unexplainable from anything on screen.
+                          A DEPTH TARGET adds no number here: it is an ordering tier, not a bonus
+                          (see `draft-optimizer.ts`), and the rationale is where it speaks. */}
                       <div className="text-[10px] text-gray-600">
                         VOR {r.player.vor?.toFixed(0)}
-                        {r.needBonus > 0 && <span className="text-[#10b981]"> +{r.needBonus.toFixed(0)}</span>}
+                        {r.needLevel === 0 && r.expectedStarts > 0 && (
+                          <span> · starts ~{r.expectedStarts.toFixed(1)} wk</span>
+                        )}
+                        {r.needBonus > 0 && (
+                          <span className="text-[#10b981]"> +{r.needBonus.toFixed(0)}</span>
+                        )}
                       </div>
                     </div>
                     <Button
