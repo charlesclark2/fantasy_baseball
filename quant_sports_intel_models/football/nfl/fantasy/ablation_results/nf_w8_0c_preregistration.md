@@ -314,3 +314,41 @@ control DID NOT RUN" — a failed clause, never a pass.
 - Family A′ inherits family A's resolution: a residual gap below the pairwise MDE survives
   undetected at every position equally. A null here is "no residual artifact larger than X PPR",
   never "no artifact" (MH2.6).
+
+---
+
+## §11 BUILD-TIME AMENDMENTS (appended BEFORE any scoring run; §1–§10 untouched)
+
+Recorded here rather than in §12 because they landed while the harness was being BUILT — before
+the path proof, before any fold was scored, and therefore before any result could have shaped
+them. Both were found by this story's own RED proof, not by review.
+
+**§11.1 ⭐ THE §3.1 IDENTITY WAS TAUTOLOGICAL IN THE FIRST CUT, AND ITS GUARD PASSED ON NOTHING.**
+The decomposition first defined the READ channel as `mean(point) − Σ wᵢ·legmeanᵢ` — i.e. as the
+RESIDUAL. That makes `identity_holds` **vacuously true for ANY leg means**, including wrong ones:
+the clause could not fail, so it tested nothing (the NF-C0e "a test that reads a value back under
+the key the code writes" class, inside the very guard written to honour NF-W8-0b §12.5(e)). The
+RED half of the guard (`the identity FAILS when the leg means are not the ones the point came
+from`) is what exposed it: it stayed GREEN on a deliberately-perturbed leg-mean vector.
+
+**Cure (structural, not another test):** `assemble_qb` now also returns the assembled total's OWN
+per-row draw mean — a quantity the decomposition does not construct — and the reported identity is
+the LINEARITY residual `Σ wᵢ·legmeanᵢ − mean(total)` beside the arithmetic reconstruction.
+`identity_holds` requires BOTH. A wrong leg-mean vector now breaks it, and the RED proof pins that
+in two places: the unit fixture AND the real runner path (a leg-mean drift of 1% turns the
+end-to-end path proof red). ⇒ **the general rule: a decomposition whose residual term is DEFINED
+as the residual has no identity to assert — give it an anchor it did not compute.**
+
+**§11.2 The path proof asserts NON-VACUITY, not merely that it ran.** The synthetic end-to-end
+proof additionally asserts that every DECLARED arm was fitted, assembled and ACTED, that every
+per-form oracle was formed, and that the comparator and both degenerates were scored — because a
+field scored with arms silently absent is not the declared field (MH2 / NF1.7 (a)). The RED proof
+carries the matching break (`an_arm_silently_drops_out_of_the_declared_field`).
+
+**§11.3 In-session verification is SYNTHETIC by design (prereg §8, restated).** The real `--smoke`
+needs the W6d marginal dispatch (~370–600 s/fold cold; **no bank cache exists on this machine** —
+checked, in this worktree and in every sibling checkout), so it is an OPERATOR command under the
+repo's >2-min rule. The in-session proof drives the SAME runner functions with only the marginal
+banks and the direct-points learner stubbed, and its verdict is necessarily `UNDEFINED` because
+synthetic banks cannot reproduce a certified record — which is the fail-closed answer, not a
+limitation being excused.
