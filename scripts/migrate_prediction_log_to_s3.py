@@ -112,15 +112,26 @@ FROM latest WHERE over_prob_consensus IS NOT NULL
 
 
 def _snowflake_rows() -> list[dict]:
+    """Every Snowflake prediction_log row, with `loaded_at` already canonicalised.
+
+    ⚠️ The driver returns `loaded_at` as a `datetime` (it is TIMESTAMP_NTZ there) while the
+    parquet column is a fixed-width ISO string. Coercing at the READ boundary, not at the
+    write, is what keeps `_normalise_loaded_at` comparing like with like: a partially
+    damaged game can have its h2h row surviving in Snowflake (datetime) and its totals row
+    RECONSTRUCTED (already a string), and `max()` over a mixed group raises TypeError.
+    """
     from betting_ml.utils.data_loader import get_snowflake_connection
     conn = get_snowflake_connection(schema="config")
     try:
         cur = conn.cursor()
         cur.execute(_SF_SELECT)
         cols = [d[0].lower() for d in cur.description]
-        return [dict(zip(cols, r)) for r in cur.fetchall()]
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
     finally:
         conn.close()
+    for r in rows:
+        r["loaded_at"] = pred_log.canonical_stamp(r["loaded_at"])
+    return rows
 
 
 def _reconstructed_rows(start: date, end: date) -> list[dict]:
@@ -319,7 +330,20 @@ def run(*, repair_start: date | None, repair_end: date, dry_run: bool,
         by_date.setdefault(pred_log._iso_date(r["prediction_date"]), []).append(r)
 
     if dry_run:
-        log.info("[DRY RUN] would write %d row(s) across %d partition(s) to %s — nothing written.",
+        # ⚠️ A DRY RUN THAT SKIPS SERIALISATION IS NOT A REHEARSAL. The first cut returned
+        # here, so `--dry-run` validated the parity arithmetic and NOTHING about whether the
+        # rows could actually be written — and the real run then died on the first partition
+        # (`Expected bytes, got a 'datetime.datetime' object`, a `loaded_at` the Snowflake
+        # driver returns as a datetime). Build every partition's arrow table here; it is the
+        # whole write path minus the PUT, costs ~a second, and would have caught it.
+        for d, part in sorted(by_date.items()):
+            parquet_rows, dropped = pred_log.normalise_rows(part, d, loaded_at=pred_log.utc_stamp())
+            pred_log.rows_to_arrow_table(parquet_rows)
+            if dropped:
+                log.warning("  %s: %d row(s) would be DROPPED (un-coercible game_pk): %s",
+                            d, len(dropped), dropped)
+        log.info("[DRY RUN] would write %d row(s) across %d partition(s) to %s — every "
+                 "partition serialised OK; nothing written.",
                  len(rows), len(by_date), pred_log.LOC)
         return
 

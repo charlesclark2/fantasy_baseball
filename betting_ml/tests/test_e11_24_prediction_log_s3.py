@@ -269,6 +269,61 @@ class TestNormaliseRows:
         assert {r["loaded_at"] for r in rows} == {"stamp"}
 
 
+class TestLoadedAtCoercion:
+    """The defect that killed the first real migration run.
+
+    `loaded_at` is stored as a fixed-width ISO VARCHAR and the dedup ORDERS BY it, so every
+    value must be a str AND the same width. A database driver hands back a `datetime` —
+    which is the normal thing for a caller to have — and pyarrow then raised
+    `Expected bytes, got a 'datetime.datetime' object` while building the FIRST partition.
+
+    Nothing caught it because every test passed a string and `--dry-run` returned before the
+    write loop, so no test and no rehearsal ever ran the conversion.
+    """
+
+    def test_a_datetime_loaded_at_is_coerced_to_the_canonical_string(self):
+        from datetime import datetime
+        rows, _ = store.normalise_rows(
+            [{"game_pk": 1, "market": "h2h",
+              "loaded_at": datetime(2026, 8, 16, 17, 57, 7, 672000)}],
+            _DATE, loaded_at="fallback")
+        assert rows[0]["loaded_at"] == "2026-08-16 17:57:07.672000"
+
+    def test_a_coerced_datetime_is_the_same_width_as_a_native_stamp(self):
+        """Same width or it mis-sorts against the stamps around it — and mis-sorting IS the
+        dedup picking the wrong batch."""
+        from datetime import datetime, timezone
+        coerced = store.canonical_stamp(datetime(2026, 8, 16, 0, 0, 0, 0))
+        native = store.utc_stamp(datetime(2026, 8, 16, 0, 0, 0, 1, tzinfo=timezone.utc))
+        assert len(coerced) == len(native)
+        assert coerced < native
+
+    def test_an_absent_loaded_at_falls_back_to_the_batch_stamp(self):
+        rows, _ = store.normalise_rows([{"game_pk": 1, "market": "h2h"}],
+                                       _DATE, loaded_at="batch")
+        assert rows[0]["loaded_at"] == "batch"
+
+    def test_a_datetime_row_actually_serialises(self):
+        """The end-to-end claim, not just the coercion: the exact row shape the Snowflake
+        read produces must reach parquet."""
+        from datetime import datetime
+        rows, _ = store.normalise_rows(
+            [{"game_pk": 1, "market": "h2h", "model_prob": 0.5,
+              "loaded_at": datetime(2026, 8, 16, 10, 0, 0)}],
+            _DATE, loaded_at="fallback")
+        table = store.rows_to_arrow_table(rows)
+        assert table.num_rows == 1
+
+    def test_a_hand_built_row_with_a_datetime_fails_by_NAME(self):
+        """A caller bypassing normalise_rows must get an error that names the column —
+        pyarrow's own message names neither the column nor the row."""
+        from datetime import datetime
+        bad = [{c: None for c in store.COLUMNS}]
+        bad[0]["loaded_at"] = datetime(2026, 8, 16, 10, 0, 0)
+        with pytest.raises(TypeError, match="loaded_at"):
+            store.rows_to_arrow_table(bad)
+
+
 class TestStampOrdering:
     def test_the_stamp_is_fixed_width_so_string_order_is_time_order(self):
         """Lexicographic order of these strings IS the dedup's ordering. Python's
