@@ -726,6 +726,74 @@ def test_the_full_runner_path_runs_end_to_end_on_synthetic_banks(monkeypatch, tm
     assert QB.V_UNDEFINED in md and "Family A" in md and "Promote blockers" in md
 
 
+@pytest.mark.slow          # 7.7s — the repo's >5s marker rule; it lands in the slow gate,
+                          # never in the fast one (CLAUDE.md marker discipline)
+def test_the_winner_present_branch_executes_and_renders(monkeypatch, tmp_path):
+    """⭐ The `winner is None` path proof above CANNOT reach the deflation, the classification or
+    the winner half of the report — on synthetic banks no arm clears the PIT floor, which is the
+    floor working as designed. So this drives the SAME derivation with the PIT bar patched HIGH
+    **purely to reach the code path**.
+
+    ⛔ This is NOT a re-read of a gate (E2.1-r) and it asserts NOTHING about any verdict: it
+    asserts only that PBO/DSR compute, that `classify_null` is reached with the declared field,
+    and that `write_report` renders the winner half — because a crash there lands AFTER an
+    ~80-minute decisive run."""
+    from quant_sports_intel_models.football.nfl.fantasy import kdst_weekly as KWm
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w8_0_cross_position as W80m
+    from quant_sports_intel_models.football.nfl.fantasy import run_nf_w8_0c_qb_body as R
+    from quant_sports_intel_models.football.nfl.fantasy import weekly_projection as WPm
+
+    feat = _synthetic_feat()
+    smap = {f"{p}|{leg}": {"source": "synthetic"} for p in XP.POSITIONS for leg in FA.LEGS}
+
+    def _banks(fold_label, train, test, smap_, *, matrix_key, rebuild=False):
+        rng = np.random.default_rng(abs(hash(fold_label)) % 2**31)
+        pos = test["position"].astype(str).to_numpy()
+        out = {}
+        for cell in smap_:
+            n = int((pos == cell.split("|", 1)[0]).sum())
+            b = np.sort(rng.gamma(2.0, 2.0, size=(n, FA.N_LEVELS)), axis=1)
+            b[:, : FA.N_LEVELS // 2] = 0.0
+            out[cell] = b
+        return out, "synthetic"
+
+    def _direct(train, test, features, target, *, y_train=None):
+        rng = np.random.default_rng(7)
+        return np.sort(rng.gamma(2.0, 3.0, size=(len(test), FA.N_LEVELS)), axis=1)
+
+    monkeypatch.setattr(W80m, "_marginals_cached", _banks)
+    monkeypatch.setattr(R, "_marginals_cached", _banks, raising=False)
+    monkeypatch.setattr(KWm, "fit_direct_points", _direct)
+    monkeypatch.setattr(FA, "MIN_ESTIMATION_ROWS", 5, raising=False)
+    monkeypatch.setattr(QB, "PIT_MAX_DECILE_DEV", 1.0)      # reach the path, judge nothing
+
+    folds = WPm.build_folds(feat)
+    ledgers: list[dict] = []
+    fold_results = []
+    for f in folds[:6]:
+        fr, led = R.run_fold(f, feat, smap, draws=32, matrix_key="synthetic",
+                             rows_dir=tmp_path / "rows", prior_ledgers=list(ledgers))
+        fold_results.append(fr)
+        if led:
+            ledgers.append(led)
+    out = R.derive_0c({"story": QB.STORY, "generated_at": "synthetic",
+                       "gate_league": "full_ppr", "n_folds": len(fold_results),
+                       "fold_results": fold_results})
+    fb = out["family_b"]
+    assert fb["winner"] in QB.REAL_ARMS, "the winner-present branch was not reached"
+    assert set(QB.ARM_CLAUSES) <= set(fb["winner_clauses"]), "a registered clause was not computed"
+    assert fb["pbo"] is not None and fb["dsr"] is not None
+    assert out["family_a_prime"].get(fb["winner"]) is not None, (
+        "family A′ must be re-tested UNDER the winner, not only under identity")
+    assert out["gap_closed_under_winner"] in (True, False)
+    # the pins still fail on synthetic banks, so the verdict stays UNDEFINED — the winner-present
+    # machinery must run to completion WITHOUT that turning into a verdict (NF1.7 (a))
+    assert out["verdict"]["state"] == QB.V_UNDEFINED and out["cross_rankable"] is False
+    R.write_report(out, tmp_path / "report.md")
+    md = (tmp_path / "report.md").read_text()
+    assert f"`{fb['winner']}`" in md and "oracle ceilings" in md and "Family C" in md
+
+
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # The committed record, once the decisive run lands
 # ══════════════════════════════════════════════════════════════════════════════════════════════
