@@ -193,6 +193,20 @@ def derive_0b(out: dict) -> dict:
                                   if "bias_gridmean" in fr["positions"].get(pos, {})])), 4)
         for pos in XP.POSITIONS
         if any("bias_gridmean" in fr["positions"].get(pos, {}) for fr in out["fold_results"])}
+    # ⭐ THE ROW-POOLED completion delta — the ONLY convention under which the headline identity
+    # (a pair's movement == the difference of its two positions' deltas) is EXACT. The per-fold
+    # `bank_detail` means above are a MEAN OF FOLD MEANS and differ by up to 0.002 PPR, which is
+    # enough to make a bound stated from them WRONG (NF1.8: pool over rows, never a mean of fold
+    # means — caught here by the bound guard, on this story's own headline).
+    out["completion_delta_pooled"] = {
+        pos: round(float(out["identity_bias"]["pooled"][pos]["bias_pooled"]
+                         - out["gridmean_bias_by_position"][pos]), 6)
+        for pos in XP.POSITIONS
+        if out["identity_bias"]["pooled"].get(pos, {}).get("bias_pooled") is not None
+        and pos in out["gridmean_bias_by_position"]}
+    if out["completion_delta_pooled"]:
+        v = list(out["completion_delta_pooled"].values())
+        out["completion_delta_pooled_spread"] = round(float(max(v) - min(v)), 6)
 
     v0b = TP.tail_point_verdict(
         predecessor_verdict=out["verdict"],
@@ -243,6 +257,8 @@ def write_report(out: dict, path: Path) -> None:
         gm = out.get("gridmean_bias_by_position", {}).get(pos)
         tc = out["identity_bias"]["pooled"].get(pos, {}).get("bias_pooled")
         d = out.get("tail_completion_by_position", {}).get(pos, {}).get("mean_completion_delta_ppr")
+        # round for DISPLAY only — the stored record keeps full precision (the pins read it)
+        tc = None if tc is None else round(float(tc), 4)
         L.append(f"| {pos} | {gm} | {tc} | {d} |")
     L += ["", "## Reproduction pins (the consumed generators, by identity)", "",
           "| pos | generator | reproduces | folds | max gap |", "|---|---|---|---|---|"]

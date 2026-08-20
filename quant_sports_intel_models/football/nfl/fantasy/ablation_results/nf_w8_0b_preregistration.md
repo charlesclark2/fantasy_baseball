@@ -267,3 +267,161 @@ stays out of scope for a successor's registration.
   not FLEX-eligible in the gate league) is a property of the GATE LEAGUE, **lost in superflex**.
 - Family B is REPORTED, not this story's gate; a `LEVEL_ARTIFACT_REMOVED` outcome is recorded as
   the weaker claim it is (§6.2) and does not license the raw-point surfaces.
+
+---
+
+## §12 POST-RUN FINDINGS (appended 2026-08-19 after the decisive 8-fold run; §1–§9 untouched)
+
+Decisive run: operator laptop, 8 folds × 4000 draws, 3,874.6 s. Record:
+`nf_w8_0b_tail_point.{json,md}` (re-derived once via `--rewrite-report` for a display-rounding
+fix — verdict, every gap, every pin and every clause byte-identical).
+
+### §12.0 Headline — VERDICT `TAIL_COMPLETED_GAP_PERSISTS` · `cross_rankable: false`
+
+**The tail-truncation mechanism is REAL, MEASURED, and roughly 20× TOO SMALL to be the cause of
+the QB cross-position gap.** All four reproduction pins hit at **0.0 over 8 folds** — the consumed
+generators are byte-identical to their certified records, so the `point_reader` architecture
+delivered what it was built for. `banks_untouched` True, max quantile drift 0.0, shipped arm
+`identity`.
+
+### §12.1 The measurement (family A on the tail-completed point)
+
+| pos | grid-mean bias | tail-completed bias | completion Δ | hi-tail recovered |
+|---|---|---|---|---|
+| QB | −0.4695 | −0.4237 | **+0.0462** | +0.0816 |
+| RB | −0.2532 | −0.2206 | +0.0331 | +0.0598 |
+| WR | −0.1110 | −0.0591 | **+0.0498** | +0.0773 |
+| TE | −0.1509 | −0.1127 | +0.0383 | +0.0557 |
+
+`gap_detected` **True**: QB|WR **−0.3621** (p=0.0016, MDE 0.2036) and QB|TE **−0.3106**
+(p=0.0026, MDE 0.1903) still survive BH(q=0.10); no other pair does. Against NF-W8-0's grid-mean
+reads the pairs moved by **−0.0036** and **+0.0080** — i.e. QB|WR got marginally WORSE.
+
+⭐ **The change to any pair is EXACTLY the difference of the two positions' ROW-POOLED completion
+deltas** (QB +0.0458 · RB +0.0326 · WR +0.0519 · TE +0.0382 — verified to 1e-17), **so the whole
+mechanism is bounded by their SPREAD: 0.0193 PPR.** Every one of the six pairs moved by ≤0.0193,
+as that identity requires (largest: RB|WR, exactly 0.0193). Against a 0.36 PPR artifact needing to
+fall under a ~0.20 PPR MDE, the lever is **~19× short**.
+
+⚠️ **The pooling convention is load-bearing, and this story's own bound guard caught it.** Stated
+from the per-fold `bank_detail` means — a MEAN OF FOLD MEANS — the deltas read
++0.0462/+0.0331/+0.0498/+0.0383 and imply a bound of **0.0167**, which is simply WRONG: RB|WR
+moves 0.0193 and would breach it. Pooled over ROWS the identity is exact. The record now carries
+BOTH (`completion_delta_pooled` beside `tail_completion_by_position`) precisely because they
+differ enough to change a headline (NF1.8, on this story's own conclusion).
+
+### §12.2 ⭐ §12.3d's HYPOTHESIS IS REFUTED, with a decomposition
+
+NF-W8-0 §12.3d proposed (explicitly "untested here") that the QB gap is tail-mass differential
+between the assembled and 9-knot representations under the same grid read. On the certified banks,
+scoring both generators on the IDENTICAL rows:
+
+| pos | consumed vs swap | level gap | tail-channel share |
+|---|---|---|---|
+| **QB** | `zm_floor` vs `direct_points` | **−0.3505** | **+0.0173 = 4.9%** |
+| RB | `direct_points` vs `single_copula` | −0.0443 | −0.0242 = 54.5% |
+| WR | `mixall_learned` vs `direct_points` | −0.0426 | +0.0111 = 26.0% |
+| TE | `single_copula` vs `direct_points` | +0.1060 | +0.0128 = 12.0% |
+
+**~95% of the QB generator gap lives in the BODY of the distribution, not in the truncated
+tails** — a level difference present across the quantile function, which no tail completion can
+reach. Per pair: the tail channel is **1.2%** of QB|WR and **8.1%** of QB|TE.
+
+⚠️ The mechanism is NOT inert — at RB it explains 54.5% of that (much smaller) gap, and QB does
+carry the heaviest right tail (hi-tail +0.0816, the largest). It is real; it is simply not what
+drives QB.
+
+**Why the direction confirms but the magnitude does not.** The incumbent grid mean carries TWO
+opposite errors: it drops the outer tails (understating, most for a heavy tail) AND it weights the
+covered mass by 200/199 (overstating by 0.5% of the position's own LEVEL). QB has both the
+heaviest tail (+0.0816) and the highest level (re-weight −0.0354), so the two nearly cancel and
+QB's net completion (+0.0462) lands BELOW WR's (+0.0498). ⇒ **the truncated grid mean is closer to
+`E[Y]` than it "should" be, by an accident of offsetting errors** — and the offset is
+position-dependent in a way that shrinks rather than creates the cross-position differential.
+
+### §12.3 ⭐ THE ONE THING THAT SHIPPED — the swap materiality floor is VALIDATED
+
+The §12.5(2) successor works exactly as registered. Floor **0.197 PPR** (`median_pairwise_mde_ppr`;
+band {0.1733, 0.197, 0.3288}):
+
+- **QB** — pooled shift −0.3576, precise ✓ **and material ✓ ⇒ ACTIVE**, collapsing 0.3576 → 0.0763
+  (p = 3.4e-07) ⇒ **PASSES**;
+- **RB / WR / TE** — pooled 0.0566 / 0.0263 / 0.1059, precise ✓ but **material ✗ ⇒ INACTIVE**.
+
+`swap_clause` goes **FAIL → PASS**. The floor did NOT weaken the clause: the position family A
+indicted is still active, still tested, and passes decisively; only the immaterial refusals
+§12.3c named are removed. This is the NF-W6 "demonstrable ≠ material" lesson landing as working
+code.
+
+### §12.4 ⭐ THE CLASSIFICATION CHANGED — and a reader must not mis-scope its trigger
+
+With `swap_clause` (an ANCHOR clause) now passing, the winner `level_affine` fails only
+STATISTICAL clauses — `reduces_gap` (p=0.0522 vs the 0.05 bar; the bar stays, E2.1-r) and
+`dsr_ok` (0.9193 vs 0.95). So the classification moves from NF-W8-0's **`CONSTRAINT_REFUSED`,
+binding_half=anchor, NO data trigger** to **`POWER_LIMITED`** with a published trigger
+("+2 folds for the DSR gate; field size is not a lever").
+
+⚠️⚠️ **THAT TRIGGER DESCRIBES FAMILY B ONLY, AND MUST NOT BE READ AS FAMILY A'S STATUS.** Family B
+asks "can a FITTED layer repair the residual?" — a genuinely power-limited question. Family A —
+this story's actual gate — asks "does the DETERMINISTIC point close the gap?", and its answer is
+**arithmetically bounded, not underpowered**: the completion delta is a deterministic function of
+each certified bank, its cross-position spread is 0.0167 PPR, and **no fold count can make that
+spread larger**. More seasons would estimate the same bound more precisely and change nothing.
+Publishing "+2 folds" beside family A's null would be the NF-D18 misleading-trigger class; family
+A's null is closer in kind to a measured absence.
+
+### §12.5 The findings that outlive the story
+
+- **(a) A quantile-grid MEAN is a truncated `E[Y]` whose bias scales with right-tail heaviness**,
+  so two calibrated generators of the same quantity produce different "means" by how heavy a tail
+  their code emits. Real, measured (+0.033 to +0.050 PPR here), and now correctable
+  deterministically — but at this magnitude it is a **rounding-scale** effect, not a
+  cross-position artifact. Other repo sites reading `bank.mean(axis=1)` as `E[Y]`
+  (`stat_distribution_serving.encode_bank`, `fp_assembly`, `opportunity_allocation.pit_frame`,
+  `run_nf_w3._point_and_sd`) inherit the same property and are unaudited.
+- **(b) ⭐ The re-weight is not optional and its omission would have MANUFACTURED a result.**
+  Dropping the 199/200 correction inflates every point by 0.5% of its own level — largest at QB —
+  which would have "closed" much of the QB gap while being arithmetically wrong (a degenerate bank
+  would return 1.005·c). The guard that catches it is exactness on a degenerate bank. A successor
+  tempted to "just add the tails" is being offered a fabricated win.
+- **(c) The non-stationarity floor is unchanged by the point read.** `position_mean_point` scores
+  **0.511** on the tail-completed point, identical to NF-W8-0's grid-mean 0.511 — as it must,
+  being a property of prior-vs-fold `y`-level drift, not of how the point is read. The real arms
+  again capture ~20% of the peeking oracle's ceiling (0.4901 → 0.3906 against 0.0).
+- **(d) The smoke predicted the decisive result to within 0.005 PPR per pair.** A 1-fold,
+  300-draw path proof bounded the mechanism at ≤0.012 PPR (observed 0.0167) and put the tail
+  channel at 1.6% of the QB swap gap (observed 4.9%). Where a mechanism's magnitude is a
+  DETERMINISTIC function of the bank, a path proof can forecast the verdict cheaply — the draw
+  count biases the completion delta by only ~10% at 300 draws and ~0% by 4000 (measured). ⛔ It
+  cannot replace the run: the pins do not hit at smoke draws, so the banks are not certified.
+
+- **(e) ⭐ A BOUND IS ONLY AS GOOD AS ITS POOLING CONVENTION, AND PROSE CANNOT CATCH THAT.** This
+  story's headline is an identity ("a pair moves by exactly the difference of its two positions'
+  completion deltas"), and it was first written from the per-fold `bank_detail` means — giving a
+  bound of 0.0167 that RB|WR (0.0193) breaches. Nothing about the sentence looked wrong; the
+  error was one convention deep (NF1.8). It was caught by a guard that asserts the IDENTITY on
+  the committed record rather than restating the claim — the residual is 1e-17 pooled over rows
+  and ~2.6e-3 as a mean of fold means. ⇒ when a conclusion rests on an arithmetic identity,
+  ASSERT the identity against the artifact; a bound quoted from a differently-pooled summary of
+  the same quantity is a different number wearing the same name.
+
+### §12.6 Successors (forward registrations only — nothing here was selected)
+
+1. **The QB gap lives in the BODY of the assembled distribution.** §12.2 localises ~95% of the
+   −0.3505 PPR `zm_floor`-vs-`direct_points` gap to a level difference across the quantile
+   function. A successor registers a BODY-level comparison (which quantile ranges carry the gap,
+   and whether it is a mixture-weight or a per-leg-scale effect) — ⛔ NOT another read of the
+   tails, which are now measured closed.
+2. **The `reduces_gap` bar and the fitted-layer route are power-limited (§12.4)** — a family-B
+   successor is a genuine +2-fold / lower-variance question, and is a DIFFERENT question from
+   whether the hybrid is cross-rankable deterministically.
+3. **NF-W8-0 §12.5(3) remains OPEN**: the PM decision on bounded VOR-space consumption under the
+   disclosed gap, with NF-W8-0 §12.3b's structural shield (a uniform QB level shift cancels
+   exactly in VOR; QB is not FLEX-eligible in the gate league) intact and superflex still excluded.
+
+### §12.7 What ships from this record
+
+The 4-position input parquets under `identity` **on the tail-completed point**, `cross_rankable:
+false`, per-row `level_gap_disclosure`, the Option-B caveat on every QB row, and every promote
+blocker in force. Raw-point cross-position surfaces and superflex stay BLOCKED. 🚩 NF-W8-0's §1
+second-reader flag remains OPEN.
