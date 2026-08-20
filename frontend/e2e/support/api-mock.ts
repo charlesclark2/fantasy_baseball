@@ -210,6 +210,17 @@ export type MockOptions = {
     // all four "no projection" causes renderable at once.
     | "kdstGap"
   /**
+   * ⭐ NF-C7b — the caller's ACCOUNT-level fantasy defaults (`GET /fantasy/preferences`).
+   *
+   *   undefined / "none" — no account default. The state a user is in until they visit /settings,
+   *                        and the one every pre-NF-C7b test is implicitly in.
+   *   "accountTargets"   — an account-level depth target, so a surface can be asserted to INHERIT
+   *                        it. Deliberately a distinct mode rather than folded into `leagues`: a
+   *                        league value and an account value must be settable independently or the
+   *                        precedence between them cannot be exercised at all.
+   */
+  fantasyPrefs?: "none" | "accountTargets"
+  /**
    * ⭐ NF-C4 — what `GET /fantasy/nfl/custom-boards` starts out holding for this caller.
    *
    *   "none"    — THE DEFAULT: no saved board. The state every user is in the first time they open
@@ -424,6 +435,14 @@ function writeResponseFor(
   method: string,
   postData: string | null,
 ): unknown | undefined {
+  if (method === "PUT" && pathname === "/fantasy/preferences") {
+    // Echo the SENT value — see `fantasyPrefsPayloadFor`.
+    try {
+      return JSON.parse(postData || "{}")
+    } catch {
+      return { depth_targets: {} }
+    }
+  }
   const isCreate = method === "POST" && pathname === "/fantasy/leagues"
   const isUpdate = method === "PUT" && /^\/fantasy\/leagues\/[^/]+$/.test(pathname)
   if (!isCreate && !isUpdate) return undefined
@@ -1300,6 +1319,23 @@ function leaguesFor(leagues: NonNullable<MockOptions["leagues"]>): any[] {
   return [FIXTURES.myTeams().leagues[0]]
 }
 
+/**
+ * NF-C7b — the caller's ACCOUNT-level fantasy defaults.
+ *
+ * ⚠️ The PUT echoes back what was SENT rather than a canned value, because the client compares
+ * returned-against-sent to catch a backend that accepted the field and dropped it (E8.6). A canned
+ * response would make that comparison pass without the round trip ever carrying anything.
+ */
+function fantasyPrefsPayloadFor(
+  pathname: string,
+  method: string,
+  mode: NonNullable<MockOptions["fantasyPrefs"]>,
+): unknown | undefined {
+  if (pathname !== "/fantasy/preferences") return undefined
+  if (method === "PUT") return undefined // handled by the write path below
+  return { depth_targets: mode === "accountTargets" ? { QB: 2, TE: 3 } : {} }
+}
+
 function personalPayloadFor(
   pathname: string,
   leagues: NonNullable<MockOptions["leagues"]>,
@@ -1756,6 +1792,7 @@ export async function mockApi(page: Page, options: MockOptions = {}): Promise<Ap
     }
 
     let body =
+      fantasyPrefsPayloadFor(apiPath, route.request().method(), options.fantasyPrefs ?? "none") ??
       personalPayloadFor(apiPath, options.leagues ?? "none", search) ??
       billingPayloadFor(apiPath, options.subscription ?? "none") ??
       payloadFor(apiPath, entitlement)

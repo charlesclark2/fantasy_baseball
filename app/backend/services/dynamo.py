@@ -606,6 +606,53 @@ def upsert_user_portfolio(user_id: str, prefs: dict) -> dict:
     return {"user_id": user_id, **pf}
 
 
+# ── Fantasy ACCOUNT preferences (NF-C7b) ─────────────────────────────────────
+# Account-level fantasy defaults, stored as a `fantasy_prefs` map on the user item — the same
+# "ride the existing users table" pattern as portfolio preferences above, for the same reasons
+# (no new table, no new IAM grant, and this repo has already documented a table that was written
+# down but never actually created).
+#
+# Today it holds exactly one key, `depth_targets`: the per-position depth target that applies to
+# every league the user has NOT given its own. Precedence lives in
+# `app/backend/services/depth_targets.py` and nowhere else.
+
+
+def get_fantasy_prefs(user_id: str) -> dict:
+    """Return the user's account-level fantasy preferences, or `{}` if never saved.
+
+    Non-raising, matching `get_user_portfolio`: these are DEFAULTS for a draft board, and a
+    DynamoDB blip must degrade to "no account default" rather than fail the caller's draft. The
+    per-league value is unaffected either way, so the failure mode is a recommendation without the
+    user's default — visibly wrong to them, never a 500 mid-draft.
+    """
+    try:
+        resp = _users_table().get_item(Key={"user_id": user_id})
+        prefs = resp.get("Item", {}).get("fantasy_prefs")
+        if prefs:
+            return _from_dynamo(prefs)
+    except Exception:
+        logger.warning("dynamo.get_fantasy_prefs failed for user=%s", user_id)
+    return {}
+
+
+def upsert_fantasy_prefs(user_id: str, prefs: dict) -> dict:
+    """Save account-level fantasy preferences as the `fantasy_prefs` map on the user item.
+
+    ⚠️ RAISES on failure, unlike the getter. A read that fails can fall back to "no default" and
+    the user simply sees their leagues unchanged; a WRITE that fails silently is the E8.6
+    silent-save class — the UI would show the new value, the reload would show the old one, and
+    nothing would say why. A save either lands or says so.
+    """
+    payload = {"depth_targets": prefs.get("depth_targets") or {}}
+    _users_table().update_item(
+        Key={"user_id": user_id},
+        UpdateExpression="SET #fp = :fp",
+        ExpressionAttributeNames={"#fp": "fantasy_prefs"},
+        ExpressionAttributeValues={":fp": _to_dynamo(payload)},
+    )
+    return payload
+
+
 # ── Fantasy league settings (NF-C0b) ─────────────────────────────────────────
 # Per-user hand-entered (or imported) league configs, stored as a `fantasy_leagues`
 # map {league_id: config} on the user item (PK user_id) — the same "ride the existing

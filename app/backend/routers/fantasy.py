@@ -35,8 +35,10 @@ from app.backend.models.fantasy import (
     BigBoard,
     BigBoardSave,
     DraftAssistantRequest,
+    FantasyPreferences,
     League,
     LeagueSave,
+    sanitize_depth_targets,
 )
 from app.backend.services import (
     draft_assistant,
@@ -46,6 +48,10 @@ from app.backend.services import (
     projection_fields,
     scoring_probe_guard,
 )
+# Aliased because `depth_targets` is also the name of the FIELD this module reads off a league
+# record and off a request payload; an unaliased import would shadow-read as the value in every
+# local scope that touches one, which is exactly the kind of thing a reviewer skims past.
+from app.backend.services import depth_targets as depth_targets_service
 
 logger = logging.getLogger(__name__)
 
@@ -947,6 +953,41 @@ def update_league(
     return _league_response(record)
 
 
+@personal_router.get("/preferences")
+def get_fantasy_preferences(user_id: str = Depends(require_personalized_league_access)) -> dict:
+    """The caller's ACCOUNT-level fantasy defaults.
+
+    Today: `depth_targets`, the per-position depth target applied to every league that has not been
+    given its own (NF-C7b). Precedence lives in `services/depth_targets.py`.
+
+    ⚠️ Returns `{}` rather than 404 when nothing has been saved. "You have no defaults" is a normal
+    state, not a missing resource, and a 404 here would have every client branch on an error path
+    for the commonest case — which is how an empty state ends up rendering as a failure.
+    """
+    prefs = dynamo.get_fantasy_prefs(user_id)
+    return {"depth_targets": sanitize_depth_targets(prefs.get("depth_targets"))}
+
+
+@personal_router.put("/preferences")
+def update_fantasy_preferences(
+    payload: FantasyPreferences,
+    user_id: str = Depends(require_personalized_league_access),
+) -> dict:
+    """Overwrite the caller's account-level fantasy defaults.
+
+    ⚠️ NO QUOTA CHECK, matching `update_league` directly above: a default is not a league and
+    creates none, so a free user at their quota of one must still be able to set one. A cap applied
+    here would present as "saving is broken" (E8.6).
+    """
+    targets = sanitize_depth_targets(payload.depth_targets)
+    saved = dynamo.upsert_fantasy_prefs(user_id, {"depth_targets": targets})
+    # Echoing the SAVED value rather than the requested one is what lets the client detect a
+    # silently-dropped field: NF-C7's own E8.6 lesson is that an un-deployed backend accepts an
+    # unknown key, returns 200, and the user watches their setting vanish on reload. A client that
+    # compares returned-vs-sent sees that immediately.
+    return {"depth_targets": sanitize_depth_targets(saved.get("depth_targets"))}
+
+
 @personal_router.delete("/leagues/{league_id}", status_code=204)
 def delete_league(league_id: str, user_id: str = Depends(require_personalized_league_access)):
     try:
@@ -1073,6 +1114,15 @@ def nfl_draft_assistant(
 
     from quant_sports_intel_models.fantasy_engine.league_config import LeagueConfig
 
+    # ⭐ NF-C7b — THE EXTENSION GETS DEPTH TARGETS WITHOUT SENDING ANYTHING. `record` is the saved
+    # league we just resolved (or the draft room's own settings, which carry none), so the targets
+    # ride in on data already fetched. That is what keeps this free of the E8.6 deploy-skew hazard:
+    # no new request field means no window in which an un-deployed backend accepts, ignores and
+    # silently drops one, returning a 200 and a phantom save.
+    applied_targets, targets_source = depth_targets_service.resolve_for_record(
+        record, dynamo.get_fantasy_prefs(user_id).get("depth_targets")
+    )
+
     result = draft_assistant.recommend_for_state(
         board=board,
         config=LeagueConfig.from_dict(record),
@@ -1080,6 +1130,8 @@ def nfl_draft_assistant(
         drafted_espn_ids=drafted,
         my_espn_ids=mine,
         top_n=payload.top_n,
+        depth_targets=applied_targets,
+        depth_targets_source=targets_source,
     )
     result["season"] = payload.season
     result["league"] = {
