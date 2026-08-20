@@ -99,6 +99,8 @@ def test_the_shape_matched_null_never_judges_a_pit_or_coverage_statistic():
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.slow
+
+@pytest.mark.research
 @pytest.mark.parametrize("scale", [1.25, 0.80])
 def test_sigma_scale_defect_is_reachable_in_both_directions(scale):
     """MH2.10's headline is a NON-firing verdict, so the firing one must be proven emittable —
@@ -112,6 +114,9 @@ def test_sigma_scale_defect_is_reachable_in_both_directions(scale):
 
 
 @pytest.mark.slow
+
+
+@pytest.mark.research
 def test_a_clean_frame_does_not_fire_phase_2():
     fr = M.clean_frame(655, np.random.default_rng(12))
     v = M.run(frame=fr, reps=FAST_REPS, with_power=False, with_games_needed=False,
@@ -147,6 +152,9 @@ def test_the_shape_matched_null_is_unbiased_on_a_SKEWED_truth():
 
 
 @pytest.mark.slow
+
+
+@pytest.mark.research
 def test_the_discriminator_does_not_SYSTEMATICALLY_invent_a_sigma_defect_on_skewed_data():
     """The rate half of the same control, at the pre-registered bar rather than at zero.
 
@@ -279,6 +287,8 @@ def test_power_limited_never_masks_a_firing_verdict():
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.slow
+
+@pytest.mark.research
 def test_the_windows_knob_is_a_cost_knob_not_a_scope_knob():
     """The control sweep computes the PRIMARY window only, for speed. That is safe ONLY because
     `_decide` reads the primary window alone — if a future edit made the verdict depend on RECENT
@@ -335,6 +345,8 @@ def test_run_refuses_a_population_whose_declared_deviation_has_grown():
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.slow
+
+@pytest.mark.research
 def test_the_contrast_block_cannot_influence_the_verdict():
     """§6 compares morning against post_lineup. MH2.1 (b) forbids an incumbent-relative anchor, so
     the contrast must be reportable without being readable by the decision rule. Corrupting the

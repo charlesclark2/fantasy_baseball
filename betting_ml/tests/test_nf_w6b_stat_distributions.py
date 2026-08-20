@@ -549,7 +549,7 @@ def _synth_frame(n_per_pos_gw: int = 12, gws: int = 10, seed: int = 7) -> pd.Dat
 
 class TestArmsOnSyntheticData:
     # real LGBM/kNN fits (>5s) — slow tier by the marker rule; still on the merge bar
-    pytestmark = [pytest.mark.slow]
+    pytestmark = [pytest.mark.slow, pytest.mark.research]
     FEATS = ["f1", "f2", "f3"]
 
     @pytest.fixture()
