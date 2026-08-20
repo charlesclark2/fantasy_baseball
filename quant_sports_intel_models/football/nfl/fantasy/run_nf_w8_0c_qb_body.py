@@ -561,10 +561,10 @@ def derive_0c(out: dict) -> dict:  # noqa: C901
         clauses["degenerates_lose"] = bool(all(
             crps_pooled.get(d) is not None and crps_pooled.get(winner) is not None
             and crps_pooled[d] > crps_pooled[winner] for d in QB.DEGENERATE_ARMS))
-        acts = all(fr["qb"]["arms"][winner]["acts"] for fr in ev_folds
-                   if winner in fr["qb"]["arms"])
-        non_qb_identical = pins["non_qb_bias_matches_w8_0b"]["reproduces"]
-        clauses["banks_move_deliberately"] = bool(acts and non_qb_identical)
+        clauses["banks_move_deliberately"] = QB.banks_move_deliberately(
+            arm_acts_by_fold=[fr["qb"]["arms"][winner]["acts"] for fr in ev_folds
+                              if winner in fr["qb"]["arms"]],
+            non_qb_identical=bool(pins["non_qb_bias_matches_w8_0b"]["reproduces"]))
         mat = pd.DataFrame({a: [abs(v) for v in _series(a, "bias")] for a in QB.ELIGIBLE},
                            index=evaluable)
         deflate_detail = NF18.deflate(mat, subset=list(QB.ELIGIBLE))

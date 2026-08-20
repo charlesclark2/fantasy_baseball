@@ -402,6 +402,26 @@ class TestSelection:
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # Family C + the verdict
 # ══════════════════════════════════════════════════════════════════════════════════════════════
+class TestBanksMoveDeliberately:
+    def test_an_arm_that_cannot_act_is_refused_not_passed(self):
+        """NF-D20: a mechanism with nothing to act on is a FINDING, never a pass."""
+        assert QB.banks_move_deliberately(arm_acts_by_fold=[True, False, True],
+                                          non_qb_identical=True) is False
+
+    def test_a_moved_non_qb_bank_refuses_the_arm(self):
+        """This story re-levels QB and NOTHING else — a WR or TE bank that moved means the
+        harness changed something it never registered."""
+        assert QB.banks_move_deliberately(arm_acts_by_fold=[True, True],
+                                          non_qb_identical=False) is False
+
+    def test_a_genuine_qb_only_move_passes(self):
+        assert QB.banks_move_deliberately(arm_acts_by_fold=[True, True],
+                                          non_qb_identical=True) is True
+
+    def test_no_fold_is_UNDEFINED_never_a_verdict(self):
+        assert QB.banks_move_deliberately(arm_acts_by_fold=[], non_qb_identical=True) is None
+
+
 class TestArchitectureState:
     def test_the_assembly_dominates_when_it_alone_clears_the_pit_bar_and_ties_elsewhere(self):
         s = QB.architecture_state(pit_folds_assembly=7, pit_folds_direct=0, n_folds=7,

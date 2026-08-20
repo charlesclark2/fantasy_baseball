@@ -608,6 +608,21 @@ def architecture_state(*, pit_folds_assembly: int, pit_folds_direct: int, n_fold
             "mean_crps_delta": float(cd.mean()), "mean_abs_bias_delta": float(bd.mean())}
 
 
+def banks_move_deliberately(*, arm_acts_by_fold: list[bool],
+                            non_qb_identical: bool) -> bool | None:
+    """⭐ THE TWO-SIDED BANK CLAUSE: the arm's OWN distribution must have moved (an arm that
+    cannot ACT is INACTIVE — a finding, never a pass, NF-D20) **and** every OTHER position's
+    certified bank must have passed through BYTE-IDENTICALLY (this story re-levels QB and nothing
+    else; a WR or TE bank that moved means the harness changed something it never registered).
+
+    Returns None — never False, never True — when there is no fold to read: a clause that could
+    not be evaluated is UNDEFINED (NF1.7 (a))."""
+    acts = [bool(a) for a in arm_acts_by_fold]
+    if not acts:
+        return None
+    return bool(all(acts) and non_qb_identical)
+
+
 def select_arm(bias_by_arm: dict[str, dict], clauses_by_arm: dict[str, dict]) -> str | None:
     """The registered selection (prereg §4): the smallest pooled |bias| among arms that are
     ELIGIBLE and clear BOTH hard constraints; ties within `TIE_SE_MULT` SE break to the registered

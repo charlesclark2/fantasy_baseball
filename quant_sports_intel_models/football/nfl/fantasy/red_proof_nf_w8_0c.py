@@ -172,6 +172,24 @@ BREAKS: tuple[Break, ...] = (
           "a 0.001 PPR edge buys the 13-parameter arm that re-levels a CERTIFIED per-stat "
           "marginal — a tie decided against the registration (E2.1-r)"),
 
+    Break("an_inactive_arm_counts_as_a_deliberate_move", _QB,
+          "    return bool(all(acts) and non_qb_identical)",
+          "    return bool(any(acts) and non_qb_identical)",
+          ("TestBanksMoveDeliberately::test_an_arm_that_cannot_act_is_refused_not_passed",),
+          "an arm that produced the incumbent's own bank on some folds still ships as a repair — "
+          "a mechanism that cannot ACT is a finding, never a pass (NF-D20)"),
+    Break("a_moved_non_qb_bank_no_longer_refuses_the_arm", _QB,
+          "    return bool(all(acts) and non_qb_identical)\n\n\ndef select_arm(",
+          "    return bool(all(acts))\n\n\ndef select_arm(",
+          ("TestBanksMoveDeliberately::test_a_moved_non_qb_bank_refuses_the_arm",),
+          "⭐ a WR/TE certified bank moves and the arm still ships — this story re-levels QB and "
+          "NOTHING else, so a moved non-QB distribution is an unregistered change"),
+    Break("an_unevaluable_bank_clause_reads_as_a_pass", _QB,
+          "    if not acts:\n        return None",
+          "    if not acts:\n        return True",
+          ("TestBanksMoveDeliberately::test_no_fold_is_UNDEFINED_never_a_verdict",),
+          "a clause with no fold to read reports a PASS (NF1.7 (a))"),
+
     # ── family C + the verdict ─────────────────────────────────────────────────────────────────
     Break("a_tie_on_every_axis_counts_as_assembly_dominance", _QB,
           "    a_dominates = any(wins_a.values()) and not any(wins_d.values())",
