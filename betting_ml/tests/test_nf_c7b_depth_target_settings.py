@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -346,6 +347,82 @@ class TestStorage:
         """
         assert sanitize_depth_targets({"QB": MAX_DEPTH_TARGET + 1}) == {}
         assert sanitize_depth_targets({"QB": MAX_DEPTH_TARGET}) == {"QB": MAX_DEPTH_TARGET}
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# THE STORE, not the model — a shipped bug these tests originally could not see
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+class TestTheValuesSurviveARealDynamoRoundTrip:
+    """⚠️ WRITTEN AFTER SHIPPING, BECAUSE EVERY TEST ABOVE PASSED WHILE THE FEATURE WAS BROKEN.
+
+    Saving an account default worked and then vanished — within ~60 seconds (the react-query
+    `staleTime`) or on any sign-out. The WRITE was landing; the READ was dropping it.
+
+    DynamoDB returns every number as `Decimal`. `get_fantasy_prefs` used `_from_dynamo`, which
+    converts Decimal only at the TOP level of the map it is handed — but these counts live TWO
+    levels down (`fantasy_prefs.depth_targets.RB`), so they came back as `Decimal`, and
+    `sanitize_depth_targets` tests `isinstance(v, (int, float))`, which `Decimal` is NEITHER. Every
+    count was silently dropped.
+
+    ⭐ THE REASON THE SUITE MISSED IT: every storage test above constructs a Python dict and feeds
+    it to a Pydantic model. Pydantic COERCES Decimal to int, so it would have passed either way —
+    the tests exercised the MODEL and the defect lived in the STORE. `list_fantasy_leagues` already
+    used the deep converter, which is why the per-league path worked and only the account default
+    broke; a test that had gone through the store would have found that asymmetry immediately.
+    """
+
+    @staticmethod
+    def _table_holding(item: dict):
+        class _FakeTable:
+            def get_item(self, Key):  # noqa: N803 — boto3's own kwarg name
+                return {"Item": item}
+        return _FakeTable()
+
+    def test_counts_come_back_as_ints_not_decimals(self, monkeypatch):
+        from app.backend.services import dynamo
+
+        monkeypatch.setattr(
+            dynamo, "_users_table",
+            lambda: self._table_holding(
+                {"fantasy_prefs": {"depth_targets": {"RB": Decimal("6"), "TE": Decimal("2")}}}
+            ),
+        )
+        got = dynamo.get_fantasy_prefs("u1")
+        assert got == {"depth_targets": {"RB": 6, "TE": 2}}
+        assert not any(isinstance(v, Decimal) for v in got["depth_targets"].values()), (
+            "a Decimal survived the read — sanitize_depth_targets will silently drop it"
+        )
+
+    def test_a_stored_default_survives_the_read_path_end_to_end(self, monkeypatch):
+        """The user-visible property: what was saved is what comes back.
+
+        Asserted through `sanitize_depth_targets` — the function the router actually applies —
+        rather than on the raw dict, because the defect was that the sanitizer rejected the type
+        the store returned. Checking the dict alone would pass on the broken code.
+        """
+        from app.backend.services import dynamo
+
+        monkeypatch.setattr(
+            dynamo, "_users_table",
+            lambda: self._table_holding(
+                {"fantasy_prefs": {"depth_targets": {"RB": Decimal("6")}}}
+            ),
+        )
+        served = sanitize_depth_targets(dynamo.get_fantasy_prefs("u1").get("depth_targets"))
+        assert served == {"RB": 6}, "a saved account default did not survive the round trip"
+
+    def test_the_resolver_sees_a_stored_default_too(self, monkeypatch):
+        """...and it reaches the thing that ranks picks, not just the response body."""
+        from app.backend.services import dynamo
+
+        monkeypatch.setattr(
+            dynamo, "_users_table",
+            lambda: self._table_holding(
+                {"fantasy_prefs": {"depth_targets": {"TE": Decimal("3")}}}
+            ),
+        )
+        account = dynamo.get_fantasy_prefs("u1").get("depth_targets")
+        assert dt.resolve_for_record({"name": "L"}, account) == ({"TE": 3}, dt.SOURCE_ACCOUNT)
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
