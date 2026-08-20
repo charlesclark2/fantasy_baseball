@@ -361,3 +361,18 @@ supposed to move; the QB side proves the tail-completed POINT read on the certif
 bank is the same read NF-W8-0b decided on). ⛔ §7 is left VERBATIM and the change is recorded here
 instead: it landed BEFORE any score, it can only make a pin HARDER to satisfy, and a registration
 edited after the fact is no longer one (E2.1-r).
+
+**§11.5 The two-fold `--smoke` and why it is not a one-fold proof.** Prereg §4 makes fold 1
+identity BY CONSTRUCTION, so a one-fold path proof runs the whole runner and touches NOT ONE
+member of the declared field — the NF1.7 (a) shape applied to the proof itself. `--smoke`
+therefore takes the last TWO folds. It is nearly free in net terms: the per-fold marginal-bank
+cache is keyed on (matrix key, fold, served map) and NOT on the draw count, so the decisive run
+inherits both folds' banks from the proof.
+
+**§11.6 `banks_move_deliberately` was extracted as a pure clause so it could be RED-proven.** It
+began as an inline boolean in the derive layer, which left the one clause asserting "the arm's OWN
+distribution moved AND every other position's certified bank did NOT" with no isolating fixture
+and no deliberate break — the NF-D17 shape (a clause inside a conjunction whose deletion nothing
+can observe). It is now a three-state function (False when the arm did not act on some fold —
+NF-D20; False when a non-QB bank moved; **None, never True**, when there is no fold to read), with
+one isolating fixture and one RED break per clause.
