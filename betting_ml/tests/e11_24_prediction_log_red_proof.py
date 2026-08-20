@@ -243,6 +243,36 @@ BREAKS = [
      f"{WIRE_T}::TestMigrationReconstruction::test_the_repair_only_adds_missing_keys",
      "_key(r) not in have"),
 
+    # ── the loaded_at coercion (the defect that killed the first real migration run) ──
+    ("canonical_stamp stops coercing a datetime (pyarrow: 'Expected bytes, got ...')", STORE,
+     "    if isinstance(value, datetime):\n        return utc_stamp(value)\n",
+     "",
+     f"{STORE_T}::TestLoadedAtCoercion::"
+     "test_a_datetime_loaded_at_is_coerced_to_the_canonical_string",
+     # NOT the `isinstance` line — `_iso_date` and `_as_date` carry it too (3 occurrences).
+     "        return utc_stamp(value)"),
+    ("normalise_rows stops routing loaded_at through the coercion", STORE,
+     '            "loaded_at":                 canonical_stamp(r.get("loaded_at"), loaded_at),',
+     '            "loaded_at":                 r.get("loaded_at") or loaded_at,',
+     f"{STORE_T}::TestLoadedAtCoercion::test_a_datetime_row_actually_serialises",
+     "canonical_stamp(r.get"),
+    ("rows_to_arrow_table loses the named type check (back to pyarrow's opaque error)", STORE,
+     "    for col in (\"market\", \"model_version\", \"loaded_at\"):",
+     "    for col in ():",
+     f"{STORE_T}::TestLoadedAtCoercion::test_a_hand_built_row_with_a_datetime_fails_by_NAME",
+     None),
+    ("_snowflake_rows stops canonicalising at the read boundary", MIGRATE,
+     '    for r in rows:\n        r["loaded_at"] = pred_log.canonical_stamp(r["loaded_at"])\n',
+     "",
+     f"{WIRE_T}::TestMigrationReconstruction::"
+     "test_snowflake_loaded_at_is_canonicalised_at_the_read_boundary",
+     'r["loaded_at"] = pred_log.canonical_stamp'),
+    ("--dry-run stops serialising (it validates parity and nothing else)", MIGRATE,
+     "            pred_log.rows_to_arrow_table(parquet_rows)\n",
+     "",
+     f"{WIRE_T}::TestMigrationReconstruction::test_the_dry_run_serialises_every_partition",
+     "pred_log.rows_to_arrow_table(parquet_rows)"),
+
     # ── the guard's own source-stripper ────────────────────────────────────────────
     # Every "this statement is GONE" clause rests on docstrings being stripped. If the
     # stripper degenerated, those clauses would all pass on their own explanatory prose —
