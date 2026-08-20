@@ -143,13 +143,35 @@ only take effect for runs launched **after the executing `dagster-codeloc` conta
 (`up -d --build`), not merely restarted.
 
 **(b) A deliberately-slow leg is KILLED at the timeout, not hung.** Run on the **EC2 BOX** — this
-shells the real `_run_script` at a 5-second budget against a 300-second child, so it proves the kill
-path in the container the job actually executes in (not on a laptop):
+drives the real `run_bounded` at a 5-second budget against a SIGTERM-ignoring child that has spawned
+a grandchild, so it proves the kill path in the container the job actually executes in.
+
+⚠️ **THE CHECK MUST DISTINGUISH A ZOMBIE FROM A LIVE PROCESS.** `os.kill(pid, 0)` SUCCEEDS on a
+zombie, and `dagster-codeloc` runs `dagster api grpc` as PID 1 with no `init: true`, so a
+successfully-killed orphan is reparented to a process that never calls `wait()` and its PID-table
+entry persists indefinitely. The first cut of this command used a bare `os.kill` and reported
+`FAIL: grandchild SURVIVED` for a process that had in fact been killed (measured on the box
+2026-08-20: `State: Z (zombie)`, `cmdline: []`, 1 jiffy of CPU). A false FAIL on a verification
+command is worse than no command — it tells a future operator the fix is broken.
 
 ```bash
 docker compose -f services/dagster/aws/docker-compose.yml exec -T dagster-codeloc python -c "
-import subprocess, sys, time, os
+import subprocess, sys, time, os, pathlib
 from betting_ml.utils.bounded_subprocess import run_bounded
+
+def state(pid):
+    # 'gone' or 'zombie' both mean KILLED; only 'alive' is a failure.
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return 'gone'
+    st = pathlib.Path('/proc/%d/status' % pid)
+    if st.exists():
+        for line in st.read_text().splitlines():
+            if line.startswith('State:'):
+                return 'zombie' if line.split()[1].upper().startswith('Z') else 'alive'
+    return 'alive'
+
 # a child that spawns a grandchild AND ignores SIGTERM — the realistic wedge
 script = ('import os,signal,subprocess,sys,time\n'
           'signal.signal(signal.SIGTERM, signal.SIG_IGN)\n'
@@ -161,17 +183,25 @@ try:
     run_bounded([sys.executable, '-c', script], timeout=5)
     print('FAIL: it returned instead of timing out')
 except subprocess.TimeoutExpired:
-    print(f'timed out after {time.monotonic()-t0:.1f}s (expected ~5-11s, NOT 300s)')
+    print('PASS: timed out after %.1fs (expected ~10s, NOT 300s)' % (time.monotonic()-t0))
 time.sleep(2)
 gpid = int(open('/tmp/e1126_gpid').read())
-try:
-    os.kill(gpid, 0); print(f'FAIL: grandchild {gpid} SURVIVED')
-except OSError:
-    print(f'PASS: grandchild {gpid} was killed with the group')
+st = state(gpid)
+note = '  (killed; defunct only because PID 1 does not reap)' if st == 'zombie' else ''
+print(('PASS' if st in ('gone','zombie') else 'FAIL') + ': grandchild %d is %s%s' % (gpid, st, note))
 " 2>&1 | tail -5
 ```
 
-PASS = `timed out after ~5-11s` **and** `PASS: grandchild … was killed with the group`.
+PASS = **both** lines start `PASS` — timed out at ~10 s (the 5 s budget plus the 5 s SIGTERM grace
+before SIGKILL, which is the escalation working, not a delay) and the grandchild reads `gone` or
+`zombie`. `alive` would be a genuine defect in `run_bounded`.
+
+ℹ️ A zombie holds **no CPU and no memory**, only a PID-table entry, so it is not what E11.26 exists
+to prevent (an orphan burning one of the box's two vCPUs). Zombies arise here only on a leg timeout,
+which should be rare. Adding `init: true` to the compose service would reap them, but that changes
+PID 1 for every service and therefore the container's shutdown/signal path — on a box whose last
+deploy incident (INC-36) involved container removal, that is a change to argue on its own merits,
+not a tidy-up to fold into this story.
 
 **(c) Optional, only if you want the ceiling itself observed end-to-end:** launch
 `intraday_schedule_job` from Dagit with the run tag `dagster/max_runtime` overridden to `60` against
