@@ -359,22 +359,38 @@ def fold_range(bias_by_pos_fold: dict[str, float]) -> float:
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # §6 — the generator-swap verification
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def swap_activity(shifts_by_fold: np.ndarray, *, se_mult: float = ACTIVITY_SE_MULT) -> dict:
+def swap_activity(shifts_by_fold: np.ndarray, *, se_mult: float = ACTIVITY_SE_MULT,
+                  floor_ppr: float | None = None) -> dict:
     """Is this position ACTIVE for the swap clause? |pooled pre-layer level shift| must exceed
     se_mult × its paired SE — on an INACTIVE position the two generators already agree on level
-    and the clause has nothing to act on (NF-D20: uninformative, never a pass)."""
+    and the clause has nothing to act on (NF-D20: uninformative, never a pass).
+
+    `floor_ppr` is NF-W8-0's registered SUCCESSOR rule (§12.3c), OPT-IN and OFF by default:
+    ⛔ `None` reproduces NF-W8-0's decided behaviour EXACTLY (precision-only, no floor), which is
+    what the predecessor's record was computed under and what its guards pin. A successor that
+    registers a design-derived materiality floor passes it here, making activity
+    `|pooled| > se_mult·SE AND |pooled| ≥ floor` — because a shift can be PRECISELY ESTIMATED and
+    still be an order of magnitude below the family's own detection floor (NF-W6:
+    demonstrable ≠ material)."""
     s = np.asarray(shifts_by_fold, float)
     s = s[np.isfinite(s)]
     if len(s) < 2:
         return {"active": None, "note": "fewer than 2 evaluable folds — activity UNDEFINED"}
     se = float(s.std(ddof=1) / np.sqrt(len(s)))
     pooled = float(s.mean())
-    return {"active": bool(abs(pooled) > se_mult * se), "pooled_shift": round(pooled, 4),
-            "se": round(se, 4), "threshold": round(se_mult * se, 4), "n_folds": int(len(s))}
+    precise = bool(abs(pooled) > se_mult * se)
+    material = True if floor_ppr is None else bool(abs(pooled) >= float(floor_ppr))
+    out = {"active": bool(precise and material), "pooled_shift": round(pooled, 4),
+           "se": round(se, 4), "threshold": round(se_mult * se, 4), "n_folds": int(len(s))}
+    if floor_ppr is not None:
+        out |= {"precise": precise, "material": material,
+                "materiality_floor_ppr": round(float(floor_ppr), 4)}
+    return out
 
 
 def swap_clause(before_by_pos: dict[str, np.ndarray],
-                after_by_pos: dict[str, np.ndarray]) -> dict:
+                after_by_pos: dict[str, np.ndarray],
+                *, floor_ppr: float | None = None) -> dict:
     """`swap_level_component_collapses` (prereg §6): on every ACTIVE position the layer must
     reduce |level shift| (paired per fold, one-sided p < ALPHA). Inactive positions are reported
     INACTIVE; if none is active the clause is INACTIVE_EVERYWHERE (corroborates comparability,
@@ -382,7 +398,7 @@ def swap_clause(before_by_pos: dict[str, np.ndarray],
     detail: dict[str, dict] = {}
     active_pass: list[bool] = []
     for pos, before in before_by_pos.items():
-        act = swap_activity(np.asarray(before, float))
+        act = swap_activity(np.asarray(before, float), floor_ppr=floor_ppr)
         entry = {"activity": act}
         if act["active"]:
             b = np.abs(np.asarray(before, float))
