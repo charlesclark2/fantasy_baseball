@@ -49,10 +49,13 @@ export function DepthTargetsField({
     <div>
       <span className="mb-1 flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-gray-500">
         <InfoTip label="Depth targets">
-          How many of each position you want on your roster IN TOTAL, starters included. A position
-          you are short of gets a nudge once your starting spots are filled — weaker than an open
-          starter slot, stronger than generic bench depth. Leave a box empty for no preference.
-          Your league&apos;s required starters can never be starved by a target.
+          How many of each position you want on your roster IN TOTAL, starters included. Once your
+          starting spots are filled, a position you are SHORT of moves up and one you have ALREADY
+          reached moves down — so setting QB to 1 stops us suggesting backup quarterbacks. Both
+          effects sit below an open starter slot. Leave a box at 0 for no preference at that
+          position: 0 means &ldquo;no opinion&rdquo;, not &ldquo;none wanted&rdquo;, and a target on
+          one position never moves the others. Your league&apos;s required starters can never be
+          starved by a target.
         </InfoTip>
       </span>
       <p className="mb-2 text-xs text-gray-500">

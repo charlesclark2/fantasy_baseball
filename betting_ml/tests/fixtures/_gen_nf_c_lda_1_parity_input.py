@@ -50,6 +50,14 @@ scenarios = {
                          "depthTargets": {"QB": 2, "RB": 6, "WR": 6, "TE": 2}},
     "depth_target_met": {"drafted": ids[:110], "mine": ids[2:14:2], "topN": 30,
                          "depthTargets": {"QB": 0, "RB": 1, "WR": 1, "TE": 0}},
+    # ⭐ NF-C7c — the CAP half. `depth_target_met` above sets targets of 0/1/1/0, which the engine
+    # reads as "no target" for QB/TE, so it exercises the SHORT and NEUTRAL tiers and never reaches
+    # SATISFIED. This one sets a target the roster has already MET at every position, which is the
+    # only state that produces `depthTier = 1` — without it the cap is agreed on by never being run
+    # (the vacuous-guard class), and the parity test's non-vacuity clause asserts a satisfied tier
+    # exists somewhere in this fixture for exactly that reason.
+    "depth_target_capped": {"drafted": ids[:110], "mine": ids[2:14:2], "topN": 30,
+                            "depthTargets": {"QB": 1, "RB": 1, "WR": 1, "TE": 1}},
     "depth_target_reserve": {"drafted": ids[:150], "mine": ids[1:27:2], "topN": 20,
                              "depthTargets": {"QB": 4, "TE": 4, "K": 5, "DST": 5}},
 }
