@@ -46,6 +46,8 @@ Generated 2026-08-20T01:42:29.748774+00:00 · gate league **full_ppr** · 8 fold
 | RB|TE | -0.1074 | 0.0619 | 0.126097 | False | 0.1733 |
 | WR|TE | 0.0515 | 0.066 | 0.461092 | False | 0.185 |
 
+⭐ **The bound.** A pair's movement vs the grid-mean read is EXACTLY the difference of its two positions' ROW-POOLED completion deltas (QB +0.0458 · RB +0.0326 · WR +0.0519 · TE +0.0382), so the whole mechanism is bounded by their SPREAD: **0.019303 PPR**. ⚠️ The convention is load-bearing — the per-fold means in `tail_completion_by_position` are a MEAN OF FOLD MEANS and imply a different (wrong) bound (NF1.8).
+
 ## §6 swap clause under the registered MATERIALITY FLOOR
 
 - floor: **0.197 PPR** (`median_pairwise_mde_ppr` over 6 pairs) · sensitivity band {'min': 0.1733, 'median': 0.197, 'max': 0.3288}
@@ -73,6 +75,8 @@ Generated 2026-08-20T01:42:29.748774+00:00 · gate league **full_ppr** · 8 fold
 ## Null classification
 
 - {'state': 'POWER_LIMITED', 'reason': '`cross_position_bias_range`: the effect is positive and every gate is REACHABLE, but this design cannot resolve it — DSR alone needs 9 folds against 7 (the BH-FDR requirement is separate and may be larger). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.', 'retest_trigger': '+2 folds for the DSR gate — field size is NOT a lever here — even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)', 'failing_statistical_checks': ['reduces_gap', 'dsr_ok'], 'field_remedy_admissible': None}
+
+⚠️⚠️ **THE TRIGGER ABOVE DESCRIBES FAMILY B ONLY (the FITTED recalibration contest) AND IS NOT FAMILY A'S STATUS.** Family A — this story's gate — asks whether the DETERMINISTIC point closes the gap, and its answer is ARITHMETICALLY BOUNDED, not underpowered: the completion delta is a deterministic function of each certified bank and no fold count can widen its cross-position spread. Reading a fold trigger onto family A would be the NF-D18 misleading-trigger class.
 
 ## The input
 

@@ -274,6 +274,15 @@ def write_report(out: dict, path: Path) -> None:
     for name, d in fa["pairs"].items():
         L.append(f"| {name} | {d['gap']} | {d['se']} | {d['p_two_sided']} | "
                  f"{d['bh_rejected']} | {d['mde_ppr']} |")
+    if out.get("completion_delta_pooled"):
+        cd = out["completion_delta_pooled"]
+        L += ["",
+              f"⭐ **The bound.** A pair's movement vs the grid-mean read is EXACTLY the "
+              f"difference of its two positions' ROW-POOLED completion deltas "
+              f"({' · '.join(f'{k} {v:+.4f}' for k, v in cd.items())}), so the whole mechanism is "
+              f"bounded by their SPREAD: **{out['completion_delta_pooled_spread']} PPR**. ⚠️ The "
+              f"convention is load-bearing — the per-fold means in `tail_completion_by_position` "
+              f"are a MEAN OF FOLD MEANS and imply a different (wrong) bound (NF1.8)."]
     L += ["", "## §6 swap clause under the registered MATERIALITY FLOOR", "",
           f"- floor: **{fl['floor_ppr']} PPR** (`{fl['statistic']}` over {fl['n_pairs']} pairs) "
           f"· sensitivity band {fl.get('sensitivity_band')}",
@@ -287,8 +296,17 @@ def write_report(out: dict, path: Path) -> None:
           "| arm | pooled cross-position bias range (PPR) |", "|---|---|"]
     for arm, d in out["recal"]["range_by_arm"].items():
         L.append(f"| `{arm}` | {d['pooled']} |")
-    L += ["", "## Null classification", "", f"- {out.get('classification')}",
-          "", "## The input", "",
+    L += ["", "## Null classification", "", f"- {out.get('classification')}"]
+    if (out.get("classification") or {}).get("retest_trigger"):
+        L += ["",
+              "⚠️⚠️ **THE TRIGGER ABOVE DESCRIBES FAMILY B ONLY (the FITTED recalibration "
+              "contest) AND IS NOT FAMILY A'S STATUS.** Family A — this story's gate — asks "
+              "whether the DETERMINISTIC point closes the gap, and its answer is "
+              "ARITHMETICALLY BOUNDED, not underpowered: the completion delta is a deterministic "
+              "function of each certified bank and no fold count can widen its cross-position "
+              "spread. Reading a fold trigger onto family A would be the NF-D18 "
+              "misleading-trigger class."]
+    L += ["", "## The input", "",
           f"- dir: `{out.get('input', {}).get('dir')}` · shipped arm "
           f"`{out.get('input', {}).get('shipped_arm')}` · banks_untouched "
           f"{out.get('input', {}).get('banks_untouched')} (max quantile drift "

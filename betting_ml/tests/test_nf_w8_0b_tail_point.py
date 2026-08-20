@@ -571,6 +571,44 @@ class TestDerive0bEndToEnd:
         for pos in XP.POSITIONS:                     # both reads of the same banks, per position
             assert f"| {pos} |" in txt
 
+    def test_a_rendered_retest_trigger_is_always_scoped_to_the_family_it_describes(
+            self, tmp_path, pins_pass):
+        """⛔ NF-D18: `classify_null`'s trigger describes FAMILY B (the fitted contest). Family A's
+        null is arithmetically bounded, not underpowered. A record that prints `+2 folds` with no
+        scoping invites a reader to apply it to family A — so the renderer must carry the warning
+        wherever it carries the number."""
+        bias = {"QB": -1.2, "RB": -0.2, "WR": 0.0, "TE": 0.0}
+        out = R0B.derive_0b(_out_shell(
+            _fold_results(_make_rows(bias, bias), tmp_path), tmp_path))
+        # ⛔ INJECT the trigger rather than hoping a synthetic field reaches one — a guard that
+        # SKIPS when the branch is unreached proves nothing (it is the vacuous-guard class in a
+        # skip's clothing, and this test skipped on first write).
+        out["classification"] = dict(out.get("classification") or {}) | {
+            "state": "POWER_LIMITED", "retest_trigger": "+2 folds for the DSR gate"}
+        path = tmp_path / "scoped.md"
+        R0B.write_report(out, path)
+        txt = path.read_text()
+        assert "+2 folds for the DSR gate" in txt, "non-vacuity: the trigger must be rendered"
+        assert "FAMILY B ONLY" in txt, "a trigger was rendered with no family scoping"
+        assert "ARITHMETICALLY BOUNDED" in txt
+
+        # and the negative half: no trigger ⇒ no warning (the note must not be unconditional
+        # boilerplate, or it would read as scoping a trigger that isn't there)
+        out["classification"] = {"state": "CONSTRAINT_REFUSED", "retest_trigger": None}
+        path2 = tmp_path / "unscoped.md"
+        R0B.write_report(out, path2)
+        assert "FAMILY B ONLY" not in path2.read_text()
+
+    def test_the_report_carries_the_bound_in_the_row_pooled_convention(self, tmp_path, pins_pass):
+        flat = {p: 0.05 for p in XP.POSITIONS}
+        out = R0B.derive_0b(_out_shell(
+            _fold_results(_make_rows(flat, flat), tmp_path), tmp_path))
+        path = tmp_path / "bound.md"
+        R0B.write_report(out, path)
+        txt = path.read_text()
+        assert "ROW-POOLED completion deltas" in txt and "MEAN OF FOLD MEANS" in txt
+        assert str(out["completion_delta_pooled_spread"]) in txt
+
     def test_the_report_renders_on_an_UNDEFINED_path_proof(self, tmp_path, monkeypatch):
         monkeypatch.setattr(R, "_generator_record_scores", lambda position: {"F1": 2.02})
         flat = {p: 0.05 for p in XP.POSITIONS}
@@ -719,6 +757,17 @@ class TestCommittedRecordConsistency:
             failing_anchors = [n for n in XP.ANCHOR_CLAUSES if clauses.get(n) is False]
             assert not failing_anchors, (
                 f"a retest trigger is published while anchor clauses {failing_anchors} fail")
+
+    def test_the_committed_report_scopes_its_published_trigger(self, rec):
+        """The .md is the human-facing artifact; the scoping must be IN it, not only in the
+        preregistration a reader may never open."""
+        md = _RECORD.with_suffix(".md")
+        assert md.exists()
+        txt = md.read_text()
+        trig = (rec.get("classification") or {}).get("retest_trigger")
+        if trig:
+            assert "FAMILY B ONLY" in txt and "ARITHMETICALLY BOUNDED" in txt
+        assert "ROW-POOLED completion deltas" in txt, "the bound must be stated in the record"
 
     def test_the_family_a_family_is_the_six_declared_pairs(self, rec):
         assert len(rec["family_a"]["pairs"]) == 6
