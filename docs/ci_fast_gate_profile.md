@@ -333,9 +333,41 @@ error. Three things keep that from happening:
    `betting_ml/tests/ci_slow_gate_red_proof.py` (5 breaks, all caught), including
    "revert the workflow to the unscoped command", which is the wired-≠-invoked case.
 
+### 🔴 CORRECTION (2026-08-20, same day) — the scoping did NOT move the gate
+
+**The "~7m20s → ~4m30s" projection above is WRONG and the change should not be credited with a
+speed-up.** Measured properly afterwards, across the CI job's real distribution rather than one run
+either side:
+
+| | n | mean | median | sd | range |
+|---|---:|---:|---:|---:|---:|
+| before scoping | 12 | 408.3s | 401s | 67.8s | 282–567 |
+| after scoping | 5 | **407.8s** | 378s | 43.1s | 370–477 |
+
+**Delta in means: −0.5s.** The job's natural run-to-run spread is **285 seconds**, so any saving
+below roughly 140s cannot be seen in a before/after pair — and a before/after pair is exactly what
+was reported, twice, in both directions (first "−36%" projected from one local run, then "−19%" from
+one CI run).
+
+**What is still true:** collection genuinely drops 11.04s → 1.30s, and the scoped command genuinely
+selects the identical 80 tests. That is ~44s of wall clock on a 4-worker runner — real, directionally
+right, and **smaller than the noise it has to beat**. The change is kept because it is free and
+correct, not because it made the gate faster.
+
+**What this means for the next attempt:** the remaining cost is the tests' own CPU (~256s serial
+locally, ~4× that on CI), and the only lever that divides it is **sharding across runners** — the
+thing this document argued against on the strength of the bad projection. That argument is
+withdrawn. ⚠️ And it must be validated against the DISTRIBUTION: ≥5 runs each side, compared on
+medians, not one run before and one after.
+
 ### The reusable lesson
 
-**A slow pytest job is not necessarily slow tests.** Before trimming any test, measure collection —
-`pytest <selector> --collect-only -q` prints `N/M tests collected`, and a large `M` with a small `N`
-means most of the wall clock is import, paid per worker. The fix is scoping the paths, which changes
-no test semantics at all.
+**A slow pytest job is not necessarily slow tests** — `pytest <selector> --collect-only -q` prints
+`N/M tests collected`, and a large `M` with a small `N` means much of the wall clock is import, paid
+per worker. That diagnosis was correct here.
+
+⭐ **But the second lesson is the one that cost something: a CI timing claim needs the job's
+DISTRIBUTION, never a before/after pair.** This job ranges 282–567s run to run. Sizing a fix from one
+observation — or confirming it from one — cannot distinguish a 44s improvement from nothing, and both
+readings were reported as fact before the distribution was pulled. Get `n≥5` each side and compare
+medians BEFORE claiming a CI speed-up, however clean the local measurement looks.
