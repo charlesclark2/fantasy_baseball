@@ -36,14 +36,29 @@ every command below (the repo's documented-≠-actual class, on the credential c
     # 2. approve. The browser is redirected to our callback, which currently returns a 401 JSON
     #    page (the API Gateway authorizer — see the memo). THAT IS FINE FOR THIS PROBE: the code
     #    is in the address bar. Copy the WHOLE URL.
-    # 3. exchange it and run the full reconciliation:
+    # 3a. ⭐ IF THE BROWSER LANDED ON `…/fantasy/import?yahoo=connected`, THE HANDSHAKE ALREADY
+    #     SUCCEEDED and the deployed callback SPENT the code. There is nothing left to exchange —
+    #     resume from the stored grant instead:
+    #        …probe_yahoo_fantasy_live.py --from-stored-grant nf-c0-yahoo-spike
+    # 3b. if the callback route is not reachable yet, the browser stops on the 401 page with the
+    #     code still in the address bar — exchange it here:
     env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
       AWS_PROFILE=AdministratorAccess-769392325318 \
       uv run python scripts/probe_yahoo_fantasy_live.py \
         --callback-url 'https://api.credencesports.com/...?code=...&state=...'
 
-⚠️ An authorization code is single-use and short-lived. If step 3 reports INVALID_AUTHORIZATION_CODE,
-redo step 1 — the code was already spent or it aged out.
+    # 4. ⭐ CLEAN UP. A successful consent leaves a REAL Yahoo grant in the PRODUCTION users table
+    #    under the synthetic id above, which no UI surfaces:
+    #        …probe_yahoo_fantasy_live.py --forget nf-c0-yahoo-spike
+
+⚠️ An authorization code is single-use and short-lived. If step 3b reports
+INVALID_AUTHORIZATION_CODE, redo step 1 — the code was already spent or it aged out.
+
+⚠️ IF EVERY FANTASY CALL RETURNS `YahooNotEntitled` (measured 2026-08-19), the handshake is FINE and
+the APP lacks Fantasy Sports data access — Yahoo answers `oauth_problem="additional_authorization_
+required"` on a bare 401 while `openid/v1/userinfo` returns 200 for the same token. That is an
+operator/Yahoo fix (the app's API permissions), not a reconnect, and it needs a FRESH consent
+afterwards because a granted permission set is bound at consent time.
 """
 
 from __future__ import annotations
@@ -120,18 +135,71 @@ def _tokens_from_callback(url: str) -> dict:
     return yahoo_oauth.exchange_code(code)
 
 
+def _tokens_from_stored_grant(user_id: str) -> dict:
+    """Resume from the grant the REAL callback already stored (the normal path once O1 is done).
+
+    ⭐ WHY THIS MODE EXISTS. An authorization code is single-use, and the deployed callback spends
+    it — correctly — the moment Yahoo redirects the browser. So after a successful consent there is
+    no code left for this script to exchange, and `--callback-url` reports "no code in that URL"
+    on the very run that PROVED the handshake works. The grant is in DynamoDB; read it from there.
+
+    Uses the SHIPPING `dynamo` + `yahoo_oauth` code path, so a bug in the refresh/write-back would
+    show up here rather than being masked by a re-implementation.
+    """
+    from app.backend.services import dynamo
+
+    record = dynamo.get_platform_token(user_id, yahoo.PLATFORM)
+    if not record or not record.get("refresh_token"):
+        raise SystemExit(
+            f"No stored Yahoo grant for user_id={user_id!r}. Complete the consent first "
+            f"(--authorize-url), or pass the user id the state was issued for."
+        )
+    print(f"  stored grant   : found for user_id={user_id!r}, "
+          f"connected_at={record.get('connected_at')}")
+    return {
+        "access_token": str(record.get("access_token") or ""),
+        "refresh_token": yahoo_oauth.decrypt_token(str(record["refresh_token"])),
+        "expires_at": int(record.get("expires_at") or 0),
+        "guid": None,
+        "_user_id": user_id,
+    }
+
+
+def _write_back(user_id: str, refreshed: dict) -> None:
+    """Persist a rotated refresh token. Yahoo revokes the previous one when it issues a new one, so
+    skipping this would leave the stored grant dead after the first refresh."""
+    from app.backend.services import dynamo
+
+    existing = dynamo.get_platform_token(user_id, yahoo.PLATFORM) or {}
+    dynamo.put_platform_token(
+        user_id,
+        yahoo.PLATFORM,
+        {
+            "refresh_token": yahoo_oauth.encrypt_token(refreshed["refresh_token"]),
+            "access_token": refreshed["access_token"],
+            "expires_at": refreshed["expires_at"],
+            "connected_at": existing.get("connected_at"),
+        },
+    )
+
+
 def _report_oauth(tokens: dict) -> dict:
     """Record what the grant actually is — scopes and lifetime — then prove refresh works."""
-    lifetime = max(0, int(tokens["expires_at"]) - int(time.time())) + 60  # undo the safety margin
+    remaining = max(0, int(tokens["expires_at"]) - int(time.time()))
     print("\n=== 1. OAUTH ===")
-    print(f"  access_token   : present ({REDACTED}), lifetime ~{lifetime}s ({lifetime // 60} min)")
+    print(f"  access_token   : present ({REDACTED}), ~{remaining}s ({remaining // 60} min) left on it")
     print(f"  refresh_token  : {'present' if tokens.get('refresh_token') else '⛔ ABSENT'} ({REDACTED})")
     print(f"  xoauth_yahoo_guid: {'present' if tokens.get('guid') else 'absent'}")
     print("  scopes         : Yahoo's token response carries no `scope` field for Fantasy — the")
     print("                   permission is a property of the APPROVED APP, not of the request.")
     refreshed = yahoo_oauth.refresh_access_token(tokens["refresh_token"])
     rotated = refreshed["refresh_token"] != tokens["refresh_token"]
-    print(f"  refresh works  : ✅ yes (refresh token {'ROTATED — write-back required' if rotated else 'unchanged'})")
+    new_life = max(0, int(refreshed["expires_at"]) - int(time.time())) + 60  # undo the safety margin
+    print(f"  refresh works  : ✅ yes — new token lifetime {new_life}s ({new_life // 60} min)")
+    print(f"  rotation       : refresh token {'ROTATED (write-back is required)' if rotated else 'unchanged'}")
+    if tokens.get("_user_id"):
+        _write_back(tokens["_user_id"], refreshed)
+        print(f"  write-back     : ✅ stored (so the next read does not use a revoked token)")
     return refreshed
 
 
@@ -227,26 +295,54 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--authorize-url", action="store_true", help="print the consent URL and exit")
     ap.add_argument("--callback-url", help="the FULL URL Yahoo redirected your browser to")
+    ap.add_argument(
+        "--forget",
+        metavar="USER_ID",
+        help="delete the stored Yahoo grant for USER_ID and exit. ⭐ RUN THIS WHEN YOU ARE DONE: a "
+             "successful consent leaves a REAL, live Yahoo grant in the PRODUCTION users table "
+             "under the synthetic id this script issues, which no UI would ever show you.",
+    )
+    ap.add_argument(
+        "--from-stored-grant",
+        metavar="USER_ID",
+        help="resume from the grant the deployed callback already stored (use this after a "
+             "successful consent — the code is already spent). USER_ID is what the state was "
+             "issued for; this script issues 'nf-c0-yahoo-spike'.",
+    )
     ap.add_argument("--league-key", help="a specific league (default: every league found)")
     ap.add_argument("--out", default="yahoo_live_shape_report.json", help="where to write the SHAPE report")
     ap.add_argument("--keep-values", action="store_true",
                     help="⚠️ keep raw values in the capture — Yahoo Fantasy Information; delete after use")
     args = ap.parse_args()
 
+    if args.forget:
+        from app.backend.services import dynamo
+
+        dynamo.delete_platform_token(args.forget, yahoo.PLATFORM)
+        left = dynamo.get_platform_token(args.forget, yahoo.PLATFORM)
+        print(f"Deleted the stored Yahoo grant for {args.forget!r}. Still present: {bool(left)}")
+        print("⚠️  This deletes OUR copy only. The authoritative revocation is the Yahoo account's "
+              "own security settings — https://login.yahoo.com/account/security")
+        return 0
+
     if args.authorize_url:
         print(_authorize_url())
         print("\nOpen that, approve, then copy the FULL address-bar URL you land on (a 401 page is "
               "expected today — the code is still in the URL) and re-run with --callback-url '<url>'.")
         return 0
-    if not args.callback_url:
-        ap.error("pass --authorize-url first, then --callback-url")
+    if not args.callback_url and not args.from_stored_grant:  # --authorize-url/--forget returned above
+        ap.error("pass --authorize-url first, then --callback-url or --from-stored-grant USER_ID")
 
     if args.keep_values:
         print("⚠️  --keep-values: the capture will contain Yahoo Fantasy Information. Delete it "
               "when you are done; do not commit it.")
 
     capture: dict[str, Any] = {"probed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-    tokens = _report_oauth(_tokens_from_callback(args.callback_url))
+    tokens = _report_oauth(
+        _tokens_from_stored_grant(args.from_stored_grant)
+        if args.from_stored_grant
+        else _tokens_from_callback(args.callback_url)
+    )
     token = tokens["access_token"]
 
     print("\n=== 2. LEAGUES (`/users;use_login=1/games;game_keys=nfl/leagues`) ===")
