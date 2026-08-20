@@ -28,6 +28,7 @@ _XP = Path(__file__).with_name("fp_cross_position.py")
 _W80 = Path(__file__).with_name("run_nf_w8_0_cross_position.py")
 _R0B = Path(__file__).with_name("run_nf_w8_0b_tail_point.py")
 _TESTS = _ROOT / "betting_ml/tests/test_nf_w8_0b_tail_point.py"
+_RECORD = Path(__file__).with_name("ablation_results") / "nf_w8_0b_tail_point.json"
 _W80_TESTS = _ROOT / "betting_ml/tests/test_nf_w8_0_cross_position.py"
 _TIMEOUT_S = 300
 
@@ -208,6 +209,26 @@ BREAKS: tuple[Break, ...] = (
           ("TestDerive0bEndToEnd::"
            "test_an_unformable_floor_on_a_run_that_WOULD_reach_a_verdict_still_raises",),
           "a run that CAN decide silently takes the path-proof relaxation instead of refusing"),
+    Break("published_trigger_loses_its_family_scoping", _R0B,
+          '    if (out.get("classification") or {}).get("retest_trigger"):',
+          '    if False:',
+          ("TestDerive0bEndToEnd::"
+           "test_a_rendered_retest_trigger_is_always_scoped_to_the_family_it_describes",),
+          "⭐ the record publishes `+2 folds` with nothing saying it describes FAMILY B — a "
+          "reader applies it to family A, whose null is arithmetically bounded (NF-D18)"),
+    # ⚠️ ARTIFACT guards: these read the COMMITTED RECORD, so a SOURCE mutation cannot move them
+    # (a first cut targeted the source and came back GREEN for exactly that reason). The record
+    # is the thing under test, so the record is what the break must mutate.
+    Break("record_bound_reverts_to_the_mean_of_fold_means", _RECORD,
+          '"completion_delta_pooled": {\n    "QB": 0.045805,\n    "RB": 0.032641,\n'
+          '    "WR": 0.051944,\n    "TE": 0.038152\n  },\n'
+          '  "completion_delta_pooled_spread": 0.019303',
+          '"completion_delta_pooled": {\n    "QB": 0.0462,\n    "RB": 0.0331,\n'
+          '    "WR": 0.0498,\n    "TE": 0.0383\n  },\n'
+          '  "completion_delta_pooled_spread": 0.0167',
+          ("TestCommittedRecordConsistency::test_the_deterministic_bound_the_headline_rests_on",),
+          "the record's headline bound reverts to a MEAN OF FOLD MEANS — the identity stops "
+          "holding and the published bound (0.0167) is breached by RB|WR (0.0193) (NF1.8)"),
     Break("writer_shifts_the_band_with_the_point", _W80,
           '        w["point_vs_bank_offset"] = w["point_recal"] - w["point_raw"]',
           '        w["point_vs_bank_offset"] = (w["point_recal"] - w["point_raw"]); '
