@@ -44,6 +44,9 @@ for (const [name, sc] of Object.entries(scenarios)) {
     config,
     draftedIds: new Set(sc.drafted),
     myPlayerIds: sc.mine,
+    // NF-C7 — `undefined` on every pre-NF-C7 scenario, which is the shape a caller that has never
+    // heard of depth targets sends, so those scenarios keep pinning the INERT path too.
+    depthTargets: sc.depthTargets,
     topN: sc.topN ?? 8,
   }).map((r) => ({
     id: r.player.id,
@@ -52,6 +55,9 @@ for (const [name, sc] of Object.entries(scenarios)) {
     needLevel: r.needLevel,
     needBonus: r.needBonus,
     seatValue: r.seatValue,
+    orderValue: r.orderValue,
+    depthShort: r.depthShort,
+    expectedStarts: r.expectedStarts,
     positionalDropoff: r.positionalDropoff,
     tier: r.tier,
     isLastInTier: r.isLastInTier,

@@ -33,9 +33,6 @@ import pytest
 
 from app.backend.services.draft_assistant import engine_row
 from quant_sports_intel_models.fantasy_engine.draft import (
-    SURPLUS_BASE,
-    SURPLUS_CAP,
-    SURPLUS_OVER,
     recommend,
 )
 from quant_sports_intel_models.fantasy_engine.league_config import (
@@ -176,58 +173,113 @@ def test_the_depth_scenario_actually_reaches_bench_depth(depth_recs):
     at more than one position."""
     assert len(depth_recs) >= 15
     assert all(r.need_level == 0 for r in depth_recs), "this state is not the depth phase"
-    assert len({r.position for r in depth_recs}) >= 3, "too few positions to compare discounts"
+    # ⚠️ TWO, NOT THREE, SINCE NF-C7. This asked for three positions when a bench pick was ranked by
+    # VOR, which surfaced backup QBs and TEs in every depth panel — the symptom NF-C-LDA-6 then
+    # quantified (47% backup QB / 53% backup TE across 120 drafts, zero RBs and zero WRs). NF-C7
+    # ranks a bench pick on how many weeks it would actually be started, so a top-25 depth panel is
+    # now RB/WR, and requiring three positions would be requiring the defect back.
+    assert len({r.position for r in depth_recs}) >= 2, "too few positions to compare"
 
 
-def test_bench_depth_is_discounted_identically_across_positions(depth_recs):
-    """⭐ THE DEFECT ITSELF. A bench TE and a bench RB fill the same number of open slots — none —
-    so they must be discounted the same. The old `capacity` said otherwise only because it counted
-    a flex seat an RB was already sitting in."""
-    # A bye-week stack carries its own penalty, so only clean rows isolate the surplus discount.
-    clean = [r for r in depth_recs if r.vor > 0 and r.bye_conflict == 0]
-    kept: dict[str, list[float]] = {}
-    for r in clean:
-        kept.setdefault(r.position, []).append(r.score / r.vor)
-    assert len(kept) >= 2, f"only one position produced a clean positive-VOR bench pick: {list(kept)}"
+def test_a_flex_seat_an_rb_is_sitting_in_is_not_capacity_for_a_tight_end():
+    """⭐ THE DEFECT ITSELF, RE-ANCHORED ONTO THE NF-C7 IMPLEMENTATION (E9.60: re-anchor an existing
+    property onto a new implementation; do not delete it and do not bolt a new story's requirement
+    onto an old clause).
 
-    flat = [v for vs in kept.values() for v in vs]
-    # Tolerance is the engine's own 0.1 output rounding carried through the smallest VOR in the set.
-    # Doubled because the two rows furthest apart may have rounded in OPPOSITE directions.
-    tol = 2 * 0.05 / min(r.vor for r in clean)
-    assert max(flat) - min(flat) <= tol, (
-        "positions keep different fractions of their VOR as bench depth — a position-dependent "
-        f"discount is back: { {p: [round(v, 4) for v in vs] for p, vs in kept.items()} }"
+    The bug was in `open_starter_slots`: a user holding one TE with an RB already in the flex read as
+    "TE capacity 2, held 1 ⇒ still has room", so a backup TE kept 50% of its VOR while a bench back
+    kept 15% — a 3.3x boost for a player no lineup could ever start.
+
+    The retired surplus constants that clause used to measure are gone. The MISCOUNT is not: NF-C7's
+    bench valuation asks how many seats the position actually OCCUPIES, and getting that wrong the
+    same way would credit a second tight end with covering a seat an RB is in. `OpenSlots.seated` is
+    where the answer now lives, so that is what this asserts — the same question, one layer nearer
+    the cause than a discount ratio was.
+    """
+    from quant_sports_intel_models.fantasy_engine.draft import (
+        RosterRequirements, open_starter_slots, starter_seats_for,
     )
-    expected = 1.0 - min(SURPLUS_CAP, SURPLUS_BASE + SURPLUS_OVER)
-    assert abs(sum(flat) / len(flat) - expected) <= tol, (
-        f"bench depth keeps {sum(flat) / len(flat):.4f} of its VOR, not the {expected:.4f} the "
-        "constants describe"
+
+    cfg = _config(_LIVE_ROSTER)
+    req = RosterRequirements.from_config(cfg)
+    # QB1 RB3 WR2 TE1 — the screenshot-2 roster. The third RB is in the flex.
+    open_slots = open_starter_slots(["QB", "RB", "RB", "WR", "WR", "TE", "RB"], req)
+
+    assert open_slots.seated.get("TE") == 1, (
+        f"a tight end is seated {open_slots.seated.get('TE')} times with an RB in the flex — the "
+        "flex-capacity miscount is back, and a second TE would be credited with covering a seat he "
+        "can never reach"
+    )
+    assert open_slots.seated.get("RB") == 3, (
+        "the third running back is not counted as occupying the flex seat he is actually in"
+    )
+    # ⭐ AND THE TWO NUMBERS MUST DIFFER, or this clause is agreeing with the defect by accident:
+    # `starter_seats_for` is the roster's CAPACITY at the position (2 for TE here), which is exactly
+    # the wrong answer, and the bench valuation must not be reading it.
+    assert starter_seats_for(req, "TE") == 2 and open_slots.seated["TE"] == 1, (
+        "capacity and seated agree for TE in this fixture, so it cannot tell the two apart"
     )
 
 
 def test_bench_depth_ranks_by_player_value(depth_recs):
     """Once every candidate is bench depth, the ordering is the board's own currency. Before the fix
     a backup TE outranked a bench RB worth 80 more VOR."""
+    # ⚠️ WITHIN A POSITION SINCE NF-C7, and the narrowing is the point rather than a weakening.
+    # ACROSS positions a bench pick is no longer ranked in VOR at all — it is ranked on how many
+    # weeks you would actually start him, which is the whole NF-C7 change and is deliberately not
+    # VOR-ordered. WITHIN a position the guarantee survives intact and is what the K31 inversion was
+    # about: a worse player at a position can never out-rank a better one.
     positive = [r for r in depth_recs if r.vor > 0 and r.bye_conflict == 0]
     assert len(positive) >= 8, "too few clean rows to check the ordering"
-    vors = [r.vor for r in positive]
-    assert vors == sorted(vors, reverse=True), (
-        "bench depth is not ordered by VOR: "
-        + ", ".join(f"{r.position} {r.player_name} vor={r.vor:.1f}" for r in positive[:8])
+    by_pos: dict[str, list] = {}
+    for r in positive:
+        by_pos.setdefault(r.position, []).append(r)
+    assert any(len(v) >= 3 for v in by_pos.values()), (
+        "no position has three clean rows, so a within-position ordering claim proves nothing"
     )
+    for pos, rows in by_pos.items():
+        vors = [r.vor for r in rows]
+        assert vors == sorted(vors, reverse=True), (
+            f"bench depth at {pos} is not ordered by VOR: "
+            + ", ".join(f"{r.player_name} vor={r.vor:.1f}" for r in rows[:8])
+        )
 
 
-def test_a_second_tight_end_no_longer_outranks_clearly_better_bench_backs(depth_recs):
-    """The user-visible symptom, stated as the property that failed: with the flex filled by an RB,
-    a backup TE must not lead a bench RB carrying materially more value."""
-    # A bye stack carries its own penalty, so comparing across one would test the wrong rule.
-    best_te = next((r for r in depth_recs if r.position == "TE" and r.bye_conflict == 0), None)
-    better_rbs = [r for r in depth_recs if r.position == "RB" and r.bye_conflict == 0
-                  and best_te is not None and r.vor > best_te.vor + 20]
-    assert best_te is not None and better_rbs, "the fixture does not pose the question"
-    assert all(r.score > best_te.score for r in better_rbs), (
-        f"TE {best_te.player_name} (vor {best_te.vor:.1f}, score {best_te.score:.1f}) outranks bench backs "
-        "worth more: " + ", ".join(f"{r.player_name} vor={r.vor:.1f} score={r.score:.1f}" for r in better_rbs)
+def test_a_second_tight_end_is_valued_against_one_seat_not_two(depth_recs):
+    """The user-visible symptom, RE-ANCHORED (E9.60). It used to read "a backup TE must not lead a
+    bench RB carrying materially more value", which was a statement about the VOR ordering NF-C7
+    replaced — under the new rule a tight end you have no cover for can legitimately be worth more
+    than a fourth running back, and that is the change, not a regression.
+
+    What must still hold is the DEFECT's own signature: with the flex filled by a running back, a
+    second tight end is covering ONE seat, and his value must be exactly what it would be if the
+    flex did not exist at all.
+    """
+    from quant_sports_intel_models.fantasy_engine.draft import bench_insurance_value
+
+    board = _board()
+    mine_ids = _fill(board, ["QB", "RB", "RB", "WR", "WR", "TE", "RB"])
+    by_id = {str(r["player_id"]): r for r in board}
+    my_tes = [by_id[p] for p in mine_ids if by_id[p]["position"] == "TE"]
+    # ⚠️ READ FROM THE WHOLE RANKING, not from `depth_recs`. Since NF-C7 a top-25 depth panel holds
+    # no tight end at all (that IS the change), so pulling the candidate out of the panel would make
+    # this clause pass on `None` — the vacuous shape it is written to avoid.
+    full = recommend(board, config=_config(_LIVE_ROSTER), drafted_ids=mine_ids,
+                     my_player_ids=mine_ids, top_n=600)
+    best_te = next((r for r in full if r.position == "TE"), None)
+    assert best_te is not None and len(my_tes) == 1, "the fixture does not pose the question"
+
+    cand = by_id[best_te.player_id]
+    one_seat = bench_insurance_value(cand, my_tes, 1)
+    two_seats = bench_insurance_value(cand, my_tes, 2)
+    assert one_seat != two_seats, (
+        "the seat count makes no difference to this candidate, so the clause cannot detect the "
+        "miscount it exists to catch"
+    )
+    assert abs(best_te.seat_value - round(one_seat, 1)) < 0.11, (
+        f"TE {best_te.player_name} is valued at {best_te.seat_value} as bench cover, but covering "
+        f"ONE seat is worth {one_seat:.1f} and covering TWO is worth {two_seats:.1f} — he is being "
+        "credited with a flex seat a running back is sitting in"
     )
 
 

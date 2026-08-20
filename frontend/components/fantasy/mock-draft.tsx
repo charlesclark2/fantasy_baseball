@@ -21,6 +21,13 @@ import { FastForward, RotateCcw, Search, Undo2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Picker } from "@/components/ui/picker"
 import { InfoTip } from "@/components/fantasy/shared"
+import { DepthTargetsField } from "@/components/fantasy/depth-targets-field"
+import {
+  NO_DEPTH_TARGETS,
+  loadDepthTargets,
+  saveDepthTargets,
+  type DepthTargets,
+} from "@/lib/depth-targets"
 import {
   assignRoster,
   openStarterSlots,
@@ -102,6 +109,10 @@ export function MockDraft() {
   const [speed, setSpeed] = useState<SpeedKey>("fast")
   const [seed, setSeed] = useState<number>(1)
   const [picks, setPicks] = useState<Pick[]>([])
+  // NF-C7 — the SAME preference, the SAME storage key as the live draft tool (`lib/depth-targets`),
+  // so a user who sets a target on one surface finds it applied on the other. Two copies of this
+  // would be two rule sets (E9.61).
+  const [depthTargets, setDepthTargets] = useState<DepthTargets>(NO_DEPTH_TARGETS)
   const [log, setLog] = useState<Record<string, string>>({}) // playerId -> the CPU's stated reason
   const [search, setSearch] = useState("")
   const [posFilter, setPosFilter] = useState<string>("ALL")
@@ -295,8 +306,20 @@ export function MockDraft() {
 
   const recs = useMemo(() => {
     if (!board || !config) return []
-    return recommend({ board, config, draftedIds, myPlayerIds, topN: 6 })
-  }, [board, config, draftedIds, myPlayerIds])
+    return recommend({ board, config, draftedIds, myPlayerIds, depthTargets, topN: 6 })
+  }, [board, config, draftedIds, myPlayerIds, depthTargets])
+
+  useEffect(() => {
+    setDepthTargets(loadDepthTargets(SEASON, configName))
+  }, [configName])
+
+  const updateDepthTargets = useCallback(
+    (next: DepthTargets) => {
+      setDepthTargets(next)
+      saveDepthTargets(SEASON, configName, next)
+    },
+    [configName],
+  )
 
   const myPlayers = useMemo(
     () => myPlayerIds.map((id) => byId.get(id)).filter(Boolean) as Player[],
@@ -422,6 +445,11 @@ export function MockDraft() {
                   />
                 </Field>
               </div>
+              <DepthTargetsField
+                config={config}
+                targets={depthTargets}
+                onChange={updateDepthTargets}
+              />
               <Button
                 onClick={() => setStarted(true)}
                 className="mt-2 bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669]"
@@ -570,7 +598,21 @@ export function MockDraft() {
                       </div>
                       <div className="text-right">
                         <div className="text-sm font-semibold text-white">{r.score.toFixed(0)}</div>
-                        <div className="text-[10px] text-gray-600">VOR {r.player.vor?.toFixed(0)}</div>
+                      {/* ⭐ NF-C7 — a BENCH row's `score` is his INSURANCE value, not his VOR, so the
+                            sub-line names the two things that produced it: the VOR he can be looked up
+                            under, and the weeks he'd actually be started. Without the second number the
+                            headline is unexplainable from anything on screen.
+                            A DEPTH TARGET adds no number here: it is an ordering tier, not a bonus
+                            (see `draft-optimizer.ts`), and the rationale is where it speaks. */}
+                        <div className="text-[10px] text-gray-600">
+                          VOR {r.player.vor?.toFixed(0)}
+                          {r.needLevel === 0 && r.expectedStarts > 0 && (
+                            <span> · starts ~{r.expectedStarts.toFixed(1)} wk</span>
+                          )}
+                          {r.needBonus > 0 && (
+                            <span className="text-[#10b981]"> +{r.needBonus.toFixed(0)}</span>
+                          )}
+                        </div>
                       </div>
                       <Button
                         size="sm"

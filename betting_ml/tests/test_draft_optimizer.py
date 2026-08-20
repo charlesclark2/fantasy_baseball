@@ -67,7 +67,15 @@ def _board(config) -> list[dict]:
         "league_points", "replacement_points", "vor", "positional_rank", "overall_rank",
         "vor_p10", "vor_p90",
     ]
-    return board[[c for c in keep if c in board.columns]].to_dict("records")
+    rows = board[[c for c in keep if c in board.columns]].to_dict("records")
+    # NF-C7 — the engine reads expected games as `games`; the projection frame calls it `proj_games`,
+    # and the served board publishes it as `g` (see `draft_assistant.engine_row`). Without it every
+    # row here would carry no availability at all and the bench-seat valuation could not act — a
+    # fixture that cannot reach the rule is not a fixture that tests it (NF-D20).
+    for r in rows:
+        if "games" not in r and r.get("proj_games") is not None:
+            r["games"] = r["proj_games"]
+    return rows
 
 
 # ── roster-need detection ─────────────────────────────────────────────────────────────────────────
