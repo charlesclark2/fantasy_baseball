@@ -268,3 +268,74 @@ fast gate rather than the ~106s slow gate.
 `derivative_model_gate` (48s) and `perside_bakeoff` (24s) were **tiered, not trimmed** — they carry
 the same `nbinom.ppf` cost and the same trim would likely work, but they now run nightly where the
 runtime does not block anyone. Trim them only if the nightly job itself becomes a problem.
+
+---
+
+## TD3 (2026-08-20) — the slow gate was mostly COLLECTION, not Monte-Carlo
+
+**Reported symptom:** the slow gate had crept to **7m19s** and was delaying merges. The obvious read
+— "the Monte-Carlo tests are too slow" — is **wrong**, and the measurement says so.
+
+### What was actually happening
+
+`pytest -m "slow and not research"` with no path arguments collects `testpaths`. Measured:
+
+| | |
+|---|---|
+| tests IMPORTED to find the 79 slow ones | **10,659** |
+| collection cost | **11.04s** — and xdist pays it **once per worker** |
+| serial CPU of the actual tests | 256s |
+| local wall clock, `-n 4` | 106.8s |
+| CI wall clock | ~440s ⇒ **CI is ~4× slower per core** |
+
+This is the same duplicated-collection tax documented above for the fast gate, but it bites far
+harder here: the fast gate at least *runs* most of what it imports, while the slow gate imported the
+entire suite to run 0.7% of it.
+
+### The fix, and what it is not
+
+Hand pytest the **17 files that carry the marker**. `-m "slow and not research"` remains the
+selector — the path list only narrows what is IMPORTED, never what RUNS — and the two were verified
+to select the **identical 80 tests**.
+
+| | collection | wall clock (`-n 4`) |
+|---|---|---|
+| unscoped (before) | 11.04s | 106.8s |
+| **scoped (after)** | **1.30s** | **68.8s (−36%)** |
+
+Projected CI: **~7m20s → ~4m30s**.
+
+⛔ **Not trimmed.** The two files that are 65% of the cost (`mh2_6`, `mh2_10`) already run at
+`FAST_REPS = 600`, sitting deliberately just above `min_null_reps()` — the **measured vacuity
+floor**. MH2.6's own finding is that below that floor no statistic can clear the multiplicity
+correction, i.e. the harness passes everything. Cutting reps here would re-create the exact defect
+those tests exist to detect. TD2's "cut draws, never games" does not apply: the draws are already at
+their floor.
+
+⛔ **Not sharded, and that is measured rather than assumed.** Once scoped, this job (~4m30s) and the
+E2E smoke shard (4m25s) are neck and neck, so a 3-way split would move the *whole gate* by seconds
+while adding three jobs' startup and three more things to keep in sync. Shard it only if E2E gets
+faster first.
+
+### The hazard this introduces, and the guard
+
+An explicit file list is a way for a test to **stop running with no signal**: `-m` can only select
+from what is imported, so a slow test in a missed file is deselected by *absence* — green gate, no
+error. Three things keep that from happening:
+
+1. the list is **derived by AST-scanning for the marker** (`ci_shards.slow_files()`), not
+   maintained by hand — all four ways of writing the marker (`@pytest.mark.slow`, `pytestmark = …`,
+   `pytestmark = [ … ]`, `pytest.param(marks=…)`) parse to one attribute chain, so one check covers
+   every form a regex would have to enumerate;
+2. `--slow-paths` **exits non-zero on an empty list** — without that, no arguments would silently
+   fall back to `testpaths` and quietly restore the whole-suite collection;
+3. `test_fast_gate_hygiene.py::TestSlowGatePathScoping` pins all of it, RED-proven by
+   `betting_ml/tests/ci_slow_gate_red_proof.py` (5 breaks, all caught), including
+   "revert the workflow to the unscoped command", which is the wired-≠-invoked case.
+
+### The reusable lesson
+
+**A slow pytest job is not necessarily slow tests.** Before trimming any test, measure collection —
+`pytest <selector> --collect-only -q` prints `N/M tests collected`, and a large `M` with a small `N`
+means most of the wall clock is import, paid per worker. The fix is scoping the paths, which changes
+no test semantics at all.

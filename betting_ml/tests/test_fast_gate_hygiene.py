@@ -34,7 +34,8 @@ import yaml
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 sys.path.insert(0, str(_REPO_ROOT / "scripts"))
-from ci_shards import (  # noqa: E402  (needs the sys.path line above)
+import ci_shards  # noqa: E402  (needs the sys.path line above)
+from ci_shards import (  # noqa: E402
     CATCH_ALL,
     SHARD_NAMES,
     _RULES,
@@ -313,3 +314,70 @@ def test_predict_today_does_not_fetch_the_calibrator_at_import():
         f"{eager}) — that is an S3 fetch on IMPORT, paid by every pytest worker and by anything "
         "that merely imports this module. Keep it behind the memoized _calibrator() accessor."
     )
+
+class TestSlowGatePathScoping:
+    """The slow gate is handed an explicit file list; these keep that from silently narrowing.
+
+    ⚠️ THE FAILURE MODE IS A TEST THAT STOPS RUNNING WITHOUT ANYONE NOTICING. `-m "slow and not
+    research"` remains the selector, but pytest can only select from what it IMPORTS, so a slow test
+    in a file the scanner misses is deselected by absence — green gate, no signal, no error. The
+    scan is therefore derived from the marker itself (AST, not grep) and pinned here.
+    """
+
+    def test_the_scanner_finds_the_files_that_carry_the_marker(self):
+        """Anti-vacuity + a floor: an empty or collapsed list would make the gate run nothing."""
+        files = {p.name for p in ci_shards.slow_files()}
+        assert len(files) >= 10, f"the slow-file scan collapsed to {len(files)} files"
+        # The three that dominate the gate's cost (measured 2026-08-20: 65% of it is the first two).
+        for expected in ("test_mh2_6_calibration_audit.py", "test_mh2_10_morning_audit.py",
+                         "test_totals_distribution.py"):
+            assert expected in files, f"{expected} fell out of the slow gate's file list"
+
+    @pytest.mark.parametrize(
+        "form",
+        [
+            "@pytest.mark.slow\ndef test_x():\n    pass\n",
+            "import pytest\npytestmark = pytest.mark.slow\ndef test_x():\n    pass\n",
+            "import pytest\npytestmark = [pytest.mark.slow]\ndef test_x():\n    pass\n",
+            "import pytest\n@pytest.mark.parametrize('a', [pytest.param(1, marks=pytest.mark.slow)])\n"
+            "def test_x(a):\n    pass\n",
+        ],
+        ids=["decorator", "pytestmark", "pytestmark-list", "param-marks"],
+    )
+    def test_every_way_of_writing_the_marker_is_detected(self, tmp_path, form):
+        """⭐ THE CLAUSE THAT MAKES THE SCAN SAFE TO RELY ON.
+
+        A regex would have to enumerate these spellings; all four parse to the same attribute chain,
+        so the AST check covers them uniformly. If a fifth form appears and is NOT detected, the
+        file it lives in is handed to nobody and its slow tests stop running silently.
+        """
+        f = tmp_path / "test_form.py"
+        f.write_text(form)
+        assert ci_shards._uses_marker(f, ci_shards.SLOW_MARKER), (
+            "a real way of writing the slow marker is invisible to the scanner"
+        )
+
+    def test_a_file_with_no_slow_marker_is_not_claimed(self):
+        """The two-sided half — a scanner that returns True for everything is not a scanner."""
+        assert not ci_shards._uses_marker(
+            _REPO_ROOT / "scripts" / "ci_shards.py", ci_shards.SLOW_MARKER
+        )
+
+    def test_an_unparseable_file_is_handed_over_rather_than_dropped(self, tmp_path):
+        """A syntax error must fail LOUDLY inside pytest, never vanish from the run."""
+        f = tmp_path / "test_broken.py"
+        f.write_text("def test_x(:\n")
+        assert ci_shards._uses_marker(f, ci_shards.SLOW_MARKER)
+
+    def test_the_workflow_actually_uses_the_scoped_list(self):
+        """WIRED ≠ INVOKED (NF-C0e) — a flag nothing calls buys nothing.
+
+        Comment lines are stripped first: the block above the step EXPLAINS `--slow-paths`, and a
+        substring check would be satisfied by the prose while the command ran unscoped (INC-38).
+        """
+        ci = _CI_WORKFLOW.read_text()
+        code = "\n".join(l for l in ci.splitlines() if not l.lstrip().startswith("#"))
+        assert "ci_shards.py --slow-paths" in code, (
+            "the slow gate is not using the scoped file list — collection is back to the whole suite"
+        )
+        assert '-m "slow and not research"' in code, "the slow gate lost its marker selector"

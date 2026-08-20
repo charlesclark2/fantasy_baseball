@@ -278,8 +278,26 @@ jobs:
       # bake-off — so they no longer block a merge. They still run, nightly, in
       # research_tests.yml. What stays here is the math that runs LIVE: totals_distribution
       # (drawn per game on every daily serving write via totals_serving) + prop_pricing.
+      # ⭐ SCOPED TO THE FILES THAT CARRY THE MARKER (2026-08-20). With no path arguments pytest
+      # collects `testpaths` — measured, that is 10,659 tests IMPORTED to find 79, and xdist pays
+      # that collection ONCE PER WORKER (the duplicated-collection cost in
+      # docs/ci_fast_gate_profile.md). Handing it the 17 marker-carrying files drops collection
+      # 11.04s -> 1.30s and this job's wall clock 36% (106.8s -> 68.8s locally; ~7m20s -> ~4m30s
+      # here), which stops it being the gate's critical path — the E2E smoke shard is 4m25s.
+      #
+      # ⚠️ `-m "slow and not research"` IS STILL THE SELECTOR. The path list only narrows what gets
+      # IMPORTED; it never decides what RUNS, and the two were verified to select the identical 80
+      # tests. `--slow-paths` derives the list by AST-scanning for the marker, so it cannot drift,
+      # and it EXITS NON-ZERO on an empty list — without that, no arguments would silently fall
+      # back to `testpaths` and quietly restore the very collection this removes.
+      #
+      # ⛔ NOT SHARDED, and that is measured rather than assumed: once scoped, this job (~4m30s)
+      # and the E2E smoke shard (4m25s) are neck and neck, so splitting it further would move the
+      # whole gate by seconds. Shard it only if E2E gets faster first.
       - name: Run slow tests (LIVE-path Monte-Carlo calibration guards)
-        run: uv run pytest -m "slow and not research" -n auto --tb=short
+        run: |
+          uv run pytest $(uv run python scripts/ci_shards.py --slow-paths) \
+            -m "slow and not research" -n auto --tb=short
 
   model-smoke-test:
     name: Model Artifact Smoke Test
