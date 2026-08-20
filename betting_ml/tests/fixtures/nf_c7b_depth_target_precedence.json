@@ -1,0 +1,136 @@
+{
+  "_note": "NF-C7b \u2014 the ONE statement of depth-target precedence. Consumed by BOTH betting_ml/tests/test_nf_c7b_depth_target_settings.py (Python, app/backend/services/depth_targets.py) and frontend/e2e/... via frontend/lib/depth-targets.ts. Neither side may restate the rule in its own words: E9.61's lesson is that two renderers of one field become two rule sets, and a grep of the wrong file clears the right one. Adding a case here is how the rule changes.",
+  "_client_only_note": "The FRONTEND resolver has a fourth level beneath these two \u2014 `local`, this browser's ad-hoc value \u2014 for a draft run against a PRESET format, where there is no saved record to write to. The server has no such level and never can: it cannot see browser storage. Every case here therefore leaves `local` unset, so both sides are pinned on the two levels they SHARE and the client's extra level is tested on the client alone. This is stated rather than left implied because 'Python has fewer cases than TypeScript' otherwise reads as a gap.",
+  "cases": [
+    {
+      "name": "a league value wins over the account default",
+      "league": {
+        "QB": 2
+      },
+      "account": {
+        "TE": 3
+      },
+      "targets": {
+        "QB": 2
+      },
+      "source": "league"
+    },
+    {
+      "name": "a league that was never given targets inherits the account default",
+      "league": null,
+      "account": {
+        "TE": 3
+      },
+      "targets": {
+        "TE": 3
+      },
+      "source": "account"
+    },
+    {
+      "name": "a league CLEARED to empty opts out and does NOT re-inherit",
+      "why": "the load-bearing case. Written as `league || account` an empty map is falsy, so clearing one league's targets would silently restore the account default and the user could never turn the feature off for that league \u2014 it would present as 'my setting will not save' (E8.6).",
+      "league": {},
+      "account": {
+        "TE": 3
+      },
+      "targets": {},
+      "source": "none"
+    },
+    {
+      "name": "no league value and no account default is none, not an error",
+      "league": null,
+      "account": null,
+      "targets": {},
+      "source": "none"
+    },
+    {
+      "name": "a league value REPLACES the account default whole rather than merging per position",
+      "why": "a merge would make 'this league wants 6 RBs' quietly inherit an account TE:3 the user never asked for on that league, and no single screen would show the effective set.",
+      "league": {
+        "RB": 6
+      },
+      "account": {
+        "TE": 3,
+        "QB": 2
+      },
+      "targets": {
+        "RB": 6
+      },
+      "source": "league"
+    },
+    {
+      "name": "an unknown position is dropped on both sides",
+      "league": {
+        "QB": 2,
+        "PUNTER": 4
+      },
+      "account": null,
+      "targets": {
+        "QB": 2
+      },
+      "source": "league"
+    },
+    {
+      "name": "a zero is dropped rather than stored \u2014 'no target' and 'a target of zero' are one instruction",
+      "league": {
+        "QB": 0,
+        "TE": 2
+      },
+      "account": null,
+      "targets": {
+        "TE": 2
+      },
+      "source": "league"
+    },
+    {
+      "name": "an all-zero league map is an opt-out, exactly like an empty one",
+      "why": "the UI clears a target by typing 0, so this is what a real cleared league looks like on the wire. If it resolved differently from {} the same user action would produce two different answers depending on whether the row was removed or zeroed.",
+      "league": {
+        "QB": 0,
+        "TE": 0
+      },
+      "account": {
+        "TE": 3
+      },
+      "targets": {},
+      "source": "none"
+    },
+    {
+      "name": "a count above the ceiling is dropped, not clamped",
+      "why": "by the time a value reaches storage the user cannot see a correction, so storing a number they never chose is worse than storing nothing.",
+      "league": {
+        "WR": 999,
+        "RB": 6
+      },
+      "account": null,
+      "targets": {
+        "RB": 6
+      },
+      "source": "league"
+    },
+    {
+      "name": "a negative count is dropped",
+      "league": {
+        "WR": -3,
+        "RB": 6
+      },
+      "account": null,
+      "targets": {
+        "RB": 6
+      },
+      "source": "league"
+    },
+    {
+      "name": "a league map that normalises to nothing is an opt-out, like any other explicit map",
+      "why": "ONE rule, deliberately: a league carrying an explicit map resolves to that map, even when normalisation empties it. The alternative \u2014 fall through to the account default when the map is unreadable \u2014 would make the SAME user action resolve differently depending on whether their client sent a known position, so a client bug would silently reinstate a default the user had turned off.",
+      "league": {
+        "PUNTER": 4
+      },
+      "account": {
+        "TE": 3
+      },
+      "targets": {},
+      "source": "none"
+    }
+  ]
+}

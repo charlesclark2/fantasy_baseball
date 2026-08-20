@@ -13,19 +13,26 @@ import {
   depthTargetPositions,
   starterRequirement,
   type DepthTargets,
+  type RosterShaped,
 } from "@/lib/depth-targets"
-import type { LeagueConfigMeta } from "@/lib/draft-optimizer"
 
 export function DepthTargetsField({
   config,
   targets,
   onChange,
+  positions: positionsOverride,
 }: {
-  config: LeagueConfigMeta | undefined | null
+  config: RosterShaped | undefined | null
   targets: DepthTargets
   onChange: (next: DepthTargets) => void
+  /** NF-C7b — offer THESE positions instead of deriving them from a league's roster. The ACCOUNT
+   *  default has no league, so there is no roster to read: it offers every position we project.
+   *  Deliberately an override rather than "fall back to all when config is null" — a league whose
+   *  roster genuinely seats nothing must still render nothing, and folding the two cases together
+   *  would make a broken config look like an account-level control. */
+  positions?: readonly string[]
 }) {
-  const positions = depthTargetPositions(config)
+  const positions = positionsOverride ?? depthTargetPositions(config)
   if (!positions.length) return null
 
   const set = (pos: string, n: number) => {

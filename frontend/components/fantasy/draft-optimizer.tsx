@@ -18,7 +18,9 @@ import { InfoTip } from "@/components/fantasy/shared"
 import { DepthTargetsField } from "@/components/fantasy/depth-targets-field"
 import {
   NO_DEPTH_TARGETS,
+  DEPTH_TARGET_SOURCE_LABEL,
   loadDepthTargets,
+  resolveDepthTargets,
   saveDepthTargets,
   type DepthTargets,
 } from "@/lib/depth-targets"
@@ -39,6 +41,7 @@ import {
   isCustomSelection,
   useFantasyManifest,
   useResolvedBoard,
+  useFantasyPreferences,
   useSavedLeagues,
 } from "@/lib/fantasy-queries"
 
@@ -95,7 +98,7 @@ export function DraftOptimizer() {
   // NF-C7 — a PREFERENCE, so it is per-league-format and lives in localStorage beside the picks
   // rather than on the saved league (a league's identity does not include how many backup
   // quarterbacks its drafter likes — see `lib/depth-targets`).
-  const [depthTargets, setDepthTargets] = useState<DepthTargets>(NO_DEPTH_TARGETS)
+  const [localDepthTargets, setLocalDepthTargets] = useState<DepthTargets>(NO_DEPTH_TARGETS)
   const [search, setSearch] = useState("")
   const [posFilter, setPosFilter] = useState<string>("ALL")
   const [sortCol, setSortCol] = useState<"ovrRank" | "pts" | "vor">("ovrRank")
@@ -114,6 +117,8 @@ export function DraftOptimizer() {
   // roster is presented as a `LeagueConfigMeta`, so every downstream calculation in this component
   // (roster needs, slots-per-team, the recommendation engine) is untouched by the distinction.
   const { data: savedLeagues } = useSavedLeagues()
+  // NF-C7b — the account-level default, beneath any per-league value.
+  const accountPrefs = useFantasyPreferences()
   const selectedLeague = isCustomSelection(configName)
     ? savedLeagues?.find((l) => `custom:${l.league_id}` === configName)
     : undefined
@@ -176,13 +181,32 @@ export function DraftOptimizer() {
   // NF-C7 — read the stored targets whenever the league format changes, so a superflex room and a
   // 1QB room keep their own answers. ⚠️ NOT keyed on the draft slot: re-picking a slot is not a
   // change of mind about wanting a backup tight end.
+  //
+  // NF-C7b — the LOCAL value is now the LAST resort. A saved league carries its own targets and an
+  // account default sits beneath that; this browser key survives only for a draft run against a
+  // PRESET format, where there is no record to write to. `resolveDepthTargets` owns the order —
+  // this component must not re-state it (E9.61).
   useEffect(() => {
-    setDepthTargets(loadDepthTargets(SEASON, configName))
+    setLocalDepthTargets(loadDepthTargets(SEASON, configName))
   }, [configName])
 
+  const { targets: depthTargets, source: depthTargetSource } = useMemo(
+    () =>
+      resolveDepthTargets({
+        league: selectedLeague ? (selectedLeague.depth_targets ?? null) : null,
+        account: accountPrefs.data?.depth_targets ?? null,
+        local: localDepthTargets,
+      }),
+    [selectedLeague, accountPrefs.data, localDepthTargets],
+  )
+
+  // ⚠️ EDITING HERE ONLY EVER WRITES THE LOCAL VALUE. A saved league's targets belong to the
+  // league and are edited on /fantasy/league-settings; silently rewriting them from a draft screen
+  // would change every other surface (and the extension) without saying so. When a league or
+  // account value is in force the control is read-only and names where to change it.
   const updateDepthTargets = useCallback(
     (next: DepthTargets) => {
-      setDepthTargets(next)
+      setLocalDepthTargets(next)
       saveDepthTargets(SEASON, configName, next)
     },
     [configName],
@@ -361,11 +385,32 @@ export function DraftOptimizer() {
                   />
                 </Field>
               </div>
-              <DepthTargetsField
-                config={config}
-                targets={depthTargets}
-                onChange={updateDepthTargets}
-              />
+              {depthTargetSource === "league" || depthTargetSource === "account" ? (
+                /* ⭐ NAMED, NOT SILENTLY APPLIED. A league target of {QB: 2} and an account default
+                   of {QB: 2} produce an identical board, so a user who wants to change it cannot
+                   tell which screen to open — the same reason the extension echoes its source. */
+                <p className="text-xs text-gray-400">
+                  Depth targets {DEPTH_TARGET_SOURCE_LABEL[depthTargetSource]}:{" "}
+                  <span className="text-gray-200">
+                    {Object.entries(depthTargets)
+                      .map(([pos, n]) => `${n} ${pos}`)
+                      .join(", ") || "none"}
+                  </span>
+                  .{" "}
+                  <a
+                    className="underline hover:text-gray-200"
+                    href={depthTargetSource === "league" ? "/fantasy/league-settings" : "/settings"}
+                  >
+                    Change
+                  </a>
+                </p>
+              ) : (
+                <DepthTargetsField
+                  config={config}
+                  targets={depthTargets}
+                  onChange={updateDepthTargets}
+                />
+              )}
               <Button
                 onClick={() => setStarted(true)}
                 className="mt-2 bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669]"

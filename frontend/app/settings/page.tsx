@@ -19,6 +19,7 @@ import { useLocalStorage } from "@/hooks/use-local-storage"
 import { apiFetch } from "@/lib/api"
 import { NotificationsSettings } from "@/components/notifications-settings"
 import { MfaSettings } from "@/components/mfa-settings"
+import { FantasyDefaultsSettings } from "@/components/fantasy-defaults-settings"
 import { openBillingPortal, getSubscriptionStatus } from "@/lib/subscription"
 
 // ---------------------------------------------------------------------------
@@ -985,6 +986,11 @@ export default function SettingsPage() {
         {/* Sportsbooks / Bankroll bookkeeping (E9.17)                        */}
         {/* ---------------------------------------------------------------- */}
         <SportsbooksSection accessToken={accessToken} />
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Fantasy defaults — account-level depth targets (NF-C7b)           */}
+        {/* ---------------------------------------------------------------- */}
+        <FantasyDefaultsSettings />
 
         {/* ---------------------------------------------------------------- */}
         {/* Danger zone card                                                  */}

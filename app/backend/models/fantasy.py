@@ -49,6 +49,54 @@ MAX_LEAGUE_ROSTER_PLAYERS = 500  # total across every team: 32 × 15 starters + 
 #: is a 40% size saving on the field that is up against the item ceiling.
 LEAGUE_ROSTER_PLAYER_FIELDS = ("name", "position", "team")
 
+# ── NF-C7b: per-position DEPTH TARGETS ───────────────────────────────────────────────────────────
+# How many of a position the user WANTS to end the draft holding. A position short of its target is
+# a soft need, ranked below a real open starter slot and above generic bench depth (NF-C7).
+#
+# ⭐ WHY THIS LIVES ON THE LEAGUE RECORD AND NOT IN THE BROWSER. NF-C7 shipped it in localStorage
+# keyed by season + scoring-format NAME, which meant two different leagues on the same format
+# silently shared one setting, nothing synced across devices, and — the real gap — the Chrome
+# extension could not read it at all. The extension already resolves the caller's saved league by
+# id (`_draft_league_config`), so putting the targets on that record means the extension inherits
+# them with NO new request field and NO client change: it dodges the E8.6 deploy-skew hazard
+# (a newly-added request field that an un-deployed backend accepts, ignores and drops with a 200)
+# entirely, because nothing new is ever sent.
+#
+# ⚠️ DECLARED ON `_LeagueFields` OR SILENTLY DROPPED — these models set no `extra="forbid"`.
+#
+# Item-budget note (NF-C6P3): a six-key int map is ~60 bytes per league, ~1.5 KB across a
+# subscriber's 25 — three orders of magnitude inside the shared 400 KB ceiling. Measured, not
+# assumed, because that ceiling is shared with the league rosters above.
+DEPTH_TARGET_POSITIONS = ("QB", "RB", "WR", "TE", "K", "DST")
+MAX_DEPTH_TARGET = 20
+
+
+def sanitize_depth_targets(raw: object) -> dict[str, int]:
+    """Normalise a depth-target map. Pure and total — never raises.
+
+    Unknown positions are dropped, non-numeric values are dropped, and counts are clamped into
+    `[0, MAX_DEPTH_TARGET]`. A zero is dropped rather than stored: "no target" and "a target of
+    zero" are the same instruction to the optimizer, and keeping both spellings would let two
+    records that behave identically compare unequal.
+
+    ⚠️ DROPS rather than clamps an out-of-range or junk value on the WRITE path's behalf being a
+    deliberate asymmetry with the UI's `NumericInput` (which rejects a bad keystroke outright): by
+    the time a value reaches storage the user has no way to see a correction, so the safe move is
+    to store nothing rather than a number they never chose.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, int] = {}
+    for pos in DEPTH_TARGET_POSITIONS:
+        value = raw.get(pos)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        count = int(value)
+        if count <= 0 or count > MAX_DEPTH_TARGET:
+            continue
+        out[pos] = count
+    return out
+
 
 class RosterSlotModel(BaseModel):
     """One starting-lineup or bench slot. A BENCH slot (BN/IR) may declare an EMPTY eligibility
@@ -155,6 +203,13 @@ class _LeagueFields(BaseModel):
     league_rosters_synced_at: str | None = None
     league_rosters_truncated: bool = False
 
+    # ── NF-C7b: per-position depth targets (see the module constants) ─────────────────────────
+    # `None` means "this league has never been given targets" and is DISTINCT from `{}` ("the user
+    # deliberately cleared them"): the first inherits the account default, the second does not.
+    # Collapsing the two would make clearing a league's targets impossible — it would silently
+    # re-inherit — which is the shape of a preference the user cannot turn off.
+    depth_targets: dict[str, int] | None = None
+
 
 def bound_league_rosters(
     rosters: list[dict] | None,
@@ -213,8 +268,36 @@ def bound_league_rosters(
     return kept, truncated
 
 
+class FantasyPreferences(BaseModel):
+    """NF-C7b — ACCOUNT-level fantasy defaults (`GET/PUT /fantasy/preferences`).
+
+    Deliberately its own model rather than a field on the league: these apply to every league the
+    user has NOT given its own value, so they are not a property of any one league.
+
+    ⚠️ NO VALIDATOR HERE. The router sanitises on the way in and again on the way out, and the
+    normalisation is `sanitize_depth_targets` — the SAME function the league save uses, so an
+    account default and a per-league value can never disagree about what a legal target is. Two
+    normalisers for one field would be the E9.61 two-renderers shape.
+    """
+
+    depth_targets: dict[str, int] = Field(default_factory=dict)
+
+
 class LeagueSave(_LeagueFields):
     """Inbound payload for POST/PUT. Every validator here applies to SAVES only."""
+
+    @field_validator("depth_targets")
+    @classmethod
+    def _depth_targets_bounded(cls, v: dict | None) -> dict | None:
+        """Normalise on the way IN only.
+
+        ⚠️ ON `LeagueSave`, NOT ON `_LeagueFields` — E9.49. A validator on the shared base runs when
+        a STORED record is serialized back out, so tightening an input rule would retroactively
+        reject history: one league saved before the rule existed would raise on READ and, because
+        the list endpoint builds its response in one comprehension, blank the caller's entire league
+        list with a 500. Write rules live on the write model.
+        """
+        return None if v is None else sanitize_depth_targets(v)
 
     @field_validator("name")
     @classmethod

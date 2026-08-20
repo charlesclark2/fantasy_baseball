@@ -54,7 +54,8 @@ import {
 } from "@/lib/league-config"
 import type { LeagueConfig, RosterSlotConfig, TermCoverage } from "@/lib/league-config"
 import { availableFields } from "@/lib/league-scoring"
-import { useFantasyProjections } from "@/lib/fantasy-queries"
+import { useFantasyPreferences, useFantasyProjections } from "@/lib/fantasy-queries"
+import { DepthTargetsField } from "@/components/fantasy/depth-targets-field"
 import {
   EmptyBlock,
   LeagueQuotaNotice,
@@ -88,6 +89,14 @@ export function LeagueSettingsEditor() {
   const { data: leagues, isLoading: leaguesLoading } = useSavedLeagues()
   const { data: projections } = useFantasyProjections()
   const saveLeague = useSaveLeague()
+  // NF-C7b — the ACCOUNT default, shown so "inheriting" names a value rather than being an
+  // invisible state. Read-only here; it is edited on /settings.
+  const accountPrefs = useFantasyPreferences()
+  const accountTargetSummary = useMemo(() => {
+    const t = accountPrefs.data?.depth_targets ?? {}
+    const parts = Object.entries(t).filter(([, n]) => n > 0)
+    return parts.length ? parts.map(([pos, n]) => `${n} ${pos}`).join(", ") : ""
+  }, [accountPrefs.data])
   const deleteLeague = useDeleteLeague()
 
   const [leagueId, setLeagueId] = useState<string | null>(null)
@@ -385,6 +394,59 @@ export function LeagueSettingsEditor() {
 
       {/* ── roster ───────────────────────────────────────────────────────────────────────── */}
       <RosterEditor roster={cfg.roster} onChange={(roster) => update({ roster })} />
+
+      {/* ── NF-C7b: draft depth targets, for THIS league ─────────────────────────────────── */}
+      <section className="mt-6 rounded-lg border border-gray-800 bg-[#0f0f0f] p-4">
+        <h2 className="text-sm font-semibold text-gray-200">Draft depth targets</h2>
+        <p className="mt-1 text-xs text-gray-500">
+          How many of each position you want to finish the draft holding, for this league. Applies
+          everywhere we rank your picks — the draft optimizer, the mock draft, and the live draft
+          assistant in the browser extension.
+        </p>
+
+        {/* ⭐ INHERITING IS A STATE THE USER CAN GET BACK TO. `depth_targets` absent means "use my
+            account default"; the moment the control is touched this league becomes explicit and
+            stops inheriting. Without a way back that is a ONE-WAY DOOR — a user who tries the
+            control once could never return to the default, and clearing every box would read as
+            "off" rather than "inherit". The two states are named and both are reachable. */}
+        {cfg.depth_targets == null ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <p className="text-xs text-gray-400">
+              {accountTargetSummary
+                ? `Using your account default — ${accountTargetSummary}.`
+                : accountPrefs.isLoading
+                  ? "Checking your account default…"
+                  : accountPrefs.isError
+                    ? "We couldn't read your account default just now."
+                    : "No account default set, so no depth targets apply here."}
+            </p>
+            <button
+              type="button"
+              className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-800"
+              onClick={() => update({ depth_targets: accountPrefs.data?.depth_targets ?? {} })}
+            >
+              Set for this league
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="mt-3">
+              <DepthTargetsField
+                config={cfg}
+                targets={cfg.depth_targets ?? {}}
+                onChange={(depth_targets) => update({ depth_targets })}
+              />
+            </div>
+            <button
+              type="button"
+              className="mt-2 rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-800"
+              onClick={() => update({ depth_targets: null })}
+            >
+              Use my account default instead
+            </button>
+          </>
+        )}
+      </section>
 
       {/* ── scoring ──────────────────────────────────────────────────────────────────────── */}
       <section className="mt-6 rounded-lg border border-gray-800 bg-[#0f0f0f] p-4">
