@@ -352,3 +352,12 @@ repo's >2-min rule. The in-session proof drives the SAME runner functions with o
 banks and the direct-points learner stubbed, and its verdict is necessarily `UNDEFINED` because
 synthetic banks cannot reproduce a certified record — which is the fail-closed answer, not a
 limitation being excused.
+
+**§11.4 The `non_qb_bias_matches_w8_0b` pin was STRENGTHENED to cover all four positions.** §7
+registers it over WR/RB/TE; it now also compares **QB's** per-fold `bias_identity` on the
+tail-completed point against NF-W8-0b's record, which pins family A′ UNDER `identity` to the
+decided predecessor's family A exactly (the non-QB side proves this story moved nothing it was not
+supposed to move; the QB side proves the tail-completed POINT read on the certified `zm_floor`
+bank is the same read NF-W8-0b decided on). ⛔ §7 is left VERBATIM and the change is recorded here
+instead: it landed BEFORE any score, it can only make a pin HARDER to satisfy, and a registration
+edited after the fact is no longer one (E2.1-r).

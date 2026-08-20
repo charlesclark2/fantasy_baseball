@@ -410,8 +410,13 @@ def _w7f_qb_pins(fold_results: list[dict]) -> dict:
 
 
 def _w8_0b_non_qb_pins(fold_results: list[dict]) -> dict:
-    """The WR/RB/TE per-fold identity bias on the tail-completed point vs the NF-W8-0b record —
-    the check that the non-QB side of the cross-position measurement is byte-identical."""
+    """Every position's per-fold identity bias on the tail-completed point vs the NF-W8-0b record.
+
+    ⭐ This pins family A′ UNDER `identity` to the decided predecessor's family A exactly: the
+    three non-QB positions prove this story moved nothing it was not supposed to move, and QB
+    proves the tail-completed POINT read on the certified `zm_floor` bank is the same read
+    NF-W8-0b decided on. A gap at ANY position means the cross-position measurement this story
+    re-tests is not the one the predecessor recorded."""
     rec = _record(_W8_0B_REL, "NF-W8-0b")
     if rec is None:
         return {"reproduces": False, "n_folds_compared": 0,
@@ -425,8 +430,6 @@ def _w8_0b_non_qb_pins(fold_results: list[dict]) -> dict:
             continue
         n += 1
         for pos in XP.POSITIONS:
-            if pos == QB.POSITION:
-                continue
             a = fr["positions"].get(pos, {}).get("bias_identity")
             b = want[fr["label"]].get(pos, {}).get("bias_identity")
             if not a or not b:
@@ -434,7 +437,7 @@ def _w8_0b_non_qb_pins(fold_results: list[dict]) -> dict:
             gaps[pos] = max(gaps.get(pos, 0.0), abs(float(a["bias"]) - float(b["bias"])))
     if not gaps:
         return {"reproduces": False, "n_folds_compared": n,
-                "note": "no non-QB fold cell could be compared — DID NOT RUN (NF1.7 (a))"}
+                "note": "no fold cell could be compared — DID NOT RUN (NF1.7 (a))"}
     return {"reproduces": bool(max(gaps.values()) <= QB.REPRODUCTION_TOLERANCE),
             "n_folds_compared": n, "max_abs_gap_by_position": gaps,
             "max_abs_gap": float(max(gaps.values()))}
@@ -758,7 +761,7 @@ def write_report(out: dict, path: Path) -> None:  # noqa: C901
     L += [f"| QB `zm_floor` CRPS+PIT vs NF-W7f | {p7['reproduces']} | "
           f"{p7['n_folds_compared']} folds, crps {p7.get('max_abs_crps_gap')}, "
           f"pit {p7.get('max_abs_pit_gap')} |",
-          f"| non-QB bias vs NF-W8-0b | {p0b['reproduces']} | "
+          f"| per-position identity bias vs NF-W8-0b | {p0b['reproduces']} | "
           f"max gap {p0b.get('max_abs_gap')} by position {p0b.get('max_abs_gap_by_position')} |",
           f"| this story's assembly ≡ the certified path | {pid['matches']} | "
           f"crps gap {pid['max_crps_gap']}, point gap {pid['max_point_gap']} |",
