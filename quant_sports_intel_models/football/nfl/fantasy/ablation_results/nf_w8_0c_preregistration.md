@@ -399,6 +399,23 @@ is not re-labelled (E2.1-r) — the correction is recorded here, where a reader 
 This is the **fourth consecutive QB/RB story refused by `dsr_ok` alone** (NF-W7f, NF-W7h, NF-W7j,
 now NF-W8-0c), and §12.5 measures — for the first time in the line — *why*.
 
+⚠️ **A GOVERNANCE POINT THE PM MUST SEE, because the result landed exactly in the gap between two
+statements of the same acceptance criterion.** The story card's informal AC reads *"if an arm closes
+the QB body gap WITHOUT breaking QB's PIT/CRPS → the hybrid is cross-rankable"* — and on that
+reading this run **passes**: the gap closes, PIT is preserved (7/7 folds, and the winner's 0.0273 is
+*better* than the incumbent's 0.0297), and CRPS is not harmed (2.5804 vs 2.5852). The pre-registered
+verdict rule (§6) is **stricter**: it requires ALL of `ARM_CLAUSES`, which includes `dsr_ok`. The
+registered rule **binds** — it was committed before any scoring run, and re-reading an acceptance
+bar after seeing a result is the E2.1-r inversion this program exists to avoid. So the verdict is
+`QB_BODY_GAP_PERSISTS` and `cross_rankable` stays **false**.
+
+⛔ This is recorded as a **disclosure, not a request** to relax the gate: it is stated because a
+reader holding the card would otherwise conclude the AC was met and the flag was wrongly withheld.
+If the PM wants the looser reading to govern a *consumption* decision, that is the NF-W7j precedent —
+`dsr_ok` is a SHIPPING gate, and a consumer may act under a registered-forward, caveated,
+second-reader-flagged decision **without** relaxing the ship bar. That is a forward decision on the
+open QB Option-B question (§12.7), never a re-certification of this run.
+
 ### §12.1 Family A — the mechanism is measured, and it is ONE per-stat cell
 
 The §3.1 identity holds against the artifact: max identity residual **1.17e-15**, max linearity
