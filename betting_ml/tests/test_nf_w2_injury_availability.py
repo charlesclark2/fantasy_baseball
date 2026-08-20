@@ -137,6 +137,7 @@ def _fit_frame(n: int, seed: int) -> pd.DataFrame:
 
 class TestFoilIdentity:
     @pytest.mark.slow
+    @pytest.mark.research
     def test_base_hurdle_equals_the_nf_w1_champion_fit(self):
         """`hurdle_parts` + `mix_parts` with both legs on the same features must reproduce
         `WP.fit_lgbm_hurdle` EXACTLY — the incumbent foil is the NF-W1 champion, not a

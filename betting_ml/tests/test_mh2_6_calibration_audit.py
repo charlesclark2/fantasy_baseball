@@ -59,6 +59,8 @@ def _frame(n=300, *, sigma_scale=1.0, mu_shift=0.0, p_shift=0.0, seed=7,
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.slow
+
+@pytest.mark.research
 class TestTheAuditCanFail:
     def test_a_clean_frame_is_called_within_noise(self):
         """The negative control. Without it, 'it detects defects' could just mean 'it fires on
@@ -143,6 +145,8 @@ class TestPreRegisteredLocks:
         assert all(M.n_strata(a) <= M.n_strata(b) for a, b in [(100, 200), (200, 400)])
 
     @pytest.mark.slow
+
+    @pytest.mark.research
     def test_the_rolled_back_mh2_1_rows_leave_the_totals_leg_and_stay_in_the_h2h_leg(self):
         """The 2026-08-02 rows were priced for TOTALS by the rolled-back challenger; their
         home_win side is still v6. Isolating fixture: the only thing separating the two legs is
@@ -302,6 +306,8 @@ class TestTheMultiplicityCorrection:
             "a lone borderline drift p-value must not clear BH either")
 
     @pytest.mark.slow
+
+    @pytest.mark.research
     def test_a_rep_count_too_small_for_the_correction_to_bind_is_REFUSED(self):
         """⭐ Below the vacuity floor no statistic can ever clear BH, so the audit would return
         WITHIN_NOISE for every input — including a catastrophically broken model. A study whose
@@ -461,6 +467,7 @@ class TestThePostHocDiagnosis:
 
 class TestTheReport:
     @pytest.mark.slow
+    @pytest.mark.research
     def test_a_null_verdict_is_reported_together_with_its_MDE(self):
         """NF1.8 / MH2: 'no defect found' means 'no defect larger than the MDE'. A null without a
         power statement is a shrug, not a measurement."""

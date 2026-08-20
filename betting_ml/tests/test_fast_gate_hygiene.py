@@ -25,6 +25,7 @@ Pure source/AST inspection: no IO, no `pipeline` import (the manifest is absent 
 from __future__ import annotations
 
 import ast
+import functools
 import sys
 from pathlib import Path
 
@@ -381,3 +382,145 @@ class TestSlowGatePathScoping:
             "the slow gate is not using the scoped file list — collection is back to the whole suite"
         )
         assert '-m "slow and not research"' in code, "the slow gate lost its marker selector"
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# TD4 — the `research` tier's own precondition, enforced rather than documented
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#: Every `research`-marked test file → the modules whose ABSENCE from the serving path is what
+#: justified moving it off the merge bar. Declared by hand ON PURPOSE: a test imports many things
+#: and only its SUBJECT matters, and no automatic rule can tell a subject from an incidental shared
+#: util without either missing real subjects or firing on `data_loader`. The exhaustiveness check
+#: below is what stops the hand-written half from rotting (INC-38: pin the registry, not just the
+#: rule it serves).
+RESEARCH_SUBJECTS: dict[str, tuple[str, ...]] = {
+    # TD2 (2026-07-27) — the original four.
+    "test_derivative_model_gate.py": ("betting_ml.utils.derivative_model_gate",),
+    "test_line_microstructure.py": ("betting_ml.utils.line_microstructure",),
+    "test_perside_bakeoff.py": ("betting_ml.scripts.totals_generative.bakeoff_perside",),
+    "test_f5_distribution.py": (
+        "betting_ml.utils.f5_distribution",
+        "betting_ml.scripts.totals_generative.bakeoff_f5_perside",
+    ),
+    # TD4 (2026-08-20) — the §0.5 audit + bake-off harnesses. 183s of the slow gate's 256s of
+    # serial CPU guarded modules NOTHING in production imports; they execute only when a human
+    # deliberately runs an audit or a bake-off.
+    "test_mh2_6_calibration_audit.py": ("betting_ml.scripts.mh2_6_calibration_audit",),
+    "test_mh2_10_morning_audit.py": ("betting_ml.scripts.mh2_10_morning_audit",),
+    "test_nf_w2_injury_availability.py": (
+        "quant_sports_intel_models.football.nfl.fantasy.weekly_frame",
+        "quant_sports_intel_models.football.nfl.fantasy.weekly_projection",
+        "quant_sports_intel_models.football.nfl.fantasy.weekly_projection_w2",
+    ),
+    "test_nf_w6b_stat_distributions.py": (
+        "quant_sports_intel_models.football.nfl.fantasy.stat_distributions",
+        "quant_sports_intel_models.football.nfl.fantasy.efficiency_marginals",
+        "quant_sports_intel_models.football.nfl.fantasy.margin_calibration",
+        "quant_sports_intel_models.football.nfl.fantasy.run_nf_w6b_stat_distributions",
+    ),
+}
+
+_SERVING_ROOTS = ("scripts", "app", "pipeline")
+
+
+def _research_files() -> list[Path]:
+    """Test files carrying a `research` marker.
+
+    ⚠️ AST, NOT A SUBSTRING SCAN — and this file is the proof. A `"mark.research" in source` check
+    matched THIS module, because the registry above quotes the marker in its own prose, so the
+    guard reported itself as an unregistered research file. The AST sees an attribute chain and a
+    docstring is not one.
+    """
+    return [p for p in _ALL_TEST_FILES
+            if ci_shards._uses_marker(_REPO_ROOT / p, "research")]
+
+
+@functools.lru_cache(maxsize=1)
+def _serving_import_map() -> dict[str, list[str]]:
+    """Every dotted module imported by anything under `scripts/`, `app/`, `pipeline/`.
+
+    ⭐ AST, NOT STRING NEEDLES, AND THE RED PROOF IS WHY. The first cut matched
+    `f"from {module} import"` and friends — which misses `from betting_ml.scripts import
+    mh2_6_calibration_audit`, the form this repo actually uses and the exact form the research test
+    files themselves are written in. The guard would have reported a rotted tier as healthy: the
+    realistic defect was the one it could not see.
+
+    ⚠️ AND NOT A BARE LEAF EITHER. Matching leaf names reports `betting_ml.scripts` as "imported by
+    194 files" because it matches every sibling — measured, and it made a research-only module look
+    live. Both failure modes are covered by breaks in `ci_research_tier_red_proof.py`.
+
+    Built once and cached: the parametrized checks below are then set lookups rather than a rescan.
+    """
+    out: dict[str, list[str]] = {}
+    for root in _SERVING_ROOTS:
+        base = _REPO_ROOT / root
+        if not base.exists():
+            continue
+        for py in base.rglob("*.py"):
+            if "/tests/" in py.as_posix():
+                continue
+            try:
+                tree = ast.parse(py.read_text(errors="ignore"))
+            except SyntaxError:
+                continue
+            rel = py.relative_to(_REPO_ROOT).as_posix()
+            for node in ast.walk(tree):
+                names: list[str] = []
+                if isinstance(node, ast.Import):
+                    names = [a.name for a in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+                    # BOTH forms: `from pkg.mod import thing` AND `from pkg import mod`.
+                    names = [node.module] + [f"{node.module}.{a.name}" for a in node.names]
+                for n in names:
+                    out.setdefault(n, []).append(rel)
+    return {k: sorted(set(v)) for k, v in out.items()}
+
+
+def _serving_importers(module: str) -> list[str]:
+    """Serving/pipeline/API files importing this EXACT dotted module."""
+    return _serving_import_map().get(module, [])
+
+
+class TestResearchTierPrecondition:
+    """A test leaves the merge bar ONLY while nothing in production imports what it guards.
+
+    That rule has been prose in `research_tests.yml` since TD2 — *"mark `research` ONLY if its
+    module under test has no importer under `scripts/`, `app/`, `pipeline/`"* — with nothing
+    checking it. A module that LATER gains a serving importer keeps its nightly-only tier silently,
+    and the first sign is a production break that a non-blocking job noticed hours earlier.
+
+    This is the same shape as the depth-target defect this session shipped: a rule that held when it
+    was written, no mechanism to notice when it stopped holding.
+    """
+
+    def test_every_research_file_declares_what_it_guards(self):
+        """Exhaustiveness — the hand-written registry cannot silently omit a new research file."""
+        found = {p.name for p in _research_files()}
+        assert found, "no research-marked test files — the checks below would be vacuous"
+        missing = found - set(RESEARCH_SUBJECTS)
+        assert not missing, (
+            f"research-marked file(s) not in RESEARCH_SUBJECTS: {sorted(missing)} — declare the "
+            f"module(s) each one guards so the serving-importer check can cover it"
+        )
+        stale = set(RESEARCH_SUBJECTS) - found
+        assert not stale, f"RESEARCH_SUBJECTS names non-research file(s): {sorted(stale)}"
+
+    @pytest.mark.parametrize("test_file", sorted(RESEARCH_SUBJECTS))
+    def test_no_research_module_has_gained_a_serving_importer(self, test_file):
+        """⭐ THE POINT. If this goes red, the fix is to DROP the `research` marker from that file —
+        in the same change that introduced the importer — not to edit this registry."""
+        for module in RESEARCH_SUBJECTS[test_file]:
+            importers = _serving_importers(module)
+            assert not importers, (
+                f"{module} is guarded ONLY by the nightly job, but production now imports it:\n"
+                f"  " + "\n  ".join(importers) + f"\n"
+                f"Remove @pytest.mark.research from {test_file} so it blocks a merge again."
+            )
+
+    def test_the_registered_modules_actually_exist(self):
+        """A registry entry that names nothing checks nothing — the vacuous half of the clause
+        above, since `_serving_importers` on a typo'd module trivially returns []."""
+        for test_file, modules in RESEARCH_SUBJECTS.items():
+            for module in modules:
+                path = _REPO_ROOT / (module.replace(".", "/") + ".py")
+                assert path.exists(), f"{test_file} registers {module}, which does not exist"
