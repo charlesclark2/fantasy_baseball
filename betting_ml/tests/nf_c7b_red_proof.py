@@ -19,6 +19,7 @@ TEST = "betting_ml/tests/test_nf_c7b_depth_target_settings.py"
 _ASSIST = "app/backend/services/draft_assistant.py"
 _RESOLVE = "app/backend/services/depth_targets.py"
 _MODELS = "app/backend/models/fantasy.py"
+_DYNAMO = "app/backend/services/dynamo.py"
 _ROUTER = "app/backend/routers/fantasy.py"
 _TS = "frontend/lib/depth-targets.ts"
 _REGEN_TS = ["node", "--experimental-strip-types",
@@ -57,6 +58,12 @@ BREAKS = [
      # ⚠️ the token must be unique to THIS call site — a bare `dynamo.get_fantasy_prefs(user_id)`
      # also appears in the `/fantasy/preferences` GET handler and survives legitimately.
      "account_default_reaches_the_extension", "record, dynamo.get_fantasy_prefs(user_id)"),
+
+    # ── THE STORE: the shipped Decimal bug ───────────────────────────────────────────────────────
+    ("store: go back to the SHALLOW converter, so nested counts come back as Decimal", _DYNAMO,
+     "            return _deep_from_dynamo(prefs)",
+     "            return _from_dynamo(prefs)",
+     "TestTheValuesSurviveARealDynamoRoundTrip", "return _deep_from_dynamo(prefs)"),
 
     # ── PRECEDENCE: the distinction the resolver exists for ──────────────────────────────────────
     ("precedence: write it the obvious way (`league or account`), so clearing re-inherits", _RESOLVE,

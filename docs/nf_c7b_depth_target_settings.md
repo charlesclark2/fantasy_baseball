@@ -85,6 +85,29 @@ deferral is a higher sort key. NF-C7 proved this against a target typed on the s
 looking at; NF-C7b re-asserts it against one arriving from **storage**, which is a different path to
 the same code and had never been tested.
 
+## 🔴 Shipped broken, then fixed: nested `Decimal` on the read path
+
+An account default saved fine and then **vanished** — within ~60 seconds (react-query's
+`staleTime`) or on any sign-out. Reported from production; not caught by the suite.
+
+`get_fantasy_prefs` used `_from_dynamo`, which converts `Decimal` only at the **top level** of the
+map it is handed. These counts live **two levels down** (`fantasy_prefs.depth_targets.RB`), so they
+came back as `Decimal` — and `sanitize_depth_targets` tests `isinstance(v, (int, float))`, which
+`Decimal` is **neither**. Every count was silently dropped on READ while the WRITE landed correctly.
+Fix: `_deep_from_dynamo`, the converter `list_fantasy_leagues` was already using.
+
+⭐ **Why 18 passing tests could not see it.** Every storage test constructed a Python dict and fed it
+to a Pydantic model, and **Pydantic coerces `Decimal` to `int`** — so they passed either way. They
+exercised the MODEL; the defect lived in the STORE. The asymmetry was visible the whole time and
+nothing looked at it: the per-league path worked (it goes through `_deep_from_dynamo`) while only the
+account default broke, which is exactly the shape a store-level test would have surfaced on the
+first run.
+
+The lesson generalises past this field: **a nested numeric map read from DynamoDB needs the deep
+converter, and a test that never crosses the storage boundary cannot tell you that.**
+`portfolio` above escapes it only because its numbers happen to be one level deep — it is one nested
+key away from the same bug.
+
 ## ⚠️ Found but not fixed
 
 **`/settings` throws React #418 (a hydration text mismatch) on load, and it predates this story.**
@@ -101,8 +124,8 @@ this story's own components remain covered.
 
 ## Guards
 
-`betting_ml/tests/test_nf_c7b_depth_target_settings.py` (18), RED-proven by
-`betting_ml/tests/nf_c7b_red_proof.py` — **14 deliberate breaks, all caught**, including one that
+`betting_ml/tests/test_nf_c7b_depth_target_settings.py` (21), RED-proven by
+`betting_ml/tests/nf_c7b_red_proof.py` — **15 deliberate breaks, all caught**, including one that
 mutates the TypeScript resolver and regenerates its fixture (a break in TS that is not regenerated
 lands in a file the Python guard never opens and reports a false green — E11.24 #815).
 
