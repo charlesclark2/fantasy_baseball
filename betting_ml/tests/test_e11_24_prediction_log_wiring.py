@@ -276,6 +276,19 @@ class TestMigrationReconstruction:
         code = _code_only(MIGRATE)
         assert re.search(r"if\s+_key\(r\)\s+not\s+in\s+have", code)
 
+    def test_the_source_duplicates_are_dropped(self):
+        """Snowflake holds a few exact duplicate keys (4 keys x 4 copies on 2026-07-11 — a
+        retried INSERT whose DELETE did not reach). The read view collapses them, but there
+        is no reason to WRITE rows nothing can ever return."""
+        code = _code_only(MIGRATE)
+        assert "return list(seen.values())" in code, (
+            "_snowflake_rows must collapse exact duplicate keys before they are written"
+        )
+        assert "CONFLICTING" in MIGRATE.read_text(), (
+            "a duplicate whose VALUES differ is a finding and must be reported, not "
+            "silently resolved"
+        )
+
     def test_snowflake_loaded_at_is_canonicalised_at_the_read_boundary(self):
         """The driver returns `loaded_at` as a datetime; the parquet column is a string.
 

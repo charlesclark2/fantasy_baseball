@@ -131,7 +131,28 @@ def _snowflake_rows() -> list[dict]:
         conn.close()
     for r in rows:
         r["loaded_at"] = pred_log.canonical_stamp(r["loaded_at"])
-    return rows
+
+    # Drop EXACT duplicate keys. The source table holds a few (measured: 4 keys x 4
+    # byte-identical copies on 2026-07-11 — a retried INSERT whose DELETE did not reach).
+    # The read view now collapses them anyway, but there is no reason to write 12 rows
+    # nothing can ever return; and a duplicate whose VALUES differ is a finding, so it is
+    # reported rather than silently resolved.
+    seen: dict[tuple, dict] = {}
+    conflicts = 0
+    for r in rows:
+        k = _key(r)
+        prior = seen.get(k)
+        if prior is None:
+            seen[k] = r
+            continue
+        if any(prior[c] != r[c] for c in ("model_prob", "actual_outcome",
+                                          "closing_market_prob", "model_version")):
+            conflicts += 1
+    dropped = len(rows) - len(seen)
+    if dropped:
+        log.warning("Source holds %d duplicate row(s) across %d key(s); keeping one each "
+                    "(%d had CONFLICTING values).", dropped, len(seen), conflicts)
+    return list(seen.values())
 
 
 def _reconstructed_rows(start: date, end: date) -> list[dict]:
