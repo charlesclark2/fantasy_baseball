@@ -215,11 +215,107 @@ const NEED_W_DEDICATED = 1.0
 /** Exported for `scripts/measure-flex-urgency.mjs`, which reconstructs the pre-flex-pool ordering
  *  from a `Recommendation` to count how often the rule below changes the top pick. */
 export const NEED_W_FLEX = 0.4
-const SURPLUS_BASE = 0.5
-const SURPLUS_OVER = 0.35
-const SURPLUS_CAP = 0.9
+// ⭐⭐ NF-C7 — A DEPTH TARGET IS AN ORDERING TIER (see the block below; kept as a comment because it
+// declares no constant — the tier lives in the bench re-rank inside `recommend`).
+/*
+ * ⭐⭐ NF-C7 — A DEPTH TARGET IS AN ORDERING TIER, NOT A SCORE BONUS, AND THAT IS A MEASUREMENT.
+ *
+ * The obvious spelling is a bonus through the existing need machinery: `NEED_W_DEPTH * urgency`
+ * with `NEED_W_DEPTH` under `NEED_W_FLEX`. It was built that way first and it DOES NOT WORK, for a
+ * reason worth keeping: `urgency` is a VOR gap and a bench candidate's `score` is his INSURANCE
+ * value, so the bonus is in the wrong unit for the number it is added to. Measured mid-draft on the
+ * real 2026 board with `{QB: 2, TE: 2}` set: the QB dropoff is a couple of points, so the bonus came
+ * to well under one point against bench running backs scoring 50+, and NOT ONE candidate at a
+ * short position reached a six-slot panel. A control the user cannot feel is not a control.
+ *
+ * Raising the weight is not the fix either — it would have to be ~50x `NEED_W_FLEX` to bridge the
+ * gap, at which point it is a number reverse-engineered from the answer, and it would corrupt
+ * `score`, which the panel prints (E2.1-r).
+ *
+ * So the target orders instead of scoring, exactly as `deferred` does for K/DST and for exactly the
+ * same stated reason. Inside the BENCH cohort — and only there — a position short of its target
+ * sorts above one that is not. That is literally "below a real open starter slot, above generic
+ * depth": the cohort's placement against the need-fillers is untouched.
+ *
+ * ⭐⭐ IT CANNOT REACH `mustFill` OR `deferred`. It reorders WITHIN the level-0 cohort and touches
+ * nothing else — `needLevel` is unchanged, so `mustFill = mustFillNow && level > 0` cannot see it,
+ * and the K/DST deferral is a HIGHER sort key, so a kicker target cannot surface a kicker in round
+ * 6. The reserve constraint OUTRANKS every depth target by construction, not by tuning: a
+ * preference can never walk a user into an illegal roster.
+ * Pinned by `betting_ml/tests/test_nf_c7_pick_recommendation.py`.
+ */
+/**
+ * ⭐⭐ NF-C7 — WHERE THE BENCH COHORT SITS, WHICH IS A DIFFERENT QUESTION FROM WHO IS IN IT.
+ *
+ * The old `SURPLUS_BASE + SURPLUS_OVER` (capped at `SURPLUS_CAP`) damped a bench candidate to 15% of
+ * his VOR. NF-C7 replaces it as a VALUATION — `benchInsuranceValue` is a far better answer to "which
+ * bench player?" — but KEEPS it as the ORDERING term that places the bench cohort against the
+ * need-fillers, and that distinction is load-bearing:
+ *
+ *   · a NEED-FILLER's score is VOR — points over the FREELY-AVAILABLE alternative at his position,
+ *     i.e. over the player you would take instead if you waited;
+ *   · an INSURANCE value is points added to YOUR lineup, measured against the man you already hold.
+ *
+ * Those are different baselines, so putting insurance straight into the sort compares two different
+ * questions. MEASURED on the 41 committed parity states: doing that made bench depth outrank EVERY
+ * open-starter-slot filler in 8 of the 23 states that have both — including one where a bench RB
+ * (55.6) beat filling an EMPTY QB1 (12.9). Under the retired rule that happened in 1 of 8, by 0.3
+ * points. An empty starter slot scores ZERO every week; recommending depth over it is the failure
+ * the reserve constraint exists to stop, arriving several rounds earlier than the constraint can.
+ *
+ * ⭐ It is also the ONLY shape NF-C-LDA-6 measured. Every arm there first asked the shipped engine
+ * what it would take and re-ranked only if that was a bench pick — "the arms never differ on WHETHER
+ * to take a bench player, only on WHICH". The +77.3 season points is a measurement OF THAT SHAPE, so
+ * this reproduces it rather than shipping an integration nothing scored.
+ *
+ * ⛔ NOT a valuation and NEVER displayed. It orders; `score` values. Kept as one constant (0.85, the
+ * product the three retired ones always evaluated to) so nobody re-tunes three knobs that only ever
+ * moved together.
+ */
+const BENCH_ORDER_DAMPING = 0.85
+
+/**
+ * ⭐⭐ NF-C7 — HOW FAR DOWN THE BOARD INSURANCE IS ALLOWED TO REACH, and it is the single most
+ * consequential number in this file. MEASURED, not chosen.
+ *
+ * NF-C-LDA-6 scored its arms by asking the engine for its top 40 and re-ranking the BENCH candidates
+ * among THOSE. That shortlist was never presented as part of the rule — but it is, and removing it
+ * destroys the result. Re-measured over the same 120 paired drafts with the identical valuation
+ * function:
+ *
+ *     re-rank the legacy top-40's bench candidates    +45.2 season points, ±8.0, 102/120
+ *     re-rank EVERY bench candidate on the board       +3.0 season points, ±12.2,  61/120
+ *
+ * The second is a NULL — its interval spans zero. Same formula, same anchors, same seeds; the only
+ * difference is how far down the board the re-rank may reach.
+ *
+ * ⭐ WHY, and it generalises: an insurance value is points added to MY lineup, so it is happy to
+ * crown a player the whole league has passed on 300 times if his position happens to be thin on my
+ * roster. VOR is what says he is not worth a pick. So insurance is a good TIE-BREAKER among
+ * candidates the value board already rates, and a bad PRIMARY over the entire pool — which is
+ * exactly the shape this shortlist enforces.
+ *
+ * ⚠️ NOT a tuned knob: 40 is the number the study measured, carried over verbatim. Moving it is a
+ * re-measurement, not a preference.
+ * ⚠️ LOCK-STEP: `BENCH_RERANK_SHORTLIST` in `quant_sports_intel_models/fantasy_engine/draft.py`.
+ */
+const BENCH_RERANK_SHORTLIST = 40
+
+/** Where a bench candidate SITS relative to a need-filler — the retired rule, in VOR units, so the
+ *  comparison is like-for-like. See `BENCH_ORDER_DAMPING`. */
+function benchOrderValue(vor: number): number {
+  return vor - (vor > 0 ? BENCH_ORDER_DAMPING * vor : 0)
+}
 const BYE_PEN_FRAC = 0.08
 const BYE_CLUSTER_CAP = 3
+
+/** Fantasy weeks in the regular season the NF-C-LDA-6 study scored (18, one bye each). The unit the
+ *  expected-start count is expressed in — NOT a claim about any league's playoff schedule. */
+const SEASON_WEEKS = 18
+/** Games in an NFL regular season — the denominator the board's `g` projection is stated against
+ *  (a player projected for `g` of these misses `17 - g`). ⚠️ DISTINCT from `SEASON_WEEKS`, which
+ *  counts FANTASY weeks including the bye; conflating them is a silent one-week error. */
+const SEASON_GAMES = 17
 
 export interface RosterRequirements {
   dedicated: Record<string, number>
@@ -263,6 +359,18 @@ export function rosterRequirements(roster: RosterSlotDef[]): RosterRequirements 
 export interface OpenSlots {
   dedicated: Record<string, number>
   flex: Set<string>[]
+  /** ⭐ NF-C7 — position → how many of MY players are currently SEATED in a starter slot at it. The
+   *  same greedy assignment that produced the two fields above, counted rather than discarded.
+   *
+   *  ⛔ NOT the roster's CAPACITY at the position (`starterSeatsFor`). A bench candidate can only
+   *  ever start in place of somebody this roster ACTUALLY seats at his position: TE capacity in a
+   *  1TE+1FLEX league is 2, but with an RB in the flex, TE occupies ONE seat and a second TE covers
+   *  only that one man's absence. Using capacity made a level-0 candidate who out-rated the single
+   *  seated TE read as "walks into a seat" and price at his ENTIRE projected season — measured on
+   *  the real 2026 board, George Kittle came back at 248 points of bench cover.
+   *
+   *  ⚠️ LOCK-STEP: `OpenSlots.seated` in `quant_sports_intel_models/fantasy_engine/draft.py`. */
+  seated: Record<string, number>
 }
 
 // need level: 2 = fills an open DEDICATED starter; 1 = fills only an open FLEX/superflex; 0 = none open
@@ -279,10 +387,12 @@ export function openStarterSlots(myPositions: string[], req: RosterRequirements)
   const counts: Record<string, number> = {}
   for (const p of myPositions) counts[p] = (counts[p] ?? 0) + 1
 
+  const seated: Record<string, number> = {}
   for (const pos of Object.keys(openDed)) {
     const take = Math.min(openDed[pos], counts[pos] ?? 0)
     openDed[pos] -= take
     counts[pos] = (counts[pos] ?? 0) - take
+    if (take) seated[pos] = (seated[pos] ?? 0) + take
   }
 
   const flexSpots: Set<string>[] = []
@@ -293,20 +403,188 @@ export function openStarterSlots(myPositions: string[], req: RosterRequirements)
   for (const elig of flexSpots) {
     let filler: string | null = null
     // prefer the scarcest surplus (fewest held) — same ordering intent as the Python
-    const eligPositions = [...elig].sort((a, b) => (counts[a] ?? 0) - (counts[b] ?? 0))
+    // ⭐ TOTAL ORDER, AND THE SECOND KEY IS LOAD-BEARING (NF-C7). "Prefer the scarcest surplus"
+    // leaves TIES — a roster holding 3 RBs and 3 WRs with 2+2 dedicated seats has one of each spare,
+    // and either may take the flex. This engine broke that tie by the eligibility Set's insertion
+    // order and the Python engine by a FROZENSET's hash order (randomized per process there), so the
+    // two disagreed — and Python was not even stable run-to-run.
+    //
+    // Invisible until NF-C7, because nothing downstream could see WHICH position took the seat, only
+    // how many flex spots were left (the same either way). `seated` can see it, and it feeds every
+    // bench candidate's insurance value. Breaking the tie on the position NAME makes it
+    // deterministic and identical in both. ⚠️ LOCK-STEP: the same two-key sort in `draft.py`.
+    const eligPositions = [...elig].sort(
+      (a, b) => (counts[a] ?? 0) - (counts[b] ?? 0) || (a < b ? -1 : a > b ? 1 : 0),
+    )
     for (const pos of eligPositions) {
       if ((counts[pos] ?? 0) > 0) {
         filler = pos
         break
       }
     }
-    if (filler) counts[filler] -= 1
-    else openFlex.push(elig)
+    if (filler) {
+      counts[filler] -= 1
+      seated[filler] = (seated[filler] ?? 0) + 1
+    } else openFlex.push(elig)
   }
 
   const dedicated: Record<string, number> = {}
   for (const [p, n] of Object.entries(openDed)) if (n > 0) dedicated[p] = n
-  return { dedicated, flex: openFlex }
+  return { dedicated, flex: openFlex, seated }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// NF-C7 — the BENCH seat: what a depth pick is actually worth
+// ─────────────────────────────────────────────────────────────────────────────────────────────────
+//
+// ⚠️ LOCK-STEP: `per_week_points` / `absence_prob` / `starter_seats_for` / `expected_starts` /
+// `displaced_rate` / `bench_insurance_value` in `quant_sports_intel_models/fantasy_engine/draft.py`,
+// pinned byte-for-byte by `betting_ml/tests/test_nf_c_lda_1_optimizer_parity.py`.
+
+/**
+ * Points per WEEK OF THE SEASON — his projected total spread over the games in one, NOT over the
+ * games he is projected to play.
+ *
+ * ⭐⭐ `pts / g` IS THE WRONG QUANTITY AND IT SHIPPED ONCE. It is points per game PLAYED, so it
+ * divides by a number that is TINY for exactly the players a bench comparison is about. Found by
+ * drafting: the board projects Easton Stick for 1.9 games and 76.6 points, which is a "rate" of 40.3
+ * a game — nearly DOUBLE any real starting quarterback. The insurance rule read that as "he
+ * out-rates the QB you hold", concluded he would walk into your starting seat, and recommended him
+ * in round 10 at "worth 35 as cover" against a published VOR of MINUS 189. Bailey Zappe (0.8 games)
+ * was the same defect one step further along.
+ *
+ * ⭐ `pts / SEASON_GAMES` has no small denominator at all — the divisor is a CONSTANT — and it is
+ * what a seat actually collects: his contribution in an average week of the season, availability
+ * included. The identity survives (`SEASON_GAMES × perWeekPoints = pts`), so a candidate can never
+ * be worth more than his own projection.
+ *
+ * ⚠️ BECAUSE AVAILABILITY IS ALREADY IN THE NUMERATOR, `expectedStarts` must NOT multiply by it
+ * again — see the note there. Carrying it once, in the stable place, is the whole point.
+ *
+ * ⚠️ `absenceProb` still divides by games, and that is correct: it is asked only about players
+ * ALREADY ON THE ROSTER, whose `g` is a real full-season projection.
+ */
+export function perWeekPoints(p: Player): number {
+  return num(p.pts) / SEASON_GAMES
+}
+
+/** P(he misses any given non-bye week), read from the board's own expected-games projection — read,
+ *  NOT invented. A player projected for 15.2 of 17 is absent 10.6% of weeks. Nothing here models
+ *  injury correlation or in-season news.
+ *
+ *  ⭐ A row with NO `games` is treated as fully AVAILABLE, not as certainly absent. `(SEASON_GAMES - 0)
+ *  / SEASON_GAMES` is 1.0 — "out every week" — which would make every backup behind him maximally
+ *  valuable, so the arithmetic default is the DANGEROUS one. Assuming availability is the
+ *  conservative reading: it adds no bench value we cannot evidence. */
+export function absenceProb(p: Player): number {
+  const g = num(p.g)
+  if (g <= 0) return 0
+  return Math.max(0, Math.min(1, (SEASON_GAMES - g) / SEASON_GAMES))
+}
+
+/** How many STARTER seats a position could ever occupy on one roster — dedicated slots plus every
+ *  flex/superflex slot it is eligible for. A property of the roster SHAPE.
+ *
+ *  ⛔ NOT the seat count the bench-insurance value uses — that is `OpenSlots.seated`, how many of
+ *  these seats this roster's players ACTUALLY occupy. See the note there. */
+export function starterSeatsFor(req: RosterRequirements, position: string): number {
+  return (
+    (req.dedicated[position] ?? 0) +
+    req.flex.reduce((a, f) => a + (f.eligible.has(position) ? f.count : 0), 0)
+  )
+}
+
+/**
+ * Weeks I would ACTUALLY get points out of him — the whole point of a bench seat.
+ *
+ * `ahead` is every player I already hold at his position who out-scores him per week. If I hold
+ * fewer of those than the position SEATS, he takes a seat outright and every non-bye week counts.
+ * Otherwise he reaches one only when at least `ahead.length - seats + 1` of them are out — a
+ * POISSON-BINOMIAL over their per-week absence probabilities, with a bye a certain absence. Exact by
+ * DP; the counts are tiny (a roster holds a handful per position).
+ *
+ * ⚠️ HIS OWN BYE IS SKIPPED, and that is the only self-adjustment here. His own ABSENCE is already
+ * inside `perWeekPoints`, so multiplying by `1 - absenceProb(him)` as well would charge him for it
+ * TWICE. Skipping the bye is not double-counting: a bye is a certainty about a NAMED week, which a
+ * season average cannot express, and it is what prices a backup who shares his starter's bye — the
+ * one week he can never cover.
+ *
+ * ⚠️ Absences are treated as INDEPENDENT across players and weeks. That UNDERSTATES depth (a real
+ * injury is a contiguous BLOCK, which is exactly what a bench player covers), i.e. it is
+ * conservative toward the retired rule — NF-C-LDA-6 measured both models and the ranking held.
+ */
+export function expectedStarts(candidate: Player, ahead: Player[], seats: number, weeks = SEASON_WEEKS): number {
+  const need = ahead.length < seats ? null : ahead.length - seats + 1
+  let starts = 0
+  for (let week = 1; week <= weeks; week++) {
+    if (candidate.bye === week) continue
+    if (need === null) {
+      starts += 1
+      continue
+    }
+    let dist = [1]
+    for (const r of ahead) {
+      const prob = r.bye === week ? 1 : absenceProb(r)
+      const next: number[] = new Array(dist.length + 1).fill(0)
+      for (let k = 0; k < dist.length; k++) {
+        next[k] += dist[k] * (1 - prob)
+        next[k + 1] += dist[k] * prob
+      }
+      dist = next
+    }
+    let tail = 0
+    for (let k = need; k < dist.length; k++) tail += dist[k]
+    starts += tail
+  }
+  return starts
+}
+
+/**
+ * Whose snaps he actually takes — the comparator the upgrade is measured against. Two cases:
+ *
+ *   · he out-rates enough of my seat-holders to WALK INTO A SEAT — he pushes out the WEAKEST
+ *     current seat-holder, so that is who he displaces;
+ *   · otherwise he only plays when somebody ahead is out — he displaces whoever would have covered
+ *     that seat instead (my best player at the position NOT already in a seat), or NOBODY (0) if I
+ *     have no cover at all.
+ *
+ * ⚠️ THE STUDY'S RULE ALWAYS TOOK THE SECOND BRANCH, which is wrong in the first: with three RB
+ * seats, three RBs held and a better RB falling to me, the bench is EMPTY, so the comparator was 0
+ * and his insurance came out as his ENTIRE projected season. That branch is reachable in a normal
+ * draft, so it is corrected here — and MEASURED as its own arm (`insurance_seat`) in
+ * `bench_valuation_study.py` rather than assumed.
+ */
+export function displacedRate(myRatesDesc: number[], seats: number, candidateRate: number): number {
+  if (seats > 0 && myRatesDesc.length >= seats) {
+    const nAhead = myRatesDesc.filter((r) => r > candidateRate).length
+    if (nAhead < seats) return myRatesDesc[seats - 1]
+  }
+  const bench = myRatesDesc.slice(seats)
+  return bench.length ? bench[0] : 0
+}
+
+/**
+ * What a BENCH seat is worth: P(I need him) × his upgrade over the man he displaces.
+ *
+ * ⭐ FLOORED AT ZERO ON THE UPGRADE, NOT ON THE PRODUCT: a candidate worse than the cover I already
+ * have is worth nothing extra, and a NEGATIVE insurance value would claim that holding him makes my
+ * lineup worse — false, I would simply never start him.
+ *
+ * Returns `{ value, starts }` from ONE computation, because the score and the sentence shown beside
+ * it must never be two derivations of the same quantity (E9.61).
+ */
+export function benchInsuranceValue(
+  candidate: Player,
+  myAtPosition: Player[],
+  seats: number,
+  weeks = SEASON_WEEKS,
+): { value: number; starts: number } {
+  const rate = perWeekPoints(candidate)
+  const ratesDesc = myAtPosition.map(perWeekPoints).sort((a, b) => b - a)
+  const ahead = myAtPosition.filter((r) => perWeekPoints(r) > rate).sort((a, b) => perWeekPoints(b) - perWeekPoints(a))
+  const starts = expectedStarts(candidate, ahead, seats, weeks)
+  const upgrade = Math.max(0, rate - displacedRate(ratesDesc, seats, rate))
+  return { value: upgrade <= 0 ? 0 : starts * upgrade, starts }
 }
 
 // Tier numbers (1 = best) for a DESCENDING points list: a new tier starts at an unusually-large gap
@@ -419,6 +697,22 @@ export interface Recommendation {
    *  `scripts/measure-flex-urgency.mjs` counts flips with, instead of keeping a forked copy of the
    *  engine that could drift away from the one being measured. */
   seatValue: number
+  /** ⭐ NF-C7 — THE SORT KEY, which is `score` for every candidate that fills an open starter slot
+   *  and something else for a BENCH candidate. See `BENCH_ORDER_DAMPING`: a bench candidate's
+   *  `score` is his insurance value, which is on a different baseline from a need-filler's VOR, so
+   *  the two must not be compared directly. Exposed rather than kept private so the ordering stays
+   *  reconstructible from a `Recommendation` alone — the panel is not sorted by the number it
+   *  prints, and a reader has to be able to see why. */
+  orderValue: number
+  /** ⭐ NF-C7 — how many more of this position the user asked for than they hold. `0` for every
+   *  candidate whenever no target is set, so the whole feature is inert until it is asked for, and
+   *  `0` for anything that fills an open starter slot (the lineup is already asking for those). */
+  depthShort: number
+  /** ⭐ NF-C7 — the weeks I would actually get points out of him, given who I already hold at his
+   *  position, their byes and absence, and his own. `0` for a candidate who fills an open starter
+   *  slot (he starts by definition, so the question is moot). Rendered, because it is the whole
+   *  reason a bench pick is worth anything. */
+  expectedStarts: number
   positionalDropoff: number
   tier: number
   isLastInTier: boolean
@@ -440,6 +734,14 @@ export interface RecommendArgs {
   config: LeagueConfigMeta
   draftedIds: Set<string>
   myPlayerIds: string[]
+  /** ⭐ NF-C7 — `{ position: how many of him I want IN TOTAL }`. A position I hold fewer of than
+   *  its target sorts above one that is not, INSIDE the bench cohort only — below every open
+   *  starter slot, above generic depth. See the ORDERING TIER note near the top of this file.
+   *
+   *  It is a PREFERENCE, so it is an argument rather than a field on `LeagueConfigMeta`: a league's
+   *  identity does not include how many backup quarterbacks its drafter likes, and putting it on
+   *  the config would round-trip it into every saved and imported league. Absent/empty ⇒ inert. */
+  depthTargets?: Record<string, number>
   topN?: number
   tierK?: number
 }
@@ -498,17 +800,21 @@ export function sortAvailable(rows: Player[], opts: SortAvailableOpts): Player[]
 }
 
 export function recommend(args: RecommendArgs): Recommendation[] {
-  const { board, config, draftedIds, myPlayerIds, topN = 8, tierK = 1.0 } = args
+  const { board, config, draftedIds, myPlayerIds, depthTargets, topN = 8, tierK = 1.0 } = args
   const req = rosterRequirements(config.roster)
   const mine = new Set(myPlayerIds)
 
   const myPositions: string[] = []
+  const myRowsByPos: Record<string, Player[]> = {}
   const myByes = new Map<string, number>() // `${pos}|${bye}` → count I already hold
   const available: Player[] = []
   for (const p of board) {
     if (draftedIds.has(p.id)) {
       if (mine.has(p.id)) {
         myPositions.push(p.pos)
+        // NF-C7 — the bench seat's insurance value is measured against WHO I HOLD, and a list of
+        // position strings cannot say how good they are.
+        ;(myRowsByPos[p.pos] ??= []).push(p)
         if (p.bye != null) myByes.set(`${p.pos}|${p.bye}`, (myByes.get(`${p.pos}|${p.bye}`) ?? 0) + 1)
       }
       continue
@@ -651,10 +957,45 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     }
     if (Number.isFinite(best)) flexSeatRepl[pos] = best
   }
-  /** What this player is worth in the seat he would actually occupy. Plain VOR everywhere except a
-   *  flex-only candidate, where the baseline moves onto the seat (see the note above). */
+  // ⭐⭐ NF-C7 — THE BENCH SEAT, the third of the three seats `seatValue` prices.
+  //
+  // A level-0 candidate fills no open starter slot, so he is bench depth — and a bench seat does not
+  // collect a season of points, it collects the weeks a starter is out or on bye. Pricing him in VOR
+  // (points over the LEAGUE's last STARTABLE player at his position) measures him against a seat he
+  // is not in. That is exactly the flex-seat argument above, one seat further along.
+  //
+  // WHY IT MATTERS, MEASURED (NF-C-LDA-6, 120 paired drafts per arm): the retired flat 15%-of-VOR
+  // discount is a constant, so it preserved VOR's ORDER — and VOR is a starter-scarcity currency in
+  // which only 12 QBs and 12 TEs clear replacement while 35 WRs and 25 RBs do and a 12-team room
+  // consumes all of them by round 8. So "best value on the board" was STRUCTURALLY GUARANTEED to
+  // return a backup TE or QB late: the shipped rule's bench came back 47% backup QB and 53% backup
+  // TE with ZERO RBs and ZERO WRs, a tight-end share nearer a NIHILIST's (98%) than the oracle's
+  // (23%). Insurance captures 83% of the peeking oracle's headroom: +77.3 season points, 118/120.
+  //
+  // `insuranceOf` memoises because `expectedStarts` runs an 18-week Poisson-binomial and the value
+  // is read twice (the score, and the sentence beside it — which must be ONE derivation, E9.61).
+  const insuranceCache = new Map<string, { value: number; starts: number }>()
+  /** Seats this position OCCUPIES in my lineup right now — the seats a bench pick at it could ever
+   *  be needed for. Zero means the position starts nobody for me, so no depth at it can score. */
+  const benchSeats = (pos: string): number => open.seated[pos] ?? 0
+  const insuranceOf = (p: Player): { value: number; starts: number } => {
+    let hit = insuranceCache.get(p.id)
+    if (!hit) {
+      hit = benchInsuranceValue(p, myRowsByPos[p.pos] ?? [], benchSeats(p.pos))
+      insuranceCache.set(p.id, hit)
+    }
+    return hit
+  }
+  /** What this player is worth in the seat he would actually occupy. Three seats, three baselines:
+   *  an open DEDICATED slot is plain VOR (you must start a TE, so measure him against TEs); an open
+   *  FLEX seat re-bases onto the SEAT's own replacement (NF-C2.1); a BENCH seat is his insurance
+   *  value (NF-C7). */
   const seatValue = (p: Player): number =>
-    flexSeatRepl[p.pos] != null ? num(p.pts) - flexSeatRepl[p.pos] : num(p.vor)
+    flexSeatRepl[p.pos] != null
+      ? num(p.pts) - flexSeatRepl[p.pos]
+      : needLevel(open, p.pos) === 0
+        ? insuranceOf(p).value
+        : num(p.vor)
 
   const flexPoolDropoff: Record<string, number> = {}
   for (const pos of Object.keys(byPos)) {
@@ -735,18 +1076,28 @@ export function recommend(args: RecommendArgs): Recommendation[] {
     // with an RB in the flex read as "capacity 2, held 1 ⇒ still has room", so a backup TE kept 50%
     // of its VOR while a bench RB kept 15%: a 3.3x boost for a player no lineup could start. The
     // light branch was reachable ONLY through that miscount, so the fix removes it.
-    let surplusPen = 0
-    if (level === 0 && vor > 0) {
-      surplusPen = Math.min(SURPLUS_CAP, SURPLUS_BASE + SURPLUS_OVER) * vor
+    // ⭐ NF-C7 — THE USER'S DEPTH TARGET. `depthShort` is how many more of this position the user
+    // asked for than they hold. It carries NO weight and NO bonus: it is read by the bench re-rank
+    // below as an ORDERING TIER (see the note near the top of this file, which records why a
+    // weighted bonus was built first and measured inert).
+    //
+    // ⛔ LEVEL 0 ONLY. A position with an OPEN starter slot is already being asked for by the
+    // lineup, and letting a preference speak there would re-weight the very needs it must rank
+    // below.
+    let depthShort = 0
+    const depthTarget = depthTargets?.[p.pos] ?? 0
+    if (level === 0 && depthTarget > 0) {
+      depthShort = Math.max(0, depthTarget - (myRowsByPos[p.pos]?.length ?? 0))
     }
     // bye-week stacking: penalize by how many I already hold at this position on the same bye week
     const byeConflict = p.bye != null ? myByes.get(`${p.pos}|${p.bye}`) ?? 0 : 0
     const byePen = byeConflict > 0 && vor > 0 ? BYE_PEN_FRAC * Math.min(byeConflict, BYE_CLUSTER_CAP) * vor : 0
-    // ⭐ `seatValue`, not `vor` — see the note above. Identical to `vor` for every candidate except a
-    // flex-only one. (`surplusPen` is level-0-only and `byePen` scales a held-position stack, so both
-    // stay on `vor`: they are statements about the roster, not about the open seat.)
+    // ⭐ `seatValue`, not `vor` — see the seat blocks above. Identical to `vor` for a candidate
+    // filling an open DEDICATED slot; re-based for a flex-only one; his insurance value for a BENCH
+    // pick. (`byePen` scales a held-position stack, so it stays on `vor`: it is a statement about
+    // the roster, not about the open seat.)
     const base = seatValue(p)
-    const score = base + needBonus - surplusPen - byePen
+    const score = base + needBonus - byePen
 
     const rows = byPos[p.pos]
     const i = idxInPos[p.id]
@@ -766,13 +1117,19 @@ export function recommend(args: RecommendArgs): Recommendation[] {
       needLevel: level,
       needBonus: Math.round(needBonus * 10) / 10,
       seatValue: Math.round(base * 10) / 10,
+      // For a candidate that fills an open starter slot this IS `score`. For a BENCH candidate it is
+      // the retired damping in VOR units — the same bonuses and penalties applied to a comparable
+      // base — and the re-rank below PERMUTES those values across the cohort into insurance order.
+      orderValue: Math.round((level === 0 ? benchOrderValue(vor) - byePen : score) * 10) / 10,
+      depthShort,
+      expectedStarts: level === 0 ? Math.round(insuranceOf(p).starts * 10) / 10 : 0,
       positionalDropoff: Math.round(dropoff * 10) / 10,
       tier: tierOf[p.id] ?? 1,
       isLastInTier: isLast,
       byeConflict,
       mustFill,
       deferred,
-      rationale: rationale(p.pos, level, needBonus, dropoff, urgency, base - vor, vor, isLast, tierOf[p.id] ?? 1, surplusPen, p.bye, byeConflict, mustFill, picksRemaining, openStarterCount),
+      rationale: rationale(p.pos, level, needBonus, dropoff, urgency, base - vor, vor, isLast, tierOf[p.id] ?? 1, p.bye, byeConflict, mustFill, picksRemaining, openStarterCount, base, depthShort, depthTarget),
     })
   }
 
@@ -803,10 +1160,85 @@ export function recommend(args: RecommendArgs): Recommendation[] {
   // accept, the bench is full ⇒ `picksRemaining == openStarterCount` ⇒ the reserve constraint is
   // NECESSARILY binding ⇒ `mustFill` lifts them straight back to the top. That is structural, not
   // luck. So: never early, always by the end — the operator's rule (2026-08-12) in two keys.
+  // ── NF-C7: the bench cohort keeps its retired PLACEMENT, and insurance decides WHO fills it ────
+  //
+  // The level-0 rows collectively occupy exactly the slots the retired damping gave them — so
+  // WHETHER to take a bench player is unchanged, which is the thing NF-C-LDA-6 held fixed — while
+  // WHICH bench player gets each of those slots is decided by insurance. Within the cohort the
+  // ordering is therefore monotone in `score` too, so only the boundary between fillers and bench
+  // can read out of order, and the rationale on each row says which it is.
+  //
+  // ⚠️ SPLIT BY `deferred`. K/DST sit below every real candidate on their own sort key, so mixing
+  // their order values into the skill-position cohort would hand a skill-position bench pick a
+  // K/DST slot and vice versa — placements that mean nothing, since the two never compete.
+  // ⚠️ TOTAL ORDER ON BOTH SIDES (`id` breaks a tie): a stable sort would inherit board order, which
+  // is the same in both engines today but is not a property either of them states.
+  for (const deferredGroup of [false, true]) {
+    // ⭐ THE SHORTLIST (see `BENCH_RERANK_SHORTLIST`): only the bench candidates the RETIRED ordering
+    // already rates may be re-ranked. Everything below keeps its legacy place, so insurance can pick
+    // among plausible depth and can never reach 300 picks down the board for a player whose only
+    // virtue is that my roster is thin at his position.
+    //
+    // ⭐⭐ …PLUS THE BEST CANDIDATE AT EACH POSITION THE USER IS SHORT OF. The shortlist is a bound
+    // on how far INSURANCE may reach; it must not be a bound on what the USER may ask for. Found by
+    // driving a mock draft: with a TE target set and no tight end inside the top 40, the target
+    // could not act at all and the control was invisible to whoever set it.
+    //
+    // ⚠️ PROVABLY INERT WITHOUT A TARGET, which is what keeps the measurement valid: no arm in
+    // `bench_valuation_study.py` sets `depthTargets`, so `depthShort` is 0 for every candidate
+    // there and this union is empty. +45.2 was measured on exactly this set.
+    const sameTier = recs.filter((r) => r.deferred === deferredGroup)
+    const rankedByOrder = [...sameTier].sort(
+      (a, b) =>
+        b.orderValue - a.orderValue ||
+        (a.player.id < b.player.id ? -1 : a.player.id > b.player.id ? 1 : 0),
+    )
+    const eligibleIds = new Set(rankedByOrder.slice(0, BENCH_RERANK_SHORTLIST).map((r) => r.player.id))
+    const seenShort = new Set<string>()
+    for (const r of rankedByOrder) {
+      if (r.needLevel === 0 && r.depthShort > 0 && !seenShort.has(r.player.pos)) {
+        seenShort.add(r.player.pos)
+        eligibleIds.add(r.player.id)
+      }
+    }
+    const cohort = sameTier.filter((r) => r.needLevel === 0 && eligibleIds.has(r.player.id))
+    if (cohort.length < 2) continue
+    const slots = cohort.map((r) => r.orderValue).sort((a, b) => b - a)
+    // ⭐ THE DEPTH TIER LIVES HERE, and only here: the cohort's SLOTS are fixed (that is the
+    // placement rule), and the target decides only WHO gets which of them. So a target can reorder
+    // the bench and can never move the bench as a whole.
+    // ⭐ THE THIRD KEY IS NOT COSMETIC. A tie on `score` is COMMON — every bench candidate a roster
+    // has no use for is worth exactly 0 — and falling through to the player id there is arbitrary.
+    // Found by drafting: with the whole bench tied at 0 the best placement slot went to whoever won
+    // an ALPHABETICAL tie, and round 10 recommended Philip Rivers (VOR -246) over bench receivers
+    // the retired rule ranked 200 points higher. Breaking the tie on the candidate's OWN placement
+    // value means insurance decides, and WHERE INSURANCE IS INDIFFERENT THE RETIRED ORDERING
+    // STANDS — the correct fallback, not a new rule.
+    const ranked = [...cohort].sort(
+      (a, b) =>
+        Number(b.depthShort > 0) - Number(a.depthShort > 0) ||
+        b.score - a.score ||
+        b.orderValue - a.orderValue ||
+        (a.player.id < b.player.id ? -1 : a.player.id > b.player.id ? 1 : 0),
+    )
+    ranked.forEach((r, i) => {
+      r.orderValue = slots[i]
+    })
+  }
+
+  // ⚠️ TOTAL ORDER. `orderValue` TIES inside the bench cohort (many bench candidates share a
+  // rounded value), and a stable sort would then fall back to BOARD order — silently undoing the
+  // re-rank above, which is the whole NF-C7 change. The extra keys re-state the re-rank's own
+  // ordering, so a tie resolves the same way the cohort was ranked. ⚠️ LOCK-STEP: `draft.py`.
   recs.sort((a, b) => {
     if (a.mustFill !== b.mustFill) return a.mustFill ? -1 : 1
     if (a.deferred !== b.deferred) return a.deferred ? 1 : -1
-    return b.score - a.score
+    return (
+      b.orderValue - a.orderValue ||
+      Number(b.depthShort > 0) - Number(a.depthShort > 0) ||
+      b.score - a.score ||
+      (a.player.id < b.player.id ? -1 : a.player.id > b.player.id ? 1 : 0)
+    )
   })
   return recs.slice(0, topN)
 }
@@ -829,12 +1261,17 @@ function rationale(
   vor: number,
   lastInTier: boolean,
   tier: number,
-  surplusPen: number,
   bye: number | null,
   byeConflict: number,
   mustFill = false,
   picksRemaining = 0,
-  openStarterCount = 0
+  openStarterCount = 0,
+  /** ⭐ NF-C7 — the score's base. For a BENCH candidate this is his insurance value, NOT his VOR, and
+   *  the sentence has to say so: the panel prints `score`, and an unexplained gap between it and the
+   *  player's published VOR is exactly the kind of number a user is right not to trust. */
+  seatValueOut = 0,
+  depthShort = 0,
+  depthTarget = 0,
 ): string {
   const parts: string[] = []
   // Leads the sentence when it applies: this is no longer a value judgement the user can weigh, so
@@ -853,6 +1290,14 @@ function rationale(
   // tooltip.
   if (level === 1 && seatAdj < -0.5)
     parts.push(`Scored for the FLEX seat: ${Math.round(vor + seatAdj)}, not his ${Math.round(vor)} VOR`)
+  // ⭐ NF-C7 — a BENCH pick names what it is worth AND why, because the number is no longer his VOR.
+  // Sits HERE, beside the flex-seat clause, because the two answer the same question — "why is this
+  // score not the VOR you can see on the board?" — and the clause that explains the number belongs
+  // above the ones that colour it (tier cliff, bye stack).
+  if (level === 0)
+    parts.push(`Bench depth — worth ${Math.round(seatValueOut)} as cover, not his ${Math.round(vor)} VOR`)
+  if (depthShort > 0)
+    parts.push(`You asked for ${depthTarget} ${pos}${depthTarget === 1 ? "" : "s"} — ${depthShort} short`)
   if (lastInTier && dropoff > 0) parts.push(`Last of Tier ${tier} — ${Math.round(dropoff)} VOR cliff to the next ${pos}`)
   // ⚠️ QUOTES `urgency`, NOT `dropoff` — for a FLEX seat the bonus is the gap over the flex POOL, and
   // naming the (larger) within-position gap beside it would explain the score with a number the
@@ -863,7 +1308,6 @@ function rationale(
         ? `+${Math.round(urgency)} VOR over the next FLEX-eligible player`
         : `+${Math.round(urgency)} VOR over the next ${pos}`,
     )
-  if (surplusPen > 0) parts.push(`Depth pick — ${pos} starters already set`)
   if (byeConflict > 0 && bye != null) parts.push(`⚠ ${byeConflict} other ${pos} on bye ${bye}`)
   if (parts.length === 0) parts.push("Best value on the board (VOR)")
   return parts.join(" · ")

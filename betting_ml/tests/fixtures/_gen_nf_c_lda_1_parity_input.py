@@ -36,6 +36,22 @@ scenarios = {
     # request walks far enough down each position to cross real tier boundaries.
     "deep_top_n": {"drafted": ids[:24], "mine": [ids[1], ids[9]], "topN": 120},
     "deep_top_n_late": {"drafted": ids[:110], "mine": ids[2:14:2], "topN": 120},
+    # ⭐ NF-C7 DEPTH TARGETS. Without a state that SETS one, the parity guard would agree on the
+    # feature by never reaching it — the vacuous-guard class (NF1.7(a)), and the anti-vacuity clause
+    # in the test asserts a non-zero `depthBonus` exists somewhere in the fixture for exactly that
+    # reason. Three states, because the mechanism has three distinct behaviours to pin:
+    #   · `depth_target_mid`   — targets ABOVE what the roster holds, mid-draft, so the bonus fires;
+    #   · `depth_target_met`   — the SAME roster with targets it already MEETS, so it must NOT fire
+    #     (an "on" state alone cannot tell a working gate from one that always pays);
+    #   · `depth_target_reserve` — a nearly-full roster where the RESERVE CONSTRAINT binds, with a
+    #     huge K/DST target. It pins the load-bearing guard: a preference must never outrank a slot
+    #     the lineup requires, and must never lift a deferred K/DST above a real candidate.
+    "depth_target_mid": {"drafted": ids[:110], "mine": ids[2:14:2], "topN": 30,
+                         "depthTargets": {"QB": 2, "RB": 6, "WR": 6, "TE": 2}},
+    "depth_target_met": {"drafted": ids[:110], "mine": ids[2:14:2], "topN": 30,
+                         "depthTargets": {"QB": 0, "RB": 1, "WR": 1, "TE": 0}},
+    "depth_target_reserve": {"drafted": ids[:150], "mine": ids[1:27:2], "topN": 20,
+                             "depthTargets": {"QB": 4, "TE": 4, "K": 5, "DST": 5}},
 }
 random.seed(20260819)
 for t in range(30):

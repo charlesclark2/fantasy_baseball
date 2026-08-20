@@ -61,6 +61,7 @@ from pathlib import Path
 
 from quant_sports_intel_models.fantasy_engine.draft import (
     RosterRequirements,
+    bench_insurance_value,
     open_starter_slots,
     recommend,
 )
@@ -71,6 +72,35 @@ from quant_sports_intel_models.fantasy_engine.league_config import (
 
 WEEKS = 18
 _REPO = Path(__file__).resolve().parents[2]
+
+# ── NF-C7 ADDENDUM ═════════════════════════════════════════════════════════════════════════════
+# The original run measured `insurance` as a MATCHED FOIL layered on top of the then-shipped engine.
+# NF-C7 ships it, which raises two questions the original study did not ask, both PRE-REGISTERED
+# here before the re-run and both answered by an arm rather than by argument:
+#
+#   insurance_seat    the SHIPPED formula (`draft.bench_insurance_value`) driven as a two-stage
+#                     foil, so "did correcting the formula help?" stays separable from "did
+#                     shipping it inside the engine help?".
+#   insurance_sorted  ⭐ THE SHIPPED ENGINE, END TO END. Every other arm is a two-stage foil: the
+#                     engine picks, and if it picked a bench player the arm re-ranks the bench.
+#                     That deliberately holds WHETHER to take a bench player fixed. Shipping the
+#                     rule INSIDE `recommend` does not hold it fixed — a bench candidate now
+#                     competes with a need-filler on the score itself, and the two are on different
+#                     baselines (VOR is points over the LEAGUE's replacement; insurance is points
+#                     added to MY lineup). Whether that costs anything is a MEASUREMENT, and this is
+#                     the arm that makes it. ⛔ It is not licensed by the original result.
+#
+# ⚠️ `incumbent` is the PRE-NF-C7 rule and must stay so, or the whole leaderboard re-bases onto the
+# new default and the published +77.3 becomes unreproducible. `_LEGACY_SURPLUS` is the retired
+# constant (`SURPLUS_BASE + SURPLUS_OVER`, capped at `SURPLUS_CAP`) and is reproduced here — the ONE
+# place it still exists — rather than left in the engine as a dead knob a reader could tune.
+_LEGACY_SURPLUS = min(0.9, 0.5 + 0.35)
+
+
+def _bench_value_legacy(row: dict, pos: str) -> float:
+    """The retired rule: keep 15% of a positive VOR, all of a negative one."""
+    vor = float(row.get("vor") or 0.0)
+    return vor - (_LEGACY_SURPLUS * vor if vor > 0 else 0.0)
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -261,15 +291,54 @@ def bench_nihilist(row, rec, ctx):
     return -float(row.get("league_points") or 0.0)
 
 
+def bench_insurance_seats_only(row, rec, ctx):
+    """Correction 1 alone — seats the position OCCUPIES, no self-availability discount."""
+    return _insurance_variant(row, ctx, seated_seats=True, discount_self=False)
+
+
+def bench_insurance_avail_only(row, rec, ctx):
+    """Correction 2 alone — self-availability discount, on the uncorrected seat count."""
+    return _insurance_variant(row, ctx, seated_seats=False, discount_self=True)
+
+
+def bench_insurance_seat(row, rec, ctx):
+    """`insurance` with the two NF-C7 formula corrections, scored as a matched foil so the
+    correction is separable from the decision to ship it.
+
+    Both corrections were found by running the rule against the real 2026 board and reading the
+    numbers, not by inspection — the original rule priced George Kittle at 248 points of bench cover
+    and Bailey Zappe (0.8 projected games) at 394, which was the top-ranked pick on the board:
+
+      1. SEATS ARE THE ONES THE POSITION ACTUALLY OCCUPIES, not the roster's capacity at it. TE
+         capacity in 1TE+1FLEX is 2, but with an RB in the flex a TE occupies ONE seat — so a
+         candidate out-rating the single seated TE read as "walks into a seat" and priced at his
+         whole season.
+      2. HE MUST BE AVAILABLE HIMSELF. Without that, value is `weeks x pts/g`, which explodes as `g`
+         falls, and a backup sharing his starter's bye was credited for the one week he cannot play.
+    """
+    # ⚠️ `seated`, NOT `_seats_for` (the roster's CAPACITY at the position) — that IS correction 1,
+    # so reading capacity here would leave this arm measuring only correction 2.
+    seated = open_starter_slots([r["position"] for r in ctx.my_rows], ctx.req).seated
+    return bench_insurance_value(row, [r for r in ctx.my_rows if r["position"] == row["position"]],
+                                 seated.get(row["position"], 0), WEEKS)
+
+
 BENCH_RULES = {
     "incumbent": bench_incumbent,
+    "insurance_seat": bench_insurance_seat,
     "own_worst_starter": bench_own_worst_starter,
     "seats_covered": bench_seats_covered,
     "insurance": bench_insurance,
     "raw_points": bench_raw_points,
     "oracle": bench_oracle,
     "nihilist": bench_nihilist,
+    # sentinel: never called — `draft_one` short-circuits on `SHIPPED_ARMS`.
+    "insurance_sorted": bench_incumbent,
 }
+#: ⭐ NOT a bench COMPARATOR — `insurance_sorted` is the shipped engine's own ordering, so it has no
+#: two-stage re-rank at all. `draft_one` branches on membership here rather than calling a rule.
+SHIPPED_ARMS = {"insurance_sorted"}
+
 ANCHORS = {"oracle", "nihilist"}
 REFERENCES = {"raw_points"}
 
@@ -356,9 +425,32 @@ def draft_one(
                         break
                 continue
             my_rows = [by_id[p] for p in mine]
-            recs = recommend(rows, config=cfg, drafted_ids=taken, my_player_ids=mine, top_n=40)
+            # ⭐ EVERY OTHER ARM RUNS THE ENGINE ON THE *RETIRED* BENCH RULE, so `incumbent` really
+            # is the pre-NF-C7 null and the published leaderboard stays reproducible after NF-C7
+            # changed the default. `insurance_sorted` is the ONE arm that runs the shipped default —
+            # which is the whole point of it.
+            recs = recommend(
+                rows, config=cfg, drafted_ids=taken, my_player_ids=mine, top_n=40,
+                bench_value=None if rule_name in SHIPPED_ARMS else _bench_value_legacy,
+            )
             if not recs:
                 break
+            if rule_name in SHIPPED_ARMS:
+                # ⭐⭐ `recs[0]`, AND NOTHING ELSE. `recommend` RETURNS ITS LIST SORTED, so the top
+                # recommendation is the first row — and re-deriving it here with a `max(...)` is a
+                # SECOND implementation of the engine's ordering, free to drift from it.
+                #
+                # It did, and the drift was silent and total: this arm re-ranked on `score`, which
+                # is a bench candidate's raw insurance value, while the engine ranks bench
+                # candidates on `order_value` (see `BENCH_ORDER_DAMPING`). So the arm measured the
+                # DIRECT INTEGRATION — the thing NF-C7 measured and rejected — and reported it as
+                # the shipped rule. The tell was a re-run coming back BYTE-IDENTICAL after a change
+                # that provably moved the engine: an arm that cannot see a change to the thing it
+                # claims to measure is not measuring it (E9.61, inside the harness this time).
+                best = recs[0]
+                taken.add(best.player_id)
+                mine.append(best.player_id)
+                continue
             ctx = BenchContext(cfg=cfg, req=req, my_rows=my_rows,
                                realized_games=realized_games, absences=absences)
 

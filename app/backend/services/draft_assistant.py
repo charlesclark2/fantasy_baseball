@@ -82,6 +82,12 @@ def engine_row(row: dict, replacement: dict[str, float]) -> dict:
         "team_id": row.get("team"),
         "vor": row.get("vor"),
         "league_points": row.get("pts"),
+        # NF-C7 — expected GAMES PLAYED. The bench seat's insurance value is P(you need him) x his
+        # upgrade over the next man up, and both halves are read off this: a rate is `pts / g`, and
+        # an absence probability is `(17 - g) / 17`. A missing `g` scores the candidate as worthless
+        # cover rather than raising, which is the safe direction — but it is a SILENT ZERO, so the
+        # parity guard pins this key.
+        "games": row.get("g"),
         "replacement_points": repl if repl is not None else replacement.get(pos, 0.0),
         "positional_rank": row.get("posRank"),
         "overall_rank": row.get("ovrRank"),
