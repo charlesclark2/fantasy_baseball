@@ -18,6 +18,7 @@ vacuous-isolation shape this repo keeps hitting.
 Restores every file in a `finally`, so an interrupted run cannot leave a break on disk.
 Runtime ~2 min (each case spawns a pytest). Exits non-zero if ANY break stays green.
 """
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +31,8 @@ JOBS = "pipeline/jobs/intraday_jobs.py"
 BUDGET = "betting_ml/monitoring/intraday_tick_budget.py"
 RUNNER = "betting_ml/utils/bounded_subprocess.py"
 ALERTING = "pipeline/utils/alerting.py"
+GUARD = TEST  # the guard module itself: its termination probe is test infrastructure
+                # every kill assertion rests on, so it gets its own falsifiability case.
 DAGSTER_YAML = "services/dagster/dagster.yaml"
 SCHEDULES = "pipeline/schedules/intraday_schedules.py"
 
@@ -162,6 +165,15 @@ BREAKS = [
      '    "intraday_schedule_job",\n}',
      f"{TEST}::test_the_documented_page_severity_matches_the_sensors_actual_tier_set", None),
 
+    # ── the termination probe every kill assertion rests on ─────────────────────────────────
+    # A probe that blindly answered "terminated" would make test_the_grandchild_is_killed_too,
+    # test_an_interruption_also_kills_the_child and the SIGTERM-ignoring case ALL pass on nothing.
+    # Its non-vacuity control must therefore be falsifiable in its own right.
+    ("the termination probe degenerates to always-terminated", GUARD,
+     "    try:\n        os.kill(pid, 0)\n    except OSError:\n        return True  # reaped and gone",
+     "    return True",
+     f"{TEST}::test_the_termination_probe_reports_a_LIVE_process_as_live", None),
+
     # ── the alerting path stays bounded ──────────────────────────────────────────────────────
     ("the SNS publish reverts to botocore's ~5-minute defaults", ALERTING,
      '        boto3.client("sns", region_name=_region(), config=_sns_cfg).publish(',
@@ -171,6 +183,20 @@ BREAKS = [
 
 
 _BAK = ".e11_26_red_proof.bak"
+
+
+def _invalidate_bytecode(path: Path) -> None:
+    """Belt-and-braces behind PYTHONDONTWRITEBYTECODE: drop any cached bytecode for a file we
+    mutated, and push its mtime forward so a stale .pyc written by some other process cannot
+    still validate. Cheap, and the alternative is a silent wrong-constant import."""
+    cache = path.parent / "__pycache__"
+    if cache.is_dir():
+        for pyc in cache.glob(path.stem + ".*.pyc"):
+            pyc.unlink(missing_ok=True)
+    try:
+        os.utime(path, None)
+    except OSError:
+        pass
 
 
 def _restore_stale_backups() -> None:
@@ -216,10 +242,18 @@ def main() -> int:
                 continue
             proc = subprocess.run(
                 ["uv", "run", "pytest", test, "-q", "--no-header", "-p", "no:cacheprovider"],
-                cwd=REPO, capture_output=True, text=True)
+                cwd=REPO, capture_output=True, text=True,
+                # ⚠️ A SAME-LENGTH MUTATION RESTORED WITHIN THE SAME SECOND LEAVES A POISONED .pyc.
+                # CPython invalidates bytecode on (source mtime, source size), so `1800` -> `3600`
+                # — identical length, restored in the same wall-clock second — leaves the MUTATED
+                # bytecode looking valid. It is then served to every later import while the source
+                # reads correctly, which is about as confusing as a failure gets: this cost a full
+                # fast-gate run reporting the cadence guard broken against correct source.
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
             red = proc.returncode != 0
         finally:
             path.write_text(original)
+            _invalidate_bytecode(path)
             bak.unlink(missing_ok=True)
         print(f"{'RED  ✅' if red else 'GREEN ❌'}  {label}")
         if not red:

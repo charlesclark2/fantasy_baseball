@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import ast
 import os
+import pathlib
 import signal
 import subprocess
 import sys
@@ -96,6 +97,68 @@ def test_the_cadence_constant_matches_the_actual_cron(schedule_name):
 
 # ── behavioural: the child really dies ───────────────────────────────────────
 
+# ── "is it dead?" is not "is its PID gone" ───────────────────────────────────
+#
+# Measured on the box 2026-08-20: after a successful process-group kill the grandchild sat as
+# `State: Z (zombie)`, `cmdline: []`, 1 jiffy of CPU, `PPid: 1`. `os.kill(pid, 0)` SUCCEEDS on a
+# zombie, so the obvious liveness probe reported "it SURVIVED" for a process that had been killed
+# — a false FAIL, which is worse than no check at all.
+#
+# It reproduces only where PID 1 does not reap. `dagster-codeloc` runs `dagster api grpc` as PID 1
+# with no `init: true`, so an orphan is reparented to a process that never calls wait() and the
+# entry persists indefinitely. A CI runner's init reaps within milliseconds, which is the only
+# reason these tests passed before — i.e. they were passing for an environment-dependent reason,
+# not because they asserted the right property. The property is TERMINATED, not "PID absent".
+
+
+def _process_is_terminated(pid: int) -> bool:
+    """True if `pid` is gone OR defunct (zombie). False only if it is genuinely still running."""
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return True  # reaped and gone
+    # Still has a PID-table entry — but that includes zombies. Ask for the actual state.
+    status = pathlib.Path(f"/proc/{pid}/status")
+    if status.exists():  # Linux (the box, CI)
+        for line in status.read_text().splitlines():
+            if line.startswith("State:"):
+                return line.split()[1].upper().startswith("Z")
+        return False
+    try:  # BSD / macOS
+        out = subprocess.run(["ps", "-o", "state=", "-p", str(pid)],
+                             capture_output=True, text=True, timeout=10)
+        if out.returncode != 0 or not out.stdout.strip():
+            return True  # ps cannot see it
+        return out.stdout.strip().upper().startswith("Z")
+    except (OSError, subprocess.SubprocessError):
+        return False  # cannot establish death — report ALIVE, never a false pass
+
+
+def _wait_terminated(pid: int, seconds: float = 10.0) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if _process_is_terminated(pid):
+            return True
+        time.sleep(0.2)
+    return False
+
+
+def test_the_termination_probe_reports_a_LIVE_process_as_live():
+    """Non-vacuity control for `_process_is_terminated`. It is the assertion every kill test now
+    rests on, so a version that blindly returned True would make all of them pass on nothing —
+    and a probe that cannot say "alive" cannot say "dead" either."""
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert not _process_is_terminated(proc.pid), (
+            "_process_is_terminated called a running process terminated — every kill assertion "
+            "built on it would be vacuous"
+        )
+    finally:
+        proc.kill()
+        proc.wait()
+    assert _process_is_terminated(proc.pid), "a killed+reaped process must read as terminated"
+
+
 def test_a_slow_child_is_killed_at_the_timeout():
     started = time.monotonic()
     with pytest.raises(subprocess.TimeoutExpired):
@@ -120,13 +183,8 @@ def test_the_grandchild_is_killed_too(tmp_path):
 
     assert pidfile.exists(), "the fixture never spawned a grandchild — the test would be vacuous"
     gpid = int(pidfile.read_text())
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        try:
-            os.kill(gpid, 0)
-        except OSError:
-            return  # gone — the process group was killed
-        time.sleep(0.2)
+    if _wait_terminated(gpid):
+        return
     try:  # do not leak a sleeping process into the rest of the suite
         os.kill(gpid, signal.SIGKILL)
     except OSError:
@@ -168,13 +226,8 @@ def test_an_interruption_also_kills_the_child(tmp_path):
 
     assert marker.exists(), "the child never started — the test would be vacuous"
     pid = int(marker.read_text())
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        try:
-            os.kill(pid, 0)
-        except OSError:
-            return
-        time.sleep(0.2)
+    if _wait_terminated(pid):
+        return
     try:
         os.kill(pid, signal.SIGKILL)
     except OSError:
@@ -208,13 +261,8 @@ def test_a_child_that_IGNORES_sigterm_is_still_killed(monkeypatch, tmp_path):
 
     assert pidfile.exists(), "the child never armed its SIGTERM handler — the test would be vacuous"
     pid = int(pidfile.read_text())
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        try:
-            os.kill(pid, 0)
-        except OSError:
-            return  # SIGKILL landed
-        time.sleep(0.2)
+    if _wait_terminated(pid):
+        return  # SIGKILL landed
     try:  # never leak a 300s sleeper into the rest of the suite
         os.kill(pid, signal.SIGKILL)
     except OSError:
@@ -396,6 +444,22 @@ def test_the_documented_page_severity_matches_the_sensors_actual_tier_set():
     assert "not CRITICAL" in docstring or "NOT CRITICAL" in docstring, (
         "the docstring must say explicitly that this is NOT CRITICAL — the op being HALT-tier "
         "invites exactly that misreading (it was wrong in the first cut of this story)"
+    )
+
+
+def test_the_red_proof_cannot_poison_the_bytecode_cache():
+    """A source-mutating proof whose mutation is the SAME LENGTH as the original (`1800` -> `3600`)
+    and is restored within the same wall-clock second leaves CPython's (mtime, size) invalidation
+    satisfied — so the MUTATED bytecode is served to every later import while the source reads
+    correctly. It cost a full fast-gate run reporting the cadence guard broken against correct
+    source, and it is a repeat offender in this repo, so pin the two mitigations."""
+    src = (_REPO / "betting_ml" / "tests" / "e11_26_red_proof.py").read_text()
+    assert "PYTHONDONTWRITEBYTECODE" in src, (
+        "the RED proof must run pytest with PYTHONDONTWRITEBYTECODE=1, or a same-length mutation "
+        "can leave a poisoned .pyc behind"
+    )
+    assert "_invalidate_bytecode" in src, (
+        "the RED proof must drop cached bytecode for any file it mutated, as a backstop"
     )
 
 
