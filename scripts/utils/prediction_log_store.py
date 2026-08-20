@@ -83,6 +83,7 @@ except ImportError:  # pragma: no cover — lean image layout (COPY scripts/util
 
 __all__ = [
     "COLUMNS", "LOC", "TABLE", "partition_prefix", "view_sql", "register_view",
+    "canonical_stamp",
     "normalise_rows", "rows_to_arrow_table", "write_rows", "compact_partition",
     "list_partition_keys", "utc_stamp",
 ]
@@ -126,6 +127,30 @@ def utc_stamp(when: datetime | None = None) -> str:
     return dt.strftime(_STAMP_FMT)
 
 
+def canonical_stamp(value, default: str | None = None) -> str | None:
+    """Coerce ANY caller-supplied `loaded_at` to the canonical fixed-width string.
+
+    `loaded_at` is stored as a VARCHAR (the Snowflake-misreads-binary-parquet-timestamps
+    cure) and the dedup ORDERS BY it, so the column has two hard requirements: every value
+    is a str, and every value is the same width. A caller handing over a `datetime` breaks
+    both — and it is the NORMAL thing for a caller to have, because that is what a database
+    driver returns. The Snowflake→S3 migration hit exactly this: pyarrow raised
+    `Expected bytes, got a 'datetime.datetime' object` while building the first partition.
+
+    Coercing here rather than at each call site is deliberate: this module owns the column
+    contract, so a future caller with a datetime gets the right answer instead of an opaque
+    arrow error 6 frames down.
+    """
+    if value is None or value == "":
+        return default
+    if isinstance(value, datetime):
+        return utc_stamp(value)
+    if isinstance(value, date):
+        # A bare date still has to be fixed width, or it sorts before every timestamp.
+        return utc_stamp(datetime(value.year, value.month, value.day))
+    return str(value)
+
+
 def partition_prefix(prediction_date) -> str:
     return f"{KEY_PREFIX}/dt={_iso_date(prediction_date)}/"
 
@@ -164,6 +189,17 @@ def view_sql(loc: str | None = None) -> str:
     `filename` is the deterministic tiebreak: two batches sharing a `loaded_at` to the
     microsecond is not physically reachable (separate processes, minutes apart), but an
     arbitrary winner is worse than a deterministic one for a monitoring substrate.
+
+    ⚠️ THE TRAILING `QUALIFY` IS A SECOND, DIFFERENT DEDUP AND BOTH ARE NEEDED. The join
+    above resolves ACROSS batches; it cannot see a key duplicated WITHIN one, because every
+    such copy carries the same `loaded_at` and the same `filename` and therefore all of them
+    match the winner. Measured on the real migration: Snowflake held 4 keys duplicated 4x
+    (2026-07-11), they landed in a single part file, and 12 excess rows survived a view that
+    was believed to collapse them — which would have counted those keys 4x in
+    `compute_model_health`'s sample. The QUALIFY makes "one row per
+    (prediction_date, game_pk, market)" a property of the READ, so no writer can violate it.
+    It orders by the value columns so the survivor is deterministic even when the copies are
+    NOT identical.
     """
     base = loc or LOC
     cols = ", ".join(f"r.{c}" for c in COLUMNS)
@@ -189,6 +225,11 @@ JOIN (
   AND r.loaded_at       = w._lt
   AND r._part           = w._pf
 WHERE r.market IS NOT NULL
+QUALIFY row_number() OVER (
+    PARTITION BY r.prediction_date, r.game_pk, r.market
+    ORDER BY r.model_prob, r.market_prob_at_prediction, r.closing_market_prob,
+             r.actual_outcome, r.decimal_odds, r.ev, r.kelly_fraction, r.model_version
+) = 1
 """.strip()
 
 
@@ -264,7 +305,7 @@ def normalise_rows(
             "ev":                        _float_or_none(r.get("ev")),
             "kelly_fraction":            _float_or_none(r.get("kelly_fraction")),
             "model_version":             _str_or_none(r.get("model_version")),
-            "loaded_at":                 r.get("loaded_at") or loaded_at,
+            "loaded_at":                 canonical_stamp(r.get("loaded_at"), loaded_at),
         })
 
     for pk in _int_list(scoped_game_pks):
@@ -336,6 +377,17 @@ def rows_to_arrow_table(rows):
     import pyarrow as pa
     schema = _arrow_schema()
     cols = {c: [r.get(c) for r in rows] for c in COLUMNS}
+    # pyarrow's own message for a type mismatch here is `Expected bytes, got a
+    # 'datetime.datetime' object` — which names neither the column nor the row, and cost a
+    # real migration run. Fail with something actionable instead.
+    for col in ("market", "model_version", "loaded_at"):
+        bad = next((v for v in cols[col] if v is not None and not isinstance(v, str)), None)
+        if bad is not None:
+            raise TypeError(
+                f"prediction_log column {col!r} must be a str, got {type(bad).__name__} "
+                f"({bad!r}) — route the value through prediction_log_store.canonical_stamp() "
+                f"/ normalise_rows() rather than building the row dict by hand"
+            )
     return pa.Table.from_pydict(cols, schema=schema)
 
 

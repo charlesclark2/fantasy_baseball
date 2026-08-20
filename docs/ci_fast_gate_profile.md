@@ -371,3 +371,52 @@ DISTRIBUTION, never a before/after pair.** This job ranges 282–567s run to run
 observation — or confirming it from one — cannot distinguish a 44s improvement from nothing, and both
 readings were reported as fact before the distribution was pulled. Get `n≥5` each side and compare
 medians BEFORE claiming a CI speed-up, however clean the local measurement looks.
+
+
+---
+
+## TD4 (2026-08-20) — 71% of the slow gate guarded modules production does not import
+
+TD3's scoping was measured at **−0.5s** (see the correction above). The gate's remaining cost is the
+tests' own CPU, so the question became: **which of it has to block a merge at all?**
+
+TD2 already answers that — a test is `research` (nightly, non-blocking) when the module it guards has
+**no importer under `scripts/`, `app/`, `pipeline/`**. Applying that rule to the slow set, measured
+with a dotted-path AST scan rather than a leaf grep:
+
+| file | serial cost | serving importers | verdict |
+|---|---:|---:|---|
+| `test_mh2_6_calibration_audit.py` | 84.5s | **0** | → research |
+| `test_mh2_10_morning_audit.py` | 82.3s | **0** | → research |
+| `test_nf_w6b_stat_distributions.py` | 9.4s | **0** | → research |
+| `test_nf_w2_injury_availability.py` | 6.6s | **0** | → research |
+| `test_totals_distribution.py` | 42.5s | 3 (incl. `write_serving_store.py`, `models/picks.py`) | **stays** |
+| `test_prop_pricing.py` | 12.8s | 2 (the K and TB projection writers) | **stays** |
+| `test_nf_c7_pick_recommendation.py` | 17.6s | 1 (`draft_assistant.py`) | **stays** |
+
+**183s of 256s — 71% — guarded §0.5 audit and bake-off harnesses that execute only when a human
+deliberately runs one.** Measured locally: **106.8s → 43.0s** wall, 80 → 59 blocking tests, serial CPU
+256s → 73s. Unlike TD3's ~44s, a 3.5× cut in actual CPU is large enough to clear the 285s noise band.
+
+⚠️ **This is a real reduction in what blocks a merge**, and it is a trade rather than a free win: a
+calibration-audit regression now surfaces the next morning instead of on the PR. Those harnesses run
+only on demand, so the exposure is a nightly delay, not an unguarded serving path.
+
+### The precondition is now enforced, not documented
+
+TD2's rule lived in a workflow comment with nothing checking it, so a module that LATER gained a
+serving importer would keep its nightly-only tier silently — the first sign being a production break
+that a non-blocking job had noticed hours earlier. **That is the same shape as the depth-target
+defect shipped the same day: a rule that held when written, with no mechanism to notice it stopping.**
+
+`TestResearchTierPrecondition` (fast gate) now holds a `RESEARCH_SUBJECTS` registry — every
+research-marked file → the modules whose absence from serving justified it — with an exhaustiveness
+check so the hand-written half cannot rot, and RED proofs in
+`betting_ml/tests/ci_research_tier_red_proof.py` (4 breaks, all caught).
+
+⭐ **The RED proof found a real hole in the guard before it shipped.** The first scanner matched
+string needles (`from {module} import`, …) and therefore missed **`from betting_ml.scripts import
+mh2_6_calibration_audit`** — the form this repo actually uses, and the form the research test files
+are themselves written in. The guard would have reported a rotted tier as healthy: the one realistic
+defect was the one it could not see. It now resolves imports by AST and records both rejected
+approaches (leaf-matching, string needles) beside the code.

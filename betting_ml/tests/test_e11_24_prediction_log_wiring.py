@@ -276,6 +276,66 @@ class TestMigrationReconstruction:
         code = _code_only(MIGRATE)
         assert re.search(r"if\s+_key\(r\)\s+not\s+in\s+have", code)
 
+    def test_the_source_duplicates_are_dropped(self):
+        """Snowflake holds a few exact duplicate keys (4 keys x 4 copies on 2026-07-11 — a
+        retried INSERT whose DELETE did not reach). The read view collapses them, but there
+        is no reason to WRITE rows nothing can ever return."""
+        code = _code_only(MIGRATE)
+        assert "return list(seen.values())" in code, (
+            "_snowflake_rows must collapse exact duplicate keys before they are written"
+        )
+        assert "CONFLICTING" in MIGRATE.read_text(), (
+            "a duplicate whose VALUES differ is a finding and must be reported, not "
+            "silently resolved"
+        )
+
+    def test_snowflake_loaded_at_is_canonicalised_at_the_read_boundary(self):
+        """The driver returns `loaded_at` as a datetime; the parquet column is a string.
+
+        Coercing at the READ, not at the write, is what keeps `_normalise_loaded_at`
+        comparing like with like — a partially damaged game can have its h2h row surviving
+        in Snowflake (datetime) and its totals row reconstructed (already a string), and
+        `max()` over a mixed group raises TypeError.
+        """
+        code = _code_only(MIGRATE)
+        assert re.search(r'r\["loaded_at"\]\s*=\s*pred_log\.canonical_stamp', code), (
+            "_snowflake_rows must canonicalise loaded_at before any caller compares it"
+        )
+
+    def test_a_mixed_datetime_and_string_group_normalises_without_raising(self):
+        """The latent crash the coercion closes, driven rather than asserted about."""
+        import importlib.util
+        from datetime import datetime
+
+        spec = importlib.util.spec_from_file_location("_migrate_probe", MIGRATE)
+        migrate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migrate)
+
+        rows = [  # one surviving Snowflake row + one reconstructed row, SAME game
+            {"prediction_date": "2026-08-02", "game_pk": 1, "market": "h2h",
+             "loaded_at": migrate.pred_log.canonical_stamp(datetime(2026, 8, 2, 10, 0, 0))},
+            {"prediction_date": "2026-08-02", "game_pk": 1, "market": "totals",
+             "loaded_at": "2026-08-02 12:00:00.000000"},
+        ]
+        migrate._normalise_loaded_at(rows)
+        assert rows[0]["loaded_at"] == rows[1]["loaded_at"] == "2026-08-02 12:00:00.000000"
+
+    def test_the_dry_run_serialises_every_partition(self):
+        """A dry run that skips serialisation is not a rehearsal — the first cut returned
+        before the write loop, so it validated the parity arithmetic and nothing about
+        whether the rows could be written. The real run then died on partition one."""
+        tree = ast.parse(MIGRATE.read_text())
+        run = next(n for n in ast.walk(tree)
+                   if isinstance(n, ast.FunctionDef) and n.name == "run")
+        called = {
+            n.func.attr for n in ast.walk(run)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+        }
+        assert "rows_to_arrow_table" in called, (
+            "run() must build the arrow table on the dry-run path, or --dry-run cannot "
+            "catch a serialisation failure"
+        )
+
     def test_loaded_at_is_normalised_per_game(self):
         """The view resolves a game to the latest batch that OWNED it, so two markets of
         one game carrying different stamps would drop the older one."""

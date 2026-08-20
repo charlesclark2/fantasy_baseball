@@ -269,6 +269,108 @@ class TestNormaliseRows:
         assert {r["loaded_at"] for r in rows} == {"stamp"}
 
 
+class TestWithinBatchDuplicates:
+    """The second dedup, and why the first one is not enough.
+
+    The winner-join resolves ACROSS batches. It structurally CANNOT see a key duplicated
+    WITHIN one, because every copy carries the same `loaded_at` and the same `filename` and
+    therefore all of them match the winner. Measured on the real migration: Snowflake held
+    4 keys duplicated 4x (2026-07-11), they landed in one part file, and 12 excess rows
+    survived a view that was believed to collapse them — which would have counted those
+    keys 4x in compute_model_health's sample.
+    """
+
+    def _dupe_rows(self, model_prob=0.5):
+        row = {"game_pk": 1, "market": "h2h", "model_prob": model_prob,
+               "market_prob_at_prediction": 0.5, "kelly_fraction": 0.0, "model_version": "v6"}
+        return [dict(row), dict(row), dict(row), dict(row)]
+
+    def test_a_key_duplicated_within_one_batch_is_returned_once(self, s3):
+        store.write_rows(self._dupe_rows(), _DATE,
+                         loaded_at="2026-08-16 10:00:00.000000", s3=s3)
+        assert s3.rows_on(_DATE) == [(1, "h2h", 0.5)]
+
+    def test_the_duplicates_really_were_written(self):
+        """Non-vacuity: if the writer silently dropped them, the clause above would pass on
+        nothing and the view would be untested."""
+        rows, _ = store.normalise_rows(self._dupe_rows(), _DATE, loaded_at="s")
+        assert len(rows) == 4
+
+    def test_the_survivor_is_deterministic_when_the_copies_differ(self, s3):
+        """Duplicates are not guaranteed identical, so the tiebreak orders by the value
+        columns rather than leaving an arbitrary winner."""
+        rows = self._dupe_rows(model_prob=0.9)[:1] + self._dupe_rows(model_prob=0.1)[:1]
+        store.write_rows(rows, _DATE, loaded_at="2026-08-16 10:00:00.000000", s3=s3)
+        first = s3.rows_on(_DATE)
+        store.write_rows(list(reversed(rows)), _DATE,
+                         loaded_at="2026-08-16 11:00:00.000000", s3=s3)
+        assert s3.rows_on(_DATE) == first == [(1, "h2h", 0.1)]
+
+    def test_a_later_batch_still_wins_over_a_duplicated_earlier_one(self, s3):
+        """The two dedups must COMPOSE — the per-key uniqueness must not shadow the
+        across-batch ordering."""
+        store.write_rows(self._dupe_rows(model_prob=0.5), _DATE,
+                         loaded_at="2026-08-16 10:00:00.000000", s3=s3)
+        store.write_rows([{"game_pk": 1, "market": "h2h", "model_prob": 0.9}], _DATE,
+                         scoped_game_pks=[1], loaded_at="2026-08-16 12:00:00.000000", s3=s3)
+        assert s3.rows_on(_DATE) == [(1, "h2h", 0.9)]
+
+
+class TestLoadedAtCoercion:
+    """The defect that killed the first real migration run.
+
+    `loaded_at` is stored as a fixed-width ISO VARCHAR and the dedup ORDERS BY it, so every
+    value must be a str AND the same width. A database driver hands back a `datetime` —
+    which is the normal thing for a caller to have — and pyarrow then raised
+    `Expected bytes, got a 'datetime.datetime' object` while building the FIRST partition.
+
+    Nothing caught it because every test passed a string and `--dry-run` returned before the
+    write loop, so no test and no rehearsal ever ran the conversion.
+    """
+
+    def test_a_datetime_loaded_at_is_coerced_to_the_canonical_string(self):
+        from datetime import datetime
+        rows, _ = store.normalise_rows(
+            [{"game_pk": 1, "market": "h2h",
+              "loaded_at": datetime(2026, 8, 16, 17, 57, 7, 672000)}],
+            _DATE, loaded_at="fallback")
+        assert rows[0]["loaded_at"] == "2026-08-16 17:57:07.672000"
+
+    def test_a_coerced_datetime_is_the_same_width_as_a_native_stamp(self):
+        """Same width or it mis-sorts against the stamps around it — and mis-sorting IS the
+        dedup picking the wrong batch."""
+        from datetime import datetime, timezone
+        coerced = store.canonical_stamp(datetime(2026, 8, 16, 0, 0, 0, 0))
+        native = store.utc_stamp(datetime(2026, 8, 16, 0, 0, 0, 1, tzinfo=timezone.utc))
+        assert len(coerced) == len(native)
+        assert coerced < native
+
+    def test_an_absent_loaded_at_falls_back_to_the_batch_stamp(self):
+        rows, _ = store.normalise_rows([{"game_pk": 1, "market": "h2h"}],
+                                       _DATE, loaded_at="batch")
+        assert rows[0]["loaded_at"] == "batch"
+
+    def test_a_datetime_row_actually_serialises(self):
+        """The end-to-end claim, not just the coercion: the exact row shape the Snowflake
+        read produces must reach parquet."""
+        from datetime import datetime
+        rows, _ = store.normalise_rows(
+            [{"game_pk": 1, "market": "h2h", "model_prob": 0.5,
+              "loaded_at": datetime(2026, 8, 16, 10, 0, 0)}],
+            _DATE, loaded_at="fallback")
+        table = store.rows_to_arrow_table(rows)
+        assert table.num_rows == 1
+
+    def test_a_hand_built_row_with_a_datetime_fails_by_NAME(self):
+        """A caller bypassing normalise_rows must get an error that names the column —
+        pyarrow's own message names neither the column nor the row."""
+        from datetime import datetime
+        bad = [{c: None for c in store.COLUMNS}]
+        bad[0]["loaded_at"] = datetime(2026, 8, 16, 10, 0, 0)
+        with pytest.raises(TypeError, match="loaded_at"):
+            store.rows_to_arrow_table(bad)
+
+
 class TestStampOrdering:
     def test_the_stamp_is_fixed_width_so_string_order_is_time_order(self):
         """Lexicographic order of these strings IS the dedup's ordering. Python's
