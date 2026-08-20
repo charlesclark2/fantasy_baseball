@@ -81,6 +81,12 @@ BAND_CASE = """
 #     Matched first so a CI build of a prod-named model is never counted as a prod waker —
 #     conflating them would send a fix session at the wrong caller.
 #   · '8 model-health/pred_log' — compute_model_health.py + backfill_prediction_log.py.
+#     ⚠️ POST-E11.24-P1 THIS FAMILY SHOULD READ ~0 — prediction_log left Snowflake, so its
+#     DELETE/UPDATE/SELECT statements no longer exist. A zero here is the EXPECTED cutover
+#     state, NOT a dead job — and read it PER-DAY, never off an aggregate straddling the
+#     flip date (that measures residue). The one statement that SURVIVES the migration is
+#     the `model_health_log` INSERT, which does not mention prediction_log and therefore
+#     lands in a different bucket.
 #   · '4b scd2 signal writers' now also matches `tmp_%incoming%`: scd2_writer's default temp
 #     table is `tmp_scd2_incoming`, but the signal generators pass CUSTOM names
 #     (`tmp_starter_ip_signals_incoming`), so the old literal pattern missed per-row INSERTs
