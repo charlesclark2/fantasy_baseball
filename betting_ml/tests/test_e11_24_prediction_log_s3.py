@@ -269,6 +269,53 @@ class TestNormaliseRows:
         assert {r["loaded_at"] for r in rows} == {"stamp"}
 
 
+class TestWithinBatchDuplicates:
+    """The second dedup, and why the first one is not enough.
+
+    The winner-join resolves ACROSS batches. It structurally CANNOT see a key duplicated
+    WITHIN one, because every copy carries the same `loaded_at` and the same `filename` and
+    therefore all of them match the winner. Measured on the real migration: Snowflake held
+    4 keys duplicated 4x (2026-07-11), they landed in one part file, and 12 excess rows
+    survived a view that was believed to collapse them — which would have counted those
+    keys 4x in compute_model_health's sample.
+    """
+
+    def _dupe_rows(self, model_prob=0.5):
+        row = {"game_pk": 1, "market": "h2h", "model_prob": model_prob,
+               "market_prob_at_prediction": 0.5, "kelly_fraction": 0.0, "model_version": "v6"}
+        return [dict(row), dict(row), dict(row), dict(row)]
+
+    def test_a_key_duplicated_within_one_batch_is_returned_once(self, s3):
+        store.write_rows(self._dupe_rows(), _DATE,
+                         loaded_at="2026-08-16 10:00:00.000000", s3=s3)
+        assert s3.rows_on(_DATE) == [(1, "h2h", 0.5)]
+
+    def test_the_duplicates_really_were_written(self):
+        """Non-vacuity: if the writer silently dropped them, the clause above would pass on
+        nothing and the view would be untested."""
+        rows, _ = store.normalise_rows(self._dupe_rows(), _DATE, loaded_at="s")
+        assert len(rows) == 4
+
+    def test_the_survivor_is_deterministic_when_the_copies_differ(self, s3):
+        """Duplicates are not guaranteed identical, so the tiebreak orders by the value
+        columns rather than leaving an arbitrary winner."""
+        rows = self._dupe_rows(model_prob=0.9)[:1] + self._dupe_rows(model_prob=0.1)[:1]
+        store.write_rows(rows, _DATE, loaded_at="2026-08-16 10:00:00.000000", s3=s3)
+        first = s3.rows_on(_DATE)
+        store.write_rows(list(reversed(rows)), _DATE,
+                         loaded_at="2026-08-16 11:00:00.000000", s3=s3)
+        assert s3.rows_on(_DATE) == first == [(1, "h2h", 0.1)]
+
+    def test_a_later_batch_still_wins_over_a_duplicated_earlier_one(self, s3):
+        """The two dedups must COMPOSE — the per-key uniqueness must not shadow the
+        across-batch ordering."""
+        store.write_rows(self._dupe_rows(model_prob=0.5), _DATE,
+                         loaded_at="2026-08-16 10:00:00.000000", s3=s3)
+        store.write_rows([{"game_pk": 1, "market": "h2h", "model_prob": 0.9}], _DATE,
+                         scoped_game_pks=[1], loaded_at="2026-08-16 12:00:00.000000", s3=s3)
+        assert s3.rows_on(_DATE) == [(1, "h2h", 0.9)]
+
+
 class TestLoadedAtCoercion:
     """The defect that killed the first real migration run.
 

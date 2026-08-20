@@ -189,6 +189,17 @@ def view_sql(loc: str | None = None) -> str:
     `filename` is the deterministic tiebreak: two batches sharing a `loaded_at` to the
     microsecond is not physically reachable (separate processes, minutes apart), but an
     arbitrary winner is worse than a deterministic one for a monitoring substrate.
+
+    ⚠️ THE TRAILING `QUALIFY` IS A SECOND, DIFFERENT DEDUP AND BOTH ARE NEEDED. The join
+    above resolves ACROSS batches; it cannot see a key duplicated WITHIN one, because every
+    such copy carries the same `loaded_at` and the same `filename` and therefore all of them
+    match the winner. Measured on the real migration: Snowflake held 4 keys duplicated 4x
+    (2026-07-11), they landed in a single part file, and 12 excess rows survived a view that
+    was believed to collapse them — which would have counted those keys 4x in
+    `compute_model_health`'s sample. The QUALIFY makes "one row per
+    (prediction_date, game_pk, market)" a property of the READ, so no writer can violate it.
+    It orders by the value columns so the survivor is deterministic even when the copies are
+    NOT identical.
     """
     base = loc or LOC
     cols = ", ".join(f"r.{c}" for c in COLUMNS)
@@ -214,6 +225,11 @@ JOIN (
   AND r.loaded_at       = w._lt
   AND r._part           = w._pf
 WHERE r.market IS NOT NULL
+QUALIFY row_number() OVER (
+    PARTITION BY r.prediction_date, r.game_pk, r.market
+    ORDER BY r.model_prob, r.market_prob_at_prediction, r.closing_market_prob,
+             r.actual_outcome, r.decimal_odds, r.ev, r.kelly_fraction, r.model_version
+) = 1
 """.strip()
 
 

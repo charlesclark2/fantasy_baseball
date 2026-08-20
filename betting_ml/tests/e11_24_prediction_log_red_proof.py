@@ -243,6 +243,34 @@ BREAKS = [
      f"{WIRE_T}::TestMigrationReconstruction::test_the_repair_only_adds_missing_keys",
      "_key(r) not in have"),
 
+    # ── the within-batch dedup (12 excess rows survived the first cut) ───────────────
+    # ⚠️ The obvious break — ADDING columns to the PARTITION BY — does NOT work: the
+    # duplicate copies share loaded_at and _part too, so they stay in one group and are
+    # still deduped. The mutation lands and moves nothing (the #815 shape). Remove the
+    # clause outright.
+    ("the view loses its per-key QUALIFY (a key duplicated in ONE part survives 4x)", STORE,
+     "QUALIFY row_number() OVER (\n"
+     "    PARTITION BY r.prediction_date, r.game_pk, r.market\n"
+     "    ORDER BY r.model_prob, r.market_prob_at_prediction, r.closing_market_prob,\n"
+     "             r.actual_outcome, r.decimal_odds, r.ev, r.kelly_fraction, r.model_version\n"
+     ") = 1\n",
+     "",
+     f"{STORE_T}::TestWithinBatchDuplicates::"
+     "test_a_key_duplicated_within_one_batch_is_returned_once",
+     "PARTITION BY r.prediction_date, r.game_pk, r.market"),
+    ("the per-key tiebreak becomes arbitrary instead of value-ordered", STORE,
+     "    ORDER BY r.model_prob, r.market_prob_at_prediction, r.closing_market_prob,\n"
+     "             r.actual_outcome, r.decimal_odds, r.ev, r.kelly_fraction, r.model_version",
+     "    ORDER BY r.loaded_at DESC",
+     f"{STORE_T}::TestWithinBatchDuplicates::"
+     "test_the_survivor_is_deterministic_when_the_copies_differ",
+     "ORDER BY r.model_prob"),
+    ("the migration stops dropping exact duplicate source rows", MIGRATE,
+     "    return list(seen.values())",
+     "    return rows",
+     f"{WIRE_T}::TestMigrationReconstruction::test_the_source_duplicates_are_dropped",
+     "return list(seen.values())"),
+
     # ── the loaded_at coercion (the defect that killed the first real migration run) ──
     ("canonical_stamp stops coercing a datetime (pyarrow: 'Expected bytes, got ...')", STORE,
      "    if isinstance(value, datetime):\n        return utc_stamp(value)\n",
