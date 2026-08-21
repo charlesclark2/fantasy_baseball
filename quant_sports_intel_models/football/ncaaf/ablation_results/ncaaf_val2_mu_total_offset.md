@@ -248,8 +248,29 @@ Handled as follows, and visibly:
   data pull** — and the fact that it happened is stamped in the artifact and printed at the top of
   every run.
 - The vintage gap is flagged `⚠️ VINTAGE MISMATCH`, never silently absorbed.
-- Consequently **VAL1's exact recorded figures do not reproduce here** (its §2a pin fails on
-  `ats_n` 4110 vs 4114 and `ats_hit` 0.4976 vs 0.509), and this run's μ differs from VAL1's.
+- Consequently **VAL1's exact recorded figures do not reproduce here** — its §2a pin fails on
+  `ats_n` (4110 vs 4114) and `ats_hit` (0.4976 vs 0.509).
+- ⚠️ **What that does NOT establish, stated because it is the tempting inference:** whether this
+  run's **μ** differs from VAL1's is *not* determined by those figures. VAL1's recorded hit rates
+  come through the misaligned path of §2, whose row set is `0..n−1` — so a change in `n` alone
+  shifts *which games are read*, and the recorded numbers cannot isolate a change in μ from a change
+  in the population. The population difference is measured (4,182 vs 4,187 closes); a μ difference
+  is **not measured either way** here.
+
+**⛔ The 2026-08-20 vintage is not locally reproducible.** `--assemble --matrix-source parquet`
+requires the P1.3 artifact `models/artifacts/feature_ncaaf_pregame_matrix.parquet`, which is
+gitignored (absent in a fresh worktree) and, in the main checkout, dated **2026-07-21** — older than
+the 07-22 cache, so it cannot rebuild the 08-20 assembly. `--matrix-source s3` pulls **today's**
+Delta matrix, i.e. a *third* vintage, not VAL1's. VAL1's cache exists in no checkout. ⇒ the realistic
+choices are to leave these levels as recorded here, or to re-quote them on the CURRENT vintage —
+which is arguably the better target anyway, since VAL3 would be built against current data rather
+than against VAL1's snapshot.
+
+⚠️ **Footgun if anyone does re-assemble:** `assemble_cache` catches a failing CLV odds join, logs an
+ALERT, and **still writes the cache** — with `has_close = False` on every row. A credential or
+network failure there therefore replaces the only working cache on the machine with a close-less one,
+and VAL2/VAL1/P1.4's vs-market legs all stop running until a successful re-assemble. Back the cache
+up first (`cp betting_ml/data/cache/ncaaf_p1_4_game_matrix.{parquet,meta.json} /tmp/`).
 
 **What that does and does not put at risk.** The misalignment finding is a property of the **source
 code** and the decomposition is **arithmetic** — neither depends on the population. The offset
