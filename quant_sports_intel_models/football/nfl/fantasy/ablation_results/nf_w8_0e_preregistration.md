@@ -494,4 +494,169 @@ What the path proof DID establish, all of it about the harness rather than the q
 
 ## §13 POST-RUN FINDINGS (appended after the decisive run; §1–§12 untouched)
 
-_(empty at registration)_
+_Decisive run 2026-08-21T04:06:30Z · 8 folds × 4 positions · 4000 draws · 3182.1 s · artifacts
+`nf_w8_0e_qb_passing_cell.{json,md}`. §1–§12 are the registration and are UNCHANGED; everything
+below is a reading of stored per-fold scores._
+
+### 13.1 Verdict
+
+**`CELL_NOT_CORRECTED` · `cross_rankable: false`.** The CRPS-ranked winner is `zm_only`
+(Δ `crps_q199` **−0.15482**, CI95 [−0.46137, +0.15174], 3/8 folds, p 0.8643) and it fails six of
+the fifteen registered clauses — `beats_foil`, `not_a_foil_tie`, `fold_consistency`, `dsr_ok`,
+`fdr_ok`, `cell_pit_not_degraded`. **The served `QB|passing_yards` cell STANDS and the NF-W8-0c
+reading is unchanged.** Nothing is promoted, nothing is re-served, `best_alpha = 0`.
+
+`cv_power.classify_null(declared_field_size=5, degenerates_excluded_from_v=True)` returns
+**`GENUINE_ABSENCE`** with **`retest_trigger: null`** — the best arm loses ON AVERAGE, and the
+NF-W8-0d lockstep reading is attached and **CLOSED**: `SR = −0.4222 ≤ SR0 = 0.9173`, so a shared
+proportional variance lever maps `SR − SR0 ↦ (SR − SR0)/c` with its sign invariant. No row, fold or
+draw count clears it ⇒ **no data trigger is published** (NF-D18), and the instrument's stock
+"lower-variance design" remedy is VOID here rather than merely unmet.
+
+### 13.2 ⭐ The interaction, and the mechanism behind it — the reason this was ONE story
+
+The primary square is **SUPER_ADDITIVE**, and not marginally:
+
+| quantity (CRPS, shift form) | mean | CI95 | folds won |
+|---|---|---|---|
+| Δ_Z (zero-mass alone) | −0.15482 | [−0.46137, +0.15174] | 3/8 |
+| Δ_C (conditional level alone) | **−13.23693** | [−17.87689, −8.59698] | 0/8 |
+| Δ_joint (both) | **−0.97468** | [−1.53138, −0.41798] | 0/8 |
+| interaction | **+12.41707** | [+8.02400, +16.81013] | — |
+| joint ÷ sum-of-halves | **0.0728** | — | — |
+
+The conditional-level correction applied ALONE costs **13.6×** what it costs applied WITH the
+zero-mass fix. The fitted parameters name the mechanism exactly, and only the 2×2 could produce
+them — δ is refitted per Z column (§4.1), so the square carries both:
+
+| Z column | model conditional mean (prior OOF) | realized positive-side mean | fitted δ | fitted κ |
+|---|---|---|---|---|
+| **Z ON** (atom re-spliced to ≈0.52) | 172.1 – 189.1 | 205.9 – 218.1 | **29.0 – 34.4** | 1.153 – 1.167 |
+| **Z OFF** (atom left at ≈0.31) | 135.5 – 141.1 | 205.9 – 218.1 | **73.5 – 77.1** | 1.542 – 1.546 |
+
+With the atom left wrong, ≈21 points of probability mass that belongs at zero sit inside the
+"conditional" region and drag the model's conditional mean down ≈35 yards, so the δ needed to match
+the realized positive-side mean is **≈2.4× too large** — and it is then applied to every
+above-atom level, including the mass that should have been zero. That is the whole interaction.
+**A sequential story would have measured Δ_C = −13.24 first and concluded the conditional-level
+correction is catastrophic and must be abandoned — the wrong conclusion, off a correct number.**
+This is the NF-W7e finding reproduced with an independent mechanism and a measured cause.
+
+### 13.3 What the correction DOES do — and what it costs
+
+Registered as REPORT-ONLY context (§12A A8); the §7 verdict reads none of it.
+
+| arm | cell CRPS | cell PIT | cell level bias (yds) | pred P(0) | assembled CRPS | assembled PIT | assembled bias (PPR) |
+|---|---|---|---|---|---|---|---|
+| `identity` (served) | **30.699** | 0.0569 | −1.51 | 0.3100 | 2.56449 | 0.0281 | **−0.4233** |
+| `zm_only` | 30.854 | 0.0643 | −11.06 | 0.5235 | 2.56449 | 0.0281 | −0.4233 |
+| `cond_shift` | 43.936 | 0.0826 | +43.63 | 0.3083 | 2.62382 | 0.0377 | +0.8253 |
+| `joint_shift` | 31.674 | **0.0389** | +3.52 | 0.4955 | **2.56401** | 0.0255 | **+0.1179** |
+| `joint_scale` | 32.151 | 0.0434 | +2.97 | 0.4960 | 2.56521 | **0.0239** | **+0.0971** |
+
+Realized cell `P(0)` pooled **0.5497** (NF-W7f recorded 0.5563 against a served 0.2983).
+
+Three measured facts, each stated as a fact and none of them a selection:
+
+1. **The diagnosis is CONFIRMED at the cell.** Even with the atom corrected, the model's conditional
+   mean runs **≈33 yards low** against the realized positive-side mean, every fold. That is
+   NF-W8-0c's conditional-level defect observed directly in the cell it localised it to.
+2. **The joint arms close the downstream gap.** Assembled QB level bias moves from
+   **−0.4233, CI95 [−0.6033, −0.2433] — excluding zero** — to **+0.1179, CI95 [−0.0727, +0.3084]**
+   (`joint_shift`) and **+0.0971, CI95 [−0.1031, +0.2973]** (`joint_scale`), both **containing
+   zero**. Family D agrees independently: under both joint arms `gap_detected` is **False**, QB|WR
+   and QB|TE fall **below their MDEs**, and **nothing is BH-rejected**. The conditional-only arms
+   **overshoot decisively** (+0.83 / +1.15 PPR, CIs excluding zero) — the coupling again.
+3. **The cell-CRPS cost does NOT propagate.** `joint_shift` loses **0.975 CRPS at the cell**
+   (0/8 folds, CI excluding zero) while the assembled QB total is a **statistical tie**:
+   identity − `joint_shift` = **+0.00048**, CI95 [−0.01154, +0.01251], joint better in 5/8 folds.
+   Assembled PIT is a favourable tie (+0.00265, CI95 [−0.00430, +0.00959]) and every arm clears the
+   0.05 bar on 8/8 folds, so the registered `assembled_pit_preserved` and `assembled_crps_no_harm`
+   constraints both HOLD.
+
+⛔ **These three do not add up to "the gate was wrong."** The registered primary is the CELL's
+`crps_q199` (§5, §7) because this is a per-stat cell story, the cost on it is decisive rather than
+noisy, and **re-reading this field on a different primary now — after seeing CRPS refuse — is
+precisely the E2.1-r inversion.** The verdict stands as registered. What the three facts do is
+name a successor (§13.6) rather than reopen this one.
+
+### 13.4 Why this is GENUINE_ABSENCE and not an underpowered null
+
+The classifier's verdict is corroborated by a series it does not read: **the CRPS deficit WIDENS as
+the fit gets better informed.** Per fold, identity − `joint_shift`: 2022H1 **+0.000** (structurally
+ineligible — no prior OOF rows, identity by construction, §4.1), then −0.553, −0.436, −0.701,
+−1.884, −1.032, −1.671, **−1.520**, against `n_prior` rising 674 → 4,784. More seasons make δ more
+stable and the arm *worse*, not better. Stated in the unit that grows: **there is no fold count,
+row count or draw count that turns this positive** — the direction is affirmatively
+counter-indicated, not merely unsupported. Combined with the closed lockstep, **no re-test trigger
+is published in any form.**
+
+### 13.5 The anchors — every one earned its place
+
+- **`identity_vs_zm_only`: 0/8 active folds, max abs CRPS gap `0.000000000`.** The §8.1 prediction,
+  registered BEFORE the run, is CONFIRMED at 8 folds: the consumed `zm_floor` generator already
+  re-splices all thirteen legs idempotently, so the Z column is a **structural no-op at the
+  assembled layer** and downstream propagation depends on C alone. The Z×C coupling of §13.2 lives
+  entirely at the CELL layer. An inactive arm is UNINFORMATIVE, never a pass (NF-D20) — which is
+  why it is measured and labelled rather than quietly counted as agreement.
+- **Two-sided magnitude bracket, both LOSE:** `over_joint_shift` (×2) 34.812 and
+  `reverse_joint_shift` (×−1) 32.743 vs `joint_shift` 31.674. Unlike NF-D20, the registered-to-lose
+  magnitudes actually lose, so the fitted magnitude is not an under-correction hiding behind an
+  inadmissible anchor. On CRPS the ordering is monotone toward **zero** correction
+  (identity 30.699 < `zm_only` 30.854 < ×1 31.674 < ×−1 32.743 < ×2 34.812): the cell's CRPS optimum
+  is **no conditional correction at all**, while the level channel wants ≈+33 yards. The two are
+  opposed with no interior optimum on the registered metric — the cleanest statement of the null.
+- **`permutation_is_inactive` ✅.** `permuted_shift` scores **byte-identical** to `joint_shift`
+  (31.67391 both) — the tie was registered in advance (§5.2) as the expected result of permuting a
+  row-blind pooled scalar, and it is reported as a confirmed INACTIVE anchor, never as a passed test
+  (NF-D16 sibling defect).
+- **Per-form oracle floors split the field, and the split is informative.** `cond_shift` and
+  `cond_scale` are **`ACTIVE_AND_VIOLATED`** — each BEATS its own peeking oracle (gaps −1.627 and
+  −1.725), which per NF-W6d refuses those forms on an anchor independently of the statistics. Both
+  joint arms are `ACTIVE_AND_RESPECTED`, but by **+0.079 / +0.087 CRPS ≈ 0.25%** — narrow enough
+  that a future reader should treat them as near-ties rather than comfortable clearances.
+- **All four degenerates lose** (`nihilist_zero` 91.94, `zero_width` 40.53, `max_width` 40.19,
+  `climatology_bank` 57.11) and `coverage_80` = 0.8086 (n 5,485, SE 0.0054) clears its floor as a
+  CONSTRAINT — `max_width` satisfies that floor and is eliminated by the metric, which is the shape
+  NF1.8 requires.
+- **PBO 0.0000** with 88.6% of the in-sample flip mass on `identity` — the field is not a tie the
+  rank statistic is mis-reading; the incumbent genuinely wins the CRPS contest.
+- Every reproduction pin holds at **1e-9 or exact**: `qb_assembly_matches_w7f` (max abs CRPS gap
+  0.0, PIT gap 0.0), `non_qb_bias_matches_w8_0b` (0.0 at all four positions),
+  `w8_0c_leg_contribution` (recorded −0.3975331334769923 vs recomputed −0.3975331334769923,
+  gap 0.0), `incumbent_cell_is_the_served_cell`.
+
+### 13.6 What a successor may — and may NOT — do
+
+**MAY:** register FORWARD, as a fresh coherent family, the question §13.3 raises and this story did
+not ask: whether a correction selected on the ASSEMBLED quantity (level closure under a cell-CRPS
+no-harm CONSTRAINT) clears its own battery. §13.3(3) shows the assembled tie is real, so such a
+registration is **not a foregone pass** — it would have to survive its own anchors, its own
+degenerates and its own DSR field, and the cell-CRPS cost it must constrain is measured and
+decisive, not noise. A ROW-DEPENDENT (covariate-conditioned) correction is the other admissible
+successor: §13.4's widening deficit is the signature of a **row-blind pooled scalar buying
+calibration at the cost of per-row accuracy**, which is exactly the limitation §12 registered in
+advance.
+
+**MAY NOT:** re-read THIS field on a different primary, trim these five declared arms post hoc
+(MH2.2), promote a family-D row (§12A A8 — the table is report-only and the guard pins it),
+re-classify `zm_only`'s refusal, or carry "the joint arms close the QB gap" forward as a shipped
+result. `cond_scale`/`joint_scale` additionally re-level a CERTIFIED per-stat marginal
+multiplicatively; their measured marginal drift is disclosed and an admissible scale win would
+trade per-stat certification scope for an assembled level.
+
+### 13.7 Corrections and limitations discovered in the run
+
+1. **Fold 2022H1 is structurally ineligible for every fitted arm** (no prior OOF rows; identity by
+   construction, §4.1). Family A therefore reports 8 folds of which **7 are evaluable** for the
+   fitted arms, and `joint_shift`'s "0/8 folds won" is really 0 of 7 evaluable plus one exact tie.
+   Recorded rather than trimmed — dropping it would be a post-hoc population change.
+2. `assembled_crps_delta` is reported as `0.0` because it is computed for the **winner**
+   (`zm_only`), whose assembled effect is the §8.1 structural no-op. It is not a statement about
+   the joint arms; their assembled deltas are in §13.3(3).
+3. **`share_clipped_at_zero` = 0.0 on every eligible fold** — the `max(·,0)` floor never bound, so
+   the shift form's zero-floor guard is present and INACTIVE here. Recorded as inactive, not as a
+   passed test.
+4. The gate league is `full_ppr` (`passing_yards` at +0.04); every PPR figure above scales with a
+   league that prices it differently, and no other league is certified by this run.
+
