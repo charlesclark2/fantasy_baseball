@@ -112,5 +112,7 @@
       "bench": true
     }
   ],
-  "captured_rules": {}
+  "captured_rules": {},
+  "draft_type": "snake",
+  "auction_budget": 200
 }

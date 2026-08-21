@@ -93,11 +93,19 @@ This is the load-bearing item. **Option B must be a forward decision, not a post
 
 ## 9. Sign-off block
 
-- ☐ **APPROVED** — NF-W8 may consume `zm_floor` QB under Option B (caveated, deploy-held).
-- ☐ **APPROVED WITH CONDITIONS:** ______________________________________________
-- ☐ **REJECTED / NEEDS MORE:** ______________________________________________
+- ☒ **APPROVED WITH CONDITIONS** — NF-W8 may consume `zm_floor` QB under Option B (caveated, deploy-held), conditional on (a)–(d) below.
 
-Reviewer: ____________________  Date: ____________
+**Reviewer:** Independent second-reader session, 2026-08-21. Independence is *procedural* (clean context, ground-truth-first reading order, PM's §10 read last) — same underlying model as the PM's session, so a human co-sign is the stronger guarantee if the operator wants one.
+
+**Verdict = CONSUME, not park** (§12): after 0d/0e every remedy lever is measured-exhausted (fields: no lever; draws: 325× short; design: no feasible point; substrate: genuine trade), so PARK would be an indefinite hold on a fully-adjudicated question. Deploy-held, `best_alpha=0`, reversible. ⚠️ Approving consumption creates NO obligation to build the secondary surfaces — build start/sit + superflex on **product priority**, not because the input became available.
+
+**Conditions:**
+- (a) ✅ **CLOSED** — provenance (E2.1-r) confirmed by PM 2026-08-21 via `git log`: `nf_w8_0_preregistration.md` was CREATED at commit `6852ca1e` **2026-08-19T06:49:21Z** (message: "the QB Option-B consumption decision — registered forward, before any scoring"), ~16 h BEFORE the NF-W8-0 decisive record (`f874f95e`, 2026-08-19T23:08:48Z). Forward registration verified; approval not void.
+- (b) ⏳ **ENGINEERING** — a mechanical caveat-propagation guard (a test asserting any NF-W8 output containing QB rows carries the Option-B flag) BEFORE the first NF-W8 QB-bearing record is generated (the NF-C0e "wired ≠ invoked" cure; prose is insufficient).
+- (c) ✅ **CLOSED** — the principle is recorded in two governance homes: the cross-vertical CLAUDE.md landmine, and a **STANDING GOVERNANCE PRINCIPLE** block in `quant_sports_intel_models/production_model_state/nfl_season_fantasy.md` (deflation gates bind claims; measurement gates bind consumption; the `dsr_ok` bar is untouched for everyone else; a future position/target registers its OWN decision). It is the principled line, not a QB exception.
+- (d) ⏳ **PACKET** — commit this memo's §11–12 update (and this §9 verdict) to `main` so the signed packet is the complete one.
+
+Date: 2026-08-21
 
 ---
 
@@ -110,3 +118,20 @@ I believe Option B is sound: it was registered forward (the E2.1-r concern is an
 But because I am the advocate, the sign-off should be an **independent** yes/no against the §8 checklist — run by you, or handed to a fresh engineering session / human reviewer with no stake in the original call. If you'd prefer maximal independence, I can hand this packet to a clean review session instead of you signing it directly.
 
 **Recommended next regardless of the outcome here:** NF-W8-0d (the gate-design/power instrument) before NF-W8-0e (the substrate fix) — agreed. If 0d shows the gate is clearable, this whole consumption question may become moot.
+
+---
+
+## 11. UPDATE 2026-08-21 — NF-W8-0d and NF-W8-0e have both shipped; the decision is now cleaner, not moot
+
+Both successors named in §6/§10 have run. Neither made the question go away; together they sharpen it.
+
+- **NF-W8-0d (design frontier): `NO_FEASIBLE_DESIGN_CLEARS`.** No feasible (rows/fold × fold-count) design clears `dsr_ok=0.95` — because of the *lockstep invariant*: the winner is itself one of the trials `SR0` deflates against, so any shared-variance lever (rows/fold, folds, draws, a sharper estimator) scales both `SR` and `SR0` by the same factor and leaves `SR−SR0`'s sign unchanged. "Just clear the gate" is now **provably off the table** for a QB weekly effect of this size. ⇒ this **strengthens** the consumer-gate framing under review: there is no cleaner path that would let us avoid the judgment call.
+- **NF-W8-0e (root-cause cell): `CELL_NOT_CORRECTED` / `GENUINE_ABSENCE`.** The QB|passing_yards cell fix, registered jointly with the zero-mass recal, closes the downstream level gap but **loses its own registered cell CRPS decisively** (a substantive trade, not a gate artifact). ⇒ the model-layer fixes are **exhausted**. The assembled `zm_floor` remains the **only PIT-clearing QB distribution on record**, but note the precision: "best-calibrated construction" is true at the **assembled** layer; the underlying cell is not "corrected."
+
+**Net effect on the decision.** The choice is now cleanly **consume vs park** for the *secondary* surfaces Option-B would unblock — raw-point cross-position (start/sit, lineup totals) and superflex. The **flagship VOR board is structurally shielded** (a uniform per-position level shift cancels in VOR; measured 0.000 rank moves) and is unaffected **either way**. So signing off buys consumption on secondary surfaces at the cost of carrying a caveated, `dsr_ok`-failing distribution; parking costs nothing today and is revisitable if superflex/start-sit becomes a priority.
+
+**PM leaning (advocate's view, not the independent call): lean PARK** — the flagship needs nothing, the unblocked surfaces are secondary, and with model-layer fixes exhausted, consuming is a caveated judgment rather than a pending improvement. The independent reviewer should still reach its own verdict against §8 (plus the new §12 question below).
+
+## 12. The question the reviewer should now answer (in addition to §8)
+
+Given 0d (no feasible gate clearance) and 0e (model-layer fixes exhausted, flagship shielded): **is consuming a caveated, PIT/CRPS-clearing-but-`dsr_ok`-failing QB distribution on the secondary surfaces it unblocks worth the governance overhead — or is PARK the right disposition until those surfaces are prioritized?** Record: **APPROVE** / **APPROVE-WITH-CONDITIONS** / **PARK** / **REJECT**, with reasoning, in §9.
