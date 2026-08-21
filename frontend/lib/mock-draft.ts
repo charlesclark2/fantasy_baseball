@@ -525,3 +525,67 @@ export function gradeDraft(args: {
     reaches: reaches.filter((s) => (s.vsMarket as number) < 0),
   }
 }
+
+export const ordinal = (n: number): string => {
+  const s = ["th", "st", "nd", "rd"]
+  const v = n % 100
+  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0])
+}
+
+/** The short caption baked into the branded share image and used anywhere there is no room for the
+ *  full {@link GRADE_CIRCULARITY_NOTE}. Exported so the image route, the share page and the modal
+ *  all quote the identical sentence rather than each writing their own (NF-DS: this card is a THIRD
+ *  renderer of the grade, on top of the E9.61 discipline `GradeCard` already follows).
+ *
+ *  ⚠️ THE DENYLIST SCAN (`e2e/support/claim-denylist.ts`) IS A SUBSTRING MATCH WITH NO NEGATION
+ *  AWARENESS — "not a guaranteed finish" still CONTAINS "guaranteed" and would trip it exactly as
+ *  hard as an actual guarantee would. Word this without any denylisted term, negated or not. */
+export const SHARE_CARD_CAPTION = "By our projections — not a promise about how the real thing goes."
+
+export interface ShareSteal {
+  name: string
+  pos: string
+  /** `vsMarket`, already positive (only rows in `grade.steals` ever reach here). */
+  value: number
+}
+
+export interface ShareSummary {
+  rank: number
+  nTeams: number
+  starterPoints: number
+  roomMedian: number
+  leagueLabel: string
+  bestPosition: { pos: string; delta: number } | null
+  /** Up to 3, ordered by `vsMarket` — the same ordering `grade.steals` already carries. */
+  steals: ShareSteal[]
+}
+
+/** Derives the compact set of fields a share card needs, reading them straight off the SAME
+ *  `DraftGrade` the in-app results screen (`GradeCard`) renders — never a second computation of the
+ *  rank, the position deltas or the steals. (E9.61: two renderers of one field are two rule sets;
+ *  this keeps there being exactly one — `gradeDraft` — and everything downstream, including the
+ *  share card, only ever reads its output.) */
+export function buildShareSummary(grade: DraftGrade, leagueLabel: string): ShareSummary {
+  // Mirrors GradeCard's own filter: a position nobody in the room has drafted yet (every K/D-ST in
+  // a quick mock) is not a comparison, so it cannot be crowned "strongest".
+  let bestPosition: { pos: string; delta: number } | null = null
+  for (const p of grade.positions) {
+    if (p.mine === 0 && p.roomMedian === 0) continue
+    const delta = p.mine - p.roomMedian
+    if (!bestPosition || delta > bestPosition.delta) bestPosition = { pos: p.pos, delta }
+  }
+
+  const steals: ShareSteal[] = grade.steals
+    .slice(0, 3)
+    .map((s) => ({ name: s.player.name, pos: s.player.pos, value: s.vsMarket as number }))
+
+  return {
+    rank: grade.myRank,
+    nTeams: grade.nTeams,
+    starterPoints: grade.me.starterPoints,
+    roomMedian: grade.roomMedian,
+    leagueLabel,
+    bestPosition,
+    steals,
+  }
+}
