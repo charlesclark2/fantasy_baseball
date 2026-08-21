@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { FastForward, RotateCcw, Search, Undo2 } from "lucide-react"
+import { FastForward, RotateCcw, Search, Share2, Undo2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Picker } from "@/components/ui/picker"
 import { InfoTip } from "@/components/fantasy/shared"
@@ -47,6 +47,7 @@ import {
   gradeDraft,
   marketDepth,
   marketOrder,
+  ordinal,
   personaFor,
   randomSeed,
   simulateCpuPicks,
@@ -54,6 +55,7 @@ import {
   type DraftGrade,
   type Pick,
 } from "@/lib/mock-draft"
+import { MockDraftShareModal } from "@/components/fantasy/mock-draft-share-modal"
 import {
   FANTASY_SEASON,
   isCustomSelection,
@@ -120,6 +122,10 @@ export function MockDraft() {
   const [log, setLog] = useState<Record<string, string>>({}) // playerId -> the CPU's stated reason
   const [search, setSearch] = useState("")
   const [posFilter, setPosFilter] = useState<string>("ALL")
+  const [shareOpen, setShareOpen] = useState(false)
+  // Guards the auto-open to fire once per COMPLETED draft, not once per re-render while complete —
+  // and resets when a new draft starts so the NEXT completion pops it again.
+  const autoSharePoppedRef = useRef(false)
 
   // A seed is chosen on the CLIENT after mount — `Math.random()` during render would differ between
   // the server and the client pass and trip hydration.
@@ -361,6 +367,16 @@ export function MockDraft() {
     return gradeDraft({ board, config, picks, nTeams: size, mySlot })
   }, [board, config, draftComplete, picks, size, mySlot])
 
+  // Pop the share modal once per completed mock — not on every re-render while `grade` is set, and
+  // ready to pop again once a new draft (restart) finishes.
+  useEffect(() => {
+    if (grade && !autoSharePoppedRef.current) {
+      autoSharePoppedRef.current = true
+      setShareOpen(true)
+    }
+    if (!grade) autoSharePoppedRef.current = false
+  }, [grade])
+
   const available = useMemo(() => {
     const rows = (board ?? []).filter((p) => !draftedIds.has(p.id))
     const q = search.trim().toLowerCase()
@@ -594,7 +610,13 @@ export function MockDraft() {
               intrinsic minimum. Guarded by "a long recommendation reason never widens the page". */}
           <div className="flex min-w-0 flex-col gap-4">
             {grade ? (
-              <GradeCard grade={grade} rounds={rounds} slotsPerTeam={slotsPerTeam} onRestart={restart} />
+              <GradeCard
+                grade={grade}
+                rounds={rounds}
+                slotsPerTeam={slotsPerTeam}
+                onRestart={restart}
+                onShare={() => setShareOpen(true)}
+              />
             ) : (
               <div className="rounded-lg border border-[#262626] bg-[#0f0f0f] p-4">
                 <div className="mb-3 flex items-center gap-2">
@@ -765,6 +787,12 @@ export function MockDraft() {
           </div>
         </div>
       )}
+      <MockDraftShareModal
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        grade={grade}
+        leagueLabel={config?.label ?? "Mock Draft"}
+      />
       <HonestNote />
     </div>
   )
@@ -983,11 +1011,13 @@ function GradeCard({
   rounds,
   slotsPerTeam,
   onRestart,
+  onShare,
 }: {
   grade: DraftGrade
   rounds: number
   slotsPerTeam: number
   onRestart: () => void
+  onShare: () => void
 }) {
   const { me, myRank, nTeams, roomMedian, positions, steals, reaches } = grade
   const vsMedian = me.starterPoints - roomMedian
@@ -1066,6 +1096,9 @@ function GradeCard({
       <div className="mt-4 flex gap-2">
         <Button size="sm" onClick={onRestart} className="bg-[#10b981] font-semibold text-[#0a0a0a] hover:bg-[#059669]">
           Draft a new room
+        </Button>
+        <Button size="sm" variant="outline" onClick={onShare} data-testid="mock-draft-share-trigger">
+          <Share2 className="mr-1.5 h-3.5 w-3.5" /> Share your grade
         </Button>
       </div>
     </div>
@@ -1167,12 +1200,6 @@ function PickValueList({
       </div>
     </div>
   )
-}
-
-const ordinal = (n: number): string => {
-  const s = ["th", "st", "nd", "rd"]
-  const v = n % 100
-  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0])
 }
 
 function HonestNote() {
