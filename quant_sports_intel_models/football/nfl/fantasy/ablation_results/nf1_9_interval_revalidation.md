@@ -1,6 +1,6 @@
 # Interval-band re-validation — the standing annual check on both per-position coverage floors
 
-**Generated:** 2026-08-21T01:51:19.726682+00:00 · **verdict: ✅ ALL FLOORS MET**
+**Generated:** 2026-08-21T03:23:13.526681+00:00 · **verdict: ✅ ALL FLOORS MET**
 
 ⚠️ **A per-position coverage floor is invisible at serving time** — coverage needs realized outcomes, so no board build, export guard or API check can see it break. That is how the veteran band went five stories at 0.55 coverage of its nominal 0.80. This check is the owner of both floors; a breach is a **RE-SELECTION TRIGGER** (re-run that population's bake-off), never a reason to move the floor.
 
@@ -48,8 +48,8 @@ The objection to a self-attenuating per-group floor is that a band could rest ne
 
 | population   | position   |   n (held-out) |   coverage | floor (power-derived)                              |   slack (rows) |   floor at nominal (previous rule) |   slack at nominal (rows) |   P(reject | truly nominal) |   …under the previous rule |   detectable shortfall | verdict   |
 |:-------------|:-----------|---------------:|-----------:|:---------------------------------------------------|---------------:|-----------------------------------:|--------------------------:|----------------------------:|---------------------------:|-----------------------:|:----------|
-| rookies      | QB         |             81 |      0.815 | 0.7284                                             |          7.000 |                              0.800 |                     1.000 |                       0.044 |                      0.456 |                  0.678 | ✅ met    |
-| rookies      | RB         |            148 |      0.804 | 0.7432                                             |          9.000 |                              0.800 |                     0.000 |                       0.037 |                      0.500 |                  0.708 | ✅ met    |
+| rookies      | QB         |             81 |      0.802 | 0.7284                                             |          6.000 |                              0.800 |                     0.000 |                       0.044 |                      0.456 |                  0.678 | ✅ met    |
+| rookies      | RB         |            148 |      0.790 | 0.7432                                             |          7.000 |                              0.800 |                    -2.000 |                       0.037 |                      0.500 |                  0.708 | ✅ met    |
 | rookies      | TE         |            100 |      0.900 | 0.73                                               |         17.000 |                              0.800 |                    10.000 |                       0.034 |                      0.441 |                  0.685 | ✅ met    |
 | rookies      | WR         |            224 |      0.835 | 0.7545                                             |         18.000 |                              0.800 |                     7.000 |                       0.040 |                      0.513 |                  0.727 | ✅ met    |
 | veterans     | FB         |            299 |      0.860 | unconstrained (n below the pre-registered minimum) |        nan     |                            nan     |                   nan     |                     nan     |                    nan     |                nan     | —         |
@@ -66,7 +66,7 @@ One draft class (~80 rookie-seasons) or one target season (~600 veteran-seasons,
 
 | population   |   cohort |   n |   pooled coverage |   cov QB |   cov RB |   cov TE |   cov WR |   cov FB |   cov DST |   cov K |
 |:-------------|---------:|----:|------------------:|---------:|---------:|---------:|---------:|---------:|----------:|--------:|
-| rookies      |     2025 |  85 |             0.824 |    0.786 |    0.760 |    0.875 |    0.867 |  nan     |   nan     | nan     |
+| rookies      |     2025 |  85 |             0.812 |    0.786 |    0.720 |    0.875 |    0.867 |  nan     |   nan     | nan     |
 | veterans     |     2025 | 701 |             0.903 |    0.913 |    0.883 |    0.927 |    0.904 |    0.769 |   nan     | nan     |
 | kdst         |     2025 |  76 |             0.868 |  nan     |  nan     |  nan     |  nan     |  nan     |     0.938 |   0.818 |
 

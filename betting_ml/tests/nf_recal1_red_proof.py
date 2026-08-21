@@ -112,10 +112,23 @@ CASES: list[tuple[str, str, str, str]] = [
         "test_a_rookie_row_in_the_population_is_a_hard_failure",
     ),
     (
+        # ⭐ RE-ANCHORED 2026-08-20 (NF-D21-PUBLISH). The gate no longer pins ONE literal disposition
+        #    — it checks membership of `REVIEWED_ROOKIE_DISPOSITIONS`, the recorded set of rookie
+        #    states a human has re-read this story's scope against. The break is the same in spirit:
+        #    stop checking the imported disposition at all.
         "the-scope-gate-stops-re-reading-the-imported-disposition",
-        'if RPP.DISPOSITION != "CONSTRAINT_REFUSED" or bool(getattr(RPP, "SERVING_ENABLED", False)):',
+        'if RPP.DISPOSITION not in REVIEWED_ROOKIE_DISPOSITIONS:',
         'if False:',
-        "test_the_scope_gate_re_reads_the_imported_disposition",
+        "test_the_scope_gate_refuses_a_rookie_disposition_nobody_re_read",
+    ),
+    (
+        # …and the second half of that gate: the rookie policy's OWN coherence is DELEGATED to
+        #    `RPP.assert_coherent()` rather than re-implemented here, so deleting the delegation must
+        #    also go red (a serving flip contradicting its disposition would otherwise sail through).
+        "the-scope-gate-stops-delegating-the-rookie-policy-coherence-check",
+        '    RPP.assert_coherent()\n    if RPP.DISPOSITION not in REVIEWED_ROOKIE_DISPOSITIONS:',
+        '    if RPP.DISPOSITION not in REVIEWED_ROOKIE_DISPOSITIONS:',
+        "test_the_scope_gate_refuses_a_rookie_disposition_nobody_re_read",
     ),
     (
         "mae-is-quietly-restored-as-the-selection-metric",

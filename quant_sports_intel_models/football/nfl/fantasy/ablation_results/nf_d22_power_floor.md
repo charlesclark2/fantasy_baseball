@@ -1,6 +1,6 @@
 # NF-D22 — a power-derived coverage floor for structurally-thin groups
 
-**Generated:** 2026-08-21T01:52:13.618397+00:00 · **verdict: ✅ FLOOR INSTALLED — and NF-D16 at λ=0.5 now CLEARS the interval-floor gate**
+**Generated:** 2026-08-21T02:53:49.592132+00:00 · **verdict: ✅ FLOOR INSTALLED — and NF-D16 at λ=0.5 now CLEARS the interval-floor gate**
 
 > ⚖️ EDGE-INDEPENDENT (`best_alpha = 0`) · DEPLOY-HELD · a projection-QUALITY gate. No market, edge, CLV or ROI claim is made or implied. Nothing in this run flips a serving switch: `rookie_publish_policy.SERVING_ENABLED` is untouched and stays `False`.
 

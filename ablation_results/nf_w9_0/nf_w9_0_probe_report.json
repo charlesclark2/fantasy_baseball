@@ -1,0 +1,18 @@
+{
+  "story": "NF-W9-0",
+  "best_alpha": 0,
+  "research_only": true,
+  "transport": "direct",
+  "legs": [
+    {
+      "league": "nfl",
+      "failed": true,
+      "error": "All 3 direct attempts failed for https://premium.pff.com/api/v1/games?league=nfl&season=2024&week=1"
+    },
+    {
+      "league": "ncaa",
+      "failed": true,
+      "error": "All 3 direct attempts failed for https://premium.pff.com/api/v1/games?league=ncaa&season=2024&week=1"
+    }
+  ]
+}
