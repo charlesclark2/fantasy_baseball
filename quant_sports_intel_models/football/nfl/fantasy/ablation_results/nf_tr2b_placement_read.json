@@ -1,10 +1,10 @@
 {
  "story": "NF-TR2b",
  "read": "cross-position placement (NF-D16 class)",
- "generated_at": "2026-08-21T00:49:10.330878+00:00",
+ "generated_at": "2026-08-21T00:54:11.754745+00:00",
  "source_kind": "s3",
  "source": "s3://credence-prod-s3-api-cache/fantasy/nfl/2026/",
- "read_from": "/var/folders/88/q8wq3ss94k3bvmkq1j1f_j0w0000gn/T/nf_tr2b_placement_6mfuux2n",
+ "read_from": "/var/folders/88/q8wq3ss94k3bvmkq1j1f_j0w0000gn/T/nf_tr2b_placement_x0eu29hi",
  "season": 2026,
  "served_level_model_version": "nfl_fantasy_nf_tr2b_veteran_level_v1",
  "served_level_status": "recalibrated",
@@ -232,6 +232,11 @@
    "cohort_shift": {
     "veteran_mean_move": 1.44,
     "rookie_mean_move": -14.05,
+    "rookie_top60": {
+     "n": 4,
+     "mean_move": -34.75,
+     "median_move": -29.0
+    },
     "rookie_by_position": {
      "QB": 9.3,
      "RB": -81.69,
@@ -424,6 +429,11 @@
    "cohort_shift": {
     "veteran_mean_move": 1.7,
     "rookie_mean_move": -16.58,
+    "rookie_top60": {
+     "n": 3,
+     "mean_move": -19.0,
+     "median_move": -20.0
+    },
     "rookie_by_position": {
      "QB": 6.9,
      "RB": -87.54,
@@ -616,6 +626,11 @@
    "cohort_shift": {
     "veteran_mean_move": 2.95,
     "rookie_mean_move": -28.75,
+    "rookie_top60": {
+     "n": 3,
+     "mean_move": -13.33,
+     "median_move": -13.0
+    },
     "rookie_by_position": {
      "QB": 9.2,
      "RB": -160.85,
@@ -808,6 +823,11 @@
    "cohort_shift": {
     "veteran_mean_move": 2.27,
     "rookie_mean_move": -22.12,
+    "rookie_top60": {
+     "n": 3,
+     "mean_move": -13.0,
+     "median_move": -12.0
+    },
     "rookie_by_position": {
      "QB": 6.9,
      "RB": -153.31,
@@ -1000,6 +1020,11 @@
    "cohort_shift": {
     "veteran_mean_move": 3.18,
     "rookie_mean_move": -30.99,
+    "rookie_top60": {
+     "n": 4,
+     "mean_move": -28.0,
+     "median_move": -23.0
+    },
     "rookie_by_position": {
      "QB": 9.2,
      "RB": -36.15,
@@ -1192,6 +1217,11 @@
    "cohort_shift": {
     "veteran_mean_move": 2.39,
     "rookie_mean_move": -23.35,
+    "rookie_top60": {
+     "n": 4,
+     "mean_move": -19.5,
+     "median_move": -20.5
+    },
     "rookie_by_position": {
      "QB": 6.2,
      "RB": -35.69,
@@ -1384,6 +1414,11 @@
    "cohort_shift": {
     "veteran_mean_move": 2.57,
     "rookie_mean_move": -25.09,
+    "rookie_top60": {
+     "n": 4,
+     "mean_move": -18.0,
+     "median_move": -16.0
+    },
     "rookie_by_position": {
      "QB": 9.1,
      "RB": -174.54,
@@ -1576,6 +1611,11 @@
    "cohort_shift": {
     "veteran_mean_move": 2.7,
     "rookie_mean_move": -26.31,
+    "rookie_top60": {
+     "n": 3,
+     "mean_move": -17.0,
+     "median_move": -14.0
+    },
     "rookie_by_position": {
      "QB": 6.4,
      "RB": -11.92,
@@ -1768,6 +1808,11 @@
    "cohort_shift": {
     "veteran_mean_move": 3.02,
     "rookie_mean_move": -29.41,
+    "rookie_top60": {
+     "n": 4,
+     "mean_move": -17.75,
+     "median_move": -16.5
+    },
     "rookie_by_position": {
      "QB": 9.1,
      "RB": -85.31,
@@ -1960,6 +2005,11 @@
    "cohort_shift": {
     "veteran_mean_move": 2.54,
     "rookie_mean_move": -24.75,
+    "rookie_top60": {
+     "n": 4,
+     "mean_move": -16.75,
+     "median_move": -16.5
+    },
     "rookie_by_position": {
      "QB": 5.8,
      "RB": -54.38,
@@ -2152,6 +2202,11 @@
    "cohort_shift": {
     "veteran_mean_move": 2.5,
     "rookie_mean_move": -24.37,
+    "rookie_top60": {
+     "n": 4,
+     "mean_move": -16.25,
+     "median_move": -14.5
+    },
     "rookie_by_position": {
      "QB": 8.9,
      "RB": -72.77,
@@ -2344,6 +2399,11 @@
    "cohort_shift": {
     "veteran_mean_move": 3.48,
     "rookie_mean_move": -33.9,
+    "rookie_top60": {
+     "n": 4,
+     "mean_move": -19.0,
+     "median_move": -20.0
+    },
     "rookie_by_position": {
      "QB": 6.2,
      "RB": 3.08,
@@ -2536,6 +2596,11 @@
    "cohort_shift": {
     "veteran_mean_move": 3.13,
     "rookie_mean_move": -30.56,
+    "rookie_top60": {
+     "n": 5,
+     "mean_move": -11.8,
+     "median_move": -20.0
+    },
     "rookie_by_position": {
      "QB": 14.2,
      "RB": -89.46,
@@ -2728,6 +2793,11 @@
    "cohort_shift": {
     "veteran_mean_move": 2.43,
     "rookie_mean_move": -23.73,
+    "rookie_top60": {
+     "n": 4,
+     "mean_move": -12.0,
+     "median_move": -15.0
+    },
     "rookie_by_position": {
      "QB": 37.5,
      "RB": -58.92,

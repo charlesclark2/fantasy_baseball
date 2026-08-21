@@ -1,5 +1,5 @@
 # NF-TR2b — whole-board CROSS-POSITION placement read (the NF-D16 class)
-_generated 2026-08-21T00:49:10.330878+00:00_ · read from `s3://credence-prod-s3-api-cache/fantasy/nfl/2026/` · `best_alpha = 0` · served `nfl_fantasy_nf_tr2b_veteran_level_v1` · status `recalibrated` · board built 2026-08-20T14:22:29.512306+00:00
+_generated 2026-08-21T00:54:11.754745+00:00_ · read from `s3://credence-prod-s3-api-cache/fantasy/nfl/2026/` · `best_alpha = 0` · served `nfl_fantasy_nf_tr2b_veteran_level_v1` · status `recalibrated` · board built 2026-08-20T14:22:29.512306+00:00
 
 ## Verdict: **SANE**
 
@@ -46,6 +46,25 @@ The INCUMBENT board breaches the inherited rookie-placement cap on `['standard_1
 ### The rookie/veteran boundary — a measured, DISCLOSED consequence
 
 TR2b touches VETERANS only; the rookie leg is held at incumbent (NF-D21 CLOSED, CONSTRAINT_REFUSED). So rookies move purely as a RELATIVE consequence, and because three of four `k` exceed 1 they move DOWN — per position tracking the `k` of the veterans they compete with, QB rookies (the only `k` < 1) being the ones that RISE.
+
+⚠️ The whole-board rookie mean is dominated by the ~76 rookies in the flat-VOR tail, where a large rank move is near-noise. The DECISION-RELEVANT figure is the 3-5 rookies inside the top 60, and it is NOT simply a smaller version of the headline — it runs both above and below it by config (`standard_10` moves -34.8 in the top 60 against a -14.1 whole-board mean; `superflex_10` moves -11.8 against -30.6). Read this table, not the headline:
+
+| config | rookies in top 60 | mean move | median move |
+|---|---|---|---|
+| standard_10 | 4 | -34.75 | -29.0 |
+| standard_12 | 3 | -19.0 | -20.0 |
+| standard_3wr_10 | 3 | -13.33 | -13.0 |
+| standard_3wr_12 | 3 | -13.0 | -12.0 |
+| half_ppr_10 | 4 | -28.0 | -23.0 |
+| half_ppr_12 | 4 | -19.5 | -20.5 |
+| half_ppr_3wr_10 | 4 | -18.0 | -16.0 |
+| half_ppr_3wr_12 | 3 | -17.0 | -14.0 |
+| full_ppr_10 | 4 | -17.75 | -16.5 |
+| full_ppr_12 | 4 | -16.75 | -16.5 |
+| full_ppr_3wr_10 | 4 | -16.25 | -14.5 |
+| full_ppr_3wr_12 | 4 | -19.0 | -20.0 |
+| superflex_10 | 5 | -11.8 | -20.0 |
+| superflex_12 | 4 | -12.0 | -15.0 |
 
 ⭐ That direction is why G2 cannot be breached here: `rookie_placement_breach` caps a rookie placing TOO HIGH, and this correction moves them away from that cap. ⚠️ The honest converse: there is NO guard on the opposite side, so veterans are re-priced against an UNCORRECTED rookie leg by construction. Disclosed, not adjudicated by this read.
 

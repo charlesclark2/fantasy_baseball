@@ -122,6 +122,17 @@ def run(src: pathlib.Path, origin: str | None = None) -> dict:
             "cohort_shift": {
                 "veteran_mean_move": round(float(vet["move"].mean()), 2) if len(vet) else None,
                 "rookie_mean_move": round(float(rook["move"].mean()), 2) if len(rook) else None,
+                # ⭐ The whole-board rookie mean is dominated by the ~76 rookies in the flat-VOR
+                # tail, where a big rank move is near-noise. The DECISION-RELEVANT figure is the
+                # handful inside the top 60 — reported separately so the disclosure is quantified
+                # where a drafter would actually feel it rather than where the tail inflates it.
+                "rookie_top60": (
+                    {"n": int((rook["overall_rank_inc"] <= 60).sum()),
+                     "mean_move": round(float(
+                         rook.loc[rook["overall_rank_inc"] <= 60, "move"].mean()), 2),
+                     "median_move": float(
+                         rook.loc[rook["overall_rank_inc"] <= 60, "move"].median())}
+                    if int((rook["overall_rank_inc"] <= 60).sum()) else None),
                 "rookie_by_position": {
                     p: round(float(rook.loc[rook["position"] == p, "move"].mean()), 2)
                     for p in sorted(rook["position"].unique())
@@ -223,6 +234,18 @@ def _md(r: dict) -> str:
           "CONSTRAINT_REFUSED). So rookies move purely as a RELATIVE consequence, and because three "
           "of four `k` exceed 1 they move DOWN — per position tracking the `k` of the veterans they "
           "compete with, QB rookies (the only `k` < 1) being the ones that RISE.", "",
+          "⚠️ The whole-board rookie mean is dominated by the ~76 rookies in the flat-VOR tail, "
+          "where a large rank move is near-noise. The DECISION-RELEVANT figure is the 3-5 rookies "
+          "inside the top 60, and it is NOT simply a smaller version of the headline — it runs "
+          "both above and below it by config (`standard_10` moves -34.8 in the top 60 against a "
+          "-14.1 whole-board mean; `superflex_10` moves -11.8 against -30.6). Read this table, not "
+          "the headline:", "",
+          "| config | rookies in top 60 | mean move | median move |", "|---|---|---|---|"]
+    for _stem, _c in r["per_config"].items():
+        _t = (_c.get("cohort_shift") or {}).get("rookie_top60") if _c.get("status") == "OK" else None
+        if _t:
+            L.append(f"| {_stem} | {_t['n']} | {_t['mean_move']:+} | {_t['median_move']:+} |")
+    L += ["",
           "⭐ That direction is why G2 cannot be breached here: `rookie_placement_breach` caps a "
           "rookie placing TOO HIGH, and this correction moves them away from that cap. ⚠️ The honest "
           "converse: there is NO guard on the opposite side, so veterans are re-priced against an "
