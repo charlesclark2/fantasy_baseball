@@ -66,6 +66,7 @@ import {
 } from "@/components/fantasy/shared"
 import { NumericInput } from "@/components/ui/numeric-input"
 import { Picker } from "@/components/ui/picker"
+import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
 /** Sentinel for the "create a new league" row. Radix reserves "" for "nothing selected", so a
  *  selectable action cannot use an empty value; this is deliberately not a possible league_id. */
@@ -567,6 +568,12 @@ export function LeagueSettingsEditor() {
 
       {/* ── live preview ─────────────────────────────────────────────────────────────────── */}
       <BoardPreview preview={preview} />
+
+      {/* 🚩 NF-C0-Yahoo-ENABLE — the editor is showing the scoring rules and roster slots we READ
+          FROM the platform, which is exactly the case the terms' "wherever their data is shown"
+          covers. Keyed on the league currently loaded, not on `leagues` as a whole: a user editing
+          their hand-entered league is not looking at anyone's imported data. */}
+      <PlatformAttribution sources={leagues?.find((l) => l.league_id === leagueId)} />
     </div>
   )
 }

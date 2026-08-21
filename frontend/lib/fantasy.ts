@@ -528,6 +528,14 @@ export interface SavedLeague extends LeagueConfig, LeagueProvenance {
   user_id?: string | null
   created_at?: string | null
   updated_at?: string | null
+  /** NF-C0-Yahoo-ENABLE — true once a disconnect, or the retention window closing, deleted roster
+   *  data this league HAD held. Read with `?? false`: it is an additive key (NF-C0) and a league
+   *  saved before it existed carries none.
+   *
+   *  ⭐ It exists so a deletion cannot render as "your league hasn't drafted yet". Those two states
+   *  produce the identical payload — a linked team with an empty roster — and explaining ours as
+   *  theirs is a confident wrong answer that sends the user to re-import for no reason. */
+  roster_retention_purged?: boolean | null
 }
 
 export function listSavedLeagues(token: string | null): Promise<SavedLeague[]> {

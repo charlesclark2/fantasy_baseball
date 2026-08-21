@@ -209,6 +209,19 @@ export type MockOptions = {
     // the board that actually shipped on 2026-08-16 (K and DST rows absent). The mode that makes
     // all four "no projection" causes renderable at once.
     | "kdstGap"
+    // 🚩 NF-C0-Yahoo-ENABLE — `drafted`, byte-for-byte, except that it came from YAHOO.
+    //
+    // ⭐ IT DIFFERS FROM `drafted` IN EXACTLY ONE FIELD, and that is the whole point. Yahoo's terms
+    // require an on-screen credit wherever their data is shown, so the credit has to be keyed on
+    // the league's PROVENANCE and on nothing else. Running the same assertions against both modes
+    // is what proves that: `yahooImported` must show the credit, `drafted` (Sleeper) must not. A
+    // one-sided test would pass just as happily on a component that renders the credit
+    // unconditionally, which is a different compliance problem (crediting Yahoo for Sleeper data).
+    | "yahooImported"
+    // 🚩 The same league AFTER a disconnect: rosters gone, settings kept, `roster_retention_purged`
+    // set. The state the server produces at `purge_platform_league_data`, which My Teams must
+    // explain as a deletion rather than as "your league hasn't drafted yet".
+    | "yahooPurged"
   /**
    * ⭐ NF-C7b — the caller's ACCOUNT-level fantasy defaults (`GET /fantasy/preferences`).
    *
@@ -809,6 +822,9 @@ export const E2E_LINKED_LEAGUES = {
  */
 export const E2E_DRAFTED_LEAGUE = { id: "e2e-league-drafted", name: "Draft Night" } as const
 
+/** 🚩 NF-C0-Yahoo-ENABLE — the Yahoo-sourced league the attribution spec selects by name. */
+export const E2E_YAHOO_LEAGUE = { id: "e2e-league-yahoo", name: "Yahoo Night" } as const
+
 /** The `n`th player at `pos` in served order, so a roster can hold several without repeating one. */
 function boardPlayersAt(pos: string, count: number): any[] {
   const players = FIXTURES.projectionsEntitled().players as any[]
@@ -1007,6 +1023,43 @@ function draftedLeague(): any {
     league_rosters: leagueRosters(),
     league_rosters_synced_at: "2026-08-12T12:00:00Z",
     league_rosters_truncated: false,
+  }
+}
+
+/**
+ * 🚩 NF-C0-Yahoo-ENABLE — the drafted league, imported from YAHOO instead of Sleeper.
+ *
+ * Derived from `draftedLeague()` rather than written out, so the two can never drift into differing
+ * by anything except the one field under test (see the `yahooImported` mode docs).
+ */
+function yahooImportedLeague(): any {
+  return {
+    ...draftedLeague(),
+    league_id: E2E_YAHOO_LEAGUE.id,
+    name: E2E_YAHOO_LEAGUE.name,
+    source_platform: "yahoo",
+    source_league_id: "461.l.1000",
+  }
+}
+
+/**
+ * 🚩 NF-C0-Yahoo-ENABLE — that league after a disconnect (or after the retention window closed).
+ *
+ * ⚠️ The rosters are EMPTY and the settings are INTACT, which is exactly what the server leaves
+ * behind: `purge_platform_league_data` removes the copied roster fields and nothing else. The team
+ * stays LINKED — `source_team_key` is our own record of which team is theirs, not Yahoo's data —
+ * which is precisely why this state is otherwise indistinguishable from "linked but never drafted"
+ * and why `roster_retention_purged` has to be served.
+ */
+function yahooPurgedLeague(): any {
+  return {
+    ...yahooImportedLeague(),
+    imported_roster: [],
+    roster_synced_at: null,
+    league_rosters: null,
+    league_rosters_synced_at: null,
+    league_rosters_truncated: false,
+    roster_retention_purged: true,
   }
 }
 
@@ -1309,6 +1362,8 @@ function leaguesFor(leagues: NonNullable<MockOptions["leagues"]>): any[] {
   if (leagues === "lineupGap") return lineupGapLeaguePair()
   if (leagues === "kdstGap") return [{ ...linkedLeaguePair()[0], imported_roster: kdstGapRoster() }]
   if (leagues === "drafted") return [draftedLeague()]
+  if (leagues === "yahooImported") return [yahooImportedLeague()]
+  if (leagues === "yahooPurged") return [yahooPurgedLeague()]
   if (leagues === "predraft") return [predraftLeague()]
   // NF-C6P3 — the PARTIAL-coverage state: some of the league's rosters held, not all. It is a real
   // state (a league imported before this shipped and re-imported since, a platform that previewed
@@ -1436,7 +1491,9 @@ function personalPayloadFor(
     leagues === "drafted" ||
     leagues === "predraft" ||
     leagues === "partialRosters" ||
-    leagues === "lineupGap"
+    leagues === "lineupGap" ||
+    leagues === "yahooImported" ||
+    leagues === "yahooPurged"
   ) {
     const only = leaguesFor(leagues)
     return pathname === "/fantasy/leagues"

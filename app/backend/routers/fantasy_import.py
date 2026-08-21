@@ -367,12 +367,28 @@ def yahoo_preview(payload: PreviewRequest, user_id: str = Depends(require_person
 
 @router.delete("/yahoo/connection", status_code=204)
 def yahoo_disconnect(user_id: str = Depends(require_personalized_league_access)):
-    """Forget the user's Yahoo grant on our side.
+    """Forget the user's Yahoo grant on our side, AND delete the Yahoo data we copied.
 
     ⚠️ Says exactly what it does: this deletes OUR copy. The authoritative revocation is the user's
     own Yahoo account settings, which the UI links to — claiming to have revoked a grant we cannot
     revoke would be the kind of quiet overstatement this product does not make.
+
+    ⭐ NF-C0-Yahoo-ENABLE (Half A) — DELETION ON DISCONNECT IS MANDATORY, NOT A COURTESY (§6). Until
+    this story, disconnecting dropped the OAuth token and nothing else, so a user who disconnected
+    kept every roster we had copied from Yahoo, indefinitely and with no way to remove it. The
+    spike memo carried that as gap B2. Two halves, and the split is deliberate:
+      · THE ROSTERS GO. `imported_roster` and `league_rosters` are a copy of Yahoo's league state.
+      · THE LEAGUE STAYS. Its scoring rules, roster slots, team count and depth targets are the
+        user's own configuration — the same artefact a hand-entered league is — and destroying it
+        would punish someone for exercising the control this endpoint exists to give them.
+
+    ⚠️ THE PURGE RUNS FIRST AND IS ALLOWED TO FAIL THE REQUEST. Dropping the token first would
+    leave the rosters behind with the connection already gone, and this endpoint is the user's only
+    handle on them. A purge that cannot complete therefore surfaces as a failed disconnect the user
+    can retry, rather than as a silent partial one — the compliance red line is deletion, so the
+    fail-closed direction is to not report success we did not achieve.
     """
+    dynamo.purge_platform_league_data(user_id, yahoo.PLATFORM)
     dynamo.delete_platform_token(user_id, yahoo.PLATFORM)
     return None
 

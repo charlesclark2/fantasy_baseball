@@ -89,6 +89,7 @@ import {
   num,
   teamLabel,
 } from "@/components/fantasy/shared"
+import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
 /** Signed, with an explicit zero — "0" reads as "did not move", which is the honest reading. */
 function signed(n: number | null | undefined, nd = 0): string {
@@ -724,6 +725,10 @@ export function MyLeague() {
           Showing the {HIGHLIGHT_COUNT} largest moves in each direction; the full board is above.
         </p>
       )}
+
+      {/* 🚩 NF-C0-Yahoo-ENABLE — the credit the platform's terms require, on a surface built from
+          the league it imported. Renders nothing for a hand-entered or Sleeper/ESPN league. */}
+      <PlatformAttribution sources={league} />
     </div>
   )
 }
