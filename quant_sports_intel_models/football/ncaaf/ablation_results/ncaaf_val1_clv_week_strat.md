@@ -227,6 +227,28 @@ collapsed `var_trials_sr` to zero, and made `classify_null` **skip its DSR branc
 verdict still plausible, the deflation leg never run (the NF-C0e wired-but-never-invoked class). It
 is now an explicit `SystemExit` rather than a silent skip, and guarded.
 
+## ⚠️ Scope of the claim — what this can and cannot refute
+
+The premise as usually stated — *"the college book is softest early"* — is a claim about the
+**market**. What this study measures is **our served model's hit rate against that market**. Those
+are not the same proposition, and the gap matters: a genuinely soft early-season book that our model
+cannot see would produce **exactly** the result above.
+
+So the defensible statement is: **our served joint distribution has no decision-changing
+early-season edge against the closing line, and its interval excludes one** — which is precisely the
+form the premise takes when it is used to motivate work (it is invoked as *"there is edge to go get
+in weeks 1–3"*, i.e. a claim about what a model of ours could earn). That use is refuted.
+
+The strictly-market version of the question gets a weaker, but non-empty, answer from the
+pre-registered side-bias degenerates, which are model-free: in wk1-3, `always_home` covered 0.5121
+and `always_under` hit 0.5362 — **neither significant** (p ≈ 0.24 against breakeven at n≈700). So the
+simplest exploitable forms of early-season softness are not visible either, but that is a much
+weaker statement than the model-level one and is not evidence of absence.
+
+⇒ A future story wanting to test *market* softness directly needs a market-side instrument (line
+movement from open to close, cross-book dispersion, steam) — P0.6c's T-1 capture is the natural
+substrate — not another model-vs-close hit rate.
+
 ## Verdict
 
 **`ALL_BUCKETS_NULL` — the founding "early season is softest" premise is measured-null at the close,
