@@ -461,7 +461,8 @@ export function LeagueBoard() {
 
       {/* 🚩 NF-C0-Yahoo-ENABLE — `league` is non-null only for a `custom:<id>` selection, i.e. only
           when the board on screen was built from the user's own saved (possibly imported) league.
-          A preset board owes no credit and renders none. */}
+          A preset board owes no credit and declares none. The credit itself is drawn by the
+          page footer, which is where Yahoo's Cover Page requires it. */}
       <PlatformAttribution sources={league} />
     </div>
   )

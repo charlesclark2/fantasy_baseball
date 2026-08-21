@@ -19,6 +19,7 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Iterator
 from uuid import uuid4
 
 import boto3
@@ -927,6 +928,53 @@ def purge_platform_league_data(user_id: str, platform: str) -> dict:
             len(targets), user_id, platform,
         )
     return {"leagues_purged": len(targets), "league_ids": targets}
+
+
+def iter_platform_league_holders(platform: str) -> Iterator[tuple[str, int]]:
+    """Every `(user_id, leagues_holding_rosters)` with roster data copied from `platform`.
+
+    ⭐ WHY THIS EXISTS AT ALL — §6 OF THE AGREEMENT, WHICH NOTHING COULD SATISFY BEFORE IT.
+    "As soon as practicable following any termination or expiration of this Agreement (and in no
+    event more than ten (10) business days thereafter), Developer agrees to … delete from its
+    computer systems and servers all copies of the Yahoo Materials and Yahoo Fantasy Information."
+    `purge_platform_league_data` deletes ONE user's copies and is reached only by that user's own
+    disconnect, so on the day the Agreement ends there was no way to execute the obligation across
+    the account base at all. This is the enumeration half; `scripts/purge_platform_data.py` is the
+    operator front door.
+
+    ⚠️ A FULL TABLE SCAN, AND IT IS THE RIGHT SHAPE HERE. There is no index on `source_platform`
+    (it is nested two levels inside a map), and this runs at most a handful of times in the
+    product's life — on termination, or on an audit under §14. Projecting only the two attributes
+    it needs keeps the read small; `audit_tos_acceptance.py` is the same pattern.
+
+    Yields rather than returning a list so a caller can act per user and report progress instead of
+    holding the whole account base in memory.
+    """
+    table = _users_table()
+    kwargs: dict = {"ProjectionExpression": "user_id, fantasy_leagues"}
+    while True:
+        resp = table.scan(**kwargs)
+        for item in resp.get("Items", []):
+            user_id = str(item.get("user_id") or "")
+            if not user_id:
+                continue
+            holding = 0
+            for cfg in (item.get("fantasy_leagues") or {}).values():
+                try:
+                    record = _deep_from_dynamo(cfg)
+                except Exception:  # noqa: BLE001
+                    continue
+                if not isinstance(record, dict):
+                    continue
+                if str(record.get("source_platform") or "").lower() != platform.lower():
+                    continue
+                if _has_platform_roster(record):
+                    holding += 1
+            if holding:
+                yield user_id, holding
+        if "LastEvaluatedKey" not in resp:
+            return
+        kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]
 
 
 def list_fantasy_leagues(user_id: str) -> list[dict]:

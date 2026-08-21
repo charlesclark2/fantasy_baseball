@@ -727,7 +727,8 @@ export function MyLeague() {
       )}
 
       {/* 🚩 NF-C0-Yahoo-ENABLE — the credit the platform's terms require, on a surface built from
-          the league it imported. Renders nothing for a hand-entered or Sleeper/ESPN league. */}
+          the league it imported — DECLARED here, drawn by the page footer, which is where
+          Yahoo's Cover Page requires it. A hand-entered or Sleeper/ESPN league declares none. */}
       <PlatformAttribution sources={league} />
     </div>
   )
