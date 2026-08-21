@@ -161,7 +161,8 @@ discarded because they are 7 days apart and MVP-1's predates NF-TR2b entirely, t
 | [15, 18) | 63 | 0.958 | 17% |
 
 **Spearman ρ(expected games, `nf1_scale`) = −0.187, p = 6.6e-07, n = 697**, and it is significant at
-every position: QB −0.299, RB −0.252, TE −0.236, WR −0.126. The clamp saturators sit at low `g`
+every position: QB −0.299, RB −0.252, TE −0.236, WR −0.126. ⭐ **SUPERSEDED BY §7.2** — a
+matched-vintage rebuild put the true figure at **−0.213 (p = 1.4e-08)**, by both routes. The clamp saturators sit at low `g`
 (4 of 7 have `g < 3`).
 
 ⇒ **The ordering step systematically transfers point level from high-availability players to
@@ -282,3 +283,67 @@ neither is attributable (NF-W7d).
 * **Two artifacts of different vintages are not an A/B.** The first cut of §2.3 compared the MVP-1
   and NF1.5 parquets (7 days apart, one predating NF-TR2b) and read the TR2b constant as a finding.
   The vintage-free instrument — `nf1_scale`, recorded in-run — was already on the row (NF-D10).
+
+
+---
+
+## 7. POST-PUBLISH VERIFICATION (2026-08-21, operator ran the §5a chain and published)
+
+The operator ran steps (a)–(f). `generated_at` 2026-08-21T05:23:33Z; `sleeper_status_as_of`
+**2026-08-20T13:30:16Z**; `[METRIC] nf_inj1_injury_input_freshness=OK lag_hours=15.9`. ⭐ Both
+projection frames were rebuilt in the **same run**, which finally makes the MVP-1 ↔ NF1.5 A/B
+matched-vintage (`proj_games` identical to 3.55e-15) — the comparison §2.3 could not make.
+
+### 7.1 Facet 1 — FIXED, verified on the published artifact ✅
+
+All 9 spot-checked newly-flagged players moved **down**; the full flagged cohort is 23 rows.
+
+| player | status | expected games | PPR |
+|---|---|---|---|
+| Alec Pierce | PUP | 15.16 → **7.30** | 134.5 → 118.3 |
+| Jayden Higgins | RES | 12.86 → **6.70** | 114.4 → 106.8 |
+| Ricky Pearsall | RES | 9.50 → **5.60** | 108.4 → **45.0** |
+| Luke Musgrave | PUP | 12.30 → **6.50** | 39.6 → 27.7 |
+| Tyrell Shavers | PUP | 9.71 → **5.70** | 38.0 → 18.6 |
+
+### 7.2 …and the same run measured §3 directly, on live data
+
+Note the ratios above: **Pierce's expected games HALVED while his points fell 12%.** With both frames
+at matched vintage this decomposes exactly. On the 23-row injury-capped cohort, MVP-1 applies the cap
+to games *and* line, and the ordering step then hands the point back:
+
+* **median NF1.5 ÷ MVP-1 point = 1.292; 18 of 23 scaled UP** (Higgins ×2.32, Pierce ×1.67, Guerendo ×1.81)
+* **aggregate 563 → 769 PPR = +36.4% of the availability discount given back**, on precisely the
+  cohort the discount exists for.
+
+Matched-vintage whole-board gradient (this **supersedes** §2.3's −0.187): median point ratio **1.942**
+at `g < 2` → **0.955** at `g ≥ 15`; **ρ(games, point ratio) = −0.213, p = 1.4e-08, n = 697** — and
+ρ(games, `nf1_scale`) is **−0.213** to three decimals, i.e. the vintage-free instrument was measuring
+exactly the right quantity. Veterans with `g < 6`: +14.8% aggregate (§2.3's contaminated cut said
++18.1%).
+
+### 7.3 Two numbers moved — one is nothing, one is undecomposable
+
+**Violations 9 → 10.** The new row is **Spencer Rattler** (QB, `g` 6.50, 359.8 att = 55.4/g, scale
+2.10). He is **not** injury-flagged, so this is not the refresh. The market also refreshed in the same
+run (ADP 08-16 → 08-20, ECR 08-15 → 08-21) and the pre-refresh frame was overwritten, so ⛔ **this is
+not attributable** — recorded as observed, not explained.
+
+**⚠️ Clamp saturation 19 → 31 — my first read of this was WRONG and is corrected here.** It is
+**entirely the LOW end**: high-end saturation (`≥3.4999`, the direction that manufactures an
+impossible stat line) is **7 → 7, unchanged**; the low end (`≤0.3001`, downgrades the line cannot
+reach) went **12 → 24**, median `g` 10.32 — i.e. healthy players marked down hard, not injured ones
+inflated. **The injury refresh did not aggravate the coherence defect.** Same caveat as Rattler: two
+inputs changed at once, so the low-end doubling is observed, not attributed.
+
+### 7.4 Stick-class rows are NOT coherent — as designed
+
+`Easton Stick` is byte-identical (153.4 att / 1.86 g / 80.7 per game) and the board published with the
+ALERT firing on 10 rows. That is the intended outcome of this story, not a miss: the AC's
+"Stick-class players are coherent" is gated on the §0.5 model change in
+`nf_inj1_preregistration.md`, which is the half that is *not* shipped here.
+
+**What §7.2 changes for that study:** it replaces an inferred mechanism with a measured effect size.
+The pre-registered `rate_permute` arm now has a concrete target — restore the 36.4% give-back on the
+injury-capped cohort without losing held-out ordering ρ — and a matched-vintage baseline to be scored
+against.

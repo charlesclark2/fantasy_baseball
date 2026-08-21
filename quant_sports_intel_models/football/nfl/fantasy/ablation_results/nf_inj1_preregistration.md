@@ -23,6 +23,13 @@ bake-off validated.
 **The question that decides it is not "is it more coherent" — it is coherent by construction.** It is
 whether the *ordering* survives, and whether the served point level is not made worse.
 
+⭐ **MEASURED TARGET (diagnosis §7.2, post-publish 2026-08-21).** On the 23-row injury-capped cohort
+the ordering step hands back **+36.4%** of the availability discount in aggregate (median point ratio
+1.292; 18 of 23 scaled up). `rate_permute` should remove that give-back **without** losing held-out
+within-position ρ. The matched-vintage whole-board gradient to close is ρ(games, point ratio) =
+**−0.213** (p = 1.4e-08, n = 697); a successful arm drives it to ~0 by construction, so ⛔ it is **not**
+a discriminator between arms and must not be reported as one — it is a precondition.
+
 ---
 
 ## 2. Arms (declared forward; this IS the field for DSR)
