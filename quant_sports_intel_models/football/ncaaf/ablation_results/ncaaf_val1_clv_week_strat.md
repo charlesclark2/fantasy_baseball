@@ -20,8 +20,10 @@ EXISTING CLV read by a pre-registered `season_order_week` bucket, once, and clas
 
 ## The headline
 
-**There is no early-season edge, and week 1–3 is the WORST of the three buckets in BOTH markets.**
-The premise is not merely unproven — the point estimates run the opposite way.
+**Our served model has no early-season edge against the close, and week 1–3 is the WORST of the
+three buckets in BOTH markets.** The premise is not merely unproven — the point estimates run the
+opposite way. (On why this refutes the premise *as it is used* but is not a general claim about
+market softness, see [§ Scope](#️-scope-of-the-claim--what-this-can-and-cannot-refute).)
 
 | market | pooled | **wk1-3** | wk4-6 | wk7+ | breakeven |
 |---|---|---|---|---|---|
@@ -40,11 +42,11 @@ null classification below says it is.
 
 | market | bucket | n | hit | edge (pp) | ROI@−110 | placebo | best degenerate | p(>0.5238) | BH cut | MDE | upper bound | null state |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| ATS | pooled | 4114 | 0.5083 | −1.55 | −3.10 % | 0.4995 | 0.5005 | 0.9778 | — | 0.5434 | 0.5212 | *(MEASURED_IMMATERIAL)* |
+| ATS | pooled | 4114 | 0.5083 | −1.55 | −2.97 % | 0.4995 | 0.5005 | 0.9778 | — | 0.5434 | 0.5212 | *(MEASURED_IMMATERIAL)* |
 | ATS | **wk1-3** | 701 | **0.4936** | −3.02 | −5.77 % | 0.4879 | **0.5121** | 0.9494 | 0.0333 | 0.5714 | 0.5344 | **MEASURED_IMMATERIAL** |
 | ATS | wk4-6 | 832 | 0.5228 | −0.10 | −0.19 % | 0.5096 | 0.5072 | 0.5362 | 0.0167 | 0.5667 | 0.5601 | **POWER_LIMITED** |
 | ATS | wk7+ | 2581 | 0.5076 | −1.62 | −3.10 % | 0.4994 | 0.5017 | 0.9527 | 0.0500 | 0.5485 | 0.5287 | **MEASURED_IMMATERIAL** |
-| O/U | pooled | 4135 | 0.5137 | −1.01 | −1.93 % | 0.4958 | 0.5018 | 0.9067 | — | 0.5433 | 0.5266 | *(MEASURED_IMMATERIAL)* |
+| O/U | pooled | 4135 | 0.5137 | −1.01 | −1.94 % | 0.4958 | 0.5018 | 0.9067 | — | 0.5433 | 0.5266 | *(MEASURED_IMMATERIAL)* |
 | O/U | **wk1-3** | 705 | **0.4950** | −2.88 | −5.49 % | 0.4752 | **0.5362** | 0.9414 | 0.0500 | 0.5710 | 0.5358 | **MEASURED_IMMATERIAL** |
 | O/U | wk4-6 | 843 | 0.5291 | +0.53 | +1.00 % | 0.5089 | 0.5172 | 0.3932 | 0.0167 | 0.5666 | 0.5661 | **DSR_UNREACHABLE** |
 | O/U | wk7+ | 2587 | 0.5137 | −1.01 | −1.93 % | 0.4971 | 0.5014 | 0.8522 | 0.0333 | 0.5484 | 0.5348 | **MEASURED_IMMATERIAL** |
