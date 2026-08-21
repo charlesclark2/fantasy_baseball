@@ -196,8 +196,9 @@ mean-calibration question for a P2.x successor, and it is *market-blind* (a comp
 the close, not an edge claim).
 
 ⚠️ Scope: this table is a post-hoc description of an already-decided null, not a test. The market
-half of it is not established — over hitting 0.464 on n=705 is ~1.9 SE from 0.50 (two-sided
-p ≈ 0.055), so *"early-season closing totals are too high"* is **not** a claim this story supports.
+half of it is not established — over hitting 0.464 on n=705 is 1.92 SE from 0.50 (EXACT
+two-sided binomial p = 0.060 — a normal approximation reads 0.055, which is the wrong side of a
+conventional bar), so *"early-season closing totals are too high"* is **not** a claim this story supports.
 What *is* solid is our model's tilt, because that is a property of the model, not a sample statistic.
 
 ## Instrument finding — a 5th call-site correction of `cv_power.classify_null`
