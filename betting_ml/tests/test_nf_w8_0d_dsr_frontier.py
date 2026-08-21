@@ -163,6 +163,16 @@ class TestTheDecompositionAndTheStructuralBound:
         b = DF.paired_noise_bound(_known())
         assert b["paired_share_of_level_variance_bound"] < 0.01
         assert b["level_row_sd_ppr"] > 5.0
+        # ⭐ the bound must be ROBUST to π̄, not contingent on it — the whole declared grid stays
+        # under 1%, and the reported figure must be the WORST rung, never a favourable one
+        assert len(b["pi_bar_ladder"]) >= 3
+        assert all(r["share_of_level_variance"] < 0.01 for r in b["pi_bar_ladder"])
+        assert b["paired_share_of_level_variance_bound"] == max(
+            r["share_of_level_variance"] for r in b["pi_bar_ladder"])
+        # Bhatia–Davis is exact at π̄ = 1 (the shift is a constant ⇒ zero row variance)
+        assert next(r for r in b["pi_bar_ladder"]
+                    if r["pi_bar"] == 1.0)["paired_row_sd_bound_ppr"] == pytest.approx(0.0,
+                                                                                       abs=1e-12)
 
     def test_a_non_positive_excess_is_reported_not_clamped_away(self):
         """NF-W7k's `het_var` discipline: a residual at or below zero is a real reading."""

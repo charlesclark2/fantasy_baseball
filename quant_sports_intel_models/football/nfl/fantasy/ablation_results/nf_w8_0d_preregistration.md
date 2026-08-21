@@ -72,6 +72,16 @@ variance. This is NF-W7k's common-random-numbers lesson one axis over: **the sam
 across arms, so row-sampling error cancels in the paired delta** — it survives only through the
 `|·|` KINK, on the folds where the corrected bias crosses zero (2 of 7 for `cond_shift`).
 
+> ⚠️ **SUPERSEDED, kept verbatim above (NF-W7f's discipline: a pre-registration edited after its
+> result is no longer one).** The `|shift|·½` step is only exact at `π̄ = 1`: `|shift|` there is the
+> RAW shift parameter `S`, while the record carries only the level shift `s_f = S·π̄`, so bounding
+> by `s_f/2` is not rigorous for `π̄ < 1`. **The run reports the rigorous form instead** — every
+> row's point difference lies in `[0, S]` with mean `s_f`, so Bhatia–Davis gives
+> `SD ≤ √(s_f·(S − s_f))`, EVALUATED over a declared `π̄ ∈ {1.0, 0.8, 0.6, 0.4}` grid rather than
+> at an assumed `π̄`. The conclusion is unchanged and is now ROBUST rather than contingent: the
+> paired share stays **under 1%** across the whole grid. The correction TIGHTENS the argument and
+> moves no decision rule (§3 is untouched).
+
 Estimation, all from NF-W8-0c's published per-fold summaries:
 
 - `σ_row` = √mean(sd_err²) over the evaluable folds (**known**, not fitted).

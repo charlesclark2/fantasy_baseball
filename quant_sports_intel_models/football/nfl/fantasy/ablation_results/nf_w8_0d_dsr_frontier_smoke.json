@@ -9,7 +9,7 @@
  ],
  "kind": "instrument",
  "smoke": true,
- "generated_at": "2026-08-21T01:00:57.996232+00:00",
+ "generated_at": "2026-08-21T01:08:01.006011+00:00",
  "source_record": "nf_w8_0c_qb_body.json",
  "bar": 0.95,
  "declared_field_size": 4,
@@ -195,10 +195,37 @@
  },
  "paired_noise_bound": {
   "worst_fold_shift_ppr": 0.4534511726917473,
-  "paired_row_sd_bound_ppr": 0.22672558634587364,
   "level_row_sd_ppr": 6.136569580813001,
-  "paired_share_of_level_variance_bound": 0.0013650537161017796,
-  "note": "an upper BOUND (\u03c0's row SD \u2264 \u00bd); the realised share is smaller still"
+  "pi_bar_ladder": [
+   {
+    "pi_bar": 1.0,
+    "raw_shift_ppr": 0.4534511726917473,
+    "paired_row_sd_bound_ppr": 0.0,
+    "share_of_level_variance": 0.0
+   },
+   {
+    "pi_bar": 0.8,
+    "raw_shift_ppr": 0.566813965864684,
+    "paired_row_sd_bound_ppr": 0.22672558634587356,
+    "share_of_level_variance": 0.0013650537161017785
+   },
+   {
+    "pi_bar": 0.6,
+    "raw_shift_ppr": 0.7557519544862455,
+    "paired_row_sd_bound_ppr": 0.37024133212047955,
+    "share_of_level_variance": 0.003640143242938079
+   },
+   {
+    "pi_bar": 0.4,
+    "raw_shift_ppr": 1.133627931729368,
+    "paired_row_sd_bound_ppr": 0.5553619981807192,
+    "share_of_level_variance": 0.008190322296610673
+   }
+  ],
+  "worst_case_pi_bar": 0.4,
+  "paired_row_sd_bound_ppr": 0.5553619981807192,
+  "paired_share_of_level_variance_bound": 0.008190322296610673,
+  "note": "Bhatia\u2013Davis on a per-row point difference confined to [0, S]; evaluated over a DECLARED \u03c0\u0304 grid because S itself is not in the published record"
  },
  "design_model": {
   "mu_bar": -0.457267373058047,
@@ -969,5 +996,5 @@
   }
  },
  "declared_field_size_source": "NF-W8-0c prereg \u00a74 \u2014 4 arms, the \u00a70.5 minimum (\u22653 classes + a direct-learned foil); MH2.7 stamped the shrink remedy SUSPECT",
- "runtime_seconds": 2.6
+ "runtime_seconds": 3.4
 }

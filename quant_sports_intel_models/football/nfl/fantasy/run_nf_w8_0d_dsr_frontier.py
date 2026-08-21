@@ -303,12 +303,24 @@ def render(out: dict) -> str:
     m.append("> `b_I,f − b_a,f = −(1/m)·Σᵢ(pointₐ,ᵢ − point_I,ᵢ)` — **the realized `y` cancels "
              "exactly.**")
     m.append("")
-    m.append(f"`cond_shift` adds `shift·alive` to every draw, so the per-row point difference is "
-             f"`shift·πᵢ` with `π ∈ [0,1]`; its row SD is bounded by `|shift|/2 ≤ "
-             f"{P['paired_row_sd_bound_ppr']:.4f}` PPR against a per-row error SD of "
-             f"**{P['level_row_sd_ppr']:.2f}** PPR. **The paired difference therefore carries at "
-             f"most {P['paired_share_of_level_variance_bound']:.2%} of the level's sampling "
-             f"variance** — an upper bound; the realised share is smaller still.")
+    m.append(f"`cond_shift` adds `S·alive` to every draw, so every row's point difference lies in "
+             f"`[0, S]` and has mean equal to the fold's OBSERVED level shift `s_f` "
+             f"({P['worst_fold_shift_ppr']:.4f} PPR at its worst fold). Bhatia–Davis then bounds "
+             f"its row SD by `√(s_f·(S − s_f))`. ⚠️ `S` is the raw shift PARAMETER and is not in "
+             f"the record — only `s_f = S·π̄` is — so rather than assume a `π̄` the bound is "
+             f"EVALUATED over a declared grid, against a per-row error SD of "
+             f"**{P['level_row_sd_ppr']:.2f}** PPR:")
+    m.append("")
+    m.append("| assumed `π̄` | implied raw shift `S` | paired row-SD bound | share of the level's "
+             "sampling variance |")
+    m.append("|---|---|---|---|")
+    for r in P["pi_bar_ladder"]:
+        m.append(f"| {r['pi_bar']:.1f} | {r['raw_shift_ppr']:.4f} | "
+                 f"{r['paired_row_sd_bound_ppr']:.4f} | {r['share_of_level_variance']:.2%} |")
+    m.append("")
+    m.append(f"**Across the whole declared grid the paired difference carries at most "
+             f"{P['paired_share_of_level_variance_bound']:.2%} of the level's sampling variance** — "
+             f"the finding is robust to `π̄`, not contingent on it.")
     m.append("")
     m.append("The level's noise re-enters `δ` **only through the `|·|` KINK**, on the folds where "
              "the corrected bias crosses zero (2 of 7 for `cond_shift`). ⇒ **measuring the "

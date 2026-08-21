@@ -1,6 +1,6 @@
 # NF-W8-0d — the DSR gate-design FRONTIER for weekly QB (**NO_FEASIBLE_DESIGN_CLEARS**, answer **(b)**)
 
-Generated 2026-08-21T01:00:39.568553+00:00 · position **QB** · source record `nf_w8_0c_qb_body.json` · bar `DSR_MIN` **0.95** (INHERITED) · declared field **4**
+Generated 2026-08-21T01:07:35.813422+00:00 · position **QB** · source record `nf_w8_0c_qb_body.json` · bar `DSR_MIN` **0.95** (INHERITED) · declared field **4**
 
 ⚖️ `best_alpha = 0` · **DEPLOY-HELD** · an INSTRUMENT. ⛔ No model ships, nothing is promoted, no arm is re-scored and **no live gate is relaxed**. Every number is arithmetic on NF-W8-0c's already-published per-fold scores — the EFFECT is held fixed, only the DESIGN moves.
 
@@ -53,7 +53,16 @@ NF-W8-0c's decomposition of the **level** reproduces exactly: observed fold SD *
 
 > `b_I,f − b_a,f = −(1/m)·Σᵢ(pointₐ,ᵢ − point_I,ᵢ)` — **the realized `y` cancels exactly.**
 
-`cond_shift` adds `shift·alive` to every draw, so the per-row point difference is `shift·πᵢ` with `π ∈ [0,1]`; its row SD is bounded by `|shift|/2 ≤ 0.2267` PPR against a per-row error SD of **6.14** PPR. **The paired difference therefore carries at most 0.14% of the level's sampling variance** — an upper bound; the realised share is smaller still.
+`cond_shift` adds `S·alive` to every draw, so every row's point difference lies in `[0, S]` and has mean equal to the fold's OBSERVED level shift `s_f` (0.4535 PPR at its worst fold). Bhatia–Davis then bounds its row SD by `√(s_f·(S − s_f))`. ⚠️ `S` is the raw shift PARAMETER and is not in the record — only `s_f = S·π̄` is — so rather than assume a `π̄` the bound is EVALUATED over a declared grid, against a per-row error SD of **6.14** PPR:
+
+| assumed `π̄` | implied raw shift `S` | paired row-SD bound | share of the level's sampling variance |
+|---|---|---|---|
+| 1.0 | 0.4535 | 0.0000 | 0.00% |
+| 0.8 | 0.5668 | 0.2267 | 0.14% |
+| 0.6 | 0.7558 | 0.3702 | 0.36% |
+| 0.4 | 1.1336 | 0.5554 | 0.82% |
+
+**Across the whole declared grid the paired difference carries at most 0.82% of the level's sampling variance** — the finding is robust to `π̄`, not contingent on it.
 
 The level's noise re-enters `δ` **only through the `|·|` KINK**, on the folds where the corrected bias crosses zero (2 of 7 for `cond_shift`). ⇒ **measuring the rows/fold lever on the LEVEL over-states it**; this is NF-W7k's common-random-numbers lesson one axis over — the arms share the same rows, so row-sampling error cancels in the paired delta.
 
@@ -231,4 +240,4 @@ Across the FEASIBLE grid the best point becomes 2019-2025 (widest reachable toda
 
 ⚠️⚠️ **READ THE TRIGGER AGAINST §1.** `classify_null` is RIGHT that no fold count and no field size clears — and it then prescribes, verbatim, *"the only lever left is a lower-variance design (more rows per fold / a sharper metric)"*. **That is precisely the lever this story measures, and §1 shows it is VOID** whenever the variance reduction is shared across the field, which is the generic case under common random numbers. The trigger is not wrong about its own axis; it is a prescription the instrument cannot check, and it is the sentence that sent THREE consecutive records (NF-W7f, NF-W7j, NF-W8-0c) at a wall. ⇒ **a second forward recommendation, R2: when `DSR_UNREACHABLE` fires, `classify_null` should compute the lockstep check — `sign(SR − SR0)` under proportional shrinkage — and, when the sign is negative, state that the variance lever is closed too, rather than naming it.** Same shape as MH2.7's own lesson (i): a defect corrected N times downstream is a defect in the INSTRUMENT. ⛔ Not implemented here — `cv_power` is a SHARED instrument pinned by cross-vertical guards (MH2.7 lesson ii), so changing it is a successor's deliberate step.
 
-_runtime 206.3s_
+_runtime 156.2s_

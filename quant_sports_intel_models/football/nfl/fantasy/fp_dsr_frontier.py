@@ -244,23 +244,47 @@ def level_decomposition(obs: Observed) -> dict:
     }
 
 
+#: the declared availability levels the paired bound is evaluated over (see `paired_noise_bound`)
+PI_BAR_GRID: tuple[float, ...] = (1.0, 0.8, 0.6, 0.4)
+
+
 def paired_noise_bound(obs: Observed) -> dict:
     """The STRUCTURAL bound on how much test-row sampling error survives into the PAIRED delta.
 
-    `b_I,f − b_a,f` depends only on the two POINT vectors — the realized `y` cancels exactly — and
-    `cond_shift`'s per-row point difference is `shift·πᵢ` with `π ∈ [0, 1]`, so its row SD is at
-    most `|shift|/2`. Reported as a BOUND, not an estimate: the per-row `π` is not in the published
-    record, so the honest statement is the worst case, and the worst case is already negligible."""
+    `b_I,f − b_a,f` depends only on the two POINT vectors — **the realized `y` cancels exactly** —
+    and `cond_shift` adds `S·alive` to every draw, so every row's point difference `dᵢ` lies in
+    `[0, S]` (a non-negative shift raises every grid quantile weakly, and by at most `S`). By
+    Bhatia–Davis, a variable on `[0, S]` with mean `μ` has `Var ≤ μ(S − μ)`, and the fold's OBSERVED
+    level shift IS that mean (`μ = s_f`). So the paired difference's row SD is bounded by
+    `√(s_f·(S − s_f))`.
+
+    ⚠️ `S` is the raw shift PARAMETER and is not in the published record; only `s_f = S·π̄` is. An
+    earlier draft asserted `SD ≤ |s_f|/2`, which is only exact at `π̄ = 1` and is NOT rigorous
+    otherwise. Rather than assume a `π̄`, the bound is EVALUATED over a declared grid — and it stays
+    under 1% of the level's sampling variance across the whole of it, which is what makes the
+    finding robust instead of contingent."""
     s = np.abs(obs.shifts[WINNER])
     worst_shift = float(s.max())
-    bound_sd = 0.5 * worst_shift
     sigma_row = float(np.sqrt(float((obs.sd_err ** 2).mean())))
+    ladder = []
+    for pi_bar in PI_BAR_GRID:
+        if not 0.0 < pi_bar <= 1.0:
+            raise ValueError(f"π̄ must lie in (0, 1], got {pi_bar}")
+        raw_shift = worst_shift / pi_bar
+        sd = math.sqrt(max(worst_shift * (raw_shift - worst_shift), 0.0))
+        ladder.append({"pi_bar": float(pi_bar), "raw_shift_ppr": raw_shift,
+                       "paired_row_sd_bound_ppr": sd,
+                       "share_of_level_variance": (sd / sigma_row) ** 2})
+    worst = max(ladder, key=lambda r: r["share_of_level_variance"])
     return {
         "worst_fold_shift_ppr": worst_shift,
-        "paired_row_sd_bound_ppr": bound_sd,
         "level_row_sd_ppr": sigma_row,
-        "paired_share_of_level_variance_bound": (bound_sd / sigma_row) ** 2,
-        "note": "an upper BOUND (π's row SD ≤ ½); the realised share is smaller still",
+        "pi_bar_ladder": ladder,
+        "worst_case_pi_bar": worst["pi_bar"],
+        "paired_row_sd_bound_ppr": worst["paired_row_sd_bound_ppr"],
+        "paired_share_of_level_variance_bound": worst["share_of_level_variance"],
+        "note": ("Bhatia–Davis on a per-row point difference confined to [0, S]; evaluated over a "
+                 "DECLARED π̄ grid because S itself is not in the published record"),
     }
 
 
