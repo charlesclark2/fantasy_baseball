@@ -74,6 +74,7 @@ import {
   int,
   teamLabel,
 } from "@/components/fantasy/shared"
+import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
 /** Our rank for a row, given which tab is active. */
 const rankOf = (p: Player, pos: string) => (pos === "Overall" ? p.ovrRank : p.posRank)
@@ -688,6 +689,10 @@ export function RankingsBoard() {
           <FreemiumBoundary entitled={entitled} />
         </>
       )}
+
+      {/* 🚩 NF-C0-Yahoo-ENABLE — a `custom:` selection re-scores this board under scoring rules we
+          READ FROM the platform, so the credit is owed here too. Renders nothing on a preset. */}
+      <PlatformAttribution sources={isCustom ? league : null} />
     </div>
   )
 }

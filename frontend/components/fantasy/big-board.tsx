@@ -74,6 +74,7 @@ import {
   useSaveCustomBoard,
   useSavedLeagues,
 } from "@/lib/fantasy-queries"
+import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
 const SEASON = FANTASY_SEASON
 const FILTER_POSITIONS = ["QB", "RB", "WR", "TE", "K", "DST"] as const
@@ -857,6 +858,10 @@ export function BigBoard() {
       )}
 
       <HonestNote />
+
+      {/* 🚩 NF-C0-Yahoo-ENABLE — a `custom:` selection re-scores this board under scoring rules we
+          READ FROM the platform, so the credit is owed here too. Renders nothing on a preset. */}
+      <PlatformAttribution sources={selectedLeague} />
     </div>
   )
 }

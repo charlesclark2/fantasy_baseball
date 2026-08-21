@@ -85,6 +85,7 @@ import {
   int,
   teamLabel,
 } from "@/components/fantasy/shared"
+import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
 /** 72 → "72nd", 1 → "1st", 11 → "11th", etc. */
 function ordinal(n: number): string {
@@ -252,7 +253,9 @@ function PlayerView({ playerId }: { playerId: string }) {
     savedLeagues,
     entitled,
   )
-  const { board, isLoading: boardLoading } = useResolvedBoard(configName, size)
+  // `league` — NF-C0-Yahoo-ENABLE: non-null only for a `custom:<id>` selection, which is the only
+  // case in which anything on this page was scored under platform-derived rules.
+  const { board, isLoading: boardLoading, league } = useResolvedBoard(configName, size)
 
   const config = manifest?.configs.find((c) => c.name === configName)
 
@@ -786,6 +789,10 @@ function PlayerView({ playerId }: { playerId: string }) {
           <FreemiumBoundary entitled={entitled} />
         </>
       )}
+
+      {/* 🚩 NF-C0-Yahoo-ENABLE — a `custom:` selection re-scores this board under scoring rules we
+          READ FROM the platform, so the credit is owed here too. Renders nothing on a preset. */}
+      <PlatformAttribution sources={league} />
     </div>
   )
 }

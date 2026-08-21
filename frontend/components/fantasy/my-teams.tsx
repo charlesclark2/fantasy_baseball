@@ -67,6 +67,8 @@ import {
 import type { RosterMatch } from "@/lib/league-scoring"
 import { classifyUnmatched } from "@/lib/league-scoring"
 import { GAP_EPSILON, portfolioRollup, teamRollup, type TeamRollup } from "@/lib/portfolio-rollup"
+import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
+import { PLATFORM_ROSTER_RETENTION_DAYS } from "@/lib/platform-retention"
 
 export function MyTeams() {
   const { teams, isLoading, isError, boardPositions } = useMyTeams()
@@ -106,6 +108,10 @@ export function MyTeams() {
               boardPositions={boardPositions}
             />
           ))}
+          {/* 🚩 NF-C0-Yahoo-ENABLE — ONE credit for the whole page rather than one per card: this
+              surface shows several leagues at once, and the component resolves the distinct
+              platforms actually on screen. */}
+          <PlatformAttribution sources={teams.map((t) => t.league)} />
         </div>
       )}
     </div>
@@ -280,6 +286,9 @@ function LeagueCard({
   // the same as "you never picked a team." `roster.length` alone can't tell those apart.
   const linked = !!league.source_team_key
   const hasPlayers = roster.length > 0
+  // NF-C0-Yahoo-ENABLE — `?? false`: an additive server key (NF-C0), absent on any league saved
+  // before it existed, so an older payload keeps rendering exactly what it renders today.
+  const purged = league.roster_retention_purged ?? false
   const matchedCount = roster.filter((r) => r.board).length
   const unmatchedCount = roster.length - matchedCount
   const starters = roster.filter((r) => r.roster.starter)
@@ -316,7 +325,25 @@ function LeagueCard({
         </p>
       )}
 
-      {linked && !hasPlayers && (
+      {/* ⭐ NF-C0-Yahoo-ENABLE — WE DELETED IT is a different fact from THEY NEVER DRAFTED, and the
+          two produce the identical payload: a linked team with an empty roster. Explaining ours as
+          theirs is a confident wrong answer that sends the user to re-import for no reason, which
+          is the NF-C6b ambiguous-empty-state defect exactly. This branch goes FIRST for the same
+          reason: it is the more specific of the two, and the general one below would otherwise
+          swallow it. */}
+      {linked && !hasPlayers && purged && (
+        <p className="mt-3 text-xs text-gray-500" data-testid="roster-retention-purged">
+          We deleted the roster we had copied for this league — either you disconnected the
+          platform, or it passed our {PLATFORM_ROSTER_RETENTION_DAYS}-day retention window. Your
+          league&rsquo;s scoring settings are untouched.{" "}
+          <Link href="/fantasy/import" className="text-emerald-400 hover:underline">
+            Re-import this league
+          </Link>{" "}
+          to see your roster here again.
+        </p>
+      )}
+
+      {linked && !hasPlayers && !purged && (
         <p className="mt-3 text-xs text-gray-500">
           {league.source_team_name ? `${league.source_team_name} is` : "Your team is"}{" "}
           linked, but the platform reported no rostered players for it — the usual reason is your

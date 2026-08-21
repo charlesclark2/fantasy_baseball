@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { Nav } from "@/components/nav"
+import { PLATFORM_ROSTER_RETENTION_DAYS } from "@/lib/platform-retention"
 
 export const metadata = {
   title: "Privacy Policy — Credence Sports",
@@ -14,7 +15,7 @@ export default function PrivacyPage() {
         <div className="mb-10">
           <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Credence Sports · A product of Penumbra Partners</p>
           <h1 className="text-3xl font-bold text-foreground">Privacy Policy</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Effective Date: June 14, 2026 · Last Updated: June 14, 2026</p>
+          <p className="mt-2 text-sm text-muted-foreground">Effective Date: June 14, 2026 · Last Updated: August 20, 2026</p>
         </div>
 
         <div className="prose prose-invert prose-sm max-w-none space-y-8 text-gray-300 leading-relaxed">
@@ -75,18 +76,43 @@ export default function PrivacyPage() {
             <p><strong>Aggregate and anonymized data.</strong> We may share aggregate, anonymized statistics about Service usage with no information that could identify you individually.</p>
           </Section>
 
-          <Section title="5. Data Retention">
+          <Section title="5. Fantasy League Import (Yahoo, ESPN, Sleeper)">
+            <p>The Service lets you connect a fantasy football league you own on a third-party platform — Yahoo Fantasy, ESPN or Sleeper — so that our projections and draft tools can be scored against your league&rsquo;s real rules instead of a generic preset. Connecting a league is entirely optional and nothing on the Service requires it.</p>
+
+            <h3 className="text-sm font-semibold text-gray-200 mt-4 mb-2">What we read</h3>
+            <p>With your permission we read, from the league you select: its scoring rules, roster slots, team count and draft type; the list of teams in the league and which one is yours; and the players on those teams at the moment you import. We read only leagues you choose, one at a time. We never write anything back to the platform — every request we make is read-only — and we never see your password for that platform.</p>
+            <p><strong>Yahoo.</strong> Yahoo access is granted through Yahoo&rsquo;s own consent screen (OAuth). We hold a token that lets us read your Yahoo Fantasy leagues; we never receive or store your Yahoo password. Fantasy data provided by <a href="https://football.fantasysports.yahoo.com/" target="_blank" rel="noreferrer" className="text-[#10b981] hover:underline">Yahoo Fantasy</a>.</p>
+            <p><strong>ESPN and Sleeper.</strong> Sleeper leagues are read from Sleeper&rsquo;s public API using the league identifier you provide. ESPN leagues are imported from a league page you paste in yourself; that flow runs in your browser and does not send us an ESPN credential.</p>
+
+            <h3 className="text-sm font-semibold text-gray-200 mt-4 mb-2">What we keep, and for how long</h3>
+            <p><strong>Your league settings are kept for as long as you keep the league.</strong> Scoring rules, roster slots, team count and any depth targets you set become your saved league configuration — the same object you would get by typing those settings in by hand — and they are yours to edit or delete at any time in League Settings.</p>
+            <p><strong>Roster data is kept for at most {PLATFORM_ROSTER_RETENTION_DAYS} days.</strong> The rosters we copy from the platform — your team, and the other teams in your league — expire {PLATFORM_ROSTER_RETENTION_DAYS} days after we copy them. Once expired they are no longer readable by any part of the Service and are deleted from our store. Re-importing the league takes a fresh copy and starts a new {PLATFORM_ROSTER_RETENTION_DAYS}-day window.</p>
+            <p><strong>Disconnecting deletes the rosters immediately.</strong> If you disconnect a platform, we delete our copy of your access token <em>and</em> every roster we copied from that platform, without waiting for the retention window. Your league&rsquo;s scoring settings are not deleted, because they are your own configuration rather than the platform&rsquo;s data. Disconnecting on our side does not revoke the permission at the platform itself — for Yahoo, use your Yahoo account security settings to do that, and the Service links you there.</p>
+
+            <h3 className="text-sm font-semibold text-gray-200 mt-4 mb-2">What we never do with it</h3>
+            <p>League data imported from a third-party platform is used only to render your own personalized surfaces to you. Specifically, we do not:</p>
+            <ul>
+              <li>use it to train, fit or evaluate any predictive model — our projections are built from public play-by-play and statistical sources, never from user leagues</li>
+              <li>send it to any large language model or other AI tool</li>
+              <li>index it, or make it searchable or visible to any other user</li>
+              <li>sell it, share it with advertisers, or disclose it to any third party except the infrastructure providers listed in the section above</li>
+            </ul>
+            <p>Where a platform&rsquo;s terms require it, we display that platform&rsquo;s attribution and a link back to it on every screen showing its data.</p>
+          </Section>
+
+          <Section title="6. Data Retention">
             <p>We retain your personal information for as long as your account is active or as needed to provide the Service. Specifically:</p>
             <ul>
               <li>Account information is retained for the duration of your account and deleted within 90 days of account closure upon request</li>
               <li>Bet log data is retained for the duration of your account — this is your data and you can export or delete it</li>
               <li>Usage logs are retained for up to 12 months for security and debugging purposes</li>
               <li>Email communications are retained for up to 3 years</li>
+              <li>Fantasy rosters imported from a third-party platform are retained for at most {PLATFORM_ROSTER_RETENTION_DAYS} days, and are deleted immediately when you disconnect that platform — see the section above</li>
             </ul>
             <p>You may request deletion of your account and associated data at any time by contacting us at <a href="mailto:support@credencesports.com" className="text-[#10b981] hover:underline">support@credencesports.com</a>. We will process deletion requests within 30 days.</p>
           </Section>
 
-          <Section title="6. Data Security">
+          <Section title="7. Data Security">
             <p>We implement industry-standard security measures to protect your information, including:</p>
             <ul>
               <li>All data transmitted between your browser and our servers is encrypted using TLS (HTTPS)</li>
@@ -97,7 +123,7 @@ export default function PrivacyPage() {
             <p>However, no method of transmission over the internet or method of electronic storage is 100% secure. While we strive to protect your personal information, we cannot guarantee absolute security. In the event of a data breach that affects your personal information, we will notify you as required by applicable law.</p>
           </Section>
 
-          <Section title="7. Your Rights and Choices">
+          <Section title="8. Your Rights and Choices">
             <p>Depending on your jurisdiction, you may have certain rights regarding your personal information:</p>
             <p><strong>Access.</strong> You may request a copy of the personal information we hold about you.</p>
             <p><strong>Correction.</strong> You may request that we correct inaccurate personal information about you.</p>
@@ -108,23 +134,23 @@ export default function PrivacyPage() {
             <p>To exercise any of these rights, contact us at <a href="mailto:support@credencesports.com" className="text-[#10b981] hover:underline">support@credencesports.com</a>. We will respond to your request within 30 days.</p>
           </Section>
 
-          <Section title="8. Cookies">
+          <Section title="9. Cookies">
             <p><strong>Essential cookies.</strong> Required for the Service to function. These include session cookies that keep you logged in. You cannot opt out of essential cookies without discontinuing use of the Service.</p>
             <p><strong>Analytics cookies.</strong> We may use basic analytics to understand usage patterns. These are not advertising cookies and do not track you across other websites.</p>
             <p>We do not use third-party advertising cookies. We do not participate in any advertising networks or retargeting programs.</p>
             <p>You can control cookies through your browser settings. Disabling cookies may affect your ability to use certain features of the Service.</p>
           </Section>
 
-          <Section title="9. Third-Party Links">
+          <Section title="10. Third-Party Links">
             <p>The Service may contain links to third-party websites or services, including sportsbooks and betting platforms referenced in our content. This Privacy Policy does not apply to those third-party services. We encourage you to review the privacy policies of any third-party services you access through the Service.</p>
           </Section>
 
-          <Section title="10. Children's Privacy">
+          <Section title="11. Children's Privacy">
             <p>The Service is not directed to individuals under the age of 18. We do not knowingly collect personal information from anyone under 18. If we become aware that we have collected personal information from a person under 18, we will take steps to delete that information promptly.</p>
             <p>If you believe we may have inadvertently collected information from a minor, please contact us at <a href="mailto:support@credencesports.com" className="text-[#10b981] hover:underline">support@credencesports.com</a>.</p>
           </Section>
 
-          <Section title="11. California Privacy Rights">
+          <Section title="12. California Privacy Rights">
             <p>If you are a California resident, you have additional rights under the California Consumer Privacy Act (CCPA) and California Privacy Rights Act (CPRA), including:</p>
             <ul>
               <li>The right to know what personal information we collect</li>
@@ -135,12 +161,12 @@ export default function PrivacyPage() {
             <p>To exercise your California privacy rights, contact us at <a href="mailto:support@credencesports.com" className="text-[#10b981] hover:underline">support@credencesports.com</a>.</p>
           </Section>
 
-          <Section title="12. Changes to This Privacy Policy">
+          <Section title="13. Changes to This Privacy Policy">
             <p>We may update this Privacy Policy from time to time. We will notify you of material changes by posting the updated policy with a new effective date and, for significant changes, by sending an email to the address associated with your account.</p>
             <p>Your continued use of the Service after the effective date of any changes constitutes your acceptance of the updated Privacy Policy.</p>
           </Section>
 
-          <Section title="13. Contact">
+          <Section title="14. Contact">
             <p>For questions, concerns, or requests regarding this Privacy Policy or our data practices, contact us at:</p>
             <address className="not-italic mt-2 text-gray-400">
               Penumbra Partners / Credence Sports<br />

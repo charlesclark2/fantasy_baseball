@@ -390,6 +390,24 @@ class League(_LeagueFields):
     created_at: str | None = None
     updated_at: str | None = None
 
+    # ── NF-C0-Yahoo-ENABLE (Half A): why a deleted roster has to SAY it was deleted ────────────
+    # True once a disconnect, or the retention window closing, removed roster data this league HAD
+    # held (`dynamo.purge_platform_league_data` / the read-side expiry).
+    #
+    # ⭐ WITHOUT IT THE DELETION IS INDISTINGUISHABLE FROM A LEAGUE THAT NEVER DRAFTED. My Teams
+    # branches on `source_team_key && !roster.length` and explains that state as "the platform
+    # reported no rostered players — the usual reason is your league hasn't drafted yet." After a
+    # purge that sentence is a confident, wrong explanation for something WE did, and it invites the
+    # user to re-import to fix a non-problem. This is the NF-C6b ambiguous-empty-state class: an
+    # absence must be reported, never imputed.
+    #
+    # ⚠️ ON `League`, NOT ON `_LeagueFields` — E9.49, and the same reasoning as the validators
+    # above facing the other way. This is storage metadata about what we did to a record, not
+    # something a client may assert about itself; putting it on the shared base would let a SAVE
+    # set it. A hand edit that rewrites the league legitimately clears it, because the record being
+    # written is the user's own and holds no purged platform data to describe.
+    roster_retention_purged: bool = False
+
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # NF-C4 — the CUSTOM BIG BOARD
