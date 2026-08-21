@@ -1,5 +1,10 @@
 # NF-INJ1 §0.5 PRE-REGISTRATION — restoring (games, line) coherence to the served board
 
+> ⭐ **THIS IS NF-INJ2's REGISTRATION.** Written during NF-INJ1 (the diagnosis), **FUNDED by the PM on
+> 2026-08-21** (`nf_inj1_diagnosis.md` §8.2), and executed as the separate story **NF-INJ2**. It is
+> pre-registered because it was committed before any arm was scored — running it in a later session
+> does not weaken that, and ⛔ editing it now would (E2.1-r).
+
 Written **before any arm is scored**. Diagnosis: `nf_inj1_diagnosis.md`. `best_alpha = 0`.
 
 ⛔ This document is the record. A change to it after a result is not a pre-registration (E2.1-r).

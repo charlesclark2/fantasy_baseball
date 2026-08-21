@@ -235,7 +235,7 @@ refusing would freeze every publish through draft season over 9 backup QBs on an
 Refresh the injury input and rebuild. This alone corrects all 23 misprojected players (18 uncapped +
 5 wrongly capped) including three draftable WRs, during draft season. Commands in the handoff.
 
-### 5b. The coherence fix — **§0.5, pre-registered** (`nf_inj1_preregistration.md`)
+### 5b. The coherence fix — **§0.5, pre-registered** (`nf_inj1_preregistration.md`) → **FUNDED as NF-INJ2** (§8.2)
 Level-adjacent ⇒ triggers the whole-board placement read (`run_nf_tr2b_placement_read`) **and** the
 interval revalidation (`run_interval_revalidation`) per NF-D16/D21, and — because it changes a
 served *point* — the NF-TR2b multiplicative-correction caveat that the VOR "shield" is additive-only
@@ -250,11 +250,11 @@ Candidate arms (declared forward, ≥3 + a matched foil + degenerates):
 * `feasibility_clamp` — bound `nf1_scale` by the envelope. Minimal, but treats the symptom.
 * Anchors: an oracle floor, a `no_reorder` degenerate, and a matched foil isolating the games channel.
 
-### 5c. The rookie path (§2.2) — separate, smaller
+### 5c. The rookie path (§2.2) — separate, smaller → **low priority, no standalone story** (§8.3)
 `rookie_projection` reconciles `fp_target` and the slot-bucket games not at all. Fixable in the same
 family but on its own registration; 1 row today, and it is the only MVP-1-side violation.
 
-### 5d. The injury cap itself (§1.3) — §0.5 candidate, lower priority
+### 5d. The injury cap itself (§1.3) — §0.5 candidate → **scheduled as NF-INJ3, AFTER NF-INJ2** (§8.3)
 `{RES: 4, PUP: 4, NFI: 4, SUS: 7}` is unfitted and status-only. A fitted current-status →
 expected-games prior (with recency of the designation as a covariate) is the honest successor.
 **Keep it separable from 5b** — a level change and an availability change must not be bundled, or
@@ -347,3 +347,83 @@ ALERT firing on 10 rows. That is the intended outcome of this story, not a miss:
 The pre-registered `rate_permute` arm now has a concrete target — restore the 36.4% give-back on the
 injury-capped cohort without losing held-out ordering ρ — and a matched-vintage baseline to be scored
 against.
+
+
+---
+
+## 8. PM DECISIONS (2026-08-21) — recorded; NF-INJ1 closes here
+
+All three items in §5 were put to the PM. The decisions, and the trigger conditions that go with
+them, are recorded here so a later reader does not have to reconstruct them.
+
+### 8.1 Decision 1 — the coherence guard stays at **ALERT** ✅
+
+**DECIDED: Option A.** The guard measures and pages; it does not block. The rationale is the coupling,
+which is the part that is easy to miss: **HALT would have blocked the 2026-08-21 republish** — the one
+that corrected 23 injured players including three draftable WRs (§7.1). Blocking publishes blocks
+**injury refreshes too**, so HALT trades a cosmetic defect on undraftable backup QBs for a real one on
+draftable players. `--strict-coherence` exists and is deliberately left OFF.
+
+**⏰ Option C is the documented fallback, and this is its TRIGGER — recorded so it is not forgotten:**
+
+> **Suppress the stat line on violating rows only** (points and expected games still render; the
+> impossible counting stats do not) **IF EITHER**
+> **(a)** NF-INJ2 is not funded, **OR**
+> **(b)** NF-INJ2 runs and does not clear its gates.
+
+C is **not** needed today: the affected rows are undraftable backups, there are **no paying
+subscribers yet**, and the funded fix removes those rows anyway.
+
+**⚠️ AND A SECOND TRIGGER, which is time-based rather than outcome-based — revisit C *immediately* if
+paying subscribers arrive before NF-INJ2 lands.** An impossible number on a paid surface is a
+credibility cost for an honest-analytics product even on a backup, and that cost does not depend on
+whether anyone drafts the player.
+
+### 8.2 Decision 2 — the §0.5 fix is **FUNDED**, as its own story ✅
+
+**DECIDED: fund it, and run it as NF-INJ2 — a separate follow-on story off the existing
+pre-registration, NOT an extension of this diagnosis session.**
+
+The PM's framing, recorded because it is the correct reading of the evidence and sharper than the
+"impossible stat line" headline: **the give-back un-discounts injured players.** It hands back +36.4%
+of the availability cut on 18 of 23 flagged players and it hits DRAFTABLE ones (Pierce ×1.67, Kittle
+×1.29, Higgins ×2.32) in the exact draft-season window where it matters most. **That is the founding
+injury priority running backwards** — an injured player must project down, and today he partly
+projects back up. The rate-permutation reformulation removes the give-back and the 10 impossible rows
+in one principled change.
+
+Confirmed as pre-registered, with three readings the PM ratified explicitly:
+* **a TIE on the selecting metric still ships** — coherence is a correctness constraint the incumbent
+  *violates*, so this is **not** the E2.1-r inversion; it is the pricing-vs-discrimination family rule
+  that a tie ships when the incumbent fails a hard constraint;
+* a placement/interval refusal is recorded **`CONSTRAINT_REFUSED`** with **no "more data" re-test
+  trigger** (NF-D18);
+* it moves served point levels ⇒ the whole-board placement read **and** interval revalidation
+  (NF-D16/D21) both gate it.
+
+⚠️ **Verify against the CURRENT board vintage** — the board is republished by hand and moved twice
+during NF-INJ1 alone; a study scored against a stale frame measures a board nobody is served (§7.2's
+own lesson, and the CLV-class trap).
+
+### 8.3 Decision 3 — 3b is **NF-INJ3, scheduled AFTER NF-INJ2**; 3a is low priority ✅
+
+**DECIDED as recommended.**
+
+**NF-INJ3 (§5d — the hardcoded `{RES: 4.0, PUP: 4.0, NFI: 4.0, SUS: 7.0}` caps).** The more
+consequential of the two: it governs the expected games of all 23 flagged players, the constants are
+unfitted and unrevalidated, and they ignore **when** the designation happened — a March PUP and a
+late-August PUP both collapse to 4.0, which is clearly wrong. Own §0.5 story; make the caps
+designation-timing-aware, ideally fitted rather than hardcoded.
+
+⛔ **Do NOT bundle it with NF-INJ2.** NF-INJ3 changes the same quantity (availability / expected
+games) that NF-INJ2 is trying to stop mis-handling, and mixing a level change with an availability
+change makes neither attributable (NF-W7e's measured non-additivity).
+
+**3a (the rookie path, §5c — 1 row today).** Low priority, no standalone story: fold it into the next
+rookie-path touch.
+
+### 8.4 NF-INJ1 status
+
+**CLOSED** as the diagnosis + the ALERT-tier guard (PRs #991 / #993, both merged to `dev`).
+`best_alpha = 0` throughout. Carried forward: **NF-INJ2** (the funded fix) and **NF-INJ3** (the caps),
+both as separate stories in `nfl_fantasy_story_prompts.md`.
