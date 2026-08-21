@@ -76,6 +76,12 @@ BREAKS: list[tuple[str, pathlib.Path, str, str, str]] = [
      "_PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[5]",
      "test_the_runner_writes_only_inside_the_repo_and_only_its_own_paths"),
 
+    ("an optional `adp` column becomes REQUIRED (a board without it crashes)", _PL,
+     "        \"adp\": (pd.to_numeric(b[\"adp\"], errors=\"coerce\").to_numpy()\n"
+     "                if \"adp\" in b.columns else np.full(len(b), np.nan)),",
+     "        \"adp\": pd.to_numeric(b.get(\"adp\"), errors=\"coerce\").to_numpy(),",
+     "test_a_board_without_an_adp_column_still_produces_a_read"),
+
     ("a stamp-less payload DEFAULTS instead of raising", _RUN,
      "    if not k:\n        raise RuntimeError(",
      "    if not k:\n        k = {\"QB\": 1.0, \"RB\": 1.0, \"WR\": 1.0, \"TE\": 1.0}\n"

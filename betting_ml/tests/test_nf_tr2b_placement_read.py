@@ -177,3 +177,20 @@ def test_the_policy_positions_and_the_read_agree_on_what_is_recalibrated():
     src = _MODULE.read_text()
     assert "VLP.RECALIBRATED_POSITIONS" in src, "the read must source positions from the policy"
     assert set(VLP.RECALIBRATED_POSITIONS) == {"QB", "RB", "WR", "TE"}
+
+
+def test_a_board_without_an_adp_column_still_produces_a_read():
+    """The market figure is REPORTED, never gated — so its absence must never block the verdict.
+
+    Caught only by a fixture that does NOT share the code's assumption: every other fixture here
+    carries `adp`, so none of them could disconfirm the optional-column handling (the NF-C0e
+    'a fixture derived from the first payload cannot disconfirm it' class).
+    """
+    frame = pd.DataFrame([{"id": "a", "pos": "RB", "pts": 200.0, "rookie": False, "name": "a"},
+                          {"id": "b", "pos": "WR", "pts": 150.0, "rookie": False, "name": "b"}])
+    assert "adp" not in frame.columns
+    p = _built(frame)
+    m = PL.movement(p["board_inc"], p["board_rec"])
+    assert len(m) == 2
+    assert PL.spearman_vs_adp(m)["rho_incumbent"] is None, (
+        "with no ADP the market read must report None, not crash and not invent a number")

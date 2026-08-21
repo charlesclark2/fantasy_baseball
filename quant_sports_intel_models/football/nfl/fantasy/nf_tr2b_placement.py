@@ -106,7 +106,12 @@ def paired_boards(board: pd.DataFrame, k: Mapping[str, float], config, profile) 
     base = pd.DataFrame({
         "position": b["pos"].to_numpy(), "id": b["id"].to_numpy(),
         "name": b["name"].to_numpy(), "rookie": b["rookie"].to_numpy(),
-        "adp": pd.to_numeric(b.get("adp"), errors="coerce").to_numpy(),
+        # `adp` is optional: a board without it must still produce a placement read (the market
+        # figure is a REPORTED read, never a gate, so its absence can never block the verdict).
+        # `b.get("adp")` returns None when the column is missing, and pd.to_numeric(None) yields a
+        # SCALAR — so the column is materialised explicitly rather than coerced.
+        "adp": (pd.to_numeric(b["adp"], errors="coerce").to_numpy()
+                if "adp" in b.columns else np.full(len(b), np.nan)),
     })
     rec = base.copy(); rec["league_points"] = served.loc[keep].to_numpy()
     inc = base.copy(); inc["league_points"] = reconstruct_incumbent_points(b, k).to_numpy()
