@@ -3,6 +3,10 @@
     "week": "2026-08-17",
     "items": [
       {
+        "tag": "improved",
+        "text": "Rookie projections now carry a level correction we had been holding back. Our rookie numbers ran low as a group: across seven past draft classes a draftable rookie's projection was off by about 1.07 points on average, and a per-position correction cut that to about 0.94. We are applying it at half strength — a deliberately conservative setting chosen by judgement, not picked out by a search, and we say so wherever the board records how it was built. It touches running backs, receivers and tight ends only; rookie quarterbacks are left alone, because earlier testing showed the same correction double-counts there. It sat switched off since early August, and the reason is worth being straight about: our own coverage check refused it. That check turned out to reject a perfectly calibrated projection roughly half the time at the sample sizes a single rookie position actually gives us, so its refusals carried almost no information either way. We replaced it with one derived from sample size alone — written and reviewed before we looked at whether this correction would pass it — re-ran the gate, and it now clears every check we hold a projection to. About seventy rookies move; the top ten overall is unchanged, and so is the top three at each of quarterback, running back, receiver and tight end. As always, this is a projection for your league's scoring and not a claim about results."
+      },
+      {
         "tag": "new",
         "text": "Player pages now show a short note on what actually builds the projection above it — our own baseline model, refined with market consensus where testing shows it helps, plus our live veteran season-rate recalibration. It sits beside the existing per-player \"what pushes his number up or down\" panel, which is a separate research model's read and is labelled as such."
       },

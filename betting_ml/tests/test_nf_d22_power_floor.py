@@ -370,16 +370,46 @@ def test_the_runner_writes_only_its_own_paths_and_never_a_decided_storys():
 
 
 def test_the_runner_does_not_flip_a_serving_switch():
-    """⛔ NF-D21 is CLOSED. A publish needs a NEW PM disposition; this runner reports and stops."""
+    """⛔ THIS RUNNER PUBLISHES NOTHING — it reports and stops. A publish needs a NEW PM disposition,
+    recorded in `rookie_publish_policy` by a human.
+
+    ⭐ RE-ANCHORED 2026-08-20. The original form ALSO asserted the live state was still
+    `False` / `CONSTRAINT_REFUSED`, which conflated two different claims: "this runner does not flip
+    the switch" (a property of THIS story, permanent) and "the switch is currently off" (a fact about
+    a DIFFERENT story, which changed the moment NF-D21-PUBLISH landed). Pinning the second inside
+    NF-D22's suite made a legitimate downstream decision look like an NF-D22 regression. The
+    permanent claim is kept and made stricter; the live-state claim moves to the story that owns it
+    (`test_nf_d21_rookie_publish.py`), and what is asserted here instead is that the two are
+    INDEPENDENT — the flip moved by a route that does not run through this module."""
     src = Path(D22.__file__).read_text()
     assignments = [n for n in ast.walk(ast.parse(src))
                    if isinstance(n, ast.Assign)
                    for t in n.targets
                    if isinstance(t, ast.Attribute) and t.attr in
-                   ("SERVING_ENABLED", "DISPOSITION", "SHRINK_LAMBDA")]
+                   ("SERVING_ENABLED", "DISPOSITION", "SHRINK_LAMBDA",
+                    "DISPOSITION_IS_NOT_PENDING", "PUBLISHABLE_DISPOSITIONS")]
     assert not assignments, "the runner mutates the rookie publish policy"
+    # ⚠️ non-vacuity: the AST scan above proves nothing if it never looked at real assignments.
+    assert any(isinstance(n, ast.Assign) for n in ast.walk(ast.parse(src))), (
+        "the AST scan found no assignments at all — it is not reading the runner's source")
+    # …and no other mutation route either (setattr / __dict__ / importlib.reload on the policy).
+    low = _code_only(src)
+    assert "setattr(" not in low and "__dict__" not in low, (
+        "the runner reaches the rookie policy by a route the AST scan cannot see")
+
+
+def test_the_serving_flip_is_owned_by_nf_d21_not_by_this_story():
+    """⭐ THE SEPARATION IS THE POINT OF NF-D22's WHOLE FRAMING: the floor is derived from design
+    quantities, and NF-D16 clearing under it is a CONSEQUENCE, never the motivation. So this suite
+    asserts the SEPARATION (the flip is decided elsewhere, under its own recorded disposition) and
+    deliberately does NOT assert which way it currently points — an NF-D22 test that went red when a
+    PM re-decided NF-D21 would be claiming ownership of a decision it must not own."""
     from quant_sports_intel_models.football.nfl.fantasy import rookie_publish_policy as RP
-    assert RP.SERVING_ENABLED is False and RP.DISPOSITION == "CONSTRAINT_REFUSED"
+    RP.assert_coherent()
+    assert RP.SERVING_ENABLED is (RP.DISPOSITION in RP.PUBLISHABLE_DISPOSITIONS) or \
+        not RP.SERVING_ENABLED, "serving must agree with the recorded disposition"
+    assert RP.DECISION_STORY == "NF-D21", "the flip's owning story"
+    assert RP.DISPOSITION_REVIEWED_BY.strip(), "a disposition with no named reviewer is unowned"
 
 
 def test_section_3_is_not_computed_unless_the_two_sided_validation_passes():

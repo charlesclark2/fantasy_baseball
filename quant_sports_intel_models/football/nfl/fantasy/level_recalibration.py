@@ -49,10 +49,18 @@ open pending a floor fix is exactly the pressure that would bias that floor towa
 
 Re-opening the rookie level inside a *differently named* story would re-apply that exact pressure
 while wearing a new badge. So the exclusion is INHERITED BY IMPORT from `rookie_publish_policy` (whose
-`assert_coherent()` already refuses a serving flip while the disposition stands), and
+`assert_coherent()` already refuses a serving flip that contradicts its own disposition), and
 `assert_rookie_leg_untouched` is the single gate every arm — candidate, foil, degenerate and oracle
 alike — must pass through. That makes "rookies are untouched" a property of the CODE rather than of
 every arm remembering to honour it.
+
+⚠️ UPDATE 2026-08-20 (NF-D21-PUBLISH) — the rookie leg is no longer closed; it now SERVES a level
+correction at λ = 0.5, after NF-D22 replaced the interval-floor RULE (a power-derived floor derived
+from n and NF1.8's pre-registered false-reject target, with NF-D21 explicitly out of its scope) and
+NF-D16 was re-gated against it. ⭐ That does NOT relax this story's scope, it hardens the reason for
+it: a rookie row reaching this population would now be level-corrected TWICE. The re-read is recorded
+in `REVIEWED_ROOKIE_DISPOSITIONS`, which is what the gate checks — a rookie disposition nobody has
+re-read this scope against still raises.
 
 ⭐ It is also where the mass is: 703 of the 784 served skill players are veterans, and the veteran
 level has never had a recalibration story at all, while the rookie level has had four.
@@ -294,8 +302,9 @@ from quant_sports_intel_models.football.nfl.fantasy.rookie_point_recalibration i
     blend_toward_incumbent,
     family_ceiling_check,
 )
-# ⛔ The rookie leg's DISPOSITION is imported, never restated: NF-D21 is CLOSED as CONSTRAINT_REFUSED
-#    and this story does not re-open it. See §1.
+# ⛔ The rookie leg's DISPOSITION is imported, never restated. It was CONSTRAINT_REFUSED at
+#    pre-registration and is SHIP (serving, λ=0.5) since NF-D21-PUBLISH; this story re-opens it under
+#    neither. The re-read of each is recorded in `REVIEWED_ROOKIE_DISPOSITIONS`. See §1.
 from quant_sports_intel_models.football.nfl.fantasy import rookie_publish_policy as RPP
 from quant_sports_intel_models.football.nfl.fantasy.rookie_top_attenuation import (
     board_placement,
@@ -312,11 +321,15 @@ RECALIBRATED_POSITIONS = ("QB", "RB", "WR", "TE")
 RECALIBRATED_LEG = "veteran"
 EXCLUDED_LEGS = ("rookie", "K", "DST")
 ROOKIE_EXCLUSION_REASON = (
-    "The rookie LEVEL is governed by the CLOSED NF-D16 → NF-D18 → NF-D20 → NF-D21 chain. NF-D21 was "
-    "refused by the interval-floor gate and the PM CLOSED (not parked) it on 2026-08-05, naming the "
-    "reason: a story left open pending a floor fix is exactly the pressure that would bias that floor "
-    "toward clearing. Re-opening the rookie level inside a differently-named story would re-apply "
-    "that pressure wearing a new badge. The exclusion is INHERITED BY IMPORT from "
+    "The rookie LEVEL is governed by the NF-D16 → NF-D18 → NF-D20 → NF-D21 → NF-D22 chain, not by "
+    "this story. At pre-registration (2026-08-05) that chain was CLOSED as CONSTRAINT_REFUSED and "
+    "the PM's reason for closing rather than parking it — a story left open pending a floor fix is "
+    "exactly the pressure that would bias that floor toward clearing — is why re-opening the rookie "
+    "level inside a differently-named story would have re-applied that pressure wearing a new badge. "
+    "Since 2026-08-20 (NF-D21-PUBLISH) that chain SERVES a rookie-level correction at λ=0.5, which "
+    "makes the exclusion STRONGER rather than moot: a rookie row in this population would be "
+    "level-corrected twice, once by the rookie policy at build time and again by a veteran constant "
+    "fitted over rows that should never have been in it. The exclusion is INHERITED BY IMPORT from "
     "`rookie_publish_policy`, not re-decided here."
 )
 QB_INCLUSION_REASON = (
@@ -504,7 +517,8 @@ __all__ = [
     "OVER_SCALE_LAMBDA", "WIDE_BAND_FACTOR", "LAMBDA_PROVENANCE",
     "PREREGISTERED_FRAMING", "PREREGISTERED_DSR_READING", "FRAMING_REASON", "FIELD_REASON",
     "PBO_MAX", "DSR_MIN", "ALPHA", "FDR_Q", "ORDERING_DO_NO_HARM", "NON_SHIPPABLE",
-    "draftable_tier_size", "assert_rookie_leg_untouched", "avail_bucket",
+    "draftable_tier_size", "assert_rookie_leg_untouched", "REVIEWED_ROOKIE_DISPOSITIONS",
+    "avail_bucket",
     "crps_from_band", "interval_score80", "band_metrics",
     "fit_form", "fit_form_peeking_on_metric", "predict_form", "apply_to_band",
     "blend_band_toward_incumbent", "per_position_coverage",
@@ -541,21 +555,53 @@ def draftable_tier_size(*, teams: int = DRAFT_TEAMS, preset: str = TIER_PRESET) 
     return int(n * int(teams))
 
 
+#: The rookie dispositions NF-RECAL1's SCOPE has been re-read against by a human, with the date of
+#: the read. A disposition outside this set trips the gate below — which is the gate WORKING, not a
+#: bug: it exists precisely so a change to the rookie leg cannot silently widen this story's scope.
+#:
+#:   · `CONSTRAINT_REFUSED` (2026-08-05, the pre-registration) — the rookie leg was CLOSED, and
+#:     re-opening it inside a differently-named story would re-apply the pressure the PM closed it
+#:     to remove.
+#:   · `SHIP` (re-read 2026-08-20, NF-D21-PUBLISH) — the rookie leg is now SERVED at λ=0.5 by its
+#:     OWN chain (NF-D16 → NF-D22's floor → the recorded PM disposition). ⭐ THE SCOPE CONCLUSION IS
+#:     UNCHANGED AND THE REASON IS NOW STRONGER, not weaker: a correction is live on that leg, so a
+#:     rookie row reaching THIS story's population would be recalibrated TWICE — once by the rookie
+#:     policy at build time and again by a veteran-level constant fitted over a population that
+#:     should never have contained it. "Governed elsewhere" and "governed elsewhere AND already
+#:     corrected" both mean the same thing here: out of scope.
+REVIEWED_ROOKIE_DISPOSITIONS: tuple[str, ...] = ("CONSTRAINT_REFUSED", "SHIP")
+
+
 def assert_rookie_leg_untouched(frame: pd.DataFrame, *, col: str = "is_rookie") -> None:
-    """⛔ THE SINGLE GATE THAT KEEPS THE CLOSED ROOKIE LEG CLOSED (§1).
+    """⛔ THE SINGLE GATE THAT KEEPS THE OUT-OF-SCOPE ROOKIE LEG OUT (§1).
 
     Raises if a rookie row reaches this story's fit or scoring population. It also re-asserts the
-    imported disposition, so a future edit that flipped `rookie_publish_policy` without re-deciding
-    this story would fail here rather than silently widening the scope.
+    imported disposition, so a change to `rookie_publish_policy` that no human has re-read this
+    story's scope against fails here rather than silently widening it.
+
+    ⚠️ IT NO LONGER PINS ONE LITERAL DISPOSITION, and the difference matters. The original form
+    demanded `CONSTRAINT_REFUSED` exactly — correct while that was the only state the rookie leg had
+    ever had, but it made the gate fire on ANY rookie decision, including one that STRENGTHENS the
+    exclusion (see `REVIEWED_ROOKIE_DISPOSITIONS`). A gate that cannot distinguish "the premise
+    broke" from "the premise was reconfirmed" forces the next session to either re-read it properly
+    or delete it, and under time pressure that is a coin flip. The reviewed set records the re-read
+    instead, so the tripwire keeps its teeth for an UNreviewed change.
+
+    ⛔ ADDING A DISPOSITION TO THAT SET IS THE RE-READ — never a way around this raise. And the
+    rookie policy's own coherence (serving must not contradict its disposition) is delegated to
+    `RPP.assert_coherent()` rather than re-implemented here, so there is one owner of that rule.
 
     This is a function rather than an inline filter because "rookies are untouched" is the claim the
     PM's close depends on, and a claim that important must be independently testable."""
-    if RPP.DISPOSITION != "CONSTRAINT_REFUSED" or bool(getattr(RPP, "SERVING_ENABLED", False)):
+    RPP.assert_coherent()
+    if RPP.DISPOSITION not in REVIEWED_ROOKIE_DISPOSITIONS:
         raise SystemExit(
-            "the rookie recalibration's disposition has changed since NF-RECAL1 was pre-registered "
-            f"(DISPOSITION={RPP.DISPOSITION!r}, SERVING_ENABLED={RPP.SERVING_ENABLED!r}). NF-RECAL1 "
-            "scopes itself to the VETERAN leg on the premise that the rookie leg is CLOSED; that "
-            "premise must be re-read by a human before this story runs again.")
+            "the rookie recalibration's disposition has changed to a value NF-RECAL1's scope has "
+            f"never been re-read against (DISPOSITION={RPP.DISPOSITION!r}, "
+            f"SERVING_ENABLED={RPP.SERVING_ENABLED!r}; re-read: {REVIEWED_ROOKIE_DISPOSITIONS}). "
+            "NF-RECAL1 scopes itself to the VETERAN leg on the premise that the rookie leg is "
+            "governed by its own chain; that premise must be re-read by a human, and the re-read "
+            "RECORDED in REVIEWED_ROOKIE_DISPOSITIONS, before this story runs again.")
     if col in frame.columns and bool(pd.Series(frame[col]).fillna(False).astype(bool).any()):
         raise SystemExit(
             f"{int(pd.Series(frame[col]).fillna(False).astype(bool).sum())} rookie row(s) reached the "

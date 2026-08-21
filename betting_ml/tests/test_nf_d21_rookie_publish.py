@@ -155,19 +155,36 @@ def test_the_honest_framing_makes_no_market_or_selection_claim():
                 f"by a search, which is exactly what this story must never say")
 
 
-def test_serving_lambda_is_zero_while_the_flip_is_held():
-    """The flip is HELD by the interval-floor gate (rookie RB, 2 covered rows short at λ=0.5).
-    While it is held the served λ must be 0 — i.e. the incumbent — so the whole system (the board
-    stamp, the registry, the standing re-validation) agrees on ONE answer."""
-    assert RP.SERVING_ENABLED is False
-    assert RP.serving_lambda() == 0.0
+def test_serving_lambda_is_the_published_shrink_and_the_rollback_is_one_switch(monkeypatch):
+    """⭐ RE-ANCHORED 2026-08-20 (NF-D21-PUBLISH). The flip was HELD `False` from 2026-08-04 by the
+    interval-floor gate (rookie RB, 2 covered rows short at λ=0.5); NF-D22 replaced that gate's RULE
+    with a power-derived floor, NF-D16 was re-gated against it, and the PM recorded a new
+    disposition. The served λ is now the published shrink.
+
+    Both directions are asserted, because the ONE-SWITCH property is what makes the rollback safe:
+    `SERVING_ENABLED = False` must return exactly 0.0 (the identity affine → the byte-identical
+    pre-NF-D16 point), so the whole system — the board stamp, the registry, the standing interval
+    re-validation — reads ONE answer in either state."""
+    assert RP.SERVING_ENABLED is True
+    assert RP.serving_lambda() == RP.SHRINK_LAMBDA == 0.5
+
+    monkeypatch.setattr(RP, "SERVING_ENABLED", False)
+    assert RP.serving_lambda() == 0.0, "the rollback must return the identity, not a small shrink"
 
 
-def test_the_held_flip_is_documented_with_its_measured_reason():
-    """A held flip with no recorded reason becomes an unexplained `False` that someone flips back."""
+def test_the_superseded_refusal_survives_beside_the_flip_that_reversed_it():
+    """⭐ A decision record that DELETES the refusal it reversed reads as if the gate had always
+    passed — which is exactly the history a reader needs in order to judge whether this publish was
+    earned or engineered. So the measured breach, the gate that produced it, and the refused
+    predecessor disposition must all still be present now that the flip is ON."""
     src = inspect.getsource(RP)
     assert "interval_floors" in src or "INTERVAL-FLOOR" in src
-    assert "0.7905" in src, "the measured breach value must be recorded beside the held flip"
+    assert "0.7905" in src, "the measured breach value must survive as history, not be deleted"
+    assert RP.PREDECESSOR_DISPOSITION == "CONSTRAINT_REFUSED"
+    assert RP.PREDECESSOR_DECIDED_ON == "2026-08-05"
+    assert RP.PREDECESSOR_RATIONALE.strip(), "the refused rationale must be preserved verbatim"
+    assert RP.PREDECESSOR_DECIDED_ON < RP.DISPOSITION_DECIDED_ON, (
+        "the predecessor must predate the disposition that supersedes it")
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -306,16 +323,38 @@ def test_nf_d16s_own_post_ship_harness_still_pins_its_historical_lambda():
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 # The PM DISPOSITION (2026-08-05) — NF-D21 CLOSED as CONSTRAINT_REFUSED
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-def test_the_disposition_is_recorded_as_a_closure_not_a_pending_decision():
-    """⭐ "Closed" and "open pending a fix" are DIFFERENT STATES with different pressures, and the
-    difference IS the decision: a story left open pending the floor work is exactly the pressure
-    that would bias that floor toward clearing λ=0.5. A record that loses the distinction loses the
-    reason, so both halves are asserted."""
-    assert RP.DISPOSITION == "CONSTRAINT_REFUSED"
+def test_the_disposition_is_a_decided_publish_not_a_pending_one():
+    """⭐ RE-ANCHORED 2026-08-20. `DISPOSITION_IS_NOT_PENDING` originally recorded that NF-D21 was
+    CLOSED rather than "open pending the floor fix" — because a dangling dependency is exactly the
+    pressure that would have biased NF-D22 toward clearing λ=0.5. It still reads `True`, now with
+    the mirror-image meaning: the publish is DECIDED, not provisional. Either way the field means
+    ONE thing — no other story owes this one an output — and a record that loses that distinction
+    loses the reason, so every half is asserted.
+
+    The vocabulary is `veteran_level_policy`'s deliberately: two level policies that read the same
+    way are two a reviewer can check with one set of expectations."""
+    assert RP.DISPOSITION == "SHIP"
+    assert RP.DISPOSITION in RP.PUBLISHABLE_DISPOSITIONS
     assert RP.DISPOSITION_IS_NOT_PENDING is True
     assert RP.DISPOSITION_REVIEWED_BY.strip(), "a disposition with no named reviewer is unowned"
     assert RP.DISPOSITION_DECIDED_ON >= RP.DECIDED_ON, (
         "the disposition cannot predate the decision it disposes of")
+    # the follow-on that made this admissible must be recorded as LANDED, not still awaited
+    assert RP.FOLLOW_ON_STORY == "NF-D22" and RP.FOLLOW_ON_STATUS == "LANDED"
+
+
+def test_the_publish_did_not_move_lambda():
+    """⛔ THE PROHIBITION THAT MATTERS MOST HERE. The only admissible way to this publish was to
+    change the RULE (NF-D22's floor) and re-gate; moving λ toward the floor's headroom is NF1.8's
+    explicit prohibition, and the nearest passing grid value under the OLD rule was 0.75 — precisely
+    the board-fitted frontier NF-D18/NF-D20 ruled un-publishable. So a publish that also moved λ
+    would be indistinguishable from selecting on the constraint's own headroom."""
+    assert RP.SHRINK_LAMBDA == 0.5 == (RP.SHRINK_LAMBDA_INTERVAL[0]
+                                       + RP.SHRINK_LAMBDA_INTERVAL[1]) / 2.0
+    assert RP.SHRINK_LAMBDA != RP.NF_D20_FRONTIER_LAMBDA
+    assert RP.STATISTICALLY_SELECTED is False, (
+        "serving must not upgrade a judgment call into a claimed selection")
+    assert RP.SELECTION_STATUS == "PM_JUDGMENT"
 
 
 def test_the_registry_carries_the_pm_rationale_VERBATIM():
@@ -329,29 +368,49 @@ def test_the_registry_carries_the_pm_rationale_VERBATIM():
     entry = reg["nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1"]
     assert RP.DISPOSITION_RATIONALE in entry["validation_report"], (
         "the registry's validation_report must carry the PM rationale verbatim")
-    assert entry["promotion_status"] == "champion", "no challenger was promoted"
-    assert entry["rookie_selection_status"] == "incumbent"
-    assert entry["rookie_shrink_lambda"] == 0.0, "the served λ is 0 — the incumbent"
+    assert entry["promotion_status"] == "champion"
+    assert entry["rookie_selection_status"] == RP.SELECTION_STATUS == "PM_JUDGMENT"
+    assert entry["rookie_shrink_lambda"] == RP.serving_lambda() == 0.5
+    assert entry["rookie_statistically_selected"] is False, (
+        "the registry must record a judgment call AS a judgment call (the E2.1-r laundering "
+        "NF-D20 forbade, committed into the system of record)")
+    # ⭐ the SUPERSEDED refusal is not deleted from the record either — the registry is the named
+    #    authority for why the served board is what it is, and "it was refused, then the RULE
+    #    changed" is a materially different history from "it always passed".
+    assert RP.PREDECESSOR_RATIONALE in entry["validation_report"], (
+        "the registry must keep the refused rationale beside the publish that superseded it")
 
 
-def test_serving_on_a_constraint_refused_disposition_is_REFUSED_at_import(monkeypatch):
-    """Two-sided, because a one-sided version would be VACUOUS today: `SERVING_ENABLED` is False, so
-    the incoherent branch is never reached in the live module and a "the live state is fine" assert
-    would pass with the rule deleted. The realistic future failure is a session flipping the flip
-    because NF-D22 landed, WITHOUT re-gating or re-deciding — producing a served artifact whose own
-    provenance record contradicts it."""
-    RP.assert_coherent()  # (a) the live state is coherent
+def test_serving_under_an_unpublishable_disposition_is_REFUSED_at_import(monkeypatch):
+    """⭐ RE-ANCHORED 2026-08-20, and the direction it guards has REVERSED. While the flip was off,
+    the realistic failure was a session flipping it on because NF-D22 landed, WITHOUT re-gating or
+    re-deciding. Now that the flip is ON, the realistic failure is a ROLLBACK that moves
+    `DISPOSITION` back to a refusal and forgets `SERVING_ENABLED` (or the reverse) — the same defect
+    wearing the other face, and equally silent: nothing else in the system compares these two
+    constants.
 
-    # (b) the rule actually FIRES — `assert_coherent` reads module globals, so substituting them
-    #     exercises the real function rather than a re-implementation of it.
-    monkeypatch.setattr(RP, "SERVING_ENABLED", True)
+    Every leg substitutes module globals rather than re-implementing the rule, so the REAL function
+    is what is exercised."""
+    RP.assert_coherent()  # (a) the live state — serving, under SHIP — is coherent
+
+    # (b) the rule FIRES on the incoherence a half-done rollback produces.
+    monkeypatch.setattr(RP, "DISPOSITION", "CONSTRAINT_REFUSED")
     with pytest.raises(ValueError, match="INCOHERENT"):
         RP.assert_coherent()
 
-    # (c) and it is the DISPOSITION that holds it, not merely the flip — a genuine future publish
-    #     (re-gated + re-decided) must be ALLOWED through, or the guard becomes a permanent block.
-    monkeypatch.setattr(RP, "DISPOSITION", "PUBLISHED")
+    # (c) a COMPLETE rollback — both constants moved together — is allowed through, or the guard
+    #     would make the rollback path itself unreachable.
+    monkeypatch.setattr(RP, "SERVING_ENABLED", False)
     RP.assert_coherent()
+
+    # (d) ⭐ AN ALLOW-LIST, NOT A DENY-LIST. The original rule named `CONSTRAINT_REFUSED` as the one
+    #     forbidden value, which silently permitted every other string — a typo, a half-written
+    #     `"PENDING"`, or a value invented by a session that never re-ran the gate. Serving under an
+    #     unrecognised disposition is refused.
+    monkeypatch.setattr(RP, "SERVING_ENABLED", True)
+    monkeypatch.setattr(RP, "DISPOSITION", "PUBLISHED")
+    with pytest.raises(ValueError, match="INCOHERENT"):
+        RP.assert_coherent()
 
 
 def test_the_follow_on_is_carded_separately_with_its_prohibitions_recorded():
