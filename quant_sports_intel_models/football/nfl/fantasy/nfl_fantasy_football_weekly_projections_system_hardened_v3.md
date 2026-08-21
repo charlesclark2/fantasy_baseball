@@ -1,5 +1,9 @@
 # NFL Fantasy Football Weekly Projections System
 
+> ⚠️ **AMENDMENT (2026-08-20) — READ FIRST: the empirical record has REFUTED most of the generative decomposition prescribed below. Do NOT rebuild toward the full chain.** The bake-offs tested most of the chain, and the architecture the evidence supports is: **lean direct champion (NF-W1 `lgbm_hurdle`, SHIP at all 4 positions, 8/8 folds) + an injury layer (NF-W2, SHIP at all 4) + SELECTIVELY licensed per-stat heads (NF-W6 yards cells + QB passing-TD).** What LOST/NULLED: **NF-W3** game-environment (NULL — the channel is real, realized-env oracle +2–3% CRPS, but ~unforecastable from the market-BLIND contract; ⭐ the ONE open question is a market-FEATURE re-run — Vegas spread/total/implied team points, a legitimate projection input); **NF-W4** projected availability (GENUINE_ABSENCE at QB/RB/WR — the forecastable slice is already priced by the injury layer; the residual is Friday→Sunday news = a DATA-FRESHNESS problem, not a modeling one); **NF-W5** opportunity/copula joint allocation (NO — 0.54% ceiling); **NF-W7c** per-stat assembly→points (direct-points BEATS assembly at QB/RB; only TE ships; correlation earns its place INSIDE the assembly, but the assembly does not beat modeling the total directly). ⛔ **CLOSED:** no TD-prediction stories at WR/TE/RB-receiving (the NF-W6 gate found pure climatology, 0.38% ceiling — irreducible noise at this data resolution). ⭐ The chain's value was **DIAGNOSTIC** — it located where the error lives (availability TIMING) and where it doesn't (environment, allocation). The original design below is retained for provenance; **build to this amended architecture, not the original prescription.**
+
+---
+
 The strongest design is **not one model that directly predicts fantasy points**. Build a probabilistic system that models:
 
 1. **Will the player be active?**

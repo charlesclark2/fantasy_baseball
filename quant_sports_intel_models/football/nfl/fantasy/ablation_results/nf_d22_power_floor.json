@@ -1,6 +1,6 @@
 {
   "story": "NF-D22",
-  "generated_at": "2026-08-21T01:52:13.618397+00:00",
+  "generated_at": "2026-08-21T02:53:49.592132+00:00",
   "best_alpha": 0,
   "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
   "artifacts_dir": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/quant_sports_intel_models/football/nfl/fantasy/artifacts",
@@ -1345,7 +1345,7 @@
         }
       ],
       "ready_to_promote": true,
-      "evaluated_at": "2026-08-21T01:52:20.591687+00:00"
+      "evaluated_at": "2026-08-21T02:53:57.836842+00:00"
     }
   },
   "board_effects": {
