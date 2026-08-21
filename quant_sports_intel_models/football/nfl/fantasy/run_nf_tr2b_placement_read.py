@@ -62,7 +62,7 @@ def _fetch(dest: pathlib.Path) -> pathlib.Path:
     return dest
 
 
-def run(src: pathlib.Path) -> dict:
+def run(src: pathlib.Path, origin: str | None = None) -> dict:
     proj = json.loads((src / "projections.json").read_text())
     stamp = proj.get("veteran_level_policy") or {}
     k = {str(p): float(v) for p, v in (stamp.get("params") or {}).items()}
@@ -152,7 +152,13 @@ def run(src: pathlib.Path) -> dict:
 
     return {"story": "NF-TR2b", "read": "cross-position placement (NF-D16 class)",
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "source": str(src), "season": proj.get("season"),
+            # ⭐ PROVENANCE, stated honestly: this record's whole claim is "this is what is ON THE
+            # WIRE", so it must name where the artifacts actually came from. A `--from-dir` run
+            # records the LOCAL path and does NOT claim the prod bucket — a record that asserted S3
+            # while reading an arbitrary directory would be worse than no provenance at all.
+            "source_kind": "s3" if origin else "local-dir",
+            "source": origin or f"local-dir:{src}",
+            "read_from": str(src), "season": proj.get("season"),
             "served_level_model_version": stamp.get("level_model_version"),
             "served_level_status": stamp.get("status"),
             "policy_serving_enabled": bool(VLP.SERVING_ENABLED),
@@ -164,7 +170,7 @@ def run(src: pathlib.Path) -> dict:
 def _md(r: dict) -> str:
     v, k = r["verdict"], r["k_from_served_artifact"]
     L = [f"# NF-TR2b — whole-board CROSS-POSITION placement read (the NF-D16 class)",
-         f"_generated {r['generated_at']}_ · `best_alpha = 0` · served "
+         f"_generated {r['generated_at']}_ · read from `{r['source']}` · `best_alpha = 0` · served "
          f"`{r['served_level_model_version']}` · status `{r['served_level_status']}` · "
          f"board built {r['projection_built_at']}", "",
          f"## Verdict: **{v['verdict']}**", "",
@@ -232,10 +238,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-report", action="store_true")
     a = ap.parse_args(argv)
     if a.from_dir:
-        src = pathlib.Path(a.from_dir)
+        src, origin = pathlib.Path(a.from_dir), None
     else:
-        src = _fetch(pathlib.Path(tempfile.mkdtemp(prefix="nf_tr2b_placement_")))
-    r = run(src)
+        src, origin = _fetch(pathlib.Path(tempfile.mkdtemp(prefix="nf_tr2b_placement_"))), _S3
+    r = run(src, origin=origin)
     print(f"NF-TR2b placement read — verdict {r['verdict']['verdict']} "
           f"({r['served_level_model_version']})")
     for name, val in r["verdict"]["gates"].items():

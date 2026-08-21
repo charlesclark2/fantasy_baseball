@@ -1,5 +1,5 @@
 # NF-TR2b — whole-board CROSS-POSITION placement read (the NF-D16 class)
-_generated 2026-08-21T00:40:20.353601+00:00_ · `best_alpha = 0` · served `nfl_fantasy_nf_tr2b_veteran_level_v1` · status `recalibrated` · board built 2026-08-20T14:22:29.512306+00:00
+_generated 2026-08-21T00:49:10.330878+00:00_ · read from `s3://credence-prod-s3-api-cache/fantasy/nfl/2026/` · `best_alpha = 0` · served `nfl_fantasy_nf_tr2b_veteran_level_v1` · status `recalibrated` · board built 2026-08-20T14:22:29.512306+00:00
 
 ## Verdict: **SANE**
 
