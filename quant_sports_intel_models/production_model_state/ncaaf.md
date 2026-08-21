@@ -227,8 +227,14 @@ defect. Sliced by season week:
 
 The homoscedastic form **under-covers weeks 1–2** (0.785, below the strict 0.80 floor); the posterior-predictive
 fixes it at **no late-season cost** — and it is 3.4× wider in weeks 1–3 than week 8+ (corr with games-played
-−0.65). The 4,557 late-season games swamped the 684 early ones in the aggregate. Early season is also exactly
-where the college book is softest.
+−0.65). The 4,557 late-season games swamped the 684 early ones in the aggregate.
+
+⚠️ **CORRECTED 2026-08-20 by NCAAF-VAL1.** An earlier version of this paragraph added "early season is also
+exactly where the college book is softest" as extra justification. **That clause is REFUTED**: stratifying the
+vs-close CLV by pre-registered `season_order_week` bucket found weeks 1–3 to be the WORST bucket in both
+markets (ATS 0.4936, O/U 0.4950 vs a 0.5238 breakeven), and its interval EXCLUDES a decision-changing edge.
+The form choice above stands entirely on its CALIBRATION half — which is measured, reproduced and unaffected.
+See `football/ncaaf/ablation_results/ncaaf_val1_clv_week_strat.md`.
 
 **For an auditor:** this is a documented judgment call, not a metric violation — a candidate was selected on a
 pre-registered FLOOR after the primary metric declared a tie. Record it as such; do not "discover" it later as
