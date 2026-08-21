@@ -85,6 +85,8 @@ _BOARDS_DIR = _ARTIFACTS / "league_boards"
 # part a user cannot look up. See `ablation_results/nf1_5b_serving_reland.md` for the measured result
 # — including that it is NOT positive at every position (RB is a wash) and that ECR/ESPN/Sleeper
 # still order better than we do.
+from quant_sports_intel_models.football.nfl.fantasy import projection_coherence as _PC
+
 PROJECTION_SOURCES = ("nf1_5", "mvp1")
 DEFAULT_PROJECTION_SOURCE = "nf1_5"
 _PROJECTION_PARQUET = {
@@ -1348,6 +1350,74 @@ def assert_published_position_coverage(out_dir: Path, season: int) -> None:
              "in all %d staged board/projections file(s)", ", ".join(PROJECTABLE), len(checked))
 
 
+def report_publish_coherence(out_dir: Path, season: int, freshness: dict | None,
+                             now_iso: str, strict: bool = False) -> dict:
+    """🔶 NF-INJ1 PUBLISH CHECK — does the staged board serve a physically possible (games, line) pair,
+    and was it built on a current injury snapshot? ALERT-tier: it MEASURES and PAGES LOUDLY, and only
+    REFUSES under `--strict-coherence`.
+
+    ⭐ WHY ALERT AND NOT HALT, stated because the sibling guard one function up DOES halt. NF-K1
+    refuses because a board missing a whole position is unusable and the remedy is a rebuild the
+    operator can run in minutes. Here the defect is nine backup QBs carrying an impossible stat line
+    on an otherwise sound 868-player board, and the remedy is a §0.5 model change (the ordering step
+    rescales the stat line but not `proj_games` — see `projection_coherence`). Halting would freeze
+    every publish until that lands, in the middle of draft season, which is a worse outcome than
+    shipping a board whose defect is measured, named and visible. ⛔ THE DEFAULT IS A PM DECISION,
+    not a modelling one: `--strict-coherence` exists so the operator can flip it without a code
+    change, and the count rides on the manifest so the choice is never invisible.
+
+    ⛔ It reads the STAGED BYTES (NF-K1's lesson) and it reports NOT-APPLICABLE rather than "clean"
+    for the league-board blobs, which carry no counting line and on which the envelope structurally
+    cannot fire."""
+    summaries: dict[str, dict] = {}
+    for path in sorted(out_dir.glob("*.json")):
+        if path.name != "projections.json" and not path.name.startswith("board_"):
+            continue
+        try:
+            blob = json.loads(path.read_text())
+        except Exception as exc:  # noqa: BLE001
+            log.warning("[ALERT] NF-INJ1 coherence: %s UNREADABLE (%s) — an unverifiable artifact "
+                        "is a failure, never a pass", path.name, type(exc).__name__)
+            summaries[path.name] = {"applicable": False, "unreadable": True}
+            continue
+        rows = blob.get("players") if isinstance(blob, dict) else blob
+        summaries[path.name] = _PC.coherence_summary(rows if isinstance(rows, list) else [])
+
+    scored = {n: s for n, s in summaries.items() if s.get("applicable")}
+    if not scored:
+        log.warning("[ALERT] NF-INJ1 coherence: NO staged file carried a counting stat line — the "
+                    "check did not run. That is not a pass (NF1.7 (a)).")
+    total = 0
+    for name, s in scored.items():
+        log.info("%s", _PC.format_summary(s, name))
+        total += int(s.get("n_violating_players", 0))
+
+    fresh = _PC.assess_injury_input_freshness((freshness or {}).get("input_vintage"), now_iso)
+    log.info("[METRIC] nf_inj1_coherence_violating_players=%d", total)
+    log.info("[METRIC] nf_inj1_injury_input_freshness=%s lag_hours=%s",
+             fresh["verdict"], fresh["lag_hours"])
+    if total:
+        log.warning("[ALERT] NF-INJ1 — %d player(s) are about to be published with a stat line that "
+                    "is impossible at their own expected games. The paid /projections-full surface "
+                    "serves this line verbatim. Cause: the NF1.5 ordering step rescales the stat "
+                    "line to the assigned point level but leaves `proj_games` untouched "
+                    "(`nf1_model._RAW_SCALE_COLS`). Fix is pre-registered as a §0.5 model change; "
+                    "see ablation_results/nf_inj1_diagnosis.md.", total)
+    if fresh["verdict"] != "OK":
+        log.warning("[ALERT] NF-INJ1 injury input %s — %s", fresh["verdict"], fresh["detail"])
+
+    if strict and (total or fresh["verdict"] != "OK" or not scored):
+        raise SystemExit(
+            "🔴 NF-INJ1 PUBLISH REFUSED (--strict-coherence).\n"
+            f"  - {total} player(s) exceed the all-time realized per-game envelope\n"
+            f"  - injury input: {fresh['verdict']} ({fresh['detail']})\n"
+            f"  - files carrying a scorable stat line: {len(scored)}\n"
+            "NOTHING WAS PUBLISHED; the board serving from S3 is untouched.")
+    return {"violating_players": total, "by_file": {n: s.get("n_violating_players")
+                                                   for n, s in scored.items()},
+            "injury_input": fresh}
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--season", type=int, default=2026)
@@ -1377,6 +1447,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "fantasy/nfl/<season>/ where the gated /fantasy/nfl/* API reads them. Resolving a "
         "bucket alone does NOT upload — pass --publish too (see below).",
     )
+    ap.add_argument(
+        "--strict-coherence", action="store_true",
+        help="NF-INJ1: REFUSE to publish when the staged board carries a physically impossible "
+             "(expected-games, stat-line) pair or was built on a stale injury snapshot. Default is "
+             "ALERT-loud-but-continue — see report_publish_coherence for why that default is a PM "
+             "decision rather than a modelling one.")
     ap.add_argument(
         "--publish",
         action="store_true",
@@ -1647,6 +1723,16 @@ def main(argv: list[str] | None = None) -> int:
     # disk rather than anything held in memory. A whole projectable position going missing must
     # fail the export, not reach users as "not matched" beside every kicker and defence.
     assert_published_position_coverage(out_dir, args.season)
+
+    # 🔶 NF-INJ1 — beside NF-K1 and for the same reason: it opens the staged bytes. ALERT-tier by
+    # default (see `report_publish_coherence` for why this one measures where NF-K1 refuses); the
+    # result is written back onto the manifest so the count is visible on the served payload rather
+    # than living only in a run log nobody reads (the E11.30 lesson).
+    _coh = report_publish_coherence(out_dir, args.season, manifest.get("freshness"),
+                                    datetime.now(timezone.utc).isoformat(),
+                                    strict=args.strict_coherence)
+    manifest["coherence"] = _coh
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
     # Upload to S3 for the server-side-gated /fantasy/nfl/* endpoints (E9.45) — gated behind
     # --publish (NF-D12). Without a bucket the boards are only staged locally (the API then
