@@ -1,11 +1,12 @@
 import { expect, test, type Page } from "@playwright/test"
-import { FIXTURES, collectPageErrors, mockApi } from "../support/api-mock"
+import { FIXTURES, captureAnalytics, collectPageErrors, mockApi } from "../support/api-mock"
 import { signIn } from "../support/session"
 import { forbiddenPhrasesIn } from "../support/claim-denylist"
 import { expectNoNaN, expectNoPageErrors } from "../support/assertions"
 import { openEligibility, slotOnClock, type LeagueConfigMeta, type Player } from "@/lib/draft-optimizer"
 import {
   GRADE_CIRCULARITY_NOTE,
+  SHARE_CARD_CAPTION,
   boardOrder,
   gradeDraft,
   marketOrder,
@@ -262,6 +263,11 @@ async function startMock(page: Page) {
   const errors = collectPageErrors(page)
   await signIn(page, { groups: ["subscriber"] })
   await mockApi(page, { entitlement: "entitled", leagues: "none" })
+  // NF-DS — armed unconditionally rather than only in the share-modal test, so the one test that
+  // pays for a full playthrough (below) can assert the share analytics too instead of a second
+  // draft existing purely to re-pay that cost. `captureAnalytics` answers every ingest call with a
+  // 200 (never aborts), so this changes nothing for the other callers of `startMock`.
+  const events = await captureAnalytics(page)
   await page.goto("/fantasy/mock-draft")
 
   await expect(page.getByRole("heading", { name: "Mock Draft" })).toBeVisible()
@@ -276,7 +282,7 @@ async function startMock(page: Page) {
 
   await page.getByRole("button", { name: "Start mock draft" }).click()
   await expect(page.locator("table tbody tr").first()).toBeVisible()
-  return { errors, setupText }
+  return { errors, setupText, events }
 }
 
 /** The draft's phase, read in ONE round trip.
@@ -507,8 +513,8 @@ test.describe("running a mock draft", () => {
     expectNoPageErrors(errors)
   })
 
-  test("a full quick mock runs to completion and the roster grades", async ({ page }) => {
-    const { errors } = await startMock(page)
+  test("a full quick mock runs to completion and the roster grades", async ({ page, context }) => {
+    const { errors, events } = await startMock(page)
     await playToTheEnd(page)
 
     const grade = page.getByTestId("mock-draft-grade")
@@ -529,6 +535,72 @@ test.describe("running a mock draft", () => {
       grade.getByText(GRADE_CIRCULARITY_NOTE, { exact: false }),
       "the grade shipped without the note saying it scores the room on our own projections",
     ).toBeVisible()
+
+    // ══ NF-DS — THE SHARE MODAL, ON THE SAME COMPLETED DRAFT ══════════════════════════════════
+    // Deliberately folded into this test rather than a second one that replays a whole draft to
+    // reach the same completion event — see the file's own note above on why that cost is paid
+    // exactly once.
+    await context.grantPermissions(["clipboard-read", "clipboard-write"])
+
+    const modal = page.getByTestId("mock-draft-share-modal")
+    await expect(modal, "the share modal did not auto-open when the draft completed").toBeVisible()
+    await expect(
+      modal.getByText(GRADE_CIRCULARITY_NOTE, { exact: false }),
+      "the share modal renders the grade without its circularity caveat",
+    ).toBeVisible()
+
+    // ⚠️ NF-C4 — ASSERT THE RENDERED OUTPUT, NOT THE SOURCE. A `src` attribute pointing at the
+    // right URL proves nothing if the route 500s or satori rejects the JSX. Fetch the SAME URL the
+    // DOM actually carries (never `page.waitForResponse` here — the modal auto-opens as soon as the
+    // draft completes, well before this line runs, so the browser's own image load is very likely
+    // to have already happened by the time a listener is registered; a request-scoped fetch has no
+    // such race) and separately confirm the browser decoded it as a real image.
+    const shareImage = modal.getByTestId("mock-draft-share-image")
+    await expect(shareImage).toBeVisible()
+    const imageSrc = await shareImage.getAttribute("src")
+    expect(imageSrc, "the share image has no src").toMatch(/^\/fantasy\/mock-draft\/share\/image\?/)
+    const imageResponse = await page.request.get(imageSrc as string)
+    expect(imageResponse.ok(), "the share image route did not return 200").toBeTruthy()
+    expect(imageResponse.headers()["content-type"], "the share image route did not serve a PNG").toBe(
+      "image/png",
+    )
+    await expect
+      .poll(async () => shareImage.evaluate((img: HTMLImageElement) => img.naturalWidth))
+      .toBeGreaterThan(0)
+
+    // Download affordance — a real link the browser will save, not a button with no destination.
+    const downloadLink = modal.locator("a[download]")
+    await expect(downloadLink).toHaveAttribute("href", /\/fantasy\/mock-draft\/share\/image\?/)
+
+    // Copy link — the clipboard ends up holding the PUBLIC share-page URL (not the image URL), and
+    // the button says so.
+    await modal.getByRole("button", { name: /Copy link/ }).click()
+    await expect(modal.getByRole("button", { name: "Copied!" })).toBeVisible()
+    const clipboardText = await page.evaluate(() => navigator.clipboard.readText())
+    expect(clipboardText).toMatch(/^https:\/\/www\.credencesports\.com\/fantasy\/mock-draft\/share\?/)
+
+    // The auto-open and the copy each fire their own analytics event — capture is async (a network
+    // round trip to `/ingest`), so poll rather than reading the array synchronously.
+    await expect
+      .poll(() => events.some((e) => e.event === "mock_draft_share_modal_shown"))
+      .toBe(true)
+    await expect
+      .poll(() => events.some((e) => e.event === "mock_draft_share_link_copied"))
+      .toBe(true)
+
+    // ⚠️ NF-C2.1 — a grid item's automatic minimum can widen the whole page; the modal itself is
+    // flex-based, but assert the invariant at the page level since that is what a real overflow
+    // would actually cost a user.
+    const overflowsHorizontally = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    )
+    expect(overflowsHorizontally, "the share modal pushed the page into horizontal scroll").toBe(false)
+
+    // Dismiss and reopen via the in-card trigger, proving the modal is not a one-shot.
+    await page.keyboard.press("Escape")
+    await expect(modal).not.toBeVisible()
+    await grade.getByTestId("mock-draft-share-trigger").click()
+    await expect(modal).toBeVisible()
 
     // ⭐ THE RESULTS SCREEN'S DENYLIST SCREEN LIVES HERE rather than in its own test, deliberately.
     // best_alpha = 0, so all three screens must be clean — but playing a mock out is the expensive

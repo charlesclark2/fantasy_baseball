@@ -3,6 +3,10 @@
     "week": "2026-08-17",
     "items": [
       {
+        "tag": "new",
+        "text": "Mock Draft: finish a draft and you now get a share card — your finishing rank, projected points against the room, your strongest position and your best value pick, all in one branded image. Download it, copy a link, or use your device's share sheet. Anyone who opens the link sees the same card and the same honest framing we show you in the app: it ranks the room on our own projections, not a guarantee of how a real league goes. The share page itself needs no account to view."
+      },
+      {
         "tag": "fixed",
         "text": "Depth targets now work in both directions. Setting a position to a number you have already reached moves it DOWN the list, so telling us you want one quarterback stops us suggesting backup quarterbacks late in a draft — previously a target only ever pushed a position you were short of UP, so setting it to what you already had changed nothing. A position you leave at 0 is untouched either way: 0 means no opinion, not none wanted, and a target on one position never moves the others. Your league's required starters still come first — a target can never leave you unable to fill a lineup spot."
       },
