@@ -691,7 +691,8 @@ export function RankingsBoard() {
       )}
 
       {/* 🚩 NF-C0-Yahoo-ENABLE — a `custom:` selection re-scores this board under scoring rules we
-          READ FROM the platform, so the credit is owed here too. Renders nothing on a preset. */}
+          READ FROM the platform, so the credit is owed here too. This DECLARES it; the page
+          footer draws it (Yahoo's Cover Page puts it there). A preset declares nothing. */}
       <PlatformAttribution sources={isCustom ? league : null} />
     </div>
   )

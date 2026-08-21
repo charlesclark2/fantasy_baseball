@@ -742,7 +742,8 @@ export function DraftOptimizer() {
       )}
       <HonestNote />
       {/* 🚩 NF-C0-Yahoo-ENABLE — this surface is driven by the SELECTED league's own scoring and
-          roster; when that league was imported, the platform's terms require the credit here too. */}
+          roster; when that league was imported, the platform's terms require the credit. DECLARED
+          here, drawn by the page footer — which is where Yahoo's Cover Page requires it. */}
       <PlatformAttribution sources={selectedLeague} />
     </div>
   )

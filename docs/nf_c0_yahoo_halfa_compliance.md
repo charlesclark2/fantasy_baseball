@@ -2,6 +2,27 @@
 
 **Date:** 2026-08-20 · **Branch:** `nf-c0-yahoo-halfa-compliance` · `best_alpha = 0`
 
+> ## ⚠️ PARTIALLY SUPERSEDED — read `nf_c0_yahoo_clause_audit.md` first
+>
+> This document was written **without the agreement text**, against the spike memo's paraphrase of
+> it. The operator supplied the executed agreement on 2026-08-21 and the clause-by-clause audit is
+> in **`docs/nf_c0_yahoo_clause_audit.md`**. Three claims below did not survive contact with it and
+> are corrected there rather than edited out here — a record edited after the fact is no longer a
+> record of what was decided and on what basis:
+>
+> * **§1 — the 30-day retention window does NOT satisfy §2.c.vii**, which prohibits storing Yahoo
+>   Fantasy Information with no retention qualifier at all. The window is a mitigation, not
+>   compliance. **This is the open item and it blocks Half B.**
+> * **§1 — "the scoring config is ours" is a weak textual argument.** §1.e defines Yahoo Fantasy
+>   Information as *any information retrieved from the Yahoo Fantasy Database*, which includes the
+>   league settings this document treats as our own derived artefact.
+> * **§2 — the credit had to be in the page FOOTER**, which the paraphrase did not say. Fixed on
+>   `nf-c0-yahoo-halfa-clause-audit`.
+>
+> **§4 (US + CA) is RESOLVED and the decision it recorded STANDS** — §2.b bounds the licence, not
+> delivery. The hedge ("I could not read the clause") no longer applies; the audit carries the
+> reading, and the declared-jurisdiction attestation it sketched is not needed.
+
 Half A closes the three compliance gaps the NF-C0-Yahoo spike measured and left for a PM decision
 (`docs/nf_c0_yahoo_spike_memo.md` §5, gaps **B2–B4**), and records the decision on the agreement's
 **US + CA** scope.

@@ -852,6 +852,13 @@ export function LeagueImport() {
                 />
               </div>
             )}
+            {/* 🚩 THE LIST IS ALREADY YAHOO FANTASY INFORMATION — league names, team counts, season
+                and status all come straight from their API — so the credit is owed HERE, not only
+                once a preview has been loaded. Half A rendered it inside the preview block alone,
+                which left this screen showing their data uncredited for as long as the user spent
+                choosing a league. Found by reading the Cover Page's "each page where Yahoo Fantasy
+                Information is displayed" against what this screen actually puts up. */}
+            <PlatformAttribution sources={platformId} />
             <div className="mt-4 divide-y divide-white/5 rounded-lg border border-white/10">
               {leagues.map((l) => {
                 const saved = savedMatchFor(platformId, l.league_id)

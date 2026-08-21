@@ -37,6 +37,9 @@ MODELS = REPO / "app/backend/models/fantasy.py"
 PRIVACY = REPO / "frontend/app/privacy/page.tsx"
 TS_RETENTION = REPO / "frontend/lib/platform-retention.ts"
 MY_TEAMS = REPO / "frontend/components/fantasy/my-teams.tsx"
+SITE_FOOTER = REPO / "frontend/components/site-footer.tsx"
+PROVIDERS = REPO / "frontend/components/providers.tsx"
+IMPORT_UI = REPO / "frontend/components/fantasy/league-import.tsx"
 
 
 @dataclass
@@ -92,7 +95,14 @@ BREAKS = [
         path=DYNAMO,
         old='        if str(record.get("source_platform") or "").lower() != platform.lower():\n            continue\n',
         new="",
-        must_vanish='!= platform.lower()',
+        # ⚠️ NEWLINE-ANCHORED, and it took two attempts to get right — worth recording.
+        # `iter_platform_league_holders` (§6) carries the SAME predicate at a deeper indent, so a
+        # bare `!= platform.lower()` matches BOTH functions; and the 8-space form is a SUBSTRING of
+        # the 16-space form, so indenting the token does not disambiguate it either. Only anchoring
+        # at the line start does. Both wrong versions were caught by the #815 must-vanish check
+        # reporting "landed but did not move the asserted predicate" — a later change made an
+        # existing break's token ambiguous, which is precisely the drift that check exists for.
+        must_vanish='\n        if str(record.get("source_platform") or "").lower() != platform.lower():',
         expects="test_only_the_disconnected_platform_is_purged",
     ),
     Break(
@@ -188,6 +198,54 @@ BREAKS = [
         new="<strong>Disconnecting.</strong>",
         must_vanish="Disconnecting deletes the rosters immediately",
         expects="test_the_privacy_policy_covers_the_league_import",
+    ),
+    Break(
+        name="the credit drifts back out of the page FOOTER",
+        path=SITE_FOOTER,
+        old='          <PlatformAttributionFooterSlot className="mt-2" />\n',
+        new="",
+        must_vanish="<PlatformAttributionFooterSlot",
+        expects="test_the_credit_is_wired_into_the_page_FOOTER",
+    ),
+    Break(
+        name="the provider stops wrapping the footer, so nothing can reach it",
+        path=PROVIDERS,
+        old="<PlatformAttributionProvider>{children}</PlatformAttributionProvider>",
+        new="{children}",
+        must_vanish="<PlatformAttributionProvider>{children}</PlatformAttributionProvider>",
+        expects="test_the_credit_is_wired_into_the_page_FOOTER",
+    ),
+    Break(
+        name="the import screen credits only the preview, not the league LIST",
+        path=IMPORT_UI,
+        old="            <PlatformAttribution sources={platformId} />\n",
+        new="",
+        must_vanish="<PlatformAttribution sources={platformId} />",
+        expects="test_the_import_screen_credits_the_league_LIST_not_only_the_preview",
+    ),
+    Break(
+        name="§6 — the account-wide enumeration stops paginating",
+        path=DYNAMO,
+        old='        if "LastEvaluatedKey" not in resp:\n            return\n        kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]',
+        new="        return",
+        must_vanish='        if "LastEvaluatedKey" not in resp:\n            return\n        kwargs["ExclusiveStartKey"] = resp["LastEvaluatedKey"]',
+        expects="test_the_enumeration_paginates",
+    ),
+    Break(
+        name="§6 — the enumeration reports accounts whose rosters are already gone",
+        path=DYNAMO,
+        old="                if _has_platform_roster(record):\n                    holding += 1",
+        new="                holding += 1",
+        must_vanish="                if _has_platform_roster(record):\n                    holding += 1",
+        expects="test_it_skips_an_account_whose_rosters_are_already_gone",
+    ),
+    Break(
+        name="§6 — the termination purge deletes by DEFAULT instead of dry-running",
+        path=REPO / "scripts/purge_platform_data.py",
+        old="    if not args.apply:",
+        new="    if False:",
+        must_vanish="    if not args.apply:",
+        expects="test_the_operator_script_defaults_to_a_dry_run_and_uses_the_shared_purge",
     ),
     Break(
         name="a league-aware surface ships without the platform credit",

@@ -1,5 +1,7 @@
 import Link from "next/link"
 
+import { PlatformAttributionFooterSlot } from "@/components/fantasy/platform-attribution"
+
 /**
  * E9.60 — the footer, restructured to spec §23: Products / Credence / Legal, fantasy-first.
  *
@@ -119,6 +121,15 @@ export function SiteFooter() {
 
         <div className="mt-8 border-t border-[#262626] pt-6">
           <span className="text-xs text-gray-600">&copy; 2026 Penumbra Partners</span>
+          {/* 🚩 THE PLATFORM ATTRIBUTION, WHICH THE AGREEMENT PUTS HERE SPECIFICALLY.
+              Yahoo's Cover Page: "attribution must appear in the FOOTER OF EACH PAGE where Yahoo
+              Fantasy Information is displayed and must include a hyperlink to an official Yahoo
+              Fantasy webpage." A page-level component cannot render into this footer — it is a
+              SIBLING of `{children}` in the root layout — so the surfaces register what they are
+              displaying and this slot draws it. Renders NOTHING on a page showing no such data,
+              which is the other half of the requirement: crediting Yahoo for data Yahoo did not
+              supply is its own false statement. See `platform-attribution.tsx`. */}
+          <PlatformAttributionFooterSlot className="mt-2" />
         </div>
       </div>
     </footer>
