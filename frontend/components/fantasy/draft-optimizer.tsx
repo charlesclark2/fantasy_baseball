@@ -44,6 +44,7 @@ import {
   useFantasyPreferences,
   useSavedLeagues,
 } from "@/lib/fantasy-queries"
+import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
 const SEASON = FANTASY_SEASON
 const POS_COLORS: Record<string, string> = {
@@ -421,6 +422,12 @@ export function DraftOptimizer() {
           )}
         </div>
         <HonestNote />
+        {/* 🚩 NF-C0-Yahoo-ENABLE — ON THE SETUP SCREEN TOO, and this is the screen that actually
+            needed it: the league PICKER, the format description and the roster slots on this page
+            are read straight from the platform's league. The live screen below is a separate
+            early-returned tree, so a credit placed only there never renders for a user who is
+            configuring a draft — which is where they spend the time looking at these settings. */}
+        <PlatformAttribution sources={selectedLeague} />
       </div>
     )
   }
@@ -734,6 +741,9 @@ export function DraftOptimizer() {
         </div>
       )}
       <HonestNote />
+      {/* 🚩 NF-C0-Yahoo-ENABLE — this surface is driven by the SELECTED league's own scoring and
+          roster; when that league was imported, the platform's terms require the credit here too. */}
+      <PlatformAttribution sources={selectedLeague} />
     </div>
   )
 }

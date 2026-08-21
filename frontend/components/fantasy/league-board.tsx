@@ -49,6 +49,7 @@ import {
   int,
   teamLabel,
 } from "@/components/fantasy/shared"
+import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
 interface PosSummary {
   pos: string
@@ -457,6 +458,11 @@ export function LeagueBoard() {
           )}
         </>
       )}
+
+      {/* 🚩 NF-C0-Yahoo-ENABLE — `league` is non-null only for a `custom:<id>` selection, i.e. only
+          when the board on screen was built from the user's own saved (possibly imported) league.
+          A preset board owes no credit and renders none. */}
+      <PlatformAttribution sources={league} />
     </div>
   )
 }

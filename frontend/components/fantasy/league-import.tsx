@@ -34,6 +34,7 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useFantasyProjections, useSaveLeague, useSavedLeagues } from "@/lib/fantasy-queries"
+import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 import {
   espnPreview,
   espnReadUrl,
@@ -777,10 +778,15 @@ export function LeagueImport() {
                 >
                   <Unlink className="h-3.5 w-3.5" /> Disconnect
                 </button>
-                {/* Says precisely what it does. We can delete OUR copy of the grant; only Yahoo can
-                    revoke it, so we link there rather than implying we did it. */}
+                {/* Says precisely what it does — BOTH halves. We can delete OUR copy of the grant
+                    and OUR copy of the rosters; only Yahoo can revoke the grant itself, so we link
+                    there rather than implying we did it. NF-C0-Yahoo-ENABLE added the second
+                    sentence because the deletion it names is now real: until this shipped,
+                    disconnecting dropped the token and left every copied roster in place. */}
                 <span className="text-xs text-gray-500">
-                  Disconnecting deletes our copy of your Yahoo permission. To revoke it at Yahoo, use{" "}
+                  Disconnecting deletes our copy of your Yahoo permission, and deletes the Yahoo
+                  rosters we stored. Your league&rsquo;s scoring settings stay — they&rsquo;re yours.
+                  To revoke the permission at Yahoo, use{" "}
                   <a
                     href="https://login.yahoo.com/account/security"
                     target="_blank"
@@ -1226,19 +1232,11 @@ export function LeagueImport() {
             </div>
           )}
 
-          {/* 🚩 Yahoo's API terms require this attribution wherever their data is shown. */}
-          {preview.platform === "yahoo" && (
-            <p className="mt-4 text-[11px] text-gray-600">
-              <a
-                href="https://football.fantasysports.yahoo.com/"
-                target="_blank"
-                rel="noreferrer"
-                className="hover:underline"
-              >
-                Fantasy data provided by Yahoo Fantasy
-              </a>
-            </p>
-          )}
+          {/* 🚩 Yahoo's API terms require this attribution wherever their data is shown — which is
+              why it is now the SHARED component rather than a string typed into this file. This
+              screen used to be the only place it rendered; every post-save surface showed none.
+              See `platform-attribution.tsx`. */}
+          <PlatformAttribution sources={preview.platform} />
         </section>
       )}
     </div>

@@ -91,6 +91,7 @@ import {
 import { Picker } from "@/components/ui/picker"
 import { useAuth } from "@/lib/auth-context"
 import { canAccess } from "@/lib/entitlements"
+import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
 function Section({
   title,
@@ -261,6 +262,12 @@ export function RosterReport() {
       {!boardError && boardLoading && <LoadingBlock label="Building your report…" />}
       {!boardError && !boardLoading && !report.ready && <Empty reason={report.reason} />}
       {!boardError && report.ready && <Report report={report} entitled={entitled} />}
+
+      {/* 🚩 NF-C0-Yahoo-ENABLE — the whole report is built from ONE imported league's roster, so
+          the credit belongs on it. Outside the ready/error branches deliberately: the league is
+          selected before the board resolves, and a credit that blinks out while a report loads is
+          a credit missing from a screen showing that platform's league. */}
+      <PlatformAttribution sources={teams?.find((t) => t.league.league_id === leagueId)?.league} />
     </Shell>
   )
 }

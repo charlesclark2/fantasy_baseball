@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -755,6 +755,180 @@ def _fits_fantasy_budget(user_id: str, league_id: str, record: dict) -> bool:
     return others + _estimated_bytes(record) <= MAX_FANTASY_BYTES
 
 
+# ── NF-C0-Yahoo-ENABLE (Half A) — RETENTION AND DELETION OF PLATFORM-DERIVED ROSTERS ─────────────
+#
+# Yahoo's API terms forbid storing, caching or indexing Yahoo Fantasy Information beyond a stated
+# retention window, and require it to be DELETED when the user disconnects. The spike memo
+# (`docs/nf_c0_yahoo_spike_memo.md`, gaps §2.c.vii and §6) measured us failing both: rosters were
+# persisted with no bound at all, and `DELETE /fantasy/import/yahoo/connection` dropped only the
+# OAuth token, so a user who disconnected kept every roster we had copied, forever.
+#
+# ⭐ WHAT IS PLATFORM DATA AND WHAT IS OURS. The distinction is the whole design, and it is drawn
+# here rather than at the call sites so there is exactly one answer:
+#   · THE ROSTERS ARE THEIRS. `imported_roster` (the user's own team) and `league_rosters` (every
+#     team's) are a copy of the platform's league state — Yahoo Fantasy Information by any reading.
+#     These are what expire and what a disconnect deletes.
+#   · THE SCORING CONFIG IS OURS. `scoring`, `roster` slots, `n_teams`, `ppr`, `depth_targets` — the
+#     league SETTINGS — are our own derived artefact in the same class as a hand-entered league, and
+#     a user who disconnects keeps the league they configured. Deleting those would silently destroy
+#     work the user did, on an action they took to stop us reading Yahoo.
+#
+# ⚠️ WHY THIS IS NOT A DynamoDB TTL. DynamoDB's TTL deletes whole ITEMS, and every one of a user's
+# leagues lives as an attribute on their SINGLE user row alongside their bets, portfolio and
+# preferences (see `MAX_FANTASY_LEAGUES_BYTES` above for why). A native TTL here would delete the
+# user's entire account row when a roster aged out — so the window is enforced in this module. The
+# SEMANTICS deliberately mirror DynamoDB's own: expired data is FILTERED OUT OF EVERY READ (the
+# guarantee — no caller can serve it, and it holds even if no sweep ever runs), and the bytes are
+# removed lazily by a best-effort sweep on the next read that observes the expiry.
+
+#: How long a copied roster may live on our side before it is unreadable and swept. A retention
+#: WINDOW, not a cache TTL: it is the number this product states to Yahoo and to the user, so it is
+#: declared once, here, and read by the privacy policy copy and the guard tests.
+PLATFORM_ROSTER_RETENTION_DAYS = 30
+
+#: Stamped on a stored league that carries copied roster data; absent means "no roster stored".
+_ROSTER_EXPIRES_AT = "roster_retention_expires_at"
+
+#: Set when a purge (a disconnect, or the retention window closing) removed roster data that HAD
+#: been stored. Served, because an absent roster otherwise reads as "your league has not drafted" —
+#: a plausible, wrong explanation for a deletion we performed (the NF-C6b ambiguous-empty-state
+#: class). An absence reported, never imputed.
+_ROSTER_PURGED = "roster_retention_purged"
+
+#: Every field that is a copy of the platform's league state. `*_synced_at` and
+#: `league_rosters_truncated` go with them: they describe a roster that no longer exists, and
+#: leaving "Roster as of 10 Aug" beside no roster is the same wrong-explanation failure.
+PLATFORM_ROSTER_FIELDS = (
+    "imported_roster",
+    "roster_synced_at",
+    "league_rosters",
+    "league_rosters_synced_at",
+    "league_rosters_truncated",
+)
+
+
+def _has_platform_roster(record: dict) -> bool:
+    """Does this record actually carry copied roster data (as opposed to empty placeholders)?"""
+    return bool(record.get("imported_roster")) or bool(record.get("league_rosters"))
+
+
+def roster_retention_expiry(now: datetime | None = None) -> str:
+    """The ISO instant at which roster data stored NOW stops being readable."""
+    base = now or datetime.now(timezone.utc)
+    return (base + timedelta(days=PLATFORM_ROSTER_RETENTION_DAYS)).isoformat()
+
+
+def _stamp_roster_retention(record: dict) -> None:
+    """Give a record about to be stored its retention stamp — or clear it if it holds no roster.
+
+    ⚠️ The stamp is REFRESHED on every save that carries roster data, and that is correct rather
+    than lax: a save is a fresh copy from the platform, so the window runs from when WE took the
+    copy. A save that carries no roster clears the stamp so a stale expiry can never make a
+    later, roster-less league look expired.
+    """
+    if _has_platform_roster(record):
+        record[_ROSTER_EXPIRES_AT] = roster_retention_expiry()
+    else:
+        record.pop(_ROSTER_EXPIRES_AT, None)
+
+
+def _roster_retention_expired(record: dict, now_iso: str) -> bool:
+    """Has this record's stored roster passed its window?
+
+    A record carrying roster data with NO stamp is treated as EXPIRED. That is the fail-closed
+    direction and it is the one that matters: the only way to hold an unstamped roster is to have
+    stored it before this shipped, i.e. under no retention bound at all.
+    """
+    if not _has_platform_roster(record):
+        return False
+    stamp = record.get(_ROSTER_EXPIRES_AT)
+    if not stamp:
+        return True
+    return str(stamp) <= now_iso
+
+
+def _strip_platform_rosters(record: dict) -> bool:
+    """Remove every copied-roster field in place. Returns whether anything was actually removed."""
+    removed = _has_platform_roster(record)
+    for field in PLATFORM_ROSTER_FIELDS:
+        record.pop(field, None)
+    record.pop(_ROSTER_EXPIRES_AT, None)
+    if removed:
+        record[_ROSTER_PURGED] = True
+    return removed
+
+
+def _remove_roster_attributes(user_id: str, league_ids: list[str]) -> None:
+    """Best-effort REMOVE of the roster attributes on the named leagues.
+
+    ⚠️ NEVER RAISES. This is the byte-removal half; the read-side mask is the guarantee, so a
+    transient write failure must not turn a league list into an error page. It retries on the next
+    read that observes the same expiry.
+    """
+    if not league_ids:
+        return
+    table = _users_table()
+    names = {"#fl": "fantasy_leagues"}
+    for i, field in enumerate(PLATFORM_ROSTER_FIELDS + (_ROSTER_EXPIRES_AT,)):
+        names[f"#f{i}"] = field
+    field_refs = [f"#f{i}" for i in range(len(PLATFORM_ROSTER_FIELDS) + 1)]
+    for league_id in league_ids:
+        try:
+            table.update_item(
+                Key={"user_id": user_id},
+                UpdateExpression=(
+                    "REMOVE " + ", ".join(f"#fl.#id.{ref}" for ref in field_refs)
+                    + " SET #fl.#id.#purged = :true"
+                ),
+                ExpressionAttributeNames={**names, "#id": league_id, "#purged": _ROSTER_PURGED},
+                ExpressionAttributeValues={":true": True},
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "dynamo: could not remove expired roster data for user=%s league=%s",
+                user_id, league_id,
+            )
+
+
+def purge_platform_league_data(user_id: str, platform: str) -> dict:
+    """Delete every roster we copied from `platform`, keeping the leagues' own scoring config.
+
+    This is what a disconnect must do (§6). Returns `{"leagues_purged": n, "league_ids": [...]}`
+    so the caller can log what actually happened rather than assert it.
+
+    ⚠️ Reads through the RAW map rather than `list_fantasy_leagues`, because that reader already
+    MASKS expired rosters — purging off a masked view would report "nothing to delete" for exactly
+    the records most overdue for deletion.
+    """
+    try:
+        resp = _users_table().get_item(Key={"user_id": user_id})
+        raw = resp.get("Item", {}).get("fantasy_leagues") or {}
+    except Exception:  # noqa: BLE001
+        logger.warning("dynamo.purge_platform_league_data: read failed for user=%s", user_id)
+        raise
+
+    targets = []
+    for league_id, cfg in raw.items():
+        try:
+            record = _deep_from_dynamo(cfg)
+        except Exception:  # noqa: BLE001
+            continue
+        if not isinstance(record, dict):
+            continue
+        if str(record.get("source_platform") or "").lower() != platform.lower():
+            continue
+        if _has_platform_roster(record):
+            targets.append(str(league_id))
+
+    _remove_roster_attributes(user_id, targets)
+    if targets:
+        logger.info(
+            "[METRIC] platform_league_rosters_purged=%d user=%s platform=%s",
+            len(targets), user_id, platform,
+        )
+    return {"leagues_purged": len(targets), "league_ids": targets}
+
+
 def list_fantasy_leagues(user_id: str) -> list[dict]:
     """Every league the user has saved, newest-updated first.
 
@@ -763,6 +937,13 @@ def list_fantasy_leagues(user_id: str) -> list[dict]:
 
     ⚠️ Each stored league is converted INDEPENDENTLY and a malformed one is SKIPPED, never
     raised (E9.49): one un-representable row must never blank the whole collection.
+
+    ⭐ NF-C0-Yahoo-ENABLE — THIS IS WHERE THE RETENTION WINDOW IS ENFORCED, and it is enforced on
+    the READ rather than on a timer. Every caller in the codebase reaches a stored league through
+    this function (`get_fantasy_league` included), so a roster past its window is unreachable to
+    all of them — a guarantee that holds whether or not any sweep ever runs. The sweep below then
+    removes the bytes, best-effort, exactly as DynamoDB's own TTL does. See
+    `PLATFORM_ROSTER_RETENTION_DAYS`.
     """
     try:
         resp = _users_table().get_item(Key={"user_id": user_id})
@@ -771,12 +952,17 @@ def list_fantasy_leagues(user_id: str) -> list[dict]:
         logger.warning("dynamo.list_fantasy_leagues failed for user=%s", user_id)
         return []
 
+    now_iso = _now_iso()
+    expired: list[str] = []
     out: list[dict] = []
     for league_id, cfg in raw.items():
         try:
             item = _deep_from_dynamo(cfg)
             if not isinstance(item, dict):
                 continue
+            if _roster_retention_expired(item, now_iso):
+                _strip_platform_rosters(item)
+                expired.append(str(league_id))
             item["league_id"] = league_id
             out.append(item)
         except Exception:
@@ -784,6 +970,15 @@ def list_fantasy_leagues(user_id: str) -> list[dict]:
                 "dynamo.list_fantasy_leagues: skipping malformed league %s for user=%s",
                 league_id, user_id,
             )
+
+    # The byte-removal half. Conditional on an expiry actually being observed, so the ordinary read
+    # costs no extra write — a league can only cross its window once.
+    if expired:
+        logger.info(
+            "[METRIC] platform_league_rosters_expired=%d user=%s", len(expired), user_id
+        )
+        _remove_roster_attributes(user_id, expired)
+
     out.sort(key=lambda c: str(c.get("updated_at") or ""), reverse=True)
     return out
 
@@ -844,6 +1039,12 @@ def put_fantasy_league(
             "is near its 400 KB ceiling; this league keeps its own roster only",
             user_id, league_id,
         )
+
+    # NF-C0-Yahoo-ENABLE — the retention stamp, applied AFTER the budget check so it describes what
+    # is actually being stored: a save whose rosters were just dropped for size must not carry an
+    # expiry for roster data it no longer holds. Its own ~60 bytes sit far inside the 140 KB reserve
+    # the budget above deliberately leaves, so stamping after the measurement cannot overflow it.
+    _stamp_roster_retention(record)
 
     table = _users_table()
     try:
