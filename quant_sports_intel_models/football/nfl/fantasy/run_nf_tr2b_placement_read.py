@@ -28,7 +28,6 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 
-import numpy as np
 import pandas as pd
 
 _PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[4]
@@ -140,10 +139,10 @@ def run(src: pathlib.Path, origin: str | None = None) -> dict:
     for name in ("within_position_order", "rookie_placement_cap", "position_survival"):
         fails = [c for c, g in gates_all.items() if g[name].get("pass") is False]
         unev = [c for c, g in gates_all.items() if g[name].get("pass") is None]
-        merged[name] = {"pass": (not fails and not unev) or None if unev else not fails,
+        # None (UNEVALUABLE) wins over a pass: a gate that could not be computed on some config is
+        # never rolled up as healthy (NF1.7 (a)). A FAIL anywhere still fails.
+        merged[name] = {"pass": (False if fails else (None if unev else True)),
                         "failing_configs": fails, "unevaluable_configs": unev}
-        if unev:
-            merged[name]["pass"] = None
     merged["rookie_placement_cap"]["incumbent_breached_configs"] = [
         c for c, g in gates_all.items()
         if g["rookie_placement_cap"]["incumbent"]["breach"] is True]
