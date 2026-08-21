@@ -381,20 +381,49 @@ def test_a_missing_anchor_is_a_hard_failure_not_a_pass():
 # Scope — the CLOSED rookie leg stays closed
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def test_a_rookie_row_in_the_population_is_a_hard_failure():
-    """⛔ §1 — the rookie LEVEL is governed by the CLOSED NF-D16→D21 chain, and re-opening it inside
-    a differently-named story would re-apply the exact pressure the PM closed it to remove."""
+    """⛔ §1 — the rookie LEVEL is governed by its own NF-D16→D22 chain, not by this story. The
+    reason has changed shape since pre-registration and got STRONGER: while the chain was CLOSED,
+    re-opening the leg here would have re-applied the pressure the PM closed it to remove; now that
+    the chain SERVES a correction at λ=0.5, a rookie row here would be level-corrected TWICE.
+
+    ⚠️ The second call is the load-bearing half — it asserts the gate does NOT fire on a clean
+    veteran-only population under the LIVE disposition, which is what makes the first call's raise
+    attributable to the rookie row rather than to ambient module state."""
     with pytest.raises(SystemExit):
         LR.assert_rookie_leg_untouched(pd.DataFrame({"is_rookie": [False, True, False]}))
     LR.assert_rookie_leg_untouched(pd.DataFrame({"is_rookie": [False, False]}))
 
 
-def test_the_scope_gate_re_reads_the_imported_disposition(monkeypatch):
-    """The exclusion is INHERITED, not restated — so if a future edit flips the rookie policy without
-    re-deciding this story, NF-RECAL1 must FAIL rather than silently widen its own scope."""
+def test_the_scope_gate_refuses_a_rookie_disposition_nobody_re_read(monkeypatch):
+    """The exclusion is INHERITED, not restated — so a rookie-policy state this story's scope has
+    never been re-read against must FAIL rather than silently widen the scope.
+
+    ⭐ RE-ANCHORED 2026-08-20. The original form monkeypatched `SERVING_ENABLED = True` and expected
+    a raise, which encoded "the rookie leg is off" as the premise. That premise is now FALSE in the
+    live module — the leg ships at λ=0.5 — so the old assertion would have been satisfied by the
+    live state itself and proved nothing. The genuine tripwire is an UNREVIEWED disposition, and
+    that is what is asserted here: both recorded states pass, an invented one raises."""
     from quant_sports_intel_models.football.nfl.fantasy import rookie_publish_policy as RPP
-    monkeypatch.setattr(RPP, "SERVING_ENABLED", True, raising=False)
-    with pytest.raises(SystemExit):
-        LR.assert_rookie_leg_untouched(pd.DataFrame({"is_rookie": [False]}))
+    clean = pd.DataFrame({"is_rookie": [False]})
+
+    # (a) every disposition whose re-read is RECORDED passes — including the pre-registration state,
+    #     so a rollback of the rookie publish does not spuriously break this story.
+    assert set(LR.REVIEWED_ROOKIE_DISPOSITIONS) == {"CONSTRAINT_REFUSED", "SHIP"}
+    monkeypatch.setattr(RPP, "DISPOSITION", "CONSTRAINT_REFUSED")
+    monkeypatch.setattr(RPP, "SERVING_ENABLED", False)
+    LR.assert_rookie_leg_untouched(clean)
+
+    # (b) a disposition nobody re-read this scope against RAISES — the actual tripwire.
+    monkeypatch.setattr(RPP, "DISPOSITION", "SOME_FUTURE_DECISION")
+    with pytest.raises(SystemExit, match="never been re-read"):
+        LR.assert_rookie_leg_untouched(clean)
+
+    # (c) and the rookie policy's OWN coherence is delegated, not re-implemented: a flip that
+    #     contradicts its disposition is refused here too, through `RPP.assert_coherent()`.
+    monkeypatch.setattr(RPP, "DISPOSITION", "CONSTRAINT_REFUSED")
+    monkeypatch.setattr(RPP, "SERVING_ENABLED", True)
+    with pytest.raises((SystemExit, ValueError)):
+        LR.assert_rookie_leg_untouched(clean)
 
 
 def test_qb_is_in_scope_and_the_reason_is_recorded():

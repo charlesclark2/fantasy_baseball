@@ -3,8 +3,8 @@ nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1:
   level_model_version: nfl_fantasy_nf_tr2b_veteran_level_v1
   ordering_model_version: nfl_fantasy_nf1_5_v1
   rookie_model_version: rookie_slot_curve_v1
-  rookie_selection_status: incumbent
-  rookie_shrink_lambda: 0.0
+  rookie_selection_status: PM_JUDGMENT
+  rookie_shrink_lambda: 0.5
   rookie_statistically_selected: false
   interval_model_version:
     rookie: nf1_8
@@ -28,24 +28,44 @@ nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1:
     mean-match, trailing 5 seasons, band FIXED); record ablation_results/nf_tr2_level_recalibration_b.md
     (CRPS 49.34 vs 49.92, PBO 0.0, DSR 0.9995 declared / 0.999 under NF-B3''s field,
     p 0.0002); rebuilt + published 2026-08-15 by the operator (k QB 0.929 / RB 1.248
-    / WR 1.100 / TE 1.112). Rollback = veteran_level_policy.SERVING_ENABLED=False.] [NF-TR2b placement
-    read, 2026-08-20: the WHOLE-BOARD CROSS-POSITION placement consequence (the
-    NF-D16 class) is now measured on the SERVED artifact across all 14 published
-    configs — verdict SANE, all four structural/inherited gates green (within-leg
-    order identity, the NF-D18/D20 rookie placement cap DELEGATED, position
-    survival, served band integrity). The decision-relevant top-24 moves ~2-5
-    ranks; the large moves sit in the deep board where VOR is flat. G2 is ACTIVE
-    rather than vacuous: the INCUMBENT board breached the cap on standard_12 and
-    TR2b REPAIRS it. Disclosed consequence, NOT adjudicated here: TR2b re-prices
-    veterans against an UNCORRECTED rookie leg (NF-D21 CLOSED), so rookies fall
-    ~23 ranks on average as a pure relative effect, and no guard exists on that
-    side of the cap. Record
+    / WR 1.100 / TE 1.112). Rollback = veteran_level_policy.SERVING_ENABLED=False.]
+    [NF-TR2b placement read, 2026-08-20: the WHOLE-BOARD CROSS-POSITION placement
+    consequence (the NF-D16 class) is now measured on the SERVED artifact across all
+    14 published configs — verdict SANE, all four structural/inherited gates green
+    (within-leg order identity, the NF-D18/D20 rookie placement cap DELEGATED, position
+    survival, served band integrity). The decision-relevant top-24 moves ~2-5 ranks;
+    the large moves sit in the deep board where VOR is flat. G2 is ACTIVE rather than
+    vacuous: the INCUMBENT board breached the cap on standard_12 and TR2b REPAIRS
+    it. Disclosed consequence, NOT adjudicated here: TR2b re-prices veterans against
+    an UNCORRECTED rookie leg (NF-D21 CLOSED), so rookies fall ~23 ranks on average
+    as a pure relative effect, and no guard exists on that side of the cap. Record
     quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_tr2b_placement_read.md;
-    re-runnable via run_nf_tr2b_placement_read.py.]'
+    re-runnable via run_nf_tr2b_placement_read.py.] [NF-D21-PUBLISH, 2026-08-20: the
+    rookie level recalibration is now SERVED at lambda=0.5 (rookie_publish_policy.SERVING_ENABLED=True,
+    DISPOSITION=SHIP). Publish at lambda=0.5: NF-D22 replaced the hard point-estimate
+    coverage floor with a power-derived one, derived on its own merits from n and
+    NF1.8''s pre-registered false-reject target and validated two-sided — the rule
+    it replaced rejected a perfectly calibrated band 0.393-0.500 of the time at every
+    size. Against the floor now in force NF-D16''s ratified lift (pooled draftable-tier
+    MAE 1.0738 -> 0.9407 over seven held-out draft classes, 7/7 positive, PBO 0.029,
+    DSR 0.996) clears every per-group coverage floor and all ten NF-G0 gates at lambda=0.5.
+    lambda is UNCHANGED at the board-blind midpoint: nothing was re-selected, and
+    NF-D16 clearing is a consequence of the new floor, never its motivation. Supporting
+    record: ablation_results/nf_d22_power_floor.md sections 1-2 (the floor''s derivation
+    from design quantities and its two-sided validation), section 3 (the lambda sweep
+    under the floor in force) and section 4 (NF-D16 at lambda=0.5 through the ten
+    NF-G0 gates, ready_to_promote=True); the superseded refusal is preserved at ablation_results/nf_g0_d21_governance_publish.md
+    section 4 and in rookie_publish_policy.PREDECESSOR_DISPOSITION. Rollback = rookie_publish_policy.SERVING_ENABLED=False
+    (returns lambda=0, the byte-identical pre-NF-D16 rookie point) plus a re-decided
+    DISPOSITION. ORDERING: this entry moves with the POLICY, which is what the next
+    board build reads; the SERVED artifact catches up on the box''s next sports_nfl_board_publish_schedule
+    run, and the model_stamp_consistency gate is what refuses a board whose stamp
+    disagrees with this entry.]'
   promotion_status: champion
   promoted_at: '2026-08-01'
-  reviewed_by: 'Charlie (operator/PM) — NF-D21 disposition 2026-08-05 (genesis promotion:
-    operator (PM), NF1.5b re-land)'
+  reviewed_by: 'Charlie (operator/PM) — NF-D21-PUBLISH disposition 2026-08-20 (supersedes
+    the NF-D21 disposition of 2026-08-05; genesis promotion: operator (PM), NF1.5b
+    re-land)'
   notes: 'GENESIS entry (NF-G0, 2026-08-04): the state NFL fantasy was ALREADY serving
     when this registry was created. It has no true predecessor, so `fallback_artifact_uri`
     points at ITSELF and `previous_served_version` repeats its own version — rolling
@@ -61,7 +81,16 @@ nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1:
     incumbent` is now the SETTLED state rather than a pending one. This entry stays
     the champion and no challenger was ever promoted: the first real artifact routed
     through this registry was REFUSED by its own gate, which is stronger evidence
-    the governance layer works than a clean pass would have been.'
+    the governance layer works than a clean pass would have been. UPDATED 2026-08-20
+    (NF-D21-PUBLISH): `rookie_selection_status` is now `PM_JUDGMENT` at lambda=0.5
+    — the 2026-08-05 CONSTRAINT_REFUSED close is HISTORY, not the current state. It
+    moved because NF-D22 REPLACED the interval floor rule (a power-derived exact-Binomial
+    floor taking no coverage argument, derived from n and NF1.8''s pre-registered
+    false-reject target and validated two-sided) and NF-D16 was RE-GATED against it
+    — not because the floor was moved to clear it. `served_version` is UNCHANGED:
+    NF1.5 is still the ordering model and the rookie correction is a stamped property
+    of the board, not a new served version, so this stays one champion entry rather
+    than a promotion.'
   model_family: nfl_fantasy
   target: season_projection
 nfl_fantasy__weekly_projection__nfl_fantasy_w2b_v1:

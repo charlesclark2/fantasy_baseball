@@ -5,8 +5,8 @@
       "population": "rookies",
       "config": "SHIPPED rookie band",
       "form": "qreg_sqrt",
-      "rookie_point_shrink_lambda": 0.0,
-      "rookie_selection_status": "incumbent",
+      "rookie_point_shrink_lambda": 0.5,
+      "rookie_selection_status": "PM_JUDGMENT",
       "cohorts": [
         2019,
         2020,
@@ -43,10 +43,10 @@
           "detectable_shortfall": 0.678,
           "is_thin": true,
           "approximation_error": -0.0057,
-          "coverage": 0.8148,
-          "covered_rows": 66,
-          "slack_rows": 7,
-          "slack_rows_at_nominal_floor": 1,
+          "coverage": 0.8025,
+          "covered_rows": 65,
+          "slack_rows": 6,
+          "slack_rows_at_nominal_floor": 0,
           "met": true
         },
         "RB": {
@@ -65,10 +65,10 @@
           "detectable_shortfall": 0.708,
           "is_thin": true,
           "approximation_error": 0.0054,
-          "coverage": 0.8041,
-          "covered_rows": 119,
-          "slack_rows": 9,
-          "slack_rows_at_nominal_floor": 0,
+          "coverage": 0.7905,
+          "covered_rows": 117,
+          "slack_rows": 7,
+          "slack_rows_at_nominal_floor": -2,
           "met": true
         },
         "TE": {
@@ -123,8 +123,8 @@
         "WR": 0.8
       },
       "coverage": {
-        "QB": 0.8148,
-        "RB": 0.8041,
+        "QB": 0.8025,
+        "RB": 0.7905,
         "TE": 0.9,
         "WR": 0.8348
       },
@@ -135,22 +135,24 @@
         "WR": 224
       },
       "slack_rows": {
-        "QB": 7,
-        "RB": 9,
+        "QB": 6,
+        "RB": 7,
         "TE": 17,
         "WR": 18
       },
       "slack_rows_at_nominal": {
-        "QB": 1,
-        "RB": 0,
+        "QB": 0,
+        "RB": -2,
         "TE": 10,
         "WR": 7
       },
       "unconstrained": [],
       "misses": [],
-      "misses_at_nominal_floor": [],
+      "misses_at_nominal_floor": [
+        "RB 0.7905<0.800"
+      ],
       "pass": true,
-      "pooled_coverage": 0.8354,
+      "pooled_coverage": 0.83,
       "pooled_floor": 0.7722,
       "pooled_floor_detail": {
         "n": 553,
@@ -168,10 +170,10 @@
         "detectable_shortfall": 0.7555,
         "is_thin": true,
         "approximation_error": -0.0028,
-        "coverage": 0.8354,
-        "covered_rows": 462,
-        "slack_rows": 35,
-        "slack_rows_at_nominal_floor": 19,
+        "coverage": 0.83,
+        "covered_rows": 459,
+        "slack_rows": 32,
+        "slack_rows_at_nominal_floor": 16,
         "met": true
       },
       "pooled_backstop": {
@@ -189,14 +191,14 @@
         "family_false_reject_rate_at_nominal_floor": 0.9259,
         "note": "Independence across groups is ASSUMED here and is optimistic \u2014 rows in different positions share draft classes/seasons, so the true family rate is somewhat lower than the product. Reported as the conservative reading. \u26d4 NOT corrected for: a Bonferroni split would LOOSEN every individual floor, which is the adjustment this story must least be able to make."
       },
-      "interval_score": 183.407,
+      "interval_score": 184.534,
       "newest_cohort": {
         "cohort": 2025,
         "n": 85,
-        "pooled_coverage": 0.8235,
+        "pooled_coverage": 0.8118,
         "coverage": {
           "QB": 0.7857,
-          "RB": 0.76,
+          "RB": 0.72,
           "TE": 0.875,
           "WR": 0.8667
         },
@@ -535,5 +537,5 @@
       }
     }
   ],
-  "generated_at": "2026-08-21T01:51:19.726682+00:00"
+  "generated_at": "2026-08-21T03:23:13.526681+00:00"
 }
