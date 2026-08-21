@@ -28,7 +28,20 @@ nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1:
     mean-match, trailing 5 seasons, band FIXED); record ablation_results/nf_tr2_level_recalibration_b.md
     (CRPS 49.34 vs 49.92, PBO 0.0, DSR 0.9995 declared / 0.999 under NF-B3''s field,
     p 0.0002); rebuilt + published 2026-08-15 by the operator (k QB 0.929 / RB 1.248
-    / WR 1.100 / TE 1.112). Rollback = veteran_level_policy.SERVING_ENABLED=False.]'
+    / WR 1.100 / TE 1.112). Rollback = veteran_level_policy.SERVING_ENABLED=False.] [NF-TR2b placement
+    read, 2026-08-20: the WHOLE-BOARD CROSS-POSITION placement consequence (the
+    NF-D16 class) is now measured on the SERVED artifact across all 14 published
+    configs — verdict SANE, all four structural/inherited gates green (within-leg
+    order identity, the NF-D18/D20 rookie placement cap DELEGATED, position
+    survival, served band integrity). The decision-relevant top-24 moves ~2-5
+    ranks; the large moves sit in the deep board where VOR is flat. G2 is ACTIVE
+    rather than vacuous: the INCUMBENT board breached the cap on standard_12 and
+    TR2b REPAIRS it. Disclosed consequence, NOT adjudicated here: TR2b re-prices
+    veterans against an UNCORRECTED rookie leg (NF-D21 CLOSED), so rookies fall
+    ~23 ranks on average as a pure relative effect, and no guard exists on that
+    side of the cap. Record
+    quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_tr2b_placement_read.md;
+    re-runnable via run_nf_tr2b_placement_read.py.]'
   promotion_status: champion
   promoted_at: '2026-08-01'
   reviewed_by: 'Charlie (operator/PM) — NF-D21 disposition 2026-08-05 (genesis promotion:
