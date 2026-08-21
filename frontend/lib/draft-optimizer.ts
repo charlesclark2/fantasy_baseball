@@ -128,6 +128,23 @@ export interface FreshnessBlock {
   market_refresh?: boolean | null
 }
 
+/** NF-C-HEALTHY — the VETERAN-LEVEL policy stamp, READ OFF THE BUILT BOARD (never the policy
+ *  module's own values — see `veteran_level_policy.stamp()` / `export_draft_board_json.
+ *  veteran_level_stamp`, which pulls this from the board's own columns so it can never describe a
+ *  policy the board wasn't actually built with). `status` is `"recalibrated"` when NF-TR2b's
+ *  correction is live, `"incumbent"` when it is the identity map (a pre-NF-TR2 export, or a
+ *  deliberate rollback) — a consumer must read this rather than assume the correction is always
+ *  on. Absent entirely on a manifest exported before NF-TR2. */
+export interface VeteranLevelPolicy {
+  status: string
+  form?: string | null
+  window_seasons?: number | null
+  source_model?: string | null
+  decision_story?: string | null
+  statistically_selected?: boolean | null
+  level_model_version?: string | null
+}
+
 export interface Manifest {
   season: number
   generated_at: string
@@ -159,6 +176,8 @@ export interface Manifest {
     projection_label?: string | null
     market_lean?: Record<string, string> | null
     market_lean_note?: string | null
+    /** NF-C-HEALTHY — the served veteran-level recalibration stamp. See `VeteranLevelPolicy`. */
+    veteran_level_policy?: VeteranLevelPolicy | null
   } | null
   // ── E9.56: the server-side entitlement envelope ────────────────────────────────────────────
   // The board endpoint returns a bare ARRAY (no room for an envelope without the NF-C0 shape

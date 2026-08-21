@@ -70,6 +70,7 @@ import {
   LOW_PREDICTABILITY_POSITIONS,
   PlayerContributionsPanel,
   PosBadge,
+  ProjectionMethodologyNote,
   ProvenanceLine,
   RangeCell,
   LockChip,
@@ -685,6 +686,16 @@ function PlayerView({ playerId }: { playerId: string }) {
               </>
             )}
           </section>
+
+          {/* NF-C-HEALTHY — what actually built the projection above: the served stack, not a
+              research model. Gated on the manifest having loaded at all (see the component doc). */}
+          {manifest && (
+            <ProjectionMethodologyNote
+              projectionSource={manifest.projectionSource}
+              projectionLabel={manifest.projectionLabel}
+              veteranLevelPolicy={manifest.projections?.veteran_level_policy}
+            />
+          )}
 
           {/* NF3.4 — what pushes THIS player's number up or down (a separate research-model read) */}
           <PlayerContributionsPanel

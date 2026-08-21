@@ -4,6 +4,14 @@
     "items": [
       {
         "tag": "new",
+        "text": "Player pages now show a short note on what actually builds the projection above it — our own baseline model, refined with market consensus where testing shows it helps, plus our live veteran season-rate recalibration. It sits beside the existing per-player \"what pushes his number up or down\" panel, which is a separate research model's read and is labelled as such."
+      },
+      {
+        "tag": "fixed",
+        "text": "The full-season rate (the \"if he plays every week\" comparability figure beside a player's projection) no longer shows for a player projected for only a game or two. Dividing a season total by a very small games figure produced a technically-real but misleading number; it now shows nothing rather than a number that overstates him."
+      },
+      {
+        "tag": "new",
         "text": "Mock Draft: finish a draft and you now get a share card — your finishing rank, projected points against the room, your strongest position and your best value pick, all in one branded image. Download it, copy a link, or use your device's share sheet. Anyone who opens the link sees the same card and the same honest framing we show you in the app: it ranks the room on our own projections, not a guarantee of how a real league goes. The share page itself needs no account to view."
       },
       {
