@@ -58,6 +58,30 @@ QB 1 / RB **0** / TE 12 / WR 8 — i.e. rookie RB clears its floor with ZERO cov
 slack, so it is the floor a future class breaks first. The veteran margins are much larger (64–337 rows)
 because the population is ~10× bigger, not because the band is more certain.
 
+⭐ NF-D22 — **THE FLOOR THIS CHECK GATES ON IS NOW POWER-DERIVED, AND THE MARGINS ABOVE ARE WHY.**
+"RB clears with ZERO rows of slack" was read for a year as a statement about the BAND. It is mostly a
+statement about the FLOOR: a hard point-estimate floor at nominal rejects a *perfectly calibrated*
+band with probability ≈ 0.5 at every n this program has (measured exactly: 0.456 at n = 81, **0.500**
+at n = 148, 0.489 at n = 3000). A gate whose refusals are coin tosses is not conservative, it is
+uninformative — and its refusals still read as evidence, which is worse than not gating at all.
+
+So the floor is now the exact one-sided Binomial acceptance bound at a PRE-REGISTERED false-reject
+target (`betting_ml.utils.coverage_power_floor`, target 0.05 — NF1.8's own Tier-2 level, only now
+applied to every constrained group instead of a hardcoded two-position tuple, and computed exactly
+rather than through a normal approximation that does not honour the rate it advertises). It is a
+function of the group's `n` and that target and NOTHING ELSE, and it self-attenuates: 0.667 at
+n = 30, 0.743 at n = 148, 0.788 at n = 3000, 0.792 at n = 6000 → nominal. Nothing had to decide which
+groups count as "thin".
+
+  ⛔ THE FLOOR STILL MAY NOT MOVE, AND A BREACH IS STILL A RE-SELECTION TRIGGER (E2.1-r; NF1.8 §1).
+     What changed is that a breach now MEANS something. Both readings are printed side by side in
+     every run (`floors` / `floors_at_nominal`, `slack_rows` / `slack_rows_at_nominal`) so the change
+     is visible in the artifact rather than only in a changelog.
+  ⛔ THE §0.5 SELECTION FLOOR IS UNTOUCHED. `run_rookie_perposition_ablation.position_floors` still
+     governs bake-off ELIGIBILITY at the hard nominal level. There a FIELD of arms exists and the
+     METRIC does the selecting; here there is one shipped band and the floor is the whole decision.
+     Relaxing eligibility inside recorded searches would re-decide them post hoc.
+
 RUN ON THE LAPTOP (~1 min with a warm panel; add --rebuild-panel after a new season lands):
 
     uv run python -m quant_sports_intel_models.football.nfl.fantasy.run_interval_revalidation
@@ -82,6 +106,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from betting_ml.utils import coverage_power_floor as CPF  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import season_projection as SP  # noqa: E402
 from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
     rookie_publish_policy as _ROOKIE_POLICY,
@@ -93,6 +118,10 @@ from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
 )
 
 log = logging.getLogger("nfl.fantasy.interval_revalidation")
+
+#: Only ever used when a caller omits `nominal` — every real call passes its population's own
+#: pre-registered value, so this is a guard against a silent 0-coverage floor, not a policy.
+CPF_NOMINAL_DEFAULT = 0.80
 
 _REPORT_DIR = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/ablation_results"
 _OUT_JSON = _REPORT_DIR / "nf1_9_interval_revalidation.json"
@@ -130,18 +159,78 @@ def shipped_veteran_cfg() -> dict:
 # Scoring one population
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def _floor_block(rec: dict, positions: list[str], floor_kwargs: dict) -> dict:
-    """The pooled per-position floor read for one population — the BINDING check."""
-    floors = NF18.position_floors(rec, positions, tier=1, **floor_kwargs)
-    misses = NF18.floor_misses(rec, floors)
+    """The pooled + per-position floor read for one population — the BINDING check.
+
+    ⭐ NF-D22: THE FLOOR IS NOW POWER-DERIVED (`betting_ml.utils.coverage_power_floor`), NOT A HARD
+    POINT ESTIMATE AT NOMINAL. The rule it replaces rejected a *perfectly calibrated* band about half
+    the time at every n this program has (exactly 0.500 at n = 148, 0.456 at n = 81, 0.489 at
+    n = 3000) — so a breach carried almost no information and a refusal read as evidence when it was
+    a coin toss. The floor here is the exact one-sided Binomial acceptance bound at a pre-registered
+    false-reject TARGET, derived from the group's `n` and that target and NOTHING else; it converges
+    to nominal as n grows, so nothing had to decide which groups are "thin".
+
+    ⛔ THIS IS THE **GATE** FLOOR, NOT THE **SELECTION** FLOOR. `NF18.position_floors` — the
+    eligibility constraint inside a §0.5 bake-off, where a FIELD of arms exists and the METRIC does
+    the selecting — is deliberately untouched, because relaxing eligibility there would re-decide
+    searches that are already recorded. Here there is one shipped band, no field and no metric, so
+    the floor *is* the whole decision, which is exactly and only where a ~50% false-reject rate is
+    fatal. See the module docstring of `coverage_power_floor` for the full prohibition list.
+
+    ⚠️ A breach under the new rule is STILL a re-selection trigger and the floor still may not move.
+    Both floors are reported side by side so the change is visible in every run rather than inferable
+    from a changelog: `floors_at_nominal` and `slack_rows_at_nominal` preserve the previous reading.
+    """
+    nominal = float(floor_kwargs.get("nominal", CPF_NOMINAL_DEFAULT))
+    min_n = floor_kwargs.get("min_n")
+    n_by = {p: rec.get(f"n_{p}") for p in positions}
+    cov_by = {p: rec.get(f"cov_{p}") for p in positions}
+    table = CPF.floor_table(n_by, nominal=nominal, min_n=min_n, coverage_by_group=cov_by)
+
+    # The POOLED floor runs the IDENTICAL rule over the pooled row count. It is materially tighter
+    # (larger n ⇒ closer to nominal), which is what makes the two-tier structure the substantive
+    # backstop against a band resting on each thin group's own low floor — MEASURED below, never
+    # assumed.
+    pooled_n = int(rec.get("n") or 0)
+    pooled_cov = rec.get("coverage_80")
+    pooled = (CPF.group_floor(pooled_n, nominal=nominal, coverage=pooled_cov)
+              if pooled_n > 0 else None)
+    misses = list(table["misses"])
+    if pooled is not None and pooled_cov is not None and not pooled["met"]:
+        misses.insert(0, f"pooled {pooled['coverage']}<{pooled['floor']:.4f} "
+                         f"({pooled['covered_rows']}/{pooled_n} covered, "
+                         f"{pooled['covered_rows_required']} required)")
+    # ⚠️ A position whose coverage could not be read is NOT a pass (NF1.7 (a)) — it is a check with
+    #    no subject, and scoring that green is how a floor becomes decoration.
+    misses += [f"{p} coverage unavailable — NOT scored as met" for p in table["coverage_unavailable"]]
+
+    # NF1.8's previous reading, preserved verbatim beside the new one.
+    nominal_floors = {p: nominal for p, n in n_by.items()
+                      if int(n or 0) > 0 and (min_n is None or int(n) >= int(min_n))}
     return {
-        "floors": floors,
-        "coverage": {p: rec.get(f"cov_{p}") for p in positions},
-        "n_by_position": {p: rec.get(f"n_{p}") for p in positions},
-        "slack_rows": NF18.floor_slack_rows(rec, floors),
-        "unconstrained": [p for p in positions if p not in floors],
+        "floor_rule": table["floor_rule"],
+        "target_false_reject_rate": table["target_false_reject_rate"],
+        "target_provenance": table["target_provenance"],
+        "floors": table["floors"],
+        "floor_detail": table["detail"],
+        "floors_at_nominal": nominal_floors,
+        "coverage": cov_by,
+        "n_by_position": n_by,
+        "slack_rows": {p: b["slack_rows"] for p, b in table["detail"].items()
+                       if "slack_rows" in b},
+        "slack_rows_at_nominal": {p: b["slack_rows_at_nominal_floor"]
+                                  for p, b in table["detail"].items()
+                                  if "slack_rows_at_nominal_floor" in b},
+        "unconstrained": table["unconstrained"],
         "misses": misses,
+        "misses_at_nominal_floor": NF18.floor_misses(
+            rec, NF18.position_floors(rec, positions, tier=1, **floor_kwargs)),
         "pass": not misses,
-        "pooled_coverage": rec.get("coverage_80"),
+        "pooled_coverage": pooled_cov,
+        "pooled_floor": (pooled or {}).get("floor"),
+        "pooled_floor_detail": pooled,
+        "pooled_backstop": CPF.pooled_backstop_check(
+            pooled_n or 1, [b["n"] for b in table["detail"].values()], nominal=nominal),
+        "family_false_reject": table["family"],
         "interval_score": rec.get("interval_score"),
     }
 
@@ -240,9 +329,22 @@ def revalidate_kdst(panel_path: Path, *, widen: float = 1.0,
     except Exception as exc:  # noqa: BLE001 — an errored block is NOT a pass (see docstring)
         return {"population": "kdst", "error": f"the K/DST band did not score: {exc}"}
     positions = sorted(str(p) for p in panel["position"].dropna().unique())
-    floors = {p: KD.NOMINAL_COVERAGE for p in positions if rep.get(f"n_{p}")}
-    misses = [p for p, f in floors.items() if (rep.get(f"cov_{p}") or 0.0) < f]
+    # ⭐ NF-D22 — the SAME power-derived floor as the other two populations, with no K/DST-specific
+    #    carve-out. K and DST are the THINNEST groups this check has (~45 kickers and ~32 DSTs a
+    #    season), so a hard point-estimate floor at nominal was least informative exactly here. The
+    #    breach RESPONSE stays different by design (widen, do not re-select — `breach_response`
+    #    below); only the floor's DERIVATION changed. `nominal` is still read off the served constant
+    #    `KD.NOMINAL_COVERAGE`, never re-typed.
+    kd_table = CPF.floor_table(
+        {p: rep.get(f"n_{p}") for p in positions}, nominal=KD.NOMINAL_COVERAGE,
+        coverage_by_group={p: rep.get(f"cov_{p}") for p in positions})
+    floors = dict(kd_table["floors"])
+    # ⚠️ A position whose coverage could not be read is NOT a pass (NF1.7 (a)).
+    misses = list(kd_table["misses"]) + [
+        f"{p} coverage unavailable — NOT scored as met" for p in kd_table["coverage_unavailable"]]
     cohorts = [int(v) for v in sorted(panel["target_season"].unique())]
+    table_unconstrained = sorted(set(kd_table["unconstrained"]) | {p for p in positions
+                                                                  if p not in floors})
     out = {
         "population": "kdst",
         "config": (f"SHIPPED K/DST base band (q{KD.BAND_QUANTILES[0]:.2f}/"
@@ -250,15 +352,22 @@ def revalidate_kdst(panel_path: Path, *, widen: float = 1.0,
         "form": "empirical_ratio_band",
         "cohorts": rep.get("held_out_seasons", cohorts),
         "n": rep["n"],
+        "floor_rule": kd_table["floor_rule"],
+        "target_false_reject_rate": kd_table["target_false_reject_rate"],
         "floors": floors,
+        "floor_detail": kd_table["detail"],
+        "floors_at_nominal": {p: KD.NOMINAL_COVERAGE for p in floors},
+        "family_false_reject": kd_table["family"],
         "coverage": {p: rep.get(f"cov_{p}") for p in floors},
         "n_by_position": {p: rep.get(f"n_{p}") for p in floors},
         # margin in ROWS, the NF1.8 convention — "0.83 vs 0.80" reads like a calibration statement;
         # "12 covered rows of slack" is the number that says how close this actually is
-        "slack_rows": {p: int(np.floor((rep.get(f"cov_{p}") or 0.0) * (rep.get(f"n_{p}") or 0))
-                             - np.ceil(f * (rep.get(f"n_{p}") or 0)))
-                       for p, f in floors.items()},
-        "unconstrained": [p for p in positions if p not in floors],
+        "slack_rows": {p: b["slack_rows"] for p, b in kd_table["detail"].items()
+                       if "slack_rows" in b},
+        "slack_rows_at_nominal": {p: b["slack_rows_at_nominal_floor"]
+                                  for p, b in kd_table["detail"].items()
+                                  if "slack_rows_at_nominal_floor" in b},
+        "unconstrained": table_unconstrained,
         "misses": misses,
         "pass": not misses,
         "pooled_coverage": rep["coverage_80"],
@@ -305,13 +414,22 @@ def rows_for(block: dict) -> list[dict]:
     for p in sorted(block["coverage"]):
         floor = block["floors"].get(p)
         cov = block["coverage"].get(p)
+        detail = (block.get("floor_detail") or {}).get(p) or {}
         rows.append({
             "population": block["population"], "position": p,
             "n (held-out)": block["n_by_position"].get(p),
             "coverage": cov,
-            "floor": floor if floor is not None else "unconstrained (n below the pre-registered "
-                                                     "minimum)",
+            "floor (power-derived)": floor if floor is not None else
+            "unconstrained (n below the pre-registered minimum)",
             "slack (rows)": block["slack_rows"].get(p),
+            # ⭐ THE PREVIOUS READING, KEPT VISIBLE. A floor change that only shows up in a
+            #    changelog is a floor change a future reader cannot audit; carrying both columns
+            #    makes "what would the old rule have said" a glance rather than an archaeology dig.
+            "floor at nominal (previous rule)": (block.get("floors_at_nominal") or {}).get(p),
+            "slack at nominal (rows)": (block.get("slack_rows_at_nominal") or {}).get(p),
+            "P(reject | truly nominal)": detail.get("false_reject_rate"),
+            "…under the previous rule": detail.get("false_reject_rate_at_nominal_floor"),
+            "detectable shortfall": detail.get("detectable_shortfall"),
             "verdict": ("—" if floor is None else
                         "✅ met" if (cov or 0) >= floor else "🚨 BREACH → RE-SELECT"),
         })
@@ -331,6 +449,72 @@ def write_report(out: dict, path: Path) -> None:
       "band went five stories at 0.55 coverage of its nominal 0.80. This check is the owner of both "
       "floors; a breach is a **RE-SELECTION TRIGGER** (re-run that population's bake-off), never a "
       "reason to move the floor.")
+    p("")
+    p("## The floor in force — a DESIGN table, computable before any band is scored (NF-D22)")
+    p("")
+    p("Every floor below is a function of the group's held-out row count and a **pre-registered "
+      "false-reject target** (0.05 — NF1.8's own Tier-2 level), and of nothing else. No observed "
+      "coverage reaches the derivation: `power_floor(n, nominal, target)` has no coverage argument "
+      "and a guard asserts its signature never gains one. That is what makes it a floor rather than "
+      "a number reverse-engineered from something that failed (E2.1-r).")
+    p("")
+    p("The rule it replaces was a hard point estimate at nominal, whose false-reject rate against a "
+      "**perfectly calibrated** band is ≈ 0.5 at every sample size this program has — so a breach "
+      "carried almost no information while its refusals still read as evidence. Both columns are "
+      "kept below so the change is auditable per run.")
+    p("")
+    drows = []
+    for b in out["blocks"]:
+        for g, d in sorted((b.get("floor_detail") or {}).items()):
+            drows.append({
+                "population": b.get("population"), "group": g, "n": d.get("n"),
+                "floor (NF-D22)": d.get("floor"),
+                "covered rows required": d.get("covered_rows_required"),
+                "…at the nominal floor": d.get("covered_rows_required_at_nominal_floor"),
+                "relaxation (rows)": d.get("relaxation_rows"),
+                "P(reject | truly nominal)": d.get("false_reject_rate"),
+                "…under the previous rule": d.get("false_reject_rate_at_nominal_floor"),
+                "detectable shortfall": d.get("detectable_shortfall"),
+                "thin?": d.get("is_thin"),
+            })
+    p(_md(pd.DataFrame(drows)) if drows else "_no constrained group scored_")
+    p("")
+    p("⚠️ **`detectable shortfall` is the floor's RESOLUTION and is reported with every verdict.** "
+      "It is the largest true coverage the floor rejects with ≥80% probability. A floor that cannot "
+      "resolve a defect has not cleared the band, it has failed to look — so a ✅ here means \"not "
+      "shown to be broken at this n\", never \"shown to be right\" (NF1.7 (a)).")
+    p("")
+    p("⚠️ **Multiplicity is REPORTED AND NOT CORRECTED FOR, deliberately.** Every floor must hold, "
+      "so the rate at which the whole check falsely fires compounds across groups:")
+    p("")
+    frows = [{"population": b.get("population"),
+              "floors": (b.get("family_false_reject") or {}).get("n_floors"),
+              "family false-reject (NF-D22)":
+                  (b.get("family_false_reject") or {}).get("family_false_reject_rate"),
+              "…under the previous rule":
+                  (b.get("family_false_reject") or {}).get(
+                      "family_false_reject_rate_at_nominal_floor")}
+             for b in out["blocks"] if b.get("family_false_reject")]
+    p(_md(pd.DataFrame(frows)) if frows else "_not computed_")
+    p("")
+    p("A Bonferroni split would bound the family figure — by making **every individual floor "
+      "looser**, which is precisely the adjustment a reader should distrust from a story whose "
+      "downstream consequence is a previously-refused publish clearing. The per-group "
+      "pre-registered target binds; this is the caveat beside it, not a lever (NF1.8: report both "
+      "conventions, let the pre-registered one bind).")
+    p("")
+    p("### The substantive backstop — MEASURED, not asserted")
+    p("")
+    p("The objection to a self-attenuating per-group floor is that a band could rest near every "
+      "thin group's own low floor. It cannot: the POOLED check runs the identical rule over a "
+      "several-times-larger `n`, so its floor sits closer to nominal than any single group's.")
+    p("")
+    brows = [{"population": b.get("population"), **(b.get("pooled_backstop") or {})}
+             for b in out["blocks"] if b.get("pooled_backstop")]
+    if brows:
+        p(_md(pd.DataFrame([{k: v for k, v in r.items() if k != "note"} for r in brows])))
+    else:
+        p("_not computed_")
     p("")
     p("## Pooled per-position coverage — the BINDING check")
     p("")
@@ -359,7 +543,10 @@ def write_report(out: dict, path: Path) -> None:
     p("## What to do on a breach")
     p("")
     p("1. **Do NOT adjust the floor.** A floor that moves until something clears it is not a floor "
-      "(E2.1-r; NF1.8 §1).")
+      "(E2.1-r; NF1.8 §1). ⭐ That prohibition BINDS HARDER after NF-D22, not less: the false-reject "
+      "target is not a tuning knob, it is NF1.8's own pre-registered level, and a breach under a "
+      "calibrated rule is now genuine evidence rather than a coin toss. The one honest response is "
+      "to re-select (or, for K/DST, to widen).")
     p("2. Re-run the bake-off for the breaching population — it re-selects under the same "
       "pre-registered floor, anchors and deflation:")
     p("")
@@ -460,8 +647,11 @@ def main(argv: list[str] | None = None) -> int:
             fl = b["floors"].get(p)
             cov = b["coverage"].get(p)
             mark = "—" if fl is None else ("✅" if (cov or 0) >= fl else "🚨 BREACH")
+            prev = (b.get("slack_rows_at_nominal") or {}).get(p)
             print(f"   {p:>3s}: cov {cov} floor {fl if fl is not None else 'unconstrained':>12} "
-                  f"slack {b['slack_rows'].get(p)} rows  {mark}")
+                  f"slack {b['slack_rows'].get(p)} rows  {mark}"
+                  f"   (previous rule: floor {(b.get('floors_at_nominal') or {}).get(p)}, "
+                  f"slack {prev} rows)")
         nc = b.get("newest_cohort") or {}
         if nc:
             print(f"   newest cohort {nc.get('cohort')} (leading indicator only): n={nc.get('n')} "

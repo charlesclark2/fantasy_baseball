@@ -1,0 +1,1495 @@
+{
+  "story": "NF-D22",
+  "generated_at": "2026-08-21T01:52:13.618397+00:00",
+  "best_alpha": 0,
+  "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+  "artifacts_dir": "/Users/charlesclark/Documents/machine_learning/baseball_betting/baseball_betting_and_fantasy/quant_sports_intel_models/football/nfl/fantasy/artifacts",
+  "design": {
+    "nominal": 0.8,
+    "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+    "target_false_reject_rate": 0.05,
+    "target_provenance": "NF1.8's pre-registered Tier-2 fallback level: `_TIER2_Z = 1.6448536269514722 = \u03a6\u207b\u00b9(0.95)`, i.e. a ONE-SIDED 95% test \u21d2 a 0.05 false-reject target. Recorded in `run_rookie_perposition_ablation` before any of the results this floor is now read against existed. NF-D22 widens its SCOPE and makes it EXACT; it does not move the level.",
+    "detection_power": 0.8,
+    "rows": [
+      {
+        "n": 30,
+        "nominal": 0.8,
+        "floor": 0.6667,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 20,
+        "covered_rows_required_at_nominal_floor": 24,
+        "relaxation_rows": 4,
+        "relaxation_pp": 13.333,
+        "normal_approx_floor": 0.6799,
+        "false_reject_rate": 0.0256,
+        "false_reject_rate_at_nominal_floor": 0.393,
+        "detectable_shortfall": 0.5735,
+        "is_thin": true,
+        "approximation_error": 0.0111
+      },
+      {
+        "n": 50,
+        "nominal": 0.8,
+        "floor": 0.7,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 35,
+        "covered_rows_required_at_nominal_floor": 40,
+        "relaxation_rows": 5,
+        "relaxation_pp": 10.0,
+        "normal_approx_floor": 0.707,
+        "false_reject_rate": 0.0308,
+        "false_reject_rate_at_nominal_floor": 0.4164,
+        "detectable_shortfall": 0.632,
+        "is_thin": true,
+        "approximation_error": 0.0107
+      },
+      {
+        "n": 81,
+        "nominal": 0.8,
+        "floor": 0.7284,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 59,
+        "covered_rows_required_at_nominal_floor": 65,
+        "relaxation_rows": 6,
+        "relaxation_pp": 7.16,
+        "normal_approx_floor": 0.7269,
+        "false_reject_rate": 0.0443,
+        "false_reject_rate_at_nominal_floor": 0.4558,
+        "detectable_shortfall": 0.678,
+        "is_thin": true,
+        "approximation_error": -0.0057
+      },
+      {
+        "n": 100,
+        "nominal": 0.8,
+        "floor": 0.73,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 73,
+        "covered_rows_required_at_nominal_floor": 80,
+        "relaxation_rows": 7,
+        "relaxation_pp": 7.0,
+        "normal_approx_floor": 0.7342,
+        "false_reject_rate": 0.0342,
+        "false_reject_rate_at_nominal_floor": 0.4405,
+        "detectable_shortfall": 0.6855,
+        "is_thin": true,
+        "approximation_error": 0.0058
+      },
+      {
+        "n": 148,
+        "nominal": 0.8,
+        "floor": 0.7432,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 110,
+        "covered_rows_required_at_nominal_floor": 119,
+        "relaxation_rows": 9,
+        "relaxation_pp": 5.676,
+        "normal_approx_floor": 0.7459,
+        "false_reject_rate": 0.0369,
+        "false_reject_rate_at_nominal_floor": 0.5,
+        "detectable_shortfall": 0.708,
+        "is_thin": true,
+        "approximation_error": 0.0054
+      },
+      {
+        "n": 200,
+        "nominal": 0.8,
+        "floor": 0.755,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 151,
+        "covered_rows_required_at_nominal_floor": 160,
+        "relaxation_rows": 9,
+        "relaxation_pp": 4.5,
+        "normal_approx_floor": 0.7535,
+        "false_reject_rate": 0.0494,
+        "false_reject_rate_at_nominal_floor": 0.4578,
+        "detectable_shortfall": 0.7255,
+        "is_thin": true,
+        "approximation_error": -0.0006
+      },
+      {
+        "n": 400,
+        "nominal": 0.8,
+        "floor": 0.7675,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 307,
+        "covered_rows_required_at_nominal_floor": 320,
+        "relaxation_rows": 13,
+        "relaxation_pp": 3.25,
+        "normal_approx_floor": 0.7671,
+        "false_reject_rate": 0.0478,
+        "false_reject_rate_at_nominal_floor": 0.4701,
+        "detectable_shortfall": 0.7475,
+        "is_thin": true,
+        "approximation_error": -0.0022
+      },
+      {
+        "n": 1000,
+        "nominal": 0.8,
+        "floor": 0.779,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 779,
+        "covered_rows_required_at_nominal_floor": 800,
+        "relaxation_rows": 21,
+        "relaxation_pp": 2.1,
+        "normal_approx_floor": 0.7792,
+        "false_reject_rate": 0.0459,
+        "false_reject_rate_at_nominal_floor": 0.4811,
+        "detectable_shortfall": 0.767,
+        "is_thin": true,
+        "approximation_error": 0.0039
+      },
+      {
+        "n": 3000,
+        "nominal": 0.8,
+        "floor": 0.788,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 2364,
+        "covered_rows_required_at_nominal_floor": 2400,
+        "relaxation_rows": 36,
+        "relaxation_pp": 1.2,
+        "normal_approx_floor": 0.788,
+        "false_reject_rate": 0.0486,
+        "false_reject_rate_at_nominal_floor": 0.4891,
+        "detectable_shortfall": 0.781,
+        "is_thin": true,
+        "approximation_error": -0.0014
+      },
+      {
+        "n": 6000,
+        "nominal": 0.8,
+        "floor": 0.7915,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 4749,
+        "covered_rows_required_at_nominal_floor": 4800,
+        "relaxation_rows": 51,
+        "relaxation_pp": 0.85,
+        "normal_approx_floor": 0.7915,
+        "false_reject_rate": 0.0488,
+        "false_reject_rate_at_nominal_floor": 0.4923,
+        "detectable_shortfall": 0.7865,
+        "is_thin": true,
+        "approximation_error": -0.0012
+      }
+    ],
+    "incumbent_false_reject_range": [
+      0.393,
+      0.5
+    ],
+    "new_false_reject_max": 0.0494,
+    "all_reference_sizes_thin": true,
+    "attenuation_envelope": [
+      0.6364,
+      0.7301
+    ],
+    "self_attenuates": true
+  },
+  "two_sided": {
+    "rows": [
+      {
+        "n": 30,
+        "floor": 0.6667,
+        "P(pass | truly nominal)": 0.9744,
+        "target P(pass)": 0.95,
+        "P(pass | true cov 0.800)": 0.9744,
+        "P(pass | true cov 0.775)": 0.944,
+        "P(pass | true cov 0.750)": 0.8943,
+        "P(pass | true cov 0.725)": 0.8226,
+        "P(pass | true cov 0.700)": 0.7304,
+        "P(pass | true cov 0.650)": 0.5078,
+        "P(pass | true cov 0.600)": 0.2915
+      },
+      {
+        "n": 50,
+        "floor": 0.7,
+        "P(pass | truly nominal)": 0.9692,
+        "target P(pass)": 0.95,
+        "P(pass | true cov 0.800)": 0.9692,
+        "P(pass | true cov 0.775)": 0.9212,
+        "P(pass | true cov 0.750)": 0.8369,
+        "P(pass | true cov 0.725)": 0.7157,
+        "P(pass | true cov 0.700)": 0.5692,
+        "P(pass | true cov 0.650)": 0.2801,
+        "P(pass | true cov 0.600)": 0.0955
+      },
+      {
+        "n": 81,
+        "floor": 0.7284,
+        "P(pass | truly nominal)": 0.9557,
+        "target P(pass)": 0.95,
+        "P(pass | true cov 0.800)": 0.9557,
+        "P(pass | true cov 0.775)": 0.8712,
+        "P(pass | true cov 0.750)": 0.7228,
+        "P(pass | true cov 0.725)": 0.5298,
+        "P(pass | true cov 0.700)": 0.3362,
+        "P(pass | true cov 0.650)": 0.0846,
+        "P(pass | true cov 0.600)": 0.0111
+      },
+      {
+        "n": 100,
+        "floor": 0.73,
+        "P(pass | truly nominal)": 0.9658,
+        "target P(pass)": 0.95,
+        "P(pass | true cov 0.800)": 0.9658,
+        "P(pass | true cov 0.775)": 0.8829,
+        "P(pass | true cov 0.750)": 0.7224,
+        "P(pass | true cov 0.725)": 0.5067,
+        "P(pass | true cov 0.700)": 0.2964,
+        "P(pass | true cov 0.650)": 0.0558,
+        "P(pass | true cov 0.600)": 0.0046
+      },
+      {
+        "n": 148,
+        "floor": 0.7432,
+        "P(pass | truly nominal)": 0.9631,
+        "target P(pass)": 0.95,
+        "P(pass | true cov 0.800)": 0.9631,
+        "P(pass | true cov 0.775)": 0.8469,
+        "P(pass | true cov 0.750)": 0.6176,
+        "P(pass | true cov 0.725)": 0.3471,
+        "P(pass | true cov 0.700)": 0.1446,
+        "P(pass | true cov 0.650)": 0.0097,
+        "P(pass | true cov 0.600)": 0.0002
+      },
+      {
+        "n": 200,
+        "floor": 0.755,
+        "P(pass | truly nominal)": 0.9506,
+        "target P(pass)": 0.95,
+        "P(pass | true cov 0.800)": 0.9506,
+        "P(pass | true cov 0.775)": 0.7789,
+        "P(pass | true cov 0.750)": 0.4729,
+        "P(pass | true cov 0.725)": 0.1927,
+        "P(pass | true cov 0.700)": 0.0506,
+        "P(pass | true cov 0.650)": 0.0009,
+        "P(pass | true cov 0.600)": 0.0
+      },
+      {
+        "n": 400,
+        "floor": 0.7675,
+        "P(pass | truly nominal)": 0.9522,
+        "target P(pass)": 0.95,
+        "P(pass | true cov 0.800)": 0.9522,
+        "P(pass | true cov 0.775)": 0.6657,
+        "P(pass | true cov 0.750)": 0.2277,
+        "P(pass | true cov 0.725)": 0.0307,
+        "P(pass | true cov 0.700)": 0.0016,
+        "P(pass | true cov 0.650)": 0.0,
+        "P(pass | true cov 0.600)": 0.0
+      },
+      {
+        "n": 1000,
+        "floor": 0.779,
+        "P(pass | truly nominal)": 0.9541,
+        "target P(pass)": 0.95,
+        "P(pass | true cov 0.800)": 0.9541,
+        "P(pass | true cov 0.775)": 0.398,
+        "P(pass | true cov 0.750)": 0.0177,
+        "P(pass | true cov 0.725)": 0.0001,
+        "P(pass | true cov 0.700)": 0.0,
+        "P(pass | true cov 0.650)": 0.0,
+        "P(pass | true cov 0.600)": 0.0
+      },
+      {
+        "n": 3000,
+        "floor": 0.788,
+        "P(pass | truly nominal)": 0.9514,
+        "target P(pass)": 0.95,
+        "P(pass | true cov 0.800)": 0.9514,
+        "P(pass | true cov 0.775)": 0.0454,
+        "P(pass | true cov 0.750)": 0.0,
+        "P(pass | true cov 0.725)": 0.0,
+        "P(pass | true cov 0.700)": 0.0,
+        "P(pass | true cov 0.650)": 0.0,
+        "P(pass | true cov 0.600)": 0.0
+      },
+      {
+        "n": 6000,
+        "floor": 0.7915,
+        "P(pass | truly nominal)": 0.9512,
+        "target P(pass)": 0.95,
+        "P(pass | true cov 0.800)": 0.9512,
+        "P(pass | true cov 0.775)": 0.0011,
+        "P(pass | true cov 0.750)": 0.0,
+        "P(pass | true cov 0.725)": 0.0,
+        "P(pass | true cov 0.700)": 0.0,
+        "P(pass | true cov 0.650)": 0.0,
+        "P(pass | true cov 0.600)": 0.0
+      }
+    ],
+    "verdicts": [
+      {
+        "n": 30,
+        "nominal_band_clears": true,
+        "short_band_still_fails": true,
+        "detectable_shortfall": 0.5735
+      },
+      {
+        "n": 50,
+        "nominal_band_clears": true,
+        "short_band_still_fails": true,
+        "detectable_shortfall": 0.632
+      },
+      {
+        "n": 81,
+        "nominal_band_clears": true,
+        "short_band_still_fails": true,
+        "detectable_shortfall": 0.678
+      },
+      {
+        "n": 100,
+        "nominal_band_clears": true,
+        "short_band_still_fails": true,
+        "detectable_shortfall": 0.6855
+      },
+      {
+        "n": 148,
+        "nominal_band_clears": true,
+        "short_band_still_fails": true,
+        "detectable_shortfall": 0.708
+      },
+      {
+        "n": 200,
+        "nominal_band_clears": true,
+        "short_band_still_fails": true,
+        "detectable_shortfall": 0.7255
+      },
+      {
+        "n": 400,
+        "nominal_band_clears": true,
+        "short_band_still_fails": true,
+        "detectable_shortfall": 0.7475
+      },
+      {
+        "n": 1000,
+        "nominal_band_clears": true,
+        "short_band_still_fails": true,
+        "detectable_shortfall": 0.767
+      },
+      {
+        "n": 3000,
+        "nominal_band_clears": true,
+        "short_band_still_fails": true,
+        "detectable_shortfall": 0.781
+      },
+      {
+        "n": 6000,
+        "nominal_band_clears": true,
+        "short_band_still_fails": true,
+        "detectable_shortfall": 0.7865
+      }
+    ],
+    "pass": true,
+    "note": "Exact Binomial throughout \u2014 both halves are closed-form, so neither rests on a simulation seed. `detectable_shortfall` is the floor's RESOLUTION: a \u2705 means 'not shown to be broken at this n', never 'shown to be right' (NF1.7 (a))."
+  },
+  "veterans": {
+    "nominal": 0.8,
+    "min_n": 400,
+    "note": "Veteran per-position n is ~20\u00d7 the rookie equivalent, so the calibrated floor sits within ~1pp of nominal there. The rule is identical; its EFFECT scales with 1/\u221an, which is why no thin-group boundary had to be drawn.",
+    "reference": [
+      {
+        "n": 400,
+        "nominal": 0.8,
+        "floor": 0.7675,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 307,
+        "covered_rows_required_at_nominal_floor": 320,
+        "relaxation_rows": 13,
+        "relaxation_pp": 3.25,
+        "normal_approx_floor": 0.7671,
+        "false_reject_rate": 0.0478,
+        "false_reject_rate_at_nominal_floor": 0.4701,
+        "detectable_shortfall": 0.7475,
+        "is_thin": true,
+        "approximation_error": -0.0022
+      },
+      {
+        "n": 1000,
+        "nominal": 0.8,
+        "floor": 0.779,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 779,
+        "covered_rows_required_at_nominal_floor": 800,
+        "relaxation_rows": 21,
+        "relaxation_pp": 2.1,
+        "normal_approx_floor": 0.7792,
+        "false_reject_rate": 0.0459,
+        "false_reject_rate_at_nominal_floor": 0.4811,
+        "detectable_shortfall": 0.767,
+        "is_thin": true,
+        "approximation_error": 0.0039
+      },
+      {
+        "n": 2000,
+        "nominal": 0.8,
+        "floor": 0.785,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 1570,
+        "covered_rows_required_at_nominal_floor": 1600,
+        "relaxation_rows": 30,
+        "relaxation_pp": 1.5,
+        "normal_approx_floor": 0.7853,
+        "false_reject_rate": 0.0451,
+        "false_reject_rate_at_nominal_floor": 0.4866,
+        "detectable_shortfall": 0.7765,
+        "is_thin": true,
+        "approximation_error": 0.0005
+      },
+      {
+        "n": 4000,
+        "nominal": 0.8,
+        "floor": 0.7895,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 3158,
+        "covered_rows_required_at_nominal_floor": 3200,
+        "relaxation_rows": 42,
+        "relaxation_pp": 1.05,
+        "normal_approx_floor": 0.7896,
+        "false_reject_rate": 0.0472,
+        "false_reject_rate_at_nominal_floor": 0.4905,
+        "detectable_shortfall": 0.7835,
+        "is_thin": true,
+        "approximation_error": 0.0011
+      },
+      {
+        "n": 6000,
+        "nominal": 0.8,
+        "floor": 0.7915,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 4749,
+        "covered_rows_required_at_nominal_floor": 4800,
+        "relaxation_rows": 51,
+        "relaxation_pp": 0.85,
+        "normal_approx_floor": 0.7915,
+        "false_reject_rate": 0.0488,
+        "false_reject_rate_at_nominal_floor": 0.4923,
+        "detectable_shortfall": 0.7865,
+        "is_thin": true,
+        "approximation_error": -0.0012
+      }
+    ]
+  },
+  "serving_enabled": false,
+  "nf_d21_disposition": {
+    "disposition": "CONSTRAINT_REFUSED",
+    "is_not_pending": true,
+    "rationale": "Held at incumbent: the rookie-RB interval-floor breach is a coin-flip at n=148 (a perfectly calibrated band fails this floor 50% of the time), so the honest remedy is a power-derived floor for structurally-thin groups \u2014 carded independently \u2014 not moving \u03bb or the floor. NF-D16's lift is deferred, not abandoned.",
+    "note": "NF-D22 does not re-open it. A publish needs a NEW PM disposition recorded against the floor now in force; this run reports the gate's reading and stops."
+  },
+  "sweep": {
+    "cohorts": [
+      2019,
+      2025
+    ],
+    "config": "SHIPPED rookie band",
+    "rows": [
+      {
+        "lambda": 0.0,
+        "pooled_coverage": 0.8354,
+        "pooled_floor": 0.7722,
+        "interval_score": 183.407,
+        "coverage": {
+          "QB": 0.8148,
+          "RB": 0.8041,
+          "TE": 0.9,
+          "WR": 0.8348
+        },
+        "n_by_position": {
+          "QB": 81,
+          "RB": 148,
+          "TE": 100,
+          "WR": 224
+        },
+        "floors": {
+          "QB": 0.7284,
+          "RB": 0.7432,
+          "TE": 0.73,
+          "WR": 0.7545
+        },
+        "floors_at_nominal": {
+          "QB": 0.8,
+          "RB": 0.8,
+          "TE": 0.8,
+          "WR": 0.8
+        },
+        "slack_rows": {
+          "QB": 7,
+          "RB": 9,
+          "TE": 17,
+          "WR": 18
+        },
+        "slack_rows_at_nominal": {
+          "QB": 1,
+          "RB": 0,
+          "TE": 10,
+          "WR": 7
+        },
+        "misses": [],
+        "misses_at_nominal_floor": [],
+        "pass": true,
+        "pass_at_nominal_floor": true,
+        "floor_detail": {
+          "QB": {
+            "n": 81,
+            "nominal": 0.8,
+            "floor": 0.7284,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 59,
+            "covered_rows_required_at_nominal_floor": 65,
+            "relaxation_rows": 6,
+            "relaxation_pp": 7.16,
+            "normal_approx_floor": 0.7269,
+            "false_reject_rate": 0.0443,
+            "false_reject_rate_at_nominal_floor": 0.4558,
+            "detectable_shortfall": 0.678,
+            "is_thin": true,
+            "approximation_error": -0.0057,
+            "coverage": 0.8148,
+            "covered_rows": 66,
+            "slack_rows": 7,
+            "slack_rows_at_nominal_floor": 1,
+            "met": true
+          },
+          "RB": {
+            "n": 148,
+            "nominal": 0.8,
+            "floor": 0.7432,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 110,
+            "covered_rows_required_at_nominal_floor": 119,
+            "relaxation_rows": 9,
+            "relaxation_pp": 5.676,
+            "normal_approx_floor": 0.7459,
+            "false_reject_rate": 0.0369,
+            "false_reject_rate_at_nominal_floor": 0.5,
+            "detectable_shortfall": 0.708,
+            "is_thin": true,
+            "approximation_error": 0.0054,
+            "coverage": 0.8041,
+            "covered_rows": 119,
+            "slack_rows": 9,
+            "slack_rows_at_nominal_floor": 0,
+            "met": true
+          },
+          "TE": {
+            "n": 100,
+            "nominal": 0.8,
+            "floor": 0.73,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 73,
+            "covered_rows_required_at_nominal_floor": 80,
+            "relaxation_rows": 7,
+            "relaxation_pp": 7.0,
+            "normal_approx_floor": 0.7342,
+            "false_reject_rate": 0.0342,
+            "false_reject_rate_at_nominal_floor": 0.4405,
+            "detectable_shortfall": 0.6855,
+            "is_thin": true,
+            "approximation_error": 0.0058,
+            "coverage": 0.9,
+            "covered_rows": 90,
+            "slack_rows": 17,
+            "slack_rows_at_nominal_floor": 10,
+            "met": true
+          },
+          "WR": {
+            "n": 224,
+            "nominal": 0.8,
+            "floor": 0.7545,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 169,
+            "covered_rows_required_at_nominal_floor": 180,
+            "relaxation_rows": 11,
+            "relaxation_pp": 4.554,
+            "normal_approx_floor": 0.756,
+            "false_reject_rate": 0.0396,
+            "false_reject_rate_at_nominal_floor": 0.5133,
+            "detectable_shortfall": 0.727,
+            "is_thin": true,
+            "approximation_error": 0.0052,
+            "coverage": 0.8348,
+            "covered_rows": 187,
+            "slack_rows": 18,
+            "slack_rows_at_nominal_floor": 7,
+            "met": true
+          }
+        },
+        "family_false_reject": {
+          "n_floors": 4,
+          "per_group_target": 0.05,
+          "family_false_reject_rate": 0.1462,
+          "family_false_reject_rate_at_nominal_floor": 0.9259,
+          "note": "Independence across groups is ASSUMED here and is optimistic \u2014 rows in different positions share draft classes/seasons, so the true family rate is somewhat lower than the product. Reported as the conservative reading. \u26d4 NOT corrected for: a Bonferroni split would LOOSEN every individual floor, which is the adjustment this story must least be able to make."
+        },
+        "pooled_backstop": {
+          "pooled_n": 553,
+          "pooled_floor": 0.7722,
+          "loosest_group_floor": 0.7545,
+          "tightest_group_floor": 0.7284,
+          "verdict": "BACKSTOP_HOLDS",
+          "note": "The pooled floor runs the IDENTICAL rule over a larger n, so it sits closer to nominal than any single group's floor. A band resting at each group's own floor therefore fails the pooled check \u2014 that two-tier structure, not a hand-set minimum, is the substantive backstop."
+        }
+      },
+      {
+        "lambda": 0.25,
+        "pooled_coverage": 0.8336,
+        "pooled_floor": 0.7722,
+        "interval_score": 183.911,
+        "coverage": {
+          "QB": 0.8025,
+          "RB": 0.8041,
+          "TE": 0.9,
+          "WR": 0.8348
+        },
+        "n_by_position": {
+          "QB": 81,
+          "RB": 148,
+          "TE": 100,
+          "WR": 224
+        },
+        "floors": {
+          "QB": 0.7284,
+          "RB": 0.7432,
+          "TE": 0.73,
+          "WR": 0.7545
+        },
+        "floors_at_nominal": {
+          "QB": 0.8,
+          "RB": 0.8,
+          "TE": 0.8,
+          "WR": 0.8
+        },
+        "slack_rows": {
+          "QB": 6,
+          "RB": 9,
+          "TE": 17,
+          "WR": 18
+        },
+        "slack_rows_at_nominal": {
+          "QB": 0,
+          "RB": 0,
+          "TE": 10,
+          "WR": 7
+        },
+        "misses": [],
+        "misses_at_nominal_floor": [],
+        "pass": true,
+        "pass_at_nominal_floor": true,
+        "floor_detail": {
+          "QB": {
+            "n": 81,
+            "nominal": 0.8,
+            "floor": 0.7284,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 59,
+            "covered_rows_required_at_nominal_floor": 65,
+            "relaxation_rows": 6,
+            "relaxation_pp": 7.16,
+            "normal_approx_floor": 0.7269,
+            "false_reject_rate": 0.0443,
+            "false_reject_rate_at_nominal_floor": 0.4558,
+            "detectable_shortfall": 0.678,
+            "is_thin": true,
+            "approximation_error": -0.0057,
+            "coverage": 0.8025,
+            "covered_rows": 65,
+            "slack_rows": 6,
+            "slack_rows_at_nominal_floor": 0,
+            "met": true
+          },
+          "RB": {
+            "n": 148,
+            "nominal": 0.8,
+            "floor": 0.7432,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 110,
+            "covered_rows_required_at_nominal_floor": 119,
+            "relaxation_rows": 9,
+            "relaxation_pp": 5.676,
+            "normal_approx_floor": 0.7459,
+            "false_reject_rate": 0.0369,
+            "false_reject_rate_at_nominal_floor": 0.5,
+            "detectable_shortfall": 0.708,
+            "is_thin": true,
+            "approximation_error": 0.0054,
+            "coverage": 0.8041,
+            "covered_rows": 119,
+            "slack_rows": 9,
+            "slack_rows_at_nominal_floor": 0,
+            "met": true
+          },
+          "TE": {
+            "n": 100,
+            "nominal": 0.8,
+            "floor": 0.73,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 73,
+            "covered_rows_required_at_nominal_floor": 80,
+            "relaxation_rows": 7,
+            "relaxation_pp": 7.0,
+            "normal_approx_floor": 0.7342,
+            "false_reject_rate": 0.0342,
+            "false_reject_rate_at_nominal_floor": 0.4405,
+            "detectable_shortfall": 0.6855,
+            "is_thin": true,
+            "approximation_error": 0.0058,
+            "coverage": 0.9,
+            "covered_rows": 90,
+            "slack_rows": 17,
+            "slack_rows_at_nominal_floor": 10,
+            "met": true
+          },
+          "WR": {
+            "n": 224,
+            "nominal": 0.8,
+            "floor": 0.7545,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 169,
+            "covered_rows_required_at_nominal_floor": 180,
+            "relaxation_rows": 11,
+            "relaxation_pp": 4.554,
+            "normal_approx_floor": 0.756,
+            "false_reject_rate": 0.0396,
+            "false_reject_rate_at_nominal_floor": 0.5133,
+            "detectable_shortfall": 0.727,
+            "is_thin": true,
+            "approximation_error": 0.0052,
+            "coverage": 0.8348,
+            "covered_rows": 187,
+            "slack_rows": 18,
+            "slack_rows_at_nominal_floor": 7,
+            "met": true
+          }
+        },
+        "family_false_reject": {
+          "n_floors": 4,
+          "per_group_target": 0.05,
+          "family_false_reject_rate": 0.1462,
+          "family_false_reject_rate_at_nominal_floor": 0.9259,
+          "note": "Independence across groups is ASSUMED here and is optimistic \u2014 rows in different positions share draft classes/seasons, so the true family rate is somewhat lower than the product. Reported as the conservative reading. \u26d4 NOT corrected for: a Bonferroni split would LOOSEN every individual floor, which is the adjustment this story must least be able to make."
+        },
+        "pooled_backstop": {
+          "pooled_n": 553,
+          "pooled_floor": 0.7722,
+          "loosest_group_floor": 0.7545,
+          "tightest_group_floor": 0.7284,
+          "verdict": "BACKSTOP_HOLDS",
+          "note": "The pooled floor runs the IDENTICAL rule over a larger n, so it sits closer to nominal than any single group's floor. A band resting at each group's own floor therefore fails the pooled check \u2014 that two-tier structure, not a hand-set minimum, is the substantive backstop."
+        }
+      },
+      {
+        "lambda": 0.5,
+        "pooled_coverage": 0.83,
+        "pooled_floor": 0.7722,
+        "interval_score": 184.534,
+        "coverage": {
+          "QB": 0.8025,
+          "RB": 0.7905,
+          "TE": 0.9,
+          "WR": 0.8348
+        },
+        "n_by_position": {
+          "QB": 81,
+          "RB": 148,
+          "TE": 100,
+          "WR": 224
+        },
+        "floors": {
+          "QB": 0.7284,
+          "RB": 0.7432,
+          "TE": 0.73,
+          "WR": 0.7545
+        },
+        "floors_at_nominal": {
+          "QB": 0.8,
+          "RB": 0.8,
+          "TE": 0.8,
+          "WR": 0.8
+        },
+        "slack_rows": {
+          "QB": 6,
+          "RB": 7,
+          "TE": 17,
+          "WR": 18
+        },
+        "slack_rows_at_nominal": {
+          "QB": 0,
+          "RB": -2,
+          "TE": 10,
+          "WR": 7
+        },
+        "misses": [],
+        "misses_at_nominal_floor": [
+          "RB 0.7905<0.800"
+        ],
+        "pass": true,
+        "pass_at_nominal_floor": false,
+        "floor_detail": {
+          "QB": {
+            "n": 81,
+            "nominal": 0.8,
+            "floor": 0.7284,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 59,
+            "covered_rows_required_at_nominal_floor": 65,
+            "relaxation_rows": 6,
+            "relaxation_pp": 7.16,
+            "normal_approx_floor": 0.7269,
+            "false_reject_rate": 0.0443,
+            "false_reject_rate_at_nominal_floor": 0.4558,
+            "detectable_shortfall": 0.678,
+            "is_thin": true,
+            "approximation_error": -0.0057,
+            "coverage": 0.8025,
+            "covered_rows": 65,
+            "slack_rows": 6,
+            "slack_rows_at_nominal_floor": 0,
+            "met": true
+          },
+          "RB": {
+            "n": 148,
+            "nominal": 0.8,
+            "floor": 0.7432,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 110,
+            "covered_rows_required_at_nominal_floor": 119,
+            "relaxation_rows": 9,
+            "relaxation_pp": 5.676,
+            "normal_approx_floor": 0.7459,
+            "false_reject_rate": 0.0369,
+            "false_reject_rate_at_nominal_floor": 0.5,
+            "detectable_shortfall": 0.708,
+            "is_thin": true,
+            "approximation_error": 0.0054,
+            "coverage": 0.7905,
+            "covered_rows": 117,
+            "slack_rows": 7,
+            "slack_rows_at_nominal_floor": -2,
+            "met": true
+          },
+          "TE": {
+            "n": 100,
+            "nominal": 0.8,
+            "floor": 0.73,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 73,
+            "covered_rows_required_at_nominal_floor": 80,
+            "relaxation_rows": 7,
+            "relaxation_pp": 7.0,
+            "normal_approx_floor": 0.7342,
+            "false_reject_rate": 0.0342,
+            "false_reject_rate_at_nominal_floor": 0.4405,
+            "detectable_shortfall": 0.6855,
+            "is_thin": true,
+            "approximation_error": 0.0058,
+            "coverage": 0.9,
+            "covered_rows": 90,
+            "slack_rows": 17,
+            "slack_rows_at_nominal_floor": 10,
+            "met": true
+          },
+          "WR": {
+            "n": 224,
+            "nominal": 0.8,
+            "floor": 0.7545,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 169,
+            "covered_rows_required_at_nominal_floor": 180,
+            "relaxation_rows": 11,
+            "relaxation_pp": 4.554,
+            "normal_approx_floor": 0.756,
+            "false_reject_rate": 0.0396,
+            "false_reject_rate_at_nominal_floor": 0.5133,
+            "detectable_shortfall": 0.727,
+            "is_thin": true,
+            "approximation_error": 0.0052,
+            "coverage": 0.8348,
+            "covered_rows": 187,
+            "slack_rows": 18,
+            "slack_rows_at_nominal_floor": 7,
+            "met": true
+          }
+        },
+        "family_false_reject": {
+          "n_floors": 4,
+          "per_group_target": 0.05,
+          "family_false_reject_rate": 0.1462,
+          "family_false_reject_rate_at_nominal_floor": 0.9259,
+          "note": "Independence across groups is ASSUMED here and is optimistic \u2014 rows in different positions share draft classes/seasons, so the true family rate is somewhat lower than the product. Reported as the conservative reading. \u26d4 NOT corrected for: a Bonferroni split would LOOSEN every individual floor, which is the adjustment this story must least be able to make."
+        },
+        "pooled_backstop": {
+          "pooled_n": 553,
+          "pooled_floor": 0.7722,
+          "loosest_group_floor": 0.7545,
+          "tightest_group_floor": 0.7284,
+          "verdict": "BACKSTOP_HOLDS",
+          "note": "The pooled floor runs the IDENTICAL rule over a larger n, so it sits closer to nominal than any single group's floor. A band resting at each group's own floor therefore fails the pooled check \u2014 that two-tier structure, not a hand-set minimum, is the substantive backstop."
+        }
+      },
+      {
+        "lambda": 0.75,
+        "pooled_coverage": 0.8354,
+        "pooled_floor": 0.7722,
+        "interval_score": 184.119,
+        "coverage": {
+          "QB": 0.8148,
+          "RB": 0.8041,
+          "TE": 0.9,
+          "WR": 0.8348
+        },
+        "n_by_position": {
+          "QB": 81,
+          "RB": 148,
+          "TE": 100,
+          "WR": 224
+        },
+        "floors": {
+          "QB": 0.7284,
+          "RB": 0.7432,
+          "TE": 0.73,
+          "WR": 0.7545
+        },
+        "floors_at_nominal": {
+          "QB": 0.8,
+          "RB": 0.8,
+          "TE": 0.8,
+          "WR": 0.8
+        },
+        "slack_rows": {
+          "QB": 7,
+          "RB": 9,
+          "TE": 17,
+          "WR": 18
+        },
+        "slack_rows_at_nominal": {
+          "QB": 1,
+          "RB": 0,
+          "TE": 10,
+          "WR": 7
+        },
+        "misses": [],
+        "misses_at_nominal_floor": [],
+        "pass": true,
+        "pass_at_nominal_floor": true,
+        "floor_detail": {
+          "QB": {
+            "n": 81,
+            "nominal": 0.8,
+            "floor": 0.7284,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 59,
+            "covered_rows_required_at_nominal_floor": 65,
+            "relaxation_rows": 6,
+            "relaxation_pp": 7.16,
+            "normal_approx_floor": 0.7269,
+            "false_reject_rate": 0.0443,
+            "false_reject_rate_at_nominal_floor": 0.4558,
+            "detectable_shortfall": 0.678,
+            "is_thin": true,
+            "approximation_error": -0.0057,
+            "coverage": 0.8148,
+            "covered_rows": 66,
+            "slack_rows": 7,
+            "slack_rows_at_nominal_floor": 1,
+            "met": true
+          },
+          "RB": {
+            "n": 148,
+            "nominal": 0.8,
+            "floor": 0.7432,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 110,
+            "covered_rows_required_at_nominal_floor": 119,
+            "relaxation_rows": 9,
+            "relaxation_pp": 5.676,
+            "normal_approx_floor": 0.7459,
+            "false_reject_rate": 0.0369,
+            "false_reject_rate_at_nominal_floor": 0.5,
+            "detectable_shortfall": 0.708,
+            "is_thin": true,
+            "approximation_error": 0.0054,
+            "coverage": 0.8041,
+            "covered_rows": 119,
+            "slack_rows": 9,
+            "slack_rows_at_nominal_floor": 0,
+            "met": true
+          },
+          "TE": {
+            "n": 100,
+            "nominal": 0.8,
+            "floor": 0.73,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 73,
+            "covered_rows_required_at_nominal_floor": 80,
+            "relaxation_rows": 7,
+            "relaxation_pp": 7.0,
+            "normal_approx_floor": 0.7342,
+            "false_reject_rate": 0.0342,
+            "false_reject_rate_at_nominal_floor": 0.4405,
+            "detectable_shortfall": 0.6855,
+            "is_thin": true,
+            "approximation_error": 0.0058,
+            "coverage": 0.9,
+            "covered_rows": 90,
+            "slack_rows": 17,
+            "slack_rows_at_nominal_floor": 10,
+            "met": true
+          },
+          "WR": {
+            "n": 224,
+            "nominal": 0.8,
+            "floor": 0.7545,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 169,
+            "covered_rows_required_at_nominal_floor": 180,
+            "relaxation_rows": 11,
+            "relaxation_pp": 4.554,
+            "normal_approx_floor": 0.756,
+            "false_reject_rate": 0.0396,
+            "false_reject_rate_at_nominal_floor": 0.5133,
+            "detectable_shortfall": 0.727,
+            "is_thin": true,
+            "approximation_error": 0.0052,
+            "coverage": 0.8348,
+            "covered_rows": 187,
+            "slack_rows": 18,
+            "slack_rows_at_nominal_floor": 7,
+            "met": true
+          }
+        },
+        "family_false_reject": {
+          "n_floors": 4,
+          "per_group_target": 0.05,
+          "family_false_reject_rate": 0.1462,
+          "family_false_reject_rate_at_nominal_floor": 0.9259,
+          "note": "Independence across groups is ASSUMED here and is optimistic \u2014 rows in different positions share draft classes/seasons, so the true family rate is somewhat lower than the product. Reported as the conservative reading. \u26d4 NOT corrected for: a Bonferroni split would LOOSEN every individual floor, which is the adjustment this story must least be able to make."
+        },
+        "pooled_backstop": {
+          "pooled_n": 553,
+          "pooled_floor": 0.7722,
+          "loosest_group_floor": 0.7545,
+          "tightest_group_floor": 0.7284,
+          "verdict": "BACKSTOP_HOLDS",
+          "note": "The pooled floor runs the IDENTICAL rule over a larger n, so it sits closer to nominal than any single group's floor. A band resting at each group's own floor therefore fails the pooled check \u2014 that two-tier structure, not a hand-set minimum, is the substantive backstop."
+        }
+      },
+      {
+        "lambda": 1.0,
+        "pooled_coverage": 0.8391,
+        "pooled_floor": 0.7722,
+        "interval_score": 184.048,
+        "coverage": {
+          "QB": 0.8148,
+          "RB": 0.8041,
+          "TE": 0.92,
+          "WR": 0.8348
+        },
+        "n_by_position": {
+          "QB": 81,
+          "RB": 148,
+          "TE": 100,
+          "WR": 224
+        },
+        "floors": {
+          "QB": 0.7284,
+          "RB": 0.7432,
+          "TE": 0.73,
+          "WR": 0.7545
+        },
+        "floors_at_nominal": {
+          "QB": 0.8,
+          "RB": 0.8,
+          "TE": 0.8,
+          "WR": 0.8
+        },
+        "slack_rows": {
+          "QB": 7,
+          "RB": 9,
+          "TE": 19,
+          "WR": 18
+        },
+        "slack_rows_at_nominal": {
+          "QB": 1,
+          "RB": 0,
+          "TE": 12,
+          "WR": 7
+        },
+        "misses": [],
+        "misses_at_nominal_floor": [],
+        "pass": true,
+        "pass_at_nominal_floor": true,
+        "floor_detail": {
+          "QB": {
+            "n": 81,
+            "nominal": 0.8,
+            "floor": 0.7284,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 59,
+            "covered_rows_required_at_nominal_floor": 65,
+            "relaxation_rows": 6,
+            "relaxation_pp": 7.16,
+            "normal_approx_floor": 0.7269,
+            "false_reject_rate": 0.0443,
+            "false_reject_rate_at_nominal_floor": 0.4558,
+            "detectable_shortfall": 0.678,
+            "is_thin": true,
+            "approximation_error": -0.0057,
+            "coverage": 0.8148,
+            "covered_rows": 66,
+            "slack_rows": 7,
+            "slack_rows_at_nominal_floor": 1,
+            "met": true
+          },
+          "RB": {
+            "n": 148,
+            "nominal": 0.8,
+            "floor": 0.7432,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 110,
+            "covered_rows_required_at_nominal_floor": 119,
+            "relaxation_rows": 9,
+            "relaxation_pp": 5.676,
+            "normal_approx_floor": 0.7459,
+            "false_reject_rate": 0.0369,
+            "false_reject_rate_at_nominal_floor": 0.5,
+            "detectable_shortfall": 0.708,
+            "is_thin": true,
+            "approximation_error": 0.0054,
+            "coverage": 0.8041,
+            "covered_rows": 119,
+            "slack_rows": 9,
+            "slack_rows_at_nominal_floor": 0,
+            "met": true
+          },
+          "TE": {
+            "n": 100,
+            "nominal": 0.8,
+            "floor": 0.73,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 73,
+            "covered_rows_required_at_nominal_floor": 80,
+            "relaxation_rows": 7,
+            "relaxation_pp": 7.0,
+            "normal_approx_floor": 0.7342,
+            "false_reject_rate": 0.0342,
+            "false_reject_rate_at_nominal_floor": 0.4405,
+            "detectable_shortfall": 0.6855,
+            "is_thin": true,
+            "approximation_error": 0.0058,
+            "coverage": 0.92,
+            "covered_rows": 92,
+            "slack_rows": 19,
+            "slack_rows_at_nominal_floor": 12,
+            "met": true
+          },
+          "WR": {
+            "n": 224,
+            "nominal": 0.8,
+            "floor": 0.7545,
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+            "target_false_reject_rate": 0.05,
+            "covered_rows_required": 169,
+            "covered_rows_required_at_nominal_floor": 180,
+            "relaxation_rows": 11,
+            "relaxation_pp": 4.554,
+            "normal_approx_floor": 0.756,
+            "false_reject_rate": 0.0396,
+            "false_reject_rate_at_nominal_floor": 0.5133,
+            "detectable_shortfall": 0.727,
+            "is_thin": true,
+            "approximation_error": 0.0052,
+            "coverage": 0.8348,
+            "covered_rows": 187,
+            "slack_rows": 18,
+            "slack_rows_at_nominal_floor": 7,
+            "met": true
+          }
+        },
+        "family_false_reject": {
+          "n_floors": 4,
+          "per_group_target": 0.05,
+          "family_false_reject_rate": 0.1462,
+          "family_false_reject_rate_at_nominal_floor": 0.9259,
+          "note": "Independence across groups is ASSUMED here and is optimistic \u2014 rows in different positions share draft classes/seasons, so the true family rate is somewhat lower than the product. Reported as the conservative reading. \u26d4 NOT corrected for: a Bonferroni split would LOOSEN every individual floor, which is the adjustment this story must least be able to make."
+        },
+        "pooled_backstop": {
+          "pooled_n": 553,
+          "pooled_floor": 0.7722,
+          "loosest_group_floor": 0.7545,
+          "tightest_group_floor": 0.7284,
+          "verdict": "BACKSTOP_HOLDS",
+          "note": "The pooled floor runs the IDENTICAL rule over a larger n, so it sits closer to nominal than any single group's floor. A band resting at each group's own floor therefore fails the pooled check \u2014 that two-tier structure, not a hand-set minimum, is the substantive backstop."
+        }
+      }
+    ],
+    "floor_rule": "nf_d22_exact_binomial_power_floor_v1"
+  },
+  "lambda": 0.5,
+  "governance": {
+    "staged_key": "nfl_fantasy__season_projection__nfl_fantasy_nf1_5_v1_nf_d21_lambda05",
+    "validation": {
+      "n": 10,
+      "passed": 8,
+      "failed": 0,
+      "unevaluable": 2,
+      "gates": [
+        {
+          "gate": "model_stamp_consistency",
+          "status": "PASS",
+          "detail": "artifact stamp agrees with the registry on 6 lineage field(s)",
+          "data": {
+            "checked": [
+              "served_version",
+              "level_model_version",
+              "ordering_model_version",
+              "rookie_model_version",
+              "rookie_selection_status",
+              "scoring_contract_version"
+            ]
+          }
+        },
+        {
+          "gate": "projection_source_consistency",
+          "status": "PASS",
+          "detail": "payload lineage agrees with the registry (model_version='nfl_fantasy_nf1_5_v1', projection_source='nf1_5')"
+        },
+        {
+          "gate": "universe_count",
+          "status": "PASS",
+          "detail": "universe 794 \u2192 794 (0.00% drift, within 2%)",
+          "data": {
+            "n_staged": 794,
+            "n_previous": 794
+          }
+        },
+        {
+          "gate": "rookie_coverage",
+          "status": "PASS",
+          "detail": "81 rookie(s), unchanged",
+          "data": {
+            "n_rookies": 81
+          }
+        },
+        {
+          "gate": "interval_floors",
+          "status": "PASS",
+          "detail": "all per-group coverage floors met after the change (floor rule: nf_d22_exact_binomial_power_floor_v1)",
+          "data": {
+            "floor_rule": "nf_d22_exact_binomial_power_floor_v1"
+          }
+        },
+        {
+          "gate": "scoring_parity",
+          "status": "PASS",
+          "detail": "scored line reproduces the displayed point (max |\u0394| 0 over 81 row(s))",
+          "data": {
+            "max_abs_diff": 0.0
+          }
+        },
+        {
+          "gate": "track_record_copy_compatible",
+          "status": "PASS",
+          "detail": "copy carries no forbidden market/edge claim"
+        },
+        {
+          "gate": "rollback_artifact_exists",
+          "status": "PASS",
+          "detail": "rollback artifact present at s3://credence-prod-s3-api-cache/fantasy/nfl/2026/",
+          "data": {
+            "uri": "s3://credence-prod-s3-api-cache/fantasy/nfl/2026/"
+          }
+        },
+        {
+          "gate": "live_payload_matches_staged",
+          "status": "UNEVALUABLE",
+          "detail": "one side has no digest (pre-publish, or the live read failed) \u2014 cannot claim the live payload matches what was reviewed"
+        },
+        {
+          "gate": "clients_agree_on_version",
+          "status": "UNEVALUABLE",
+          "detail": "neither client version could be read"
+        }
+      ],
+      "ready_to_promote": true,
+      "evaluated_at": "2026-08-21T01:52:20.591687+00:00"
+    }
+  },
+  "board_effects": {
+    "board": "served (NF1.5 ordering)",
+    "n_players": 794,
+    "n_rookies": 81,
+    "best_rookie_overall_rank_incumbent": 14,
+    "best_rookie_overall_rank": 14,
+    "best_rookie_name": "Fernando Mendoza",
+    "best_rookie_position": "QB",
+    "placement_constraint_active": false,
+    "qb_max_abs_point_delta": 0.0,
+    "veteran_max_abs_point_delta": 0.0,
+    "rookie_mean_lift_ppr": 7.385867877573267,
+    "rookie_max_lift_ppr": 41.59316038796078,
+    "per_position": {
+      "FB": {
+        "n": 17,
+        "n_rookies": 1,
+        "within_position_rank_moves": 0,
+        "overall_rank_moves": 6,
+        "max_abs_point_delta": 0.0
+      },
+      "QB": {
+        "n": 106,
+        "n_rookies": 10,
+        "within_position_rank_moves": 0,
+        "overall_rank_moves": 81,
+        "max_abs_point_delta": 0.0
+      },
+      "RB": {
+        "n": 180,
+        "n_rookies": 12,
+        "within_position_rank_moves": 73,
+        "overall_rank_moves": 149,
+        "max_abs_point_delta": 41.59316038796078
+      },
+      "TE": {
+        "n": 170,
+        "n_rookies": 22,
+        "within_position_rank_moves": 80,
+        "overall_rank_moves": 101,
+        "max_abs_point_delta": 20.96036864541344
+      },
+      "WR": {
+        "n": 321,
+        "n_rookies": 36,
+        "within_position_rank_moves": 151,
+        "overall_rank_moves": 228,
+        "max_abs_point_delta": 9.416558357762227
+      }
+    },
+    "free_preview": {
+      "top10_overall_before": [
+        "JAHMYR GIBBS",
+        "CHRISTIAN MCCAFFREY",
+        "BIJAN ROBINSON",
+        "JONATHAN TAYLOR",
+        "JOSH ALLEN",
+        "LAMAR JACKSON",
+        "DRAKE MAYE",
+        "JA'MARR CHASE",
+        "ASHTON JEANTY",
+        "JOE BURROW"
+      ],
+      "top10_overall_after": [
+        "JAHMYR GIBBS",
+        "CHRISTIAN MCCAFFREY",
+        "BIJAN ROBINSON",
+        "JONATHAN TAYLOR",
+        "JOSH ALLEN",
+        "LAMAR JACKSON",
+        "DRAKE MAYE",
+        "JA'MARR CHASE",
+        "ASHTON JEANTY",
+        "JOE BURROW"
+      ],
+      "top10_overall_unchanged": true,
+      "top3_by_position": {
+        "QB": {
+          "before": [
+            "JOSH ALLEN",
+            "LAMAR JACKSON",
+            "DRAKE MAYE"
+          ],
+          "after": [
+            "JOSH ALLEN",
+            "LAMAR JACKSON",
+            "DRAKE MAYE"
+          ],
+          "unchanged": true
+        },
+        "RB": {
+          "before": [
+            "JAHMYR GIBBS",
+            "CHRISTIAN MCCAFFREY",
+            "BIJAN ROBINSON"
+          ],
+          "after": [
+            "JAHMYR GIBBS",
+            "CHRISTIAN MCCAFFREY",
+            "BIJAN ROBINSON"
+          ],
+          "unchanged": true
+        },
+        "WR": {
+          "before": [
+            "JA'MARR CHASE",
+            "PUKA NACUA",
+            "AMON-RA ST. BROWN"
+          ],
+          "after": [
+            "JA'MARR CHASE",
+            "PUKA NACUA",
+            "AMON-RA ST. BROWN"
+          ],
+          "unchanged": true
+        },
+        "TE": {
+          "before": [
+            "TREY MCBRIDE",
+            "BROCK BOWERS",
+            "TYLER WARREN"
+          ],
+          "after": [
+            "TREY MCBRIDE",
+            "BROCK BOWERS",
+            "TYLER WARREN"
+          ],
+          "unchanged": true
+        }
+      },
+      "well_formed": true
+    }
+  },
+  "scoring_parity": {
+    "max_abs_diff": 0.0,
+    "n_compared": 81,
+    "target_quantisation_ppr": 0.021765192009059575,
+    "target_quantisation_note": "max |emitted point \u2212 affine target| \u2014 the pre-existing 2-dp fumble rounding, NOT a parity defect (NF-D16 measured the same effect at 0.032 PPR at \u03bb=1)"
+  },
+  "interval_floors_clears_at_lambda": true,
+  "interval_floors_cleared_under_previous_rule": false,
+  "all_g0_gates_clear": true,
+  "verdict": "\u2705 FLOOR INSTALLED \u2014 and NF-D16 at \u03bb=0.5 now CLEARS the interval-floor gate",
+  "verdict_prose": "The power-derived floor is derived from design quantities alone (\u00a71) and satisfies both halves of its validation (\u00a72). Installing it, NF-D16's rookie recalibration at \u03bb = 0.5 clears every per-group coverage floor and every one of the ten NF-G0 gates \u2014 under the previous hard point-estimate rule it did not (`pass_at_nominal_floor = False`). \u26d4 **That is a CONSEQUENCE, not this story's motivation, and it publishes nothing.** NF-D21 stays CLOSED with disposition `CONSTRAINT_REFUSED`; a publish needs a NEW PM disposition recorded against the floor now in force, and `SERVING_ENABLED` is untouched at `False`."
+}
