@@ -3,6 +3,14 @@
     "week": "2026-08-17",
     "items": [
       {
+        "tag": "fixed",
+        "text": "Players who are currently on PUP or injured reserve now project down on the draft board. The injury feed was being read from a snapshot several weeks old, so a number of players who had since been placed on PUP or IR — including three inside the draftable range — were still projected as if they were healthy, while a few who had been cleared were still being marked down. The board now reads the current snapshot, and it reports how old that snapshot is before publishing."
+      },
+      {
+        "tag": "fixed",
+        "text": "A handful of backup quarterbacks were shown with season stat lines that could not happen in the number of games they were projected to play — in one case about 80 pass attempts per game. The board now checks every projection against the most any real player has ever produced per game before it publishes, and reports any that fail."
+      },
+      {
         "tag": "changed",
         "text": "Where a fantasy league was imported from a platform whose terms require it, that credit now appears in the site footer — the placement those terms actually specify — and it shows on the league list while you are choosing which league to import, not only once you have opened one. It still appears only on pages showing that platform's data, and never on a page showing none."
       },
