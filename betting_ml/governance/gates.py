@@ -160,11 +160,24 @@ def rookie_coverage(n_rookies: int | None, n_previous_rookies: int | None, *,
 # 5. interval floors
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def interval_floors(revalidation: dict | None) -> GateResult:
-    """Every per-position 80% coverage floor still holds after the change.
+    """Every per-group coverage floor still holds after the change.
 
     Consumes `run_interval_revalidation`'s report verbatim. ⛔ A floor breach is a RE-SELECTION
     trigger, never a reason to move the floor (E2.1-r; NF1.8 §1) — so this gate has no tolerance
-    knob and cannot be tuned into passing."""
+    knob and cannot be tuned into passing.
+
+    ⭐ NF-D22 CHANGED THE FLOOR THE REPORT COMPUTES, NOT THIS GATE'S LOGIC, AND THAT SEPARATION IS
+    DELIBERATE. The floor moved from a hard point estimate at nominal — whose false-reject rate
+    against a *perfectly calibrated* band is ≈ 0.5 at every n (exactly 0.500 at n = 148) — to the
+    exact one-sided Binomial acceptance bound at a pre-registered false-reject target
+    (`betting_ml.utils.coverage_power_floor`). This gate stays a pure consumer of the verdict, so the
+    floor rule has exactly ONE owner and cannot be re-specified here.
+
+    The report's `floor_rule` is SURFACED into `data` when present so a stored verdict names the rule
+    that produced it. ⚠️ Its absence is **not** treated as a failure: this is an ADDITIVE contract
+    change and refusing an older report would fail closed on records that were correct when written
+    (the NF-C0 additive-response discipline). A missing rule is reported as `unstated`, which is a
+    fact a reader can act on, rather than a silent assumption about which rule ran."""
     name = "interval_floors"
     if not revalidation:
         return _blind(name, "no interval re-validation report supplied — a level shift moves the "
@@ -172,14 +185,21 @@ def interval_floors(revalidation: dict | None) -> GateResult:
     if "pass" not in revalidation:
         return _blind(name, "re-validation report carries no verdict key")
     misses = []
+    rules = set()
     for pop in ("rookies", "veterans", "kdst"):
         block = revalidation.get(pop) or {}
+        if block.get("floor_rule"):
+            rules.add(str(block["floor_rule"]))
         for p in block.get("misses") or []:
             misses.append(f"{pop}:{p}")
+    rule = revalidation.get("floor_rule") or (sorted(rules)[0] if len(rules) == 1 else
+                                              (",".join(sorted(rules)) if rules else "unstated"))
     if not revalidation.get("pass") or misses:
         return _bad(name, "coverage floor BREACH — re-run that population's bake-off, do NOT move "
-                          f"the floor. Breaches: {misses or 'see report'}", misses=misses)
-    return _ok(name, "all per-position 80% coverage floors met after the change")
+                          f"the floor. Breaches: {misses or 'see report'}", misses=misses,
+                    floor_rule=rule)
+    return _ok(name, f"all per-group coverage floors met after the change (floor rule: {rule})",
+               floor_rule=rule)
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
