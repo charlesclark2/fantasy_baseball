@@ -39,6 +39,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from betting_ml.utils import coverage_power_floor as CPF
 from quant_sports_intel_models.fantasy_engine.scoring import score_players
 from quant_sports_intel_models.football.nfl.fantasy import kdst_projection as KD
 from quant_sports_intel_models.football.nfl.fantasy import kdst_source as KS
@@ -917,8 +918,27 @@ def test_revalidate_kdst_derives_its_config_from_the_served_constants(tmp_path):
     panel = tmp_path / "p.parquet"
     _band_panel().to_parquet(panel, index=False)
     out = REV.revalidate_kdst(panel)
-    assert out["floors"] == {"DST": KD.NOMINAL_COVERAGE, "K": KD.NOMINAL_COVERAGE}
+    # ⭐ RE-ANCHORED ONTO NF-D22, NOT WEAKENED (the MH2.7 rule: a guard suite can encode a RETIRED
+    #    world). The property this test defends has never been "the floor equals 0.80" — it is "the
+    #    floor is DERIVED from the served constant, never re-typed". NF-D22 replaced the hard point
+    #    estimate at nominal with the exact one-sided Binomial acceptance bound at a pre-registered
+    #    false-reject target, so the floor is now a function of (n, KD.NOMINAL_COVERAGE, target).
+    #    Re-anchoring means reproducing it from that function — which still fails if anyone re-types
+    #    a literal or points the derivation at a different nominal.
+    assert set(out["floors"]) == {"DST", "K"}
+    for pos, floor in out["floors"].items():
+        n = out["n_by_position"][pos]
+        assert floor == pytest.approx(
+            CPF.power_floor(n, nominal=KD.NOMINAL_COVERAGE), abs=5e-5), (
+            f"{pos}'s floor must be the power-derived floor for its own n, read off the SERVED "
+            f"nominal constant")
+        # ⛔ and it may never be TIGHTENED above nominal (NF1.8 §1 — every notch above nominal moves
+        #    the eligible set toward `max_width`).
+        assert floor <= KD.NOMINAL_COVERAGE
     assert "slack_rows" in out, "the floor margin must be stated in ROWS (NF1.8)"
+    assert out["floors_at_nominal"] == {"DST": KD.NOMINAL_COVERAGE, "K": KD.NOMINAL_COVERAGE}, (
+        "the PREVIOUS reading must stay visible in the report so a floor change is auditable per "
+        "run rather than only in a changelog")
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

@@ -4,6 +4,14 @@
     "items": [
       {
         "tag": "new",
+        "text": "Player pages now show a short note on what actually builds the projection above it — our own baseline model, refined with market consensus where testing shows it helps, plus our live veteran season-rate recalibration. It sits beside the existing per-player \"what pushes his number up or down\" panel, which is a separate research model's read and is labelled as such."
+      },
+      {
+        "tag": "fixed",
+        "text": "The full-season rate (the \"if he plays every week\" comparability figure beside a player's projection) no longer shows for a player projected for only a game or two. Dividing a season total by a very small games figure produced a technically-real but misleading number; it now shows nothing rather than a number that overstates him."
+      },
+      {
+        "tag": "new",
         "text": "Mock Draft: finish a draft and you now get a share card — your finishing rank, projected points against the room, your strongest position and your best value pick, all in one branded image. Download it, copy a link, or use your device's share sheet. Anyone who opens the link sees the same card and the same honest framing we show you in the app: it ranks the room on our own projections, not a guarantee of how a real league goes. The share page itself needs no account to view."
       },
       {
@@ -77,6 +85,10 @@
       {
         "tag": "fixed",
         "text": "The draft board is rebuilding daily again. Since 16 August the automated rebuild had been unable to read the kicker and defence projections, and rather than publish a board missing two positions it published nothing — so the board you were reading was correct, but it had stopped picking up new market and depth-chart data. It is advancing again, and the check that stopped the bad board from shipping is unchanged."
+      },
+      {
+        "tag": "improved",
+        "text": "Behind the scenes: we fixed a statistical flaw in how we check our own projection ranges. Every range we publish is meant to contain the real season outcome 80% of the time, and we re-check that against what actually happened. The old check compared a group's measured rate against 80% as a flat cut-off — which, on a small group like rookie running backs (148 seasons of history), rejects a perfectly accurate range about half the time purely by chance. So a failure told us almost nothing while still reading like a problem. The check now asks the honest question — is this group's coverage meaningfully below 80%, or just normal small-sample wobble? — using a threshold derived from the group's size alone, decided before any result is looked at. Small groups get more room; large ones barely move. Nothing about the projections you see changed today: this only makes the quality check trustworthy in both directions, so a genuinely broken range still fails it."
       }
     ]
   },

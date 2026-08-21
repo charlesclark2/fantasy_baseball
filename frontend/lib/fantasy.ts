@@ -305,6 +305,18 @@ export function trimLockedTail<T extends { adp?: number | null; locked?: boolean
  *  cannot disagree about it, and so a schedule change is one edit. */
 export const FULL_SEASON_GAMES = 17
 
+/** NF-C-HEALTHY — below this many expected games, `pts * 17 / games` amplifies ordinary projection
+ *  noise into a number that no longer describes anything real: the same shape as NF-C7's `pts / g`
+ *  defect (a 1.9-game, 76.6-point Easton Stick line "rating" 40.3/game), one arithmetic step over —
+ *  run that identical 1.9 through THIS formula and it prints ~686, not merely a doubled number.
+ *  `fullSeasonRate` is deliberately a rate over the player's OWN expected games (dividing by the
+ *  constant `FULL_SEASON_GAMES` instead, NF-C7's fix, would answer "how much does he help across
+ *  the whole roster", a different question this metric does not ask) — so the guard here is a FLOOR
+ *  below which the arithmetic refuses outright, not a different divisor. 2 is not a measured
+ *  threshold; it is the smallest games figure at which a one-game swing (the resolution `g` is
+ *  reported at) is not itself enough to double the result. */
+export const MIN_GAMES_FOR_FULL_SEASON_RATE = 2
+
 /**
  * The full-season rate, or `null` when it cannot be computed.
  *
@@ -316,6 +328,9 @@ export const FULL_SEASON_GAMES = 17
  *   • `games`/`pts` absent — K/DST and gap-filled rows do not always carry both; a missing field
  *     type-checks as its declared type at runtime (the E9.56b lesson) and `undefined * 17` is NaN.
  *   • a NEGATIVE `games` cannot occur today but would silently flip the sign, so it is refused too.
+ *   • `0 < games < MIN_GAMES_FOR_FULL_SEASON_RATE` — technically finite and positive, but the
+ *     low-denominator trap: a real number that is not a meaningful comparability figure (see the
+ *     constant's own doc). Refused for the same reason `games === 0` is, not merely a smaller one.
  * Callers render `null` as an em-dash — never a blank cell, which reads as a rendering fault.
  */
 export function fullSeasonRate(
@@ -325,6 +340,7 @@ export function fullSeasonRate(
   if (typeof pts !== "number" || !Number.isFinite(pts)) return null
   if (typeof games !== "number" || !Number.isFinite(games)) return null
   if (games <= 0) return null
+  if (games < MIN_GAMES_FOR_FULL_SEASON_RATE) return null
   return (pts * FULL_SEASON_GAMES) / games
 }
 
