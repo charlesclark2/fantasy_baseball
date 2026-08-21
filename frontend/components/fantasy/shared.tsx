@@ -14,7 +14,7 @@ import Link from "next/link"
 import { Info, Lock } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Picker } from "@/components/ui/picker"
-import type { FreshnessBlock, LeagueConfigMeta, Manifest } from "@/lib/draft-optimizer"
+import type { FreshnessBlock, LeagueConfigMeta, Manifest, VeteranLevelPolicy } from "@/lib/draft-optimizer"
 import { freeSelection, isFreeConfig } from "@/lib/draft-optimizer"
 import { marketLeaningPositions } from "@/lib/fantasy"
 import type { ProjectedPlayer } from "@/lib/fantasy"
@@ -728,15 +728,60 @@ export function MarketLeanNote({
   )
 }
 
+/** NF-C-HEALTHY — "how this projection is built", the SERVED-STACK companion to the NF3.4 panel
+ *  below. It describes what actually produced the projection shown elsewhere on this page: a
+ *  per-position baseline (MVP-1), refined within each position using market consensus at the
+ *  positions where that measurably helped (NF1.5, when this export is running the market-aware
+ *  lineage), and a season-long rate recalibration against realized outcomes (NF-TR2b's veteran
+ *  level policy, when it is live). Every clause is sourced from the manifest's OWN stamp columns —
+ *  never hard-coded — so a rollback or a pre-recalibration export renders honestly instead of
+ *  claiming a stage that isn't actually in this build. The MVP-1 baseline clause is always true and
+ *  always rendered; the market-aware and level-recalibration clauses degrade gracefully — a
+ *  pre-NF1.5b or pre-NF-TR2 export just omits the clause it predates rather than claiming it. The
+ *  caller gates rendering on the manifest having loaded at all (see `player-page.tsx`). */
+export function ProjectionMethodologyNote({
+  projectionSource,
+  projectionLabel,
+  veteranLevelPolicy,
+}: {
+  projectionSource?: string | null
+  projectionLabel?: string | null
+  veteranLevelPolicy?: VeteranLevelPolicy | null
+}) {
+  const marketAware = projectionSource === "nf1_5"
+  const levelOn = veteranLevelPolicy?.status === "recalibrated"
+  const stages = ["a per-position baseline level and range (our MVP-1 model)"]
+  if (marketAware) {
+    stages.push(
+      `refined within each position using market consensus, at the positions where doing so measurably helped on the backtest (${projectionLabel ?? "NF1.5"})`,
+    )
+  }
+  if (levelOn) {
+    stages.push(
+      `each position's season-long rate recalibrated against realized outcomes (${veteranLevelPolicy?.level_model_version ?? "our veteran level model"}, live)`,
+    )
+  }
+  return (
+    <p
+      data-testid="projection-methodology-note"
+      className="mb-4 text-[11px] leading-relaxed text-gray-600"
+    >
+      <span className="font-semibold text-gray-400">How this projection is built: </span>
+      {stages.join(", then ")}. This is the model that produced the number above — the panel below,
+      when shown, is a second, separate model's independent read on the same player.
+    </p>
+  )
+}
+
 /** NF3.4 — "what pushes {player}'s number up or down", the PER-PLAYER transparency panel.
  *
  *  🚨 HONEST LABELLING is the whole point of this component: every point value comes from our NF1
  *  research model's OWN separate prediction for this player (LightGBM TreeSHAP, exact — the
  *  contributions always sum to `contrib.totalPts`), which is NOT guaranteed to equal the served
- *  projection shown elsewhere on this page. The panel says so plainly rather than implying the two
- *  numbers are the same thing. Renders nothing for a rookie or K/DST (NF1 doesn't cover them) or if
- *  the manifest carries no legend yet (an older export) — see `ProjectedPlayer.contrib` / `Manifest.
- *  featureLegend`. */
+ *  projection shown elsewhere on this page (see `ProjectionMethodologyNote` for what actually
+ *  built that one). The panel says so plainly rather than implying the two numbers are the same
+ *  thing. Renders nothing for a rookie or K/DST (NF1 doesn't cover them) or if the manifest carries
+ *  no legend yet (an older export) — see `ProjectedPlayer.contrib` / `Manifest.featureLegend`. */
 export function PlayerContributionsPanel({
   playerName,
   contrib,
