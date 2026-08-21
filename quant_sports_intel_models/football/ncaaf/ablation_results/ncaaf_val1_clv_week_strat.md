@@ -79,6 +79,34 @@ one that encodes a plausible *bias* (always-home, always-under), because that is
 p ≈ 0.24 against breakeven — nowhere near significant, and it is a *market* claim (an early-season
 closing-total bias), not a model claim. It is reported because clause 4 fired, not because it stands.
 
+## The §4a diagnostic: signal-before-vig (⛔ registered NON-BINDING, reported in full)
+
+The pre-registration separated two questions and bound only the first: *is there a **profitable**
+edge at −110* (vs 0.5238, the pass criterion) and *is there **any** demonstrable signal against the
+close before vig* (vs 0.5000, a diagnostic that may inform narrative and **may never** be
+substituted for the criterion). Both are reported here, in full, because reporting only the one that
+failed would be selective.
+
+One-sided exact-binomial p against **0.5000**:
+
+| | pooled | wk1-3 | wk4-6 | wk7+ |
+|---|---|---|---|---|
+| ATS | 0.1481 | 0.6472 | 0.0998 | 0.2272 |
+| O/U | **0.0408** | 0.6184 | **0.0491** | 0.0844 |
+
+⇒ **There is a weak hint of pre-vig signal on TOTALS** — the pooled O/U read (0.5137) and `ou/wk4-6`
+(0.5291) each sit nominally below 0.05 against a coin flip. Read honestly, this says the model is
+*probably not worthless* against closing totals, and simultaneously that **whatever it has is
+smaller than the vig** — which is the ordinary condition of a market-blind model against an
+efficient close, and is exactly why `best_alpha = 0`.
+
+⛔ **These do not resurrect anything.** They are uncorrected for multiplicity (0.0491 would not
+survive its own family's 0.0167 BH cutoff), they are the wrong bar for a betting decision, and
+crucially **they are not concentrated early** — wk1-3 is the least significant cell in both markets
+(0.6472 / 0.6184). Even on the generous bar, the early-season premise gets no support.
+⛔ Re-reading the verdict off this row would be the E2.1-r inversion in its most literal form: the
+bar was chosen before the result precisely so that it could not be moved after it.
+
 ## The wk1-3 verdict is DECISIVE, not underpowered — with a stated limit
 
 The pre-registration predicted `wk1-3` would come back POWER_LIMITED (its MDE, +4.8 pp, is roughly
