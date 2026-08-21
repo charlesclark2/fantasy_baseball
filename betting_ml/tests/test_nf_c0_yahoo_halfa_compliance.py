@@ -69,6 +69,15 @@ class FakeUsersTable:
         item = self.items.get(Key["user_id"])
         return {"Item": item} if item is not None else {}
 
+    def scan(self, **kwargs):
+        """One page, every item. Enough to exercise the §6 enumeration's shape.
+
+        ⚠️ It deliberately does NOT return `LastEvaluatedKey`, so a caller that forgot to paginate
+        would still pass here — that gap is closed by a source clause below rather than pretended
+        away with a fake that models DynamoDB's paging rules.
+        """
+        return {"Items": [{"user_id": uid, **item} for uid, item in self.items.items()]}
+
     def update_item(  # noqa: N803
         self,
         Key,
@@ -240,6 +249,62 @@ class TestDisconnectDeletesTheRostersAndKeepsTheLeague:
             "league_ids": [],
         }
         assert len(dynamo._table.writes) == before
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+# 1b. §6 — deleting EVERY account's copies, which nothing could do before the clause audit
+# ══════════════════════════════════════════════════════════════════════════════════════════════════
+class TestTheAgreementCanActuallyBeTerminated:
+    """§6 gives ten business days to delete every copy of Yahoo Fantasy Information on termination.
+
+    ⚠️ Until the clause audit there was NO mechanism: `purge_platform_league_data` deletes ONE
+    user's copies and is reachable only through that user's own disconnect. The obligation named a
+    deadline against something that did not exist.
+    """
+
+    def test_the_enumeration_finds_every_account_holding_the_platforms_rosters(self, dynamo):
+        dynamo.put_fantasy_league("u1", None, _yahoo_league())
+        dynamo.put_fantasy_league("u2", None, _yahoo_league(name="Second"))
+        dynamo.put_fantasy_league("u3", None, _yahoo_league(source_platform="sleeper"))
+
+        holders = dict(dynamo.iter_platform_league_holders("yahoo"))
+        assert holders == {"u1": 1, "u2": 1}, holders
+
+    def test_it_skips_an_account_whose_rosters_are_already_gone(self, dynamo):
+        """The control. An enumeration that returned every account with a Yahoo LEAGUE — rather than
+        every account holding Yahoo ROSTERS — would report work to do forever, and a termination
+        purge that never converges cannot be certified complete to a counterparty."""
+        dynamo.put_fantasy_league("u1", None, _yahoo_league())
+        dynamo.purge_platform_league_data("u1", "yahoo")
+        assert list(dynamo.iter_platform_league_holders("yahoo")) == []
+
+    def test_the_enumeration_paginates(self):
+        """⚠️ A SCAN THAT IGNORES `LastEvaluatedKey` SILENTLY COVERS ONE PAGE. It would report a
+        clean sweep having looked at the first 1 MB of the table, and the accounts past that keep
+        the data — a false 'complete' on a contractual deletion. The fake table above returns one
+        page by design, so this is asserted against the source rather than pretended away."""
+        src = (REPO / "app/backend/services/dynamo.py").read_text()
+        body = src[src.index("def iter_platform_league_holders") : src.index("def list_fantasy_leagues")]
+        assert "LastEvaluatedKey" in body and "ExclusiveStartKey" in body, (
+            "the account-wide enumeration does not paginate — it can only ever see the first page"
+        )
+
+    def test_the_operator_script_defaults_to_a_dry_run_and_uses_the_shared_purge(self):
+        """Two properties, and both are about not having a second implementation of deletion.
+
+        The script must not carry its own idea of what a platform's data IS — that belongs to
+        `PLATFORM_ROSTER_FIELDS` and to the one purge function the user-facing disconnect also
+        calls. And it must not delete by default: this destroys data across every account.
+        """
+        script = REPO / "scripts/purge_platform_data.py"
+        assert script.is_file(), "the §6 termination purge script is missing"
+        code = re.sub(r"#.*", "", script.read_text())
+        code = re.sub(r'"""[\s\S]*?"""', "", code)
+        assert "purge_platform_league_data" in code, (
+            "the termination purge does not go through the shared deletion function"
+        )
+        assert '"--apply"' in code, "the script has no explicit --apply gate"
+        assert "if not args.apply" in code, "the script does not short-circuit into a dry run"
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════════
@@ -469,6 +534,41 @@ class TestNoLeagueAwareSurfaceIsMissingTheCredit:
         assert not offenders, (
             "these surfaces can render one of the caller's saved leagues and owe its platform's "
             "attribution: " + ", ".join(offenders)
+        )
+
+    def test_the_credit_is_wired_into_the_page_FOOTER(self):
+        """🚩 THE PLACEMENT IS PART OF THE CLAUSE, not a styling choice.
+
+        Cover Page: "attribution must appear IN THE FOOTER OF EACH PAGE where Yahoo Fantasy
+        Information is displayed and must include a hyperlink to an official Yahoo Fantasy
+        webpage." Half A rendered it at the end of each surface's main content, ABOVE the site
+        footer, because the spike memo's paraphrase did not carry the word "footer".
+
+        ⚠️ TWO FILES, and either one alone silently kills the credit on EVERY page: the footer must
+        render the slot, and the provider must wrap the footer as well as the page (they are
+        siblings). Whether it actually paints is the E2E's job; this catches the wiring in the fast
+        gate, where a deletion would otherwise reach the operator only through a browser run.
+        """
+        footer = self._strip_ts_comments((FRONTEND / "components/site-footer.tsx").read_text())
+        assert "<PlatformAttributionFooterSlot" in footer, (
+            "the site footer no longer renders the platform attribution slot"
+        )
+        providers = self._strip_ts_comments((FRONTEND / "components/providers.tsx").read_text())
+        assert "<PlatformAttributionProvider>{children}</PlatformAttributionProvider>" in providers, (
+            "the attribution provider no longer wraps the tree, so nothing can reach the footer"
+        )
+
+    def test_the_import_screen_credits_the_league_LIST_not_only_the_preview(self):
+        """The list — league names, team counts, season, status — is already the platform's data.
+
+        Half A credited only the preview block, so this screen showed Yahoo's data uncredited for
+        the whole time a user spends choosing which league to import.
+        """
+        code = self._strip_ts_comments(
+            (FRONTEND / "components/fantasy/league-import.tsx").read_text()
+        )
+        assert code.count("<PlatformAttribution") >= 2, (
+            "the import screen credits only one of its two Yahoo-data views"
         )
 
     def test_the_e2e_registry_names_a_surface_for_every_route_the_story_listed(self):

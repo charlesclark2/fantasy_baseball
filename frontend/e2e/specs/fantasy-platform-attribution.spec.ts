@@ -35,6 +35,15 @@ import { expectNoPageErrors } from "../support/assertions"
  *     supply is a false statement about a third party on our own product.
  * One-sided, a stub returning the link on every page would pass every test in this file.
  *
+ * ══ AND IT MUST BE IN THE FOOTER ══════════════════════════════════════════════════════════════
+ *
+ * The Cover Page is specific about placement — "attribution must appear IN THE FOOTER OF EACH PAGE
+ * where Yahoo Fantasy Information is displayed" — and Half A put it at the end of each surface's
+ * MAIN CONTENT, above the site footer, because the spike memo's paraphrase did not carry the word
+ * "footer" and the clause text was not available. So every case below asserts the credit inside the
+ * page's `<footer>` element, not merely somewhere on the page: a credit that drifts back out of the
+ * footer would look identical to a reader and would not satisfy the clause.
+ *
  * ⛔ WHAT THIS FILE DOES NOT PROVE. That the string and URL are the ones Yahoo's terms actually
  * name, and that the SERVER agrees with the client about them. Those are asserted against the
  * shipping Python constants in `betting_ml/tests/test_nf_c0_yahoo_halfa_compliance.py`.
@@ -144,7 +153,9 @@ async function open(page: Page, surface: (typeof SURFACES)[number], options: Moc
   return { errors, mock }
 }
 
-const attribution = (page: Page) => page.getByTestId("platform-attribution")
+/** ⚠️ SCOPED TO `<footer>` DELIBERATELY. `getByTestId` alone would pass just as happily with the
+ *  credit back in the page body, which is where it used to be and is what the clause rules out. */
+const attribution = (page: Page) => page.locator("footer").getByTestId("platform-attribution")
 
 for (const surface of SURFACES) {
   test.describe(surface.name, () => {
@@ -174,7 +185,7 @@ for (const surface of SURFACES) {
       const { errors } = await open(page, surface, { leagues: "drafted" })
 
       await expect(
-        attribution(page),
+        page.getByTestId("platform-attribution"),
         `${surface.name} credits Yahoo for a league imported from Sleeper`,
       ).toHaveCount(0)
       await expect(page.getByText(/Fantasy data provided by Yahoo/)).toHaveCount(0)
@@ -183,6 +194,46 @@ for (const surface of SURFACES) {
     })
   })
 }
+
+test.describe("the import screen credits Yahoo before a league is even previewed", () => {
+  test("⭐ the LEAGUE LIST is already Yahoo's data, and is credited on sight", async ({ page }) => {
+    // ⚠️ THE LIST IS THE POINT. League names, team counts, season and status all come straight from
+    // Yahoo's API, and Half A rendered the credit only inside the PREVIEW block — so this screen
+    // showed their data uncredited for the whole time a user spends choosing which league to
+    // import, which is the longest they look at it. The Cover Page says "each page where Yahoo
+    // Fantasy Information is displayed", not "each page where it is displayed in detail".
+    const errors = collectPageErrors(page)
+    await signIn(page, { groups: [] })
+    await mockApi(page, { entitlement: "free", leagues: "none", yahoo: "connected" })
+    await page.goto("/fantasy/import?yahoo=connected")
+    await page.getByRole("button", { name: /Yahoo/ }).first().click()
+    await page.getByRole("button", { name: /Load my Yahoo leagues/ }).click()
+
+    // Non-vacuity first: the list has to actually be on screen, or "credited" means nothing.
+    await expect(page.getByTestId("import-league-option").first()).toBeVisible()
+    const link = attribution(page).getByRole("link", { name: /Fantasy data provided by Yahoo/ })
+    await expect(
+      link,
+      "the Yahoo league list is on screen with no attribution in the footer",
+    ).toBeVisible()
+    await expect(link).toHaveAttribute("href", /fantasysports\.yahoo\.com/)
+
+    expectNoPageErrors(errors)
+  })
+
+  test("a visitor who has not connected Yahoo sees no credit", async ({ page }) => {
+    // The control. Without it, an import page that credited Yahoo unconditionally — before the user
+    // has connected anything, on a screen showing none of their data — would pass the case above.
+    const errors = collectPageErrors(page)
+    await signIn(page, { groups: [] })
+    await mockApi(page, { entitlement: "free", leagues: "none" })
+    await page.goto("/fantasy/import")
+
+    await expect(page.getByTestId("platform-attribution")).toHaveCount(0)
+
+    expectNoPageErrors(errors)
+  })
+})
 
 test.describe("a deleted roster says it was deleted", () => {
   test("⭐ a purged league is not explained as a league that never drafted", async ({ page }) => {
