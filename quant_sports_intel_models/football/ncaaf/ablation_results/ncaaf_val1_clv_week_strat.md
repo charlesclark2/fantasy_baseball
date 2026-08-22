@@ -1,12 +1,51 @@
 # NCAAF-VAL1 — early-season CLV stratification
 
-**Status (2026-08-20): ✅ COMPLETE — verdict `ALL_BUCKETS_NULL`, and the founding premise is
-directionally CONTRADICTED, not merely unsupported.** Query-only; no serving change, no refit, no
-bet. `best_alpha = 0` before and after.
+**Status (2026-08-21): ✅ COMPLETE — verdict `ALL_BUCKETS_NULL`, RE-EARNED on a repaired read.
+The founding premise is UNSUPPORTED.** (⚠️ the original status said *directionally CONTRADICTED*;
+that stronger reading did not survive the NCAAF-CLV-repair re-run — see §0.) Query-only; no serving
+change, no refit, no bet. `best_alpha = 0` before and after.
 
 Pre-registration: [`ncaaf_val1_preregistration.md`](./ncaaf_val1_preregistration.md), committed at
 `df8373cc` **before** a single bucket hit rate was computed. Machine record:
 `ncaaf_val1_clv_week_strat.json`. Harness: `models/ncaaf_val1_clv_week_strat.py`.
+
+---
+
+## §0 ⚠️ SUPERSEDED FIGURES — this record was computed on a row-MISALIGNED read
+
+**Everything below §0 is retained VERBATIM as recorded on 2026-08-20 and is NOT citable as a
+measurement.** NCAAF-VAL2 §2 subsequently found that `score_config` indexed the `(n_games, n_draws)`
+predictive-draw array with a `reset_index(drop=True)` index — reading a *different game's*
+distribution on **100 % of rows**. NCAAF-CLV-repair fixed it and re-ran this study.
+
+The text is left unedited rather than back-filled with the new numbers: a record rewritten after its
+own result is no longer a record of what was decided, and every table below is interlocking (BH
+cutoffs, anchors, ROI, the deflation leg). **Authoritative repaired figures:
+[`ncaaf_clv_row_alignment_repair.md`](./ncaaf_clv_row_alignment_repair.md) §5.** The machine record
+`ncaaf_val1_clv_week_strat.json` HAS been regenerated on the repaired path, so it and this document
+deliberately disagree — the JSON is the current one.
+
+### What survives, and what does not
+
+| claim | status after the repair |
+|---|---|
+| **`ALL_BUCKETS_NULL`** — 0 of 6 cells clear | ✅ **SURVIVES, and is now EARNED.** Every repaired cell still sits below the 0.5238 breakeven. A misaligned eval *cannot earn* a null — it is guaranteed to produce one; this one is measured. |
+| the ordering is **non-monotone** ⇒ noise | ✅ survives — both markets are still non-monotone (ATS `wk1-3 > wk7+ > wk4-6`; O/U `wk4-6 > wk7+ > wk1-3`) |
+| no early-season edge exists | ✅ survives — ATS `wk1-3` p = 0.609 against a BH cutoff of 0.0167 |
+| **"`wk1-3` is the WORST bucket in BOTH markets"** | ⛔ **REFUTED.** Repaired, `wk1-3` is the **best** ATS bucket (0.5193 vs 0.4928 / 0.4959) and the worst O/U bucket (0.4986). |
+| **"the founding premise is directionally CONTRADICTED"** | ⛔ **DOWNGRADED to UNSUPPORTED.** There is still no early edge, but the ATS point estimate now runs *with* the "early season is softest" premise, so the claim that the estimates run the opposite way is no longer supportable. |
+| the **`side_tilt`** table (§ side tilt) | ⛔ **ARTIFACT.** Over-tilt ordering reverses: recorded `wk4-6 > wk7+ > wk1-3` → repaired `wk7+ > wk1-3 > wk4-6`. Pooled over-tilt 0.5850 → **0.6057** (VAL2 independently measures `μ > close` on 0.608 of games). |
+| the §2a reproduction **PIN** targets | 🔁 **RE-ANCHORED** onto S1-serve's repaired re-run. The clause is unchanged; the old targets were numbers the defect made. |
+| 3 of 6 **null-state** classifications | 🔁 changed (ATS `wk1-3` → `POWER_LIMITED`; ATS `wk4-6` → `MEASURED_IMMATERIAL`; O/U `wk4-6` → `POWER_LIMITED`) |
+
+⚠️ **The repaired levels are the 2026-07-22 cache vintage (4,182 closes), not the 2026-08-20 one
+(4,187) this record used** — that cache exists in no checkout (`ncaaf_val2_mu_total_offset.md` §8).
+The repair is a property of the source code and holds on any vintage; the levels are vintage-bound.
+
+⭐ **Why the headline hit rate did not reveal this:** on the ATS leg the misaligned and repaired
+reads land on **exactly 2,039 / 4,110 — while 45.8 % of the underlying sides flip.** A before/after
+diff of the headline says "nothing changed" and is wrong. The discriminating statistic is
+side-agreement with `sign(μ − close)`: **0.98 repaired vs 0.70 as-coded.**
 
 ---
 
@@ -21,7 +60,8 @@ EXISTING CLV read by a pre-registered `season_order_week` bucket, once, and clas
 ## The headline
 
 **Our served model has no early-season edge against the close, and week 1–3 is the WORST of the
-three buckets in BOTH markets.** The premise is not merely unproven — the point estimates run the
+three buckets in BOTH markets.** ⛔ *(§0: the second half of this sentence is REFUTED by the
+NCAAF-CLV-repair re-run — repaired, `wk1-3` is the best ATS bucket. The first half survives.)* The premise is not merely unproven — the point estimates run the
 opposite way. (On why this refutes the premise *as it is used* but is not a general claim about
 market softness, see [§ Scope](#️-scope-of-the-claim--what-this-can-and-cannot-refute).)
 
