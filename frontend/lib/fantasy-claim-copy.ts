@@ -162,6 +162,147 @@ export const EXPECTED_POINTS_NOTE = {
     "The points we publish are an expected season total: the chance a player misses games is already priced into the number. That puts ours below the “if he plays every week” projections most sites show, and below what a player who stayed healthy actually finished on — by design, not by accident. The projected-games column shows how much of that discount is availability for each player. It is not the only reason a projection lands under a finished season, and we do not present it as one.",
 } as const
 
+// ══ NF-C8 — THE AVAILABILITY FLAG ══════════════════════════════════════════════════════════════
+//
+// The projected-games column and the expected-points label above already make the discount
+// EXPLICABLE. They do not make it VISIBLE: a drafter scanning a board meets a lower number and a
+// lower rank, and nothing on the row says which of those is availability until he goes looking. The
+// flag is the glance-level version of the same disclosure — a colour on the games figure for the
+// rows where the discount is doing real work, with the sentence one tap behind it.
+//
+// ⛔⛔ THE ONE RULE THIS BLOCK EXISTS FOR, AND IT IS ABSOLUTE: THIS MAY NOT FORECAST AN INJURY.
+// What we know is a property of OUR PROJECTION — we project this player for fewer than a full slate
+// of games. What we do NOT know, have never modelled, and could not defend, is that a particular
+// player is hurt, will get hurt, or will miss particular weeks. Those are medical predictions. The
+// distinction is invisible in a UI (an amber chip reads as "injury risk" unless the words say
+// otherwise) and it is one careless verb away in copy — "will miss", "expected to miss", "injury
+// risk", "out for" all cross it. `test_nf_c8_availability_flag_copy.py` holds a forbidden-verb list
+// over these constants for exactly that reason.
+//
+// ⛔ AND IT MAY NOT ABSORB THE RESIDUAL, same rule as `EXPECTED_POINTS_NOTE` one block up.
+// Availability carries most of the measured level shift and not all of it. A flag that said "this
+// is why his number is low" would be using an honest mechanism to bury a dishonest amount, and it
+// would do it on a far higher-traffic surface than the track record.
+//
+// ⛔ NO THRESHOLD IN THE PROSE. The constants that decide which rows flag live in `lib/fantasy.ts`
+// (`LIMITED_AVAILABILITY_GAMES` / `HEAVILY_LIMITED_AVAILABILITY_GAMES`) and are display quantities;
+// typing "below 14 games" into a sentence here would (a) duplicate them somewhere no test pins and
+// (b) read as a published finding rather than as a rendering choice. The copy says "fewer than a
+// full season" and lets the per-player value — read from the served artifact — carry the size.
+
+/** The chip's own accessible name, and the heading of the definition behind it. Deliberately names
+ *  the PROJECTION as the subject ("we project") rather than the player ("he will play"): the first
+ *  is a statement we can defend, the second is a forecast about a person. */
+export const AVAILABILITY_FLAG_LABEL = "Limited projected availability"
+
+/** The one-line summary rendered at the top of the flag's definition, with the served per-player
+ *  games figure substituted for `{games}` at render time.
+ *
+ *  ⚠️ `{games}` IS A PLACEHOLDER, NOT A FIGURE, and that is the whole reason this constant reads
+ *  oddly out of context. The rule from the head of this file — no measured number typed into copy —
+ *  applies to a games value exactly as it applies to a bias or an interval: a number typed here
+ *  cannot be reconciled against the artifact it describes. The value is read per-player from the
+ *  served payload and interpolated by the component. */
+export const AVAILABILITY_FLAG_SUMMARY =
+  "Projected {games} games — limited availability priced in."
+
+/** The tappable definition behind the flag. Says what the flag IS, what it is NOT, and points at
+ *  the expected-points explanation rather than restating it. */
+export const AVAILABILITY_FLAG_DEFINITION =
+  "We project this player for fewer games than a full season, and his point total is already built on that smaller number of games rather than on a full slate. This is a statement about our projection, not a diagnosis: the games figure is an average across everything that could happen to him, so it is not a forecast about his health and it does not name weeks he sits out. It is also not the only reason a projection lands where it does — read it next to the expected-points definition, which is where the rest of that story lives."
+
+/** The freshness line inside the flag's definition (NF-FRESH2's rule, applied to the one input this
+ *  flag actually rests on).
+ *
+ *  ⚠️ ABSENT ≠ NULL, and both directions matter here as much as they do on the provenance strip:
+ *  a payload that never carried the stamp gets NO line at all (inventing "unknown" during a routine
+ *  deploy window would put a scary word under every flag), while a stamp the exporter looked for and
+ *  could not resolve renders as unknown rather than being silently dropped — an unevaluable check is
+ *  never scored healthy (NF1.7 (a)). */
+export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury and roster status as of"
+
+export const AVAILABILITY_DATA_AS_OF_UNKNOWN = "unknown"
+
+// ══ NF-C9 — THE WEEKLY GAME-STATUS DESIGNATION: DISCLOSED, NOT MODELLED ════════════════════════
+//
+// ⭐ THE GAP THIS DISCLOSES, TRACED RATHER THAN INFERRED (NF-C8's finding,
+// `ablation_results/nf_c8_injury_designation_gap.md`). The availability discount has exactly one
+// entry point and it is narrow by construction: `season_projection.injury_availability_games` caps
+// projected games only for a formal ROSTER TRANSACTION (injured reserve / PUP / non-football-injury
+// / suspension), and `sleeper_injuries_source.map_injury_status` returns NO OVERRIDE for a weekly
+// game-report tag. So **Questionable, Doubtful and Out apply a discount of exactly zero** — and a
+// reader who meets an "Out" player at a normal-looking projected-games figure reasonably assumes we
+// marked him down. We hold the designation. We do not act on it. Until NF-C8 put a flag on the
+// games figure, nothing on any surface said so.
+//
+// ⛔⛔ THE ONE RULE THIS BLOCK EXISTS FOR: THIS IS A DISCLOSURE, NOT AN ADJUSTMENT. Every sentence
+// here has to survive a reader asking "so is it in the number or not?" with the answer NO. The
+// tempting failure is not a lie, it is a HEDGE that reads as one — "we take his status into
+// account", "reflected in the projection", "priced in", "factored in", "adjusted for" — each of
+// which would be false about this channel while sounding like ordinary product copy.
+// `test_nf_c9_designation_disclosure.py` holds that list over these constants.
+//
+// ⛔ AND IT MAY NOT FORECAST AN INJURY, for exactly the reasons the NF-C8 block above gives, only
+// more sharply: this constant renders a real designation about a NAMED PERSON, so the distance
+// between "a third party listed him Questionable for one game" and "he is hurt and will miss time"
+// is one sentence of carelessness. The SAME `_INJURY_FORECAST_VERBS` screen runs over these
+// strings, and it is deliberately ABSOLUTE (negation-blind) — see that suite's note on why a
+// negation WINDOW is the wrong repair: "we do not think he will miss time" is still a medical
+// prediction. The refusal is expressed WITHOUT the banned tokens.
+//
+// ⛔ NO DURATION, EVER. A weekly designation carries none: "Out" means out of ONE game, and the
+// multi-week absence a news report describes is a NEWS fact, not a status fact. Copy that implied a
+// length would be inventing the single quantity that makes this hard to model at all.
+//
+// ⛔ NO STATUS TYPED HERE. `{status}` is a placeholder filled from the served payload, the same
+// rule the head of this file applies to every measured figure: a designation typed into a component
+// cannot be reconciled against the feed it came from. The vocabulary lives in
+// `sleeper_injuries_source.WEEKLY_DESIGNATIONS`, which is where it was measured.
+
+/** The chip's accessible name and the heading of the definition behind it. Names the REPORT as the
+ *  subject, never the player — "listed on a report" is a fact about a document we read; "he is
+ *  banged up" is a claim about a person we have no standing to make. */
+export const WEEKLY_DESIGNATION_LABEL = "Weekly game-status designation"
+
+/** The one-line summary at the top of the definition. `{status}` is the served designation. */
+export const WEEKLY_DESIGNATION_SUMMARY =
+  "Listed {status} on the most recent game-status report our injury feed carries."
+
+/** The summary for a value the build cannot interpret — the third state (NF1.7 (a)): the feed said
+ *  something, we could not read it, and saying nothing would let that render as a clean bill of
+ *  health. ⛔ It deliberately does not print the raw token: publishing a code we decline to define
+ *  asks the reader to interpret it for us. */
+export const WEEKLY_DESIGNATION_UNKNOWN_SUMMARY =
+  "Our injury feed carries a game-status value for this player that we do not recognise, so we are not going to guess at what it says."
+
+/** ⭐⭐ THE SENTENCE THE WHOLE STORY IS FOR. If a copy trim ever takes one line out of this block,
+ *  this is the line that must not be it: without it the chip reads as an adjustment we made. */
+export const WEEKLY_DESIGNATION_NOT_MODELLED =
+  "Our projected-games figure does not take this into account. That number moves only on a formal roster move — injured reserve, the physically-unable-to-perform list, the non-football-injury list, or a suspension — so a weekly designation like this one applies no discount to it at all. We show it because we hold it, not because we have built it into anything."
+
+/** The refusal, in the register the NF-C8 flag uses. Says what a designation IS and what it is not:
+ *  one club's filing about one game, not a diagnosis, and carrying no length. */
+export const WEEKLY_DESIGNATION_NOT_A_DIAGNOSIS =
+  "A designation is what a club filed about one game. It is not a diagnosis, it is not our own read on how a player is doing, and it says nothing about how many games anything lasts."
+
+/** What the chip shows for a value we could not interpret. Lowercase on purpose — it is a state, not
+ *  a designation, and title case would make it look like one. */
+export const WEEKLY_DESIGNATION_UNKNOWN = "unknown"
+
+/** Designation → the glyph on the chip.
+ *
+ *  ⚠️ A LOOKUP, NOT A FALLBACK CHAIN: a designation this map does not know renders VERBATIM (see
+ *  `WeeklyDesignation`), never as "unknown". The two are different facts — the exporter refusing to
+ *  interpret a feed value is an unknown; a NEWER exporter serving a designation an OLDER client has
+ *  not learned yet is a deploy-skew window (NF-C0), and the honest rendering there is the word the
+ *  server sent. Q/D/OUT are the codes the game-status report itself uses, so they need no legend;
+ *  the full word is always in the accessible name and in the definition. */
+export const WEEKLY_DESIGNATION_CODE: Record<string, string> = {
+  Out: "OUT",
+  Doubtful: "D",
+  Questionable: "Q",
+}
+
 // ══ THE FULL-SEASON RATE — the second reading of the same number ═══════════════════════════════
 //
 // `EXPECTED_POINTS_LABEL` above is the availability-weighted season total: the chance a player

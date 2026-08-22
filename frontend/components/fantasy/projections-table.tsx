@@ -47,9 +47,11 @@ import {
   UncertaintyNote,
   UpgradeBanner,
   num,
+  AvailabilityFlag,
   numOrLock,
   int,
   teamLabel,
+  WeeklyDesignation,
 } from "@/components/fantasy/shared"
 import { Picker } from "@/components/ui/picker"
 
@@ -330,7 +332,19 @@ export function ProjectionsTable() {
                     </td>
                     <td className="px-3 py-2 text-gray-400">{teamLabel(p)}</td>
                     <td className="px-3 py-2 text-right text-gray-500">{p.bye ?? "—"}</td>
-                    <td className="px-3 py-2 text-right text-gray-400">{numOrLock(p.g, p.locked)}</td>
+                    {/* NF-C8 — the availability flag; see `AvailabilityFlag`. Unflagged, locked
+                        and games-less rows all render exactly as they did before. */}
+                    <td className="px-3 py-2 text-right text-gray-400">
+                      <AvailabilityFlag
+                        games={p.g}
+                        locked={p.locked}
+                        freshness={data?.freshness}
+                        underDefinedHeader
+                      />
+                      {/* NF-C9 — see `WeeklyDesignation`. Same component, same feed vintage
+                          and same disclaimer the Rankings board renders. */}
+                      <WeeklyDesignation status={p.gameStatus} freshness={data?.freshness} />
+                    </td>
                     {statCols.map((c) => (
                       <td key={String(c.key)} className="px-3 py-2 text-right text-gray-400">
                         {numOrLock(p[c.key] as number | null, p.locked, c.nd ?? 1)}

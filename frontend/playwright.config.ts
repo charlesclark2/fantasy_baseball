@@ -99,8 +99,14 @@ export default defineConfig({
     // else, and no desktop assertion can see a fixed-width table. `fantasy-my-teams-mobile.spec.ts`
     // is scoped to what only a small viewport can tell you; the correctness suite stays
     // desktop-only rather than doubling.
+    // ⭐ NF-C8 joins for the `expected-points-label` reason, verbatim: its tap test is VACUOUS on
+    // desktop. `InfoTip` opens on `pointerenter` when `pointerType === "mouse"`, so Chromium's
+    // `click()` opens the availability definition via HOVER before the click is dispatched — a
+    // Radix Tooltip, which no touch can ever open, would pass identically. The flag is a coloured
+    // number whose meaning lives ENTIRELY behind that tap, so a phone reader who cannot open it
+    // meets exactly the unexplained figure the flag exists to explain.
       testMatch:
-        /(signup-funnel|expected-points-label|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile)\.spec\.ts/,
+        /(signup-funnel|expected-points-label|availability-flag|weekly-designation|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile)\.spec\.ts/,
     },
   ],
 

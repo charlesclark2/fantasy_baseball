@@ -11,3 +11,9 @@
 
 # NF-W7e per-fold marginal-bank cache (regenerable; ~70 MB/fold)
 nf_w7e_bank_cache/
+
+# NF-INJ2 working directory: the per-arm 2026 boards plus the SERVED-artifact baseline copies the
+# reproduction pin is measured against. All regenerable by
+# `run_nf_inj2_rate_permutation.py` — and the served copies are snapshots of artifacts the board
+# build already owns, so committing them would fork a second vintage of the same board.
+nf_inj2_baseline/

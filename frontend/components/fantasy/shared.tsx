@@ -16,10 +16,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Picker } from "@/components/ui/picker"
 import type { FreshnessBlock, LeagueConfigMeta, Manifest, VeteranLevelPolicy } from "@/lib/draft-optimizer"
 import { freeSelection, isFreeConfig } from "@/lib/draft-optimizer"
-import { marketLeaningPositions } from "@/lib/fantasy"
-import type { ProjectedPlayer } from "@/lib/fantasy"
+import { availabilityTier, marketLeaningPositions } from "@/lib/fantasy"
+import type { AvailabilityTier, ProjectedPlayer } from "@/lib/fantasy"
 import { useTrackRecordManifest } from "@/lib/fantasy-track-record"
 import {
+  AVAILABILITY_DATA_AS_OF_PREFIX,
+  AVAILABILITY_DATA_AS_OF_UNKNOWN,
+  AVAILABILITY_FLAG_DEFINITION,
+  AVAILABILITY_FLAG_LABEL,
+  AVAILABILITY_FLAG_SUMMARY,
   DECISION_SUPPORT_LINE,
   DISAGREEMENT_HOOK,
   EXPECTED_POINTS_DEFINITION,
@@ -31,7 +36,15 @@ import {
   PAID_TIER_HEADING,
   PAID_TIER_SUMMARY,
   PROJECTED_GAMES_DEFINITION,
+  PROJECTED_GAMES_LABEL,
   TRACK_RECORD_TRUST_LINK,
+  WEEKLY_DESIGNATION_CODE,
+  WEEKLY_DESIGNATION_LABEL,
+  WEEKLY_DESIGNATION_NOT_A_DIAGNOSIS,
+  WEEKLY_DESIGNATION_NOT_MODELLED,
+  WEEKLY_DESIGNATION_SUMMARY,
+  WEEKLY_DESIGNATION_UNKNOWN,
+  WEEKLY_DESIGNATION_UNKNOWN_SUMMARY,
 } from "@/lib/fantasy-claim-copy"
 
 export const POS_COLORS: Record<string, string> = {
@@ -524,7 +537,34 @@ export const UNCERTAINTY_HELP: Record<string, string> = {
 /** A column header (or any label) with an explainer on hover/focus. These boards use several terms
  *  of art — VOR, replacement, ADP — that are unreadable at a glance to anyone who has not met them,
  *  so the definition travels with the column rather than living in a paragraph below the table. */
-export function InfoTip({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
+export function InfoTip({
+  label,
+  srLabel,
+  bare,
+  children,
+}: {
+  label: React.ReactNode
+  /** The accessible name, when `label` is a NODE rather than a string.
+   *
+   *  ⚠️ NF-C8. The fallback below ("What this means") is fine for an icon-only tip and useless the
+   *  moment the label carries meaning that only renders VISUALLY — the availability chip is a
+   *  coloured number, so a screen reader met a button called "What this means" sitting next to a
+   *  bare figure, i.e. exactly the unexplained number the tip exists to explain. Optional, so every
+   *  existing caller is unchanged. */
+  srLabel?: string
+  /** Render the trigger WITHOUT the dotted underline and the ⓘ glyph.
+   *
+   *  ⚠️ NF-C8, and it is a scoped exception rather than a style knob. The underline+icon is what
+   *  says "there is a definition behind this" for a plain text label, and removing it from one is
+   *  removing the only affordance it has. It is redundant ONLY where a labelled, defined column
+   *  header sits directly above the cell — the reader has already met the ⓘ once per column, and
+   *  repeating it on every row of a dense table that already scrolls sideways on a phone costs
+   *  width on every row to say the same thing again. The trigger stays a real focusable `<button>`
+   *  with its accessible name, so keyboard and screen-reader access are untouched; what goes is
+   *  chrome, not function. ⛔ Do not pass this where the label is the only thing on screen. */
+  bare?: boolean
+  children: React.ReactNode
+}) {
   // Built on POPOVER, not Tooltip, and that is deliberate: Radix's Tooltip closes on pointerdown by
   // design, so a tap can never open it — on a phone (no hover) the definition would be unreachable,
   // and these definitions are what make the boards readable. Popover is click/tap-driven (Radix
@@ -545,7 +585,13 @@ export function InfoTip({ label, children }: { label: React.ReactNode; children:
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={typeof label === "string" ? `${label} — what this means` : "What this means"}
+          aria-label={
+            typeof label === "string"
+              ? `${label} — what this means`
+              : srLabel
+                ? `${srLabel} — what this means`
+                : "What this means"
+          }
           onPointerEnter={(e) => {
             if (e.pointerType === "mouse") setOpen(true)
           }}
@@ -559,10 +605,14 @@ export function InfoTip({ label, children }: { label: React.ReactNode; children:
           // inheritance so this reads correctly both inside an uppercase header AND inline mid-sentence
           // (e.g. the Confidence badge on the player page), which is exactly what "inherit" should do.
           style={{ textTransform: "inherit" }}
-          className="inline-flex cursor-help items-center gap-1 underline decoration-dotted decoration-gray-600 underline-offset-4"
+          className={
+            bare
+              ? "inline-flex cursor-help items-center"
+              : "inline-flex cursor-help items-center gap-1 underline decoration-dotted decoration-gray-600 underline-offset-4"
+          }
         >
           {label}
-          <Info className="h-3 w-3 text-gray-600" aria-hidden />
+          {!bare && <Info className="h-3 w-3 text-gray-600" aria-hidden />}
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -607,6 +657,201 @@ export const GLOSSARY = {
   consistency:
     "How much this player's points PER GAME have swung from one season to the next — not how spiky he is week to week within a season, which is a different question this doesn't answer. Steady means his per-game rate has stayed in a fairly tight band across seasons; Boom-or-bust means it has swung widely — a monster season followed by a quiet one, or the reverse. Based on games he actually played, so a season lost to injury doesn't get counted as a bad rate — that's what the Games/missed column already covers. Needs at least 3 qualifying seasons to say anything meaningful; shown as a plain label, not a raw statistic, and it describes the past — it is not a projection of what he'll do next.",
 } as const
+
+// ══ NF-C8 — THE AVAILABILITY FLAG ══════════════════════════════════════════════════════════════
+//
+// Rendered IN THE PROJECTED-GAMES CELL, replacing the plain grey figure rather than adding a
+// column. That placement is the point: the number that explains the discount becomes the thing that
+// announces it, so a drafter scanning the board sees WHERE to look and WHY in one glance, and the
+// board gains a colour instead of a column (this table already scrolls sideways on a phone, and a
+// new column would be paid for on every row including the ~95% that carry no flag).
+//
+// ⛔ Every claim-bearing string here comes from `fantasy-claim-copy.ts`. None of it is typed inline
+// — the injury-forecast boundary is one careless verb wide (see that module's NF-C8 block), and a
+// sentence written in a component is a sentence no denylist has ever read.
+
+const AVAILABILITY_STYLE: Record<AvailabilityTier, string> = {
+  // Amber and rose, matching this file's existing attention palette (`CONF_STYLE`'s medium, and
+  // `FadeBadge`'s miss) rather than inventing a third. ⚠️ Colour is never the ONLY carrier: the
+  // chip is also a real `<button>` with an accessible name and a tappable definition, so a
+  // colour-blind or screen-reader user gets the same disclosure (WCAG 1.4.1).
+  limited: "border-amber-500/40 bg-amber-500/10 text-amber-400",
+  "heavily-limited": "border-rose-500/40 bg-rose-500/10 text-rose-400",
+}
+
+/** The freshness line inside the flag's definition, or `null` when the payload says nothing.
+ *
+ *  ⚠️ THE THREE STATES ARE NOT TWO (NF-FRESH2, and NF1.7 (a) for the third):
+ *    • no `freshness`, or no `input_vintage`, or the KEY ABSENT → `null`, render nothing. A payload
+ *      that predates the stamp must not be described, and during an NF-C0 deploy-skew window that
+ *      is every payload.
+ *    • the key present with a NULL value → "unknown". The exporter looked and could not resolve it;
+ *      dropping that silently would let a missing stamp read as covered.
+ *    • an unparseable string → also "unknown", via `shortStamp`, for the same reason.
+ */
+export function availabilityAsOfLine(freshness?: FreshnessBlock | null): string | null {
+  const vintage = freshness?.input_vintage
+  if (!vintage || !("sleeper_status_as_of" in vintage)) return null
+  const stamp = shortStamp(vintage.sleeper_status_as_of)
+  return `${AVAILABILITY_DATA_AS_OF_PREFIX} ${stamp ?? AVAILABILITY_DATA_AS_OF_UNKNOWN}`
+}
+
+/**
+ * The projected-games figure, flagged when the row's availability discount is material.
+ *
+ * ⭐ ONE COMPONENT FOR ALL THREE SURFACES (rankings, projections, player page) rather than three
+ * conditionals. The tiering rule, the palette, the wording and the accessible name are then a
+ * single edit — the E9.61 "two renderers of one field are two rule sets" lesson, applied before it
+ * becomes true rather than after.
+ *
+ * ⚠️ RENDERS THE PLAIN FIGURE WHEN THERE IS NO FLAG, and that is what makes it safe to use as a
+ * drop-in for the bare `numOrLock(p.g, p.locked)` it replaces: an unflagged row is byte-identical
+ * to what shipped before, a locked row still gets its lock chip, and an absent `g` still gets its
+ * em-dash. `availabilityTier` refuses locked and absent rows, so neither can reach the chip branch.
+ */
+export function AvailabilityFlag({
+  games,
+  locked,
+  freshness,
+  underDefinedHeader,
+}: {
+  games: number | null | undefined
+  locked?: boolean
+  /** From `manifest.freshness` (boards) or `projections.freshness` (the projections table and the
+   *  player page). Omit and the flag simply carries no as-of line. */
+  freshness?: FreshnessBlock | null
+  /** ⭐ THE TABLES PASS THIS; THE PLAYER PAGE DOES NOT, and the asymmetry is the whole point.
+   *
+   *  On Rankings and Projections the projected-games COLUMN HEADER is itself an `InfoTip` carrying
+   *  `PROJECTED_GAMES_LABEL` and its definition, directly above every cell — so the per-row ⓘ says
+   *  a second time what the header already said, once per row, in a table that already scrolls
+   *  sideways on a phone. The coloured chip is its own affordance there. The player page has no such
+   *  header, so the flag keeps the glyph and remains discoverable. (Operator call, 2026-08-22.) */
+  underDefinedHeader?: boolean
+}) {
+  const tier = availabilityTier(games, { locked })
+  if (tier == null) return <>{numOrLock(games, locked)}</>
+
+  const value = num(games)
+  const asOf = availabilityAsOfLine(freshness)
+  return (
+    <InfoTip
+      bare={underDefinedHeader}
+      srLabel={`${value} projected games — ${AVAILABILITY_FLAG_LABEL.toLowerCase()}`}
+      label={
+        // `whitespace-nowrap` for the same reason `FadeBadge` carries it: this chip lives in a
+        // right-aligned cell of a table that already scrolls, and a break would draw the border
+        // around a two-line figure.
+        <span
+          className={`inline-block whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${AVAILABILITY_STYLE[tier]}`}
+        >
+          {value}
+        </span>
+      }
+    >
+      <p className="font-semibold text-gray-200">
+        {AVAILABILITY_FLAG_SUMMARY.replace("{games}", value)}
+      </p>
+      <p className="mt-2">{AVAILABILITY_FLAG_DEFINITION}</p>
+      <p className="mt-2">
+        <span className="font-medium text-gray-400">{PROJECTED_GAMES_LABEL}</span> —{" "}
+        {GLOSSARY.projectedGames}
+      </p>
+      {asOf && <p className="mt-2 text-gray-500">{asOf}</p>}
+    </InfoTip>
+  )
+}
+
+// ══ NF-C9 — THE WEEKLY GAME-STATUS DESIGNATION ═════════════════════════════════════════════════
+//
+// Rendered BESIDE the projected-games figure, which is the only placement that makes the sentence
+// land: the whole disclosure is "this designation is NOT in that number", so it has to sit next to
+// the number it is not in. It is a SEPARATE component from `AvailabilityFlag` on purpose —
+//
+//   ⭐ THEY ARE INDEPENDENT FACTS, AND COUPLING THEM WOULD MISS THE MOTIVATING CASE. The flag fires
+//     on OUR projection (a materially low `g`); this fires on a THIRD PARTY'S filing. A player can
+//     carry either without the other, and the row that prompted NF-C8's finding is exactly that
+//     shape — Jordyn Tyson sat at 13.6 projected games, ABOVE `LIMITED_AVAILABILITY_GAMES`, so a
+//     disclosure hung off the flag would never have rendered for the player it was written for.
+//   ⭐ IT KEEPS NF-C8's SUITE HONEST. Folding a second concern into `AvailabilityFlag` would make
+//     that story's clauses fail for reasons unrelated to anything it defends (the NF-D17 rule about
+//     adding a new story's requirement to an older story's guard).
+//
+// ⛔ NEUTRAL, AND THE COLOUR IS ITSELF A CLAIM. Amber and rose on the availability flag mean "our
+// projection moved". This chip means the opposite — "a club filed this and our number did not
+// move" — so painting it in the attention palette would say, in the only language a scanning reader
+// actually reads, that we priced it. Slate is the honest colour here, and it is not a styling
+// preference. Colour is never the sole carrier either: the chip is a real `<button>` whose
+// accessible name spells the designation out in full (WCAG 1.4.1).
+
+const DESIGNATION_CHIP =
+  "inline-block whitespace-nowrap rounded border border-slate-500/40 bg-slate-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300"
+
+/**
+ * The un-modelled weekly designation, or nothing at all.
+ *
+ * ⚠️ THREE STATES, MATCHING WHAT THE EXPORTER CAN ACTUALLY ESTABLISH (NF-FRESH2's absent-vs-null
+ * rule; `export_draft_board_json.weekly_designation_map` is the other half of this contract):
+ *
+ *   • `status` ABSENT (`undefined`) → render NOTHING. Either the feed had nothing to disclose about
+ *     him — no designation, or a roster move the projection ALREADY prices — or the build could not
+ *     read the feed at all. In every one of those cases this channel has no true sentence to say,
+ *     and a board-wide "unknown" during a routine ingest gap would put a scary word on every row
+ *     (the hazard `AVAILABILITY_DATA_AS_OF_PREFIX`'s doc names). The board-level statement already
+ *     exists: the injury vintage under the availability flag.
+ *   • `status` NULL → render "unknown". The feed said something the build could not interpret.
+ *     Dropping it silently would let an unreadable value read as a clean bill of health, which is
+ *     the one direction that is never safe (NF1.7 (a)).
+ *   • `status` a STRING → render it. A designation this client does not know renders VERBATIM
+ *     rather than as "unknown" — a newer exporter serving a new label to an older client is an
+ *     NF-C0 deploy-skew window, and the honest rendering there is the word the server sent.
+ *
+ * ⛔ It never invents "Active"/"Healthy" for a player with no designation. Silence is the correct
+ * rendering of "we were told nothing", and a fabricated clean status is the one output here that
+ * would be worse than the gap this story exists to close.
+ */
+export function WeeklyDesignation({
+  status,
+  freshness,
+}: {
+  /** The served `gameStatus`. `undefined` (absent) and `null` are DIFFERENT — see above. */
+  status?: string | null
+  /** From `manifest.freshness` / `projections.freshness`. Supplies the same injury-feed vintage the
+   *  availability flag names, because it is the same feed and the same snapshot — Sleeper carries no
+   *  per-designation timestamp, so a per-row date would be a precision the source does not have. */
+  freshness?: FreshnessBlock | null
+}) {
+  if (status === undefined) return null
+
+  const known = status == null ? null : status
+  const label = known ?? WEEKLY_DESIGNATION_UNKNOWN
+  const glyph = known == null ? WEEKLY_DESIGNATION_UNKNOWN : (WEEKLY_DESIGNATION_CODE[known] ?? known)
+  const asOf = availabilityAsOfLine(freshness)
+
+  return (
+    <InfoTip
+      // `bare` because the bordered chip IS the affordance — the same argument `AvailabilityFlag`
+      // makes for its own chip, and it holds on every surface here rather than only where a defined
+      // column header sits above (this chip is never a bare run of text).
+      bare
+      srLabel={`${WEEKLY_DESIGNATION_LABEL.toLowerCase()}: ${label}`}
+      label={<span className={DESIGNATION_CHIP}>{glyph}</span>}
+    >
+      <p className="font-semibold text-gray-200">
+        {known == null
+          ? WEEKLY_DESIGNATION_UNKNOWN_SUMMARY
+          : WEEKLY_DESIGNATION_SUMMARY.replace("{status}", known)}
+      </p>
+      {/* ⭐⭐ THE LINE THE STORY IS FOR. It renders on BOTH branches — an unrecognised value is
+          exactly as un-modelled as a recognised one, and a reader who meets "unknown" with no
+          disclaimer would have no way to tell. */}
+      <p className="mt-2">{WEEKLY_DESIGNATION_NOT_MODELLED}</p>
+      <p className="mt-2">{WEEKLY_DESIGNATION_NOT_A_DIAGNOSIS}</p>
+      {asOf && <p className="mt-2 text-gray-500">{asOf}</p>}
+    </InfoTip>
+  )
+}
+
 
 /** The ADP-delta column header. Plain English on purpose — "Δ" reads as statistical notation and
  *  tells a drafter nothing about what the number means. */

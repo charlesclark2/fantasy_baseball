@@ -70,9 +70,11 @@ import {
   UpgradeBanner,
   downloadCsv,
   num,
+  AvailabilityFlag,
   numOrLock,
   int,
   teamLabel,
+  WeeklyDesignation,
 } from "@/components/fantasy/shared"
 import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
@@ -532,7 +534,28 @@ export function RankingsBoard() {
                           </td>
                           <td className="px-3 py-2 text-gray-400">{teamLabel(p)}</td>
                           <td className="px-3 py-2 text-right text-gray-500">{p.bye ?? "—"}</td>
-                          <td className="px-3 py-2 text-right text-gray-400">{numOrLock(p.g, p.locked)}</td>
+                          {/* NF-C8 — the availability flag. The games figure itself becomes the
+                              disclosure on a row whose projection carries a material availability
+                              discount: a colour a drafter catches while scanning, with the sentence
+                              (and the injury-data vintage) one tap behind it. An unflagged row, a
+                              locked row and a row with no `g` all render exactly as before — see
+                              `AvailabilityFlag`, which falls straight through to `numOrLock`. */}
+                          <td className="px-3 py-2 text-right text-gray-400">
+                            <AvailabilityFlag
+                              games={p.g}
+                              locked={p.locked}
+                              freshness={manifest?.freshness}
+                              underDefinedHeader
+                            />
+                            {/* NF-C9 — the weekly designation, which our games figure does NOT
+                                price in. Beside the number rather than in it, and neutral rather
+                                than amber, because the whole message is that this one did not move
+                                the projection. Absent on every row the feed says nothing about. */}
+                            <WeeklyDesignation
+                              status={p.gameStatus}
+                              freshness={manifest?.freshness}
+                            />
+                          </td>
                           <td className="px-3 py-2 text-right font-semibold text-gray-100">{numOrLock(p.pts, p.locked)}</td>
                           {/* ⚠️ `fullSeasonRate` returns null on a zero/absent games figure, and the
                               em-dash is the rendering of that null — never a blank cell (reads as a

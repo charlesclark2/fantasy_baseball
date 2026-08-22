@@ -94,27 +94,14 @@ VAL1_RECORDED = {"n_with_close": 4187, "ou_side_frac": 0.585006, "ou_always_over
 # ── cache vintage ───────────────────────────────────────────────────────────────────────────
 
 def ensure_pace_composites(df: pd.DataFrame, feat: list[str]) -> tuple[pd.DataFrame, list[str], dict]:
-    """Return the frame with the served pace composites present, plus a PROVENANCE record.
+    """Derive the served pace composites if the on-disk cache predates NCAAF-P2.1-S1-serve.
 
-    A cache assembled before NCAAF-P2.1-S1-serve carries the pace SOURCE columns but not the two
-    derived composites, so the served `strength_pace` contract cannot resolve on it. The derivation
-    is the SAME shared function `assemble_cache` calls, over columns already in the frame — it is a
-    deterministic local transform, NOT a data pull. It is done loudly and recorded, because a
-    silently-repaired cache is a silently-different population.
+    ⭐ Delegates to `bakeoff_ncaaf_game.ensure_pace_composites`, the single owner. This wrapper
+    shipped here first; NCAAF-VAL1's repair needed the same behaviour, so the rule was moved beside
+    `assemble_cache` (which owns the assemble-time derivation) rather than copied. Name, signature
+    and return contract are unchanged — this module's guards pin them.
     """
-    if all(c in df.columns for c in ("pace_sum", "pace_diff")):
-        return df, feat, {"pace_derived_in_session": False}
-    out = derive_pace_composites(df)                      # RAISES if the source columns are absent
-    feat2 = B.feature_columns(out)
-    B.assert_market_blind(feat2, context=f"{_STORY} pace-repaired cache")
-    return out, feat2, {
-        "pace_derived_in_session": True,
-        "n_features_before": len(feat), "n_features_after": len(feat2),
-        "pace_non_null": int(out["pace_sum"].notna().sum()), "n_rows": int(len(out)),
-        "note": ("the on-disk cache predates NCAAF-P2.1-S1-serve; the two served pace composites "
-                 "were derived in-session by the SAME shared `derive_pace_composites` the assemble "
-                 "path calls, from columns already present. No data pull."),
-    }
+    return B.ensure_pace_composites(df, feat, context=_STORY)
 
 
 def cache_provenance(df: pd.DataFrame, meta: dict) -> dict[str, Any]:

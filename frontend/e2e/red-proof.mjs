@@ -2495,6 +2495,144 @@ const CASES = [
     to: "  body:has([data-printable-surface]) footer.never-matches {",
     grep: "cheat sheet and nothing else",
   },
+
+  // ══ NF-C8 — the availability flag ═════════════════════════════════════════════════════════════
+  //
+  // ⭐ THESE TWO ARE HERE BECAUSE THE PYTHON SUITE STRUCTURALLY CANNOT SEE THEM.
+  // `test_nf_c8_availability_flag_copy.py` proves the copy is honest and that all three surfaces
+  // BIND the component — and every clause in it stays green for a classifier that flags EVERY row
+  // or NONE of them. A flag on every row is decoration, not disclosure; a flag on no row is
+  // indistinguishable from the defect the story exists to fix. Only a render can tell.
+  {
+    id: "availability-flags-everything",
+    shipped: "NF-C8 — pre-emptive: a classifier that stops discriminating",
+    detail:
+      "Flags every row. The badge renders, the copy is honest, the Python suite is green — and the " +
+      "colour now means nothing, because it is on all 858 rows.",
+    file: "lib/fantasy.ts",
+    from: '  if (games < LIMITED_AVAILABILITY_GAMES) return "limited"\n  return null',
+    to: '  return "limited"',
+    grep: "a materially-low games row is flagged and a full-season row is not",
+  },
+  {
+    id: "availability-threshold-off-by-one",
+    shipped: "NF-C8 — pre-emptive: the inclusive comparison",
+    // The threshold is a design quantity and `<` vs `<=` is the classic silent slip. It is not
+    // catchable by any source clause that pins the CONSTANT (14 is still 14), and on the captured
+    // fixture — whose minimum `g` is 14 — it would flag a large slice of the board.
+    detail: "`<=` instead of `<`, so a row AT a full-slate-minus-three flags when it should not.",
+    file: "lib/fantasy.ts",
+    from: "  if (games < LIMITED_AVAILABILITY_GAMES) return \"limited\"",
+    to: "  if (games <= LIMITED_AVAILABILITY_GAMES) return \"limited\"",
+    grep: "a materially-low games row is flagged and a full-season row is not",
+  },
+  {
+    id: "availability-leaks-a-locked-row",
+    shipped: "NF-C8 — pre-emptive: NF-LEAK1 on the games column",
+    // E9.56's redaction strips `g` and renders a subscribe chip. A classifier that ignores `locked`
+    // would flag whatever value reached it — disclosing the withheld figure's neighbourhood on
+    // exactly the rows the server withheld it from, beside a chip saying it is withheld.
+    detail: "Drops the `locked` guard, so a redacted row can still be flagged.",
+    file: "lib/fantasy.ts",
+    from: "  if (opts?.locked) return null",
+    to: "  if (false) return null",
+    grep: "a locked row is never flagged",
+  },
+  {
+    id: "availability-chip-shows-a-fixed-number",
+    shipped: "NF-C8 — pre-emptive: the badge that is not the player's own figure",
+    // The badge IS the games number, so a chip carrying a constant renders perfectly and is wrong
+    // on every row but one. `tsc` sees a string; the Python suite sees a component that renders.
+    detail: "Renders a fixed games figure in the chip instead of the served per-player value.",
+    file: "components/fantasy/shared.tsx",
+    from: "  const value = num(games)",
+    to: '  const value = "9.9"',
+    grep: "a materially-low games row is flagged and a full-season row is not",
+  },
+
+  // ── NF-C9 — the weekly game-status designation ────────────────────────────────────────────────
+  //
+  // ⭐ SAME REASON AS THE FOUR ABOVE: `test_nf_c9_designation_disclosure.py` proves the copy is
+  // honest and that all three surfaces BIND the component, and every clause in it stays green for a
+  // component that renders on EVERY row, on NO row, or with the wrong value in the chip. This field
+  // is a factual claim about a named person's game status, so "renders on every row" is not merely
+  // decoration here — it asserts a designation for ~93% of players who carry none.
+  {
+    id: "designation-renders-on-every-row",
+    shipped: "NF-C9 — pre-emptive: the disclosure that stops discriminating",
+    detail:
+      "Renders the chip whatever the payload says, so every undesignated player is shown as " +
+      "carrying a game-status designation he does not have.",
+    file: "components/fantasy/shared.tsx",
+    from: "  if (status === undefined) return null",
+    to: "  if (false) return null",
+    grep: "each of the three states renders as itself",
+  },
+  {
+    id: "designation-collapses-absent-into-unknown",
+    shipped: "NF-C9 — pre-emptive: the NF-FRESH2 collapse, in the direction that shouts",
+    // ABSENT means "nothing to disclose" — the normal state for ~93% of players. NULL means "the
+    // feed said something we could not read". Treating them as one thing renders "unknown" under
+    // almost every player on every board, which is the scary-word-everywhere failure the NF-C8
+    // freshness note names, at board scale. `tsc` cannot see it: both are `undefined | null`.
+    detail: "`status == null` instead of `status === undefined`, so an absent key says 'unknown'.",
+    file: "components/fantasy/shared.tsx",
+    from: "  if (status === undefined) return null",
+    to: "  if (status === undefined || status === null) return null",
+    grep: "each of the three states renders as itself",
+  },
+  {
+    id: "designation-chip-shows-a-fixed-value",
+    shipped: "NF-C9 — pre-emptive: the chip that is not this player's own designation",
+    // The chip IS the designation, so a constant renders perfectly and is a false statement about
+    // a named person on every row but one. The Python suite sees a component that renders.
+    detail: "Renders a fixed designation instead of the served per-player value.",
+    file: "components/fantasy/shared.tsx",
+    from: "  const glyph = known == null ? WEEKLY_DESIGNATION_UNKNOWN : (WEEKLY_DESIGNATION_CODE[known] ?? known)",
+    to: '  const glyph = "Q"',
+    grep: "each of the three states renders as itself",
+  },
+  {
+    id: "designation-unknown-loses-the-disclaimer",
+    shipped: "NF-C9 — pre-emptive: the branch a reader has least to go on",
+    // "unknown" with no statement about whether we priced it reads MORE like a model input than a
+    // designation does. A component that hangs the disclaimer off the recognised branch looks
+    // complete, and the Python clause that pins it had to be rewritten twice before it could see
+    // this (see that suite's note on the preceding-character assertion).
+    detail: "Hides the un-modelled disclaimer on the unreadable-value branch.",
+    file: "components/fantasy/shared.tsx",
+    from: '      <p className="mt-2">{WEEKLY_DESIGNATION_NOT_MODELLED}</p>',
+    to: '      {known != null && <p className="mt-2">{WEEKLY_DESIGNATION_NOT_MODELLED}</p>}',
+    grep: "still carries the disclaimer",
+  },
+  {
+    id: "designation-nested-in-the-availability-branch",
+    shipped: "NF-C9 — pre-emptive: the defect that would have skipped the motivating player",
+    // ⭐⭐ THE ONE THAT MATTERS MOST. The designation and the availability flag are INDEPENDENT:
+    // Jordyn Tyson, the row that produced NF-C8's finding, sat at 13.6 projected games — ABOVE the
+    // flag threshold — so he carries a designation and NO flag. Nested inside the player page's
+    // availability-tier branch, the disclosure renders only where the projection is ALREADY
+    // discounted: i.e. never for the player it was written for. Every source clause about binding
+    // and copy stays green.
+    detail: "Moves the player page's designation inside its availability-tier branch.",
+    file: "components/fantasy/player-page.tsx",
+    from: "                    <span className=\"ml-1.5 normal-case\">\n" +
+      "                      <WeeklyDesignation\n" +
+      "                        status={proj.gameStatus}\n" +
+      "                        freshness={projPayload?.freshness}\n" +
+      "                      />\n" +
+      "                    </span>",
+    to: "                    {availabilityTier(proj.g) != null && (\n" +
+      "                      <span className=\"ml-1.5 normal-case\">\n" +
+      "                        <WeeklyDesignation\n" +
+      "                          status={proj.gameStatus}\n" +
+      "                          freshness={projPayload?.freshness}\n" +
+      "                        />\n" +
+      "                      </span>\n" +
+      "                    )}",
+    grep: "the player page discloses the same designation",
+  },
+
 ]
 
 /**
@@ -2557,7 +2695,7 @@ const CASES = [
 // `-- auction-quotes`) for the same reason every entry above records: a production build per case
 // does not belong in a session. So 137/131/6 → 142/136/6, and the next full run CONFIRMS it.
 // ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 157, red: 151, notObservable: 6 }
+const RECORDED_BOARD = { total: 162, red: 156, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

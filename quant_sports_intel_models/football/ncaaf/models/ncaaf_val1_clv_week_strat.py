@@ -66,8 +66,36 @@ SECONDARY = {"label": "p1_4_v1", "mc": "ridge", "contract": "strength_only",
              "form": "strength_posterior", "binding": False}
 
 #: §2a — the reproduction pin against the recorded S1-serve vs-close CLV.
-PIN = {"ats_n": 4114, "ou_n": 4135, "ats_hit": 0.509, "ou_hit": 0.513,
-       "ats_placebo": 0.501, "tol": 0.010}
+#:
+#: ⭐ RE-ANCHORED by NCAAF-CLV-repair onto the REPAIRED parent. The previous targets
+#: (`ats_n` 4114, `ou_n` 4135, `ats_hit` 0.509, `ou_hit` 0.513, `ats_placebo` 0.501) were produced
+#: by the row-misaligned `_clv_eval` NCAAF-VAL2 §2 measured — i.e. the pin pinned a number a defect
+#: made. Pinning a repaired child to a defective parent is not a reproduction check, so the targets
+#: now come from S1-serve's `--stage finalize --contract strength_pace` re-run on the repaired path.
+#: The CLAUSE is unchanged: strict equality on the population, `tol` on every rate.
+#:
+#: ⚠️ These targets are VINTAGE-BOUND (`n_with_close`), and they are supposed to be. A re-assemble
+#: moves the close population by a handful of games, and when it does this pin HALTs — correctly.
+#: The remedy is to re-run the PARENT (S1-serve) on the new cache and re-anchor here from ITS
+#: output; ⛔ never from VAL1's own, which would make the pin a restatement of the thing it checks.
+#:
+#: ⭐ RE-ANCHORED A SECOND TIME by NCAAF-VAL3 (2026-08-22), and this is that remedy executed rather
+#: than described: VAL3's first step is a `--assemble` onto the CURRENT vintage (the PM decision
+#: recorded in `ncaaf_clv_row_alignment_repair.md` §6a-2 — the repair's levels stay 2026-07-22 and
+#: VAL3 re-quotes on current data), which moved the close population 4,182 → 4,187 and HALTed this
+#: pin on `ats_n`/`ou_n`. The HALT was the instruction. Targets below come from the PARENT's
+#: eval-only re-run on the new cache (`--stage finalize --contract strength_pace --form
+#: strength_posterior --calib-out …`), which writes NO served artifact and does not rewrite
+#: S1-serve's own decided record.
+PIN = {"ats_n": 4115, "ou_n": 4136,
+       "ats_hit": 0.4994, "ou_hit": 0.5152,
+       "ats_placebo": 0.4987, "tol": 0.010,
+       # provenance of the targets above — which parent run, on which cache vintage
+       "source": ("ncaaf_s1_serve_calibration (repaired _clv_eval), re-run eval-only by "
+                  "NCAAF-VAL3 on the 2026-08-22 re-assembly → "
+                  "ablation_results/ncaaf_val3_s1_serve_reanchor.json"),
+       "source_n_with_close": 4187,
+       "source_cache_assembled_at": "2026-08-22"}
 
 MARKETS = ("ats", "ou")
 
@@ -206,9 +234,20 @@ def score_config(df: pd.DataFrame, feat: list[str], cfg: dict, *, seed: int, n_d
     B._early_season_validation(oos, df, dists, obs, rng)            # rng-stream parity (see above)
 
     close = df[["game_id", "close_home_spread", "close_total", "has_close"]].drop_duplicates("game_id")
-    m = oos.merge(close, on="game_id", how="left")
-    m = m[m["has_close"] == True].reset_index(drop=True)             # noqa: E712
-    idx = m.index.to_numpy()
+    merged = oos.merge(close, on="game_id", how="left")
+    # ⭐ `merged` row i must BE `dists[...][i]`; a duplicated close key would silently misalign the
+    # positional read below, so the correspondence is asserted rather than assumed.
+    if len(merged) != len(oos):
+        raise SystemExit(f"[{_STORY}] the close join changed the row count ({len(oos):,} → "
+                         f"{len(merged):,}); a duplicated close key would silently misalign every "
+                         "positional read into the draw arrays.")
+    mask = (merged["has_close"] == True).to_numpy()                  # noqa: E712
+    # ⭐ TRUE positions into the (n_games, n_draws) draw arrays, taken BEFORE the reset. `m.index`
+    # after `reset_index(drop=True)` is `0..n−1` — the FIRST n rows of the draw array, not the rows
+    # carrying a close (NCAAF-VAL2 §2: 100 % misindexed; sign agreement 0.697 vs the arithmetic
+    # 0.980). This line is that repair; the §2a alignment pin below holds it in place.
+    idx = np.flatnonzero(mask)
+    m = merged[mask].reset_index(drop=True)
 
     line = -m["close_home_spread"].to_numpy()                        # margin the home side must beat
     y_m, y_t = m["y_margin"].to_numpy(), m["y_total"].to_numpy()
@@ -510,7 +549,16 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"=== {_STORY} — early-season CLV stratification (QUERY-ONLY, best_alpha=0) ===")
     df, feat, meta = B.load_cache()
+    # A pre-S1-serve cache carries the pace SOURCE columns but not the two derived composites, so
+    # the SERVED `strength_pace` primary cannot resolve on it. Derived by the SAME shared function
+    # the assemble path calls — a deterministic local transform, not a data pull — and said out
+    # loud. NO-OP on a post-S1-serve cache.
+    df, feat, pace_prov = B.ensure_pace_composites(df, feat, context=_STORY)
     print(f"  cache: {len(df):,} games, {int(df['has_close'].sum()):,} with a leakage-safe close")
+    if pace_prov.get("pace_derived_in_session"):
+        print(f"  ⚠️ pace composites derived in-session ({pace_prov['n_features_before']}→"
+              f"{pace_prov['n_features_after']} features, {pace_prov['pace_non_null']:,}/"
+              f"{pace_prov['n_rows']:,} non-null) — the on-disk cache predates S1-serve.")
 
     print(f"\n  scoring PRIMARY ({PRIMARY['mc']}/{PRIMARY['contract']}/{PRIMARY['form']}, "
           f"seed={args.seed}, draws={args.n_draws:,}) — the P1.4 finalize path verbatim …")

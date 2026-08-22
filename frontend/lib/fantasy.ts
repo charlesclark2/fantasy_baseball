@@ -25,6 +25,16 @@ export interface ProjectedPlayer {
   conf: string | null
   /** Projected games played. */
   g: number | null
+  /** NF-C9 — the WEEKLY GAME-STATUS DESIGNATION ("Out" / "Doubtful" / "Questionable"), served for
+   *  DISCLOSURE ONLY. Our projected-games figure does NOT price it in: the availability discount
+   *  moves on a formal roster move (IR/PUP/NFI/suspension) and on nothing else, so this channel
+   *  applies no discount at all — which is exactly why it has to be said out loud beside `g`.
+   *
+   *  ⚠️ ABSENT ≠ NULL, and both are real (`WeeklyDesignation` renders the difference): the key is
+   *  ABSENT when there is nothing to disclose (no designation, or a roster move already priced, or
+   *  no feed) and NULL when the feed carries a value the build could not interpret → "unknown".
+   *  ⛔ Never an input to ordering, VOR or the optimizer. */
+  gameStatus?: string | null
   fpStd: number | null
   fpHalf: number | null
   fpPpr: number | null
@@ -342,6 +352,104 @@ export function fullSeasonRate(
   if (games <= 0) return null
   if (games < MIN_GAMES_FOR_FULL_SEASON_RATE) return null
   return (pts * FULL_SEASON_GAMES) / games
+}
+
+// ══ NF-C8 — THE AVAILABILITY FLAG ═══════════════════════════════════════════════════════════════
+//
+// THE PROBLEM. The projection already multiplies the chance a player misses games through his point
+// total, and `g` is served beside it — so the discount is PRESENT on every board and INVISIBLE on
+// all of them. A drafter scanning the rankings meets a player two rounds lower than he expected and
+// a number he cannot account for; the games column that explains it is four columns right, in the
+// same weight and colour as every other figure on the row. The remedy is to make the discount
+// legible AT A GLANCE on the rows where it is doing real work.
+//
+// THE BOUNDARY, STATED PRECISELY, BECAUSE THE DISHONEST VERSION IS ONE WORD AWAY. It is a fact
+// about OUR PROJECTION — "we project this player for fewer than a full slate of games" — and it is
+// NOT an injury forecast. We are not saying he is hurt, will get hurt, or will miss particular
+// weeks. `g` is an EXPECTATION across everything that could happen to him (which is why it is
+// fractional), and a surface that rendered it as "expected to miss N games" would be publishing a
+// medical prediction we have never made and could not defend. See `AVAILABILITY_FLAG_DEFINITION`
+// in `fantasy-claim-copy.ts`, which is where that boundary is written down and screened.
+//
+// AND IT IS A DISPLAY CLASSIFIER, FULL STOP. Like `fullSeasonRate` above, it must never reach VOR,
+// the board ordering, tiering or the optimizer — a threshold that moved a player's RANK would be a
+// model decision subject to the whole-board placement gate (NF-D18/NF-D20), not a UI change.
+
+/** Below this many expected games, a row carries the availability flag.
+ *
+ *  ⚠️⚠️ THIS WAS 14 AND 14 WAS WRONG — the correction is recorded here rather than quietly applied,
+ *  because the mistake is instructive and the temptation to re-make it is permanent.
+ *
+ *  The original derivation read "three games below a full `FULL_SEASON_GAMES` slate". The arithmetic
+ *  was fine; the ANCHOR was not. **No skill player is projected anywhere near 17** — that is the
+ *  schedule, and the only rows that reach it are team defences. Measured on the served 2026 board,
+ *  the median DRAFTABLE skill player (top 180, the roster-fill depth of a 12-team league) sits at
+ *  **14.4 expected games**, and the running-back median is **exactly 14.0**. So a 14-game threshold
+ *  sat just below the median of the very population it was meant to mark as exceptional, and flagged
+ *  **37.6% of draftable skill players** — 45.7% of running backs against 19.0% of tight ends, i.e.
+ *  the flag was substantially reporting "this is a running back", which is a position norm and not
+ *  information. A colour on two rows in five is a background, not a signal.
+ *
+ *  THE CORRECTED RULE, stated as a rule so the next reader can check it rather than trust it:
+ *  measure the discount against the board's own typical draftable skill player, NOT against the
+ *  schedule. "Limited" is roughly **two games below that typical player** — 14.4 − 2 ≈ 12.4, taken
+ *  as 12.5 — which lands at 15.4% of draftable skill players and flattens the position spread
+ *  (RB 25.7%, QB 18.8%, WR 11.1%, TE 4.8%).
+ *
+ *  ⛔ AND THE E2.1-r LINE, which this change walks right up to: re-deriving a threshold FROM A
+ *  MEASURED PROPERTY OF THE POPULATION (its median) against a rule fixed in advance is legitimate;
+ *  re-picking it so that a PARTICULAR PLAYER flags or stops flagging is the inversion, and it would
+ *  be very easy here because the flag is visible and opinions about individual players are cheap.
+ *  The roster this produces was sanity-checked AFTER the number was derived and the number was not
+ *  moved as a result. Anyone changing it again owes the same order of operations. */
+export const LIMITED_AVAILABILITY_GAMES = 12.5
+
+/** The stronger tier — fewer than this many expected games. UNCHANGED at 10 by the same corrected
+ *  rule: roughly four and a half games below the typical draftable skill player, which is a genuinely
+ *  unusual projection rather than a soft one. It fires on 0.9% of the top 180 and 3.4% of the top 250
+ *  — deliberately rare, because a second colour that is not rare is a second background.
+ *
+ *  Two tiers rather than one because "he misses a couple of games" and "we project him for well under
+ *  half a season" are different facts for a drafter, and a single flag renders them identically. */
+export const HEAVILY_LIMITED_AVAILABILITY_GAMES = 10
+
+export type AvailabilityTier = "limited" | "heavily-limited"
+
+/**
+ * Which availability tier a row is in, or `null` when it carries no flag.
+ *
+ * EVERY `null` BRANCH HERE IS A REAL PAYLOAD STATE, and returning `null` for all of them is a
+ * deliberate choice rather than defensive padding:
+ *
+ *   - `locked` — E9.56's redaction strips `g` from the row entirely, and `numOrLock` renders a
+ *     "subscribe" chip in its place. A flag beside that chip would be worse than useless: it would
+ *     DISCLOSE the withheld value's neighbourhood on exactly the rows the server withheld it from
+ *     (NF-LEAK1), while claiming to describe a number the reader cannot see.
+ *   - `g` absent or `null` — a K/DST row, a gap-filled row, or a payload from before `g` shipped.
+ *     There is no honest flag for "we have no expected-games figure": unlike a freshness stamp
+ *     (where NF-FRESH2's absent-vs-null distinction is load-bearing because "we looked and could
+ *     not tell" is itself a fact worth rendering), an ABSENT projection supports no availability
+ *     claim in either direction. Render nothing.
+ *   - a NEGATIVE or non-finite `g` cannot occur today and would be flagged as "heavily limited" by
+ *     a naive `<` chain — i.e. a corrupt field would produce a confident user-facing claim. Refused.
+ *
+ * `g === 0` is NOT refused. It is a real served state (the free-board fixture plants one), it is
+ * genuinely below a full slate, and it is the single most important row to flag — the reader whose
+ * projection is zero is the one owed an explanation. Note this is where the flag and
+ * `fullSeasonRate` deliberately part company: that helper refuses below
+ * `MIN_GAMES_FOR_FULL_SEASON_RATE` because DIVIDING by a tiny denominator amplifies noise into a
+ * meaningless number, which is an arithmetic hazard this classifier does not have.
+ */
+export function availabilityTier(
+  games: number | null | undefined,
+  opts?: { locked?: boolean },
+): AvailabilityTier | null {
+  if (opts?.locked) return null
+  if (typeof games !== "number" || !Number.isFinite(games)) return null
+  if (games < 0) return null
+  if (games < HEAVILY_LIMITED_AVAILABILITY_GAMES) return "heavily-limited"
+  if (games < LIMITED_AVAILABILITY_GAMES) return "limited"
+  return null
 }
 
 /** NF1.5b — the positions whose ordering INCORPORATES market consensus, from a `market_lean` map.

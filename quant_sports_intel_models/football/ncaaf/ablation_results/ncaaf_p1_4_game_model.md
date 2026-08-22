@@ -89,14 +89,23 @@ posterior-predictive is the honest ship — it holds the early-season floor the 
 misses at no aggregate cost, and early-season is exactly where the NCAAF book is softest. Finalize
 the reference with `--form strength_posterior`.
 
-> ⚠️ **The "book is softest early" clause above is SUPERSEDED (NCAAF-VAL1, 2026-08-20) — the sentence
-> is retained VERBATIM because this is a decided story's record, not because the clause stands.**
-> VAL1 stratified this story's own vs-close CLV read by pre-registered `season_order_week` bucket and
-> found weeks 1–3 the WORST bucket in BOTH markets (ATS 0.4936 / O/U 0.4950 against a 0.5238
-> breakeven), with the family-adjusted interval EXCLUDING a decision-changing edge. **The
-> recommendation itself is unaffected** — it rested on the calibration half (0.785 → 0.804 early
-> coverage), which VAL1 does not touch and which remains the correct reason to serve
-> `strength_posterior`. See `ncaaf_val1_clv_week_strat.md`.
+> ⚠️ **The "book is softest early" clause above is SUPERSEDED (NCAAF-VAL1; figures corrected
+> post-CLV-alignment-repair 2026-08-22) — the sentence is retained VERBATIM because this is a decided
+> story's record, not because the clause stands.** VAL1 stratified this story's own vs-close CLV read
+> by pre-registered `season_order_week` bucket and found **no early-season edge: 0 of 6 cells clear
+> the 0.5238 breakeven**, so the premise is **UNSUPPORTED**.
+>
+> ⚠️ **The figures originally cited here (ATS 0.4936 / O/U 0.4950, "the WORST bucket in BOTH markets",
+> interval EXCLUDES a decision-changing edge) came through a row-MISALIGNED read** — `_clv_eval`
+> indexed the draw array with a `reset_index(drop=True)` index (NCAAF-VAL2 §2). Aligned values:
+> **ATS wk1-3 0.5193** (the *best* ATS bucket, not the worst) **/ O/U wk1-3 0.4986**, still both below
+> breakeven. And the "interval excludes a decision-changing edge" half now holds for **O/U only**: the
+> ATS wk1-3 upper bound moved 0.5344 → **0.5601**, above the meaningful 0.5476, so that cell is
+> `POWER_LIMITED`. See [`ncaaf_clv_row_alignment_repair.md`](./ncaaf_clv_row_alignment_repair.md).
+>
+> **The recommendation itself is unaffected either way** — it rested on the calibration half
+> (0.785 → 0.804 early coverage), which neither VAL1 nor the repair touches and which remains the
+> correct reason to serve `strength_posterior`. See `ncaaf_val1_clv_week_strat.md`.
 
 ## Early-season / cold-start validation (PM follow-up AC, 2026-07-22)
 

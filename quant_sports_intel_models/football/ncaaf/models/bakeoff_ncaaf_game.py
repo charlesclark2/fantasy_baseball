@@ -422,6 +422,38 @@ def assemble_cache(args) -> Path:
     return _CACHE_PATH
 
 
+def ensure_pace_composites(df: pd.DataFrame, feat: list[str], *,
+                           context: str = _STORY) -> tuple[pd.DataFrame, list[str], dict]:
+    """Return the frame with the served pace composites present, plus a PROVENANCE record.
+
+    A cache assembled before NCAAF-P2.1-S1-serve carries the pace SOURCE columns but not the two
+    derived composites, so the served `strength_pace` contract cannot resolve on it. The derivation
+    is the SAME shared `derive_pace_composites` `assemble_cache` calls, over columns already in the
+    frame — a deterministic local transform, NOT a data pull. It is done loudly and recorded,
+    because a silently-repaired cache is a silently-different population.
+
+    ⭐ ONE OWNER. NCAAF-VAL2 shipped this wrapper first and NCAAF-VAL1 needs the same behaviour to
+    score the served config on a pre-S1-serve cache; two copies of "derive it if absent" around one
+    shared rule is the repo's one-logical-thing-many-owners shape (INC-30/36/38), so it lives here —
+    beside `assemble_cache`, which owns the assemble-time derivation — and both callers delegate.
+    On a cache that already carries the composites this is a no-op, so a re-assembled cache behaves
+    byte-identically to a run that never called it.
+    """
+    if all(c in df.columns for c in ("pace_sum", "pace_diff")):
+        return df, feat, {"pace_derived_in_session": False}
+    out = derive_pace_composites(df)                      # RAISES if the source columns are absent
+    feat2 = feature_columns(out)
+    assert_market_blind(feat2, context=f"{context} pace-repaired cache")
+    return out, feat2, {
+        "pace_derived_in_session": True,
+        "n_features_before": len(feat), "n_features_after": len(feat2),
+        "pace_non_null": int(out["pace_sum"].notna().sum()), "n_rows": int(len(out)),
+        "note": ("the on-disk cache predates NCAAF-P2.1-S1-serve; the two served pace composites "
+                 "were derived in-session by the SAME shared `derive_pace_composites` the assemble "
+                 "path calls, from columns already present. No data pull."),
+    }
+
+
 def load_cache() -> tuple[pd.DataFrame, list[str], dict]:
     if not _CACHE_PATH.exists():
         raise SystemExit(f"[{_STORY}] no cache at {_CACHE_PATH}. Run `--assemble` first.")
@@ -1182,13 +1214,24 @@ def _clv_eval(oos: pd.DataFrame, df: pd.DataFrame, dists: dict, rng) -> dict:
     a PLACEBO (a random side) to show the signal is not a mirage. Honest, deflation-aware — a hit
     rate near 50% is the expected null (best_alpha = 0)."""
     close = df[["game_id", "close_home_spread", "close_total", "has_close"]].drop_duplicates("game_id")
-    m = oos.merge(close, on="game_id", how="left")
-    m = m[m["has_close"] == True].reset_index(drop=True)  # noqa: E712
+    merged = oos.merge(close, on="game_id", how="left")
+    # ⭐ The positional read below is only sound while `merged` row i IS `dists[...][i]`. A duplicated
+    # close key would silently re-index every draw read, so the correspondence is asserted, not assumed.
+    if len(merged) != len(oos):
+        raise SystemExit(f"[{_STORY}] the close join changed the row count ({len(oos):,} → "
+                         f"{len(merged):,}); a duplicated close key would silently misalign every "
+                         "positional read into the draw arrays.")
+    mask = (merged["has_close"] == True).to_numpy()  # noqa: E712
+    # ⭐ TRUE positions into the (n_games, n_draws) draw arrays, taken BEFORE any reset. Reading
+    # `m.index` AFTER `reset_index(drop=True)` yields `0..n−1` — the FIRST n rows of the draw array,
+    # not the rows that carry a close. That defect (NCAAF-VAL2 §2: 100 % of rows misindexed, model
+    # side agreeing with `sign(μ − close)` on 0.697 instead of 0.980) is what this line repairs.
+    idx = np.flatnonzero(mask)
+    m = merged[mask].reset_index(drop=True)
     out: dict[str, Any] = {"n_with_close": int(len(m))}
     if len(m) < 100:
         out["note"] = "too few closes for a stable vs-market read"
         return out
-    idx = m.index.to_numpy()
     p_cover = (dists["margin"][idx] > (-m["close_home_spread"].to_numpy())[:, None]).mean(axis=1)
     ats_win = np.where(p_cover >= 0.5,
                        m["y_margin"].to_numpy() > -m["close_home_spread"].to_numpy(),
@@ -1285,6 +1328,15 @@ def fit_served_mean(df: pd.DataFrame, feat_cols: list[str], mc: str, contract: s
 
 def stage_finalize(args) -> None:
     df, feat, meta = load_cache()
+    # A cache assembled before NCAAF-P2.1-S1-serve carries the pace SOURCE columns but not the two
+    # derived composites, so `strength_pace` cannot resolve on it. Derive them with the SAME shared
+    # function the assemble path calls — a deterministic local transform, not a data pull — and say
+    # so. On a post-S1-serve cache this is a NO-OP, so a re-assembled cache behaves identically.
+    df, feat, _pace_prov = ensure_pace_composites(df, feat)
+    if _pace_prov.get("pace_derived_in_session"):
+        print(f"  ⚠️ pace composites derived in-session ({_pace_prov['n_features_before']}→"
+              f"{_pace_prov['n_features_after']} features, {_pace_prov['pace_non_null']:,}/"
+              f"{_pace_prov['n_rows']:,} non-null) — the on-disk cache predates S1-serve.")
     mc = args.model_class or _REF_LEARNER
     contract = args.contract or _REF_CONTRACT
     fm = args.form or _REF_FORM
@@ -1424,6 +1476,18 @@ def stage_finalize(args) -> None:
                  "served_mean": {"n_columns": len(mean_params.columns),
                                  "n_train_rows": mean_params.n_train_rows,
                                  "alpha": mean_params.alpha, **pace_report}}
+    if getattr(args, "calib_out", None):
+        # ⭐ EVAL-ONLY OUTPUT. `stage_finalize` otherwise writes to FIXED paths — the served
+        # dispersion + mean artifacts and one of two calibration records. Re-running it purely to
+        # re-measure `_clv_eval` (e.g. after the NCAAF-VAL2 §2 misalignment repair) would therefore
+        # refit and OVERWRITE the SERVED artifacts as a side effect, on whatever cache vintage
+        # happens to be on disk. This writes the calibration doc to an explicit path and writes
+        # NOTHING else — the NF-W2c-CBS hardcoded-output-path hazard this file already warns about.
+        out = Path(args.calib_out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(calib_doc, indent=2, default=float))
+        print(f"\n[--calib-out] calibration doc → {out}  (no served artifact written)")
+        return
     if args.no_save:
         print("\n[--no-save] skipping artifact + calibration write.")
         return
@@ -1521,6 +1585,9 @@ def main() -> None:
     ap.add_argument("--max-folds", type=int, default=None)
     ap.add_argument("--n-jobs", type=int, default=None)
     ap.add_argument("--no-save", action="store_true")
+    ap.add_argument("--calib-out", default=None,
+                    help="finalize: write the calibration doc HERE and write no served artifact "
+                         "(an eval-only re-run; see the note at the write site).")
     ap.add_argument("--seed", type=int, default=_SEED)
     args = ap.parse_args()
 

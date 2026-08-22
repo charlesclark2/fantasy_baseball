@@ -81,6 +81,19 @@ every recorded model-vs-close hit rate in **P1.4, S1-serve and VAL1**. It is car
 in §8, and a **tripwire guard** (`test_the_upstream_clv_misalignment_is_still_present_TRIPWIRE`) goes
 RED the moment someone fixes it, with the required re-run list in its docstring.
 
+> ✅ **DISCHARGED (2026-08-21) by NCAAF-CLV-repair** —
+> [`ncaaf_clv_row_alignment_repair.md`](./ncaaf_clv_row_alignment_repair.md). Both sites repaired
+> with `np.flatnonzero(mask)` taken before the reset; P1.4, S1-serve and VAL1 re-run; VAL1's verdict
+> re-read. **`ALL_BUCKETS_NULL` survives and is now earned; the `side_tilt` ordering reverses exactly
+> as predicted above, and VAL1's headline "`wk1-3` is the worst bucket in both markets" is refuted**
+> (repaired, `wk1-3` is the best ATS bucket). This section's impact table is confirmed: the repaired
+> read reproduces `repaired_read` to four decimals from three independent code paths.
+>
+> ⭐ One thing this section could not have anticipated, and it sharpens the lesson: **the ATS leg
+> lands on exactly 2,039/4,110 under BOTH reads while 45.8 % of the underlying sides flip.** The
+> headline hit rate is therefore not merely a weak detector of this defect — on that leg it is a
+> null detector. The two-sided sign-agreement control above is what does the work.
+
 **This study is immune to that defect by construction**, and the immunity is guarded: it joins on
 `game_id` and reads each row's own `mu_total`; an AST guard fails the build if any positional read
 into a draw array appears outside the alignment control.
@@ -272,6 +285,17 @@ network failure there therefore replaces the only working cache on the machine w
 and VAL2/VAL1/P1.4's vs-market legs all stop running until a successful re-assemble. Back the cache
 up first (`cp betting_ml/data/cache/ncaaf_p1_4_game_matrix.{parquet,meta.json} /tmp/`).
 
+> ✅ **DISCHARGED (2026-08-22) by NCAAF-VAL3's step 0.** `--assemble --matrix-source s3` →
+> **4,187 closes** (the population VAL1/S1-serve recorded), and this module re-run on it. **Every
+> verdict and every constraint below reproduces:** `HAND_TO_VAL3_SCOPED` on `wk1-3`; `wk1-3` μ−y
+> +2.322 → **+2.311** [+0.89, +3.74], 6/6 seasons; the matched contrast +2.118 → **+2.101**
+> [+0.39, +3.81], t +3.16; `wk4-6` **−0.626** (still negative); the pooled CI still spans zero; the
+> by-week decay +4.83/+2.88/+0.28 → **+4.77/+2.88/+0.28**. ⭐ The levels moved by ≤0.02 pts, so §3–§6
+> as written below are within a rounding of the current vintage — but the JSON **is** regenerated
+> and is the current one. Per the PM decision recorded in `ncaaf_clv_row_alignment_repair.md` §6a-2
+> and NF-W7f, the prose below is left VERBATIM (a decided story's record is not rewritten after its
+> result); the re-quoted figures live in `ncaaf_val3_preregistration.md` §0 and this module's JSON.
+
 **What that does and does not put at risk.** The misalignment finding is a property of the **source
 code** and the decomposition is **arithmetic** — neither depends on the population. The offset
 **level** does. The *sign* and the concentration in the cold-start weeks are structural (they track a
@@ -307,7 +331,8 @@ to quote §3–§6 against the recorded vintage before VAL3 sizes anything off t
 
 **Operator / PM follow-ons**
 
-1. ⚠️ **Card the CLV misalignment as an incident.** It is not a serving defect — nothing bets on it
+1. ✅ **DONE — carded and repaired as NCAAF-CLV-repair (2026-08-21).** Original text follows.
+   ⚠️ **Card the CLV misalignment as an incident.** It is not a serving defect — nothing bets on it
    (`best_alpha = 0`) and no serving path reads `_clv_eval` — but it invalidates the recorded
    model-vs-close numbers in **P1.4, S1-serve and VAL1** and makes VAL1's `side_tilt` table an
    artifact. Repair (`idx = np.flatnonzero(mask)` taken BEFORE the reset), then re-run all three and
@@ -324,8 +349,9 @@ to quote §3–§6 against the recorded vintage before VAL3 sizes anything off t
 
 - `models/ncaaf_val2_mu_total_offset.py` — the harness (query-only; join-based, never positional).
 - `models/ncaaf_val2_red_proof.py` — 22 deliberate breaks, **22/22 RED**.
-- `betting_ml/tests/test_ncaaf_val2_mu_total_offset.py` — 29 fast-gate guards (incl. the upstream
-  tripwire).
+- `betting_ml/tests/test_ncaaf_val2_mu_total_offset.py` — 29 fast-gate guards. ⚠️ the upstream
+  tripwire was DISCHARGED by PR #995 and is now an anti-regression check; the substantive guards for
+  the repair live in `betting_ml/tests/test_ncaaf_clv_row_alignment.py` (RED-proven 6/6).
 - `ablation_results/ncaaf_val2_mu_total_offset.json` — every figure above, machine-readable.
 
 Runtime: **16 s** end-to-end on the laptop (one OOS collection + one draw for the alignment control).
