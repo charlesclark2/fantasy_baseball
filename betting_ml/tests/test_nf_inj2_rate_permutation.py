@@ -296,3 +296,29 @@ def test_the_shipping_path_delegates_to_the_one_arm_kernel():
     assert moved.sum() >= 10, (
         "the arm argument had no effect — the shipping path is ignoring it (and a fixture where the "
         "two arms agree everywhere would make this clause vacuous)")
+
+
+def test_the_recorded_gate_status_matches_the_committed_report():
+    """The policy module's `GATE_STATUS` must agree with the verdict in the committed report.
+
+    ⭐ WHY THIS EXISTS. `GATE_STATUS` shipped as `"UNRUN"` in the merged PR — after the decisive run
+    had landed and been REFUSED. Nothing broke (it is only read when `SERVED_ARM` is not the
+    incumbent, and the board serves the incumbent), but the policy module was asserting that a study
+    which had run and failed had never run. A flag whose only enforcement is a docstring saying
+    "written here by hand" is not enforced at all; this makes the two move together, so a re-run
+    that changes the verdict cannot leave the policy behind.
+
+    Fails CLOSED: an unreadable or absent report is a state in which the record cannot be checked,
+    which is not the same as a record that checks out (NF1.7 (a))."""
+    import json
+    from pathlib import Path
+    report = (Path(__file__).resolve().parents[2]
+              / "quant_sports_intel_models/football/nfl/fantasy/ablation_results"
+              / "nf_inj2_rate_permutation.json")
+    assert report.exists(), f"the committed report is missing at {report}"
+    state = json.loads(report.read_text())["verdict"]["state"]
+    # SHIP / SHIP_WITH_CAVEAT are the only states that may record CLEARED
+    expected = "CLEARED" if state.startswith("SHIP") else state
+    assert RP.GATE_STATUS == expected, (
+        f"GATE_STATUS is {RP.GATE_STATUS!r} but the committed report's verdict is {state!r} — the "
+        "policy module and the record it points at disagree")
