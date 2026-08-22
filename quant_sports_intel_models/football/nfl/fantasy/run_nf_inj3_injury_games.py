@@ -802,9 +802,14 @@ def write_report_md(rep: dict, path: Path) -> None:
                "incumbent" if arm == "incumbent" else "")
         rows.append({"arm": arm, "role": tag, "CRPS": d["crps"], "MAE": d["mae"],
                      "mean games": d["mean_games"], "lift vs incumbent": d["mean_lift"],
-                     "folds won": d["folds_beating_incumbent"]})
+                     "folds beating incumbent": ("— (self)" if arm == "incumbent"
+                                                 else d["folds_beating_incumbent"])})
     rows.sort(key=lambda r: r["CRPS"])
-    p(_md(rows, ["arm", "role", "CRPS", "MAE", "mean games", "lift vs incumbent", "folds won"]))
+    p(_md(rows, ["arm", "role", "CRPS", "MAE", "mean games", "lift vs incumbent",
+                 "folds beating incumbent"]))
+    p(f"⛔ The incumbent's own \"folds beating incumbent\" cell is a self-comparison and is rendered "
+      f"`— (self)` rather than `0`: a literal 0 there reads as \"the incumbent never wins a fold\", "
+      f"which is FALSE and overstates the evidence.")
     p("⛔ **CRPS selects. MAE never does — and that is MEASURED here, not assumed.**")
     mi = rep["mae_inversion_check"]
     p(f"On this cohort (n={mi['n']}, median realized games **{mi['median_realized_games']:.0f}**, "
@@ -982,13 +987,23 @@ def reading_section(rep: dict) -> str:
 
     a("### 1. The substantive finding, which holds regardless of the verdict")
     a("")
-    a(f"**Every real arm beats the incumbent, and the incumbent's expected games are roughly DOUBLE "
-      f"what any fitted form says.** Pooled mean expected games: incumbent "
+    nf = len(rep["folds"])
+    a(f"**Every real arm beats the incumbent ON THE MEAN, and the incumbent's expected games are "
+      f"roughly DOUBLE what any fitted form says.** Pooled mean expected games: incumbent "
       f"**{pl['incumbent']['mean_games']}** against {pl['fitted_status']['mean_games']}–"
-      f"{pl['hurdle_transfer']['mean_games']} for the fitted arms; the incumbent wins **0 of 7 folds** "
-      f"against every one of them. On the live board all **{sa['n_moved_down']} of {sa['n']}** flagged "
-      f"veterans move DOWN (mean **{sa['mean_incumbent_games']} → {sa['mean_arm_games']}** games), "
-      f"none up.")
+      f"{pl['hurdle_transfer']['mean_games']} for the fitted arms. On the live board all "
+      f"**{sa['n_moved_down']} of {sa['n']}** flagged veterans move DOWN (mean "
+      f"**{sa['mean_incumbent_games']} → {sa['mean_arm_games']}** games), none up.")
+    a("")
+    a(f"⚠️ **Read the fold counts, not just the means — they are the honest measure of how strong "
+      f"this is.** The winner beats the incumbent on "
+      f"**{pl['hurdle_transfer']['folds_beating_incumbent']}/{nf}** folds; `fitted_status`, "
+      f"`timing_aware` and `sus_regime` on **{pl['fitted_status']['folds_beating_incumbent']}/{nf}** "
+      f"each. So the LEVEL channel is a LARGE mean effect with HIGH fold-to-fold variance "
+      f"(p = {cd['steps']['level__incumbent_to_fitted_status']['p_one_sided']}), not a metronomic "
+      f"one — which is exactly why the design's 7 folds cannot certify it. ⛔ The `0` in the "
+      f"incumbent's own \"folds won\" cell above is a SELF-COMPARISON ARTIFACT (its lift over itself "
+      f"is 0, not > 0) and must NOT be read as \"the incumbent never wins a fold\".")
     a("")
     a("⭐ **The PM-facing reading: after the cap, the board still materially UNDER-discounts injured "
       "players.** NF-INJ1 found the ordering step handing back +36.4% of the availability discount; "

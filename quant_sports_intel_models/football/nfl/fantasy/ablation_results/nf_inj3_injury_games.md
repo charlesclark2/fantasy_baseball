@@ -1,6 +1,6 @@
 # NF-INJ3 — a designation-timing-aware injury-games model (replacing the hardcoded caps)
 
-**VERDICT: POWER_LIMITED** — winner `hurdle_transfer`. `best_alpha = 0`. Generated 2026-08-22T06:25:54.424933+00:00 in 1.1s.
+**VERDICT: POWER_LIMITED** — winner `hurdle_transfer`. `best_alpha = 0`. Generated 2026-08-22T07:12:05.553599+00:00 in 1.2s.
 
 > Pre-registration: `ablation_results/nf_inj3_preregistration.md` — committed BEFORE any arm was scored. ⛔ Not edited by this run (E2.1-r).
 
@@ -20,17 +20,18 @@ The story asks for games as a function of status and **when the designation land
 
 Folds **2019–2025** (7), expanding window, fit on 2016…Y−1. Declared field **7** arms + the matched foil `timing_aware_minus_timing`; pre-registered degenerates `all_zero`, `no_cap`. Excluded by registration: **60** rookies, **78** returners.
 
-| arm | role | CRPS | MAE | mean games | lift vs incumbent | folds won |
+| arm | role | CRPS | MAE | mean games | lift vs incumbent | folds beating incumbent |
 |---|---|---|---|---|---|---|
 | hurdle_transfer |  | 2.1089 | 3.3554 | 2.6070 | 0.2845 | 6 |
 | timing_aware |  | 2.1561 | 3.2290 | 2.1900 | 0.2373 | 4 |
 | fitted_status |  | 2.1756 | 3.3562 | 2.3870 | 0.2178 | 4 |
 | sus_regime |  | 2.1810 | 3.3692 | 2.4050 | 0.2123 | 4 |
 | timing_aware_minus_timing | matched foil | 2.1812 | 3.2130 | 2.0930 | 0.2121 | 4 |
-| incumbent | incumbent | 2.3933 | 4.4698 | 5.4030 | 0.0000 | 0 |
+| incumbent | incumbent | 2.3933 | 4.4698 | 5.4030 | 0.0000 | — (self) |
 | all_zero | DEGENERATE | 2.9478 | 2.9487 | 0.0000 | -0.5545 | 2 |
 | no_cap | DEGENERATE | 4.1125 | 6.3607 | 8.5450 | -1.7192 | 0 |
 
+⛔ The incumbent's own "folds beating incumbent" cell is a self-comparison and is rendered `— (self)` rather than `0`: a literal 0 there reads as "the incumbent never wins a fold", which is FALSE and overstates the evidence.
 ⛔ **CRPS selects. MAE never does — and that is MEASURED here, not assumed.**
 On this cohort (n=418, median realized games **0**, zero share 0.608) the all-zero nihilist scores MAE **2.7536** against the pooled mean's **3.5228** ⇒ MAE inverted = **True**. MAE is minimised at the conditional median, which sits AT the floor here ⇒ MAE pays for pessimism and CANNOT select. CRPS is primary (NF-D11/NF-D14).
 
@@ -219,7 +220,9 @@ evidence. Both halves of that sentence are load-bearing.**
 
 ### 1. The substantive finding, which holds regardless of the verdict
 
-**Every real arm beats the incumbent, and the incumbent's expected games are roughly DOUBLE what any fitted form says.** Pooled mean expected games: incumbent **5.403** against 2.387–2.607 for the fitted arms; the incumbent wins **0 of 7 folds** against every one of them. On the live board all **22 of 22** flagged veterans move DOWN (mean **5.292 → 2.682** games), none up.
+**Every real arm beats the incumbent ON THE MEAN, and the incumbent's expected games are roughly DOUBLE what any fitted form says.** Pooled mean expected games: incumbent **5.403** against 2.387–2.607 for the fitted arms. On the live board all **22 of 22** flagged veterans move DOWN (mean **5.292 → 2.682** games), none up.
+
+⚠️ **Read the fold counts, not just the means — they are the honest measure of how strong this is.** The winner beats the incumbent on **6/7** folds; `fitted_status`, `timing_aware` and `sus_regime` on **4/7** each. So the LEVEL channel is a LARGE mean effect with HIGH fold-to-fold variance (p = 0.1265), not a metronomic one — which is exactly why the design's 7 folds cannot certify it. ⛔ The `0` in the incumbent's own "folds won" cell above is a SELF-COMPARISON ARTIFACT (its lift over itself is 0, not > 0) and must NOT be read as "the incumbent never wins a fold".
 
 ⭐ **The PM-facing reading: after the cap, the board still materially UNDER-discounts injured players.** NF-INJ1 found the ordering step handing back +36.4% of the availability discount; this finds the discount was too SMALL to begin with. They compound in the same direction, and this half is the larger of the two.
 
