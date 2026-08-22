@@ -1000,6 +1000,25 @@ def player_bio_map() -> dict[str, dict]:
 # source does not have, and 870 copies of one board-level fact is not provenance, it is bytes.
 
 
+def _norm_player_id(value) -> str:
+    """⭐ THE ONE OWNER OF PLAYER-ID NORMALISATION ON THE DISCLOSURE PATH, and it exists because the
+    Sleeper feed does not deliver clean ids.
+
+    ⚠️ MEASURED ON THE LIVE SNAPSHOT (2026-08-22): **275 of 2,501 rows carry a LEADING SPACE** in
+    `player_id` (`' 00-0035700'`). The gsis id is otherwise identical to the board's, so an exact
+    string match — which is what this module did until now — silently matches NOTHING for those
+    players, and a silent non-match on this field is indistinguishable from "the feed says nothing
+    about him": the row simply renders no chip.
+
+    It shipped that way for a few hours and the cost was concrete: **Josh Jacobs and DK Metcalf were
+    both listed Questionable and both silently undisclosed** on a published board, i.e. exactly the
+    high-value rows the disclosure exists for. Found by joining the published artifact back to the
+    feed BY NAME, not by any test — the NF-C0e wrong-key / NF-C6P3 join-miss family, and the reason
+    an id join must normalise rather than trust its source.
+    """
+    return str(value).strip()
+
+
 def weekly_designation_map(season: int) -> "dict[str, str | None] | None":
     """`{player_id -> weekly designation label or None}`, or **None** when the feed is unreadable.
 
@@ -1055,7 +1074,7 @@ def weekly_designation_map(season: int) -> "dict[str, str | None] | None":
         disclose, label = SI.disclosable_designation(status)
         if not disclose:
             continue
-        out[str(pid)] = label
+        out[_norm_player_id(pid)] = label
         if label is None:
             unrecognised[str(status).strip().upper()] = unrecognised.get(
                 str(status).strip().upper(), 0) + 1
@@ -1087,11 +1106,16 @@ def _attach_designations(recs: list[dict], designations: "dict[str, str | None] 
     """
     if not designations:
         return 0
+    # ⚠️ NORMALISE THE MAP'S KEYS HERE TOO, not only at the one call site that builds it. The first
+    # cut of this fix normalised the ROW id and trusted the map — which is safe only while every
+    # caller happens to route through `weekly_designation_map`, i.e. it makes correctness a property
+    # of the CALLER rather than of this function. Its own regression test caught that immediately.
+    lookup = {_norm_player_id(k): v for k, v in designations.items()}
     n = 0
     for rec in recs:
-        pid = str(rec.get("id"))
-        if pid in designations:
-            rec["gameStatus"] = designations[pid]
+        pid = _norm_player_id(rec.get("id"))
+        if pid in lookup:
+            rec["gameStatus"] = lookup[pid]
             n += 1
     return n
 
