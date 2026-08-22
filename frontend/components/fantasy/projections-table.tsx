@@ -51,6 +51,7 @@ import {
   numOrLock,
   int,
   teamLabel,
+  WeeklyDesignation,
 } from "@/components/fantasy/shared"
 import { Picker } from "@/components/ui/picker"
 
@@ -340,6 +341,9 @@ export function ProjectionsTable() {
                         freshness={data?.freshness}
                         underDefinedHeader
                       />
+                      {/* NF-C9 — see `WeeklyDesignation`. Same component, same feed vintage
+                          and same disclaimer the Rankings board renders. */}
+                      <WeeklyDesignation status={p.gameStatus} freshness={data?.freshness} />
                     </td>
                     {statCols.map((c) => (
                       <td key={String(c.key)} className="px-3 py-2 text-right text-gray-400">

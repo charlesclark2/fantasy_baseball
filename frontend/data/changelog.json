@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "added",
+        "text": "Where a player is listed on the weekly game-status report — Questionable, Doubtful or Out — that designation now shows beside his projected-games figure on the rankings board, the projections table and his player page, together with a plain statement that our projection does not take it into account. It genuinely does not: the projected-games number moves only on a formal roster move (injured reserve, PUP, the non-football-injury list or a suspension), so a weekly designation currently applies no discount at all. We already held these designations and simply were not showing them, which meant a player listed Out could sit at a completely normal-looking projection with nothing on the row to say why. This closes that by showing what we know, not by changing any number — pricing a weekly designation into a season projection needs a measure of how long an absence actually lasts, which a one-game designation does not carry and which we have not built. A designation is what a club filed about one game; it is not a diagnosis and not our own read on any player's health. Where our feed carries a status we cannot interpret we say \"unknown\" rather than guess, and where it says nothing we show nothing rather than invent a clean bill of health."
+      },
+      {
+        "tag": "added",
         "text": "Players we project for less than a full season are now flagged on the rankings board, the projections table and the player page. Our point projections already price in the chance a player misses games, but nothing on the row said so — a lower ranking simply looked unexplained. The projected-games figure now carries a colour when it sits materially below a full slate, and tapping it explains that this is a statement about our projection rather than a view on any player's health, alongside the date of the roster and injury data behind it."
       },
       {

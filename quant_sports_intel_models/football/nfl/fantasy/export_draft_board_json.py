@@ -978,6 +978,124 @@ def player_bio_map() -> dict[str, dict]:
     return out
 
 
+# ══ NF-C9 — THE WEEKLY GAME-STATUS DESIGNATION, SERVED FOR DISCLOSURE ══════════════════════════
+#
+# NF-C8's finding, in one line: the availability discount fires on a ROSTER TRANSACTION (IR / PUP /
+# NFI / suspension) and on nothing else, so a player carrying a weekly game-status designation —
+# Questionable, Doubtful, Out — is projected with a discount of exactly ZERO. That is leakage-safe
+# and working as designed. It is also not what a reader assumes when they meet an "Out" player at a
+# normal-looking projection. We already HOLD the designation; we simply never served it.
+#
+# ⭐ THIS SERVES IT AND MODELS NOTHING. The projection is byte-identical before and after this
+# change: `injury_availability_games` does not read this field, no ordering reads it, no VOR reads
+# it. It is one string per player on the payload and a sentence in the UI saying plainly that our
+# games figure does not price it in. `ablation_results/nf_c8_injury_designation_gap.md` §3 is the
+# decision this implements ("a cheap, honest interim that ships nothing predictive"), including its
+# ⛔: it must NOT be dressed up as a projection adjustment, because it is not one.
+#
+# ⚠️ NO PER-PLAYER AS-OF, AND THAT IS THE HONEST CHOICE RATHER THAN A GAP. Sleeper's feed carries no
+# per-designation timestamp — the only date we can defend is when we READ THE SNAPSHOT, which is
+# already served for every surface as `freshness.input_vintage.sleeper_status_as_of` (NF-FRESH2) and
+# already rendered under the NF-C8 flag. Stamping a per-row date here would invent a precision the
+# source does not have, and 870 copies of one board-level fact is not provenance, it is bytes.
+
+
+def weekly_designation_map(season: int) -> "dict[str, str | None] | None":
+    """`{player_id -> weekly designation label or None}`, or **None** when the feed is unreadable.
+
+    ⭐ THE RETURN TYPE CARRIES THE THREE STATES the payload needs, and conflating any two of them is
+    the whole failure mode this function is shaped to avoid:
+
+      `None` (the whole map)   The designation feed could not be read — no ingest yet, a lake
+                               failure, a season with no snapshot. NO record gets the key, so the UI
+                               renders nothing per row. ⛔ Deliberately NOT "a null on every row":
+                               that would put "unknown" under every player on the board during a
+                               routine ingest gap, which is precisely the scary-word-everywhere
+                               failure `AVAILABILITY_DATA_AS_OF_PREFIX`'s doc warns about. The
+                               board-level statement already exists and is the right place for it —
+                               `sleeper_status_as_of` renders "unknown" when the vintage is missing.
+
+      key ABSENT (one player)  The feed was read and has nothing to disclose about him: no
+                               designation, or a LONG-ABSENCE tag the projection already prices.
+                               Both render nothing, and for the same reason — in neither case does
+                               this channel have a true sentence to say (see
+                               `sleeper_injuries_source.disclosable_designation`).
+
+      value `None` (one player) The feed lists something we cannot interpret. Renders "unknown", is
+                               never silently dropped (NF1.7 (a)).
+
+    Best-effort by construction: any read failure logs and returns None. A provenance/disclosure
+    enrichment must never be able to fail a board build — the boards are the draft-critical output.
+    """
+    from quant_sports_intel_models.football.nfl.fantasy import sleeper_injuries_source as SI
+    from quant_sports_intel_models.football.nfl.ingest import s3io
+
+    try:
+        uri = s3io.table_uri("nfl", "sleeper_injuries", tier="raw")
+        con = _lake_connection()
+        try:
+            df = con.sql(
+                f"select player_id, injury_status from delta_scan('{uri}') "
+                f"where season = {int(season)} and player_id is not null"
+            ).df()
+        finally:
+            con.close()
+    except Exception as e:  # noqa: BLE001 — a disclosure stamp must never fail the export
+        log.warning("[ALERT] NF-C9: weekly game-status designations unreadable (%s: %s) — the "
+                    "boards will carry NO designation field, and every surface will correctly "
+                    "render nothing rather than an invented status", type(e).__name__, e)
+        return None
+
+    out: dict[str, str | None] = {}
+    unrecognised: dict[str, int] = {}
+    for pid, status in zip(df["player_id"], df["injury_status"]):
+        if pid is None or (isinstance(pid, float) and pd.isna(pid)):
+            continue
+        status = None if (status is None or (isinstance(status, float) and pd.isna(status))) else status
+        disclose, label = SI.disclosable_designation(status)
+        if not disclose:
+            continue
+        out[str(pid)] = label
+        if label is None:
+            unrecognised[str(status).strip().upper()] = unrecognised.get(
+                str(status).strip().upper(), 0) + 1
+
+    log.info("NF-C9 weekly designations: %d player(s) to disclose out of %d fed rows",
+             len(out), len(df))
+    if unrecognised:
+        # ⭐ SURFACED TO THE OPERATOR, not to the reader. The UI says "unknown" (honest, and never a
+        # fabricated status); this line is the only place anyone learns WHICH token we failed to
+        # read, and it is what turns "add DNR to WEEKLY_DESIGNATIONS" into a visible task rather
+        # than a silent shrug on somebody's board row.
+        log.warning("[ALERT] NF-C9: %d player(s) carry a game-status value this build does not "
+                    "recognise %s — they will render as 'unknown'. Add the token to "
+                    "sleeper_injuries_source.WEEKLY_DESIGNATIONS if it is a real designation.",
+                    sum(unrecognised.values()), unrecognised)
+    return out
+
+
+def _attach_designations(recs: list[dict], designations: "dict[str, str | None] | None") -> int:
+    """Add `gameStatus` to the records the feed has something to disclose about. Returns how many.
+
+    ⚠️ IT SETS THE KEY ONLY WHERE THERE IS SOMETHING TO SAY — no `gameStatus: null` sprayed across
+    the board. See `weekly_designation_map` for why absent and null are different facts here, and
+    `shared.tsx::WeeklyDesignation` for the rendering that depends on it.
+
+    ⚠️ K/DST rows never carry one and that is a SOURCE fact, not an omission: Sleeper's feed is
+    scoped to QB/RB/WR/TE (`sleeper_injuries_source._SKILL`), so it has no opinion about a kicker or
+    a team defence, and an absent key is the correct rendering of "we were told nothing".
+    """
+    if not designations:
+        return 0
+    n = 0
+    for rec in recs:
+        pid = str(rec.get("id"))
+        if pid in designations:
+            rec["gameStatus"] = designations[pid]
+            n += 1
+    return n
+
+
 # ── build the JSON ────────────────────────────────────────────────────────────────────────────────
 def board_records(
     df: pd.DataFrame,
@@ -1491,6 +1609,12 @@ def main(argv: list[str] | None = None) -> int:
                     "enrichment skipped' warning above for the actual read failure.")
     # bye weeks for the projection season — empty until NF-D1 lands the schedule, then auto-populates
     byes = bye_week_map(args.season)
+    # NF-C9 — the UN-MODELLED weekly game-status designation, for DISCLOSURE. Read once and shared
+    # by the boards and the projections blob so the two surfaces can never disagree about what the
+    # feed said (the E9.61 "two renderers of one field are two rule sets" lesson). None on any read
+    # failure → no record carries the field → every surface renders nothing, never an invented
+    # status. See `weekly_designation_map`.
+    designations = weekly_designation_map(args.season)
 
     # real NFL team abbreviations from the projection (drives the K/DST placeholder set)
     teams = sorted({
@@ -1529,6 +1653,10 @@ def main(argv: list[str] | None = None) -> int:
         matched = _attach_adp(skill, adp_cache_for(args.season, adp_fmt, n_teams))
         log.info("  %s_%d: ADP (%s/%dteam) matched %d/%d players",
                  config_name, n_teams, adp_fmt, n_teams, matched, len(skill))
+        # NF-C9 — disclose the weekly designation on the row whose games figure it is NOT in.
+        flagged = _attach_designations(skill, designations)
+        log.info("  %s_%d: %d player(s) carry a weekly game-status designation to disclose",
+                 config_name, n_teams, flagged)
         # NF1.6: `skill` now already contains the PROJECTED K/DST rows; the placeholders only fill
         # whatever (pos, team) pairs the projection did not cover, so no slot is ever unfillable.
         covered = {(r["pos"], r["team"]) for r in skill
@@ -1590,6 +1718,10 @@ def main(argv: list[str] | None = None) -> int:
             log.info("  projections: folded in %d NF1.6 K/DST rows", len(kdf))
         projections = projection_records(pdf, rookie_teams, byes, bio, contrib_map, casing,
                                          board_names)
+        # NF-C9 — the same map the boards used, so the Projections table and the player page
+        # disclose exactly what Rankings does.
+        log.info("  projections: %d player(s) carry a weekly game-status designation to disclose",
+                 _attach_designations(projections, designations))
         # E9.61 — what the casing authority DID, so a silent S3 failure reads as a zero rather than
         # as a clean run. `repaired` counts names the rule pass ALONE would have got wrong (measured
         # against the source frame, not against the output); `kept` counts roster disagreements the
