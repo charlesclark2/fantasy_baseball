@@ -6,6 +6,36 @@
 🔗 **THE SHARED CORE:** the per-player-week posterior-predictive projection is built in **N1.2 (props)** and consumed here — build once, don't duplicate. NF1 refines it into fantasy points; if NF1 runs before N1.2, IT builds the shared core (coordinate).
 
 ---
+🩹 **NF-INJ2 — RESTORE (games, line) COHERENCE: permute the RATE, not the season point** [Model · §0.5 · 🧭 OPUS · `best_alpha=0` · PM-FUNDED 2026-08-21]
+
+**Why:** NF1.5 re-orders each position and hands every player a DIFFERENT player's point level, rescaling the stat line to match — but not `proj_games` (`nf1_model.apply_learned_level`'s `_RAW_SCALE_COLS` omits it). Because MVP-1's point is `rate × games`, it EMBEDS availability, so the permutation **redistributes the injury discount**. Measured on the live board: the 23 currently-flagged PUP/IR players get **+36.4% of their availability cut handed back** (18 of 23 scaled up — Pierce ×1.67, Kittle ×1.29, Higgins ×2.32), and 10 rows carry a physically impossible stat line (all QB). ⭐ **This is the founding injury priority running BACKWARDS** — an injured player must project down, and today he partly projects back up. Whole-board gradient ρ(expected games, point ratio) = **−0.213** (p=1.4e-08, n=697).
+
+**Read first:** `ablation_results/nf_inj1_diagnosis.md` (the diagnosis; §7 = the verified post-publish measurement, §8 = the PM decisions) and **`ablation_results/nf_inj1_preregistration.md` — THIS STORY'S REGISTRATION, written before any arm was scored. ⛔ Do NOT edit it (E2.1-r); execute it.**
+
+**Do:** the full walk-forward §0.5 bake-off exactly as registered — 6 declared arms (lead: `rate_permute`, permuting the per-game RATE multiset and re-multiplying by each player's OWN `proj_games`, so coherence holds by construction and availability becomes un-permutable), CRPS primary (⛔ MAE never selects), held-out within-position ρ as a CONSTRAINT not the selector, the matched foil (`rate_permute_games_frozen`) that isolates the per-player availability channel, two pre-registered degenerates, `classify_null(declared_field_size=6)` + read `field_remedy_admissible`, PBO/DSR/BH-FDR, per-form oracle ceilings. ⛔ No post-hoc field trim (MH2.2).
+
+**Gates (level-adjacent — it moves served point levels):** whole-board cross-position **placement read** (`run_nf_tr2b_placement_read`, against the PUBLISHED artifact per config — the NF-TR2b VOR "shield" is ADDITIVE-only and does not hold under the two superflex configs, where QB is cross-pooled and QB is the position this moves most) **and** interval **revalidation** (`run_interval_revalidation`; per-group coverage floors via `power_floor()`, ⛔ never a flat nominal point-floor — NF-D22).
+
+**Pre-committed readings (PM-ratified 2026-08-21 — do not re-litigate):** a **TIE** on the selecting metric **still ships** (coherence is a correctness constraint the incumbent VIOLATES ⇒ this is not the E2.1-r inversion but the pricing-vs-discrimination rule that a tie ships when the incumbent fails a hard constraint); a placement/interval refusal is **`CONSTRAINT_REFUSED`** with **NO "more data" re-test trigger** (NF-D18); driving ρ to ~0 is a **PRECONDITION** the winning arm achieves by construction, ⛔ never reported as a discriminator.
+
+**⚠️ Verify against the CURRENT board vintage** — the board is republished by hand and moved twice during NF-INJ1 alone; a study scored on a stale frame measures a board nobody is served (the CLV-class trap; and see §7.2, where a cross-vintage cut contaminated the first estimate).
+
+**⛔ Do NOT bundle NF-INJ3** (the injury-cap constants). It changes the same quantity this story is fixing the handling of — mixing a level change with an availability change makes neither attributable (NF-W7e).
+
+**Consequence if it does not clear:** NF-INJ1 §8.1's fallback fires — suppress the stat line on violating rows only. Worktree; PR→dev; ablation writeup.
+
+---
+🩹 **NF-INJ3 — the injury-games caps: make them designation-TIMING-aware (and fitted)** [Model · §0.5 · 🧭 OPUS · `best_alpha=0` · PM-scheduled 2026-08-21, **AFTER NF-INJ2 lands**]
+
+**Why:** `season_projection._INJURY_STATUS_GAMES_CAP = {RES: 4.0, PUP: 4.0, NFI: 4.0, SUS: 7.0}` at blend 0.7 governs the expected games of **all 23 currently-flagged players**. The constants are described in-code as "empirical" but are **unfitted, never revalidated since NF-D2 slice 5, and status-only** — they ignore **WHEN** the designation happened, so a March PUP and a late-August PUP both collapse to 4.0. That is clearly wrong: a designation days before Week 1 is a far stronger signal about the season than one in March.
+
+**Read first:** `ablation_results/nf_inj1_diagnosis.md` §1.3 (the limit, recorded but not fixed) + §8.3 (the PM decision). Feed: `stg_nfl_sleeper_injuries` (`ingested_at` + `injury_status`) — note the mapped vocabulary is deliberately the long-absence set only (PUP/IR→RES/NFI/SUS); the weekly Q/D/O channel stays unmapped (NF-D2 found it weak/confounded) unless this story re-opens it WITH a bake-off.
+
+**Do:** a §0.5 study fitting current-status → expected-games IN-FOLD, with **designation recency as a covariate**, replacing the hardcoded constants. Score the pre-registered degenerates (an all-4.0 constant = today's incumbent; an all-healthy null) and READ them (NF-D14 — do not reason about whether MAE inverts on a zero-heavy cohort, measure it). Level-adjacent via `proj_games` ⇒ the same NF-D16/D21 placement + interval gates as NF-INJ2.
+
+**⛔ Sequencing is load-bearing: this runs AFTER NF-INJ2 has landed**, never alongside it (NF-W7e non-additivity). Worktree; PR→dev; ablation writeup.
+
+---
 🚨 **NF-FRESH1 (LAUNCH-CRITICAL) — Draft-board data-freshness audit · PHASE 1 (READ-ONLY investigation)** [App/serving + data · OPUS · `best_alpha=0` · operator 2026-08-15] (Trello: top of To Do)
 
 **Why:** we launch into DRAFT SEASON, and a user drafting today must see current **ADP**, recent **injuries**, **depth-chart** movement (being sorted now that preseason started), and daily **transactions** (trades/cuts/signings that move draft stock). The PM's read is the live board likely reflects NONE of these — but that must be CONFIRMED, because the finding decides whether this is a small fix (only ADP stale) or a launch blocker (the board is injury-blind). ⛔ **READ-ONLY — no code/serving change this phase**; the deliverable is a written diagnosis + a scoped Phase-2 build plan.
