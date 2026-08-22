@@ -78,13 +78,24 @@ SECONDARY = {"label": "p1_4_v1", "mc": "ridge", "contract": "strength_only",
 #: moves the close population by a handful of games, and when it does this pin HALTs — correctly.
 #: The remedy is to re-run the PARENT (S1-serve) on the new cache and re-anchor here from ITS
 #: output; ⛔ never from VAL1's own, which would make the pin a restatement of the thing it checks.
-PIN = {"ats_n": 4110, "ou_n": 4129,
-       "ats_hit": 0.4993, "ou_hit": 0.5127,
-       "ats_placebo": 0.4968, "tol": 0.010,
+#:
+#: ⭐ RE-ANCHORED A SECOND TIME by NCAAF-VAL3 (2026-08-22), and this is that remedy executed rather
+#: than described: VAL3's first step is a `--assemble` onto the CURRENT vintage (the PM decision
+#: recorded in `ncaaf_clv_row_alignment_repair.md` §6a-2 — the repair's levels stay 2026-07-22 and
+#: VAL3 re-quotes on current data), which moved the close population 4,182 → 4,187 and HALTed this
+#: pin on `ats_n`/`ou_n`. The HALT was the instruction. Targets below come from the PARENT's
+#: eval-only re-run on the new cache (`--stage finalize --contract strength_pace --form
+#: strength_posterior --calib-out …`), which writes NO served artifact and does not rewrite
+#: S1-serve's own decided record.
+PIN = {"ats_n": 4115, "ou_n": 4136,
+       "ats_hit": 0.4994, "ou_hit": 0.5152,
+       "ats_placebo": 0.4987, "tol": 0.010,
        # provenance of the targets above — which parent run, on which cache vintage
-       "source": "ncaaf_s1_serve_calibration (repaired _clv_eval)",
-       "source_n_with_close": 4182,
-       "source_cache_assembled_at": "2026-07-22"}
+       "source": ("ncaaf_s1_serve_calibration (repaired _clv_eval), re-run eval-only by "
+                  "NCAAF-VAL3 on the 2026-08-22 re-assembly → "
+                  "ablation_results/ncaaf_val3_s1_serve_reanchor.json"),
+       "source_n_with_close": 4187,
+       "source_cache_assembled_at": "2026-08-22"}
 
 MARKETS = ("ats", "ou")
 
