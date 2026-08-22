@@ -1,6 +1,6 @@
 {
   "story": "NCAAF-VAL1",
-  "run_at": "2026-08-21",
+  "run_at": "2026-08-22",
   "preregistration": "ablation_results/ncaaf_val1_preregistration.md",
   "config": {
     "primary": {
@@ -19,7 +19,7 @@
     },
     "seed": 42,
     "n_draws": 4000,
-    "cache_assembled_at": "2026-07-22"
+    "cache_assembled_at": "2026-08-22"
   },
   "contract": {
     "breakeven": 0.5238,
@@ -35,28 +35,28 @@
   "reproduction_pin": {
     "checks": {
       "ats_n": {
-        "got": 4110,
-        "expected": 4110,
+        "got": 4115,
+        "expected": 4115,
         "ok": true
       },
       "ou_n": {
-        "got": 4129,
-        "expected": 4129,
+        "got": 4136,
+        "expected": 4136,
         "ok": true
       },
       "ats_hit": {
-        "got": 0.4992700729927007,
-        "expected": 0.4993,
+        "got": 0.4993924665856622,
+        "expected": 0.4994,
         "ok": true
       },
       "ou_hit": {
-        "got": 0.5127149430854928,
-        "expected": 0.5127,
+        "got": 0.5152321083172147,
+        "expected": 0.5152,
         "ok": true
       },
       "ats_placebo": {
-        "got": 0.4968369829683698,
-        "expected": 0.4968,
+        "got": 0.49866342648845685,
+        "expected": 0.4987,
         "ok": true
       }
     },
@@ -65,72 +65,72 @@
   "primary": {
     "pooled": {
       "ats": {
-        "n": 4110,
-        "wins": 2052,
-        "hit_rate": 0.4992700729927007,
-        "placebo": 0.4968369829683698,
+        "n": 4115,
+        "wins": 2055,
+        "hit_rate": 0.4993924665856622,
+        "placebo": 0.49866342648845685,
         "anchors": {
-          "always_home": 0.49951338199513384,
-          "always_away": 0.5004866180048662
+          "always_home": 0.498906439854192,
+          "always_away": 0.501093560145808
         },
-        "side_frac": 0.4635036496350365,
-        "side_balance": 0.4635036496350365,
+        "side_frac": 0.46439854191980556,
+        "side_balance": 0.46439854191980556,
         "n_push": 72,
-        "p_one_sided": 0.9992184992038268,
-        "p_one_sided_vs_50": 0.5434726643374077,
-        "upper_bound_bonf": 0.5122176572524755,
-        "upper_bound_nominal": 0.5122176572524755,
-        "mde_hit_rate": 0.5431564821633798,
-        "mde_pp": 1.9356482163379707,
-        "edge_pp": -2.4529927007299337,
-        "roi_at_minus_110": -0.04684804246848051,
+        "p_one_sided": 0.9991806342996401,
+        "p_one_sided_vs_50": 0.5372593122077817,
+        "upper_bound_bonf": 0.5123320517577078,
+        "upper_bound_nominal": 0.5123320517577078,
+        "mde_hit_rate": 0.5432294378206604,
+        "mde_pp": 1.9429437820660311,
+        "edge_pp": -2.4407533414337825,
+        "roi_at_minus_110": -0.046614381972826746,
         "band_reading": "MEASURED_IMMATERIAL"
       },
       "ou": {
-        "n": 4129,
-        "wins": 2117,
-        "hit_rate": 0.5127149430854928,
-        "placebo": 0.5078711552434003,
+        "n": 4136,
+        "wins": 2131,
+        "hit_rate": 0.5152321083172147,
+        "placebo": 0.495889748549323,
         "anchors": {
-          "always_over": 0.49866795834342453,
-          "always_under": 0.5013320416565754
+          "always_over": 0.4990328820116054,
+          "always_under": 0.5009671179883946
         },
-        "side_frac": 0.6057156696536692,
-        "side_balance": 0.3942843303463308,
-        "n_push": 53,
-        "p_one_sided": 0.9252857842204917,
-        "p_one_sided_vs_50": 0.052772472038128945,
-        "upper_bound_bonf": 0.5256212731222574,
-        "upper_bound_nominal": 0.5256212731222574,
-        "mde_hit_rate": 0.5433359976322609,
-        "mde_pp": 1.9535997632260882,
-        "edge_pp": -1.108505691450723,
-        "roi_at_minus_110": -0.02118056320042283,
+        "side_frac": 0.6061411992263056,
+        "side_balance": 0.3938588007736944,
+        "n_push": 51,
+        "p_one_sided": 0.8683858077646626,
+        "p_one_sided_vs_50": 0.025961816570118795,
+        "upper_bound_bonf": 0.5281243054515896,
+        "upper_bound_nominal": 0.5281243054515896,
+        "mde_hit_rate": 0.5431475007696204,
+        "mde_pp": 1.934750076962033,
+        "edge_pp": -0.8567891682785378,
+        "roi_at_minus_110": -0.01637506593986293,
         "band_reading": "MEASURED_IMMATERIAL"
       }
     },
     "buckets": {
       "wk1-3": {
         "ats": {
-          "n": 699,
-          "wins": 363,
-          "hit_rate": 0.51931330472103,
-          "placebo": 0.4864091559370529,
+          "n": 701,
+          "wins": 366,
+          "hit_rate": 0.5221112696148359,
+          "placebo": 0.48502139800285304,
           "anchors": {
-            "always_home": 0.5150214592274678,
-            "always_away": 0.48497854077253216
+            "always_home": 0.514978601997147,
+            "always_away": 0.48502139800285304
           },
-          "side_frac": 0.43490701001430615,
-          "side_balance": 0.43490701001430615,
+          "side_frac": 0.43651925820256776,
+          "side_balance": 0.43651925820256776,
           "n_push": 14,
-          "p_one_sided": 0.6086893848073925,
-          "p_one_sided_vs_50": 0.16270377061526767,
-          "upper_bound_bonf": 0.56006624367984,
-          "upper_bound_nominal": 0.5510084595752741,
-          "mde_hit_rate": 0.5715372750396468,
-          "mde_pp": 4.773727503964675,
-          "edge_pp": -0.4486695278970054,
-          "roi_at_minus_110": -0.008583690987124581,
+          "p_one_sided": 0.5508908849220313,
+          "p_one_sided_vs_50": 0.1285814317059226,
+          "upper_bound_bonf": 0.5627824372294399,
+          "upper_bound_nominal": 0.5537444242697298,
+          "mde_hit_rate": 0.5713564847608545,
+          "mde_pp": 4.75564847608545,
+          "edge_pp": -0.168873038516415,
+          "roi_at_minus_110": -0.003242121644404239,
           "per_season": {
             "seasons": [
               2020,
@@ -142,32 +142,32 @@
             ],
             "hit_rate": [
               0.5161,
-              0.4925,
-              0.4853,
+              0.5037,
+              0.4779,
               0.5396,
               0.5354,
-              0.5455
+              0.5564
             ],
             "n": [
               31,
-              134,
+              135,
               136,
               139,
               127,
-              132
+              133
             ],
             "fold_wins": 3,
             "n_folds": 6,
-            "observed_sr": -0.18590653373624913,
-            "skew": -0.34397468985961943,
-            "kurt": 1.4482121866073037
+            "observed_sr": -0.08052982889952354,
+            "skew": -0.3675649924431206,
+            "kurt": 2.018581609713607
           },
           "bh_family": "ats",
           "bh_cutoff": 0.016666666666666666,
           "bh_reject": false,
           "bh6_cutoff": 0.016666666666666666,
           "bh6_reject": false,
-          "family_var_trials_sr": 0.29684104208187645,
+          "family_var_trials_sr": 0.3988427764735164,
           "null": {
             "raw": {
               "state": "GENUINE_ABSENCE",
@@ -180,32 +180,32 @@
             },
             "corrected": {
               "state": "POWER_LIMITED",
-              "reason": "`ats_wk1-3`: hit rate 0.5193 is below breakeven, but the family-adjusted upper bound 0.5601 still ADMITS the meaningful effect 0.5476. \u26d4 Do NOT read this as absence \u2014 this design cannot separate the null from a decision-changing edge.",
-              "retest_trigger": "2,785 non-push games at 80% power vs 699 here (+2,086 \u2248 18 more seasons at this bucket's rate)"
+              "reason": "`ats_wk1-3`: hit rate 0.5221 is below breakeven, but the family-adjusted upper bound 0.5628 still ADMITS the meaningful effect 0.5476. \u26d4 Do NOT read this as absence \u2014 this design cannot separate the null from a decision-changing edge.",
+              "retest_trigger": "2,785 non-push games at 80% power vs 701 here (+2,084 \u2248 18 more seasons at this bucket's rate)"
             },
             "correction_applied": true
           }
         },
         "ou": {
-          "n": 702,
-          "wins": 350,
-          "hit_rate": 0.4985754985754986,
-          "placebo": 0.46438746438746437,
+          "n": 704,
+          "wins": 352,
+          "hit_rate": 0.5,
+          "placebo": 0.4715909090909091,
           "anchors": {
-            "always_over": 0.46296296296296297,
-            "always_under": 0.5370370370370371
+            "always_over": 0.4630681818181818,
+            "always_under": 0.5369318181818182
           },
-          "side_frac": 0.6082621082621082,
-          "side_balance": 0.39173789173789175,
+          "side_frac": 0.6079545454545454,
+          "side_balance": 0.3920454545454546,
           "n_push": 11,
-          "p_one_sided": 0.9155232421755854,
-          "p_one_sided_vs_50": 0.5450697131452149,
-          "upper_bound_bonf": 0.5393711302231079,
-          "upper_bound_nominal": 0.530289474157217,
-          "mde_hit_rate": 0.570557537734129,
-          "mde_pp": 4.675753773412894,
-          "edge_pp": -2.522450142450144,
-          "roi_at_minus_110": -0.04817404817404808,
+          "p_one_sided": 0.9035122812860635,
+          "p_one_sided_vs_50": 0.5150303644881811,
+          "upper_bound_bonf": 0.5407300938872996,
+          "upper_bound_nominal": 0.5316636869132213,
+          "mde_hit_rate": 0.571794048358496,
+          "mde_pp": 4.799404835849597,
+          "edge_pp": -2.3800000000000043,
+          "roi_at_minus_110": -0.04545454545454547,
           "per_season": {
             "seasons": [
               2020,
@@ -217,32 +217,32 @@
             ],
             "hit_rate": [
               0.5161,
-              0.5149,
-              0.4667,
+              0.5111,
+              0.4741,
               0.5319,
-              0.4806,
-              0.4924
+              0.4884,
+              0.4887
             ],
             "n": [
               31,
-              134,
+              135,
               135,
               141,
               129,
-              132
+              133
             ],
             "fold_wins": 1,
             "n_folds": 6,
-            "observed_sr": -0.9464222867874862,
-            "skew": -0.12836952708953597,
-            "kurt": 1.6480846348793639
+            "observed_sr": -1.0252444335429722,
+            "skew": 0.12375759008826176,
+            "kurt": 1.703255121210097
           },
           "bh_family": "ou",
           "bh_cutoff": 0.05,
           "bh_reject": false,
           "bh6_cutoff": 0.03333333333333333,
           "bh6_reject": false,
-          "family_var_trials_sr": 0.17825667658588562,
+          "family_var_trials_sr": 0.2631082166332494,
           "null": {
             "raw": {
               "state": "GENUINE_ABSENCE",
@@ -255,7 +255,7 @@
             },
             "corrected": {
               "state": "MEASURED_IMMATERIAL",
-              "reason": "`ou_wk1-3`: hit rate 0.4986 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5394 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 702, but the interval already excludes it, which is the sharper post-data question.)",
+              "reason": "`ou_wk1-3`: hit rate 0.5000 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5407 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 704, but the interval already excludes it, which is the sharper post-data question.)",
               "retest_trigger": null
             },
             "correction_applied": true
@@ -265,24 +265,24 @@
       "wk4-6": {
         "ats": {
           "n": 832,
-          "wins": 410,
-          "hit_rate": 0.49278846153846156,
-          "placebo": 0.5144230769230769,
+          "wins": 411,
+          "hit_rate": 0.49399038461538464,
+          "placebo": 0.5084134615384616,
           "anchors": {
             "always_home": 0.48677884615384615,
             "always_away": 0.5132211538461539
           },
-          "side_frac": 0.4891826923076923,
-          "side_balance": 0.4891826923076923,
+          "side_frac": 0.49038461538461536,
+          "side_balance": 0.49038461538461536,
           "n_push": 21,
-          "p_one_sided": 0.9659919852641234,
-          "p_one_sided_vs_50": 0.6738819201908772,
-          "upper_bound_bonf": 0.5302399530708904,
-          "upper_bound_nominal": 0.5218846991734699,
+          "p_one_sided": 0.9604183241126926,
+          "p_one_sided_vs_50": 0.6485184564492924,
+          "upper_bound_bonf": 0.5314381061364073,
+          "upper_bound_nominal": 0.5230843615757812,
           "mde_hit_rate": 0.566734677310835,
           "mde_pp": 4.2934677310835,
-          "edge_pp": -3.101153846153848,
-          "roi_at_minus_110": -0.05922202797202791,
+          "edge_pp": -2.980961538461541,
+          "roi_at_minus_110": -0.05692744755244761,
           "per_season": {
             "seasons": [
               2020,
@@ -295,695 +295,9 @@
             "hit_rate": [
               0.557,
               0.5032,
-              0.4313,
-              0.5724,
+              0.425,
+              0.5789,
               0.4236,
-              0.5
-            ],
-            "n": [
-              79,
-              157,
-              160,
-              152,
-              144,
-              140
-            ],
-            "fold_wins": 2,
-            "n_folds": 6,
-            "observed_sr": -0.4199164198224868,
-            "skew": -0.08090072298076485,
-            "kurt": 1.5431324698714954
-          },
-          "bh_family": "ats",
-          "bh_cutoff": 0.03333333333333333,
-          "bh_reject": false,
-          "bh6_cutoff": 0.04166666666666667,
-          "bh6_reject": false,
-          "family_var_trials_sr": 0.29684104208187645,
-          "null": {
-            "raw": {
-              "state": "GENUINE_ABSENCE",
-              "reason": "`ats_wk4-6`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
-              "retest_trigger": null,
-              "detail": {
-                "n_folds": 6.0,
-                "n_arms": 3.0
-              }
-            },
-            "corrected": {
-              "state": "MEASURED_IMMATERIAL",
-              "reason": "`ats_wk4-6`: hit rate 0.4928 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5302 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 832, but the interval already excludes it, which is the sharper post-data question.)",
-              "retest_trigger": null
-            },
-            "correction_applied": true
-          }
-        },
-        "ou": {
-          "n": 843,
-          "wins": 440,
-          "hit_rate": 0.5219454329774614,
-          "placebo": 0.5041518386714117,
-          "anchors": {
-            "always_over": 0.5183867141162515,
-            "always_under": 0.4816132858837485
-          },
-          "side_frac": 0.5765124555160143,
-          "side_balance": 0.42348754448398573,
-          "n_push": 10,
-          "p_one_sided": 0.5567831607488497,
-          "p_one_sided_vs_50": 0.10749295114380848,
-          "upper_bound_bonf": 0.5589988881933338,
-          "upper_bound_nominal": 0.55074756629234,
-          "mde_hit_rate": 0.5665517545889196,
-          "mde_pp": 4.2751754588919555,
-          "edge_pp": -0.18545670225386113,
-          "roi_at_minus_110": -0.0035587188612100085,
-          "per_season": {
-            "seasons": [
-              2020,
-              2021,
-              2022,
-              2023,
-              2024,
-              2025
-            ],
-            "hit_rate": [
-              0.475,
-              0.4968,
-              0.4753,
-              0.586,
-              0.5411,
-              0.539
-            ],
-            "n": [
-              80,
-              157,
-              162,
-              157,
-              146,
-              141
-            ],
-            "fold_wins": 3,
-            "n_folds": 6,
-            "observed_sr": -0.11187815158310306,
-            "skew": 0.3677129630829185,
-            "kurt": 1.7962786613223283
-          },
-          "bh_family": "ou",
-          "bh_cutoff": 0.016666666666666666,
-          "bh_reject": false,
-          "bh6_cutoff": 0.008333333333333333,
-          "bh6_reject": false,
-          "family_var_trials_sr": 0.17825667658588562,
-          "null": {
-            "raw": {
-              "state": "GENUINE_ABSENCE",
-              "reason": "`ou_wk4-6`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
-              "retest_trigger": null,
-              "detail": {
-                "n_folds": 6.0,
-                "n_arms": 3.0
-              }
-            },
-            "corrected": {
-              "state": "POWER_LIMITED",
-              "reason": "`ou_wk4-6`: hit rate 0.5219 is below breakeven, but the family-adjusted upper bound 0.5590 still ADMITS the meaningful effect 0.5476. \u26d4 Do NOT read this as absence \u2014 this design cannot separate the null from a decision-changing edge.",
-              "retest_trigger": "2,785 non-push games at 80% power vs 843 here (+1,942 \u2248 14 more seasons at this bucket's rate)"
-            },
-            "correction_applied": true
-          }
-        }
-      },
-      "wk7+": {
-        "ats": {
-          "n": 2579,
-          "wins": 1279,
-          "hit_rate": 0.49592865451725476,
-          "placebo": 0.4939899185730903,
-          "anchors": {
-            "always_home": 0.4994183792167507,
-            "always_away": 0.5005816207832493
-          },
-          "side_frac": 0.46297014346645987,
-          "side_balance": 0.46297014346645987,
-          "n_push": 37,
-          "p_one_sided": 0.997828984051912,
-          "p_one_sided_vs_50": 0.667564229559972,
-          "upper_bound_bonf": 0.5170676983035449,
-          "upper_bound_nominal": 0.5123140887448243,
-          "mde_hit_rate": 0.5485710661142765,
-          "mde_pp": 2.4771066114276485,
-          "edge_pp": -2.787134548274528,
-          "roi_at_minus_110": -0.053227114103422735,
-          "per_season": {
-            "seasons": [
-              2020,
-              2021,
-              2022,
-              2023,
-              2024,
-              2025
-            ],
-            "hit_rate": [
-              0.4828,
-              0.4717,
-              0.5248,
-              0.5012,
-              0.5192,
-              0.4737
-            ],
-            "n": [
-              377,
-              407,
-              423,
-              429,
-              468,
-              475
-            ],
-            "fold_wins": 1,
-            "n_folds": 6,
-            "observed_sr": -1.2245690358304826,
-            "skew": 0.2209992343006102,
-            "kurt": 1.380735756342304
-          },
-          "bh_family": "ats",
-          "bh_cutoff": 0.05,
-          "bh_reject": false,
-          "bh6_cutoff": 0.05,
-          "bh6_reject": false,
-          "family_var_trials_sr": 0.29684104208187645,
-          "null": {
-            "raw": {
-              "state": "GENUINE_ABSENCE",
-              "reason": "`ats_wk7+`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
-              "retest_trigger": null,
-              "detail": {
-                "n_folds": 6.0,
-                "n_arms": 3.0
-              }
-            },
-            "corrected": {
-              "state": "MEASURED_IMMATERIAL",
-              "reason": "`ats_wk7+`: hit rate 0.4959 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5171 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 2,579, but the interval already excludes it, which is the sharper post-data question.)",
-              "retest_trigger": null
-            },
-            "correction_applied": true
-          }
-        },
-        "ou": {
-          "n": 2584,
-          "wins": 1327,
-          "hit_rate": 0.5135448916408669,
-          "placebo": 0.5208978328173375,
-          "anchors": {
-            "always_over": 0.5019349845201239,
-            "always_under": 0.49806501547987614
-          },
-          "side_frac": 0.6145510835913313,
-          "side_balance": 0.38544891640866874,
-          "n_push": 32,
-          "p_one_sided": 0.8562084376132542,
-          "p_one_sided_vs_50": 0.0873237056289663,
-          "upper_bound_bonf": 0.5346331995151823,
-          "upper_bound_nominal": 0.5298941066378002,
-          "mde_hit_rate": 0.548292018679068,
-          "mde_pp": 2.4492018679067917,
-          "edge_pp": -1.0255108359133125,
-          "roi_at_minus_110": -0.019596115958344984,
-          "per_season": {
-            "seasons": [
-              2020,
-              2021,
-              2022,
-              2023,
-              2024,
-              2025
-            ],
-            "hit_rate": [
-              0.5346,
-              0.5322,
-              0.4787,
-              0.5092,
-              0.5332,
-              0.4969
-            ],
-            "n": [
-              376,
-              404,
-              422,
-              434,
-              467,
-              481
-            ],
-            "fold_wins": 3,
-            "n_folds": 6,
-            "observed_sr": -0.4176957686028567,
-            "skew": -0.49958040388327607,
-            "kurt": 1.7309923011201216
-          },
-          "bh_family": "ou",
-          "bh_cutoff": 0.03333333333333333,
-          "bh_reject": false,
-          "bh6_cutoff": 0.025,
-          "bh6_reject": false,
-          "family_var_trials_sr": 0.17825667658588562,
-          "null": {
-            "raw": {
-              "state": "GENUINE_ABSENCE",
-              "reason": "`ou_wk7+`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
-              "retest_trigger": null,
-              "detail": {
-                "n_folds": 6.0,
-                "n_arms": 3.0
-              }
-            },
-            "corrected": {
-              "state": "MEASURED_IMMATERIAL",
-              "reason": "`ou_wk7+`: hit rate 0.5135 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5346 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 2,584, but the interval already excludes it, which is the sharper post-data question.)",
-              "retest_trigger": null
-            },
-            "correction_applied": true
-          }
-        }
-      }
-    },
-    "side_tilt": {
-      "wk1-3": {
-        "model_takes_home_ats": 0.43490701001430615,
-        "home_actually_covered": 0.5150214592274678,
-        "model_takes_over_ou": 0.6082621082621082,
-        "over_actually_hit": 0.46296296296296297
-      },
-      "wk4-6": {
-        "model_takes_home_ats": 0.4891826923076923,
-        "home_actually_covered": 0.48677884615384615,
-        "model_takes_over_ou": 0.5765124555160143,
-        "over_actually_hit": 0.5183867141162515
-      },
-      "wk7+": {
-        "model_takes_home_ats": 0.46297014346645987,
-        "home_actually_covered": 0.4994183792167507,
-        "model_takes_over_ou": 0.6145510835913313,
-        "over_actually_hit": 0.5019349845201239
-      }
-    },
-    "leave_2020_out": {
-      "wk1-3": {
-        "ats": {
-          "n": 668,
-          "hit_rate": 0.5194610778443114,
-          "placebo": 0.48952095808383234
-        },
-        "ou": {
-          "n": 671,
-          "hit_rate": 0.4977645305514158,
-          "placebo": 0.46795827123695977
-        }
-      },
-      "wk4-6": {
-        "ats": {
-          "n": 753,
-          "hit_rate": 0.4860557768924303,
-          "placebo": 0.5139442231075697
-        },
-        "ou": {
-          "n": 763,
-          "hit_rate": 0.526867627785059,
-          "placebo": 0.49934469200524245
-        }
-      },
-      "wk7+": {
-        "ats": {
-          "n": 2202,
-          "hit_rate": 0.4981834695731153,
-          "placebo": 0.494550408719346
-        },
-        "ou": {
-          "n": 2208,
-          "hit_rate": 0.509963768115942,
-          "placebo": 0.5190217391304348
-        }
-      }
-    },
-    "pass": {
-      "wk1-3": {
-        "ats": {
-          "1_material_point": false,
-          "2_bh_significant": false,
-          "3_beats_placebo": true,
-          "4_beats_degenerates": true,
-          "5_non_degenerate_n": true,
-          "6_active": true,
-          "values": {
-            "hit_rate": 0.51931330472103,
-            "breakeven": 0.5238,
-            "p_one_sided": 0.6086893848073925,
-            "bh_cutoff": 0.016666666666666666,
-            "placebo": 0.4864091559370529,
-            "best_degenerate": 0.5150214592274678,
-            "n": 699,
-            "side_balance": 0.43490701001430615
-          },
-          "CLEARS": false
-        },
-        "ou": {
-          "1_material_point": false,
-          "2_bh_significant": false,
-          "3_beats_placebo": true,
-          "4_beats_degenerates": false,
-          "5_non_degenerate_n": true,
-          "6_active": true,
-          "values": {
-            "hit_rate": 0.4985754985754986,
-            "breakeven": 0.5238,
-            "p_one_sided": 0.9155232421755854,
-            "bh_cutoff": 0.05,
-            "placebo": 0.46438746438746437,
-            "best_degenerate": 0.5370370370370371,
-            "n": 702,
-            "side_balance": 0.39173789173789175
-          },
-          "CLEARS": false
-        }
-      },
-      "wk4-6": {
-        "ats": {
-          "1_material_point": false,
-          "2_bh_significant": false,
-          "3_beats_placebo": false,
-          "4_beats_degenerates": false,
-          "5_non_degenerate_n": true,
-          "6_active": true,
-          "values": {
-            "hit_rate": 0.49278846153846156,
-            "breakeven": 0.5238,
-            "p_one_sided": 0.9659919852641234,
-            "bh_cutoff": 0.03333333333333333,
-            "placebo": 0.5144230769230769,
-            "best_degenerate": 0.5132211538461539,
-            "n": 832,
-            "side_balance": 0.4891826923076923
-          },
-          "CLEARS": false
-        },
-        "ou": {
-          "1_material_point": false,
-          "2_bh_significant": false,
-          "3_beats_placebo": true,
-          "4_beats_degenerates": true,
-          "5_non_degenerate_n": true,
-          "6_active": true,
-          "values": {
-            "hit_rate": 0.5219454329774614,
-            "breakeven": 0.5238,
-            "p_one_sided": 0.5567831607488497,
-            "bh_cutoff": 0.016666666666666666,
-            "placebo": 0.5041518386714117,
-            "best_degenerate": 0.5183867141162515,
-            "n": 843,
-            "side_balance": 0.42348754448398573
-          },
-          "CLEARS": false
-        }
-      },
-      "wk7+": {
-        "ats": {
-          "1_material_point": false,
-          "2_bh_significant": false,
-          "3_beats_placebo": true,
-          "4_beats_degenerates": false,
-          "5_non_degenerate_n": true,
-          "6_active": true,
-          "values": {
-            "hit_rate": 0.49592865451725476,
-            "breakeven": 0.5238,
-            "p_one_sided": 0.997828984051912,
-            "bh_cutoff": 0.05,
-            "placebo": 0.4939899185730903,
-            "best_degenerate": 0.5005816207832493,
-            "n": 2579,
-            "side_balance": 0.46297014346645987
-          },
-          "CLEARS": false
-        },
-        "ou": {
-          "1_material_point": false,
-          "2_bh_significant": false,
-          "3_beats_placebo": false,
-          "4_beats_degenerates": true,
-          "5_non_degenerate_n": true,
-          "6_active": true,
-          "values": {
-            "hit_rate": 0.5135448916408669,
-            "breakeven": 0.5238,
-            "p_one_sided": 0.8562084376132542,
-            "bh_cutoff": 0.03333333333333333,
-            "placebo": 0.5208978328173375,
-            "best_degenerate": 0.5019349845201239,
-            "n": 2584,
-            "side_balance": 0.38544891640866874
-          },
-          "CLEARS": false
-        }
-      }
-    }
-  },
-  "secondary": {
-    "pooled": {
-      "ats": {
-        "n": 4110,
-        "wins": 2039,
-        "hit_rate": 0.4961070559610706,
-        "placebo": 0.4968369829683698,
-        "anchors": {
-          "always_home": 0.49951338199513384,
-          "always_away": 0.5004866180048662
-        },
-        "side_frac": 0.46958637469586373,
-        "side_balance": 0.46958637469586373,
-        "n_push": 72,
-        "p_one_sided": 0.9998203732391175,
-        "p_one_sided_vs_50": 0.6966320758022555,
-        "upper_bound_bonf": 0.509055929108124,
-        "upper_bound_nominal": 0.509055929108124,
-        "mde_hit_rate": 0.5431564821633798,
-        "mde_pp": 1.9356482163379707,
-        "edge_pp": -2.769294403892947,
-        "roi_at_minus_110": -0.052886529528865356,
-        "band_reading": "MEASURED_IMMATERIAL"
-      },
-      "ou": {
-        "n": 4129,
-        "wins": 2089,
-        "hit_rate": 0.5059336401065634,
-        "placebo": 0.5078711552434003,
-        "anchors": {
-          "always_over": 0.49866795834342453,
-          "always_under": 0.5013320416565754
-        },
-        "side_frac": 0.6691692903850811,
-        "side_balance": 0.3308307096149189,
-        "n_push": 53,
-        "p_one_sided": 0.9896497090980615,
-        "p_one_sided_vs_50": 0.22753473068091673,
-        "upper_bound_bonf": 0.5188467571482566,
-        "upper_bound_nominal": 0.5188467571482566,
-        "mde_hit_rate": 0.5433359976322609,
-        "mde_pp": 1.9535997632260882,
-        "edge_pp": -1.7866359893436656,
-        "roi_at_minus_110": -0.03412668706928812,
-        "band_reading": "MEASURED_IMMATERIAL"
-      }
-    },
-    "buckets": {
-      "wk1-3": {
-        "ats": {
-          "n": 699,
-          "wins": 361,
-          "hit_rate": 0.5164520743919886,
-          "placebo": 0.4864091559370529,
-          "anchors": {
-            "always_home": 0.5150214592274678,
-            "always_away": 0.48497854077253216
-          },
-          "side_frac": 0.43776824034334766,
-          "side_balance": 0.43776824034334766,
-          "n_push": 14,
-          "p_one_sided": 0.6654178061719007,
-          "p_one_sided_vs_50": 0.2026802841996168,
-          "upper_bound_bonf": 0.5572272373011025,
-          "upper_bound_nominal": 0.5481625683726662,
-          "mde_hit_rate": 0.5715372750396468,
-          "mde_pp": 4.773727503964675,
-          "edge_pp": -0.7347925608011452,
-          "roi_at_minus_110": -0.01404603979711272,
-          "per_season": {
-            "seasons": [
-              2020,
-              2021,
-              2022,
-              2023,
-              2024,
-              2025
-            ],
-            "hit_rate": [
-              0.5161,
-              0.4925,
-              0.4779,
-              0.5396,
-              0.5354,
-              0.5379
-            ],
-            "n": [
-              31,
-              134,
-              136,
-              139,
-              127,
-              132
-            ],
-            "fold_wins": 3,
-            "n_folds": 6,
-            "observed_sr": -0.2764693156621194,
-            "skew": -0.5302930806360548,
-            "kurt": 1.6393104043396576
-          },
-          "bh_family": "ats",
-          "bh_cutoff": 0.016666666666666666,
-          "bh_reject": false,
-          "bh6_cutoff": 0.016666666666666666,
-          "bh6_reject": false,
-          "family_var_trials_sr": 0.3254939239747027,
-          "null": {
-            "raw": {
-              "state": "GENUINE_ABSENCE",
-              "reason": "`ats_wk1-3`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
-              "retest_trigger": null,
-              "detail": {
-                "n_folds": 6.0,
-                "n_arms": 3.0
-              }
-            },
-            "corrected": {
-              "state": "POWER_LIMITED",
-              "reason": "`ats_wk1-3`: hit rate 0.5165 is below breakeven, but the family-adjusted upper bound 0.5572 still ADMITS the meaningful effect 0.5476. \u26d4 Do NOT read this as absence \u2014 this design cannot separate the null from a decision-changing edge.",
-              "retest_trigger": "2,785 non-push games at 80% power vs 699 here (+2,086 \u2248 18 more seasons at this bucket's rate)"
-            },
-            "correction_applied": true
-          }
-        },
-        "ou": {
-          "n": 702,
-          "wins": 352,
-          "hit_rate": 0.5014245014245015,
-          "placebo": 0.46438746438746437,
-          "anchors": {
-            "always_over": 0.46296296296296297,
-            "always_under": 0.5370370370370371
-          },
-          "side_frac": 0.6282051282051282,
-          "side_balance": 0.3717948717948718,
-          "n_push": 11,
-          "p_one_sided": 0.8896360429754588,
-          "p_one_sided_vs_50": 0.484948255192489,
-          "upper_bound_bonf": 0.5422062385614165,
-          "upper_bound_nominal": 0.5331295681857235,
-          "mde_hit_rate": 0.570557537734129,
-          "mde_pp": 4.675753773412894,
-          "edge_pp": -2.2375498575498587,
-          "roi_at_minus_110": -0.042735042735042694,
-          "per_season": {
-            "seasons": [
-              2020,
-              2021,
-              2022,
-              2023,
-              2024,
-              2025
-            ],
-            "hit_rate": [
-              0.5161,
-              0.5299,
-              0.4815,
-              0.5603,
-              0.4961,
-              0.4318
-            ],
-            "n": [
-              31,
-              134,
-              135,
-              141,
-              129,
-              132
-            ],
-            "fold_wins": 2,
-            "n_folds": 6,
-            "observed_sr": -0.47973090399617807,
-            "skew": -0.38180524749707145,
-            "kurt": 2.3327086543054376
-          },
-          "bh_family": "ou",
-          "bh_cutoff": 0.03333333333333333,
-          "bh_reject": false,
-          "bh6_cutoff": 0.025,
-          "bh6_reject": false,
-          "family_var_trials_sr": 0.11682536160064678,
-          "null": {
-            "raw": {
-              "state": "GENUINE_ABSENCE",
-              "reason": "`ou_wk1-3`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
-              "retest_trigger": null,
-              "detail": {
-                "n_folds": 6.0,
-                "n_arms": 3.0
-              }
-            },
-            "corrected": {
-              "state": "MEASURED_IMMATERIAL",
-              "reason": "`ou_wk1-3`: hit rate 0.5014 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5422 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 702, but the interval already excludes it, which is the sharper post-data question.)",
-              "retest_trigger": null
-            },
-            "correction_applied": true
-          }
-        }
-      },
-      "wk4-6": {
-        "ats": {
-          "n": 832,
-          "wins": 404,
-          "hit_rate": 0.4855769230769231,
-          "placebo": 0.5144230769230769,
-          "anchors": {
-            "always_home": 0.48677884615384615,
-            "always_away": 0.5132211538461539
-          },
-          "side_frac": 0.4963942307692308,
-          "side_balance": 0.4963942307692308,
-          "n_push": 21,
-          "p_one_sided": 0.9874851251005171,
-          "p_one_sided_vs_50": 0.8069460607685356,
-          "upper_bound_bonf": 0.5230465714873689,
-          "upper_bound_nominal": 0.5146832714057773,
-          "mde_hit_rate": 0.566734677310835,
-          "mde_pp": 4.2934677310835,
-          "edge_pp": -3.822307692307697,
-          "roi_at_minus_110": -0.07298951048951047,
-          "per_season": {
-            "seasons": [
-              2020,
-              2021,
-              2022,
-              2023,
-              2024,
-              2025
-            ],
-            "hit_rate": [
-              0.5316,
-              0.4904,
-              0.4313,
-              0.5592,
-              0.4167,
               0.5071
             ],
             "n": [
@@ -996,16 +310,16 @@
             ],
             "fold_wins": 2,
             "n_folds": 6,
-            "observed_sr": -0.615074238235795,
-            "skew": -0.20013161258040116,
-            "kurt": 1.6287840964561573
+            "observed_sr": -0.38054239152961594,
+            "skew": -0.10972561904622592,
+            "kurt": 1.5587555064871297
           },
           "bh_family": "ats",
           "bh_cutoff": 0.03333333333333333,
           "bh_reject": false,
           "bh6_cutoff": 0.04166666666666667,
           "bh6_reject": false,
-          "family_var_trials_sr": 0.3254939239747027,
+          "family_var_trials_sr": 0.3988427764735164,
           "null": {
             "raw": {
               "state": "GENUINE_ABSENCE",
@@ -1018,7 +332,7 @@
             },
             "corrected": {
               "state": "MEASURED_IMMATERIAL",
-              "reason": "`ats_wk4-6`: hit rate 0.4856 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5230 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 832, but the interval already excludes it, which is the sharper post-data question.)",
+              "reason": "`ats_wk4-6`: hit rate 0.4940 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5314 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 832, but the interval already excludes it, which is the sharper post-data question.)",
               "retest_trigger": null
             },
             "correction_applied": true
@@ -1026,24 +340,24 @@
         },
         "ou": {
           "n": 843,
-          "wins": 439,
-          "hit_rate": 0.5207591933570581,
-          "placebo": 0.5041518386714117,
+          "wins": 442,
+          "hit_rate": 0.5243179122182681,
+          "placebo": 0.5088967971530249,
           "anchors": {
-            "always_over": 0.5183867141162515,
-            "always_under": 0.4816132858837485
+            "always_over": 0.5195729537366548,
+            "always_under": 0.4804270462633452
           },
-          "side_frac": 0.6488730723606169,
-          "side_balance": 0.35112692763938314,
+          "side_frac": 0.575326215895611,
+          "side_balance": 0.42467378410438905,
           "n_push": 10,
-          "p_one_sided": 0.5838530970794009,
-          "p_one_sided_vs_50": 0.12078631807534462,
-          "upper_bound_bonf": 0.5578211625784872,
-          "upper_bound_nominal": 0.549567274907723,
+          "p_one_sided": 0.501962439008091,
+          "p_one_sided_vs_50": 0.08413323622498939,
+          "upper_bound_bonf": 0.5613537207336567,
+          "upper_bound_nominal": 0.5531076703604714,
           "mde_hit_rate": 0.5665517545889196,
           "mde_pp": 4.2751754588919555,
-          "edge_pp": -0.3040806642941929,
-          "roi_at_minus_110": -0.005823358136525458,
+          "edge_pp": 0.0517912218268024,
+          "roi_at_minus_110": 0.0009705596894208357,
           "per_season": {
             "seasons": [
               2020,
@@ -1054,12 +368,12 @@
               2025
             ],
             "hit_rate": [
-              0.4,
-              0.4777,
+              0.4875,
+              0.4968,
               0.4753,
-              0.5924,
-              0.5685,
-              0.5603
+              0.586,
+              0.5411,
+              0.5461
             ],
             "n": [
               80,
@@ -1071,56 +385,63 @@
             ],
             "fold_wins": 3,
             "n_folds": 6,
-            "observed_sr": -0.15557225275677591,
-            "skew": -0.3921017448196538,
-            "kurt": 1.79528438047056
+            "observed_sr": -0.03916243357632426,
+            "skew": 0.34308365028370974,
+            "kurt": 1.741347348966152
           },
           "bh_family": "ou",
           "bh_cutoff": 0.016666666666666666,
           "bh_reject": false,
           "bh6_cutoff": 0.008333333333333333,
           "bh6_reject": false,
-          "family_var_trials_sr": 0.11682536160064678,
+          "family_var_trials_sr": 0.2631082166332494,
           "null": {
             "raw": {
-              "state": "GENUINE_ABSENCE",
-              "reason": "`ou_wk4-6`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
-              "retest_trigger": null,
+              "state": "DSR_UNREACHABLE",
+              "reason": "`ou_wk4-6`: the winner's per-fold Sharpe -0.039 sits at or BELOW the 3-arm field's deflated benchmark SR0 0.437, so DSR is unreachable at ANY fold count \u2014 `n` scales a positive gap, it cannot create one. The remedy is a SMALLER, PRE-REGISTERED field, not more seasons \u2014 and \u26d4 only if such a field was pre-registered; this is NOT a licence to re-cut a field you have already scored (MH2.7). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+              "retest_trigger": "field size is NOT a lever here \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)",
               "detail": {
                 "n_folds": 6.0,
-                "n_arms": 3.0
+                "n_arms": 3.0,
+                "observed_sr": -0.0392,
+                "sr0": 0.4374,
+                "var_trials_sr": 0.2631082166332494,
+                "degenerates_excluded_from_v": 1.0,
+                "declared_field_size": 3.0,
+                "declared_field_size_source": "stated",
+                "field_remedy_admissible": null
               }
             },
             "corrected": {
-              "state": "POWER_LIMITED",
-              "reason": "`ou_wk4-6`: hit rate 0.5208 is below breakeven, but the family-adjusted upper bound 0.5578 still ADMITS the meaningful effect 0.5476. \u26d4 Do NOT read this as absence \u2014 this design cannot separate the null from a decision-changing edge.",
-              "retest_trigger": "2,785 non-push games at 80% power vs 843 here (+1,942 \u2248 14 more seasons at this bucket's rate)"
+              "state": "DSR_UNREACHABLE",
+              "reason": "`ou_wk4-6`: the winner's per-fold Sharpe -0.039 sits at or BELOW the 3-arm field's deflated benchmark SR0 0.437, so DSR is unreachable at ANY fold count \u2014 `n` scales a positive gap, it cannot create one. The remedy is a SMALLER, PRE-REGISTERED field, not more seasons \u2014 and \u26d4 only if such a field was pre-registered; this is NOT a licence to re-cut a field you have already scored (MH2.7). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+              "retest_trigger": "field size is NOT a lever here \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)"
             },
-            "correction_applied": true
+            "correction_applied": false
           }
         }
       },
       "wk7+": {
         "ats": {
-          "n": 2579,
-          "wins": 1274,
-          "hit_rate": 0.4939899185730903,
-          "placebo": 0.4939899185730903,
+          "n": 2582,
+          "wins": 1278,
+          "hit_rate": 0.4949651432997676,
+          "placebo": 0.4992254066615027,
           "anchors": {
-            "always_home": 0.4994183792167507,
-            "always_away": 0.5005816207832493
+            "always_home": 0.49845081332300545,
+            "always_away": 0.5015491866769946
           },
-          "side_frac": 0.46956184567661885,
-          "side_balance": 0.46956184567661885,
+          "side_frac": 0.4635941130906274,
+          "side_balance": 0.4635941130906274,
           "n_push": 37,
-          "p_one_sided": 0.9988524142459829,
-          "p_one_sided_vs_50": 0.7356884378348479,
-          "upper_bound_bonf": 0.5151306939919991,
-          "upper_bound_nominal": 0.510376350242175,
-          "mde_hit_rate": 0.5485710661142765,
-          "mde_pp": 2.4771066114276485,
-          "edge_pp": -2.981008142690972,
-          "roi_at_minus_110": -0.05692833726955493,
+          "p_one_sided": 0.9984200829017736,
+          "p_one_sided_vs_50": 0.702409703959104,
+          "upper_bound_bonf": 0.5160926992752146,
+          "upper_bound_nominal": 0.5113414734834572,
+          "mde_hit_rate": 0.5483261773874486,
+          "mde_pp": 2.4526177387448556,
+          "edge_pp": -2.8834856700232447,
+          "roi_at_minus_110": -0.055066544609534585,
           "per_season": {
             "seasons": [
               2020,
@@ -1131,33 +452,33 @@
               2025
             ],
             "hit_rate": [
-              0.4854,
-              0.4693,
-              0.5296,
+              0.4801,
+              0.4767,
+              0.5248,
               0.5035,
-              0.4979,
-              0.4779
+              0.5139,
+              0.4695
             ],
             "n": [
               377,
               407,
               423,
-              429,
-              468,
+              431,
+              469,
               475
             ],
             "fold_wins": 1,
             "n_folds": 6,
-            "observed_sr": -1.3894305085520535,
-            "skew": 0.5839550274807475,
-            "kurt": 2.310790103092869
+            "observed_sr": -1.2930908975637412,
+            "skew": 0.18817719294217772,
+            "kurt": 1.4279131336038262
           },
           "bh_family": "ats",
           "bh_cutoff": 0.05,
           "bh_reject": false,
           "bh6_cutoff": 0.05,
           "bh6_reject": false,
-          "family_var_trials_sr": 0.3254939239747027,
+          "family_var_trials_sr": 0.3988427764735164,
           "null": {
             "raw": {
               "state": "GENUINE_ABSENCE",
@@ -1170,32 +491,32 @@
             },
             "corrected": {
               "state": "MEASURED_IMMATERIAL",
-              "reason": "`ats_wk7+`: hit rate 0.4940 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5151 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 2,579, but the interval already excludes it, which is the sharper post-data question.)",
+              "reason": "`ats_wk7+`: hit rate 0.4950 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5161 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 2,582, but the interval already excludes it, which is the sharper post-data question.)",
               "retest_trigger": null
             },
             "correction_applied": true
           }
         },
         "ou": {
-          "n": 2584,
-          "wins": 1298,
-          "hit_rate": 0.5023219814241486,
-          "placebo": 0.5208978328173375,
+          "n": 2589,
+          "wins": 1337,
+          "hit_rate": 0.5164156044804944,
+          "placebo": 0.4982618771726535,
           "anchors": {
-            "always_over": 0.5019349845201239,
-            "always_under": 0.49806501547987614
+            "always_over": 0.5021243723445346,
+            "always_under": 0.49787562765546545
           },
-          "side_frac": 0.6869195046439629,
-          "side_balance": 0.3130804953560371,
-          "n_push": 32,
-          "p_one_sided": 0.9862669068054006,
-          "p_one_sided_vs_50": 0.41434267915586065,
-          "upper_bound_bonf": 0.5234324688127612,
-          "upper_bound_nominal": 0.5186863728088768,
-          "mde_hit_rate": 0.548292018679068,
-          "mde_pp": 2.4492018679067917,
-          "edge_pp": -2.147801857585141,
-          "roi_at_minus_110": -0.04102167182662536,
+          "side_frac": 0.615681730397837,
+          "side_balance": 0.384318269602163,
+          "n_push": 30,
+          "p_one_sided": 0.7799763376237976,
+          "p_one_sided_vs_50": 0.04937304888404781,
+          "upper_bound_bonf": 0.537476036308419,
+          "upper_bound_nominal": 0.5327436768808372,
+          "mde_hit_rate": 0.5483996549941961,
+          "mde_pp": 2.459965499419603,
+          "edge_pp": -0.7384395519505649,
+          "roi_at_minus_110": -0.014115664173601605,
           "per_season": {
             "seasons": [
               2020,
@@ -1206,33 +527,33 @@
               2025
             ],
             "hit_rate": [
-              0.5053,
-              0.5124,
-              0.4597,
-              0.53,
-              0.5203,
-              0.4865
+              0.5368,
+              0.5396,
+              0.481,
+              0.5138,
+              0.5321,
+              0.499
             ],
             "n": [
-              376,
+              380,
               404,
               422,
               434,
-              467,
+              468,
               481
             ],
-            "fold_wins": 1,
+            "fold_wins": 3,
             "n_folds": 6,
-            "observed_sr": -0.8388683868371493,
-            "skew": -0.7059015135880794,
-            "kurt": 2.289520214713689
+            "observed_sr": -0.28713942782628876,
+            "skew": -0.5081008692121999,
+            "kurt": 1.7739238277262344
           },
           "bh_family": "ou",
-          "bh_cutoff": 0.05,
+          "bh_cutoff": 0.03333333333333333,
           "bh_reject": false,
-          "bh6_cutoff": 0.03333333333333333,
+          "bh6_cutoff": 0.025,
           "bh6_reject": false,
-          "family_var_trials_sr": 0.11682536160064678,
+          "family_var_trials_sr": 0.2631082166332494,
           "null": {
             "raw": {
               "state": "GENUINE_ABSENCE",
@@ -1245,7 +566,7 @@
             },
             "corrected": {
               "state": "MEASURED_IMMATERIAL",
-              "reason": "`ou_wk7+`: hit rate 0.5023 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5234 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 2,584, but the interval already excludes it, which is the sharper post-data question.)",
+              "reason": "`ou_wk7+`: hit rate 0.5164 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5375 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 2,589, but the interval already excludes it, which is the sharper post-data question.)",
               "retest_trigger": null
             },
             "correction_applied": true
@@ -1255,59 +576,59 @@
     },
     "side_tilt": {
       "wk1-3": {
-        "model_takes_home_ats": 0.43776824034334766,
-        "home_actually_covered": 0.5150214592274678,
-        "model_takes_over_ou": 0.6282051282051282,
-        "over_actually_hit": 0.46296296296296297
+        "model_takes_home_ats": 0.43651925820256776,
+        "home_actually_covered": 0.514978601997147,
+        "model_takes_over_ou": 0.6079545454545454,
+        "over_actually_hit": 0.4630681818181818
       },
       "wk4-6": {
-        "model_takes_home_ats": 0.4963942307692308,
+        "model_takes_home_ats": 0.49038461538461536,
         "home_actually_covered": 0.48677884615384615,
-        "model_takes_over_ou": 0.6488730723606169,
-        "over_actually_hit": 0.5183867141162515
+        "model_takes_over_ou": 0.575326215895611,
+        "over_actually_hit": 0.5195729537366548
       },
       "wk7+": {
-        "model_takes_home_ats": 0.46956184567661885,
-        "home_actually_covered": 0.4994183792167507,
-        "model_takes_over_ou": 0.6869195046439629,
-        "over_actually_hit": 0.5019349845201239
+        "model_takes_home_ats": 0.4635941130906274,
+        "home_actually_covered": 0.49845081332300545,
+        "model_takes_over_ou": 0.615681730397837,
+        "over_actually_hit": 0.5021243723445346
       }
     },
     "leave_2020_out": {
       "wk1-3": {
         "ats": {
-          "n": 668,
-          "hit_rate": 0.5164670658682635,
-          "placebo": 0.48952095808383234
+          "n": 670,
+          "hit_rate": 0.5223880597014925,
+          "placebo": 0.4880597014925373
         },
         "ou": {
-          "n": 671,
-          "hit_rate": 0.5007451564828614,
-          "placebo": 0.46795827123695977
+          "n": 673,
+          "hit_rate": 0.49925705794947994,
+          "placebo": 0.4710252600297177
         }
       },
       "wk4-6": {
         "ats": {
           "n": 753,
-          "hit_rate": 0.4807436918990704,
-          "placebo": 0.5139442231075697
+          "hit_rate": 0.48738379814077026,
+          "placebo": 0.5073041168658698
         },
         "ou": {
           "n": 763,
-          "hit_rate": 0.5334207077326344,
-          "placebo": 0.49934469200524245
+          "hit_rate": 0.528178243774574,
+          "placebo": 0.5072083879423329
         }
       },
       "wk7+": {
         "ats": {
-          "n": 2202,
-          "hit_rate": 0.49545867393278836,
-          "placebo": 0.494550408719346
+          "n": 2205,
+          "hit_rate": 0.49750566893424036,
+          "placebo": 0.4988662131519274
         },
         "ou": {
-          "n": 2208,
-          "hit_rate": 0.5018115942028986,
-          "placebo": 0.5190217391304348
+          "n": 2209,
+          "hit_rate": 0.5129017655047533,
+          "placebo": 0.5070167496604798
         }
       }
     },
@@ -1321,14 +642,707 @@
           "5_non_degenerate_n": true,
           "6_active": true,
           "values": {
-            "hit_rate": 0.5164520743919886,
+            "hit_rate": 0.5221112696148359,
             "breakeven": 0.5238,
-            "p_one_sided": 0.6654178061719007,
+            "p_one_sided": 0.5508908849220313,
             "bh_cutoff": 0.016666666666666666,
-            "placebo": 0.4864091559370529,
-            "best_degenerate": 0.5150214592274678,
-            "n": 699,
-            "side_balance": 0.43776824034334766
+            "placebo": 0.48502139800285304,
+            "best_degenerate": 0.514978601997147,
+            "n": 701,
+            "side_balance": 0.43651925820256776
+          },
+          "CLEARS": false
+        },
+        "ou": {
+          "1_material_point": false,
+          "2_bh_significant": false,
+          "3_beats_placebo": true,
+          "4_beats_degenerates": false,
+          "5_non_degenerate_n": true,
+          "6_active": true,
+          "values": {
+            "hit_rate": 0.5,
+            "breakeven": 0.5238,
+            "p_one_sided": 0.9035122812860635,
+            "bh_cutoff": 0.05,
+            "placebo": 0.4715909090909091,
+            "best_degenerate": 0.5369318181818182,
+            "n": 704,
+            "side_balance": 0.3920454545454546
+          },
+          "CLEARS": false
+        }
+      },
+      "wk4-6": {
+        "ats": {
+          "1_material_point": false,
+          "2_bh_significant": false,
+          "3_beats_placebo": false,
+          "4_beats_degenerates": false,
+          "5_non_degenerate_n": true,
+          "6_active": true,
+          "values": {
+            "hit_rate": 0.49399038461538464,
+            "breakeven": 0.5238,
+            "p_one_sided": 0.9604183241126926,
+            "bh_cutoff": 0.03333333333333333,
+            "placebo": 0.5084134615384616,
+            "best_degenerate": 0.5132211538461539,
+            "n": 832,
+            "side_balance": 0.49038461538461536
+          },
+          "CLEARS": false
+        },
+        "ou": {
+          "1_material_point": true,
+          "2_bh_significant": false,
+          "3_beats_placebo": true,
+          "4_beats_degenerates": true,
+          "5_non_degenerate_n": true,
+          "6_active": true,
+          "values": {
+            "hit_rate": 0.5243179122182681,
+            "breakeven": 0.5238,
+            "p_one_sided": 0.501962439008091,
+            "bh_cutoff": 0.016666666666666666,
+            "placebo": 0.5088967971530249,
+            "best_degenerate": 0.5195729537366548,
+            "n": 843,
+            "side_balance": 0.42467378410438905
+          },
+          "CLEARS": false
+        }
+      },
+      "wk7+": {
+        "ats": {
+          "1_material_point": false,
+          "2_bh_significant": false,
+          "3_beats_placebo": false,
+          "4_beats_degenerates": false,
+          "5_non_degenerate_n": true,
+          "6_active": true,
+          "values": {
+            "hit_rate": 0.4949651432997676,
+            "breakeven": 0.5238,
+            "p_one_sided": 0.9984200829017736,
+            "bh_cutoff": 0.05,
+            "placebo": 0.4992254066615027,
+            "best_degenerate": 0.5015491866769946,
+            "n": 2582,
+            "side_balance": 0.4635941130906274
+          },
+          "CLEARS": false
+        },
+        "ou": {
+          "1_material_point": false,
+          "2_bh_significant": false,
+          "3_beats_placebo": true,
+          "4_beats_degenerates": true,
+          "5_non_degenerate_n": true,
+          "6_active": true,
+          "values": {
+            "hit_rate": 0.5164156044804944,
+            "breakeven": 0.5238,
+            "p_one_sided": 0.7799763376237976,
+            "bh_cutoff": 0.03333333333333333,
+            "placebo": 0.4982618771726535,
+            "best_degenerate": 0.5021243723445346,
+            "n": 2589,
+            "side_balance": 0.384318269602163
+          },
+          "CLEARS": false
+        }
+      }
+    }
+  },
+  "secondary": {
+    "pooled": {
+      "ats": {
+        "n": 4115,
+        "wins": 2043,
+        "hit_rate": 0.4964763061968408,
+        "placebo": 0.49866342648845685,
+        "anchors": {
+          "always_home": 0.498906439854192,
+          "always_away": 0.501093560145808
+        },
+        "side_frac": 0.47023086269744835,
+        "side_balance": 0.47023086269744835,
+        "n_push": 72,
+        "p_one_sided": 0.9997867419423899,
+        "p_one_sided_vs_50": 0.6799858303149193,
+        "upper_bound_bonf": 0.5094171147470339,
+        "upper_bound_nominal": 0.5094171147470339,
+        "mde_hit_rate": 0.5432294378206604,
+        "mde_pp": 1.9429437820660311,
+        "edge_pp": -2.7323693803159244,
+        "roi_at_minus_110": -0.052181597260576695,
+        "band_reading": "MEASURED_IMMATERIAL"
+      },
+      "ou": {
+        "n": 4136,
+        "wins": 2101,
+        "hit_rate": 0.5079787234042553,
+        "placebo": 0.495889748549323,
+        "anchors": {
+          "always_over": 0.4990328820116054,
+          "always_under": 0.5009671179883946
+        },
+        "side_frac": 0.6694874274661509,
+        "side_balance": 0.33051257253384914,
+        "n_push": 51,
+        "p_one_sided": 0.9799250663234985,
+        "p_one_sided_vs_50": 0.15607945504905185,
+        "upper_bound_bonf": 0.5208790171953684,
+        "upper_bound_nominal": 0.5208790171953684,
+        "mde_hit_rate": 0.5431475007696204,
+        "mde_pp": 1.934750076962033,
+        "edge_pp": -1.5821276595744727,
+        "roi_at_minus_110": -0.03022243713733075,
+        "band_reading": "MEASURED_IMMATERIAL"
+      }
+    },
+    "buckets": {
+      "wk1-3": {
+        "ats": {
+          "n": 701,
+          "wins": 364,
+          "hit_rate": 0.5192582025677603,
+          "placebo": 0.48502139800285304,
+          "anchors": {
+            "always_home": 0.514978601997147,
+            "always_away": 0.48502139800285304
+          },
+          "side_frac": 0.43937232524964337,
+          "side_balance": 0.43937232524964337,
+          "n_push": 14,
+          "p_one_sided": 0.6099195238756012,
+          "p_one_sided_vs_50": 0.1630494156382693,
+          "upper_bound_bonf": 0.5599527618994173,
+          "upper_bound_nominal": 0.5509076106170656,
+          "mde_hit_rate": 0.5713564847608545,
+          "mde_pp": 4.75564847608545,
+          "edge_pp": -0.45417974322397026,
+          "roi_at_minus_110": -0.008688886007003016,
+          "per_season": {
+            "seasons": [
+              2020,
+              2021,
+              2022,
+              2023,
+              2024,
+              2025
+            ],
+            "hit_rate": [
+              0.5161,
+              0.5037,
+              0.4706,
+              0.5396,
+              0.5354,
+              0.5489
+            ],
+            "n": [
+              31,
+              135,
+              136,
+              139,
+              127,
+              133
+            ],
+            "fold_wins": 3,
+            "n_folds": 6,
+            "observed_sr": -0.1644837070653785,
+            "skew": -0.7081224966094269,
+            "kurt": 2.279684664387138
+          },
+          "bh_family": "ats",
+          "bh_cutoff": 0.016666666666666666,
+          "bh_reject": false,
+          "bh6_cutoff": 0.016666666666666666,
+          "bh6_reject": false,
+          "family_var_trials_sr": 0.4196119522484488,
+          "null": {
+            "raw": {
+              "state": "GENUINE_ABSENCE",
+              "reason": "`ats_wk1-3`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+              "retest_trigger": null,
+              "detail": {
+                "n_folds": 6.0,
+                "n_arms": 3.0
+              }
+            },
+            "corrected": {
+              "state": "POWER_LIMITED",
+              "reason": "`ats_wk1-3`: hit rate 0.5193 is below breakeven, but the family-adjusted upper bound 0.5600 still ADMITS the meaningful effect 0.5476. \u26d4 Do NOT read this as absence \u2014 this design cannot separate the null from a decision-changing edge.",
+              "retest_trigger": "2,785 non-push games at 80% power vs 701 here (+2,084 \u2248 18 more seasons at this bucket's rate)"
+            },
+            "correction_applied": true
+          }
+        },
+        "ou": {
+          "n": 704,
+          "wins": 354,
+          "hit_rate": 0.5028409090909091,
+          "placebo": 0.4715909090909091,
+          "anchors": {
+            "always_over": 0.4630681818181818,
+            "always_under": 0.5369318181818182
+          },
+          "side_frac": 0.6278409090909091,
+          "side_balance": 0.37215909090909094,
+          "n_push": 11,
+          "p_one_sided": 0.8751460439363046,
+          "p_one_sided_vs_50": 0.45499406440791107,
+          "upper_bound_bonf": 0.5435565429406886,
+          "upper_bound_nominal": 0.5344952391022793,
+          "mde_hit_rate": 0.571794048358496,
+          "mde_pp": 4.799404835849597,
+          "edge_pp": -2.0959090909090983,
+          "roi_at_minus_110": -0.04003099173553726,
+          "per_season": {
+            "seasons": [
+              2020,
+              2021,
+              2022,
+              2023,
+              2024,
+              2025
+            ],
+            "hit_rate": [
+              0.5161,
+              0.5259,
+              0.4889,
+              0.5603,
+              0.5039,
+              0.4286
+            ],
+            "n": [
+              31,
+              135,
+              135,
+              141,
+              129,
+              133
+            ],
+            "fold_wins": 2,
+            "n_folds": 6,
+            "observed_sr": -0.4504519354821272,
+            "skew": -0.6150901436119527,
+            "kurt": 2.7126754321667184
+          },
+          "bh_family": "ou",
+          "bh_cutoff": 0.03333333333333333,
+          "bh_reject": false,
+          "bh6_cutoff": 0.025,
+          "bh6_reject": false,
+          "family_var_trials_sr": 0.11610231391214518,
+          "null": {
+            "raw": {
+              "state": "GENUINE_ABSENCE",
+              "reason": "`ou_wk1-3`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+              "retest_trigger": null,
+              "detail": {
+                "n_folds": 6.0,
+                "n_arms": 3.0
+              }
+            },
+            "corrected": {
+              "state": "MEASURED_IMMATERIAL",
+              "reason": "`ou_wk1-3`: hit rate 0.5028 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5436 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 704, but the interval already excludes it, which is the sharper post-data question.)",
+              "retest_trigger": null
+            },
+            "correction_applied": true
+          }
+        }
+      },
+      "wk4-6": {
+        "ats": {
+          "n": 832,
+          "wins": 406,
+          "hit_rate": 0.4879807692307692,
+          "placebo": 0.5084134615384616,
+          "anchors": {
+            "always_home": 0.48677884615384615,
+            "always_away": 0.5132211538461539
+          },
+          "side_frac": 0.4963942307692308,
+          "side_balance": 0.4963942307692308,
+          "n_push": 21,
+          "p_one_sided": 0.9822347377527418,
+          "p_one_sided_vs_50": 0.7666961485809809,
+          "upper_bound_bonf": 0.52544521567045,
+          "upper_bound_nominal": 0.5170844052572754,
+          "mde_hit_rate": 0.566734677310835,
+          "mde_pp": 4.2934677310835,
+          "edge_pp": -3.5819230769230828,
+          "roi_at_minus_110": -0.06840034965034975,
+          "per_season": {
+            "seasons": [
+              2020,
+              2021,
+              2022,
+              2023,
+              2024,
+              2025
+            ],
+            "hit_rate": [
+              0.5316,
+              0.4904,
+              0.425,
+              0.5724,
+              0.4167,
+              0.5143
+            ],
+            "n": [
+              79,
+              157,
+              160,
+              152,
+              144,
+              140
+            ],
+            "fold_wins": 2,
+            "n_folds": 6,
+            "observed_sr": -0.5244022878663135,
+            "skew": -0.11592776409422512,
+            "kurt": 1.6596137675146154
+          },
+          "bh_family": "ats",
+          "bh_cutoff": 0.03333333333333333,
+          "bh_reject": false,
+          "bh6_cutoff": 0.04166666666666667,
+          "bh6_reject": false,
+          "family_var_trials_sr": 0.4196119522484488,
+          "null": {
+            "raw": {
+              "state": "GENUINE_ABSENCE",
+              "reason": "`ats_wk4-6`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+              "retest_trigger": null,
+              "detail": {
+                "n_folds": 6.0,
+                "n_arms": 3.0
+              }
+            },
+            "corrected": {
+              "state": "MEASURED_IMMATERIAL",
+              "reason": "`ats_wk4-6`: hit rate 0.4880 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5254 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 832, but the interval already excludes it, which is the sharper post-data question.)",
+              "retest_trigger": null
+            },
+            "correction_applied": true
+          }
+        },
+        "ou": {
+          "n": 843,
+          "wins": 442,
+          "hit_rate": 0.5243179122182681,
+          "placebo": 0.5088967971530249,
+          "anchors": {
+            "always_over": 0.5195729537366548,
+            "always_under": 0.4804270462633452
+          },
+          "side_frac": 0.6488730723606169,
+          "side_balance": 0.35112692763938314,
+          "n_push": 10,
+          "p_one_sided": 0.501962439008091,
+          "p_one_sided_vs_50": 0.08413323622498939,
+          "upper_bound_bonf": 0.5613537207336567,
+          "upper_bound_nominal": 0.5531076703604714,
+          "mde_hit_rate": 0.5665517545889196,
+          "mde_pp": 4.2751754588919555,
+          "edge_pp": 0.0517912218268024,
+          "roi_at_minus_110": 0.0009705596894208357,
+          "per_season": {
+            "seasons": [
+              2020,
+              2021,
+              2022,
+              2023,
+              2024,
+              2025
+            ],
+            "hit_rate": [
+              0.425,
+              0.4777,
+              0.4753,
+              0.5924,
+              0.5685,
+              0.5674
+            ],
+            "n": [
+              80,
+              157,
+              162,
+              157,
+              146,
+              141
+            ],
+            "fold_wins": 3,
+            "n_folds": 6,
+            "observed_sr": -0.09060738374899516,
+            "skew": -0.1926980093134158,
+            "kurt": 1.4487838547023437
+          },
+          "bh_family": "ou",
+          "bh_cutoff": 0.016666666666666666,
+          "bh_reject": false,
+          "bh6_cutoff": 0.008333333333333333,
+          "bh6_reject": false,
+          "family_var_trials_sr": 0.11610231391214518,
+          "null": {
+            "raw": {
+              "state": "DSR_UNREACHABLE",
+              "reason": "`ou_wk4-6`: the winner's per-fold Sharpe -0.091 sits at or BELOW the 3-arm field's deflated benchmark SR0 0.291, so DSR is unreachable at ANY fold count \u2014 `n` scales a positive gap, it cannot create one. The remedy is a SMALLER, PRE-REGISTERED field, not more seasons \u2014 and \u26d4 only if such a field was pre-registered; this is NOT a licence to re-cut a field you have already scored (MH2.7). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+              "retest_trigger": "field size is NOT a lever here \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)",
+              "detail": {
+                "n_folds": 6.0,
+                "n_arms": 3.0,
+                "observed_sr": -0.0906,
+                "sr0": 0.2906,
+                "var_trials_sr": 0.11610231391214518,
+                "degenerates_excluded_from_v": 1.0,
+                "declared_field_size": 3.0,
+                "declared_field_size_source": "stated",
+                "field_remedy_admissible": null
+              }
+            },
+            "corrected": {
+              "state": "DSR_UNREACHABLE",
+              "reason": "`ou_wk4-6`: the winner's per-fold Sharpe -0.091 sits at or BELOW the 3-arm field's deflated benchmark SR0 0.291, so DSR is unreachable at ANY fold count \u2014 `n` scales a positive gap, it cannot create one. The remedy is a SMALLER, PRE-REGISTERED field, not more seasons \u2014 and \u26d4 only if such a field was pre-registered; this is NOT a licence to re-cut a field you have already scored (MH2.7). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+              "retest_trigger": "field size is NOT a lever here \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)"
+            },
+            "correction_applied": false
+          }
+        }
+      },
+      "wk7+": {
+        "ats": {
+          "n": 2582,
+          "wins": 1273,
+          "hit_rate": 0.4930286599535244,
+          "placebo": 0.4992254066615027,
+          "anchors": {
+            "always_home": 0.49845081332300545,
+            "always_away": 0.5015491866769946
+          },
+          "side_frac": 0.4701781564678544,
+          "side_balance": 0.4701781564678544,
+          "n_push": 37,
+          "p_one_sided": 0.9991796231738002,
+          "p_one_sided_vs_50": 0.7667371441743146,
+          "upper_bound_bonf": 0.5141577870951931,
+          "upper_bound_nominal": 0.5094058642988318,
+          "mde_hit_rate": 0.5483261773874486,
+          "mde_pp": 2.4526177387448556,
+          "edge_pp": -3.0771340046475637,
+          "roi_at_minus_110": -0.058763467361453436,
+          "per_season": {
+            "seasons": [
+              2020,
+              2021,
+              2022,
+              2023,
+              2024,
+              2025
+            ],
+            "hit_rate": [
+              0.4828,
+              0.4742,
+              0.5296,
+              0.5058,
+              0.4925,
+              0.4737
+            ],
+            "n": [
+              377,
+              407,
+              423,
+              431,
+              469,
+              475
+            ],
+            "fold_wins": 1,
+            "n_folds": 6,
+            "observed_sr": -1.4222555127675691,
+            "skew": 0.7699349000110292,
+            "kurt": 2.2895736341383257
+          },
+          "bh_family": "ats",
+          "bh_cutoff": 0.05,
+          "bh_reject": false,
+          "bh6_cutoff": 0.05,
+          "bh6_reject": false,
+          "family_var_trials_sr": 0.4196119522484488,
+          "null": {
+            "raw": {
+              "state": "GENUINE_ABSENCE",
+              "reason": "`ats_wk7+`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+              "retest_trigger": null,
+              "detail": {
+                "n_folds": 6.0,
+                "n_arms": 3.0
+              }
+            },
+            "corrected": {
+              "state": "MEASURED_IMMATERIAL",
+              "reason": "`ats_wk7+`: hit rate 0.4930 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5142 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 2,582, but the interval already excludes it, which is the sharper post-data question.)",
+              "retest_trigger": null
+            },
+            "correction_applied": true
+          }
+        },
+        "ou": {
+          "n": 2589,
+          "wins": 1305,
+          "hit_rate": 0.5040556199304751,
+          "placebo": 0.4982618771726535,
+          "anchors": {
+            "always_over": 0.5021243723445346,
+            "always_under": 0.49787562765546545
+          },
+          "side_frac": 0.6875241405948243,
+          "side_balance": 0.31247585940517575,
+          "n_push": 30,
+          "p_one_sided": 0.9788451447758945,
+          "p_one_sided_vs_50": 0.34713982477730987,
+          "upper_bound_bonf": 0.5251428180870749,
+          "upper_bound_nominal": 0.5204022195441292,
+          "mde_hit_rate": 0.5483996549941961,
+          "mde_pp": 2.459965499419603,
+          "edge_pp": -1.9744380069524947,
+          "roi_at_minus_110": -0.03771199831454758,
+          "per_season": {
+            "seasons": [
+              2020,
+              2021,
+              2022,
+              2023,
+              2024,
+              2025
+            ],
+            "hit_rate": [
+              0.5079,
+              0.5149,
+              0.4621,
+              0.5346,
+              0.5171,
+              0.4886
+            ],
+            "n": [
+              380,
+              404,
+              422,
+              434,
+              468,
+              481
+            ],
+            "fold_wins": 1,
+            "n_folds": 6,
+            "observed_sr": -0.7717191104995772,
+            "skew": -0.6247016315445126,
+            "kurt": 2.3482314667820123
+          },
+          "bh_family": "ou",
+          "bh_cutoff": 0.05,
+          "bh_reject": false,
+          "bh6_cutoff": 0.03333333333333333,
+          "bh6_reject": false,
+          "family_var_trials_sr": 0.11610231391214518,
+          "null": {
+            "raw": {
+              "state": "GENUINE_ABSENCE",
+              "reason": "`ou_wk7+`: the best arm does not beat the foil ON AVERAGE. No sample size rescues a negative point estimate and no field size changes its sign \u2014 do NOT re-test.",
+              "retest_trigger": null,
+              "detail": {
+                "n_folds": 6.0,
+                "n_arms": 3.0
+              }
+            },
+            "corrected": {
+              "state": "MEASURED_IMMATERIAL",
+              "reason": "`ou_wk7+`: hit rate 0.5041 is below the 0.5238 breakeven AND the family-adjusted one-sided upper bound 0.5251 lies BELOW the pre-registered meaningful effect 0.5476. The ENTIRE plausible range is below a decision-changing edge, so this is decisive \u2014 not underpowered. (Detecting that effect would need 2,785 non-push games; this bucket has 2,589, but the interval already excludes it, which is the sharper post-data question.)",
+              "retest_trigger": null
+            },
+            "correction_applied": true
+          }
+        }
+      }
+    },
+    "side_tilt": {
+      "wk1-3": {
+        "model_takes_home_ats": 0.43937232524964337,
+        "home_actually_covered": 0.514978601997147,
+        "model_takes_over_ou": 0.6278409090909091,
+        "over_actually_hit": 0.4630681818181818
+      },
+      "wk4-6": {
+        "model_takes_home_ats": 0.4963942307692308,
+        "home_actually_covered": 0.48677884615384615,
+        "model_takes_over_ou": 0.6488730723606169,
+        "over_actually_hit": 0.5195729537366548
+      },
+      "wk7+": {
+        "model_takes_home_ats": 0.4701781564678544,
+        "home_actually_covered": 0.49845081332300545,
+        "model_takes_over_ou": 0.6875241405948243,
+        "over_actually_hit": 0.5021243723445346
+      }
+    },
+    "leave_2020_out": {
+      "wk1-3": {
+        "ats": {
+          "n": 670,
+          "hit_rate": 0.5194029850746269,
+          "placebo": 0.4880597014925373
+        },
+        "ou": {
+          "n": 673,
+          "hit_rate": 0.5022288261515602,
+          "placebo": 0.4710252600297177
+        }
+      },
+      "wk4-6": {
+        "ats": {
+          "n": 753,
+          "hit_rate": 0.48339973439575035,
+          "placebo": 0.5073041168658698
+        },
+        "ou": {
+          "n": 763,
+          "hit_rate": 0.5347313237221494,
+          "placebo": 0.5072083879423329
+        }
+      },
+      "wk7+": {
+        "ats": {
+          "n": 2205,
+          "hit_rate": 0.4947845804988662,
+          "placebo": 0.4988662131519274
+        },
+        "ou": {
+          "n": 2209,
+          "hit_rate": 0.5033952014486193,
+          "placebo": 0.5070167496604798
+        }
+      }
+    },
+    "pass": {
+      "wk1-3": {
+        "ats": {
+          "1_material_point": false,
+          "2_bh_significant": false,
+          "3_beats_placebo": true,
+          "4_beats_degenerates": true,
+          "5_non_degenerate_n": true,
+          "6_active": true,
+          "values": {
+            "hit_rate": 0.5192582025677603,
+            "breakeven": 0.5238,
+            "p_one_sided": 0.6099195238756012,
+            "bh_cutoff": 0.016666666666666666,
+            "placebo": 0.48502139800285304,
+            "best_degenerate": 0.514978601997147,
+            "n": 701,
+            "side_balance": 0.43937232524964337
           },
           "CLEARS": false,
           "note": "robustness read \u2014 pre-registered \u00a72 as INELIGIBLE to pass under any circumstance, so CLEARS is False by construction, not by result."
@@ -1341,14 +1355,14 @@
           "5_non_degenerate_n": true,
           "6_active": true,
           "values": {
-            "hit_rate": 0.5014245014245015,
+            "hit_rate": 0.5028409090909091,
             "breakeven": 0.5238,
-            "p_one_sided": 0.8896360429754588,
+            "p_one_sided": 0.8751460439363046,
             "bh_cutoff": 0.03333333333333333,
-            "placebo": 0.46438746438746437,
-            "best_degenerate": 0.5370370370370371,
-            "n": 702,
-            "side_balance": 0.3717948717948718
+            "placebo": 0.4715909090909091,
+            "best_degenerate": 0.5369318181818182,
+            "n": 704,
+            "side_balance": 0.37215909090909094
           },
           "CLEARS": false,
           "note": "robustness read \u2014 pre-registered \u00a72 as INELIGIBLE to pass under any circumstance, so CLEARS is False by construction, not by result."
@@ -1363,11 +1377,11 @@
           "5_non_degenerate_n": true,
           "6_active": true,
           "values": {
-            "hit_rate": 0.4855769230769231,
+            "hit_rate": 0.4879807692307692,
             "breakeven": 0.5238,
-            "p_one_sided": 0.9874851251005171,
+            "p_one_sided": 0.9822347377527418,
             "bh_cutoff": 0.03333333333333333,
-            "placebo": 0.5144230769230769,
+            "placebo": 0.5084134615384616,
             "best_degenerate": 0.5132211538461539,
             "n": 832,
             "side_balance": 0.4963942307692308
@@ -1376,19 +1390,19 @@
           "note": "robustness read \u2014 pre-registered \u00a72 as INELIGIBLE to pass under any circumstance, so CLEARS is False by construction, not by result."
         },
         "ou": {
-          "1_material_point": false,
+          "1_material_point": true,
           "2_bh_significant": false,
           "3_beats_placebo": true,
           "4_beats_degenerates": true,
           "5_non_degenerate_n": true,
           "6_active": true,
           "values": {
-            "hit_rate": 0.5207591933570581,
+            "hit_rate": 0.5243179122182681,
             "breakeven": 0.5238,
-            "p_one_sided": 0.5838530970794009,
+            "p_one_sided": 0.501962439008091,
             "bh_cutoff": 0.016666666666666666,
-            "placebo": 0.5041518386714117,
-            "best_degenerate": 0.5183867141162515,
+            "placebo": 0.5088967971530249,
+            "best_degenerate": 0.5195729537366548,
             "n": 843,
             "side_balance": 0.35112692763938314
           },
@@ -1405,14 +1419,14 @@
           "5_non_degenerate_n": true,
           "6_active": true,
           "values": {
-            "hit_rate": 0.4939899185730903,
+            "hit_rate": 0.4930286599535244,
             "breakeven": 0.5238,
-            "p_one_sided": 0.9988524142459829,
+            "p_one_sided": 0.9991796231738002,
             "bh_cutoff": 0.05,
-            "placebo": 0.4939899185730903,
-            "best_degenerate": 0.5005816207832493,
-            "n": 2579,
-            "side_balance": 0.46956184567661885
+            "placebo": 0.4992254066615027,
+            "best_degenerate": 0.5015491866769946,
+            "n": 2582,
+            "side_balance": 0.4701781564678544
           },
           "CLEARS": false,
           "note": "robustness read \u2014 pre-registered \u00a72 as INELIGIBLE to pass under any circumstance, so CLEARS is False by construction, not by result."
@@ -1420,19 +1434,19 @@
         "ou": {
           "1_material_point": false,
           "2_bh_significant": false,
-          "3_beats_placebo": false,
+          "3_beats_placebo": true,
           "4_beats_degenerates": true,
           "5_non_degenerate_n": true,
           "6_active": true,
           "values": {
-            "hit_rate": 0.5023219814241486,
+            "hit_rate": 0.5040556199304751,
             "breakeven": 0.5238,
-            "p_one_sided": 0.9862669068054006,
+            "p_one_sided": 0.9788451447758945,
             "bh_cutoff": 0.05,
-            "placebo": 0.5208978328173375,
-            "best_degenerate": 0.5019349845201239,
-            "n": 2584,
-            "side_balance": 0.3130804953560371
+            "placebo": 0.4982618771726535,
+            "best_degenerate": 0.5021243723445346,
+            "n": 2589,
+            "side_balance": 0.31247585940517575
           },
           "CLEARS": false,
           "note": "robustness read \u2014 pre-registered \u00a72 as INELIGIBLE to pass under any circumstance, so CLEARS is False by construction, not by result."
@@ -1444,45 +1458,45 @@
     "skipped": false,
     "runs": {
       "seed7": {
-        "ats_wk1-3": 0.5278969957081545,
-        "ou_wk1-3": 0.5,
-        "ats_wk4-6": 0.4963942307692308,
-        "ou_wk4-6": 0.5183867141162515,
-        "ats_wk7+": 0.49631640170608765,
-        "ou_wk7+": 0.5123839009287926
+        "ats_wk1-3": 0.5306704707560628,
+        "ou_wk1-3": 0.5014204545454546,
+        "ats_wk4-6": 0.49759615384615385,
+        "ou_wk4-6": 0.5219454329774614,
+        "ats_wk7+": 0.4953524399690163,
+        "ou_wk7+": 0.5144843568945539
       },
       "seed1234": {
-        "ats_wk1-3": 0.5150214592274678,
-        "ou_wk1-3": 0.49145299145299143,
-        "ats_wk4-6": 0.49759615384615385,
-        "ou_wk4-6": 0.5231316725978647,
-        "ats_wk7+": 0.4955409073284219,
-        "ou_wk7+": 0.5096749226006192
+        "ats_wk1-3": 0.5178316690442225,
+        "ou_wk1-3": 0.4928977272727273,
+        "ats_wk4-6": 0.4987980769230769,
+        "ou_wk4-6": 0.5266903914590747,
+        "ats_wk7+": 0.4941905499612703,
+        "ou_wk7+": 0.5110081112398609
       },
       "draws20000": {
-        "ats_wk1-3": 0.5221745350500715,
-        "ou_wk1-3": 0.5,
-        "ats_wk4-6": 0.49399038461538464,
-        "ou_wk4-6": 0.5183867141162515,
-        "ats_wk7+": 0.49709189608375337,
-        "ou_wk7+": 0.5127708978328174
+        "ats_wk1-3": 0.5249643366619116,
+        "ou_wk1-3": 0.5014204545454546,
+        "ats_wk4-6": 0.4963942307692308,
+        "ou_wk4-6": 0.5219454329774614,
+        "ats_wk7+": 0.4957397366382649,
+        "ou_wk7+": 0.5140981073773658
       },
       "primary": {
-        "ats_wk1-3": 0.51931330472103,
-        "ou_wk1-3": 0.4985754985754986,
-        "ats_wk4-6": 0.49278846153846156,
-        "ou_wk4-6": 0.5219454329774614,
-        "ats_wk7+": 0.49592865451725476,
-        "ou_wk7+": 0.5135448916408669
+        "ats_wk1-3": 0.5221112696148359,
+        "ou_wk1-3": 0.5,
+        "ats_wk4-6": 0.49399038461538464,
+        "ou_wk4-6": 0.5243179122182681,
+        "ats_wk7+": 0.4949651432997676,
+        "ou_wk7+": 0.5164156044804944
       }
     },
     "spread_pp": {
-      "ats_wk1-3": 1.29,
+      "ats_wk1-3": 1.28,
       "ou_wk1-3": 0.85,
       "ats_wk4-6": 0.48,
       "ou_wk4-6": 0.47,
-      "ats_wk7+": 0.16,
-      "ou_wk7+": 0.39
+      "ats_wk7+": 0.15,
+      "ou_wk7+": 0.54
     }
   },
   "best_alpha": 0
