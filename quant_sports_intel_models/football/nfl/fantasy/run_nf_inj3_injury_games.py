@@ -47,8 +47,69 @@ _STAGING, _MARTS = "main_nfl_staging", "main_nfl_marts"
 _SEED = 20260822
 MAX_PBO, MIN_DSR = 0.20, 0.95
 SERVING_SEASON = 2026
-#: 🔒 the SERVED arm. Deploy-held: nothing here serves until the PM records a disposition.
+#: 🔒 the SERVED arm. Deploy-held. ⭐ THE PM RECORDED ITS DISPOSITION ON 2026-08-22 (see
+#: `PM_DISPOSITION`) and it is UNCHANGED: the null stands and the served caps are untouched.
 SERVED_ARM = "incumbent"
+
+#: ⭐ THE PM'S RULINGS, recorded here so the report cannot be read without them and a later reader
+#: does not have to reconstruct them (the NF-INJ1 §8 pattern). Rendered directly under the verdict.
+PM_DISPOSITION = """\
+## 0a. ⚖️ PM DISPOSITION (2026-08-22) — recorded; NF-INJ3 closes here
+
+**Nothing deploys. `best_alpha = 0`. The null STANDS and the served caps are UNCHANGED.**
+
+**Decision 1 — the timing line → B.** Accept the ONSET PROXY as the modelling answer: the timing
+hypothesis has been tested as well as this data allows (+0.0252 CRPS, p 0.098 — the smallest of the
+three live channels) and the registered designation-date covariate genuinely does not exist. **Also
+fund the capture change** — stop overwriting the Sleeper Delta partition so a real designation date
+accrues going forward — but as **non-gating data infrastructure on a multi-season horizon**
+(~40 rows/yr), **NOT** an NF-INJ3 follow-up, and it must block nothing. Worth starting now: the
+sooner it snapshots, the sooner there is history. ⭐ **Load-bearing record: a future story must NOT
+re-assume `stg_nfl_sleeper_injuries.ingested_at` carries designation recency.** → carded `NF-INJ3-CAP`.
+
+**Decision 2 — → A: NF-INJ3b is FUNDED.** A fresh FORWARD pre-registration that names, up front:
+`V`'s membership (degenerates ∉ `V` **and** the incumbent REFERENCE arm ∉ `V`, per MH2.1 (a) — its
+trial Sharpe is 0-by-construction and inflates a small-family `V`); the BH family (one mechanism,
+one population, no position axis ⇒ arguably single-hypothesis); the **hurdle** form as primary; and
+a coherent narrower family justified **on mechanism**.
+
+> ⚠️ **Register it honestly.** DSR's outcome is largely known in advance (0.973 from this report's
+> diagnostic), so NF-INJ3b buys a **properly-registered record and an honest BH answer, not new
+> evidence** — say so; do not present a foregone DSR pass as fresh confirmation.
+
+⛔ **NOT B** (consumption / the NF-W8 QB Option-B route): that precedent required the model-layer
+remedies to be MEASURED-EXHAUSTED, and they are not — NF-INJ3b is cheap and available, so we do the
+clean thing, not a governance override. ⛔ **NOT C**: leaving demonstrably ~2× too-high availability
+on draftable players through draft season is the wrong product outcome when the direction is robust.
+
+⛔ **HARD PROHIBITIONS.** Do not re-read NF-INJ3's gate off the 0.973 diagnostic (E2.1-r). Do not
+trim the field post-hoc (MH2.2). Do not publish a "more seasons" trigger — 28 folds is 28 NFL
+seasons, and the binding quantity was `V`'s COMPOSITION, not power.
+
+**Decision 3 — draft-season exposure raises NF-INJ3b to HIGH priority, with NO rushed interim.**
+The board serving Kittle / Pierce / Charbonnet / Higgins / Musgrave at ~2× their fitted availability
+during draft season is a real live accuracy problem, and NF-INJ3b is the path to fix it — prioritise
+accordingly, and **if it clears, move the gated served-cap change promptly**. But no interim
+consumption tweak: any cap change is level-adjacent (`point = rate × games` ⇒ whole-board placement
+read + interval revalidation + NF-TR2b's superflex caveat) so it is not free, and the served-POINT
+impact is unmeasured (NF1.5 hands some back — NF-INJ1/2 territory). A rushed interim on uncertified
+specific values is riskier than the clean path. **If draft season ends before NF-INJ3b ships, the
+gates were the correct cost.**
+
+**NF-INJ3c** (the rookie path is never discounted; 0 live 2026 rows) needs no decision — fold into
+the next rookie-path touch.
+
+---
+
+⚠️ **ONE TECHNICAL CAUTION FOR WHOEVER REGISTERS NF-INJ3b, added by this session:** the 0.973
+figure is **specific to THIS 7-arm field with the reference arm removed**. `V` is a SAMPLE VARIANCE
+over the field's trial Sharpes, so changing the family's MEMBERSHIP changes it **non-monotonically**
+— DSR-CONV already documents that dropping a NEAR-MEAN arm WIDENS the variance and RAISES the bar.
+⇒ a narrower NF-INJ3b family does **not** inherit 0.973, and must not be registered as though it
+does. ⛔ **This session deliberately did NOT compute DSR for candidate narrowed fields**: publishing
+a menu of per-family DSRs is exactly what would contaminate the successor's family choice (MH2.2).
+Declare the family on mechanism FIRST, then compute.
+"""
 #: the REFERENCE arm — its lift over itself is identically 0, so its trial Sharpe is 0 by
 #: construction (MH2.1 (a)). Named here so the diagnostic cannot silently mean something else.
 INCUMBENT_REFERENCE = "incumbent"
@@ -757,6 +818,8 @@ def write_report_md(rep: dict, path: Path) -> None:
       "Nothing here serves until the PM records a disposition.")
     p()
 
+    p(PM_DISPOSITION)
+    p()
     p("## 0. ⚠️ The registered covariate does not exist — read this before the leaderboard")
     p()
     p("The story asks for games as a function of status and **when the designation landed relative "
