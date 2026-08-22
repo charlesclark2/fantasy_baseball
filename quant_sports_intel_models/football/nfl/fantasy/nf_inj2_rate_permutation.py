@@ -273,9 +273,19 @@ def feasible_hi(*, arm: str, line: pd.DataFrame | None, positions, games,
 #: support (NF-D22's governance shape).
 SERVED_ARM = "incumbent"
 
-#: the §0.5 outcome, recorded by the runner. One of: "UNRUN" | "CLEARED" | "CONSTRAINT_REFUSED" |
-#: "NULL". Written here by hand when the decisive run lands, and read by `assert_coherent`.
-GATE_STATUS = "UNRUN"
+#: the §0.5 outcome. One of "UNRUN" | "CLEARED" | "CONSTRAINT_REFUSED" | "NULL", read by
+#: `assert_coherent`.
+#:
+#: ⭐ IT IS PINNED TO THE COMMITTED REPORT, not maintained by hand. The first cut said it was
+#: "written here by hand when the decisive run lands" — and it then shipped as `"UNRUN"` after the
+#: decisive run had landed and been refused, i.e. the policy module claimed the study had never run.
+#: Harmless that day (a non-incumbent `SERVED_ARM` is what makes `assert_coherent` read it, and the
+#: board serves the incumbent), but it is exactly the documented-≠-actual class this repo keeps
+#: paying for, and a hand-maintained flag with no consumer is the NF-C0e defect in miniature.
+#: `test_the_recorded_gate_status_matches_the_committed_report` now fails if this and
+#: `ablation_results/nf_inj2_rate_permutation.json`'s verdict disagree, so a re-run that changes the
+#: verdict must change this in the SAME commit.
+GATE_STATUS = "CONSTRAINT_REFUSED"
 
 #: whether a PM has recorded a disposition to serve `PRIMARY_ARM`. Kept SEPARATE from `GATE_STATUS`
 #: because clearing the gates and deciding to ship are different facts, and NF-D21/NF-D22 were both
