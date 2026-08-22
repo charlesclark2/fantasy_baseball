@@ -40,6 +40,21 @@ deliberately disagree — the JSON is the current one.
 | the §2a reproduction **PIN** targets | 🔁 **RE-ANCHORED** onto S1-serve's repaired re-run. The clause is unchanged; the old targets were numbers the defect made. |
 | 3 of 6 **null-state** classifications | 🔁 changed (ATS `wk1-3` → `POWER_LIMITED`; ATS `wk4-6` → `MEASURED_IMMATERIAL`; O/U `wk4-6` → `POWER_LIMITED`) |
 
+### The re-test question now splits by market (PM, 2026-08-22)
+
+This record's "⛔ do NOT card 're-test with more seasons'" advice was derived from the decisive
+reading, and half of it is invalidated:
+
+- **O/U `wk1-3`** — interval still excludes the effect that would matter ⇒ ⛔ **still no re-test.**
+- **ATS `wk1-3`** — now `POWER_LIMITED` ⇒ a **forward-registered re-test with more seasons is
+  admissible** (NF-D18: `POWER_LIMITED` earns a trigger, a decisive/immaterial null does not).
+  🚩 **LOW PRIOR** — one cell, against a whole VAL thread that came back null/unsupported. It is the
+  one place an early edge is *not excluded*, not a reason to build an epic. Home: the **P0.6b
+  in-season shadow**.
+
+P2.2/P2.3 are otherwise unchanged: still do not BUILD on an assumed early-season seam. The door is
+**open-but-low-prior**, not closed.
+
 ⚠️ **The repaired levels are the 2026-07-22 cache vintage (4,182 closes), not the 2026-08-20 one
 (4,187) this record used** — that cache exists in no checkout (`ncaaf_val2_mu_total_offset.md` §8).
 The repair is a property of the source code and holds on any vintage; the levels are vintage-bound.

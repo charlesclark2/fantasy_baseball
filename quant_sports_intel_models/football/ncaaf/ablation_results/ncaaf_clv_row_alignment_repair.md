@@ -79,6 +79,16 @@ The same trap fired a second time, differently: S1-serve's **recorded** O/U hit 
 the 2026-07-22 vintage). Diffing the two recorded numbers again says "nothing changed"; a
 like-for-like read on one vintage says 0.5193 → 0.5127.
 
+And a **third** instance, on a second cache vintage (§4e): on the 2026-08-22 assembly the **pooled
+O/U hit rate is identical to four decimals both ways (0.5128), and so is `wk7+` (0.5126)** — while
+the pooled side moves 0.5881 → 0.6064 and `wk7+` 0.5802 → 0.6135.
+
+⭐ **Three instances across two vintages is not a coincidence, it is a mechanism, and the mechanism
+is the uncomfortable part: a market on which the model has no edge returns ≈0.5 whichever side you
+take, so flipping sides is a no-op on the hit rate while being a total change to the decisions.
+⇒ the headline statistic is LEAST able to detect this defect exactly where a null is being claimed
+— which is exactly where it was being used.**
+
 ⇒ **the discriminating statistic is the side-agreement control of §2, not the hit rate.** This is
 the vertical's own recurring class (a metric a correct pipeline and a broken one both produce cannot
 certify the pipeline) and it is why the guard suite's load-bearing test is numerical, not textual.
@@ -125,6 +135,41 @@ Re-running `ncaaf_val2_mu_total_offset` on the repaired tree reproduces its JSON
    absent" around one shared rule (the one-logical-thing-many-owners class, INC-30/36/38) it now
    lives beside `assemble_cache` — which owns the assemble-time derivation — and VAL2 delegates. It
    is a no-op on any post-S1-serve cache, so a re-assembled cache behaves identically.
+
+### 4e. Cross-vintage confirmation — the operator's 2026-08-22 re-assemble
+
+The operator ran the optional re-assemble (`--matrix-source s3` → 4,187 closes) and re-ran the
+chain. **Per PM decision 2026-08-22 this is NOT a re-quote — the levels recorded here stay the
+2026-07-22 vintage and NCAAF-VAL3 re-quotes on current data as its first step.** It is kept as
+evidence, because it answers three questions the single-vintage run could not:
+
+| | 2026-07-22 | 2026-08-22 |
+|---|---|---|
+| sign agreement, **repaired** | 0.9802 | **0.9804** |
+| sign agreement, as-coded | 0.6968 | 0.6936 |
+| S1-serve ATS / O/U | 0.4993 / 0.5127 | 0.4984 / 0.5128 |
+| VAL2 verdict | `HAND_TO_VAL3_SCOPED`, cell `wk1-3` | identical |
+| VAL2 cold-start contrast Δ | +2.118 [+0.42, +3.81] | +2.101 [+0.39, +3.81] |
+
+1. **The repair is vintage-robust.** Agreement lands on 0.98 on both assemblies, and the served
+   levels move by ≤0.001. The fix is a property of the source code, as claimed.
+2. **⭐ VAL1's re-anchored §2a pin worked exactly as designed, on its first real test.** It HALTed —
+   and the *way* it HALTed is the point: **all three RATE legs PASSED** (ats_hit 0.4984 vs 0.4993,
+   ou_hit 0.5128 vs 0.5127, placebo 0.5018 vs 0.4968) while **only the two POPULATION legs failed**,
+   by 5 games (4,115 vs 4,110; 4,134 vs 4,129). That is the pin separating *"the population moved"*
+   from *"the read changed"* — and reporting, correctly, that the repaired read did **not** change
+   across vintages. Re-anchoring from the new parent is VAL3's first step; the HALT is the
+   instruction, not a failure.
+3. **The invariance finding got its third instance** (§3) — and on the O/U leg, which *did* move on
+   the 07-22 vintage. Whether the headline moves is an accident of the cell; whether the sides move
+   is not.
+
+⚙️ **Process correction:** this session handed the re-assemble over as a ">2 min operator job". It
+took **6 seconds**. The `>2 min ⇒ hand to the operator` rule was over-applied — a cheap smoke would
+have shown that (the same over-application MH2.2 recorded for §0.5 re-scoring). The *other* reason
+to hand it over stands and is unchanged: `--assemble` is a live data pull that overwrites the only
+working cache on the machine, and a failed odds join still writes it with `has_close = False` on
+every row.
 
 ## 5. VAL1's verdict, re-read against the repaired figures
 
@@ -229,6 +274,40 @@ VAL2's record stays coherent about its §2. The substantive guards live in the f
 Also fixed in passing: VAL1's pin test hardcoded the pre-repair rates and **still passed** after the
 re-anchor — by 0.0003 of the tolerance. It now derives its fixture from `PIN`, so it tests the
 function rather than restating a constant that silently rots.
+
+## 6a. PM decisions (2026-08-22)
+
+Both decisions this repair raised are resolved; recorded here so the reasoning travels with the
+numbers.
+
+**1 — the corrected VAL1 verdict.** Approved as: *`ALL_BUCKETS_NULL` stands and is now EARNED;
+founding premise **UNSUPPORTED** (⛔ not "contradicted"/"refuted" — the aligned ATS estimate runs
+with the premise; and ⛔ not weaker — there is still no measured edge); `wk1-3` ATS is
+`POWER_LIMITED` so a decision-changing early ATS edge is no longer excluded, while O/U `wk1-3`
+stays decisively immaterial; the cold-start totals over-tilt survives, strengthens, and is what
+VAL3 consumes.* The four PM-owned docs that quoted the withdrawn claims were corrected in this PR
+under that approved wording (`ncaaf_roadmap.md` L76 + the VAL1 entry,
+`ncaaf_p1_4_game_model.md`, `production_model_state/ncaaf.md`), each with a dated
+"corrected post-CLV-alignment-repair 2026-08-22" note. VAL1's own record keeps its SUPERSEDED
+marker with the surviving/overturned table left verbatim — a decided story's record is not
+rewritten after its result (NF-W7f); the *live guidance* docs get the corrected truth.
+
+⭐ **The re-test question splits by market, and that split is the repair's most actionable output.**
+For **O/U `wk1-3`** the family-adjusted interval still excludes the effect that would matter, so ⛔
+still do NOT card a re-test. For **ATS `wk1-3`** the cell is `POWER_LIMITED`, so a
+forward-registered re-test with more seasons **is admissible** (NF-D18: `POWER_LIMITED` earns a
+trigger; a decisive/immaterial null does not). 🚩 **Registered LOW-PRIOR**: it is one cell, the whole
+VAL thread and the founding premise came back null/unsupported, and it is *the one place an early
+edge is not excluded* — not a reason to build an epic. Natural home is the **P0.6b in-season
+shadow**. P2.2/P2.3 guidance is otherwise unchanged: still do not BUILD on an assumed early-season
+seam; the door is **open-but-low-prior**, not closed.
+
+**2 — do NOT re-quote the levels.** The 2026-07-22 vintage stands for this record and NCAAF-VAL3
+re-quotes against current data as its first step (VAL2 §8 already argues current data is the right
+VAL3 target). Rationale: what this PR certifies is the code fix and the verdicts, and **all of those
+are vintage-robust** — `ALL_BUCKETS_NULL`, the premise downgrade, and the ATS-cell `POWER_LIMITED`
+reclassification hold on any assembly, as §4e now demonstrates on a second one. The exact level
+figures are not what is being certified here, and VAL3 would only re-quote them again.
 
 ## 7. Scope
 
