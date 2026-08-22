@@ -543,7 +543,9 @@ def build_season_projection(con, base_season: int, projection_season: int, schem
                             selections: dict[str, dict], inputs, base_from: int = 2017,
                             pool: pd.DataFrame | None = None,
                             band_panel: pd.DataFrame | None = None,
-                            market_refresh: bool = False) -> pd.DataFrame:
+                            market_refresh: bool = False,
+                            arm: str | None = None,
+                            capture: dict | None = None) -> pd.DataFrame:
     """The NF1.5 refined board = **the SHIPPED MVP-1 board with the veteran ORDER re-assigned**.
 
     ⭐ NF1.5b REBUILT THIS AS A TRANSFORM OF THE SHIPPED BOARD rather than a parallel assembly, and
@@ -594,7 +596,14 @@ def build_season_projection(con, base_season: int, projection_season: int, schem
         n_by_pos = {p: int(((vets["position"] == p) & elig).sum()) for p in positions}
         log.info("refined re-order: %d/%d veterans scored %s; %d left at their MVP-1 level",
                  int(elig.sum()), len(vets), n_by_pos, int((~elig).sum()))
-        out = M1.apply_learned_ordering(vets, score, positions=positions, eligible=elig)
+        if capture is not None:
+            # NF-INJ2: an OUT-param (the INC-41 `run_ref` pattern), so a §0.5 harness can drive the
+            # REAL build once per fold and then apply every pre-registered arm to the IDENTICAL
+            # veteran frame, learned scores and band model — common random numbers across arms, and
+            # no re-implementation of the shipped ordering to drift from it (NF-C0e).
+            capture.update(vets=vets.copy(), band_model=band_model, scores=dict(scores),
+                           eligible=elig.copy(), score=score.copy(), positions=positions)
+        out = M1.apply_learned_ordering(vets, score, positions=positions, eligible=elig, arm=arm)
         out = SP.score_line(out, prefix="proj_")
         # `nf1_scale` is the per-row raw-line rescale the re-level needed. Stashed here because
         # `build_projection` trims to `OUTPUT_COLS` and would drop it — and it is the diagnostic that

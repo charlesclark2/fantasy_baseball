@@ -498,7 +498,9 @@ _RAW_SCALE_COLS = (
 def apply_learned_ordering(mvp1: pd.DataFrame, learned_score: np.ndarray,
                            positions: tuple = LEARN_POSITIONS,
                            lo: float = 0.30, hi: float = 3.5,
-                           eligible: np.ndarray | None = None) -> pd.DataFrame:
+                           eligible: np.ndarray | None = None,
+                           arm: str | None = None,
+                           arm_seed: int | None = None) -> pd.DataFrame:
     """Apply the learned model as an ORDERING within each position, PRESERVING MVP-1's calibrated
     point-level distribution (a within-position quantile remap — the `blend_adp_prior` mechanism).
 
@@ -527,22 +529,22 @@ def apply_learned_ordering(mvp1: pd.DataFrame, learned_score: np.ndarray,
     player by his MVP-1 points on a scale the learner does not share — silently interleaves two
     different scales. A player the model cannot speak to should be left alone, not guessed at."""
     from quant_sports_intel_models.football.nfl.fantasy import season_projection as _SP
+    from quant_sports_intel_models.football.nfl.fantasy import nf_inj2_rate_permutation as _RP
     out = mvp1.copy()
     base = _SP.score_line(out, prefix="proj_")["proj_fp_ppr"].to_numpy(dtype=float)
-    remapped = base.copy()
     pos = np.array([(p or "").upper() for p in out["position"]], dtype=object)
     score = np.asarray(learned_score, dtype=float)
     elig = (np.ones(len(out), dtype=bool) if eligible is None
             else np.asarray(eligible, dtype=bool))
-    for p in positions:
-        idx = np.where((pos == p) & elig)[0]
-        if len(idx) < 2:
-            continue
-        s = score[idx]
-        s = np.where(np.isfinite(s), s, -np.inf)          # unscored players sink to the bottom
-        order = idx[np.argsort(-s, kind="stable")]        # best learned score first
-        remapped[order] = np.sort(base[idx])[::-1]        # this position's own point multiset, desc
-    return apply_learned_level(out, remapped, lo=lo, hi=hi)
+    use_arm = _RP.SERVED_ARM if arm is None else str(arm)
+    remapped = _RP.assign_targets(
+        base=base, games=out.get("proj_games"), score=score, positions=pos, eligible=elig,
+        arm=use_arm, learn_positions=positions, line=out,
+        seed=_RP.RANDOM_ORDER_SEED if arm_seed is None else int(arm_seed),
+        rescale_lo=lo, rescale_hi=hi)
+    hi_eff = _RP.feasible_hi(arm=use_arm, line=out, positions=pos,
+                             games=out.get("proj_games"), rescale_hi=hi)
+    return apply_learned_level(out, remapped, lo=lo, hi=hi_eff)
 
 
 def apply_learned_level(mvp1: pd.DataFrame, learned_fp: np.ndarray, fp_col: str = "proj_fp_ppr",
