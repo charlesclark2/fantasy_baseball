@@ -41,7 +41,7 @@ import {
 import { useAllTrackRecordSeasons, useTrackRecordManifest } from "@/lib/fantasy-track-record"
 import { positionTierMap, type Player } from "@/lib/draft-optimizer"
 import { initials, nflTeamLogoUrl } from "@/lib/nfl-teams"
-import { fullSeasonRate } from "@/lib/fantasy"
+import { availabilityTier, fullSeasonRate } from "@/lib/fantasy"
 import type { ProjectedPlayer } from "@/lib/fantasy"
 import {
   EXPECTED_POINTS_LABEL,
@@ -57,6 +57,7 @@ import {
   ADP_DELTA_LABEL,
   AdpDelta,
   ALL_POSITIONS,
+  AvailabilityFlag,
   ConfidenceBadge,
   EmptyBlock,
   FadeBadge,
@@ -720,9 +721,24 @@ function PlayerView({ playerId }: { playerId: string }) {
                 {proj.g != null ? (
                   <>
                     {" · "}
-                    <InfoTip label={`${num(proj.g)} ${PROJECTED_GAMES_LABEL.toLowerCase()}`}>
-                      {GLOSSARY.projectedGames}
-                    </InfoTip>
+                    {/* NF-C8 — on a row whose availability discount is material this becomes the
+                        flag (the same coloured chip the boards render, with the same definition and
+                        injury-data vintage behind it); on every other row it stays the plain
+                        "N proj. games" tip that shipped before. The player page is where a drafter
+                        arrives having ALREADY noticed the low number on a board, so the two
+                        surfaces answering with one component is the point. */}
+                    {availabilityTier(proj.g) != null ? (
+                      <span className="normal-case">
+                        <AvailabilityFlag games={proj.g} freshness={projPayload?.freshness} />
+                        <span className="ml-1.5 text-gray-500">
+                          {PROJECTED_GAMES_LABEL.toLowerCase()}
+                        </span>
+                      </span>
+                    ) : (
+                      <InfoTip label={`${num(proj.g)} ${PROJECTED_GAMES_LABEL.toLowerCase()}`}>
+                        {GLOSSARY.projectedGames}
+                      </InfoTip>
+                    )}
                   </>
                 ) : null}
               </h2>

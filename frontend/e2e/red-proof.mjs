@@ -2495,6 +2495,61 @@ const CASES = [
     to: "  body:has([data-printable-surface]) footer.never-matches {",
     grep: "cheat sheet and nothing else",
   },
+
+  // ══ NF-C8 — the availability flag ═════════════════════════════════════════════════════════════
+  //
+  // ⭐ THESE TWO ARE HERE BECAUSE THE PYTHON SUITE STRUCTURALLY CANNOT SEE THEM.
+  // `test_nf_c8_availability_flag_copy.py` proves the copy is honest and that all three surfaces
+  // BIND the component — and every clause in it stays green for a classifier that flags EVERY row
+  // or NONE of them. A flag on every row is decoration, not disclosure; a flag on no row is
+  // indistinguishable from the defect the story exists to fix. Only a render can tell.
+  {
+    id: "availability-flags-everything",
+    shipped: "NF-C8 — pre-emptive: a classifier that stops discriminating",
+    detail:
+      "Flags every row. The badge renders, the copy is honest, the Python suite is green — and the " +
+      "colour now means nothing, because it is on all 858 rows.",
+    file: "lib/fantasy.ts",
+    from: '  if (games < LIMITED_AVAILABILITY_GAMES) return "limited"\n  return null',
+    to: '  return "limited"',
+    grep: "a materially-low games row is flagged and a full-season row is not",
+  },
+  {
+    id: "availability-threshold-off-by-one",
+    shipped: "NF-C8 — pre-emptive: the inclusive comparison",
+    // The threshold is a design quantity and `<` vs `<=` is the classic silent slip. It is not
+    // catchable by any source clause that pins the CONSTANT (14 is still 14), and on the captured
+    // fixture — whose minimum `g` is 14 — it would flag a large slice of the board.
+    detail: "`<=` instead of `<`, so a row AT a full-slate-minus-three flags when it should not.",
+    file: "lib/fantasy.ts",
+    from: "  if (games < LIMITED_AVAILABILITY_GAMES) return \"limited\"",
+    to: "  if (games <= LIMITED_AVAILABILITY_GAMES) return \"limited\"",
+    grep: "a materially-low games row is flagged and a full-season row is not",
+  },
+  {
+    id: "availability-leaks-a-locked-row",
+    shipped: "NF-C8 — pre-emptive: NF-LEAK1 on the games column",
+    // E9.56's redaction strips `g` and renders a subscribe chip. A classifier that ignores `locked`
+    // would flag whatever value reached it — disclosing the withheld figure's neighbourhood on
+    // exactly the rows the server withheld it from, beside a chip saying it is withheld.
+    detail: "Drops the `locked` guard, so a redacted row can still be flagged.",
+    file: "lib/fantasy.ts",
+    from: "  if (opts?.locked) return null",
+    to: "  if (false) return null",
+    grep: "a locked row is never flagged",
+  },
+  {
+    id: "availability-chip-shows-a-fixed-number",
+    shipped: "NF-C8 — pre-emptive: the badge that is not the player's own figure",
+    // The badge IS the games number, so a chip carrying a constant renders perfectly and is wrong
+    // on every row but one. `tsc` sees a string; the Python suite sees a component that renders.
+    detail: "Renders a fixed games figure in the chip instead of the served per-player value.",
+    file: "components/fantasy/shared.tsx",
+    from: "  const value = num(games)",
+    to: '  const value = "9.9"',
+    grep: "a materially-low games row is flagged and a full-season row is not",
+  },
+
 ]
 
 /**

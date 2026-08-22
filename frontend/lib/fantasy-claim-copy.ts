@@ -162,6 +162,67 @@ export const EXPECTED_POINTS_NOTE = {
     "The points we publish are an expected season total: the chance a player misses games is already priced into the number. That puts ours below the “if he plays every week” projections most sites show, and below what a player who stayed healthy actually finished on — by design, not by accident. The projected-games column shows how much of that discount is availability for each player. It is not the only reason a projection lands under a finished season, and we do not present it as one.",
 } as const
 
+// ══ NF-C8 — THE AVAILABILITY FLAG ══════════════════════════════════════════════════════════════
+//
+// The projected-games column and the expected-points label above already make the discount
+// EXPLICABLE. They do not make it VISIBLE: a drafter scanning a board meets a lower number and a
+// lower rank, and nothing on the row says which of those is availability until he goes looking. The
+// flag is the glance-level version of the same disclosure — a colour on the games figure for the
+// rows where the discount is doing real work, with the sentence one tap behind it.
+//
+// ⛔⛔ THE ONE RULE THIS BLOCK EXISTS FOR, AND IT IS ABSOLUTE: THIS MAY NOT FORECAST AN INJURY.
+// What we know is a property of OUR PROJECTION — we project this player for fewer than a full slate
+// of games. What we do NOT know, have never modelled, and could not defend, is that a particular
+// player is hurt, will get hurt, or will miss particular weeks. Those are medical predictions. The
+// distinction is invisible in a UI (an amber chip reads as "injury risk" unless the words say
+// otherwise) and it is one careless verb away in copy — "will miss", "expected to miss", "injury
+// risk", "out for" all cross it. `test_nf_c8_availability_flag_copy.py` holds a forbidden-verb list
+// over these constants for exactly that reason.
+//
+// ⛔ AND IT MAY NOT ABSORB THE RESIDUAL, same rule as `EXPECTED_POINTS_NOTE` one block up.
+// Availability carries most of the measured level shift and not all of it. A flag that said "this
+// is why his number is low" would be using an honest mechanism to bury a dishonest amount, and it
+// would do it on a far higher-traffic surface than the track record.
+//
+// ⛔ NO THRESHOLD IN THE PROSE. The constants that decide which rows flag live in `lib/fantasy.ts`
+// (`LIMITED_AVAILABILITY_GAMES` / `HEAVILY_LIMITED_AVAILABILITY_GAMES`) and are display quantities;
+// typing "below 14 games" into a sentence here would (a) duplicate them somewhere no test pins and
+// (b) read as a published finding rather than as a rendering choice. The copy says "fewer than a
+// full season" and lets the per-player value — read from the served artifact — carry the size.
+
+/** The chip's own accessible name, and the heading of the definition behind it. Deliberately names
+ *  the PROJECTION as the subject ("we project") rather than the player ("he will play"): the first
+ *  is a statement we can defend, the second is a forecast about a person. */
+export const AVAILABILITY_FLAG_LABEL = "Limited projected availability"
+
+/** The one-line summary rendered at the top of the flag's definition, with the served per-player
+ *  games figure substituted for `{games}` at render time.
+ *
+ *  ⚠️ `{games}` IS A PLACEHOLDER, NOT A FIGURE, and that is the whole reason this constant reads
+ *  oddly out of context. The rule from the head of this file — no measured number typed into copy —
+ *  applies to a games value exactly as it applies to a bias or an interval: a number typed here
+ *  cannot be reconciled against the artifact it describes. The value is read per-player from the
+ *  served payload and interpolated by the component. */
+export const AVAILABILITY_FLAG_SUMMARY =
+  "Projected {games} games — limited availability priced in."
+
+/** The tappable definition behind the flag. Says what the flag IS, what it is NOT, and points at
+ *  the expected-points explanation rather than restating it. */
+export const AVAILABILITY_FLAG_DEFINITION =
+  "We project this player for fewer games than a full season, and his point total is already built on that smaller number of games rather than on a full slate. This is a statement about our projection, not a diagnosis: the games figure is an average across everything that could happen to him, so it is not a forecast about his health and it does not name weeks he sits out. It is also not the only reason a projection lands where it does — read it next to the expected-points definition, which is where the rest of that story lives."
+
+/** The freshness line inside the flag's definition (NF-FRESH2's rule, applied to the one input this
+ *  flag actually rests on).
+ *
+ *  ⚠️ ABSENT ≠ NULL, and both directions matter here as much as they do on the provenance strip:
+ *  a payload that never carried the stamp gets NO line at all (inventing "unknown" during a routine
+ *  deploy window would put a scary word under every flag), while a stamp the exporter looked for and
+ *  could not resolve renders as unknown rather than being silently dropped — an unevaluable check is
+ *  never scored healthy (NF1.7 (a)). */
+export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury and roster status as of"
+
+export const AVAILABILITY_DATA_AS_OF_UNKNOWN = "unknown"
+
 // ══ THE FULL-SEASON RATE — the second reading of the same number ═══════════════════════════════
 //
 // `EXPECTED_POINTS_LABEL` above is the availability-weighted season total: the chance a player
