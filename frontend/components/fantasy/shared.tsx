@@ -533,6 +533,7 @@ export const UNCERTAINTY_HELP: Record<string, string> = {
 export function InfoTip({
   label,
   srLabel,
+  bare,
   children,
 }: {
   label: React.ReactNode
@@ -544,6 +545,17 @@ export function InfoTip({
    *  bare figure, i.e. exactly the unexplained number the tip exists to explain. Optional, so every
    *  existing caller is unchanged. */
   srLabel?: string
+  /** Render the trigger WITHOUT the dotted underline and the ⓘ glyph.
+   *
+   *  ⚠️ NF-C8, and it is a scoped exception rather than a style knob. The underline+icon is what
+   *  says "there is a definition behind this" for a plain text label, and removing it from one is
+   *  removing the only affordance it has. It is redundant ONLY where a labelled, defined column
+   *  header sits directly above the cell — the reader has already met the ⓘ once per column, and
+   *  repeating it on every row of a dense table that already scrolls sideways on a phone costs
+   *  width on every row to say the same thing again. The trigger stays a real focusable `<button>`
+   *  with its accessible name, so keyboard and screen-reader access are untouched; what goes is
+   *  chrome, not function. ⛔ Do not pass this where the label is the only thing on screen. */
+  bare?: boolean
   children: React.ReactNode
 }) {
   // Built on POPOVER, not Tooltip, and that is deliberate: Radix's Tooltip closes on pointerdown by
@@ -586,10 +598,14 @@ export function InfoTip({
           // inheritance so this reads correctly both inside an uppercase header AND inline mid-sentence
           // (e.g. the Confidence badge on the player page), which is exactly what "inherit" should do.
           style={{ textTransform: "inherit" }}
-          className="inline-flex cursor-help items-center gap-1 underline decoration-dotted decoration-gray-600 underline-offset-4"
+          className={
+            bare
+              ? "inline-flex cursor-help items-center"
+              : "inline-flex cursor-help items-center gap-1 underline decoration-dotted decoration-gray-600 underline-offset-4"
+          }
         >
           {label}
-          <Info className="h-3 w-3 text-gray-600" aria-hidden />
+          {!bare && <Info className="h-3 w-3 text-gray-600" aria-hidden />}
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -690,12 +706,21 @@ export function AvailabilityFlag({
   games,
   locked,
   freshness,
+  underDefinedHeader,
 }: {
   games: number | null | undefined
   locked?: boolean
   /** From `manifest.freshness` (boards) or `projections.freshness` (the projections table and the
    *  player page). Omit and the flag simply carries no as-of line. */
   freshness?: FreshnessBlock | null
+  /** ⭐ THE TABLES PASS THIS; THE PLAYER PAGE DOES NOT, and the asymmetry is the whole point.
+   *
+   *  On Rankings and Projections the projected-games COLUMN HEADER is itself an `InfoTip` carrying
+   *  `PROJECTED_GAMES_LABEL` and its definition, directly above every cell — so the per-row ⓘ says
+   *  a second time what the header already said, once per row, in a table that already scrolls
+   *  sideways on a phone. The coloured chip is its own affordance there. The player page has no such
+   *  header, so the flag keeps the glyph and remains discoverable. (Operator call, 2026-08-22.) */
+  underDefinedHeader?: boolean
 }) {
   const tier = availabilityTier(games, { locked })
   if (tier == null) return <>{numOrLock(games, locked)}</>
@@ -704,6 +729,7 @@ export function AvailabilityFlag({
   const asOf = availabilityAsOfLine(freshness)
   return (
     <InfoTip
+      bare={underDefinedHeader}
       srLabel={`${value} projected games — ${AVAILABILITY_FLAG_LABEL.toLowerCase()}`}
       label={
         // `whitespace-nowrap` for the same reason `FadeBadge` carries it: this chip lives in a

@@ -32,9 +32,19 @@ occurs twice patches whichever comes first, which may not be the one under test 
 reports a correct guard as vacuous, the dangerous direction, because a false vacuity report invites
 WEAKENING a guard that is fine.
 
-Restores every file from an in-memory backup in a `finally`. ⛔ Deliberately not `git checkout --`:
-that destroys uncommitted work in the files it patches.
+⚠️⚠️ AND IT RESTORES STALE BACKUPS **AT START-UP**, not only in its own `finally` — the E11.26
+lesson, learned here the hard way. An in-memory `finally` cannot run if the process is KILLED, and
+the ordinary way to kill this one is completely mundane: piping it to `head`, which closes stdout
+and delivers SIGPIPE mid-mutation. That leaves the deliberately-BROKEN source on disk, and the next
+thing to read it — the next red-proof run, a test run, a commit — sees a defect that is physically
+present and was never authored. It happened during this story: a `| head -12` killed a run between
+`write_text(patched)` and `write_text(src)`, and the following run's baseline failed on a mutation
+nobody had made. So every backup is also written to `_BACKUP_DIR` before any file is touched, and
+start-up restores anything left there by a previous run before it does anything else.
+
+⛔ Deliberately not `git checkout --`: that destroys uncommitted work in the files it patches.
 """
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -107,10 +117,17 @@ CASES = [
      "test_the_summary_interpolates_the_served_games_value"),
 
     ("re-tune the threshold", LIB,
-     "export const LIMITED_AVAILABILITY_GAMES = 14",
+     "export const LIMITED_AVAILABILITY_GAMES = 12.5",
      "export const LIMITED_AVAILABILITY_GAMES = 16",
      None,
      "test_the_thresholds_are_one_shared_constant_at_the_declared_values"),
+
+    # ⚠️ THE REGRESSION THIS STORY ACTUALLY SHIPPED: re-anchoring the threshold on the schedule.
+    ("re-anchor the threshold on the schedule length", LIB,
+     "export const LIMITED_AVAILABILITY_GAMES = 12.5",
+     "export const LIMITED_AVAILABILITY_GAMES = FULL_SEASON_GAMES - 3",
+     None,
+     "test_the_threshold_is_not_anchored_on_the_schedule_length"),
 
     # ⭐ THE PLAUSIBLE WRONG SHAPE: the constants exist, and a surface ignores them anyway. This is
     # how three boards end up disagreeing about which rows are flagged with nothing failing.
@@ -134,13 +151,16 @@ CASES = [
     # ── coverage: each surface, one at a time ────────────────────────────────────────────────
     ("un-flag the rankings board", RANKINGS,
      "<AvailabilityFlag\n                              games={p.g}\n                              locked={p.locked}\n"
-     "                              freshness={manifest?.freshness}\n                            />",
+     "                              freshness={manifest?.freshness}\n                              underDefinedHeader\n"
+     "                            />",
      "{numOrLock(p.g, p.locked)}",
      "<AvailabilityFlag",
      "test_every_games_surface_renders_the_shared_flag[rankings-board.tsx]"),
 
     ("un-flag the projections table", PROJECTIONS,
-     "<AvailabilityFlag games={p.g} locked={p.locked} freshness={data?.freshness} />",
+     "<AvailabilityFlag\n                        games={p.g}\n                        locked={p.locked}\n"
+     "                        freshness={data?.freshness}\n                        underDefinedHeader\n"
+     "                      />",
      "{numOrLock(p.g, p.locked)}",
      "<AvailabilityFlag",
      "test_every_games_surface_renders_the_shared_flag[projections-table.tsx]"),
@@ -154,9 +174,8 @@ CASES = [
     # ⭐ THE HALF-MIGRATED SURFACE — it carries the flag AND a leftover bare cell, so it satisfies
     # the coverage clause above while still rendering an unflagged games figure.
     ("leave a second, unflagged games cell behind", PROJECTIONS,
-     "<AvailabilityFlag games={p.g} locked={p.locked} freshness={data?.freshness} />",
-     "<AvailabilityFlag games={p.g} locked={p.locked} freshness={data?.freshness} />"
-     "{numOrLock(p.g, p.locked)}",
+     "                      />\n                    </td>",
+     "                      />{numOrLock(p.g, p.locked)}\n                    </td>",
      None,
      "test_no_games_surface_still_renders_the_bare_unflagged_figure[projections-table.tsx]"),
 
@@ -170,8 +189,8 @@ CASES = [
      "test_the_flag_falls_through_to_the_plain_figure_rather_than_rendering_nothing"),
 
     ("put the definition on a hover-only title attribute", SHARED,
-     "    <InfoTip\n      srLabel={`${value} projected games",
-     "    <span title=\"limited\">\n      <InfoTip\n      srLabel={`${value} projected games",
+     "    <InfoTip\n      bare={underDefinedHeader}",
+     "    <span title=\"limited\">\n      <InfoTip\n      bare={underDefinedHeader}",
      None,
      "test_the_flag_definition_travels_through_infotip_and_not_a_hover_only_tooltip"),
 
@@ -216,6 +235,40 @@ CASES = [
 
 FILES = {c[1] for c in CASES}
 
+#: Where the on-disk copies live while a mutation is applied. Inside the repo (so it is obvious and
+#: greppable) and gitignored-by-name via the leading dot; removed on a clean exit.
+_BACKUP_DIR = REPO / ".nf_c8_red_proof_backup"
+
+
+def _slug(path: Path) -> str:
+    return str(path.relative_to(REPO)).replace("/", "__")
+
+
+def _restore_stale_backups() -> None:
+    """⚠️ RUN THIS BEFORE ANYTHING ELSE. A backup dir surviving from a previous run means that run
+    was killed mid-mutation and the file on disk is the DELIBERATELY BROKEN version. Restoring it
+    silently would be wrong in the other direction, so it says so loudly."""
+    if not _BACKUP_DIR.exists():
+        return
+    restored = []
+    for saved in sorted(_BACKUP_DIR.iterdir()):
+        target = REPO / saved.name.replace("__", "/")
+        if target.exists() and target.read_text() != saved.read_text():
+            target.write_text(saved.read_text())
+            restored.append(str(target.relative_to(REPO)))
+    shutil.rmtree(_BACKUP_DIR, ignore_errors=True)
+    if restored:
+        print("⚠️  a previous run was killed mid-mutation; restored deliberately-broken source in:")
+        for f in restored:
+            print(f"     {f}")
+        print()
+
+
+def _write_backups(backups: dict) -> None:
+    _BACKUP_DIR.mkdir(exist_ok=True)
+    for path, src in backups.items():
+        (_BACKUP_DIR / _slug(path)).write_text(src)
+
 
 def run(test_name: str) -> tuple[int, str]:
     r = subprocess.run(
@@ -227,7 +280,9 @@ def run(test_name: str) -> tuple[int, str]:
 
 
 def main() -> int:
+    _restore_stale_backups()
     backups = {p: p.read_text() for p in FILES}
+    _write_backups(backups)
     failures: list[str] = []
     try:
         r = subprocess.run(["uv", "run", "pytest", SUITE, "-q", "--no-header"],
@@ -268,6 +323,7 @@ def main() -> int:
     finally:
         for p, src in backups.items():
             p.write_text(src)
+        shutil.rmtree(_BACKUP_DIR, ignore_errors=True)
         print("\nrestored all files")
 
     if failures:
