@@ -1,6 +1,6 @@
 {
   "story": "NCAAF-VAL2",
-  "run_at": "2026-08-20",
+  "run_at": "2026-08-21",
   "parent": "ablation_results/ncaaf_val1_clv_week_strat.md",
   "config": {
     "served": {

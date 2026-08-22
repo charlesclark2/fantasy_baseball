@@ -270,13 +270,19 @@ def test_evaluate_raises_rather_than_classify_without_the_deflation_leg():
 def test_the_reproduction_pin_halts_on_a_population_that_is_not_the_recorded_one():
     """§2a — a stratification of a read that does not reproduce its own pooled parent is not
     evidence, so the pin must be able to FAIL, not merely be present."""
-    good = {"ats": {"n": V.PIN["ats_n"], "hit_rate": 0.509, "placebo": 0.501},
-            "ou": {"n": V.PIN["ou_n"], "hit_rate": 0.513, "placebo": 0.50}}
+    # ⭐ `good` is DERIVED FROM `PIN`, never restated. This test's job is to prove `check_pin`
+    # DISCRIMINATES; hardcoding the targets makes it a copy of a constant that silently rots when
+    # the pin is re-anchored. It did: after NCAAF-CLV-repair moved the targets onto the repaired
+    # S1-serve parent, the old literals (0.509 / 0.513) still passed — by 0.0003 of the tolerance.
+    good = {"ats": {"n": V.PIN["ats_n"], "hit_rate": V.PIN["ats_hit"], "placebo": V.PIN["ats_placebo"]},
+            "ou": {"n": V.PIN["ou_n"], "hit_rate": V.PIN["ou_hit"], "placebo": 0.50}}
     assert V.check_pin(good)["all_ok"] is True
     bad_n = {**good, "ats": {**good["ats"], "n": V.PIN["ats_n"] - 1}}
     assert V.check_pin(bad_n)["all_ok"] is False, "a changed population slipped past the pin"
-    bad_hit = {**good, "ou": {**good["ou"], "hit_rate": 0.513 + 2 * V.PIN["tol"]}}
+    bad_hit = {**good, "ou": {**good["ou"], "hit_rate": V.PIN["ou_hit"] + 2 * V.PIN["tol"]}}
     assert V.check_pin(bad_hit)["all_ok"] is False, "changed predictions slipped past the pin"
+    bad_placebo = {**good, "ats": {**good["ats"], "placebo": V.PIN["ats_placebo"] + 2 * V.PIN["tol"]}}
+    assert V.check_pin(bad_placebo)["all_ok"] is False, "a changed placebo slipped past the pin"
 
 
 def test_the_story_is_query_only():

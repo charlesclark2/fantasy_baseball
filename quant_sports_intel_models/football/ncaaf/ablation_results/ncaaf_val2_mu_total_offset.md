@@ -81,6 +81,19 @@ every recorded model-vs-close hit rate in **P1.4, S1-serve and VAL1**. It is car
 in §8, and a **tripwire guard** (`test_the_upstream_clv_misalignment_is_still_present_TRIPWIRE`) goes
 RED the moment someone fixes it, with the required re-run list in its docstring.
 
+> ✅ **DISCHARGED (2026-08-21) by NCAAF-CLV-repair** —
+> [`ncaaf_clv_row_alignment_repair.md`](./ncaaf_clv_row_alignment_repair.md). Both sites repaired
+> with `np.flatnonzero(mask)` taken before the reset; P1.4, S1-serve and VAL1 re-run; VAL1's verdict
+> re-read. **`ALL_BUCKETS_NULL` survives and is now earned; the `side_tilt` ordering reverses exactly
+> as predicted above, and VAL1's headline "`wk1-3` is the worst bucket in both markets" is refuted**
+> (repaired, `wk1-3` is the best ATS bucket). This section's impact table is confirmed: the repaired
+> read reproduces `repaired_read` to four decimals from three independent code paths.
+>
+> ⭐ One thing this section could not have anticipated, and it sharpens the lesson: **the ATS leg
+> lands on exactly 2,039/4,110 under BOTH reads while 45.8 % of the underlying sides flip.** The
+> headline hit rate is therefore not merely a weak detector of this defect — on that leg it is a
+> null detector. The two-sided sign-agreement control above is what does the work.
+
 **This study is immune to that defect by construction**, and the immunity is guarded: it joins on
 `game_id` and reads each row's own `mu_total`; an AST guard fails the build if any positional read
 into a draw array appears outside the alignment control.
@@ -307,7 +320,8 @@ to quote §3–§6 against the recorded vintage before VAL3 sizes anything off t
 
 **Operator / PM follow-ons**
 
-1. ⚠️ **Card the CLV misalignment as an incident.** It is not a serving defect — nothing bets on it
+1. ✅ **DONE — carded and repaired as NCAAF-CLV-repair (2026-08-21).** Original text follows.
+   ⚠️ **Card the CLV misalignment as an incident.** It is not a serving defect — nothing bets on it
    (`best_alpha = 0`) and no serving path reads `_clv_eval` — but it invalidates the recorded
    model-vs-close numbers in **P1.4, S1-serve and VAL1** and makes VAL1's `side_tilt` table an
    artifact. Repair (`idx = np.flatnonzero(mask)` taken BEFORE the reset), then re-run all three and

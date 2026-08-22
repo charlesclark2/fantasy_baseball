@@ -126,35 +126,37 @@ def test_the_offset_read_never_indexes_a_draw_array_positionally():
 
 # ── the alignment control ───────────────────────────────────────────────────────────────────
 
-def test_the_upstream_clv_misalignment_is_still_present_TRIPWIRE():
-    """⚠️ THIS GUARD PINS A KNOWN DEFECT, DELIBERATELY. It goes RED when someone FIXES it — which
-    is the point.
+def test_the_upstream_clv_misalignment_is_repaired():
+    """The deliberate `..._is_still_present_TRIPWIRE` guard that stood here has been DISCHARGED.
 
-    `bakeoff_ncaaf_game._clv_eval` and `ncaaf_val1_clv_week_strat.score_config` both select their
-    close-carrying rows with `reset_index(drop=True)` and then index the (n_games, n_draws)
-    predictive array with the RESET index `0..n−1`. That reads the FIRST n rows of the draw array,
-    not the rows that carry a close — measured by NCAAF-VAL2 at 100 % of rows misindexed, with the
-    model's side agreeing with `sign(μ − close)` on 0.697 of rows instead of 0.980.
+    It pinned the known defect NCAAF-VAL2 §2 measured — `bakeoff_ncaaf_game._clv_eval` and
+    `ncaaf_val1_clv_week_strat.score_config` indexing the `(n_games, n_draws)` draw array with a
+    `reset_index(drop=True)` index — and went RED the moment someone fixed it, because the fix was
+    not free: it changes every recorded model-vs-close hit rate in P1.4, S1-serve and VAL1.
 
-    Repairing it is OUT OF SCOPE for VAL2 (query-only), but the repair is not free: it changes every
-    recorded model-vs-close hit rate in **P1.4, S1-serve and VAL1**, including VAL1's `side_tilt`
-    table. So when this test goes red:
-        1. keep the fix (`idx = np.flatnonzero(mask)` taken BEFORE the reset),
-        2. delete this test,
-        3. RE-RUN P1.4 `stage_finalize`, S1-serve and VAL1, and re-record their CLV numbers,
-        4. re-read VAL1's verdict against the repaired figures.
-    ⛔ Do not delete this test without doing 3 and 4 — that would leave three recorded decisions
-    resting on numbers nobody re-derived."""
+    Its four discharge conditions were met by NCAAF-CLV-repair: the fix is
+    `idx = np.flatnonzero(mask)` taken BEFORE the reset at both sites; P1.4, S1-serve and VAL1 were
+    re-run on the repaired path; and VAL1's verdict was re-read against the repaired figures
+    (`ALL_BUCKETS_NULL` survives — now EARNED rather than guaranteed — while its `side_tilt`
+    ordering reverses). See `ablation_results/ncaaf_clv_row_alignment_repair.md`.
+
+    ⛔ This assertion is deliberately weak: it only refuses a REGRESSION to the exact original
+    shape, so that VAL2's suite stays coherent about its own §2. The substantive guards — including
+    the numerical one that drives the real `_clv_eval` — live in
+    `betting_ml/tests/test_ncaaf_clv_row_alignment.py`, RED-proven 6/6.
+    """
     from quant_sports_intel_models.football.ncaaf.models import bakeoff_ncaaf_game as _B
-    still_broken = []
+    regressed = []
     for mod in (_B, V1):
-        src = Path(mod.__file__).read_text()
-        if "reset_index(drop=True)" in src and "idx = m.index.to_numpy()" in src:
-            still_broken.append(Path(mod.__file__).name)
-    assert still_broken == ["bakeoff_ncaaf_game.py", "ncaaf_val1_clv_week_strat.py"], (
-        f"the upstream CLV misalignment appears to have changed (still broken: {still_broken}). "
-        "Read this test's docstring: the fix requires re-running P1.4, S1-serve and VAL1 before "
-        "this guard may be deleted.")
+        tree = ast.parse(Path(mod.__file__).read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                body = "\n".join(ast.unparse(st) for st in node.body)   # comments dropped
+                if "m.index.to_numpy()" in body and "reset_index(drop=True)" in body:
+                    regressed.append(f"{Path(mod.__file__).name}::{node.name}")
+    assert regressed == [], (
+        f"the NCAAF-VAL2 §2 row misalignment has come BACK at {regressed}. The repaired form is "
+        "`idx = np.flatnonzero(mask)` taken BEFORE the reset; see test_ncaaf_clv_row_alignment.py.")
 
 
 def test_the_alignment_control_is_two_sided():
