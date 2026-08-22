@@ -24,6 +24,18 @@
 
 **Consequence if it does not clear:** NF-INJ1 §8.1's fallback fires — suppress the stat line on violating rows only. Worktree; PR→dev; ablation writeup.
 
+**✅ RAN 2026-08-22 — VERDICT `CONSTRAINT_REFUSED`. Report: `ablation_results/nf_inj2_rate_permutation.{md,json}`. Code is DEPLOY-HELD (`nf_inj2_rate_permutation.SERVED_ARM == "incumbent"`; `assert_coherent()` refuses a flip the record does not support).**
+
+*What the arm did:* on the CURRENT served 2026 board (`generated_at` 2026-08-21T05:22:20Z; incumbent rebuilt through this code reproduces the served artifact to **6e-13**) it removes **every veteran impossible row (10 → 0 attributable** — the single residual is the rookie Mendoza, which `mvp1_null` produces with the ordering entirely OFF, i.e. the out-of-scope §5 rookie path), and turns the injury give-back **+33.96% → −11.99%** (18 of 26 flagged players now scaled DOWN vs 18 UP under the incumbent). It also WINS the selecting metric: CRPS **26.199 vs 26.512** (+0.313, 5/7 folds, tie band ±0.200), PBO **0.029**. The matched foil LOSES by 6.78 CRPS and makes the give-back WORSE (**+40.9%**) ⇒ the mechanism is attributed to the per-player availability channel from both directions (NF-D15 g′).
+
+*Why it is refused anyway:* the pre-registered **ORDERING constraint is breached at QB** on the draftable tier — tier-ρ **0.481 → 0.350**, p=0.001, BH-significant at q=0.10 (§6 branch 3). Also fails DSR (**0.108**, and `SR 0.590 ≤ SR0 1.093` ⇒ `DSR_UNREACHABLE`) and fold-consistency (5 wins, 6 required). ⛔ **NO "more data" re-test trigger** — the binding refusal is a constraint the arm BREACHES (more folds make a real regression MORE significant) and the DSR gap is unreachable at any `n`.
+
+*The finding that names the successor:* the damage ranks exactly with how weak an ordering signal expected games is per position (draftable-tier ρ of games ALONE: QB **0.161**, RB 0.273, WR 0.238, TE **0.370**; observed Δtier-ρ: QB −0.130, RB −0.008, WR −0.005, TE **+0.019**). `rate_permute`'s point is `assigned_rate × own_games`, so its ordering BLENDS the learned rank with availability — and NF1.5's learner is fitted on `real_fp_ppr`, a SEASON TOTAL, so it was selected to order POINTS, not rates. ⇒ **a successor that wants coherence AND the ordering must re-select the ordering learner on a per-game RATE target**, not re-use a points-ordering learner to order rates. (Two readings disagree and both are reported: over the FULL veteran population the arm improves ρ at every position; the draftable tier — NF1.5's own selection metric, and the one a drafter uses — is what binds.)
+
+**⏰ THIS FIRES NF-INJ1 §8.1's OPTION C TRIGGER (b) — "NF-INJ2 runs and does not clear its gates".** The board keeps serving 10 impossible QB rows and the +33.96% give-back. Option C = suppress the stat line on violating rows only (points + expected games still render). **A PM call, not carded here.** Note §8.1's second, time-based trigger too: revisit C *immediately* if paying subscribers arrive.
+
+**⚠️ NF-INJ3's "AFTER NF-INJ2 lands" sequencing:** NF-INJ2 did NOT land a model change, so the non-additivity hazard it guards against (NF-W7e) does not apply — NF-INJ3 is free to run against the CURRENT incumbent. Whether the PM still wants it sequenced behind an NF-INJ2 successor is a scheduling call.
+
 ---
 🩹 **NF-INJ3 — the injury-games caps: make them designation-TIMING-aware (and fitted)** [Model · §0.5 · 🧭 OPUS · `best_alpha=0` · PM-scheduled 2026-08-21, **AFTER NF-INJ2 lands**]
 

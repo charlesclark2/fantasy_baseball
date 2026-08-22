@@ -180,6 +180,34 @@ def coherence_summary(rows: list) -> dict:
     }
 
 
+def frame_rows(frame, *, pos_col: str = "position", games_col: str = "proj_games",
+               id_col: str = "player_id", name_col: str = "player_name") -> list[dict]:
+    """A `season_projection`-shaped BUILD FRAME → the row dicts `coherence_summary` reads.
+
+    ⭐ WHY THIS LIVES HERE. `PARQUET_FIELD` shipped with NF-INJ1 as "the published field → frame
+    column map, for the build-time diagnostic" and had no consumer — a declaration without a caller
+    (the NF-C0e wired-≠-invoked class). NF-INJ2 needs to score coherence on a build frame per arm per
+    fold, and doing that with a private mapping would leave two field maps to drift apart: the one
+    the publish guard reads and the one the bake-off scored. One mapping, both callers."""
+    import pandas as _pd
+    out: list[dict] = []
+    cols = set(getattr(frame, "columns", []))
+    for r in frame.to_dict("records"):
+        row = {"pos": r.get(pos_col), "g": r.get(games_col),
+               "id": r.get(id_col), "name": r.get(name_col)}
+        for field, col in PARQUET_FIELD.items():
+            if col in cols:
+                row[field] = r.get(col)
+        out.append(row)
+    return out
+
+
+def frame_coherence_summary(frame, **kw) -> dict:
+    """`coherence_summary` over a build frame. The same reducer the publish guard uses, so an arm's
+    violation count and a published board's violation count are the SAME measurement."""
+    return coherence_summary(frame_rows(frame, **kw))
+
+
 def format_summary(summary: dict, label: str = "", limit: int = 12) -> str:
     """A human-readable banner for a run log. Names the players — an operator cannot act on a count."""
     if not summary.get("applicable"):
