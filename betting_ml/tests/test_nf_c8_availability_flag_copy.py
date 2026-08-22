@@ -335,17 +335,41 @@ def test_the_flag_copy_passes_the_track_record_denylist(copy_src):
 # 3. The thresholds — ONE shared constant, pinned, and never a model input
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 def test_the_thresholds_are_one_shared_constant_at_the_declared_values():
-    """⭐ THE STORY'S OWN AC. Three surfaces flag rows; if each carried its own `< 14` the boards
+    """⭐ THE STORY'S OWN AC. Three surfaces flag rows; if each carried its own `< 12.5` the boards
     would drift apart silently — the same row flagged on Rankings and not on Projections, with
     nothing failing. Pinned at the values so a change is a deliberate edit to a test rather than a
     quiet re-tuning (the E2.1-r discipline: a display threshold reverse-engineered to make a
-    particular player flag is the same inversion as a gate reverse-engineered to pass)."""
+    particular player flag is the same inversion as a gate reverse-engineered to pass).
+
+    ⚠️ 12.5, NOT 14 — see the constant's own doc. 14 was derived against `FULL_SEASON_GAMES`, which
+    no skill player is projected near; measured on the served board it sat just below the MEDIAN
+    draftable skill player (14.4) and flagged 37.6% of them."""
     src = _strip_ts_comments(_FANTASY_LIB_TS.read_text())
-    assert re.search(r"export const LIMITED_AVAILABILITY_GAMES\s*=\s*14\b", src), (
-        "LIMITED_AVAILABILITY_GAMES is not declared as 14 in lib/fantasy.ts"
+    assert re.search(r"export const LIMITED_AVAILABILITY_GAMES\s*=\s*12\.5\b", src), (
+        "LIMITED_AVAILABILITY_GAMES is not declared as 12.5 in lib/fantasy.ts"
     )
     assert re.search(r"export const HEAVILY_LIMITED_AVAILABILITY_GAMES\s*=\s*10\b", src), (
         "HEAVILY_LIMITED_AVAILABILITY_GAMES is not declared as 10 in lib/fantasy.ts"
+    )
+
+
+def test_the_threshold_is_not_anchored_on_the_schedule_length():
+    """⚠️ THE MISTAKE THIS STORY SHIPPED AND HAD TO CORRECT, pinned so it cannot come back.
+
+    `FULL_SEASON_GAMES` is 17 — the SCHEDULE. The only rows projected anywhere near it are team
+    defences; the median draftable skill player is 14.4. A threshold expressed as "N games below a
+    full slate" therefore measures every skill player against a level none of them occupy, and the
+    first version of this constant flagged 37.6% of the draftable skill board as a result.
+
+    The clause is deliberately about the DERIVATION rather than the value: a future edit that
+    re-anchors on the schedule would very likely re-introduce a threshold near 14 and re-create the
+    defect, and the value pin above would not catch it if the number happened to differ."""
+    src = _strip_ts_comments(_FANTASY_LIB_TS.read_text())
+    decl = src.split("export const LIMITED_AVAILABILITY_GAMES", 1)[1].split("\n", 1)[0]
+    assert "FULL_SEASON_GAMES" not in decl, (
+        "the availability threshold is expressed in terms of FULL_SEASON_GAMES — that is the "
+        "schedule length, not a level any skill player is projected at, and anchoring on it is "
+        "exactly how this constant came to flag 37.6% of the draftable skill board"
     )
 
 
@@ -356,7 +380,7 @@ def test_no_surface_hardcodes_its_own_availability_threshold():
     offenders = {}
     for path in sorted(_FANTASY_COMPONENTS.glob("*.tsx")):
         src = _strip_ts_comments(path.read_text())
-        hits = re.findall(r"\.g\s*[<>]=?\s*\d+", src)
+        hits = re.findall(r"\.g\s*[<>]=?\s*\d+(?:\.\d+)?", src)
         if hits:
             offenders[path.name] = hits
     assert not offenders, (

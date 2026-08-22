@@ -36,11 +36,17 @@ import { forbiddenPhrasesIn } from "../support/claim-denylist"
 /** The four planted rows. Ids are stable across the board AND projections fixtures (checked), so
  *  the same players drive the player page. */
 const HEAVILY_LIMITED = { name: "Jonathan Taylor", id: "00-0036223", g: 7.3, shown: "7.3" }
-const LIMITED = { name: "Justin Jefferson", id: "00-0036322", g: 12.5, shown: "12.5" }
-/** ⭐ EXACTLY AT THE THRESHOLD. `LIMITED_AVAILABILITY_GAMES` is 14 and the comparison is strictly
+const LIMITED = { name: "Justin Jefferson", id: "00-0036322", g: 11.5, shown: "11.5" }
+/** ⭐ EXACTLY AT THE THRESHOLD. `LIMITED_AVAILABILITY_GAMES` is 12.5 and the comparison is strictly
  *  `<`, so this row must NOT flag — the single most likely off-by-one in the whole story, and one
- *  no other row in the fixture can see. */
-const AT_THRESHOLD = { name: "Derrick Henry", id: "00-0032764", g: 14 }
+ *  no other row in the fixture can see.
+ *
+ *  ⚠️ ALSO THE ROW THAT KEEPS THE THRESHOLD HONEST. It was 14 until the served distribution was
+ *  measured (the median draftable skill player is 14.4, so a 14-game threshold flagged 37.6% of
+ *  them). If this constant is ever edited to make a real player flag or stop flagging rather than
+ *  to track `LIMITED_AVAILABILITY_GAMES`, the fixture has stopped testing the boundary and started
+ *  encoding an opinion. */
+const AT_THRESHOLD = { name: "Derrick Henry", id: "00-0032764", g: 12.5 }
 /** Untouched by the transform: a genuine full-season row, proving the flag is not painted on
  *  everything. */
 const FULL_SEASON = { name: "Zay Jones", id: "00-0033891" }

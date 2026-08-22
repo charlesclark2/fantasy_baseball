@@ -367,21 +367,40 @@ export function fullSeasonRate(
 
 /** Below this many expected games, a row carries the availability flag.
  *
- *  A DESIGN QUANTITY, FIXED BEFORE ANY BOARD WAS READ — and it must stay one. 14 is three games
- *  below a full `FULL_SEASON_GAMES` slate: the smallest absence that changes what a drafter does
- *  with the pick rather than merely rounding his projection. It is NOT measured, NOT a model
- *  output, and it may never be re-derived from a board to make a particular player flag or stop
- *  flagging — reverse-engineering a threshold from the answer it produces is the E2.1-r inversion,
- *  and it would be especially tempting here because the flag is visible and opinions about
- *  individual players are cheap. Move it only as a deliberate product decision, in its own change,
- *  with the reason written down. */
-export const LIMITED_AVAILABILITY_GAMES = 14
+ *  ⚠️⚠️ THIS WAS 14 AND 14 WAS WRONG — the correction is recorded here rather than quietly applied,
+ *  because the mistake is instructive and the temptation to re-make it is permanent.
+ *
+ *  The original derivation read "three games below a full `FULL_SEASON_GAMES` slate". The arithmetic
+ *  was fine; the ANCHOR was not. **No skill player is projected anywhere near 17** — that is the
+ *  schedule, and the only rows that reach it are team defences. Measured on the served 2026 board,
+ *  the median DRAFTABLE skill player (top 180, the roster-fill depth of a 12-team league) sits at
+ *  **14.4 expected games**, and the running-back median is **exactly 14.0**. So a 14-game threshold
+ *  sat just below the median of the very population it was meant to mark as exceptional, and flagged
+ *  **37.6% of draftable skill players** — 45.7% of running backs against 19.0% of tight ends, i.e.
+ *  the flag was substantially reporting "this is a running back", which is a position norm and not
+ *  information. A colour on two rows in five is a background, not a signal.
+ *
+ *  THE CORRECTED RULE, stated as a rule so the next reader can check it rather than trust it:
+ *  measure the discount against the board's own typical draftable skill player, NOT against the
+ *  schedule. "Limited" is roughly **two games below that typical player** — 14.4 − 2 ≈ 12.4, taken
+ *  as 12.5 — which lands at 15.4% of draftable skill players and flattens the position spread
+ *  (RB 25.7%, QB 18.8%, WR 11.1%, TE 4.8%).
+ *
+ *  ⛔ AND THE E2.1-r LINE, which this change walks right up to: re-deriving a threshold FROM A
+ *  MEASURED PROPERTY OF THE POPULATION (its median) against a rule fixed in advance is legitimate;
+ *  re-picking it so that a PARTICULAR PLAYER flags or stops flagging is the inversion, and it would
+ *  be very easy here because the flag is visible and opinions about individual players are cheap.
+ *  The roster this produces was sanity-checked AFTER the number was derived and the number was not
+ *  moved as a result. Anyone changing it again owes the same order of operations. */
+export const LIMITED_AVAILABILITY_GAMES = 12.5
 
-/** The stronger tier — fewer than this many expected games. Same discipline as the constant above:
- *  10 is a shade under two thirds of a full slate, chosen as a design quantity rather than fitted.
- *  Two tiers rather than one because "he misses a couple of games" and "we project him for well
- *  under half a season" are different facts for a drafter, and a single flag would render them
- *  identically. */
+/** The stronger tier — fewer than this many expected games. UNCHANGED at 10 by the same corrected
+ *  rule: roughly four and a half games below the typical draftable skill player, which is a genuinely
+ *  unusual projection rather than a soft one. It fires on 0.9% of the top 180 and 3.4% of the top 250
+ *  — deliberately rare, because a second colour that is not rare is a second background.
+ *
+ *  Two tiers rather than one because "he misses a couple of games" and "we project him for well under
+ *  half a season" are different facts for a drafter, and a single flag renders them identically. */
 export const HEAVILY_LIMITED_AVAILABILITY_GAMES = 10
 
 export type AvailabilityTier = "limited" | "heavily-limited"

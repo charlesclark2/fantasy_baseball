@@ -544,6 +544,7 @@ export function RankingsBoard() {
                               games={p.g}
                               locked={p.locked}
                               freshness={manifest?.freshness}
+                              underDefinedHeader
                             />
                           </td>
                           <td className="px-3 py-2 text-right font-semibold text-gray-100">{numOrLock(p.pts, p.locked)}</td>

@@ -334,7 +334,12 @@ export function ProjectionsTable() {
                     {/* NF-C8 — the availability flag; see `AvailabilityFlag`. Unflagged, locked
                         and games-less rows all render exactly as they did before. */}
                     <td className="px-3 py-2 text-right text-gray-400">
-                      <AvailabilityFlag games={p.g} locked={p.locked} freshness={data?.freshness} />
+                      <AvailabilityFlag
+                        games={p.g}
+                        locked={p.locked}
+                        freshness={data?.freshness}
+                        underDefinedHeader
+                      />
                     </td>
                     {statCols.map((c) => (
                       <td key={String(c.key)} className="px-3 py-2 text-right text-gray-400">
