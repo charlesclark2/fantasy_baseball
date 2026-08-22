@@ -47,6 +47,25 @@
 
 **⛔ Sequencing is load-bearing: this runs AFTER NF-INJ2 has landed**, never alongside it (NF-W7e non-additivity). Worktree; PR→dev; ablation writeup.
 
+**✅ RUN 2026-08-22 (PR #1003) — `POWER_LIMITED`, deploy-held. `SERVED_ARM` unchanged.** Report `ablation_results/nf_inj3_injury_games.md`; pre-registration `nf_inj3_preregistration.md`.
+* **The substantive finding stands regardless of the verdict: the caps are ~2× TOO HIGH.** Every real arm beats the incumbent (+0.2845 CRPS, 6/7 folds); pooled mean expected games **5.403 → 2.387–2.607**. On the live board **all 22 of 22** flagged veterans move DOWN (5.292 → 2.682). ⇒ after the cap the board still materially UNDER-discounts injured players, compounding with NF-INJ1's +36.4% give-back **in the same direction**.
+* **Channel split (matched pairs):** LEVEL **+0.2178 (77%)** · FORM −0.0057 (a wash) · **TIMING +0.0252 (p 0.098)** · **HURDLE SPLIT +0.0472 (p 0.056)**. ⇒ the card's headline hypothesis (timing) is the SMALLEST live channel; the **NF-W2 transfer wins** — its features can't transfer (no preseason / no 2026 rows) but its FINDING (the lift lives in the availability leg) does.
+* **⚠️ THE CARD'S FEED PREMISE IS FALSE AND THIS IS THE DURABLE CORRECTION:** it says "Feed: `stg_nfl_sleeper_injuries` (`ingested_at` + `injury_status`)" for designation recency. **There is no designation DATE anywhere in this stack** — the Sleeper ingest OVERWRITES its Delta partition every capture (exactly ONE snapshot exists), the roster feed has no preseason weeks, the injury report has no `PRE` and no 2026 rows, and there is no transactions feed. Tested through a declared ONSET proxy instead; **a future story must not re-assume `ingested_at` carries recency.**
+* **Why the null:** 7 of 9 gates pass (PBO 0.000, folds 6/7, degenerates lose, own-form oracles + matched-n control respected, permutation beaten, matched foil positive). DSR 0.8913 and BH-FDR fail — **both on a SPECIFICATION the pre-registration left open, not on the evidence**: the incumbent REFERENCE arm's identically-zero skill series sat in `V` (MH2.1 (a) not invoked; excluding it → `V` 0.0724→0.0151, DSR **0.973**), and the BH family was never named. ⛔ Neither acted on (E2.1-r / MH2.2); recorded as inadmissible diagnostics.
+* **Also measured, carded below:** the cap **never reaches a rookie** — 50 of 60 flagged rookies project ABOVE the incumbent's own ceiling vs **0 of 496** veterans.
+
+---
+🩹 **NF-INJ3b — re-register the injury-games model with the DEFLATION CONVENTIONS named** [Model · §0.5 · 🧭 OPUS · `best_alpha=0` · successor to NF-INJ3, 2026-08-22]
+
+**Why:** NF-INJ3 measured a large, well-attributed, anchor-clean effect (the caps are ~2× too high; all 22 served flagged veterans move down) and returned a null on **two unstated specification details**, not on the evidence — `V`'s membership (MH2.1 (a): a REFERENCE arm's trial Sharpe is 0 BY CONSTRUCTION and inflated `V` 4.8×, costing 0.08 of DSR) and the BH multiplicity family. **The remedy is a FRESH pre-registration, never a re-read of NF-INJ3's** (E2.1-r / MH2.2).
+
+**Do:** re-register the SAME mechanism with (a) the `V` convention stated up front — degenerates ∉ `V` (DSR-CONV) **and** the reference arm ∉ `V` (MH2.1 (a)), `n_trials` at full declared field; (b) the BH family NAMED (one mechanism / one population ⇒ state whether BH applies at all, the MH2.7 `INAPPLICABLE` shape); (c) a coherent narrower family justified on MECHANISM, not on NF-INJ3's leaderboard (⛔ MH2.2 — you get to pre-register a family, you do not get to discover one). ⭐ Register the **hurdle** form as primary (it won) and the timing proxy as a declared secondary. Level-adjacent ⇒ the NF-D16/D21 placement + interval gates still gate any ship. Worktree; PR→dev; ablation writeup.
+
+---
+🩹 **NF-INJ3c — the injury cap never reaches the ROOKIE path** [Model/serving · `best_alpha=0` · carded by NF-INJ3, 2026-08-22 · low priority]
+
+**Why:** `injury_availability_games` runs inside `project_veterans`; `project_rookies` is a separate frame concatenated afterwards, so a rookie designated RES/PUP/NFI/SUS is **structurally never discounted**. Measured over the single-vintage historical builds: **50 of 60** flagged rookies project ABOVE the incumbent's own ceiling (Derrius Guice, `RES` for all of 2018, projected 12.5 games) against **0 of 496** veterans. Adjacent to NF-INJ1 §5c (the rookie `fp_target` ↔ games reconciliation gap) — the same code path, and best folded into the next rookie-path touch rather than run standalone. ⚠️ 0 of the 26 currently-flagged 2026 board rows is a rookie, so it is not live today.
+
 ---
 🚨 **NF-FRESH1 (LAUNCH-CRITICAL) — Draft-board data-freshness audit · PHASE 1 (READ-ONLY investigation)** [App/serving + data · OPUS · `best_alpha=0` · operator 2026-08-15] (Trello: top of To Do)
 
