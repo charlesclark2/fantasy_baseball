@@ -91,6 +91,78 @@ def map_injury_status(injury_status) -> "str | None":
     return hit
 
 
+# ══ NF-C9 — THE WEEKLY GAME-STATUS DESIGNATION, FOR DISCLOSURE ONLY ═══════════════════════════
+#
+# ⭐ THE DELIBERATE COUNTERPART OF `_STATUS_MAP` ABOVE, and the pairing is the whole point. That map
+# names the LONG-ABSENCE roster designations the PROJECTION consumes; this one names the WEEKLY
+# game-report tags it does NOT. NF-C8's finding
+# (`ablation_results/nf_c8_injury_designation_gap.md`) traced the gap to exactly these two
+# functions: `injury_availability_games` caps games only for RES/PUP/NFI/SUS, and
+# `map_injury_status` returns None for a weekly tag — so **Questionable, Doubtful and Out apply a
+# discount of exactly zero**. That is leakage-safe and defensible, and it is not what a reader
+# assumes. We already hold the designation; we simply do not act on it.
+#
+# ⛔⛔ THIS MAP MUST NEVER GROW A GAMES NUMBER, A WEIGHT, OR A DURATION. A weekly designation carries
+# NO duration — "Out" means out for ONE game, and the multi-week absence a news report describes is
+# a NEWS fact, not a status fact. Mapping a designation to a games penalty here would be a
+# hand-picked constant wearing a projection's clothing, which is the thing this program refuses
+# elsewhere (the honest version is an empirical designation → games-missed distribution fit on
+# history, i.e. a §0.5 modelling story with a real bake-off). This is a DISCLOSURE channel: it
+# reaches the payload and the UI, and nothing else. `test_nf_c9_designation_disclosure.py` pins that
+# the model's own availability path never reads it.
+#
+# ⚠️ MEASURED, NOT GUESSED (2026-08-22, the live `nfl/raw/sleeper_injuries` season-2026 snapshot of
+# 2026-08-21, 2,501 rows): `None` 2338 · `Questionable` 116 · `IR` 24 · `NA` 13 · `PUP` 8 · `DNR` 2.
+# Two things that reading settles and an armchair guess would not:
+#   • `Out`/`Doubtful` are ABSENT today and still belong here — the snapshot is preseason, and the
+#     game-status report only publishes them once the season starts. Their absence is a calendar
+#     fact about the measurement, not evidence the tags do not occur.
+#   • `NA` and `DNR` are REAL and UNMAPPED, so the "we cannot interpret this" branch below is
+#     reachable in production rather than theoretical — `DNR` sat on Brandon Aiyuk (SF, WR, a
+#     genuinely draftable row) on the measured snapshot.
+WEEKLY_DESIGNATIONS: dict[str, str] = {
+    "OUT": "Out",
+    "DOUBTFUL": "Doubtful",
+    "QUESTIONABLE": "Questionable",
+}
+
+
+def disclosable_designation(injury_status) -> "tuple[bool, str | None]":
+    """Pure — `(has_something_to_disclose, label)` for the UN-MODELLED weekly designation channel.
+
+    ⭐ THREE STATES, NOT TWO, and each one is a different fact about what we know (NF-FRESH2's
+    absent-vs-null rule, and NF1.7 (a) for the third):
+
+      `(False, None)`  NOTHING TO DISCLOSE. Either the feed lists no designation at all — the normal
+                       state for ~93% of players, where we are making no claim and should say
+                       nothing — or it lists a LONG-ABSENCE tag the projection ALREADY prices
+                       (`map_injury_status` returns a status). The second case is the load-bearing
+                       one: this channel's whole message is "our games projection does not price
+                       this in", and for an IR/PUP/NFI/SUS row that sentence is FALSE. So a modelled
+                       status is withheld here BY CONSTRUCTION rather than by a caller remembering
+                       to filter it, which is what keeps the disclaimer true for everything that
+                       does reach the payload.
+
+      `(True, label)`  A RECOGNISED WEEKLY DESIGNATION — `Out` / `Doubtful` / `Questionable`.
+
+      `(True, None)`   THE FEED SAYS SOMETHING WE CANNOT INTERPRET (`NA`, `DNR`, or a tag Sleeper
+                       adds tomorrow). Reported as an explicit unknown rather than silently dropped:
+                       collapsing it into "no designation" would let an unreadable value render as a
+                       clean bill of health, which is the one direction that is never safe. ⛔ The
+                       raw token is deliberately NOT surfaced to the reader — publishing "DNR" asks
+                       them to interpret an acronym we ourselves decline to define. It IS surfaced to
+                       the OPERATOR, at export time, where somebody can add it to the map above.
+    """
+    if injury_status is None:
+        return False, None
+    raw = str(injury_status).strip()
+    if not raw:
+        return False, None
+    if map_injury_status(raw) is not None:      # the projection already acts on this one
+        return False, None
+    return True, WEEKLY_DESIGNATIONS.get(raw.upper())
+
+
 def fetch_sleeper_players(
     cache_dir: "str | Path | None" = None, refresh: bool = False, timeout: int = 30,
     as_of: "str | None" = None,

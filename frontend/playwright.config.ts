@@ -106,7 +106,7 @@ export default defineConfig({
     // number whose meaning lives ENTIRELY behind that tap, so a phone reader who cannot open it
     // meets exactly the unexplained figure the flag exists to explain.
       testMatch:
-        /(signup-funnel|expected-points-label|availability-flag|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile)\.spec\.ts/,
+        /(signup-funnel|expected-points-label|availability-flag|weekly-designation|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile)\.spec\.ts/,
     },
   ],
 

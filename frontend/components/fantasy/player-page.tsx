@@ -85,6 +85,7 @@ import {
   num,
   int,
   teamLabel,
+  WeeklyDesignation,
 } from "@/components/fantasy/shared"
 import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
@@ -739,6 +740,18 @@ function PlayerView({ playerId }: { playerId: string }) {
                         {GLOSSARY.projectedGames}
                       </InfoTip>
                     )}
+                    {/* NF-C9 — OUTSIDE the availability branch above, and that placement is the
+                        whole reason this renders on the player the story was written for. The two
+                        disclosures are independent: the flag is about OUR projection, this is about
+                        a club's filing, and the row that surfaced the gap (13.6 projected games —
+                        above the flag threshold) carries the second without the first. Nesting it
+                        inside the flag would have hidden it from exactly that case. */}
+                    <span className="ml-1.5 normal-case">
+                      <WeeklyDesignation
+                        status={proj.gameStatus}
+                        freshness={projPayload?.freshness}
+                      />
+                    </span>
                   </>
                 ) : null}
               </h2>

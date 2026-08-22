@@ -74,6 +74,7 @@ import {
   numOrLock,
   int,
   teamLabel,
+  WeeklyDesignation,
 } from "@/components/fantasy/shared"
 import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
@@ -545,6 +546,14 @@ export function RankingsBoard() {
                               locked={p.locked}
                               freshness={manifest?.freshness}
                               underDefinedHeader
+                            />
+                            {/* NF-C9 — the weekly designation, which our games figure does NOT
+                                price in. Beside the number rather than in it, and neutral rather
+                                than amber, because the whole message is that this one did not move
+                                the projection. Absent on every row the feed says nothing about. */}
+                            <WeeklyDesignation
+                              status={p.gameStatus}
+                              freshness={manifest?.freshness}
                             />
                           </td>
                           <td className="px-3 py-2 text-right font-semibold text-gray-100">{numOrLock(p.pts, p.locked)}</td>

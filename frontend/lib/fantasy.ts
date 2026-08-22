@@ -25,6 +25,16 @@ export interface ProjectedPlayer {
   conf: string | null
   /** Projected games played. */
   g: number | null
+  /** NF-C9 — the WEEKLY GAME-STATUS DESIGNATION ("Out" / "Doubtful" / "Questionable"), served for
+   *  DISCLOSURE ONLY. Our projected-games figure does NOT price it in: the availability discount
+   *  moves on a formal roster move (IR/PUP/NFI/suspension) and on nothing else, so this channel
+   *  applies no discount at all — which is exactly why it has to be said out loud beside `g`.
+   *
+   *  ⚠️ ABSENT ≠ NULL, and both are real (`WeeklyDesignation` renders the difference): the key is
+   *  ABSENT when there is nothing to disclose (no designation, or a roster move already priced, or
+   *  no feed) and NULL when the feed carries a value the build could not interpret → "unknown".
+   *  ⛔ Never an input to ordering, VOR or the optimizer. */
+  gameStatus?: string | null
   fpStd: number | null
   fpHalf: number | null
   fpPpr: number | null

@@ -38,6 +38,13 @@ import {
   PROJECTED_GAMES_DEFINITION,
   PROJECTED_GAMES_LABEL,
   TRACK_RECORD_TRUST_LINK,
+  WEEKLY_DESIGNATION_CODE,
+  WEEKLY_DESIGNATION_LABEL,
+  WEEKLY_DESIGNATION_NOT_A_DIAGNOSIS,
+  WEEKLY_DESIGNATION_NOT_MODELLED,
+  WEEKLY_DESIGNATION_SUMMARY,
+  WEEKLY_DESIGNATION_UNKNOWN,
+  WEEKLY_DESIGNATION_UNKNOWN_SUMMARY,
 } from "@/lib/fantasy-claim-copy"
 
 export const POS_COLORS: Record<string, string> = {
@@ -754,6 +761,97 @@ export function AvailabilityFlag({
     </InfoTip>
   )
 }
+
+// ══ NF-C9 — THE WEEKLY GAME-STATUS DESIGNATION ═════════════════════════════════════════════════
+//
+// Rendered BESIDE the projected-games figure, which is the only placement that makes the sentence
+// land: the whole disclosure is "this designation is NOT in that number", so it has to sit next to
+// the number it is not in. It is a SEPARATE component from `AvailabilityFlag` on purpose —
+//
+//   ⭐ THEY ARE INDEPENDENT FACTS, AND COUPLING THEM WOULD MISS THE MOTIVATING CASE. The flag fires
+//     on OUR projection (a materially low `g`); this fires on a THIRD PARTY'S filing. A player can
+//     carry either without the other, and the row that prompted NF-C8's finding is exactly that
+//     shape — Jordyn Tyson sat at 13.6 projected games, ABOVE `LIMITED_AVAILABILITY_GAMES`, so a
+//     disclosure hung off the flag would never have rendered for the player it was written for.
+//   ⭐ IT KEEPS NF-C8's SUITE HONEST. Folding a second concern into `AvailabilityFlag` would make
+//     that story's clauses fail for reasons unrelated to anything it defends (the NF-D17 rule about
+//     adding a new story's requirement to an older story's guard).
+//
+// ⛔ NEUTRAL, AND THE COLOUR IS ITSELF A CLAIM. Amber and rose on the availability flag mean "our
+// projection moved". This chip means the opposite — "a club filed this and our number did not
+// move" — so painting it in the attention palette would say, in the only language a scanning reader
+// actually reads, that we priced it. Slate is the honest colour here, and it is not a styling
+// preference. Colour is never the sole carrier either: the chip is a real `<button>` whose
+// accessible name spells the designation out in full (WCAG 1.4.1).
+
+const DESIGNATION_CHIP =
+  "inline-block whitespace-nowrap rounded border border-slate-500/40 bg-slate-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-300"
+
+/**
+ * The un-modelled weekly designation, or nothing at all.
+ *
+ * ⚠️ THREE STATES, MATCHING WHAT THE EXPORTER CAN ACTUALLY ESTABLISH (NF-FRESH2's absent-vs-null
+ * rule; `export_draft_board_json.weekly_designation_map` is the other half of this contract):
+ *
+ *   • `status` ABSENT (`undefined`) → render NOTHING. Either the feed had nothing to disclose about
+ *     him — no designation, or a roster move the projection ALREADY prices — or the build could not
+ *     read the feed at all. In every one of those cases this channel has no true sentence to say,
+ *     and a board-wide "unknown" during a routine ingest gap would put a scary word on every row
+ *     (the hazard `AVAILABILITY_DATA_AS_OF_PREFIX`'s doc names). The board-level statement already
+ *     exists: the injury vintage under the availability flag.
+ *   • `status` NULL → render "unknown". The feed said something the build could not interpret.
+ *     Dropping it silently would let an unreadable value read as a clean bill of health, which is
+ *     the one direction that is never safe (NF1.7 (a)).
+ *   • `status` a STRING → render it. A designation this client does not know renders VERBATIM
+ *     rather than as "unknown" — a newer exporter serving a new label to an older client is an
+ *     NF-C0 deploy-skew window, and the honest rendering there is the word the server sent.
+ *
+ * ⛔ It never invents "Active"/"Healthy" for a player with no designation. Silence is the correct
+ * rendering of "we were told nothing", and a fabricated clean status is the one output here that
+ * would be worse than the gap this story exists to close.
+ */
+export function WeeklyDesignation({
+  status,
+  freshness,
+}: {
+  /** The served `gameStatus`. `undefined` (absent) and `null` are DIFFERENT — see above. */
+  status?: string | null
+  /** From `manifest.freshness` / `projections.freshness`. Supplies the same injury-feed vintage the
+   *  availability flag names, because it is the same feed and the same snapshot — Sleeper carries no
+   *  per-designation timestamp, so a per-row date would be a precision the source does not have. */
+  freshness?: FreshnessBlock | null
+}) {
+  if (status === undefined) return null
+
+  const known = status == null ? null : status
+  const label = known ?? WEEKLY_DESIGNATION_UNKNOWN
+  const glyph = known == null ? WEEKLY_DESIGNATION_UNKNOWN : (WEEKLY_DESIGNATION_CODE[known] ?? known)
+  const asOf = availabilityAsOfLine(freshness)
+
+  return (
+    <InfoTip
+      // `bare` because the bordered chip IS the affordance — the same argument `AvailabilityFlag`
+      // makes for its own chip, and it holds on every surface here rather than only where a defined
+      // column header sits above (this chip is never a bare run of text).
+      bare
+      srLabel={`${WEEKLY_DESIGNATION_LABEL.toLowerCase()}: ${label}`}
+      label={<span className={DESIGNATION_CHIP}>{glyph}</span>}
+    >
+      <p className="font-semibold text-gray-200">
+        {known == null
+          ? WEEKLY_DESIGNATION_UNKNOWN_SUMMARY
+          : WEEKLY_DESIGNATION_SUMMARY.replace("{status}", known)}
+      </p>
+      {/* ⭐⭐ THE LINE THE STORY IS FOR. It renders on BOTH branches — an unrecognised value is
+          exactly as un-modelled as a recognised one, and a reader who meets "unknown" with no
+          disclaimer would have no way to tell. */}
+      <p className="mt-2">{WEEKLY_DESIGNATION_NOT_MODELLED}</p>
+      <p className="mt-2">{WEEKLY_DESIGNATION_NOT_A_DIAGNOSIS}</p>
+      {asOf && <p className="mt-2 text-gray-500">{asOf}</p>}
+    </InfoTip>
+  )
+}
+
 
 /** The ADP-delta column header. Plain English on purpose — "Δ" reads as statistical notation and
  *  tells a drafter nothing about what the number means. */

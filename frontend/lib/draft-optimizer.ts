@@ -47,6 +47,16 @@ export interface Player {
   /** The honest caveat to render beside a `lowPred` row. Supplied by the exporter so the wording
    *  lives with the model that earned it, not scattered across components. */
   predNote?: string | null
+  /** NF-C9 — the WEEKLY GAME-STATUS DESIGNATION ("Out" / "Doubtful" / "Questionable"), served for
+   *  DISCLOSURE ONLY. Our projected-games figure does NOT price it in: the availability discount
+   *  moves on a formal roster move (IR/PUP/NFI/suspension) and on nothing else, so this channel
+   *  applies no discount at all — which is exactly why it has to be said out loud beside `g`.
+   *
+   *  ⚠️ ABSENT ≠ NULL, and both are real (`WeeklyDesignation` renders the difference): the key is
+   *  ABSENT when there is nothing to disclose (no designation, or a roster move already priced, or
+   *  no feed) and NULL when the feed carries a value the build could not interpret → "unknown".
+   *  ⛔ Never an input to ordering, VOR or the optimizer. */
+  gameStatus?: string | null
   /** E9.56 — the server withheld this season's model output from this caller. The row keeps its
    *  public identity (name/pos/team/bye/ADP) and carries NO `pts`/`vor`/`posRank`/`ovrRank`, so a
    *  "subscribe to unlock" chip renders in each value cell. Optional: absent on an entitled
