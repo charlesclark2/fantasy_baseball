@@ -171,6 +171,27 @@ over-tilt **0.5850 → 0.6057** — and VAL2 independently measured `μ > close`
 which the misaligned 58.5 % had understated. `over_actually_hit` barely moves (0.4638 → 0.4630 at
 wk1-3), exactly as it should: the repair moves OUR side, never the realised outcome.
 
+**⛔ A third claim flips, and it is the one VAL1's roadmap entry stars: "the `wk1-3` null is
+DECISIVE, not underpowered".** That rested on the family-adjusted one-sided upper bounds lying
+BELOW the pre-registered meaningful effect (`BREAKEVEN + VIG_WIDTH` = 0.5476), i.e. a
+decision-changing early-season edge being inconsistent with the data. Repaired:
+
+| cell | upper bound recorded | repaired | < 0.5476 ⇒ decisive? |
+|---|---|---|---|
+| **ATS wk1-3** | 0.5344 | **0.5601** | ✅ → **⛔ NO — no longer excluded** |
+| O/U wk1-3 | 0.5358 | 0.5394 | ✅ → ✅ still decisive |
+
+So the null is decisive on **O/U only**. On ATS `wk1-3` the interval no longer excludes an edge that
+would matter — which is exactly what the null-state flip to `POWER_LIMITED` says independently. The
+roadmap's companion advice ("⛔ Do NOT card 're-test with more seasons'") was derived from the
+decisive reading and is therefore half-invalidated: it still holds for O/U, not for ATS.
+
+⭐ **The one thing that gets STRONGER:** VAL1's "one actionable lead" — the served total mean running
+high in the cold-start weeks — survives and sharpens. The model takes the over on **60.8 %** of
+`wk1-3` picks (recorded: 57.4 %) in the one bucket where over hit only 0.463, and VAL2 independently
+measured `μ > close` on 60.8 % of games. That lead is the input VAL3 actually needs, and the repair
+did not weaken it.
+
 **3 of 6 null-state classifications change** (ATS wk1-3 `MEASURED_IMMATERIAL`→`POWER_LIMITED`;
 ATS wk4-6 `POWER_LIMITED`→`MEASURED_IMMATERIAL`; O/U wk4-6 `DSR_UNREACHABLE`→`POWER_LIMITED`).
 
