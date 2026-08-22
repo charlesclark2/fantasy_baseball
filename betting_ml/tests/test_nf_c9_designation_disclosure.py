@@ -380,6 +380,53 @@ def test_the_exporter_omits_the_key_where_there_is_nothing_to_disclose():
     )
 
 
+def test_a_whitespace_padded_feed_id_still_reaches_its_board_row():
+    """⭐⭐ THE DEFECT THIS STORY ACTUALLY SHIPPED, for a few hours, on a live board.
+
+    The Sleeper feed does not deliver clean ids: measured on the 2026-08-22 snapshot, **275 of 2,501
+    rows carry a LEADING SPACE** in `player_id`. The gsis id is otherwise identical to the board's,
+    so the exact string match this module used matched NOTHING for those players — and a silent
+    non-match here is INDISTINGUISHABLE from "the feed says nothing about him", because both render
+    no chip. Nothing failed. The published board simply carried no designation for **Josh Jacobs
+    (RB, GB) and DK Metcalf (WR, PIT)**, both listed Questionable — the highest-value rows the
+    disclosure exists for.
+
+    ⚠️ IT WAS FOUND BY JOINING THE PUBLISHED ARTIFACT BACK TO THE FEED **BY NAME**, not by any test
+    and not by the id-keyed check that preceded it — that check reported "0 join failures" because a
+    padded id is absent from the board's id set, so the miss classified as "not projected" rather
+    than as a failure. An id-keyed instrument cannot see an id defect (NF-C6P3: "not matched" and
+    "not published" must be distinguishable).
+
+    Both directions are pinned: the feed may pad, and so may a board row."""
+    from quant_sports_intel_models.football.nfl.fantasy import export_draft_board_json as E
+
+    # The real pair, verbatim from the live snapshot.
+    recs = [{"id": "00-0035700"}, {"id": " 00-0035640 "}]
+    n = E._attach_designations(recs, {" 00-0035700": "Questionable", "00-0035640": "Out"})
+    assert n == 2, (
+        "a whitespace-padded player id no longer reaches its board row — 275 of 2,501 live feed "
+        "rows carry one, and the failure is SILENT: the row renders exactly as if the feed had "
+        "said nothing about that player"
+    )
+    assert recs[0]["gameStatus"] == "Questionable"
+    assert recs[1]["gameStatus"] == "Out"
+
+
+def test_both_sides_of_the_id_join_go_through_the_one_normaliser():
+    """A normalisation applied at ONE end of a join is half a fix — and which end is padded is a
+    property of the FEED, not of our code, so it can change under us. Pinned as a shared owner
+    rather than two open-coded `.strip()` calls (the E9.61 two-renderers rule, on a join key)."""
+    src = _EXPORTER.read_text()
+    build = src.split("def weekly_designation_map", 1)[1].split("\ndef ", 1)[0]
+    attach = src.split("def _attach_designations", 1)[1].split("\ndef ", 1)[0]
+    assert "_norm_player_id(pid)" in build, (
+        "weekly_designation_map no longer normalises the FEED id when building the map"
+    )
+    assert '_norm_player_id(rec.get("id"))' in attach, (
+        "_attach_designations no longer normalises the BOARD id when looking one up"
+    )
+
+
 def test_an_unreadable_feed_leaves_every_record_untouched():
     """The whole-map None case. A read failure must cost the DISCLOSURE only — never the boards,
     which are the draft-critical output, and never an invented status on a single row."""

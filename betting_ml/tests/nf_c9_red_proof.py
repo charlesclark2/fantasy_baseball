@@ -168,9 +168,9 @@ CASES = [
     # ══ 4. THE EXPORTER'S THREE STATES ════════════════════════════════════════════════════════
     # ⭐ "unknown" under every player on every board, during any routine ingest gap.
     ("spray a null designation across every row", EXPORTER,
-     "        if pid in designations:\n            rec[\"gameStatus\"] = designations[pid]\n            n += 1",
-     "        rec[\"gameStatus\"] = designations.get(pid)\n        n += 1",
-     "if pid in designations:",
+     "        if pid in lookup:\n            rec[\"gameStatus\"] = lookup[pid]\n            n += 1",
+     "        rec[\"gameStatus\"] = lookup.get(pid)\n        n += 1",
+     "if pid in lookup:",
      "test_the_exporter_omits_the_key_where_there_is_nothing_to_disclose"),
 
     # ⚠️ THE FIRST CUT OF THIS MUTATION WAS A NO-OP — it defaulted a missing feed to `{}`, which
@@ -189,6 +189,28 @@ CASES = [
      '        log.debug("NF-C9: %d player(s) carry an unrecognised game-status value "',
      "[ALERT] NF-C9: %d player(s) carry a game-status value",
      "test_an_unrecognised_token_is_reported_to_the_operator"),
+
+    # ⭐⭐ THE DEFECT THAT ACTUALLY SHIPPED (2026-08-22, live for a few hours). 275 of 2,501 feed
+    # rows carry a LEADING SPACE in `player_id`; an exact match drops them SILENTLY, and a silent
+    # drop here is indistinguishable from "the feed says nothing about him". Josh Jacobs and DK
+    # Metcalf were both listed Questionable and both undisclosed on a published board.
+    ("drop the id normalisation on the lookup side", EXPORTER,
+     "    lookup = {_norm_player_id(k): v for k, v in designations.items()}",
+     "    lookup = dict(designations)",
+     "_norm_player_id(k)",
+     "test_a_whitespace_padded_feed_id_still_reaches_its_board_row"),
+
+    ("drop the id normalisation on the board-row side", EXPORTER,
+     '        pid = _norm_player_id(rec.get("id"))',
+     '        pid = str(rec.get("id"))',
+     '_norm_player_id(rec.get("id"))',
+     "test_both_sides_of_the_id_join_go_through_the_one_normaliser"),
+
+    ("open-code the strip instead of using the shared normaliser", EXPORTER,
+     "        out[_norm_player_id(pid)] = label",
+     "        out[str(pid).strip()] = label",
+     "_norm_player_id(pid)",
+     "test_both_sides_of_the_id_join_go_through_the_one_normaliser"),
 
     # ══ 5. THE SURFACES ═══════════════════════════════════════════════════════════════════════
     ("drop the designation from the rankings board", RANKINGS,

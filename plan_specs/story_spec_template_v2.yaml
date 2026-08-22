@@ -1,0 +1,60 @@
+# Story spec template v2 — successor to eda_plan_spec_template.yaml
+# Applies to: any card promoted into To Do or the Sprint list.
+# Tiering: FULL spec (Goal + Overlap + Plan) for model/§0.5 stories and
+#   multi-session builds; MINI spec (Goal + Overlap only) for small ops,
+#   frontend, or infra fixes; NO spec for pure operator checklist items.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: <slug — matches the Trello card ID prefix, e.g. nf-inj4-...>
+  vertical: <mlb | nfl_fantasy | ncaaf | platform>
+  card: <Trello card short URL>
+  status: DRAFT   # DRAFT -> ACCEPTED -> IN_PROGRESS -> CLOSED(<verdict>)
+spec:
+  description: >
+    What and why, in the story's own terms. State best_alpha posture and
+    whether anything ships/serves.
+  acceptanceCriteria:
+    - description: >
+        Observable, checkable outcomes. For §0.5 stories: the pre-registered
+        gates (PBO/DSR/FDR/power) and the null classifications that are valid
+        outcomes.
+
+---
+# ⭐ THE NEW SECTION — the overlap gate. A spec is not ACCEPTED until every
+# field below is filled with evidence (a search actually run, not "none known").
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: <slug>
+spec:
+  boardSearch:
+    queries: [<the trelloSearch queries actually run>]
+    duplicates: []        # cards this would duplicate -> STOP, merge instead
+    adjacent: []          # cards it touches; state the boundary explicitly
+  triedLedger:
+    files: [<production_model_state/*.md sections grepped>]
+    recordedNulls: []     # any recorded null/refusal this re-approaches.
+                          # If non-empty: cite it and state what is NEW
+                          # (fresh registration, new data, coherent field) —
+                          # or the spec is REJECTED (E2.1-r / no re-reads).
+  supersedes: []          # cards/specs this replaces -> archive them on ACCEPT
+  dependsOn: []           # cards/specs that gate this
+  feedsInto: []           # what consumes the output
+
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: <slug>-plan
+spec:
+  goalRef: { name: <slug> }
+  graph:
+    nodes: []   # tasks, per the existing phase_9 format
+  closeout:
+    verdict: null        # filled at close: SHIPPED | NULL(<class>) | REFUSED | PARKED
+    followUps: >
+      Findings land HERE first. PM triages each into: checklist item on the
+      parent card | merge into an existing card (name it) | a new spec.
+      Worker sessions never create Trello cards directly.
