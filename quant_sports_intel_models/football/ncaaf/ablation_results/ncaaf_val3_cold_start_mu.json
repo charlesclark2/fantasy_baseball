@@ -1,0 +1,1517 @@
+{
+  "story": "NCAAF-VAL3",
+  "decided_at": "2026-08-22",
+  "verdict": "INCUMBENT_STANDS",
+  "survivors": [],
+  "best_arm_any_role": "over_scale",
+  "best_candidate": "bucket_shift",
+  "n_folds": 8,
+  "fold_years": [
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "n_oos_games": 6024,
+  "cache": {
+    "assembled_at": "2026-08-22",
+    "n_games": 8325,
+    "n_with_close": 4187
+  },
+  "served_config": {
+    "label": "served_v2",
+    "mc": "ridge",
+    "contract": "strength_pace",
+    "form": "strength_posterior",
+    "binding": true
+  },
+  "declared_field_size": 8,
+  "reproduction_pin": {
+    "checks": {
+      "cache_assembled_at": {
+        "got": "2026-08-22",
+        "expected": "2026-08-22",
+        "ok": true
+      },
+      "n_with_close": {
+        "got": 4187,
+        "expected": 4187,
+        "ok": true
+      },
+      "n_oos_games": {
+        "got": 6024,
+        "expected": 6024,
+        "ok": true
+      },
+      "fold_years": {
+        "got": [
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "expected": [
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "ok": true
+      }
+    },
+    "all_ok": true,
+    "source": "ncaaf_val3_s1_serve_reanchor.json (S1-serve --stage finalize, repaired _clv_eval)"
+  },
+  "crps_instrument_control": {
+    "max_abs_gap_by_draws": {
+      "5000": 0.021251709592682744,
+      "20000": 0.012343806839590243
+    },
+    "max_abs_gap_closed_form_vs_ensemble": 0.012343806839590243,
+    "gap_shrinks_with_draws": true,
+    "gap_pct_of_crps": 0.1304268367920441,
+    "reading": "the closed-form Gaussian CRPS and the ensemble identity score the SAME predictive; a disagreement would mean one of them is not scoring what this study claims to score, and it would be invisible in every headline. Read the CONVERGENCE, not the single gap: a fixed residual gap would be a real disagreement, a gap that shrinks ~1/\u221an is the sampler's own error."
+  },
+  "deflation": {
+    "pbo": 0.53,
+    "pbo_gate": 0.2,
+    "pbo_pass": false,
+    "n_buckets": 15,
+    "n_cscv_combos": 1000,
+    "dsr_gate": 0.95,
+    "bh_alpha": 0.05,
+    "bh_cutoff": 0.03571428571428572,
+    "var_trials_sr_binding": 0.058781475273324786,
+    "var_trials_sr_convention_variant": 0.090796361748679,
+    "v_binding_note": "FULL-FIELD V (all 7 non-foil, non-diagnostic arms) BINDS, declared forward in \u00a75. The DSR-CONV variant (designed losers excluded from V) is reported as a labelled diagnostic. Declaring the generous reading NON-binding is the conservative direction and forecloses the NF-W7h failure in which a post-hoc re-read of V deletes the arm under test.",
+    "fold_consistency": {
+      "n_folds": 8,
+      "required_wins": 6,
+      "attainable": true,
+      "attained_false_fire": 0.14453125,
+      "legacy_required": 5,
+      "legacy_false_fire": 0.36328125
+    }
+  },
+  "pbo_sensitivity": {
+    "binding_preregistered": {
+      "arms": [
+        "none",
+        "bucket_shift",
+        "per_week_shift",
+        "linear_decay",
+        "shrunk_bucket",
+        "pooled_level",
+        "week_blind",
+        "over_scale"
+      ],
+      "n_arms": 8,
+      "n_buckets": 15,
+      "pbo": 0.53,
+      "n_combos": 1000,
+      "binds": true,
+      "note": "\u00a75's declared population: the foil + all 7 scored arms."
+    },
+    "eligible_set_only": {
+      "arms": [
+        "none",
+        "bucket_shift",
+        "per_week_shift",
+        "linear_decay",
+        "shrunk_bucket"
+      ],
+      "n_arms": 5,
+      "n_buckets": 15,
+      "pbo": 0.701,
+      "n_combos": 1000,
+      "binds": false,
+      "note": "the search the SELECTION actually ran \u2014 the foil + the 4 SELECTABLE candidates. Reported because CLAUDE.md's own PBO note says the eligible set is the right population; \u26d4 but it was NOT what this study pre-registered, so it cannot be adopted here (MH2.2)."
+    },
+    "two_arm_decision": {
+      "arms": [
+        "none",
+        "bucket_shift"
+      ],
+      "n_arms": 2,
+      "n_buckets": 15,
+      "pbo": 0.0,
+      "n_combos": 1000,
+      "binds": false,
+      "note": "the question a PM actually faces \u2014 correct vs do nothing. A 2-arm CSCV has almost no search to overfit, so this is a lower bound, not a gate."
+    }
+  },
+  "pbo_companions": {
+    "whole_field_spread_crps": 0.07739251154287174,
+    "contender_spread_crps": 0.012502829603104004,
+    "contender_spread_pct_of_foil": 0.13210709931498854,
+    "fold_flip_distribution": {
+      "none": 0,
+      "bucket_shift": 1,
+      "per_week_shift": 3,
+      "linear_decay": 1,
+      "shrunk_bucket": 0,
+      "pooled_level": 0,
+      "week_blind": 0,
+      "over_scale": 3
+    },
+    "reading": "E2.1-r/NF1.8: a HIGH PBO over a field whose candidates genuinely TIE is the NULL, not evidence of overfitting; a high PBO with a WIDE spread IS overfitting. The SPREAD is the discriminator, reported beside the flips."
+  },
+  "anchors": {
+    "headline_bucket_oracle_crps_cold": 9.346440371011251,
+    "headline_matched_n_crps_cold": 9.415374895478916,
+    "headline_peek_gain": 0.06893452446766446,
+    "headline_pair_active": true,
+    "foil_crps_cold": 9.464161780808599,
+    "reading": "a peeking oracle is a floor only at MATCHED family AND MATCHED sample (NF1.7 (b) / NF1.9 (f)); it is computed PER FORM (NF-D16 g\u2034) and a peek that does not beat its own matched-n control could not act, so its floor is INACTIVE \u2014 uninformative, never a pass and never a fail (NF-W6d / NF-D20).",
+    "per_form_oracle": {
+      "bucket_shift": {
+        "form": "bucket",
+        "arm_crps": 9.379343907045403,
+        "peek_crps": 9.346440371011251,
+        "matched_n_crps": 9.415374895478916,
+        "peek_gain_over_matched_n": 0.06893452446766446,
+        "anchor_pair_active": true,
+        "gap": 0.032903536034151415,
+        "state": "FLOORED"
+      },
+      "per_week_shift": {
+        "form": "per_week",
+        "arm_crps": 9.390760884199791,
+        "peek_crps": 9.211713269832156,
+        "matched_n_crps": 9.469244679310554,
+        "peek_gain_over_matched_n": 0.25753140947839803,
+        "anchor_pair_active": true,
+        "gap": 0.17904761436763472,
+        "state": "FLOORED"
+      },
+      "linear_decay": {
+        "form": "linear",
+        "arm_crps": 9.382175372038835,
+        "peek_crps": 9.284475879056691,
+        "matched_n_crps": 9.436098201391331,
+        "peek_gain_over_matched_n": 0.15162232233464046,
+        "anchor_pair_active": true,
+        "gap": 0.09769949298214442,
+        "state": "FLOORED"
+      },
+      "shrunk_bucket": {
+        "form": "shrunk",
+        "arm_crps": 9.391846736648507,
+        "peek_crps": 9.37623725210829,
+        "matched_n_crps": 9.4218470040907,
+        "peek_gain_over_matched_n": 0.04560975198241124,
+        "anchor_pair_active": true,
+        "gap": 0.015609484540217267,
+        "state": "FLOORED"
+      },
+      "pooled_level": {
+        "form": "pooled_all",
+        "arm_crps": 9.44971025379175,
+        "peek_crps": 9.444905627755029,
+        "matched_n_crps": 9.415374895478916,
+        "peek_gain_over_matched_n": -0.029530732276112914,
+        "anchor_pair_active": false,
+        "gap": 0.00480462603672116,
+        "state": "INACTIVE"
+      },
+      "week_blind": {
+        "form": "pooled_cold",
+        "arm_crps": 9.44971025379175,
+        "peek_crps": 9.444905627755029,
+        "matched_n_crps": 9.415374895478916,
+        "peek_gain_over_matched_n": -0.029530732276112914,
+        "anchor_pair_active": false,
+        "gap": 0.00480462603672116,
+        "state": "INACTIVE"
+      },
+      "over_scale": {
+        "form": "over2",
+        "arm_crps": 9.372317742248878,
+        "peek_crps": 9.417741667270409,
+        "matched_n_crps": 9.526511941674432,
+        "peek_gain_over_matched_n": 0.10877027440402287,
+        "anchor_pair_active": true,
+        "gap": -0.04542392502153092,
+        "state": "BEATEN"
+      }
+    }
+  },
+  "channel_attribution": {
+    "magnitude_channel": {
+      "pair": "bucket_shift \u2212 week_blind",
+      "cell": "wk1-3",
+      "mean_gain": 0.07036634674634845,
+      "folds_positive": 7,
+      "n_folds": 8,
+      "p_one_sided": 0.005126732778939224,
+      "reading": "> 0 \u21d2 a week-informed magnitude beats the pooled one with the scoping held fixed."
+    },
+    "scoping_channel": {
+      "pair": "week_blind \u2212 pooled_level",
+      "cell": "pooled (all rows)",
+      "mean_gain": 4.786736897410826e-05,
+      "folds_positive": 3,
+      "n_folds": 8,
+      "p_one_sided": 0.49283378546522266,
+      "reading": "> 0 \u21d2 confining the SAME magnitude to weeks 1\u20133 beats spreading it over every row. Read on the POOLED cell because the two arms are identical by construction on the cold cell."
+    },
+    "foil_cold_crps": 9.464161780808599,
+    "foil_pooled_crps": 9.402700367010592,
+    "why_two_cells": "the primary metric is the wk1-3 cell (the only rows the mechanism can move \u2014 NCAAF-P2.1 (f)); the scoping channel is invisible there BY CONSTRUCTION and is therefore read on the pooled cell. Stated as an arithmetic property of the design, not discovered from a score."
+  },
+  "foil": {
+    "arm": "none",
+    "cold_crps": 9.464161780808599,
+    "pooled_crps": 9.402700367010592,
+    "cold_bias_pts": 2.0744557616145283,
+    "pooled_bias_pts": 0.3621610347267977
+  },
+  "arms": {
+    "bucket_shift": {
+      "arm": "bucket_shift",
+      "role": "candidate",
+      "scope": "cold",
+      "n_params": "1",
+      "doc": "one constant over weeks 1\u20133",
+      "cold_crps": 9.379343907045403,
+      "gain_vs_foil_cold": 0.08481787376319616,
+      "pooled_gain_vs_foil": 0.014135545088173274,
+      "tie_with_foil": false,
+      "fold_wins": 8,
+      "n_folds": 8,
+      "fold_consistency_required": 6,
+      "fold_consistency_ok": true,
+      "sharpe": 1.251877386050951,
+      "series_skew": 0.8766240590915533,
+      "series_kurt": 3.3203249543978934,
+      "dsr": 0.9977129366735941,
+      "sr0": 0.3537363767015329,
+      "dsr_convention_variant": 0.9948320936623251,
+      "p_one_sided": 0.0047295734979763875,
+      "bh_pass": true,
+      "calibration": {
+        "cold": {
+          "crps": 9.379343907045403,
+          "pit_max_decile_dev": 0.06125022613088839,
+          "calib_80": 0.8301920281068255,
+          "bias": 0.5572610863224734
+        },
+        "pooled": {
+          "crps": 9.388564821922419,
+          "pit_max_decile_dev": 0.0269098503470349,
+          "calib_80": 0.8085886420395463,
+          "bias": 0.10207096025738832
+        },
+        "late": {
+          "crps": 9.389019551873218,
+          "pit_max_decile_dev": 0.028048078972896805,
+          "calib_80": 0.8039229194211361,
+          "bias": 0.03609911884033379
+        }
+      },
+      "mean_delta_pts": 1.5171946752920558,
+      "per_fold_delta": [
+        1.874821455576915,
+        1.2912189055491734,
+        1.3474004151529344,
+        1.3813400991751976,
+        1.4587040781311837,
+        1.3024169390590363,
+        1.5722033221276914,
+        1.9094521875643142
+      ],
+      "clauses": {
+        "C1_pooled_pit_not_degraded": {
+          "ok": true,
+          "arm": 0.02691,
+          "foil": 0.02606,
+          "tol": 0.002
+        },
+        "C2_pooled_calib_floor": {
+          "ok": true,
+          "value": 0.8086,
+          "floor": 0.78
+        },
+        "C3_cold_calib_floor": {
+          "ok": true,
+          "value": 0.8302,
+          "floor": 0.78
+        },
+        "C4_market_blind_estimator": {
+          "ok": true,
+          "enforced_at": "assert_estimator_is_market_blind"
+        },
+        "C5_week_scoped": {
+          "ok": true,
+          "max_late_crps_gap": 0.0,
+          "scope": "cold",
+          "tol": 1e-09
+        },
+        "C6_margin_frozen": {
+          "ok": true,
+          "enforced_at": "no arm touches mu_margin (by construction)"
+        },
+        "C7_sigma_frozen": {
+          "ok": true,
+          "max_gap": 0.0,
+          "tol": 1e-09
+        },
+        "C8_own_form_oracle_floor": {
+          "ok": true,
+          "state": "FLOORED",
+          "gap": 0.032903536034151415
+        },
+        "all_ok": true
+      }
+    },
+    "per_week_shift": {
+      "arm": "per_week_shift",
+      "role": "candidate",
+      "scope": "cold",
+      "n_params": "3",
+      "doc": "a separate constant per week 1, 2, 3",
+      "cold_crps": 9.390760884199791,
+      "gain_vs_foil_cold": 0.073400896608808,
+      "pooled_gain_vs_foil": 0.01095307219576469,
+      "tie_with_foil": false,
+      "fold_wins": 6,
+      "n_folds": 8,
+      "fold_consistency_required": 6,
+      "fold_consistency_ok": true,
+      "sharpe": 0.5842522178649533,
+      "series_skew": -0.4327940357466532,
+      "series_kurt": 2.6790006730777556,
+      "dsr": 0.703395828180232,
+      "sr0": 0.3537363767015329,
+      "dsr_convention_variant": 0.6312362928493802,
+      "p_one_sided": 0.07120485780754059,
+      "bh_pass": false,
+      "calibration": {
+        "cold": {
+          "crps": 9.390760884199791,
+          "pit_max_decile_dev": 0.05807826362837526,
+          "calib_80": 0.8298876688081778,
+          "bias": 0.5199395988022991
+        },
+        "pooled": {
+          "crps": 9.391747294814827,
+          "pit_max_decile_dev": 0.02533951317982449,
+          "calib_80": 0.8080383655799979,
+          "bias": 0.10227900262390877
+        },
+        "late": {
+          "crps": 9.389019551873218,
+          "pit_max_decile_dev": 0.028048078972896805,
+          "calib_80": 0.8039229194211361,
+          "bias": 0.03609911884033379
+        }
+      },
+      "mean_delta_pts": 1.554516162812229,
+      "per_fold_delta": [
+        1.878994637995487,
+        1.2447845519907395,
+        1.7989834334595391,
+        1.2261414190540636,
+        1.4429497756855416,
+        1.245198062617914,
+        1.6207655512172927,
+        1.978311870477254
+      ],
+      "clauses": {
+        "C1_pooled_pit_not_degraded": {
+          "ok": true,
+          "arm": 0.02534,
+          "foil": 0.02606,
+          "tol": 0.002
+        },
+        "C2_pooled_calib_floor": {
+          "ok": true,
+          "value": 0.808,
+          "floor": 0.78
+        },
+        "C3_cold_calib_floor": {
+          "ok": true,
+          "value": 0.8299,
+          "floor": 0.78
+        },
+        "C4_market_blind_estimator": {
+          "ok": true,
+          "enforced_at": "assert_estimator_is_market_blind"
+        },
+        "C5_week_scoped": {
+          "ok": true,
+          "max_late_crps_gap": 0.0,
+          "scope": "cold",
+          "tol": 1e-09
+        },
+        "C6_margin_frozen": {
+          "ok": true,
+          "enforced_at": "no arm touches mu_margin (by construction)"
+        },
+        "C7_sigma_frozen": {
+          "ok": true,
+          "max_gap": 0.0,
+          "tol": 1e-09
+        },
+        "C8_own_form_oracle_floor": {
+          "ok": true,
+          "state": "FLOORED",
+          "gap": 0.17904761436763472
+        },
+        "all_ok": true
+      }
+    },
+    "linear_decay": {
+      "arm": "linear_decay",
+      "role": "candidate",
+      "scope": "cold",
+      "n_params": "2",
+      "doc": "OLS ramp a + b\u00b7week over weeks 1\u20133",
+      "cold_crps": 9.382175372038835,
+      "gain_vs_foil_cold": 0.08198640876976349,
+      "pooled_gain_vs_foil": 0.013785228653990345,
+      "tie_with_foil": false,
+      "fold_wins": 7,
+      "n_folds": 8,
+      "fold_consistency_required": 6,
+      "fold_consistency_ok": true,
+      "sharpe": 0.8970526398179676,
+      "series_skew": 0.6573973119331298,
+      "series_kurt": 2.424877219056026,
+      "dsr": 0.9526080673415377,
+      "sr0": 0.3537363767015329,
+      "dsr_convention_variant": 0.9202187373213344,
+      "p_one_sided": 0.019409863277969595,
+      "bh_pass": true,
+      "calibration": {
+        "cold": {
+          "crps": 9.382175372038835,
+          "pit_max_decile_dev": 0.06280872619509997,
+          "calib_80": 0.8311018920524038,
+          "bias": 0.5488618735102623
+        },
+        "pooled": {
+          "crps": 9.388915138356602,
+          "pit_max_decile_dev": 0.026749606827135425,
+          "calib_80": 0.8087465388316672,
+          "bias": 0.10171212214729913
+        },
+        "late": {
+          "crps": 9.389019551873218,
+          "pit_max_decile_dev": 0.028048078972896805,
+          "calib_80": 0.8039229194211361,
+          "bias": 0.03609911884033379
+        }
+      },
+      "mean_delta_pts": 1.5255938881042663,
+      "per_fold_delta": [
+        1.8401104700613167,
+        1.2693658907509604,
+        1.4306058051293797,
+        1.3758463811666806,
+        1.4958078227880733,
+        1.3101753098760611,
+        1.5491589706243187,
+        1.933680454437339
+      ],
+      "clauses": {
+        "C1_pooled_pit_not_degraded": {
+          "ok": true,
+          "arm": 0.02675,
+          "foil": 0.02606,
+          "tol": 0.002
+        },
+        "C2_pooled_calib_floor": {
+          "ok": true,
+          "value": 0.8087,
+          "floor": 0.78
+        },
+        "C3_cold_calib_floor": {
+          "ok": true,
+          "value": 0.8311,
+          "floor": 0.78
+        },
+        "C4_market_blind_estimator": {
+          "ok": true,
+          "enforced_at": "assert_estimator_is_market_blind"
+        },
+        "C5_week_scoped": {
+          "ok": true,
+          "max_late_crps_gap": 0.0,
+          "scope": "cold",
+          "tol": 1e-09
+        },
+        "C6_margin_frozen": {
+          "ok": true,
+          "enforced_at": "no arm touches mu_margin (by construction)"
+        },
+        "C7_sigma_frozen": {
+          "ok": true,
+          "max_gap": 0.0,
+          "tol": 1e-09
+        },
+        "C8_own_form_oracle_floor": {
+          "ok": true,
+          "state": "FLOORED",
+          "gap": 0.09769949298214442
+        },
+        "all_ok": true
+      }
+    },
+    "shrunk_bucket": {
+      "arm": "shrunk_bucket",
+      "role": "candidate",
+      "scope": "cold",
+      "n_params": "1",
+      "doc": "positive-part James\u2013Stein shrink of the bucket constant toward 0 by its own SE",
+      "cold_crps": 9.391846736648507,
+      "gain_vs_foil_cold": 0.07231504416009216,
+      "pooled_gain_vs_foil": 0.012264524195158444,
+      "tie_with_foil": false,
+      "fold_wins": 8,
+      "n_folds": 8,
+      "fold_consistency_required": 6,
+      "fold_consistency_ok": true,
+      "sharpe": 1.167271759930199,
+      "series_skew": 1.0947923379692284,
+      "series_kurt": 3.3275768168528295,
+      "dsr": 0.9990260380924245,
+      "sr0": 0.3537363767015329,
+      "dsr_convention_variant": 0.997205259884491,
+      "p_one_sided": 0.006546448217461423,
+      "bh_pass": true,
+      "calibration": {
+        "cold": {
+          "crps": 9.391846736648507,
+          "pit_max_decile_dev": 0.06556775363388084,
+          "calib_80": 0.8269233522207142,
+          "bias": 1.0775184242478124
+        },
+        "pooled": {
+          "crps": 9.390435842815434,
+          "pit_max_decile_dev": 0.02616423150834177,
+          "calib_80": 0.8079553277314887,
+          "bias": 0.19042738369855122
+        },
+        "late": {
+          "crps": 9.389019551873218,
+          "pit_max_decile_dev": 0.028048078972896805,
+          "calib_80": 0.8039229194211361,
+          "bias": 0.03609911884033379
+        }
+      },
+      "mean_delta_pts": 0.996937337366717,
+      "per_fold_delta": [
+        0.5588194618632608,
+        0.43953172430093596,
+        0.8185728634017028,
+        0.9017841173994897,
+        1.1180085812116611,
+        1.0051489936391536,
+        1.3663075116636867,
+        1.7673254454538447
+      ],
+      "clauses": {
+        "C1_pooled_pit_not_degraded": {
+          "ok": true,
+          "arm": 0.02616,
+          "foil": 0.02606,
+          "tol": 0.002
+        },
+        "C2_pooled_calib_floor": {
+          "ok": true,
+          "value": 0.808,
+          "floor": 0.78
+        },
+        "C3_cold_calib_floor": {
+          "ok": true,
+          "value": 0.8269,
+          "floor": 0.78
+        },
+        "C4_market_blind_estimator": {
+          "ok": true,
+          "enforced_at": "assert_estimator_is_market_blind"
+        },
+        "C5_week_scoped": {
+          "ok": true,
+          "max_late_crps_gap": 0.0,
+          "scope": "cold",
+          "tol": 1e-09
+        },
+        "C6_margin_frozen": {
+          "ok": true,
+          "enforced_at": "no arm touches mu_margin (by construction)"
+        },
+        "C7_sigma_frozen": {
+          "ok": true,
+          "max_gap": 0.0,
+          "tol": 1e-09
+        },
+        "C8_own_form_oracle_floor": {
+          "ok": true,
+          "state": "FLOORED",
+          "gap": 0.015609484540217267
+        },
+        "all_ok": true
+      }
+    },
+    "pooled_level": {
+      "arm": "pooled_level",
+      "role": "lose",
+      "scope": "all",
+      "n_params": "1",
+      "doc": "MATCHED FOIL (SCOPING) \u2014 the POOLED mean error applied to EVERY row. Winning would mean the effect is a season-wide level, not a cold start (VAL2's \u26d4 would be wrong).",
+      "cold_crps": 9.44971025379175,
+      "gain_vs_foil_cold": 0.014451527016849042,
+      "pooled_gain_vs_foil": 0.00230992863106394,
+      "tie_with_foil": false,
+      "fold_wins": 6,
+      "n_folds": 8,
+      "fold_consistency_required": 6,
+      "fold_consistency_ok": true,
+      "sharpe": 1.0181099018823667,
+      "series_skew": 0.14078122253947717,
+      "series_kurt": 2.4409431900357306,
+      "dsr": 0.9485458928501385,
+      "sr0": 0.3537363767015329,
+      "dsr_convention_variant": 0.9222028893826785,
+      "p_one_sided": 0.011831712193471294,
+      "bh_pass": true,
+      "calibration": {
+        "cold": {
+          "crps": 9.44971025379175,
+          "pit_max_decile_dev": 0.06701540644627729,
+          "calib_80": 0.8296371618825098,
+          "bias": 1.8670708820784976
+        },
+        "pooled": {
+          "crps": 9.400390438379528,
+          "pit_max_decile_dev": 0.027304965334359128,
+          "calib_80": 0.8079511446190065,
+          "bias": 0.15477615519076676
+        },
+        "late": {
+          "crps": 9.388973308296585,
+          "pit_max_decile_dev": 0.02916563342975041,
+          "calib_80": 0.8033255460503943,
+          "bias": -0.17128576069569718
+        }
+      },
+      "mean_delta_pts": 0.2393810342153122,
+      "per_fold_delta": [
+        0.7389828706696498,
+        0.1628900403555884,
+        0.20115555910991556,
+        -0.047767419066163136,
+        -0.08021719965096388,
+        0.17945028835702112,
+        0.23731048252206324,
+        0.26727441399113233
+      ],
+      "clauses": {
+        "C1_pooled_pit_not_degraded": {
+          "ok": true,
+          "arm": 0.0273,
+          "foil": 0.02606,
+          "tol": 0.002
+        },
+        "C2_pooled_calib_floor": {
+          "ok": true,
+          "value": 0.808,
+          "floor": 0.78
+        },
+        "C3_cold_calib_floor": {
+          "ok": true,
+          "value": 0.8296,
+          "floor": 0.78
+        },
+        "C4_market_blind_estimator": {
+          "ok": true,
+          "enforced_at": "assert_estimator_is_market_blind"
+        },
+        "C5_week_scoped": {
+          "ok": true,
+          "max_late_crps_gap": 0.018843369940961807,
+          "scope": "all",
+          "tol": 1e-09
+        },
+        "C6_margin_frozen": {
+          "ok": true,
+          "enforced_at": "no arm touches mu_margin (by construction)"
+        },
+        "C7_sigma_frozen": {
+          "ok": true,
+          "max_gap": 0.0,
+          "tol": 1e-09
+        },
+        "C8_own_form_oracle_floor": {
+          "ok": true,
+          "state": "INACTIVE",
+          "gap": 0.00480462603672116
+        },
+        "all_ok": true
+      }
+    },
+    "week_blind": {
+      "arm": "week_blind",
+      "role": "lose",
+      "scope": "cold",
+      "n_params": "1",
+      "doc": "MATCHED FOIL (MAGNITUDE) \u2014 the POOLED magnitude applied to weeks 1\u20133 ONLY. Holds the SCOPING fixed and removes the week-informed MAGNITUDE (NF-D15 g\u2032).",
+      "cold_crps": 9.44971025379175,
+      "gain_vs_foil_cold": 0.014451527016849042,
+      "pooled_gain_vs_foil": 0.002357796000037382,
+      "tie_with_foil": false,
+      "fold_wins": 6,
+      "n_folds": 8,
+      "fold_consistency_required": 6,
+      "fold_consistency_ok": true,
+      "sharpe": 1.0181099018823667,
+      "series_skew": 0.14078122253947717,
+      "series_kurt": 2.4409431900357306,
+      "dsr": 0.9485458928501385,
+      "sr0": 0.3537363767015329,
+      "dsr_convention_variant": 0.9222028893826785,
+      "p_one_sided": 0.011831712193471294,
+      "bh_pass": true,
+      "calibration": {
+        "cold": {
+          "crps": 9.44971025379175,
+          "pit_max_decile_dev": 0.06701540644627729,
+          "calib_80": 0.8296371618825098,
+          "bias": 1.8670708820784976
+        },
+        "pooled": {
+          "crps": 9.400342571010555,
+          "pit_max_decile_dev": 0.025647252028632696,
+          "calib_80": 0.8084343316721123,
+          "bias": 0.3273381202127963
+        },
+        "late": {
+          "crps": 9.389019551873218,
+          "pit_max_decile_dev": 0.028048078972896805,
+          "calib_80": 0.8039229194211361,
+          "bias": 0.03609911884033379
+        }
+      },
+      "mean_delta_pts": 0.2393810342153122,
+      "per_fold_delta": [
+        0.7389828706696498,
+        0.1628900403555884,
+        0.20115555910991556,
+        -0.047767419066163136,
+        -0.08021719965096388,
+        0.17945028835702112,
+        0.23731048252206324,
+        0.26727441399113233
+      ],
+      "clauses": {
+        "C1_pooled_pit_not_degraded": {
+          "ok": true,
+          "arm": 0.02565,
+          "foil": 0.02606,
+          "tol": 0.002
+        },
+        "C2_pooled_calib_floor": {
+          "ok": true,
+          "value": 0.8084,
+          "floor": 0.78
+        },
+        "C3_cold_calib_floor": {
+          "ok": true,
+          "value": 0.8296,
+          "floor": 0.78
+        },
+        "C4_market_blind_estimator": {
+          "ok": true,
+          "enforced_at": "assert_estimator_is_market_blind"
+        },
+        "C5_week_scoped": {
+          "ok": true,
+          "max_late_crps_gap": 0.0,
+          "scope": "cold",
+          "tol": 1e-09
+        },
+        "C6_margin_frozen": {
+          "ok": true,
+          "enforced_at": "no arm touches mu_margin (by construction)"
+        },
+        "C7_sigma_frozen": {
+          "ok": true,
+          "max_gap": 0.0,
+          "tol": 1e-09
+        },
+        "C8_own_form_oracle_floor": {
+          "ok": true,
+          "state": "INACTIVE",
+          "gap": 0.00480462603672116
+        },
+        "all_ok": true
+      }
+    },
+    "over_scale": {
+      "arm": "over_scale",
+      "role": "lose",
+      "scope": "cold",
+      "n_params": "1",
+      "doc": "2 \u00d7 the bucket constant. Winning would mean the estimator UNDER-corrects (NF-D20).",
+      "cold_crps": 9.372317742248878,
+      "gain_vs_foil_cold": 0.09184403855972079,
+      "pooled_gain_vs_foil": 0.014801873707835256,
+      "tie_with_foil": false,
+      "fold_wins": 6,
+      "n_folds": 8,
+      "fold_consistency_required": 6,
+      "fold_consistency_ok": true,
+      "sharpe": 0.6881031051780053,
+      "series_skew": 0.5407144068066437,
+      "series_kurt": 3.5515173673103457,
+      "dsr": 0.825726959122476,
+      "sr0": 0.3537363767015329,
+      "dsr_convention_variant": 0.7569697087757866,
+      "p_one_sided": 0.04633905201887838,
+      "bh_pass": false,
+      "calibration": {
+        "cold": {
+          "crps": 9.372317742248878,
+          "pit_max_decile_dev": 0.05437456908300778,
+          "calib_80": 0.8276767349949661,
+          "bias": -0.9599335889695819
+        },
+        "pooled": {
+          "crps": 9.387898493302757,
+          "pit_max_decile_dev": 0.026446727238979256,
+          "calib_80": 0.8081293053898747,
+          "bias": -0.1580191142120212
+        },
+        "late": {
+          "crps": 9.389019551873218,
+          "pit_max_decile_dev": 0.028048078972896805,
+          "calib_80": 0.8039229194211361,
+          "bias": 0.03609911884033379
+        }
+      },
+      "mean_delta_pts": 3.0343893505841115,
+      "per_fold_delta": [
+        3.74964291115383,
+        2.582437811098347,
+        2.694800830305869,
+        2.7626801983503952,
+        2.9174081562623675,
+        2.6048338781180727,
+        3.144406644255383,
+        3.8189043751286285
+      ],
+      "clauses": {
+        "C1_pooled_pit_not_degraded": {
+          "ok": true,
+          "arm": 0.02645,
+          "foil": 0.02606,
+          "tol": 0.002
+        },
+        "C2_pooled_calib_floor": {
+          "ok": true,
+          "value": 0.8081,
+          "floor": 0.78
+        },
+        "C3_cold_calib_floor": {
+          "ok": true,
+          "value": 0.8277,
+          "floor": 0.78
+        },
+        "C4_market_blind_estimator": {
+          "ok": true,
+          "enforced_at": "assert_estimator_is_market_blind"
+        },
+        "C5_week_scoped": {
+          "ok": true,
+          "max_late_crps_gap": 0.0,
+          "scope": "cold",
+          "tol": 1e-09
+        },
+        "C6_margin_frozen": {
+          "ok": true,
+          "enforced_at": "no arm touches mu_margin (by construction)"
+        },
+        "C7_sigma_frozen": {
+          "ok": true,
+          "max_gap": 0.0,
+          "tol": 1e-09
+        },
+        "C8_own_form_oracle_floor": {
+          "ok": false,
+          "state": "BEATEN",
+          "gap": -0.04542392502153092
+        },
+        "all_ok": false
+      }
+    }
+  },
+  "_foil_folds": [
+    {
+      "eval_year": 2018,
+      "fitted": {
+        "form": "zero",
+        "n_source": 776,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 143,
+        "crps": 9.397100066613866,
+        "pit_max_decile_dev": 0.05384615384615385,
+        "pit_mean_dev": 0.017203064450403982,
+        "calib_80": 0.8741258741258742,
+        "bias": 0.7157786289483933
+      },
+      "pooled": {
+        "n": 772,
+        "crps": 9.802639129760145,
+        "pit_max_decile_dev": 0.02435233160621761,
+        "pit_mean_dev": 0.0025593072592615673,
+        "calib_80": 0.8186528497409327,
+        "bias": -0.4161877269031057
+      },
+      "late": {
+        "n": 629,
+        "crps": 9.894836404847455,
+        "pit_max_decile_dev": 0.02400635930047694,
+        "pit_mean_dev": 0.0007698776029537724,
+        "calib_80": 0.8060413354531002,
+        "bias": -0.673534609076022
+      },
+      "sigma_checksum": 13851.735713261403,
+      "buckets": [
+        9.747172944074592,
+        9.042096585245243
+      ],
+      "crps_sampled_control": {
+        "5000": 9.417201360802332,
+        "20000": 9.39391012622126
+      }
+    },
+    {
+      "eval_year": 2019,
+      "fitted": {
+        "form": "zero",
+        "n_source": 1548,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 139,
+        "crps": 9.538775703727048,
+        "pit_max_decile_dev": 0.05107913669064748,
+        "pit_mean_dev": 0.022535950884841838,
+        "calib_80": 0.7913669064748201,
+        "bias": 1.4621885354944326
+      },
+      "pooled": {
+        "n": 774,
+        "crps": 9.477542365523167,
+        "pit_max_decile_dev": 0.02377260981912145,
+        "pit_mean_dev": 0.010802917947121127,
+        "calib_80": 0.8191214470284238,
+        "bias": 0.27768659661857026
+      },
+      "late": {
+        "n": 635,
+        "crps": 9.464138532436017,
+        "pit_max_decile_dev": 0.029133858267716542,
+        "pit_mean_dev": 0.008234584752879914,
+        "calib_80": 0.8251968503937008,
+        "bias": 0.01840192023471989
+      },
+      "sigma_checksum": 13644.298814760316,
+      "buckets": [
+        10.117099214173049,
+        8.952070693129654
+      ],
+      "crps_sampled_control": {
+        "5000": 9.546062367216148,
+        "20000": 9.537338312654938
+      }
+    },
+    {
+      "eval_year": 2020,
+      "fitted": {
+        "form": "zero",
+        "n_source": 2322,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 34,
+        "crps": 10.007445397784561,
+        "pit_max_decile_dev": 0.10588235294117646,
+        "pit_mean_dev": 0.044133997416443416,
+        "calib_80": 0.7941176470588235,
+        "bias": 1.8035896974521801
+      },
+      "pooled": {
+        "n": 534,
+        "crps": 9.927141551941249,
+        "pit_max_decile_dev": 0.027340823970037453,
+        "pit_mean_dev": 0.01204711477140541,
+        "calib_80": 0.7883895131086143,
+        "bias": -1.1301628410228204
+      },
+      "late": {
+        "n": 500,
+        "crps": 9.921680890423902,
+        "pit_max_decile_dev": 0.027999999999999997,
+        "pit_mean_dev": 0.015867430400179128,
+        "calib_80": 0.788,
+        "bias": -1.3296580136391205
+      },
+      "sigma_checksum": 9157.917897033716,
+      "buckets": [
+        10.007445397784561
+      ],
+      "crps_sampled_control": {
+        "5000": 9.996828388511295,
+        "20000": 9.995101590944971
+      }
+    },
+    {
+      "eval_year": 2021,
+      "fitted": {
+        "form": "zero",
+        "n_source": 2856,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 147,
+        "crps": 9.6775351507685,
+        "pit_max_decile_dev": 0.049659863945578225,
+        "pit_mean_dev": 0.03481457348068484,
+        "calib_80": 0.8435374149659864,
+        "bias": 1.699216584137208
+      },
+      "pooled": {
+        "n": 770,
+        "crps": 9.324578145841445,
+        "pit_max_decile_dev": 0.03246753246753248,
+        "pit_mean_dev": 0.006156876604303307,
+        "calib_80": 0.8428571428571429,
+        "bias": -0.20057638582004253
+      },
+      "late": {
+        "n": 623,
+        "crps": 9.241296155914837,
+        "pit_max_decile_dev": 0.03739967897271268,
+        "pit_mean_dev": 0.0006050518721463227,
+        "calib_80": 0.8426966292134831,
+        "bias": -0.6488421427762477
+      },
+      "sigma_checksum": 13523.734399354878,
+      "buckets": [
+        9.697113578278923,
+        9.657688525620948
+      ],
+      "crps_sampled_control": {
+        "5000": 9.662226842297658,
+        "20000": 9.680061433573474
+      }
+    },
+    {
+      "eval_year": 2022,
+      "fitted": {
+        "form": "zero",
+        "n_source": 3626,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 150,
+        "crps": 8.881443851486143,
+        "pit_max_decile_dev": 0.04000000000000001,
+        "pit_mean_dev": 0.022183979974761125,
+        "calib_80": 0.86,
+        "bias": 0.6731007257285224
+      },
+      "pooled": {
+        "n": 776,
+        "crps": 9.209726073155515,
+        "pit_max_decile_dev": 0.02757731958762885,
+        "pit_mean_dev": 0.030344233634434115,
+        "calib_80": 0.7989690721649485,
+        "bias": 1.3927934733015488
+      },
+      "late": {
+        "n": 626,
+        "crps": 9.288387947357442,
+        "pit_max_decile_dev": 0.024600638977635772,
+        "pit_mean_dev": 0.03229956598100109,
+        "calib_80": 0.7843450479233227,
+        "bias": 1.5652438121768746
+      },
+      "sigma_checksum": 12860.958029007097,
+      "buckets": [
+        9.665624375994328,
+        8.09726332697796
+      ],
+      "crps_sampled_control": {
+        "5000": 8.878108873069143,
+        "20000": 8.877072634258647
+      }
+    },
+    {
+      "eval_year": 2023,
+      "fitted": {
+        "form": "zero",
+        "n_source": 4402,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 153,
+        "crps": 10.024229712515213,
+        "pit_max_decile_dev": 0.06993464052287582,
+        "pit_mean_dev": 0.04981658302047731,
+        "calib_80": 0.7320261437908496,
+        "bias": 2.9017388308451157
+      },
+      "pooled": {
+        "n": 792,
+        "crps": 9.288011703727168,
+        "pit_max_decile_dev": 0.016161616161616155,
+        "pit_mean_dev": 0.01178473706980332,
+        "calib_80": 0.7941919191919192,
+        "bias": 0.5589021172626127
+      },
+      "late": {
+        "n": 639,
+        "crps": 9.111734152327212,
+        "pit_max_decile_dev": 0.02206572769953051,
+        "pit_mean_dev": 0.002678520433726461,
+        "calib_80": 0.809076682316119,
+        "bias": -0.002058785989536021
+      },
+      "sigma_checksum": 12812.085924783336,
+      "buckets": [
+        10.382192097617851,
+        9.661557296029644
+      ],
+      "crps_sampled_control": {
+        "5000": 10.045481422107896,
+        "20000": 10.019590010999817
+      }
+    },
+    {
+      "eval_year": 2024,
+      "fitted": {
+        "form": "zero",
+        "n_source": 5194,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 140,
+        "crps": 8.658555155512698,
+        "pit_max_decile_dev": 0.1,
+        "pit_mean_dev": 0.0807737516877371,
+        "calib_80": 0.9,
+        "bias": 4.09434305150015
+      },
+      "pooled": {
+        "n": 798,
+        "crps": 9.167035711097354,
+        "pit_max_decile_dev": 0.02857142857142858,
+        "pit_mean_dev": 0.017791392566525843,
+        "calib_80": 0.8020050125313283,
+        "bias": 0.46230281004419693
+      },
+      "late": {
+        "n": 658,
+        "crps": 9.275223063349408,
+        "pit_max_decile_dev": 0.027051671732522806,
+        "pit_mean_dev": 0.004390890625842581,
+        "calib_80": 0.7811550151975684,
+        "bias": -0.3104717094145167
+      },
+      "sigma_checksum": 13011.110795959561,
+      "buckets": [
+        9.501538581733373,
+        7.815571729292021
+      ],
+      "crps_sampled_control": {
+        "5000": 8.649079517410593,
+        "20000": 8.664240324015166
+      }
+    },
+    {
+      "eval_year": 2025,
+      "fitted": {
+        "form": "zero",
+        "n_source": 5992,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 145,
+        "crps": 9.528209208060753,
+        "pit_max_decile_dev": 0.05172413793103449,
+        "pit_mean_dev": 0.052992548576009935,
+        "calib_80": 0.8206896551724138,
+        "bias": 3.245690038810226
+      },
+      "pooled": {
+        "n": 808,
+        "crps": 9.024928255038686,
+        "pit_max_decile_dev": 0.02821782178217823,
+        "pit_mean_dev": 0.0403679475104981,
+        "calib_80": 0.7995049504950495,
+        "bias": 1.9525302343334214
+      },
+      "late": {
+        "n": 663,
+        "crps": 8.914859268329486,
+        "pit_max_decile_dev": 0.032126696832579196,
+        "pit_mean_dev": 0.03760691107837261,
+        "calib_80": 0.7948717948717948,
+        "bias": 1.6697124792065186
+      },
+      "sigma_checksum": 13202.001647173589,
+      "buckets": [
+        10.446767348197296,
+        8.59689331597787
+      ],
+      "crps_sampled_control": {
+        "5000": 9.52403279849641,
+        "20000": 9.522869795267349
+      }
+    }
+  ],
+  "null_classification": {
+    "best_candidate": "bucket_shift",
+    "instrument_state": "POWER_LIMITED",
+    "instrument_reason": "`crps_total_wk1_3`: insufficient recorded statistics to certify the null as powered. Absent a detectability figure the honest default is POWER-LIMITED \u2014 a null is trustworthy only when something was computed to make it so.",
+    "instrument_retest_trigger": null,
+    "instrument_detail": {
+      "n_folds": 8,
+      "n_arms": 7,
+      "observed_sr": 1.2519,
+      "sr0": 0.3362,
+      "var_trials_sr": 0.058781475273324786,
+      "degenerates_excluded_from_v": false,
+      "declared_field_size": 8,
+      "declared_field_size_source": "stated",
+      "field_remedy_admissible": true,
+      "sign_floor": 0.00390625,
+      "bh_cutoff": 0.03571428571428572
+    },
+    "field_remedy_admissible": true,
+    "constraint_clauses_failed": [],
+    "deflation_gates_failed": [
+      "pbo"
+    ],
+    "binding_half": "deflation",
+    "recorded_state": "DEFLATION_REFUSED_PBO",
+    "why_recorded_state": "the refusal is caused by a pre-registered DEFLATION gate that WAS evaluated and FAILED. \u26a0\ufe0f `cv_power.classify_null` takes no PBO argument at all \u2014 it can express PBO-UNDEFINED (too few folds/arms) but NOT PBO-EVALUATED-AND-FAILED \u2014 so its own state structurally cannot see the gate that bound here. That is an INSTRUMENT GAP, recorded rather than worked around; the instrument's state is preserved above and is not the verdict. \u26d4 No fold/season re-test trigger is published: the admissible remedy for a PBO refusal is a FORWARD-registered narrower coherent family (or a forward-registered PBO population), never more seasons and NEVER a post-hoc re-cut of a field already scored (MH2.2).",
+    "meaningful_effect_not_preregistered": "\u26a0\ufe0f This study pre-registered a materiality band in POINTS (inherited from VAL2) but NOT a practically-meaningful CRPS effect in SD units, so `classify_null` correctly falls through to its honest default rather than certifying the null as powered. \u26d4 Supplying one now would be re-deriving a bar from the answer (E2.1-r); it is a pre-registration gap, recorded as such, and a successor registers it forward."
+  },
+  "over_tilt": {
+    "n_close_carrying_cold": 715,
+    "state": "EVALUABLE",
+    "over_actually_hit": 0.45594405594405596,
+    "note": "DESCRIPTIVE. The model's side vs the close on the cold-start rows, before and after each arm's shift. Never a clause; best_alpha = 0 and no edge claim is made.",
+    "arms": {
+      "none": {
+        "model_to_over": 0.6125874125874126,
+        "mean_offset_pts": 1.3571106429156117
+      },
+      "bucket_shift": {
+        "model_to_over": 0.5020979020979021,
+        "mean_offset_pts": -0.15738856157225306
+      },
+      "per_week_shift": {
+        "model_to_over": 0.509090909090909,
+        "mean_offset_pts": -0.16033482328182713
+      },
+      "linear_decay": {
+        "model_to_over": 0.4965034965034965,
+        "mean_offset_pts": -0.16236324407575423
+      },
+      "shrunk_bucket": {
+        "model_to_over": 0.5188811188811189,
+        "mean_offset_pts": 0.1474219646552967
+      },
+      "pooled_level": {
+        "model_to_over": 0.6083916083916084,
+        "mean_offset_pts": 1.243829661882332
+      },
+      "week_blind": {
+        "model_to_over": 0.6083916083916084,
+        "mean_offset_pts": 1.243829661882332
+      },
+      "over_scale": {
+        "model_to_over": 0.4097902097902098,
+        "mean_offset_pts": -1.6718877660601184
+      },
+      "oracle_bucket": {
+        "model_to_over": 0.44755244755244755,
+        "mean_offset_pts": -1.113921227336961
+      },
+      "matched_n_bucket": {
+        "model_to_over": 0.4811188811188811,
+        "mean_offset_pts": -0.5597310898917295
+      }
+    }
+  },
+  "folds": [
+    {
+      "eval_year": 2018,
+      "n_eval": 772,
+      "n_cold": 143,
+      "n_infold": 776,
+      "n_infold_cold": 141,
+      "sigma_total_median": 17.70346290055145,
+      "dispersion": {
+        "sigma_margin": 16.211,
+        "sigma_total": 18.165,
+        "rho": 0.024,
+        "sigma0_margin": 16.206,
+        "k_margin": 0.0,
+        "sigma0_total": 17.067,
+        "k_total": 0.755,
+        "sigma_margin_med": 16.206
+      }
+    },
+    {
+      "eval_year": 2019,
+      "n_eval": 774,
+      "n_cold": 139,
+      "n_infold": 1548,
+      "n_infold_cold": 284,
+      "sigma_total_median": 17.628293042325883,
+      "dispersion": {
+        "sigma_margin": 16.142,
+        "sigma_total": 17.634,
+        "rho": 0.1,
+        "sigma0_margin": 15.435,
+        "k_margin": 0.628,
+        "sigma0_total": 17.628,
+        "k_total": 0.0,
+        "sigma_margin_med": 15.844
+      }
+    },
+    {
+      "eval_year": 2020,
+      "n_eval": 534,
+      "n_cold": 34,
+      "n_infold": 2322,
+      "n_infold_cold": 423,
+      "sigma_total_median": 16.91251047852459,
+      "dispersion": {
+        "sigma_margin": 15.853,
+        "sigma_total": 16.893,
+        "rho": 0.008,
+        "sigma0_margin": 14.52,
+        "k_margin": 1.0,
+        "sigma0_total": 15.524,
+        "k_total": 1.0,
+        "sigma_margin_med": 15.997
+      }
+    },
+    {
+      "eval_year": 2021,
+      "n_eval": 770,
+      "n_cold": 147,
+      "n_infold": 2856,
+      "n_infold_cold": 457,
+      "sigma_total_median": 17.563291427733578,
+      "dispersion": {
+        "sigma_margin": 16.534,
+        "sigma_total": 17.555,
+        "rho": -0.002,
+        "sigma0_margin": 14.927,
+        "k_margin": 1.0,
+        "sigma0_total": 17.563,
+        "k_total": 0.0,
+        "sigma_margin_med": 16.09
+      }
+    },
+    {
+      "eval_year": 2022,
+      "n_eval": 776,
+      "n_cold": 150,
+      "n_infold": 3626,
+      "n_infold_cold": 604,
+      "sigma_total_median": 16.472669700153215,
+      "dispersion": {
+        "sigma_margin": 16.437,
+        "sigma_total": 16.597,
+        "rho": 0.018,
+        "sigma0_margin": 14.916,
+        "k_margin": 1.0,
+        "sigma0_total": 16.216,
+        "k_total": 0.493,
+        "sigma_margin_med": 16.03
+      }
+    },
+    {
+      "eval_year": 2023,
+      "n_eval": 792,
+      "n_cold": 153,
+      "n_infold": 4402,
+      "n_infold_cold": 754,
+      "sigma_total_median": 16.146595638044694,
+      "dispersion": {
+        "sigma_margin": 15.957,
+        "sigma_total": 16.139,
+        "rho": 0.081,
+        "sigma0_margin": 15.452,
+        "k_margin": 0.559,
+        "sigma0_total": 16.063,
+        "k_total": 0.286,
+        "sigma_margin_med": 15.778
+      }
+    },
+    {
+      "eval_year": 2024,
+      "n_eval": 798,
+      "n_cold": 140,
+      "n_infold": 5194,
+      "n_infold_cold": 907,
+      "sigma_total_median": 16.036568934903848,
+      "dispersion": {
+        "sigma_margin": 15.397,
+        "sigma_total": 16.465,
+        "rho": 0.051,
+        "sigma0_margin": 15.401,
+        "k_margin": 0.0,
+        "sigma0_total": 15.03,
+        "k_total": 1.0,
+        "sigma_margin_med": 15.401
+      }
+    },
+    {
+      "eval_year": 2025,
+      "n_eval": 808,
+      "n_cold": 145,
+      "n_infold": 5992,
+      "n_infold_cold": 1047,
+      "sigma_total_median": 16.043613616263368,
+      "dispersion": {
+        "sigma_margin": 16.038,
+        "sigma_total": 16.347,
+        "rho": 0.089,
+        "sigma0_margin": 14.718,
+        "k_margin": 1.0,
+        "sigma0_total": 15.09,
+        "k_total": 1.0,
+        "sigma_margin_med": 15.695
+      }
+    }
+  ],
+  "inner_min_train_seasons": 2,
+  "market_blind": true,
+  "best_alpha": 0,
+  "serving_change": null
+}
