@@ -47,6 +47,7 @@ import {
   UncertaintyNote,
   UpgradeBanner,
   num,
+  AvailabilityFlag,
   numOrLock,
   int,
   teamLabel,
@@ -330,7 +331,11 @@ export function ProjectionsTable() {
                     </td>
                     <td className="px-3 py-2 text-gray-400">{teamLabel(p)}</td>
                     <td className="px-3 py-2 text-right text-gray-500">{p.bye ?? "—"}</td>
-                    <td className="px-3 py-2 text-right text-gray-400">{numOrLock(p.g, p.locked)}</td>
+                    {/* NF-C8 — the availability flag; see `AvailabilityFlag`. Unflagged, locked
+                        and games-less rows all render exactly as they did before. */}
+                    <td className="px-3 py-2 text-right text-gray-400">
+                      <AvailabilityFlag games={p.g} locked={p.locked} freshness={data?.freshness} />
+                    </td>
                     {statCols.map((c) => (
                       <td key={String(c.key)} className="px-3 py-2 text-right text-gray-400">
                         {numOrLock(p[c.key] as number | null, p.locked, c.nd ?? 1)}

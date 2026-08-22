@@ -3,6 +3,10 @@
     "week": "2026-08-17",
     "items": [
       {
+        "tag": "added",
+        "text": "Players we project for less than a full season are now flagged on the rankings board, the projections table and the player page. Our point projections already price in the chance a player misses games, but nothing on the row said so — a lower ranking simply looked unexplained. The projected-games figure now carries a colour when it sits materially below a full slate, and tapping it explains that this is a statement about our projection rather than a view on any player's health, alongside the date of the roster and injury data behind it."
+      },
+      {
         "tag": "fixed",
         "text": "Players who are currently on PUP or injured reserve now project down on the draft board. The injury feed was being read from a snapshot several weeks old, so a number of players who had since been placed on PUP or IR — including three inside the draftable range — were still projected as if they were healthy, while a few who had been cleared were still being marked down. The board now reads the current snapshot, and it reports how old that snapshot is before publishing."
       },
