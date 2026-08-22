@@ -338,8 +338,9 @@ to quote §3–§6 against the recorded vintage before VAL3 sizes anything off t
 
 - `models/ncaaf_val2_mu_total_offset.py` — the harness (query-only; join-based, never positional).
 - `models/ncaaf_val2_red_proof.py` — 22 deliberate breaks, **22/22 RED**.
-- `betting_ml/tests/test_ncaaf_val2_mu_total_offset.py` — 29 fast-gate guards (incl. the upstream
-  tripwire).
+- `betting_ml/tests/test_ncaaf_val2_mu_total_offset.py` — 29 fast-gate guards. ⚠️ the upstream
+  tripwire was DISCHARGED by PR #995 and is now an anti-regression check; the substantive guards for
+  the repair live in `betting_ml/tests/test_ncaaf_clv_row_alignment.py` (RED-proven 6/6).
 - `ablation_results/ncaaf_val2_mu_total_offset.json` — every figure above, machine-readable.
 
 Runtime: **16 s** end-to-end on the laptop (one OOS collection + one draw for the alignment control).
