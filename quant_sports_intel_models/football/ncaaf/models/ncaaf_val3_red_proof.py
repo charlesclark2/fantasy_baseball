@@ -134,6 +134,9 @@ BREAKS: list[tuple[str, Path, str, str]] = [
     ("tilt: the row-count invariant behind the join is dropped", V3,
      '    if len(merged) != len(oos):\n        raise SystemExit(f"[{_STORY}] the close join changed the row count; refusing to report.")',
      "    pass"),
+    ("output: the runner writes over the hand-written narrative", V3,
+     '_OUT_MD = _RESULTS / "ncaaf_val3_cold_start_readout.md"',
+     '_OUT_MD = _RESULTS / "ncaaf_val3_cold_start_mu.md"'),
     ("tilt: an unevaluable report renders as a number instead of a state", V3,
      '        return {"n_close_carrying_cold": 0, "over_actually_hit": None, "arms": {},\n'
      '                "state": "UNEVALUABLE",',

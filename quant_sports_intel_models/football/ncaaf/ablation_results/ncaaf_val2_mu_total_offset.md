@@ -285,6 +285,17 @@ network failure there therefore replaces the only working cache on the machine w
 and VAL2/VAL1/P1.4's vs-market legs all stop running until a successful re-assemble. Back the cache
 up first (`cp betting_ml/data/cache/ncaaf_p1_4_game_matrix.{parquet,meta.json} /tmp/`).
 
+> ✅ **DISCHARGED (2026-08-22) by NCAAF-VAL3's step 0.** `--assemble --matrix-source s3` →
+> **4,187 closes** (the population VAL1/S1-serve recorded), and this module re-run on it. **Every
+> verdict and every constraint below reproduces:** `HAND_TO_VAL3_SCOPED` on `wk1-3`; `wk1-3` μ−y
+> +2.322 → **+2.311** [+0.89, +3.74], 6/6 seasons; the matched contrast +2.118 → **+2.101**
+> [+0.39, +3.81], t +3.16; `wk4-6` **−0.626** (still negative); the pooled CI still spans zero; the
+> by-week decay +4.83/+2.88/+0.28 → **+4.77/+2.88/+0.28**. ⭐ The levels moved by ≤0.02 pts, so §3–§6
+> as written below are within a rounding of the current vintage — but the JSON **is** regenerated
+> and is the current one. Per the PM decision recorded in `ncaaf_clv_row_alignment_repair.md` §6a-2
+> and NF-W7f, the prose below is left VERBATIM (a decided story's record is not rewritten after its
+> result); the re-quoted figures live in `ncaaf_val3_preregistration.md` §0 and this module's JSON.
+
 **What that does and does not put at risk.** The misalignment finding is a property of the **source
 code** and the decomposition is **arithmetic** — neither depends on the population. The offset
 **level** does. The *sign* and the concentration in the cold-start weeks are structural (they track a

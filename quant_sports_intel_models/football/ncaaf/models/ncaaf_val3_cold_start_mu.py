@@ -55,7 +55,10 @@ _STORY = "NCAAF-VAL3"
 _RESULTS = Path(B._RESULTS_DIR)
 _SCORES_JSON = _RESULTS / "ncaaf_val3_cold_start_scores.json"
 _OUT_JSON = _RESULTS / "ncaaf_val3_cold_start_mu.json"
-_OUT_MD = _RESULTS / "ncaaf_val3_cold_start_mu.md"
+#: ⚠️ The MACHINE-rendered table. The hand-written NARRATIVE lives at
+#: `ncaaf_val3_cold_start_mu.md` and is NOT written by this module — a runner that writes to a
+#: narrative's fixed path silently clobbers it on every re-run (the NF-W2c-CBS hazard).
+_OUT_MD = _RESULTS / "ncaaf_val3_cold_start_readout.md"
 _PARENT_JSON = _RESULTS / "ncaaf_val3_s1_serve_reanchor.json"
 
 #: The SERVED config, imported from VAL1 rather than restated — a second literal could drift away

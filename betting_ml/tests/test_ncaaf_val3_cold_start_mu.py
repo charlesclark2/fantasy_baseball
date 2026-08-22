@@ -526,6 +526,15 @@ def test_the_module_does_not_write_any_served_artifact():
         assert forbidden not in src, f"VAL3 must not touch {forbidden}"
 
 
+def test_the_runner_never_writes_to_the_narrative_writeup_path():
+    """NF-W2c-CBS — a runner that writes to a hand-written narrative's FIXED path silently clobbers
+    it on every re-run, and `git status` is the only thing that would catch it."""
+    src = _src_no_comments()
+    assert "ncaaf_val3_cold_start_readout.md" in src
+    assert "ncaaf_val3_cold_start_mu.md" not in src, \
+        "the harness writes to the NARRATIVE path; it would clobber the writeup on every run"
+
+
 def test_the_study_declares_itself_market_blind_and_best_alpha_zero():
     src = _src_no_comments()
     assert "'market_blind': True" in src.replace('"', "'")
