@@ -7,7 +7,7 @@ metadata:
   name: nf-inj3b
   vertical: nfl_fantasy
   card: https://trello.com/c/SGsvQJPb
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Fresh §0.5 FORWARD re-registration of the injury-games caps. NF-INJ3
