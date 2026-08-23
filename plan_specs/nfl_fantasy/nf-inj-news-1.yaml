@@ -1,0 +1,150 @@
+# Plan spec — NF-INJ-NEWS-1 (serving/data story; NOT a §0.5 model claim)
+# Authored by PM 2026-08-23. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inj-news-1
+  vertical: nfl_fantasy
+  card: https://trello.com/c/67JbJ6J6
+  status: ACCEPTED
+spec:
+  description: >
+    Reported-absence games cap: an operator-curated, provenance-stamped
+    overrides table that moves players with a credibly-reported absence but
+    NO formal roster status (the Jordyn Tyson class) DOWN the draft board
+    during draft season. Approved by the operator 2026-08-23 after a live
+    draft surfaced the gap. The availability discount currently fires only
+    on formal IR/PUP/NFI/SUS placement (season_projection.py availability
+    path); weekly Q/D/O tags and news reports apply zero discount. This
+    story consumes a curated cap through the SAME games-cap machinery the
+    formal statuses use. It is an OPERATOR JUDGMENT with provenance, not a
+    fitted model: forward-only, never backtested, never presented as a
+    projection improvement. The §0.5 duration model (parent card wufGcjB8)
+    replaces it post-draft-season. best_alpha=0. First publish is
+    operator-approved with the measured board delta in hand.
+  acceptanceCriteria:
+    - description: >
+        Overrides table lives IN THE REPO for git-native provenance
+        (e.g. quant_sports_intel_models/football/nfl/fantasy/data/
+        reported_absence_overrides.yaml). Schema per row: normalized
+        player_id, player_name, expected_games_missed (integer),
+        source_url (required), note, entered_by, entered_at, review_by
+        (a date after which the row is IGNORED and flagged for re-entry —
+        stale judgments must not linger silently).
+    - description: >
+        DISJOINTNESS RULE (hard): a row is applied ONLY when the player has
+        NO formal IR/PUP/NFI/SUS status in the current feed. If a formal tag
+        appears, the formal path wins and the override is ignored + surfaced
+        in the build log (no double-discount; no collision with NF-INJ3b's
+        cap constants, which govern the formally-tagged population only).
+    - description: >
+        CAP-ONLY and monotone: an override can only LOWER expected games
+        (min(current_expected_games, 17 - expected_games_missed)); it can
+        never raise availability. It feeds the same expected_games quantity
+        the formal caps feed — no new modeling pathway.
+    - description: >
+        Joins use the NORMALIZED player id and are verified BY NAME, not by
+        the id under test (NF-C9 lesson; the Sleeper feed pads ~11% of ids —
+        if NF-C9b has not landed, normalize locally at the join with a
+        comment pointing at NF-C9b).
+    - description: >
+        DISCLOSURE: the served payload/manifest stamps affected rows
+        (e.g. reported_absence: {source_url, entered_at}) and the surface
+        shows a chip distinct from the NF-C8 availability flag: neutral
+        provenance copy ("reported absence — manually sourced {date}"),
+        all strings via fantasy-claim-copy.ts, denylist-clean (no forecast
+        verbs, no diagnosis, no injury prediction).
+        ⚠️ SEQUENCING: the frontend chip work must land AFTER NF-INJ1-C's PR
+        (shared fantasy-claim-copy.ts + /projections-full surface). Build
+        the data/serving path first; rebase the chip on INJ1-C's merged dev.
+    - description: >
+        MEASUREMENT BEFORE FIRST PUBLISH (report, then operator decision):
+        run the whole-board placement read (run_nf_tr2b_placement_read) and
+        run_interval_revalidation on the with-overrides board; report the
+        moved rows, cross-position placement effects, and the NF1.5
+        give-back interaction (part of any cap is handed back — measure,
+        never assume proportional). DEPLOY-HELD until the operator approves
+        the first publish with these numbers in hand.
+    - description: >
+        HONESTY GUARDS: no copy anywhere claims accuracy/improvement from
+        overrides; the transparency/methodology panel discloses the
+        mechanism exists and is manual. Guards assert RENDERED output
+        (NF-C4); absent-vs-null (NF-FRESH2) — an un-overridden player is
+        indistinguishable from before this story; every new guard
+        RED-proven (mutation landed AND moved the asserted predicate).
+    - description: >
+        SEED LIST at ship time: the session drafts the initial ~10-25
+        candidate rows from current beat reports (each with source_url) as a
+        PROPOSAL file for the operator to confirm/edit before the first
+        publish — the session does not decide who is injured; it assembles
+        sourced candidates. Jordyn Tyson (reported ~2-month absence, WR27
+        undiscounted) is the canonical first row.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inj-news-1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "NF-INJ1" / "frontend" / "availability" / "injury" (board Credence Sports, 2026-08-23)'
+    duplicates: []
+    adjacent:
+      - "Parent 🔴 availability-news card (Sprint, trello.com/c/wufGcjB8) — holds the §0.5 duration model + NLP leads; this story is its approved interim. Card stays open."
+      - "NF-INJ3b (IN FLIGHT) — formal-status cap constants; disjoint by the hard rule above. Do not touch its files."
+      - "NF-INJ1-C (IN FLIGHT) — /projections-full + fantasy-claim-copy.ts; chip work sequences after its PR lands."
+      - "NF-C9b (Sprint, not started) — ingest id normalisation; this story normalizes locally at its join if C9b hasn't landed."
+      - "NF-INFRA2 (Sprint) — publish automation; this story publishes via the existing manual chain until INFRA2 lands."
+  triedLedger:
+    files:
+      - "ablation_results/nf_c8_injury_designation_gap.md (the gap write-up naming Tyson)"
+      - "quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj3_injury_games.md (formal-cap territory this must not touch)"
+      - "production_model_state/nfl_season_fantasy.md"
+    recordedNulls:
+      - "NF-INJ3 ruling D3 ('no rushed interim') governed the FORMAL-status cap constants — its certified fix (NF-INJ3b) was funded and in flight. This story covers the UNTAGGED population, which has no fix in flight and no fitted claim to wait on; the operator explicitly approved the interim 2026-08-23. Not a re-read."
+      - "NF-W4 availability GENUINE_ABSENCE (weekly modeling) untouched — this is a season/draft-board data mechanism, not a weekly model feature."
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "The published draft board (operator-approved first publish)"
+    - "NF-INJ-NEWS-0's recommendation (automates population later); the §0.5 duration model (replaces this post-draft-season)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inj-news-1-plan
+spec:
+  goalRef: { name: nf-inj-news-1 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-schema-and-loader
+        desc: >
+          Overrides file + loader with the disjointness, cap-only, review_by,
+          and normalized-id rules; unit + RED-proof coverage.
+      - id: 2-availability-consumption
+        desc: >
+          Wire the cap into the season availability path beside the formal
+          caps; build-log line for every applied AND every ignored override.
+      - id: 3-payload-stamp
+        desc: "Manifest/payload provenance stamp on affected rows (additive fields only — NF-C0)."
+      - id: 4-measure
+        desc: "Placement read + interval reval on the with-overrides board; write the report."
+      - id: 5-seed-proposal
+        desc: "Draft the sourced seed list as a proposal file for operator confirmation."
+      - id: 6-chip
+        desc: >
+          Frontend chip + methodology-panel disclosure — ONLY after NF-INJ1-C's
+          PR is merged; rebase on dev first.
+      - id: 7-closeout
+        desc: >
+          Verdict + findings into closeout.followUps; hand the operator the
+          publish decision with the node-4 report + node-5 proposal.
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
