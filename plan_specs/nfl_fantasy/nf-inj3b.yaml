@@ -224,3 +224,37 @@ spec:
       2026 serving cohort (22 flagged veterans: 14 RES, 8 PUP), and this study is
       pre-labelled EXPLORATORY on every per-status channel other than `RES`. The
       certified claim is about the RES/PUP population the board actually serves.
+
+      ── PM RULINGS RECORDED 2026-08-23 (D1-D4) ──────────────────────────────────
+      D1=A the scoped measurement follow-up is FUNDED (counterfactual DRY-RUN board
+      rebuild + diff incl. superflex_10/12 + counterfactual placement read +
+      interval reval; NO --publish; the ship decision returns to the operator WITH
+      the measurement). Option C refused. D2=A serve the certified
+      `hurdle_transfer` via a PERSISTED, VERSIONED serving artifact (MH2.1);
+      `fitted_status` REFUSED on this study's evidence (4/7 folds, p 0.1265 —
+      choosing it now is picking an arm after seeing the scores) and the refusal is
+      recorded so it cannot be resurrected; PM BOUNDARY verbatim — "the certified
+      population is RES/PUP; SUS and NFI rows RETAIN the incumbent constants — zero
+      live rows, exploratory channels — until a live row exists and a registered
+      read covers them". D3=ACCEPTED, PM wording: "A committed ablation artifact
+      must be regenerated from the committed code that claims to have produced it —
+      the generating code's commit must be the same as or an ancestor of the
+      artifact's commit" (the CLAUDE.md append is NF-INJ3b-M node 0b, NOT this
+      session's). D4=FOLDED into NF-INJ3b-M node 1 (--out stems on
+      run_nf_tr2b_placement_read + run_interval_revalidation, with a RED proof that
+      the DEFAULT invocations stop clobbering the decided artifacts); no standalone
+      card. Full text recorded verbatim in the decisive record's §12 rulings block
+      (`ablation_results/nf_inj3b_injury_games.md`) and in
+      `run_nf_inj3b_injury_games.PM_RULINGS`.
+
+      (7) ⚠️⚠️ BLOCKING THE NEXT STORY — `plan_specs/nfl_fantasy/nf-inj3b-m.yaml`
+      DOES NOT EXIST. The ruling directs the next session into it as "PM-authored,
+      ACCEPTED, already on dev". Measured exhaustively before stopping: absent from
+      origin/dev's tree; absent from EVERY ref in the repo (git for-each-ref x
+      git ls-tree over 3,024 commits); no add-commit anywhere in --all history; and
+      PR #1008 ("Pushing up plan specs") is a dev->main PROMOTION carrying
+      plan_specs/ncaaf/ncaaf-val3b.yaml, not a spec delivery. The nfl_fantasy specs
+      present are nf-inj-news-0, nf-inj-news-1, nf-inj1-c, nf-inj3b. A worker
+      session does not author its own spec, and D3's CLAUDE.md append + D4's runner
+      fix are explicitly scoped to that spec's nodes 0b and 1 — so NEITHER was made
+      here. NF-INJ3b-M is blocked on the PM committing the spec file.

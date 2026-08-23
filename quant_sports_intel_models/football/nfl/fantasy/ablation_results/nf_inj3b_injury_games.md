@@ -1,6 +1,6 @@
 # NF-INJ3b — a FRESH forward re-registration of the injury-games caps
 
-**VERDICT: SHIP** — registered primary `hurdle_transfer`. `best_alpha = 0`. Generated 2026-08-23T05:56:48.727720+00:00 in 1.1s.
+**VERDICT: SHIP** — registered primary `hurdle_transfer`. `best_alpha = 0`. Generated 2026-08-23T06:12:18.563821+00:00 in 1.2s.
 
 > Pre-registration: `ablation_results/nf_inj3b_preregistration.md` — committed BEFORE any arm was scored under this registration. ⛔ Not edited by this run (E2.1-r).
 
@@ -176,7 +176,65 @@ Arm `hurdle_transfer` on the **22** flagged veterans of the live board: mean exp
 
 They name a LEVER; they never license a re-read of a registered gate (E2.1-r / MH2.2). A DSR reached by deleting the arm under test is INADMISSIBLE and is refused rather than reported (NF-W7h).
 
-## 12. Reading the result (hand-written; the JSON above is the machine record)
+## 12. ⚖️ PM rulings, and reading the result
+
+### ⚖️ PM RULINGS (2026-08-23) — recorded; NF-INJ3b's own work closes here
+
+The PM verified this record against `dev` (pre-registration 00:32 < decisive run 00:42; PR #1010
+merged; spec `CLOSED(CLEARS)`) and read the honesty clause as registered. **Nothing deploys on this
+ruling.** `best_alpha = 0`; `SERVED_ARM` stays `"incumbent"`.
+
+**D1 = A — the scoped follow-up is FUNDED.** A counterfactual 2026 board **DRY-RUN** rebuild, diffed
+against the published board on `pts` / `proj_games` / overall **and** within-position rank /
+per-config placement **including `superflex_10` and `superflex_12`**, plus the counterfactual
+placement read and the interval revalidation. ⛔ **No `--publish`.** The ship decision returns to the
+operator **with the measurement**. Option C (ship on (a)–(c) alone) is **REFUSED** for the reason
+this study gave: it breaches NF-INJ3b's own preregistration §5 and re-creates the rushed interim
+NF-INJ3 D3 ruled out.
+
+**D2 = A — serve the certified `hurdle_transfer`, via a PERSISTED, VERSIONED serving artifact.**
+MH2.1: *serve the object that was validated, never a re-derivation.*
+
+⛔ **`fitted_status` is REFUSED on this study's evidence, and the refusal is recorded here so it
+cannot be resurrected.** It wins **4 of 7** folds at **p = 0.1265** — it fails both the
+fold-consistency clause and BH on its own numbers. Choosing it now, because it is cheaper to serve,
+is **picking an arm after seeing the scores**. That it carries 77% of the lift does not make it
+certified; it makes it the arm a future story would have to register as its own primary.
+
+⭐ **PM BOUNDARY, recorded verbatim:** *the certified population is RES/PUP; SUS and NFI rows RETAIN
+the incumbent constants — zero live rows, exploratory channels — until a live row exists and a
+registered read covers them.*
+
+**D3 = ACCEPTED, reworded by the PM:** *"A committed ablation artifact must be regenerated from the
+committed code that claims to have produced it — the generating code's commit must be the same as or
+an ancestor of the artifact's commit."* ⛔ The CLAUDE.md append is **node 0b of NF-INJ3b-M** and is
+owned by whichever session runs that spec — **this session did not make it** (see the ⚠️ note below).
+
+**D4 = FOLDED into NF-INJ3b-M as its node 1** — `--out` stems on `run_nf_tr2b_placement_read` and
+`run_interval_revalidation`, plus a RED proof that the DEFAULT invocations stop clobbering
+`nf_tr2b_placement_read.*` and `nf1_9_interval_revalidation.json`. No standalone card. This
+session's byte-restore workaround was confirmed correct.
+
+**Carried forward, no action here:** `NF-INJ3c` (the cap never reaches a rookie — folds into the next
+rookie-path touch) and `NF-INJ3-CAP` (non-gating) are already on the board.
+
+---
+
+⚠️⚠️ **THE NEXT STEP'S PRECONDITION IS FALSE, AND THIS SESSION STOPPED RATHER THAN IMPROVISING.**
+The ruling directs the next session into `plan_specs/nfl_fantasy/nf-inj3b-m.yaml`, described as
+already existing on `dev` (PM-authored, `ACCEPTED`). **It does not exist.** Measured, exhaustively,
+before stopping: absent from `origin/dev`'s tree; absent from **every** ref in the repository
+(`git for-each-ref` × `git ls-tree`, 3,024 commits); no add-commit anywhere in `--all` history; and
+PR #1008 ("Pushing up plan specs") is a **`dev` → `main` promotion**, not a spec delivery — it
+carries `plan_specs/ncaaf/ncaaf-val3b.yaml` and no `nf-inj3b-m.yaml`. The specs present in
+`plan_specs/nfl_fantasy/` are `nf-inj-news-0`, `nf-inj-news-1`, `nf-inj1-c` and `nf-inj3b`.
+
+⛔ A worker session does not author its own spec, and D3's CLAUDE.md append + D4's runner fix are
+explicitly scoped to NF-INJ3b-M's nodes 0b and 1 — so neither was made here. **The rulings above are
+recorded; NF-INJ3b-M is blocked on the PM committing its spec.**
+
+
+### The reading (hand-written; the JSON above is the machine record)
 
 **All nine registered gates pass. The study CLEARS — and the honest word for what that buys is a RECORD, not a discovery.**
 
