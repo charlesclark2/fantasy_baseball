@@ -456,6 +456,12 @@ def projection_records(
             # and a player page renders one player, not the whole board.
             "mktLean": (None if pd.isna(r.get("market_lean")) else str(r["market_lean"])),
         }
+        # NF-INJ-NEWS-1 — the reported-absence provenance stamp. ADDITIVE and CONDITIONAL: the key
+        # is set only on a row an operator judgment actually moved, so an older client that has
+        # never heard of it is unaffected (NF-C0) and an un-overridden player is unchanged.
+        _ra = _reported_absence(r)
+        if _ra:
+            rec["reportedAbsence"] = _ra
         c = contributions.get(pid)
         if c:
             rec["contrib"] = {
@@ -1120,6 +1126,36 @@ def _attach_designations(recs: list[dict], designations: "dict[str, str | None] 
     return n
 
 
+def _reported_absence(r) -> "dict | None":
+    """NF-INJ-NEWS-1 — the reported-absence PROVENANCE stamp for one row, or `None`.
+
+    ⭐ RETURNS `None` FOR ALMOST EVERY PLAYER, and the caller then omits the key entirely rather
+    than shipping `reportedAbsence: null` on 870 rows. Absent and null are different facts here
+    (NF-FRESH2, and NF-C9's three-state payload one story over): an ABSENT key means "no operator
+    judgment touched this number", which is the true and normal state, and it is what makes an
+    un-overridden player byte-identical to the pre-story board.
+
+    ⭐ IT READS THE BUILT BOARD'S OWN COLUMNS, not the overrides file. The projection stamps
+    `reported_absence_*` only on the rows a cap was ACTUALLY applied to — so a row the disjointness
+    rule refused (the player acquired a formal IR tag) or one whose id matched nothing carries
+    nothing here and cannot be disclosed as though it had moved the projection. Re-reading the YAML
+    at export time would reintroduce exactly that gap, because the exporter cannot see
+    `proj_status`. Same discipline as `rookie_policy_stamp`/`veteran_level_stamp`: read the
+    artifact, never the policy module's word for it (NF-C0e wired-vs-invoked).
+
+    ⛔ NOTHING HERE IS A FORECAST. The payload carries a link and a date — where the judgment came
+    from and when it was made — and never a diagnosis, a return date, or a prediction. The games
+    number itself already ships as `g`; this says only how it came to be what it is.
+    """
+    url = r.get("reported_absence_source_url")
+    if url is None or (isinstance(url, float) and pd.isna(url)) or not str(url).strip():
+        return None
+    entered = r.get("reported_absence_entered_at")
+    entered = None if entered is None or (isinstance(entered, float) and pd.isna(entered)) \
+        else str(entered).strip() or None
+    return {"sourceUrl": str(url).strip(), "enteredAt": entered}
+
+
 # ── build the JSON ────────────────────────────────────────────────────────────────────────────────
 def board_records(
     df: pd.DataFrame,
@@ -1178,6 +1214,12 @@ def board_records(
             "lowPred": pos in LOW_PREDICTABILITY,
             "predNote": LOW_PREDICTABILITY_NOTE if pos in LOW_PREDICTABILITY else None,
         })
+        # NF-INJ-NEWS-1 — same additive, conditional stamp as `projection_records`. The draft board
+        # is the surface the gap was found on (a live draft, Tyson at WR27), so it carries the
+        # provenance too rather than only the projections table.
+        _ra = _reported_absence(r)
+        if _ra:
+            recs[-1]["reportedAbsence"] = _ra
     return recs
 
 
@@ -1679,6 +1721,10 @@ def main(argv: list[str] | None = None) -> int:
                  config_name, n_teams, adp_fmt, n_teams, matched, len(skill))
         # NF-C9 — disclose the weekly designation on the row whose games figure it is NOT in.
         flagged = _attach_designations(skill, designations)
+        # NF-INJ-NEWS-1 — count the reported-absence stamps per board. Logged even when ZERO, so a
+        # build in which the curated file did nothing is legible as such rather than silent.
+        log.info("  %s_%d: %d player(s) carry a reported-absence provenance stamp",
+                 config_name, n_teams, sum(1 for _r in skill if _r.get("reportedAbsence")))
         log.info("  %s_%d: %d player(s) carry a weekly game-status designation to disclose",
                  config_name, n_teams, flagged)
         # NF1.6: `skill` now already contains the PROJECTED K/DST rows; the placeholders only fill
@@ -1836,8 +1882,16 @@ def main(argv: list[str] | None = None) -> int:
                     "until the season projection is exported", type(e).__name__, e)
 
     # manifest — meta + per-config roster shapes + available combos
+    # NF-INJ-NEWS-1 — how many rows on THIS build carry an operator reported-absence cap. On the
+    # manifest because it is a board-level fact an operator (and the methodology panel) needs
+    # without walking 870 rows, and because a mechanism that is switched on must be visible in the
+    # artifact rather than only in a build log nobody keeps (the E11.30 "detected but nobody
+    # notified" shape). ⭐ `0` is a REAL answer here, not an absence: this key is always present
+    # once the mechanism exists, so "no judgments are applied" is stated rather than inferred.
+    _ra_count = sum(1 for _r in projections if _r.get("reportedAbsence"))
     manifest = {
         "season": args.season,
+        "reportedAbsenceCount": _ra_count,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source": "lake" if args.from_lake else "local-artifacts",
         # NF-FRESH2 — the per-input vintage, on the MANIFEST as well as on `projections.json`,

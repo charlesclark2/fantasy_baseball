@@ -467,6 +467,17 @@ _PUBLIC_MANIFEST_FIELDS = frozenset(
         "adp_as_of",
         "ecr_as_of",
         "freshness",
+        # NF-INJ-NEWS-1 — how many rows carry an operator-curated reported-absence cap. Provenance
+        # about the MECHANISM, never a player number: it says "N judgments are applied on this
+        # build", which is exactly the disclosure the methodology panel owes a reader, and it is as
+        # true for a locked view as an open one. Added here in the same change that starts shipping
+        # it, per the note on `_PUBLIC_PROJECTIONS_META_FIELDS` above.
+        # ⚠️ The PER-ROW `reportedAbsence` stamp is deliberately NOT added to
+        # `_PUBLIC_BOARD_FIELDS`/`_PUBLIC_PROJECTION_FIELDS`: those redact a row to identity +
+        # third-party market, and provenance about a number that has itself been withheld tells a
+        # non-entitled reader which players we discounted while showing them no figure. The
+        # allowlist already drops it by default — this comment records that the default is the
+        # intended answer, not an oversight, if E9.56 is ever re-wired.
     }
 )
 

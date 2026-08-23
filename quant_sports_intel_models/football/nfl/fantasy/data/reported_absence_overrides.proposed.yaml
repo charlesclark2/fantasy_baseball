@@ -1,0 +1,202 @@
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-INJ-NEWS-1 — SEED LIST **PROPOSAL**. NOT LOADED BY ANYTHING. NOT APPLIED TO ANY BOARD.
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⛔ THIS FILE IS A DRAFT FOR THE OPERATOR, NOT A CONFIG. No code reads it. The mechanism reads
+#    `reported_absence_overrides.yaml`, which ships EMPTY. To adopt a row, MOVE it there.
+#
+# The session did not decide who is injured. It assembled candidates with citations, then MEASURED
+# the two things it could measure (below) and left every judgment call open. Where the session's
+# reading and a source disagree, the source wording is quoted so the operator can overrule it.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# WHAT WAS MEASURED (2026-08-23, live Sleeper `v1/players/nfl` snapshot, 4,039 skill rows)
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# ✅ EVERY candidate below carries `proj_status = None` in the live feed — i.e. NO formal
+#    IR/PUP/NFI/SUS designation. So the disjointness rule would admit all of them TODAY. That is a
+#    measurement, not the research's inference, and it is the one thing that most needed checking.
+#
+# ⚠️ MOST CANDIDATES HAVE NO NATIVE `gsis_id` IN THE FEED, so `player_id` below is mostly UNRESOLVED.
+#    The pipeline resolves those through `adp_source.attach_gsis`'s (name, position) crosswalk,
+#    which needs the lake — absent from a worktree (NF-INFRA1). ⇒ the ids must be filled in the
+#    MAIN CHECKOUT before adoption. ⛔ Do NOT guess one: a wrong id renders identically to a genuine
+#    absence on every surface. The build log reports `UNMATCHED_ON_BOARD` for an id that matches
+#    nothing — read it, and verify each APPLY line names the player you meant (NF-C9).
+#
+# ⭐ AND THE FEED IS DIRTY RIGHT NOW, MEASURED: Josh Jacobs' `gsis_id` is `' 00-0035700'` — WITH A
+#    LEADING SPACE, on 2026-08-23, on the very player the NF-C9 postmortem names. The override join
+#    normalises both ends, so this is handled; it is recorded here because it is live evidence that
+#    the normalisation is load-bearing rather than defensive.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# ⏳ THIS LIST HAS A SHELF LIFE OF ABOUT A WEEK, AND THAT IS THE DESIGN WORKING
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# The 2026 cutdown to 53 is **Sunday 2026-08-30**. This whole population exists BECAUSE teams have
+# not made their IR placements yet — several of these players are described in reporting as IR
+# candidates once the cut happens. When a team places one on IR, the formal path takes over and
+# the override is IGNORED automatically (and named in the build log). Nothing has to be remembered.
+# ⇒ Every `review_by` below is set on or before the cutdown for exactly that reason.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# ⚠️ CAVEATS THE OPERATOR MUST CARRY (do not skip — two of these would change a decision)
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# 1. EVERY `expected_games_missed` BELOW IS THE SESSION'S ARITHMETIC ON THE SOURCE'S PROSE, not a
+#    figure any source states. Only Tyson has independent corroboration for the derived number
+#    (multiple outlets independently put his return "around Week 6"). The `reading` line under each
+#    row shows the working so it can be overruled.
+# 2. QUOTES REACHED THE SESSION THROUGH A SUMMARISATION LAYER and should be verified against the
+#    live URL before adoption. The URLs are real; the exact wording deserves a click.
+# 3. TEAM ASSIGNMENTS SHOULD BE SPOT-CHECKED. Several look like 2026 free-agency movement the
+#    session cannot corroborate, and the aggregate trackers contradicted each other on some
+#    players. Team is not the join key, so a wrong team does not break anything — but it is a
+#    signal that a row was assembled from a source that had something else wrong too.
+# 4. ⚠️ `ablation_results/nf_c8_injury_designation_gap.md` says Tyson will move "once ARIZONA
+#    places him" on a list. The live Sleeper feed has him at **NO (New Orleans)**, and the beat
+#    reporting agrees. The NF-C8 write-up appears to have the team wrong. Nothing depends on it —
+#    flagged because a false premise in a doc is what the next reader builds on.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# THE SESSION'S RECOMMENDATION (a recommendation, not a decision)
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+#   ADOPT      Tier A (3) — reporting explicitly names regular-season games missed.
+#   OPERATOR   Tier B (3) — Week 1 in genuine sourced doubt; a 1-game cap is defensible but the
+#              team messaging is "hopeful", so these are judgment calls, not readings.
+#   DECLINE    Tier C (6) — team messaging is actively optimistic ("very confident he'll be ready
+#              for game one"). Capping a player his own coach expects to play is the mechanism
+#              being used to express a hunch, which is the thing it must not become.
+#   ⛔ EXCLUDE Tier D — Puka Nacua and Josh Jacobs are under PENDING NFL DISCIPLINARY REVIEW with
+#              NO announced suspension. No source supports ANY number of games, so any integer
+#              here would be manufactured. If a suspension IS announced it becomes `SUS`, a formal
+#              status, and the formal path handles it — this mechanism must never be the place a
+#              guess about league discipline gets a number attached.
+#
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+schema_version: 1
+season: 2026
+
+# ── TIER A — reporting explicitly names regular-season games ────────────────────────────────────
+proposed_tier_a:
+  - player_id: null            # UNRESOLVED — no native gsis in the feed; resolve in the main checkout
+    player_name: "Jordyn Tyson"
+    position: "WR"
+    team: "NO"
+    expected_games_missed: 5
+    source_url: "https://www.nfl.com/news/saints-rookie-wr-jordyn-tyson-hamstring-expected-to-miss-2-months"
+    quote: "Receiver Jordyn Tyson will miss approximately two months due to a hamstring injury, NFL Network Insiders Mike Garafolo and Ian Rapoport reported on Monday."
+    source_date: "2026-08-17"
+    reading: "Injured 2026-08-13; ~two months to mid-October; secondary reporting puts the return around Week 6 ⇒ misses Weeks 1-5."
+    live_feed_status: "injury_status=Doubtful, proj_status=None (no formal designation)"
+    note: "The canonical case. Reporting notes he COULD open on short-term IR — if that happens the formal path takes over and this row is ignored automatically."
+    entered_by: "operator"
+    entered_at: "2026-08-23"
+    review_by: "2026-08-30"
+
+  - player_id: "00-0033906"    # native gsis present in the feed
+    player_name: "Alvin Kamara"
+    position: "RB"
+    team: "NO"
+    expected_games_missed: 2
+    source_url: "https://www.espn.com/nfl/story/_/id/49658952/source-saints-rb-kamara-least-month-mcl-sprain"
+    quote: "expected to be sidelined for at least the next month due to a sprained MCL"
+    source_date: "2026-08-18"
+    reading: "'At least a month' from 2026-08-18 reaches ~2026-09-18; Week 1 is a stated miss and Week 2 is at risk ⇒ 2. Range 1-3."
+    live_feed_status: "injury_status=Questionable, proj_status=None"
+    entered_by: "operator"
+    entered_at: "2026-08-23"
+    review_by: "2026-08-30"
+
+  - player_id: null            # UNRESOLVED
+    player_name: "Kyle Monangai"
+    position: "RB"
+    team: "CHI"
+    expected_games_missed: 1
+    source_url: "https://www.espn.com/nfl/story/_/id/49643703/bears-rb-kyle-monangai-knee-expected-miss-multiple-weeks-source-says"
+    quote: "will be week-to-week after sustaining a knee injury during practice on Sunday"
+    source_date: "2026-08-17"
+    reading: "Headline says 'expected to miss multiple weeks'; the coach says week-to-week and no surgery is needed ⇒ 1 is the conservative reading. Range 0-3 — genuinely wide."
+    live_feed_status: "injury_status=Questionable, proj_status=None"
+    entered_by: "operator"
+    entered_at: "2026-08-23"
+    review_by: "2026-08-30"
+
+# ── TIER B — Week 1 in genuine sourced doubt; an operator call, not a reading ────────────────────
+proposed_tier_b:
+  - player_id: null
+    player_name: "Jeremiyah Love"
+    position: "RB"
+    team: "ARI"
+    expected_games_missed: 1
+    source_url: "https://www.nfl.com/news/report-cardinals-rb-jeremiyah-love-unlikely-to-play-again-in-preseason-due-to-high-ankle-sprain"
+    quote: "unlikely to play again in preseason due to high ankle sprain"
+    source_date: "2026-08-16"
+    reading: "Follow-up reporting says Week 1 availability is 'up in the air' and a Grade 1 high ankle sprain often costs 3-4 weeks; the team is 'hopeful for Week 1'. A coin flip."
+    live_feed_status: "injury_status=Questionable, proj_status=None"
+    entered_by: "operator"
+    entered_at: "2026-08-23"
+    review_by: "2026-08-30"
+
+  - player_id: null
+    player_name: "Emeka Egbuka"
+    position: "WR"
+    team: "TB"
+    expected_games_missed: 1
+    source_url: "https://clutchpoints.com/nfl/tampa-bay-buccaneers/buccaneers-news-emeka-egbuka-cryptic-week-1-injury-update-todd-bowles"
+    quote: "day-to-day, week-to-week"
+    source_date: "2026-08-17"
+    reading: "Asked whether the toe sprain affects Week 1, the head coach said he could not say. The trend moved NEGATIVE from an optimistic 2026-08-14 report."
+    live_feed_status: "injury_status=Questionable, proj_status=None"
+    entered_by: "operator"
+    entered_at: "2026-08-23"
+    review_by: "2026-08-30"
+
+  - player_id: null
+    player_name: "Sam LaPorta"
+    position: "TE"
+    team: "DET"
+    expected_games_missed: 1
+    source_url: "https://fieldlevelmedia.com/news/lions-te-sam-laporta-nursing-hip-injury-week-1-status-uncertain/"
+    quote: "It flared up a little bit, it's a little aggravated... we feel good long term about him. We'll just rest him for a little bit here, let it calm down."
+    source_date: "2026-08-20"
+    reading: "Asked whether it extends into the regular season the head coach said 'I don't know'. The most recent item in this list."
+    live_feed_status: "injury_status=Questionable, proj_status=None"
+    entered_by: "operator"
+    entered_at: "2026-08-23"
+    review_by: "2026-08-30"
+
+# ── TIER C — the session recommends DECLINING these ─────────────────────────────────────────────
+# Listed so the operator can see what was considered and overrule, not as a shortlist. In every one
+# the team's own messaging is optimistic about Week 1, so a cap here expresses a hunch rather than
+# a report — the failure mode this mechanism must not acquire.
+declined_tier_c:
+  - {player_name: "Luther Burden III", position: "WR", team: "CHI",
+     source_url: "https://www.espn.com/nfl/story/_/id/49574301/sources-bears-luther-burden-iii-expected-miss-preseason",
+     why_declined: "'Expected to miss the preseason'; the team is hopeful for Week 1. Preseason absence is not regular-season absence."}
+  - {player_name: "Chuba Hubbard", position: "RB", team: "CAR",
+     source_url: "https://www.upi.com/Sports_News/NFL/2026/08/13/Carolina-Panthers-Chuba-Hubbard-week-hamstring/9681786642004/",
+     why_declined: "Head coach: 'Very confident he'll be ready for game one.'"}
+  - {player_name: "Breece Hall", position: "RB", team: "NYJ",
+     source_url: "https://www.cbssports.com/nfl/news/nfl-training-camp-injury-tracker/",
+     why_declined: "Groin strain, 'two to three weeks', explicitly 'expected to be available for Week 1'."}
+  - {player_name: "Malik Nabers", position: "WR", team: "NYG",
+     source_url: "https://www.theringer.com/2026/08/18/nfl/nfl-2026-preseason-injury-panic-index",
+     why_declined: "ACL recovery, 'should be back by Week 1'. The uncertainty is real but no source names a game he misses."}
+  - {player_name: "Tank Dell", position: "WR", team: "HOU",
+     source_url: "https://www.nfl.com/news/texans-wr-tank-dell-ready-to-return-season-long-absence-hardest-year-of-my-life",
+     why_declined: "Deliberately kept OFF PUP; Week 1 odds reported well above 50%."}
+  - {player_name: "Patrick Mahomes", position: "QB", team: "KC",
+     source_url: "https://www.nfl.com/news/chiefs-qb-patrick-mahomes-rehabilitation-going-great-goal-remains-to-return-week-1-and-have-no-restrictions",
+     why_declined: "Cleared for full participation, targeting Week 1 with no restrictions."}
+
+# ── TIER D — ⛔ EXCLUDED ON PRINCIPLE, not on evidence ───────────────────────────────────────────
+# Pending NFL disciplinary reviews with NO announced suspension. No source supports any number of
+# games, so an integer here would be manufactured — and this file's whole claim is that its numbers
+# come from somewhere. If a suspension is announced the status becomes `SUS`, which the FORMAL path
+# already prices; this mechanism must never be where a guess about league discipline gets a number.
+excluded_tier_d:
+  - {player_name: "Puka Nacua", position: "WR", team: "LAR",
+     source_url: "https://www.si.com/nfl/nfl-training-camp-puka-nacua-josh-jacobs-potential-suspensions",
+     why_excluded: "Under league review; no discipline announced. No supportable games figure exists."}
+  - {player_name: "Josh Jacobs", position: "RB", team: "GB",
+     source_url: "https://www.si.com/nfl/nfl-training-camp-puka-nacua-josh-jacobs-potential-suspensions",
+     why_excluded: "Same. (Also the player whose feed gsis carries the leading space noted above.)"}

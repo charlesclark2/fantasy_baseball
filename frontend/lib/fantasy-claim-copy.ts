@@ -289,6 +289,67 @@ export const WEEKLY_DESIGNATION_NOT_A_DIAGNOSIS =
  *  a designation, and title case would make it look like one. */
 export const WEEKLY_DESIGNATION_UNKNOWN = "unknown"
 
+// ══ NF-INJ-NEWS-1 — THE REPORTED-ABSENCE STAMP: A HUMAN READ A REPORT, AND WE SAY SO ═══════════
+//
+// ⭐ THE THIRD, DELIBERATELY SEPARATE INJURY CHANNEL ON THIS BOARD, and the separation is the
+// point — the three answer different questions and collapsing any two of them makes at least one
+// sentence false:
+//
+//   `AvailabilityFlag`    (NF-C8)  — "our projection says this player misses time." A MODEL output,
+//                                    fired by the projected games number whatever produced it.
+//   `WeeklyDesignation`   (NF-C9)  — "the league lists him Questionable, and we do NOT price it in."
+//                                    A FEED value, disclosed precisely because the model ignores it.
+//   `ReportedAbsence`     (here)   — "a person on our side read a report and lowered his games."
+//                                    An OPERATOR JUDGMENT, with the source attached.
+//
+// The first two are things we OBSERVE. This one is a thing we DID, which is why it is the only one
+// that ships a citation and a date-of-entry: the reader is entitled to check the human's work.
+//
+// ⛔ IT IS NOT A FORECAST AND MUST NEVER READ AS ONE. No return date, no body part, no diagnosis,
+// no "expected back in Week N" — that would be a medical claim we have no basis for, and the honest
+// duration model that could support one is a separate §0.5 story that has not been run. The copy
+// says WHERE the number came from and WHEN somebody decided it. Nothing else.
+//
+// ⛔ AND IT CLAIMS NO IMPROVEMENT. This mechanism has never been backtested and is not presented as
+// making the projection better — it is an interim while the duration model is built. Saying so is
+// not a hedge, it is the accurate description; `test_nf_inj_news_1_reported_absence.py` refuses any
+// accuracy or forecast phrasing in this block.
+export const REPORTED_ABSENCE_LABEL = "Reported absence"
+
+/** The chip's summary. ⚠️ PAST TENSE AND FIRST PERSON on purpose — "we lowered" names an ACT we
+ *  performed, where "he is expected to miss N games" would be a prediction about the player. */
+export const REPORTED_ABSENCE_SUMMARY =
+  "We lowered this player's projected games by hand, on a published report of an expected absence."
+
+/** The honesty line, rendered UNCONDITIONALLY beneath the summary — never behind a click, and never
+ *  only on some surfaces. NF-C6P3: a caveat a reader has to open is a caveat most readers never
+ *  see, and this is the sentence that stops a manual adjustment reading as a model output. */
+export const REPORTED_ABSENCE_MANUAL =
+  "This is a manual judgment, not a model output. It has not been tested against outcomes."
+
+/** ⛔ The no-forecast line. The reader is told what we did NOT do, because the natural reading of a
+ *  lowered games number is that we know when he is coming back. We do not. */
+export const REPORTED_ABSENCE_NOT_A_FORECAST =
+  "It is not a medical opinion and not a return date — our projection carries no view on when he plays again."
+
+/** Prefix for the entry date. The date is when the JUDGMENT was made, which is not the same as the
+ *  injury-feed vintage the other two chips show, and labelling it loosely would conflate them. */
+export const REPORTED_ABSENCE_ENTERED_PREFIX = "Entered"
+
+/** The link out to the source. Required on every stamped row — a manual adjustment with nothing to
+ *  check is indistinguishable from a guess, and the citation is the whole difference. */
+export const REPORTED_ABSENCE_SOURCE_LABEL = "Read the report"
+
+/** The methodology-panel disclosure. ⭐ It exists so the mechanism is discoverable by a reader who
+ *  has NOT happened to hover a chip: a manual override that only announces itself on the rows it
+ *  touched is not disclosed, it is merely visible. */
+export const REPORTED_ABSENCE_METHOD_DISCLOSURE =
+  "A small number of players carry a games projection we lowered by hand, after a published report " +
+  "of an expected absence that no official roster move had yet reflected. Those rows are marked and " +
+  "carry a link to the report. It is a manual judgment with a source attached, not a model output, " +
+  "and it has not been tested against outcomes; we review each entry on a set date and drop it when " +
+  "it goes stale. Every other player's games projection is produced by the model alone."
+
 /** Designation → the glyph on the chip.
  *
  *  ⚠️ A LOOKUP, NOT A FALLBACK CHAIN: a designation this map does not know renders VERBATIM (see

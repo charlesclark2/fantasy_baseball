@@ -66,6 +66,7 @@ import {
   SUBSCRIBE_HREF,
   SurfaceHeader,
   MarketLeanNote,
+  ReportedAbsenceNote,
   UncertaintyNote,
   UpgradeBanner,
   downloadCsv,
@@ -75,6 +76,7 @@ import {
   int,
   teamLabel,
   WeeklyDesignation,
+  ReportedAbsence,
 } from "@/components/fantasy/shared"
 import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
@@ -555,6 +557,12 @@ export function RankingsBoard() {
                               status={p.gameStatus}
                               freshness={manifest?.freshness}
                             />
+                            {/* NF-INJ-NEWS-1 — the third channel: a games figure we lowered BY
+                                HAND on a published report. Distinct from both siblings because it
+                                means something different — the flag is our model's output and the
+                                designation is a club's filing, but this one is an act we performed,
+                                so it is the only one that ships a citation. */}
+                            <ReportedAbsence reported={p.reportedAbsence} />
                           </td>
                           <td className="px-3 py-2 text-right font-semibold text-gray-100">{numOrLock(p.pts, p.locked)}</td>
                           {/* ⚠️ `fullSeasonRate` returns null on a zero/absent games figure, and the
@@ -702,6 +710,9 @@ export function RankingsBoard() {
                 lean={manifest?.projections?.market_lean}
                 note={manifest?.projections?.market_lean_note}
               />
+              {/* NF-INJ-NEWS-1 — the board-level disclosure. A hand-adjusted number that only
+                  announces itself on the rows it touched is visible, not disclosed. */}
+              <ReportedAbsenceNote count={manifest?.reportedAbsenceCount} />
             </UncertaintyNote>
           </div>
 

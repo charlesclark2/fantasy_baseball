@@ -109,8 +109,11 @@ export default defineConfig({
     // renders as a bare em-dash, so the ENTIRE difference between "we are not showing you this"
     // and "we have nothing for this player" lives behind the tap. A phone reader who cannot open
     // it meets an unexplained blank on a surface they have paid for.
+    // ⭐ NF-INJ-NEWS-1 joins because its tap hides the CITATION. The chip says a human lowered this
+    // number; the link proving a human had something to read is behind the popover, and a manual
+    // adjustment whose evidence a phone reader cannot reach is a bare assertion.
       testMatch:
-        /(signup-funnel|expected-points-label|availability-flag|weekly-designation|stat-line-suppression|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile)\.spec\.ts/,
+        /(signup-funnel|expected-points-label|availability-flag|weekly-designation|reported-absence|stat-line-suppression|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile)\.spec\.ts/,
     },
   ],
 
