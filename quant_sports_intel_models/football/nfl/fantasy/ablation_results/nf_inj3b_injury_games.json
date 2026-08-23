@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-23T05:42:13.841274+00:00",
+  "generated_at": "2026-08-23T05:56:48.727720+00:00",
   "elapsed_s": 1.1,
   "story": "NF-INJ3b",
   "preregistration": "ablation_results/nf_inj3b_preregistration.md",
@@ -1177,8 +1177,8 @@
     },
     "V_arms": [
       "fitted_status",
-      "timing_aware",
-      "hurdle_transfer"
+      "hurdle_transfer",
+      "timing_aware"
     ],
     "V_excluded_arms": [
       "all_zero",

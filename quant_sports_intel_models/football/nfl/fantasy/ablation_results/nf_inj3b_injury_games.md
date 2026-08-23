@@ -1,6 +1,6 @@
 # NF-INJ3b — a FRESH forward re-registration of the injury-games caps
 
-**VERDICT: SHIP** — registered primary `hurdle_transfer`. `best_alpha = 0`. Generated 2026-08-23T05:42:13.841274+00:00 in 1.1s.
+**VERDICT: SHIP** — registered primary `hurdle_transfer`. `best_alpha = 0`. Generated 2026-08-23T05:56:48.727720+00:00 in 1.1s.
 
 > Pre-registration: `ablation_results/nf_inj3b_preregistration.md` — committed BEFORE any arm was scored under this registration. ⛔ Not edited by this run (E2.1-r).
 
@@ -30,7 +30,7 @@
 * **Registered PRIMARY:** `hurdle_transfer` — gates are computed on the primary, never on the field's argmin. Field argmin this run: `hurdle_transfer` (agree: **True**).
 * **Matched foil for the claimed channel:** `timing_aware` — identical covariates, availability SPLIT removed and nothing else changed.
 * **Excluded ON MECHANISM:** `sus_regime` — a per-status REGIME carve-out for SUS, which has 0 rows on the 2026 serving cohort and 11 eval rows all in 2019–2020 (inert on 5 of 7 folds) — a different mechanism, structurally inactive where the claim lands (NF-D20). ⚠️ The narrowing is ADVERSE by DSR-CONV's own non-monotonicity (a near-mean arm's removal WIDENS `V`), declared before scoring.
-* **`V` membership:** measured over `fitted_status`, `timing_aware`, `hurdle_transfer`; EXCLUDED from `V`: `all_zero`, `no_cap`, `incumbent` (DSR-CONV degenerates + MH2.1 (a) reference). `n_trials` = **6** — every declared arm pays FULL multiplicity.
+* **`V` membership:** measured over `fitted_status`, `hurdle_transfer`, `timing_aware`; EXCLUDED from `V`: `all_zero`, `no_cap`, `incumbent` (DSR-CONV degenerates + MH2.1 (a) reference). `n_trials` = **6** — every declared arm pays FULL multiplicity.
 * **BH family:** `single_hypothesis` (size 1) at q = 0.1.
 * **Era floor:** 2016 — a DATA-FIDELITY quantity (§8). Folds: [2019, 2020, 2021, 2022, 2023, 2024, 2025].
 

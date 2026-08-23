@@ -164,7 +164,10 @@ def deflation(per_fold: list[dict], primary: str) -> dict:
         "dsr_registered": R3.dsr_conv(d, list(srs_v.values()), DECLARED_FIELD_SIZE),
         "dsr_whole_field": M14.deflated_sharpe(d, np.asarray(list(srs_all.values()))),
         "trial_sharpes": {k: round(v, 4) for k, v in sorted(srs_all.items(), key=lambda kv: -kv[1])},
-        "V_arms": [a for a in arms if a not in V_EXCLUDED_ARMS],
+        # ⭐ DERIVED from `srs_v`, never re-derived from the arm list: a reported membership
+        #    that is computed separately from the one DSR actually uses can drift silently
+        #    (found by this story's RED proof — the mutation landed and the claim did not move).
+        "V_arms": sorted(srs_v),
         "V_excluded_arms": list(V_EXCLUDED_ARMS),
         "V_registered": round(float(np.var(list(srs_v.values()), ddof=1)), 6),
         "V_whole_field": round(float(np.var(list(srs_all.values()), ddof=1)), 6),
