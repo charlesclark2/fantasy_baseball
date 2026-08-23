@@ -1,6 +1,6 @@
 # NF-INJ3b-M — the served-POINT impact, MEASURED (closes NF-INJ3b §5(d))
 
-_generated 2026-08-23T06:47:07.812689+00:00_ · season 2026 · `best_alpha = 0` · **DEPLOY-HELD** (`SERVING_ENABLED` on disk = False) · **nothing published**
+_generated 2026-08-23T06:51:33.554349+00:00_ · season 2026 · `best_alpha = 0` · **DEPLOY-HELD** (`SERVING_ENABLED` on disk = False) · **nothing published**
 
 ## What this measures, and why it could not be estimated
 
@@ -12,10 +12,21 @@ The board build is **not** bit-deterministic run to run, so a diff that credited
 
 | quantity | rows differing | max abs | p99 abs |
 |---|---|---|---|
-| `proj_games` (replicate) | 21 | 3.55e-15 | 1.78e-15 |
-| `proj_fp_ppr` (replicate) | 224 | 3.13e-13 | 6.49e-14 |
+| `proj_games` (replicate) | 13 | 3.55e-15 | 1.78e-15 |
+| `proj_fp_ppr` (replicate) | 129 | 4.26e-13 | 7.20e-14 |
 
 Replicate overall-rank order identical: **True** ⇒ a rank move in §2 cannot be build noise.
+
+### Band integrity — the interval half a board rebuild CAN move
+
+G4 — the served band must ORDER (p10 <= p90) and BRACKET its own point. The COVERAGE half needs realized outcomes and stays `run_interval_revalidation`'s job (run separately, ALL FLOORS MET); a board rebuild cannot move it.
+
+| board | n | order violations | point above p90 | point below p10 | pass |
+|---|---|---|---|---|---|
+| incumbent | 794 | 0 | 0 | 0 | **True** |
+| counterfactual | 794 | 0 | 0 | 0 | **True** |
+
+Regression vs the incumbent board: **False**.
 
 ## 2. The served-POINT impact
 

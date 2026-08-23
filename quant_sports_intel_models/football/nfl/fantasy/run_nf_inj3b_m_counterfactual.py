@@ -304,6 +304,23 @@ def run(con, art: Path, schema: str) -> dict:
     log.info("building COUNTERFACTUAL board (policy ON + covariate feed) …")
     cf = build_board_frame(con, schema, serving_on=True, cov=cov, nf15=nf15)
 
+    # ⭐ THE INTERVAL CHECK THAT IS WELL-DEFINED ON A COUNTERFACTUAL BOARD. `run_interval_
+    #    revalidation` scores the shipped BANDS against REALIZED outcomes — a population-level
+    #    coverage question that a board rebuild cannot move, and it is run (and passes) in
+    #    `run_nf_inj3b_m_ship_path`. What a NEW board CAN break is band INTEGRITY: the point being
+    #    pushed toward or through its own p90 while the NF1.9-validated band is held. So that is
+    #    what is measured here, on BOTH boards, and the distinction is stated rather than blurred.
+    bands = {lab: PL.band_integrity(f.rename(columns={"proj_fp_ppr": "fpPpr",
+                                                      "fp_ppr_p10": "fpP10",
+                                                      "fp_ppr_p90": "fpP90"}))
+             for lab, f in (("incumbent", base), ("counterfactual", cf))}
+    bands["what_it_is"] = (
+        "G4 — the served band must ORDER (p10 <= p90) and BRACKET its own point. The COVERAGE half "
+        "needs realized outcomes and stays `run_interval_revalidation`'s job (run separately, ALL "
+        "FLOORS MET); a board rebuild cannot move it.")
+    bands["regression_vs_incumbent"] = bool(
+        bands["counterfactual"]["pass"] is False and bands["incumbent"]["pass"] is True)
+
     noise = _noise_floor(base, base2)
     points = _point_diff(base, cf, flagged_ids)
     per_config = _per_config(base, cf)
@@ -324,6 +341,7 @@ def run(con, art: Path, schema: str) -> dict:
                            "source": "run_nf_inj3_injury_games.build_population — the bake-off's "
                                      "OWN builder, not re-derived",
                            "provenance": cov_prov},
+        "band_integrity": bands,
         "noise_floor": noise,
         "served_point_impact": points,
         "per_config_placement": per_config,
@@ -377,6 +395,21 @@ def _md(r: dict) -> str:
         "",
         f"Replicate overall-rank order identical: **{n['overall_rank_order_identical']}** ⇒ a rank "
         f"move in §2 cannot be build noise.",
+        "",
+        "### Band integrity — the interval half a board rebuild CAN move",
+        "",
+        f"{r['band_integrity']['what_it_is']}",
+        "",
+        "| board | n | order violations | point above p90 | point below p10 | pass |",
+        "|---|---|---|---|---|---|",
+    ] + [
+        f"| {lab} | {b['n']} | {b['band_order_violations']} | {b['point_above_p90']} | "
+        f"{b['point_below_p10']} | **{b['pass']}** |"
+        for lab, b in r["band_integrity"].items() if isinstance(b, dict)
+    ] + [
+        "",
+        f"Regression vs the incumbent board: "
+        f"**{r['band_integrity']['regression_vs_incumbent']}**.",
         "",
         "## 2. The served-POINT impact",
         "",

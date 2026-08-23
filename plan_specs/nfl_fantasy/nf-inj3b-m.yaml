@@ -7,7 +7,7 @@ metadata:
   name: nf-inj3b-m
   vertical: nfl_fantasy
   card: https://trello.com/c/SGsvQJPb   # continues the NF-INJ3b thread; M card linked on creation
-  status: IN_PROGRESS
+  status: CLOSED(MEASURED)
 spec:
   description: >
     Close NF-INJ3b's blocking §5(d): MEASURE the served-point impact of the
@@ -109,8 +109,96 @@ spec:
       - id: 5-packet-closeout
         desc: "Ship-decision packet to the operator; verdict + findings into closeout.followUps."
   closeout:
-    verdict: null
+    verdict: >
+      MEASURED — NF-INJ3b §5(d) is CLOSED. Nothing shipped; nothing published;
+      `injury_games_policy.SERVING_ENABLED` is False on disk. The ship/no-ship is
+      the operator's, and this hands over the measurement it was blocked on.
+      ⭐⭐ THE RESULT VINDICATES THE REFUSAL TO ESTIMATE. Flagged (22): mean
+      Δgames −2.610 but mean Δpts(PPR) only **−1.234** (median −0.488; 19 down,
+      3 UP; 17 rank moves, worst −82). UNFLAGGED: **348 players' POINTS change
+      and 517 change rank**, and the LARGEST single point move on the whole board
+      (**11.46 PPR**) lands on an UNFLAGGED player — ~9× the mean move on a
+      flagged one. GIVE-BACK: with NF1.5's re-order disabled the same cap change
+      moves the flagged players −12.06 PPR; with it enabled, −1.23 ⇒ **~90% of
+      the raw point impact is absorbed and REDISTRIBUTED**. A proportional
+      estimate would have been wrong by an order of magnitude AND structurally
+      blind to the 517 unflagged rank moves.
+      NOISE FLOOR MEASURED FIRST (the baseline built twice): replicate max |Δ|
+      3.6e-15 games / 3.1e-13 pts and an IDENTICAL replicate rank order, so every
+      move reported is readable and none is build noise.
+      Per-config placement across all 14 published configs; superflex_10/12 read
+      on their OWN rows (max |move| 120/112 vs a non-superflex range 62–164),
+      because NF-TR2b's VOR shield is ADDITIVE-only and does not cover a
+      cross-pooled QB. Band integrity measured on BOTH boards; the COVERAGE half
+      stays `run_interval_revalidation`'s job and passes (ALL FLOORS MET).
+      Delivered: the certified hurdle PERSISTED as a versioned coefficient table
+      reproducing the validated arm at EXACTLY 0.0 (tol 1e-9) with the writer
+      REFUSING to write if it missed; the D4 `--out` fix with a live two-sided
+      proof that the DEFAULT invocations no longer touch either decided artifact;
+      the D3 provenance rule in CLAUDE.md. Guards: 106 tests, RED proofs 22/22
+      and 25/25. best_alpha=0 throughout.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      (1) ⭐ A PUBLISH-TIME STAMP GUARD IS THE MISSING SAFETY NET, and this story
+      created the need for it. Serving the certified arm requires a covariate feed
+      (`onset_carryover`, `weeks_since_last_game`, `log1p_prior_fp`) that exists
+      NOWHERE in the board build — it is now an optional parameter threaded
+      build_projection -> build_veteran_projection -> project_veterans plus
+      `--injury-covariates`. Because `project_veterans` is ALSO called by NF1.5's
+      INTERNAL research-frame assembly (which legitimately has no feed), a call
+      site DECLARES `feed_supplied=False` and gets the incumbent on a RECORDED
+      path. The residual risk is real and named: a SERVED build that forgot its
+      feed would quietly ship the incumbent under the fitted arm's stamp. The
+      guard belongs on the ARTIFACT at publish (does the published board carry
+      `injury_games_model_version` == the fitted version, and do the flagged rows
+      actually differ from the incumbent cap?) — the NF-K1 lesson, and it should
+      land in the same change as any flip.
+
+      (2) ⚠️ THE PM's SHIP DECISION NOW HAS A DIFFERENT SHAPE THAN WHEN IT WAS
+      FRAMED. NF-INJ3 sold this as "22 draftable veterans are served at ~2× their
+      fitted availability." That is true of `proj_games` and is ~90% UNTRUE of the
+      served POINT: after NF1.5 the flagged players move −1.23 PPR on average and
+      three move UP, while the largest single point move on the board lands on an
+      UNFLAGGED player. So the honest product question is no longer only "are the
+      caps too high" but "do we accept 517 unflagged rank moves and a
+      redistribution of ~90% of the discount as the price of a more accurate
+      `proj_games`?" — a question about NF1.5's ordering step as much as about the
+      caps. NF-INJ2b (the ordering-learner successor) is where that lives.
+
+      (3) A DEFAULT-STEM CHANGE ON A STANDING JOB, flagged for reversal if the PM
+      disagrees: the D4 fix makes `run_interval_revalidation` and
+      `run_nf_tr2b_placement_read` write to a NEUTRAL `<stem>_latest` path by
+      default, so refreshing NF1.9's / NF-TR2b's decided record is now an explicit
+      `--out <decided stem>`. That follows the spec's wording ("the DEFAULT
+      invocation no longer rewrites ...") and both runners SAY so loudly on every
+      non-decided write, but it does change the standing ANNUAL interval
+      re-validation's default output path. One-line reversal if unwanted.
+
+      (4) TWO DEFECTS FOUND ONLY BY RUNNING IT, both fixed: (a) a wrong NF1.5
+      report suffix made `load_selection` return {} so the re-order scored 0 of
+      758 veterans — the board still built and the diff still printed a confident
+      number, which was the proportional answer in disguise (now refused by
+      `_assert_reorder_fired`, reading the shipped build's own `capture`
+      OUT-param); (b) forcing the policy on process-wide killed the entire build
+      via NF1.5's internal `project_veterans` calls. Neither was visible in code
+      review or in a green suite. ⭐ (a) is also what produced the −12.06
+      comparison that quantifies the give-back — the accident became the control.
+
+      (5) The board build is NOT bit-deterministic run to run (ULP-level drift on
+      ~156–224 of 794 rows with byte-identical code). It cannot move a rank and it
+      is far below any effect here, but any future board diff should measure its
+      own replicate floor rather than credit every non-zero delta.
+
+      (6) UNCHANGED and still open from NF-INJ3b: the cap never reaches a ROOKIE
+      (NF-INJ3c), and NF-INJ3-CAP (stop overwriting the Sleeper Delta partition)
+      remains non-gating. The PM boundary is ENFORCED IN CODE: SUS/NFI retain the
+      incumbent constants, guarded two-sided.
+
+      (7) COMPOSITION, per the spec's binding note: this measurement is vs TODAY's
+      published board and so is NF-INJ-NEWS-1's. They do NOT compose additively —
+      NEWS-1's PR had NOT landed when this ran (it was in flight, no PR open), so
+      no rebase was possible. The FIRST publish carrying both changes needs ONE
+      final combined placement + interval read before the operator approves it.
