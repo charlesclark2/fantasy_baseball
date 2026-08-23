@@ -1,0 +1,89 @@
+# Plan spec — NF-INJ1-C (MINI tier: frontend/serving fix)
+# Authored by PM 2026-08-23. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inj1-c
+  vertical: nfl_fantasy
+  card: https://trello.com/c/NhCErPAF
+  status: ACCEPTED
+spec:
+  description: >
+    Suppress the impossible COUNTING-STAT line on violating rows of the paid
+    /projections-full surface (NF-INJ1 §8.1 Option C). The board serves ~10
+    physically-impossible QB stat lines (e.g. ~80 att/game) on rows where
+    NF1.5's point-permutation decoupled the stat line from expected games.
+    NF-INJ2 (the real fix) was REFUSED by its pre-registered ordering gate,
+    which fired Option-C trigger (b) — so this story ships the SYMPTOM patch
+    only. On violating rows ONLY: suppress the counting-stat line; points +
+    expected games still render. Default treatment: an em-dash "—" with a
+    neutral tooltip ("stat detail withheld — availability-adjusted").
+    best_alpha=0; display-only; NO projection value changes; the PM default
+    treatment stands unless the operator overrides it.
+  acceptanceCriteria:
+    - description: >
+        The violation predicate is NF-INJ1's RECORDED predicate, sourced from
+        quant_sports_intel_models/football/nfl/fantasy/ablation_results/
+        nf_inj1_diagnosis.md — do NOT invent a new threshold; cite the exact
+        section in the implementation and in this spec's closeout.
+    - description: >
+        On a violating row: counting stats render as "—" + tooltip; points and
+        expected games still render. On a clean row: byte-identical rendering
+        to today. Both asserted in E2E against RENDERED output (NF-C4 rule —
+        computed layout / rendered text, never a source grep).
+    - description: >
+        All user-facing copy passes the honest-framing denylist
+        (frontend claim copy module, fantasy-claim-copy.ts): no forecast
+        language, no injury forecasting verbs, neutral "withheld" phrasing.
+    - description: >
+        Absent-vs-null discipline (NF-FRESH2): a suppressed stat is
+        distinguishable from a missing/never-served stat in the payload and
+        the render path; no optimistic default renders.
+    - description: >
+        Guards RED-proven (a deliberate break flips them; the break is
+        asserted to have landed AND moved the asserted predicate).
+    - description: >
+        No projection value, ordering, VOR, or band changes anywhere —
+        verified by comparing the published artifact before/after (projection
+        fields byte-identical).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inj1-c
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "NF-INJ1" (board Credence Sports, 2026-08-23)'
+      - 'trelloSearch cards: "impossible" / "suppress" (2026-08-22 PM pass)'
+    duplicates: []
+    adjacent:
+      - "NF-INJ2b (To Do, trello.com/c/FUOXwXzS) — the REAL fix (rate-target ordering learner). Boundary: this story never touches the give-back or any projection value."
+      - "NF-C8 availability flag + NF-C9 designation disclosure (Done) — do NOT touch their components/copy."
+      - "🟠 stat-line calibration bar decision card (Backlog, trello.com/c/Hcgr91Hi) — a coherence FLOOR is not calibration; out of scope here."
+  triedLedger:
+    files:
+      - "quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj1_diagnosis.md (§8 options + violation predicate)"
+      - "quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj2_rate_permutation.md (the refusal that fired trigger (b))"
+    recordedNulls:
+      - "NF-INJ2 REFUSED (ordering-gate breach, QB draftable tier). This story does NOT relax or re-read that refusal (E2.1-r) — it implements the Option-C consequence the refusal itself triggered. Nothing new is claimed about NF-INJ2."
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "Paid-surface credibility pre-draft (/projections-full is the NF-EPIC1 paid substrate)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inj1-c-plan
+spec:
+  goalRef: { name: nf-inj1-c }
+  graph:
+    nodes: []   # MINI tier — no task graph; disciplines carried in the kickoff prompt
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
