@@ -180,8 +180,10 @@ spec:
       projected games" — it names the condition a reader can check, stays
       denylist-clean (no forecast language, no injury claim, no diagnosis), and
       composes with the popover's second sentence, which is UNCHANGED.
-      SHIPPED in commit e6df254c on branch `nf-inj1-c-label` (display-only; nothing
-      else moved).
+      SHIPPED in PR #1012, branch `nf-inj1-c-label` (display-only; nothing else
+      moved). ⚠️ Cited by PR number, not commit SHA: a SHA does not survive the
+      rebase-before-merge this repo requires, and a record pointing at a commit
+      that no longer exists is worse than one pointing at nothing.
       ⚠️ THE FINDING THAT CAME WITH IT, worth more than the reword: the change was
       INVISIBLE TO EVERY PIN THAT PREDATED IT. The disclosure trigger's accessible
       name comes from a DIFFERENT constant (`STAT_LINE_WITHHELD_SR_LABEL`), and "the
