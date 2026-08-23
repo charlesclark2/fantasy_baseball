@@ -1,0 +1,808 @@
+{
+  "story": "NCAAF-VAL3b",
+  "decided_at": "2026-08-23",
+  "verdict": "SHIP_CORRECTION",
+  "ships": true,
+  "n_folds": 8,
+  "fold_years": [
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "n_oos_games": 6024,
+  "cache": {
+    "assembled_at": "2026-08-23",
+    "n_games": 8325,
+    "n_with_close": 4187
+  },
+  "served_config": {
+    "label": "served_v2",
+    "mc": "ridge",
+    "contract": "strength_pace",
+    "form": "strength_posterior",
+    "binding": true
+  },
+  "declared_field_size": 2,
+  "selectable_arms": 1,
+  "reproduction_pin": {
+    "checks": {
+      "n_with_close": {
+        "got": 4187,
+        "expected": 4187,
+        "ok": true,
+        "binds": true
+      },
+      "n_oos_games": {
+        "got": 6024,
+        "expected": 6024,
+        "ok": true,
+        "binds": true
+      },
+      "fold_years": {
+        "got": [
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "expected": [
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "ok": true,
+        "binds": true
+      },
+      "cache_assembled_at": {
+        "got": "2026-08-23",
+        "expected": null,
+        "ok": null,
+        "binds": false,
+        "note": "REPORTED provenance, not a population quantity \u2014 `assemble_cache` stamps `date.today()`, so this leg moves with the clock whatever the population is. Declared forward in \u00a77 of the pre-registration."
+      }
+    },
+    "all_ok": true,
+    "binding_legs": [
+      "n_with_close",
+      "n_oos_games",
+      "fold_years"
+    ],
+    "reported_only": [
+      "cache_assembled_at"
+    ],
+    "source": "ncaaf_val3_s1_serve_reanchor.json (S1-serve --stage finalize, repaired _clv_eval)"
+  },
+  "m2_derivation": {
+    "C_foil": 0.570530772613178,
+    "C_corrected": 0.5662271050763829,
+    "derived_rel_gain": 0.0075432697820718994,
+    "module_literal": 0.007543,
+    "full_removal_rel_gain": 0.011114543456398156
+  },
+  "deflation": {
+    "pbo": null,
+    "pbo_state": "INAPPLICABLE",
+    "pbo_note": "a SINGLE pre-registered contrast has NO SEARCH to overfit \u2014 CSCV/PBO asks whether the in-sample winner of a search holds up out of sample, and there is no winner to pick. `cv_power.classify_null`'s own n_arms<2 branch says exactly this and emits NO re-test trigger. \u26d4 Recorded INAPPLICABLE, never 'passed'; a two-arm CSCV number is deliberately NOT computed even as a diagnostic, because reproducing the figure VAL3 already reported as a lower bound would read as 'the gate we failed now passes' \u2014 the misreading this successor shape exists to avoid (\u00a74.1).",
+    "dsr_gate": 0.95,
+    "var_trials_sr": null,
+    "var_trials_sr_effective": 0.125,
+    "sr0": 0.1837612642493783,
+    "v_note": "`V` is UNDEFINED at one selectable arm (a variance needs \u22652 points), so `deflated_sharpe`'s documented fallback \u2014 the ASYMPTOTIC null variance of a Sharpe estimate, V = 1/n_obs \u2014 is what this study DECLARED FORWARD. It is a DESIGN quantity: it depends only on the fold count. \u26d4 Importing VAL3's measured V (0.05878) would be a dispersion from a field this registration does not have. \u2b50 The resulting bar SR0 = 0.18376 is LOWER than VAL3's 0.35374, and that is the whole arithmetic content of the successor shape: a 2-arm design carries almost no expected-max inflation. It is legitimate ONLY because the family is declared FORWARD on a mechanism argument and scored whole \u2014 never trimmed after the fact (MH2.2). The NF-W8-0d lockstep invariant does NOT apply: V is not a field variance.",
+    "dsr_sensitivity": {
+      "val3_full_field": {
+        "n_trials": 8,
+        "var_trials_sr": 0.05878,
+        "sr0": 0.3537319377085295,
+        "dsr": 0.9977130370191489,
+        "clears_gate": true,
+        "binds": false
+      },
+      "val3_dsr_conv_variant": {
+        "n_trials": 8,
+        "var_trials_sr": 0.0908,
+        "sr0": 0.4396452714383978,
+        "dsr": 0.9948316795389365,
+        "clears_gate": true,
+        "binds": false
+      },
+      "strictest_constructible": {
+        "n_trials": 8,
+        "var_trials_sr": 0.125,
+        "sr0": 0.5158393740028692,
+        "dsr": 0.9899319286161572,
+        "clears_gate": true,
+        "binds": false
+      }
+    },
+    "dsr_sensitivity_note": "\u2b50 NON-BINDING, and it answers the first question a sceptical reader asks of a successor whose field is smaller than its parent's: did the arm CLEAR the gate, or was the gate LOWERED? Re-scored under VAL3's own recorded `V`/`n_trials` and under the strictest combination constructible from either study's declared quantities. \u26d4 It changes no verdict \u2014 the binding reading is \u00a74.2's, declared forward before scoring; adopting a different one after the fact would be the E2.1-r inversion.",
+    "dsr_ceiling_at_n_folds": 0.9999085946835091,
+    "bh_alpha": 0.05,
+    "bh_cutoff": 0.05,
+    "bh_note": "ONE hypothesis \u21d2 the Benjamini\u2013Hochberg cutoff IS \u03b1. Stated so a reader sees the multiplicity correction became trivial as a CONSEQUENCE of the declared design, not because it was switched off.",
+    "fold_consistency": {
+      "n_folds": 8,
+      "required_wins": 6,
+      "attainable": true,
+      "attained_false_fire": 0.14453125,
+      "legacy_required": 5,
+      "legacy_false_fire": 0.36328125
+    },
+    "fold_flip_distribution": {
+      "none": 0,
+      "bucket_shift": 8
+    }
+  },
+  "materiality_bars": {
+    "M1_bias_reduction_pts": 1.0,
+    "M2_relative_crps_gain": 0.007543,
+    "mde_sd_units": 0.9500000000000001,
+    "note": "registered FORWARD, closing the gap VAL3 recorded. Both BIND and both are STRICTER than VAL3's clause set \u2014 a new refusal condition, not a loosened one. Zero free parameters: closed-form functions of constants VAL2 recorded before VAL3 existed."
+  },
+  "crps_instrument_control": {
+    "max_abs_gap_by_draws": {
+      "5000": 0.021251709592682744,
+      "20000": 0.012343806839590243
+    },
+    "gap_shrinks_with_draws": true,
+    "gap_pct_of_crps": 0.1304268367920441,
+    "reading": "the closed-form Gaussian CRPS and the ensemble identity score the SAME predictive. Read the CONVERGENCE, not the single gap."
+  },
+  "anchors": {
+    "headline_bucket_oracle_crps_cold": 9.346440371011251,
+    "headline_matched_n_crps_cold": 9.415374895478916,
+    "headline_peek_gain": 0.06893452446766446,
+    "headline_pair_active": true,
+    "foil_crps_cold": 9.464161780808599,
+    "reading": "a peeking oracle is a floor only at MATCHED family AND MATCHED sample (NF1.7 (b) / NF1.9 (f)); it is computed PER FORM (NF-D16 g\u2034) and a peek that does not beat its own matched-n control could not act, so its floor is INACTIVE \u2014 uninformative, never a pass and never a fail (NF-W6d / NF-D20).",
+    "per_form_oracle": {
+      "bucket_shift": {
+        "form": "bucket",
+        "arm_crps": 9.379343907045403,
+        "peek_crps": 9.346440371011251,
+        "matched_n_crps": 9.415374895478916,
+        "peek_gain_over_matched_n": 0.06893452446766446,
+        "anchor_pair_active": true,
+        "gap": 0.032903536034151415,
+        "state": "FLOORED"
+      }
+    }
+  },
+  "channel_attribution_cited_from_val3": {
+    "magnitude": {
+      "pair": "bucket_shift \u2212 week_blind",
+      "cell": "wk1-3",
+      "mean_gain": 0.0704,
+      "folds_positive": 7,
+      "n_folds": 8,
+      "p": 0.0051
+    },
+    "scoping": {
+      "pair": "week_blind \u2212 pooled_level",
+      "cell": "pooled",
+      "mean_gain": 0.0,
+      "folds_positive": 3,
+      "n_folds": 8,
+      "p": 0.4928
+    },
+    "note": "\u26d4 CITED from `ncaaf_val3_cold_start_mu.md` \u00a74b, NOT re-measured here. VAL3's matched foils are honest, in-principle-shippable estimators; calling one a 'diagnostic' to keep it out of VAL3b's multiplicity count would be exactly the laundering MH2.2 forbids, so they are OUT of this field entirely. The cost is disclosed: VAL3b does not independently re-attribute the channel."
+  },
+  "foil": {
+    "arm": "none",
+    "cold_crps": 9.464161780808599,
+    "pooled_crps": 9.402700367010592,
+    "cold_bias_pts": 2.0744557616145283,
+    "pooled_bias_pts": 0.3621610347267977
+  },
+  "arm": {
+    "arm": "bucket_shift",
+    "role": "candidate",
+    "cold_crps": 9.379343907045403,
+    "gain_vs_foil_cold": 0.08481787376319616,
+    "pooled_gain_vs_foil": 0.014135545088173274,
+    "tie_with_foil": false,
+    "fold_wins": 8,
+    "n_folds": 8,
+    "fold_consistency_required": 6,
+    "fold_consistency_ok": true,
+    "sharpe": 1.251877386050951,
+    "series_skew": 0.8766240590915533,
+    "series_kurt": 3.3203249543978934,
+    "per_fold_improvement": [
+      0.008518343722883515,
+      0.031078323215375292,
+      0.08993092901141253,
+      0.0650534897938222,
+      0.027390568019484363,
+      0.10198628356833161,
+      0.21128328454016554,
+      0.14330176823409602
+    ],
+    "dsr": 0.9996271896592742,
+    "sr0": 0.1837612642493783,
+    "dsr_var_trials_sr_used": 0.125,
+    "p_one_sided": 0.0047295734979763875,
+    "bh_pass": true,
+    "lift_in_fold_delta_sd": 1.251877386050951,
+    "calibration": {
+      "cold": {
+        "crps": 9.379343907045403,
+        "pit_max_decile_dev": 0.06125022613088839,
+        "calib_80": 0.8301920281068255,
+        "bias": 0.5572610863224734
+      },
+      "pooled": {
+        "crps": 9.388564821922419,
+        "pit_max_decile_dev": 0.0269098503470349,
+        "calib_80": 0.8085886420395463,
+        "bias": 0.10207096025738832
+      },
+      "late": {
+        "crps": 9.389019551873218,
+        "pit_max_decile_dev": 0.028048078972896805,
+        "calib_80": 0.8039229194211361,
+        "bias": 0.03609911884033379
+      }
+    },
+    "mean_delta_pts": 1.5171946752920558,
+    "per_fold_delta": [
+      1.874821455576915,
+      1.2912189055491734,
+      1.3474004151529344,
+      1.3813400991751976,
+      1.4587040781311837,
+      1.3024169390590363,
+      1.5722033221276914,
+      1.9094521875643142
+    ],
+    "clauses": {
+      "C1_pooled_pit_not_degraded": {
+        "ok": true,
+        "arm": 0.02691,
+        "foil": 0.02606,
+        "tol": 0.002
+      },
+      "C2_pooled_calib_floor": {
+        "ok": true,
+        "value": 0.8086,
+        "floor": 0.78
+      },
+      "C3_cold_calib_floor": {
+        "ok": true,
+        "value": 0.8302,
+        "floor": 0.78
+      },
+      "C4_market_blind_estimator": {
+        "ok": true,
+        "enforced_at": "assert_estimator_is_market_blind"
+      },
+      "C5_week_scoped": {
+        "ok": true,
+        "max_late_crps_gap": 0.0,
+        "scope": "cold",
+        "tol": 1e-09
+      },
+      "C6_margin_frozen": {
+        "ok": true,
+        "enforced_at": "no arm touches mu_margin (by construction)"
+      },
+      "C7_sigma_frozen": {
+        "ok": true,
+        "max_gap": 0.0,
+        "tol": 1e-09
+      },
+      "C8_own_form_oracle_floor": {
+        "ok": true,
+        "state": "FLOORED",
+        "gap": 0.032903536034151415
+      },
+      "all_ok": true
+    },
+    "materiality": {
+      "M1_bias_reduction_pts": {
+        "ok": true,
+        "value": 1.5171946752920549,
+        "band": 1.0,
+        "foil_bias": 2.0744557616145283,
+        "arm_bias": 0.5572610863224734,
+        "note": "VAL2's own acceptance band, inherited as a constant and \u26d4 never re-derived."
+      },
+      "M2_relative_crps_gain": {
+        "ok": true,
+        "value": 0.008962005904758477,
+        "band": 0.007543,
+        "foil_crps": 9.464161780808599,
+        "arm_crps": 9.379343907045403,
+        "note": "the closed-form relative CRPS gain of removing VAL2's 1.0-pt band from VAL2's recorded 0.15 \u03c3 cold-start bias \u2014 \u03c3-free, zero free parameters, re-derived at run time by `verify_m2_derivation`."
+      }
+    }
+  },
+  "_foil_folds": [
+    {
+      "eval_year": 2018,
+      "fitted": {
+        "form": "zero",
+        "n_source": 776,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 143,
+        "crps": 9.397100066613866,
+        "pit_max_decile_dev": 0.05384615384615385,
+        "pit_mean_dev": 0.017203064450403982,
+        "calib_80": 0.8741258741258742,
+        "bias": 0.7157786289483933
+      },
+      "pooled": {
+        "n": 772,
+        "crps": 9.802639129760145,
+        "pit_max_decile_dev": 0.02435233160621761,
+        "pit_mean_dev": 0.0025593072592615673,
+        "calib_80": 0.8186528497409327,
+        "bias": -0.4161877269031057
+      },
+      "late": {
+        "n": 629,
+        "crps": 9.894836404847455,
+        "pit_max_decile_dev": 0.02400635930047694,
+        "pit_mean_dev": 0.0007698776029537724,
+        "calib_80": 0.8060413354531002,
+        "bias": -0.673534609076022
+      },
+      "sigma_checksum": 13851.735713261403,
+      "crps_sampled_control": {
+        "5000": 9.417201360802332,
+        "20000": 9.39391012622126
+      }
+    },
+    {
+      "eval_year": 2019,
+      "fitted": {
+        "form": "zero",
+        "n_source": 1548,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 139,
+        "crps": 9.538775703727048,
+        "pit_max_decile_dev": 0.05107913669064748,
+        "pit_mean_dev": 0.022535950884841838,
+        "calib_80": 0.7913669064748201,
+        "bias": 1.4621885354944326
+      },
+      "pooled": {
+        "n": 774,
+        "crps": 9.477542365523167,
+        "pit_max_decile_dev": 0.02377260981912145,
+        "pit_mean_dev": 0.010802917947121127,
+        "calib_80": 0.8191214470284238,
+        "bias": 0.27768659661857026
+      },
+      "late": {
+        "n": 635,
+        "crps": 9.464138532436017,
+        "pit_max_decile_dev": 0.029133858267716542,
+        "pit_mean_dev": 0.008234584752879914,
+        "calib_80": 0.8251968503937008,
+        "bias": 0.01840192023471989
+      },
+      "sigma_checksum": 13644.298814760316,
+      "crps_sampled_control": {
+        "5000": 9.546062367216148,
+        "20000": 9.537338312654938
+      }
+    },
+    {
+      "eval_year": 2020,
+      "fitted": {
+        "form": "zero",
+        "n_source": 2322,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 34,
+        "crps": 10.007445397784561,
+        "pit_max_decile_dev": 0.10588235294117646,
+        "pit_mean_dev": 0.044133997416443416,
+        "calib_80": 0.7941176470588235,
+        "bias": 1.8035896974521801
+      },
+      "pooled": {
+        "n": 534,
+        "crps": 9.927141551941249,
+        "pit_max_decile_dev": 0.027340823970037453,
+        "pit_mean_dev": 0.01204711477140541,
+        "calib_80": 0.7883895131086143,
+        "bias": -1.1301628410228204
+      },
+      "late": {
+        "n": 500,
+        "crps": 9.921680890423902,
+        "pit_max_decile_dev": 0.027999999999999997,
+        "pit_mean_dev": 0.015867430400179128,
+        "calib_80": 0.788,
+        "bias": -1.3296580136391205
+      },
+      "sigma_checksum": 9157.917897033716,
+      "crps_sampled_control": {
+        "5000": 9.996828388511295,
+        "20000": 9.995101590944971
+      }
+    },
+    {
+      "eval_year": 2021,
+      "fitted": {
+        "form": "zero",
+        "n_source": 2856,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 147,
+        "crps": 9.6775351507685,
+        "pit_max_decile_dev": 0.049659863945578225,
+        "pit_mean_dev": 0.03481457348068484,
+        "calib_80": 0.8435374149659864,
+        "bias": 1.699216584137208
+      },
+      "pooled": {
+        "n": 770,
+        "crps": 9.324578145841445,
+        "pit_max_decile_dev": 0.03246753246753248,
+        "pit_mean_dev": 0.006156876604303307,
+        "calib_80": 0.8428571428571429,
+        "bias": -0.20057638582004253
+      },
+      "late": {
+        "n": 623,
+        "crps": 9.241296155914837,
+        "pit_max_decile_dev": 0.03739967897271268,
+        "pit_mean_dev": 0.0006050518721463227,
+        "calib_80": 0.8426966292134831,
+        "bias": -0.6488421427762477
+      },
+      "sigma_checksum": 13523.734399354878,
+      "crps_sampled_control": {
+        "5000": 9.662226842297658,
+        "20000": 9.680061433573474
+      }
+    },
+    {
+      "eval_year": 2022,
+      "fitted": {
+        "form": "zero",
+        "n_source": 3626,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 150,
+        "crps": 8.881443851486143,
+        "pit_max_decile_dev": 0.04000000000000001,
+        "pit_mean_dev": 0.022183979974761125,
+        "calib_80": 0.86,
+        "bias": 0.6731007257285224
+      },
+      "pooled": {
+        "n": 776,
+        "crps": 9.209726073155515,
+        "pit_max_decile_dev": 0.02757731958762885,
+        "pit_mean_dev": 0.030344233634434115,
+        "calib_80": 0.7989690721649485,
+        "bias": 1.3927934733015488
+      },
+      "late": {
+        "n": 626,
+        "crps": 9.288387947357442,
+        "pit_max_decile_dev": 0.024600638977635772,
+        "pit_mean_dev": 0.03229956598100109,
+        "calib_80": 0.7843450479233227,
+        "bias": 1.5652438121768746
+      },
+      "sigma_checksum": 12860.958029007097,
+      "crps_sampled_control": {
+        "5000": 8.878108873069143,
+        "20000": 8.877072634258647
+      }
+    },
+    {
+      "eval_year": 2023,
+      "fitted": {
+        "form": "zero",
+        "n_source": 4402,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 153,
+        "crps": 10.024229712515213,
+        "pit_max_decile_dev": 0.06993464052287582,
+        "pit_mean_dev": 0.04981658302047731,
+        "calib_80": 0.7320261437908496,
+        "bias": 2.9017388308451157
+      },
+      "pooled": {
+        "n": 792,
+        "crps": 9.288011703727168,
+        "pit_max_decile_dev": 0.016161616161616155,
+        "pit_mean_dev": 0.01178473706980332,
+        "calib_80": 0.7941919191919192,
+        "bias": 0.5589021172626127
+      },
+      "late": {
+        "n": 639,
+        "crps": 9.111734152327212,
+        "pit_max_decile_dev": 0.02206572769953051,
+        "pit_mean_dev": 0.002678520433726461,
+        "calib_80": 0.809076682316119,
+        "bias": -0.002058785989536021
+      },
+      "sigma_checksum": 12812.085924783336,
+      "crps_sampled_control": {
+        "5000": 10.045481422107896,
+        "20000": 10.019590010999817
+      }
+    },
+    {
+      "eval_year": 2024,
+      "fitted": {
+        "form": "zero",
+        "n_source": 5194,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 140,
+        "crps": 8.658555155512698,
+        "pit_max_decile_dev": 0.1,
+        "pit_mean_dev": 0.0807737516877371,
+        "calib_80": 0.9,
+        "bias": 4.09434305150015
+      },
+      "pooled": {
+        "n": 798,
+        "crps": 9.167035711097354,
+        "pit_max_decile_dev": 0.02857142857142858,
+        "pit_mean_dev": 0.017791392566525843,
+        "calib_80": 0.8020050125313283,
+        "bias": 0.46230281004419693
+      },
+      "late": {
+        "n": 658,
+        "crps": 9.275223063349408,
+        "pit_max_decile_dev": 0.027051671732522806,
+        "pit_mean_dev": 0.004390890625842581,
+        "calib_80": 0.7811550151975684,
+        "bias": -0.3104717094145167
+      },
+      "sigma_checksum": 13011.110795959561,
+      "crps_sampled_control": {
+        "5000": 8.649079517410593,
+        "20000": 8.664240324015166
+      }
+    },
+    {
+      "eval_year": 2025,
+      "fitted": {
+        "form": "zero",
+        "n_source": 5992,
+        "delta": 0.0
+      },
+      "cold": {
+        "n": 145,
+        "crps": 9.528209208060753,
+        "pit_max_decile_dev": 0.05172413793103449,
+        "pit_mean_dev": 0.052992548576009935,
+        "calib_80": 0.8206896551724138,
+        "bias": 3.245690038810226
+      },
+      "pooled": {
+        "n": 808,
+        "crps": 9.024928255038686,
+        "pit_max_decile_dev": 0.02821782178217823,
+        "pit_mean_dev": 0.0403679475104981,
+        "calib_80": 0.7995049504950495,
+        "bias": 1.9525302343334214
+      },
+      "late": {
+        "n": 663,
+        "crps": 8.914859268329486,
+        "pit_max_decile_dev": 0.032126696832579196,
+        "pit_mean_dev": 0.03760691107837261,
+        "calib_80": 0.7948717948717948,
+        "bias": 1.6697124792065186
+      },
+      "sigma_checksum": 13202.001647173589,
+      "crps_sampled_control": {
+        "5000": 9.52403279849641,
+        "20000": 9.522869795267349
+      }
+    }
+  ],
+  "null_classification": {},
+  "over_tilt": {
+    "n_close_carrying_cold": 715,
+    "state": "EVALUABLE",
+    "over_actually_hit": 0.45734265734265733,
+    "note": "DESCRIPTIVE. The model's side vs the close on the cold-start rows, before and after each arm's shift. Never a clause; best_alpha = 0 and no edge claim is made.",
+    "arms": {
+      "none": {
+        "model_to_over": 0.6139860139860139,
+        "mean_offset_pts": 1.3703973562023248
+      },
+      "bucket_shift": {
+        "model_to_over": 0.5020979020979021,
+        "mean_offset_pts": -0.14410184828553976
+      },
+      "oracle_bucket": {
+        "model_to_over": 0.44755244755244755,
+        "mean_offset_pts": -1.1006345140502478
+      },
+      "matched_n_bucket": {
+        "model_to_over": 0.4811188811188811,
+        "mean_offset_pts": -0.5464443766050162
+      }
+    }
+  },
+  "over_tilt_implementation": "ncaaf_val3_cold_start_mu.over_tilt_report \u2014 a `game_id` join that takes no positional index into any array (the `_clv_leg`-immune implementation). \u26d4 NOT `_clv_eval`.",
+  "folds": [
+    {
+      "eval_year": 2018,
+      "n_eval": 772,
+      "n_cold": 143,
+      "n_infold": 776,
+      "n_infold_cold": 141,
+      "sigma_total_median": 17.70346290055145,
+      "dispersion": {
+        "sigma_margin": 16.211,
+        "sigma_total": 18.165,
+        "rho": 0.024,
+        "sigma0_margin": 16.206,
+        "k_margin": 0.0,
+        "sigma0_total": 17.067,
+        "k_total": 0.755,
+        "sigma_margin_med": 16.206
+      }
+    },
+    {
+      "eval_year": 2019,
+      "n_eval": 774,
+      "n_cold": 139,
+      "n_infold": 1548,
+      "n_infold_cold": 284,
+      "sigma_total_median": 17.628293042325883,
+      "dispersion": {
+        "sigma_margin": 16.142,
+        "sigma_total": 17.634,
+        "rho": 0.1,
+        "sigma0_margin": 15.435,
+        "k_margin": 0.628,
+        "sigma0_total": 17.628,
+        "k_total": 0.0,
+        "sigma_margin_med": 15.844
+      }
+    },
+    {
+      "eval_year": 2020,
+      "n_eval": 534,
+      "n_cold": 34,
+      "n_infold": 2322,
+      "n_infold_cold": 423,
+      "sigma_total_median": 16.91251047852459,
+      "dispersion": {
+        "sigma_margin": 15.853,
+        "sigma_total": 16.893,
+        "rho": 0.008,
+        "sigma0_margin": 14.52,
+        "k_margin": 1.0,
+        "sigma0_total": 15.524,
+        "k_total": 1.0,
+        "sigma_margin_med": 15.997
+      }
+    },
+    {
+      "eval_year": 2021,
+      "n_eval": 770,
+      "n_cold": 147,
+      "n_infold": 2856,
+      "n_infold_cold": 457,
+      "sigma_total_median": 17.563291427733578,
+      "dispersion": {
+        "sigma_margin": 16.534,
+        "sigma_total": 17.555,
+        "rho": -0.002,
+        "sigma0_margin": 14.927,
+        "k_margin": 1.0,
+        "sigma0_total": 17.563,
+        "k_total": 0.0,
+        "sigma_margin_med": 16.09
+      }
+    },
+    {
+      "eval_year": 2022,
+      "n_eval": 776,
+      "n_cold": 150,
+      "n_infold": 3626,
+      "n_infold_cold": 604,
+      "sigma_total_median": 16.472669700153215,
+      "dispersion": {
+        "sigma_margin": 16.437,
+        "sigma_total": 16.597,
+        "rho": 0.018,
+        "sigma0_margin": 14.916,
+        "k_margin": 1.0,
+        "sigma0_total": 16.216,
+        "k_total": 0.493,
+        "sigma_margin_med": 16.03
+      }
+    },
+    {
+      "eval_year": 2023,
+      "n_eval": 792,
+      "n_cold": 153,
+      "n_infold": 4402,
+      "n_infold_cold": 754,
+      "sigma_total_median": 16.146595638044694,
+      "dispersion": {
+        "sigma_margin": 15.957,
+        "sigma_total": 16.139,
+        "rho": 0.081,
+        "sigma0_margin": 15.452,
+        "k_margin": 0.559,
+        "sigma0_total": 16.063,
+        "k_total": 0.286,
+        "sigma_margin_med": 15.778
+      }
+    },
+    {
+      "eval_year": 2024,
+      "n_eval": 798,
+      "n_cold": 140,
+      "n_infold": 5194,
+      "n_infold_cold": 907,
+      "sigma_total_median": 16.036568934903848,
+      "dispersion": {
+        "sigma_margin": 15.397,
+        "sigma_total": 16.465,
+        "rho": 0.051,
+        "sigma0_margin": 15.401,
+        "k_margin": 0.0,
+        "sigma0_total": 15.03,
+        "k_total": 1.0,
+        "sigma_margin_med": 15.401
+      }
+    },
+    {
+      "eval_year": 2025,
+      "n_eval": 808,
+      "n_cold": 145,
+      "n_infold": 5992,
+      "n_infold_cold": 1047,
+      "sigma_total_median": 16.043613616263368,
+      "dispersion": {
+        "sigma_margin": 16.038,
+        "sigma_total": 16.347,
+        "rho": 0.089,
+        "sigma0_margin": 14.718,
+        "k_margin": 1.0,
+        "sigma0_total": 15.09,
+        "k_total": 1.0,
+        "sigma_margin_med": 15.695
+      }
+    }
+  ],
+  "inner_min_train_seasons": 2,
+  "market_blind": true,
+  "best_alpha": 0,
+  "serving_change": null,
+  "ship_gating": "\u26d4 SHIP_CORRECTION does NOT serve anything. A pre-opener ship needs the S1-serve-class train/serve PARITY check against the SERVED artifact contract AND explicit operator approval; otherwise DEPLOY-HELD with the gap named (spec AC (a)/(b)). Nothing serves from this session."
+}
