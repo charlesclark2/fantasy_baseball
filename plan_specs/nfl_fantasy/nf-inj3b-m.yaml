@@ -1,0 +1,116 @@
+# Plan spec — NF-INJ3b-M (measurement + serving-artifact story; closes NF-INJ3b §5(d))
+# Authored by PM 2026-08-23 per rulings D1=A, D2=A, D3=accept, D4=fold-in.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inj3b-m
+  vertical: nfl_fantasy
+  card: https://trello.com/c/SGsvQJPb   # continues the NF-INJ3b thread; M card linked on creation
+  status: ACCEPTED
+spec:
+  description: >
+    Close NF-INJ3b's blocking §5(d): MEASURE the served-point impact of the
+    certified injury-games caps, and build the serving artifact for the
+    certified arm so the measurement is of the thing that would actually
+    ship. NF-INJ3b CLEARED 9/9 on hurdle_transfer (a fitted GLM hurdle:
+    P(plays>=1) x E[games | plays>=1] over onset_carryover,
+    weeks_since_last_game, prior_games, log1p_prior_fp, is_qb). PM ruling
+    D2=A: serve the certified object via a persisted artifact (MH2.1 —
+    serve what was validated, never a re-derivation); fitted_status is NOT
+    admissible on this study's evidence (4/7, p 0.1265 — post-hoc arm
+    choice). PM boundary: certified population is RES/PUP — SUS and NFI
+    rows RETAIN the incumbent constants (zero live rows; exploratory
+    channels) until a live row exists and a registered read covers them.
+    best_alpha=0; DEPLOY-HELD throughout; the ship/no-ship returns to the
+    operator with the measurement. NO --publish anywhere in this story.
+  acceptanceCriteria:
+    - description: >
+        Persisted serving artifact for the fitted hurdle_transfer object
+        (versioned, stamped into NF-G0 conventions like level_model_version),
+        with a guard proving the served object reproduces the validated
+        arm's predictions (pin 1e-9) — not a re-fit.
+    - description: >
+        Counterfactual 2026 board rebuilt DRY-RUN on that artifact (RES/PUP
+        via hurdle_transfer; SUS/NFI via incumbent constants). Diff vs the
+        PUBLISHED board: pts, proj_games, overall rank, within-position
+        rank, per-config placement including superflex_10/12. The NF1.5
+        give-back interaction is thereby MEASURED, not estimated — no
+        proportional shortcut anywhere.
+    - description: >
+        Counterfactual placement read (the decision-relevant one) + interval
+        revalidation on the counterfactual board, using the --out stems from
+        the D4 fix so no decided artifact is clobbered.
+    - description: >
+        D4 fix shipped: --out stem on run_nf_tr2b_placement_read.main() and
+        run_interval_revalidation (including under --no-report); RED-proof
+        that the default invocation no longer rewrites
+        nf_tr2b_placement_read.* / nf1_9_interval_revalidation.json.
+    - description: >
+        D3 rule appended to CLAUDE.md (separate commit): "A committed
+        ablation artifact must be regenerated from the committed code that
+        claims to have produced it — the generating code's commit must be
+        the same as or an ancestor of the artifact's commit."
+    - description: >
+        Deliverable to the operator: a ship-decision packet (moved rows with
+        names, rank deltas by config, interval status, the give-back
+        measurement) — recommendation permitted, decision not made.
+        ⚠️ COMPOSITION NOTE (binding): this measurement is vs today's
+        published board; NF-INJ-NEWS-1's measurement is too. The two do NOT
+        compose additively — the FIRST publish that carries both changes
+        requires one final combined placement + interval read before the
+        operator approves it.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inj3b-m
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "NF-INJ" / "injury" (board Credence Sports, 2026-08-23)'
+    duplicates: []
+    adjacent:
+      - "NF-INJ-NEWS-1 (IN FLIGHT) — same availability-path module family. This story's rebuild/diff legs are read-only/dry-run (no conflict); the serving-artifact WIRING commit must rebase on dev AFTER NEWS-1's PR lands if it is still open when node 3 starts."
+      - "NF-INJ2b (To Do) — ordering learner; untouched here."
+      - "NF-INJ3c (Backlog) — rookie-path bypass; untouched (fold into next rookie-path touch, per the record)."
+      - "NF-INFRA2 (Sprint) — publish automation; this story never publishes."
+  triedLedger:
+    files:
+      - "ablation_results/nf_inj3b_injury_games.md (§12), nf_inj3b_preregistration.md, nf_inj3b_ship_path.md"
+    recordedNulls:
+      - "fitted_status fails fold-consistency + BH on NF-INJ3b's numbers — recorded as inadmissible to serve (D2-C refused); this story must not resurrect it."
+  supersedes: []
+  dependsOn:
+    - "PR #1010 merged (verified: dev @ cef9f593)"
+  feedsInto:
+    - "The operator's cap ship/no-ship decision; the first combined publish read (with NF-INJ-NEWS-1)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inj3b-m-plan
+spec:
+  goalRef: { name: nf-inj3b-m }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 0b-claude-md
+        desc: "Separate commit: the D3 artifact-provenance rule appended to CLAUDE.md."
+      - id: 1-runner-out-stems
+        desc: "D4 fix + RED-proof (do this FIRST so the rest of the story uses it)."
+      - id: 2-serving-artifact
+        desc: "Persist + version the fitted hurdle_transfer; reproduction guard at 1e-9."
+      - id: 3-counterfactual-rebuild
+        desc: "Dry-run board rebuild (RES/PUP arm + SUS/NFI incumbent); NO --publish. Rebase on dev first if NEWS-1 landed."
+      - id: 4-diff-and-reads
+        desc: "Published-vs-counterfactual diff + counterfactual placement read + interval reval via --out stems."
+      - id: 5-packet-closeout
+        desc: "Ship-decision packet to the operator; verdict + findings into closeout.followUps."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
