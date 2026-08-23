@@ -540,3 +540,109 @@ def test_the_stamp_never_reaches_ordering_or_the_optimizer():
             f"{rel} READS `reportedAbsence` outside its type declaration ({reads}) — the cap "
             "already reached the board through `g`, so reading it here prices the same judgment "
             "twice; it is a receipt, not an adjustment")
+
+
+# ══ BOTH POPULATIONS — the defect measurement found, and the reason it was invisible ═════════════
+
+def test_the_cap_reaches_the_ROOKIE_path_not_only_the_veteran_one():
+    """⭐⭐ THE DEFECT THIS STORY ALMOST SHIPPED, and the clause most worth keeping.
+
+    Every existing availability discount (the RES/PUP/NFI/SUS status cap, the NF-D11 return prior)
+    lives inside `project_veterans`; `project_rookies` has its own games path and calls none of
+    them. Jordyn Tyson — the canonical first row, the player whose 13.6 projected games against a
+    reported two-month absence is the reason this mechanism exists — is a 2026 ROOKIE
+    (`is_rookie=True`, `source='rookie'`, board id `TYS405541`), and so is Jeremiyah Love. Wired
+    only into the veteran path, the mechanism would have DECLARED that it moves the Tyson class and
+    been structurally incapable of it, on 81 of the 794 rows of the 2026 board.
+
+    ⚠️ It was invisible to every test in this file, because a synthetic frame does not know which
+    production function built it. It was found by resolving the seed candidates against the REAL
+    built board — the NF-C0e wired-vs-invoked class, which only the artifact shows."""
+    src = (_FANTASY / "season_projection.py").read_text()
+    body = src.split("def project_rookies(", 1)[1].split("\ndef ", 1)[0]
+    assert "reported_absence_games(" in body, (
+        "project_rookies never applies the reported-absence cap — the mechanism cannot move a "
+        "rookie, and the player it was written for is one")
+    run = (_FANTASY / "run_season_projection.py").read_text()
+    call = run.split("rks = (project_rookies(", 1)[1].split(")", 1)[0] if "rks = (project_rookies(" in run else ""
+    assert "reported_absence_rows" in call, (
+        "build_projection does not pass the overrides to project_rookies — the rookie step exists "
+        "and is never invoked, which is the same defect wearing a different hat")
+
+
+def test_a_rookie_override_is_not_reported_as_unmatched_by_the_veteran_half():
+    """⭐ Each half is handed the WHOLE override list and reports on all of it, so a rookie's row is
+    `UNMATCHED_ON_BOARD` as far as the veteran frame is concerned. Logged raw, EVERY override would
+    emit a spurious `[ALERT] NOT applied` beside its own `APPLY` — and an alert that fires on every
+    healthy row is the failure mode that gets a monitor ignored. A player is unmatched only when
+    NEITHER population matched him."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_season_projection as R
+    import logging as _lg
+
+    recs: list = []
+
+    class _Cap(_lg.Handler):
+        def emit(self, rec):
+            recs.append((rec.levelno, rec.getMessage()))
+
+    h = _Cap()
+    # ⚠️ The APPLY line is INFO and the logger's default effective level is WARNING, so without
+    # this the handler sees only the alerts — and "no APPLY was logged" would be indistinguishable
+    # from "the APPLY was filtered", i.e. the assertion below would pass on a build that logged
+    # nothing at all.
+    prior = R.log.level
+    R.log.setLevel(_lg.INFO)
+    R.log.addHandler(h)
+    try:
+        R._log_reported_absence_decisions([
+            {"player_id": "T1", "player_name": "Rookie", "applied": False,
+             "reason": RAO.REASON_UNMATCHED, "detail": "no board row"},
+            {"player_id": "T1", "player_name": "Rookie", "applied": True, "reason": "APPLIED",
+             "row_index": 0, "games_before": 13.6, "games_after": 12.0, "games_cap": 12.0,
+             "inert": False, "detail": "miss 5"},
+        ])
+    finally:
+        R.log.removeHandler(h)
+        R.log.setLevel(prior)
+    warnings = [m for lvl, m in recs if lvl >= _lg.WARNING]
+    assert not warnings, f"a successfully-applied rookie override still raised an alert: {warnings}"
+    assert any("APPLY" in m for _l, m in recs), "the applied override was not reported at all"
+
+
+def test_a_real_refusal_outranks_not_in_this_half():
+    """The reconciliation must not lose information in the other direction: a player refused by the
+    DISJOINTNESS rule in one half and merely absent from the other must report the formal-status
+    reason, which is actionable, rather than 'unmatched', which would send the operator hunting a
+    join bug that does not exist."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_season_projection as R
+    import logging as _lg
+
+    recs: list = []
+
+    class _Cap(_lg.Handler):
+        def emit(self, rec):
+            recs.append(rec.getMessage())
+
+    h = _Cap()
+    R.log.addHandler(h)
+    try:
+        R._log_reported_absence_decisions([
+            {"player_id": "K1", "player_name": "Tagged", "applied": False,
+             "reason": RAO.REASON_UNMATCHED, "detail": "no board row"},
+            {"player_id": "K1", "player_name": "Tagged", "applied": False,
+             "reason": RAO.REASON_FORMAL_STATUS, "detail": "formal status 'RES'"},
+        ])
+    finally:
+        R.log.removeHandler(h)
+    joined = "\n".join(recs)
+    assert RAO.REASON_FORMAL_STATUS in joined, "the actionable reason was lost in reconciliation"
+    assert RAO.REASON_UNMATCHED not in joined, (
+        "the row reports UNMATCHED as well — the operator is sent hunting a join bug that is not "
+        "there")
+
+
+def test_the_two_reason_constants_agree_across_their_two_owners():
+    """`run_season_projection` mirrors `REASON_UNMATCHED` to reconcile without importing at module
+    scope. A mirror that can drift is worse than no mirror (the NF-TR1 denylist lesson)."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_season_projection as R
+    assert R.REASON_UNMATCHED == RAO.REASON_UNMATCHED

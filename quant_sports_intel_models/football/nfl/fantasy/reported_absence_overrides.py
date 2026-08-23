@@ -69,6 +69,19 @@ log = logging.getLogger("nfl.fantasy.reported_absence")
 # trace. A database row would carry none of that.
 DEFAULT_OVERRIDES_PATH = Path(__file__).resolve().parent / "data" / "reported_absence_overrides.yaml"
 
+#: ⭐ THE MEASUREMENT HOOK, and it exists so the operator never has to edit the live file to find
+#: out what a change would do. Point `NF_REPORTED_ABSENCE_OVERRIDES` at any candidate file — the
+#: seed PROPOSAL, a what-if — and build; the live curated file is untouched, so a board built to be
+#: MEASURED can never be mistaken for a board built to be PUBLISHED.
+#:
+#: ⚠️ IT IS READ AT LOAD, NOT CACHED AT IMPORT, so a test can drive it without a module reload.
+#: ⛔ It must NEVER be set on a publishing build. `run_nf_inj_news_1_measure.py` sets it per
+#: subprocess and never exports it globally, and the value in force is echoed into the build log by
+#: `format_load_log` (the path is on the header line), so a board built under a non-default file
+#: announces which file it used rather than leaving it to be inferred — the E11.24 documented-vs-
+#: actually-set class, on a flag whose whole job is to change what gets served.
+_OVERRIDES_PATH_ENV = "NF_REPORTED_ABSENCE_OVERRIDES"
+
 # A regular season is 17 games. `expected_games_missed` is bounded by it on both ends: 0 would be a
 # no-op row (an operator meaning "no absence" should DELETE the row, not encode one that does
 # nothing), and >17 is not expressible.
@@ -246,8 +259,10 @@ def load_overrides(path: "str | Path | None" = None, as_of: "date | None" = None
     Returns a `LoadResult` in which EVERY row of the file is accounted for: applied (`rows`) or
     rejected with a reason (`rejected`). An absent file is the normal empty state (`readable=True`,
     no rows); an UNREADABLE file is `readable=False` — a different fact, reported as such."""
+    import os
+
     as_of = as_of or date.today()
-    p = Path(path or DEFAULT_OVERRIDES_PATH)
+    p = Path(path or os.environ.get(_OVERRIDES_PATH_ENV) or DEFAULT_OVERRIDES_PATH)
     result = LoadResult(path=str(p), as_of=as_of)
 
     if not p.exists():

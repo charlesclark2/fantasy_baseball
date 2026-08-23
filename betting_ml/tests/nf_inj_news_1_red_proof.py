@@ -228,6 +228,32 @@ CASES = [
      "  scoreHack = (p: any) => (p.reportedAbsence ? 0 : 1)",
      None,
      "test_the_stamp_never_reaches_ordering_or_the_optimizer"),
+
+    # ══ BOTH POPULATIONS — the defect the measurement found ══════════════════════════════════════
+    ("the rookie path stops applying the cap (the Tyson class becomes unreachable)", SEASON,
+     "        _new_games, _ra_dec = reported_absence_games(df, reported_absence_rows)",
+     "        _new_games, _ra_dec = (df[\"proj_games\"].to_numpy(), [])",
+     "_ra_dec = reported_absence_games(",
+     "test_the_cap_reaches_the_ROOKIE_path_not_only_the_veteran_one"),
+
+    ("build_projection stops passing the overrides to the rookie half", RUNNER,
+     "                           reported_absence_rows=_ra.rows, reported_absence_log=_ra_log)\n"
+     "           if not incoming.empty else pd.DataFrame())",
+     "                           )\n           if not incoming.empty else pd.DataFrame())",
+     None,
+     "test_the_cap_reaches_the_ROOKIE_path_not_only_the_veteran_one"),
+
+    ("the two halves' decisions stop being reconciled (an alert on every healthy row)", RUNNER,
+     "    decisions = list(best.values())",
+     "    decisions = list(decisions)",
+     "decisions = list(best.values())",
+     "test_a_rookie_override_is_not_reported_as_unmatched_by_the_veteran_half"),
+
+    ("reconciliation loses the actionable reason and reports UNMATCHED instead", RUNNER,
+     "        elif not prev.get(\"applied\") and prev.get(\"reason\") == REASON_UNMATCHED:",
+     "        elif False:",
+     'prev.get("reason") == REASON_UNMATCHED',
+     "test_a_real_refusal_outranks_not_in_this_half"),
 ]
 
 _BACKUP_DIR = REPO / ".nf_inj_news_1_red_proof_backup"

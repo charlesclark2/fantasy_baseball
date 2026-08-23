@@ -64,6 +64,7 @@ from quant_sports_intel_models.football.nfl.fantasy import win_total_source  # n
 from quant_sports_intel_models.football.nfl.fantasy import xfp_source  # noqa: E402
 
 log = logging.getLogger("nfl.fantasy.fastpath")
+REASON_UNMATCHED = "UNMATCHED_ON_BOARD"  # mirrors reported_absence_overrides.REASON_UNMATCHED
 
 # NF-INJ-NEWS-1 — the operator-curated reported-absence overrides (loader + provenance).
 from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
@@ -895,6 +896,24 @@ def _log_reported_absence_decisions(decisions: list) -> None:
     """
     if not decisions:
         return
+    # ⭐ RECONCILE THE TWO HALVES FIRST, and this is not cosmetic. The veteran and rookie paths are
+    # each handed the WHOLE override list and each reports on all of it, so a rookie's override is
+    # `UNMATCHED_ON_BOARD` as far as the veteran frame is concerned and vice versa. Logged raw, every
+    # single override would emit a spurious `[ALERT] NOT applied` line beside its own `APPLY` line —
+    # and an alert that fires on every healthy row is the failure mode that gets a monitor ignored,
+    # which this repo has now paid for several times. A player is UNMATCHED only when NEITHER
+    # population matched him, which is the honest reading: the board is their union.
+    best: dict = {}
+    for d in decisions:
+        prev = best.get(d["player_id"])
+        if prev is None:
+            best[d["player_id"]] = d
+        elif d.get("applied"):
+            best[d["player_id"]] = d
+        elif not prev.get("applied") and prev.get("reason") == REASON_UNMATCHED:
+            # A real refusal (a formal tag) outranks "not in this half of the board".
+            best[d["player_id"]] = d
+    decisions = list(best.values())
     applied = [d for d in decisions if d.get("applied")]
     log.info("NF-INJ-NEWS-1: reported-absence caps at the board — %d applied, %d ignored",
              len(applied), len(decisions) - len(applied))
@@ -1086,7 +1105,6 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
         absence_prior_blend=absence_prior_blend, band_model=band_model,
         level_recal=((level_form, level_params) if (level_form and level_params) else None),
         reported_absence_rows=_ra.rows, reported_absence_log=_ra_log)
-    _log_reported_absence_decisions(_ra_log)
     if veteran_postprocess is not None:
         vets = veteran_postprocess(vets, band_model)
 
@@ -1128,8 +1146,18 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
         band_hist=_rookie_full,
         recal_hist=_rookie_full if _recal_lambda else None,
         recal_lambda=_recal_lambda)
-    rks = project_rookies(incoming, curve, projection_season) if not incoming.empty else pd.DataFrame()
+    # NF-INJ-NEWS-1 — the ROOKIE half of the reported-absence cap. The canonical first row
+    # (Tyson) is a rookie, so passing the rows here is what makes the mechanism able to move
+    # the population it was written for; the same `_ra_log` sink collects both halves'
+    # decisions so the build log reports one list rather than two.
+    rks = (project_rookies(incoming, curve, projection_season,
+                           reported_absence_rows=_ra.rows, reported_absence_log=_ra_log)
+           if not incoming.empty else pd.DataFrame())
 
+    # ⚠️ LOGGED AFTER BOTH POPULATIONS, never after the veterans alone: the two halves each
+    # report on the FULL override list, so a rookie override looks UNMATCHED to the veteran
+    # half and vice versa. `_log_reported_absence_decisions` reconciles them.
+    _log_reported_absence_decisions(_ra_log)
     proj = pd.concat([vets, rks], ignore_index=True, sort=False)
     proj["sport"] = "nfl"
     proj["base_season"] = int(base_season)

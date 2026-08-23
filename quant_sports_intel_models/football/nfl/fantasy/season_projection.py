@@ -3058,6 +3058,10 @@ def project_rookies(
     curve: RookieSlotCurve,
     projection_season: int,
     residual_lambda: float = 0.12,
+    # NF-INJ-NEWS-1 — the operator-curated reported-absence rows + the decision sink. See the step
+    # below for why the rookie path needs its own copy of it.
+    reported_absence_rows=None,
+    reported_absence_log=None,
 ) -> pd.DataFrame:
     """Project the incoming rookie class (skill positions) from the slot curve, nudged by the P1A
     residual (talent the draft board under/over-rated) and widened for rookie uncertainty.
@@ -3126,6 +3130,59 @@ def project_rookies(
     df["proj_fumbles_lost"] = np.round(touches * 0.006, 2)
     df["proj_two_pt"] = np.nan
     df = score_line(df, prefix="proj_")
+
+    # ── NF-INJ-NEWS-1: the REPORTED-ABSENCE cap, on the ROOKIE path too.
+    #
+    # ⚠️⚠️ THIS IS NOT A COPY-PASTE OF THE VETERAN STEP FOR TIDINESS — WITHOUT IT THE WHOLE
+    # MECHANISM CANNOT MOVE THE PLAYER IT WAS WRITTEN FOR. Every existing availability discount
+    # (the RES/PUP/NFI/SUS status cap, the NF-D11 return prior) lives inside `project_veterans`;
+    # `project_rookies` has its own, simpler games path and calls none of them. Jordyn Tyson — the
+    # canonical first row, reported out ~two months — is a 2026 ROOKIE (`is_rookie=True`,
+    # `source='rookie'`, id `TYS405541`), and so is Jeremiyah Love. Wiring the cap only into the
+    # veteran path would have shipped a mechanism that DECLARES it moves the Tyson class and
+    # structurally cannot: 81 of the 794 rows on the 2026 board are rookies, and they are exactly
+    # the population with no roster history for the model to discount them by.
+    # Found by resolving the seed candidates against the REAL built board, not by any test — the
+    # NF-C0e wired-vs-invoked class, which is only ever visible in the artifact.
+    #
+    # ⚠️ Rookies carry NO `proj_status` column at all (there is no forward roster-status join for a
+    # player with no NFL history), so `reported_absence_games` takes its documented "nobody is
+    # formally tagged here" branch. That is the correct reading rather than a gap: the formal path
+    # is likewise absent for this population, so the override is the only thing that can price the
+    # absence, and refusing it would leave the rookie class permanently un-discountable.
+    #
+    # Applied BEFORE the NF-D16 level recalibration and before the band, which is the same position
+    # in the ordering the veteran path uses (availability → level → band), so the two populations
+    # compose their steps identically.
+    if reported_absence_rows:
+        _new_games, _ra_dec = reported_absence_games(df, reported_absence_rows)
+        if reported_absence_log is not None:
+            reported_absence_log.extend(_ra_dec)
+        _old = df["proj_games"].to_numpy()
+        _sc = np.where(_old > 1e-6, _new_games / np.clip(_old, 1e-6, None), 1.0)
+        for _c in ("proj_pass_att", "proj_pass_cmp", "proj_pass_yds", "proj_pass_td", "proj_pass_int",
+                   "proj_rush_att", "proj_rush_yds", "proj_rush_td",
+                   "proj_targets", "proj_rec", "proj_rec_yds", "proj_rec_td"):
+            if _c in df.columns:
+                df[_c] = df[_c].to_numpy() * _sc
+        df["proj_games"] = _new_games
+        df["proj_pass_cmp"] = np.minimum(df["proj_pass_cmp"], df["proj_pass_att"])
+        df["proj_rec"] = np.minimum(df["proj_rec"], df["proj_targets"])
+        df["proj_fumbles_lost"] = np.round(
+            (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
+        df = score_line(df, prefix="proj_")
+        _applied_r = [d for d in _ra_dec if d.get("applied")]
+        if _applied_r:
+            for _c in REPORTED_ABSENCE_COLS:
+                if _c not in df.columns:
+                    df[_c] = np.nan
+            _by_id_r = {r.player_id: r for r in reported_absence_rows}
+            for _d in _applied_r:
+                _row = _by_id_r[_d["player_id"]]
+                _i = df.index[_d["row_index"]]
+                df.loc[_i, "reported_absence_source_url"] = _row.source_url
+                df.loc[_i, "reported_absence_entered_at"] = _row.entered_at.isoformat()
+                df.loc[_i, "reported_absence_games_missed"] = float(_row.expected_games_missed)
 
     # ── NF-D16: the per-position LEVEL RECALIBRATION of the served point ──────────────────────────
     # NF1.4 DOCUMENTED that the rookie prior runs COLD on the draftable tier (`tier_bias` RB −58 /
