@@ -7,7 +7,7 @@ metadata:
   name: nf-inj-news-1
   vertical: nfl_fantasy
   card: https://trello.com/c/67JbJ6J6
-  status: IN_PROGRESS
+  status: DONE
 spec:
   description: >
     Reported-absence games cap: an operator-curated, provenance-stamped
@@ -213,27 +213,37 @@ spec:
           publish decision with the node-4 report + node-5 proposal.
   closeout:
     verdict: >
-      BUILT, DEPLOY-HELD. All 7 plan nodes complete. The mechanism ships with the
-      curated file EMPTY, so the board is byte-identical to the pre-story board
-      until the operator adopts rows. Nothing is published; the first publish is
-      the operator's decision with the node-4 report and the node-5 proposal in
-      hand. It is an OPERATOR JUDGMENT with provenance, never a model: not
-      fitted, never backtested, no accuracy or improvement claim anywhere, and
-      best_alpha = 0. 48 guard clauses, 29/29 RED-proven, plus a rendered-output
-      E2E registered in the mobile project. TWO ITEMS NEED THE OPERATOR'S CALL —
-      see followUps items 1 and 2.
+      BUILT AND AMENDED, DEPLOY-HELD. All 7 plan nodes complete, then re-opened
+      for PM rulings 1, 2b and 3 (2026-08-23) and closed again. The mechanism
+      ships with the curated file EMPTY, so the board is byte-identical to the
+      pre-story board until the operator adopts rows. Nothing is published.
+      It is an OPERATOR JUDGMENT with provenance, never a model: not fitted,
+      never backtested, no accuracy or improvement claim anywhere,
+      best_alpha = 0.
+      RULING 1 — the combination rule is the REMAINING-SEASON RATE
+      (min(current, (17-n) x current/17)); the ceiling it replaced was measured
+      inert on 5 of 6 real rows. Effects now: Tyson 13.61 -> 9.608 (-4.003),
+      Kamara 11.49 -> 10.139 (-1.352). No inert tier remains and every applied
+      row logs its effect size.
+      RULING 2b — disjointness turns on whether a formal discount was APPLIED,
+      not on whether a tag EXISTS, so a rookie on IR (who receives zero from
+      the formal path) is no longer also un-overridable. A board-wide detector
+      names every tag-without-discount row on every build; it counts rookies
+      explicitly, which required attaching proj_status to the rookie half FOR
+      DETECTION ONLY (no discount — the rookie-path fix is NF-INJ3c's).
+      RULING 3 — the qualifying policy: regular-season time reported, and
+      n >= 2 (mechanically enforced). Four of the six proposed rows fall out on
+      BOTH halves; TWO qualify (Tyson 5, Kamara 2). The two disciplinary
+      exclusions are confirmed and recorded so they are not re-litigated.
+      64 guard clauses, 38/38 RED-proven, plus a rendered-output E2E.
     followUps: >
-      1. ⚠️ DECISION OWED — THE CAP RULE IS INERT FOR SHORT ABSENCES, MEASURED.
-      The spec's binding rule is min(current_expected_games, 17 -
-      expected_games_missed), implemented exactly as written. Measured against
-      the real 2026 board it does nothing for 5 of the 6 proposed candidates:
-      the model already projects starters at 11-16 games, so a ceiling of "17
-      minus a short absence" sits ABOVE the current projection. Only Tyson's
-      5-game report bites, and it moves 12%, not the ~29% "misses 5 of 17"
-      suggests. A subtractive rule (current - missed) would always engage. The
-      clause was FLAGGED rather than edited per the kickoff; the numbers and both
-      readings are in ablation_results/nf_inj_news_1_board_delta.md. Until this
-      is settled the mechanism is effectively a long-absence-only tool.
+      1. ✅ RESOLVED BY PM RULING 1 — the cap rule. The ceiling was measured
+      inert for 5 of 6 candidates and is replaced by the remaining-season rate.
+      Recorded in the acceptance criteria above and implemented; the superseded
+      measurement is retained verbatim in
+      ablation_results/nf_inj_news_1_board_delta.md §1, because the ruling was
+      made on those numbers and a record that rewrote itself would leave the
+      decision resting on evidence nobody can check.
 
       2. ⏭️ OPERATOR STEPS BEFORE THE FIRST PUBLISH: (a) confirm/edit the seed
       rows in data/reported_absence_overrides.proposed.yaml and move the accepted
@@ -244,19 +254,33 @@ spec:
       (d) run_interval_revalidation as a regression check. (b)-(d) need the lake
       and the panel caches, gitignored and absent from a worktree (NF-INFRA1).
 
-      3. ⭐ FINDING (repo-wide, worth a durable note): THE ROOKIE POPULATION HAS
-      NO AVAILABILITY PATH AT ALL. Every availability discount — the
-      RES/PUP/NFI/SUS status cap AND the NF-D11 return prior — lives inside
-      project_veterans; project_rookies calls none of them, on 81 of the 794 rows
-      of the 2026 board. This story fixed it for ITS OWN cap only. So a rookie
-      placed on IR today still receives ZERO discount from the formal path, which
-      is a live gap of the same shape as the one this story was written to close
-      and is NOT fixed here. Worth a PM decision.
+      3. ⭐ ROUTED BY PM RULING 2a — the rookie population has NO availability
+      path at all (the formal RES/PUP/NFI/SUS cap AND the NF-D11 return prior
+      both live in project_veterans; project_rookies calls neither, on 81 of
+      the 794 rows of the 2026 board). Merged into the NF-INJ3c rookie-path
+      bundle card, which the PM promoted to the Sprint with a before-8/30
+      target because the IR wave lands at the cutdown onto a population with no
+      formal availability path. NOT this story's to build. This story fixed it
+      for its OWN cap only, and ruling 2b stops the gap compounding with this
+      mechanism. `_warn_formal_tag_without_discount` is the live detector for
+      that population and runs on every build.
 
-      4. 📌 ablation_results/nf_c8_injury_designation_gap.md places Jordyn Tyson
-      in ARIZONA; the live Sleeper feed and every beat report say NEW ORLEANS.
-      Nothing depends on it, but a false premise in a doc is what the next reader
-      builds on.
+      4. ✅ CORRECTED — nf_c8_injury_designation_gap.md placed Jordyn Tyson in
+      ARIZONA; he is a NEW ORLEANS WR (confirmed against the live Sleeper
+      snapshot, team = NO). Fixed in place with a marked factual correction.
+
+      4b. ⚠️ OUT-OF-SCOPE DEFECT ENCOUNTERED AND FIXED, reported rather than
+      absorbed: test_ingest_umpires_per_game_skip mocked `insert_rows` with
+      `list.extend()`, which returns None, and main() logs it through
+      `log.info("Inserted %d ...", loaded)` — a TypeError that fires ONLY when
+      the record is actually FORMATTED. That made it order-dependent: green
+      alone and on dev, red under -n 4 once this story's added tests shifted
+      xdist's distribution. Fixed in the test (one line, no production change).
+      ⭐ THE UNDERLYING MECHANISM IS NOT FIXED AND IS WORTH A PM DECISION:
+      scripts/ingest_umpires.py calls logging.basicConfig() AT MODULE SCOPE,
+      which is the import-time global mutation CLAUDE.md forbids precisely
+      because it makes results depend on which shard a test lands in. Left
+      alone here because changing it could alter logging on the box.
 
       5. ⏳ SHELF LIFE: the 2026 cutdown to 53 is 2026-08-30. This whole
       population exists because IR placements have not happened yet, and several

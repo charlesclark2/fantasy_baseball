@@ -306,7 +306,15 @@ class TestMainOnTheS3Leg:
              patch.object(iu, "fetch_hp_umpires", return_value=fetched), \
              patch.object(iu, "existing_statsapi_assignments") as read, \
              patch.object(iu, "get_snowflake_conn", return_value=MagicMock()), \
-             patch.object(iu, "insert_rows", side_effect=lambda _c, rows: written.extend(rows)), \
+             patch.object(iu, "insert_rows",
+                          # ⚠️ RETURNS THE COUNT, not `list.extend()`'s None. `main()` logs it
+                          # through `log.info("Inserted %d ...", loaded)`, which raises
+                          # TypeError on None — but ONLY when the record is actually
+                          # FORMATTED, i.e. only when the root logger happens to sit at INFO.
+                          # That made this an ORDER-DEPENDENT failure: it passed alone and in
+                          # most shard layouts, and surfaced under `-n 4` once an unrelated
+                          # story added tests and shifted xdist's distribution.
+                          side_effect=lambda _c, rows: (written.extend(rows), len(rows))[1]), \
              patch.object(iu.argparse.ArgumentParser, "parse_args", return_value=args):
             iu.main()
 

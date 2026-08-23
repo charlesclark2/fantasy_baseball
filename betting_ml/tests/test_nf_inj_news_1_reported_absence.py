@@ -41,88 +41,175 @@ def _row(pid="00-0039918", name="Jordyn Tyson", miss=8, url="https://example.com
                            review_by=review)
 
 
-def _frame(pid="00-0039918", games=13.6, status=None, name="Jordyn Tyson"):
-    """A minimal projection frame. ⭐ `proj_status` is present and NULL by default so the
-    disjointness clause is the only thing that can refuse a row — a frame with the column ABSENT
-    would exercise a different branch and make the disjointness test vacuous."""
-    return pd.DataFrame({"player_id": [pid], "player_name": [name],
-                         "proj_games": [games], "proj_status": [status]})
+def _frame(pid="00-0039918", games=13.6, status=None, name="Jordyn Tyson",
+           formal_applied=False):
+    """A minimal projection frame.
+
+    ⭐ `proj_status` is present and NULL by default, and `_formal_discount_applied` is present and
+    False, so the disjointness clause is the only thing that can refuse a row — a frame with either
+    column ABSENT would exercise a different branch and make the disjointness test vacuous.
+
+    ⚖️ PM RULING 2b: disjointness turns on `formal_applied`, NOT on `status`. Both are parameters
+    here precisely so a test can drive the two apart, which is the whole content of that ruling."""
+    return pd.DataFrame({"player_id": [pid], "player_name": [name], "proj_games": [games],
+                         "proj_status": [status],
+                         SP.FORMAL_APPLIED_COL: [formal_applied]})
+
+
+def _rate(games: float, missed: int, season: float = 17.0) -> float:
+    """PM ruling 1's rule, written out independently of the implementation so the assertions below
+    are a statement of the RULE rather than a restatement of the code."""
+    return min(games, games * (season - missed) / season)
 
 
 # ══ RULE 1 — DISJOINTNESS: the formal path always wins ═══════════════════════════════════════════
 
 @pytest.mark.parametrize("status", sorted(SP._INJURY_STATUS_GAMES_CAP))
-def test_a_formally_tagged_player_is_never_touched_by_an_override(status):
-    """The hard rule. Parametrized over the formal map ITSELF, not a hand-copied list, so a future
-    status added to `_INJURY_STATUS_GAMES_CAP` is covered the day it is added.
+def test_a_player_who_RECEIVED_a_formal_discount_is_never_touched_by_an_override(status):
+    """⚖️ PM RULING 2b — the rule turns on the APPLIED DISCOUNT, so this fixture carries BOTH a tag
+    and `formal_applied=True`. That is the case the no-double-discount rule exists for.
 
-    ⭐ THE FIXTURE IS BUILT SO ONLY DISJOINTNESS CAN REFUSE IT: the id matches, the row is
-    unexpired, well-formed and un-duplicated, and the cap (9) is genuinely BELOW the player's games
-    (13.6), so a working override WOULD move this row. The only reason it must not is the tag."""
-    games, decisions = SP.reported_absence_games(_frame(status=status), [_row()])
+    Parametrized over the formal map ITSELF, not a hand-copied list, so a status added to
+    `_INJURY_STATUS_GAMES_CAP` is covered the day it is added.
+
+    ⭐ ONLY DISJOINTNESS CAN REFUSE THIS FIXTURE: the id matches, the row is unexpired, well-formed
+    and un-duplicated, and under the rate rule an applied override ALWAYS moves a row — so a working
+    override would move this one. The only reason it must not is that the formal path already did."""
+    games, decisions = SP.reported_absence_games(
+        _frame(status=status, formal_applied=True), [_row()])
     assert games[0] == pytest.approx(13.6), (
-        f"a {status} player was moved by an override — the formal cap governs him, and applying "
-        "both is a double discount")
+        f"a {status} player who already received a formal discount was moved AGAIN by an override "
+        "— that is the double discount the rule exists to prevent")
     assert decisions[0]["reason"] == RAO.REASON_FORMAL_STATUS
     assert decisions[0]["applied"] is False
 
 
-def test_the_same_override_DOES_move_the_player_when_no_formal_tag_is_present():
-    """The other half of the pair, and it is what makes the clause above non-vacuous: the identical
-    row, the identical frame, differing ONLY in `proj_status`, must move the number. Without this
-    the disjointness test would pass just as well against an override mechanism that never worked."""
-    games, decisions = SP.reported_absence_games(_frame(status=None), [_row()])
-    assert games[0] == pytest.approx(9.0)
+@pytest.mark.parametrize("status", sorted(SP._INJURY_STATUS_GAMES_CAP))
+def test_a_formal_TAG_with_NO_applied_discount_leaves_the_override_STANDING(status):
+    """⭐⭐ THE HEART OF PM RULING 2b, and the case that made it necessary.
+
+    A ROOKIE placed on IR receives ZERO from the formal path — that path runs only inside
+    `project_veterans`. Under the old tag-based rule he was also un-overridable, because a tag
+    existed. Undiscounted AND un-overridable is strictly the worst state available, and the 53-man
+    cutdown puts a wave of exactly those rows on the board.
+
+    ⭐ THE FIXTURE DIFFERS FROM THE ONE ABOVE IN EXACTLY ONE FIELD — `formal_applied` — which is
+    what makes each clause a test of the ruling rather than of the fixture."""
+    games, decisions = SP.reported_absence_games(
+        _frame(status=status, formal_applied=False), [_row()])
+    assert games[0] == pytest.approx(_rate(13.6, 8)), (
+        f"a {status} player who received NO formal discount was ALSO refused the override — he is "
+        "undiscounted and un-overridable, which is the worst reachable state (PM ruling 2b)")
+    assert decisions[0]["applied"] is True
+    assert decisions[0]["tag_without_discount"] is True, (
+        "the override stood, but the build log does not say the player carries a formal tag that "
+        "bought him nothing — that line is the live NF-INJ3c detector")
+
+
+def test_a_frame_with_no_formal_flag_at_all_treats_nothing_as_discounted():
+    """The rookie frame, and a build with the formal cap switched off. An absent flag means no
+    formal step ran, so nothing can have been double-counted — the truthful conservative reading."""
+    df = pd.DataFrame({"player_id": ["00-0039918"], "player_name": ["R"], "proj_games": [13.6]})
+    games, decisions = SP.reported_absence_games(df, [_row()])
+    assert games[0] == pytest.approx(_rate(13.6, 8))
     assert decisions[0]["applied"] is True
 
 
-def test_the_disjointness_rule_reads_the_formal_map_itself_not_a_copy_of_its_keys():
-    """⭐ A DRIFT GUARD, not a behaviour guard. The whole design claim is that the two populations
-    cannot separate because the disjointness dispatches on `_INJURY_STATUS_GAMES_CAP` — the very
-    object the formal cap uses. If someone re-implements it against a literal set, the populations
-    drift silently the next time a status is added. Proven behaviourally with a status injected at
-    runtime, which a hand-copied literal could not know about."""
+def test_the_tag_disclosure_reads_the_formal_map_itself_not_a_copy_of_its_keys():
+    """⭐ A DRIFT GUARD. The `tag_without_discount` disclosure dispatches on
+    `_INJURY_STATUS_GAMES_CAP` — the very object the formal cap uses — so a status added there is
+    disclosed the day it is added. Proven behaviourally with a status injected at runtime, which a
+    hand-copied literal could not know about."""
     injected = dict(SP._INJURY_STATUS_GAMES_CAP)
     injected["FAKE_NEW_STATUS"] = 5.0
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(SP, "_INJURY_STATUS_GAMES_CAP", injected)
-        games, decisions = SP.reported_absence_games(_frame(status="FAKE_NEW_STATUS"), [_row()])
-    assert games[0] == pytest.approx(13.6), (
-        "a status added to the formal map was not respected by the disjointness rule — it is "
-        "reading a COPY of the keys, so the two populations will drift")
-    assert decisions[0]["reason"] == RAO.REASON_FORMAL_STATUS
+        _g, decisions = SP.reported_absence_games(
+            _frame(status="FAKE_NEW_STATUS", formal_applied=False), [_row()])
+    assert decisions[0]["tag_without_discount"] is True, (
+        "a status added to the formal map is not recognised by the tag disclosure — it is reading "
+        "a COPY of the keys, so the two will drift")
 
 
 # ══ RULE 2 — CAP-ONLY and MONOTONE ═══════════════════════════════════════════════════════════════
 
 def test_an_override_can_never_raise_expected_games():
-    """Cap-only. The player already sits at 4.0 games (say the NF-D11 return prior cut him); an
-    override asserting he misses 8 (ceiling 9) must leave him at 4.0, NOT lift him to 9.
+    """Cap-only, which the `min()` preserves under the rate rule exactly as it did under the
+    ceiling. A player already cut to 4.0 games (say by the NF-D11 return prior) can only go lower.
 
-    ⭐ Note the fixture: everything else about the row is valid and the player is un-tagged, so the
-    monotone rule is the only thing that can produce this outcome."""
+    ⭐ Everything else about the row is valid and no formal discount was applied, so monotonicity
+    is the only thing that can produce this outcome."""
     games, decisions = SP.reported_absence_games(_frame(games=4.0), [_row(miss=8)])
-    assert games[0] == pytest.approx(4.0), "an override raised availability — it is not cap-only"
+    assert games[0] <= 4.0 + 1e-9, "an override raised availability — it is not cap-only"
+    assert games[0] == pytest.approx(_rate(4.0, 8))
     assert decisions[0]["applied"] is True
-    assert decisions[0]["inert"] is True, (
-        "a cap that changed nothing must be reported INERT — otherwise it is indistinguishable "
-        "from a working discount in the build log")
 
 
-def test_the_cap_is_a_hard_min_not_a_blend():
-    """The formal path blends 0.7 toward an EMPIRICAL level; this path does not, because the number
-    IS the operator's stated expectation and blending it would silently overrule the judgment.
-    A blend of 0.7 would land on 10.38, not 9.0 — the assertion separates the two."""
+def test_the_rule_is_the_REMAINING_SEASON_RATE_not_a_ceiling_and_not_a_subtraction():
+    """⚖️ PM RULING 1, asserted against all three candidate rules so the clause distinguishes them.
+
+    On the real board's Tyson row (13.61 games, a 5-game report) they differ decisively:
+      • rate (SHIPPED):  13.61 x 12/17 = 9.607   → effect 4.003
+      • ceiling (was):   min(13.61, 12) = 12.0   → effect 1.61
+      • subtraction:     13.61 − 5      = 8.61   → effect 5.00
+    The ceiling was measured INERT on 5 of 6 real candidates; subtraction double-counts the report
+    against durability the model has already priced. The rate is strictly between them by
+    construction (effect = n x games/17 < n)."""
+    games, dec = SP.reported_absence_games(_frame(games=13.61), [_row(miss=5)])
+    assert games[0] == pytest.approx(13.61 * 12 / 17, abs=1e-6), "not the remaining-season rate"
+    assert games[0] != pytest.approx(12.0), "this is the CEILING rule the PM replaced"
+    assert games[0] != pytest.approx(13.61 - 5), "this is SUBTRACTION, which double-counts"
+    assert dec[0]["effect_games"] == pytest.approx(13.61 * 5 / 17, abs=1e-6)
+
+
+def test_the_rule_always_engages_which_is_the_whole_point_of_the_amendment():
+    """⭐ The ceiling's failure was that it moved 5 of 6 real candidates by ZERO. Asserted on the
+    REAL measured board figures, so this clause fails if the rule ever regains an inert tier."""
+    for games_now, missed in ((13.61, 5), (11.49, 2), (13.83, 2), (15.30, 2), (16.00, 2)):
+        g, d = SP.reported_absence_games(_frame(games=games_now), [_row(miss=missed)])
+        assert g[0] < games_now - 1e-9, (
+            f"a {missed}-game report moved a {games_now}-game player by nothing — the inert tier "
+            "is back, which is exactly what PM ruling 1 removed")
+        assert d[0]["inert"] is False
+
+
+def test_the_effect_is_strictly_smaller_than_subtracting_the_reported_games():
+    """The rate rule's safety property, stated as a property rather than an example: it never
+    double-counts the report in full, because the model's games figure already prices some
+    absence."""
+    for games_now in (4.0, 9.0, 13.61, 17.0):
+        for missed in range(2, 18):
+            _g, d = SP.reported_absence_games(_frame(games=games_now), [_row(miss=missed)])
+            effect = d[0]["effect_games"]
+            # ⚠️ STRICTLY smaller below a full season, not merely `<=`. A `<=` here passes on plain
+            # SUBTRACTION (effect == missed exactly), which is the rule the PM explicitly did not
+            # pick — its own RED proof caught that, so the boundary has to be exact. At a full 17
+            # games the two coincide by construction (effect = missed x 17/17), and that is the one
+            # place equality is correct.
+            if games_now < 17.0:
+                assert effect < missed - 1e-9, (
+                    f"a {missed}-game report on a {games_now}-game player cost {effect} — that is "
+                    "subtraction, which double-counts absence the model has already priced")
+            else:
+                assert effect == pytest.approx(missed)
+
+
+def test_the_cap_is_not_a_blend_toward_an_empirical_level():
+    """The formal path blends 0.7 toward an EMPIRICAL status level; this path must not, because the
+    number IS the operator's stated expectation and blending "he'll miss eight" into "he'll miss
+    five and a half" would silently overrule the judgment the mechanism carries."""
     games, _ = SP.reported_absence_games(_frame(games=13.6), [_row(miss=8)])
-    assert games[0] == pytest.approx(17.0 - 8), "the reported-absence cap is not a hard MIN"
+    blended = 0.3 * 13.6 + 0.7 * _rate(13.6, 8)
+    assert games[0] != pytest.approx(blended), "the reported-absence rule has acquired a blend"
 
 
 def test_the_three_availability_caps_compose_monotonically():
     """Property check over the composition, not one example: applying an override after any prior
     availability step can only ever move games DOWN or leave them alone, for every starting level."""
     for start in (0.5, 1.0, 4.0, 8.9, 9.0, 9.1, 13.6, 17.0):
-        games, _ = SP.reported_absence_games(_frame(games=start), [_row(miss=8)])
-        assert games[0] <= start + 1e-9, f"games rose from {start} to {games[0]}"
+        for missed in (2, 5, 8, 17):
+            games, _ = SP.reported_absence_games(_frame(games=start), [_row(miss=missed)])
+            assert games[0] <= start + 1e-9, f"games rose from {start} to {games[0]}"
 
 
 # ══ RULE 3 — the join is NORMALISED on both ends and verifiable BY NAME ══════════════════════════
@@ -132,7 +219,7 @@ def test_a_whitespace_padded_board_id_still_receives_its_override():
     match dropped them and the miss classified as 'this player is not on the board'. Both ends of
     this join normalise, so a padded board id still matches a clean override id."""
     games, decisions = SP.reported_absence_games(_frame(pid=" 00-0039918"), [_row()])
-    assert games[0] == pytest.approx(9.0), (
+    assert games[0] == pytest.approx(_rate(13.6, 8)), (
         "a whitespace-padded board id did not match its override — the join normalises only one "
         "end, which makes correctness a property of the caller")
     assert decisions[0]["applied"] is True
@@ -208,10 +295,10 @@ def test_a_source_url_that_is_not_a_link_is_rejected(tmp_path):
     assert r.rows == [], "a citation nobody can follow is not a citation"
 
 
-@pytest.mark.parametrize("games", ["0", "18", "3.5", "true", '"eight"'])
+@pytest.mark.parametrize("games", ["0", "1", "18", "3.5", "true", '"eight"'])
 def test_an_out_of_range_or_non_integer_games_count_is_rejected(tmp_path, games):
-    """`0` is rejected on purpose (delete the row instead of encoding a no-op) and `true` because
-    a bool is an int in Python and would silently become 1 game."""
+    """`0` is rejected on purpose (delete the row instead of encoding a no-op); `1` by PM ruling 3's
+    qualifying floor; and `true` because a bool is an int in Python and would silently become 1."""
     bad = dict(_GOOD, expected_games_missed=games)
     r = RAO.load_overrides(_write(tmp_path, [bad]), as_of=date(2026, 8, 23), season=2026)
     assert r.rows == [], f"expected_games_missed={games} was accepted"
@@ -646,3 +733,165 @@ def test_the_two_reason_constants_agree_across_their_two_owners():
     scope. A mirror that can drift is worse than no mirror (the NF-TR1 denylist lesson)."""
     from quant_sports_intel_models.football.nfl.fantasy import run_season_projection as R
     assert R.REASON_UNMATCHED == RAO.REASON_UNMATCHED
+
+
+# ══ PM RULING 3 — the qualifying floor ═══════════════════════════════════════════════════════════
+
+def test_a_one_game_report_is_refused_by_the_qualifying_floor(tmp_path):
+    """⚖️ PM RULING 3. Under the rate rule a 1-game report moves a 14-game starter by 0.82 games —
+    inside the width of the band the board already publishes around him. A manual judgment row must
+    move the board by more than its own noise to be worth its maintenance and its chip.
+
+    ⭐ THE FIXTURE IS OTHERWISE PERFECT — real URL, unexpired, unique, well-formed — so the floor is
+    the ONLY clause that can reject it, which is what stops this passing for another reason."""
+    r = RAO.load_overrides(_write(tmp_path, [dict(_GOOD, expected_games_missed="1")]),
+                           as_of=date(2026, 8, 23), season=2026)
+    assert r.rows == [], "a 1-game report was accepted — PM ruling 3's floor is not enforced"
+    assert r.rejected[0].reason == RAO.REASON_MALFORMED
+    assert "2" in r.rejected[0].detail, "the rejection does not name the floor"
+
+
+def test_the_floor_is_exactly_two_and_two_is_accepted(tmp_path):
+    """The other side of the boundary — without it the clause above would also pass on a mechanism
+    that rejected everything."""
+    assert RAO.MIN_REPORTED_GAMES == 2
+    r = RAO.load_overrides(_write(tmp_path, [dict(_GOOD, expected_games_missed="2")]),
+                           as_of=date(2026, 8, 23), season=2026)
+    assert len(r.rows) == 1, "a 2-game report was refused — the floor is set too high"
+
+
+def test_the_curated_file_carries_the_wording_half_of_the_policy():
+    """⚖️ PM ruling 3's clause (i) — the source must report REGULAR-SEASON time, never
+    day-to-day/week-to-week/camp-only language.
+
+    ⛔ IT IS NOT ENFORCED IN CODE ON PURPOSE, and the reason is worth pinning: a keyword scan over
+    source PROSE would be the negation-blind class (NF-C6P3) and would reject an honest citation
+    that quotes a coach saying "week-to-week" while reporting a dated return. It is the curator's
+    obligation, so the obligation has to be written where the curator works."""
+    header = (_FANTASY / "data/reported_absence_overrides.yaml").read_text().lower()
+    assert "what qualifies a row" in header, "the curated file carries no qualifying-policy section"
+    # ⚠️ SCOPED TO THE POLICY SECTION, not to the whole file. The disqualifying phrases also appear
+    # in the paragraph that EXPLAINS why the rule is not automated, so a file-wide `in` check stays
+    # green when the policy itself is gutted — its own RED proof caught exactly that.
+    # ⚠️ SCOPED TO CLAUSE (i) ITSELF, stopping at the paragraph that explains why it is not
+    # automated — that paragraph QUOTES the same phrases as an example of what a naive scan would
+    # wrongly reject, so a section-wide check stays green when the policy statement is gutted. Two
+    # rounds of the RED proof were needed to find the boundary that actually isolates the rule.
+    section = header.split("what qualifies a row", 1)[1].split("what will be ignored", 1)[0]
+    policy = section.split("(i)", 1)[1].split("this one is yours", 1)[0]
+    assert "regular-season" in policy or "regular season" in policy, (
+        "the policy does not say the source must report REGULAR-SEASON time")
+    for phrase in ("day-to-day", "week-to-week"):
+        assert phrase in policy, (
+            f"the qualifying policy does not name {phrase!r} as disqualifying language — clause (i) "
+            "exists nowhere the curator will see it")
+
+
+# ══ PM RULING 2b — the board-wide NF-INJ3c detector ══════════════════════════════════════════════
+
+def _detector_lines(proj) -> list:
+    from quant_sports_intel_models.football.nfl.fantasy import run_season_projection as R
+    import logging as _lg
+
+    recs: list = []
+
+    class _Cap(_lg.Handler):
+        def emit(self, rec):
+            recs.append(rec.getMessage())
+
+    h = _Cap()
+    prior = R.log.level
+    R.log.setLevel(_lg.INFO)
+    R.log.addHandler(h)
+    try:
+        n = R._warn_formal_tag_without_discount(proj)
+    finally:
+        R.log.removeHandler(h)
+        R.log.setLevel(prior)
+    return n, recs
+
+
+def test_the_detector_names_a_rookie_on_IR_who_received_no_formal_discount():
+    """⭐⭐ THE POPULATION THE DETECTOR EXISTS FOR. The formal discount runs only inside
+    `project_veterans`, so a rookie placed on IR is projected as though healthy by BOTH paths, and
+    until this line existed nothing on any surface or in any log said so. The 53-man cutdown
+    (2026-08-30) puts a wave of exactly those rows on the board."""
+    proj = pd.DataFrame({
+        "player_id": ["v1", "r1"], "player_name": ["VetDiscounted", "RookieOnIR"],
+        "position": ["WR", "WR"], "proj_status": ["RES", "RES"], "proj_games": [4.0, 13.6],
+        "is_rookie": [False, True], SP.FORMAL_APPLIED_COL: [True, None]})
+    n, lines = _detector_lines(proj)
+    assert n == 1, "the detector did not count the rookie who received nothing from either path"
+    joined = "\n".join(lines)
+    assert "RookieOnIR" in joined and "ROOKIE" in joined
+    assert "VetDiscounted" not in joined, (
+        "a player who DID receive a formal discount is being reported as a gap — the detector is "
+        "keyed on the tag rather than on the discount")
+    assert "NF-INJ3c" in joined, "the alert does not route the reader to the story that owns the gap"
+
+
+def test_the_detector_is_silent_when_every_tagged_row_was_discounted():
+    """A detector that fires on a healthy board trains its reader to ignore it — the muted-monitor
+    pattern this repo has paid for repeatedly."""
+    proj = pd.DataFrame({
+        "player_id": ["v1"], "player_name": ["Vet"], "position": ["WR"], "proj_status": ["RES"],
+        "proj_games": [4.0], "is_rookie": [False], SP.FORMAL_APPLIED_COL: [True]})
+    n, lines = _detector_lines(proj)
+    assert n == 0
+    assert not any("ALERT" in m for m in lines)
+
+
+def test_the_detector_reports_UNEVALUABLE_rather_than_healthy_when_it_cannot_run():
+    """NF1.7 (a): a check that did not run is not a check that passed. Returns -1, never 0."""
+    n, lines = _detector_lines(pd.DataFrame({"player_id": ["x"], "proj_games": [10.0]}))
+    assert n == -1, "an unevaluable detector reported a clean board"
+    assert any("cannot evaluate" in m for m in lines)
+
+
+def test_the_applied_row_log_carries_the_EFFECT_SIZE():
+    """⚖️ PM ruling 1's logging clause. The ceiling rule made "did this row move at all?" the live
+    question; the rate rule always moves, so the MAGNITUDE is now the thing worth seeing."""
+    from quant_sports_intel_models.football.nfl.fantasy import run_season_projection as R
+    import logging as _lg
+
+    recs: list = []
+
+    class _Cap(_lg.Handler):
+        def emit(self, rec):
+            recs.append(rec.getMessage())
+
+    h = _Cap()
+    prior = R.log.level
+    R.log.setLevel(_lg.INFO)
+    R.log.addHandler(h)
+    try:
+        R._log_reported_absence_decisions([
+            {"player_id": "T1", "player_name": "Tyson", "applied": True, "reason": "APPLIED",
+             "row_index": 0, "games_before": 13.61, "games_after": 9.607,
+             "effect_games": 4.003, "inert": False, "tag_without_discount": False,
+             "detail": "miss 5 of 17"}])
+    finally:
+        R.log.removeHandler(h)
+        R.log.setLevel(prior)
+    joined = "\n".join(recs)
+    assert "4.00" in joined, f"the applied-row log does not carry the effect size: {joined}"
+
+
+def test_project_veterans_stamps_the_formal_flag_from_the_MOVE_not_from_the_tag():
+    """⚖️ PM ruling 2b's other half, at its source. The flag `reported_absence_games` reads must be
+    set from whether the formal step actually MOVED the row — a tagged player whose games already
+    sat below the status level is unchanged by the 0.7 blend, and nothing was double-counted for him
+    either, so he keeps his override.
+
+    ⚠️ SOURCE-INSPECTED because a synthetic frame sets the flag directly and therefore cannot see
+    how production computes it — the exact gap that let a deliberate break of this line stay green
+    against every behavioural clause in this file."""
+    src = (_FANTASY / "season_projection.py").read_text()
+    body = src.split("def project_veterans(", 1)[1].split("\ndef ", 1)[0]
+    assert f"df[{SP.FORMAL_APPLIED_COL!r}]" in body or "df[FORMAL_APPLIED_COL]" in body, (
+        "project_veterans never stamps the formal-discount flag — the reported-absence disjointness "
+        "would then read every veteran as un-discounted and could double-discount")
+    stamp = body.split("FORMAL_APPLIED_COL] =", 1)[1].split("\n", 1)[0]
+    assert "new_games" in stamp and "old_games" in stamp, (
+        f"the flag is not derived from the games the formal step actually moved (got `{stamp}`) — "
+        "a constant or a tag test here reintroduces exactly the defect PM ruling 2b removed")

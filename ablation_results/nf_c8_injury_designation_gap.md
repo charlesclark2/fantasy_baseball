@@ -28,8 +28,15 @@ The availability discount has exactly one entry point, and it is narrow by const
 
 So the model reacts to a **roster transaction** (IR / PUP / NFI / suspension) and to nothing else.
 **Questionable, Doubtful and Out apply a discount of exactly zero**, and a press report of an
-expected absence is not a status at all. Tyson will only move once Arizona actually places him on
+expected absence is not a status at all. Tyson will only move once New Orleans actually places him on
 one of those lists.
+
+> **📌 Factual correction (2026-08-23, NF-INJ-NEWS-1).** This sentence originally read *"once
+> **Arizona** actually places him"*. Jordyn Tyson is a **New Orleans** WR — confirmed against
+> the live Sleeper `v1/players/nfl` snapshot (`team = NO`) and against the beat reporting of
+> his August absence. Nothing in this document's argument depends on the team, but a false
+> premise in a doc is what the next reader builds on, so it is corrected here rather than
+> left to be inherited.
 
 This is a **scope limit, working as designed** — the design is leakage-safe and transaction-driven,
 which is defensible. It is also, on the evidence of one live check, **not what a reader assumes we

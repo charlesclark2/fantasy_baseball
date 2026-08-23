@@ -87,6 +87,25 @@ _OVERRIDES_PATH_ENV = "NF_REPORTED_ABSENCE_OVERRIDES"
 # nothing), and >17 is not expressible.
 SEASON_GAMES = 17
 
+#: ⚖️ PM RULING 3 (2026-08-23) — the QUALIFYING FLOOR, mechanically enforced.
+#:
+#: A row qualifies when BOTH hold: (i) the source explicitly reports missing REGULAR-SEASON time —
+#: a named number of games/weeks or a dated return ("out until October") — never "day-to-day" /
+#: "week-to-week" / camp-only language; (ii) `expected_games_missed >= 2`.
+#:
+#: ⭐ ONLY (ii) IS ENFORCED HERE, and the split is deliberate rather than lazy. (ii) is arithmetic
+#: and belongs in code. (i) is a judgment about what a source actually says, which no scan can make
+#: — a keyword denylist over source PROSE would be the negation-blind class (NF-C6P3) and would
+#: reject an honest citation that happens to quote a coach saying "week-to-week" while reporting a
+#: dated return. It is the curator's obligation, carried in the curated file's header, and it is
+#: what the PR review of an added row is FOR.
+#:
+#: The floor's rationale is the rate rule's own arithmetic: the effect is `n x proj_games / 17`, so
+#: at n=1 a 14-game starter moves 0.82 games — smaller than the width of the band the board already
+#: publishes around him. A row that moves the board by less than its own noise still costs a chip, a
+#: review cycle and a claim.
+MIN_REPORTED_GAMES = 2
+
 _REQUIRED_FIELDS = ("player_id", "player_name", "expected_games_missed",
                     "source_url", "entered_by", "entered_at", "review_by")
 
@@ -96,6 +115,11 @@ REASON_EXPIRED = "EXPIRED"
 REASON_DUPLICATE = "DUPLICATE"
 REASON_FORMAL_STATUS = "FORMAL_STATUS_WINS"
 REASON_UNMATCHED = "UNMATCHED_ON_BOARD"
+#: PM ruling 2b — a player carries a formal IR/PUP/NFI/SUS tag but NO formal discount was applied
+#: to him. NOT a rejection of an override (under ruling 2b the override STANDS in that case); it is
+#: a DISCLOSURE, and the live detector for the NF-INJ3c population — a rookie on IR receives nothing
+#: from the formal path, because that path runs only inside `project_veterans`.
+REASON_TAG_NO_DISCOUNT = "FORMAL_TAG_NO_DISCOUNT"
 
 
 def normalize_player_id(value) -> str:
@@ -217,10 +241,13 @@ def _validate(raw: dict) -> OverrideRow:
     if isinstance(games, bool) or not isinstance(games, int):
         # `bool` is an `int` in Python and `True` would silently become 1 game.
         raise ValueError(f"expected_games_missed must be an integer (got {games!r})")
-    if not (1 <= games <= SEASON_GAMES):
+    if not (MIN_REPORTED_GAMES <= games <= SEASON_GAMES):
         raise ValueError(
-            f"expected_games_missed must be between 1 and {SEASON_GAMES} (got {games}); "
-            "0 is a no-op row — delete it instead of encoding one that does nothing")
+            f"expected_games_missed must be between {MIN_REPORTED_GAMES} and {SEASON_GAMES} "
+            f"(got {games}). PM ruling 3 (2026-08-23) sets the floor at {MIN_REPORTED_GAMES}: "
+            "under the remaining-season rate rule a 1-game report moves a starter by under one "
+            "game — inside the served band's width — and a manual judgment row must move the board "
+            "by more than its own noise to be worth its maintenance and its chip")
 
     entered_at = _parse_date(raw["entered_at"], "entered_at")
     review_by = _parse_date(raw["review_by"], "review_by")

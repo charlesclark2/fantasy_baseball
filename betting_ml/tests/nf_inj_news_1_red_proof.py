@@ -49,40 +49,96 @@ FILES = (LOADER, SEASON, RUNNER, EXPORTER, YAML, FIELDS, COPY, SHARED, RANKINGS,
 #: file, or the break landed without moving the assertion and GREEN would mean "the mutation
 #: missed" rather than "the guard is vacuous". `None` where the clause asserts on an ABSENCE.
 CASES = [
-    # ══ RULE 1 — DISJOINTNESS ════════════════════════════════════════════════════════════════════
-    ("disjointness deleted: apply the override to a formally-tagged player too", SEASON,
+    # ══ PM RULING 2b — DISJOINTNESS ON THE APPLIED DISCOUNT ═════════════════════════════════════
+    ("disjointness deleted: double-discount a player the formal path already cut", SEASON,
      "        if formal[i]:",
      "        if False:",
      "if formal[i]:",
-     "test_a_formally_tagged_player_is_never_touched_by_an_override[RES]"),
+     "test_a_player_who_RECEIVED_a_formal_discount_is_never_touched_by_an_override[RES]"),
 
-    ("disjointness reads a hand-copied literal set instead of the formal map", SEASON,
-     'formal = df["proj_status"].astype("string").map(_INJURY_STATUS_GAMES_CAP).notna().to_numpy()',
-     'formal = df["proj_status"].isin(["RES", "PUP", "NFI", "SUS"]).to_numpy()',
-     # ⚠️ the `gone` token must be unique to THIS function: a bare
-     # `map(_INJURY_STATUS_GAMES_CAP)` also appears in `injury_availability_games`, so the
-     # mutation would read as "did not bite" while having landed perfectly.
-     'formal = df["proj_status"].astype("string").map(',
-     "test_the_disjointness_rule_reads_the_formal_map_itself_not_a_copy_of_its_keys"),
+    ("disjointness reverts to the TAG (a rookie on IR becomes un-overridable)", SEASON,
+     "        formal = df[FORMAL_APPLIED_COL].fillna(False).astype(bool).to_numpy()",
+     '        formal = df["proj_status"].astype("string").map(_INJURY_STATUS_GAMES_CAP).notna().to_numpy()',
+     "formal = df[FORMAL_APPLIED_COL]",
+     "test_a_formal_TAG_with_NO_applied_discount_leaves_the_override_STANDING[RES]"),
 
-    # ══ RULE 2 — CAP-ONLY / MONOTONE ═════════════════════════════════════════════════════════════
+    ("the tag-without-discount disclosure is dropped (the NF-INJ3c detector goes dark)", SEASON,
+     '        tagged = df["proj_status"].astype("string").map(_INJURY_STATUS_GAMES_CAP).notna().to_numpy()',
+     "        tagged = np.zeros(len(df), dtype=bool)",
+     'tagged = df["proj_status"].astype("string").map(',
+     "test_the_tag_disclosure_reads_the_formal_map_itself_not_a_copy_of_its_keys[RES]"),
+
+    ("project_veterans stops stamping which rows the formal path actually moved", SEASON,
+     "        df[FORMAL_APPLIED_COL] = new_games < old_games - 1e-9",
+     "        df[FORMAL_APPLIED_COL] = False",
+     "FORMAL_APPLIED_COL] = new_games < old_games",
+     # ⚠️ NOT one of the behavioural clauses: they build the frame directly and set the flag
+     # themselves, so they are structurally blind to how production computes it. This break's
+     # only honest home is the clause that inspects the stamping itself.
+     "test_project_veterans_stamps_the_formal_flag_from_the_MOVE_not_from_the_tag"),
+
+    # ══ PM RULING 1 — THE REMAINING-SEASON RATE ══════════════════════════════════════════════════
+    ("the rule reverts to the CEILING that was measured inert on 5 of 6 real rows", SEASON,
+     "        eg[i] = min(before, before * target) if np.isfinite(before) else np.nan",
+     "        eg[i] = min(before, float(season_games - row.expected_games_missed))",
+     "min(before, before * target)",
+     "test_the_rule_is_the_REMAINING_SEASON_RATE_not_a_ceiling_and_not_a_subtraction"),
+
+    ("the rule becomes plain SUBTRACTION, double-counting the report in full", SEASON,
+     "        target = float(season_games - row.expected_games_missed) / float(season_games)",
+     "        target = (before - row.expected_games_missed) / before if before else 1.0",
+     "target = float(season_games - row.expected_games_missed) / float(season_games)",
+     "test_the_effect_is_strictly_smaller_than_subtracting_the_reported_games"),
+
     ("the cap can RAISE availability (min -> max): the injury priority backwards", SEASON,
-     "        eg[i] = min(before, cap) if np.isfinite(before) else cap",
-     "        eg[i] = max(before, cap) if np.isfinite(before) else cap",
-     "eg[i] = min(before, cap)",
+     "        eg[i] = min(before, before * target) if np.isfinite(before) else np.nan",
+     "        eg[i] = max(before, before * target) if np.isfinite(before) else np.nan",
+     "eg[i] = min(before, before * target)",
      "test_an_override_can_never_raise_expected_games"),
 
-    ("the hard cap becomes a 0.7 blend, silently overruling the operator's number", SEASON,
-     "        cap = float(season_games - row.expected_games_missed)",
-     "        cap = float(0.3 * 13.6 + 0.7 * (season_games - row.expected_games_missed))",
-     "cap = float(season_games - row.expected_games_missed)",
-     "test_the_cap_is_a_hard_min_not_a_blend"),
+    ("the applied-row log drops the effect size", RUNNER,
+     '                     d.get("effect_games") if d.get("effect_games") is not None else float("nan"),',
+     '                     float("nan"),',
+     'd.get("effect_games") if d.get("effect_games") is not None',
+     "test_the_applied_row_log_carries_the_EFFECT_SIZE"),
 
-    ("an inert cap is reported as a working discount", SEASON,
-     '"inert": bool(np.isfinite(before) and eg[i] >= before - 1e-9),',
-     '"inert": False,',
-     '"inert": bool(',
-     "test_an_override_can_never_raise_expected_games"),
+    # ══ PM RULING 3 — THE QUALIFYING FLOOR ═══════════════════════════════════════════════════════
+    ("the n>=2 qualifying floor is removed", LOADER,
+     "MIN_REPORTED_GAMES = 2",
+     "MIN_REPORTED_GAMES = 1",
+     "MIN_REPORTED_GAMES = 2",
+     "test_a_one_game_report_is_refused_by_the_qualifying_floor"),
+
+    ("the floor is raised so a qualifying 2-game report is refused", LOADER,
+     "MIN_REPORTED_GAMES = 2",
+     "MIN_REPORTED_GAMES = 3",
+     "MIN_REPORTED_GAMES = 2",
+     "test_the_floor_is_exactly_two_and_two_is_accepted"),
+
+    ("the curated file stops naming the wording half of the qualifying policy", YAML,
+     '#        "week-to-week", NEVER camp-or-preseason-only language',
+     "#        camp-or-preseason-only language",
+     None,
+     "test_the_curated_file_carries_the_wording_half_of_the_policy"),
+
+    # ══ THE NF-INJ3c BOARD-WIDE DETECTOR ═════════════════════════════════════════════════════════
+    ("the detector keys on the TAG instead of the applied discount", RUNNER,
+     "    gap = proj[tagged & ~applied]",
+     "    gap = proj[tagged]",
+     "proj[tagged & ~applied]",
+     "test_the_detector_names_a_rookie_on_IR_who_received_no_formal_discount"),
+
+    ("the detector scores an unevaluable frame as a clean board", RUNNER,
+     '                    "detector — the frame carries no proj_status column.")\n        return -1',
+     '                    "detector — the frame carries no proj_status column.")\n        return 0',
+     "return -1",
+     "test_the_detector_reports_UNEVALUABLE_rather_than_healthy_when_it_cannot_run"),
+
+    ("the detector fires on a healthy board (the muted-monitor pattern)", RUNNER,
+     "    if gap.empty:",
+     "    if False:",
+     "if gap.empty:",
+     "test_the_detector_is_silent_when_every_tagged_row_was_discounted"),
 
     # ══ RULE 3 — NORMALISED JOIN, VERIFIED BY NAME ═══════════════════════════════════════════════
     ("the board end of the join stops normalising (the NF-C9 padded-id defect)", SEASON,

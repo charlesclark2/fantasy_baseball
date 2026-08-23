@@ -40,11 +40,27 @@
 #                         and Josh Jacobs and DK Metcalf were silently undisclosed on a live board).
 #   player_name           the name, carried so the join is verifiable by something other than the
 #                         key under test. It is NOT the join key.
-#   expected_games_missed integer 1-17. The number of games the reporting says he is expected to
-#                         miss. It becomes a CEILING of `17 - this`, applied as a hard MIN against
-#                         whatever the model already projects — it can only ever lower a player's
-#                         games, never raise them. 0 is rejected: a row that changes nothing should
-#                         be DELETED, not encoded.
+#   expected_games_missed integer 2-17. The number of games the reporting says he is expected to
+#                         miss. ⚖️ PM RULING 1 (2026-08-23) — it is applied as a REMAINING-SEASON
+#                         RATE, not as a ceiling and not as a subtraction:
+#
+#                             new_games = min(current, (17 - n) x current / 17)
+#
+#                         i.e. the model's projected games is a season-long availability RATE, the
+#                         report removes n games from the schedulable season, and the rate then
+#                         applies to the 17-n that remain. The EFFECT is `n x current / 17` —
+#                         strictly smaller than subtracting n outright, so a report is never
+#                         double-counted in full against durability the model has already priced.
+#                         Worked: a 5-game report on a 13.61-game player moves him to 9.61
+#                         (effect 4.00); a 2-game report on an 11.49-game player moves him to 10.14
+#                         (effect 1.35).
+#                         It can only ever LOWER a player's games, never raise them.
+#                         ⛔ The original spec used a CEILING (`min(current, 17 - n)`). It was
+#                         MEASURED INERT on 5 of 6 real candidates — the model already projects
+#                         starters at 11-16 games, so a ceiling of "17 minus a short absence" sits
+#                         ABOVE the current projection and does nothing. The PM replaced it after
+#                         seeing that measurement (ablation_results/nf_inj_news_1_board_delta.md).
+#                         Minimum 2 — see the qualifying policy below.
 #   source_url            REQUIRED, http(s). A cap with no citation is indistinguishable from a
 #                         guess, and "a human read a report" is the entire claim this file makes.
 #   note                  optional free text — what the report actually said.
@@ -57,9 +73,38 @@
 #                         field prevents is a stale judgment quietly suppressing a healthy player
 #                         for the rest of the season. Set it to when you next expect news.
 #
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# ⚖️ WHAT QUALIFIES A ROW — PM RULING 3 (2026-08-23). BOTH conditions must hold.
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+#
+#   (i)  THE SOURCE EXPLICITLY REPORTS MISSING REGULAR-SEASON TIME — a named number of games or
+#        weeks, or a dated return ("out until October"). ⛔ NEVER "day-to-day", NEVER
+#        "week-to-week", NEVER camp-or-preseason-only language ("expected to miss the preseason" is
+#        not a regular-season absence, and "the team is hopeful for Week 1" is not a report that he
+#        misses one).
+#
+#        ⭐ THIS ONE IS YOURS, NOT THE CODE'S. No scan can read a source and decide what it means:
+#        a keyword check over source prose would reject an honest citation that quotes a coach
+#        saying "week-to-week" while reporting a dated return. Judging it is what adding a row IS,
+#        and what the PR review of a row is for.
+#
+#   (ii) `expected_games_missed >= 2`. ENFORCED — the loader rejects a 1-game row and names this
+#        policy. Rationale: under the rate rule a 1-game report moves a 14-game starter by 0.82
+#        games, which is inside the width of the band the board already publishes around him. A
+#        manual judgment row must move the board by more than its own noise to be worth its
+#        maintenance and its chip.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+#
 # WHAT WILL BE IGNORED (all of it reported loudly in the build log, never silently dropped):
-#   • a player who has since acquired a formal IR/PUP/NFI/SUS tag — the FORMAL PATH WINS, and this
+#   • a player to whom a FORMAL availability discount WAS APPLIED — the formal path wins and this
 #     row is not applied. No double discount.
+#     ⚖️ PM RULING 2b (2026-08-23): the test is whether a formal discount was APPLIED, not whether
+#     a formal TAG exists. A player who carries an IR/PUP/NFI/SUS tag but received NO discount from
+#     it — today, every ROOKIE, because the formal path runs only on the veteran half — KEEPS his
+#     override, and the build log names him. Undiscounted AND un-overridable was the worst state
+#     the old rule could reach, and the 53-man cutdown puts a wave of exactly those rows on the
+#     board. (The underlying rookie-path gap is NF-INJ3c's, not this file's.)
 #   • an expired row (`review_by` in the past).
 #   • two rows for one player — the whole group is ignored rather than one silently chosen.
 #   • a malformed row (missing field, non-integer games, a `source_url` that is not a link).
@@ -80,7 +125,7 @@ season: 2026
 #
 #   - player_id: "00-0039918"
 #     player_name: "Jordyn Tyson"
-#     expected_games_missed: 8
+#     expected_games_missed: 5
 #     source_url: "https://example.com/report"
 #     note: "Beat report 2026-08-18: expected to miss roughly two months."
 #     entered_by: "operator"

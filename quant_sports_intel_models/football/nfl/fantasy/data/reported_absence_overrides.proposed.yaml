@@ -56,28 +56,50 @@
 #    flagged because a false premise in a doc is what the next reader builds on.
 #
 # ───────────────────────────────────────────────────────────────────────────────────────────────
+# ⚖️ RE-SCORED UNDER PM RULINGS 1 AND 3 (2026-08-23) — READ THIS BEFORE ADOPTING
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+#
+# The rule that will actually serve is the REMAINING-SEASON RATE (PM ruling 1):
+#     new_games = min(current, (17 - n) x current / 17)      effect = n x current / 17
+# NOT the ceiling this proposal was first drafted against. Effects below are computed on the real
+# 2026 board (794 rows, built 08-21), so you are adopting against the numbers that will serve.
+#
+#   player            pos  rookie   proj_games   n     new_games   effect   qualifies?
+#   Jordyn Tyson      WR   yes          13.61    5        9.608     4.003   YES
+#   Alvin Kamara      RB   no           11.49    2       10.139     1.352   YES
+#   Kyle Monangai     RB   no           11.89    1       11.193     0.700   no - n<2
+#   Jeremiyah Love    RB   yes          16.00    1       15.059     0.941   no - n<2
+#   Emeka Egbuka      WR   no           15.30    1       14.398     0.900   no - n<2
+#   Sam LaPorta       TE   no           13.83    1       13.016     0.814   no - n<2
+#
+# ⚠️ FOUR OF THE SIX ORIGINALLY-PROPOSED ROWS NO LONGER QUALIFY, on both halves of PM ruling 3:
+#   (ii) n < 2 — the loader now REJECTS them outright, naming the policy; and
+#   (i)  their sources do not report regular-season time in the first place. Monangai and Egbuka
+#        are "week-to-week"/"day-to-day", LaPorta's coach said "I don't know", and Love's report is
+#        preseason-only. Those are precisely the wordings clause (i) disqualifies, which is a good
+#        sign the policy is aimed at something real rather than at a number.
+#
+# ⇒ TWO ROWS QUALIFY: Jordyn Tyson (5) and Alvin Kamara (2). They are moved into `proposed` below;
+#   the four that no longer qualify are kept in `declined_under_ruling_3` with their reason, so a
+#   later curator can see they were considered rather than missed.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
 # THE SESSION'S RECOMMENDATION (a recommendation, not a decision)
 # ───────────────────────────────────────────────────────────────────────────────────────────────
-#   ADOPT      Tier A (3) — reporting explicitly names regular-season games missed.
-#   OPERATOR   Tier B (3) — Week 1 in genuine sourced doubt; a 1-game cap is defensible but the
-#              team messaging is "hopeful", so these are judgment calls, not readings.
-#   DECLINE    Tier C (6) — team messaging is actively optimistic ("very confident he'll be ready
-#              for game one"). Capping a player his own coach expects to play is the mechanism
-#              being used to express a hunch, which is the thing it must not become.
-#   ⛔ EXCLUDE Tier D — Puka Nacua and Josh Jacobs are under PENDING NFL DISCIPLINARY REVIEW with
-#              NO announced suspension. No source supports ANY number of games, so any integer
-#              here would be manufactured. If a suspension IS announced it becomes `SUS`, a formal
-#              status, and the formal path handles it — this mechanism must never be the place a
-#              guess about league discipline gets a number attached.
+#   ADOPT      the two qualifying rows. Both cite reporting that names regular-season time.
+#   ⛔ EXCLUDE the two disciplinary cases — CONFIRMED BY PM RULING 3, recorded below so the next
+#              curator does not re-litigate it.
 #
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+
 # ═══════════════════════════════════════════════════════════════════════════════════════════════
 
 schema_version: 1
 season: 2026
 
-# ── TIER A — reporting explicitly names regular-season games ────────────────────────────────────
-proposed_tier_a:
-  - player_id: null            # UNRESOLVED — no native gsis in the feed; resolve in the main checkout
+# ── QUALIFYING under PM ruling 3 — adopt these by moving them into `overrides:` in the LIVE file
+proposed:
+  - player_id: "TYS405541"     # RESOLVED by name against the real 2026 board (a rookie board id)
     player_name: "Jordyn Tyson"
     position: "WR"
     team: "NO"
@@ -86,6 +108,7 @@ proposed_tier_a:
     quote: "Receiver Jordyn Tyson will miss approximately two months due to a hamstring injury, NFL Network Insiders Mike Garafolo and Ian Rapoport reported on Monday."
     source_date: "2026-08-17"
     reading: "Injured 2026-08-13; ~two months to mid-October; secondary reporting puts the return around Week 6 ⇒ misses Weeks 1-5."
+    served_effect: "13.61 -> 9.608 games (effect 4.003) under PM ruling 1's rate rule"
     live_feed_status: "injury_status=Doubtful, proj_status=None (no formal designation)"
     note: "The canonical case. Reporting notes he COULD open on short-term IR — if that happens the formal path takes over and this row is ignored automatically."
     entered_by: "operator"
@@ -101,70 +124,30 @@ proposed_tier_a:
     quote: "expected to be sidelined for at least the next month due to a sprained MCL"
     source_date: "2026-08-18"
     reading: "'At least a month' from 2026-08-18 reaches ~2026-09-18; Week 1 is a stated miss and Week 2 is at risk ⇒ 2. Range 1-3."
+    served_effect: "11.49 -> 10.139 games (effect 1.352) under PM ruling 1's rate rule"
     live_feed_status: "injury_status=Questionable, proj_status=None"
     entered_by: "operator"
     entered_at: "2026-08-23"
     review_by: "2026-08-30"
 
-  - player_id: null            # UNRESOLVED
-    player_name: "Kyle Monangai"
-    position: "RB"
-    team: "CHI"
-    expected_games_missed: 1
-    source_url: "https://www.espn.com/nfl/story/_/id/49643703/bears-rb-kyle-monangai-knee-expected-miss-multiple-weeks-source-says"
-    quote: "will be week-to-week after sustaining a knee injury during practice on Sunday"
-    source_date: "2026-08-17"
-    reading: "Headline says 'expected to miss multiple weeks'; the coach says week-to-week and no surgery is needed ⇒ 1 is the conservative reading. Range 0-3 — genuinely wide."
-    live_feed_status: "injury_status=Questionable, proj_status=None"
-    entered_by: "operator"
-    entered_at: "2026-08-23"
-    review_by: "2026-08-30"
+# ── NO LONGER QUALIFYING under PM ruling 3 (kept so a later curator sees they were considered) ──
+# Each fails BOTH halves: n < 2 (the loader rejects it) AND a source that does not report
+# regular-season time. Re-propose one only if NEW reporting names games or a dated return.
+declined_under_ruling_3:
+  - {player_name: "Kyle Monangai", position: "RB", team: "CHI", player_id: "00-0040236", n_reported: 1,
+     source_url: "https://www.espn.com/nfl/story/_/id/49643703/bears-rb-kyle-monangai-knee-expected-miss-multiple-weeks-source-says",
+     why: "'week-to-week' — clause (i) disqualifies the wording, and n=1 is below the floor."}
+  - {player_name: "Jeremiyah Love", position: "RB", team: "ARI", player_id: "LOV121782", n_reported: 1,
+     source_url: "https://www.nfl.com/news/report-cardinals-rb-jeremiyah-love-unlikely-to-play-again-in-preseason-due-to-high-ankle-sprain",
+     why: "preseason-only report; the team is hopeful for Week 1. Not a regular-season absence."}
+  - {player_name: "Emeka Egbuka", position: "WR", team: "TB", player_id: "00-0040129", n_reported: 1,
+     source_url: "https://clutchpoints.com/nfl/tampa-bay-buccaneers/buccaneers-news-emeka-egbuka-cryptic-week-1-injury-update-todd-bowles",
+     why: "'day-to-day, week-to-week' — clause (i) disqualifies it explicitly."}
+  - {player_name: "Sam LaPorta", position: "TE", team: "DET", player_id: "00-0039065", n_reported: 1,
+     source_url: "https://fieldlevelmedia.com/news/lions-te-sam-laporta-nursing-hip-injury-week-1-status-uncertain/",
+     why: "the head coach said 'I don't know' about the regular season — an uncertainty, not a report."}
 
-# ── TIER B — Week 1 in genuine sourced doubt; an operator call, not a reading ────────────────────
-proposed_tier_b:
-  - player_id: null
-    player_name: "Jeremiyah Love"
-    position: "RB"
-    team: "ARI"
-    expected_games_missed: 1
-    source_url: "https://www.nfl.com/news/report-cardinals-rb-jeremiyah-love-unlikely-to-play-again-in-preseason-due-to-high-ankle-sprain"
-    quote: "unlikely to play again in preseason due to high ankle sprain"
-    source_date: "2026-08-16"
-    reading: "Follow-up reporting says Week 1 availability is 'up in the air' and a Grade 1 high ankle sprain often costs 3-4 weeks; the team is 'hopeful for Week 1'. A coin flip."
-    live_feed_status: "injury_status=Questionable, proj_status=None"
-    entered_by: "operator"
-    entered_at: "2026-08-23"
-    review_by: "2026-08-30"
-
-  - player_id: null
-    player_name: "Emeka Egbuka"
-    position: "WR"
-    team: "TB"
-    expected_games_missed: 1
-    source_url: "https://clutchpoints.com/nfl/tampa-bay-buccaneers/buccaneers-news-emeka-egbuka-cryptic-week-1-injury-update-todd-bowles"
-    quote: "day-to-day, week-to-week"
-    source_date: "2026-08-17"
-    reading: "Asked whether the toe sprain affects Week 1, the head coach said he could not say. The trend moved NEGATIVE from an optimistic 2026-08-14 report."
-    live_feed_status: "injury_status=Questionable, proj_status=None"
-    entered_by: "operator"
-    entered_at: "2026-08-23"
-    review_by: "2026-08-30"
-
-  - player_id: null
-    player_name: "Sam LaPorta"
-    position: "TE"
-    team: "DET"
-    expected_games_missed: 1
-    source_url: "https://fieldlevelmedia.com/news/lions-te-sam-laporta-nursing-hip-injury-week-1-status-uncertain/"
-    quote: "It flared up a little bit, it's a little aggravated... we feel good long term about him. We'll just rest him for a little bit here, let it calm down."
-    source_date: "2026-08-20"
-    reading: "Asked whether it extends into the regular season the head coach said 'I don't know'. The most recent item in this list."
-    live_feed_status: "injury_status=Questionable, proj_status=None"
-    entered_by: "operator"
-    entered_at: "2026-08-23"
-    review_by: "2026-08-30"
-
-# ── TIER C — the session recommends DECLINING these ─────────────────────────────────────────────
+# ── ALSO DECLINED — the team's own messaging is optimistic about Week 1 ─────────────────────────
 # Listed so the operator can see what was considered and overrule, not as a shortlist. In every one
 # the team's own messaging is optimistic about Week 1, so a cap here expresses a hunch rather than
 # a report — the failure mode this mechanism must not acquire.
@@ -188,12 +171,16 @@ declined_tier_c:
      source_url: "https://www.nfl.com/news/chiefs-qb-patrick-mahomes-rehabilitation-going-great-goal-remains-to-return-week-1-and-have-no-restrictions",
      why_declined: "Cleared for full participation, targeting Week 1 with no restrictions."}
 
-# ── TIER D — ⛔ EXCLUDED ON PRINCIPLE, not on evidence ───────────────────────────────────────────
+# ── ⛔ EXCLUDED — CONFIRMED BY PM RULING 3 (2026-08-23). DO NOT RE-LITIGATE. ────────────────────
+# Recorded verbatim: "EXCLUSIONS CONFIRMED, both: Nacua and Jacobs stay out. Pending discipline with
+# no announced suspension supports no integer — any number would be manufactured, which violates the
+# provenance requirement at its core; an announced suspension becomes SUS and the formal path prices
+# it."
 # Pending NFL disciplinary reviews with NO announced suspension. No source supports any number of
 # games, so an integer here would be manufactured — and this file's whole claim is that its numbers
 # come from somewhere. If a suspension is announced the status becomes `SUS`, which the FORMAL path
 # already prices; this mechanism must never be where a guess about league discipline gets a number.
-excluded_tier_d:
+excluded_confirmed_by_pm:
   - {player_name: "Puka Nacua", position: "WR", team: "LAR",
      source_url: "https://www.si.com/nfl/nfl-training-camp-puka-nacua-josh-jacobs-potential-suspensions",
      why_excluded: "Under league review; no discipline announced. No supportable games figure exists."}

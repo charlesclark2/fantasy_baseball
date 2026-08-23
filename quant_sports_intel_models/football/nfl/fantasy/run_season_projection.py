@@ -64,7 +64,8 @@ from quant_sports_intel_models.football.nfl.fantasy import win_total_source  # n
 from quant_sports_intel_models.football.nfl.fantasy import xfp_source  # noqa: E402
 
 log = logging.getLogger("nfl.fantasy.fastpath")
-REASON_UNMATCHED = "UNMATCHED_ON_BOARD"  # mirrors reported_absence_overrides.REASON_UNMATCHED
+REASON_UNMATCHED = "UNMATCHED_ON_BOARD"       # mirrors reported_absence_overrides
+REASON_TAG_NO_DISCOUNT = "FORMAL_TAG_NO_DISCOUNT"  # mirrors reported_absence_overrides
 
 # NF-INJ-NEWS-1 — the operator-curated reported-absence overrides (loader + provenance).
 from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
@@ -884,6 +885,56 @@ def fit_veteran_band_from_panel(panel: pd.DataFrame, projection_season: int):
     return model
 
 
+def _warn_formal_tag_without_discount(proj: pd.DataFrame) -> int:
+    """PM ruling 2b — name every row that carries a formal IR/PUP/NFI/SUS tag and received NO formal
+    availability discount. Returns the count.
+
+    ⭐ THIS IS THE LIVE DETECTOR FOR THE NF-INJ3c POPULATION, not a check on this story's overrides.
+    The formal discount lives entirely inside `project_veterans`; `project_rookies` calls it never.
+    So a ROOKIE placed on IR is projected as though healthy, by both paths, and until this line
+    existed nothing said so. The 53-man cutdown (2026-08-30) puts a wave of exactly those rows on
+    the board.
+
+    ⚠️ IT IS A WARNING, NOT A GATE. The rookie-path fix is NF-INJ3c's story, not this one's — this
+    line makes the population countable so that story can be sized and so an operator publishing
+    before it lands knows what is on the board.
+
+    ⚠️ AND IT NEEDS `proj_status` ON BOTH HALVES OF THE FRAME TO SEE ANYTHING. The rookie half does
+    not carry it natively (there is no forward-roster-status join in the rookie path), so
+    `build_projection` attaches it for DETECTION ONLY — see the join there. Without that attach this
+    detector would be structurally blind to precisely the population it exists for, which is the
+    vacuous-guard shape this repo keeps paying for.
+    """
+    if "proj_status" not in proj.columns:
+        # ⚠️ Never silent. An unevaluable check is not a passing one (NF1.7 (a)).
+        log.warning("[ALERT] NF-INJ-NEWS-1: cannot evaluate the formal-tag-without-discount "
+                    "detector — the frame carries no proj_status column.")
+        return -1
+    tagged = proj["proj_status"].astype("string").map(_SP._INJURY_STATUS_GAMES_CAP).notna()
+    # ⚠️ `== True` rather than `.fillna(False).astype(bool)`: the column is object-dtype after the
+    # concat (the rookie half never sets it), and `fillna` on an object column is a deprecated
+    # downcast. This form is NaN-safe and reads a missing flag as "no formal discount", which is the
+    # truthful conservative direction.
+    applied = (proj[_SP.FORMAL_APPLIED_COL] == True  # noqa: E712 — NaN-safe on an object column
+               if _SP.FORMAL_APPLIED_COL in proj.columns
+               else pd.Series(False, index=proj.index))
+    gap = proj[tagged & ~applied]
+    if gap.empty:
+        log.info("NF-INJ-NEWS-1: every formally-tagged row also received a formal discount.")
+        return 0
+    rookies = int(pd.to_numeric(gap.get("is_rookie"), errors="coerce").fillna(0).astype(bool).sum())
+    log.warning("[ALERT] NF-INJ-NEWS-1/NF-INJ3c: %d row(s) carry a formal IR/PUP/NFI/SUS tag and "
+                "received NO formal availability discount (%d rookie) — they are projected as "
+                "though healthy by BOTH paths. A reported-absence override still applies to them "
+                "(PM ruling 2b); the underlying gap is NF-INJ3c.", len(gap), rookies)
+    for _, r in gap.head(25).iterrows():
+        log.warning("    %s [%s] %s %s · status=%s · proj_games=%.2f",
+                    r.get("player_name"), r.get("player_id"), r.get("position"),
+                    "ROOKIE" if bool(r.get("is_rookie")) else "veteran",
+                    r.get("proj_status"), float(r.get("proj_games") or 0.0))
+    return len(gap)
+
+
 def _log_reported_absence_decisions(decisions: list) -> None:
     """NF-INJ-NEWS-1 — the second half of the build log: what each override DID at the frame.
 
@@ -926,9 +977,19 @@ def _log_reported_absence_decisions(decisions: list) -> None:
                         d.get("player_name"), d["player_id"], d.get("games_before", float("nan")),
                         d.get("games_cap", float("nan")))
         else:
-            log.info("  APPLY  %s [%s] %.1f -> %.1f games (%s)", d.get("player_name"),
-                     d["player_id"], d.get("games_before", float("nan")),
-                     d.get("games_after", float("nan")), d.get("detail", ""))
+            # PM ruling 1 — log the computed EFFECT for every applied row. The ceiling rule made
+            # "did this row move, and by how much?" a live question (it was often zero); the rate
+            # rule always moves, so the number is now the thing worth seeing rather than the fact.
+            log.info("  APPLY  %s [%s] %.2f -> %.2f games (effect -%.2f) %s",
+                     d.get("player_name"), d["player_id"],
+                     d.get("games_before", float("nan")), d.get("games_after", float("nan")),
+                     d.get("effect_games") if d.get("effect_games") is not None else float("nan"),
+                     d.get("detail", ""))
+            if d.get("tag_without_discount"):
+                # Ruling 2b: the override STANDS here — but the reader should know the row also
+                # carries a formal tag that bought it nothing.
+                log.warning("         ^ this player carries a formal tag that applied NO discount "
+                            "(%s) — the override stands per PM ruling 2b", REASON_TAG_NO_DISCOUNT)
     for d in decisions:
         if not d.get("applied"):
             log.warning("[ALERT] NF-INJ-NEWS-1: override NOT applied — %s [%s] · %s: %s",
@@ -1158,7 +1219,29 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     # report on the FULL override list, so a rookie override looks UNMATCHED to the veteran
     # half and vice versa. `_log_reported_absence_decisions` reconciles them.
     _log_reported_absence_decisions(_ra_log)
+
+    # ── PM ruling 2b: attach the forward roster status to the ROOKIE half, FOR DETECTION ONLY.
+    #    ⛔ THIS APPLIES NO DISCOUNT AND IS NOT THE NF-INJ3c FIX. `project_rookies` still runs no
+    #    formal availability cap — that is NF-INJ3c's story. What this buys is that
+    #    `_warn_formal_tag_without_discount` can SEE a rookie on IR at all: the rookie frame carries
+    #    no `proj_status` natively, so without this the detector would be structurally blind to
+    #    exactly the population it exists for, which is the vacuous-guard shape (NF1.7 (a)).
+    #    ⭐ NORMALISED ON BOTH ENDS (NF-C9). The sibling join a few lines above in
+    #    `build_veteran_projection` does NOT normalise — that is the known open defect NF-C9 carded
+    #    and NF-C9b fixes at the ingest; this one does not inherit it.
+    if not rks.empty:
+        _rk_status = load_forward_roster_status(con, projection_season)
+        if not _rk_status.empty:
+            _n = _rk_status.assign(
+                player_id=_rk_status["player_id"].map(_RAO.normalize_player_id))
+            rks = rks.assign(
+                player_id=rks["player_id"].map(_RAO.normalize_player_id)
+            ).merge(_n, on="player_id", how="left", suffixes=("", "_rk"))
+
     proj = pd.concat([vets, rks], ignore_index=True, sort=False)
+    # PM ruling 2b — the board-wide NF-INJ3c detector. Runs on EVERY build, not only when an
+    # override exists: the population it counts has nothing to do with this story's overrides.
+    _warn_formal_tag_without_discount(proj)
     proj["sport"] = "nfl"
     proj["base_season"] = int(base_season)
     proj["model_version"] = MODEL_VERSION
