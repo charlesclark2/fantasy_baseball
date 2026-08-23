@@ -980,6 +980,7 @@ def project_veterans(
     absence_prior_blend: float = _ABSENCE_PRIOR_BLEND,
     band_model: "VeteranBandModel | None" = None,
     level_recal: tuple | None = None,
+    injury_covariates: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Project every base-season player's UPCOMING-season raw stat line.
 
@@ -1107,7 +1108,30 @@ def project_veterans(
     #    games ratio. Applied LAST so it caps whatever the prior steps produced. No-op when the
     #    proj_status column is absent or injury_override_blend == 0.
     if injury_override_blend > 0 and "proj_status" in df.columns:
-        new_games = injury_availability_games(df, blend=injury_override_blend)
+        # ⭐ NF-INJ3b-M: THE COVARIATE FEED the certified hurdle needs. `onset_carryover`,
+        #    `weeks_since_last_game` and `log1p_prior_fp` are NOT produced anywhere in this build —
+        #    they are derived from the warehouse by the bake-off's own population builder — so a
+        #    flip is impossible without supplying them. Optional and None by default: with the
+        #    policy OFF nothing reads them. ⛔ Merged, never recomputed here (NF-C0e).
+        if injury_covariates is not None and len(injury_covariates):
+            cov = injury_covariates.drop_duplicates("player_id")
+            df = df.merge(cov[[c for c in cov.columns if c == "player_id"
+                               or c not in df.columns]], on="player_id", how="left")
+        # ⭐ NF-INJ3b / NF-INJ3b-M: routed through the POLICY. With
+        #    `injury_games_policy.SERVING_ENABLED = False` (today, DEPLOY-HELD) this is
+        #    `injury_availability_games` byte-for-byte — pinned by test — so the wiring is inert
+        #    until the operator flips it. The import is LAZY because `injury_games_serving` →
+        #    `nf_inj3_injury_games` → this module (a module-scope import would be circular).
+        from quant_sports_intel_models.football.nfl.fantasy import (
+            injury_games_serving as _IGS,
+        )
+        new_games, _injury_prov = _IGS.served_injury_games(
+            df, eg=df["proj_games"].to_numpy(), blend=injury_override_blend,
+            feed_supplied=(injury_covariates is not None))
+        if _injury_prov.get("path") == "incumbent_no_feed":
+            import logging
+            logging.getLogger("nfl.fantasy.season_projection").warning("injury-games policy is ON but this call site supplied no covariate feed "
+                        "— serving the INCUMBENT cap here (%s)", _injury_prov["reason"])
         old_games = df["proj_games"].to_numpy()
         iscale = np.where(old_games > 1e-6, new_games / np.clip(old_games, 1e-6, None), 1.0)
         for col in ("proj_pass_att", "proj_pass_cmp", "proj_pass_yds", "proj_pass_td", "proj_pass_int",

@@ -1,0 +1,3682 @@
+{
+  "story": "NF-INJ3b-M",
+  "read": "counterfactual served-POINT + placement (NF-INJ3b \u00a75(d))",
+  "generated_at": "2026-08-23T06:47:07.812689+00:00",
+  "season": 2026,
+  "policy": {
+    "model_version": "nfl_fantasy_nf_inj3b_injury_games_v1",
+    "arm": "hurdle_transfer",
+    "certified_statuses": [
+      "RES",
+      "PUP"
+    ],
+    "incumbent_statuses": [
+      "SUS",
+      "NFI"
+    ],
+    "serving_enabled_on_disk": false,
+    "forced_on_in_memory_for_the_counterfactual_only": true
+  },
+  "covariate_feed": {
+    "n_rows": 22,
+    "columns": [
+      "onset_carryover",
+      "weeks_since_last_game",
+      "prior_games",
+      "log1p_prior_fp",
+      "is_qb"
+    ],
+    "source": "run_nf_inj3_injury_games.build_population \u2014 the bake-off's OWN builder, not re-derived",
+    "provenance": {
+      "per_season": [
+        {
+          "season": 2026,
+          "board_rows": 794,
+          "flagged": 26,
+          "rookies_excluded": 0,
+          "returners_excluded": 4,
+          "scored": 22
+        }
+      ],
+      "excluded": {
+        "rookies": 0,
+        "returners": 4,
+        "why_rookies": "injury_availability_games runs inside project_veterans; project_rookies is a separate frame concatenated afterwards, so the cap STRUCTURALLY cannot act on a rookie (preregistration \u00a73 \u2014 out of scope, recorded for carding)",
+        "why_returners": "NF-D11's absence prior runs immediately after the injury cap, so a returner's served games compose two caps and this one's contribution is not separably recoverable (preregistration \u00a73)"
+      }
+    }
+  },
+  "noise_floor": {
+    "proj_games": {
+      "n_nonzero": 21,
+      "max_abs": 3.552713678800501e-15,
+      "p99_abs": 1.7763568394002505e-15
+    },
+    "proj_fp_ppr": {
+      "n_nonzero": 224,
+      "max_abs": 3.126388037344441e-13,
+      "p99_abs": 6.494360604847225e-14
+    },
+    "overall_rank_order_identical": true,
+    "what_it_is": "two builds of the SAME board with IDENTICAL code. A treatment delta is only readable ABOVE this; a rank move is meaningful only if the replicate rank order is identical."
+  },
+  "served_point_impact": {
+    "n_rows": 794,
+    "n_flagged": 22,
+    "n_unflagged": 772,
+    "flagged": {
+      "mean_d_proj_games": -2.6104,
+      "mean_d_pts_ppr": -1.2341,
+      "median_d_pts_ppr": -0.4876,
+      "n_pts_down": 19,
+      "n_pts_up": 3,
+      "n_rank_moved": 17,
+      "mean_d_rank": -10.45,
+      "worst_rank_drop": -82
+    },
+    "unflagged_collateral": {
+      "n_pts_changed": 348,
+      "max_abs_d_pts_ppr": 11.4592,
+      "n_rank_moved": 517,
+      "why_it_matters": "NF1.5 re-assigns each position's POINT MULTISET in learned-rank order, so moving the flagged players' games moves points onto UNFLAGGED players too. A proportional estimate cannot see this."
+    },
+    "rows": [
+      {
+        "player_name": "CHRIS COLLIER",
+        "position": "RB",
+        "proj_games_inc": 2.252851910753004,
+        "proj_games_cf": 0.4673070118875485,
+        "d_proj_games": -1.7855448988654554,
+        "proj_fp_ppr_inc": 15.718306940304004,
+        "proj_fp_ppr_cf": 4.259088843164339,
+        "d_proj_fp_ppr": -11.459218097139665,
+        "rank_inc": 605,
+        "rank_cf": 784,
+        "d_rank": -179,
+        "posrank_inc": 159,
+        "posrank_cf": 180,
+        "is_flagged": false
+      },
+      {
+        "player_name": "ISAAC GUERENDO",
+        "position": "RB",
+        "proj_games_inc": 5.19104,
+        "proj_games_cf": 2.04640472499577,
+        "d_proj_games": -3.14463527500423,
+        "proj_fp_ppr_inc": 37.58244035068457,
+        "proj_fp_ppr_cf": 28.590823452005115,
+        "d_proj_fp_ppr": -8.991616898679457,
+        "rank_inc": 348,
+        "rank_cf": 430,
+        "d_rank": -82,
+        "posrank_inc": 90,
+        "posrank_cf": 104,
+        "is_flagged": true
+      },
+      {
+        "player_name": "DANTE MILLER",
+        "position": "RB",
+        "proj_games_inc": 1.3250822926977484,
+        "proj_games_cf": 0.4673070118875485,
+        "d_proj_games": -0.8577752808101999,
+        "proj_fp_ppr_inc": 16.015766208939525,
+        "proj_fp_ppr_cf": 7.344323849986029,
+        "d_proj_fp_ppr": -8.671442358953495,
+        "rank_inc": 603,
+        "rank_cf": 753,
+        "d_rank": -150,
+        "posrank_inc": 157,
+        "posrank_cf": 177,
+        "is_flagged": false
+      },
+      {
+        "player_name": "TANNER MCLACHLAN",
+        "position": "TE",
+        "proj_games_inc": 2.1519336433411436,
+        "proj_games_cf": 0.4673070118875485,
+        "d_proj_games": -1.6846266314535951,
+        "proj_fp_ppr_inc": 9.104364925358304,
+        "proj_fp_ppr_cf": 2.3724689980236233,
+        "d_proj_fp_ppr": -6.731895927334681,
+        "rank_inc": 743,
+        "rank_cf": 788,
+        "d_rank": -45,
+        "posrank_inc": 150,
+        "posrank_cf": 170,
+        "is_flagged": false
+      },
+      {
+        "player_name": "MICHAEL MAYER",
+        "position": "TE",
+        "proj_games_inc": 12.090474999999998,
+        "proj_games_cf": 12.090474999999998,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 73.83267185951584,
+        "proj_fp_ppr_cf": 67.4360906067578,
+        "d_proj_fp_ppr": -6.39658125275804,
+        "rank_inc": 201,
+        "rank_cf": 212,
+        "d_rank": -11,
+        "posrank_inc": 37,
+        "posrank_cf": 37,
+        "is_flagged": false
+      },
+      {
+        "player_name": "COLE KMET",
+        "position": "TE",
+        "proj_games_inc": 13.14901794871795,
+        "proj_games_cf": 13.14901794871795,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 65.17969887076151,
+        "proj_fp_ppr_cf": 60.21531375747951,
+        "d_proj_fp_ppr": -4.964385113282006,
+        "rank_inc": 220,
+        "rank_cf": 229,
+        "d_rank": -9,
+        "posrank_inc": 39,
+        "posrank_cf": 40,
+        "is_flagged": false
+      },
+      {
+        "player_name": "PAT FREIERMUTH",
+        "position": "TE",
+        "proj_games_inc": 14.784732616487457,
+        "proj_games_cf": 14.784732616487457,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 86.49626726305975,
+        "proj_fp_ppr_cf": 81.7761297505616,
+        "d_proj_fp_ppr": -4.720137512498155,
+        "rank_inc": 170,
+        "rank_cf": 181,
+        "d_rank": -11,
+        "posrank_inc": 29,
+        "posrank_cf": 29,
+        "is_flagged": false
+      },
+      {
+        "player_name": "NIKOLA KALINIC",
+        "position": "TE",
+        "proj_games_inc": 4.24,
+        "proj_games_cf": 1.0600626709247605,
+        "d_proj_games": -3.1799373290752397,
+        "proj_fp_ppr_inc": 9.427891598701661,
+        "proj_fp_ppr_cf": 5.187211037011226,
+        "d_proj_fp_ppr": -4.240680561690436,
+        "rank_inc": 739,
+        "rank_cf": 775,
+        "d_rank": -36,
+        "posrank_inc": 147,
+        "posrank_cf": 166,
+        "is_flagged": true
+      },
+      {
+        "player_name": "ELIJAH MITCHELL",
+        "position": "RB",
+        "proj_games_inc": 3.8005806451612907,
+        "proj_games_cf": 3.8005806451612907,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 10.000525564877215,
+        "proj_fp_ppr_cf": 5.954871895562185,
+        "d_proj_fp_ppr": -4.04565366931503,
+        "rank_inc": 728,
+        "rank_cf": 766,
+        "d_rank": -38,
+        "posrank_inc": 178,
+        "posrank_cf": 178,
+        "is_flagged": false
+      },
+      {
+        "player_name": "ROMAN WILSON",
+        "position": "WR",
+        "proj_games_inc": 8.987882352941178,
+        "proj_games_cf": 8.987882352941178,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 44.41324244881656,
+        "proj_fp_ppr_cf": 40.532361982768485,
+        "d_proj_fp_ppr": -3.880880466048076,
+        "rank_inc": 303,
+        "rank_cf": 318,
+        "d_rank": -15,
+        "posrank_inc": 124,
+        "posrank_cf": 130,
+        "is_flagged": false
+      },
+      {
+        "player_name": "NOAH GRAY",
+        "position": "TE",
+        "proj_games_inc": 12.1578305997552,
+        "proj_games_cf": 12.1578305997552,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 55.020990404069835,
+        "proj_fp_ppr_cf": 51.204568861852465,
+        "d_proj_fp_ppr": -3.8164215422173697,
+        "rank_inc": 254,
+        "rank_cf": 264,
+        "d_rank": -10,
+        "posrank_inc": 45,
+        "posrank_cf": 45,
+        "is_flagged": false
+      },
+      {
+        "player_name": "TREY PALMER",
+        "position": "WR",
+        "proj_games_inc": 5.07151316939404,
+        "proj_games_cf": 5.07151316939404,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 44.94508900976716,
+        "proj_fp_ppr_cf": 41.14264697181659,
+        "d_proj_fp_ppr": -3.80244203795057,
+        "rank_inc": 299,
+        "rank_cf": 314,
+        "d_rank": -15,
+        "posrank_inc": 123,
+        "posrank_cf": 128,
+        "is_flagged": false
+      },
+      {
+        "player_name": "TOMMY TREMBLE",
+        "position": "TE",
+        "proj_games_inc": 13.818188372093022,
+        "proj_games_cf": 13.818188372093022,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 49.596181033584905,
+        "proj_fp_ppr_cf": 46.053431424071675,
+        "d_proj_fp_ppr": -3.54274960951323,
+        "rank_inc": 273,
+        "rank_cf": 290,
+        "d_rank": -17,
+        "posrank_inc": 47,
+        "posrank_cf": 48,
+        "is_flagged": false
+      },
+      {
+        "player_name": "ISAIAH DAVIS",
+        "position": "RB",
+        "proj_games_inc": 9.469363867684478,
+        "proj_games_cf": 9.469363867684478,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 54.81128000446283,
+        "proj_fp_ppr_cf": 51.601724305973164,
+        "d_proj_fp_ppr": -3.209555698489666,
+        "rank_inc": 256,
+        "rank_cf": 260,
+        "d_rank": -4,
+        "posrank_inc": 68,
+        "posrank_cf": 68,
+        "is_flagged": false
+      },
+      {
+        "player_name": "THEO JOHNSON",
+        "position": "TE",
+        "proj_games_inc": 13.562709909909909,
+        "proj_games_cf": 13.562709909909909,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 81.78981198753085,
+        "proj_fp_ppr_cf": 78.60385167498494,
+        "d_proj_fp_ppr": -3.185960312545916,
+        "rank_inc": 182,
+        "rank_cf": 186,
+        "d_rank": -4,
+        "posrank_inc": 30,
+        "posrank_cf": 30,
+        "is_flagged": false
+      },
+      {
+        "player_name": "ZACH ERTZ",
+        "position": "TE",
+        "proj_games_inc": 14.970653799392096,
+        "proj_games_cf": 14.970653799392096,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 46.04207702220509,
+        "proj_fp_ppr_cf": 43.028072774982604,
+        "d_proj_fp_ppr": -3.0140042472224877,
+        "rank_inc": 294,
+        "rank_cf": 307,
+        "d_rank": -13,
+        "posrank_inc": 49,
+        "posrank_cf": 50,
+        "is_flagged": false
+      },
+      {
+        "player_name": "JA'LYNN POLK",
+        "position": "WR",
+        "proj_games_inc": 5.024570711798641,
+        "proj_games_cf": 5.024570711798641,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 42.47114389024546,
+        "proj_fp_ppr_cf": 39.57199307661287,
+        "d_proj_fp_ppr": -2.8991508136325876,
+        "rank_inc": 316,
+        "rank_cf": 327,
+        "d_rank": -11,
+        "posrank_inc": 130,
+        "posrank_cf": 132,
+        "is_flagged": false
+      },
+      {
+        "player_name": "RAHEEM MOSTERT",
+        "position": "RB",
+        "proj_games_inc": 9.856533333333333,
+        "proj_games_cf": 9.856533333333333,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 58.676499239676055,
+        "proj_fp_ppr_cf": 55.78959380139136,
+        "d_proj_fp_ppr": -2.8869054382846926,
+        "rank_inc": 241,
+        "rank_cf": 249,
+        "d_rank": -8,
+        "posrank_inc": 66,
+        "posrank_cf": 66,
+        "is_flagged": false
+      },
+      {
+        "player_name": "COOPER KUPP",
+        "position": "WR",
+        "proj_games_inc": 12.848663212435232,
+        "proj_games_cf": 12.848663212435232,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 69.84384612914336,
+        "proj_fp_ppr_cf": 67.00513145630114,
+        "d_proj_fp_ppr": -2.8387146728422152,
+        "rank_inc": 211,
+        "rank_cf": 213,
+        "d_rank": -2,
+        "posrank_inc": 81,
+        "posrank_cf": 81,
+        "is_flagged": false
+      },
+      {
+        "player_name": "SAMAJE PERINE",
+        "position": "RB",
+        "proj_games_inc": 10.779627075351213,
+        "proj_games_cf": 10.779627075351213,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 51.59770235932264,
+        "proj_fp_ppr_cf": 48.78594572069298,
+        "d_proj_fp_ppr": -2.81175663862966,
+        "rank_inc": 263,
+        "rank_cf": 275,
+        "d_rank": -12,
+        "posrank_inc": 69,
+        "posrank_cf": 70,
+        "is_flagged": false
+      },
+      {
+        "player_name": "JAYDON BLUE",
+        "position": "RB",
+        "proj_games_inc": 7.4336,
+        "proj_games_cf": 7.4336,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 65.61282111528047,
+        "proj_fp_ppr_cf": 62.942793707602966,
+        "d_proj_fp_ppr": -2.6700274076775017,
+        "rank_inc": 219,
+        "rank_cf": 221,
+        "d_rank": -2,
+        "posrank_inc": 58,
+        "posrank_cf": 59,
+        "is_flagged": false
+      },
+      {
+        "player_name": "ERICK ALL JR.",
+        "position": "TE",
+        "proj_games_inc": 4.709318911229261,
+        "proj_games_cf": 4.709318911229261,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 43.026700842621764,
+        "proj_fp_ppr_cf": 40.38845147319325,
+        "d_proj_fp_ppr": -2.6382493694285145,
+        "rank_inc": 312,
+        "rank_cf": 319,
+        "d_rank": -7,
+        "posrank_inc": 51,
+        "posrank_cf": 52,
+        "is_flagged": false
+      },
+      {
+        "player_name": "FELEIPE FRANKS",
+        "position": "TE",
+        "proj_games_inc": 8.7396,
+        "proj_games_cf": 8.7396,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 6.157740539460351,
+        "proj_fp_ppr_cf": 3.5653862218404804,
+        "d_proj_fp_ppr": -2.5923543176198702,
+        "rank_inc": 775,
+        "rank_cf": 785,
+        "d_rank": -10,
+        "posrank_inc": 168,
+        "posrank_cf": 168,
+        "is_flagged": false
+      },
+      {
+        "player_name": "RICKY PEARSALL",
+        "position": "WR",
+        "proj_games_inc": 5.6498409638554214,
+        "proj_games_cf": 4.005138613647071,
+        "d_proj_games": -1.6447023502083509,
+        "proj_fp_ppr_inc": 45.01575788743472,
+        "proj_fp_ppr_cf": 42.45814508562956,
+        "d_proj_fp_ppr": -2.5576128018051563,
+        "rank_inc": 298,
+        "rank_cf": 311,
+        "d_rank": -13,
+        "posrank_inc": 122,
+        "posrank_cf": 127,
+        "is_flagged": true
+      },
+      {
+        "player_name": "TRAVIS HOMER",
+        "position": "RB",
+        "proj_games_inc": 6.4004145077720205,
+        "proj_games_cf": 6.4004145077720205,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 7.338130324982487,
+        "proj_fp_ppr_cf": 4.797188091792574,
+        "d_proj_fp_ppr": -2.540942233189913,
+        "rank_inc": 764,
+        "rank_cf": 778,
+        "d_rank": -14,
+        "posrank_inc": 180,
+        "posrank_cf": 179,
+        "is_flagged": false
+      },
+      {
+        "player_name": "PATRICK TAYLOR JR.",
+        "position": "RB",
+        "proj_games_inc": 4.287701282711375,
+        "proj_games_cf": 4.287701282711375,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 29.911556393355703,
+        "proj_fp_ppr_cf": 27.388348622253748,
+        "d_proj_fp_ppr": -2.523207771101955,
+        "rank_inc": 416,
+        "rank_cf": 442,
+        "d_rank": -26,
+        "posrank_inc": 105,
+        "posrank_cf": 105,
+        "is_flagged": false
+      },
+      {
+        "player_name": "DONT'E THORNTON JR.",
+        "position": "WR",
+        "proj_games_inc": 9.438666666666666,
+        "proj_games_cf": 9.438666666666666,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 38.315876035718624,
+        "proj_fp_ppr_cf": 35.94374619323833,
+        "d_proj_fp_ppr": -2.372129842480291,
+        "rank_inc": 344,
+        "rank_cf": 355,
+        "d_rank": -11,
+        "posrank_inc": 138,
+        "posrank_cf": 140,
+        "is_flagged": false
+      },
+      {
+        "player_name": "JAKE TONGES",
+        "position": "TE",
+        "proj_games_inc": 11.736769230769232,
+        "proj_games_cf": 11.736769230769232,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 67.435938644027,
+        "proj_fp_ppr_cf": 65.17519918403376,
+        "d_proj_fp_ppr": -2.260739459993246,
+        "rank_inc": 215,
+        "rank_cf": 217,
+        "d_rank": -2,
+        "posrank_inc": 38,
+        "posrank_cf": 38,
+        "is_flagged": false
+      },
+      {
+        "player_name": "TUTU ATWELL",
+        "position": "WR",
+        "proj_games_inc": 7.856,
+        "proj_games_cf": 7.856,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 37.9515036735176,
+        "proj_fp_ppr_cf": 35.7073131781737,
+        "d_proj_fp_ppr": -2.2441904953439007,
+        "rank_inc": 345,
+        "rank_cf": 360,
+        "d_rank": -15,
+        "posrank_inc": 139,
+        "posrank_cf": 141,
+        "is_flagged": false
+      },
+      {
+        "player_name": "KALIF RAYMOND",
+        "position": "WR",
+        "proj_games_inc": 9.628542372881356,
+        "proj_games_cf": 9.628542372881356,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 38.68203717235339,
+        "proj_fp_ppr_cf": 36.489946892786556,
+        "d_proj_fp_ppr": -2.192090279566834,
+        "rank_inc": 340,
+        "rank_cf": 351,
+        "d_rank": -11,
+        "posrank_inc": 137,
+        "posrank_cf": 139,
+        "is_flagged": false
+      },
+      {
+        "player_name": "KIMANI VIDAL",
+        "position": "RB",
+        "proj_games_inc": 11.40816,
+        "proj_games_cf": 11.40816,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 68.01494013021893,
+        "proj_fp_ppr_cf": 65.93423713648542,
+        "d_proj_fp_ppr": -2.08070299373351,
+        "rank_inc": 213,
+        "rank_cf": 215,
+        "d_rank": -2,
+        "posrank_inc": 56,
+        "posrank_cf": 56,
+        "is_flagged": false
+      },
+      {
+        "player_name": "JUSTICE HILL",
+        "position": "RB",
+        "proj_games_inc": 9.719419558359622,
+        "proj_games_cf": 9.719419558359622,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 62.412952191142445,
+        "proj_fp_ppr_cf": 60.43632872584773,
+        "d_proj_fp_ppr": -1.9766234652947148,
+        "rank_inc": 226,
+        "rank_cf": 228,
+        "d_rank": -2,
+        "posrank_inc": 61,
+        "posrank_cf": 61,
+        "is_flagged": false
+      },
+      {
+        "player_name": "NICK KALLERUP",
+        "position": "TE",
+        "proj_games_inc": 7.0666,
+        "proj_games_cf": 7.0666,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 6.500055698338816,
+        "proj_fp_ppr_cf": 4.53905199525508,
+        "d_proj_fp_ppr": -1.961003703083736,
+        "rank_inc": 774,
+        "rank_cf": 781,
+        "d_rank": -7,
+        "posrank_inc": 167,
+        "posrank_cf": 167,
+        "is_flagged": false
+      },
+      {
+        "player_name": "BAM KNIGHT",
+        "position": "RB",
+        "proj_games_inc": 8.117962264150943,
+        "proj_games_cf": 8.117962264150943,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 32.26258436968646,
+        "proj_fp_ppr_cf": 30.30897244461833,
+        "d_proj_fp_ppr": -1.9536119250681274,
+        "rank_inc": 396,
+        "rank_cf": 411,
+        "d_rank": -15,
+        "posrank_inc": 102,
+        "posrank_cf": 102,
+        "is_flagged": false
+      },
+      {
+        "player_name": "KYLE WILLIAMS",
+        "position": "WR",
+        "proj_games_inc": 9.201333333333332,
+        "proj_games_cf": 9.201333333333332,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 54.147229753986096,
+        "proj_fp_ppr_cf": 52.20344338103376,
+        "d_proj_fp_ppr": -1.9437863729523386,
+        "rank_inc": 258,
+        "rank_cf": 258,
+        "d_rank": 0,
+        "posrank_inc": 102,
+        "posrank_cf": 103,
+        "is_flagged": false
+      },
+      {
+        "player_name": "JAYDEN HIGGINS",
+        "position": "WR",
+        "proj_games_inc": 6.65882105263158,
+        "proj_games_cf": 4.094198819256489,
+        "d_proj_games": -2.5646222333750908,
+        "proj_fp_ppr_inc": 101.05267721110634,
+        "proj_fp_ppr_cf": 99.1372060844314,
+        "d_proj_fp_ppr": -1.9154711266749445,
+        "rank_inc": 154,
+        "rank_cf": 155,
+        "d_rank": -1,
+        "posrank_inc": 56,
+        "posrank_cf": 56,
+        "is_flagged": true
+      },
+      {
+        "player_name": "NAJEE HARRIS",
+        "position": "RB",
+        "proj_games_inc": 6.8163155818540435,
+        "proj_games_cf": 6.8163155818540435,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 47.197369121841746,
+        "proj_fp_ppr_cf": 45.30513105677624,
+        "d_proj_fp_ppr": -1.8922380650655057,
+        "rank_inc": 289,
+        "rank_cf": 293,
+        "d_rank": -4,
+        "posrank_inc": 75,
+        "posrank_cf": 76,
+        "is_flagged": false
+      },
+      {
+        "player_name": "DARNELL WASHINGTON",
+        "position": "TE",
+        "proj_games_inc": 11.913819951923077,
+        "proj_games_cf": 11.913819951923077,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 60.22811172351443,
+        "proj_fp_ppr_cf": 58.336433550929485,
+        "d_proj_fp_ppr": -1.891678172584946,
+        "rank_inc": 232,
+        "rank_cf": 240,
+        "d_rank": -8,
+        "posrank_inc": 41,
+        "posrank_cf": 41,
+        "is_flagged": false
+      },
+      {
+        "player_name": "SAVION WILLIAMS",
+        "position": "WR",
+        "proj_games_inc": 6.644,
+        "proj_games_cf": 6.644,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 41.15487961416015,
+        "proj_fp_ppr_cf": 39.29051483502916,
+        "d_proj_fp_ppr": -1.8643647791309945,
+        "rank_inc": 319,
+        "rank_cf": 333,
+        "d_rank": -14,
+        "posrank_inc": 131,
+        "posrank_cf": 133,
+        "is_flagged": false
+      },
+      {
+        "player_name": "KAVONTAE TURPIN",
+        "position": "WR",
+        "proj_games_inc": 8.474722860791827,
+        "proj_games_cf": 8.474722860791827,
+        "d_proj_games": 0.0,
+        "proj_fp_ppr_inc": 40.52728017538937,
+        "proj_fp_ppr_cf": 38.678929324976096,
+        "d_proj_fp_ppr": -1.8483508504132757,
+        "rank_inc": 322,
+        "rank_cf": 337,
+        "d_rank": -15,
+        "posrank_inc": 133,
+        "posrank_cf": 134,
+        "is_flagged": false
+      }
+    ]
+  },
+  "per_config_placement": {
+    "standard_10": {
+      "n": 794,
+      "n_rank_moved": 510,
+      "max_abs_move": 62,
+      "mean_abs_move": 2.312,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 10,
+        "verdict": {
+          "best_rookie_overall_rank": 10.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 10,
+        "verdict": {
+          "best_rookie_overall_rank": 10.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 11,
+            "WR": 1,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 11,
+            "WR": 1,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 3,
+            "RB": 17,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 3,
+            "RB": 17,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 5,
+            "RB": 20,
+            "WR": 8,
+            "TE": 3,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 5,
+            "RB": 20,
+            "WR": 8,
+            "TE": 3,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 10,
+            "RB": 28,
+            "WR": 15,
+            "TE": 7,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 10,
+            "RB": 28,
+            "WR": 15,
+            "TE": 7,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 14,
+            "RB": 34,
+            "WR": 33,
+            "TE": 19,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 14,
+            "RB": 34,
+            "WR": 33,
+            "TE": 19,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": false
+    },
+    "standard_12": {
+      "n": 794,
+      "n_rank_moved": 538,
+      "max_abs_move": 119,
+      "mean_abs_move": 2.846,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 10,
+        "verdict": {
+          "best_rookie_overall_rank": 10.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 10,
+        "verdict": {
+          "best_rookie_overall_rank": 10.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 12,
+            "WR": 0,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 12,
+            "WR": 0,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 2,
+            "RB": 18,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 2,
+            "RB": 18,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 3,
+            "RB": 24,
+            "WR": 7,
+            "TE": 2,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 3,
+            "RB": 24,
+            "WR": 7,
+            "TE": 2,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 9,
+            "RB": 32,
+            "WR": 13,
+            "TE": 6,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 9,
+            "RB": 32,
+            "WR": 13,
+            "TE": 6,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 14,
+            "RB": 39,
+            "WR": 32,
+            "TE": 15,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 14,
+            "RB": 39,
+            "WR": 32,
+            "TE": 15,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": false
+    },
+    "standard_3wr_10": {
+      "n": 794,
+      "n_rank_moved": 480,
+      "max_abs_move": 95,
+      "mean_abs_move": 2.204,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 12,
+        "verdict": {
+          "best_rookie_overall_rank": 12.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": true,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 12,
+        "verdict": {
+          "best_rookie_overall_rank": 12.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": true,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 10,
+            "WR": 2,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 10,
+            "WR": 2,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 2,
+            "RB": 15,
+            "WR": 6,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 2,
+            "RB": 15,
+            "WR": 6,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 3,
+            "RB": 20,
+            "WR": 12,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 3,
+            "RB": 20,
+            "WR": 12,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 8,
+            "RB": 24,
+            "WR": 23,
+            "TE": 5,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 8,
+            "RB": 24,
+            "WR": 23,
+            "TE": 5,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 14,
+            "RB": 32,
+            "WR": 39,
+            "TE": 15,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 14,
+            "RB": 32,
+            "WR": 39,
+            "TE": 15,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": false
+    },
+    "standard_3wr_12": {
+      "n": 794,
+      "n_rank_moved": 515,
+      "max_abs_move": 126,
+      "mean_abs_move": 2.773,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 10,
+        "verdict": {
+          "best_rookie_overall_rank": 10.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 10,
+        "verdict": {
+          "best_rookie_overall_rank": 10.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 11,
+            "WR": 1,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 11,
+            "WR": 1,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 1,
+            "RB": 18,
+            "WR": 4,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 1,
+            "RB": 18,
+            "WR": 4,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 3,
+            "RB": 22,
+            "WR": 10,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 3,
+            "RB": 22,
+            "WR": 10,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 5,
+            "RB": 30,
+            "WR": 21,
+            "TE": 4,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 5,
+            "RB": 30,
+            "WR": 21,
+            "TE": 4,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 13,
+            "RB": 37,
+            "WR": 37,
+            "TE": 13,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 13,
+            "RB": 37,
+            "WR": 37,
+            "TE": 13,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": false
+    },
+    "half_ppr_10": {
+      "n": 794,
+      "n_rank_moved": 490,
+      "max_abs_move": 123,
+      "mean_abs_move": 2.547,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 10,
+        "verdict": {
+          "best_rookie_overall_rank": 10.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 10,
+        "verdict": {
+          "best_rookie_overall_rank": 10.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 10,
+            "WR": 2,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 10,
+            "WR": 2,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 2,
+            "RB": 16,
+            "WR": 5,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 2,
+            "RB": 16,
+            "WR": 5,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 3,
+            "RB": 19,
+            "WR": 9,
+            "TE": 5,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 3,
+            "RB": 19,
+            "WR": 9,
+            "TE": 5,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 9,
+            "RB": 25,
+            "WR": 18,
+            "TE": 8,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 9,
+            "RB": 25,
+            "WR": 18,
+            "TE": 8,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 14,
+            "RB": 33,
+            "WR": 33,
+            "TE": 20,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 14,
+            "RB": 33,
+            "WR": 33,
+            "TE": 20,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": false
+    },
+    "half_ppr_12": {
+      "n": 794,
+      "n_rank_moved": 539,
+      "max_abs_move": 82,
+      "mean_abs_move": 2.997,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 9,
+        "verdict": {
+          "best_rookie_overall_rank": 9.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 9,
+        "verdict": {
+          "best_rookie_overall_rank": 9.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 11,
+            "WR": 1,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 11,
+            "WR": 1,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 1,
+            "RB": 17,
+            "WR": 5,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 1,
+            "RB": 17,
+            "WR": 5,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 3,
+            "RB": 21,
+            "WR": 9,
+            "TE": 3,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 3,
+            "RB": 21,
+            "WR": 9,
+            "TE": 3,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 7,
+            "RB": 29,
+            "WR": 18,
+            "TE": 6,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 7,
+            "RB": 29,
+            "WR": 18,
+            "TE": 6,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 14,
+            "RB": 35,
+            "WR": 34,
+            "TE": 17,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 14,
+            "RB": 35,
+            "WR": 34,
+            "TE": 17,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": false
+    },
+    "half_ppr_3wr_10": {
+      "n": 794,
+      "n_rank_moved": 532,
+      "max_abs_move": 105,
+      "mean_abs_move": 2.544,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 11,
+        "verdict": {
+          "best_rookie_overall_rank": 11.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 11,
+        "verdict": {
+          "best_rookie_overall_rank": 11.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 9,
+            "WR": 3,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 9,
+            "WR": 3,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 1,
+            "RB": 14,
+            "WR": 8,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 1,
+            "RB": 14,
+            "WR": 8,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 3,
+            "RB": 18,
+            "WR": 12,
+            "TE": 3,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 3,
+            "RB": 18,
+            "WR": 12,
+            "TE": 3,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 7,
+            "RB": 24,
+            "WR": 23,
+            "TE": 6,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 7,
+            "RB": 24,
+            "WR": 23,
+            "TE": 6,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 14,
+            "RB": 33,
+            "WR": 38,
+            "TE": 15,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 14,
+            "RB": 33,
+            "WR": 38,
+            "TE": 15,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": false
+    },
+    "half_ppr_3wr_12": {
+      "n": 794,
+      "n_rank_moved": 521,
+      "max_abs_move": 132,
+      "mean_abs_move": 3.229,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 10,
+        "verdict": {
+          "best_rookie_overall_rank": 10.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 10,
+        "verdict": {
+          "best_rookie_overall_rank": 10.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 10,
+            "WR": 2,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 10,
+            "WR": 2,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 16,
+            "WR": 7,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 16,
+            "WR": 7,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 2,
+            "RB": 20,
+            "WR": 12,
+            "TE": 2,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 2,
+            "RB": 20,
+            "WR": 12,
+            "TE": 2,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 5,
+            "RB": 28,
+            "WR": 22,
+            "TE": 5,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 5,
+            "RB": 28,
+            "WR": 22,
+            "TE": 5,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 13,
+            "RB": 35,
+            "WR": 39,
+            "TE": 13,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 13,
+            "RB": 35,
+            "WR": 39,
+            "TE": 13,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": false
+    },
+    "full_ppr_10": {
+      "n": 794,
+      "n_rank_moved": 515,
+      "max_abs_move": 113,
+      "mean_abs_move": 2.587,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 11,
+        "verdict": {
+          "best_rookie_overall_rank": 11.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 11,
+        "verdict": {
+          "best_rookie_overall_rank": 11.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 8,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 8,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 1,
+            "RB": 14,
+            "WR": 7,
+            "TE": 2,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 1,
+            "RB": 14,
+            "WR": 7,
+            "TE": 2,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 3,
+            "RB": 16,
+            "WR": 11,
+            "TE": 6,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 3,
+            "RB": 16,
+            "WR": 11,
+            "TE": 6,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 9,
+            "RB": 21,
+            "WR": 21,
+            "TE": 9,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 9,
+            "RB": 21,
+            "WR": 21,
+            "TE": 9,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 14,
+            "RB": 33,
+            "WR": 34,
+            "TE": 19,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 14,
+            "RB": 33,
+            "WR": 34,
+            "TE": 19,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": false
+    },
+    "full_ppr_12": {
+      "n": 794,
+      "n_rank_moved": 525,
+      "max_abs_move": 102,
+      "mean_abs_move": 2.584,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 11,
+        "verdict": {
+          "best_rookie_overall_rank": 11.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 11,
+        "verdict": {
+          "best_rookie_overall_rank": 11.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 8,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 8,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 14,
+            "WR": 8,
+            "TE": 2,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 14,
+            "WR": 8,
+            "TE": 2,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 3,
+            "RB": 16,
+            "WR": 13,
+            "TE": 4,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 3,
+            "RB": 16,
+            "WR": 13,
+            "TE": 4,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 8,
+            "RB": 21,
+            "WR": 23,
+            "TE": 8,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 8,
+            "RB": 21,
+            "WR": 23,
+            "TE": 8,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 14,
+            "RB": 33,
+            "WR": 37,
+            "TE": 16,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 14,
+            "RB": 33,
+            "WR": 37,
+            "TE": 16,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": false
+    },
+    "full_ppr_3wr_10": {
+      "n": 794,
+      "n_rank_moved": 530,
+      "max_abs_move": 91,
+      "mean_abs_move": 2.612,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 11,
+        "verdict": {
+          "best_rookie_overall_rank": 11.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 11,
+        "verdict": {
+          "best_rookie_overall_rank": 11.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 8,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 8,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 14,
+            "WR": 8,
+            "TE": 2,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 14,
+            "WR": 8,
+            "TE": 2,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 2,
+            "RB": 16,
+            "WR": 14,
+            "TE": 4,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 2,
+            "RB": 16,
+            "WR": 14,
+            "TE": 4,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 6,
+            "RB": 21,
+            "WR": 25,
+            "TE": 8,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 6,
+            "RB": 21,
+            "WR": 25,
+            "TE": 8,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 13,
+            "RB": 33,
+            "WR": 38,
+            "TE": 16,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 13,
+            "RB": 33,
+            "WR": 38,
+            "TE": 16,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": false
+    },
+    "full_ppr_3wr_12": {
+      "n": 794,
+      "n_rank_moved": 517,
+      "max_abs_move": 164,
+      "mean_abs_move": 3.096,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 10,
+        "verdict": {
+          "best_rookie_overall_rank": 10.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 10,
+        "verdict": {
+          "best_rookie_overall_rank": 10.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": false,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 9,
+            "WR": 3,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 9,
+            "WR": 3,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 0,
+            "RB": 15,
+            "WR": 8,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 0,
+            "RB": 15,
+            "WR": 8,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 1,
+            "RB": 18,
+            "WR": 14,
+            "TE": 3,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 1,
+            "RB": 18,
+            "WR": 14,
+            "TE": 3,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 3,
+            "RB": 26,
+            "WR": 25,
+            "TE": 6,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 3,
+            "RB": 26,
+            "WR": 25,
+            "TE": 6,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 13,
+            "RB": 34,
+            "WR": 40,
+            "TE": 13,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 13,
+            "RB": 34,
+            "WR": 40,
+            "TE": 13,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": false
+    },
+    "superflex_10": {
+      "n": 794,
+      "n_rank_moved": 513,
+      "max_abs_move": 120,
+      "mean_abs_move": 2.67,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 13,
+        "verdict": {
+          "best_rookie_overall_rank": 13.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": true,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 13,
+        "verdict": {
+          "best_rookie_overall_rank": 13.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": true,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 2,
+            "RB": 6,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 2,
+            "RB": 6,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 7,
+            "RB": 12,
+            "WR": 4,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 7,
+            "RB": 12,
+            "WR": 4,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 12,
+            "RB": 14,
+            "WR": 7,
+            "TE": 3,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 12,
+            "RB": 14,
+            "WR": 7,
+            "TE": 3,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 16,
+            "RB": 19,
+            "WR": 17,
+            "TE": 8,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 16,
+            "RB": 19,
+            "WR": 17,
+            "TE": 8,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 23,
+            "RB": 31,
+            "WR": 28,
+            "TE": 18,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 23,
+            "RB": 31,
+            "WR": 28,
+            "TE": 18,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": true
+    },
+    "superflex_12": {
+      "n": 794,
+      "n_rank_moved": 547,
+      "max_abs_move": 112,
+      "mean_abs_move": 2.819,
+      "top60_n_moved": 0,
+      "top60_max_abs_move": 0,
+      "within_position_order": {
+        "positions": {
+          "FB": {
+            "veterans": {
+              "n": 16,
+              "order_identical": true
+            },
+            "rookies": {
+              "n": 1,
+              "order_identical": true
+            },
+            "whole_position_order_identical": true
+          },
+          "QB": {
+            "veterans": {
+              "n": 96,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 10,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "RB": {
+            "veterans": {
+              "n": 168,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 12,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "TE": {
+            "veterans": {
+              "n": 148,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 22,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          },
+          "WR": {
+            "veterans": {
+              "n": 285,
+              "order_identical": false
+            },
+            "rookies": {
+              "n": 36,
+              "order_identical": true
+            },
+            "whole_position_order_identical": false
+          }
+        },
+        "pass": false,
+        "cross_leg_reordered_positions": [
+          "QB",
+          "RB",
+          "TE",
+          "WR"
+        ]
+      },
+      "rookie_placement_cap": {
+        "best_rookie_overall_rank": 14,
+        "verdict": {
+          "best_rookie_overall_rank": 14.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": true,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "rookie_placement_cap_incumbent": {
+        "best_rookie_overall_rank": 14,
+        "verdict": {
+          "best_rookie_overall_rank": 14.0,
+          "cap": 8.8,
+          "q": 0.1,
+          "breach": false,
+          "caps_over_q_band": {
+            "Q05": 7.9,
+            "Q10": 8.8,
+            "Q15": 9.7,
+            "Q20": 10.6,
+            "Q25": 11.5
+          },
+          "observed_minimum": 7.0,
+          "breaches_even_the_observed_minimum": false,
+          "verdict_is_threshold_invariant": true,
+          "reality_breach_rate_top10": 0.286
+        },
+        "pass": true
+      },
+      "top_n_composition": {
+        "12": {
+          "incumbent": {
+            "QB": 3,
+            "RB": 6,
+            "WR": 3,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 3,
+            "RB": 6,
+            "WR": 3,
+            "TE": 0,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "24": {
+          "incumbent": {
+            "QB": 9,
+            "RB": 11,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 9,
+            "RB": 11,
+            "WR": 3,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "36": {
+          "incumbent": {
+            "QB": 14,
+            "RB": 14,
+            "WR": 7,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 14,
+            "RB": 14,
+            "WR": 7,
+            "TE": 1,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "60": {
+          "incumbent": {
+            "QB": 18,
+            "RB": 19,
+            "WR": 18,
+            "TE": 5,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 18,
+            "RB": 19,
+            "WR": 18,
+            "TE": 5,
+            "K": 0,
+            "DST": 0
+          }
+        },
+        "100": {
+          "incumbent": {
+            "QB": 25,
+            "RB": 32,
+            "WR": 30,
+            "TE": 13,
+            "K": 0,
+            "DST": 0
+          },
+          "counterfactual": {
+            "QB": 25,
+            "RB": 32,
+            "WR": 30,
+            "TE": 13,
+            "K": 0,
+            "DST": 0
+          }
+        }
+      },
+      "is_superflex": true
+    }
+  },
+  "superflex": {
+    "configs": [
+      "superflex_10",
+      "superflex_12"
+    ],
+    "read_separately_because": "NF-TR2b \u2014 the VOR 'shield' (a per-group level shift cancels because a group's own replacement absorbs it) is ADDITIVE-ONLY and assumes the group is not cross-pooled. QB IS cross-pooled in superflex, so these configs must be read on their own rows, never inferred from the others.",
+    "max_abs_move": {
+      "superflex_10": 120,
+      "superflex_12": 112
+    },
+    "non_superflex_max_abs_move": {
+      "standard_10": 62,
+      "standard_12": 119,
+      "standard_3wr_10": 95,
+      "standard_3wr_12": 126,
+      "half_ppr_10": 123,
+      "half_ppr_12": 82,
+      "half_ppr_3wr_10": 105,
+      "half_ppr_3wr_12": 132,
+      "full_ppr_10": 113,
+      "full_ppr_12": 102,
+      "full_ppr_3wr_10": 91,
+      "full_ppr_3wr_12": 164
+    }
+  },
+  "deploy_held": true,
+  "published": false,
+  "best_alpha": 0
+}

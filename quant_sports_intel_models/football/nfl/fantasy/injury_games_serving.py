@@ -45,6 +45,21 @@ DESIGN_COLUMNS: tuple[str, ...] = (
 )
 CONTRACT_VERSION = 1
 
+#: ⚠️⚠️ THE PREREQUISITE A FLIP INHERITS, AND IT IS NOT SATISFIED BY THE BOARD BUILD TODAY.
+#: The certified arm is a GLM over these covariates. `prior_games` and `is_qb` exist on the board
+#: frame; **`onset_carryover`, `weeks_since_last_game` and `log1p_prior_fp` exist NOWHERE in the
+#: board build** — they are derived by `run_nf_inj3_injury_games.build_population` from the
+#: warehouse, and `season_projection` has never needed them. So serving this arm for real requires
+#: wiring that covariate feed into the build; until then `served_injury_games` RAISES rather than
+#: quietly falling back to the incumbent, because a silent fallback would serve the incumbent under
+#: the fitted arm's stamp (the NF-C0e "declaration outruns its production" class).
+REQUIRED_COVARIATES: tuple[str, ...] = IG.TIMING_FEATURES + IG.BASE_FEATURES
+
+
+def missing_covariates(df: pd.DataFrame) -> list[str]:
+    """Which design covariates the frame does NOT carry."""
+    return [c for c in REQUIRED_COVARIATES if c not in df.columns]
+
 
 def design_columns() -> tuple[str, ...]:
     """The column contract, DERIVED from the bake-off module so it cannot drift from `_design`."""
@@ -106,7 +121,9 @@ def predict_games(artifact: dict, df: pd.DataFrame) -> np.ndarray:
 
 
 def served_injury_games(df: pd.DataFrame, *, artifact: dict | None = None,
-                        eg: np.ndarray | None = None) -> tuple[np.ndarray, dict]:
+                        eg: np.ndarray | None = None,
+                        blend: float | None = None,
+                        feed_supplied: bool | None = None) -> tuple[np.ndarray, dict]:
     """The SERVED expected games for a board frame, honouring the PM boundary and the flip.
 
     `df` needs `proj_status` and the design covariates; `eg` is the model's PRE-cap expected games
@@ -118,7 +135,8 @@ def served_injury_games(df: pd.DataFrame, *, artifact: dict | None = None,
     eg = (np.asarray(df["proj_games"], dtype=float) if eg is None
           else np.asarray(eg, dtype=float))
     status = df["proj_status"].astype(str)
-    incumbent = IG.incumbent_games(status, eg)
+    incumbent = (IG.incumbent_games(status, eg) if blend is None
+                 else IG.incumbent_games(status, eg, blend=blend))
 
     if not POLICY.serving_enabled():
         return incumbent, {"path": "incumbent", "reason": "injury_games_policy.SERVING_ENABLED is "
@@ -126,6 +144,37 @@ def served_injury_games(df: pd.DataFrame, *, artifact: dict | None = None,
                            "n_fitted": 0, "n_incumbent": int(len(df)),
                            "model_version": POLICY.INCUMBENT_MODEL_VERSION}
 
+    # ⭐⭐ A CALL SITE THAT SUPPLIED NO COVARIATE FEED IS NOT THE SERVED BOARD, and this is a
+    #    MEASURED consequence of the flip, not a hypothetical: `project_veterans` is called by
+    #    NF1.5's INTERNAL research-frame assembly (run_nf1_2.assemble_features) as well as by the
+    #    served build, and those calls have no feed. Forcing the policy on process-wide therefore
+    #    made every one of them demand covariates and the whole build died — discovered by running
+    #    it, not by reading it.
+    #    ⛔ This is NOT the silent fallback the block below refuses. The distinction is EXPLICIT:
+    #       `feed_supplied=False`  → the caller declared it is not serving  → incumbent, RECORDED
+    #       `feed_supplied` unset  → the caller intends the fitted arm      → covariates REQUIRED
+    #    ⚠️ The residual risk it creates is real and belongs in a PUBLISH-TIME guard, not here: a
+    #    served build that forgot its feed would quietly ship the incumbent. Guard the ARTIFACT at
+    #    publish (does the board carry the fitted stamp?), the NF-K1 lesson.
+    if feed_supplied is False:
+        return incumbent, {
+            "path": "incumbent_no_feed",
+            "reason": "the policy is ON but this call site supplied no covariate feed, so it is "
+                      "not the served board assembly (e.g. NF1.5's internal research frame). "
+                      "RECORDED, never silent.",
+            "n_fitted": 0, "n_incumbent": int(len(df)),
+            "model_version": POLICY.INCUMBENT_MODEL_VERSION}
+
+    missing = missing_covariates(df)
+    if missing:
+        # ⛔ LOUD, never a silent fallback: serving the incumbent under the fitted arm's stamp is
+        #    strictly worse than failing the build (NF1.7 (a) / NF-C0e).
+        raise ValueError(
+            f"injury_games_serving: the certified hurdle needs {list(REQUIRED_COVARIATES)} and this "
+            f"frame is missing {missing}. `onset_carryover`, `weeks_since_last_game` and "
+            f"`log1p_prior_fp` are NOT produced by the board build — a real flip must wire that "
+            f"covariate feed in first. ⛔ Refusing to fall back to the incumbent while stamping "
+            f"{POLICY.MODEL_VERSION!r}.")
     a = artifact if artifact is not None else load_artifact()
     certified = status.isin(POLICY.CERTIFIED_STATUSES).to_numpy()
     out = incumbent.copy()
