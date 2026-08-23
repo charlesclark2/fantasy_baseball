@@ -241,6 +241,29 @@ test.describe("the withheld stat line — what it says", () => {
         "does not use the word reads as a missing number, which is the inversion itself",
     ).toContain("withh")
 
+    // ⭐⭐ THE LABEL MUST NAME THE ACTUAL CONDITION (PM ruling, 2026-08-23 — see the constant's
+    // note). The shipped default read "availability-adjusted", which is not vague but INVERTED: it
+    // says we adjusted this line for availability, when the line is withheld precisely because it
+    // was NOT rescaled with the games.
+    //
+    // ⚠️ THIS IS THE ONLY CLAUSE THAT CAN TELL THE TWO LABELS APART, and that is why it exists.
+    // Every pre-existing pin — the trigger's accessible name, the "withh" check above, the Python
+    // copy clause — is satisfied WORD-FOR-WORD by the retired string, so the reword would have
+    // landed with a fully green suite and nothing measuring it. RED-proven against the old label.
+    expect(
+      text,
+      "the disclosure no longer names the condition — the reader is told a stat is withheld and " +
+        "not that our line and our projected games disagree, which is the whole reason",
+    ).toContain("inconsistent with projected games")
+
+    // ⛔ …and the retired wording must not come back. It is the one phrasing that makes a positive
+    // claim about a stat we are refusing to show.
+    expect(
+      text,
+      "the disclosure claims the line was availability-adjusted — the opposite of the truth, and " +
+        "the exact reading the PM ruled out",
+    ).not.toContain("availability-adjusted")
+
     // ⛔⛔ THE SENTENCE THE STORY IS FOR. The treatment fires on rows whose projected-games figure
     // is low, so the em-dash renders right beside "1.9 proj. games" — and copy reaching for ANY
     // availability verb would read as a medical or usage forecast we have not made and do not make
