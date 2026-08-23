@@ -1,0 +1,60 @@
+{
+  "model_version": "nfl_fantasy_nf_inj3b_injury_games_v1",
+  "contract_version": 1,
+  "source_model": "NF-INJ3b",
+  "arm": "hurdle_transfer",
+  "form": "hurdle",
+  "preregistration": "ablation_results/nf_inj3b_preregistration.md",
+  "decisive_record": "ablation_results/nf_inj3b_injury_games.md",
+  "certified_statuses": [
+    "RES",
+    "PUP"
+  ],
+  "incumbent_statuses": [
+    "SUS",
+    "NFI"
+  ],
+  "pm_boundary": "the certified population is RES/PUP; SUS and NFI rows RETAIN the incumbent constants \u2014 zero live rows, exploratory channels \u2014 until a live row exists and a registered read covers them",
+  "columns": [
+    "intercept",
+    "is_PUP",
+    "is_NFI",
+    "is_SUS",
+    "onset_carryover",
+    "weeks_since_last_game",
+    "prior_games",
+    "log1p_prior_fp",
+    "is_qb"
+  ],
+  "n_games": 17,
+  "b_play": [
+    -1.921940848778713,
+    0.1257932187523269,
+    0.0,
+    1.0516488353147355,
+    0.29571201750112497,
+    0.03370438074757014,
+    0.031131726127375962,
+    0.2596573181334362,
+    0.20309271801707562
+  ],
+  "b_cond": [
+    -0.379286571873861,
+    -0.2946976154878205,
+    0.0,
+    0.13491479953955934,
+    0.1393931717666111,
+    -0.004235296557781073,
+    0.010169202944461182,
+    0.024510571818984393,
+    -0.30884252094970543
+  ],
+  "cond_pooled": 7.0182926829268295,
+  "train_seasons": [
+    2016,
+    2025
+  ],
+  "n_train_rows": 418,
+  "fit_at": "2026-08-23T06:25:43.877871+00:00",
+  "notes": "Fitted by nf_inj3_injury_games.fit_hurdle \u2014 the bake-off's OWN function \u2014 on the frame run_nf_inj3_injury_games.apply_serving uses. \u26d4 Never re-fitted at serve time (MH2.1). A coefficient table, not a pickle."
+}
