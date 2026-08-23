@@ -47,6 +47,7 @@ from app.backend.services import (
     league_scoring,
     projection_fields,
     scoring_probe_guard,
+    stat_line_suppression,
 )
 # Aliased because `depth_targets` is also the name of the FIELD this module reads off a league
 # record and off a request payload; an unaliased import would shadow-read as the value in every
@@ -238,7 +239,22 @@ def nfl_projections_full(season: int = Query(default=_DEFAULT_SEASON, ge=2000, l
     data = _full_projections(season)
     if data is None:
         raise HTTPException(status_code=404, detail="Fantasy projections not found")
-    return entitlement.open_projections_payload(data)
+    # NF-INJ1-C — the impossible counting-stat lines are withheld HERE, at the response boundary,
+    # and nowhere else.
+    #
+    # ⭐ THE PLACEMENT IS THE SAFETY ARGUMENT. `_full_projections` returns a MEMOIZED blob that
+    # `/nfl/my-teams` scores a saved league from; suppressing inside the memo (or mutating it) would
+    # turn a display patch into a change to a served board's numbers, which is precisely what this
+    # story promises not to do. `suppress_projections_payload` is pure and rebuilds the rows it
+    # touches, so the memo — and therefore every scored board — is byte-identical to before.
+    #
+    # ⚠️ ADDITIVE FOR THE DEPLOYED CLIENT (NF-C0). A violating row loses keys the shipped frontend
+    # already renders as an em-dash, so a backend that deploys ahead of the frontend degrades to
+    # "—" with no disclosure rather than to a blank screen. That is still the E9.56c inversion for
+    # the length of the skew window, so the frontend half ships FIRST — see the story handoff.
+    return entitlement.open_projections_payload(
+        stat_line_suppression.suppress_projections_payload(data)
+    )
 
 
 @board_router.get("/nfl/board")

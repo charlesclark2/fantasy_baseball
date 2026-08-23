@@ -7,7 +7,7 @@ metadata:
   name: nf-inj1-c
   vertical: nfl_fantasy
   card: https://trello.com/c/NhCErPAF
-  status: ACCEPTED
+  status: DONE
 spec:
   description: >
     Suppress the impossible COUNTING-STAT line on violating rows of the paid
@@ -82,8 +82,113 @@ spec:
   graph:
     nodes: []   # MINI tier — no task graph; disciplines carried in the kickoff prompt
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED as specified — symptom-only, display-only, no projection value moved.
+      On `/fantasy/nfl/projections-full` a row that breaches NF-INJ1's RECORDED
+      per-game envelope loses its counting-stat line; points (`fpPpr`/`fpStd`/
+      `fpHalf`) and expected games (`g`) still render.
+
+      PREDICATE — the recorded one, cited and IMPORTED, never re-derived:
+      `projection_coherence.row_violations` (envelope
+      `REALIZED_MAX_PER_GAME`, derived in nf_inj1_diagnosis.md §2.2 "Blast
+      radius" as the MAX per-game rate over 11,190 player-seasons 2006-2025).
+      `deploy.sh` step 3d lifts that stdlib-only module into the Lambda zip
+      (the 3b/3c pattern) rather than mirroring the numbers into
+      `app/backend/`, so the guard that PAGES about a violating row and the
+      code that WITHHOLDS one cannot drift apart. The bundle guard was
+      re-anchored to MEASURE the copied tree instead of hard-coding
+      `fantasy_engine`, so the copy list stays the contract.
+
+      MEASURED on a real captured `/projections-full` payload (314 rows):
+      7 rows withheld, ALL QB, named — Case Keenum, Sam Howell, Easton Stick,
+      Aidan O'''Connell, Will Levis, Fernando Mendoza, Joe Burrow. 307 clean
+      rows returned by OBJECT IDENTITY (byte-identical by construction, not by
+      key ordering); the memoized blob `/nfl/my-teams` scores leagues from is
+      provably un-mutated.
+
+      ABSENT ≠ WITHHELD: the row carries `statLineWithheld` — the LIST OF
+      WITHHELD FIELD NAMES and nothing else. ⛔ No magnitude, deliberately:
+      `implied_per_game × g` reconstructs the withheld season total exactly, so
+      publishing the violation detail would leave the suppressed number one
+      multiplication away. The payload also carries `stat_line_withheld_players`
+      EVEN AT ZERO — "0 withheld" and "this build does not run the check" are
+      different facts (NF1.7 (a)); it is a payload-level diagnostic, not a
+      projection field, so the byte-identical criterion is untouched.
+
+      WITHHELD SET is derived from `projection_fields.STAT_FIELD` (NF-EPIC 1'''s
+      safety direction), so a new scorable stat is withheld automatically.
+      `PAID_SCORING_FIELDS` is excluded — the PM ruling keeps the points.
+
+      GUARDS: 22 clauses in `test_nf_inj1_c_stat_line_suppression.py` +
+      3 E2E clauses (chromium AND mobile: the disclosure is `InfoTip`/Popover,
+      so the tap clause is vacuous on desktop). RED-PROVEN: 20/20 in
+      `nf_inj1_c_red_proof.py`, 4/4 in the browser red proof (board 162→166).
+      The Python harness asserts each mutation is UNIQUELY anchored, LANDED on
+      disk, and MOVED the asserted token (#682/#815/E11.24) — and it earned its
+      keep: it found one genuinely VACUOUS clause (a paywall-drift screen that
+      matched only "membership"/"subscri" and let "Members see the full line"
+      through) and two of its own defects.
+
+      NF-INJ2'''s refusal is untouched and unre-read (E2.1-r); this implements the
+      Option-C consequence that refusal itself triggered.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      (1) 🔴 NEEDS A PM RULING — §8.1'''s "the affected rows are undraftable
+      backups" UNDERSTATES the exposure, and it is the premise C was deferred
+      on. Will Levis is in §2.2'''s list of nine AND is draftable by §1.2'''s own
+      ≥100 PPR bar. Worse, the real captured payload used as this story'''s
+      fixture withholds JOE BURROW — a top-5 QB at fpPpr 296.9 — on a MARGINAL
+      1.03× breach (47.0 att/g vs the 45.44 max). ⚠️ Scoped honestly: that
+      capture is a DIFFERENT board vintage from the 2026-08-21 publish, whose
+      ten rows §7.3 names and which does NOT include Burrow — so this is a
+      demonstration that the predicate CAN fire on a draftable starter, not a
+      claim about the live board (the §8.2 stale-vintage trap). The question
+      for the PM: a withheld stat line on a backup is invisible; on a top-5 QB
+      it is the loudest thing on the page. ⛔ The fix is NOT a tolerance band —
+      widening a MAX-derived envelope to accommodate a board that failed it is
+      the E2.1-r inversion the module'''s own header forbids. The live check is
+      one command (below); the decision is whether Option C should be scoped to
+      a breach magnitude, and if so that magnitude is a PM/pre-registered
+      quantity, not one this story may choose.
+
+      (2) 🔴 NEEDS A PM RULING (copy) — the PM'''s default short label,
+      "stat detail withheld — availability-adjusted", is shipped VERBATIM as
+      specified. Flagging one reading: "availability-adjusted" can be heard as
+      "we adjusted this stat for availability", when the truth is the opposite
+      — the stat line is withheld BECAUSE it was NOT re-scaled with the games
+      (that is the whole NF1.5 defect). The added detail sentence states the
+      true position plainly and the E2E pins it, so the composition is honest;
+      the four-word label alone is the ambiguous part. Changing it is a PM
+      decision, not a copy edit.
+
+      (3) DEPLOY ORDER IS LOAD-BEARING, FRONTEND FIRST. The backend removes
+      keys the deployed client already renders as an em-dash, so a
+      backend-first deploy degrades to "—" with NO disclosure for the length
+      of the skew window — which is exactly the E9.56c inversion (a withheld
+      value reading as "we have nothing for this player"). `frontend/` auto-
+      deploys on merge to `main`; the API Lambda needs an explicit
+      `./infrastructure/lambda/deploy.sh`. Merge to `main` FIRST, confirm the
+      Vercel build actually ran (the commit touches `frontend/`, so the
+      `ignoreCommand` path filter passes), THEN run `deploy.sh`. The reverse
+      order is not an outage, but it is a window in which the product tells a
+      reader something false.
+
+      (4) THE EXPORTER IS FULLY DENSE — measured: all 314 rows of the real
+      payload carry all 53 scorable fields. So NOTHING on a served row is
+      currently "never served", and absent-vs-withheld operates entirely at the
+      ROW level. That is precisely why the marker exists rather than a
+      null-check, and it means the field-level half of the discipline is guarded
+      against a synthetic sparse row rather than against the fixture (recorded
+      so a future reader does not mistake the fixture for the population).
+
+      (5) AN UNEVALUABLE ROW IS LEFT ALONE, NOT BLANKED — a deliberate
+      direction, recorded because it runs against NF1.7 (a). A row with no
+      usable `g` cannot be judged; failing closed there would let a bug in a
+      symptom patch for ten backup QBs blank the paid substrate for 868
+      players. The count under-reports rather than over-reports, which is the
+      safe direction for a number a reader might quote.
+
+      (6) NOT DONE, deliberately, and out of scope: nothing here touches the
+      give-back (NF-INJ2b), the coherence PUBLISH guard'''s ALERT tier (§8.1
+      Decision 1 stands), or the stat-line calibration-bar question. The
+      impossible ROWS still exist on the board and still page at publish; this
+      story only stops the paid surface from PRINTING them.

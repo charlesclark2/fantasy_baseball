@@ -49,6 +49,46 @@ def _deploy_copied_modules() -> set[str]:
     return {name for name in m.group(1).split() if name != "__init__"}
 
 
+def _run_copy_section(pkg: Path) -> None:
+    """Execute `deploy.sh`'s copy steps for real into `pkg`. Raises with the operator's own output.
+
+    Shared by the clauses below so each one measures the SAME tree a deploy produces, rather than
+    re-implementing shell quoting / `${_m}` expansion / `[ -f … ] &&` in a regex (this file's own
+    argument for executing the section instead of parsing it).
+    """
+    script = "set -euo pipefail\nPACKAGE_DIR=" + str(pkg) + "\n" + _copy_section()
+    run = subprocess.run(["bash", "-c", script], cwd=REPO, capture_output=True, text=True,
+                         timeout=120)
+    assert run.returncode == 0, (
+        "deploy.sh's copy steps FAILED — this is exactly what an operator sees on a real deploy:\n"
+        f"{run.stdout}\n{run.stderr}"
+    )
+
+
+def _deploy_copied_dotted_modules(pkg: Path) -> set[str]:
+    """Every `quant_sports_intel_models.*` module the deploy zip ACTUALLY carries, dotted.
+
+    ⭐ MEASURED, NOT PARSED, and generalised from one hard-coded package to the whole tree. The
+    previous reading of "is this import in the zip?" was `mod.startswith("…fantasy_engine.")` — i.e.
+    the ANSWER was hard-coded to the only package step 3c copied, so a second copy step (3d's
+    `projection_coherence`, NF-INJ1-C) would be reported as "outside fantasy_engine entirely" while
+    sitting in the zip. The PROPERTY this clause defends is unchanged — every engine module the
+    backend imports must be in the bundle — so what is generalised is how the bundle's contents are
+    read, not what is required of them (⛔ the E9.60 rule: re-anchor an existing property onto a new
+    implementation; never graft a new story's requirement into an old story's clause).
+    """
+    _run_copy_section(pkg)
+    root = pkg / "quant_sports_intel_models"
+    assert root.is_dir(), "the deploy copied no quant_sports_intel_models tree at all"
+    out = {
+        ".".join(path.relative_to(pkg).with_suffix("").parts)
+        for path in root.rglob("*.py")
+        if path.name != "__init__.py"
+    }
+    assert out, "the deploy tree carries no importable modules — the clauses below would pass on nothing"
+    return out
+
+
 def _backend_engine_imports() -> dict[str, set[str]]:
     """`{file: {module, …}}` — every `quant_sports_intel_models.*` module the backend imports.
 
@@ -130,41 +170,48 @@ def test_the_lazy_package_still_resolves_every_public_name():
     assert out["missing"] == [], f"__all__ names that no longer resolve: {out['missing']}"
 
 
-def test_every_engine_module_the_backend_imports_is_in_the_deploy_zip():
+def test_every_engine_module_the_backend_imports_is_in_the_deploy_zip(tmp_path):
     """⛔ THE COPY LIST IS THE CONTRACT.
 
     An import the zip does not carry is invisible everywhere except production, which is the same
     class as the gitignored artifacts NF-INFRA1/NF-K1 kept tripping over: the local checkout has
     the file, the deployed image does not, and the failure surfaces at the worst possible moment.
     """
-    copied = _deploy_copied_modules()
-    assert copied, "deploy.sh copies no engine modules — this clause would pass on nothing"
+    copied = _deploy_copied_dotted_modules(tmp_path / "package")
     imports = _backend_engine_imports()
     assert imports, (
         "no backend file imports quant_sports_intel_models — if that is now true on purpose, the "
         "deploy.sh copy step should go too; if not, this guard has stopped measuring anything"
     )
+    #: Packages, not modules — importing one only needs the DIRECTORY (a PEP 420 namespace) or its
+    #: own `__init__.py`, both of which the copy steps create. Derived from what was copied rather
+    #: than listed, so a new copied package needs no edit here.
+    packages = {mod.rsplit(".", 1)[0] for mod in copied} | {"quant_sports_intel_models"}
     problems = []
     for where, mods in imports.items():
         for mod in mods:
-            leaf = mod.rsplit(".", 1)[-1]
-            if mod == "quant_sports_intel_models.fantasy_engine":
-                continue                       # the package itself, which deploy.sh always copies
-            if not mod.startswith("quant_sports_intel_models.fantasy_engine."):
-                problems.append(f"{where} imports {mod} — outside fantasy_engine entirely")
-            elif leaf not in copied:
-                problems.append(f"{where} imports {mod}, which deploy.sh does NOT copy ({sorted(copied)})")
+            if mod in copied or mod in packages:
+                continue
+            problems.append(
+                f"{where} imports {mod}, which deploy.sh does NOT copy into the zip "
+                f"(it carries {sorted(copied)})"
+            )
     assert not problems, "\n  ".join(["the Lambda bundle would be missing an import:"] + problems)
 
 
-def test_the_copied_modules_are_stdlib_only():
+def test_the_copied_modules_are_stdlib_only(tmp_path):
     """A carried module that grows a pandas import breaks the bundle just as surely as a missing
-    one — and it would do it at the next `deploy.sh`, not at the next test run."""
-    engine = REPO / "quant_sports_intel_models" / "fantasy_engine"
-    for name in _deploy_copied_modules() | {"__init__"}:
-        src = (engine / f"{name}.py").read_text()
+    one — and it would do it at the next `deploy.sh`, not at the next test run.
+
+    ⚠️ MODULE SCOPE ONLY, deliberately. `projection_coherence.frame_rows` imports pandas INSIDE the
+    function (it is the build-frame reducer, which the Lambda never calls); a nested import costs
+    the bundle nothing, and forbidding it would refuse a module that imports correctly there.
+    """
+    pkg = tmp_path / "package"
+    for name in sorted(_deploy_copied_dotted_modules(pkg) | {"quant_sports_intel_models.fantasy_engine.__init__"}):
+        src = (pkg / Path(*name.split("."))).with_suffix(".py").read_text()
         tree = ast.parse(src)
-        for node in ast.walk(tree):
+        for node in tree.body:                 # module scope only — see the docstring
             names = []
             if isinstance(node, ast.Import):
                 names = [a.name.split(".")[0] for a in node.names]
@@ -172,7 +219,7 @@ def test_the_copied_modules_are_stdlib_only():
                 names = [node.module.split(".")[0]]
             for imported in names:
                 assert imported not in HEAVY, (
-                    f"fantasy_engine/{name}.py imports {imported!r}, which the API Lambda bundle "
+                    f"{name} imports {imported!r} at module scope, which the API Lambda bundle "
                     "does not carry"
                 )
 

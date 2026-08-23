@@ -113,6 +113,24 @@ export interface ProjectedPlayer {
    *  resolve. */
   headshot?: string | null
 
+  /** NF-INJ1-C — the counting-stat fields the SERVER withheld on this row, by name.
+   *
+   *  ⭐ ABSENT ON EVERY NORMAL ROW, and present ONLY on a row whose stat line is physically
+   *  impossible at its own expected games (NF-INJ1's recorded per-game envelope: the maximum rate
+   *  any real NFL player-season posted 2006-2025). ~10 rows of 868 on the live board, all QB.
+   *
+   *  ⚠️ IT EXISTS BECAUSE ABSENT ≠ WITHHELD. A withheld stat and a stat that was never served
+   *  arrive as the SAME missing key, and rendering both as a bare em-dash is the E9.56c inversion —
+   *  a value we are deliberately not showing, silently reading as "we have nothing for this
+   *  player". Branch on this list, never on the key being missing.
+   *
+   *  ⛔ IT CARRIES NO MAGNITUDES, deliberately: `impliedPerGame × g` would reconstruct the withheld
+   *  season total exactly. Field NAMES only, and nothing here may grow a number.
+   *
+   *  ⛔ NEVER an input to ordering, VOR, scoring or the optimizer — this is a DISPLAY marker on the
+   *  paid `/projections-full` payload. Points and `g` are untouched. */
+  statLineWithheld?: string[] | null
+
   /** E9.56 — set by the server when this caller is not entitled to the season's model output. The
    *  row keeps its public identity (name/pos/team/ADP) so a "subscribe to unlock" CTA has something
    *  to render; every projected value is ABSENT, not null-with-a-secret. Optional: an entitled
