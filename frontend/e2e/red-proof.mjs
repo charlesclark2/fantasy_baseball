@@ -2779,6 +2779,34 @@ const CASES = [
     to: "export function isLeagueQuotaRefusal(e: unknown): boolean {\n  return e instanceof Error\n}",
     grep: "reads as a LIMIT, not as a failure",
   },
+  {
+    id: "vintage-line-says-status-on-the-availability-flag",
+    shipped: "NF-C10 — the freshness line as it SHIPPED, claiming a player's STATUS",
+    // ⭐ THE STRING THAT WAS LIVE. "Injury and roster STATUS as of {date}" reads as "we know his
+    // standing and applied it" — directly beneath the NF-C9 disclosure saying our projected-games
+    // figure does NOT take his designation into account. Two sentences contradicting each other
+    // inside one tooltip, on both surfaces they share.
+    //
+    // ⚠️ WHY IT NEEDS **TWO** CASES ON ONE EDIT. NF-INJ1-C's lesson is that a pin on one surface is
+    // not a pin on another, and the retired wording rendered on FOUR (board, projections, player
+    // page, and the NF-C9 disclosure). This case proves `availability-flag.spec.ts` catches it; the
+    // next proves `weekly-designation.spec.ts` catches the same edit independently. A single case
+    // would leave "the other spec would have caught it" as an assumption.
+    detail: "Restores the retired 'Injury and roster status as of' freshness wording.",
+    file: "lib/fantasy-claim-copy.ts",
+    from: 'export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury/roster feed as of"',
+    to: 'export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury and roster status as of"',
+    grep: "the injury-feed vintage renders when the payload carries it",
+  },
+  {
+    id: "vintage-line-says-status-on-the-nf-c9-disclosure",
+    shipped: "NF-C10 — the same retired string, on the surface where it actually contradicted",
+    detail: "Restores the retired wording; asserts the NF-C9 disclosure's own pin catches it.",
+    file: "lib/fantasy-claim-copy.ts",
+    from: 'export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury/roster feed as of"',
+    to: 'export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury and roster status as of"',
+    grep: "the disclosure stamps the FEED",
+  },
 
 ]
 
@@ -2842,7 +2870,7 @@ const CASES = [
 // `-- auction-quotes`) for the same reason every entry above records: a production build per case
 // does not belong in a session. So 137/131/6 → 142/136/6, and the next full run CONFIRMS it.
 // ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 169, red: 163, notObservable: 6 }
+const RECORDED_BOARD = { total: 171, red: 165, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

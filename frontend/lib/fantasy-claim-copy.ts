@@ -214,12 +214,20 @@ export const AVAILABILITY_FLAG_DEFINITION =
 /** The freshness line inside the flag's definition (NF-FRESH2's rule, applied to the one input this
  *  flag actually rests on).
  *
+ *  ⭐⭐ NF-C10 — PROVENANCE ONLY. THE WORD DROPPED HERE IS "STATUS", AND DROPPING IT IS THE STORY.
+ *  This line renders directly beneath the NF-C9 disclosure whose whole point is that we hold a
+ *  player's weekly designation and DO NOT act on it. "Injury and roster STATUS as of {date}" reads
+ *  as a claim about the player's standing — i.e. that we know it AND have applied it — so the two
+ *  lines contradicted each other on every surface they share. "Injury/roster FEED as of {date}"
+ *  says only what is true and all that this line was ever for: when the input we read was captured.
+ *  A vintage stamp describes a FEED, never a player. (PM-ruled Option 1, 2026-08-23.)
+ *
  *  ⚠️ ABSENT ≠ NULL, and both directions matter here as much as they do on the provenance strip:
  *  a payload that never carried the stamp gets NO line at all (inventing "unknown" during a routine
  *  deploy window would put a scary word under every flag), while a stamp the exporter looked for and
  *  could not resolve renders as unknown rather than being silently dropped — an unevaluable check is
  *  never scored healthy (NF1.7 (a)). */
-export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury and roster status as of"
+export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury/roster feed as of"
 
 export const AVAILABILITY_DATA_AS_OF_UNKNOWN = "unknown"
 

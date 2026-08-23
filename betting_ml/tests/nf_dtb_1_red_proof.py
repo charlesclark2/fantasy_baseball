@@ -34,8 +34,11 @@ ENT = REPO / "frontend/lib/entitlements.ts"
 EDITOR = REPO / "frontend/components/fantasy/league-settings-editor.tsx"
 IMPORTER = REPO / "frontend/components/fantasy/league-import.tsx"
 COPY = REPO / "frontend/lib/fantasy-claim-copy.ts"
+FLAG_SPEC = REPO / "frontend/e2e/specs/availability-flag.spec.ts"
+DESIGNATION_SPEC = REPO / "frontend/e2e/specs/weekly-designation.spec.ts"
 ROUTER = REPO / "app/backend/routers/fantasy.py"
 SUITE = "betting_ml/tests/test_nf_dtb_1_quota_refusal.py"
+NF_C8_SUITE = "betting_ml/tests/test_nf_c8_availability_flag_copy.py"
 
 #: (label, file, old, new, token-that-must-be-GONE-after-the-patch, clause)
 CASES = [
@@ -122,6 +125,42 @@ CASES = [
      '        if False:',
      'if str(e) == "too_many_leagues":',
      "test_the_backend_answers_the_cap_with_409_not_the_generic_400"),
+
+    # ══ HALF B (NF-C10) — the reworded freshness line, proven against the RETIRED string ═════════
+    # ⭐ THE ONE THAT MATTERS. NF-INJ1-C's lesson is that a constant whose only guard reads the
+    # constant is unpinned and LOOKS pinned, so the only honest proof is to put the retired wording
+    # back and watch each clause fail on its own.
+    ("the retired 'status' wording returns to the constant", COPY,
+     'export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury/roster feed as of"',
+     'export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury and roster status as of"',
+     'AVAILABILITY_DATA_AS_OF_PREFIX = "Injury/roster feed as of"',
+     f"{NF_C8_SUITE}::test_the_freshness_line_stamps_the_FEED_and_never_the_players_status"),
+
+    ("…and the repo-wide sweep for the retired wording catches the SAME edit", COPY,
+     'export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury/roster feed as of"',
+     'export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury and roster status as of"',
+     'AVAILABILITY_DATA_AS_OF_PREFIX = "Injury/roster feed as of"',
+     f"{NF_C8_SUITE}::test_the_retired_status_wording_is_gone_from_every_shipped_surface"),
+
+    # The three RENDERED pins, one case each. A reword that reaches three surfaces and misses the
+    # fourth is exactly the failure a presence-only, single-surface pin cannot see.
+    ("the PLAYER PAGE loses its rendered pin", FLAG_SPEC,
+     '  test("the player page carries the same vintage line the boards carry", async ({ page }) => {',
+     '  test.skip("the player page carries the same vintage line the boards carry", async ({ page }) => {',
+     'test("the player page carries the same vintage line the boards carry"',
+     f"{NF_C8_SUITE}::test_every_rendered_surface_pins_the_reworded_freshness_line"),
+
+    ("the NF-C9 DISCLOSURE loses its rendered pin", DESIGNATION_SPEC,
+     '  test("NF-C10: the disclosure stamps the FEED\'s vintage, never the player\'s status", async ({',
+     '  test.skip("NF-C9 vintage", async ({',
+     "NF-C10: the disclosure stamps the FEED",
+     f"{NF_C8_SUITE}::test_every_rendered_surface_pins_the_reworded_freshness_line"),
+
+    ("a spec keeps the PRESENCE half but drops the RETIRED-string half", DESIGNATION_SPEC,
+     "    ).not.toContainText(/injury and roster status as of/i)",
+     "    ).toBeVisible()",
+     "injury and roster status as of",
+     f"{NF_C8_SUITE}::test_every_rendered_surface_pins_the_reworded_freshness_line"),
 ]
 
 #: Where the on-disk copies live while a mutation is applied — inside the repo so it is obvious and
@@ -153,8 +192,11 @@ def _restore_stale_backups() -> None:
 
 
 def run(test_name: str) -> tuple[int, str]:
+    # A case may name a clause in ANOTHER suite (Half B's pins live in the NF-C8 copy suite — the
+    # NF-D17-sanctioned coupling), so a `file::test` target is passed through verbatim.
+    target = test_name if "::" in test_name else f"{SUITE}::{test_name}"
     r = subprocess.run(
-        ["uv", "run", "pytest", f"{SUITE}::{test_name}", "-q", "--no-header",
+        ["uv", "run", "pytest", target, "-q", "--no-header",
          "-p", "no:cacheprovider"],
         cwd=REPO, capture_output=True, text=True,
     )
@@ -172,7 +214,7 @@ def main() -> int:
 
     failures: list[str] = []
     try:
-        r = subprocess.run(["uv", "run", "pytest", SUITE, "-q", "--no-header"],
+        r = subprocess.run(["uv", "run", "pytest", SUITE, NF_C8_SUITE, "-q", "--no-header"],
                            cwd=REPO, capture_output=True, text=True)
         if r.returncode != 0:
             print("BASELINE IS NOT GREEN — aborting\n" + r.stdout[-2000:])

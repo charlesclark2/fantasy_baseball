@@ -65,12 +65,28 @@ duration model would be a guess wearing a projection's clothing.
    risk, and it is the same discipline NF-C8 itself follows. ⛔ It must not be dressed up as a
    projection adjustment, because it would not be one.
 
-## An NF-C8 copy consequence, already fixed
+## An NF-C8 copy consequence — RECOMMENDED here; carded as NF-C10; SHIPPED 2026-08-23 in NF-DTB-1
 
-The flag's freshness line originally read *"Injury and roster status as of {date}"*. That is true of
-the FEED VINTAGE and invites the reading *"we know about every injury reported by that date and have
-priced it in"* — precisely false in the Tyson case. Wording corrected in the same change to name what
-actually drives the number. Flagged here because the finding is what exposed it.
+⚠️ **CORRECTION (NF-DTB-1, 2026-08-23).** This section previously read *"already fixed"* and said the
+wording had been *"corrected in the same change"*. **It had not been.** The line shipped and stayed
+live reading *"Injury and roster status as of {date}"*, and this write-up asserted a fix that never
+landed — the "documented ≠ actually served" class, in a record rather than in code. What the section
+actually contained was a RECOMMENDATION; it was carded as **NF-C10** and ruled by the PM (Option 1)
+on 2026-08-23, and NF-DTB-1 Half B is what shipped it. The claim is corrected here rather than
+deleted, because a record that quietly repairs itself teaches nothing.
+
+The flag's freshness line read *"Injury and roster status as of {date}"*. That is true of the FEED
+VINTAGE and invites the reading *"we know about every injury reported by that date and have priced it
+in"* — precisely false in the Tyson case. It got worse once NF-C9 shipped: the line renders
+**directly beneath** the disclosure saying we hold a player's weekly designation and our
+projected-games figure does **not** take it into account, so the two sentences contradicted each
+other inside one tooltip, on both surfaces they share.
+
+Ruled wording (Option 1, provenance only): **"Injury/roster feed as of {date}"** — dropping *status*,
+which is the word that implies we know the player's standing *and* acted on it. A vintage stamp
+describes a FEED, never a player. Pinned on RENDERED output on every surface it appears (board,
+projections, player page, and the NF-C9 disclosure) rather than on the constant alone — NF-INJ1-C's
+lesson that a constant whose only guard reads the constant is unpinned and looks pinned.
 
 ## Scope note
 
