@@ -1,0 +1,90 @@
+# Plan spec — NF-INJ-NEWS-0 (MINI tier: read-mostly source probe)
+# Authored by PM 2026-08-23. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inj-news-0
+  vertical: nfl_fantasy
+  card: https://trello.com/c/4nJwq6qP
+  status: ACCEPTED
+spec:
+  description: >
+    Probe of FREE structured sources for the "expected to miss time at season
+    start, no formal roster status" signal (the Tyson class), so
+    NF-INJ-NEWS-1's curated table can be auto-populated and the NLP lead can
+    be adopted or closed on evidence. Read-mostly: no serving changes, no
+    model changes. Paid feeds explicitly OUT of scope (operator ruling
+    2026-08-23: free only for now — the probe may PRICE paid options in its
+    report, but not subscribe or build against them). best_alpha=0.
+  acceptanceCriteria:
+    - description: >
+        Ground-truth cohort built by hand FIRST (from current beat reports,
+        ~15-30 players): players credibly reported to miss time at season
+        start with no formal IR/PUP/NFI/SUS tag, each with a source link.
+        Tyson is row one. Committed as the probe's reference set.
+    - description: >
+        Field inventory per source, with coverage measured AGAINST THE
+        COHORT (how many of the ~15-30 does each source flag, with what lag
+        vs the first news report): (a) Sleeper's already-ingested feed's
+        UNCONSUMED fields — injury_status, injury_body_part, injury_notes,
+        practice_participation/practice_description; (b) ESPN public player /
+        news endpoints (injury comments, return timelines where present);
+        (c) nflverse injury data; (d) any other free structured source the
+        session identifies. Respect robots.txt/ToS; note any commercial-use
+        restriction found.
+    - description: >
+        As-of/leakage statement PER SOURCE: what timestamp the source itself
+        carries, whether historical states are recoverable, and what a
+        forward capture must stamp so the duration model can later train on
+        it without reading the future (news is continuous — this is the
+        known hazard from the parent card).
+    - description: >
+        Deliverable: a report (ablation_results/nf_inj_news_0_source_probe.md)
+        with a coverage table and ONE recommendation — which source(s)
+        auto-populate NF-INJ-NEWS-1's candidate list, and whether the NLP
+        lead is still needed (if structured coverage >= ~80% of the cohort,
+        recommend closing it). Include priced paid options as an appendix
+        for a future operator decision. NO ingestion code beyond throwaway
+        probe scripts; a forward-capture story is proposed via
+        closeout.followUps, not built here.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inj-news-0
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "injury" / "availability" / "news" (board Credence Sports, 2026-08-23)'
+    duplicates: []
+    adjacent:
+      - "Parent 🔴 availability-news card (trello.com/c/wufGcjB8) — this probe is its capability-(b) scoping step; the card stays open for the §0.5 duration model."
+      - "NF-INJ-NEWS-1 (sibling) — consumes this probe's recommendation; does NOT depend on it to ship (manual population day one)."
+      - "NF-W0a-CADENCE / weekly capture cards — weekly in-season capture cadence; different question (preseason untagged absences)."
+      - "NCAAF P2.7 availability probe (Backlog) — same probe SHAPE for a different vertical; note transferable findings in followUps."
+  triedLedger:
+    files:
+      - "ablation_results/nf_c8_injury_designation_gap.md (names the gap + the leakage hazard)"
+      - "production_model_state/nfl_season_fantasy.md (NF-W4: projected availability adds nothing over the injury-aware champion — the value here is DATA reach, not a new model)"
+    recordedNulls:
+      - "NF-W4 GENUINE_ABSENCE at QB/RB/WR (weekly availability modeling) — not re-approached; this probe is about acquiring a signal that does not currently exist in any ingested field, not re-modeling an existing one."
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "NF-INJ-NEWS-1 population automation; the post-season §0.5 duration model's training-data design; adopt-or-close on the NLP lead"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inj-news-0-plan
+spec:
+  goalRef: { name: nf-inj-news-0 }
+  graph:
+    nodes: []   # MINI tier — single read-mostly session; sequence carried by acceptanceCriteria
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

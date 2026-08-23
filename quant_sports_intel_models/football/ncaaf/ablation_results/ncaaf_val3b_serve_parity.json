@@ -1,0 +1,98 @@
+{
+  "story": "NCAAF-VAL3b/parity",
+  "checked_at": "2026-08-23",
+  "parity_holds": false,
+  "recommendation": "DEPLOY_HELD",
+  "legs": [
+    {
+      "leg": "i_expressibility",
+      "ok": false,
+      "artifact": "ncaaf_game_mean_v2.json",
+      "contract_fields": [
+        "alpha",
+        "coef_margin",
+        "coef_total",
+        "columns",
+        "contract",
+        "fit_at",
+        "impute_means",
+        "intercept_margin",
+        "intercept_total",
+        "learner",
+        "n_train_rows",
+        "notes",
+        "pace_columns",
+        "scaler_mean",
+        "scaler_scale",
+        "train_seasons",
+        "version"
+      ],
+      "week_or_shift_fields": [],
+      "predict_signature": [
+        "self",
+        "values",
+        "target"
+      ],
+      "finding": "the served mean is a PURE LINEAR COEFFICIENT TABLE \u2014 17 fields, NONE of them a week/shift/cold-start term \u2014 and `NcaafGameMeanParams.predict('self', 'values', 'target')` receives no week at all. A week-conditional \u03b4 is therefore NOT EXPRESSIBLE in the served contract as it stands; serving it needs a NEW field (e.g. `cold_start_shift_total` + `cold_start_max_week`) AND a `predict` that takes the week. That is a contract change with its own schema bump, not a coefficient refit."
+    },
+    {
+      "leg": "ii_quantity",
+      "ok": false,
+      "validated_deltas_per_fold": [
+        1.874821455576915,
+        1.2912189055491734,
+        1.3474004151529344,
+        1.3813400991751976,
+        1.4587040781311837,
+        1.3024169390590363,
+        1.5722033221276914,
+        1.9094521875643142
+      ],
+      "n_validated_deltas": 8,
+      "delta_min": 1.2912189055491734,
+      "delta_max": 1.9094521875643142,
+      "delta_spread_pts": 0.6182332820151408,
+      "served_artifact_fit": {
+        "n_train_rows": 8325,
+        "train_seasons": [
+          2015,
+          2016,
+          2017,
+          2018,
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ],
+        "fit_at": "2026-08-17"
+      },
+      "finding": "the study validated 8 PER-FOLD in-fold \u03b4's spanning 1.291\u20131.909 pts (spread 0.618). The served mean is ONE full-history refit (8325 rows, 11 seasons), so the \u03b4 that would actually ship is a NINTH estimate \u2014 fitted on all seasons at once \u2014 which appears in no fold of this study and has never been scored out of sample. Every per-fold \u03b4 is honest; the SERVED one is a different quantity (E7.9 train/serve consistency). \u2b50 The spread is not cosmetic: the estimator is deliberately in-fold, so a full-history \u03b4 is not the mean of the eight \u2014 it is a new fit whose out-of-sample behaviour this study does not certify."
+    },
+    {
+      "leg": "iii_week_column",
+      "ok": false,
+      "study_week_col": "season_order_week",
+      "serving_module": "game_prediction_snapshot.py",
+      "assignments": [
+        {
+          "line": 696,
+          "rhs": "df['week'].astype('int64')",
+          "is_raw_week_alias": true
+        }
+      ],
+      "n_raw_week_aliases": 1,
+      "n_honest_derivations": 0,
+      "finding": "`game_prediction_snapshot.py` assigns `season_order_week` at line 696 as `df['week'].astype('int64')` \u2014 a VERBATIM ALIAS of CFBD's raw `week`, added (per its own comment) only to satisfy a frame contract and documented as UNUSED. So the serving frame carries the study's column NAME with the postseason-RESTARTED values, and an implementation keyed on that name would apply the cold-start correction to bowl and playoff games while looking correct in review. The honest `season_order_week` lives upstream in the P1.3 `feature_pregame_matrix`; the serving path would have to carry it through, and the alias would have to go.",
+      "false_pass_note": "\u26a0\ufe0f This leg's FIRST implementation was a substring check (`col in source`) and it PASSED \u2014 satisfied by the alias assignment itself. A name-match cannot distinguish a column from an alias of the column it forbids; the AST read can. Recorded because the near-miss is the finding (NF1.7 (a) / INC-38)."
+    }
+  ],
+  "failing_legs": [
+    "i_expressibility",
+    "ii_quantity",
+    "iii_week_column"
+  ],
+  "note": "\u00a78 of the pre-registration: a pre-opener ship needs BOTH this parity check AND explicit operator approval. Any leg failing \u21d2 DEPLOY-HELD with the gap named, shipping post-opener via the P1.4 serve path. \u26d4 This module writes no served artifact and changes nothing."
+}

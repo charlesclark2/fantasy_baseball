@@ -1,0 +1,258 @@
+# Plan spec — NF-INJ1-C (MINI tier: frontend/serving fix)
+# Authored by PM 2026-08-23. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inj1-c
+  vertical: nfl_fantasy
+  card: https://trello.com/c/NhCErPAF
+  status: DONE
+spec:
+  description: >
+    Suppress the impossible COUNTING-STAT line on violating rows of the paid
+    /projections-full surface (NF-INJ1 §8.1 Option C). The board serves ~10
+    physically-impossible QB stat lines (e.g. ~80 att/game) on rows where
+    NF1.5's point-permutation decoupled the stat line from expected games.
+    NF-INJ2 (the real fix) was REFUSED by its pre-registered ordering gate,
+    which fired Option-C trigger (b) — so this story ships the SYMPTOM patch
+    only. On violating rows ONLY: suppress the counting-stat line; points +
+    expected games still render. Default treatment: an em-dash "—" with a
+    neutral tooltip ("stat detail withheld — availability-adjusted").
+    best_alpha=0; display-only; NO projection value changes; the PM default
+    treatment stands unless the operator overrides it.
+  acceptanceCriteria:
+    - description: >
+        The violation predicate is NF-INJ1's RECORDED predicate, sourced from
+        quant_sports_intel_models/football/nfl/fantasy/ablation_results/
+        nf_inj1_diagnosis.md — do NOT invent a new threshold; cite the exact
+        section in the implementation and in this spec's closeout.
+    - description: >
+        On a violating row: counting stats render as "—" + tooltip; points and
+        expected games still render. On a clean row: byte-identical rendering
+        to today. Both asserted in E2E against RENDERED output (NF-C4 rule —
+        computed layout / rendered text, never a source grep).
+    - description: >
+        All user-facing copy passes the honest-framing denylist
+        (frontend claim copy module, fantasy-claim-copy.ts): no forecast
+        language, no injury forecasting verbs, neutral "withheld" phrasing.
+    - description: >
+        Absent-vs-null discipline (NF-FRESH2): a suppressed stat is
+        distinguishable from a missing/never-served stat in the payload and
+        the render path; no optimistic default renders.
+    - description: >
+        Guards RED-proven (a deliberate break flips them; the break is
+        asserted to have landed AND moved the asserted predicate).
+    - description: >
+        No projection value, ordering, VOR, or band changes anywhere —
+        verified by comparing the published artifact before/after (projection
+        fields byte-identical).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inj1-c
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "NF-INJ1" (board Credence Sports, 2026-08-23)'
+      - 'trelloSearch cards: "impossible" / "suppress" (2026-08-22 PM pass)'
+    duplicates: []
+    adjacent:
+      - "NF-INJ2b (To Do, trello.com/c/FUOXwXzS) — the REAL fix (rate-target ordering learner). Boundary: this story never touches the give-back or any projection value."
+      - "NF-C8 availability flag + NF-C9 designation disclosure (Done) — do NOT touch their components/copy."
+      - "🟠 stat-line calibration bar decision card (Backlog, trello.com/c/Hcgr91Hi) — a coherence FLOOR is not calibration; out of scope here."
+  triedLedger:
+    files:
+      - "quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj1_diagnosis.md (§8 options + violation predicate)"
+      - "quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj2_rate_permutation.md (the refusal that fired trigger (b))"
+    recordedNulls:
+      - "NF-INJ2 REFUSED (ordering-gate breach, QB draftable tier). This story does NOT relax or re-read that refusal (E2.1-r) — it implements the Option-C consequence the refusal itself triggered. Nothing new is claimed about NF-INJ2."
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "Paid-surface credibility pre-draft (/projections-full is the NF-EPIC1 paid substrate)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inj1-c-plan
+spec:
+  goalRef: { name: nf-inj1-c }
+  graph:
+    nodes: []   # MINI tier — no task graph; disciplines carried in the kickoff prompt
+  closeout:
+    verdict: >
+      SHIPPED as specified — symptom-only, display-only, no projection value moved.
+      On `/fantasy/nfl/projections-full` a row that breaches NF-INJ1's RECORDED
+      per-game envelope loses its counting-stat line; points (`fpPpr`/`fpStd`/
+      `fpHalf`) and expected games (`g`) still render.
+
+      PREDICATE — the recorded one, cited and IMPORTED, never re-derived:
+      `projection_coherence.row_violations` (envelope
+      `REALIZED_MAX_PER_GAME`, derived in nf_inj1_diagnosis.md §2.2 "Blast
+      radius" as the MAX per-game rate over 11,190 player-seasons 2006-2025).
+      `deploy.sh` step 3d lifts that stdlib-only module into the Lambda zip
+      (the 3b/3c pattern) rather than mirroring the numbers into
+      `app/backend/`, so the guard that PAGES about a violating row and the
+      code that WITHHOLDS one cannot drift apart. The bundle guard was
+      re-anchored to MEASURE the copied tree instead of hard-coding
+      `fantasy_engine`, so the copy list stays the contract.
+
+      MEASURED on a real captured `/projections-full` payload (314 rows):
+      7 rows withheld, ALL QB, named — Case Keenum, Sam Howell, Easton Stick,
+      Aidan O’Connell, Will Levis, Fernando Mendoza, Joe Burrow. 307 clean
+      rows returned by OBJECT IDENTITY (byte-identical by construction, not by
+      key ordering); the memoized blob `/nfl/my-teams` scores leagues from is
+      provably un-mutated.
+
+      ABSENT ≠ WITHHELD: the row carries `statLineWithheld` — the LIST OF
+      WITHHELD FIELD NAMES and nothing else. ⛔ No magnitude, deliberately:
+      `implied_per_game × g` reconstructs the withheld season total exactly, so
+      publishing the violation detail would leave the suppressed number one
+      multiplication away. The payload also carries `stat_line_withheld_players`
+      EVEN AT ZERO — "0 withheld" and "this build does not run the check" are
+      different facts (NF1.7 (a)); it is a payload-level diagnostic, not a
+      projection field, so the byte-identical criterion is untouched.
+
+      WITHHELD SET is derived from `projection_fields.STAT_FIELD` (NF-EPIC 1’s
+      safety direction), so a new scorable stat is withheld automatically.
+      `PAID_SCORING_FIELDS` is excluded — the PM ruling keeps the points.
+
+      GUARDS: 22 clauses in `test_nf_inj1_c_stat_line_suppression.py` +
+      3 E2E clauses (chromium AND mobile: the disclosure is `InfoTip`/Popover,
+      so the tap clause is vacuous on desktop). RED-PROVEN: 20/20 in
+      `nf_inj1_c_red_proof.py`, 4/4 in the browser red proof (board 162→166).
+      The Python harness asserts each mutation is UNIQUELY anchored, LANDED on
+      disk, and MOVED the asserted token (#682/#815/E11.24) — and it earned its
+      keep: it found one genuinely VACUOUS clause (a paywall-drift screen that
+      matched only "membership"/"subscri" and let "Members see the full line"
+      through) and two of its own defects.
+
+      NF-INJ2’s refusal is untouched and unre-read (E2.1-r); this implements the
+      Option-C consequence that refusal itself triggered.
+    rulings: >
+      PM, 2026-08-23 — both open items in followUps are RULED. Recorded here rather
+      than by rewriting the findings below: the evidence stays as measured, the
+      disposition is stated once, and a later reader can see both.
+
+      DECISION 1 — ALL-OR-NOTHING STANDS. No magnitude scope, now or later.
+      PRINCIPLE: the predicate is a physical-impossibility FLOOR, and impossibility
+      has no degrees for display purposes. A 1.09x breach of an all-time MAX is
+      exactly as impossible as a 1.88x one — the envelope's own definition says so —
+      and a magnitude scope would convert an honesty rule into an optics rule.
+      Suppression tracks what the number IS, not how loudly it embarrasses us.
+      ⭐ The session's "costs us the most" framing INVERTS on the program's identity:
+      the one violating row a drafter actually meets (Fernando Mendoza, ADP 157.4) is
+      precisely where PRINTING a known-impossible line does the most damage to trust
+      on the paid surface — suppressing there is the treatment working at the only
+      row where it matters, not its loudest version.
+      ⛔ PROCEDURAL BAR, recorded so it is not re-opened: any threshold chosen NOW is
+      post-table and E2.1-r-contaminated whatever principle is attached to it. This
+      table has been read; there is no clean pre-registration left for a magnitude
+      scope on this predicate. That door is CLOSED, not deferred.
+
+      DECISION 1(b) — THE §8.3 RE-READ IS GRANTED. §8.3 was a PM prioritisation call,
+      not a registered gate, so new evidence may move it, and "the affected rows are
+      undraftable backups" is now MEASURED FALSE. On the live board (generated_at
+      2026-08-22T20:36Z, 871 players; the board's own manifest.coherence agrees at 10)
+      there are 10 violating players, all QB, of which THREE are draftable by §1.2's
+      own >=100 PPR bar — Mendoza 268.3, Spencer Rattler 149.6, Will Levis 102.5 —
+      and exactly one carries a market ADP: Mendoza at 157.4, i.e. inside a 12-team
+      draft's 180 picks. ⭐ Mendoza is the ROOKIE path (§2.2's separate code path:
+      rookie_projection's fp_target vs slot-bucket games, never reconciled), which
+      §8.3 ranked "3a, low priority, no standalone story". So the one violating row a
+      drafter is realistically going to meet comes from the path that was
+      deprioritised, and it is the MILDEST breach in the set (1.09x).
+      RULING: the rookie-path coherence defect is FOLDED INTO the NF-INJ3c rookie-path
+      card as a checklist item — one "next rookie-path touch" session fixes both the
+      injury-cap bypass and this decoupling in the same files. It stays BACKLOG, not
+      Sprint: with Option C live the impossible line no longer reaches users, so the
+      surface harm is contained and the underlying fix rides the next rookie-path
+      touch rather than jumping draft-season priorities. ⛔ The PM updates the card;
+      no worker session acts on this, and no Trello action was taken from here.
+
+      DECISION 2 — REWORD, and it is DONE. The shipped default
+      "stat detail withheld — availability-adjusted" is not merely vague, it is
+      INVERTED: it says we adjusted this line for availability, when the line is
+      withheld PRECISELY BECAUSE it was not rescaled with the games (that decoupling
+      IS the NF1.5 defect). New label: "stat detail withheld — inconsistent with
+      projected games" — it names the condition a reader can check, stays
+      denylist-clean (no forecast language, no injury claim, no diagnosis), and
+      composes with the popover's second sentence, which is UNCHANGED.
+      SHIPPED in PR #1012, branch `nf-inj1-c-label` (display-only; nothing else
+      moved). ⚠️ Cited by PR number, not commit SHA: a SHA does not survive the
+      rebase-before-merge this repo requires, and a record pointing at a commit
+      that no longer exists is worse than one pointing at nothing.
+      ⚠️ THE FINDING THAT CAME WITH IT, worth more than the reword: the change was
+      INVISIBLE TO EVERY PIN THAT PREDATED IT. The disclosure trigger's accessible
+      name comes from a DIFFERENT constant (`STAT_LINE_WITHHELD_SR_LABEL`), and "the
+      disclosure says it is withheld" is true of BOTH strings — so the label could
+      have been swapped in either direction with a fully green suite and nothing
+      measuring it. Two clauses now tell them apart: an E2E pin on the RENDERED
+      popover text and a fast-gate clause on the exported constant. Both RED-proven
+      against the retired string (Python red proof 1/1; browser red-proof case added,
+      RECORDED_BOARD 166 -> 167). Generalises: a constant whose only guard reads a
+      DIFFERENT constant is unpinned, and looks pinned.
+
+    followUps: >
+      (1) ✅ RULED 2026-08-23 (see rulings above: all-or-nothing STANDS; the §8.3 re-read GRANTED and folded into the NF-INJ3c rookie-path card). The finding is left exactly as measured — §8.1’s "the affected rows are undraftable
+      backups" UNDERSTATES the exposure, and it is the premise C was deferred
+      on. Will Levis is in §2.2’s list of nine AND is draftable by §1.2’s own
+      ≥100 PPR bar. Worse, the real captured payload used as this story’s
+      fixture withholds JOE BURROW — a top-5 QB at fpPpr 296.9 — on a MARGINAL
+      1.03× breach (47.0 att/g vs the 45.44 max). ⚠️ Scoped honestly: that
+      capture is a DIFFERENT board vintage from the 2026-08-21 publish, whose
+      ten rows §7.3 names and which does NOT include Burrow — so this is a
+      demonstration that the predicate CAN fire on a draftable starter, not a
+      claim about the live board (the §8.2 stale-vintage trap). The question
+      for the PM: a withheld stat line on a backup is invisible; on a top-5 QB
+      it is the loudest thing on the page. ⛔ The fix is NOT a tolerance band —
+      widening a MAX-derived envelope to accommodate a board that failed it is
+      the E2.1-r inversion the module’s own header forbids. The live check is
+      one command (below); the decision is whether Option C should be scoped to
+      a breach magnitude, and if so that magnitude is a PM/pre-registered
+      quantity, not one this story may choose.
+
+      (2) ✅ RULED 2026-08-23 — REWORDED (see rulings above; shipped in commit e6df254c). The finding as raised: the PM’s default short label,
+      "stat detail withheld — availability-adjusted", is shipped VERBATIM as
+      specified. Flagging one reading: "availability-adjusted" can be heard as
+      "we adjusted this stat for availability", when the truth is the opposite
+      — the stat line is withheld BECAUSE it was NOT re-scaled with the games
+      (that is the whole NF1.5 defect). The added detail sentence states the
+      true position plainly and the E2E pins it, so the composition is honest;
+      the four-word label alone is the ambiguous part. Changing it is a PM
+      decision, not a copy edit.
+
+      (3) DEPLOY ORDER IS LOAD-BEARING, FRONTEND FIRST. The backend removes
+      keys the deployed client already renders as an em-dash, so a
+      backend-first deploy degrades to "—" with NO disclosure for the length
+      of the skew window — which is exactly the E9.56c inversion (a withheld
+      value reading as "we have nothing for this player"). `frontend/` auto-
+      deploys on merge to `main`; the API Lambda needs an explicit
+      `./infrastructure/lambda/deploy.sh`. Merge to `main` FIRST, confirm the
+      Vercel build actually ran (the commit touches `frontend/`, so the
+      `ignoreCommand` path filter passes), THEN run `deploy.sh`. The reverse
+      order is not an outage, but it is a window in which the product tells a
+      reader something false.
+
+      (4) THE EXPORTER IS FULLY DENSE — measured: all 314 rows of the real
+      payload carry all 53 scorable fields. So NOTHING on a served row is
+      currently "never served", and absent-vs-withheld operates entirely at the
+      ROW level. That is precisely why the marker exists rather than a
+      null-check, and it means the field-level half of the discipline is guarded
+      against a synthetic sparse row rather than against the fixture (recorded
+      so a future reader does not mistake the fixture for the population).
+
+      (5) AN UNEVALUABLE ROW IS LEFT ALONE, NOT BLANKED — a deliberate
+      direction, recorded because it runs against NF1.7 (a). A row with no
+      usable `g` cannot be judged; failing closed there would let a bug in a
+      symptom patch for ten backup QBs blank the paid substrate for 868
+      players. The count under-reports rather than over-reports, which is the
+      safe direction for a number a reader might quote.
+
+      (6) NOT DONE, deliberately, and out of scope: nothing here touches the
+      give-back (NF-INJ2b), the coherence PUBLISH guard’s ALERT tier (§8.1
+      Decision 1 stands), or the stat-line calibration-bar question. The
+      impossible ROWS still exist on the board and still page at publish; this
+      story only stops the paid surface from PRINTING them.

@@ -1,0 +1,216 @@
+# Plan spec — NCAAF-VAL3b (FULL tier: §0.5 modeling story)
+# Authored by PM 2026-08-23. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ncaaf-val3b
+  vertical: ncaaf
+  card: https://trello.com/c/7gJ3idAP
+  status: DONE
+spec:
+  description: >
+    Ship-or-close the NCAAF cold-start mu correction as ONE pre-registered
+    contrast: bucket_shift vs the served incumbent. VAL3 measured a real
+    cold-start mu bias in weeks 1-3 (the exact window served for the 8/29
+    opener slate: +2.074 pts over-bias, the correction removes 73% of it,
+    8/8 folds, DSR 0.998, clears every ship clause) but was REFUSED by PBO —
+    and the refusal was MEASURED to be a field-composition artifact (4
+    near-identical correction forms; 2-arm PBO 0.000; eligible-set PBO 0.701,
+    WORSE). The admissible successor is a SINGLE coherent contrast registered
+    FORWARD on the parsimony/mechanism argument (VAL2's by-week decay is
+    approximately a constant; linear_decay bought nothing) — PBO then
+    INAPPLICABLE (n_arms < 2), remaining gates already clearing on the VAL3
+    record. ONE arm, one foil — no ladder, no HPO (tied-field lesson: nothing
+    to search). best_alpha=0; market-blind; this changes calibration honesty
+    for served probabilities, not any edge claim.
+    TIMING (PM ruling 2026-08-23, supersedes the card's 2026-08-22 deferral):
+    the STUDY runs now (free slot, disjoint repo area); the SHIP decision is
+    separately gated — see acceptanceCriteria. Default remains deploy-held to
+    post-opener unless the parity condition passes AND the operator approves
+    a pre-opener ship.
+  acceptanceCriteria:
+    - description: >
+        Pre-register BEFORE scoring (E2.1-r): the bucket definition, the
+        shift estimator, the single contrast (bucket_shift vs incumbent),
+        and the selection metric (the registered proper score — CRPS /
+        log-score per the VAL3 record) with the standing gates. A null is a
+        valid outcome and closes cleanly.
+    - description: >
+        NO delta-scaling: over_scale topped VAL3's leaderboard but the
+        PAIRED read is a TIE (+0.0070, 5/8, p=0.779) — inadmissible-lambda;
+        the rank cannot tell a tie from a win.
+    - description: >
+        CLV-eval hazard: if ANY vs-close reading is reported, use the
+        _clv_leg-immune implementation and STATE which implementation
+        produced it — the row-misaligned _clv_eval (reset_index positional
+        bug) is a recorded INC and must not be resurrected.
+    - description: >
+        Reproduction: VAL1's pin is vintage-bound to 2026-08-22 (4,187
+        closes) while the main checkout holds 07-22 (4,182) — running
+        VAL1/2/3 from main HALTs correctly; run `--assemble` first (~6s),
+        with `--form strength_posterior` (stage_finalize defaults to
+        gaussian) and `--calib-out` (writes no served artifact).
+    - description: >
+        SHIP GATING (two-step): (a) if the contrast clears, a pre-opener
+        ship is permitted ONLY if the S1-serve-class train/serve parity
+        holds — check the SERVED artifact contract directly (no pace-style
+        ship-vs-serve gap; don't assume), AND the operator explicitly
+        approves; (b) otherwise DEPLOY-HELD with the gap named, ship
+        post-opener via the P1.4 serve path. Either way nothing serves from
+        this session's hands.
+    - description: >
+        Scope guard: the +0.557 residual (estimator can't track a rising
+        level) belongs to a SEPARATE future lead (drift-aware estimator, the
+        card's lead B) — do NOT bundle it here.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: ncaaf-val3b
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "VAL3b" (board Credence Sports, 2026-08-23)'
+    duplicates: []
+    adjacent:
+      - "S1-serve (pace serving) — separate story; only its train/serve-parity LESSON is imported here."
+      - "NCAAF pre-opener operator checklist (Sprint, trello.com/c/TrUc4Zat) — schedule enablement is OPERATOR-owned; not this session."
+      - "P3.1 serving plumbing (Sprint) — the serve PATH this story's artifact would eventually ride; no file overlap in the research phase."
+  triedLedger:
+    files:
+      - "quant_sports_intel_models/football/ncaaf/ablation_results/ncaaf_val3_cold_start_mu.md (+ _readout.md, _scores.json, ncaaf_val3_preregistration.md)"
+      - "quant_sports_intel_models/football/ncaaf/ablation_results/ncaaf_val2_mu_total_offset.md, ncaaf_val1_clv_week_strat.md"
+    recordedNulls:
+      - "VAL3 REFUSED (PBO 0.53 vs <0.20). NOT re-read: what is NEW is a fresh FORWARD single-contrast registration, licensed by VAL3's own measured mechanism (field composition: 2-arm PBO 0.000, eligible-set 0.701 worse) — the MH2.2/NF-W6b-C-sanctioned successor shape, per the recorded VAL3 PM ruling (2) which carded VAL3b as shape A."
+      - "VAL1 ALL_BUCKETS_NULL (early-season softness unsupported) — untouched; this story makes no market/edge claim."
+  supersedes:
+    - "The card's 2026-08-22 'DEFER to post-opener' timing ruling is superseded ONLY as to when the STUDY runs; the ship-risk substance of that ruling survives as the SHIP GATING criterion (default deploy-held)."
+  dependsOn:
+    - "VAL3 record on dev (verified 2026-08-23: ablation_results present at dev @ a8a24626)"
+  feedsInto:
+    - "The 8/29 served opener slate IF parity + operator approval; otherwise the post-opener P1.4 serve path"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ncaaf-val3b-plan
+spec:
+  goalRef: { name: ncaaf-val3b }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec file BEFORE any other work."
+      - id: 1-prereg
+        desc: >
+          Write + commit ablation_results/ncaaf_val3b_preregistration.md:
+          bucket definition, shift estimator, single contrast, proper score,
+          standing gates, the no-delta-scaling prohibition, and the two-step
+          ship gating. BEFORE any scoring.
+      - id: 2-assemble
+        desc: >
+          Refresh the close vintage: `--assemble` (~6s), then verify the
+          VAL-series pins reproduce (HALT-on-stale is correct behavior, not
+          a bug).
+      - id: 3-run
+        desc: >
+          Score the registered contrast (bucket_shift vs incumbent) on the
+          registered metric with the standing gates. PBO recorded
+          INAPPLICABLE (n_arms<2) — never 'passed'.
+      - id: 4-verdict
+        desc: >
+          Classify + record the decisive record in ablation_results/
+          ncaaf_val3b_*. If cleared: run the train/serve parity check against
+          the SERVED artifact contract and hand the operator the pre-opener
+          ship/hold decision with the parity evidence. Nothing serves from
+          this session.
+      - id: 5-closeout
+        desc: "Verdict + findings into closeout.followUps; session summary to the operator."
+  closeout:
+    verdict: >
+      SHIP_CORRECTION, DEPLOY-HELD. The single forward-registered contrast
+      (bucket_shift vs the served incumbent) CLEARS every pre-registered gate:
+      wk1-3 CRPS 9.4642 -> 9.3793 (+0.0848), 8/8 folds, cold-start bias +2.074
+      -> +0.557 pts, DSR 0.9996 (SR 1.2519 vs SR0 0.18376), BH p 0.0047 vs a
+      0.05 cutoff, fold consistency 8/8 vs 6 required, C1-C8 all pass, and BOTH
+      new materiality bars pass (M1 bias reduction +1.517 pts vs a 1.00 band;
+      M2 relative CRPS gain 0.8962 % vs a 0.7543 % band). PBO recorded
+      INAPPLICABLE (n_arms<2) with NO number computed - never "passed".
+      ⛔ NOTHING SERVES: the AC (a) train/serve parity check FAILS on 2 of 3
+      legs, so the outcome is AC (b) DEPLOY-HELD with the gaps named, shipping
+      post-opener via the P1.4 serve path. best_alpha=0, market-blind, no
+      serving write / registry edit / refit / bet.
+    followUps: >
+      (1) ⭐ THE LOWERED BAR DID NO WORK - the headline defence of the successor
+      shape, MEASURED not asserted. VAL3b's SR0 (0.18376) is genuinely lower
+      than VAL3's (0.35374), so the obvious suspicion is that the narrowing
+      bought the pass. Re-scored under VAL3's OWN recorded bar the arm still
+      clears at DSR 0.9977, and under the strictest combination constructible
+      from either study's declared quantities (n_trials=8 with the asymptotic
+      V, SR0 0.51584) it clears at 0.9899. DSR was never binding in VAL3
+      either (0.998). PBO was the SOLE refusal, and a single pre-registered
+      contrast removes PBO BY CONSTRUCTION, not by relaxation. Reported as a
+      labelled NON-BINDING sensitivity; it changes no verdict.
+      (2) ⛔ PARITY FAILS ON 2 OF 3 LEGS - three concrete, separately-actionable
+      serving gaps, each read off the artifacts/serving code rather than
+      assumed. (i) EXPRESSIBILITY: ncaaf_game_mean_v2.json is a pure linear
+      coefficient table (17 fields, none a week/shift/cold-start term) and
+      NcaafGameMeanParams.predict(self, values, target) receives no week at
+      all - a week-conditional delta is NOT EXPRESSIBLE in the served contract;
+      it needs a new field (cold_start_shift_total + cold_start_max_week) AND a
+      predict that takes the week = a contract change with a schema bump, not a
+      coefficient refit. (ii) QUANTITY (E7.9 class): the study validated 8
+      per-fold in-fold deltas spanning 1.291-1.909 pts (spread 0.618); the
+      served mean is ONE full-history refit, so the delta that would ship is a
+      NINTH estimate appearing in no fold and never scored OOS - and because
+      the estimator is deliberately in-fold, it is NOT the mean of the eight.
+      (iii) WEEK COLUMN (P1.1 landmine): game_prediction_snapshot.py:696
+      assigns season_order_week = week.astype("int64") - a VERBATIM ALIAS of
+      CFBD's postseason-restarted raw week, added only to satisfy a frame
+      contract and documented as UNUSED. A serving implementation keyed on that
+      NAME would apply the cold-start correction to BOWL AND PLAYOFF GAMES
+      silently, while looking correct in review.
+      (3) ⚠️ A GUARD THAT RETURNED A FALSE PASS, recorded because the near-miss
+      IS the finding. Parity leg (iii) was first implemented as a substring
+      check (col in source) and PASSED - satisfied by the alias assignment
+      itself AND by the warning comment naming it. A name-match cannot tell a
+      column from an alias of the column it forbids; the AST version is the fix
+      (NF1.7 (a) / INC-38). Generalises: any guard asserting that a serving path
+      "carries" a column must verify the column is DERIVED, not aliased from
+      the very column the study forbids.
+      (4) ⚠️ FOUR VACUOUS GUARDS found by the RED proof, none by a green suite,
+      all fixed (27/27 RED after). Two are reusable: (a) an ABS-vs-SIGNED bias
+      clause - reading the SIGNED move rewards an arm that over-corrects past
+      zero (+2.0 -> -1.5 scores 3.5 signed, 0.5 absolute), so a bias-reduction
+      band needs a fixture where ONLY the abs/signed distinction can flip it;
+      (b) a NAMED-implementation guard satisfied by the READER's mention of a
+      key the WRITER had stopped emitting (NF-C0e wired-vs-invoked) - check the
+      writer's dict literal by AST, not the module's text. The other two are
+      known classes reconfirmed: a call-shape check beats a name-match
+      (fold.eval_year + 1 keeps the string, E11.24 #815), and an isolation
+      fixture must put the two readings on OPPOSITE sides of the band.
+      (5) ⭐ M2's DERIVATION IS THE TEMPLATE for closing a "no practically-
+      meaningful effect was pre-registered" gap in a SUCCESSOR whose author has
+      already read the parent's scores: derive the bar as a closed-form
+      function of constants the GRANDPARENT recorded (here VAL2's 0.15 sigma
+      cold-start bias and its 1.0-pt band), express it RELATIVELY so it is
+      sigma-free, and have the module RE-DERIVE it at run time and HALT on
+      drift. Zero free parameters is the only credible answer to "where did that
+      number come from?".
+      (6) The reproduction pin's DATE leg is REPORTED, not pinned, and the
+      reason is declared FORWARD in the prereg: assemble_cache stamps
+      date.today(), so a re-assemble fails that leg whatever the population is,
+      burying the three legs that DO define it. Reusable wherever a vintage pin
+      must survive a re-assemble on a later day. The population reproduced
+      exactly (4,187 closes / 6,024 OOS games) and VAL3b reproduced VAL3's CRPS
+      to 4 dp on a cache assembled a day later - an independent reproduction of
+      the parent, not a re-read.
+      (7) SEPARATE LEADS, deliberately not bundled: the +0.557 pt residual (the
+      estimator cannot track a rising level -> a drift-aware estimator, the
+      card's lead B); and the parity remediation itself, which is a serving
+      contract change (i + iii) plus a decision about WHICH delta ships (ii) -
+      a full-history refit would need its own forward-registered validation,
+      because this study certifies per-fold in-fold deltas only.
+      PM triages into: checklist item on the parent card | merge into an
+      existing card (name it) | a new spec. Worker sessions never create Trello
+      cards.

@@ -1,0 +1,226 @@
+# Plan spec — NF-INJ3b (FULL tier: §0.5 modeling story)
+# Authored by PM 2026-08-23. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inj3b
+  vertical: nfl_fantasy
+  card: https://trello.com/c/SGsvQJPb
+  status: CLOSED(CLEARS)
+spec:
+  description: >
+    Fresh §0.5 FORWARD re-registration of the injury-games caps. NF-INJ3
+    measured the served caps ({RES/PUP/NFI: 4.0, SUS: 7.0} @ blend 0.7) ~2x
+    too high — robust across every arm/form/served row (22/22 flagged
+    draftable veterans move DOWN; live exposure includes Kittle, Pierce,
+    Charbonnet, Higgins, Musgrave) — but returned POWER_LIMITED because DSR +
+    BH-FDR failed on PRE-REGISTRATION SPEC GAPS (V-membership never invoked
+    per MH2.1(a); BH family never named), not on the evidence. This story
+    re-registers the study with the spec fixed and re-runs the existing
+    harness (~2s). Sanctioned successor per NF-INJ3 recorded ruling D2=A.
+    best_alpha=0 throughout; DEPLOY-HELD — nothing serves until the gated
+    ship path passes AND the operator approves.
+  acceptanceCriteria:
+    - description: >
+        BINDING REGISTRATION ITEMS (verbatim in the prereg, committed BEFORE
+        any scoring run — E2.1-r provenance turns on this ordering):
+        (1) V membership named up front — degenerates NOT in V AND the
+        incumbent reference arm NOT in V (MH2.1(a): its trial Sharpe is
+        0-by-construction and inflates a small-family V);
+        (2) the BH family named up front — one mechanism, one population, no
+        position axis (arguably single-hypothesis; say which and why);
+        (3) hurdle form (hurdle_transfer, the NF-W2 split) declared PRIMARY;
+        (4) the coherent narrower family declared ON MECHANISM FIRST — NO
+        per-candidate-field DSR menu; DSR is computed only AFTER the family
+        is declared;
+        (5) era floor: training window starts 2016 (pre-2016 outcome status
+        is season-end BACKFILLED = outcome-contaminated). Note in the prereg
+        that the incumbent's docstring claims a 2015-2024 fit, i.e. one
+        contaminated season inside it — the floor is a DATA-FIDELITY
+        quantity, not an outcome choice;
+        (6) HONESTY CLAUSE: the DSR outcome is largely foregone (0.973 from
+        NF-INJ3's diagnostic) — this story buys a PROPERLY-REGISTERED record
+        plus an honest BH answer, NOT new evidence. The report must say so;
+        a foregone DSR pass is never presented as fresh confirmation.
+    - description: >
+        PROHIBITIONS: no re-read of NF-INJ3 off the 0.973 diagnostic
+        (E2.1-r); no post-hoc field trim (MH2.2); no "more seasons" re-test
+        trigger (28 folds = 28 seasons; V-composition was binding, not
+        power). classify_null called with declared_field_size= and the
+        field_remedy_admissible flag read, not the prose.
+    - description: >
+        Valid outcomes: CLEARS (all registered gates pass) or a classified
+        null (its class named per cv_power). A null closes cleanly with no
+        re-test trigger unless a trigger is genuinely reachable.
+    - description: >
+        IF IT CLEARS — the gated ship path, in order, all still deploy-held:
+        a served-cap change is LEVEL-ADJACENT (point = rate x games), so
+        (a) whole-board cross-position placement read
+        (run_nf_tr2b_placement_read) against the PUBLISHED artifact;
+        (b) run_interval_revalidation (NF-D16/D21 machinery);
+        (c) the NF-TR2b superflex caveat carried (the VOR shield is
+        ADDITIVE-only and does not cover superflex);
+        (d) the served-POINT impact MEASURED, not assumed proportional —
+        NF1.5 hands part of the availability discount back (NF-INJ1/2
+        territory), so the cap change's point-level effect is unknown until
+        measured. Ship/no-ship is then an operator decision.
+    - description: >
+        Reproduction pin at 1e-9 (never round(...,6)); RED-proofs on new
+        guards with mutation-landed + predicate-moved assertions; guards
+        prove they can fail.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inj3b
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "NF-INJ1" / "NF-INJ3b" / "injury" (board Credence Sports, 2026-08-23)'
+    duplicates: []
+    adjacent:
+      - "NF-INJ2b (To Do, trello.com/c/FUOXwXzS) — the ordering-learner successor; SEPARATE mechanism, separate files. This story does not touch the ordering learner."
+      - "NF-C9b (Sprint, trello.com/c/trChte1e) — id ingest normalisation; different files. Only collision surface is CLAUDE.md, which THIS story owns the append for (see Plan node 0b)."
+      - "NF-INJ3-CAP (Backlog) — Sleeper-capture change, non-gating (NF-INJ3 ruling D1=B); not this story."
+  triedLedger:
+    files:
+      - "quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj3_injury_games.md (+ .json, + nf_inj3_preregistration.md)"
+      - "production_model_state/nfl_season_fantasy.md (governance block: deflation-binds-claims / measurement-binds-consumption)"
+    recordedNulls:
+      - "NF-INJ3 POWER_LIMITED (documented null, PR #1003, deploy-held, SERVED_ARM='incumbent'). This story IS its sanctioned successor per recorded PM ruling D2=A — cite NF-INJ3 §0a. What is NEW: a fresh FORWARD registration that fixes the two identified spec gaps (V-membership, BH family). The null itself is not re-read."
+  supersedes: []
+  dependsOn:
+    - "PR #1003 merged to dev (verified 2026-08-23: dev @ a8a24626 contains the NF-INJ3 artifacts + harness)"
+  feedsInto:
+    - "The served injury-games caps (if cleared + operator-approved, via the gated ship path)"
+    - "NF-TR2b's warm gated-ship machinery (placement read + interval reval run here first)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inj3b-plan
+spec:
+  goalRef: { name: nf-inj3b }
+  graph:
+    nodes:
+      - id: 0a-spec-commit
+        desc: "Commit this spec file BEFORE any other work (provenance anchor)."
+      - id: 0b-claude-md-append
+        desc: >
+          As a SEPARATE commit, append two landmines to CLAUDE.md:
+          (1) a diagnostic DSR does not transfer to a narrower field — declare
+          a mechanism-justified family BEFORE computing any per-family DSR, or
+          the family choice is laundered; (2) "ask what transfers" can mean
+          the FINDING, not the feature (the NF-W2 -> NF-INJ3 example).
+      - id: 1-prereg
+        desc: >
+          Write + commit the fresh pre-registration
+          (ablation_results/nf_inj3b_preregistration.md) carrying ALL SIX
+          binding items from acceptanceCriteria[0]. Commit BEFORE any scoring.
+      - id: 2-run
+        desc: >
+          Re-run the existing harness (run_nf_inj3_injury_games.py, ~2s —
+          no operator handoff needed; a cheap smoke first per MH2.2 process
+          note) under the new registration. No new arms invented mid-run.
+      - id: 3-classify
+        desc: >
+          Score the registered gates; classify via cv_power.classify_null
+          (declared_field_size=, read field_remedy_admissible). Record the
+          decisive record + verdict in ablation_results/nf_inj3b_*.
+      - id: 4-gated-ship-path
+        desc: >
+          ONLY IF CLEARED: placement read, interval revalidation, superflex
+          caveat, measured served-point impact. Everything stays deploy-held;
+          hand the operator the ship/no-ship decision with the measurements.
+      - id: 5-closeout
+        desc: "Verdict + findings into closeout.followUps; session summary to the operator."
+  closeout:
+    verdict: >
+      CLEARS — all NINE registered gates pass on the registered primary
+      `hurdle_transfer`: beats_incumbent +0.2845 CRPS · fold consistency 6/7
+      (>=6) · PBO 0.0000 · DSR 0.9715 (>=0.95) under the declared V ·
+      BH single-hypothesis p 0.0501 (< q 0.10) · both degenerates lose ·
+      own-form oracle + matched-n respected · permutation +0.1147 ·
+      hurdle attributable +0.0472. `classify_null` is INAPPLICABLE (there is no
+      null) and that is NAMED, not silent; no re-test trigger is published.
+      Reproduction pin: 42/42 per-fold x per-arm CRPS identical to NF-INJ3's
+      recorded artifact at EXACTLY 0.0 (tol 1e-9), with a two-sided attribution
+      control (the parent's own entrypoint re-run in this environment) also at
+      0.0 => the entire delta between the two studies is the REGISTRATION.
+      ⚠️ HONESTY, as registered: this bought a properly-registered RECORD and an
+      honest BH answer, NOT new evidence. Seven of the nine gates are the SAME
+      NUMBERS NF-INJ3 already published — a reproduction, never a corroboration.
+      Exactly two things are new: (1) DSR computed for the first time under a
+      mechanism-declared family, and the direction confirms the registration was
+      honest — the narrowing drops a NEAR-MEAN arm so V WIDENED (0.0151 ->
+      0.018589) and DSR landed BELOW the parent's 0.973 diagnostic; the narrowing
+      COST the study DSR and it still cleared. (2) BH's first answer under a named
+      family; the strict across-arms sensitivity is disclosed and does NOT clear,
+      and the registered family binds either way.
+      SHIP PATH: INCOMPLETE. (a) placement read vs the PUBLISHED board = SANE,
+      4/4 gates, 14/14 configs; (b) run_interval_revalidation = ALL FLOORS MET
+      (exit 0), byte-identical to NF1.9's record; (c) superflex caveat CARRIED;
+      (d) the served-POINT impact is UNRUN and BLOCKING. DEPLOY-HELD,
+      SERVED_ARM='incumbent', best_alpha=0. Ship/no-ship is the OPERATOR's and
+      cannot be taken until (d) is measured.
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
+
+      (1) ⛔ BLOCKING THE SHIP DECISION — the served-POINT impact is UNMEASURED.
+      The point is NOT `pts x arm_games / incumbent_games`: NF1.5 permutes the
+      within-position POINT multiset and rescales the stat line to the new point,
+      and NF-INJ1 measured that step handing +36.4% of an availability discount
+      BACK. It needs a counterfactual 2026 board REBUILD on the NF-INJ3b caps
+      (DRY-RUN, no --publish) diffed against the published board on `pts`,
+      `proj_games`, overall rank and per-config placement — including the two
+      SUPERFLEX configs, which the additive-only VOR shield does not cover. That
+      rebuild ALSO unblocks the counterfactual placement read; the one run here is
+      a BASELINE on the board as published, not the decision-relevant comparison.
+      This is the single largest open item and it is a PM/operator scoping call
+      (it is >2min and needs a serving artifact for the fitted hurdle that this
+      deploy-held study deliberately does not create).
+
+      (2) NF-INJ3's committed SMOKE artifact is not reproducible; its FULL one is.
+      `nf_inj3_injury_games_smoke.json` was generated 2026-08-22T06:16Z — ELEVEN
+      MINUTES BEFORE the module's first commit (201c52f9, 01:27 local) — so it is
+      a pre-commit DEVELOPMENT vintage. Re-running the parent's own smoke here
+      diverges by 1.02e-2 on exactly the three L-BFGS-B-fitted arms, while its
+      FULL artifact reproduces at EXACTLY 0.0. Nothing turns on it (a smoke is a
+      code-path proof, never a gate, and NF-INJ3's verdict rests on the full run),
+      but a committed ablation artifact that predates the code which produced it
+      is a provenance defect worth a convention: an ablation artifact is
+      (re)generated from the COMMITTED code before it is committed.
+
+      (3) Two guard defects the RED proof caught and this story FIXED, both
+      generalisable: (a) a source-inspection clause keyed on a token that occurs
+      TWICE in the file is satisfied by the OTHER occurrence — isolate the block
+      (the NF-D17 class, now seen on a shared token rather than an AND-clause);
+      (b) `deflation` reported a `V_arms` membership RE-DERIVED independently of
+      the `srs_v` DSR actually consumes, so the CLAIM and the COMPUTATION could
+      drift silently — a mutation landed without moving the assertion (#815).
+      Derive a reported membership from the computation, and assert the VALUE.
+
+      (4) Two runners on the standing ship path REWRITE a DECIDED story's fixed
+      artifact as a side effect: `run_nf_tr2b_placement_read.main()` overwrites
+      `nf_tr2b_placement_read.*`, and `run_interval_revalidation` rewrites
+      `nf1_9_interval_revalidation.json` EVEN UNDER `--no-report`. Both were hit
+      in this session and both were reverted/byte-restored. Any story that has to
+      run them must call the pure `run()` or restore afterwards; the durable fix
+      is an `--out` stem on both (the NCAAF-P2.1 S1-serve class, on a STANDING
+      re-run rather than a one-off).
+
+      (5) Carried forward unchanged from NF-INJ3, still out of scope: the injury
+      cap NEVER REACHES A ROOKIE (`injury_availability_games` runs inside
+      `project_veterans`; 50 of 60 historical flagged rookies project ABOVE the
+      incumbent's own ceiling, against 0 of 496 veterans) — 0 live 2026 rows, fold
+      into the next rookie-path touch (NF-INJ3c). And NF-INJ3-CAP (stop
+      overwriting the Sleeper Delta partition so a real designation date accrues)
+      remains non-gating multi-season data infrastructure.
+
+      (6) Scope limit to keep on the record: `NFI` and `SUS` are INACTIVE on the
+      2026 serving cohort (22 flagged veterans: 14 RES, 8 PUP), and this study is
+      pre-labelled EXPLORATORY on every per-status channel other than `RES`. The
+      certified claim is about the RES/PUP population the board actually serves.

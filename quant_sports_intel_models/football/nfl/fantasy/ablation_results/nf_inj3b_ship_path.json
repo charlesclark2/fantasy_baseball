@@ -1,0 +1,2986 @@
+{
+  "story": "NF-INJ3b",
+  "read": "level-adjacent gated ship path (preregistration \u00a75)",
+  "generated_at": "2026-08-23T05:48:04.827495+00:00",
+  "gate_outcome": "CLEARS (9/9 registered gates)",
+  "steps": {
+    "a_placement_read_published_board": {
+      "status": "RUN",
+      "verdict": "SANE",
+      "gates": {
+        "band_integrity": "PASS",
+        "within_position_order": "PASS",
+        "rookie_placement_cap": "PASS",
+        "position_survival": "PASS"
+      },
+      "source": "s3://credence-prod-s3-api-cache/fantasy/nfl/2026/",
+      "source_kind": "s3",
+      "served_level_model_version": "nfl_fantasy_nf_tr2b_veteran_level_v1",
+      "board_built_at": "2026-08-22T20:36:26.627701+00:00",
+      "configs_read": [
+        "full_ppr_10",
+        "full_ppr_12",
+        "full_ppr_3wr_10",
+        "full_ppr_3wr_12",
+        "half_ppr_10",
+        "half_ppr_12",
+        "half_ppr_3wr_10",
+        "half_ppr_3wr_12",
+        "standard_10",
+        "standard_12",
+        "standard_3wr_10",
+        "standard_3wr_12",
+        "superflex_10",
+        "superflex_12"
+      ],
+      "configs_absent": [],
+      "scope": "\u26a0\ufe0f this is a BASELINE on the board AS PUBLISHED \u2014 it establishes that the served board is placement-clean TODAY. It is NOT the counterfactual read: the decision-relevant comparison (published board vs a board rebuilt on the NF-INJ3b caps) is blocked on the same rebuild step (d) is blocked on."
+    },
+    "b_interval_revalidation": {
+      "status": "RUN",
+      "exit_code": 0,
+      "all_floors_met": true,
+      "blocks": {
+        "rookies": {
+          "config": "SHIPPED rookie band",
+          "form": "qreg_sqrt",
+          "n": 553,
+          "pooled_coverage": 0.83,
+          "coverage": {
+            "QB": 0.8025,
+            "RB": 0.7905,
+            "TE": 0.9,
+            "WR": 0.8348
+          },
+          "floors": {
+            "QB": 0.7284,
+            "RB": 0.7432,
+            "TE": 0.73,
+            "WR": 0.7545
+          },
+          "slack_rows": {
+            "QB": 6,
+            "RB": 7,
+            "TE": 17,
+            "WR": 18
+          },
+          "error": null
+        },
+        "veterans": {
+          "config": "SHIPPED veteran band",
+          "form": "knn_norm",
+          "n": 8398,
+          "pooled_coverage": 0.8897,
+          "coverage": {
+            "FB": 0.8595,
+            "QB": 0.8575,
+            "RB": 0.8865,
+            "TE": 0.8884,
+            "WR": 0.9068
+          },
+          "floors": {
+            "QB": 0.7805,
+            "RB": 0.7854,
+            "TE": 0.7846,
+            "WR": 0.7882
+          },
+          "slack_rows": {
+            "QB": 86,
+            "RB": 204,
+            "TE": 187,
+            "WR": 375
+          },
+          "error": null
+        },
+        "kdst": {
+          "config": "SHIPPED K/DST base band (q0.10/q0.90 ratio quantiles, cluster_z=1.0)",
+          "form": "empirical_ratio_band",
+          "n": 795,
+          "pooled_coverage": 0.8566,
+          "coverage": {
+            "DST": 0.8969,
+            "K": 0.8295
+          },
+          "floors": {
+            "DST": 0.7625,
+            "K": 0.7684
+          },
+          "slack_rows": {
+            "DST": 43,
+            "K": 29
+          },
+          "error": null
+        }
+      },
+      "stdout_tail": [
+        "VERDICT: \u2705 ALL FLOORS MET"
+      ],
+      "decided_artifact_restored": true,
+      "why_it_gates": "a floor breach is a RE-SELECTION trigger for that population, never a reason to move the floor (E2.1-r / NF1.8 \u00a71)"
+    },
+    "c_superflex_caveat": {
+      "status": "CARRIED",
+      "caveat": "NF-TR2b: the VOR 'shield' \u2014 NF-W8-0's finding that a per-group level shift CANCELS in VOR space because a group's own replacement level absorbs it \u2014 is **ADDITIVE-ONLY**, and it additionally assumes the group is not cross-pooled. Two published configs are SUPERFLEX (`superflex_10`, `superflex_12`), where QB IS cross-pooled with RB/WR/TE, so the shield does NOT hold there. A cap change moves `proj_games` for flagged veterans at every position, so the superflex configs must be read on their own placement rows, never inferred from the non-superflex ones."
+    },
+    "d_served_point_impact": {
+      "status": "NOT_RUN_BLOCKING",
+      "why": "the served POINT is not recoverable from the games change: NF1.5 PERMUTES the within-position point multiset and rescales the stat line to the new point, so a games change alters the multiset the permutation re-assigns (NF-INJ1 measured that step handing +36.4% of an availability discount BACK). It requires a counterfactual board REBUILD on the NF-INJ3b caps, which additionally needs a SERVED artifact for the fitted hurdle that this deploy-held study deliberately does not create.",
+      "refused": "\u26d4 NO proportional estimate is published in its place. `pts \u00d7 arm_games / incumbent_games` is exactly the assumption preregistration \u00a75 (d) forbids, and publishing it would read as a measurement.",
+      "operator_step": "rebuild the 2026 board with the NF-INJ3b caps, DRY-RUN (no --publish), and diff the staged board against the published one on `pts`, `proj_games`, overall rank and per-config placement."
+    }
+  },
+  "executable_steps_pass": true,
+  "ship_path_complete": false,
+  "verdict": "SHIP_PATH_INCOMPLETE \u2014 step (d) is unrun and BLOCKING",
+  "deploy_held": true,
+  "served_arm": "incumbent",
+  "best_alpha": 0,
+  "decision_owner": "OPERATOR \u2014 ship/no-ship is not this harness's call, and it cannot be taken until (d) is measured.",
+  "placement_read_full": {
+    "story": "NF-TR2b",
+    "read": "cross-position placement (NF-D16 class)",
+    "generated_at": "2026-08-23T05:48:01.233273+00:00",
+    "source_kind": "s3",
+    "source": "s3://credence-prod-s3-api-cache/fantasy/nfl/2026/",
+    "read_from": "/var/folders/88/q8wq3ss94k3bvmkq1j1f_j0w0000gn/T/tmp2238vsfk",
+    "season": 2026,
+    "served_level_model_version": "nfl_fantasy_nf_tr2b_veteran_level_v1",
+    "served_level_status": "recalibrated",
+    "policy_serving_enabled": true,
+    "k_from_served_artifact": {
+      "QB": 0.9287565281164292,
+      "RB": 1.2479904415110172,
+      "TE": 1.1115566369997751,
+      "WR": 1.0992976324412493
+    },
+    "projection_built_at": "2026-08-22T20:36:26.627701+00:00",
+    "gates": {
+      "band_integrity": {
+        "n": 871,
+        "band_order_violations": 0,
+        "point_above_p90": 0,
+        "point_below_p10": 0,
+        "at_p90_within_0p05": 1,
+        "median_frac_of_band": 0.5223,
+        "pass": true
+      },
+      "within_position_order": {
+        "pass": true,
+        "failing_configs": [],
+        "unevaluable_configs": []
+      },
+      "rookie_placement_cap": {
+        "pass": true,
+        "failing_configs": [],
+        "unevaluable_configs": [],
+        "incumbent_breached_configs": [
+          "standard_10",
+          "standard_12",
+          "standard_3wr_10",
+          "standard_3wr_12",
+          "half_ppr_10",
+          "half_ppr_12",
+          "half_ppr_3wr_10",
+          "half_ppr_3wr_12",
+          "full_ppr_10",
+          "full_ppr_12",
+          "full_ppr_3wr_10",
+          "full_ppr_3wr_12",
+          "superflex_10",
+          "superflex_12"
+        ],
+        "repaired_by_tr2b": [
+          "standard_10",
+          "standard_12",
+          "standard_3wr_10",
+          "standard_3wr_12",
+          "half_ppr_10",
+          "half_ppr_12",
+          "half_ppr_3wr_10",
+          "half_ppr_3wr_12",
+          "full_ppr_10",
+          "full_ppr_12",
+          "full_ppr_3wr_10",
+          "full_ppr_3wr_12",
+          "superflex_10",
+          "superflex_12"
+        ]
+      },
+      "position_survival": {
+        "pass": true,
+        "failing_configs": [],
+        "unevaluable_configs": []
+      }
+    },
+    "verdict": {
+      "verdict": "SANE",
+      "gates": {
+        "band_integrity": "PASS",
+        "within_position_order": "PASS",
+        "rookie_placement_cap": "PASS",
+        "position_survival": "PASS"
+      },
+      "failing": []
+    },
+    "per_config": {
+      "standard_10": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 2.33,
+            "median_abs_move": 2,
+            "max_abs_move": 6
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 7.53,
+            "median_abs_move": 5,
+            "max_abs_move": 47
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 7.47,
+            "median_abs_move": 2,
+            "max_abs_move": 65
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 6.58,
+            "median_abs_move": 4,
+            "max_abs_move": 42
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 26.2,
+            "median_abs_move": 18,
+            "max_abs_move": 235
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 0,
+              "RB": 10,
+              "WR": 2,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 12,
+              "WR": 0,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 3,
+              "RB": 16,
+              "WR": 4,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 3,
+              "RB": 17,
+              "WR": 3,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 5,
+              "RB": 18,
+              "WR": 9,
+              "TE": 4,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 5,
+              "RB": 20,
+              "WR": 8,
+              "TE": 3,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 9,
+              "RB": 24,
+              "WR": 17,
+              "TE": 6,
+              "K": 1,
+              "DST": 3
+            },
+            "recalibrated": {
+              "QB": 9,
+              "RB": 27,
+              "WR": 13,
+              "TE": 6,
+              "K": 1,
+              "DST": 4
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 11,
+              "RB": 30,
+              "WR": 23,
+              "TE": 11,
+              "K": 12,
+              "DST": 13
+            },
+            "recalibrated": {
+              "QB": 11,
+              "RB": 32,
+              "WR": 22,
+              "TE": 11,
+              "K": 11,
+              "DST": 13
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 272.2,
+            "recalibrated": 254.1,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "RB": {
+            "incumbent": 100.8,
+            "recalibrated": 120.7,
+            "started_incumbent": 28,
+            "started_recalibrated": 30
+          },
+          "WR": {
+            "incumbent": 100.8,
+            "recalibrated": 114.5,
+            "started_incumbent": 22,
+            "started_recalibrated": 20
+          },
+          "TE": {
+            "incumbent": 78.2,
+            "recalibrated": 86.9,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "K": {
+            "incumbent": 130.5,
+            "recalibrated": 130.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "DST": {
+            "incumbent": 109.5,
+            "recalibrated": 109.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 2.4,
+          "rookie_mean_move": -23.4,
+          "rookie_top60": {
+            "n": 4,
+            "mean_move": -22.0,
+            "median_move": -17.5
+          },
+          "rookie_by_position": {
+            "QB": 8.8,
+            "RB": -85.46,
+            "TE": -0.05,
+            "WR": -24.19
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 215,
+          "rho_incumbent": 0.6734,
+          "rho_recalibrated": 0.6511,
+          "delta": -0.0223
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      },
+      "standard_12": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 2.38,
+            "median_abs_move": 2,
+            "max_abs_move": 6
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 7.19,
+            "median_abs_move": 6,
+            "max_abs_move": 24
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 5.52,
+            "median_abs_move": 2,
+            "max_abs_move": 61
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 7.22,
+            "median_abs_move": 4,
+            "max_abs_move": 46
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 16.85,
+            "median_abs_move": 9,
+            "max_abs_move": 220
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 0,
+              "RB": 11,
+              "WR": 1,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 12,
+              "WR": 0,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 3,
+              "RB": 16,
+              "WR": 4,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 2,
+              "RB": 18,
+              "WR": 3,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 5,
+              "RB": 20,
+              "WR": 9,
+              "TE": 2,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 3,
+              "RB": 24,
+              "WR": 7,
+              "TE": 2,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 8,
+              "RB": 29,
+              "WR": 17,
+              "TE": 6,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 8,
+              "RB": 32,
+              "WR": 14,
+              "TE": 6,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 12,
+              "RB": 32,
+              "WR": 27,
+              "TE": 12,
+              "K": 9,
+              "DST": 8
+            },
+            "recalibrated": {
+              "QB": 12,
+              "RB": 34,
+              "WR": 26,
+              "TE": 12,
+              "K": 8,
+              "DST": 8
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 267.5,
+            "recalibrated": 248.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "RB": {
+            "incumbent": 84.9,
+            "recalibrated": 100.8,
+            "started_incumbent": 32,
+            "started_recalibrated": 34
+          },
+          "WR": {
+            "incumbent": 92.2,
+            "recalibrated": 103.4,
+            "started_incumbent": 28,
+            "started_recalibrated": 26
+          },
+          "TE": {
+            "incumbent": 72.2,
+            "recalibrated": 80.2,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "K": {
+            "incumbent": 129.5,
+            "recalibrated": 129.5,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "DST": {
+            "incumbent": 109.4,
+            "recalibrated": 109.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 2.14,
+          "rookie_mean_move": -20.91,
+          "rookie_top60": {
+            "n": 4,
+            "mean_move": -17.25,
+            "median_move": -19.5
+          },
+          "rookie_by_position": {
+            "QB": 6.6,
+            "RB": -69.23,
+            "TE": -0.68,
+            "WR": -23.47
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 215,
+          "rho_incumbent": 0.7243,
+          "rho_recalibrated": 0.7077,
+          "delta": -0.0166
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      },
+      "standard_3wr_10": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 2.25,
+            "median_abs_move": 1,
+            "max_abs_move": 10
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 4.03,
+            "median_abs_move": 3,
+            "max_abs_move": 22
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 1.58,
+            "median_abs_move": 1,
+            "max_abs_move": 10
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 7.41,
+            "median_abs_move": 4,
+            "max_abs_move": 66
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 30.97,
+            "median_abs_move": 18,
+            "max_abs_move": 252
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 0,
+              "RB": 10,
+              "WR": 2,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 10,
+              "WR": 2,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 3,
+              "RB": 14,
+              "WR": 6,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 2,
+              "RB": 15,
+              "WR": 6,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 5,
+              "RB": 18,
+              "WR": 12,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 3,
+              "RB": 20,
+              "WR": 11,
+              "TE": 2,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 8,
+              "RB": 24,
+              "WR": 22,
+              "TE": 6,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 8,
+              "RB": 24,
+              "WR": 23,
+              "TE": 5,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 10,
+              "RB": 30,
+              "WR": 30,
+              "TE": 10,
+              "K": 10,
+              "DST": 10
+            },
+            "recalibrated": {
+              "QB": 10,
+              "RB": 30,
+              "WR": 30,
+              "TE": 10,
+              "K": 10,
+              "DST": 10
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 272.2,
+            "recalibrated": 254.1,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "RB": {
+            "incumbent": 96.7,
+            "recalibrated": 120.7,
+            "started_incumbent": 30,
+            "started_recalibrated": 30
+          },
+          "WR": {
+            "incumbent": 90.1,
+            "recalibrated": 99.1,
+            "started_incumbent": 30,
+            "started_recalibrated": 30
+          },
+          "TE": {
+            "incumbent": 78.2,
+            "recalibrated": 86.9,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "K": {
+            "incumbent": 130.5,
+            "recalibrated": 130.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "DST": {
+            "incumbent": 109.5,
+            "recalibrated": 109.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 3.18,
+          "rookie_mean_move": -31.01,
+          "rookie_top60": {
+            "n": 4,
+            "mean_move": -14.25,
+            "median_move": -14.0
+          },
+          "rookie_by_position": {
+            "QB": 8.9,
+            "RB": -179.77,
+            "TE": -4.36,
+            "WR": -4.67
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 215,
+          "rho_incumbent": 0.7443,
+          "rho_recalibrated": 0.7393,
+          "delta": -0.005
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      },
+      "standard_3wr_12": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 2.33,
+            "median_abs_move": 1,
+            "max_abs_move": 13
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 4.75,
+            "median_abs_move": 2,
+            "max_abs_move": 20
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 3.88,
+            "median_abs_move": 1,
+            "max_abs_move": 90
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 7.23,
+            "median_abs_move": 3,
+            "max_abs_move": 88
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 41.52,
+            "median_abs_move": 27,
+            "max_abs_move": 307
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 0,
+              "RB": 10,
+              "WR": 2,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 11,
+              "WR": 1,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 2,
+              "RB": 15,
+              "WR": 6,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 1,
+              "RB": 16,
+              "WR": 6,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 3,
+              "RB": 20,
+              "WR": 12,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 3,
+              "RB": 22,
+              "WR": 10,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 6,
+              "RB": 27,
+              "WR": 22,
+              "TE": 5,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 5,
+              "RB": 29,
+              "WR": 22,
+              "TE": 4,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 11,
+              "RB": 33,
+              "WR": 36,
+              "TE": 11,
+              "K": 4,
+              "DST": 5
+            },
+            "recalibrated": {
+              "QB": 11,
+              "RB": 34,
+              "WR": 36,
+              "TE": 11,
+              "K": 4,
+              "DST": 4
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 267.5,
+            "recalibrated": 248.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "RB": {
+            "incumbent": 80.7,
+            "recalibrated": 100.1,
+            "started_incumbent": 36,
+            "started_recalibrated": 36
+          },
+          "WR": {
+            "incumbent": 79.2,
+            "recalibrated": 87.1,
+            "started_incumbent": 36,
+            "started_recalibrated": 36
+          },
+          "TE": {
+            "incumbent": 72.2,
+            "recalibrated": 80.2,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "K": {
+            "incumbent": 129.5,
+            "recalibrated": 129.5,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "DST": {
+            "incumbent": 109.4,
+            "recalibrated": 109.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 1.9,
+          "rookie_mean_move": -18.56,
+          "rookie_top60": {
+            "n": 4,
+            "mean_move": -14.75,
+            "median_move": -16.5
+          },
+          "rookie_by_position": {
+            "QB": 6.7,
+            "RB": -117.23,
+            "TE": -1.45,
+            "WR": -0.39
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 215,
+          "rho_incumbent": 0.8036,
+          "rho_recalibrated": 0.7978,
+          "delta": -0.0058
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      },
+      "half_ppr_10": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 3.92,
+            "median_abs_move": 4,
+            "max_abs_move": 18
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 10.53,
+            "median_abs_move": 7,
+            "max_abs_move": 36
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 12.52,
+            "median_abs_move": 2,
+            "max_abs_move": 64
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 15.03,
+            "median_abs_move": 13,
+            "max_abs_move": 50
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 36.1,
+            "median_abs_move": 35,
+            "max_abs_move": 312
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 0,
+              "RB": 8,
+              "WR": 3,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 10,
+              "WR": 2,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 2,
+              "RB": 13,
+              "WR": 8,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 2,
+              "RB": 16,
+              "WR": 5,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 4,
+              "RB": 14,
+              "WR": 13,
+              "TE": 5,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 3,
+              "RB": 19,
+              "WR": 9,
+              "TE": 5,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 8,
+              "RB": 20,
+              "WR": 23,
+              "TE": 8,
+              "K": 0,
+              "DST": 1
+            },
+            "recalibrated": {
+              "QB": 9,
+              "RB": 24,
+              "WR": 17,
+              "TE": 8,
+              "K": 0,
+              "DST": 2
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 11,
+              "RB": 25,
+              "WR": 27,
+              "TE": 11,
+              "K": 12,
+              "DST": 14
+            },
+            "recalibrated": {
+              "QB": 11,
+              "RB": 29,
+              "WR": 23,
+              "TE": 11,
+              "K": 12,
+              "DST": 14
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 272.2,
+            "recalibrated": 254.1,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "RB": {
+            "incumbent": 118.9,
+            "recalibrated": 140.3,
+            "started_incumbent": 24,
+            "started_recalibrated": 28
+          },
+          "WR": {
+            "incumbent": 116.1,
+            "recalibrated": 140.2,
+            "started_incumbent": 26,
+            "started_recalibrated": 22
+          },
+          "TE": {
+            "incumbent": 99.9,
+            "recalibrated": 111.1,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "K": {
+            "incumbent": 130.5,
+            "recalibrated": 130.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "DST": {
+            "incumbent": 109.5,
+            "recalibrated": 109.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 3.85,
+          "rookie_mean_move": -37.54,
+          "rookie_top60": {
+            "n": 4,
+            "mean_move": -17.0,
+            "median_move": -14.0
+          },
+          "rookie_by_position": {
+            "QB": 8.7,
+            "RB": -57.38,
+            "TE": 16.45,
+            "WR": -76.22
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 230,
+          "rho_incumbent": 0.7042,
+          "rho_recalibrated": 0.675,
+          "delta": -0.0292
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      },
+      "half_ppr_12": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 4.08,
+            "median_abs_move": 4,
+            "max_abs_move": 17
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 11.5,
+            "median_abs_move": 10,
+            "max_abs_move": 30
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 11.18,
+            "median_abs_move": 7,
+            "max_abs_move": 45
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 11.93,
+            "median_abs_move": 8,
+            "max_abs_move": 76
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 28.92,
+            "median_abs_move": 21,
+            "max_abs_move": 243
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 0,
+              "RB": 8,
+              "WR": 3,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 11,
+              "WR": 1,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 2,
+              "RB": 14,
+              "WR": 7,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 1,
+              "RB": 17,
+              "WR": 5,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 3,
+              "RB": 16,
+              "WR": 12,
+              "TE": 5,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 3,
+              "RB": 21,
+              "WR": 9,
+              "TE": 3,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 8,
+              "RB": 21,
+              "WR": 23,
+              "TE": 8,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 7,
+              "RB": 29,
+              "WR": 18,
+              "TE": 6,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 12,
+              "RB": 29,
+              "WR": 28,
+              "TE": 11,
+              "K": 11,
+              "DST": 9
+            },
+            "recalibrated": {
+              "QB": 12,
+              "RB": 33,
+              "WR": 26,
+              "TE": 11,
+              "K": 10,
+              "DST": 8
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 267.5,
+            "recalibrated": 248.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "RB": {
+            "incumbent": 110.3,
+            "recalibrated": 117.6,
+            "started_incumbent": 29,
+            "started_recalibrated": 33
+          },
+          "WR": {
+            "incumbent": 112.3,
+            "recalibrated": 126.6,
+            "started_incumbent": 31,
+            "started_recalibrated": 27
+          },
+          "TE": {
+            "incumbent": 94.7,
+            "recalibrated": 105.3,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "K": {
+            "incumbent": 129.5,
+            "recalibrated": 129.5,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "DST": {
+            "incumbent": 109.4,
+            "recalibrated": 109.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 3.14,
+          "rookie_mean_move": -30.63,
+          "rookie_top60": {
+            "n": 4,
+            "mean_move": -19.25,
+            "median_move": -21.0
+          },
+          "rookie_by_position": {
+            "QB": 5.6,
+            "RB": 2.69,
+            "TE": -20.68,
+            "WR": -58.81
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 230,
+          "rho_incumbent": 0.7379,
+          "rho_recalibrated": 0.7327,
+          "delta": -0.0051
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      },
+      "half_ppr_3wr_10": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 2.33,
+            "median_abs_move": 1,
+            "max_abs_move": 10
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 4.08,
+            "median_abs_move": 3,
+            "max_abs_move": 17
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 2.75,
+            "median_abs_move": 2,
+            "max_abs_move": 12
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 7.21,
+            "median_abs_move": 4,
+            "max_abs_move": 88
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 46.23,
+            "median_abs_move": 33,
+            "max_abs_move": 293
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 0,
+              "RB": 8,
+              "WR": 3,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 9,
+              "WR": 3,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 2,
+              "RB": 14,
+              "WR": 7,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 1,
+              "RB": 14,
+              "WR": 8,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 3,
+              "RB": 16,
+              "WR": 13,
+              "TE": 4,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 3,
+              "RB": 18,
+              "WR": 12,
+              "TE": 3,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 8,
+              "RB": 22,
+              "WR": 24,
+              "TE": 6,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 7,
+              "RB": 24,
+              "WR": 23,
+              "TE": 6,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 10,
+              "RB": 29,
+              "WR": 31,
+              "TE": 10,
+              "K": 10,
+              "DST": 10
+            },
+            "recalibrated": {
+              "QB": 10,
+              "RB": 30,
+              "WR": 30,
+              "TE": 10,
+              "K": 10,
+              "DST": 10
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 272.2,
+            "recalibrated": 254.1,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "RB": {
+            "incumbent": 110.3,
+            "recalibrated": 136.4,
+            "started_incumbent": 29,
+            "started_recalibrated": 30
+          },
+          "WR": {
+            "incumbent": 112.3,
+            "recalibrated": 123.7,
+            "started_incumbent": 31,
+            "started_recalibrated": 30
+          },
+          "TE": {
+            "incumbent": 99.9,
+            "recalibrated": 111.1,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "K": {
+            "incumbent": 130.5,
+            "recalibrated": 130.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "DST": {
+            "incumbent": 109.5,
+            "recalibrated": 109.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 2.07,
+          "rookie_mean_move": -20.21,
+          "rookie_top60": {
+            "n": 4,
+            "mean_move": -12.5,
+            "median_move": -13.0
+          },
+          "rookie_by_position": {
+            "QB": 8.8,
+            "RB": -127.0,
+            "TE": -0.27,
+            "WR": -1.89
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 230,
+          "rho_incumbent": 0.7449,
+          "rho_recalibrated": 0.7462,
+          "delta": 0.0013
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      },
+      "half_ppr_3wr_12": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 2.67,
+            "median_abs_move": 2,
+            "max_abs_move": 12
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 8.56,
+            "median_abs_move": 7,
+            "max_abs_move": 23
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 5.92,
+            "median_abs_move": 2,
+            "max_abs_move": 37
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 9.61,
+            "median_abs_move": 7,
+            "max_abs_move": 58
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 14.65,
+            "median_abs_move": 11,
+            "max_abs_move": 270
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 0,
+              "RB": 9,
+              "WR": 3,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 10,
+              "WR": 2,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 1,
+              "RB": 14,
+              "WR": 8,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 16,
+              "WR": 7,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 3,
+              "RB": 16,
+              "WR": 15,
+              "TE": 2,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 2,
+              "RB": 21,
+              "WR": 12,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 6,
+              "RB": 23,
+              "WR": 25,
+              "TE": 6,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 4,
+              "RB": 29,
+              "WR": 22,
+              "TE": 5,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 11,
+              "RB": 33,
+              "WR": 36,
+              "TE": 11,
+              "K": 4,
+              "DST": 5
+            },
+            "recalibrated": {
+              "QB": 11,
+              "RB": 34,
+              "WR": 36,
+              "TE": 11,
+              "K": 4,
+              "DST": 4
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 267.5,
+            "recalibrated": 248.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "RB": {
+            "incumbent": 96.2,
+            "recalibrated": 110.3,
+            "started_incumbent": 33,
+            "started_recalibrated": 35
+          },
+          "WR": {
+            "incumbent": 98.7,
+            "recalibrated": 111.6,
+            "started_incumbent": 39,
+            "started_recalibrated": 37
+          },
+          "TE": {
+            "incumbent": 94.7,
+            "recalibrated": 105.3,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "K": {
+            "incumbent": 129.5,
+            "recalibrated": 129.5,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "DST": {
+            "incumbent": 109.4,
+            "recalibrated": 109.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 1.97,
+          "rookie_mean_move": -19.22,
+          "rookie_top60": {
+            "n": 4,
+            "mean_move": -15.75,
+            "median_move": -17.5
+          },
+          "rookie_by_position": {
+            "QB": 6.0,
+            "RB": -33.38,
+            "TE": -10.09,
+            "WR": -26.69
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 230,
+          "rho_incumbent": 0.8027,
+          "rho_recalibrated": 0.797,
+          "delta": -0.0057
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      },
+      "full_ppr_10": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 3.83,
+            "median_abs_move": 3,
+            "max_abs_move": 16
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 9.44,
+            "median_abs_move": 8,
+            "max_abs_move": 32
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 12.58,
+            "median_abs_move": 4,
+            "max_abs_move": 70
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 13.93,
+            "median_abs_move": 12,
+            "max_abs_move": 52
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 28.57,
+            "median_abs_move": 13,
+            "max_abs_move": 209
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 0,
+              "RB": 7,
+              "WR": 4,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 8,
+              "WR": 3,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 1,
+              "RB": 12,
+              "WR": 9,
+              "TE": 2,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 1,
+              "RB": 14,
+              "WR": 7,
+              "TE": 2,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 3,
+              "RB": 14,
+              "WR": 14,
+              "TE": 5,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 3,
+              "RB": 16,
+              "WR": 11,
+              "TE": 6,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 7,
+              "RB": 19,
+              "WR": 26,
+              "TE": 8,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 9,
+              "RB": 20,
+              "WR": 21,
+              "TE": 9,
+              "K": 0,
+              "DST": 1
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 11,
+              "RB": 23,
+              "WR": 30,
+              "TE": 12,
+              "K": 11,
+              "DST": 13
+            },
+            "recalibrated": {
+              "QB": 11,
+              "RB": 26,
+              "WR": 26,
+              "TE": 12,
+              "K": 12,
+              "DST": 13
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 272.2,
+            "recalibrated": 254.1,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "RB": {
+            "incumbent": 132.3,
+            "recalibrated": 163.0,
+            "started_incumbent": 21,
+            "started_recalibrated": 25
+          },
+          "WR": {
+            "incumbent": 134.8,
+            "recalibrated": 163.0,
+            "started_incumbent": 29,
+            "started_recalibrated": 25
+          },
+          "TE": {
+            "incumbent": 118.8,
+            "recalibrated": 132.1,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "K": {
+            "incumbent": 130.5,
+            "recalibrated": 130.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "DST": {
+            "incumbent": 109.5,
+            "recalibrated": 109.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 3.57,
+          "rookie_mean_move": -34.8,
+          "rookie_top60": {
+            "n": 4,
+            "mean_move": -12.5,
+            "median_move": -11.5
+          },
+          "rookie_by_position": {
+            "QB": 8.6,
+            "RB": -86.23,
+            "TE": 27.32,
+            "WR": -66.25
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 266,
+          "rho_incumbent": 0.7019,
+          "rho_recalibrated": 0.6585,
+          "delta": -0.0434
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      },
+      "full_ppr_12": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 3.79,
+            "median_abs_move": 3,
+            "max_abs_move": 14
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 6.14,
+            "median_abs_move": 4,
+            "max_abs_move": 16
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 12.35,
+            "median_abs_move": 8,
+            "max_abs_move": 48
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 8.45,
+            "median_abs_move": 5,
+            "max_abs_move": 63
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 9.95,
+            "median_abs_move": 5,
+            "max_abs_move": 161
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 0,
+              "RB": 7,
+              "WR": 4,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 8,
+              "WR": 3,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 2,
+              "RB": 11,
+              "WR": 10,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 14,
+              "WR": 8,
+              "TE": 2,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 3,
+              "RB": 14,
+              "WR": 15,
+              "TE": 4,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 3,
+              "RB": 16,
+              "WR": 13,
+              "TE": 4,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 8,
+              "RB": 18,
+              "WR": 26,
+              "TE": 8,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 8,
+              "RB": 21,
+              "WR": 23,
+              "TE": 8,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 12,
+              "RB": 24,
+              "WR": 34,
+              "TE": 12,
+              "K": 10,
+              "DST": 8
+            },
+            "recalibrated": {
+              "QB": 12,
+              "RB": 31,
+              "WR": 29,
+              "TE": 11,
+              "K": 9,
+              "DST": 8
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 267.5,
+            "recalibrated": 248.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "RB": {
+            "incumbent": 130.6,
+            "recalibrated": 150.0,
+            "started_incumbent": 25,
+            "started_recalibrated": 31
+          },
+          "WR": {
+            "incumbent": 130.6,
+            "recalibrated": 148.2,
+            "started_incumbent": 35,
+            "started_recalibrated": 29
+          },
+          "TE": {
+            "incumbent": 117.3,
+            "recalibrated": 130.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "K": {
+            "incumbent": 129.5,
+            "recalibrated": 129.5,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "DST": {
+            "incumbent": 109.4,
+            "recalibrated": 109.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 2.22,
+          "rookie_mean_move": -21.63,
+          "rookie_top60": {
+            "n": 4,
+            "mean_move": -13.0,
+            "median_move": -14.5
+          },
+          "rookie_by_position": {
+            "QB": 5.4,
+            "RB": -45.54,
+            "TE": -2.86,
+            "WR": -31.97
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 266,
+          "rho_incumbent": 0.7211,
+          "rho_recalibrated": 0.7256,
+          "delta": 0.0045
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      },
+      "full_ppr_3wr_10": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 3.62,
+            "median_abs_move": 3,
+            "max_abs_move": 13
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 5.39,
+            "median_abs_move": 4,
+            "max_abs_move": 17
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 10.48,
+            "median_abs_move": 6,
+            "max_abs_move": 42
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 7.18,
+            "median_abs_move": 3,
+            "max_abs_move": 62
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 14.61,
+            "median_abs_move": 12,
+            "max_abs_move": 182
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 0,
+              "RB": 7,
+              "WR": 4,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 8,
+              "WR": 3,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 1,
+              "RB": 12,
+              "WR": 10,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 14,
+              "WR": 8,
+              "TE": 2,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 3,
+              "RB": 14,
+              "WR": 15,
+              "TE": 4,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 2,
+              "RB": 16,
+              "WR": 14,
+              "TE": 4,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 7,
+              "RB": 19,
+              "WR": 26,
+              "TE": 8,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 6,
+              "RB": 21,
+              "WR": 25,
+              "TE": 8,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 10,
+              "RB": 25,
+              "WR": 35,
+              "TE": 10,
+              "K": 10,
+              "DST": 10
+            },
+            "recalibrated": {
+              "QB": 10,
+              "RB": 30,
+              "WR": 30,
+              "TE": 10,
+              "K": 10,
+              "DST": 10
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 272.2,
+            "recalibrated": 254.1,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "RB": {
+            "incumbent": 130.6,
+            "recalibrated": 152.0,
+            "started_incumbent": 25,
+            "started_recalibrated": 30
+          },
+          "WR": {
+            "incumbent": 130.6,
+            "recalibrated": 147.5,
+            "started_incumbent": 35,
+            "started_recalibrated": 30
+          },
+          "TE": {
+            "incumbent": 118.8,
+            "recalibrated": 132.1,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "K": {
+            "incumbent": 130.5,
+            "recalibrated": 130.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "DST": {
+            "incumbent": 109.5,
+            "recalibrated": 109.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 2.01,
+          "rookie_mean_move": -19.56,
+          "rookie_top60": {
+            "n": 4,
+            "mean_move": -13.25,
+            "median_move": -14.5
+          },
+          "rookie_by_position": {
+            "QB": 8.5,
+            "RB": -58.08,
+            "TE": -1.68,
+            "WR": -24.36
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 266,
+          "rho_incumbent": 0.7249,
+          "rho_recalibrated": 0.7285,
+          "delta": 0.0036
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      },
+      "full_ppr_3wr_12": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 3.79,
+            "median_abs_move": 3,
+            "max_abs_move": 17
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 6.86,
+            "median_abs_move": 6,
+            "max_abs_move": 18
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 9.17,
+            "median_abs_move": 6,
+            "max_abs_move": 38
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 7.63,
+            "median_abs_move": 5,
+            "max_abs_move": 47
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 15.74,
+            "median_abs_move": 14,
+            "max_abs_move": 235
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 0,
+              "RB": 7,
+              "WR": 4,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 9,
+              "WR": 3,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 0,
+              "RB": 12,
+              "WR": 11,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 0,
+              "RB": 15,
+              "WR": 8,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 2,
+              "RB": 14,
+              "WR": 17,
+              "TE": 3,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 1,
+              "RB": 18,
+              "WR": 15,
+              "TE": 2,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 6,
+              "RB": 20,
+              "WR": 27,
+              "TE": 7,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 4,
+              "RB": 25,
+              "WR": 25,
+              "TE": 6,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 11,
+              "RB": 31,
+              "WR": 39,
+              "TE": 10,
+              "K": 4,
+              "DST": 5
+            },
+            "recalibrated": {
+              "QB": 11,
+              "RB": 33,
+              "WR": 38,
+              "TE": 10,
+              "K": 4,
+              "DST": 4
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 267.5,
+            "recalibrated": 248.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "RB": {
+            "incumbent": 117.5,
+            "recalibrated": 134.5,
+            "started_incumbent": 32,
+            "started_recalibrated": 33
+          },
+          "WR": {
+            "incumbent": 118.6,
+            "recalibrated": 134.6,
+            "started_incumbent": 40,
+            "started_recalibrated": 39
+          },
+          "TE": {
+            "incumbent": 117.3,
+            "recalibrated": 130.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "K": {
+            "incumbent": 129.5,
+            "recalibrated": 129.5,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "DST": {
+            "incumbent": 109.4,
+            "recalibrated": 109.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 1.79,
+          "rookie_mean_move": -17.49,
+          "rookie_top60": {
+            "n": 4,
+            "mean_move": -11.5,
+            "median_move": -11.5
+          },
+          "rookie_by_position": {
+            "QB": 6.1,
+            "RB": -30.0,
+            "TE": -7.18,
+            "WR": -25.83
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 266,
+          "rho_incumbent": 0.7809,
+          "rho_recalibrated": 0.7792,
+          "delta": -0.0017
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      },
+      "superflex_10": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 4.12,
+            "median_abs_move": 3,
+            "max_abs_move": 21
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 7.08,
+            "median_abs_move": 7,
+            "max_abs_move": 23
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 12.97,
+            "median_abs_move": 4,
+            "max_abs_move": 69
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 12.38,
+            "median_abs_move": 11,
+            "max_abs_move": 43
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 34.05,
+            "median_abs_move": 20,
+            "max_abs_move": 351
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 2,
+              "RB": 6,
+              "WR": 3,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 2,
+              "RB": 6,
+              "WR": 3,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 7,
+              "RB": 9,
+              "WR": 7,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 7,
+              "RB": 12,
+              "WR": 4,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 12,
+              "RB": 12,
+              "WR": 10,
+              "TE": 2,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 12,
+              "RB": 14,
+              "WR": 7,
+              "TE": 3,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 15,
+              "RB": 16,
+              "WR": 22,
+              "TE": 7,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 16,
+              "RB": 19,
+              "WR": 17,
+              "TE": 8,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 20,
+              "RB": 21,
+              "WR": 29,
+              "TE": 10,
+              "K": 10,
+              "DST": 10
+            },
+            "recalibrated": {
+              "QB": 20,
+              "RB": 25,
+              "WR": 25,
+              "TE": 10,
+              "K": 10,
+              "DST": 10
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 223.1,
+            "recalibrated": 207.2,
+            "started_incumbent": 20,
+            "started_recalibrated": 20
+          },
+          "RB": {
+            "incumbent": 132.3,
+            "recalibrated": 163.0,
+            "started_incumbent": 21,
+            "started_recalibrated": 25
+          },
+          "WR": {
+            "incumbent": 134.8,
+            "recalibrated": 163.0,
+            "started_incumbent": 29,
+            "started_recalibrated": 25
+          },
+          "TE": {
+            "incumbent": 118.8,
+            "recalibrated": 132.1,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "K": {
+            "incumbent": 130.5,
+            "recalibrated": 130.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          },
+          "DST": {
+            "incumbent": 109.5,
+            "recalibrated": 109.5,
+            "started_incumbent": 10,
+            "started_recalibrated": 10
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 3.56,
+          "rookie_mean_move": -34.77,
+          "rookie_top60": {
+            "n": 5,
+            "mean_move": -9.0,
+            "median_move": -9.0
+          },
+          "rookie_by_position": {
+            "QB": 13.9,
+            "RB": -88.31,
+            "TE": 28.59,
+            "WR": -67.67
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 240,
+          "rho_incumbent": 0.7239,
+          "rho_recalibrated": 0.7013,
+          "delta": -0.0226
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      },
+      "superflex_12": {
+        "status": "OK",
+        "n": 871,
+        "movement_by_band": [
+          {
+            "band": "1-24",
+            "n": 24,
+            "mean_abs_move": 5.17,
+            "median_abs_move": 5,
+            "max_abs_move": 12
+          },
+          {
+            "band": "25-60",
+            "n": 36,
+            "mean_abs_move": 6.0,
+            "median_abs_move": 3,
+            "max_abs_move": 18
+          },
+          {
+            "band": "61-120",
+            "n": 60,
+            "mean_abs_move": 11.63,
+            "median_abs_move": 7,
+            "max_abs_move": 37
+          },
+          {
+            "band": "121-300",
+            "n": 180,
+            "mean_abs_move": 7.44,
+            "median_abs_move": 3,
+            "max_abs_move": 65
+          },
+          {
+            "band": "301+",
+            "n": 571,
+            "mean_abs_move": 19.63,
+            "median_abs_move": 12,
+            "max_abs_move": 303
+          }
+        ],
+        "composition": {
+          "12": {
+            "incumbent": {
+              "QB": 4,
+              "RB": 5,
+              "WR": 3,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 3,
+              "RB": 6,
+              "WR": 3,
+              "TE": 0,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "24": {
+            "incumbent": {
+              "QB": 13,
+              "RB": 7,
+              "WR": 3,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 9,
+              "RB": 11,
+              "WR": 3,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "36": {
+            "incumbent": {
+              "QB": 14,
+              "RB": 11,
+              "WR": 10,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 14,
+              "RB": 14,
+              "WR": 7,
+              "TE": 1,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "60": {
+            "incumbent": {
+              "QB": 20,
+              "RB": 14,
+              "WR": 20,
+              "TE": 6,
+              "K": 0,
+              "DST": 0
+            },
+            "recalibrated": {
+              "QB": 19,
+              "RB": 19,
+              "WR": 17,
+              "TE": 5,
+              "K": 0,
+              "DST": 0
+            }
+          },
+          "100": {
+            "incumbent": {
+              "QB": 23,
+              "RB": 21,
+              "WR": 32,
+              "TE": 10,
+              "K": 6,
+              "DST": 8
+            },
+            "recalibrated": {
+              "QB": 23,
+              "RB": 30,
+              "WR": 27,
+              "TE": 10,
+              "K": 5,
+              "DST": 5
+            }
+          }
+        },
+        "replacement": {
+          "QB": {
+            "incumbent": 193.3,
+            "recalibrated": 179.5,
+            "started_incumbent": 24,
+            "started_recalibrated": 24
+          },
+          "RB": {
+            "incumbent": 130.6,
+            "recalibrated": 150.0,
+            "started_incumbent": 25,
+            "started_recalibrated": 31
+          },
+          "WR": {
+            "incumbent": 130.6,
+            "recalibrated": 148.2,
+            "started_incumbent": 35,
+            "started_recalibrated": 29
+          },
+          "TE": {
+            "incumbent": 117.3,
+            "recalibrated": 130.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "K": {
+            "incumbent": 129.5,
+            "recalibrated": 129.5,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          },
+          "DST": {
+            "incumbent": 109.4,
+            "recalibrated": 109.4,
+            "started_incumbent": 12,
+            "started_recalibrated": 12
+          }
+        },
+        "cohort_shift": {
+          "veteran_mean_move": 2.02,
+          "rookie_mean_move": -19.69,
+          "rookie_top60": {
+            "n": 5,
+            "mean_move": -11.0,
+            "median_move": -14.0
+          },
+          "rookie_by_position": {
+            "QB": 35.2,
+            "RB": -48.38,
+            "TE": -4.45,
+            "WR": -33.89
+          }
+        },
+        "market_read_not_a_gate": {
+          "n": 240,
+          "rho_incumbent": 0.768,
+          "rho_recalibrated": 0.7773,
+          "delta": 0.0093
+        },
+        "gates": {
+          "within_position_order": true,
+          "rookie_placement_cap": true,
+          "position_survival": true
+        }
+      }
+    }
+  }
+}

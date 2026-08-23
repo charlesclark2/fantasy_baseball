@@ -147,6 +147,35 @@ for _m in __init__ league_config draft; do
      "$PACKAGE_DIR/quant_sports_intel_models/fantasy_engine/${_m}.py"
 done
 
+# ── 3d. Copy NF-INJ1's coherence predicate (NF-INJ1-C) ───────────────────────
+# `/fantasy/nfl/projections-full` withholds the counting-stat line on rows whose line is physically
+# impossible at their own expected games (NF-INJ1 §8.1 Option C, fired by NF-INJ2's gate refusal).
+# The PREDICATE is NF-INJ1's recorded one and is IMPORTED rather than mirrored into app/backend:
+# a second copy of the envelope would put the guard that PAGES about a violating row and the code
+# that WITHHOLDS it under two owners, which is the repo's most-repeated defect class (INC-30 /
+# INC-36 / INC-38 / E9.61).
+#
+# ⭐ SAME PATTERN AS 3b/3c: lift a stdlib-only module out of a heavy tree rather than pip-installing
+# it. `projection_coherence.py` imports nothing at module scope but `__future__`; its lone `pandas`
+# import is nested inside `frame_rows`, which the backend never calls.
+#
+# 🪤 `football/` and `nfl/` are PEP 420 namespace dirs with NO `__init__.py` (like
+# `quant_sports_intel_models` itself — see 3c). `fantasy/` has a real one-line `__init__.py`, so it
+# is the only level that needs copying. ⛔ Do NOT generate the missing ones: both layouts import
+# correctly, and generating them makes the DEPLOYED tree differ from the tree every test imports.
+#
+# ⚠️ THE PATH IS SPELLED OUT ON EVERY LINE rather than held in a shell variable, and that is not a
+# style choice: `test_the_deploy_copy_steps_only_copy` EXECUTES this section, so it first asserts
+# the section contains nothing but `mkdir`/`cp`/`echo`/`for`. A local assignment is not a copy, and
+# widening that allowlist to admit one would weaken the safety check that makes executing this
+# section safe at all. Verbosity here buys a guard that stays honest.
+echo "Copying projection_coherence.py (NF-INJ1-C coherence predicate)..."
+mkdir -p "$PACKAGE_DIR/quant_sports_intel_models/football/nfl/fantasy"
+for _m in __init__ projection_coherence; do
+  cp "quant_sports_intel_models/football/nfl/fantasy/${_m}.py" \
+     "$PACKAGE_DIR/quant_sports_intel_models/football/nfl/fantasy/${_m}.py"
+done
+
 # ── 4. Zip the package ────────────────────────────────────────────────────────
 # Prune bytecode caches / dist-info that pip may leave behind — smaller zip = faster,
 # more reliable upload (every KB off the 59 MB package lowers the multipart-drop risk).
