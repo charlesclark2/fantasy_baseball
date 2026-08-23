@@ -1,0 +1,100 @@
+# Plan spec — NF-DTB-1 "draft-trust bundle" (MINI tier: two small ruled frontend fixes, one session)
+# Authored by PM 2026-08-23. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-dtb-1
+  vertical: nfl_fantasy
+  card: https://trello.com/c/2rwMVxmB   # + https://trello.com/c/7a9jeXDq (NF-C10)
+  status: ACCEPTED
+spec:
+  description: >
+    Two small, already-ruled draft-season trust fixes, bundled into one
+    frontend session. best_alpha=0; display/UX only; no projection value,
+    ordering, or band moves anywhere.
+    HALF A — quota-rejection bug: a league create at the free-league cap
+    returns a generic "Could not save league" (400) instead of the 409 cap
+    error — the E8.6 "saving is broken" shape, hit through the UI during
+    draft season. Diagnose which path fires, surface an explicit
+    quota-reached message distinct from a generic save failure.
+    HALF B — NF-C10 (ruled Option 1): reword AVAILABILITY_DATA_AS_OF_PREFIX
+    to provenance-only — PM-approved wording "Injury/roster feed as of
+    {date}" (drop "status": it implies we know + acted) — and correct the
+    NF-C8 write-up's false "already fixed" claim to "recommended; carded as
+    NF-C10". The current line renders directly under the NF-C9 chip that
+    says "our projection does not price this in" — a live contradiction on
+    two surfaces.
+  acceptanceCriteria:
+    - description: >
+        HALF A: the true failure path is identified and recorded (backend
+        raising 400 where the cap should 409, or frontend collapsing a 409
+        into the generic message — confirm, don't assume). At the cap, the
+        UI shows an explicit quota message naming the limit state; a
+        non-quota save failure still shows the generic error. E2E covers
+        BOTH (at-cap → quota message; forced non-quota failure → generic),
+        asserted on RENDERED output (NF-C4). If a backend change is needed:
+        response shape ADDITIVE only (NF-C0), API Lambda ships via deploy.sh
+        — "pushed" never means the backend shipped; verify the deployed
+        behavior, and remember CI mocks IO (runtime gate applies to any
+        backend leg).
+    - description: >
+        HALF B: constant reworded to "Injury/roster feed as of {date}";
+        NF-C8's pins updated in the SAME change (legitimate NF-D17 coupling:
+        betting_ml/tests/test_nf_c8_availability_flag_copy.py
+        _NF_C8_CONSTANTS + frontend/e2e/specs/availability-flag.spec.ts
+        verbatim assertion); the write-up's false claim corrected. New pins
+        RED-proven against the retired string — and heed NF-INJ1-C's lesson:
+        a constant whose only guard reads a DIFFERENT constant is unpinned;
+        pin the rendered string itself on every surface it appears
+        (board, projections, player page, NF-C9 disclosure).
+    - description: >
+        CLAUDE.md append (separate commit), two process landmines from
+        NF-INJ1-C: (1) "A constant whose only guard reads a different
+        constant is unpinned and looks pinned — pin the rendered string, not
+        a sibling constant's presence." (2) "A CONFLICTING PR creates ZERO
+        Actions runs, so 'no failing checks' reads clean — check mergeable
+        explicitly before trusting a quiet PR."
+    - description: >
+        All copy denylist-clean (fantasy-claim-copy.ts conventions); no
+        forecast language; frontend auto-deploys on main — verify against
+        the PUBLISHED artifact/surfaces by name (NF-C9 lesson).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-dtb-1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "QUOTA rejection" / "NF-C10" / "frontend" (board Credence Sports, 2026-08-23)'
+    duplicates: []
+    adjacent:
+      - "NF-INJ-NEWS-1 (IN FLIGHT) — its chip work touches fantasy-claim-copy.ts. REBASE on current dev before Half B; if its chip strings are present, apply the reword on top and say so. Do not touch its chip component or copy."
+      - "NF-INJ1-C (Done) — do not touch STAT_LINE_WITHHELD_LABEL or the withheld-row disclosure."
+      - "NF-C8/NF-C9 (Done) — Half B edits their pins ONLY as the NF-D17-sanctioned coupling describes; components untouched."
+      - "G100-C1 free-league quota (GROWTH) — Half A surfaces the cap; it does not change the cap."
+  triedLedger:
+    files:
+      - "ablation_results/nf_c8_injury_designation_gap.md (the false 'already fixed' claim to correct)"
+      - "plan_specs/nfl_fantasy/nf-inj1-c.yaml closeout (the two landmines + pin lesson)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "Draft-season save-flow trust (Half A); surface-copy honesty (Half B)"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-dtb-1-plan
+spec:
+  goalRef: { name: nf-dtb-1 }
+  graph:
+    nodes: []   # MINI tier — sequence carried in acceptanceCriteria; Half A first (user-facing bug), then rebase, then Half B
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
