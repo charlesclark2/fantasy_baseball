@@ -7,7 +7,7 @@ metadata:
   name: nf-inj-news-1
   vertical: nfl_fantasy
   card: https://trello.com/c/67JbJ6J6
-  status: IN_PROGRESS
+  status: DONE
 spec:
   description: >
     Reported-absence games cap: an operator-curated, provenance-stamped
@@ -143,8 +143,64 @@ spec:
           Verdict + findings into closeout.followUps; hand the operator the
           publish decision with the node-4 report + node-5 proposal.
   closeout:
-    verdict: null
+    verdict: >
+      BUILT, DEPLOY-HELD. All 7 plan nodes complete. The mechanism ships with the
+      curated file EMPTY, so the board is byte-identical to the pre-story board
+      until the operator adopts rows. Nothing is published; the first publish is
+      the operator's decision with the node-4 report and the node-5 proposal in
+      hand. It is an OPERATOR JUDGMENT with provenance, never a model: not
+      fitted, never backtested, no accuracy or improvement claim anywhere, and
+      best_alpha = 0. 48 guard clauses, 29/29 RED-proven, plus a rendered-output
+      E2E registered in the mobile project. TWO ITEMS NEED THE OPERATOR'S CALL —
+      see followUps items 1 and 2.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      1. ⚠️ DECISION OWED — THE CAP RULE IS INERT FOR SHORT ABSENCES, MEASURED.
+      The spec's binding rule is min(current_expected_games, 17 -
+      expected_games_missed), implemented exactly as written. Measured against
+      the real 2026 board it does nothing for 5 of the 6 proposed candidates:
+      the model already projects starters at 11-16 games, so a ceiling of "17
+      minus a short absence" sits ABOVE the current projection. Only Tyson's
+      5-game report bites, and it moves 12%, not the ~29% "misses 5 of 17"
+      suggests. A subtractive rule (current - missed) would always engage. The
+      clause was FLAGGED rather than edited per the kickoff; the numbers and both
+      readings are in ablation_results/nf_inj_news_1_board_delta.md. Until this
+      is settled the mechanism is effectively a long-absence-only tool.
+
+      2. ⏭️ OPERATOR STEPS BEFORE THE FIRST PUBLISH: (a) confirm/edit the seed
+      rows in data/reported_absence_overrides.proposed.yaml and move the accepted
+      ones into reported_absence_overrides.yaml (player_ids are resolved and
+      listed in the node-4 report); (b) run run_nf_inj_news_1_measure.py in the
+      MAIN CHECKOUT for the A/B board delta and the give-back on this cohort;
+      (c) run_nf_tr2b_placement_read --from-dir on the with-overrides board;
+      (d) run_interval_revalidation as a regression check. (b)-(d) need the lake
+      and the panel caches, gitignored and absent from a worktree (NF-INFRA1).
+
+      3. ⭐ FINDING (repo-wide, worth a durable note): THE ROOKIE POPULATION HAS
+      NO AVAILABILITY PATH AT ALL. Every availability discount — the
+      RES/PUP/NFI/SUS status cap AND the NF-D11 return prior — lives inside
+      project_veterans; project_rookies calls none of them, on 81 of the 794 rows
+      of the 2026 board. This story fixed it for ITS OWN cap only. So a rookie
+      placed on IR today still receives ZERO discount from the formal path, which
+      is a live gap of the same shape as the one this story was written to close
+      and is NOT fixed here. Worth a PM decision.
+
+      4. 📌 ablation_results/nf_c8_injury_designation_gap.md places Jordyn Tyson
+      in ARIZONA; the live Sleeper feed and every beat report say NEW ORLEANS.
+      Nothing depends on it, but a false premise in a doc is what the next reader
+      builds on.
+
+      5. ⏳ SHELF LIFE: the 2026 cutdown to 53 is 2026-08-30. This whole
+      population exists because IR placements have not happened yet, and several
+      candidates are described in reporting as IR candidates once teams cut down.
+      Every proposed review_by is set to the cutdown. The design handles the
+      transition automatically (the formal path wins and the override is ignored,
+      named in the build log) — but the seed list itself goes stale fast.
+
+      6. ⭐ METHOD NOTE for the next session in this area: two real defects in
+      this story were invisible to 44 passing guards and were found ONLY by
+      resolving candidates against the REAL published board — the rookie wiring
+      gap and the inert-cap measurement. A synthetic fixture cannot know which
+      production function built it.
+
+      PM triages into: checklist item on the parent card | merge into an existing
+      card (name it) | a new spec. Worker sessions never create Trello cards.
