@@ -29,6 +29,9 @@ from quant_sports_intel_models.football.nfl.fantasy import season_projection as 
 
 _REPO = Path(__file__).resolve().parents[2]
 _FANTASY = _REPO / "quant_sports_intel_models/football/nfl/fantasy"
+_FE = _REPO / "frontend"
+_COPY = _FE / "lib/fantasy-claim-copy.ts"
+_SHARED = _FE / "components/fantasy/shared.tsx"
 
 
 def _row(pid="00-0039918", name="Jordyn Tyson", miss=8, url="https://example.com/report",
@@ -428,3 +431,112 @@ def test_the_whole_step_is_a_no_op_when_nothing_is_curated():
     df = _frame()
     games, decisions = SP.reported_absence_games(df, [])
     assert np.allclose(games, df["proj_games"].to_numpy()) and decisions == []
+
+
+# ══ THE FRONTEND COPY — where a reader actually meets the claim ══════════════════════════════════
+
+_COPY_CONSTANTS = ("REPORTED_ABSENCE_LABEL", "REPORTED_ABSENCE_SUMMARY", "REPORTED_ABSENCE_MANUAL",
+                   "REPORTED_ABSENCE_NOT_A_FORECAST", "REPORTED_ABSENCE_SOURCE_LABEL",
+                   "REPORTED_ABSENCE_ENTERED_PREFIX", "REPORTED_ABSENCE_METHOD_DISCLOSURE")
+
+
+def _copy_values() -> dict:
+    """The exported string literals, read out of the TS source. Single-line `export const X = "..."`
+    or a `+`-joined continuation; anything else is not a plain string constant and is skipped."""
+    src = _COPY.read_text()
+    out = {}
+    for name in _COPY_CONSTANTS:
+        m = re.search(rf"export const {name}\s*=\s*((?:\s*\"(?:[^\"\\\\]|\\\\.)*\"\s*\+?)+)", src)
+        if m:
+            out[name] = "".join(re.findall(r'"((?:[^"\\\\]|\\\\.)*)"', m.group(1)))
+    return out
+
+
+def test_every_reported_absence_string_lives_in_fantasy_claim_copy():
+    """All user-facing strings route through the shared copy module — the same rule NF-C8/NF-C9
+    follow, and the reason the honesty scans below can be exhaustive."""
+    found = _copy_values()
+    missing = [c for c in _COPY_CONSTANTS if c not in found]
+    assert not missing, f"copy constants missing from fantasy-claim-copy.ts: {missing}"
+
+
+def test_the_copy_never_forecasts_a_return_or_claims_an_improvement():
+    """⛔ The two things this mechanism must never say. It is a human reading a report: it does not
+    know when the player is back, and it has never been shown to make anything better."""
+    for name, value in _copy_values().items():
+        low = value.lower()
+        for phrase in _FORBIDDEN:
+            for m in re.finditer(rf"\b{re.escape(phrase)}\b", low):
+                before = low[max(0, m.start() - 40):m.start()]
+                assert re.search(r"\b(no|not|never|nothing|cannot|must not|neither)\b", before), (
+                    f"{name} makes an unnegated claim {phrase!r}")
+
+
+def test_the_copy_is_denylist_clean():
+    """The repo's shared overclaim denylist, applied to this block. Read from the Python AUTHORITY
+    (`export_track_record_json._CLAIM_DENYLIST`), not the browser mirror, so this cannot pass
+    against a drifted copy of the list."""
+    from quant_sports_intel_models.football.nfl.fantasy import export_track_record_json as EX
+    for name, value in _copy_values().items():
+        hits = [t for t in EX._CLAIM_DENYLIST if t in value.lower()]
+        assert not hits, f"{name} carries denied phrase(s) {hits}"
+
+
+def test_the_copy_says_out_loud_that_this_is_manual_and_untested():
+    """⭐ THE LOAD-BEARING SENTENCE. Without it a hand-lowered number reads as model output, which
+    is the single most consequential thing a reader could get wrong about this mechanism. Asserted
+    on the VALUE, not on the constant's existence — a constant renamed to something honest-sounding
+    but emptied would satisfy the binding check above."""
+    v = _copy_values()
+    manual = v["REPORTED_ABSENCE_MANUAL"].lower()
+    assert "manual" in manual and "not a model output" in manual
+    assert "not been tested" in manual, (
+        "the copy does not say the adjustment is untested — it has never been backtested and the "
+        "reader has no other way to know")
+    disclosure = v["REPORTED_ABSENCE_METHOD_DISCLOSURE"].lower()
+    assert "by hand" in disclosure and "not a model output" in disclosure
+
+
+def test_the_chip_is_a_DISTINCT_component_from_the_availability_flag_and_the_designation():
+    """⭐ THREE CHANNELS, THREE COMPONENTS. They answer different questions — our model's output, a
+    club's filing, and an act we performed — and nesting this one inside `AvailabilityFlag` would
+    hide it from exactly the motivating case: Jordyn Tyson sat at 13.6 projected games, ABOVE the
+    flag threshold, so the flag never fired on him at all (NF-C9 learned this the same way)."""
+    src = _SHARED.read_text()
+    assert "export function ReportedAbsence(" in src, "the chip is not its own component"
+    flag = src.split("export function AvailabilityFlag(", 1)[1].split("\nexport function ", 1)[0]
+    assert "ReportedAbsence" not in flag, (
+        "the reported-absence stamp renders from inside AvailabilityFlag — it would never reach a "
+        "player whose games figure sits above the flag threshold, which is the motivating case")
+
+
+def test_the_chip_is_bound_on_every_surface_that_renders_the_games_number():
+    """A hand-lowered number disclosed on one surface and not another is not disclosed."""
+    for rel in ("components/fantasy/rankings-board.tsx",
+                "components/fantasy/projections-table.tsx",
+                "components/fantasy/player-page.tsx"):
+        src = (_FE / rel).read_text()
+        assert "<ReportedAbsence " in src, f"{rel} renders `g` but never the reported-absence stamp"
+
+
+def test_the_stamp_never_reaches_ordering_or_the_optimizer():
+    """⛔ The cap already reached the board through `g` and the points rescaled with it. Reading the
+    stamp again anywhere that ORDERS players would price the same judgment twice (the NF-W7e
+    non-additivity trap, and NF-INJ1's give-back one layer over)."""
+    for rel in ("lib/draft-optimizer.ts", "lib/fantasy.ts"):
+        src = (_FE / rel).read_text()
+        # ⚠️ strip comments first: the type's own docstring says "never an input to ordering", and
+        # a scan that counted that sentence would fire on the documentation of the rule (INC-38).
+        code = re.sub(r"/\*[\s\S]*?\*/", "", src)
+        code = re.sub(r"//.*", "", code)
+        # ⚠️ A DECLARATION IS NOT A READ, and the distinction has to be structural. Counting lines
+        # that merely CONTAIN the name is wrong twice over: `reportedAbsence` is a substring of
+        # `reportedAbsenceCount` (the manifest field, a different thing), and the type declaration
+        # itself contains the name. Match the declaration FORM and treat everything else as a read.
+        decl = re.compile(r"^\s*reportedAbsence(Count)?\??:")
+        reads = [ln for ln in code.splitlines()
+                 if re.search(r"\breportedAbsence\b", ln) and not decl.match(ln)]
+        assert reads == [], (
+            f"{rel} READS `reportedAbsence` outside its type declaration ({reads}) — the cap "
+            "already reached the board through `g`, so reading it here prices the same judgment "
+            "twice; it is a receipt, not an adjustment")

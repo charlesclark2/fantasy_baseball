@@ -57,6 +57,17 @@ export interface Player {
    *  no feed) and NULL when the feed carries a value the build could not interpret → "unknown".
    *  ⛔ Never an input to ordering, VOR or the optimizer. */
   gameStatus?: string | null
+  /** NF-INJ-NEWS-1 — the reported-absence PROVENANCE stamp (see the identical field on
+   *  `lib/fantasy.ts::Projection`). This row's projected games was lowered BY HAND on a published
+   *  report of an expected absence carrying no formal roster move: an operator judgment with a
+   *  citation, never a model output and never a forecast.
+   *
+   *  ⚠️ ABSENT on almost every row, and absent is the meaningful state — the key is set only where
+   *  a judgment actually moved the number.
+   *  ⛔ Never an input to ordering, VOR or the optimizer. The CAP already reached the board through
+   *  `g` (and through the points that were rescaled with it), so reading this here would price the
+   *  same judgment TWICE. It is the receipt, not the adjustment. */
+  reportedAbsence?: { sourceUrl?: string | null; enteredAt?: string | null } | null
   /** E9.56 — the server withheld this season's model output from this caller. The row keeps its
    *  public identity (name/pos/team/bye/ADP) and carries NO `pts`/`vor`/`posRank`/`ovrRank`, so a
    *  "subscribe to unlock" chip renders in each value cell. Optional: absent on an entitled
@@ -164,6 +175,12 @@ export interface Manifest {
   adp_as_of?: string | null
   ecr_as_of?: string | null
   freshness?: FreshnessBlock | null
+  /** NF-INJ-NEWS-1 — how many rows on THIS build carry an operator-curated reported-absence cap.
+   *  ⭐ ALWAYS PRESENT once the exporter knows about the mechanism, and `0` is a real answer, not an
+   *  absence: it says "the mechanism is live and nothing is currently applied", which a reader can
+   *  only learn if we state it. ABSENT means the export predates the mechanism entirely — a
+   *  different fact, and the reason this is optional rather than defaulted to 0. */
+  reportedAbsenceCount?: number | null
   positions: string[]
   sizes: number[]
   configs: LeagueConfigMeta[]

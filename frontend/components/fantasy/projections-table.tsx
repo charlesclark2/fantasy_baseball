@@ -53,6 +53,7 @@ import {
   int,
   teamLabel,
   WeeklyDesignation,
+  ReportedAbsence,
   WithheldStat,
 } from "@/components/fantasy/shared"
 import { Picker } from "@/components/ui/picker"
@@ -346,6 +347,10 @@ export function ProjectionsTable() {
                       {/* NF-C9 — see `WeeklyDesignation`. Same component, same feed vintage
                           and same disclaimer the Rankings board renders. */}
                       <WeeklyDesignation status={p.gameStatus} freshness={data?.freshness} />
+                      {/* NF-INJ-NEWS-1 — see `ReportedAbsence`. Every surface that renders `g`
+                          renders this beside it: a hand-lowered number that discloses itself on
+                          one surface and not another is not disclosed. */}
+                      <ReportedAbsence reported={p.reportedAbsence} />
                     </td>
                     {statCols.map((c) => (
                       <td key={String(c.key)} className="px-3 py-2 text-right text-gray-400">

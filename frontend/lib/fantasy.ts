@@ -35,6 +35,19 @@ export interface ProjectedPlayer {
    *  no feed) and NULL when the feed carries a value the build could not interpret → "unknown".
    *  ⛔ Never an input to ordering, VOR or the optimizer. */
   gameStatus?: string | null
+  /** NF-INJ-NEWS-1 — the reported-absence PROVENANCE stamp: this row's projected games was lowered
+   *  BY HAND, after a published report of an expected absence that no formal roster move had yet
+   *  reflected. An OPERATOR JUDGMENT with a citation, never a model output and never a forecast.
+   *
+   *  ⚠️ ABSENT on almost every row, and absent is the meaningful state: the key is set only where a
+   *  judgment ACTUALLY moved the number (a row the disjointness rule refused, because the player
+   *  has since been placed on IR, carries nothing here — the formal path priced him instead). So an
+   *  un-overridden player is indistinguishable from before this mechanism existed (NF-FRESH2).
+   *
+   *  ⛔ Never an input to ordering, VOR or the optimizer — the CAP is already in `g`, and the whole
+   *  effect of the judgment reaches the board through that number. This is the receipt, not the
+   *  adjustment. */
+  reportedAbsence?: { sourceUrl?: string | null; enteredAt?: string | null } | null
   fpStd: number | null
   fpHalf: number | null
   fpPpr: number | null

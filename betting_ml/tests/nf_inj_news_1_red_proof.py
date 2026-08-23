@@ -35,9 +35,14 @@ RUNNER = _F / "run_season_projection.py"
 EXPORTER = _F / "export_draft_board_json.py"
 YAML = _F / "data/reported_absence_overrides.yaml"
 FIELDS = REPO / "app/backend/services/projection_fields.py"
+COPY = REPO / "frontend/lib/fantasy-claim-copy.ts"
+SHARED = REPO / "frontend/components/fantasy/shared.tsx"
+RANKINGS = REPO / "frontend/components/fantasy/rankings-board.tsx"
+OPTIMIZER = REPO / "frontend/lib/draft-optimizer.ts"
 SUITE = "betting_ml/tests/test_nf_inj_news_1_reported_absence.py"
 
-FILES = (LOADER, SEASON, RUNNER, EXPORTER, YAML, FIELDS)
+FILES = (LOADER, SEASON, RUNNER, EXPORTER, YAML, FIELDS, COPY, SHARED, RANKINGS,
+         OPTIMIZER)
 
 #: `(label, file, anchor, replacement, gone_after, the ONE test that must go red)`.
 #: `gone_after` is the token the named clause asserts on; after the mutation it must NOT be in the
@@ -185,6 +190,44 @@ CASES = [
      "# Each capped player will return in the week after his review_by date.\nschema_version: 1",
      None,
      "test_no_module_or_data_file_in_this_story_claims_accuracy_or_forecasts_a_return"),
+
+    # ══ THE FRONTEND — where a reader actually meets the claim ═══════════════════════════════════
+    ("the copy drops the 'this is manual, not a model output' sentence", COPY,
+     '  "This is a manual judgment, not a model output. It has not been tested against outcomes."',
+     '  "We adjusted this player\'s games projection."',
+     "not a model output. It has not been tested",
+     "test_the_copy_says_out_loud_that_this_is_manual_and_untested"),
+
+    ("the copy forecasts a return date", COPY,
+     '  "It is not a medical opinion and not a return date — our projection carries no view on when he plays again."',
+     '  "He will return once the reported absence ends."',
+     "not a return date",
+     "test_the_copy_never_forecasts_a_return_or_claims_an_improvement"),
+
+    ("the copy claims the override makes the projection better", COPY,
+     'export const REPORTED_ABSENCE_SUMMARY =',
+     'export const REPORTED_ABSENCE_SUMMARY_UNUSED = "x"\nexport const REPORTED_ABSENCE_SUMMARY =\n  "A more accurate games figure for this player." ||',
+     None,
+     "test_the_copy_never_forecasts_a_return_or_claims_an_improvement"),
+
+    ("the chip is nested inside AvailabilityFlag, hiding it from the motivating case", SHARED,
+     "      {asOf && <p className=\"mt-2 text-gray-500\">{asOf}</p>}\n    </InfoTip>\n  )\n}\n\n// \u2550\u2550 NF-C9",
+     "      {asOf && <p className=\"mt-2 text-gray-500\">{asOf}</p>}\n      <ReportedAbsence reported={null} />\n    </InfoTip>\n  )\n}\n\n// \u2550\u2550 NF-C9",
+     None,
+     "test_the_chip_is_a_DISTINCT_component_from_the_availability_flag_and_the_designation"),
+
+    ("a surface that renders `g` stops rendering the stamp", RANKINGS,
+     "                            <ReportedAbsence reported={p.reportedAbsence} />",
+     "                            {null}",
+     "<ReportedAbsence ",
+     "test_the_chip_is_bound_on_every_surface_that_renders_the_games_number"),
+
+    ("the optimizer starts READING the stamp, pricing the judgment twice", OPTIMIZER,
+     "  reportedAbsence?: { sourceUrl?: string | null; enteredAt?: string | null } | null",
+     "  reportedAbsence?: { sourceUrl?: string | null; enteredAt?: string | null } | null\n"
+     "  scoreHack = (p: any) => (p.reportedAbsence ? 0 : 1)",
+     None,
+     "test_the_stamp_never_reaches_ordering_or_the_optimizer"),
 ]
 
 _BACKUP_DIR = REPO / ".nf_inj_news_1_red_proof_backup"
