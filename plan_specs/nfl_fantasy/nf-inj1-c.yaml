@@ -7,7 +7,7 @@ metadata:
   name: nf-inj1-c
   vertical: nfl_fantasy
   card: https://trello.com/c/NhCErPAF
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Suppress the impossible COUNTING-STAT line on violating rows of the paid
