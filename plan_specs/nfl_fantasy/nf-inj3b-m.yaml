@@ -197,8 +197,24 @@ spec:
       remains non-gating. The PM boundary is ENFORCED IN CODE: SUS/NFI retain the
       incumbent constants, guarded two-sided.
 
-      (7) COMPOSITION, per the spec's binding note: this measurement is vs TODAY's
-      published board and so is NF-INJ-NEWS-1's. They do NOT compose additively —
-      NEWS-1's PR had NOT landed when this ran (it was in flight, no PR open), so
-      no rebase was possible. The FIRST publish carrying both changes needs ONE
-      final combined placement + interval read before the operator approves it.
+      (7) COMPOSITION, per the spec's binding note — and it was EXERCISED, not just
+      noted. NF-INJ-NEWS-1 (PR #1013) MERGED to dev while this story was in flight,
+      so this branch was REBASED onto the merged dev as the spec's OverlapCheck
+      requires. `run_season_projection.py` conflicted (both stories add an
+      availability feed to the same call chain) and was resolved as a UNION —
+      neither side dropped; taking a side would have silently reverted a sibling
+      PR's wiring. Verified after the rebase: NEWS-1's 48 tests pass and its
+      29-clause RED proof still fully bites, and the union carries BOTH paths
+      (`reported_absence_*` 12 references, `injury_covariates` 7).
+      ⭐ THE COMPOSITION QUESTION WAS THEN MEASURED, not assumed: the whole
+      counterfactual was RE-RUN on the post-NEWS-1 tree and every substantive
+      figure is IDENTICAL (flagged mean Δpts −1.2341, Δgames −2.6104; unflagged 348
+      points / 517 rank moves; `per_config_placement` and `band_integrity`
+      byte-identical). Only `generated_at`, the fresh replicate noise measurement
+      and sub-1e-9 row values move. ⇒ NEWS-1's step is INERT on today's board (its
+      disjointness rule holding, and it is itself deploy-held), so this
+      measurement stands as recorded.
+      ⚠️ That does NOT retire the spec's binding note: NEWS-1 is inert only while
+      it has no seeded override rows and stays deploy-held. The FIRST publish
+      carrying BOTH changes live still needs ONE final combined placement +
+      interval read before the operator approves it.

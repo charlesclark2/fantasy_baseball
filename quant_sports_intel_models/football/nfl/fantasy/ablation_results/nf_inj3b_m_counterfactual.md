@@ -1,6 +1,6 @@
 # NF-INJ3b-M — the served-POINT impact, MEASURED (closes NF-INJ3b §5(d))
 
-_generated 2026-08-23T06:51:33.554349+00:00_ · season 2026 · `best_alpha = 0` · **DEPLOY-HELD** (`SERVING_ENABLED` on disk = False) · **nothing published**
+_generated 2026-08-23T07:04:15.438188+00:00_ · season 2026 · `best_alpha = 0` · **DEPLOY-HELD** (`SERVING_ENABLED` on disk = False) · **nothing published**
 
 ## What this measures, and why it could not be estimated
 
@@ -12,8 +12,8 @@ The board build is **not** bit-deterministic run to run, so a diff that credited
 
 | quantity | rows differing | max abs | p99 abs |
 |---|---|---|---|
-| `proj_games` (replicate) | 13 | 3.55e-15 | 1.78e-15 |
-| `proj_fp_ppr` (replicate) | 129 | 4.26e-13 | 7.20e-14 |
+| `proj_games` (replicate) | 16 | 3.55e-15 | 1.78e-15 |
+| `proj_fp_ppr` (replicate) | 183 | 4.69e-13 | 8.53e-14 |
 
 Replicate overall-rank order identical: **True** ⇒ a rank move in §2 cannot be build noise.
 
