@@ -7,7 +7,7 @@ metadata:
   name: nf-inj-news-1
   vertical: nfl_fantasy
   card: https://trello.com/c/67JbJ6J6
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Reported-absence games cap: an operator-curated, provenance-stamped
