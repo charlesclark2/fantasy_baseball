@@ -36,3 +36,13 @@ Do not backfill specs for the existing ~150 Backlog cards. Backfill happens
 lazily: when a card is pulled toward To Do, it gets its spec then — including
 the overlap check, which is exactly when stale duplicates will surface and
 get merged or archived.
+
+## Runtime handoff rule (operator ruling 2026-08-23)
+In any modeling story, a command expected to run **longer than ~2 minutes is
+not run by the worker session** — it is handed to the operator (Charlie) as a
+paste-ready command, with the expected runtime, what artifact it writes, and
+what "success" looks like stated alongside it. The session picks back up from
+the artifact the operator's run produced. Quick smokes and sub-2-minute
+harnesses stay in-session. Kickoff prompts carry this rule in their
+DISCIPLINES block; a spec whose plan contains a known long-running node names
+it as an OPERATOR-RUN step up front.
