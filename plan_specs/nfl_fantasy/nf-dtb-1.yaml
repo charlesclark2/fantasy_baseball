@@ -7,7 +7,7 @@ metadata:
   name: nf-dtb-1
   vertical: nfl_fantasy
   card: https://trello.com/c/2rwMVxmB   # + https://trello.com/c/7a9jeXDq (NF-C10)
-  status: IN_PROGRESS
+  status: DONE
 spec:
   description: >
     Two small, already-ruled draft-season trust fixes, bundled into one
@@ -93,8 +93,91 @@ spec:
   graph:
     nodes: []   # MINI tier — sequence carried in acceptanceCriteria; Half A first (user-facing bug), then rebase, then Half B
   closeout:
-    verdict: null
+    verdict: >
+      BOTH HALVES SHIPPED. best_alpha=0; display/UX only — no projection value,
+      ordering or band moved.
+
+      HALF A — DIAGNOSED, and the spec's first candidate is EXONERATED BY
+      MEASUREMENT, not by reading. Driven against the real ASGI app,
+      `POST /fantasy/leagues` at the cap answers 409 ("You can save 1 league on
+      your current plan.") on BOTH payload shapes a user can produce — the
+      manual editor's config and the importer's, which carries `league_rosters`
+      and the source stamps. The 400 "Could not save league" branch is the
+      NON-quota fallback and never fires there. THE COLLAPSE IS THE FRONTEND, at
+      the FETCH BOUNDARY: `apiFetch` threw a bare `Error` carrying only the
+      server's `detail` and DISCARDED `res.status`, so no caller COULD branch and
+      both create surfaces rendered every failure through one generic line. Fixed
+      with `ApiError` (additive: same message, still an `Error`) + a call-site
+      predicate; both doors now render the quota notice with its upgrade CTA on a
+      409 and keep the generic line for every other failure. ⭐ NO BACKEND CHANGE
+      — so no `deploy.sh` leg and no runtime gate for a backend leg.
+
+      HALF B — NF-C10 shipped as ruled (Option 1): "Injury/roster feed as of
+      {date}". Rebased on current dev FIRST; NF-INJ-NEWS-1's REPORTED_ABSENCE_*
+      chip strings ARE present and the reword is applied ON TOP of them (its
+      chip/component/copy untouched, as are STAT_LINE_WITHHELD_LABEL and the
+      NF-INJ1-C withheld-row disclosure). Pinned on RENDERED output on all four
+      surfaces it appears (board, projections, player page, NF-C9 disclosure),
+      each with the RETIRED string asserted ABSENT beside the new one. NF-C8's
+      pins updated in the same change; the write-up's false "already fixed" claim
+      corrected in place rather than deleted.
+
+      VERIFIED LOCALLY BEYOND CI: `tsc --noEmit` clean; free-league.spec.ts 32/32,
+      availability-flag + weekly-designation 40/40 (chromium AND mobile); 16/16
+      Python clauses RED-proven; all 4 new browser red-proof cases RED.
     followUps: >
       Findings land HERE. PM triages into: checklist item on the parent card |
       merge into an existing card (name it) | a new spec. Worker sessions never
       create Trello cards.
+
+      1. ⭐ THE REPORTED SYMPTOM IS NOT FULLY EXPLAINED, AND THE GAP IS WORTH A
+      PM READ. The card said the user saw the string "Could not save league" —
+      which is the BACKEND's generic 400 detail, and the backend provably does
+      not emit it at the cap (measured, both payload shapes). What the deployed
+      client actually rendered at the cap is "Could not save. You can save 1
+      league on your current plan." — the correct server sentence behind a
+      generic prefix, with no quota affordance and no upgrade CTA. That is the
+      defect this story fixed and it fully accounts for the "saving is broken"
+      READING; it does not account for the exact quoted string. Two live
+      possibilities the session could not settle from here: (a) the report was a
+      paraphrase of the rendered line; (b) a genuine non-quota 400 was hit
+      separately (the shape-violation branch of `_enforce_scoring_probe_guard`,
+      or a `ValueError` out of the writer). If the operator has the original
+      report/screenshot, (b) is worth eliminating — it would be a DIFFERENT bug
+      wearing the same clothes.
+
+      2. THE CLIENT-SIDE `atQuota` GUARD IS RE-ENABLED BY ITS OWN CACHE, BY
+      DESIGN AND NOT ONLY IN ERROR. `useSavedLeagues` carries `staleTime: 60_000`
+      and `retry: false`, and its `data` is `undefined` both WHILE LOADING and ON
+      ERROR — each reads as "0 leagues saved" and re-enables Save. That is why the
+      server refusal is reachable at all, and this story renders it well rather
+      than removing it. A cheap follow-up if the PM wants the pre-emptive notice
+      to be reliable: distinguish "list unread" from "list read, empty" and hold
+      the control until the list is known. ⛔ Out of scope here (it changes when
+      a control is enabled, i.e. behaviour, not just its failure copy).
+
+      3. THE FREE-LEAGUE CAP NOW HAS TWO COPY SURFACES WITH DIFFERENT JOBS —
+      `LEAGUE_QUOTA_REACHED_DETAIL` (pre-emptive, at the control) and
+      `LEAGUE_QUOTA_REFUSED_DETAIL` (after a round trip: says nothing was saved).
+      They are deliberately not one constant. If a future story reworks the
+      paywall copy, both move together or the post-save one silently reverts to
+      wording that cannot answer "did my work just disappear?".
+
+      4. AN NF-DTB-1 GUARD PINS THE ROUTER'S 409. `test_nf_dtb_1_quota_refusal.py`
+      asserts `create_league` answers 409 (not 400) at the cap, because the client
+      now BRANCHES on that status — a future change to `create_league`'s status
+      would silently un-fix this story with no browser test going red. Anyone
+      touching that handler should read the clause rather than delete it.
+
+      5. RED-PROOF BOARD MOVED 167 → 171 (`frontend/e2e/red-proof.mjs`
+      RECORDED_BOARD updated in the same commits, per its own rule). Two Half A
+      cases + two Half B cases; the Half B pair deliberately breaks the SAME
+      constant twice, once per spec, because "the other spec would have caught it"
+      is an assumption until measured.
+
+      6. FOUND WHILE WORKING, NOT FIXED (no user impact, tiny): the editor's
+      `onSave` previously let `mutateAsync` REJECT out of a click handler — an
+      unhandled promise rejection on the one path a user is meant to recover from.
+      Now caught (the outcome renders off react-query's `isError`). Mentioned only
+      because the same shape may exist on other `mutateAsync` click handlers that
+      were not in scope here.
