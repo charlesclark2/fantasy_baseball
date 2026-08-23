@@ -2742,6 +2742,43 @@ const CASES = [
     to: 'export const STAT_LINE_WITHHELD_LABEL = "stat detail withheld — availability-adjusted"',
     grep: "refuses every forecast reading",
   },
+  {
+    id: "quota-409-collapsed-at-the-fetch-boundary",
+    shipped: "NF-DTB-1 — the free-league cap reported as a generic save failure",
+    // ⭐⭐ THE ACTUAL SHIPPED DEFECT, restored at its actual location. `apiFetch` threw a BARE
+    // `Error` and discarded `res.status`, so a 409 (the free-league cap, with a precise server
+    // detail) was indistinguishable from a 400 at every call site — and both rendered through the
+    // generic "Could not save. …" line. The user met a LIMIT and was told their save was broken,
+    // with nothing naming the cap and no way past it (E8.6's shape, on a paywall).
+    //
+    // ⚠️ THIS IS THE ROOT BREAK, NOT A SURFACE ONE. With the status gone, `isLeagueQuotaRefusal`
+    // returns false everywhere at once, so BOTH create paths regress from a single edit — which is
+    // the point: it proves the specs are keyed on the boundary and not on a component-local flag.
+    detail: "Reverts `apiFetch` to throwing a bare Error, discarding the HTTP status.",
+    file: "lib/api.ts",
+    from:
+      "    throw new AuthError('Unauthorized')\n" +
+      "  }\n" +
+      "  if (!res.ok) throw new ApiError(res.status, await errorMessage(res))",
+    to:
+      "    throw new AuthError('Unauthorized')\n" +
+      "  }\n" +
+      "  if (!res.ok) throw new Error(await errorMessage(res))",
+    grep: "reads as a LIMIT, not as a failure",
+  },
+  {
+    id: "quota-notice-shown-for-every-save-failure",
+    shipped: "NF-DTB-1 — the one-sided fix, i.e. the defect the FIX itself invites",
+    // ⭐ THE OTHER HALF. The tempting cure for the case above is "show the quota notice whenever a
+    // save errors", which passes every at-cap assertion and reports a genuine FAULT to the user as
+    // a billing limit — worse than the bug, because it sends them to checkout for a server error.
+    // The non-quota twin specs are what refuse it, and this case is what proves they can.
+    detail: "Treats EVERY failed save as the quota refusal, not just a 409.",
+    file: "lib/entitlements.ts",
+    from: "export function isLeagueQuotaRefusal(e: unknown): boolean {\n  return apiErrorStatus(e) === 409\n}",
+    to: "export function isLeagueQuotaRefusal(e: unknown): boolean {\n  return e instanceof Error\n}",
+    grep: "reads as a LIMIT, not as a failure",
+  },
 
 ]
 
@@ -2805,7 +2842,7 @@ const CASES = [
 // `-- auction-quotes`) for the same reason every entry above records: a production build per case
 // does not belong in a session. So 137/131/6 → 142/136/6, and the next full run CONFIRMS it.
 // ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 167, red: 161, notObservable: 6 }
+const RECORDED_BOARD = { total: 169, red: 163, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

@@ -673,6 +673,20 @@ export const LEAGUE_QUOTA_REACHED_TITLE = "You're using your free league"
 export const LEAGUE_QUOTA_REACHED_DETAIL =
   "A free account keeps one personalized league. You can edit or replace this one whenever you like; members keep several and can switch between them."
 
+/** NF-DTB-1 — the SERVER'S refusal, met after the form was already filled in.
+ *
+ *  ⭐ A SECOND CONSTANT RATHER THAN A REUSE OF `LEAGUE_QUOTA_REACHED_DETAIL`, because the two states
+ *  are read at different moments and one of them has to answer a question the other never raises:
+ *  "did my work just disappear?". The at-the-control notice is preventative — nothing has been
+ *  attempted. This one fires AFTER a save round-trip, so it has to say that nothing was stored and
+ *  that the settings on screen are still there. Reusing the preventative wording here would leave a
+ *  user who just pressed Save unable to tell a limit from a lost form (E8.6's shape).
+ *
+ *  ⚠️ It is reachable even though the control is disabled at the cap: that check reads a CACHED
+ *  league list which is empty while loading and on error (`isLeagueQuotaRefusal`). */
+export const LEAGUE_QUOTA_REFUSED_DETAIL =
+  "Nothing was saved and your settings are still on screen. A free account keeps one personalized league, and this would have been a second one — edit or replace the league you already have, or become a member to keep several."
+
 /** ⚠️ A LAPSED SUBSCRIBER, whose stored leagues outnumber their quota. This state is easy to render
  *  as an accusation or as a silent disappearance; it must be neither. Their configs are all still
  *  there and still deletable — what is paused is the board we compute from them. */

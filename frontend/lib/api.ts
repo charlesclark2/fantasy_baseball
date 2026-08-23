@@ -1,6 +1,44 @@
 export class AuthError extends Error {}
 
 /**
+ * A failed API response, carrying the STATUS as well as the server's message.
+ *
+ * ⚠️ WHY THIS EXISTS (NF-DTB-1). `errorMessage` below already rescues the API's own `detail` from
+ * the response body — but `apiFetch` then threw a BARE `Error`, so `res.status` was DISCARDED at the
+ * boundary and no caller could branch on it. That is what made a 409 indistinguishable from a 400:
+ * `POST /fantasy/leagues` answers the free-league cap with a precise 409 ("You can save 1 league on
+ * your current plan.") and the surface rendered it through the same generic "Could not save. …"
+ * line every other failure uses — the E8.6 "saving is broken" shape applied to a LIMIT rather than
+ * to a fault. Same class as the message loss this file already records, one field over: the
+ * information was correct and complete at the source and got dropped one layer out.
+ *
+ * ⭐ ADDITIVE BY CONSTRUCTION. It subclasses `Error` and carries the IDENTICAL `message`, so every
+ * existing `e instanceof Error` / `(e as Error).message` caller behaves exactly as before. A caller
+ * that wants the distinction opts in by reading `.status`; nobody is forced to.
+ */
+export class ApiError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+  }
+}
+
+/**
+ * The HTTP status of a failed API call, or `null` when the thrown value did not come from one.
+ *
+ * ⛔ Deliberately NOT a status→message lookup. A status only means something in the context of the
+ * route that returned it (409 on `POST /fantasy/leagues` is the league cap; a 409 elsewhere is
+ * something else entirely), so the INTERPRETATION belongs at the call site and this reports only
+ * the fact. A shared table here would be the next place a status quietly acquires a wrong meaning.
+ */
+export function apiErrorStatus(e: unknown): number | null {
+  return e instanceof ApiError ? e.status : null
+}
+
+/**
  * Global token refresher, registered by AuthProvider (see lib/auth-context.tsx).
  * Returns a freshly-renewed Cognito access token, or null if the refresh itself
  * failed (refresh token expired/invalid → the user must re-authenticate).
@@ -57,7 +95,7 @@ async function errorMessage(res: Response): Promise<string> {
 export async function cdnFetch(path: string): Promise<any> {
   // Relative URL ⇒ same origin ⇒ our CDN. Deliberately NOT prefixed with `NEXT_PUBLIC_API_URL`.
   const res = await fetch(path, { headers: { Accept: 'application/json' } })
-  if (!res.ok) throw new Error(await errorMessage(res))
+  if (!res.ok) throw new ApiError(res.status, await errorMessage(res))
   if (res.status === 204 || res.headers.get('content-length') === '0') return null
   return res.json()
 }
@@ -90,7 +128,7 @@ export async function apiFetch(
     }
     throw new AuthError('Unauthorized')
   }
-  if (!res.ok) throw new Error(await errorMessage(res))
+  if (!res.ok) throw new ApiError(res.status, await errorMessage(res))
   if (res.status === 204 || res.headers.get('content-length') === '0') return null
   return res.json()
 }

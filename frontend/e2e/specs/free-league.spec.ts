@@ -730,6 +730,180 @@ test.describe("the one-league quota is enforced on BOTH create paths", () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════════
+// NF-DTB-1 — THE SERVER'S REFUSAL, RENDERED AS A LIMIT AND NOT AS A FAULT
+//
+// ⭐ WHY THIS IS REACHABLE AT ALL, given the describe block above proves the control is disabled at
+// the cap. That check is ADVISORY and reads a CACHED league list: `useSavedLeagues` carries a 60s
+// stale time and `retry: false`, and its `data` is `undefined` both WHILE LOADING and ON ERROR —
+// each of which reads as "0 leagues saved", i.e. NOT at quota, and re-enables Save. So the last
+// line of defence is `POST /fantasy/leagues` answering 409, and these specs are about what the user
+// sees on the way back out.
+//
+// ⭐ THE DEFECT (measured, not assumed). The BACKEND was already right: driven against the real ASGI
+// app, a create at the cap returns 409 with "You can save 1 league on your current plan." on both
+// the editor-shaped and the importer-shaped payload (`test_g100_c1_free_league.py`, and re-measured
+// during this story on both shapes). The collapse was at the FETCH BOUNDARY — `apiFetch` threw a
+// bare `Error` and DISCARDED `res.status`, so no caller COULD branch, and the refusal rendered
+// through the same generic "Could not save. …" line every fault uses. That is the E8.6
+// "saving is broken" shape pointed at a paywall: a user who has just filled in a long form is told
+// their save failed, with no statement of the limit and no way past it.
+//
+// ⚠️ BOTH HALVES, ON EVERY SURFACE. A one-sided fix ("always show the quota notice on an error") is
+// the failure this pair exists to catch — so every quota spec below has a NON-quota twin that must
+// still render the generic line. Asserted on RENDERED output (NF-C4), never on source.
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
+
+test.describe("a save refused by the server's quota reads as a LIMIT, not as a failure", () => {
+  /** The refusal `POST /fantasy/leagues` actually answers with — copied from the router so a
+   *  reworded backend detail cannot silently make this spec test a string nobody sends. */
+  const SERVER_QUOTA_DETAIL = "You can save 1 league on your current plan."
+
+  /**
+   * Sign in as a free account whose CACHED league list is EMPTY — the state that leaves the control
+   * enabled — and make the next league CREATE fail with `status`/`detail`.
+   *
+   * ⚠️ `leagues: "none"` is load-bearing: with "one" the client-side `atQuota` notice renders before
+   * the button is ever clickable, and the spec would pass against a client that still collapsed the
+   * 409 (a vacuous guard). The point is a save that REACHES the server and comes back refused.
+   */
+  async function openWithFailingCreate(
+    page: Page,
+    path: string,
+    status: number,
+    detail: string,
+  ) {
+    await signIn(page, { groups: [] })
+    const errors = collectPageErrors(page)
+    await mockApi(page, { entitlement: "free", leagues: "none" })
+    await page.route("**/__e2e-api/fantasy/leagues", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback()
+      await route.fulfill({
+        status,
+        contentType: "application/json",
+        body: JSON.stringify({ detail }),
+      })
+    })
+    await page.goto(path)
+    return { errors }
+  }
+
+  test("editor: a 409 shows the quota notice and its way out, not the generic error", async ({
+    page,
+  }) => {
+    const { errors } = await openWithFailingCreate(
+      page,
+      "/fantasy/league-settings",
+      409,
+      SERVER_QUOTA_DETAIL,
+    )
+    await page.getByRole("button", { name: "Save league", exact: true }).click()
+
+    const notice = page.getByTestId("league-quota-notice")
+    await expect(
+      notice,
+      "a save refused for the free-league cap rendered no quota notice — the user is told the save " +
+        "failed, with nothing naming the limit they actually met",
+    ).toBeVisible()
+    // The limit state, IN THE RENDERED TEXT: nothing was stored, and their settings survived. That
+    // second half is what separates a limit from a lost form.
+    await expect(notice).toContainText("Nothing was saved")
+    await expect(notice).toContainText("one personalized league")
+    // A refusal with no way past it is a dead end (the notice carries the CTA by construction).
+    await expect(page.getByTestId("league-quota-upgrade")).toBeVisible()
+
+    await expect(
+      page.getByTestId("league-save-error"),
+      "the generic 'Could not save' line rendered alongside the quota notice — a limit reported as " +
+        "a fault is the E8.6 shape this story exists to remove",
+    ).toHaveCount(0)
+    expectNoPageErrors(errors)
+  })
+
+  test("editor: a NON-quota failure still shows the generic error", async ({ page }) => {
+    // ⭐ THE OTHER HALF. Without this, "render the quota notice on any save error" passes the spec
+    // above — and a genuine fault would be reported to the user as a billing limit.
+    const { errors } = await openWithFailingCreate(
+      page,
+      "/fantasy/league-settings",
+      400,
+      "Could not save league",
+    )
+    await page.getByRole("button", { name: "Save league", exact: true }).click()
+
+    const generic = page.getByTestId("league-save-error")
+    await expect(generic).toBeVisible()
+    // The server's own explanation survives to the screen (the `errorMessage` contract this
+    // boundary already owed the user — the status is what was newly rescued, not the message).
+    await expect(generic).toContainText("Could not save league")
+    await expect(
+      page.getByTestId("league-quota-notice"),
+      "a plain save fault was reported as the free-league quota",
+    ).toHaveCount(0)
+    expectNoPageErrors(errors)
+  })
+
+  /** Drive the importer to its review screen, where `Save this league` is the create. */
+  async function openImportReview(page: Page, status: number, detail: string) {
+    const { errors } = await openWithFailingCreate(page, "/fantasy/import", status, detail)
+    await page.getByPlaceholder("Paste your Sleeper league ID").fill("e2e-tester")
+    await page.getByRole("button", { name: "Import", exact: true }).click()
+    const options = page.getByTestId("import-league-option")
+    await expect(options.first()).toBeVisible()
+    await options.first().click()
+    await expect(page.getByRole("heading", { name: /Review what we read/ })).toBeVisible()
+    return { errors }
+  }
+
+  test("import: a 409 shows the quota notice, not the amber error line", async ({ page }) => {
+    // The SECOND create path. The tier is enforced by WHICH COMPONENT RENDERS (the freemium build's
+    // own lesson, and the reason `LeagueQuotaNotice` is shared) — so the refusal has to be tested on
+    // both doors, not just the one the fix was written against.
+    const { errors } = await openImportReview(page, 409, SERVER_QUOTA_DETAIL)
+    await page.getByRole("button", { name: /Save this league/ }).click()
+
+    const notice = page.getByTestId("import-quota-notice")
+    await expect(notice).toBeVisible()
+    await expect(notice).toContainText("Nothing was saved")
+    await expect(page.getByTestId("league-quota-upgrade")).toBeVisible()
+    await expect(
+      page.getByTestId("import-save-error"),
+      "the importer reported the free-league cap through its generic failure line",
+    ).toHaveCount(0)
+    expectNoPageErrors(errors)
+  })
+
+  test("import: a NON-quota failure still shows the amber error line", async ({ page }) => {
+    const { errors } = await openImportReview(page, 400, "Could not save league")
+    await page.getByRole("button", { name: /Save this league/ }).click()
+
+    const generic = page.getByTestId("import-save-error")
+    await expect(generic).toBeVisible()
+    await expect(generic).toContainText("Could not save league")
+    await expect(
+      page.getByTestId("import-quota-notice"),
+      "a plain save fault was reported as the free-league quota",
+    ).toHaveCount(0)
+    expectNoPageErrors(errors)
+  })
+
+  test("the refusal copy carries no overclaim", async ({ page }) => {
+    const { errors } = await openWithFailingCreate(
+      page,
+      "/fantasy/league-settings",
+      409,
+      SERVER_QUOTA_DETAIL,
+    )
+    await page.getByRole("button", { name: "Save league", exact: true }).click()
+    const notice = page.getByTestId("league-quota-notice")
+    await expect(notice).toBeVisible()
+    const text = (await notice.innerText()) ?? ""
+    expect(text.length, "the quota notice rendered empty — nothing was screened").toBeGreaterThan(40)
+    expect(forbiddenPhrasesIn(text), "the quota refusal copy carries a denied claim").toEqual([])
+    expectNoPageErrors(errors)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════════
 // G100-C2 — THE LEAGUE PICKER: a subscriber with several saved leagues only ever saw whichever one
 // `teams?.[0]` happened to return, with nothing on screen naming the others. A free account's quota
 // is 1, so these tests deliberately sign in as a SUBSCRIBER (`entitlement: "entitled"`) — that is the
