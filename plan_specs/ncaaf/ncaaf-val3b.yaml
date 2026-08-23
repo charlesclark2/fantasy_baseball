@@ -7,7 +7,7 @@ metadata:
   name: ncaaf-val3b
   vertical: ncaaf
   card: https://trello.com/c/7gJ3idAP
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Ship-or-close the NCAAF cold-start mu correction as ONE pre-registered
