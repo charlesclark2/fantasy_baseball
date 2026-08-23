@@ -65,6 +65,11 @@ from quant_sports_intel_models.football.nfl.fantasy import xfp_source  # noqa: E
 
 log = logging.getLogger("nfl.fantasy.fastpath")
 
+# NF-INJ-NEWS-1 — the operator-curated reported-absence overrides (loader + provenance).
+from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
+    reported_absence_overrides as _RAO,
+)
+
 MARTS_SCHEMA = "main_nfl_marts"
 STAGING_SCHEMA = "main_nfl_staging"
 _DEFAULT_OUT = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/artifacts"
@@ -184,6 +189,11 @@ OUTPUT_COLS = [
     "veteran_level_status", "veteran_level_form", "veteran_level_params", "veteran_level_window",
     "veteran_level_source_model", "veteran_level_decision_story",
     "veteran_level_statistically_selected", "level_model_version",
+    # ── NF-INJ-NEWS-1: the REPORTED-ABSENCE provenance, on the rows an operator judgment actually
+    # moved (NaN everywhere else → the exporter omits the key entirely, so an un-overridden player
+    # is byte-identical to the pre-story board). Stamped from what was APPLIED, never from the
+    # override file, so the payload cannot claim a cap that the disjointness rule refused.
+    *_SP.REPORTED_ABSENCE_COLS,
 ]
 
 # ── The per-player base-season raw line. Realized season totals ÷ played games → per-game counting
@@ -873,6 +883,39 @@ def fit_veteran_band_from_panel(panel: pd.DataFrame, projection_season: int):
     return model
 
 
+def _log_reported_absence_decisions(decisions: list) -> None:
+    """NF-INJ-NEWS-1 — the second half of the build log: what each override DID at the frame.
+
+    `emit_load_log` reports what the FILE contained; this reports what the BOARD did with it, and
+    the two are genuinely different facts. A row can load perfectly and still not move a number —
+    because the player has since acquired a formal IR/PUP/NFI/SUS tag (the formal path wins), or
+    because its id matches no board row, or because an earlier availability step had already cut
+    him harder. Every one of those is logged at WARNING, because each is something an operator
+    needs to see: an override that quietly does nothing is indistinguishable from one that works.
+    """
+    if not decisions:
+        return
+    applied = [d for d in decisions if d.get("applied")]
+    log.info("NF-INJ-NEWS-1: reported-absence caps at the board — %d applied, %d ignored",
+             len(applied), len(decisions) - len(applied))
+    for d in applied:
+        if d.get("inert"):
+            # Not a failure — an earlier availability step (the NF-D11 return prior, say) had
+            # already cut this player at or below the override's ceiling. Reported so a cap that
+            # changes nothing is VISIBLE rather than looking like a working discount.
+            log.warning("  INERT  %s [%s] already at %.1f games, ceiling %.0f — no change",
+                        d.get("player_name"), d["player_id"], d.get("games_before", float("nan")),
+                        d.get("games_cap", float("nan")))
+        else:
+            log.info("  APPLY  %s [%s] %.1f -> %.1f games (%s)", d.get("player_name"),
+                     d["player_id"], d.get("games_before", float("nan")),
+                     d.get("games_after", float("nan")), d.get("detail", ""))
+    for d in decisions:
+        if not d.get("applied"):
+            log.warning("[ALERT] NF-INJ-NEWS-1: override NOT applied — %s [%s] · %s: %s",
+                        d.get("player_name"), d["player_id"], d.get("reason"), d.get("detail"))
+
+
 def build_veteran_projection(con, base_season: int, projection_season: int, schema: str,
                              usage_role_blend: float | None = None,
                              mover_opportunity_blend: float | None = None,
@@ -882,7 +925,9 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
                              rescue_absent: bool = True,
                              absence_prior_family: str | None = None,
                              absence_prior_blend: float | None = None,
-                             band_model=None, level_recal: tuple | None = None) -> pd.DataFrame:
+                             band_model=None, level_recal: tuple | None = None,
+                             reported_absence_rows=None,
+                             reported_absence_log=None) -> pd.DataFrame:
     """The VETERAN half of the board, as a WIDE frame (every base-season input column retained).
 
     ⭐ Factored out of `build_projection` by NF1.9 because the veteran interval's band has to be FITTED
@@ -940,8 +985,15 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
     if a_blend > 0 and "seasons_missed" in base.columns and (base["seasons_missed"] >= 1).any():
         kw["absence_prior"] = fit_absence_prior_for(
             con, base_season, family=absence_prior_family or _SP._ABSENCE_PRIOR_FAMILY, schema=schema)
+    # NF-INJ-NEWS-1: the operator-curated reported-absence cap. ⭐ PASSED THROUGH, NEVER LOADED
+    # HERE — this function also assembles the HISTORICAL walk-forward band panel
+    # (`build_veteran_panel_season`, which calls it with none of these kwargs), and a 2026 operator
+    # judgment applied to a 2019 fold would be a human editing the past. Only `build_projection`
+    # supplies them, and `load_overrides` re-checks the declared season on top of that.
     return project_veterans(base, priors, projection_season, band_model=band_model,
-                            level_recal=level_recal, **kw)
+                            level_recal=level_recal,
+                            reported_absence_rows=reported_absence_rows,
+                            reported_absence_log=reported_absence_log, **kw)
 
 
 def fit_serving_level(panel: pd.DataFrame | None, projection_season: int) -> tuple[str, dict]:
@@ -1018,13 +1070,23 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     if _LEVEL_POLICY.serving_form() and panel is None:
         panel = build_veteran_band_panel(con, projection_season, schema)
     level_form, level_params = fit_serving_level(panel, projection_season)
+    # ── NF-INJ-NEWS-1: the REPORTED-ABSENCE overrides — an OPERATOR JUDGMENT with provenance, not a
+    #    model (see `reported_absence_overrides`). Loaded HERE, on the live-board path only, and
+    #    gated on the file's own declared season so a historical fold can never receive one.
+    #    ⭐ EVERY row of the file is logged — applied AND ignored — because a curated file whose
+    #    rows silently do nothing looks exactly like one that works.
+    _ra = _RAO.load_overrides(as_of=None, season=int(projection_season))
+    _RAO.emit_load_log(_ra, log)
+    _ra_log: list = []
     vets = build_veteran_projection(
         con, base_season, projection_season, schema, usage_role_blend=usage_role_blend,
         mover_opportunity_blend=mover_opportunity_blend, env_tilt_blend=env_tilt_blend,
         injury_override_blend=injury_override_blend, xfp_td_blend=xfp_td_blend,
         rescue_absent=rescue_absent, absence_prior_family=absence_prior_family,
         absence_prior_blend=absence_prior_blend, band_model=band_model,
-        level_recal=((level_form, level_params) if (level_form and level_params) else None))
+        level_recal=((level_form, level_params) if (level_form and level_params) else None),
+        reported_absence_rows=_ra.rows, reported_absence_log=_ra_log)
+    _log_reported_absence_decisions(_ra_log)
     if veteran_postprocess is not None:
         vets = veteran_postprocess(vets, band_model)
 
