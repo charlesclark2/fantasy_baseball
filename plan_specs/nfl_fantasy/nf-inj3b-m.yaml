@@ -7,7 +7,7 @@ metadata:
   name: nf-inj3b-m
   vertical: nfl_fantasy
   card: https://trello.com/c/SGsvQJPb   # continues the NF-INJ3b thread; M card linked on creation
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Close NF-INJ3b's blocking §5(d): MEASURE the served-point impact of the
