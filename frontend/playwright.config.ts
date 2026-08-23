@@ -105,8 +105,12 @@ export default defineConfig({
     // Radix Tooltip, which no touch can ever open, would pass identically. The flag is a coloured
     // number whose meaning lives ENTIRELY behind that tap, so a phone reader who cannot open it
     // meets exactly the unexplained figure the flag exists to explain.
+    // ⭐ NF-INJ1-C joins for the SAME reason and with the sharpest version of it: what it withholds
+    // renders as a bare em-dash, so the ENTIRE difference between "we are not showing you this"
+    // and "we have nothing for this player" lives behind the tap. A phone reader who cannot open
+    // it meets an unexplained blank on a surface they have paid for.
       testMatch:
-        /(signup-funnel|expected-points-label|availability-flag|weekly-designation|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile)\.spec\.ts/,
+        /(signup-funnel|expected-points-label|availability-flag|weekly-designation|stat-line-suppression|home-mobile|fantasy-entitlement-gates|props-slate-nav-mobile|fantasy-my-teams-mobile)\.spec\.ts/,
     },
   ],
 

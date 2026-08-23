@@ -37,6 +37,9 @@ import {
   PAID_TIER_SUMMARY,
   PROJECTED_GAMES_DEFINITION,
   PROJECTED_GAMES_LABEL,
+  STAT_LINE_WITHHELD_DETAIL,
+  STAT_LINE_WITHHELD_LABEL,
+  STAT_LINE_WITHHELD_SR_LABEL,
   TRACK_RECORD_TRUST_LINK,
   WEEKLY_DESIGNATION_CODE,
   WEEKLY_DESIGNATION_LABEL,
@@ -208,6 +211,50 @@ export const numOrLock = (
   locked: boolean | undefined,
   nd = 1,
 ): React.ReactNode => (v == null && locked ? <LockChip /> : num(v, nd))
+
+/** NF-INJ1-C — is THIS stat withheld on THIS row?
+ *
+ *  ⛔ NOT `value == null`. A missing key means one of two entirely different things and only the
+ *  row's own marker separates them: the server withheld it (an impossible per-game rate we refuse
+ *  to print), or the player genuinely has no such stat. Reading absence as withholding would put
+ *  this disclosure on every K's passing line; reading withholding as absence is the E9.56c
+ *  inversion the lock helpers above exist to prevent.
+ *
+ *  Tolerant of a non-array value on purpose: this key crosses an API boundary the frontend deploys
+ *  independently of (NF-C0), so a malformed marker must degrade to "not withheld" — the pre-story
+ *  rendering — rather than throw inside a table cell. */
+export const isStatWithheld = (
+  withheld: string[] | null | undefined,
+  key: string,
+): boolean => Array.isArray(withheld) && withheld.includes(key)
+
+/** The em-dash that stands in for a withheld stat, with the disclosure behind it.
+ *
+ *  ⭐ A POPOVER (`InfoTip`), NOT A `title=`. A `title` tooltip is unreachable on a phone — no hover,
+ *  no long-press affordance — and this renders on a dense table a phone already scrolls sideways.
+ *  A refusal a reader cannot ask about is indistinguishable from a missing number, which is the one
+ *  thing this must never look like (NF-C9 made the same call for the same reason).
+ *
+ *  `bare` because the column header directly above already carries the stat's name and its own ⓘ;
+ *  the dotted underline and second glyph would cost width on every row to repeat it. The trigger
+ *  stays a real focusable button with an accessible name, so keyboard and screen-reader access are
+ *  untouched — chrome goes, function does not. */
+export function WithheldStat() {
+  return (
+    <InfoTip
+      bare
+      srLabel={STAT_LINE_WITHHELD_SR_LABEL}
+      label={
+        <span data-testid="withheld-stat" className="cursor-help text-gray-500 underline decoration-dotted decoration-gray-700 underline-offset-4">
+          —
+        </span>
+      }
+    >
+      <p className="font-medium text-gray-300">{STAT_LINE_WITHHELD_LABEL}</p>
+      <p className="mt-1.5">{STAT_LINE_WITHHELD_DETAIL}</p>
+    </InfoTip>
+  )
+}
 
 export const intOrLock = (
   v: number | null | undefined,

@@ -48,10 +48,12 @@ import {
   UpgradeBanner,
   num,
   AvailabilityFlag,
+  isStatWithheld,
   numOrLock,
   int,
   teamLabel,
   WeeklyDesignation,
+  WithheldStat,
 } from "@/components/fantasy/shared"
 import { Picker } from "@/components/ui/picker"
 
@@ -347,7 +349,19 @@ export function ProjectionsTable() {
                     </td>
                     {statCols.map((c) => (
                       <td key={String(c.key)} className="px-3 py-2 text-right text-gray-400">
-                        {numOrLock(p[c.key] as number | null, p.locked, c.nd ?? 1)}
+                        {/* NF-INJ1-C — the server withheld this row's counting-stat line because
+                            its per-game rate is one no NFL player has ever posted (NF-INJ1's
+                            recorded envelope). ⚠️ BRANCHED ON THE ROW'S OWN MARKER, never on the
+                            value being null: a null here is an honest "he has no such stat", and
+                            collapsing the two is the E9.56c inversion. Ordered BEFORE the lock
+                            check because the two are disjoint by construction — the marker only
+                            ever reaches an ENTITLED payload, since `/projections-full` is the only
+                            route that serves a stat line at all. */}
+                        {isStatWithheld(p.statLineWithheld, String(c.key)) ? (
+                          <WithheldStat />
+                        ) : (
+                          numOrLock(p[c.key] as number | null, p.locked, c.nd ?? 1)
+                        )}
                       </td>
                     ))}
                     <td className="px-3 py-2 text-right font-semibold text-gray-100">

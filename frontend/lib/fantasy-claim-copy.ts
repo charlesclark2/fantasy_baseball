@@ -459,6 +459,39 @@ export const STAT_LINE_LOCK_TITLE = "The projected stat line is part of a member
 export const STAT_LINE_LOCK_DETAIL =
   "Targets, receptions, yards and touchdowns — the projected production the scoring formats are applied to. Members see the full line for every player, in every format."
 
+// ── NF-INJ1-C: the stat line we WITHHOLD from a member who has paid for it ──────────────────────
+//
+// ⭐ A DIFFERENT REFUSAL FROM THE LOCK ABOVE, AND THE COPY MUST NOT BLUR THE TWO. The lock says
+// "this is behind a membership"; this says "you have paid for this and we are still not showing it,
+// because the number is not one we are willing to stand behind". Rendering the lock's wording here
+// would sell a subscriber something they already have; rendering this wording on an unentitled row
+// would describe a defect where there is none.
+//
+// WHAT IS ACTUALLY WRONG (NF-INJ1 §2, measured on the live board). NF1.5's ordering step hands a
+// player a different player's point level and rescales the twelve stat columns to reach it, while
+// his expected games stay where they were — so ~10 rows carry a per-game rate no NFL player has
+// ever posted (one at 82.7 pass attempts per game against an all-time maximum of 45.4). The point
+// and the games are each defensible; their RATIO is not. So the ratio is what we refuse to print.
+//
+// ⛔ NO FORECAST LANGUAGE, and none is possible here: this says nothing about the player, his
+// health, his role or his season. It is a statement about OUR line for him. `best_alpha = 0`.
+//
+// ⚠️ THE SHORT LABEL IS THE PM'S DEFAULT TREATMENT, VERBATIM (`nf-inj1-c.yaml` — "an em-dash '—'
+// with a neutral tooltip (\"stat detail withheld — availability-adjusted\")"). The sentence below it
+// is ADDITIVE detail in the same disclosure, not a replacement: a reader who taps deserves to know
+// that the total and the games figure beside it are unaffected, which the short label alone cannot
+// say. Changing the short label is a PM decision, not a copy edit.
+
+export const STAT_LINE_WITHHELD_LABEL = "stat detail withheld — availability-adjusted"
+
+/** The accessible name for the withheld cell. Read out instead of a bare em-dash, which a screen
+ *  reader announces as nothing at all — i.e. as an empty cell, the one reading this exists to
+ *  prevent. */
+export const STAT_LINE_WITHHELD_SR_LABEL = "Stat detail withheld"
+
+export const STAT_LINE_WITHHELD_DETAIL =
+  "We hold this player's projected games and his projected stat line to each other, and for this player the two do not agree — the line implies a per-game workload no NFL player has recorded. Rather than print a number we would not stand behind, we withhold the stat detail here. His projected points and projected games are unchanged and still shown."
+
 /** ...and the entitled version of the same refusal, which is a genuine fault and must not be
  *  dressed up as one. */
 export const BOARD_LOAD_ERROR_DETAIL =

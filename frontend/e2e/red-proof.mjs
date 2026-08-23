@@ -2633,6 +2633,98 @@ const CASES = [
     grep: "the player page discloses the same designation",
   },
 
+  // ── NF-INJ1-C: the impossible stat line is withheld ─────────────────────────────────────────
+  {
+    id: "withheld-stat-renders-a-bare-em-dash",
+    shipped: "NF-INJ1-C — pre-emptive: THE defect this whole spec exists to be able to see",
+    // ⭐⭐ THE HIGHEST-VALUE CASE IN THIS GROUP, because the broken build looks IDENTICAL.
+    // The server sends an ABSENT key, and the shipped table already renders an absent number as a
+    // bare em-dash — so a build that ignores `statLineWithheld` prints "—" too. Same pixels, and
+    // "we are deliberately not showing you this" silently becomes "we have nothing for this
+    // player" (E9.56c, exactly). `tsc`, `next build`, every source scan and every Python clause in
+    // this story stay green: the marker is still SENT, it is just not READ.
+    detail: "Ignores the row's withheld marker, so the cells fall through to the plain em-dash.",
+    file: "components/fantasy/projections-table.tsx",
+    from:
+      "                        {isStatWithheld(p.statLineWithheld, String(c.key)) ? (\n" +
+      "                          <WithheldStat />\n" +
+      "                        ) : (\n" +
+      "                          numOrLock(p[c.key] as number | null, p.locked, c.nd ?? 1)\n" +
+      "                        )}",
+    to: "                        {numOrLock(p[c.key] as number | null, p.locked, c.nd ?? 1)}",
+    grep: "the violating row is withheld and the clean row is untouched",
+  },
+  {
+    id: "withheld-treatment-applied-to-every-row",
+    shipped: "NF-INJ1-C — pre-emptive: the failure that costs a MEMBER the data they paid for",
+    // The opposite miss, and the one with the larger blast radius. A treatment keyed on anything
+    // broader than the row's own marker (a null check, a position check, a truthiness slip) blanks
+    // the stat line across the paid surface — and it reads as a working feature, because the
+    // disclosure it renders is perfectly correct copy. Only a NAMED clean row can see it.
+    detail: "Applies the withheld treatment to every stat cell, not only the marked rows.",
+    file: "components/fantasy/projections-table.tsx",
+    from: "                        {isStatWithheld(p.statLineWithheld, String(c.key)) ? (",
+    to: "                        {true ? (",
+    grep: "the violating row is withheld and the clean row is untouched",
+  },
+  {
+    id: "player-page-prints-the-impossible-line",
+    shipped: "NF-INJ1-C — pre-emptive: a table-only fix, on the surface where it matters most",
+    // The player page renders the stat line as TILES, a different code path from the table's
+    // cells. It is also where the defect is most legible — the point total and the projected-games
+    // figure sit side by side, so an impossible line here is one a reader can check at a glance.
+    // A fix applied only to the table leaves exactly that page printing 82.7 attempts per game.
+    detail: "Reverts the player page's tiles to printing the raw value.",
+    file: "components/fantasy/player-page.tsx",
+    from:
+      "                        isStatWithheld(proj.statLineWithheld, String(c.key)) ? (\n" +
+      "                          <WithheldStat />\n" +
+      "                        ) : (\n" +
+      "                          num(proj[c.key] as number | null, c.nd ?? 1)\n" +
+      "                        )",
+    to: "                        num(proj[c.key] as number | null, c.nd ?? 1)",
+    grep: "the player page withholds the same line the table does",
+  },
+  {
+    id: "withheld-disclosure-unreachable-on-touch",
+    shipped: "NF-INJ1-C — pre-emptive: the disclosure a phone reader can never open",
+    // ⚠️ THE CLAUSE THAT IS VACUOUS ON DESKTOP, so this case is only meaningful on the `mobile`
+    // project — which is why the spec is registered there. A `title=` tooltip is the natural,
+    // tidier-looking edit and it is unreachable on a phone: no hover, no long-press affordance. It
+    // leaves an unexplained em-dash on a surface the reader has PAID for, which is worse than the
+    // impossible number it replaced. Chromium cannot tell the two apart (`click()` fires
+    // `pointerenter` first, so a hover-only disclosure opens before the click lands).
+    detail: "Swaps the tap-reachable popover for a hover-only title attribute.",
+    file: "components/fantasy/shared.tsx",
+    // ⚠️ THE WHOLE COMPONENT BODY IS REPLACED, not wrapped. A partial edit here produces
+    // unbalanced JSX and the case then fails at BUILD time — which reads as RED for a reason that
+    // has nothing to do with the assertion, i.e. a case that "passes" while proving nothing about
+    // the spec (the "a check whose two outcomes look identical is not a check" class).
+    from:
+      "    <InfoTip\n" +
+      "      bare\n" +
+      "      srLabel={STAT_LINE_WITHHELD_SR_LABEL}\n" +
+      "      label={\n" +
+      "        <span data-testid=\"withheld-stat\" className=\"cursor-help text-gray-500 underline decoration-dotted decoration-gray-700 underline-offset-4\">\n" +
+      "          —\n" +
+      "        </span>\n" +
+      "      }\n" +
+      "    >\n" +
+      "      <p className=\"font-medium text-gray-300\">{STAT_LINE_WITHHELD_LABEL}</p>\n" +
+      "      <p className=\"mt-1.5\">{STAT_LINE_WITHHELD_DETAIL}</p>\n" +
+      "    </InfoTip>",
+    to:
+      "    <span\n" +
+      "      data-testid=\"withheld-stat\"\n" +
+      "      title={`${STAT_LINE_WITHHELD_LABEL} ${STAT_LINE_WITHHELD_DETAIL}`}\n" +
+      "      aria-label={STAT_LINE_WITHHELD_SR_LABEL}\n" +
+      "      className=\"cursor-help text-gray-500\"\n" +
+      "    >\n" +
+      "      —\n" +
+      "    </span>",
+    grep: "refuses every forecast reading",
+  },
+
 ]
 
 /**
@@ -2695,7 +2787,7 @@ const CASES = [
 // `-- auction-quotes`) for the same reason every entry above records: a production build per case
 // does not belong in a session. So 137/131/6 → 142/136/6, and the next full run CONFIRMS it.
 // ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 162, red: 156, notObservable: 6 }
+const RECORDED_BOARD = { total: 166, red: 160, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

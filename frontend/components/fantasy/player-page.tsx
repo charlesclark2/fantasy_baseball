@@ -67,6 +67,7 @@ import {
   GLOSSARY,
   InfoTip,
   IntervalBar,
+  isStatWithheld,
   LoadingBlock,
   LOW_PREDICTABILITY_POSITIONS,
   PlayerContributionsPanel,
@@ -86,6 +87,7 @@ import {
   int,
   teamLabel,
   WeeklyDesignation,
+  WithheldStat,
 } from "@/components/fantasy/shared"
 import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
 
@@ -772,7 +774,18 @@ function PlayerView({ playerId }: { playerId: string }) {
                     <Tile
                       key={String(c.key)}
                       label={c.label}
-                      value={num(proj[c.key] as number | null, c.nd ?? 1)}
+                      /* NF-INJ1-C — same refusal the projections table renders, from the same
+                         server marker. ⚠️ The tile is where it matters most: this page shows the
+                         point total and the projected-games figure side by side, so an impossible
+                         line here is an impossible line a reader can check in one glance. Points
+                         and `g` above are untouched — only the counting stats are withheld. */
+                      value={
+                        isStatWithheld(proj.statLineWithheld, String(c.key)) ? (
+                          <WithheldStat />
+                        ) : (
+                          num(proj[c.key] as number | null, c.nd ?? 1)
+                        )
+                      }
                     />
                   ))}
                 </div>
