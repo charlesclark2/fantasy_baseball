@@ -1,7 +1,7 @@
 {
   "story": "NF-INJ3b",
   "read": "level-adjacent gated ship path (preregistration \u00a75)",
-  "generated_at": "2026-08-23T05:48:04.827495+00:00",
+  "generated_at": "2026-08-23T06:21:32.121253+00:00",
   "gate_outcome": "CLEARS (9/9 registered gates)",
   "steps": {
     "a_placement_read_published_board": {
@@ -113,9 +113,9 @@
         }
       },
       "stdout_tail": [
-        "VERDICT: \u2705 ALL FLOORS MET"
+        "  \u26a0\ufe0f NF1.9's decided record (nf1_9_interval_revalidation.*) was NOT updated. To refresh it deliberately: --out nf1_9_interval_revalidation"
       ],
-      "decided_artifact_restored": true,
+      "written_to": "nf_inj3b_ship_path_interval_revalidation.json",
       "why_it_gates": "a floor breach is a RE-SELECTION trigger for that population, never a reason to move the floor (E2.1-r / NF1.8 \u00a71)"
     },
     "c_superflex_caveat": {
@@ -129,6 +129,14 @@
       "operator_step": "rebuild the 2026 board with the NF-INJ3b caps, DRY-RUN (no --publish), and diff the staged board against the published one on `pts`, `proj_games`, overall rank and per-config placement."
     }
   },
+  "d4_decided_artifacts_intact": {
+    "verified": {
+      "nf1_9_interval_revalidation.json": true,
+      "nf_tr2b_placement_read.json": true
+    },
+    "all_intact": true,
+    "what_it_proves": "running these gates left every DECIDED artifact byte-identical \u2014 the NF-INJ3b-M node-1 (D4) fix, measured at the CALL SITE rather than assumed from the runners' source."
+  },
   "executable_steps_pass": true,
   "ship_path_complete": false,
   "verdict": "SHIP_PATH_INCOMPLETE \u2014 step (d) is unrun and BLOCKING",
@@ -139,10 +147,10 @@
   "placement_read_full": {
     "story": "NF-TR2b",
     "read": "cross-position placement (NF-D16 class)",
-    "generated_at": "2026-08-23T05:48:01.233273+00:00",
+    "generated_at": "2026-08-23T06:21:28.545435+00:00",
     "source_kind": "s3",
     "source": "s3://credence-prod-s3-api-cache/fantasy/nfl/2026/",
-    "read_from": "/var/folders/88/q8wq3ss94k3bvmkq1j1f_j0w0000gn/T/tmp2238vsfk",
+    "read_from": "/var/folders/88/q8wq3ss94k3bvmkq1j1f_j0w0000gn/T/tmpaqey98q5",
     "season": 2026,
     "served_level_model_version": "nfl_fantasy_nf_tr2b_veteran_level_v1",
     "served_level_status": "recalibrated",
