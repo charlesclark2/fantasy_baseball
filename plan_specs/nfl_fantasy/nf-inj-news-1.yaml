@@ -7,7 +7,7 @@ metadata:
   name: nf-inj-news-1
   vertical: nfl_fantasy
   card: https://trello.com/c/67JbJ6J6
-  status: DONE
+  status: IN_PROGRESS
 spec:
   description: >
     Reported-absence games cap: an operator-curated, provenance-stamped
@@ -33,16 +33,85 @@ spec:
         (a date after which the row is IGNORED and flagged for re-entry —
         stale judgments must not linger silently).
     - description: >
-        DISJOINTNESS RULE (hard): a row is applied ONLY when the player has
-        NO formal IR/PUP/NFI/SUS status in the current feed. If a formal tag
-        appears, the formal path wins and the override is ignored + surfaced
-        in the build log (no double-discount; no collision with NF-INJ3b's
-        cap constants, which govern the formally-tagged population only).
+        ⚖️ AMENDED BY PM RULING 2b (2026-08-23) — the disjointness rule takes its
+        TRUTHFUL form. Recorded verbatim:
+
+          (2b) ONE AMENDMENT THAT IS YOURS, because your build created the
+          interaction: as shipped, a rookie IR'd at cutdown hits BOTH defects at
+          once — the formal path gives zero (the gap) AND the disjointness rule
+          ignores any override (a formal tag exists). Undiscounted and
+          un-overridable is the worst reachable state, arriving in seven days.
+          Amend the disjointness rule to its truthful form: an override is
+          ignored when a formal discount WAS APPLIED to the row, not when a
+          formal tag merely EXISTS. The rule's purpose is no-double-discounting;
+          where the formal path applied nothing, there is nothing to double.
+          Every row with a formal tag but NO applied formal discount gets a
+          named build-log warning — that line is also the live detector for
+          NF-INJ3c rows. Guard + RED-prove both branches (tag+discount →
+          override ignored; tag+no-discount → override stands + warning named).
+
+        No double-discount, and no collision with NF-INJ3b's cap constants,
+        which govern the formally-DISCOUNTED population only.
     - description: >
-        CAP-ONLY and monotone: an override can only LOWER expected games
-        (min(current_expected_games, 17 - expected_games_missed)); it can
-        never raise availability. It feeds the same expected_games quantity
-        the formal caps feed — no new modeling pathway.
+        ⚖️ AMENDED BY PM RULING 1 (2026-08-23) — the combination rule is the
+        REMAINING-SEASON RATE, not the ceiling this spec originally carried.
+        Recorded verbatim:
+
+          RULING 1 = (c), with this specific rule — REMAINING-SEASON RATE, not
+          ceiling, not subtraction:
+
+              proj_games_new = min( proj_games_current,
+                                    (17 - n_reported) x proj_games_current / 17 )
+
+          Principle, for the record: the model's proj_games is a season-long
+          availability RATE (the product already treats it as one —
+          fullSeasonRate is pts x 17/expected_games; this is the same construct
+          applied in reverse). A credibly-reported absence removes n games from
+          the schedulable season with near-certainty; the model's rate then
+          applies to the 17-n games that remain. This never double-counts the
+          report in full (effect = n x rate <= n, strictly less than
+          subtractive), always engages (no inert tier — a 2-game report moves
+          Kamara ~1.35, a 5-game report moves Tyson ~4.0), and degrades
+          gracefully into the ceiling for extreme n. The residual overlap (the
+          model's rate already contains some probability of this specific event)
+          is second-order and accepted as part of the operator-judgment framing
+          — this rule is itself a recorded judgment, disclosed as such, and the
+          §0.5 duration model supersedes it. Reading (d) is refused: waiting
+          moots the interim's purpose, and the ceiling-as-shipped fails the
+          exact player class the story was written for at the magnitudes that
+          actually occur.
+
+        CAP-ONLY and monotone is UNCHANGED and is preserved by the min(): an
+        override can only LOWER expected games, never raise availability, and it
+        feeds the same expected_games quantity the formal caps feed — no new
+        modeling pathway. Every applied row logs its computed EFFECT SIZE (the
+        inert-cap logging habit generalised).
+
+    - description: >
+        ⚖️ PM RULING 3 (2026-08-23) — the QUALIFYING POLICY for a row, recorded
+        verbatim:
+
+          A row qualifies when BOTH hold: (i) the source explicitly reports
+          missing REGULAR-SEASON time — a named number of games/weeks or a dated
+          return ("out until October") — never "day-to-day"/"week-to-week"/
+          camp-only language; (ii) n_reported >= 2 regular-season games.
+          Rationale for the floor: under the new rule a 1-game report moves a
+          starter by under one game — inside the served band's width — and a
+          manual judgment row must move the board by more than its own noise to
+          be worth its maintenance and its chip.
+
+        The individual rows remain the operator's pick at adoption time.
+        Clause (ii) is MECHANICALLY ENFORCED in the loader (a row with
+        n_reported < 2 is rejected, naming the policy); clause (i) is a judgment
+        about source wording that code cannot check and is the curator's
+        obligation, carried in the curated file's header.
+
+        EXCLUSIONS CONFIRMED by the same ruling: Puka Nacua and Josh Jacobs stay
+        out — pending discipline with no announced suspension supports no
+        integer, any number would be manufactured (which violates the provenance
+        requirement at its core), and an announced suspension becomes SUS where
+        the formal path prices it. Recorded in the proposal file so the next
+        curator does not re-litigate it.
     - description: >
         Joins use the NORMALIZED player id and are verified BY NAME, not by
         the id under test (NF-C9 lesson; the Sleeper feed pads ~11% of ids —
