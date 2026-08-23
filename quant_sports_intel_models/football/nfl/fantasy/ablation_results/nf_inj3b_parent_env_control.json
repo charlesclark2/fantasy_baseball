@@ -1,0 +1,2400 @@
+{
+  "generated_at": "2026-08-23T05:39:51.535796+00:00",
+  "elapsed_s": 1.2,
+  "preregistration": "ablation_results/nf_inj3_preregistration.md",
+  "folds": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "declared_field_size": 7,
+  "population": {
+    "per_season": [
+      {
+        "season": 2016,
+        "board_rows": 713,
+        "flagged": 65,
+        "rookies_excluded": 2,
+        "returners_excluded": 9,
+        "scored": 54
+      },
+      {
+        "season": 2017,
+        "board_rows": 699,
+        "flagged": 60,
+        "rookies_excluded": 8,
+        "returners_excluded": 11,
+        "scored": 41
+      },
+      {
+        "season": 2018,
+        "board_rows": 703,
+        "flagged": 53,
+        "rookies_excluded": 8,
+        "returners_excluded": 5,
+        "scored": 40
+      },
+      {
+        "season": 2019,
+        "board_rows": 716,
+        "flagged": 62,
+        "rookies_excluded": 6,
+        "returners_excluded": 10,
+        "scored": 46
+      },
+      {
+        "season": 2020,
+        "board_rows": 745,
+        "flagged": 29,
+        "rookies_excluded": 3,
+        "returners_excluded": 1,
+        "scored": 25
+      },
+      {
+        "season": 2021,
+        "board_rows": 758,
+        "flagged": 70,
+        "rookies_excluded": 5,
+        "returners_excluded": 7,
+        "scored": 58
+      },
+      {
+        "season": 2022,
+        "board_rows": 783,
+        "flagged": 55,
+        "rookies_excluded": 11,
+        "returners_excluded": 8,
+        "scored": 36
+      },
+      {
+        "season": 2023,
+        "board_rows": 764,
+        "flagged": 64,
+        "rookies_excluded": 5,
+        "returners_excluded": 14,
+        "scored": 45
+      },
+      {
+        "season": 2024,
+        "board_rows": 734,
+        "flagged": 47,
+        "rookies_excluded": 8,
+        "returners_excluded": 7,
+        "scored": 32
+      },
+      {
+        "season": 2025,
+        "board_rows": 786,
+        "flagged": 51,
+        "rookies_excluded": 4,
+        "returners_excluded": 6,
+        "scored": 41
+      }
+    ],
+    "excluded": {
+      "rookies": 60,
+      "returners": 78,
+      "why_rookies": "injury_availability_games runs inside project_veterans; project_rookies is a separate frame concatenated afterwards, so the cap STRUCTURALLY cannot act on a rookie (preregistration \u00a73 \u2014 out of scope, recorded for carding)",
+      "why_returners": "NF-D11's absence prior runs immediately after the injury cap, so a returner's served games compose two caps and this one's contribution is not separably recoverable (preregistration \u00a73)"
+    }
+  },
+  "serving_population": {
+    "per_season": [
+      {
+        "season": 2026,
+        "board_rows": 794,
+        "flagged": 26,
+        "rookies_excluded": 0,
+        "returners_excluded": 4,
+        "scored": 22
+      }
+    ],
+    "excluded": {
+      "rookies": 0,
+      "returners": 4,
+      "why_rookies": "injury_availability_games runs inside project_veterans; project_rookies is a separate frame concatenated afterwards, so the cap STRUCTURALLY cannot act on a rookie (preregistration \u00a73 \u2014 out of scope, recorded for carding)",
+      "why_returners": "NF-D11's absence prior runs immediately after the injury cap, so a returner's served games compose two caps and this one's contribution is not separably recoverable (preregistration \u00a73)"
+    }
+  },
+  "era_fidelity": [
+    {
+      "season": 2002,
+      "n_res": 52,
+      "med_games": 7.0,
+      "zero_rate": 0.077,
+      "status_change_share": 0.035
+    },
+    {
+      "season": 2003,
+      "n_res": 61,
+      "med_games": 6.0,
+      "zero_rate": 0.066,
+      "status_change_share": 0.019
+    },
+    {
+      "season": 2004,
+      "n_res": 66,
+      "med_games": 4.0,
+      "zero_rate": 0.061,
+      "status_change_share": 0.04
+    },
+    {
+      "season": 2005,
+      "n_res": 61,
+      "med_games": 6.0,
+      "zero_rate": 0.082,
+      "status_change_share": 0.031
+    },
+    {
+      "season": 2006,
+      "n_res": 61,
+      "med_games": 5.0,
+      "zero_rate": 0.115,
+      "status_change_share": 0.041
+    },
+    {
+      "season": 2007,
+      "n_res": 70,
+      "med_games": 5.0,
+      "zero_rate": 0.129,
+      "status_change_share": 0.058
+    },
+    {
+      "season": 2008,
+      "n_res": 69,
+      "med_games": 5.0,
+      "zero_rate": 0.058,
+      "status_change_share": 0.068
+    },
+    {
+      "season": 2009,
+      "n_res": 60,
+      "med_games": 6.0,
+      "zero_rate": 0.133,
+      "status_change_share": 0.066
+    },
+    {
+      "season": 2010,
+      "n_res": 71,
+      "med_games": 6.0,
+      "zero_rate": 0.014,
+      "status_change_share": 0.073
+    },
+    {
+      "season": 2011,
+      "n_res": 71,
+      "med_games": 5.0,
+      "zero_rate": 0.056,
+      "status_change_share": 0.064
+    },
+    {
+      "season": 2012,
+      "n_res": 78,
+      "med_games": 8.0,
+      "zero_rate": 0.077,
+      "status_change_share": 0.065
+    },
+    {
+      "season": 2013,
+      "n_res": 75,
+      "med_games": 6.0,
+      "zero_rate": 0.08,
+      "status_change_share": 0.099
+    },
+    {
+      "season": 2014,
+      "n_res": 60,
+      "med_games": 6.0,
+      "zero_rate": 0.033,
+      "status_change_share": 0.073
+    },
+    {
+      "season": 2015,
+      "n_res": 86,
+      "med_games": 8.0,
+      "zero_rate": 0.035,
+      "status_change_share": 0.099
+    },
+    {
+      "season": 2016,
+      "n_res": 83,
+      "med_games": 0.0,
+      "zero_rate": 0.831,
+      "status_change_share": 0.13
+    },
+    {
+      "season": 2017,
+      "n_res": 74,
+      "med_games": 0.0,
+      "zero_rate": 0.919,
+      "status_change_share": 0.334
+    },
+    {
+      "season": 2018,
+      "n_res": 61,
+      "med_games": 0.0,
+      "zero_rate": 0.836,
+      "status_change_share": 0.371
+    },
+    {
+      "season": 2019,
+      "n_res": 79,
+      "med_games": 0.0,
+      "zero_rate": 0.848,
+      "status_change_share": 0.536
+    },
+    {
+      "season": 2020,
+      "n_res": 43,
+      "med_games": 0.0,
+      "zero_rate": 0.698,
+      "status_change_share": 0.623
+    },
+    {
+      "season": 2021,
+      "n_res": 90,
+      "med_games": 0.0,
+      "zero_rate": 0.633,
+      "status_change_share": 0.69
+    },
+    {
+      "season": 2022,
+      "n_res": 87,
+      "med_games": 0.0,
+      "zero_rate": 0.736,
+      "status_change_share": 0.59
+    },
+    {
+      "season": 2023,
+      "n_res": 83,
+      "med_games": 0.0,
+      "zero_rate": 0.723,
+      "status_change_share": 0.578
+    },
+    {
+      "season": 2024,
+      "n_res": 61,
+      "med_games": 0.0,
+      "zero_rate": 0.623,
+      "status_change_share": 0.561
+    },
+    {
+      "season": 2025,
+      "n_res": 67,
+      "med_games": 0.0,
+      "zero_rate": 0.761,
+      "status_change_share": 0.598
+    },
+    {
+      "season": 2026,
+      "n_res": 12,
+      "med_games": 0.0,
+      "zero_rate": 1.0,
+      "status_change_share": 0.0
+    }
+  ],
+  "rookie_bypass": {
+    "rookie_flagged": 60,
+    "rookie_above_ceiling": 50,
+    "veteran_flagged": 496,
+    "veteran_above_ceiling": 0,
+    "reading": "0 veterans above the ceiling reproduces the incumbent exactly; every above-ceiling row is a rookie, i.e. the cap never reaches that path"
+  },
+  "mechanism_activity": {
+    "per_fold": [
+      {
+        "fold": 2019,
+        "n_eval": 46,
+        "RES": 31,
+        "PUP": 6,
+        "NFI": 0,
+        "SUS": 9,
+        "timing_varies": true
+      },
+      {
+        "fold": 2020,
+        "n_eval": 25,
+        "RES": 21,
+        "PUP": 2,
+        "NFI": 0,
+        "SUS": 2,
+        "timing_varies": true
+      },
+      {
+        "fold": 2021,
+        "n_eval": 58,
+        "RES": 58,
+        "PUP": 0,
+        "NFI": 0,
+        "SUS": 0,
+        "timing_varies": true
+      },
+      {
+        "fold": 2022,
+        "n_eval": 36,
+        "RES": 36,
+        "PUP": 0,
+        "NFI": 0,
+        "SUS": 0,
+        "timing_varies": true
+      },
+      {
+        "fold": 2023,
+        "n_eval": 45,
+        "RES": 45,
+        "PUP": 0,
+        "NFI": 0,
+        "SUS": 0,
+        "timing_varies": true
+      },
+      {
+        "fold": 2024,
+        "n_eval": 32,
+        "RES": 32,
+        "PUP": 0,
+        "NFI": 0,
+        "SUS": 0,
+        "timing_varies": true
+      },
+      {
+        "fold": 2025,
+        "n_eval": 41,
+        "RES": 41,
+        "PUP": 0,
+        "NFI": 0,
+        "SUS": 0,
+        "timing_varies": true
+      }
+    ],
+    "total_by_status": {
+      "RES": 361,
+      "PUP": 26,
+      "NFI": 0,
+      "SUS": 31
+    },
+    "inactive_statuses": [
+      "NFI"
+    ],
+    "note": "NFI has ZERO rows historically AND zero in the 2026 serving cohort \u2014 its cap is unfittable and INACTIVE; no arm may claim credit there (NF-D20)."
+  },
+  "per_fold": [
+    {
+      "year": 2019,
+      "n_train": 135,
+      "n_eval": 46,
+      "phi": 0.40821541733011496,
+      "arms": {
+        "incumbent": {
+          "crps": 2.241129588120977,
+          "mae": 4.397454674274449,
+          "mean_mu": 5.632233905609467,
+          "n": 46
+        },
+        "fitted_status": {
+          "crps": 1.3894399182290393,
+          "mae": 2.3710117956616052,
+          "mean_mu": 2.439929984307517,
+          "n": 46
+        },
+        "timing_aware": {
+          "crps": 1.4087199312015546,
+          "mae": 2.4144619783021626,
+          "mean_mu": 2.3013295010046115,
+          "n": 46
+        },
+        "hurdle_transfer": {
+          "crps": 1.4472895070273624,
+          "mae": 2.558806318913196,
+          "mean_mu": 2.5698252531133363,
+          "n": 46
+        },
+        "sus_regime": {
+          "crps": 1.4274386602866551,
+          "mae": 2.4616440061756064,
+          "mean_mu": 2.566689078141342,
+          "n": 46
+        },
+        "all_zero": {
+          "crps": 2.238510160385734,
+          "mae": 2.239130434782609,
+          "mean_mu": 0.0,
+          "n": 46
+        },
+        "no_cap": {
+          "crps": 4.497199263136719,
+          "mae": 6.801457210743418,
+          "mean_mu": 8.553449455035112,
+          "n": 46
+        },
+        "timing_aware_minus_timing": {
+          "crps": 1.4411701354000412,
+          "mae": 2.42229349132962,
+          "mean_mu": 2.3417999675217382,
+          "n": 46
+        }
+      },
+      "anchors": {
+        "pooled_mean": {
+          "crps": 1.7723242122505092,
+          "mae": 2.926086956521739,
+          "mean_mu": 2.3111111111111113,
+          "n": 46
+        },
+        "permuted_timing": {
+          "crps": 1.4934973098409698,
+          "mae": 2.4915898375345584,
+          "mean_mu": 2.4131347027264396,
+          "n": 46
+        }
+      },
+      "oracles": {
+        "timing_aware": {
+          "crps": 1.432064253193168,
+          "mae": 2.4325285916909785,
+          "mean_mu": 2.337885980855019,
+          "n": 46
+        },
+        "timing_aware_minus_timing": {
+          "crps": 1.4554715936734335,
+          "mae": 2.444592344398495,
+          "mean_mu": 2.3214622300757797,
+          "n": 46
+        },
+        "fitted_status": {
+          "crps": 1.646097024908185,
+          "mae": 2.6750517472715627,
+          "mean_mu": 2.182802412422226,
+          "n": 46
+        },
+        "incumbent": {
+          "crps": 1.646097024908185,
+          "mae": 2.6750517472715627,
+          "mean_mu": 2.182802412422226,
+          "n": 46
+        },
+        "sus_regime": {
+          "crps": 1.646097024908185,
+          "mae": 2.6750517472715627,
+          "mean_mu": 2.182802412422226,
+          "n": 46
+        },
+        "hurdle_transfer": {
+          "crps": 1.5544586577785982,
+          "mae": 2.5456825755685326,
+          "mean_mu": 2.2391354955689304,
+          "n": 46
+        }
+      },
+      "matched_n": {
+        "crps": 1.4249403003526067,
+        "mae": 2.6265428235543964,
+        "mean_mu": 2.915266161696688,
+        "n": 46
+      },
+      "status_mix": {
+        "RES": 31,
+        "SUS": 9,
+        "PUP": 6
+      },
+      "zero_rate": 0.6304347826086957
+    },
+    {
+      "year": 2020,
+      "n_train": 181,
+      "n_eval": 25,
+      "phi": 0.4320864225006521,
+      "arms": {
+        "incumbent": {
+          "crps": 2.621001572886961,
+          "mae": 4.54743570436591,
+          "mean_mu": 5.543179616226464,
+          "n": 25
+        },
+        "fitted_status": {
+          "crps": 2.712913848164594,
+          "mae": 3.447780172413793,
+          "mean_mu": 1.847780172413793,
+          "n": 25
+        },
+        "timing_aware": {
+          "crps": 2.6380013750733746,
+          "mae": 3.307808535946029,
+          "mean_mu": 1.876382310928108,
+          "n": 25
+        },
+        "hurdle_transfer": {
+          "crps": 2.5237816974578458,
+          "mae": 3.386893726216947,
+          "mean_mu": 2.2311029071569495,
+          "n": 25
+        },
+        "sus_regime": {
+          "crps": 2.712913848164594,
+          "mae": 3.447780172413793,
+          "mean_mu": 1.847780172413793,
+          "n": 25
+        },
+        "all_zero": {
+          "crps": 3.2790923218430335,
+          "mae": 3.28,
+          "mean_mu": 0.0,
+          "n": 25
+        },
+        "no_cap": {
+          "crps": 4.337790289614874,
+          "mae": 6.586504659305603,
+          "mean_mu": 8.583932054088212,
+          "n": 25
+        },
+        "timing_aware_minus_timing": {
+          "crps": 2.6547925999425415,
+          "mae": 3.289663817910275,
+          "mean_mu": 1.8232612137172128,
+          "n": 25
+        }
+      },
+      "anchors": {
+        "pooled_mean": {
+          "crps": 2.4224507405676103,
+          "mae": 3.498563535911602,
+          "mean_mu": 2.292817679558011,
+          "n": 25
+        },
+        "permuted_timing": {
+          "crps": 2.658630431921678,
+          "mae": 3.2308431154720734,
+          "mean_mu": 2.0036857381433255,
+          "n": 25
+        }
+      },
+      "oracles": {
+        "timing_aware": {
+          "crps": 2.114055858635566,
+          "mae": 3.1879002374174137,
+          "mean_mu": 3.2818041923878196,
+          "n": 25
+        },
+        "timing_aware_minus_timing": {
+          "crps": 2.2589743313717148,
+          "mae": 3.6032391518989484,
+          "mean_mu": 3.260038244773058,
+          "n": 25
+        },
+        "fitted_status": {
+          "crps": 2.2964834911913963,
+          "mae": 3.7671619047619047,
+          "mean_mu": 3.4847999999999995,
+          "n": 25
+        },
+        "incumbent": {
+          "crps": 2.2964834911913963,
+          "mae": 3.7671619047619047,
+          "mean_mu": 3.4847999999999995,
+          "n": 25
+        },
+        "sus_regime": {
+          "crps": 2.2964834911913963,
+          "mae": 3.7671619047619047,
+          "mean_mu": 3.4847999999999995,
+          "n": 25
+        },
+        "hurdle_transfer": {
+          "crps": 2.148477650513646,
+          "mae": 3.361307662603968,
+          "mean_mu": 3.279999935627055,
+          "n": 25
+        }
+      },
+      "matched_n": {
+        "crps": 2.544300290274313,
+        "mae": 3.231145333849205,
+        "mean_mu": 1.8632672565747377,
+        "n": 25
+      },
+      "status_mix": {
+        "RES": 21,
+        "SUS": 2,
+        "PUP": 2
+      },
+      "zero_rate": 0.48
+    },
+    {
+      "year": 2021,
+      "n_train": 206,
+      "n_eval": 58,
+      "phi": 0.5144811944150769,
+      "arms": {
+        "incumbent": {
+          "crps": 2.505244184691591,
+          "mae": 4.541436346206812,
+          "mean_mu": 5.337512927273985,
+          "n": 58
+        },
+        "fitted_status": {
+          "crps": 2.7280071467660036,
+          "mae": 3.7292293450590144,
+          "mean_mu": 1.6912751677852351,
+          "n": 58
+        },
+        "timing_aware": {
+          "crps": 2.6959314923141213,
+          "mae": 3.6290598825414677,
+          "mean_mu": 1.68461664781046,
+          "n": 58
+        },
+        "hurdle_transfer": {
+          "crps": 2.5871662575177905,
+          "mae": 3.6955071733167375,
+          "mean_mu": 2.086859730848562,
+          "n": 58
+        },
+        "sus_regime": {
+          "crps": 2.7280071467660036,
+          "mae": 3.7292293450590144,
+          "mean_mu": 1.6912751677852351,
+          "n": 58
+        },
+        "all_zero": {
+          "crps": 3.447311184818943,
+          "mae": 3.4482758620689653,
+          "mean_mu": 0.0,
+          "n": 58
+        },
+        "no_cap": {
+          "crps": 4.0857838929085055,
+          "mae": 6.218843300149069,
+          "mean_mu": 8.648744240338575,
+          "n": 58
+        },
+        "timing_aware_minus_timing": {
+          "crps": 2.6968958881742178,
+          "mae": 3.6877577528613803,
+          "mean_mu": 1.7299461442045017,
+          "n": 58
+        }
+      },
+      "anchors": {
+        "pooled_mean": {
+          "crps": 2.5576242207788016,
+          "mae": 3.906930030130566,
+          "mean_mu": 2.4126213592233006,
+          "n": 58
+        },
+        "permuted_timing": {
+          "crps": 2.658275275747114,
+          "mae": 3.5625879481968017,
+          "mean_mu": 1.7401070428838636,
+          "n": 58
+        }
+      },
+      "oracles": {
+        "timing_aware": {
+          "crps": 2.378524713687417,
+          "mae": 3.758981839088111,
+          "mean_mu": 2.9674691714788954,
+          "n": 58
+        },
+        "timing_aware_minus_timing": {
+          "crps": 2.39312233732246,
+          "mae": 3.78503200121487,
+          "mean_mu": 2.9644909363410332,
+          "n": 58
+        },
+        "fitted_status": {
+          "crps": 2.380317882047131,
+          "mae": 4.220715086887462,
+          "mean_mu": 3.9241788235582327,
+          "n": 58
+        },
+        "incumbent": {
+          "crps": 2.380317882047131,
+          "mae": 4.220715086887462,
+          "mean_mu": 3.9241788235582327,
+          "n": 58
+        },
+        "sus_regime": {
+          "crps": 2.380317882047131,
+          "mae": 4.220715086887462,
+          "mean_mu": 3.9241788235582327,
+          "n": 58
+        },
+        "hurdle_transfer": {
+          "crps": 2.3453972145140116,
+          "mae": 3.9207340497239738,
+          "mean_mu": 3.4941441589176505,
+          "n": 58
+        }
+      },
+      "matched_n": {
+        "crps": 2.677441389983538,
+        "mae": 4.014385119300231,
+        "mean_mu": 2.8176005856782878,
+        "n": 58
+      },
+      "status_mix": {
+        "RES": 58
+      },
+      "zero_rate": 0.5689655172413793
+    },
+    {
+      "year": 2022,
+      "n_train": 264,
+      "n_eval": 36,
+      "phi": 0.5497492559837075,
+      "arms": {
+        "incumbent": {
+          "crps": 1.994768761055524,
+          "mae": 4.385966197440031,
+          "mean_mu": 5.354724580788566,
+          "n": 36
+        },
+        "fitted_status": {
+          "crps": 1.1145755378161715,
+          "mae": 2.2561728395061724,
+          "mean_mu": 2.1784755770263016,
+          "n": 36
+        },
+        "timing_aware": {
+          "crps": 1.0588235613087462,
+          "mae": 2.113707150323567,
+          "mean_mu": 2.0201259119746386,
+          "n": 36
+        },
+        "hurdle_transfer": {
+          "crps": 1.109678571054441,
+          "mae": 2.386255723309899,
+          "mean_mu": 2.4957008743574205,
+          "n": 36
+        },
+        "sus_regime": {
+          "crps": 1.1145755378161715,
+          "mae": 2.2561728395061724,
+          "mean_mu": 2.1784755770263016,
+          "n": 36
+        },
+        "all_zero": {
+          "crps": 1.3051014471135851,
+          "mae": 1.3055555555555556,
+          "mean_mu": 0.0,
+          "n": 36
+        },
+        "no_cap": {
+          "crps": 4.496643684550575,
+          "mae": 7.339822676702621,
+          "mean_mu": 8.645378232258176,
+          "n": 36
+        },
+        "timing_aware_minus_timing": {
+          "crps": 1.0563141738173387,
+          "mae": 2.04460223992092,
+          "mean_mu": 1.9601775472249656,
+          "n": 36
+        }
+      },
+      "anchors": {
+        "pooled_mean": {
+          "crps": 1.1685455333482835,
+          "mae": 2.5656565656565657,
+          "mean_mu": 2.640151515151515,
+          "n": 36
+        },
+        "permuted_timing": {
+          "crps": 1.0954861747121134,
+          "mae": 2.1248204412881813,
+          "mean_mu": 2.0228564159863947,
+          "n": 36
+        }
+      },
+      "oracles": {
+        "timing_aware": {
+          "crps": 1.0018705663694516,
+          "mae": 1.7843608987723572,
+          "mean_mu": 1.7700524978961267,
+          "n": 36
+        },
+        "timing_aware_minus_timing": {
+          "crps": 1.0123442101491575,
+          "mae": 1.7978983272949813,
+          "mean_mu": 1.766372695349589,
+          "n": 36
+        },
+        "fitted_status": {
+          "crps": 1.0676607104711608,
+          "mae": 2.10134733918195,
+          "mean_mu": 2.039537823225817,
+          "n": 36
+        },
+        "incumbent": {
+          "crps": 1.0676607104711608,
+          "mae": 2.10134733918195,
+          "mean_mu": 2.039537823225817,
+          "n": 36
+        },
+        "sus_regime": {
+          "crps": 1.0676607104711608,
+          "mae": 2.10134733918195,
+          "mean_mu": 2.039537823225817,
+          "n": 36
+        },
+        "hurdle_transfer": {
+          "crps": 1.0249483486146809,
+          "mae": 1.6190558105487984,
+          "mean_mu": 1.3055546484601532,
+          "n": 36
+        }
+      },
+      "matched_n": {
+        "crps": 1.1702476551170502,
+        "mae": 2.5538114594099874,
+        "mean_mu": 2.8416597292227164,
+        "n": 36
+      },
+      "status_mix": {
+        "RES": 36
+      },
+      "zero_rate": 0.6944444444444444
+    },
+    {
+      "year": 2023,
+      "n_train": 300,
+      "n_eval": 45,
+      "phi": 0.5347772996015863,
+      "arms": {
+        "incumbent": {
+          "crps": 2.5448901163623487,
+          "mae": 4.628787488041438,
+          "mean_mu": 5.408940832208855,
+          "n": 45
+        },
+        "fitted_status": {
+          "crps": 2.421858103452461,
+          "mae": 3.8986552087885014,
+          "mean_mu": 2.722980277402951,
+          "n": 45
+        },
+        "timing_aware": {
+          "crps": 2.4214446767386386,
+          "mae": 3.690217837540336,
+          "mean_mu": 2.306886879744425,
+          "n": 45
+        },
+        "hurdle_transfer": {
+          "crps": 2.3727260200842775,
+          "mae": 3.8466672030345888,
+          "mean_mu": 2.801865006331439,
+          "n": 45
+        },
+        "sus_regime": {
+          "crps": 2.421858103452461,
+          "mae": 3.8986552087885014,
+          "mean_mu": 2.722980277402951,
+          "n": 45
+        },
+        "all_zero": {
+          "crps": 3.3546109888425546,
+          "mae": 3.3555555555555556,
+          "mean_mu": 0.0,
+          "n": 45
+        },
+        "no_cap": {
+          "crps": 4.1376204413955175,
+          "mae": 6.270717062370261,
+          "mean_mu": 8.748321292548034,
+          "n": 45
+        },
+        "timing_aware_minus_timing": {
+          "crps": 2.5217466209931234,
+          "mae": 3.777826198808566,
+          "mean_mu": 2.1563086157928986,
+          "n": 45
+        }
+      },
+      "anchors": {
+        "pooled_mean": {
+          "crps": 2.4869864962859016,
+          "mae": 3.8728888888888897,
+          "mean_mu": 2.4800000000000004,
+          "n": 45
+        },
+        "permuted_timing": {
+          "crps": 2.7041957699569066,
+          "mae": 4.0681106303841466,
+          "mean_mu": 2.3963229152804413,
+          "n": 45
+        }
+      },
+      "oracles": {
+        "timing_aware": {
+          "crps": 2.0345066879388445,
+          "mae": 3.2787878005481725,
+          "mean_mu": 2.984151848478801,
+          "n": 45
+        },
+        "timing_aware_minus_timing": {
+          "crps": 2.1799496656321233,
+          "mae": 3.6172932202518506,
+          "mean_mu": 2.956511586775693,
+          "n": 45
+        },
+        "fitted_status": {
+          "crps": 2.371355358885914,
+          "mae": 4.177996772574509,
+          "mean_mu": 3.8877210181436928,
+          "n": 45
+        },
+        "incumbent": {
+          "crps": 2.371355358885914,
+          "mae": 4.177996772574509,
+          "mean_mu": 3.8877210181436928,
+          "n": 45
+        },
+        "sus_regime": {
+          "crps": 2.371355358885914,
+          "mae": 4.177996772574509,
+          "mean_mu": 3.8877210181436928,
+          "n": 45
+        },
+        "hurdle_transfer": {
+          "crps": 2.092059499808278,
+          "mae": 3.589032545630385,
+          "mean_mu": 3.3555568307714574,
+          "n": 45
+        }
+      },
+      "matched_n": {
+        "crps": 2.590572739921315,
+        "mae": 3.825342917929123,
+        "mean_mu": 2.1706900484126943,
+        "n": 45
+      },
+      "status_mix": {
+        "RES": 45
+      },
+      "zero_rate": 0.5777777777777777
+    },
+    {
+      "year": 2024,
+      "n_train": 345,
+      "n_eval": 32,
+      "phi": 0.5481285960274593,
+      "arms": {
+        "incumbent": {
+          "crps": 2.3056607934923123,
+          "mae": 3.810973835734291,
+          "mean_mu": 5.135014224243508,
+          "n": 32
+        },
+        "fitted_status": {
+          "crps": 2.3606135953229055,
+          "mae": 3.4959345192391664,
+          "mean_mu": 2.8169448455811694,
+          "n": 32
+        },
+        "timing_aware": {
+          "crps": 2.349194416658971,
+          "mae": 3.2663549127283567,
+          "mean_mu": 2.334026043472783,
+          "n": 32
+        },
+        "hurdle_transfer": {
+          "crps": 2.267128590170141,
+          "mae": 3.326443137289932,
+          "mean_mu": 2.803113664889337,
+          "n": 32
+        },
+        "sus_regime": {
+          "crps": 2.3606135953229055,
+          "mae": 3.4959345192391664,
+          "mean_mu": 2.8169448455811694,
+          "n": 32
+        },
+        "all_zero": {
+          "crps": 3.4989371503593736,
+          "mae": 3.5,
+          "mean_mu": 0.0,
+          "n": 32
+        },
+        "no_cap": {
+          "crps": 3.4467092102204746,
+          "mae": 5.208397552260195,
+          "mean_mu": 7.929214080811694,
+          "n": 32
+        },
+        "timing_aware_minus_timing": {
+          "crps": 2.4144780881548655,
+          "mae": 3.2686704540237796,
+          "mean_mu": 2.156137180963877,
+          "n": 32
+        }
+      },
+      "anchors": {
+        "pooled_mean": {
+          "crps": 2.462726598438162,
+          "mae": 3.574275362318841,
+          "mean_mu": 2.5942028985507246,
+          "n": 32
+        },
+        "permuted_timing": {
+          "crps": 2.4725564558409787,
+          "mae": 3.3497760628095263,
+          "mean_mu": 2.4457091608187294,
+          "n": 32
+        }
+      },
+      "oracles": {
+        "timing_aware": {
+          "crps": 1.9339688836659064,
+          "mae": 2.7346975351658163,
+          "mean_mu": 3.688648657475245,
+          "n": 32
+        },
+        "timing_aware_minus_timing": {
+          "crps": 1.9251360715852797,
+          "mae": 2.7205918300362955,
+          "mean_mu": 3.6866845953909895,
+          "n": 32
+        },
+        "fitted_status": {
+          "crps": 2.2412971722233626,
+          "mae": 3.660380007658558,
+          "mean_mu": 4.348342816162338,
+          "n": 32
+        },
+        "incumbent": {
+          "crps": 2.2412971722233626,
+          "mae": 3.660380007658558,
+          "mean_mu": 4.348342816162338,
+          "n": 32
+        },
+        "sus_regime": {
+          "crps": 2.2412971722233626,
+          "mae": 3.660380007658558,
+          "mean_mu": 4.348342816162338,
+          "n": 32
+        },
+        "hurdle_transfer": {
+          "crps": 2.0139003947382688,
+          "mae": 2.8875119749844504,
+          "mean_mu": 3.4999948346363583,
+          "n": 32
+        }
+      },
+      "matched_n": {
+        "crps": 2.529265348060843,
+        "mae": 3.85806024871715,
+        "mean_mu": 3.7323885918218247,
+        "n": 32
+      },
+      "status_mix": {
+        "RES": 32
+      },
+      "zero_rate": 0.46875
+    },
+    {
+      "year": 2025,
+      "n_train": 377,
+      "n_eval": 41,
+      "phi": 0.5832436665439108,
+      "arms": {
+        "incumbent": {
+          "crps": 2.5406365730730376,
+          "mae": 4.976801499114682,
+          "mean_mu": 5.407378574043552,
+          "n": 41
+        },
+        "fitted_status": {
+          "crps": 2.501545270820828,
+          "mae": 4.294942720340486,
+          "mean_mu": 3.0136775839349204,
+          "n": 41
+        },
+        "timing_aware": {
+          "crps": 2.5203040188646963,
+          "mae": 4.18138157195282,
+          "mean_mu": 2.8098779302722074,
+          "n": 41
+        },
+        "hurdle_transfer": {
+          "crps": 2.4541896213674113,
+          "mae": 4.286973368508304,
+          "mean_mu": 3.261685819659904,
+          "n": 41
+        },
+        "sus_regime": {
+          "crps": 2.501545270820828,
+          "mae": 4.294942720340486,
+          "mean_mu": 3.0136775839349204,
+          "n": 41
+        },
+        "all_zero": {
+          "crps": 3.5112615653110257,
+          "mae": 3.5121951219512195,
+          "mean_mu": 0.0,
+          "n": 41
+        },
+        "no_cap": {
+          "crps": 3.7859914037984317,
+          "mae": 6.099256220665352,
+          "mean_mu": 8.705525839349203,
+          "n": 41
+        },
+        "timing_aware_minus_timing": {
+          "crps": 2.4833450663076,
+          "mae": 4.0002502405166505,
+          "mean_mu": 2.4846497094915247,
+          "n": 41
+        }
+      },
+      "anchors": {
+        "pooled_mean": {
+          "crps": 2.631242709434715,
+          "mae": 4.310344827586206,
+          "mean_mu": 2.6710875331564985,
+          "n": 41
+        },
+        "permuted_timing": {
+          "crps": 2.4822493065569025,
+          "mae": 4.099976249244486,
+          "mean_mu": 2.912140292233345,
+          "n": 41
+        }
+      },
+      "oracles": {
+        "timing_aware": {
+          "crps": 2.269099018753581,
+          "mae": 3.7325091301043525,
+          "mean_mu": 2.7845482929016083,
+          "n": 41
+        },
+        "timing_aware_minus_timing": {
+          "crps": 2.272088397544583,
+          "mae": 3.7281393985049682,
+          "mean_mu": 2.7824224732805622,
+          "n": 41
+        },
+        "fitted_status": {
+          "crps": 2.4583636468478587,
+          "mae": 4.7349214097765016,
+          "mean_mu": 4.550861265430817,
+          "n": 41
+        },
+        "incumbent": {
+          "crps": 2.4583636468478587,
+          "mae": 4.7349214097765016,
+          "mean_mu": 4.550861265430817,
+          "n": 41
+        },
+        "sus_regime": {
+          "crps": 2.4583636468478587,
+          "mae": 4.7349214097765016,
+          "mean_mu": 4.550861265430817,
+          "n": 41
+        },
+        "hurdle_transfer": {
+          "crps": 2.2562668338358356,
+          "mae": 4.031339187800004,
+          "mean_mu": 3.5121806845672316,
+          "n": 41
+        }
+      },
+      "matched_n": {
+        "crps": 2.390664262858749,
+        "mae": 4.100967024561068,
+        "mean_mu": 3.673373364462776,
+        "n": 41
+      },
+      "status_mix": {
+        "RES": 41
+      },
+      "zero_rate": 0.6341463414634146
+    }
+  ],
+  "fit_provenance": {
+    "2019": {
+      "incumbent": {
+        "blend": 0.7,
+        "levels": {
+          "RES": 4.0,
+          "PUP": 4.0,
+          "NFI": 4.0,
+          "SUS": 7.0
+        }
+      },
+      "phi": 0.40821541733011496,
+      "fitted_status": {
+        "levels": {
+          "RES": 1.4742268041237114,
+          "PUP": 2.311111111111111,
+          "NFI": 2.311111111111111,
+          "SUS": 6.5
+        },
+        "blend": 1.0,
+        "cells": {
+          "RES": {
+            "n": 97,
+            "used_fallback": false
+          },
+          "PUP": {
+            "n": 18,
+            "used_fallback": true,
+            "why": "cell n < MIN_CELL_N=20; pooled level used"
+          },
+          "NFI": {
+            "n": 0,
+            "used_fallback": true,
+            "why": "cell n < MIN_CELL_N=20; pooled level used"
+          },
+          "SUS": {
+            "n": 20,
+            "used_fallback": false
+          }
+        }
+      },
+      "timing_aware": {
+        "features": [
+          "onset_carryover",
+          "weeks_since_last_game",
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ]
+      },
+      "hurdle_transfer": {
+        "cond_leg_fitted": true
+      },
+      "sus_regime": {
+        "sus_level": 6.5,
+        "sus_n": 20,
+        "used_fallback": false
+      },
+      "all_zero": {
+        "degenerate": true
+      },
+      "no_cap": {
+        "degenerate": true,
+        "what": "the uncapped stale durability estimate"
+      },
+      "timing_aware_minus_timing": {
+        "features": [
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ],
+        "stripped": [
+          "onset_carryover",
+          "weeks_since_last_game"
+        ],
+        "matched_foil": true
+      }
+    },
+    "2020": {
+      "incumbent": {
+        "blend": 0.7,
+        "levels": {
+          "RES": 4.0,
+          "PUP": 4.0,
+          "NFI": 4.0,
+          "SUS": 7.0
+        }
+      },
+      "phi": 0.4320864225006521,
+      "fitted_status": {
+        "levels": {
+          "RES": 1.390625,
+          "PUP": 1.875,
+          "NFI": 2.292817679558011,
+          "SUS": 6.620689655172414
+        },
+        "blend": 1.0,
+        "cells": {
+          "RES": {
+            "n": 128,
+            "used_fallback": false
+          },
+          "PUP": {
+            "n": 24,
+            "used_fallback": false
+          },
+          "NFI": {
+            "n": 0,
+            "used_fallback": true,
+            "why": "cell n < MIN_CELL_N=20; pooled level used"
+          },
+          "SUS": {
+            "n": 29,
+            "used_fallback": false
+          }
+        }
+      },
+      "timing_aware": {
+        "features": [
+          "onset_carryover",
+          "weeks_since_last_game",
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ]
+      },
+      "hurdle_transfer": {
+        "cond_leg_fitted": true
+      },
+      "sus_regime": {
+        "sus_level": 6.620689655172414,
+        "sus_n": 29,
+        "used_fallback": false
+      },
+      "all_zero": {
+        "degenerate": true
+      },
+      "no_cap": {
+        "degenerate": true,
+        "what": "the uncapped stale durability estimate"
+      },
+      "timing_aware_minus_timing": {
+        "features": [
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ],
+        "stripped": [
+          "onset_carryover",
+          "weeks_since_last_game"
+        ],
+        "matched_foil": true
+      }
+    },
+    "2021": {
+      "incumbent": {
+        "blend": 0.7,
+        "levels": {
+          "RES": 4.0,
+          "PUP": 4.0,
+          "NFI": 4.0,
+          "SUS": 7.0
+        }
+      },
+      "phi": 0.5144811944150769,
+      "fitted_status": {
+        "levels": {
+          "RES": 1.691275167785235,
+          "PUP": 1.8461538461538463,
+          "NFI": 2.412621359223301,
+          "SUS": 6.354838709677419
+        },
+        "blend": 1.0,
+        "cells": {
+          "RES": {
+            "n": 149,
+            "used_fallback": false
+          },
+          "PUP": {
+            "n": 26,
+            "used_fallback": false
+          },
+          "NFI": {
+            "n": 0,
+            "used_fallback": true,
+            "why": "cell n < MIN_CELL_N=20; pooled level used"
+          },
+          "SUS": {
+            "n": 31,
+            "used_fallback": false
+          }
+        }
+      },
+      "timing_aware": {
+        "features": [
+          "onset_carryover",
+          "weeks_since_last_game",
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ]
+      },
+      "hurdle_transfer": {
+        "cond_leg_fitted": true
+      },
+      "sus_regime": {
+        "sus_level": 6.354838709677419,
+        "sus_n": 31,
+        "used_fallback": false
+      },
+      "all_zero": {
+        "degenerate": true
+      },
+      "no_cap": {
+        "degenerate": true,
+        "what": "the uncapped stale durability estimate"
+      },
+      "timing_aware_minus_timing": {
+        "features": [
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ],
+        "stripped": [
+          "onset_carryover",
+          "weeks_since_last_game"
+        ],
+        "matched_foil": true
+      }
+    },
+    "2022": {
+      "incumbent": {
+        "blend": 0.7,
+        "levels": {
+          "RES": 4.0,
+          "PUP": 4.0,
+          "NFI": 4.0,
+          "SUS": 7.0
+        }
+      },
+      "phi": 0.5497492559837075,
+      "fitted_status": {
+        "levels": {
+          "RES": 2.183574879227053,
+          "PUP": 1.8461538461538463,
+          "NFI": 2.640151515151515,
+          "SUS": 6.354838709677419
+        },
+        "blend": 1.0,
+        "cells": {
+          "RES": {
+            "n": 207,
+            "used_fallback": false
+          },
+          "PUP": {
+            "n": 26,
+            "used_fallback": false
+          },
+          "NFI": {
+            "n": 0,
+            "used_fallback": true,
+            "why": "cell n < MIN_CELL_N=20; pooled level used"
+          },
+          "SUS": {
+            "n": 31,
+            "used_fallback": false
+          }
+        }
+      },
+      "timing_aware": {
+        "features": [
+          "onset_carryover",
+          "weeks_since_last_game",
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ]
+      },
+      "hurdle_transfer": {
+        "cond_leg_fitted": true
+      },
+      "sus_regime": {
+        "sus_level": 6.354838709677419,
+        "sus_n": 31,
+        "used_fallback": false
+      },
+      "all_zero": {
+        "degenerate": true
+      },
+      "no_cap": {
+        "degenerate": true,
+        "what": "the uncapped stale durability estimate"
+      },
+      "timing_aware_minus_timing": {
+        "features": [
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ],
+        "stripped": [
+          "onset_carryover",
+          "weeks_since_last_game"
+        ],
+        "matched_foil": true
+      }
+    },
+    "2023": {
+      "incumbent": {
+        "blend": 0.7,
+        "levels": {
+          "RES": 4.0,
+          "PUP": 4.0,
+          "NFI": 4.0,
+          "SUS": 7.0
+        }
+      },
+      "phi": 0.5347772996015863,
+      "fitted_status": {
+        "levels": {
+          "RES": 2.0534979423868314,
+          "PUP": 1.8461538461538463,
+          "NFI": 2.48,
+          "SUS": 6.354838709677419
+        },
+        "blend": 0.9,
+        "cells": {
+          "RES": {
+            "n": 243,
+            "used_fallback": false
+          },
+          "PUP": {
+            "n": 26,
+            "used_fallback": false
+          },
+          "NFI": {
+            "n": 0,
+            "used_fallback": true,
+            "why": "cell n < MIN_CELL_N=20; pooled level used"
+          },
+          "SUS": {
+            "n": 31,
+            "used_fallback": false
+          }
+        }
+      },
+      "timing_aware": {
+        "features": [
+          "onset_carryover",
+          "weeks_since_last_game",
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ]
+      },
+      "hurdle_transfer": {
+        "cond_leg_fitted": true
+      },
+      "sus_regime": {
+        "sus_level": 6.354838709677419,
+        "sus_n": 31,
+        "used_fallback": false
+      },
+      "all_zero": {
+        "degenerate": true
+      },
+      "no_cap": {
+        "degenerate": true,
+        "what": "the uncapped stale durability estimate"
+      },
+      "timing_aware_minus_timing": {
+        "features": [
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ],
+        "stripped": [
+          "onset_carryover",
+          "weeks_since_last_game"
+        ],
+        "matched_foil": true
+      }
+    },
+    "2024": {
+      "incumbent": {
+        "blend": 0.7,
+        "levels": {
+          "RES": 4.0,
+          "PUP": 4.0,
+          "NFI": 4.0,
+          "SUS": 7.0
+        }
+      },
+      "phi": 0.5481285960274593,
+      "fitted_status": {
+        "levels": {
+          "RES": 2.2569444444444446,
+          "PUP": 1.8461538461538463,
+          "NFI": 2.5942028985507246,
+          "SUS": 6.354838709677419
+        },
+        "blend": 0.9,
+        "cells": {
+          "RES": {
+            "n": 288,
+            "used_fallback": false
+          },
+          "PUP": {
+            "n": 26,
+            "used_fallback": false
+          },
+          "NFI": {
+            "n": 0,
+            "used_fallback": true,
+            "why": "cell n < MIN_CELL_N=20; pooled level used"
+          },
+          "SUS": {
+            "n": 31,
+            "used_fallback": false
+          }
+        }
+      },
+      "timing_aware": {
+        "features": [
+          "onset_carryover",
+          "weeks_since_last_game",
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ]
+      },
+      "hurdle_transfer": {
+        "cond_leg_fitted": true
+      },
+      "sus_regime": {
+        "sus_level": 6.354838709677419,
+        "sus_n": 31,
+        "used_fallback": false
+      },
+      "all_zero": {
+        "degenerate": true
+      },
+      "no_cap": {
+        "degenerate": true,
+        "what": "the uncapped stale durability estimate"
+      },
+      "timing_aware_minus_timing": {
+        "features": [
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ],
+        "stripped": [
+          "onset_carryover",
+          "weeks_since_last_game"
+        ],
+        "matched_foil": true
+      }
+    },
+    "2025": {
+      "incumbent": {
+        "blend": 0.7,
+        "levels": {
+          "RES": 4.0,
+          "PUP": 4.0,
+          "NFI": 4.0,
+          "SUS": 7.0
+        }
+      },
+      "phi": 0.5832436665439108,
+      "fitted_status": {
+        "levels": {
+          "RES": 2.38125,
+          "PUP": 1.8461538461538463,
+          "NFI": 2.6710875331564985,
+          "SUS": 6.354838709677419
+        },
+        "blend": 0.9,
+        "cells": {
+          "RES": {
+            "n": 320,
+            "used_fallback": false
+          },
+          "PUP": {
+            "n": 26,
+            "used_fallback": false
+          },
+          "NFI": {
+            "n": 0,
+            "used_fallback": true,
+            "why": "cell n < MIN_CELL_N=20; pooled level used"
+          },
+          "SUS": {
+            "n": 31,
+            "used_fallback": false
+          }
+        }
+      },
+      "timing_aware": {
+        "features": [
+          "onset_carryover",
+          "weeks_since_last_game",
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ]
+      },
+      "hurdle_transfer": {
+        "cond_leg_fitted": true
+      },
+      "sus_regime": {
+        "sus_level": 6.354838709677419,
+        "sus_n": 31,
+        "used_fallback": false
+      },
+      "all_zero": {
+        "degenerate": true
+      },
+      "no_cap": {
+        "degenerate": true,
+        "what": "the uncapped stale durability estimate"
+      },
+      "timing_aware_minus_timing": {
+        "features": [
+          "prior_games",
+          "log1p_prior_fp",
+          "is_qb"
+        ],
+        "stripped": [
+          "onset_carryover",
+          "weeks_since_last_game"
+        ],
+        "matched_foil": true
+      }
+    }
+  },
+  "pooled": {
+    "incumbent": {
+      "crps": 2.3933,
+      "mae": 4.4698,
+      "mean_games": 5.403,
+      "mean_lift": 0.0,
+      "folds_beating_incumbent": 0,
+      "per_fold_lift": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "fitted_status": {
+      "crps": 2.1756,
+      "mae": 3.3562,
+      "mean_games": 2.387,
+      "mean_lift": 0.2178,
+      "folds_beating_incumbent": 4,
+      "per_fold_lift": [
+        0.8517,
+        -0.0919,
+        -0.2228,
+        0.8802,
+        0.123,
+        -0.055,
+        0.0391
+      ]
+    },
+    "timing_aware": {
+      "crps": 2.1561,
+      "mae": 3.229,
+      "mean_games": 2.19,
+      "mean_lift": 0.2373,
+      "folds_beating_incumbent": 4,
+      "per_fold_lift": [
+        0.8324,
+        -0.017,
+        -0.1907,
+        0.9359,
+        0.1234,
+        -0.0435,
+        0.0203
+      ]
+    },
+    "hurdle_transfer": {
+      "crps": 2.1089,
+      "mae": 3.3554,
+      "mean_games": 2.607,
+      "mean_lift": 0.2845,
+      "folds_beating_incumbent": 6,
+      "per_fold_lift": [
+        0.7938,
+        0.0972,
+        -0.0819,
+        0.8851,
+        0.1722,
+        0.0385,
+        0.0864
+      ]
+    },
+    "sus_regime": {
+      "crps": 2.181,
+      "mae": 3.3692,
+      "mean_games": 2.405,
+      "mean_lift": 0.2123,
+      "folds_beating_incumbent": 4,
+      "per_fold_lift": [
+        0.8137,
+        -0.0919,
+        -0.2228,
+        0.8802,
+        0.123,
+        -0.055,
+        0.0391
+      ]
+    },
+    "all_zero": {
+      "crps": 2.9478,
+      "mae": 2.9487,
+      "mean_games": 0.0,
+      "mean_lift": -0.5545,
+      "folds_beating_incumbent": 2,
+      "per_fold_lift": [
+        0.0026,
+        -0.6581,
+        -0.9421,
+        0.6897,
+        -0.8097,
+        -1.1933,
+        -0.9706
+      ]
+    },
+    "no_cap": {
+      "crps": 4.1125,
+      "mae": 6.3607,
+      "mean_games": 8.545,
+      "mean_lift": -1.7192,
+      "folds_beating_incumbent": 0,
+      "per_fold_lift": [
+        -2.2561,
+        -1.7168,
+        -1.5805,
+        -2.5019,
+        -1.5927,
+        -1.141,
+        -1.2454
+      ]
+    },
+    "timing_aware_minus_timing": {
+      "crps": 2.1812,
+      "mae": 3.213,
+      "mean_games": 2.093,
+      "mean_lift": 0.2121,
+      "folds_beating_incumbent": 4,
+      "per_fold_lift": [
+        0.8,
+        -0.0338,
+        -0.1917,
+        0.9385,
+        0.0231,
+        -0.1088,
+        0.0573
+      ]
+    }
+  },
+  "winner": "hurdle_transfer",
+  "deflation": {
+    "pbo": 0.0,
+    "dsr_conv": 0.8913,
+    "dsr_whole_field": 0.0,
+    "trial_sharpes": {
+      "hurdle_transfer": 0.7338,
+      "timing_aware": 0.5243,
+      "fitted_status": 0.4779,
+      "sus_regime": 0.475,
+      "incumbent": 0.0,
+      "all_zero": -0.8319,
+      "no_cap": -3.4443
+    },
+    "V_declared_excl_degenerates": 0.0724,
+    "V_whole_field": 2.2023,
+    "whole_field_spread_pct": 95.01,
+    "contender_spread_pct": 2.24,
+    "degenerates_excluded_from_v": true,
+    "diagnostics": {
+      "mh2_1a_v_over_non_reference": {
+        "dropped_arm": "incumbent",
+        "V_registered": 0.0724,
+        "V_non_reference": 0.0151,
+        "dsr_registered": 0.8913,
+        "dsr_non_reference": 0.973,
+        "admissible_to_act_on": false,
+        "why": "MH2.1 (a) is a convention this pre-registration did not invoke; the registered figure BINDS and this one is a diagnostic (E2.1-r)."
+      },
+      "nf_w7h_drop_most_extreme": {
+        "evaluable": true,
+        "dropped_arm": "incumbent",
+        "dropped_arm_sharpe": 0.0,
+        "V_without_dropped_arm": 0.0151,
+        "dsr_without_dropped_arm": 0.973,
+        "note": "\u26d4 A DIAGNOSTIC, NOT A TRIM."
+      }
+    },
+    "note": "\u26a0\ufe0f The exclusion is NON-MONOTONE and is therefore not a lever: dropping a near-mean arm WIDENS the sample variance and RAISES the bar. It applies to the two arms named degenerate before any score, and to nothing else (DSR-CONV)."
+  },
+  "anchors": {
+    "incumbent": {
+      "evaluable": true,
+      "arm_crps": 2.3933,
+      "own_form_oracle_crps": 2.0659,
+      "respects_oracle": true
+    },
+    "fitted_status": {
+      "evaluable": true,
+      "arm_crps": 2.1756,
+      "own_form_oracle_crps": 2.0659,
+      "respects_oracle": true
+    },
+    "timing_aware": {
+      "evaluable": true,
+      "arm_crps": 2.1561,
+      "own_form_oracle_crps": 1.8806,
+      "respects_oracle": true
+    },
+    "hurdle_transfer": {
+      "evaluable": true,
+      "arm_crps": 2.1089,
+      "own_form_oracle_crps": 1.9194,
+      "respects_oracle": true
+    },
+    "sus_regime": {
+      "evaluable": true,
+      "arm_crps": 2.181,
+      "own_form_oracle_crps": 2.0659,
+      "respects_oracle": true
+    },
+    "all_zero": {
+      "evaluable": false,
+      "why": "no own-form peeking oracle \u2014 the check would pass on NOTHING"
+    },
+    "no_cap": {
+      "evaluable": false,
+      "why": "no own-form peeking oracle \u2014 the check would pass on NOTHING"
+    },
+    "timing_aware_minus_timing": {
+      "evaluable": true,
+      "arm_crps": 2.1812,
+      "own_form_oracle_crps": 1.9282,
+      "respects_oracle": true
+    },
+    "_matched_n_control": {
+      "evaluable": true,
+      "matched_n_crps": 2.1896,
+      "oracle_beats_matched_n": true,
+      "why": "the peeking oracle is a FLOOR only at matched family AND matched resolution (NF1.7 (b) / NF1.9 (f)) \u2014 the winner's own form on ONE prior season"
+    },
+    "_degenerates": {
+      "all_zero": {
+        "crps": 2.9478,
+        "loses_to_winner": true
+      },
+      "no_cap": {
+        "crps": 4.1125,
+        "loses_to_winner": true
+      }
+    }
+  },
+  "fold_consistency": {
+    "observed_wins": 6,
+    "required_wins": 6,
+    "n_folds": 7,
+    "alpha": 0.2,
+    "attained_false_fire": 0.0625,
+    "passes": true
+  },
+  "bh_fdr": {
+    "pvalues": {
+      "fitted_status": 0.1265,
+      "timing_aware": 0.1074,
+      "hurdle_transfer": 0.0501,
+      "sus_regime": 0.1278
+    },
+    "survives": {
+      "fitted_status": false,
+      "timing_aware": false,
+      "hurdle_transfer": false,
+      "sus_regime": false
+    },
+    "q": 0.1,
+    "dual_reading": {
+      "across_arms_STRICT_binds": {
+        "reading": "the 4 eligible arms as parallel hypotheses",
+        "bh_rank1_cutoff": 0.025,
+        "winner_p": 0.0501,
+        "survives": false
+      },
+      "single_hypothesis_diagnostic": {
+        "reading": "one mechanism, one population, no registered position axis \u21d2 arguably INAPPLICABLE rather than failed",
+        "cutoff": 0.1,
+        "winner_p": 0.0501,
+        "would_survive": true,
+        "admissible_to_act_on": false
+      }
+    }
+  },
+  "permutation_anchor": {
+    "permuted_crps": 2.2236,
+    "primary_crps": 2.1561,
+    "mean_lift_over_permuted": 0.0675,
+    "p_one_sided": 0.0808,
+    "beats": true
+  },
+  "matched_foil": {
+    "foil_crps": 2.1812,
+    "primary_crps": 2.1561,
+    "mean_delta": 0.0252,
+    "per_fold": [
+      0.0325,
+      0.0168,
+      0.001,
+      -0.0025,
+      0.1003,
+      0.0653,
+      -0.037
+    ],
+    "folds_positive": 5,
+    "p_one_sided": 0.098,
+    "what_it_measures": "timing_aware \u2212 timing_aware_minus_timing = the TIMING attribution. A primary win this does not separate is a win for the covariates the two SHARE, never for timing (NF-D10 / NF-D15)."
+  },
+  "channel_decomposition": {
+    "steps": {
+      "level__incumbent_to_fitted_status": {
+        "delta_crps": 0.2178,
+        "folds_positive": 4,
+        "p_one_sided": 0.1265
+      },
+      "form__fitted_status_to_glm_no_timing": {
+        "delta_crps": -0.0057,
+        "folds_positive": 4,
+        "p_one_sided": 0.5911
+      },
+      "timing__glm_no_timing_to_timing_aware": {
+        "delta_crps": 0.0252,
+        "folds_positive": 5,
+        "p_one_sided": 0.098
+      },
+      "hurdle_split__timing_aware_to_hurdle": {
+        "delta_crps": 0.0472,
+        "folds_positive": 5,
+        "p_one_sided": 0.0555
+      }
+    },
+    "sum_of_steps": 0.2845,
+    "winner_total_lift": 0.2845,
+    "reading": "the LEVEL channel dominates by an order of magnitude \u2014 the hardcoded caps are simply too high; TIMING is a small positive increment and the HURDLE SPLIT (the certified NF-W2 transfer) is roughly twice the timing channel."
+  },
+  "verdict": {
+    "winner": "hurdle_transfer",
+    "gates": {
+      "beats_incumbent": true,
+      "fold_consistency": true,
+      "pbo_ok": true,
+      "dsr_ok": false,
+      "bh_ok": false,
+      "degenerates_lose": true,
+      "oracle_respected": true,
+      "beats_permutation": true,
+      "timing_attributable": true
+    },
+    "ship": false,
+    "served_arm": "incumbent",
+    "deploy_held": true,
+    "best_alpha": 0,
+    "gate_choice_sensitivity": {
+      "with_dsr_removed": {
+        "beats_incumbent": true,
+        "fold_consistency": true,
+        "pbo_ok": true,
+        "bh_ok": false,
+        "degenerates_lose": true,
+        "oracle_respected": true,
+        "beats_permutation": true,
+        "timing_attributable": true
+      },
+      "still_fails_with_dsr_removed": true,
+      "still_fails_with_bh_removed": true,
+      "ships_only_if_BOTH_relaxed": true,
+      "reading": "two independent registered gates fail, so the null does not turn on either one alone; \u2b50 but BOTH failures trace to a SPECIFICATION the pre-registration left open (the V-composition convention and the BH family), not to a threshold and not to the evidence \u2014 see the hand-written reading (NF-D20)."
+    }
+  },
+  "null_classification": {
+    "state": "POWER_LIMITED",
+    "reason": "`nf_inj3_crps_hurdle_transfer`: the effect is positive and every gate is REACHABLE, but this design cannot resolve it \u2014 DSR alone needs 28 folds against 7 (the BH-FDR requirement is separate and may be larger). `V` is DSR-CONV-correct (measured EXCLUDING the pre-registered lose-by-construction degenerates, which remain in `n_trials`), so the field-size reading below is about the EVIDENCE.",
+    "retest_trigger": "+21 folds for the DSR gate \u2014 field size is NOT a lever here \u2014 even a 2-arm field does not clear at this fold count and dispersion, so the only lever left is a lower-variance design (more rows per fold / a sharper metric)",
+    "folds_have": 7,
+    "folds_needed": 28,
+    "extra_seasons": 21,
+    "max_field_size": 0,
+    "detail": {
+      "n_folds": 7,
+      "n_arms": 7,
+      "observed_sr": 0.7338,
+      "sr0": 0.3731,
+      "var_trials_sr": 0.0724,
+      "degenerates_excluded_from_v": true,
+      "var_trials_sr_with_degenerates": 2.2023,
+      "v_inflation_factor_from_degenerates": 30.4185,
+      "declared_field_size": 7,
+      "declared_field_size_source": "stated",
+      "field_remedy_admissible": null
+    },
+    "field_remedy_admissible": null
+  },
+  "serving_application": {
+    "arm": "hurdle_transfer",
+    "n": 22,
+    "mean_incumbent_games": 5.292,
+    "mean_arm_games": 2.682,
+    "n_moved_down": 22,
+    "n_moved_up": 0,
+    "rows": [
+      {
+        "player_name": "ALEC PIERCE",
+        "position": "WR",
+        "status": "PUP",
+        "eg": 15.163,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 4,
+        "incumbent_games": 7.349,
+        "arm_games": 3.661,
+        "delta": -3.688
+      },
+      {
+        "player_name": "GEORGE KITTLE",
+        "position": "TE",
+        "status": "PUP",
+        "eg": 15.05,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 3,
+        "incumbent_games": 7.315,
+        "arm_games": 3.331,
+        "delta": -3.984
+      },
+      {
+        "player_name": "ZACH CHARBONNET",
+        "position": "RB",
+        "status": "PUP",
+        "eg": 13.68,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 2,
+        "incumbent_games": 6.904,
+        "arm_games": 3.71,
+        "delta": -3.194
+      },
+      {
+        "player_name": "JAYDEN HIGGINS",
+        "position": "WR",
+        "status": "RES",
+        "eg": 12.863,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 2,
+        "incumbent_games": 6.659,
+        "arm_games": 4.094,
+        "delta": -2.565
+      },
+      {
+        "player_name": "LUKE MUSGRAVE",
+        "position": "TE",
+        "status": "PUP",
+        "eg": 12.304,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 3,
+        "incumbent_games": 6.491,
+        "arm_games": 3.196,
+        "delta": -3.295
+      },
+      {
+        "player_name": "TYRELL SHAVERS",
+        "position": "WR",
+        "status": "PUP",
+        "eg": 9.714,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 3,
+        "incumbent_games": 5.714,
+        "arm_games": 3.159,
+        "delta": -2.555
+      },
+      {
+        "player_name": "RICKY PEARSALL",
+        "position": "WR",
+        "status": "RES",
+        "eg": 9.499,
+        "onset_carryover": 1.0,
+        "weeks_since_last_game": 2,
+        "incumbent_games": 5.65,
+        "arm_games": 4.005,
+        "delta": -1.645
+      },
+      {
+        "player_name": "MASON TIPTON",
+        "position": "WR",
+        "status": "PUP",
+        "eg": 8.719,
+        "onset_carryover": 1.0,
+        "weeks_since_last_game": 6,
+        "incumbent_games": 5.416,
+        "arm_games": 3.411,
+        "delta": -2.005
+      },
+      {
+        "player_name": "ROBBIE OUZTS",
+        "position": "FB",
+        "status": "RES",
+        "eg": 8.699,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 2,
+        "incumbent_games": 5.41,
+        "arm_games": 1.41,
+        "delta": -4.0
+      },
+      {
+        "player_name": "JULIAN HILL",
+        "position": "TE",
+        "status": "RES",
+        "eg": 8.679,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 4,
+        "incumbent_games": 5.404,
+        "arm_games": 3.028,
+        "delta": -2.376
+      },
+      {
+        "player_name": "JEROME FORD",
+        "position": "RB",
+        "status": "RES",
+        "eg": 8.672,
+        "onset_carryover": 1.0,
+        "weeks_since_last_game": 8,
+        "incumbent_games": 5.402,
+        "arm_games": 4.218,
+        "delta": -1.184
+      },
+      {
+        "player_name": "ISAAC GUERENDO",
+        "position": "RB",
+        "status": "PUP",
+        "eg": 7.97,
+        "onset_carryover": 1.0,
+        "weeks_since_last_game": 7,
+        "incumbent_games": 5.191,
+        "arm_games": 2.046,
+        "delta": -3.145
+      },
+      {
+        "player_name": "GUNNER OLSZEWSKI",
+        "position": "WR",
+        "status": "RES",
+        "eg": 7.958,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 4,
+        "incumbent_games": 5.188,
+        "arm_games": 3.254,
+        "delta": -1.934
+      },
+      {
+        "player_name": "TIP REIMAN",
+        "position": "TE",
+        "status": "PUP",
+        "eg": 7.346,
+        "onset_carryover": 1.0,
+        "weeks_since_last_game": 17,
+        "incumbent_games": 5.004,
+        "arm_games": 2.621,
+        "delta": -2.383
+      },
+      {
+        "player_name": "JAMARI THRASH",
+        "position": "WR",
+        "status": "RES",
+        "eg": 6.812,
+        "onset_carryover": 1.0,
+        "weeks_since_last_game": 12,
+        "incumbent_games": 4.844,
+        "arm_games": 3.704,
+        "delta": -1.14
+      },
+      {
+        "player_name": "BRENDEN BATES",
+        "position": "TE",
+        "status": "RES",
+        "eg": 6.668,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 4,
+        "incumbent_games": 4.8,
+        "arm_games": 2.131,
+        "delta": -2.669
+      },
+      {
+        "player_name": "NIKOLA KALINIC",
+        "position": "TE",
+        "status": "RES",
+        "eg": 4.8,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 2,
+        "incumbent_games": 4.24,
+        "arm_games": 1.06,
+        "delta": -3.18
+      },
+      {
+        "player_name": "JUSTIN SHORTER",
+        "position": "WR",
+        "status": "RES",
+        "eg": 4.726,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 15,
+        "incumbent_games": 4.218,
+        "arm_games": 1.608,
+        "delta": -2.61
+      },
+      {
+        "player_name": "QUENTIN SKINNER",
+        "position": "WR",
+        "status": "RES",
+        "eg": 4.548,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 4,
+        "incumbent_games": 4.164,
+        "arm_games": 1.463,
+        "delta": -2.701
+      },
+      {
+        "player_name": "TREY SERMON",
+        "position": "RB",
+        "status": "RES",
+        "eg": 4.474,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 12,
+        "incumbent_games": 4.142,
+        "arm_games": 1.366,
+        "delta": -2.776
+      },
+      {
+        "player_name": "PRINCETON FANT",
+        "position": "TE",
+        "status": "RES",
+        "eg": 3.9,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 13,
+        "incumbent_games": 3.9,
+        "arm_games": 1.275,
+        "delta": -2.625
+      },
+      {
+        "player_name": "DAN CHISENA",
+        "position": "WR",
+        "status": "RES",
+        "eg": 3.02,
+        "onset_carryover": 0.0,
+        "weeks_since_last_game": 12,
+        "incumbent_games": 3.02,
+        "arm_games": 1.244,
+        "delta": -1.776
+      }
+    ]
+  },
+  "incumbent_reproduction": {
+    "n_flagged_veterans": 22,
+    "above_incumbent_ceiling": 0,
+    "max_abs_round_trip_error": 0.0,
+    "status_mix": {
+      "RES": 14,
+      "PUP": 8
+    },
+    "reading": "0 above the ceiling and a round-trip error at machine precision \u21d2 the served board is on the incumbent cap path (blend 0.7, caps 4/4/4/7)"
+  },
+  "mae_inversion_check": {
+    "n": 418,
+    "median_realized_games": 0.0,
+    "zero_share": 0.6077,
+    "mae_all_zero_nihilist": 2.7536,
+    "mae_pooled_mean": 3.5228,
+    "mae_is_inverted": true,
+    "reading": "MAE is minimised at the conditional median, which sits AT the floor here \u21d2 MAE pays for pessimism and CANNOT select. CRPS is primary (NF-D11/NF-D14)."
+  }
+}
