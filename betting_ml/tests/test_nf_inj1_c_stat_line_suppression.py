@@ -448,6 +448,32 @@ def test_the_withheld_copy_forecasts_nothing_about_the_player():
             assert term not in low, f"{name} implies a duration ({term!r})"
 
 
+def test_the_short_label_names_the_condition_not_an_adjustment_we_did_not_make():
+    """⭐ PM RULING, 2026-08-23 (nf-inj1-c.yaml closeout, RULINGS Decision 2).
+
+    NF-INJ1-C shipped the PM's default label verbatim: "stat detail withheld —
+    availability-adjusted". That is not merely vague, it is INVERTED — it says we adjusted this
+    line for availability, when the line is withheld PRECISELY BECAUSE it was not rescaled with the
+    games (`_RAW_SCALE_COLS` moves the twelve stat columns and not `proj_games`; that decoupling is
+    the NF1.5 defect). The retired label described the one thing that did not happen.
+
+    ⚠️ ITS OWN REASON TO EXIST: every clause that predates it is satisfied word-for-word by the
+    RETIRED string — the trigger's accessible name comes from `STAT_LINE_WITHHELD_SR_LABEL`, and
+    "says it is withheld" is true of both — so the reword could have landed with a fully green suite
+    and nothing measuring it. Kept as its OWN clause rather than folded into the one below, so the
+    fixture that flips it cannot be refused by a different assertion first (NF-D17).
+    """
+    label = _withheld_copy()["STAT_LINE_WITHHELD_LABEL"].lower()
+    assert "inconsistent with projected games" in label, (
+        "the short label no longer names the CONDITION. A reader is then told a stat is withheld "
+        "and not that our own line and our own projected games disagree, which is the entire reason"
+    )
+    assert "availability-adjusted" not in label, (
+        "the retired wording is back. It is the one phrasing that makes a positive claim about a "
+        "stat we are refusing to show, and it claims the opposite of what happened"
+    )
+
+
 def test_the_withheld_copy_says_what_it_is_and_what_survives():
     """The two things a reader has to be able to learn from the disclosure: that this is a
     WITHHOLDING (not a missing number, not a lock), and that the point total and games figure beside

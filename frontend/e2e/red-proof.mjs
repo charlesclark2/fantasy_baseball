@@ -2724,6 +2724,24 @@ const CASES = [
       "    </span>",
     grep: "refuses every forecast reading",
   },
+  {
+    id: "withheld-label-claims-an-adjustment-we-did-not-make",
+    shipped: "NF-INJ1-C — the label as it SHIPPED, before the PM reworded it",
+    // ⭐⭐ NOT PRE-EMPTIVE — this string was live on the paid surface. It is not merely vague, it
+    // is INVERTED: "availability-adjusted" says we adjusted this line for availability, when the
+    // line is withheld PRECISELY BECAUSE it was not rescaled with the games. The decoupling is the
+    // NF1.5 defect itself, so the label described the one thing that did not happen.
+    //
+    // ⚠️ THE REASON THIS CASE EARNS ITS PLACE: the reword was invisible to every pin that predated
+    // it. The trigger's accessible name comes from a DIFFERENT constant, and "the disclosure says
+    // it is withheld" is true of both strings — so this swap turns the suite green-to-green unless
+    // the clause added with the reword is doing real work. This is the case that proves it is.
+    detail: "Restores the retired 'availability-adjusted' label on the withheld-stat disclosure.",
+    file: "lib/fantasy-claim-copy.ts",
+    from: 'export const STAT_LINE_WITHHELD_LABEL = "stat detail withheld — inconsistent with projected games"',
+    to: 'export const STAT_LINE_WITHHELD_LABEL = "stat detail withheld — availability-adjusted"',
+    grep: "refuses every forecast reading",
+  },
 
 ]
 
@@ -2787,7 +2805,7 @@ const CASES = [
 // `-- auction-quotes`) for the same reason every entry above records: a production build per case
 // does not belong in a session. So 137/131/6 → 142/136/6, and the next full run CONFIRMS it.
 // ⛔ A projection is not a measurement.
-const RECORDED_BOARD = { total: 166, red: 160, notObservable: 6 }
+const RECORDED_BOARD = { total: 167, red: 161, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

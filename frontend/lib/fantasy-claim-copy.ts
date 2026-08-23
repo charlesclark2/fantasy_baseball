@@ -476,13 +476,25 @@ export const STAT_LINE_LOCK_DETAIL =
 // ⛔ NO FORECAST LANGUAGE, and none is possible here: this says nothing about the player, his
 // health, his role or his season. It is a statement about OUR line for him. `best_alpha = 0`.
 //
-// ⚠️ THE SHORT LABEL IS THE PM'S DEFAULT TREATMENT, VERBATIM (`nf-inj1-c.yaml` — "an em-dash '—'
-// with a neutral tooltip (\"stat detail withheld — availability-adjusted\")"). The sentence below it
-// is ADDITIVE detail in the same disclosure, not a replacement: a reader who taps deserves to know
-// that the total and the games figure beside it are unaffected, which the short label alone cannot
-// say. Changing the short label is a PM decision, not a copy edit.
+// ⚠️⚠️ THE SHORT LABEL NAMES THE ACTUAL CONDITION, AND THE WORDING IT REPLACED CLAIMED THE
+// OPPOSITE (PM ruling, 2026-08-23, recorded in `nf-inj1-c.yaml` closeout RULINGS Decision 2).
+//
+// NF-INJ1-C shipped with the PM's default treatment verbatim: "stat detail withheld —
+// availability-adjusted". That phrase is not merely vague, it is INVERTED — it says we adjusted
+// this line for availability, when the line is withheld PRECISELY BECAUSE it was not rescaled with
+// the games. The decoupling is the NF1.5 defect itself (`_RAW_SCALE_COLS` rescales the twelve stat
+// columns and not `proj_games`), so the retired label described the one thing that did not happen.
+//
+// The replacement states the condition a reader can check for themselves — the line and the games
+// disagree — and makes no claim about the player, his health or his season. ⛔ It must keep naming
+// the DISAGREEMENT; a future trim back to a bare "withheld" loses the only part that says why, and
+// a trim toward any availability verb re-imports the inversion.
+//
+// The sentence below is ADDITIVE detail in the same disclosure, not a replacement: a reader who
+// taps deserves to know that the total and the games figure beside it are unaffected, which the
+// short label alone cannot say. It is unchanged by the ruling.
 
-export const STAT_LINE_WITHHELD_LABEL = "stat detail withheld — availability-adjusted"
+export const STAT_LINE_WITHHELD_LABEL = "stat detail withheld — inconsistent with projected games"
 
 /** The accessible name for the withheld cell. Read out instead of a bare em-dash, which a screen
  *  reader announces as nothing at all — i.e. as an empty cell, the one reading this exists to

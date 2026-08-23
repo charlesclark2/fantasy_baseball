@@ -185,6 +185,16 @@ CASES = [
      "Members see the full line for every other player.",
      f"{SUITE}::test_the_withheld_copy_says_what_it_is_and_what_survives", None),
 
+    # ⭐ THE REWORD'S OWN PIN (PM ruling, 2026-08-23). Restoring the retired label must turn the
+    # new clause red — and NOTHING ELSE in the suite can see the difference, which is precisely why
+    # the clause was added: every pre-existing copy assertion is satisfied word-for-word by the
+    # string being restored here.
+    ("restore-the-retired-availability-adjusted-label", COPY,
+     'export const STAT_LINE_WITHHELD_LABEL = "stat detail withheld — inconsistent with projected games"',
+     'export const STAT_LINE_WITHHELD_LABEL = "stat detail withheld — availability-adjusted"',
+     f"{SUITE}::test_the_short_label_names_the_condition_not_an_adjustment_we_did_not_make",
+     "inconsistent with projected games\""),
+
     ("copy-leaves-the-governed-module", COPY,
      "export const STAT_LINE_WITHHELD_SR_LABEL",
      "const STAT_LINE_WITHHELD_SR_LABEL_MOVED_ELSEWHERE",
