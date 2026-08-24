@@ -1,0 +1,129 @@
+{
+  "season": 2026,
+  "generated_at": "2026-08-23T14:22:33.847911+00:00",
+  "source": "local-artifacts",
+  "adp_as_of": "2026-08-23",
+  "ecr_as_of": "2026-08-23",
+  "freshness": {
+    "adp": {
+      "source": "ffc",
+      "format": "ppr",
+      "teams": 12,
+      "as_of": "2026-08-23",
+      "window_start": "2026-08-16",
+      "window_end": "2026-08-23",
+      "drafts": 7479
+    },
+    "ecr": {
+      "source": "fantasypros",
+      "scoring": "PPR",
+      "as_of": "2026-08-23",
+      "label": "8/23",
+      "experts": 103
+    },
+    "adp_by_sample": {
+      "2qb/10": {
+        "source": "ffc",
+        "format": "2qb",
+        "teams": 10,
+        "as_of": "2026-08-23",
+        "window_start": "2026-07-24",
+        "window_end": "2026-08-23",
+        "drafts": 5177
+      },
+      "2qb/12": {
+        "source": "ffc",
+        "format": "2qb",
+        "teams": 12,
+        "as_of": "2026-08-23",
+        "window_start": "2026-07-24",
+        "window_end": "2026-08-23",
+        "drafts": 5177
+      },
+      "half-ppr/10": {
+        "source": "ffc",
+        "format": "half-ppr",
+        "teams": 10,
+        "as_of": "2026-08-23",
+        "window_start": "2026-08-18",
+        "window_end": "2026-08-23",
+        "drafts": 2810
+      },
+      "half-ppr/12": {
+        "source": "ffc",
+        "format": "half-ppr",
+        "teams": 12,
+        "as_of": "2026-08-23",
+        "window_start": "2026-08-18",
+        "window_end": "2026-08-23",
+        "drafts": 2810
+      },
+      "ppr/10": {
+        "source": "ffc",
+        "format": "ppr",
+        "teams": 10,
+        "as_of": "2026-08-23",
+        "window_start": "2026-08-16",
+        "window_end": "2026-08-23",
+        "drafts": 7479
+      },
+      "ppr/12": {
+        "source": "ffc",
+        "format": "ppr",
+        "teams": 12,
+        "as_of": "2026-08-23",
+        "window_start": "2026-08-16",
+        "window_end": "2026-08-23",
+        "drafts": 7479
+      },
+      "standard/10": {
+        "source": "ffc",
+        "format": "standard",
+        "teams": 10,
+        "as_of": "2026-08-23",
+        "window_start": "2026-08-16",
+        "window_end": "2026-08-23",
+        "drafts": 1604
+      },
+      "standard/12": {
+        "source": "ffc",
+        "format": "standard",
+        "teams": 12,
+        "as_of": "2026-08-23",
+        "window_start": "2026-08-16",
+        "window_end": "2026-08-23",
+        "drafts": 1604
+      }
+    },
+    "input_vintage": {
+      "depth_chart_as_of": "2026-08-23 07:28:22",
+      "sleeper_status_as_of": "2026-08-23T13:30:13.015269+00:00"
+    },
+    "projection_built_at": "2026-08-23T14:22:13.940244+00:00",
+    "market_refresh": true
+  },
+  "projectionSource": "nf1_5",
+  "projectionLabel": "market-aware refined (NF1.5)",
+  "auctionBudget": 200,
+  "coherence": {
+    "violating_players": 9,
+    "by_file": {
+      "projections.json": 9
+    },
+    "injury_input": {
+      "verdict": "OK",
+      "lag_hours": 0.9,
+      "as_of": "2026-08-23T13:30:13.015269+00:00",
+      "max_lag_hours": 72.0,
+      "detail": "injury status 0.9h old, within the 72h bar"
+    }
+  },
+  "locked": false,
+  "entitled": true,
+  "lockedSeason": 2026,
+  "freeBoard": {
+    "config": "full_ppr",
+    "size": 12
+  },
+  "_fixture_note": "REAL production manifest captured from GET https://api.credencesports.com/fantasy/nfl/manifest?season=2026 on 2026-08-24 (NF-INFRA2). Bulky per-config board listings trimmed; every field the NF-INFRA2 guards read is verbatim production output. A fixture hand-written from the guard's own assumptions cannot disconfirm them (NF-C0e)."
+}
