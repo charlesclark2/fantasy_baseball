@@ -138,6 +138,18 @@ BREAKS: list[tuple[str, Path, str, str, str, str | None]] = [
      '        return NcaafGamePrediction(game_id=game_id, season=0, game_day="")',
      "unpublished_game_is_a_404", None),
 
+    ("an unwritten snapshot table crashes the pre-opener publish instead of no-opping",
+     WRITER,
+     '        if _EMPTY_LOG_SEGMENT_MARKER not in str(exc) and not query_lake.is_missing_table_error(exc):',
+     '        if True:',
+     "unwritten_snapshot_table_is_an_empty_read", "_EMPTY_LOG_SEGMENT_MARKER not in str(exc)"),
+
+    ("the empty-log leniency widens far enough to swallow a real read failure",
+     WRITER,
+     '        if _EMPTY_LOG_SEGMENT_MARKER not in str(exc) and not query_lake.is_missing_table_error(exc):\n            raise',
+     '        if False:\n            raise',
+     "genuine_read_failure_still_raises", None),
+
     ("the served disclosure starts asserting a claim",
      CONTRACT,
      '    "— we make no claim to an advantage over it, and we publish no picks."',

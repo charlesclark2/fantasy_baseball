@@ -656,6 +656,43 @@ def test_no_snapshots_is_a_no_op_not_a_write(writer, monkeypatch):
     assert not table.items and not s3.objects, "a no-op wrote to the serving store"
 
 
+def test_an_unwritten_snapshot_table_is_an_empty_read_not_a_crash(monkeypatch):
+    """MEASURED on the real lake: before the first NCAAF-PS run both snapshot tables are absent from
+    S3, and duckdb 1.5.3's delta-kernel reports that as `No files in log segment` — which
+    `query_lake.MISSING_TABLE_MARKERS` does NOT contain. Unhandled, the pre-opener serving write
+    goes RED with "lake read failed 3x" instead of logging the clean no-op an operator should see.
+
+    Handled HERE and not in the shared helper on purpose: this caller is an idempotent PUBLISH that
+    never merges into a lake partition, so "treat it as empty" cannot lose data — whereas for the
+    READ-MERGE-WRITE writers that share that helper the same leniency would delete every prior week.
+    """
+    import scripts.write_ncaaf_serving_store as w
+    from quant_sports_intel_models.football.ncaaf.models import game_prediction_snapshot as gps
+
+    def boom(*a, **k):
+        raise RuntimeError(
+            "lake read failed 3x and is NOT a missing-table error: IO Error: DeltaKernel "
+            "GenericError (5): Generic delta kernel error: No files in log segment")
+
+    monkeypatch.setattr(gps, "read_existing_snapshots", boom)
+    assert w.read_snapshots(2026, gps.SNAPSHOT_SOURCE) is None
+
+
+def test_a_genuine_read_failure_still_raises(monkeypatch):
+    """The other side of the same coin — the leniency above must be narrow. A transient lake
+    failure must NEVER be published over as "nothing to serve" (INC-38: a no-op and a broken read
+    are different facts)."""
+    import scripts.write_ncaaf_serving_store as w
+    from quant_sports_intel_models.football.ncaaf.models import game_prediction_snapshot as gps
+
+    def boom(*a, **k):
+        raise RuntimeError("lake read failed 3x: HTTP 503 SlowDown from S3")
+
+    monkeypatch.setattr(gps, "read_existing_snapshots", boom)
+    with pytest.raises(RuntimeError, match="SlowDown"):
+        w.read_snapshots(2026, gps.SNAPSHOT_SOURCE)
+
+
 def test_a_dry_run_writes_nothing(writer, monkeypatch):
     table, s3 = _FakeTable(), _FakeS3()
     monkeypatch.setattr(writer, "_dynamo_table", lambda: table)
