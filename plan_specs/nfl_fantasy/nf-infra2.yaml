@@ -1,0 +1,133 @@
+# Plan spec — NF-INFRA2 (FULL tier: infra/orchestration; the board publishes itself)
+# Authored by PM 2026-08-24. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-infra2
+  vertical: nfl_fantasy
+  card: https://trello.com/c/IdFOj1RV
+  status: ACCEPTED
+spec:
+  description: >
+    Automate the NFL fantasy board build + publish. Today the board
+    (projections.json + manifest) is built and published BY HAND (six
+    manual commands; NF-INJ1 measured the cost — 26-day-stale injury data
+    reached users). The freshness gate ALERTs on staleness but nothing
+    rebuilds. During draft season, a new injury sitting unpublished is a
+    direct credibility hit, and every availability fix this program ships
+    (NF-INJ-NEWS-1 overrides, the coming caps flip) only reaches users
+    through a publish. Schedule the chain (run_season_projection →
+    export_draft_board_json → publish) as a recurring Dagster job so fresh
+    feed data republishes with NO human in the loop. best_alpha=0.
+    SAFETY PREMISE, stated for the record: automation publishes whatever
+    main holds — and main only receives measured, operator-approved
+    changes. All deploy-held policies are flag-off in code
+    (injury_games_policy.SERVING_ENABLED=False; overrides file empty until
+    adopted), so a scheduled publish reproduces today's board behavior
+    until a gated merge deliberately changes it.
+  acceptanceCriteria:
+    - description: >
+        A Dagster job + schedule for the build→export→publish chain with
+        default_status=RUNNING (E11.23: self-start and survive a
+        Dagster-DB reset), ordered DOWNSTREAM of the feed refreshes it
+        consumes — Sleeper injuries, depth chart, rosters (the INC-25
+        build-ordering rule: a consumer never builds from a feed mid-
+        refresh or pre-refresh).
+    - description: >
+        Box-reality hazards handled (NF-INFRA1): the build reads
+        sports.duckdb + parquet that are GITIGNORED and deploy-ephemeral —
+        a fresh image/deploy wipes /tmp and /app — so the scheduled job
+        must source them from a persistent volume or a lake fallback, and
+        must FAIL LOUD (HALT tier) if neither is present, never build from
+        a stale or partial copy (the NF-FRESH1 swallow-and-succeed class).
+    - description: >
+        Publish-time guards fire ON THE ARTIFACT: the NF-K1 projected-row
+        coverage guard; the freshness stamps advance (generated_at, and
+        each feed's as_of); the coherence block present. A guard that can't
+        fail is worse than none — RED-prove each against a deliberately
+        stale/truncated artifact.
+    - description: >
+        An INC-41-style SLA on the PUBLISHED BOARD itself (not just the
+        feeds): if the published generated_at exceeds its SLA window, the
+        alert PAGES — this is the detector for "the schedule silently
+        stopped", which schedules do (the stopped-schedule class is this
+        repo's most-repeated operational defect).
+    - description: >
+        VERIFY on the real box (runtime gate; CI mocks IO): a scheduled —
+        not manually triggered — run republishes (generated_at advances,
+        freshness monitors green) with no human in the loop.
+        ⚠️ OPERATOR-RUN rule (>2 min): box runs, deploys, and the
+        scheduled-fire observation window are handed to the operator as
+        paste-ready commands/checks with runtime, artifact, and success
+        criteria; the session resumes from results.
+    - description: >
+        CLAUDE.md append (separate commit), one landmine from NF-INJ3b-M:
+        "A change to a shared runner/instrument requires sweeping the
+        guards that pin its outputs — and running the CI shard that OWNS
+        those guards (scripts/ci_shards.py --shard core names it), not just
+        the shard of the files you touched."
+    - description: >
+        Scope guards: no projection logic changes anywhere; no schedule
+        for anything but this chain; the manual publish path remains
+        usable (the automation is additive). The reconciliation of this
+        card's premise is recorded in the closeout: NF-C9's daily 07:15 PT
+        auto-publish claim vs this card's six-manual-commands claim —
+        determine which is true on the box TODAY and say so (if a schedule
+        already exists but is stopped/broken, fixing it IS this story).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-infra2
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "NF-INFRA2" / "publish" / "staleness" (board Credence Sports, 2026-08-24)'
+    duplicates: []
+    adjacent:
+      - "🔴 Depth-chart staleness + freshness-registry card (Sprint, trello.com/c/oi9cqnhc) — SEPARATE story; but this job's feed-ordering must include the depth chart, and extending the delta-freshness registry is THAT card, not this one. Boundary: this story alerts on the published board; that one on the inputs."
+      - "NF-INJ3c (IN FLIGHT) + the coming NF-INJ3b-SHIP — projection internals; disjoint from orchestration. Do not touch project_veterans/project_rookies."
+      - "NF-W0a-CADENCE (Sprint) — capture schedules for the weekly system; different chain."
+      - "NF-C9's auto-publish claim — reconciled in-story per acceptanceCriteria (the card premises disagree; measure, don't assume)."
+  triedLedger:
+    files:
+      - "NF-INFRA1 record (box hazards: gitignored duckdb/parquet, deploy-ephemeral paths)"
+      - "NF-FRESH1/NF-FRESH2 records (swallow-and-succeed ingest; stamps written but unread)"
+      - "INC-25 (build ordering), INC-41 (artifact-freshness SLA shape), E11.23 (default_status=RUNNING), NF-K1 (publish coverage guard)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "Every pending availability publish (NEWS-1 adoption, the caps flip) reaching users while fresh; draft-season board credibility"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-infra2-plan
+spec:
+  goalRef: { name: nf-infra2 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 0b-claude-md
+        desc: "Separate commit: the shared-runner/owning-shard landmine."
+      - id: 1-reconcile-premise
+        desc: "Determine the actual publish state on the box today (schedule exists? stopped? never existed?) — read-only; hand the operator a check command if it needs the box."
+      - id: 2-job-and-schedule
+        desc: "Dagster job + schedule, feed-ordered, volume/lake-sourced, HALT on missing inputs."
+      - id: 3-artifact-guards
+        desc: "NF-K1 coverage + freshness-advance + coherence-present guards on the published artifact; RED-proofs."
+      - id: 4-board-sla
+        desc: "Published-board SLA alert (pages on stale generated_at)."
+      - id: 5-runtime-gate
+        desc: "OPERATOR-RUN: box deploy + observe one scheduled fire republish with no human; paste-ready commands/checks."
+      - id: 6-closeout
+        desc: "Verdict + findings (incl. the premise reconciliation) into closeout.followUps."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
