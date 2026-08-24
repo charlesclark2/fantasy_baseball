@@ -64,6 +64,14 @@ RECORDED = {"rookie_flagged": 60, "rookie_above_ceiling": 50,
             "veteran_flagged": 496, "veteran_above_ceiling": 0}
 SERVING_SEASON = 2026
 
+#: The gate's tolerance. NOT a knob tuned until the diff passed — it is bracketed by two MEASURED
+#: quantities: the build's own ULP noise floor (~1e-15 relative, from float reassociation) sits far
+#: below it, and the smallest change a mis-fired availability cap could produce (a blend toward a
+#: 4-game status level, i.e. a ~50% move) sits far above it. Nine orders of magnitude of daylight
+#: on either side is what makes it a threshold rather than a choice.
+MATERIAL_RTOL = 1e-9
+MATERIAL_ATOL = 1e-9
+
 
 def _status(con, season: int, sleeper: bool) -> pd.DataFrame:
     """Week-1 roster status, read exactly as NF-INJ3's own `load_status` reads it."""
@@ -330,12 +338,23 @@ def leg5_board_diff(published: Path, rebuilt: Path) -> dict:
     PUBLISHED artifact carries every story that merged since that publish and attributes none of it;
     the attributable comparison is A/B on ONE `dev` — rebuild without this change, rebuild with it.
 
-    ⭐ ROOKIE ROWS ONLY MAY MOVE. This story touches the rookie frame; a veteran row that moved is a
-    refusal, not a note. ⚠️ AND ON TODAY'S BOARD THE EXPECTED DIFF IS **EMPTY** — no 2026 rookie
-    carries a formal tag until the 2026-08-30 cutdown (§3.1 of the record), which makes this the
-    cleanest possible byte-identity check and is exactly how it should be read: the fix is INERT on
-    today's board and arms at the cutdown. A non-empty veteran diff is the finding; a non-empty
-    rookie diff before the cutdown is also a finding.
+    ⭐ ROOKIE ROWS ONLY MAY MOVE. This story touches the rookie frame; a **veteran** row that moved
+    materially is a refusal, not a note.
+
+    ⚠️⚠️ THE GATE IS A MATERIAL TOLERANCE, NOT BITWISE EQUALITY, AND THAT IS A MEASUREMENT.
+    The first cut of this function gated on `rtol=0, atol=0`. **That criterion is unreachable: the
+    board build is not reproducible run-to-run.** Measured on 2026 by building the SAME COMMIT
+    repeatedly (5 replicates, 10 pairings): 0–21 differences above a 1e-9 tolerance and ~1,100–1,900
+    bitwise, and it survives BOTH a fixed `PYTHONHASHSEED` and single-threaded BLAS. It is confined
+    to the rookie BAND columns (`fp_ppr_sd`, `fp_ppr_p10`, `fp_ppr_p90`) and has never been observed
+    to move a veteran row, a `proj_games`, or a point. That is a PRE-EXISTING reproducibility defect
+    of the build, not of this story — recorded in §7 of the story record.
+
+    ⇒ the gate is `rtol=1e-9, atol=1e-9` on VETERAN rows: far above the ~1e-15 ULP floor, far below
+    any change a cap could produce (a mis-fired cap looks like 12.69 → 6.53, not a 16th decimal).
+    The bitwise count is still REPORTED, as a reproducibility signal rather than a verdict — a
+    figure that is only noise must not be able to fail a ship gate, and a figure that is dropped
+    entirely cannot warn anyone when it changes character.
     """
     a = pd.read_parquet(published)
     b = pd.read_parquet(rebuilt)
@@ -349,14 +368,16 @@ def leg5_board_diff(published: Path, rebuilt: Path) -> dict:
          .merge(b[[key, *common]].rename(columns={c: f"{c}_new" for c in common}),
                 on=key, how="outer", indicator=True)
          .merge(ident, on=key, how="left"))
-    moved_rows, moved_fields = [], {}
+    moved_rows, moved_fields, bitwise = [], {}, 0
     for c in common:
         pub, new_ = m[f"{c}_pub"], m[f"{c}_new"]
         if pd.api.types.is_numeric_dtype(pub) and pd.api.types.is_numeric_dtype(new_):
-            d = ~np.isclose(pub.to_numpy(dtype=float), new_.to_numpy(dtype=float),
-                            rtol=0, atol=0, equal_nan=True)
+            x, y = pub.to_numpy(dtype=float), new_.to_numpy(dtype=float)
+            bitwise += int((~np.isclose(x, y, rtol=0, atol=0, equal_nan=True)).sum())
+            d = ~np.isclose(x, y, rtol=MATERIAL_RTOL, atol=MATERIAL_ATOL, equal_nan=True)
         else:
             d = pub.astype(str).to_numpy() != new_.astype(str).to_numpy()
+            bitwise += int(d.sum())
         if d.any():
             moved_fields[c] = int(d.sum())
             for i in np.flatnonzero(d):
@@ -378,10 +399,18 @@ def leg5_board_diff(published: Path, rebuilt: Path) -> dict:
         "veteran_players_moved": len(vet_moved), "rookie_players_moved": len(rk_moved),
         "veteran_ids_moved": vet_moved[:50], "rookie_ids_moved": rk_moved[:50],
         "sample": moved_rows[:40],
+        "material_tolerance": {"rtol": MATERIAL_RTOL, "atol": MATERIAL_ATOL},
+        "bitwise_differences": bitwise,
         "passes": bool(len(vet_moved) == 0 and str(only.get("both", 0)) == str(len(a))),
-        "reading": ("PASS requires ZERO veteran rows moved and identical row membership. Rookie "
-                    "rows moving is expected only once a 2026 rookie actually carries a formal tag "
-                    "(2026-08-30 cutdown); before then the whole diff should be empty."),
+        "reading": (
+            "PASS requires ZERO VETERAN rows moved beyond the material tolerance, and identical "
+            "row membership. ⚠️ A non-zero `bitwise_differences` is EXPECTED and is NOT a failure: "
+            "the board build is not reproducible run-to-run (measured 0-21 material / ~1100-1900 "
+            "bitwise between two builds of the SAME commit, surviving a fixed PYTHONHASHSEED and "
+            "single-threading), confined to the rookie band columns. If rookie BAND columns move, "
+            "run the control before concluding anything: rebuild the SAME commit twice and diff "
+            "those two. Rookie POINT or GAMES moving is a real signal, and only expected once a "
+            "2026 rookie actually carries a formal tag (2026-08-30 cutdown)."),
     }
 
 
