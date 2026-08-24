@@ -65,6 +65,7 @@ on:
       - "quant_sports_intel_models/football/ncaaf/feeder/**"
       - "quant_sports_intel_models/football/ncaaf/ingest/**"
       - "quant_sports_intel_models/football/ncaaf/models/**"
+      - "quant_sports_intel_models/football/ncaaf/serving/**"
       - "quant_sports_intel_models/football/nfl/entity/**"
       - "quant_sports_intel_models/football/nfl/fantasy/**"
       - "quant_sports_intel_models/football/nfl/ingest/**"

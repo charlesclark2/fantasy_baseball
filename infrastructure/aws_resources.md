@@ -486,6 +486,47 @@ not ship" rather than "one route is missing". Confirmed live 2026-08-08: the Lam
 serving, and `curl https://api.credencesports.com/fantasy/nfl/featured-player` returned
 `401 {"message":"Unauthorized"}` while every other public surface returned 200.
 
+#### NCAAF-P3.1 — the four `/ncaaf/*` routes (the college-football vertical) — ⛔ NOT YET APPLIED
+
+NCAAF is unconditionally FREE (E9.45 — fantasy is the paid hook), so all four routes are public in
+the FastAPI layer (`routers/ncaaf.py`, mounted with no `dependencies=`) — which, as always, is **not
+sufficient**: the catch-all `ANY /{proxy+}` carries the Cognito authorizer, so until an explicit
+route exists each of these answers **401 before the Lambda is ever invoked**.
+
+```bash
+for RK in "GET /ncaaf/manifest" "GET /ncaaf/games" "GET /ncaaf/games/{game_id}" "GET /ncaaf/futures"; do
+  aws apigatewayv2 create-route \
+    --api-id 8dhmehjak7 --region us-east-1 \
+    --route-key "$RK" \
+    --target "integrations/p093jnh" \
+    --authorization-type NONE
+done
+```
+
+⭐ **Verify without `apigateway:*`** (the everyday `baseball-access-user` profile is denied it) — curl
+each path anonymously and read the status. **401 = the authorizer is still in front**; anything else,
+including a 404 from the router when nothing has been published yet, means the route is exempt:
+
+```bash
+for P in /ncaaf/manifest /ncaaf/games /ncaaf/futures /ncaaf/games/401628319; do
+  printf '%s -> ' "$P"; curl -s -o /dev/null -w '%{http_code}\n' "https://api.credencesports.com$P"
+done
+```
+
+⚠️ **A 404 here is the GOOD outcome before the first serving write** — it means the router ran and
+found nothing published, which is exactly the absent-vs-null contract (`app/backend/models/ncaaf.py`).
+A 401 means the gateway route is missing; a 500 means the Lambda has not been `deploy.sh`'d.
+
+⚠️ `GET /ncaaf/games/{game_id}` is a PATH-PARAMETER route key — API Gateway matches the literal
+`{game_id}` template, so the braces are part of the route key and must survive shell quoting.
+
+⭐ These carry **no entitlement decision** and read **no Bearer token at all** — they serve a
+pre-built, identical-for-everyone blob (`ncaaf/…` in `credence-prod-serving-cache`, `ncaaf-cache/…`
+in `credence-prod-s3-api-cache`). `/ncaaf` is in `_DEGRADE_ALLOWED_PREFIXES` and `_PUBLIC_CACHE_RULES`
+(`services/cost_guardrails.py`), so `check_stripe_golive_readiness.py`'s NONE-route cross-check
+passes and the anonymous read is CDN-cacheable at `s-maxage=900`.
+
+
 ### 🔒 The generic-board public routes — ✅ APPLIED (re-confirmed anonymously 2026-08-08)
 
 ⭐ **RE-VERIFIED FROM OUTSIDE, not read off this doc.** An anonymous `curl` of all three returns
