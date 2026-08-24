@@ -147,6 +147,22 @@ spec:
       `status="no_snapshots"` no-op, which proves the read path, the LA game-day
       resolution and the absent-table handling against production data.
     followUps: >
+      0) ⭐ RESOLVED (2026-08-24) — item (1) below is FIXED by NCAAF-LAKE1, and its
+      DIAGNOSIS as written below is WRONG. It is not that delta-kernel reworded
+      anything: the local wording is unchanged across duckdb 1.5.3 and 1.5.5. The two
+      messages always meant different things, and because an object store has no
+      directories a never-written S3 table can only ever report "No files in log
+      segment" — so the marker set, verified against a LOCAL directory, never covered
+      the substrate production reads. LAKE1 replaced the message match with a
+      `_delta_log` LISTING, removed the retired path, re-pointed both consumers
+      (including P3.1's own local publish-path branch, whose guards were re-anchored
+      rather than deleted) and pinned duckdb. Verified live: `write_snapshot` can now
+      bootstrap a never-written S3 table. The PM ALSO ruled a one-time operator
+      bootstrap (option C) runs first, because LAKE1 only reaches NCAAF-PS once it is
+      on the box. Option A (widen the marker set) was REFUSED. The paragraph below is
+      left as written — it is what this session measured and escalated, and correcting
+      a record in place would hide that the first diagnosis was overturned by the
+      story that fixed it.
       1) ⚠️ BLOCKER FOR THE OPENER, NOT THIS STORY'S TO FIX — the FIRST NCAAF-PS
       snapshot run may be unable to bootstrap its own Delta table.
       `game_prediction_snapshot.write_snapshot` reads the table back BEFORE its

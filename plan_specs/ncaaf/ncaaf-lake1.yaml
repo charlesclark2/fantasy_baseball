@@ -109,8 +109,57 @@ spec:
       - id: 6-closeout
         desc: "Verdict + findings; record in BOTH closeouts (this spec and P3.1's)."
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED. Absence is now established by LISTING `<table>/_delta_log/` instead
+      of by matching the engine's error text; the retired message-match path is
+      removed, both consumers re-pointed, duckdb pinned to >=1.5,<1.6 with the
+      incident named at the pin. Verified LIVE against the real store: the two
+      absent NCAAF-PS tables read as empty (they raised before), a populated table
+      still reads normally (138 rows), and — the incident itself —
+      `game_prediction_snapshot.write_snapshot` can now BOOTSTRAP a never-written
+      S3 table. All four pinning guards re-anchored, none weakened; RED proof 8/8
+      in BOTH directions.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      1) ⭐ THE DIAGNOSIS IN THE ESCALATION WAS WRONG AND IS CORRECTED HERE, because
+      it changes the lesson. The escalation said delta-kernel had CHANGED its message
+      ("Path does not exist" -> "No files in log segment"). Measurement refutes that:
+      the LOCAL wording is unchanged on duckdb 1.5.3 and 1.5.5. The two messages
+      always meant DIFFERENT things — a path that does not exist versus a path that
+      resolves but holds no commit — and an object store has no directories, so a
+      never-written S3 table can only ever report the second. The marker set was
+      verified against a LOCAL directory (`tmp_path`, what the tests use) and
+      therefore NEVER covered the substrate production reads. This is not a
+      dependency regression; it is a guard asked on the wrong substrate, which is the
+      same class as "a fresh worktree cannot reproduce a bug whose trigger is a
+      gitignored file it lacks". The CLAUDE.md entry records the corrected version.
+      2) THE OPERATOR'S C BOOTSTRAP IS STILL THE RIGHT IMMEDIATE ACTION, and this
+      does not replace it. B only helps NCAAF-PS once it reaches the BOX, which needs
+      dev -> main plus an orchestration deploy; C needs nothing and unblocks the Tue
+      8/25 first fire. Once B is on the box, C becomes unnecessary for FUTURE
+      never-written tables — but the two seeds already written are harmless either way
+      (a zero-row seed contributes no rows and the first real write replaces the
+      partition).
+      3) ⚠️ DEVIATION FROM THIS SPEC'S OWN OverlapCheck, recorded rather than silently
+      absorbed. The spec said P3.1's local publish-path handling would STAY and that
+      removing it was a follow-up. It was REMOVED here instead: once the shared helper
+      handles the case correctly for every caller, the local branch is a SECOND rule
+      for one question AND a message match — exactly what the PM's ruling forbids
+      keeping as a fallback. Its two guards were re-anchored onto the shared helper,
+      not deleted, so the properties P3.1 pinned are still pinned.
+      4) THE RED PROOF FOUND TWO REAL COVERAGE HOLES IN THIS STORY'S OWN FIRST CUT —
+      both in `_table_has_commits` (the store probe). Every policy test monkeypatched
+      the probe away, so breaking the probe itself left the whole suite green: a failed
+      listing could have been swallowed into "absent" (the destructive direction) and
+      the S3 KeyCount read could have been inverted, with nothing to catch either.
+      Closed with probe-level tests on both substrates. Worth noting because it is the
+      SAME shape as the defect being fixed: the layer everything else stubs out is the
+      layer nothing is testing.
+      5) UNTESTED, and stated so it is not read as settled: whether a read-after-write
+      visibility blip can actually surface as an empty log segment. The fix is immune
+      either way (a blip means the log file IS present, so the listing finds it and the
+      read raises), which is why the question did not need answering to proceed — but it
+      was the load-bearing hazard in refusing option A, and it remains unmeasured.
+      6) CARDING CANDIDATE — `_table_has_commits` adds one S3 LIST per FAILED read.
+      That is rare by construction (only on the exception path) and MaxKeys=1, so the
+      cost is negligible today; it is recorded only so nobody is surprised to find a
+      listing call on a read path.

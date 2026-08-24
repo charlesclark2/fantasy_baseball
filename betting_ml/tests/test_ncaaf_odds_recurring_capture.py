@@ -26,6 +26,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
+import sys
+
 import pytest
 
 from quant_sports_intel_models.football.ncaaf.ingest import (
@@ -438,6 +440,78 @@ def test_an_undeterminable_listing_is_never_reported_as_absent(monkeypatch):
 def test_sql_whose_tables_cannot_be_identified_is_never_reported_as_absent():
     """A SELECT we cannot parse a `delta_scan` target out of tells us nothing about the store."""
     assert orc._table_is_absent("select 1") is False
+
+
+# ── _table_has_commits: the STORE PROBE itself ────────────────────────────────────────────────
+#
+# The tests above monkeypatch `_table_has_commits` to drive the policy, which means NOTHING was
+# asking whether the probe itself is right — the NCAAF-LAKE1 red proof found exactly that hole, by
+# breaking the probe and watching every guard stay green. These close it. The probe is the piece
+# that must be substrate-correct: it is the whole reason the classifier no longer reads messages.
+
+class _FakeS3:
+    """A boto3 stub shaped like `list_objects_v2`'s real response (or a client that explodes)."""
+
+    def __init__(self, key_count: int | None = 0, boom: bool = False):
+        self.key_count, self.boom, self.calls = key_count, boom, []
+
+    def list_objects_v2(self, **kw):
+        self.calls.append(kw)
+        if self.boom:
+            raise RuntimeError("AccessDenied: not authorized to perform s3:ListBucket")
+        return {"KeyCount": self.key_count}
+
+
+def _patch_boto3(monkeypatch, fake):
+    import types
+    monkeypatch.setitem(sys.modules, "boto3",
+                        types.SimpleNamespace(client=lambda *a, **k: fake))
+
+
+def test_the_s3_probe_reports_absent_only_when_the_log_prefix_is_empty(monkeypatch):
+    import quant_sports_intel_models.football.ncaaf.ingest.query_lake as ql
+
+    empty = _FakeS3(key_count=0)
+    _patch_boto3(monkeypatch, empty)
+    assert ql._table_has_commits("s3://bucket/ncaaf/derived/thing") is False
+    # It must ask about the _delta_log PREFIX specifically — a bucket-wide listing would report
+    # "present" for any table sharing the bucket, which is every table we have.
+    assert empty.calls[0]["Prefix"] == "ncaaf/derived/thing/_delta_log/"
+    assert empty.calls[0]["Bucket"] == "bucket"
+
+    _patch_boto3(monkeypatch, _FakeS3(key_count=1))
+    assert ql._table_has_commits("s3://bucket/ncaaf/derived/thing") is True
+
+
+def test_a_listing_that_fails_is_UNDETERMINED_never_absent(monkeypatch):
+    """⭐ THE DESTRUCTIVE DIRECTION, at the probe. A denied or failed listing tells us NOTHING about
+    the store; answering `False` would hand a merge writer a licence to overwrite on an IAM change."""
+    import quant_sports_intel_models.football.ncaaf.ingest.query_lake as ql
+
+    _patch_boto3(monkeypatch, _FakeS3(boom=True))
+    assert ql._table_has_commits("s3://bucket/ncaaf/derived/thing") is None
+    # and the policy layer must turn that into "not absent" -> the caller raises
+    assert ql.table_is_absent("select 1 from delta_scan('s3://bucket/ncaaf/derived/thing')") is False
+
+
+def test_a_malformed_s3_uri_is_undetermined_not_absent(monkeypatch):
+    import quant_sports_intel_models.football.ncaaf.ingest.query_lake as ql
+
+    _patch_boto3(monkeypatch, _FakeS3(key_count=0))
+    assert ql._table_has_commits("s3://") is None
+
+
+def test_the_local_probe_reads_the_real_filesystem(tmp_path):
+    """The other substrate, unmocked. A never-created path and a directory with no `_delta_log` are
+    BOTH absent — the second is the case the retired message match could not see."""
+    import quant_sports_intel_models.football.ncaaf.ingest.query_lake as ql
+
+    assert ql._table_has_commits(str(tmp_path / "never-created")) is False
+    assert ql._table_has_commits(str(tmp_path)) is False          # exists, but no _delta_log
+    (tmp_path / "_delta_log").mkdir()
+    assert ql._table_has_commits(str(tmp_path)) is False          # log dir, but no commit in it
+    (tmp_path / "_delta_log" / "00000000000000000000.json").write_text("{}")
+    assert ql._table_has_commits(str(tmp_path)) is True
 
 
 def test_q_or_missing_returns_none_only_for_a_genuinely_missing_table(monkeypatch):
