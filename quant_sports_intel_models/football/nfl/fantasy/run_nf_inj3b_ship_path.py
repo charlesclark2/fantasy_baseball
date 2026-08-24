@@ -48,14 +48,20 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
+    run_interval_revalidation as IV,
     run_nf_tr2b_placement_read as PR,
 )
 
 _ART = pathlib.Path(__file__).resolve().parent / "ablation_results"
 _OUT_JSON = _ART / "nf_inj3b_ship_path.json"
 _OUT_MD = _ART / "nf_inj3b_ship_path.md"
-#: a DECIDED story's artifact that `run_interval_revalidation` rewrites even under `--no-report`.
-_DECIDED_INTERVAL_JSON = _ART / "nf1_9_interval_revalidation.json"
+#: DECIDED artifacts this story's gates run against. Before NF-INJ3b-M node 1 (PM ruling D4) BOTH
+#: were rewritten as a side effect of merely running the gate — the interval one even under
+#: `--no-report`. They are now verified untouched rather than restored (see `run()`).
+_DECIDED_INTERVAL_JSON = _ART / f"{IV.DECIDED_STEM}.json"
+_DECIDED_PLACEMENT_JSON = _ART / f"{PR.DECIDED_STEM}.json"
+#: this story's OWN output stem for the interval re-validation (the D4 `--out` fix in use).
+_OUT_STEM_INTERVAL = "nf_inj3b_ship_path_interval_revalidation"
 
 SUPERFLEX_CAVEAT = (
     "NF-TR2b: the VOR 'shield' — NF-W8-0's finding that a per-group level shift CANCELS in VOR space "
@@ -70,33 +76,43 @@ SUPERFLEX_CAVEAT = (
 def placement_read() -> dict:
     """(a) — the whole-board cross-position placement read against the PUBLISHED artifact.
 
-    ⭐ Calls the TR2b runner's PURE `run()`, which returns a dict and writes NOTHING; its `main()`
-    would overwrite `nf_tr2b_placement_read.*`, a DECIDED story's record."""
+    Calls the TR2b runner's PURE `run()`, which returns a dict and writes nothing.
+
+    ⭐ HISTORICAL NOTE, kept because it is the reason NF-INJ3b-M node 1 exists: this used to be a
+    WORKAROUND. `PR.main()` overwrote `nf_tr2b_placement_read.*` — a DECIDED story's record — so
+    calling `run()` was how this story avoided clobbering it. Since the D4 fix that is no longer
+    necessary (`PR.main()` defaults to `PR.DEFAULT_STEM`), and `_assert_decided_artifacts_intact`
+    below now VERIFIES the fix rather than routing around it."""
     with tempfile.TemporaryDirectory() as td:
         src = PR._fetch(pathlib.Path(td))
         return PR.run(src, origin=PR._S3)
 
 
+def _decided_artifact_digests() -> dict[str, str | None]:
+    """SHA-256 of every DECIDED artifact this story's gates touch, taken before and after."""
+    import hashlib
+    return {p.name: (hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None)
+            for p in (_DECIDED_INTERVAL_JSON, _DECIDED_PLACEMENT_JSON)}
+
+
 def interval_revalidation(duckdb: str, artifacts: pathlib.Path) -> dict:
     """(b) — every shipped 80% band re-scored against its pre-registered coverage floor.
 
-    ⛔ A BREACH EXITS NON-ZERO and is a RE-SELECTION TRIGGER, not a log line. ⭐ The decided NF1.9
-    artifact is byte-restored afterwards: `--no-report` still rewrites its JSON."""
-    before = (_DECIDED_INTERVAL_JSON.read_bytes()
-              if _DECIDED_INTERVAL_JSON.exists() else None)
+    ⛔ A BREACH EXITS NON-ZERO and is a RE-SELECTION TRIGGER, not a log line.
+
+    ⭐ CONSUMES the NF-INJ3b-M node-1 (D4) fix rather than routing around it: the run is written to
+    this story's OWN `--out` stem, so NF1.9's decided record is untouched by construction. Before
+    D4 this function byte-restored that record afterwards, because `--no-report` rewrote its JSON
+    anyway — a workaround the next session would have had to re-invent."""
     cmd = [sys.executable, "-m",
            "quant_sports_intel_models.football.nfl.fantasy.run_interval_revalidation",
-           "--no-report", "--duckdb", duckdb,
+           "--out", _OUT_STEM_INTERVAL, "--duckdb", duckdb,
            "--rookie-pool", str(artifacts / "nf1_4_rookie_training.parquet"),
            "--veteran-panel", str(artifacts / "nf1_9_veteran_band_panel"),
            "--kdst-panel", str(artifacts / "nfl_fantasy_kdst_band_panel.parquet")]
-    try:
-        r = subprocess.run(cmd, cwd=_PROJECT_ROOT, capture_output=True, text=True, timeout=1800)
-        payload = (json.loads(_DECIDED_INTERVAL_JSON.read_text())
-                   if _DECIDED_INTERVAL_JSON.exists() else {})
-    finally:
-        if before is not None:                       # ⛔ never leave a decided artifact rewritten
-            _DECIDED_INTERVAL_JSON.write_bytes(before)
+    r = subprocess.run(cmd, cwd=_PROJECT_ROOT, capture_output=True, text=True, timeout=1800)
+    out_json = _ART / f"{_OUT_STEM_INTERVAL}.json"
+    payload = json.loads(out_json.read_text()) if out_json.exists() else {}
     blocks = {b.get("population"): {
         "config": b.get("config"), "form": b.get("form"), "n": b.get("n"),
         "pooled_coverage": b.get("pooled_coverage"),
@@ -105,14 +121,19 @@ def interval_revalidation(duckdb: str, artifacts: pathlib.Path) -> dict:
         for b in (payload.get("blocks") or [])}
     return {"exit_code": r.returncode, "all_floors_met": bool(payload.get("pass")),
             "blocks": blocks, "stdout_tail": r.stdout.strip().splitlines()[-1:],
-            "decided_artifact_restored": before is not None,
+            "written_to": f"{_OUT_STEM_INTERVAL}.json",
             "why_it_gates": "a floor breach is a RE-SELECTION trigger for that population, never a "
                             "reason to move the floor (E2.1-r / NF1.8 §1)"}
 
 
 def run(duckdb: str, artifacts: pathlib.Path) -> dict:
+    # ⭐ TWO-SIDED: take the decided artifacts' digests BEFORE the gates run and again after, so
+    #    "the D4 fix works" is MEASURED by the caller rather than trusted (NF-C0e: wired ≠ invoked).
+    before = _decided_artifact_digests()
     pl = placement_read()
     iv = interval_revalidation(duckdb, artifacts)
+    after = _decided_artifact_digests()
+    decided_intact = {k: bool(before[k] == after[k]) for k in before}
     steps = {
         "a_placement_read_published_board": {
             "status": "RUN", "verdict": pl["verdict"].get("verdict"),
@@ -155,6 +176,11 @@ def run(duckdb: str, artifacts: pathlib.Path) -> dict:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "gate_outcome": "CLEARS (9/9 registered gates)",
         "steps": steps,
+        "d4_decided_artifacts_intact": {
+            "verified": decided_intact, "all_intact": bool(all(decided_intact.values())),
+            "what_it_proves": "running these gates left every DECIDED artifact byte-identical — "
+                              "the NF-INJ3b-M node-1 (D4) fix, measured at the CALL SITE rather "
+                              "than assumed from the runners' source."},
         "executable_steps_pass": executable_ok,
         "ship_path_complete": False,
         "verdict": "SHIP_PATH_INCOMPLETE — step (d) is unrun and BLOCKING",
@@ -212,9 +238,10 @@ def _md(r: dict) -> str:
         L.append(f"| {pop} | {blk.get('form')} | {blk.get('n')} | {blk.get('pooled_coverage')} |")
     L += [
         "",
-        f"⛔ The decided NF1.9 artifact was byte-RESTORED after this run "
-        f"(`decided_artifact_restored: {b['decided_artifact_restored']}`) — `--no-report` still "
-        f"rewrites its JSON, and a post-decision story never clobbers a decided story's record.",
+        f"Written to `{b['written_to']}` via the D4 `--out` stem. Decided artifacts verified "
+        f"byte-identical across BOTH gates: `{r['d4_decided_artifacts_intact']['verified']}` "
+        f"(all intact: **{r['d4_decided_artifacts_intact']['all_intact']}**) — measured at the "
+        f"call site, not assumed from the runners' source.",
         "",
         "## (c) The NF-TR2b superflex caveat — CARRIED",
         "",
