@@ -63,10 +63,10 @@ _NF_C8_CONSTANTS = (
 #: everything that could happen to a player; it is not a diagnosis and not a schedule.
 #:
 #: ⚠️ "injury" ALONE IS NOT ON THIS LIST, and that omission is deliberate rather than an oversight.
-#: The freshness line has to be able to say WHICH FEED it is stamping ("Injury and roster status as
-#: of …"), and a blanket ban on the word would make the honest provenance line unwriteable — the
-#: NF-C6P3 lesson, where a negation-blind denylist made the honest hedge the cheapest thing to
-#: delete. What is banned is the CLAIM, not the noun.
+#: The freshness line has to be able to say WHICH FEED it is stamping ("Injury/roster feed as of …"),
+#: and a blanket ban on the word would make the honest provenance line unwriteable — the NF-C6P3
+#: lesson, where a negation-blind denylist made the honest hedge the cheapest thing to delete. What
+#: is banned is the CLAIM, not the noun.
 #:
 #: ⚠️⚠️ THE SCAN IS DELIBERATELY **NEGATION-BLIND**, AND THAT IS A CONSIDERED CHOICE RATHER THAN THE
 #: NF-C6P3 DEFECT REPEATED. It fired during this story's own build, on an honest hedge that read
@@ -241,6 +241,102 @@ def test_the_flag_copy_never_forecasts_an_injury(name, copy_src):
         f"{name} forecasts an injury {hits} — the flag describes OUR PROJECTION ('we project N "
         f"games'), never a player's health"
     )
+
+
+def test_the_freshness_line_stamps_the_FEED_and_never_the_players_status(copy_src):
+    """⭐⭐ NF-C10 (PM-ruled 2026-08-23) — THE WORD THAT HAD TO GO IS "STATUS".
+
+    This line renders directly beneath NF-C9's disclosure, whose entire point is that we HOLD a
+    player's weekly designation and DO NOT act on it. "Injury and roster STATUS as of {date}" reads
+    as a claim about the player's standing — that we know it and applied it — so the two sentences
+    contradicted each other inside one tooltip, on both surfaces they share. A vintage stamp
+    describes a FEED, never a player.
+
+    ⚠️ THIS IS THE CONSTANT-LEVEL HALF ONLY, and on its own it is exactly the pin NF-INJ1-C warns
+    about: a guard that reads the constant proves someone TYPED the string, not that any surface
+    renders it. The rendered halves live in `frontend/e2e/specs/availability-flag.spec.ts` (board,
+    projections, player page) and `weekly-designation.spec.ts` (the NF-C9 disclosure), and
+    `test_every_rendered_surface_pins_the_reworded_freshness_line` below refuses to let this file
+    stand alone.
+    """
+    # `_const` lowercases (every screen in this file is case-insensitive), so the comparison is too.
+    line = _const(copy_src, "AVAILABILITY_DATA_AS_OF_PREFIX")
+    assert line == "injury/roster feed as of", (
+        f"the freshness prefix reads {line!r}; NF-C10's ruled wording is provenance-only "
+        '("Injury/roster feed as of {date}") — "status" asserts we know the player\'s standing AND '
+        "acted on it, directly under the NF-C9 line saying we did not"
+    )
+    assert "status" not in line.lower(), (
+        "the freshness prefix says 'status' again — see the NF-C9 contradiction above"
+    )
+
+
+def test_the_retired_status_wording_is_gone_from_every_shipped_surface():
+    """⭐ A PARTIAL REWORD IS THE FAILURE MODE, and it is invisible to any "the new string is here"
+    clause. The retired line must not survive anywhere the app can render it — a leftover in one
+    component leaves the NF-C9 contradiction live on exactly that surface.
+
+    ⛔ Scoped to `frontend/` and NOT to the whole repo on purpose: the NF-C8 write-up and this
+    story's own records QUOTE the retired wording while explaining why it was retired, and a scan
+    that fired on them would make the record the cheapest thing to delete (NF-C6P3).
+    """
+    frontend = _REPO / "frontend"
+    offenders = [
+        str(f.relative_to(_REPO))
+        for f in list(frontend.rglob("*.ts")) + list(frontend.rglob("*.tsx"))
+        if "node_modules" not in f.parts
+        and "injury and roster status as of" in _strip_ts_comments(f.read_text()).lower()
+        # The e2e specs assert the retired wording is ABSENT, so they must be able to name it.
+        and "e2e/specs" not in str(f)
+    ]
+    assert offenders == [], (
+        f"the retired 'Injury and roster status as of' wording survives in {offenders} — the "
+        "NF-C9 contradiction is still live wherever it renders"
+    )
+
+
+def test_every_rendered_surface_pins_the_reworded_freshness_line():
+    """NF-INJ1-C — A CONSTANT WHOSE ONLY GUARD READS THE CONSTANT IS UNPINNED AND LOOKS PINNED.
+
+    The clause above reads `fantasy-claim-copy.ts`; that is a statement about a file, not about
+    anything a reader sees. This one refuses to let that be the whole story: every surface the line
+    renders on must assert it ON RENDERED OUTPUT, and the retired wording must be asserted ABSENT
+    there too (a reword that reaches three of four surfaces is green under a presence-only pin).
+    """
+    flag_spec = (_REPO / "frontend/e2e/specs/availability-flag.spec.ts").read_text()
+    designation_spec = (_REPO / "frontend/e2e/specs/weekly-designation.spec.ts").read_text()
+
+    # ⚠️ `test(`, NOT merely the title text — the red proof caught the first cut passing on a
+    # `test.skip(`ped pin, i.e. green with the assertion disabled on disk. A skipped guard is the
+    # NF1.7 (a) vacuous-anchor shape with a plausible-looking excuse attached.
+    for title, spec, name in (
+        ("the injury-feed vintage renders when the payload carries it", flag_spec, "board+projections"),
+        ("the player page carries the same vintage line the boards carry", flag_spec, "player page"),
+        ("NF-C10: the disclosure stamps the FEED", designation_spec, "the NF-C9 disclosure"),
+    ):
+        assert f'test(`${{surface}}: {title}`' in spec or f'test("{title}' in spec, (
+            f"the rendered pin for {name} is gone or disabled — a reword that misses that surface "
+            "leaves the NF-C9 contradiction live exactly there"
+        )
+
+    # ⚠️ COMMENTS STRIPPED, BACKSLASHES DROPPED, AND MATCHED AS A **REGEX LITERAL** (leading `/`) —
+    # all three were found necessary by the red proof, each having produced a green on a real break:
+    #   · unstripped, the story's own EXPLANATORY COMMENT carries both wordings in plain prose;
+    #   · un-de-escaped, the assertions spell them inside regex literals (`injury\/roster`);
+    #   · matched as a bare substring, an assertion's own FAILURE MESSAGE (which quotes the retired
+    #     wording to explain itself) satisfies the clause with the assertion deleted.
+    def _assertions(spec: str) -> str:
+        return _strip_ts_comments(spec).replace("\\", "").lower()
+
+    for name, spec in (("availability-flag", flag_spec), ("weekly-designation", designation_spec)):
+        body = _assertions(spec)
+        assert "/injury/roster feed as of" in body, (
+            f"{name}.spec.ts does not assert the reworded line on rendered output"
+        )
+        assert "/injury and roster status as of" in body, (
+            f"{name}.spec.ts does not assert the RETIRED wording is ABSENT — a presence-only pin "
+            "cannot see a surface the reword missed"
+        )
 
 
 def test_the_definition_says_out_loud_that_it_is_not_a_diagnosis(copy_src):

@@ -13,6 +13,8 @@
 // The server enforces the same rule on the fantasy DATA endpoints (require_fantasy_access
 // → 403) — this client helper only decides nav visibility / the locked-vs-open state.
 
+import { apiErrorStatus } from "./api"
+
 export type Surface = "betting" | "fantasy"
 
 // Betting = the existing has_access group set (E9.8's ACCESS_GROUPS). Grandfathered.
@@ -152,4 +154,23 @@ export function canConfigureLeague(signedIn: boolean, groups: string[]): boolean
  */
 export function canSaveAnotherLeague(savedCount: number, groups: string[]): boolean {
   return savedCount < personalizedLeagueQuota(groups)
+}
+
+/**
+ * NF-DTB-1 — was THIS failed league save the free-league cap, rather than a fault?
+ *
+ * ⭐ WHY A SERVER REFUSAL STILL HAPPENS AT ALL, given `canSaveAnotherLeague` above disables the
+ * control. That check is advisory and reads a CACHED list: `useSavedLeagues` has `staleTime: 60s`
+ * and `retry: false`, and its `data` is `undefined` both while loading and ON ERROR — every one of
+ * which makes `(leagues ?? []).length` read 0, i.e. "not at quota", and re-enables the button. So
+ * the last line of defence is the server's 409, and what it hits on the way back out has to say
+ * "limit", not "failure".
+ *
+ * ⚠️ SCOPED TO THE LEAGUE-SAVE CALL SITES ON PURPOSE. `POST /fantasy/leagues` raises exactly one
+ * 409, and it is the quota — but that is a fact about THAT route, not about the number 409, so this
+ * predicate is named for the route it interprets rather than living in `api.ts` as a generic
+ * `isConflict`. A shared status→meaning table is where a status quietly acquires a wrong meaning.
+ */
+export function isLeagueQuotaRefusal(e: unknown): boolean {
+  return apiErrorStatus(e) === 409
 }

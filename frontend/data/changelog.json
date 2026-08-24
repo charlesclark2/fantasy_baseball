@@ -129,6 +129,14 @@
       {
         "tag": "improved",
         "text": "Behind the scenes: we fixed a statistical flaw in how we check our own projection ranges. Every range we publish is meant to contain the real season outcome 80% of the time, and we re-check that against what actually happened. The old check compared a group's measured rate against 80% as a flat cut-off — which, on a small group like rookie running backs (148 seasons of history), rejects a perfectly accurate range about half the time purely by chance. So a failure told us almost nothing while still reading like a problem. The check now asks the honest question — is this group's coverage meaningfully below 80%, or just normal small-sample wobble? — using a threshold derived from the group's size alone, decided before any result is looked at. Small groups get more room; large ones barely move. Nothing about the projections you see changed today: this only makes the quality check trustworthy in both directions, so a genuinely broken range still fails it."
+      },
+      {
+        "tag": "fixed",
+        "text": "Trying to save a second league on a free account now says so. A free account keeps one personalized league, and the server has always refused the second one — but the refusal came back to you as a generic \"could not save\", which reads as something broken rather than as a limit. You now get the limit stated plainly, a note that nothing was saved and your settings are still on screen, and the option to become a member if you want to keep several. A genuine save failure still shows the ordinary error, so the two are no longer the same message."
+      },
+      {
+        "tag": "improved",
+        "text": "The date stamp under the projected-games flag now reads \"Injury/roster feed as of\" instead of \"Injury and roster status as of\". It sits directly beneath the note explaining that we hold a player's weekly game-status designation and do not build it into his projection — and the old wording implied the opposite, that we knew his status and had acted on it. The line only ever meant one thing: when the feed we read was captured. It now says that and nothing more."
       }
     ]
   },

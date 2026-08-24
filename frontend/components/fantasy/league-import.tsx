@@ -53,10 +53,11 @@ import {
 import type { LeagueSaveInput } from "@/lib/fantasy"
 import { resolveScoring, type TermCoverage } from "@/lib/league-config"
 import { availableFields } from "@/lib/league-scoring"
-import { canSaveAnotherLeague } from "@/lib/entitlements"
+import { canSaveAnotherLeague, isLeagueQuotaRefusal } from "@/lib/entitlements"
 import {
   LEAGUE_QUOTA_REACHED_DETAIL,
   LEAGUE_QUOTA_REACHED_TITLE,
+  LEAGUE_QUOTA_REFUSED_DETAIL,
 } from "@/lib/fantasy-claim-copy"
 import {
   EmptyBlock,
@@ -170,6 +171,9 @@ export function LeagueImport() {
   const [preview, setPreview] = useState<ImportPreview | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // NF-DTB-1 — the SERVER refused this save for the free-league cap (409). Kept apart from `error`
+  // because it renders as a LIMIT (the quota notice + its upgrade CTA), never as a fault.
+  const [quotaRefused, setQuotaRefused] = useState(false)
   const [saved, setSaved] = useState<string | null>(null)
   // NF-C6P3 — how many team rosters the SERVER said it stored, read off the save RESPONSE. `null`
   // until a save happens. See `saveImported` for why this may never be derived from the payload we
@@ -269,10 +273,18 @@ export function LeagueImport() {
     setFlowStarted(true)
     setBusy(key)
     setError(null)
+    setQuotaRefused(false)
     try {
       return await fn()
     } catch (e) {
-      setError(errorText(e))
+      // ⭐ NF-DTB-1 — A LIMIT IS NOT A FAULT. `POST /fantasy/leagues` answers the free-league cap
+      // with a 409, and until the status survived the fetch boundary (`api.ts`) that refusal was
+      // indistinguishable from a broken save: it rendered through the amber error line below,
+      // which leads with a failure and offers no way past the limit. Recorded separately so the
+      // quota notice (with its upgrade CTA) renders instead — the generic line still fires for
+      // every other failure, which is the half a one-sided fix would have quietly removed.
+      if (isLeagueQuotaRefusal(e)) setQuotaRefused(true)
+      else setError(errorText(e))
       return null
     } finally {
       setBusy(null)
@@ -953,19 +965,28 @@ export function LeagueImport() {
               </p>
             )}
 
-            {previewBlockedByQuota && (
+            {(previewBlockedByQuota || quotaRefused) && (
               <div className="mt-3">
+                {/* ⚠️ NF-DTB-1 — see the editor's twin: on a SERVER refusal the cached list can be
+                    empty, and "See the league you have" would send the user to a page showing
+                    none. */}
                 <LeagueQuotaNotice
                   title={LEAGUE_QUOTA_REACHED_TITLE}
-                  detail={`${LEAGUE_QUOTA_REACHED_DETAIL} This one would be your second, so it can't be saved on a free account.`}
+                  detail={
+                    quotaRefused
+                      ? LEAGUE_QUOTA_REFUSED_DETAIL
+                      : `${LEAGUE_QUOTA_REACHED_DETAIL} This one would be your second, so it can't be saved on a free account.`
+                  }
                   testId="import-quota-notice"
                   action={
-                    <Link
-                      href="/fantasy/my-league"
-                      className="text-gray-300 underline hover:text-[#10b981]"
-                    >
-                      See the league you have
-                    </Link>
+                    savedLeagues?.length ? (
+                      <Link
+                        href="/fantasy/my-league"
+                        className="text-gray-300 underline hover:text-[#10b981]"
+                      >
+                        See the league you have
+                      </Link>
+                    ) : undefined
                   }
                 />
               </div>

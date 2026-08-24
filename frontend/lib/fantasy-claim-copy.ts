@@ -214,12 +214,20 @@ export const AVAILABILITY_FLAG_DEFINITION =
 /** The freshness line inside the flag's definition (NF-FRESH2's rule, applied to the one input this
  *  flag actually rests on).
  *
+ *  ⭐⭐ NF-C10 — PROVENANCE ONLY. THE WORD DROPPED HERE IS "STATUS", AND DROPPING IT IS THE STORY.
+ *  This line renders directly beneath the NF-C9 disclosure whose whole point is that we hold a
+ *  player's weekly designation and DO NOT act on it. "Injury and roster STATUS as of {date}" reads
+ *  as a claim about the player's standing — i.e. that we know it AND have applied it — so the two
+ *  lines contradicted each other on every surface they share. "Injury/roster FEED as of {date}"
+ *  says only what is true and all that this line was ever for: when the input we read was captured.
+ *  A vintage stamp describes a FEED, never a player. (PM-ruled Option 1, 2026-08-23.)
+ *
  *  ⚠️ ABSENT ≠ NULL, and both directions matter here as much as they do on the provenance strip:
  *  a payload that never carried the stamp gets NO line at all (inventing "unknown" during a routine
  *  deploy window would put a scary word under every flag), while a stamp the exporter looked for and
  *  could not resolve renders as unknown rather than being silently dropped — an unevaluable check is
  *  never scored healthy (NF1.7 (a)). */
-export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury and roster status as of"
+export const AVAILABILITY_DATA_AS_OF_PREFIX = "Injury/roster feed as of"
 
 export const AVAILABILITY_DATA_AS_OF_UNKNOWN = "unknown"
 
@@ -672,6 +680,20 @@ export const MY_LEAGUE_EMPTY_DETAIL =
 export const LEAGUE_QUOTA_REACHED_TITLE = "You're using your free league"
 export const LEAGUE_QUOTA_REACHED_DETAIL =
   "A free account keeps one personalized league. You can edit or replace this one whenever you like; members keep several and can switch between them."
+
+/** NF-DTB-1 — the SERVER'S refusal, met after the form was already filled in.
+ *
+ *  ⭐ A SECOND CONSTANT RATHER THAN A REUSE OF `LEAGUE_QUOTA_REACHED_DETAIL`, because the two states
+ *  are read at different moments and one of them has to answer a question the other never raises:
+ *  "did my work just disappear?". The at-the-control notice is preventative — nothing has been
+ *  attempted. This one fires AFTER a save round-trip, so it has to say that nothing was stored and
+ *  that the settings on screen are still there. Reusing the preventative wording here would leave a
+ *  user who just pressed Save unable to tell a limit from a lost form (E8.6's shape).
+ *
+ *  ⚠️ It is reachable even though the control is disabled at the cap: that check reads a CACHED
+ *  league list which is empty while loading and on error (`isLeagueQuotaRefusal`). */
+export const LEAGUE_QUOTA_REFUSED_DETAIL =
+  "Nothing was saved and your settings are still on screen. A free account keeps one personalized league, and this would have been a second one — edit or replace the league you already have, or become a member to keep several."
 
 /** ⚠️ A LAPSED SUBSCRIBER, whose stored leagues outnumber their quota. This state is easy to render
  *  as an accusation or as a silent disappearance; it must be neither. Their configs are all still
