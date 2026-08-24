@@ -181,3 +181,15 @@ spec:
       (5) NF-INJ3b-M coordination: its D4 `--out` stem fix IS on this branch, so
       the ship-path reads can write `nf_inj3c_*` stems without touching a
       decided record.
+      (6) ⚠️ PRE-EXISTING, FOUND IN PASSING, NOT THIS BRANCH'S DOING —
+      `betting_ml/tests/nf_inj1_c_red_proof.py`'s `short-label-stops-saying-withheld`
+      case has a ROTTED ANCHOR and reports 0 occurrences. It expects
+      `STAT_LINE_WITHHELD_LABEL = "stat detail withheld — availability-adjusted"`;
+      `origin/dev` now carries `"stat detail withheld — inconsistent with
+      projected games"` (reworded by the NF-C8/NF-C9/NF-DTB-1 line). The clause
+      it defends still passes, so the SUITE is green and only the red proof
+      knows — which is exactly E9.64's finding that a mutation test whose break
+      no longer bites carries less information than it appears to. Verified on
+      `origin/dev`, and this branch touches no `frontend/` file. Cheap fix:
+      re-anchor the case onto the current constant. Worth a sweep of the other
+      red proofs for the same rot while someone is in there.
