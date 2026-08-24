@@ -124,8 +124,15 @@ log = logging.getLogger("nfl.fantasy.interval_revalidation")
 CPF_NOMINAL_DEFAULT = 0.80
 
 _REPORT_DIR = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/ablation_results"
-_OUT_JSON = _REPORT_DIR / "nf1_9_interval_revalidation.json"
-_OUT_MD = _REPORT_DIR / "nf1_9_interval_revalidation.md"
+#: ⛔ THE DECIDED ARTIFACT — NF1.9's committed standing record. Writing it is now an EXPLICIT act
+#: (`--out nf1_9_interval_revalidation`), never a side effect (NF-INJ3b D4).
+DECIDED_STEM = "nf1_9_interval_revalidation"
+#: the DEFAULT stem: a neutral "latest run" path belonging to NO story. A session that needs this
+#: re-validation as a GATE on its own change (NF-INJ3b's ship path did) must not be able to rewrite
+#: NF1.9's record on the way past — which it previously did EVEN UNDER `--no-report`.
+DEFAULT_STEM = "nf1_9_interval_revalidation_latest"
+_OUT_JSON = _REPORT_DIR / f"{DECIDED_STEM}.json"
+_OUT_MD = _REPORT_DIR / f"{DECIDED_STEM}.md"
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -603,7 +610,12 @@ def main(argv: list[str] | None = None) -> int:
                     help="rebuild the NF1.6 K/DST band panel from the local NFL marts + lake first "
                          "(do this after a new completed season lands)")
     ap.add_argument("--only", choices=("rookies", "veterans", "kdst"), default=None)
-    ap.add_argument("--no-report", action="store_true")
+    ap.add_argument("--no-report", action="store_true",
+                    help="compute + print, write NOTHING. ⭐ This previously still rewrote the "
+                         "decided JSON — a --no-report that writes is not a --no-report.")
+    ap.add_argument("--out", default=DEFAULT_STEM,
+                    help=f"output stem under ablation_results/ (default {DEFAULT_STEM!r}). Pass "
+                         f"--out {DECIDED_STEM} to DELIBERATELY refresh NF1.9's decided record.")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
@@ -658,10 +670,16 @@ def main(argv: list[str] | None = None) -> int:
                   f"pooled cov={nc.get('pooled_coverage')} {nc.get('coverage')}")
     print(f"\nVERDICT: {'✅ ALL FLOORS MET' if ok else '🚨 FLOOR BREACH — RE-SELECTION TRIGGERED'}")
 
-    _OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
-    _OUT_JSON.write_text(json.dumps(out, indent=2, default=float))
+    # ⭐ `--no-report` now writes NOTHING AT ALL. The JSON write used to sit OUTSIDE this branch,
+    #    so `--no-report` rewrote NF1.9's decided record anyway — the defect NF-INJ3b hit.
     if not args.no_report:
-        write_report(out, _OUT_MD)
+        _REPORT_DIR.mkdir(parents=True, exist_ok=True)
+        (_REPORT_DIR / f"{args.out}.json").write_text(json.dumps(out, indent=2, default=float))
+        write_report(out, _REPORT_DIR / f"{args.out}.md")
+        print(f"wrote {args.out}.json + {args.out}.md")
+        if args.out != DECIDED_STEM:
+            print(f"  ⚠️ NF1.9's decided record ({DECIDED_STEM}.*) was NOT updated. To refresh it "
+                  f"deliberately: --out {DECIDED_STEM}")
     # ⭐ NON-ZERO EXIT ON A BREACH — the trigger, not a log line.
     return 0 if ok else 1
 

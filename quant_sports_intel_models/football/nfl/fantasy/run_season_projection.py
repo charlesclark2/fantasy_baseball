@@ -1007,7 +1007,8 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
                              absence_prior_blend: float | None = None,
                              band_model=None, level_recal: tuple | None = None,
                              reported_absence_rows=None,
-                             reported_absence_log=None) -> pd.DataFrame:
+                             reported_absence_log=None,
+                             injury_covariates: pd.DataFrame | None = None) -> pd.DataFrame:
     """The VETERAN half of the board, as a WIDE frame (every base-season input column retained).
 
     ⭐ Factored out of `build_projection` by NF1.9 because the veteran interval's band has to be FITTED
@@ -1073,7 +1074,8 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
     return project_veterans(base, priors, projection_season, band_model=band_model,
                             level_recal=level_recal,
                             reported_absence_rows=reported_absence_rows,
-                            reported_absence_log=reported_absence_log, **kw)
+                            reported_absence_log=reported_absence_log,
+                            injury_covariates=injury_covariates, **kw)
 
 
 def fit_serving_level(panel: pd.DataFrame | None, projection_season: int) -> tuple[str, dict]:
@@ -1119,7 +1121,8 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
                      absence_prior_blend: float | None = None,
                      veteran_band: bool | None = None,
                      band_panel: pd.DataFrame | None = None,
-                     veteran_postprocess=None) -> pd.DataFrame:
+                     veteran_postprocess=None,
+                     injury_covariates: pd.DataFrame | None = None) -> pd.DataFrame:
     """Build the shipped season board. `veteran_postprocess(vets_wide, band_model) -> vets_wide` is
     an optional hook applied to the VETERAN half right after it is assembled and before it is joined
     to the rookie leg.
@@ -1165,7 +1168,8 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
         rescue_absent=rescue_absent, absence_prior_family=absence_prior_family,
         absence_prior_blend=absence_prior_blend, band_model=band_model,
         level_recal=((level_form, level_params) if (level_form and level_params) else None),
-        reported_absence_rows=_ra.rows, reported_absence_log=_ra_log)
+        reported_absence_rows=_ra.rows, reported_absence_log=_ra_log,
+        injury_covariates=injury_covariates)
     if veteran_postprocess is not None:
         vets = veteran_postprocess(vets, band_model)
 
@@ -1660,6 +1664,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-rescue-absent", action="store_true",
                     help="NF-D11 escape hatch: rebuild with the MVP-1 universe rule (delete every "
                          "player who missed the whole base season). Diagnostic only.")
+    ap.add_argument("--injury-covariates", default=None,
+                    help="NF-INJ3b-M: parquet of per-player covariates the certified injury-games "
+                         "hurdle needs (onset_carryover, weeks_since_last_game, log1p_prior_fp, "
+                         "prior_games, is_qb). The board build does NOT produce them; without it a "
+                         "flipped-on injury_games_policy REFUSES rather than silently serving the "
+                         "incumbent under the fitted arm's stamp.")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
 
@@ -1698,6 +1708,14 @@ def main(argv: list[str] | None = None) -> int:
             seasons = sorted(set(range(args.backtest_from, primary_season + 1)) | {primary_season})
         log.info("emitting projection seasons: %s", seasons)
 
+        # NF-INJ3b-M: the injury-hurdle covariate feed, applied ONLY to the forward season (the
+        # covariates are derived per projection season; a backtest season would need its own).
+        inj_cov = (pd.read_parquet(args.injury_covariates)
+                   if args.injury_covariates else None)
+        if inj_cov is not None:
+            log.info("NF-INJ3b-M: injury covariate feed loaded — %d rows, cols %s",
+                     len(inj_cov), sorted(c for c in inj_cov.columns if c != "player_id"))
+
         primary_proj = primary_cov = None
         face_validity: dict | None = None
         adp_audit: dict | None = None
@@ -1705,7 +1723,8 @@ def main(argv: list[str] | None = None) -> int:
         for y in seasons:
             base_y = y - 1
             proj = build_projection(con, base_y, y, args.schema,
-                                    rescue_absent=not args.no_rescue_absent)
+                                    rescue_absent=not args.no_rescue_absent,
+                                    injury_covariates=(inj_cov if y == primary_season else None))
             log.info("  %d (base %d): %d players (%d vets, %d rookies)", y, base_y, len(proj),
                      int((~proj["is_rookie"]).sum()), int(proj["is_rookie"].sum()))
 

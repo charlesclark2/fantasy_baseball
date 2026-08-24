@@ -40,8 +40,14 @@ from quant_sports_intel_models.football.nfl.fantasy.league_presets import (  # n
     NFL_PROFILE, get_preset)
 
 _ART = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/ablation_results"
-_OUT_JSON = _ART / "nf_tr2b_placement_read.json"
-_OUT_MD = _ART / "nf_tr2b_placement_read.md"
+
+#: ⛔ THE DECIDED ARTIFACT — NF-TR2b's own committed record. Writing it is now an EXPLICIT act
+#: (`--out nf_tr2b_placement_read`), never something a run does on its way past (NF-INJ3b D4).
+DECIDED_STEM = "nf_tr2b_placement_read"
+#: the DEFAULT stem: a neutral "latest run" path that belongs to NO story, so a session that needs
+#: this read as a SIDE-STEP (NF-INJ3b's ship path did, and clobbered the decided record doing it)
+#: cannot silently rewrite a decided story's audit trail.
+DEFAULT_STEM = "nf_tr2b_placement_read_latest"
 _S3 = "s3://credence-prod-s3-api-cache/fantasy/nfl/2026/"
 
 #: (served board file stem, league preset, n_teams) for every config the product publishes.
@@ -258,6 +264,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--from-dir", default=None,
                     help="read served artifacts from a local dir instead of S3")
     ap.add_argument("--no-report", action="store_true")
+    ap.add_argument("--out", default=DEFAULT_STEM,
+                    help=f"output stem under ablation_results/ (default {DEFAULT_STEM!r}). Pass "
+                         f"--out {DECIDED_STEM} to DELIBERATELY refresh NF-TR2b's decided record.")
     a = ap.parse_args(argv)
     if a.from_dir:
         src, origin = pathlib.Path(a.from_dir), None
@@ -270,9 +279,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {name:<26}{val}")
     if not a.no_report:
         _ART.mkdir(parents=True, exist_ok=True)
-        _OUT_JSON.write_text(json.dumps(r, indent=1, default=str))
-        _OUT_MD.write_text(_md(r))
-        print(f"wrote {_OUT_JSON.name} + {_OUT_MD.name}")
+        (_ART / f"{a.out}.json").write_text(json.dumps(r, indent=1, default=str))
+        (_ART / f"{a.out}.md").write_text(_md(r))
+        print(f"wrote {a.out}.json + {a.out}.md")
+        if a.out != DECIDED_STEM:
+            # ⭐ say so LOUDLY: a run that quietly wrote somewhere else is how a stale decided
+            #    record goes unnoticed — the opposite failure to the one D4 fixes.
+            print(f"  ⚠️ NF-TR2b's decided record ({DECIDED_STEM}.*) was NOT updated. To refresh it "
+                  f"deliberately: --out {DECIDED_STEM}")
     return 0 if r["verdict"]["verdict"] == "SANE" else 1
 
 

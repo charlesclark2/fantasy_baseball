@@ -168,3 +168,11 @@ quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf1_6_kdst_base_
 # convenience, never committed (a convenience commit must not sweep prod JSON into git).
 quant_sports_intel_models/football/nfl/fantasy/artifacts/served_board_snapshots/
 .nf_c8_red_proof_backup/
+
+# NF-INJ3b-M (PM ruling D4): the neutral "latest run" stems that
+# run_nf_tr2b_placement_read / run_interval_revalidation now write BY DEFAULT, so a session
+# running them as a gate cannot clobber a DECIDED story's record. They are scratch: the decided
+# artifacts are the tracked ones, refreshed only by an explicit `--out <decided stem>`.
+# ⛔ Do NOT ignore the decided stems themselves.
+quant_sports_intel_models/football/nfl/fantasy/ablation_results/*_latest.json
+quant_sports_intel_models/football/nfl/fantasy/ablation_results/*_latest.md

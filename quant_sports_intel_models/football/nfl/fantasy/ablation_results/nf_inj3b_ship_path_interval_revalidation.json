@@ -1,0 +1,541 @@
+{
+  "pass": true,
+  "blocks": [
+    {
+      "population": "rookies",
+      "config": "SHIPPED rookie band",
+      "form": "qreg_sqrt",
+      "rookie_point_shrink_lambda": 0.5,
+      "rookie_selection_status": "PM_JUDGMENT",
+      "cohorts": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "n": 553,
+      "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+      "target_false_reject_rate": 0.05,
+      "target_provenance": "NF1.8's pre-registered Tier-2 fallback level: `_TIER2_Z = 1.6448536269514722 = \u03a6\u207b\u00b9(0.95)`, i.e. a ONE-SIDED 95% test \u21d2 a 0.05 false-reject target. Recorded in `run_rookie_perposition_ablation` before any of the results this floor is now read against existed. NF-D22 widens its SCOPE and makes it EXACT; it does not move the level.",
+      "floors": {
+        "QB": 0.7284,
+        "RB": 0.7432,
+        "TE": 0.73,
+        "WR": 0.7545
+      },
+      "floor_detail": {
+        "QB": {
+          "n": 81,
+          "nominal": 0.8,
+          "floor": 0.7284,
+          "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+          "target_false_reject_rate": 0.05,
+          "covered_rows_required": 59,
+          "covered_rows_required_at_nominal_floor": 65,
+          "relaxation_rows": 6,
+          "relaxation_pp": 7.16,
+          "normal_approx_floor": 0.7269,
+          "false_reject_rate": 0.0443,
+          "false_reject_rate_at_nominal_floor": 0.4558,
+          "detectable_shortfall": 0.678,
+          "is_thin": true,
+          "approximation_error": -0.0057,
+          "coverage": 0.8025,
+          "covered_rows": 65,
+          "slack_rows": 6,
+          "slack_rows_at_nominal_floor": 0,
+          "met": true
+        },
+        "RB": {
+          "n": 148,
+          "nominal": 0.8,
+          "floor": 0.7432,
+          "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+          "target_false_reject_rate": 0.05,
+          "covered_rows_required": 110,
+          "covered_rows_required_at_nominal_floor": 119,
+          "relaxation_rows": 9,
+          "relaxation_pp": 5.676,
+          "normal_approx_floor": 0.7459,
+          "false_reject_rate": 0.0369,
+          "false_reject_rate_at_nominal_floor": 0.5,
+          "detectable_shortfall": 0.708,
+          "is_thin": true,
+          "approximation_error": 0.0054,
+          "coverage": 0.7905,
+          "covered_rows": 117,
+          "slack_rows": 7,
+          "slack_rows_at_nominal_floor": -2,
+          "met": true
+        },
+        "TE": {
+          "n": 100,
+          "nominal": 0.8,
+          "floor": 0.73,
+          "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+          "target_false_reject_rate": 0.05,
+          "covered_rows_required": 73,
+          "covered_rows_required_at_nominal_floor": 80,
+          "relaxation_rows": 7,
+          "relaxation_pp": 7.0,
+          "normal_approx_floor": 0.7342,
+          "false_reject_rate": 0.0342,
+          "false_reject_rate_at_nominal_floor": 0.4405,
+          "detectable_shortfall": 0.6855,
+          "is_thin": true,
+          "approximation_error": 0.0058,
+          "coverage": 0.9,
+          "covered_rows": 90,
+          "slack_rows": 17,
+          "slack_rows_at_nominal_floor": 10,
+          "met": true
+        },
+        "WR": {
+          "n": 224,
+          "nominal": 0.8,
+          "floor": 0.7545,
+          "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+          "target_false_reject_rate": 0.05,
+          "covered_rows_required": 169,
+          "covered_rows_required_at_nominal_floor": 180,
+          "relaxation_rows": 11,
+          "relaxation_pp": 4.554,
+          "normal_approx_floor": 0.756,
+          "false_reject_rate": 0.0396,
+          "false_reject_rate_at_nominal_floor": 0.5133,
+          "detectable_shortfall": 0.727,
+          "is_thin": true,
+          "approximation_error": 0.0052,
+          "coverage": 0.8348,
+          "covered_rows": 187,
+          "slack_rows": 18,
+          "slack_rows_at_nominal_floor": 7,
+          "met": true
+        }
+      },
+      "floors_at_nominal": {
+        "QB": 0.8,
+        "RB": 0.8,
+        "TE": 0.8,
+        "WR": 0.8
+      },
+      "coverage": {
+        "QB": 0.8025,
+        "RB": 0.7905,
+        "TE": 0.9,
+        "WR": 0.8348
+      },
+      "n_by_position": {
+        "QB": 81,
+        "RB": 148,
+        "TE": 100,
+        "WR": 224
+      },
+      "slack_rows": {
+        "QB": 6,
+        "RB": 7,
+        "TE": 17,
+        "WR": 18
+      },
+      "slack_rows_at_nominal": {
+        "QB": 0,
+        "RB": -2,
+        "TE": 10,
+        "WR": 7
+      },
+      "unconstrained": [],
+      "misses": [],
+      "misses_at_nominal_floor": [
+        "RB 0.7905<0.800"
+      ],
+      "pass": true,
+      "pooled_coverage": 0.83,
+      "pooled_floor": 0.7722,
+      "pooled_floor_detail": {
+        "n": 553,
+        "nominal": 0.8,
+        "floor": 0.7722,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 427,
+        "covered_rows_required_at_nominal_floor": 443,
+        "relaxation_rows": 16,
+        "relaxation_pp": 2.785,
+        "normal_approx_floor": 0.772,
+        "false_reject_rate": 0.0472,
+        "false_reject_rate_at_nominal_floor": 0.5,
+        "detectable_shortfall": 0.7555,
+        "is_thin": true,
+        "approximation_error": -0.0028,
+        "coverage": 0.83,
+        "covered_rows": 459,
+        "slack_rows": 32,
+        "slack_rows_at_nominal_floor": 16,
+        "met": true
+      },
+      "pooled_backstop": {
+        "pooled_n": 553,
+        "pooled_floor": 0.7722,
+        "loosest_group_floor": 0.7545,
+        "tightest_group_floor": 0.7284,
+        "verdict": "BACKSTOP_HOLDS",
+        "note": "The pooled floor runs the IDENTICAL rule over a larger n, so it sits closer to nominal than any single group's floor. A band resting at each group's own floor therefore fails the pooled check \u2014 that two-tier structure, not a hand-set minimum, is the substantive backstop."
+      },
+      "family_false_reject": {
+        "n_floors": 4,
+        "per_group_target": 0.05,
+        "family_false_reject_rate": 0.1462,
+        "family_false_reject_rate_at_nominal_floor": 0.9259,
+        "note": "Independence across groups is ASSUMED here and is optimistic \u2014 rows in different positions share draft classes/seasons, so the true family rate is somewhat lower than the product. Reported as the conservative reading. \u26d4 NOT corrected for: a Bonferroni split would LOOSEN every individual floor, which is the adjustment this story must least be able to make."
+      },
+      "interval_score": 184.534,
+      "newest_cohort": {
+        "cohort": 2025,
+        "n": 85,
+        "pooled_coverage": 0.8118,
+        "coverage": {
+          "QB": 0.7857,
+          "RB": 0.72,
+          "TE": 0.875,
+          "WR": 0.8667
+        },
+        "note": "LEADING INDICATOR ONLY \u2014 one draft class is far too thin per position to gate on"
+      }
+    },
+    {
+      "population": "veterans",
+      "config": "SHIPPED veteran band",
+      "form": "knn_norm",
+      "cohorts": [
+        2013,
+        2014,
+        2015,
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "n": 8398,
+      "below_p10": 0.025,
+      "above_p90": 0.0853,
+      "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+      "target_false_reject_rate": 0.05,
+      "target_provenance": "NF1.8's pre-registered Tier-2 fallback level: `_TIER2_Z = 1.6448536269514722 = \u03a6\u207b\u00b9(0.95)`, i.e. a ONE-SIDED 95% test \u21d2 a 0.05 false-reject target. Recorded in `run_rookie_perposition_ablation` before any of the results this floor is now read against existed. NF-D22 widens its SCOPE and makes it EXACT; it does not move the level.",
+      "floors": {
+        "QB": 0.7805,
+        "RB": 0.7854,
+        "TE": 0.7846,
+        "WR": 0.7882
+      },
+      "floor_detail": {
+        "QB": {
+          "n": 1116,
+          "nominal": 0.8,
+          "floor": 0.7805,
+          "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+          "target_false_reject_rate": 0.05,
+          "covered_rows_required": 871,
+          "covered_rows_required_at_nominal_floor": 893,
+          "relaxation_rows": 22,
+          "relaxation_pp": 1.953,
+          "normal_approx_floor": 0.7803,
+          "false_reject_rate": 0.0488,
+          "false_reject_rate_at_nominal_floor": 0.4881,
+          "detectable_shortfall": 0.769,
+          "is_thin": true,
+          "approximation_error": -0.0012,
+          "coverage": 0.8575,
+          "covered_rows": 957,
+          "slack_rows": 86,
+          "slack_rows_at_nominal_floor": 64,
+          "met": true
+        },
+        "RB": {
+          "n": 2018,
+          "nominal": 0.8,
+          "floor": 0.7854,
+          "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+          "target_false_reject_rate": 0.05,
+          "covered_rows_required": 1585,
+          "covered_rows_required_at_nominal_floor": 1615,
+          "relaxation_rows": 30,
+          "relaxation_pp": 1.457,
+          "normal_approx_floor": 0.7854,
+          "false_reject_rate": 0.049,
+          "false_reject_rate_at_nominal_floor": 0.5,
+          "detectable_shortfall": 0.777,
+          "is_thin": true,
+          "approximation_error": -0.001,
+          "coverage": 0.8865,
+          "covered_rows": 1789,
+          "slack_rows": 204,
+          "slack_rows_at_nominal_floor": 174,
+          "met": true
+        },
+        "TE": {
+          "n": 1801,
+          "nominal": 0.8,
+          "floor": 0.7846,
+          "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+          "target_false_reject_rate": 0.05,
+          "covered_rows_required": 1413,
+          "covered_rows_required_at_nominal_floor": 1441,
+          "relaxation_rows": 28,
+          "relaxation_pp": 1.544,
+          "normal_approx_floor": 0.7845,
+          "false_reject_rate": 0.0487,
+          "false_reject_rate_at_nominal_floor": 0.4906,
+          "detectable_shortfall": 0.776,
+          "is_thin": true,
+          "approximation_error": -0.0013,
+          "coverage": 0.8884,
+          "covered_rows": 1600,
+          "slack_rows": 187,
+          "slack_rows_at_nominal_floor": 159,
+          "met": true
+        },
+        "WR": {
+          "n": 3164,
+          "nominal": 0.8,
+          "floor": 0.7882,
+          "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+          "target_false_reject_rate": 0.05,
+          "covered_rows_required": 2494,
+          "covered_rows_required_at_nominal_floor": 2532,
+          "relaxation_rows": 38,
+          "relaxation_pp": 1.176,
+          "normal_approx_floor": 0.7883,
+          "false_reject_rate": 0.0477,
+          "false_reject_rate_at_nominal_floor": 0.5035,
+          "detectable_shortfall": 0.7815,
+          "is_thin": true,
+          "approximation_error": 0.0022,
+          "coverage": 0.9068,
+          "covered_rows": 2869,
+          "slack_rows": 375,
+          "slack_rows_at_nominal_floor": 337,
+          "met": true
+        }
+      },
+      "floors_at_nominal": {
+        "QB": 0.8,
+        "RB": 0.8,
+        "TE": 0.8,
+        "WR": 0.8
+      },
+      "coverage": {
+        "FB": 0.8595,
+        "QB": 0.8575,
+        "RB": 0.8865,
+        "TE": 0.8884,
+        "WR": 0.9068
+      },
+      "n_by_position": {
+        "FB": 299,
+        "QB": 1116,
+        "RB": 2018,
+        "TE": 1801,
+        "WR": 3164
+      },
+      "slack_rows": {
+        "QB": 86,
+        "RB": 204,
+        "TE": 187,
+        "WR": 375
+      },
+      "slack_rows_at_nominal": {
+        "QB": 64,
+        "RB": 174,
+        "TE": 159,
+        "WR": 337
+      },
+      "unconstrained": [
+        "FB"
+      ],
+      "misses": [],
+      "misses_at_nominal_floor": [],
+      "pass": true,
+      "pooled_coverage": 0.8897,
+      "pooled_floor": 0.7928,
+      "pooled_floor_detail": {
+        "n": 8398,
+        "nominal": 0.8,
+        "floor": 0.7928,
+        "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+        "target_false_reject_rate": 0.05,
+        "covered_rows_required": 6658,
+        "covered_rows_required_at_nominal_floor": 6719,
+        "relaxation_rows": 61,
+        "relaxation_pp": 0.719,
+        "normal_approx_floor": 0.7928,
+        "false_reject_rate": 0.0488,
+        "false_reject_rate_at_nominal_floor": 0.5,
+        "detectable_shortfall": 0.7885,
+        "is_thin": true,
+        "approximation_error": -0.0012,
+        "coverage": 0.8897,
+        "covered_rows": 7472,
+        "slack_rows": 814,
+        "slack_rows_at_nominal_floor": 753,
+        "met": true
+      },
+      "pooled_backstop": {
+        "pooled_n": 8398,
+        "pooled_floor": 0.7928,
+        "loosest_group_floor": 0.7882,
+        "tightest_group_floor": 0.7805,
+        "verdict": "BACKSTOP_HOLDS",
+        "note": "The pooled floor runs the IDENTICAL rule over a larger n, so it sits closer to nominal than any single group's floor. A band resting at each group's own floor therefore fails the pooled check \u2014 that two-tier structure, not a hand-set minimum, is the substantive backstop."
+      },
+      "family_false_reject": {
+        "n_floors": 4,
+        "per_group_target": 0.05,
+        "family_false_reject_rate": 0.1806,
+        "family_false_reject_rate_at_nominal_floor": 0.9353,
+        "note": "Independence across groups is ASSUMED here and is optimistic \u2014 rows in different positions share draft classes/seasons, so the true family rate is somewhat lower than the product. Reported as the conservative reading. \u26d4 NOT corrected for: a Bonferroni split would LOOSEN every individual floor, which is the adjustment this story must least be able to make."
+      },
+      "interval_score": 160.888,
+      "newest_cohort": {
+        "cohort": 2025,
+        "n": 701,
+        "pooled_coverage": 0.903,
+        "coverage": {
+          "FB": 0.7692,
+          "QB": 0.913,
+          "RB": 0.8834,
+          "TE": 0.9272,
+          "WR": 0.9043
+        },
+        "above_p90": 0.0742,
+        "note": "LEADING INDICATOR ONLY \u2014 one target season is far too thin per position to gate on"
+      }
+    },
+    {
+      "population": "kdst",
+      "config": "SHIPPED K/DST base band (q0.10/q0.90 ratio quantiles, cluster_z=1.0)",
+      "form": "empirical_ratio_band",
+      "cohorts": [
+        2016,
+        2017,
+        2018,
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ],
+      "n": 795,
+      "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+      "target_false_reject_rate": 0.05,
+      "floors": {
+        "DST": 0.7625,
+        "K": 0.7684
+      },
+      "floor_detail": {
+        "DST": {
+          "n": 320,
+          "nominal": 0.8,
+          "floor": 0.7625,
+          "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+          "target_false_reject_rate": 0.05,
+          "covered_rows_required": 244,
+          "covered_rows_required_at_nominal_floor": 256,
+          "relaxation_rows": 12,
+          "relaxation_pp": 3.75,
+          "normal_approx_floor": 0.7632,
+          "false_reject_rate": 0.0426,
+          "false_reject_rate_at_nominal_floor": 0.4666,
+          "detectable_shortfall": 0.74,
+          "is_thin": true,
+          "approximation_error": 0.0062,
+          "coverage": 0.8969,
+          "covered_rows": 287,
+          "slack_rows": 43,
+          "slack_rows_at_nominal_floor": 31,
+          "met": true
+        },
+        "K": {
+          "n": 475,
+          "nominal": 0.8,
+          "floor": 0.7684,
+          "floor_rule": "nf_d22_exact_binomial_power_floor_v1",
+          "target_false_reject_rate": 0.05,
+          "covered_rows_required": 365,
+          "covered_rows_required_at_nominal_floor": 380,
+          "relaxation_rows": 15,
+          "relaxation_pp": 3.158,
+          "normal_approx_floor": 0.7698,
+          "false_reject_rate": 0.0396,
+          "false_reject_rate_at_nominal_floor": 0.4726,
+          "detectable_shortfall": 0.7505,
+          "is_thin": true,
+          "approximation_error": 0.0,
+          "coverage": 0.8295,
+          "covered_rows": 394,
+          "slack_rows": 29,
+          "slack_rows_at_nominal_floor": 14,
+          "met": true
+        }
+      },
+      "floors_at_nominal": {
+        "DST": 0.8,
+        "K": 0.8
+      },
+      "family_false_reject": {
+        "n_floors": 2,
+        "per_group_target": 0.05,
+        "family_false_reject_rate": 0.0805,
+        "family_false_reject_rate_at_nominal_floor": 0.7187,
+        "note": "Independence across groups is ASSUMED here and is optimistic \u2014 rows in different positions share draft classes/seasons, so the true family rate is somewhat lower than the product. Reported as the conservative reading. \u26d4 NOT corrected for: a Bonferroni split would LOOSEN every individual floor, which is the adjustment this story must least be able to make."
+      },
+      "coverage": {
+        "DST": 0.8969,
+        "K": 0.8295
+      },
+      "n_by_position": {
+        "DST": 320,
+        "K": 475
+      },
+      "slack_rows": {
+        "DST": 43,
+        "K": 29
+      },
+      "slack_rows_at_nominal": {
+        "DST": 31,
+        "K": 14
+      },
+      "unconstrained": [],
+      "misses": [],
+      "pass": true,
+      "pooled_coverage": 0.8566,
+      "interval_score": 129.562,
+      "below_p10": 0.083,
+      "above_p90": 0.0604,
+      "beats_degenerates": true,
+      "breach_response": "WIDEN the base band (kdst_projection.RatioBand.widen / BAND_CLUSTER_Z) and re-report \u2014 this band is REPORTED, not selected, so there is no bake-off to re-run. Do NOT move the floor.",
+      "newest_cohort": {
+        "cohort": 2025,
+        "n": 76,
+        "pooled_coverage": 0.8684,
+        "coverage": {
+          "DST": 0.9375,
+          "K": 0.8182
+        },
+        "above_p90": 0.0658,
+        "note": "LEADING INDICATOR ONLY \u2014 one season is ~32 DSTs + ~45 kickers, far too thin to gate a per-position floor"
+      }
+    }
+  ],
+  "generated_at": "2026-08-23T06:21:32.021777+00:00"
+}
