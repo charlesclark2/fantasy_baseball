@@ -207,3 +207,58 @@ against itself, a refusal on a 1e-9 veteran move, and a reported-but-not-refused
 ⚠️ **COMPOSITION.** NF-INJ-NEWS-1 adoption and NF-INJ3b-M's cap change are also pending. **The first
 publish carrying any two of these needs ONE final combined placement + interval read** — a per-story
 read cannot attribute a board that moved for two reasons.
+
+---
+
+## 7. ⚠️ FOUND WHILE VALIDATING THIS STORY — the board build is NOT reproducible run-to-run
+
+Not this story's defect, and it does not change its verdict; recorded because it invalidated the
+ship gate this story originally shipped, and the next person to diff two boards will hit it.
+
+**Measured on 2026, by building the SAME COMMIT five times and diffing all ten pairings:**
+
+| control pairing | material diffs (rtol/atol 1e-9) | veterans moved |
+|---|---|---|
+| 10 pairings of 5 same-commit builds | **0 – 21** (median 19) | **0** |
+| with `PYTHONHASHSEED=0` | 15 | 0 |
+| single-threaded BLAS/OMP | 4 | 0 |
+
+So it is **neither** string-hash iteration order **nor** BLAS thread reassociation. Bitwise
+differences run ~1,100–1,900 cells per pairing.
+
+⭐ **It is tightly confined, and that is what makes it safe to defer:** every observed difference is
+in `fp_ppr_sd` / `fp_ppr_p10` / `fp_ppr_p90` — the **rookie band** — at the rounding granularity
+those fields are emitted at (0.1 and 0.01). It has **never** been observed to move a veteran row, a
+`proj_games`, or a point projection. The suspected home is the rookie band's cross-conformal
+calibration (`_ROOKIE_BAND_CQR_*`), whose fold assignment the code documents as deterministic — so
+the source is somewhere else in that fit and is not yet located.
+
+### What it invalidated, and the correction
+
+This story's first ship gate compared the two boards **bitwise** (`rtol=0, atol=0`) and predicted an
+**exactly empty** diff. That criterion is unreachable on a build that is not reproducible, and on
+the operator's real A/B it produced a **`passes: false` on 308 "moved" veterans that were all
+1-ULP** — a confident-looking refusal with nothing behind it. Corrected:
+
+* the gate is now **material** (`rtol = atol = 1e-9`) and scoped to **veteran** rows. The tolerance
+  is bracketed by two measured quantities rather than tuned: the ULP floor (~1e-15 relative) is nine
+  orders below it, and the smallest move a mis-fired availability cap could make (a blend toward a
+  4-game status level, ~50%) is eight orders above it;
+* the **bitwise count is still reported**, as a reproducibility signal rather than a verdict — a
+  figure that is only noise must not be able to fail a ship gate, and one that is deleted cannot
+  warn anyone when it changes character;
+* the reading tells the next reader to run the same-commit control **before** concluding anything
+  from a moved rookie band.
+
+**Re-read of the operator's A/B under the corrected gate: `veteran_players_moved: 0`,
+`rookie_players_moved: 12` (band columns only), `passes: true`.** Combined with the in-process
+function-level A/B — `project_rookies` with vs without `roster_status`, same curve, **0 differing
+rows on every band column** — the veteran byte-identity claim holds and the band movement is the
+build's own noise, not this change.
+
+⚠️ **Residual, stated rather than smoothed over:** the treatment pairings (22–26) sit slightly above
+the control's observed range (0–21), and 6 moved cells appear in the treatment pool that the 10
+control pairings did not produce. A 5-replicate control cannot exclude a small interaction. What
+*can* be excluded is the mechanism: the function-level A/B is exact, deterministic and in-process.
+⇒ **PM follow-up: locate the rookie-band non-determinism as its own item** — until it is fixed, no
+board comparison can be made bitwise, and a future story's byte-identity claim will hit this again.
