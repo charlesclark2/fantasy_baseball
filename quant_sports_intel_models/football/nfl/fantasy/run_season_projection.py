@@ -64,6 +64,13 @@ from quant_sports_intel_models.football.nfl.fantasy import win_total_source  # n
 from quant_sports_intel_models.football.nfl.fantasy import xfp_source  # noqa: E402
 
 log = logging.getLogger("nfl.fantasy.fastpath")
+REASON_UNMATCHED = "UNMATCHED_ON_BOARD"       # mirrors reported_absence_overrides
+REASON_TAG_NO_DISCOUNT = "FORMAL_TAG_NO_DISCOUNT"  # mirrors reported_absence_overrides
+
+# NF-INJ-NEWS-1 — the operator-curated reported-absence overrides (loader + provenance).
+from quant_sports_intel_models.football.nfl.fantasy import (  # noqa: E402
+    reported_absence_overrides as _RAO,
+)
 
 MARTS_SCHEMA = "main_nfl_marts"
 STAGING_SCHEMA = "main_nfl_staging"
@@ -184,6 +191,11 @@ OUTPUT_COLS = [
     "veteran_level_status", "veteran_level_form", "veteran_level_params", "veteran_level_window",
     "veteran_level_source_model", "veteran_level_decision_story",
     "veteran_level_statistically_selected", "level_model_version",
+    # ── NF-INJ-NEWS-1: the REPORTED-ABSENCE provenance, on the rows an operator judgment actually
+    # moved (NaN everywhere else → the exporter omits the key entirely, so an un-overridden player
+    # is byte-identical to the pre-story board). Stamped from what was APPLIED, never from the
+    # override file, so the payload cannot claim a cap that the disjointness rule refused.
+    *_SP.REPORTED_ABSENCE_COLS,
 ]
 
 # ── The per-player base-season raw line. Realized season totals ÷ played games → per-game counting
@@ -873,6 +885,117 @@ def fit_veteran_band_from_panel(panel: pd.DataFrame, projection_season: int):
     return model
 
 
+def _warn_formal_tag_without_discount(proj: pd.DataFrame) -> int:
+    """PM ruling 2b — name every row that carries a formal IR/PUP/NFI/SUS tag and received NO formal
+    availability discount. Returns the count.
+
+    ⭐ THIS IS THE LIVE DETECTOR FOR THE NF-INJ3c POPULATION, not a check on this story's overrides.
+    The formal discount lives entirely inside `project_veterans`; `project_rookies` calls it never.
+    So a ROOKIE placed on IR is projected as though healthy, by both paths, and until this line
+    existed nothing said so. The 53-man cutdown (2026-08-30) puts a wave of exactly those rows on
+    the board.
+
+    ⚠️ IT IS A WARNING, NOT A GATE. The rookie-path fix is NF-INJ3c's story, not this one's — this
+    line makes the population countable so that story can be sized and so an operator publishing
+    before it lands knows what is on the board.
+
+    ⚠️ AND IT NEEDS `proj_status` ON BOTH HALVES OF THE FRAME TO SEE ANYTHING. The rookie half does
+    not carry it natively (there is no forward-roster-status join in the rookie path), so
+    `build_projection` attaches it for DETECTION ONLY — see the join there. Without that attach this
+    detector would be structurally blind to precisely the population it exists for, which is the
+    vacuous-guard shape this repo keeps paying for.
+    """
+    if "proj_status" not in proj.columns:
+        # ⚠️ Never silent. An unevaluable check is not a passing one (NF1.7 (a)).
+        log.warning("[ALERT] NF-INJ-NEWS-1: cannot evaluate the formal-tag-without-discount "
+                    "detector — the frame carries no proj_status column.")
+        return -1
+    tagged = proj["proj_status"].astype("string").map(_SP._INJURY_STATUS_GAMES_CAP).notna()
+    # ⚠️ `== True` rather than `.fillna(False).astype(bool)`: the column is object-dtype after the
+    # concat (the rookie half never sets it), and `fillna` on an object column is a deprecated
+    # downcast. This form is NaN-safe and reads a missing flag as "no formal discount", which is the
+    # truthful conservative direction.
+    applied = (proj[_SP.FORMAL_APPLIED_COL] == True  # noqa: E712 — NaN-safe on an object column
+               if _SP.FORMAL_APPLIED_COL in proj.columns
+               else pd.Series(False, index=proj.index))
+    gap = proj[tagged & ~applied]
+    if gap.empty:
+        log.info("NF-INJ-NEWS-1: every formally-tagged row also received a formal discount.")
+        return 0
+    rookies = int(pd.to_numeric(gap.get("is_rookie"), errors="coerce").fillna(0).astype(bool).sum())
+    log.warning("[ALERT] NF-INJ-NEWS-1/NF-INJ3c: %d row(s) carry a formal IR/PUP/NFI/SUS tag and "
+                "received NO formal availability discount (%d rookie) — they are projected as "
+                "though healthy by BOTH paths. A reported-absence override still applies to them "
+                "(PM ruling 2b); the underlying gap is NF-INJ3c.", len(gap), rookies)
+    for _, r in gap.head(25).iterrows():
+        log.warning("    %s [%s] %s %s · status=%s · proj_games=%.2f",
+                    r.get("player_name"), r.get("player_id"), r.get("position"),
+                    "ROOKIE" if bool(r.get("is_rookie")) else "veteran",
+                    r.get("proj_status"), float(r.get("proj_games") or 0.0))
+    return len(gap)
+
+
+def _log_reported_absence_decisions(decisions: list) -> None:
+    """NF-INJ-NEWS-1 — the second half of the build log: what each override DID at the frame.
+
+    `emit_load_log` reports what the FILE contained; this reports what the BOARD did with it, and
+    the two are genuinely different facts. A row can load perfectly and still not move a number —
+    because the player has since acquired a formal IR/PUP/NFI/SUS tag (the formal path wins), or
+    because its id matches no board row, or because an earlier availability step had already cut
+    him harder. Every one of those is logged at WARNING, because each is something an operator
+    needs to see: an override that quietly does nothing is indistinguishable from one that works.
+    """
+    if not decisions:
+        return
+    # ⭐ RECONCILE THE TWO HALVES FIRST, and this is not cosmetic. The veteran and rookie paths are
+    # each handed the WHOLE override list and each reports on all of it, so a rookie's override is
+    # `UNMATCHED_ON_BOARD` as far as the veteran frame is concerned and vice versa. Logged raw, every
+    # single override would emit a spurious `[ALERT] NOT applied` line beside its own `APPLY` line —
+    # and an alert that fires on every healthy row is the failure mode that gets a monitor ignored,
+    # which this repo has now paid for several times. A player is UNMATCHED only when NEITHER
+    # population matched him, which is the honest reading: the board is their union.
+    best: dict = {}
+    for d in decisions:
+        prev = best.get(d["player_id"])
+        if prev is None:
+            best[d["player_id"]] = d
+        elif d.get("applied"):
+            best[d["player_id"]] = d
+        elif not prev.get("applied") and prev.get("reason") == REASON_UNMATCHED:
+            # A real refusal (a formal tag) outranks "not in this half of the board".
+            best[d["player_id"]] = d
+    decisions = list(best.values())
+    applied = [d for d in decisions if d.get("applied")]
+    log.info("NF-INJ-NEWS-1: reported-absence caps at the board — %d applied, %d ignored",
+             len(applied), len(decisions) - len(applied))
+    for d in applied:
+        if d.get("inert"):
+            # Not a failure — an earlier availability step (the NF-D11 return prior, say) had
+            # already cut this player at or below the override's ceiling. Reported so a cap that
+            # changes nothing is VISIBLE rather than looking like a working discount.
+            log.warning("  INERT  %s [%s] already at %.1f games, ceiling %.0f — no change",
+                        d.get("player_name"), d["player_id"], d.get("games_before", float("nan")),
+                        d.get("games_cap", float("nan")))
+        else:
+            # PM ruling 1 — log the computed EFFECT for every applied row. The ceiling rule made
+            # "did this row move, and by how much?" a live question (it was often zero); the rate
+            # rule always moves, so the number is now the thing worth seeing rather than the fact.
+            log.info("  APPLY  %s [%s] %.2f -> %.2f games (effect -%.2f) %s",
+                     d.get("player_name"), d["player_id"],
+                     d.get("games_before", float("nan")), d.get("games_after", float("nan")),
+                     d.get("effect_games") if d.get("effect_games") is not None else float("nan"),
+                     d.get("detail", ""))
+            if d.get("tag_without_discount"):
+                # Ruling 2b: the override STANDS here — but the reader should know the row also
+                # carries a formal tag that bought it nothing.
+                log.warning("         ^ this player carries a formal tag that applied NO discount "
+                            "(%s) — the override stands per PM ruling 2b", REASON_TAG_NO_DISCOUNT)
+    for d in decisions:
+        if not d.get("applied"):
+            log.warning("[ALERT] NF-INJ-NEWS-1: override NOT applied — %s [%s] · %s: %s",
+                        d.get("player_name"), d["player_id"], d.get("reason"), d.get("detail"))
+
+
 def build_veteran_projection(con, base_season: int, projection_season: int, schema: str,
                              usage_role_blend: float | None = None,
                              mover_opportunity_blend: float | None = None,
@@ -882,7 +1005,10 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
                              rescue_absent: bool = True,
                              absence_prior_family: str | None = None,
                              absence_prior_blend: float | None = None,
-                             band_model=None, level_recal: tuple | None = None) -> pd.DataFrame:
+                             band_model=None, level_recal: tuple | None = None,
+                             reported_absence_rows=None,
+                             reported_absence_log=None,
+                             injury_covariates: pd.DataFrame | None = None) -> pd.DataFrame:
     """The VETERAN half of the board, as a WIDE frame (every base-season input column retained).
 
     ⭐ Factored out of `build_projection` by NF1.9 because the veteran interval's band has to be FITTED
@@ -940,8 +1066,16 @@ def build_veteran_projection(con, base_season: int, projection_season: int, sche
     if a_blend > 0 and "seasons_missed" in base.columns and (base["seasons_missed"] >= 1).any():
         kw["absence_prior"] = fit_absence_prior_for(
             con, base_season, family=absence_prior_family or _SP._ABSENCE_PRIOR_FAMILY, schema=schema)
+    # NF-INJ-NEWS-1: the operator-curated reported-absence cap. ⭐ PASSED THROUGH, NEVER LOADED
+    # HERE — this function also assembles the HISTORICAL walk-forward band panel
+    # (`build_veteran_panel_season`, which calls it with none of these kwargs), and a 2026 operator
+    # judgment applied to a 2019 fold would be a human editing the past. Only `build_projection`
+    # supplies them, and `load_overrides` re-checks the declared season on top of that.
     return project_veterans(base, priors, projection_season, band_model=band_model,
-                            level_recal=level_recal, **kw)
+                            level_recal=level_recal,
+                            reported_absence_rows=reported_absence_rows,
+                            reported_absence_log=reported_absence_log,
+                            injury_covariates=injury_covariates, **kw)
 
 
 def fit_serving_level(panel: pd.DataFrame | None, projection_season: int) -> tuple[str, dict]:
@@ -987,7 +1121,8 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
                      absence_prior_blend: float | None = None,
                      veteran_band: bool | None = None,
                      band_panel: pd.DataFrame | None = None,
-                     veteran_postprocess=None) -> pd.DataFrame:
+                     veteran_postprocess=None,
+                     injury_covariates: pd.DataFrame | None = None) -> pd.DataFrame:
     """Build the shipped season board. `veteran_postprocess(vets_wide, band_model) -> vets_wide` is
     an optional hook applied to the VETERAN half right after it is assembled and before it is joined
     to the rookie leg.
@@ -1018,13 +1153,23 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     if _LEVEL_POLICY.serving_form() and panel is None:
         panel = build_veteran_band_panel(con, projection_season, schema)
     level_form, level_params = fit_serving_level(panel, projection_season)
+    # ── NF-INJ-NEWS-1: the REPORTED-ABSENCE overrides — an OPERATOR JUDGMENT with provenance, not a
+    #    model (see `reported_absence_overrides`). Loaded HERE, on the live-board path only, and
+    #    gated on the file's own declared season so a historical fold can never receive one.
+    #    ⭐ EVERY row of the file is logged — applied AND ignored — because a curated file whose
+    #    rows silently do nothing looks exactly like one that works.
+    _ra = _RAO.load_overrides(as_of=None, season=int(projection_season))
+    _RAO.emit_load_log(_ra, log)
+    _ra_log: list = []
     vets = build_veteran_projection(
         con, base_season, projection_season, schema, usage_role_blend=usage_role_blend,
         mover_opportunity_blend=mover_opportunity_blend, env_tilt_blend=env_tilt_blend,
         injury_override_blend=injury_override_blend, xfp_td_blend=xfp_td_blend,
         rescue_absent=rescue_absent, absence_prior_family=absence_prior_family,
         absence_prior_blend=absence_prior_blend, band_model=band_model,
-        level_recal=((level_form, level_params) if (level_form and level_params) else None))
+        level_recal=((level_form, level_params) if (level_form and level_params) else None),
+        reported_absence_rows=_ra.rows, reported_absence_log=_ra_log,
+        injury_covariates=injury_covariates)
     if veteran_postprocess is not None:
         vets = veteran_postprocess(vets, band_model)
 
@@ -1066,9 +1211,41 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
         band_hist=_rookie_full,
         recal_hist=_rookie_full if _recal_lambda else None,
         recal_lambda=_recal_lambda)
-    rks = project_rookies(incoming, curve, projection_season) if not incoming.empty else pd.DataFrame()
+    # NF-INJ-NEWS-1 — the ROOKIE half of the reported-absence cap. The canonical first row
+    # (Tyson) is a rookie, so passing the rows here is what makes the mechanism able to move
+    # the population it was written for; the same `_ra_log` sink collects both halves'
+    # decisions so the build log reports one list rather than two.
+    rks = (project_rookies(incoming, curve, projection_season,
+                           reported_absence_rows=_ra.rows, reported_absence_log=_ra_log)
+           if not incoming.empty else pd.DataFrame())
+
+    # ⚠️ LOGGED AFTER BOTH POPULATIONS, never after the veterans alone: the two halves each
+    # report on the FULL override list, so a rookie override looks UNMATCHED to the veteran
+    # half and vice versa. `_log_reported_absence_decisions` reconciles them.
+    _log_reported_absence_decisions(_ra_log)
+
+    # ── PM ruling 2b: attach the forward roster status to the ROOKIE half, FOR DETECTION ONLY.
+    #    ⛔ THIS APPLIES NO DISCOUNT AND IS NOT THE NF-INJ3c FIX. `project_rookies` still runs no
+    #    formal availability cap — that is NF-INJ3c's story. What this buys is that
+    #    `_warn_formal_tag_without_discount` can SEE a rookie on IR at all: the rookie frame carries
+    #    no `proj_status` natively, so without this the detector would be structurally blind to
+    #    exactly the population it exists for, which is the vacuous-guard shape (NF1.7 (a)).
+    #    ⭐ NORMALISED ON BOTH ENDS (NF-C9). The sibling join a few lines above in
+    #    `build_veteran_projection` does NOT normalise — that is the known open defect NF-C9 carded
+    #    and NF-C9b fixes at the ingest; this one does not inherit it.
+    if not rks.empty:
+        _rk_status = load_forward_roster_status(con, projection_season)
+        if not _rk_status.empty:
+            _n = _rk_status.assign(
+                player_id=_rk_status["player_id"].map(_RAO.normalize_player_id))
+            rks = rks.assign(
+                player_id=rks["player_id"].map(_RAO.normalize_player_id)
+            ).merge(_n, on="player_id", how="left", suffixes=("", "_rk"))
 
     proj = pd.concat([vets, rks], ignore_index=True, sort=False)
+    # PM ruling 2b — the board-wide NF-INJ3c detector. Runs on EVERY build, not only when an
+    # override exists: the population it counts has nothing to do with this story's overrides.
+    _warn_formal_tag_without_discount(proj)
     proj["sport"] = "nfl"
     proj["base_season"] = int(base_season)
     proj["model_version"] = MODEL_VERSION
@@ -1487,6 +1664,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--no-rescue-absent", action="store_true",
                     help="NF-D11 escape hatch: rebuild with the MVP-1 universe rule (delete every "
                          "player who missed the whole base season). Diagnostic only.")
+    ap.add_argument("--injury-covariates", default=None,
+                    help="NF-INJ3b-M: parquet of per-player covariates the certified injury-games "
+                         "hurdle needs (onset_carryover, weeks_since_last_game, log1p_prior_fp, "
+                         "prior_games, is_qb). The board build does NOT produce them; without it a "
+                         "flipped-on injury_games_policy REFUSES rather than silently serving the "
+                         "incumbent under the fitted arm's stamp.")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
 
@@ -1525,6 +1708,14 @@ def main(argv: list[str] | None = None) -> int:
             seasons = sorted(set(range(args.backtest_from, primary_season + 1)) | {primary_season})
         log.info("emitting projection seasons: %s", seasons)
 
+        # NF-INJ3b-M: the injury-hurdle covariate feed, applied ONLY to the forward season (the
+        # covariates are derived per projection season; a backtest season would need its own).
+        inj_cov = (pd.read_parquet(args.injury_covariates)
+                   if args.injury_covariates else None)
+        if inj_cov is not None:
+            log.info("NF-INJ3b-M: injury covariate feed loaded — %d rows, cols %s",
+                     len(inj_cov), sorted(c for c in inj_cov.columns if c != "player_id"))
+
         primary_proj = primary_cov = None
         face_validity: dict | None = None
         adp_audit: dict | None = None
@@ -1532,7 +1723,8 @@ def main(argv: list[str] | None = None) -> int:
         for y in seasons:
             base_y = y - 1
             proj = build_projection(con, base_y, y, args.schema,
-                                    rescue_absent=not args.no_rescue_absent)
+                                    rescue_absent=not args.no_rescue_absent,
+                                    injury_covariates=(inj_cov if y == primary_season else None))
             log.info("  %d (base %d): %d players (%d vets, %d rookies)", y, base_y, len(proj),
                      int((~proj["is_rookie"]).sum()), int(proj["is_rookie"].sum()))
 

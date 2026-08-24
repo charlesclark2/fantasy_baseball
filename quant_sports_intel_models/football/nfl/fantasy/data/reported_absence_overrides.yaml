@@ -1,0 +1,135 @@
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-INJ-NEWS-1 — REPORTED-ABSENCE GAMES CAPS (operator-curated)
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+#
+# ⚖️ WHAT A ROW IN THIS FILE IS: one human's reading of one beat report, written down with a link.
+#    It is NOT a model output, it is NOT fitted, it has NEVER been backtested, and NO surface may
+#    present it as a projection improvement. The mechanism, the four hard rules it obeys and the
+#    reason it exists are documented in `../reported_absence_overrides.py` — read that before
+#    editing this file.
+#
+# WHY IT EXISTS: the availability discount has exactly one entry point, a FORMAL roster transaction
+#    (IR/PUP/NFI/SUS). A player credibly reported to miss two months but carrying no formal tag is
+#    projected as if healthy — Jordyn Tyson sat at WR27 with 13.6 projected games while reporting
+#    had him out ~two months. See `ablation_results/nf_c8_injury_designation_gap.md`.
+#
+# ⏳ THIS IS AN INTERIM. The honest replacement is an empirical designation/news → games-missed
+#    duration model (a §0.5 story with a real bake-off, parent card wufGcjB8), scheduled to replace
+#    this mechanism after draft season. `best_alpha = 0`.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# HOW TO EDIT
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# Add a row, open a PR, get it reviewed. Git IS the provenance store: who added a row, when, and on
+# what evidence is `git log` — reviewable in the PR and impossible to change without a trace. That
+# is the entire reason this lives in the repo rather than in a database.
+#
+# `season` below is a LEAKAGE GATE, not a label. The same assembly path builds the live board AND
+# the historical walk-forward band panel, so a judgment written in 2026 must never reach a 2019
+# fold — the loader yields NO rows when this number does not match the season being built. It also
+# means the file self-expires when the board rolls forward.
+#
+# EVERY ROW FIELD IS REQUIRED except `note`:
+#
+#   player_id             the NORMALISED gsis player id, exactly as the board carries it
+#                         (`00-00xxxxx`). ⚠️ VERIFY IT BY NAME after adding a row — read the build
+#                         log and confirm the APPLY line names the player you meant. An id that
+#                         matches nothing is reported as UNMATCHED_ON_BOARD rather than silently
+#                         doing nothing, because a wrong id and a genuine absence look identical
+#                         on every surface (NF-C9: 275 of 2,501 feed ids carried a leading space,
+#                         and Josh Jacobs and DK Metcalf were silently undisclosed on a live board).
+#   player_name           the name, carried so the join is verifiable by something other than the
+#                         key under test. It is NOT the join key.
+#   expected_games_missed integer 2-17. The number of games the reporting says he is expected to
+#                         miss. ⚖️ PM RULING 1 (2026-08-23) — it is applied as a REMAINING-SEASON
+#                         RATE, not as a ceiling and not as a subtraction:
+#
+#                             new_games = min(current, (17 - n) x current / 17)
+#
+#                         i.e. the model's projected games is a season-long availability RATE, the
+#                         report removes n games from the schedulable season, and the rate then
+#                         applies to the 17-n that remain. The EFFECT is `n x current / 17` —
+#                         strictly smaller than subtracting n outright, so a report is never
+#                         double-counted in full against durability the model has already priced.
+#                         Worked: a 5-game report on a 13.61-game player moves him to 9.61
+#                         (effect 4.00); a 2-game report on an 11.49-game player moves him to 10.14
+#                         (effect 1.35).
+#                         It can only ever LOWER a player's games, never raise them.
+#                         ⛔ The original spec used a CEILING (`min(current, 17 - n)`). It was
+#                         MEASURED INERT on 5 of 6 real candidates — the model already projects
+#                         starters at 11-16 games, so a ceiling of "17 minus a short absence" sits
+#                         ABOVE the current projection and does nothing. The PM replaced it after
+#                         seeing that measurement (ablation_results/nf_inj_news_1_board_delta.md).
+#                         Minimum 2 — see the qualifying policy below.
+#   source_url            REQUIRED, http(s). A cap with no citation is indistinguishable from a
+#                         guess, and "a human read a report" is the entire claim this file makes.
+#   note                  optional free text — what the report actually said.
+#   entered_by            who made the judgment.
+#   entered_at            ISO date it was entered.
+#   review_by             ISO date after which this row STOPS being applied and is reported as
+#                         EXPIRED in the build log. ⚠️ Not optional and not decorative: a
+#                         hand-entered absence estimate goes wrong within weeks, always in the
+#                         optimistic direction (the player comes back), and the failure mode this
+#                         field prevents is a stale judgment quietly suppressing a healthy player
+#                         for the rest of the season. Set it to when you next expect news.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+# ⚖️ WHAT QUALIFIES A ROW — PM RULING 3 (2026-08-23). BOTH conditions must hold.
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+#
+#   (i)  THE SOURCE EXPLICITLY REPORTS MISSING REGULAR-SEASON TIME — a named number of games or
+#        weeks, or a dated return ("out until October"). ⛔ NEVER "day-to-day", NEVER
+#        "week-to-week", NEVER camp-or-preseason-only language ("expected to miss the preseason" is
+#        not a regular-season absence, and "the team is hopeful for Week 1" is not a report that he
+#        misses one).
+#
+#        ⭐ THIS ONE IS YOURS, NOT THE CODE'S. No scan can read a source and decide what it means:
+#        a keyword check over source prose would reject an honest citation that quotes a coach
+#        saying "week-to-week" while reporting a dated return. Judging it is what adding a row IS,
+#        and what the PR review of a row is for.
+#
+#   (ii) `expected_games_missed >= 2`. ENFORCED — the loader rejects a 1-game row and names this
+#        policy. Rationale: under the rate rule a 1-game report moves a 14-game starter by 0.82
+#        games, which is inside the width of the band the board already publishes around him. A
+#        manual judgment row must move the board by more than its own noise to be worth its
+#        maintenance and its chip.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+#
+# WHAT WILL BE IGNORED (all of it reported loudly in the build log, never silently dropped):
+#   • a player to whom a FORMAL availability discount WAS APPLIED — the formal path wins and this
+#     row is not applied. No double discount.
+#     ⚖️ PM RULING 2b (2026-08-23): the test is whether a formal discount was APPLIED, not whether
+#     a formal TAG exists. A player who carries an IR/PUP/NFI/SUS tag but received NO discount from
+#     it — today, every ROOKIE, because the formal path runs only on the veteran half — KEEPS his
+#     override, and the build log names him. Undiscounted AND un-overridable was the worst state
+#     the old rule could reach, and the 53-man cutdown puts a wave of exactly those rows on the
+#     board. (The underlying rookie-path gap is NF-INJ3c's, not this file's.)
+#   • an expired row (`review_by` in the past).
+#   • two rows for one player — the whole group is ignored rather than one silently chosen.
+#   • a malformed row (missing field, non-integer games, a `source_url` that is not a link).
+#   • an id that matches no board row.
+#
+# ───────────────────────────────────────────────────────────────────────────────────────────────
+
+schema_version: 1
+season: 2026
+
+# ⛔ INTENTIONALLY EMPTY. The mechanism is inert until the operator confirms rows: with no entries
+#    the board is byte-identical to the pre-NF-INJ-NEWS-1 board on every field a reader sees.
+#    The proposed first rows are staged for review in
+#    `data/reported_absence_overrides.proposed.yaml` — a PROPOSAL, not a config. Nothing there is
+#    applied by anything; the operator moves the rows they accept into `overrides:` below.
+#
+# Row template (copy, fill, delete the comment markers):
+#
+#   - player_id: "00-0039918"
+#     player_name: "Jordyn Tyson"
+#     expected_games_missed: 5
+#     source_url: "https://example.com/report"
+#     note: "Beat report 2026-08-18: expected to miss roughly two months."
+#     entered_by: "operator"
+#     entered_at: "2026-08-23"
+#     review_by: "2026-09-20"
+
+overrides: []

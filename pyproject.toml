@@ -28,6 +28,12 @@ dependencies = [
     "optuna>=4.8.0",
     "pyarrow>=4.0.0",
     "duckdb>=1.1.0",
+    # NF-INJ-NEWS-1: the operator-curated reported-absence overrides file is YAML, read on
+    # the BOARD BUILD path (which runs on the box as well as the laptop). PyYAML was already
+    # present transitively (dagster / dbt / snowflake-connector all pull it) and resolves to
+    # the same 6.x — but a serving-path read must not rest on a transitive dep that a future
+    # dependency prune could remove without a failing test, so it is declared here.
+    "pyyaml>=6.0",
     # E11.20 Delta lakehouse — deltalake (delta-rs) is the WRITE path (DuckDB's delta
     # extension is READ-ONLY); pinned EXACT per the spike (1.x API churn: files()→
     # file_uris(), schema().to_pyarrow()→.to_arrow()). polars pinned to the spike-tested

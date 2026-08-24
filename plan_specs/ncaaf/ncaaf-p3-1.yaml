@@ -1,0 +1,143 @@
+# Plan spec — NCAAF-P3.1 (FULL tier: serving keystone, calendar-locked)
+# Authored by PM 2026-08-23. Template: plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ncaaf-p3-1
+  vertical: ncaaf
+  card: https://trello.com/c/y0xpO30Y
+  status: ACCEPTED
+spec:
+  description: >
+    Serving plumbing KEYSTONE for the NCAAF vertical — get P1.4 game
+    predictions + the P1.5 futures board out of the S3 research lakehouse
+    and onto a serving store the app reads, with FastAPI routers on top.
+    Every P3 surface (P3.2/3.3/3.4/3.5/3.6/3.9) gates on this; the opener
+    is 2026-08-29. Source story: ncaaf_story_prompts.md §Phase 3 P3.1
+    (authoritative for tasks; frozen as history for tracking). best_alpha=0;
+    the payload is probabilities + interval params + the market line +
+    honest-frame flags — NEVER a pick, NEVER an edge claim (the CLV null
+    holds and is the recorded posture). NCAAF is FREE (E9.45).
+  acceptanceCriteria:
+    - description: >
+        Serving-write op (box Dagster): reads the P1.4 predictive + P1.5
+        board from the lakehouse, writes NCAAF blobs to DynamoDB (primary)
+        / S3 (fallback), keyed on America/Los_Angeles game-day via
+        betting_ml/utils/game_day.py::current_game_date — never UTC (the
+        INC-22 landmine). Cadence: weekly board refresh + a game-week
+        predictions write. Tiering per the failure contract: the
+        serving-critical write = HALT; narrative/enrichment = WARN.
+        NCAAF keys are OFF the MLB serving lane (separate keys); mirror
+        MLB's write_serving_store structure, don't extend its lane.
+    - description: >
+        FastAPI NCAAF routers in app/backend/ (games/predictions, futures)
+        reading the serving store. Every served field DECLARED on the
+        Pydantic response model (E9.41 silent-drop landmine); response
+        shapes ADDITIVE relative to anything existing (NF-C0). NCAAF routes
+        are public/FREE: the API-Gateway authorizer on the new routes set
+        to NONE (NF3.2). ⚠️ The API Lambda ships ONLY via
+        infrastructure/lambda/deploy.sh — "merged" never means "served";
+        the frontend and box deploy separately from it.
+    - description: >
+        Payload contract: win probability (both sides), margin + total
+        interval params sufficient for the client to draw the distributional
+        curve, the market line beside the model line as TRANSPARENCY, and
+        honest-frame flags (best_alpha=0 stamped). No pick field exists in
+        the schema at all. No "best bets" or edge language anywhere
+        (product-language policy; the P2.3 naming lesson). Copy strings on
+        any served text follow the honest-framing conventions.
+    - description: >
+        SERVED-MODEL FIDELITY: serve exactly the registered production
+        artifacts (the P1.4 mean/dispersion contract and P1.5 board as they
+        exist) — no re-derivation, no week-conditional logic of any kind.
+        ⚠️ Two recorded landmines bind here: (a) the VAL3b cold-start
+        correction is CERTIFIED but DEPLOY-HELD — do NOT attempt to express
+        it (that is NCAAF-VAL3c's contract change, post-opener); (b)
+        game_prediction_snapshot.py:696 aliases season_order_week to CFBD's
+        postseason-restarted raw week — nothing in this story may key on
+        that column (see the alias landmine card).
+    - description: >
+        RUNTIME GATE (🟥 HALT-tier serving write): CI mocks all IO, so
+        CI-green is necessary-not-sufficient. A REAL BOX RUN writing the
+        current-week predictions + futures board to the serving store, and
+        the deployed routers returning them, is the merge-adjacent bar.
+        ⚠️ OPERATOR-RUN steps (the >2-minute rule, plan_spec_process.md):
+        the box serving-write run, the deploy.sh Lambda deploy, and any
+        lakehouse-scale reads are handed to the operator as paste-ready
+        commands with expected runtime, artifact written, and success
+        criteria; the session resumes from the artifacts. ⚠️ DEPENDENCY:
+        the box marts/schedules fire (🚨 card, operator-owned) may not be
+        complete — if the box lacks main_ncaaf_marts, say so and hand the
+        operator the ordered commands rather than working around it.
+    - description: >
+        Guards: absent-vs-null on every payload field (a missing game vs a
+        served-null field are different facts); E2E/integration asserting a
+        real serialized payload round-trips the router with every field
+        intact (the E9.41 proof); RED-prove new guards (mutation landed AND
+        predicate moved). Changelog line (Monday block).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: ncaaf-p3-1
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "P3.1" / "NCAAF" (board Credence Sports, 2026-08-23)'
+    duplicates: []
+    adjacent:
+      - "🚨 NCAAF-on-the-box marts/schedules card (Sprint, trello.com/c/JEbNDPsE) — operator/box prerequisite for the runtime gate; not this session's to fix."
+      - "⏰ Pre-opener operator checklist (Sprint, trello.com/c/TrUc4Zat) — snapshot schedule + P1.2 re-fit are operator steps, independent."
+      - "P3.2–P3.9 surfaces (To Do) — consume this story's API; explicitly OUT of scope here (no frontend surface work)."
+      - "NCAAF-VAL3c + the season_order_week alias card (Backlog) — post-opener contract change; this story must not pre-empt or partially implement it."
+      - "NF-DTB-1/NF-INJ* (NFL) — disjoint repo areas; no collision."
+  triedLedger:
+    files:
+      - "quant_sports_intel_models/football/ncaaf/ncaaf_story_prompts.md §Phase 3 (P3.1 tasks + brand directive)"
+      - "quant_sports_intel_models/football/ncaaf/ablation_results/ncaaf_val3b_serve_parity.json (the served-contract facts: 17-field linear table, no week param)"
+      - "production_model_state ncaaf sections (best_alpha=0 measured; CLV null; honest-framing posture)"
+    recordedNulls:
+      - "VAL1 ALL_BUCKETS_NULL + the pooled CLV null — nothing served may imply an edge; the payload's honest-frame flags are the enforcement, not just copy."
+      - "VAL3b SHIP_CORRECTION/DEPLOY-HELD — not expressible in the served contract; expressly out of scope (NCAAF-VAL3c)."
+  supersedes: []
+  dependsOn:
+    - "Box NCAAF marts + schedules (operator, in flight — the runtime gate waits on it, code does not)"
+  feedsInto:
+    - "P3.2 game predictions surface, P3.3 team stats, P3.9 nav/entitlement — the whole MVP-by-8/29 path"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ncaaf-p3-1-plan
+spec:
+  goalRef: { name: ncaaf-p3-1 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-payload-contract
+        desc: >
+          Define the served payload schema (Pydantic models, every field
+          declared; no pick field) + the serving-store key scheme (LA
+          game-day; NCAAF lane).
+      - id: 2-serving-write-op
+        desc: "Box Dagster op + schedules-ready job (HALT tier), reading P1.4/P1.5 from the lakehouse."
+      - id: 3-routers
+        desc: "FastAPI games/predictions + futures routers; authorizer NONE on new public routes."
+      - id: 4-guards
+        desc: "Absent-vs-null, round-trip field-intact proof, RED-proofs, changelog."
+      - id: 5-runtime-gate
+        desc: >
+          OPERATOR-RUN: hand the box serving-write command + deploy.sh
+          deploy + verification curls as paste-ready commands (runtime,
+          artifact, success criteria each). Resume from results; record the
+          real-run evidence in the closeout.
+      - id: 6-closeout
+        desc: "Verdict + findings into closeout.followUps; session summary."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.

@@ -247,6 +247,53 @@ test.describe("the weekly designation — what it says", () => {
     expectNoPageErrors(errors)
   })
 
+  test("NF-C10: the disclosure stamps the FEED's vintage, never the player's status", async ({
+    page,
+  }) => {
+    // ⭐⭐ THE CONTRADICTION NF-C10 REMOVES, PINNED WHERE IT WAS LIVE. This popover says, in the
+    // paragraph above, that we hold this designation and our projected-games figure DOES NOT take
+    // it into account — and then stamped a line reading "Injury and roster STATUS as of {date}"
+    // directly beneath it. "Status as of" reads as "we know his standing and applied it": the two
+    // sentences contradicted each other, inside one tooltip, on every surface they share.
+    //
+    // ⚠️ PINNED ON THE RENDERED OUTPUT OF **THIS** SURFACE (NF-INJ1-C). The same helper feeds the
+    // availability flag, and `availability-flag.spec.ts` pins it there — but a guard on the sibling
+    // surface is not a pin on this one, and this is the surface where the wording actually clashed.
+    const errors = collectPageErrors(page)
+    const mock = await mockApi(page, {
+      ...withDesignations(),
+      transform: (pathname, body) => {
+        const planted = withDesignations().transform!(pathname, body)
+        const vintage = { input_vintage: { sleeper_status_as_of: "2026-08-19T11:00:00+00:00" } }
+        if (pathname === "/fantasy/nfl/manifest") return { ...planted, freshness: vintage }
+        return planted
+      },
+    })
+    await gotoTable(page, "/fantasy/rankings")
+
+    const row = await rowFor(page, OUT.name)
+    await row.getByRole("button", { name: CHIP }).click()
+    const definition = page.getByRole("dialog")
+    await expect(definition).toBeVisible()
+
+    // Non-vacuity first: the disclosure's own sentence must be present, so this cannot pass on a
+    // popover that failed to open or rendered empty.
+    await expect(definition).toContainText(/does not take this into account/i)
+    await expect(
+      definition,
+      "the disclosure carries no feed vintage — the stamp is planted, so it should render",
+    ).toContainText(/injury\/roster feed as of\s*8\/19/i)
+    await expect(
+      definition,
+      'the RETIRED "Injury and roster status as of" wording is still rendered here — beneath a ' +
+        "sentence saying we do NOT act on this designation, which is the contradiction NF-C10 " +
+        "exists to remove",
+    ).not.toContainText(/injury and roster status as of/i)
+
+    expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
+  })
+
   test("an unreadable value says 'unknown' AND still carries the disclaimer", async ({ page }) => {
     // ⭐ THE BRANCH A READER HAS LEAST TO GO ON. "unknown" with no statement about whether we priced
     // it reads MORE like a model input than a designation does — so the disclaimer has to render

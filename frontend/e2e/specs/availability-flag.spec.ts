@@ -260,37 +260,94 @@ test.describe("the availability flag — what it says", () => {
   })
 })
 
-test.describe("the availability flag — freshness and entitlement", () => {
-  test("the injury-data vintage renders when the payload carries it", async ({ page }) => {
-    // NF-FRESH2 stamped `sleeper_status_as_of` into the payload and NOTHING ever read it back — a
-    // stamp nothing reads is not a freshness guarantee (NF-INJ1). ⚠️ Both shipped fixtures carry
-    // `freshness: null`, so without planting one this assertion would be vacuous in the direction
-    // that matters: it would pass on a build that never renders the line.
-    const mock = await mockApi(page, {
-      ...withGames(),
-      transform: (pathname, body) => {
-        const planted = withGames().transform!(pathname, body)
-        if (pathname === "/fantasy/nfl/manifest") {
-          return {
-            ...planted,
-            freshness: { input_vintage: { sleeper_status_as_of: "2026-08-19T11:00:00+00:00" } },
-          }
-        }
-        return planted
-      },
-    })
-    await gotoTable(page, "/fantasy/rankings")
+// ⭐ NF-C10 — THE RENDERED VINTAGE LINE, PINNED VERBATIM ON EVERY SURFACE IT APPEARS.
+//
+// The wording moved from "Injury and roster STATUS as of {date}" to "Injury/roster FEED as of
+// {date}", because the old line renders directly beneath NF-C9's disclosure that we hold a weekly
+// designation and DO NOT act on it — "status" reads as "we know it and applied it", so the two
+// contradicted each other on both surfaces they share. A vintage stamp describes a FEED, not a
+// player.
+//
+// ⚠️ AND THE PIN IS THE RENDERED STRING, ON EACH SURFACE, NOT THE CONSTANT (NF-INJ1-C's lesson: a
+// constant whose only guard reads a sibling constant is unpinned and LOOKS pinned). It was
+// previously asserted on Rankings alone, so a reword that reached the board and missed Projections,
+// the player page or the NF-C9 disclosure would have gone out green.
+const VINTAGE_LINE = /injury\/roster feed as of\s*8\/19/i
+/** The RETIRED wording. Asserted absent everywhere the new line is asserted present — a partial
+ *  reword leaves the contradiction live on whichever surface it missed, and "the new string is
+ *  here" alone cannot see that. */
+const RETIRED_VINTAGE_LINE = /injury and roster status as of/i
 
-    const row = await rowFor(page, HEAVILY_LIMITED.name)
-    await row.getByRole("button", { name: FLAG }).click()
+/** The manifest/projections payloads with a real `sleeper_status_as_of` planted.
+ *
+ *  ⚠️ Both shipped fixtures carry `freshness: null`, so without planting one every assertion below
+ *  would be vacuous in the direction that matters: green on a build that never renders the line
+ *  at all (NF-FRESH2 stamped this field and NOTHING read it back — NF-INJ1). */
+function withVintage(): MockOptions {
+  return {
+    ...withGames(),
+    transform: (pathname, body) => {
+      const planted = withGames().transform!(pathname, body)
+      const vintage = { input_vintage: { sleeper_status_as_of: "2026-08-19T11:00:00+00:00" } }
+      // BOTH payloads: the tables read the manifest, the player page reads `projections`.
+      if (pathname === "/fantasy/nfl/manifest") return { ...planted, freshness: vintage }
+      if (pathname.startsWith("/fantasy/nfl/projections")) {
+        return { ...(planted as any), freshness: vintage }
+      }
+      return planted
+    },
+  }
+}
+
+test.describe("the availability flag — freshness and entitlement", () => {
+  for (const [surface, path] of [
+    ["Rankings", "/fantasy/rankings"],
+    ["Projections", "/fantasy/projections"],
+  ] as const) {
+    test(`${surface}: the injury-feed vintage renders when the payload carries it`, async ({
+      page,
+    }) => {
+      const mock = await mockApi(page, withVintage())
+      await gotoTable(page, path)
+
+      const row = await rowFor(page, HEAVILY_LIMITED.name)
+      await row.getByRole("button", { name: FLAG }).click()
+      const definition = page.getByRole("dialog")
+      await expect(definition).toBeVisible()
+      await expect(
+        definition,
+        `${surface}: the flag does not name the vintage of the feed it rests on`,
+      ).toContainText(VINTAGE_LINE)
+      await expect(
+        definition,
+        `${surface}: still carries the RETIRED "status" wording, which contradicts the NF-C9 ` +
+          "disclosure rendered beside it",
+      ).not.toContainText(RETIRED_VINTAGE_LINE)
+
+      expectApiFullyMocked(mock)
+    })
+  }
+
+  test("the player page carries the same vintage line the boards carry", async ({ page }) => {
+    // The third surface, and the one a reword is most likely to miss: it reads the vintage off
+    // `projections` rather than the manifest, so it is a genuinely different data path — not a
+    // second rendering of the same one.
+    const errors = collectPageErrors(page)
+    const mock = await mockApi(page, withVintage())
+
+    await page.goto(`/fantasy/player/${HEAVILY_LIMITED.id}`)
+    await expect(page.getByRole("heading", { name: HEAVILY_LIMITED.name })).toBeVisible()
+    await page.getByRole("button", { name: FLAG }).click()
     const definition = page.getByRole("dialog")
     await expect(definition).toBeVisible()
     await expect(
       definition,
-      "the flag does not name the vintage of the feed it rests on",
-    ).toContainText(/injury and roster status as of\s*8\/19/i)
+      "the player page does not name the vintage of the feed the flag rests on",
+    ).toContainText(VINTAGE_LINE)
+    await expect(definition).not.toContainText(RETIRED_VINTAGE_LINE)
 
     expectApiFullyMocked(mock)
+    expectNoPageErrors(errors)
   })
 
   test("a payload with no vintage says nothing rather than inventing 'unknown'", async ({
@@ -308,7 +365,9 @@ test.describe("the availability flag — freshness and entitlement", () => {
     await row.getByRole("button", { name: FLAG }).click()
     const definition = page.getByRole("dialog")
     await expect(definition).toBeVisible()
-    await expect(definition).not.toContainText(/injury and roster status as of/i)
+    await expect(definition).not.toContainText(/injury\/roster feed as of/i)
+    // Both wordings, so this half cannot be satisfied by the reword alone.
+    await expect(definition).not.toContainText(RETIRED_VINTAGE_LINE)
 
     expectApiFullyMocked(mock)
   })

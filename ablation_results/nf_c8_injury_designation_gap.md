@@ -28,8 +28,15 @@ The availability discount has exactly one entry point, and it is narrow by const
 
 So the model reacts to a **roster transaction** (IR / PUP / NFI / suspension) and to nothing else.
 **Questionable, Doubtful and Out apply a discount of exactly zero**, and a press report of an
-expected absence is not a status at all. Tyson will only move once Arizona actually places him on
+expected absence is not a status at all. Tyson will only move once New Orleans actually places him on
 one of those lists.
+
+> **📌 Factual correction (2026-08-23, NF-INJ-NEWS-1).** This sentence originally read *"once
+> **Arizona** actually places him"*. Jordyn Tyson is a **New Orleans** WR — confirmed against
+> the live Sleeper `v1/players/nfl` snapshot (`team = NO`) and against the beat reporting of
+> his August absence. Nothing in this document's argument depends on the team, but a false
+> premise in a doc is what the next reader builds on, so it is corrected here rather than
+> left to be inherited.
 
 This is a **scope limit, working as designed** — the design is leakage-safe and transaction-driven,
 which is defensible. It is also, on the evidence of one live check, **not what a reader assumes we
@@ -65,12 +72,28 @@ duration model would be a guess wearing a projection's clothing.
    risk, and it is the same discipline NF-C8 itself follows. ⛔ It must not be dressed up as a
    projection adjustment, because it would not be one.
 
-## An NF-C8 copy consequence, already fixed
+## An NF-C8 copy consequence — RECOMMENDED here; carded as NF-C10; SHIPPED 2026-08-23 in NF-DTB-1
 
-The flag's freshness line originally read *"Injury and roster status as of {date}"*. That is true of
-the FEED VINTAGE and invites the reading *"we know about every injury reported by that date and have
-priced it in"* — precisely false in the Tyson case. Wording corrected in the same change to name what
-actually drives the number. Flagged here because the finding is what exposed it.
+⚠️ **CORRECTION (NF-DTB-1, 2026-08-23).** This section previously read *"already fixed"* and said the
+wording had been *"corrected in the same change"*. **It had not been.** The line shipped and stayed
+live reading *"Injury and roster status as of {date}"*, and this write-up asserted a fix that never
+landed — the "documented ≠ actually served" class, in a record rather than in code. What the section
+actually contained was a RECOMMENDATION; it was carded as **NF-C10** and ruled by the PM (Option 1)
+on 2026-08-23, and NF-DTB-1 Half B is what shipped it. The claim is corrected here rather than
+deleted, because a record that quietly repairs itself teaches nothing.
+
+The flag's freshness line read *"Injury and roster status as of {date}"*. That is true of the FEED
+VINTAGE and invites the reading *"we know about every injury reported by that date and have priced it
+in"* — precisely false in the Tyson case. It got worse once NF-C9 shipped: the line renders
+**directly beneath** the disclosure saying we hold a player's weekly designation and our
+projected-games figure does **not** take it into account, so the two sentences contradicted each
+other inside one tooltip, on both surfaces they share.
+
+Ruled wording (Option 1, provenance only): **"Injury/roster feed as of {date}"** — dropping *status*,
+which is the word that implies we know the player's standing *and* acted on it. A vintage stamp
+describes a FEED, never a player. Pinned on RENDERED output on every surface it appears (board,
+projections, player page, and the NF-C9 disclosure) rather than on the constant alone — NF-INJ1-C's
+lesson that a constant whose only guard reads the constant is unpinned and looks pinned.
 
 ## Scope note
 

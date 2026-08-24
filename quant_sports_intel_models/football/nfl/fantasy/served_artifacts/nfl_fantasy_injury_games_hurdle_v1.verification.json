@@ -1,0 +1,115 @@
+{
+  "n_serving_rows": 22,
+  "max_abs_difference_vs_validated_arm": 0.0,
+  "tolerance": 1e-09,
+  "reproduces_validated_arm": true,
+  "what_it_proves": "the PERSISTED coefficients reproduce the arm the bake-off scored, on the live serving cohort, to machine precision \u2014 so the object that ships is the object that was validated (MH2.1), not a re-fit that happens to look similar.",
+  "population": {
+    "per_season": [
+      {
+        "season": 2016,
+        "board_rows": 713,
+        "flagged": 65,
+        "rookies_excluded": 2,
+        "returners_excluded": 9,
+        "scored": 54
+      },
+      {
+        "season": 2017,
+        "board_rows": 699,
+        "flagged": 60,
+        "rookies_excluded": 8,
+        "returners_excluded": 11,
+        "scored": 41
+      },
+      {
+        "season": 2018,
+        "board_rows": 703,
+        "flagged": 53,
+        "rookies_excluded": 8,
+        "returners_excluded": 5,
+        "scored": 40
+      },
+      {
+        "season": 2019,
+        "board_rows": 716,
+        "flagged": 62,
+        "rookies_excluded": 6,
+        "returners_excluded": 10,
+        "scored": 46
+      },
+      {
+        "season": 2020,
+        "board_rows": 745,
+        "flagged": 29,
+        "rookies_excluded": 3,
+        "returners_excluded": 1,
+        "scored": 25
+      },
+      {
+        "season": 2021,
+        "board_rows": 758,
+        "flagged": 70,
+        "rookies_excluded": 5,
+        "returners_excluded": 7,
+        "scored": 58
+      },
+      {
+        "season": 2022,
+        "board_rows": 783,
+        "flagged": 55,
+        "rookies_excluded": 11,
+        "returners_excluded": 8,
+        "scored": 36
+      },
+      {
+        "season": 2023,
+        "board_rows": 764,
+        "flagged": 64,
+        "rookies_excluded": 5,
+        "returners_excluded": 14,
+        "scored": 45
+      },
+      {
+        "season": 2024,
+        "board_rows": 734,
+        "flagged": 47,
+        "rookies_excluded": 8,
+        "returners_excluded": 7,
+        "scored": 32
+      },
+      {
+        "season": 2025,
+        "board_rows": 786,
+        "flagged": 51,
+        "rookies_excluded": 4,
+        "returners_excluded": 6,
+        "scored": 41
+      }
+    ],
+    "excluded": {
+      "rookies": 60,
+      "returners": 78,
+      "why_rookies": "injury_availability_games runs inside project_veterans; project_rookies is a separate frame concatenated afterwards, so the cap STRUCTURALLY cannot act on a rookie (preregistration \u00a73 \u2014 out of scope, recorded for carding)",
+      "why_returners": "NF-D11's absence prior runs immediately after the injury cap, so a returner's served games compose two caps and this one's contribution is not separably recoverable (preregistration \u00a73)"
+    }
+  },
+  "serving_population": {
+    "per_season": [
+      {
+        "season": 2026,
+        "board_rows": 794,
+        "flagged": 26,
+        "rookies_excluded": 0,
+        "returners_excluded": 4,
+        "scored": 22
+      }
+    ],
+    "excluded": {
+      "rookies": 0,
+      "returners": 4,
+      "why_rookies": "injury_availability_games runs inside project_veterans; project_rookies is a separate frame concatenated afterwards, so the cap STRUCTURALLY cannot act on a rookie (preregistration \u00a73 \u2014 out of scope, recorded for carding)",
+      "why_returners": "NF-D11's absence prior runs immediately after the injury cap, so a returner's served games compose two caps and this one's contribution is not separably recoverable (preregistration \u00a73)"
+    }
+  }
+}

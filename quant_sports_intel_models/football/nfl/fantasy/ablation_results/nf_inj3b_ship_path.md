@@ -1,6 +1,6 @@
 # NF-INJ3b — the LEVEL-ADJACENT gated ship path (preregistration §5)
 
-_generated 2026-08-23T05:48:04.827495+00:00_ · `best_alpha = 0` · **DEPLOY-HELD**, served arm `incumbent`
+_generated 2026-08-23T06:21:32.121253+00:00_ · `best_alpha = 0` · **DEPLOY-HELD**, served arm `incumbent`
 
 ## Verdict: **SHIP_PATH_INCOMPLETE — step (d) is unrun and BLOCKING**
 
@@ -19,7 +19,7 @@ Read from `s3://credence-prod-s3-api-cache/fantasy/nfl/2026/` (`s3`), served lev
 
 Verdict **SANE**, gates `{'band_integrity': 'PASS', 'within_position_order': 'PASS', 'rookie_placement_cap': 'PASS', 'position_survival': 'PASS'}`.
 
-⚠️ ⚠️ this is a BASELINE on the board AS PUBLISHED — it establishes that the served board is placement-clean TODAY. It is NOT the counterfactual read: the decision-relevant comparison (published board vs a board rebuilt on the NF-INJ3b caps) is blocked on the same rebuild step (d) is blocked on.
+⚠️ this is a BASELINE on the board AS PUBLISHED — it establishes that the served board is placement-clean TODAY. It is NOT the counterfactual read: the decision-relevant comparison (published board vs a board rebuilt on the NF-INJ3b caps) is blocked on the same rebuild step (d) is blocked on.
 
 ## (b) Interval re-validation
 
@@ -31,7 +31,7 @@ Verdict **SANE**, gates `{'band_integrity': 'PASS', 'within_position_order': 'PA
 | veterans | knn_norm | 8398 | 0.8897 |
 | kdst | empirical_ratio_band | 795 | 0.8566 |
 
-⛔ The decided NF1.9 artifact was byte-RESTORED after this run (`decided_artifact_restored: True`) — `--no-report` still rewrites its JSON, and a post-decision story never clobbers a decided story's record.
+Written to `nf_inj3b_ship_path_interval_revalidation.json` via the D4 `--out` stem. Decided artifacts verified byte-identical across BOTH gates: `{'nf1_9_interval_revalidation.json': True, 'nf_tr2b_placement_read.json': True}` (all intact: **True**) — measured at the call site, not assumed from the runners' source.
 
 ## (c) The NF-TR2b superflex caveat — CARRIED
 

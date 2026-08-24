@@ -87,6 +87,7 @@ import {
   int,
   teamLabel,
   WeeklyDesignation,
+  ReportedAbsence,
   WithheldStat,
 } from "@/components/fantasy/shared"
 import { PlatformAttribution } from "@/components/fantasy/platform-attribution"
@@ -753,6 +754,9 @@ function PlayerView({ playerId }: { playerId: string }) {
                         status={proj.gameStatus}
                         freshness={projPayload?.freshness}
                       />
+                      {/* NF-INJ-NEWS-1 — the player page is where a drafter goes to ask "why is
+                          this number low?", so the receipt belongs here most of all. */}
+                      <ReportedAbsence reported={proj.reportedAbsence} />
                     </span>
                   </>
                 ) : null}

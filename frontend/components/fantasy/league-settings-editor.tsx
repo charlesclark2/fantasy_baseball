@@ -26,10 +26,11 @@
 import { useEffect, useMemo, useState } from "react"
 import posthog from "posthog-js"
 import { useAuth } from "@/lib/auth-context"
-import { canSaveAnotherLeague } from "@/lib/entitlements"
+import { canSaveAnotherLeague, isLeagueQuotaRefusal } from "@/lib/entitlements"
 import {
   LEAGUE_QUOTA_REACHED_DETAIL,
   LEAGUE_QUOTA_REACHED_TITLE,
+  LEAGUE_QUOTA_REFUSED_DETAIL,
 } from "@/lib/fantasy-claim-copy"
 import { Plus, Save, Trash2, TriangleAlert, Check, Info } from "lucide-react"
 import {
@@ -141,6 +142,16 @@ export function LeagueSettingsEditor() {
   const atQuota =
     leagueId === null && !canSaveAnotherLeague((leagues ?? []).length, groups)
 
+  // ⭐ NF-DTB-1 — THE SAME BOUNDARY, MET AT THE SERVER INSTEAD OF AT THE CONTROL.
+  //
+  // `atQuota` above is advisory and reads a CACHED list (`useSavedLeagues`: 60s stale time,
+  // `retry: false`, `data` undefined while loading AND on error) — every one of those states reads
+  // as "0 leagues saved", i.e. NOT at quota, and leaves this button enabled. The save then meets
+  // the server's 409 and, before this, rendered through the generic "Could not save. …" line: the
+  // status was DISCARDED at the fetch boundary (`api.ts`), so no caller could tell a limit from a
+  // fault. That is the E8.6 "saving is broken" shape pointed at a paywall.
+  const quotaRefused = saveLeague.isError && isLeagueQuotaRefusal(saveLeague.error)
+
   // ── the honest-coverage report, computed against the data actually present ──────────────────
   const coverage = useMemo(() => {
     const fields = projections?.players?.length ? availableFields(projections.players) : undefined
@@ -166,7 +177,17 @@ export function LeagueSettingsEditor() {
       ppr: derivePprLabel(cfg.scoring),
     }
     const isNew = leagueId === null
-    const result = await saveLeague.mutateAsync({ leagueId, config: payload })
+    // ⚠️ NF-DTB-1 — `mutateAsync` REJECTS on a failed save, and this is a click handler, so an
+    // uncaught rejection is an unhandled promise rejection: a console error on a path the user is
+    // meant to recover from, and a page error every e2e run would have to whitelist. The outcome is
+    // rendered off react-query's `isError`/`error` (see `quotaRefused` above), so swallowing it
+    // here loses nothing — the refusal is on screen either way.
+    let result: SavedLeague
+    try {
+      result = await saveLeague.mutateAsync({ leagueId, config: payload })
+    } catch {
+      return
+    }
     setLeagueId(result.league_id)
     setCfg(stripServerFields(result))
     setDirty(false)
@@ -530,8 +551,11 @@ export function LeagueSettingsEditor() {
           {dirty && !saveLeague.isPending && (
             <span className="text-xs text-amber-400">Unsaved changes.</span>
           )}
-          {saveLeague.isError && (
-            <span className="text-xs text-red-400">
+          {/* ⭐ NF-DTB-1 — THE GENERIC LINE IS FOR FAULTS ONLY. A quota refusal renders the notice
+              below instead: "Could not save." leads with a failure, and a limit is not one. The
+              two must stay distinguishable in the RENDERED output, which is what the e2e asserts. */}
+          {saveLeague.isError && !quotaRefused && (
+            <span className="text-xs text-red-400" data-testid="league-save-error">
               Could not save. {(saveLeague.error as Error)?.message ?? "Please try again."}
             </span>
           )}
@@ -541,18 +565,24 @@ export function LeagueSettingsEditor() {
             and meet that on submit is the worst version of a paywall; this is the same
             "state the lock where the visitor meets it" pattern the format picker uses.
             ⛔ Advisory only — the server is the gate, and this disables a button, which is not one. */}
-        {atQuota && (
+        {(atQuota || quotaRefused) && (
           <div className="mt-2">
+            {/* ⚠️ NF-DTB-1 — THE ACTION IS WITHHELD WHEN THERE IS NOTHING TO EDIT. On a SERVER
+                refusal the cached league list can be empty (that emptiness is exactly what let the
+                save through), and "Edit the league you have" would then point at nothing — a dead
+                control on a screen the user already thinks is broken. */}
             <LeagueQuotaNotice
               title={LEAGUE_QUOTA_REACHED_TITLE}
-              detail={LEAGUE_QUOTA_REACHED_DETAIL}
+              detail={quotaRefused ? LEAGUE_QUOTA_REFUSED_DETAIL : LEAGUE_QUOTA_REACHED_DETAIL}
               action={
-                <button
-                  onClick={() => leagues?.[0] && onSelectLeague(leagues[0].league_id)}
-                  className="text-gray-300 underline hover:text-[#10b981]"
-                >
-                  Edit the league you have
-                </button>
+                leagues?.length ? (
+                  <button
+                    onClick={() => leagues[0] && onSelectLeague(leagues[0].league_id)}
+                    className="text-gray-300 underline hover:text-[#10b981]"
+                  >
+                    Edit the league you have
+                  </button>
+                ) : undefined
               }
             />
           </div>

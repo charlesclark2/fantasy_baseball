@@ -47,6 +47,13 @@ import {
   WEEKLY_DESIGNATION_NOT_MODELLED,
   WEEKLY_DESIGNATION_SUMMARY,
   WEEKLY_DESIGNATION_UNKNOWN,
+  REPORTED_ABSENCE_LABEL,
+  REPORTED_ABSENCE_SUMMARY,
+  REPORTED_ABSENCE_MANUAL,
+  REPORTED_ABSENCE_NOT_A_FORECAST,
+  REPORTED_ABSENCE_ENTERED_PREFIX,
+  REPORTED_ABSENCE_SOURCE_LABEL,
+  REPORTED_ABSENCE_METHOD_DISCLOSURE,
   WEEKLY_DESIGNATION_UNKNOWN_SUMMARY,
 } from "@/lib/fantasy-claim-copy"
 
@@ -900,6 +907,67 @@ export function WeeklyDesignation({
 }
 
 
+// NF-INJ-NEWS-1 — a chip VISUALLY DISTINCT from both siblings, because it means something different.
+// The availability flag is amber/rose (a warning about a number), the weekly designation is slate (a
+// neutral fact from the feed); this is indigo and reads as a small hand-marked annotation, which is
+// exactly what it is. ⛔ Not amber: this chip is NOT a severity signal — the severity, if any, is
+// already carried by the games number itself through `AvailabilityFlag`.
+const REPORTED_ABSENCE_CHIP =
+  "inline-block whitespace-nowrap rounded border border-indigo-400/40 bg-indigo-400/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-300"
+
+/** NF-INJ-NEWS-1 — the reported-absence provenance stamp: "a person on our side lowered this number
+ *  by hand, here is what they read".
+ *
+ *  ⭐ RENDERS NOTHING WITHOUT A SOURCE URL, and that is a correctness rule rather than a styling
+ *  choice. The whole claim this chip makes is "there is something to check"; a chip with no link
+ *  would assert a manual adjustment while withholding the only thing that distinguishes it from a
+ *  guess. The exporter already omits the key entirely on an un-stamped row (absent ≠ null,
+ *  NF-FRESH2), so the normal path here is `undefined` and nothing renders.
+ *
+ *  ⛔ IT SAYS WHAT WE DID, NEVER WHAT WILL HAPPEN. No return date, no body part, no diagnosis —
+ *  see the copy block in `fantasy-claim-copy.ts`. */
+export function ReportedAbsence({
+  reported,
+}: {
+  /** The served `reportedAbsence`. ABSENT for almost every player — the key is set only on a row an
+   *  operator judgment actually moved, so an un-overridden player is unchanged from before this
+   *  mechanism existed. */
+  reported?: { sourceUrl?: string | null; enteredAt?: string | null } | null
+}) {
+  const url = reported?.sourceUrl
+  if (!url) return null
+  const entered = shortStamp(reported?.enteredAt)
+
+  return (
+    <InfoTip
+      bare
+      srLabel={REPORTED_ABSENCE_LABEL.toLowerCase()}
+      label={<span className={REPORTED_ABSENCE_CHIP}>{REPORTED_ABSENCE_LABEL}</span>}
+    >
+      <p className="font-semibold text-gray-200">{REPORTED_ABSENCE_SUMMARY}</p>
+      {/* ⭐ BOTH honesty lines render UNCONDITIONALLY. A caveat that appears only in some states is
+          a caveat a reader learns to ignore, and these two are what keep a hand adjustment from
+          reading as a model output or as a medical opinion. */}
+      <p className="mt-2">{REPORTED_ABSENCE_MANUAL}</p>
+      <p className="mt-2">{REPORTED_ABSENCE_NOT_A_FORECAST}</p>
+      <p className="mt-2">
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          className="text-indigo-300 underline underline-offset-2 hover:text-indigo-200"
+        >
+          {REPORTED_ABSENCE_SOURCE_LABEL}
+        </a>
+      </p>
+      {entered && (
+        <p className="mt-2 text-gray-500">{`${REPORTED_ABSENCE_ENTERED_PREFIX} ${entered}`}</p>
+      )}
+    </InfoTip>
+  )
+}
+
+
 /** The ADP-delta column header. Plain English on purpose — "Δ" reads as statistical notation and
  *  tells a drafter nothing about what the number means. */
 export const ADP_DELTA_LABEL = "vs ADP"
@@ -1016,6 +1084,30 @@ export function MarketLeanNote({
         Where the ranking uses the market: {positions.join(", ")}.
       </span>{" "}
       {note}
+    </p>
+  )
+}
+
+/** NF-INJ-NEWS-1 — the board-level disclosure of the manual-override mechanism.
+ *
+ *  ⭐ WHY A BOARD-LEVEL NOTE EXISTS AT ALL, given every affected row already carries a chip: a
+ *  mechanism that announces itself only on the rows it touched is VISIBLE, not DISCLOSED. A reader
+ *  scrolling a board has no way to learn that some of these numbers are hand-adjusted unless they
+ *  happen to hover the right player — and "some of our numbers were set by a person" is exactly the
+ *  kind of thing a reader is entitled to know before they trust any of them.
+ *
+ *  ⚠️ IT RENDERS ONLY WHEN THE COUNT IS ABOVE ZERO, and that is honesty rather than tidiness: the
+ *  copy says a small number of players carry a hand-lowered projection, and on a board where none
+ *  do that sentence is simply false. An export that predates the mechanism has no count at all and
+ *  likewise renders nothing (absent ≠ 0 — NF-FRESH2). */
+export function ReportedAbsenceNote({ count }: { count?: number | null }) {
+  if (typeof count !== "number" || count <= 0) return null
+  return (
+    <p className="mt-2">
+      <span className="font-semibold text-gray-300">
+        {REPORTED_ABSENCE_LABEL}: {count} {count === 1 ? "player" : "players"}.
+      </span>{" "}
+      {REPORTED_ABSENCE_METHOD_DISCLOSURE}
     </p>
   )
 }

@@ -1,0 +1,137 @@
+# Plan spec — NF-INJ3c (FULL tier: rookie-path availability routing + coherence)
+# Authored by PM 2026-08-24. Template: plan_specs/story_spec_template_v2.yaml
+# ⏰ DATED: the 8/30 cutdown IR wave lands on a population with no availability path.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: nf-inj3c
+  vertical: nfl_fantasy
+  card: https://trello.com/c/9jTUzjd9
+  status: ACCEPTED
+spec:
+  description: >
+    Close the rookie-path availability gap BEFORE the 2026-08-30 cutdown.
+    Both existing availability discounts — the formal RES/PUP/NFI/SUS games
+    cap AND the NF-D11 return-from-absence prior — live inside
+    project_veterans; project_rookies calls neither (81 of 794 board rows).
+    A rookie IR'd at cutdown today receives ZERO discount. Measured basis:
+    50/60 historical flagged rookies project above the incumbent's own
+    ceiling (Guice, RES all 2018, projected 12.5 games) vs 0/496 veterans;
+    the live meter (_warn_formal_tag_without_discount, built by
+    NF-INJ-NEWS-1 under PM ruling 2b) reports the current count each build.
+    PRIMARY (must land before 8/30): route the FORMAL status cap through
+    the rookie frame. SECONDARY (in-story if time permits, else recorded
+    for follow-up): the Mendoza stat-line/games decoupling (rookie
+    fp_target vs slot-bucket games — NF-INJ1 §2.2), whose surface harm is
+    currently contained by NF-INJ1-C suppression. best_alpha=0;
+    DEPLOY-HELD; the ship decision returns to the operator with the
+    measured board delta.
+  acceptanceCriteria:
+    - description: >
+        FORMAL CAP FOR ROOKIES uses the INCUMBENT CONSTANTS path
+        ({RES/PUP/NFI: 4.0, SUS: 7.0} @ blend 0.7), NOT the NF-INJ3b
+        hurdle_transfer model — its covariates (prior_games, log1p_prior_fp,
+        weeks_since_last_game) are veteran-history quantities a rookie does
+        not have; serving it to rookies would be an uncertified
+        re-derivation (MH2.1). Record this boundary in the code and the
+        closeout. If NF-INJ3b-M's certified artifact later ships for
+        veterans, rookies REMAIN on constants until a registered read
+        covers them.
+    - description: >
+        NF-D11 RETURN PRIOR: evaluate applicability on MECHANISM first —
+        it conditions on prior-season absence patterns rookies cannot have.
+        If the mechanism does not transfer, DO NOT force it: record
+        NOT-APPLICABLE-BY-CONSTRUCTION with the reasoning and route only
+        the formal cap. Transferring the FINDING, not the feature, is the
+        recorded landmine.
+    - description: >
+        Implementation shape: prefer extracting the availability chain
+        (formal cap → NF-D11-where-applicable → reported-absence cap) into
+        ONE shared step both frames call, over copy-pasting caps into
+        project_rookies — "one logical thing, many owners" is the repo's
+        most-repeated defect class, and NF-INJ-NEWS-1 already had to attach
+        proj_status to the rookie frame for detection. The reported-absence
+        cap's existing rookie wiring must keep working unchanged (its
+        guards pin it).
+    - description: >
+        VERIFICATION AGAINST REALITY, not fixtures (the NF-INJ-NEWS-1
+        method lesson): re-run the historical flagged-rookie read (the
+        50/60 basis) with the routing in place — flagged rookies must now
+        cap; 0 unflagged rows may move. The
+        _warn_formal_tag_without_discount meter must read 0 on a healthy
+        with-fix build (and its guard proves it still fires when the
+        routing is deliberately broken — RED). All existing veteran-path
+        outputs byte-identical (this story touches rookies only).
+    - description: >
+        LEVEL-ADJACENT SHIP PATH (deploy-held, measured before any
+        publish): with-fix board dry-run rebuild → diff vs published
+        (rookie rows only should move) → placement read + interval reval
+        via the --out stems (NF-INJ3b-M's D4 fix — coordinate if not yet
+        merged) → ship-decision packet to the operator. ⚠️ Composition:
+        NF-INJ-NEWS-1 adoption and NF-INJ3b-M's cap change are also
+        pending; the FIRST publish carrying any two of these requires one
+        final combined placement + interval read.
+    - description: >
+        SECONDARY (decoupling): if attempted, scope = the rookie frame's
+        games/stat-line coherence only (fp_target and slot-bucket games
+        move together); no NF1.5 changes (NF-INJ2b territory); assert the
+        NF-INJ1 violation predicate returns zero rookie rows after the fix
+        (Mendoza is the live case). If not attempted, record explicitly.
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: nf-inj3c
+spec:
+  boardSearch:
+    queries:
+      - 'trelloSearch cards: "NF-INJ3c" / "rookie" / "NF-INJ" (board Credence Sports, 2026-08-24)'
+    duplicates: []
+    adjacent:
+      - "NF-INJ3b-M (IN FLIGHT) — veteran cap serving artifact + the --out stems this story's ship path uses; coordinate on run_* runners; NO shared projection files (veterans vs rookies)."
+      - "NF-INJ-NEWS-1 (Done) — its rookie wiring + detection meter are consumed here; do not regress its guards."
+      - "NF-INJ2b (To Do) — ordering learner; untouched."
+      - "NF-D22 rookie power-floor / NF-D16/D21 rookie recalibration (Done) — the rookie LEVEL machinery; this story touches games/availability, not levels; placement read is the cross-check."
+  triedLedger:
+    files:
+      - "quant_sports_intel_models/football/nfl/fantasy/ablation_results/nf_inj3_injury_games.md (the 50/60 rookie finding + incumbent constants)"
+      - "plan_specs/nfl_fantasy/nf-inj-news-1.yaml closeout (ruling 2b, the meter, the rookie attach)"
+      - "ablation_results/nf_inj1_diagnosis.md §2.2/§8.3 (the decoupling + the re-read grant)"
+    recordedNulls:
+      - "NF-INJ3b certified hurdle_transfer for the VETERAN population only — not re-read; rookies-on-constants is the conservative boundary it licenses, not an extension of it."
+  supersedes: []
+  dependsOn:
+    - "NF-INJ-NEWS-1 merged (verified: rulings amendment on dev @ 25b72b27)"
+  feedsInto:
+    - "The 8/30 cutdown IR wave being priced at all; the first combined pre-publish read"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: nf-inj3c-plan
+spec:
+  goalRef: { name: nf-inj3c }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec (status IN_PROGRESS) before any other work."
+      - id: 1-chain-extraction
+        desc: "Shared availability step; wire rookie frame (constants path); NF-D11 mechanism ruling recorded."
+      - id: 2-verify-real
+        desc: "Historical flagged-rookie read + meter-at-zero + veteran byte-identity + RED-proofs."
+      - id: 3-ship-path
+        desc: >
+          OPERATOR-RUN (>2-min rule): with-fix dry-run rebuild, diff,
+          placement read + interval reval via --out stems — hand paste-ready
+          commands with runtime/artifact/success stated; resume from results.
+      - id: 4-secondary-decoupling
+        desc: "If time permits before 8/30: rookie coherence fix + zero-violating-rookie-rows assertion; else record deferral."
+      - id: 5-closeout
+        desc: "Ship-decision packet + verdict + findings into closeout.followUps."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
