@@ -68,14 +68,16 @@ CASES = [
      'tagged = df["proj_status"].astype("string").map(',
      "test_the_tag_disclosure_reads_the_formal_map_itself_not_a_copy_of_its_keys[RES]"),
 
-    ("project_veterans stops stamping which rows the formal path actually moved", SEASON,
+    # ⭐ NF-INJ3c re-anchored this pair onto `apply_availability_chain`, the ONE owner both
+    #    projection frames now call. Same defect, same clause, new home.
+    ("the chain stops stamping which rows the formal path actually moved", SEASON,
      "        df[FORMAL_APPLIED_COL] = new_games < old_games - 1e-9",
      "        df[FORMAL_APPLIED_COL] = False",
      "FORMAL_APPLIED_COL] = new_games < old_games",
      # ⚠️ NOT one of the behavioural clauses: they build the frame directly and set the flag
      # themselves, so they are structurally blind to how production computes it. This break's
      # only honest home is the clause that inspects the stamping itself.
-     "test_project_veterans_stamps_the_formal_flag_from_the_MOVE_not_from_the_tag"),
+     "test_the_formal_flag_is_stamped_from_the_MOVE_not_from_the_tag"),
 
     # ══ PM RULING 1 — THE REMAINING-SEASON RATE ══════════════════════════════════════════════════
     ("the rule reverts to the CEILING that was measured inert on 5 of 6 real rows", SEASON,
@@ -286,16 +288,35 @@ CASES = [
      "test_the_stamp_never_reaches_ordering_or_the_optimizer"),
 
     # ══ BOTH POPULATIONS — the defect the measurement found ══════════════════════════════════════
-    ("the rookie path stops applying the cap (the Tyson class becomes unreachable)", SEASON,
-     "        _new_games, _ra_dec = reported_absence_games(df, reported_absence_rows)",
-     "        _new_games, _ra_dec = (df[\"proj_games\"].to_numpy(), [])",
-     "_ra_dec = reported_absence_games(",
+    # ⭐ NF-INJ3c: the rookie frame reaches this cap through the shared chain, so the defect has
+    #    two live shapes — the chain stops applying it (both populations lose it) and the rookie
+    #    frame stops delegating the rows to it (only rookies lose it). Both must go red.
+    ("the shared chain stops applying the cap (both populations lose it)", SEASON,
+     "        new_games, decisions = reported_absence_games(df, reported_absence_rows)",
+     "        new_games, decisions = (df[\"proj_games\"].to_numpy(), [])",
+     "decisions = reported_absence_games(",
+     "test_the_cap_reaches_the_ROOKIE_path_not_only_the_veteran_one"),
+
+    ("the rookie path stops delegating the overrides (the Tyson class becomes unreachable)", SEASON,
+     "        reported_absence_rows=reported_absence_rows,\n"
+     "        reported_absence_log=reported_absence_log,\n"
+     "    )",
+     "        reported_absence_rows=None,\n"
+     "        reported_absence_log=reported_absence_log,\n"
+     "    )",
+     # ⚠️ the token must be UNIQUE to the ROOKIE call — the veteran chain call passes the same
+     #    kwarg on ONE line, so a bare name would still be present and the harness would report
+     #    "the mutation did not bite" for a break that landed correctly (E11.24 #815).
+     "        reported_absence_rows=reported_absence_rows,\n"
+     "        reported_absence_log=reported_absence_log,",
      "test_the_cap_reaches_the_ROOKIE_path_not_only_the_veteran_one"),
 
     ("build_projection stops passing the overrides to the rookie half", RUNNER,
-     "                           reported_absence_rows=_ra.rows, reported_absence_log=_ra_log)\n"
+     "                           reported_absence_rows=_ra.rows, reported_absence_log=_ra_log,\n"
+     "                           roster_status=_rk_status)\n"
      "           if not incoming.empty else pd.DataFrame())",
-     "                           )\n           if not incoming.empty else pd.DataFrame())",
+     "                           roster_status=_rk_status)\n"
+     "           if not incoming.empty else pd.DataFrame())",
      None,
      "test_the_cap_reaches_the_ROOKIE_path_not_only_the_veteran_one"),
 

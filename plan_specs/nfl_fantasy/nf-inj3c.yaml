@@ -8,7 +8,7 @@ metadata:
   name: nf-inj3c
   vertical: nfl_fantasy
   card: https://trello.com/c/9jTUzjd9
-  status: ACCEPTED
+  status: DONE
 spec:
   description: >
     Close the rookie-path availability gap BEFORE the 2026-08-30 cutdown.
@@ -130,8 +130,66 @@ spec:
       - id: 5-closeout
         desc: "Ship-decision packet + verdict + findings into closeout.followUps."
   closeout:
-    verdict: null
+    verdict: >
+      PRIMARY SHIPPED (code complete, DEPLOY-HELD, best_alpha=0). The formal
+      RES/PUP/NFI/SUS cap now reaches the rookie frame through ONE shared
+      availability step both frames call (`apply_availability_chain`), on the
+      INCUMBENT CONSTANTS per AC-1; NF-D11 is recorded
+      NOT-APPLICABLE-BY-CONSTRUCTION per AC-2 (it conditions on
+      `seasons_missed`, a prior-NFL-season quantity a rookie cannot have — the
+      FINDING transfers, the feature does not). Measured against reality, not
+      fixtures: the 50/60 basis reproduces exactly, all 60 historical flagged
+      rookies now cap with 0 of 738 unflagged rows moving, the end-to-end
+      production path caps 60/60 over 10 ACTIVE classes with every volume
+      column scaling exactly with games, and the live meter goes 60 -> 0.
+      Veteran output is bit-for-bit unchanged (asserted against a transcription
+      of the three inline blocks it replaced). 22 guard clauses, 17 RED-proven;
+      NF-INJ-NEWS-1's two source-inspection guards RE-ANCHORED onto the shared
+      owner (not weakened) and its own red proof still RED-proves all 39.
+      ⚠️⚠️ THE LIVE 2026 CLASS IS INACTIVE: not one 2026 rookie carries a formal
+      tag today (the cutdown is 8/30), so the with-fix board moves ZERO rookie
+      rows and the live meter reads 0 with AND without the fix. The fix ships
+      AHEAD of its population, deliberately; "meter = 0 on the live board" is
+      NOT evidence the routing works (NF-D20).
+      SECONDARY (Mendoza decoupling) NOT ATTEMPTED — deferred on a RULE, not
+      the clock: NF-INJ1's own pre-registration §5 places it out of scope with
+      "its own registration" and records that bundling an availability-level
+      change with a coherence change makes neither attributable. Sized for the
+      successor: exactly 1 violating rookie row on the published board
+      (Mendoza, `passAtt` 49.64/game vs a 45.44 all-time max, x1.09), against 0
+      violating veterans at this stage.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      (1) REGISTER THE ROOKIE COHERENCE REPAIR as its own story (NF-INJ1 prereg
+      §5 already says it needs one). Target measured here: 1 row, 1 stat,
+      x1.09 — small enough that "which half is wrong" (cap the point, or raise
+      the games the point implies) IS the story, and it interacts with the
+      ratified rookie level machinery (NF-D16/D21 lambda=0.5, NF-D22's
+      power-derived floor). ⛔ It must NOT be folded into an availability story.
+      (2) COMPOSITION GATE: NF-INJ-NEWS-1 adoption and NF-INJ3b-M's cap change
+      are also pending. The FIRST publish carrying any two of these needs ONE
+      final combined placement + interval read — a per-story read cannot
+      attribute a board that moved for two reasons.
+      (3) RE-READ THE METER AFTER 2026-08-30. The routing is verified but its
+      live population does not exist yet; the first post-cutdown build is the
+      first time the meter can say anything about the 2026 board. A non-zero
+      reading there after this ships would mean the routing did not reach a row
+      it should have.
+      (4) CHANGELOG DECISION: no `frontend/data/changelog.json` entry was added.
+      Today's board is byte-identical (nothing to announce) and an entry now
+      would be a declaration outrunning its production (NF-C0e). The entry
+      belongs with the first post-cutdown publish that actually moves a rookie.
+      (5) NF-INJ3b-M coordination: its D4 `--out` stem fix IS on this branch, so
+      the ship-path reads can write `nf_inj3c_*` stems without touching a
+      decided record.
+      (6) ⚠️ PRE-EXISTING, FOUND IN PASSING, NOT THIS BRANCH'S DOING —
+      `betting_ml/tests/nf_inj1_c_red_proof.py`'s `short-label-stops-saying-withheld`
+      case has a ROTTED ANCHOR and reports 0 occurrences. It expects
+      `STAT_LINE_WITHHELD_LABEL = "stat detail withheld — availability-adjusted"`;
+      `origin/dev` now carries `"stat detail withheld — inconsistent with
+      projected games"` (reworded by the NF-C8/NF-C9/NF-DTB-1 line). The clause
+      it defends still passes, so the SUITE is green and only the red proof
+      knows — which is exactly E9.64's finding that a mutation test whose break
+      no longer bites carries less information than it appears to. Verified on
+      `origin/dev`, and this branch touches no `frontend/` file. Cheap fix:
+      re-anchor the case onto the current constant. Worth a sweep of the other
+      red proofs for the same rot while someone is in there.
