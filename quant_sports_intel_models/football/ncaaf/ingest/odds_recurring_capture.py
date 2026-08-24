@@ -204,17 +204,21 @@ def _new_kickoffs_to_capture(
     return _filter_uncaptured_kickoffs(kicks, captured_commence, now=now, buffer_min=buffer_min)
 
 
-# The DeltaKernel error DuckDB's delta_scan raises when a table/partition genuinely doesn't
-# exist yet (verified empirically: `IO Error: DeltaKernel InvalidTableLocationError (28): Invalid
-# table location: Path does not exist: "..."`). This is the ONLY error class that may be treated
-# as "nothing captured yet" — see `_q_or_missing`.
-# ── absent-partition vs transient-read-failure ─────────────────────────────────────────────
+# ── absent-table vs transient-read-failure ─────────────────────────────────────────────────
 # ⭐ ONE implementation, promoted to `query_lake` (NCAAF-PS) so the second READ-MERGE-WRITE writer
 # in this vertical (`game_prediction_snapshot`) shares it rather than growing a second copy — two
 # renderers of one rule are two rule sets (E9.61). These names are kept as the module's own API
 # because `_merge_and_write`'s data-loss guarantee is documented in terms of them.
-_MISSING_TABLE_MARKERS = query_lake.MISSING_TABLE_MARKERS
-_is_missing_table_error = query_lake.is_missing_table_error
+#
+# 🩹 NCAAF-LAKE1 (2026-08-24): absence is now established by LISTING `<table>/_delta_log/`, not by
+# matching DuckDB's error text. The retired marker set was verified against a LOCAL directory (what
+# the tests exercise) and never covered S3 — an object store has no directories, so a never-written
+# S3 table reports "No files in log segment", which the markers did not contain. THIS module was
+# never blocked by that (its table already exists), but it is the writer whose paid-odds history the
+# narrowness protected, and the listing check is STRICTLY safer for it: a read-after-write blip
+# means the log file IS there, so the listing finds it and the read RAISES instead of reporting
+# absence. See `query_lake` for the full measurement.
+_table_is_absent = query_lake.table_is_absent
 _q_or_missing = query_lake.query_or_missing
 
 

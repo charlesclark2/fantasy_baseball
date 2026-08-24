@@ -26,6 +26,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta, timezone
 
+import sys
+
 import pytest
 
 from quant_sports_intel_models.football.ncaaf.ingest import (
@@ -401,26 +403,139 @@ def test_connect_tolerates_a_credential_chain_secret_failure(monkeypatch):
     assert any("CREATE OR REPLACE SECRET" in s for s in fake_conn.executed)  # it did try
 
 
-# ── _is_missing_table_error / _q_or_missing: distinguish absent-partition from transient failure
-def test_is_missing_table_error_distinguishes_missing_from_transient():
-    missing = Exception(
-        'IO Error: DeltaKernel InvalidTableLocationError (28): Invalid table location: '
-        'Path does not exist: "s3://bucket/ncaaf/raw/odds_ncaaf_historical/".'
-    )
-    transient = Exception("IO Error: connection reset by peer")
-    assert orc._is_missing_table_error(missing) is True
-    assert orc._is_missing_table_error(transient) is False
+# ── _table_is_absent / _q_or_missing: distinguish an absent table from a transient failure ────
+#
+# 🩹 NCAAF-LAKE1 RE-ANCHORED these onto the listing check. They used to assert that a specific
+# ERROR STRING was classified as "missing" — which is a restatement of the classifier's own
+# assumption, and it is exactly why the defect survived: the string those tests used is the one a
+# LOCAL directory emits, and production reads S3, where a never-written table says something else
+# entirely. The properties pinned are unchanged; what they are asked OF is now the store.
+def test_table_is_absent_answers_from_the_store_not_from_the_error_text():
+    """The whole point of the fix: absence is a fact about the STORE. An engine message — in either
+    direction — must not be able to decide it."""
+    absent, present = [], []
+
+    def fake_has_commits(uri):
+        return False if "never-written" in uri else True
+
+    import quant_sports_intel_models.football.ncaaf.ingest.query_lake as ql
+    orig = ql._table_has_commits
+    ql._table_has_commits = fake_has_commits
+    try:
+        assert orc._table_is_absent("select 1 from delta_scan('s3://b/never-written') limit 1") is True
+        assert orc._table_is_absent("select 1 from delta_scan('s3://b/real-table') limit 1") is False
+    finally:
+        ql._table_has_commits = orig
+
+
+def test_an_undeterminable_listing_is_never_reported_as_absent(monkeypatch):
+    """The load-bearing direction. If we cannot ASK the store (no boto3, a denied listing), the only
+    safe answer is "not absent" — which sends the caller down the RAISE path. Reporting absence
+    here is what would let `_merge_and_write` overwrite a season of PAID odds."""
+    import quant_sports_intel_models.football.ncaaf.ingest.query_lake as ql
+    monkeypatch.setattr(ql, "_table_has_commits", lambda uri: None)
+    assert orc._table_is_absent("select 1 from delta_scan('s3://b/whatever') limit 1") is False
+
+
+def test_sql_whose_tables_cannot_be_identified_is_never_reported_as_absent():
+    """A SELECT we cannot parse a `delta_scan` target out of tells us nothing about the store."""
+    assert orc._table_is_absent("select 1") is False
+
+
+# ── _table_has_commits: the STORE PROBE itself ────────────────────────────────────────────────
+#
+# The tests above monkeypatch `_table_has_commits` to drive the policy, which means NOTHING was
+# asking whether the probe itself is right — the NCAAF-LAKE1 red proof found exactly that hole, by
+# breaking the probe and watching every guard stay green. These close it. The probe is the piece
+# that must be substrate-correct: it is the whole reason the classifier no longer reads messages.
+
+class _FakeS3:
+    """A boto3 stub shaped like `list_objects_v2`'s real response (or a client that explodes)."""
+
+    def __init__(self, key_count: int | None = 0, boom: bool = False):
+        self.key_count, self.boom, self.calls = key_count, boom, []
+
+    def list_objects_v2(self, **kw):
+        self.calls.append(kw)
+        if self.boom:
+            raise RuntimeError("AccessDenied: not authorized to perform s3:ListBucket")
+        return {"KeyCount": self.key_count}
+
+
+def _patch_boto3(monkeypatch, fake):
+    import types
+    monkeypatch.setitem(sys.modules, "boto3",
+                        types.SimpleNamespace(client=lambda *a, **k: fake))
+
+
+def test_the_s3_probe_reports_absent_only_when_the_log_prefix_is_empty(monkeypatch):
+    import quant_sports_intel_models.football.ncaaf.ingest.query_lake as ql
+
+    empty = _FakeS3(key_count=0)
+    _patch_boto3(monkeypatch, empty)
+    assert ql._table_has_commits("s3://bucket/ncaaf/derived/thing") is False
+    # It must ask about the _delta_log PREFIX specifically — a bucket-wide listing would report
+    # "present" for any table sharing the bucket, which is every table we have.
+    assert empty.calls[0]["Prefix"] == "ncaaf/derived/thing/_delta_log/"
+    assert empty.calls[0]["Bucket"] == "bucket"
+
+    _patch_boto3(monkeypatch, _FakeS3(key_count=1))
+    assert ql._table_has_commits("s3://bucket/ncaaf/derived/thing") is True
+
+
+def test_a_listing_that_fails_is_UNDETERMINED_never_absent(monkeypatch):
+    """⭐ THE DESTRUCTIVE DIRECTION, at the probe. A denied or failed listing tells us NOTHING about
+    the store; answering `False` would hand a merge writer a licence to overwrite on an IAM change."""
+    import quant_sports_intel_models.football.ncaaf.ingest.query_lake as ql
+
+    _patch_boto3(monkeypatch, _FakeS3(boom=True))
+    assert ql._table_has_commits("s3://bucket/ncaaf/derived/thing") is None
+    # and the policy layer must turn that into "not absent" -> the caller raises
+    assert ql.table_is_absent("select 1 from delta_scan('s3://bucket/ncaaf/derived/thing')") is False
+
+
+def test_a_malformed_s3_uri_is_undetermined_not_absent(monkeypatch):
+    import quant_sports_intel_models.football.ncaaf.ingest.query_lake as ql
+
+    _patch_boto3(monkeypatch, _FakeS3(key_count=0))
+    assert ql._table_has_commits("s3://") is None
+
+
+def test_the_local_probe_reads_the_real_filesystem(tmp_path):
+    """The other substrate, unmocked. A never-created path and a directory with no `_delta_log` are
+    BOTH absent — the second is the case the retired message match could not see."""
+    import quant_sports_intel_models.football.ncaaf.ingest.query_lake as ql
+
+    assert ql._table_has_commits(str(tmp_path / "never-created")) is False
+    assert ql._table_has_commits(str(tmp_path)) is False          # exists, but no _delta_log
+    (tmp_path / "_delta_log").mkdir()
+    assert ql._table_has_commits(str(tmp_path)) is False          # log dir, but no commit in it
+    (tmp_path / "_delta_log" / "00000000000000000000.json").write_text("{}")
+    assert ql._table_has_commits(str(tmp_path)) is True
 
 
 def test_q_or_missing_returns_none_only_for_a_genuinely_missing_table(monkeypatch):
     def fake_q(sql):
-        raise Exception(
-            'IO Error: DeltaKernel InvalidTableLocationError (28): Invalid table location: '
-            'Path does not exist: "x".'
-        )
+        raise Exception("IO Error: DeltaKernel GenericError (5): No files in log segment")
 
     monkeypatch.setattr(query_lake, "q", fake_q)
-    assert orc._q_or_missing("select 1") is None
+    monkeypatch.setattr(query_lake, "_table_has_commits", lambda uri: False)
+    assert orc._q_or_missing("select 1 from delta_scan('s3://b/t')") is None
+
+
+def test_q_or_missing_raises_when_the_table_exists_however_the_engine_worded_it(monkeypatch):
+    """⭐ THE REGRESSION TEST FOR THIS INCIDENT, FACING THE DANGEROUS WAY. The old classifier keyed
+    on the message; if a future engine emitted the ABSENT wording for a table that is really there,
+    the old code would have reported absence and a merge writer would have deleted the season. The
+    listing decides, so the wording is irrelevant."""
+    def fake_q(sql):
+        raise Exception('IO Error: DeltaKernel InvalidTableLocationError (28): Path does not exist')
+
+    monkeypatch.setattr(query_lake, "q", fake_q)
+    monkeypatch.setattr(query_lake, "_table_has_commits", lambda uri: True)
+    monkeypatch.setattr(query_lake, "_connect", lambda: _NoopConn())
+    with pytest.raises(RuntimeError, match="refusing to treat this as a missing table"):
+        orc._q_or_missing("select 1 from delta_scan('s3://b/t')", retries=0, retry_sleep=0)
 
 
 def test_q_or_missing_raises_after_bounded_retries_on_a_transient_error(monkeypatch):
@@ -434,7 +549,7 @@ def test_q_or_missing_raises_after_bounded_retries_on_a_transient_error(monkeypa
 
     monkeypatch.setattr(query_lake, "q", fake_q)
     monkeypatch.setattr(query_lake, "_connect", lambda: _NoopConn())
-    with pytest.raises(RuntimeError, match="NOT a missing-table error"):
+    with pytest.raises(RuntimeError, match="refusing to treat this as a missing table"):
         orc._q_or_missing("select 1", retries=2, retry_sleep=0)
     assert calls["n"] == 3  # initial attempt + 2 retries, all genuinely attempted
 

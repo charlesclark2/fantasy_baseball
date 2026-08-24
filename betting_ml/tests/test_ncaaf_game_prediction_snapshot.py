@@ -237,18 +237,44 @@ def test_a_genuinely_absent_partition_writes_the_new_batch_alone():
 
 def test_a_transient_lake_read_raises_instead_of_looking_like_an_empty_partition(monkeypatch):
     """"I could not read it" must never be mistaken for "there is nothing to preserve" — that
-    mistake IS the destructive overwrite. Only a genuine missing-table error yields `None`."""
+    mistake IS the destructive overwrite.
+
+    🩹 NCAAF-LAKE1 RE-ANCHORED this onto the listing check. It used to drive the two cases with two
+    ERROR STRINGS, which made it a restatement of the classifier's own assumption — and that is why
+    it stayed green through the defect: the "absent" string it used is the one a LOCAL directory
+    emits, while production reads S3, where a never-written table words it differently. Same two
+    properties, now asked of the STORE.
+    """
     from quant_sports_intel_models.football.ncaaf.ingest import query_lake
 
     monkeypatch.setattr(query_lake, "_connect", lambda: _NoopConn())
     monkeypatch.setattr(query_lake, "q", lambda sql: (_ for _ in ()).throw(
         Exception("IO Error: connection reset by peer")))
-    with pytest.raises(RuntimeError, match="NOT a missing-table error"):
+    monkeypatch.setattr(query_lake, "_table_has_commits", lambda uri: True)
+    with pytest.raises(RuntimeError, match="refusing to treat this as a missing table"):
         gps.read_existing_snapshots(2026, gps.SNAPSHOT_SOURCE, local_root="/tmp/nope")
 
-    monkeypatch.setattr(query_lake, "q", lambda sql: (_ for _ in ()).throw(
-        Exception('IO Error: DeltaKernel InvalidTableLocationError (28): Path does not exist: "x"')))
+    monkeypatch.setattr(query_lake, "_table_has_commits", lambda uri: False)
     assert gps.read_existing_snapshots(2026, gps.SNAPSHOT_SOURCE, local_root="/tmp/nope") is None
+
+
+def test_the_snapshot_writer_can_bootstrap_a_table_that_was_never_written(tmp_path):
+    """⭐ THE INCIDENT ITSELF, as a guard. `write_snapshot` reads its table back BEFORE its
+    first-ever write — correctly, that IS the never-lose-a-prior-week contract — so a first write
+    is only possible if an absent table reads as "nothing to preserve". This ran against S3 in
+    production and could not: the marker set had been verified on a LOCAL directory, and an object
+    store reports absence differently. Driven end-to-end through a REAL local Delta write, with the
+    OBJECT-STORE absence shape forced, so the substrate the defect lived on is the one under test.
+    """
+    import pandas as pd
+
+    rows = pd.DataFrame({"season": [2026], "game_id": [1],
+                         "snapshot_ts": ["2026-08-24T00:00:00.000Z"], "p_home_win": [0.5]})
+    n = gps.write_snapshot(rows, season=2026, source="bootstrap_probe",
+                           key=("game_id", "snapshot_ts"), local_root=str(tmp_path))
+    assert n == 1
+    again = gps.read_existing_snapshots(2026, "bootstrap_probe", local_root=str(tmp_path))
+    assert again is not None and len(again) == 1
 
 
 class _NoopConn:

@@ -732,6 +732,135 @@ def absence_games_sd(base_sd: np.ndarray, df: pd.DataFrame,
     return np.where(ret, np.maximum(sd, np.asarray(prior.sd(df), dtype=float)), sd)
 
 
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# NF-INJ3c — THE AVAILABILITY CHAIN, WITH ONE OWNER
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# Three availability discounts compose here, all of them min-caps on `proj_games`:
+#
+#   1. the FORMAL roster-status cap   (NF-D2 slice 5 — RES/PUP/NFI/SUS)
+#   2. the NF-D11 RETURN-FROM-ABSENCE prior  (veterans only — see the mechanism ruling below)
+#   3. the NF-INJ-NEWS-1 REPORTED-ABSENCE cap (an operator judgment, both populations)
+#
+# ⚠️⚠️ WHY THIS IS A SHARED STEP AND NOT A BLOCK INSIDE EACH FRAME. Steps 1 and 2 used to live
+# ONLY inside `project_veterans`; `project_rookies` ran step 3 alone. So a rookie placed on IR
+# received ZERO availability discount from anything — measured over the 2019–2025 builds, **50 of
+# 60** flagged rookies projected ABOVE the incumbent cap's own ceiling against **0 of 496**
+# veterans (`ablation_results/nf_inj3_injury_games.md` §1). That is the repo's most-repeated defect
+# class — one logical thing with many owners (INC-30 crontab, INC-36 deploy lock, INC-38 the
+# per-caller flag) — and the cure is the same one every time: ONE owner both callers reach, never a
+# second copy of the caps in the second frame.
+#
+# ⭐ THE FRAMES DIFFER ONLY IN WHAT THEY HAND THIS FUNCTION, never in what it does with it:
+#   • the FORMAL step is a CALLABLE the caller supplies, because the two populations are served by
+#     different objects and that boundary is a PM ruling, not an implementation detail (see
+#     `project_rookies` for the constants-vs-hurdle boundary);
+#   • NF-D11 is passed only by the veteran frame (`absence_prior=None` from the rookie one), and it
+#     additionally self-gates on `seasons_missed`, so the ruling holds at BOTH ends.
+
+
+#: The season-total volume columns an availability discount carries along with `proj_games`. ONE
+#: owner: this list used to be typed out four times (three veteran steps + one rookie step), which
+#: is exactly how a new stat column gets added to one step and forgotten in another.
+AVAILABILITY_LINE_COLS: tuple[str, ...] = (
+    "proj_pass_att", "proj_pass_cmp", "proj_pass_yds", "proj_pass_td", "proj_pass_int",
+    "proj_rush_att", "proj_rush_yds", "proj_rush_td",
+    "proj_targets", "proj_rec", "proj_rec_yds", "proj_rec_td",
+)
+
+
+def rescale_line_to_games(df: pd.DataFrame, new_games: np.ndarray) -> pd.DataFrame:
+    """Set `proj_games` to `new_games` and carry the whole season line with it, then re-score.
+
+    An availability discount is a statement about how much of the season the player is available
+    for, so the season TOTALS must move with it or the board displays points that disagree with its
+    own yards and touchdowns. Scoring is linear in the stats and the fumble term is proportional to
+    touches, so one scalar per player does it exactly. A row whose games are already ~0 is left
+    alone rather than divided by zero."""
+    old_games = df["proj_games"].to_numpy()
+    scale = np.where(old_games > 1e-6, new_games / np.clip(old_games, 1e-6, None), 1.0)
+    for col in AVAILABILITY_LINE_COLS:
+        if col in df.columns:
+            df[col] = df[col].to_numpy() * scale
+    df["proj_games"] = new_games
+    df["proj_pass_cmp"] = np.minimum(df["proj_pass_cmp"], df["proj_pass_att"])
+    df["proj_rec"] = np.minimum(df["proj_rec"], df["proj_targets"])
+    df["proj_fumbles_lost"] = np.round(
+        (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
+    return score_line(df, prefix="proj_")
+
+
+def _stamp_reported_absence_provenance(df: pd.DataFrame, decisions: list, rows) -> None:
+    """NF-INJ-NEWS-1 — write the provenance columns from the DECISIONS, never from the override
+    file. A row the disjointness rule ignored, or one that matched nothing, must not be stamped as
+    though it had moved the board (NF-C0e: a declaration must not outrun its production). Rows with
+    no override keep NaN, which the exporter renders as an ABSENT key, not a null (NF-FRESH2)."""
+    applied = [d for d in decisions if d.get("applied")]
+    if not applied:
+        return
+    for col in REPORTED_ABSENCE_COLS:
+        if col not in df.columns:
+            df[col] = np.nan
+    by_id = {r.player_id: r for r in rows}
+    for d in applied:
+        row = by_id[d["player_id"]]
+        i = df.index[d["row_index"]]
+        df.loc[i, "reported_absence_source_url"] = row.source_url
+        df.loc[i, "reported_absence_entered_at"] = row.entered_at.isoformat()
+        df.loc[i, "reported_absence_games_missed"] = float(row.expected_games_missed)
+
+
+def apply_availability_chain(
+    df: pd.DataFrame,
+    *,
+    formal_games=None,
+    absence_prior: "AbsenceReturnPrior | None" = None,
+    absence_prior_blend: float = 0.0,
+    reported_absence_rows=None,
+    reported_absence_log=None,
+) -> pd.DataFrame:
+    """Apply every availability discount, in the order that makes them compose, and return the
+    re-scored frame. THE ONE OWNER — both `project_veterans` and `project_rookies` call this.
+
+    `formal_games` is a callable `frame -> np.ndarray` producing the post-formal-cap expected games
+    (None ⇒ the frame runs no formal step, which is the honest state for a caller with no forward
+    roster status). It is a callable rather than an array because it must see the frame AFTER any
+    earlier step has moved `proj_games`, and because the two populations are served by deliberately
+    different objects.
+
+    ⭐ ORDER: formal → NF-D11 → reported absence. All three are min-caps, so the composition is
+    monotone and a player caught by more than one takes the harshest, never a rebound. The reported
+    cap goes LAST because it is disjoint from the formal cap BY CONSTRUCTION — it reads the
+    `_formal_discount_applied` flag stamped at step 1 — while it is NOT disjoint from NF-D11, so the
+    min-cap composition is what keeps that pair honest.
+
+    ⚖️ PM ruling 2b — the flag is stamped from what the formal step actually MOVED, not from whether
+    a tag exists. A tagged player whose games already sat below the status level is unchanged by the
+    blend and nothing was double-counted for him either, so he keeps his override.
+    """
+    # ── 1) the FORMAL roster-status cap ─────────────────────────────────────────────────────────
+    if formal_games is not None:
+        new_games = np.asarray(formal_games(df), dtype=float)
+        old_games = df["proj_games"].to_numpy()
+        df[FORMAL_APPLIED_COL] = new_games < old_games - 1e-9
+        df = rescale_line_to_games(df, new_games)
+
+    # ── 2) NF-D11: the RETURN-FROM-ABSENCE prior ────────────────────────────────────────────────
+    # Self-gates on `seasons_missed` as well as on the caller's prior, so a frame that cannot carry
+    # the quantity is a no-op even if a future caller passes a prior by mistake.
+    if absence_prior_blend > 0 and absence_prior is not None and "seasons_missed" in df.columns:
+        df = rescale_line_to_games(
+            df, absence_return_games(df, absence_prior, blend=absence_prior_blend))
+
+    # ── 3) NF-INJ-NEWS-1: the REPORTED-ABSENCE cap (operator judgment, not a model) ─────────────
+    if reported_absence_rows:
+        new_games, decisions = reported_absence_games(df, reported_absence_rows)
+        if reported_absence_log is not None:
+            reported_absence_log.extend(decisions)
+        df = rescale_line_to_games(df, new_games)
+        _stamp_reported_absence_provenance(df, decisions, reported_absence_rows)
+    return df
+
+
 def environment_tilt_scale(df: pd.DataFrame, blend: float = _ENV_TILT_BLEND,
                            positions: tuple = _ENV_TILT_POSITIONS) -> np.ndarray:
     """NF-D2 slice 4 / NF-D4 — the per-position multiplicative environment tilt from the projection-
@@ -1154,10 +1283,17 @@ def project_veterans(
             (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
         df = score_line(df, prefix="proj_")
 
-    # ── NF-D2 slice 5: INJURY / AVAILABILITY. Cap expected games for a player flagged unavailable
-    #    (RES/PUP/NFI/SUS) in the projection-season roster, and rescale the whole season line by the
-    #    games ratio. Applied LAST so it caps whatever the prior steps produced. No-op when the
-    #    proj_status column is absent or injury_override_blend == 0.
+    # ── THE AVAILABILITY CHAIN (NF-D2 slice 5 → NF-D11 → NF-INJ-NEWS-1) ─────────────────────────
+    #    ⭐ NF-INJ3c: all three steps now live in `apply_availability_chain`, the ONE owner both
+    #    projection frames call. What used to be three near-identical blocks here (each retyping the
+    #    12-column line rescale) is the callable below plus two keyword arguments; the rookie frame
+    #    reaches the SAME code with a different formal step and no NF-D11 prior. See that function
+    #    for the ordering and the min-cap composition argument.
+    #
+    #    NF-D2 slice 5 — the FORMAL cap. Expected games for a player flagged unavailable
+    #    (RES/PUP/NFI/SUS) in the projection-season roster, with the whole season line rescaled by
+    #    the games ratio. No-op when `proj_status` is absent or `injury_override_blend == 0`.
+    _formal_games = None
     if injury_override_blend > 0 and "proj_status" in df.columns:
         # ⭐ NF-INJ3b-M: THE COVARIATE FEED the certified hurdle needs. `onset_carryover`,
         #    `weeks_since_last_game` and `log1p_prior_fp` are NOT produced anywhere in this build —
@@ -1168,104 +1304,37 @@ def project_veterans(
             cov = injury_covariates.drop_duplicates("player_id")
             df = df.merge(cov[[c for c in cov.columns if c == "player_id"
                                or c not in df.columns]], on="player_id", how="left")
-        # ⭐ NF-INJ3b / NF-INJ3b-M: routed through the POLICY. With
-        #    `injury_games_policy.SERVING_ENABLED = False` (today, DEPLOY-HELD) this is
-        #    `injury_availability_games` byte-for-byte — pinned by test — so the wiring is inert
-        #    until the operator flips it. The import is LAZY because `injury_games_serving` →
-        #    `nf_inj3_injury_games` → this module (a module-scope import would be circular).
-        from quant_sports_intel_models.football.nfl.fantasy import (
-            injury_games_serving as _IGS,
-        )
-        new_games, _injury_prov = _IGS.served_injury_games(
-            df, eg=df["proj_games"].to_numpy(), blend=injury_override_blend,
-            feed_supplied=(injury_covariates is not None))
-        if _injury_prov.get("path") == "incumbent_no_feed":
-            import logging
-            logging.getLogger("nfl.fantasy.season_projection").warning("injury-games policy is ON but this call site supplied no covariate feed "
-                        "— serving the INCUMBENT cap here (%s)", _injury_prov["reason"])
-        old_games = df["proj_games"].to_numpy()
-        # PM ruling 2b — record whether the formal path actually MOVED this row, which is what the
-        # reported-absence disjointness reads. ⚠️ Not "does he carry a tag": a tagged player whose
-        # games already sat below the status level is unchanged by the blend, and nothing was
-        # double-counted for him either.
-        df[FORMAL_APPLIED_COL] = new_games < old_games - 1e-9
-        iscale = np.where(old_games > 1e-6, new_games / np.clip(old_games, 1e-6, None), 1.0)
-        for col in ("proj_pass_att", "proj_pass_cmp", "proj_pass_yds", "proj_pass_td", "proj_pass_int",
-                    "proj_rush_att", "proj_rush_yds", "proj_rush_td",
-                    "proj_targets", "proj_rec", "proj_rec_yds", "proj_rec_td"):
-            df[col] = df[col].to_numpy() * iscale
-        df["proj_games"] = new_games
-        df["proj_pass_cmp"] = np.minimum(df["proj_pass_cmp"], df["proj_pass_att"])
-        df["proj_rec"] = np.minimum(df["proj_rec"], df["proj_targets"])
-        df["proj_fumbles_lost"] = np.round(
-            (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
-        df = score_line(df, prefix="proj_")
 
-    # ── NF-D11: RETURN-FROM-ABSENCE availability prior. A player rescued by the most-recent-played
-    #    anchor (`seasons_missed >= 1`) carries STALE durability, so cap expected games toward the
-    #    empirical return level and rescale the season line by the games ratio. Applied AFTER the
-    #    slice-5 status cap so the two COMPOSE (both are min-caps ⇒ monotone; a returner who is ALSO
-    #    flagged RES/PUP takes the harsher of the two, never a rebound). No-op when the prior is
-    #    absent, blend == 0, or no row is a returner.
-    if absence_prior_blend > 0 and absence_prior is not None and "seasons_missed" in df.columns:
-        new_games = absence_return_games(df, absence_prior, blend=absence_prior_blend)
-        old_games = df["proj_games"].to_numpy()
-        ascale = np.where(old_games > 1e-6, new_games / np.clip(old_games, 1e-6, None), 1.0)
-        for col in ("proj_pass_att", "proj_pass_cmp", "proj_pass_yds", "proj_pass_td", "proj_pass_int",
-                    "proj_rush_att", "proj_rush_yds", "proj_rush_td",
-                    "proj_targets", "proj_rec", "proj_rec_yds", "proj_rec_td"):
-            df[col] = df[col].to_numpy() * ascale
-        df["proj_games"] = new_games
-        df["proj_pass_cmp"] = np.minimum(df["proj_pass_cmp"], df["proj_pass_att"])
-        df["proj_rec"] = np.minimum(df["proj_rec"], df["proj_targets"])
-        df["proj_fumbles_lost"] = np.round(
-            (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
-        df = score_line(df, prefix="proj_")
+        def _formal_games(_frame):
+            """⭐ NF-INJ3b / NF-INJ3b-M: the VETERAN formal step, routed through the POLICY. With
+            `injury_games_policy.SERVING_ENABLED = False` (today, DEPLOY-HELD) this is
+            `injury_availability_games` byte-for-byte — pinned by test — so the wiring is inert
+            until the operator flips it. The import is LAZY because `injury_games_serving` →
+            `nf_inj3_injury_games` → this module (a module-scope import would be circular).
 
-    # ── NF-INJ-NEWS-1: the REPORTED-ABSENCE cap (OPERATOR JUDGMENT, not a model — see
-    #    `reported_absence_overrides`). Applied THIRD and LAST among the availability steps, so it
-    #    composes with the formal status cap and the NF-D11 return prior as a min-cap chain: a
-    #    player caught by more than one takes the harshest and never rebounds. It is disjoint from
-    #    the formal cap BY CONSTRUCTION (`reported_absence_games` skips anyone the formal map fires
-    #    on), so ordering cannot produce a double discount either way — the ordering is chosen for
-    #    the monotone composition with NF-D11, which is NOT disjoint from it.
-    #    The line rescale is the identical block the two steps above use: `proj_games` is the
-    #    quantity, the season totals follow it, and the convenience fp is re-scored.
-    if reported_absence_rows:
-        new_games, _ra_decisions = reported_absence_games(df, reported_absence_rows)
-        if reported_absence_log is not None:
-            reported_absence_log.extend(_ra_decisions)
-        old_games = df["proj_games"].to_numpy()
-        rscale = np.where(old_games > 1e-6, new_games / np.clip(old_games, 1e-6, None), 1.0)
-        for col in ("proj_pass_att", "proj_pass_cmp", "proj_pass_yds", "proj_pass_td", "proj_pass_int",
-                    "proj_rush_att", "proj_rush_yds", "proj_rush_td",
-                    "proj_targets", "proj_rec", "proj_rec_yds", "proj_rec_td"):
-            df[col] = df[col].to_numpy() * rscale
-        df["proj_games"] = new_games
-        df["proj_pass_cmp"] = np.minimum(df["proj_pass_cmp"], df["proj_pass_att"])
-        df["proj_rec"] = np.minimum(df["proj_rec"], df["proj_targets"])
-        df["proj_fumbles_lost"] = np.round(
-            (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
-        df = score_line(df, prefix="proj_")
-        # ⭐ STAMP ONLY WHAT WAS ACTUALLY APPLIED. The provenance columns are written from the
-        #    DECISIONS, never from the override file — so a row the disjointness rule ignored, or
-        #    one that matched nothing, cannot be stamped as though it had moved the board. This is
-        #    the NF-C0e "a declaration must not outrun its production" rule: the payload's claim
-        #    ("this number carries a reported absence, here is the source") is derived from the
-        #    event, not from the intent. Rows with no override keep NaN, which the exporter renders
-        #    as an ABSENT key rather than a null (NF-FRESH2's absent-vs-null).
-        _applied = [d for d in _ra_decisions if d.get("applied")]
-        if _applied:
-            for _c in REPORTED_ABSENCE_COLS:
-                if _c not in df.columns:
-                    df[_c] = np.nan
-            _by_id = {r.player_id: r for r in reported_absence_rows}
-            for _d in _applied:
-                _row = _by_id[_d["player_id"]]
-                _i = df.index[_d["row_index"]]
-                df.loc[_i, "reported_absence_source_url"] = _row.source_url
-                df.loc[_i, "reported_absence_entered_at"] = _row.entered_at.isoformat()
-                df.loc[_i, "reported_absence_games_missed"] = float(_row.expected_games_missed)
+            ⛔ THIS IS THE VETERAN OBJECT AND ONLY THE VETERAN OBJECT. `project_rookies` supplies
+            the incumbent constants instead — see the boundary recorded there (NF-INJ3c AC-1)."""
+            from quant_sports_intel_models.football.nfl.fantasy import (
+                injury_games_serving as _IGS,
+            )
+            _games, _prov = _IGS.served_injury_games(
+                _frame, eg=_frame["proj_games"].to_numpy(), blend=injury_override_blend,
+                feed_supplied=(injury_covariates is not None))
+            if _prov.get("path") == "incumbent_no_feed":
+                import logging
+                logging.getLogger("nfl.fantasy.season_projection").warning(
+                    "injury-games policy is ON but this call site supplied no covariate feed "
+                    "— serving the INCUMBENT cap here (%s)", _prov["reason"])
+            return _games
+
+    df = apply_availability_chain(
+        df,
+        formal_games=_formal_games,
+        # NF-D11: the veteran population is the one this prior was fitted on and the only one that
+        # can carry `seasons_missed` at all (see `project_rookies` for the rookie ruling).
+        absence_prior=absence_prior, absence_prior_blend=absence_prior_blend,
+        reported_absence_rows=reported_absence_rows, reported_absence_log=reported_absence_log,
+    )
 
     # ── NF-TR2b: the served veteran LEVEL recalibration — a per-position constant on the per-game
     #    RATE, carried onto the whole line (every scoring format moves together). Applied LAST among
@@ -3138,10 +3207,18 @@ def project_rookies(
     curve: RookieSlotCurve,
     projection_season: int,
     residual_lambda: float = 0.12,
-    # NF-INJ-NEWS-1 — the operator-curated reported-absence rows + the decision sink. See the step
-    # below for why the rookie path needs its own copy of it.
+    # NF-INJ-NEWS-1 — the operator-curated reported-absence rows + the decision sink. See the
+    # availability step below for why the rookie path must reach this mechanism at all.
     reported_absence_rows=None,
     reported_absence_log=None,
+    # ── NF-INJ3c ────────────────────────────────────────────────────────────────────────────────
+    # `roster_status`: the caller's forward roster-status frame (`player_id, proj_status`), joined
+    # on below. WITHOUT IT THE ROOKIE FRAME CARRIES NO `proj_status` AT ALL and the formal
+    # availability cap is structurally unreachable for this population — which is the defect this
+    # parameter exists to close, not an optimisation. None ⇒ no formal step (the pre-NF-INJ3c
+    # behaviour, byte-identical), which is the honest state for a caller with no roster feed.
+    roster_status: "pd.DataFrame | None" = None,
+    injury_override_blend: float = _INJURY_OVERRIDE_BLEND,
 ) -> pd.DataFrame:
     """Project the incoming rookie class (skill positions) from the slot curve, nudged by the P1A
     residual (talent the draft board under/over-rated) and widened for rookie uncertainty.
@@ -3211,58 +3288,88 @@ def project_rookies(
     df["proj_two_pt"] = np.nan
     df = score_line(df, prefix="proj_")
 
-    # ── NF-INJ-NEWS-1: the REPORTED-ABSENCE cap, on the ROOKIE path too.
+    # ── NF-INJ3c: attach the FORWARD ROSTER STATUS the availability cap reads ────────────────────
+    # ⭐ NORMALISED ON BOTH ENDS OF THE JOIN (NF-C9). NF-C9 shipped a join that normalised one side
+    #    and trusted the other, and a padded feed id then read as "this player is not on the board"
+    #    rather than as a join failure — it cost Josh Jacobs and DK Metcalf a live board. The one
+    #    owner of the normalisation is `reported_absence_overrides.normalize_player_id`.
+    # ⚠️ This attach used to live in `run_season_projection.build_projection`, AFTER this function
+    #    returned, for DETECTION ONLY (PM ruling 2b's meter needs `proj_status` on both halves of
+    #    the concatenated frame). It moves here because a status attached after the fact cannot
+    #    drive a cap that runs inside; the meter still sees it, because the column now rides out on
+    #    the returned frame.
+    if roster_status is not None and not roster_status.empty and "proj_status" not in df.columns:
+        from quant_sports_intel_models.football.nfl.fantasy import (
+            reported_absence_overrides as _RAO_rk,
+        )
+        _st = (roster_status.loc[:, ["player_id", "proj_status"]]
+               .assign(player_id=lambda d: d["player_id"].map(_RAO_rk.normalize_player_id))
+               .drop_duplicates("player_id"))
+        df["player_id"] = pd.Series(df["player_id"]).map(_RAO_rk.normalize_player_id).to_numpy()
+        df = df.merge(_st, on="player_id", how="left")
+
+    # ── NF-INJ3c: THE AVAILABILITY CHAIN ON THE ROOKIE PATH ─────────────────────────────────────
     #
-    # ⚠️⚠️ THIS IS NOT A COPY-PASTE OF THE VETERAN STEP FOR TIDINESS — WITHOUT IT THE WHOLE
-    # MECHANISM CANNOT MOVE THE PLAYER IT WAS WRITTEN FOR. Every existing availability discount
-    # (the RES/PUP/NFI/SUS status cap, the NF-D11 return prior) lives inside `project_veterans`;
-    # `project_rookies` has its own, simpler games path and calls none of them. Jordyn Tyson — the
-    # canonical first row, reported out ~two months — is a 2026 ROOKIE (`is_rookie=True`,
-    # `source='rookie'`, id `TYS405541`), and so is Jeremiyah Love. Wiring the cap only into the
-    # veteran path would have shipped a mechanism that DECLARES it moves the Tyson class and
-    # structurally cannot: 81 of the 794 rows on the 2026 board are rookies, and they are exactly
-    # the population with no roster history for the model to discount them by.
-    # Found by resolving the seed candidates against the REAL built board, not by any test — the
-    # NF-C0e wired-vs-invoked class, which is only ever visible in the artifact.
+    # ⚠️⚠️ THIS FRAME USED TO RUN *ONLY* THE REPORTED-ABSENCE CAP. Both model-driven availability
+    # discounts — the formal RES/PUP/NFI/SUS status cap and the NF-D11 return prior — lived inside
+    # `project_veterans`, so a rookie placed on IR was projected as though healthy by every path.
+    # MEASURED over the 2019–2025 builds: **50 of 60** flagged rookies projected ABOVE the incumbent
+    # cap's own ceiling, against **0 of 496** veterans (`ablation_results/nf_inj3_injury_games.md`
+    # §1 — recorded there as a structural finding out of that story's scope). The 53-man cutdown
+    # (2026-08-30) puts a wave of exactly those rows on the board.
     #
-    # ⚠️ Rookies carry NO `proj_status` column at all (there is no forward roster-status join for a
-    # player with no NFL history), so `reported_absence_games` takes its documented "nobody is
-    # formally tagged here" branch. That is the correct reading rather than a gap: the formal path
-    # is likewise absent for this population, so the override is the only thing that can price the
-    # absence, and refusing it would leave the rookie class permanently un-discountable.
+    # ⭐ ONE OWNER, NOT A COPY. Both frames call `apply_availability_chain`; the two populations
+    # differ ONLY in the two arguments below, and each difference is a recorded ruling:
+    #
+    #   ⛔ (1) THE FORMAL CAP IS THE INCUMBENT CONSTANTS ({RES/PUP/NFI: 4.0, SUS: 7.0} @ blend 0.7),
+    #          **NEVER** NF-INJ3b's certified `hurdle_transfer` (NF-INJ3c AC-1). That arm's
+    #          covariates — `prior_games`, `log1p_prior_fp`, `weeks_since_last_game`,
+    #          `onset_carryover` — are VETERAN-HISTORY quantities a rookie does not have and cannot
+    #          have; its fit population EXCLUDED rookies by registration (60 of them). Serving it
+    #          here would be an uncertified re-derivation on a population it never scored — MH2.1's
+    #          "serve the object that was VALIDATED" facing the population axis. If NF-INJ3b-M's
+    #          artifact later ships for veterans, rookies REMAIN on constants until a registered
+    #          read covers them. `injury_availability_games` is therefore called DIRECTLY here,
+    #          bypassing `injury_games_serving` — deliberately, and pinned by test.
+    #
+    #   ⛔ (2) NF-D11 IS **NOT-APPLICABLE-BY-CONSTRUCTION** (NF-INJ3c AC-2), ruled on MECHANISM
+    #          before any measurement. The prior fires on `seasons_missed >= 1` — a player who
+    #          missed an ENTIRE prior NFL season while carrying production in Y−3..Y−2 — and its
+    #          design matrix is `(prior_games, log_prior_fp, seasons_missed, is_qb)`, three of whose
+    #          four terms are prior-NFL-career quantities. A rookie has no prior NFL season, so
+    #          `seasons_missed` is not merely missing, it is UNDEFINED; the fit population (431
+    #          historical returners) contains no row like him. So `absence_prior` is not passed.
+    #          ⭐ What DOES transfer is the FINDING, not the feature: "a player whose availability
+    #          history is absent or stale must be DISCOUNTED, never carried forward at the healthy
+    #          level" — and for a tagged rookie the formal cap in (1) is what expresses it.
+    #
+    # ⚠️ THE FORMAL STEP NEEDS `proj_status`, WHICH THIS FRAME DOES NOT PRODUCE. It is joined on by
+    # the caller's `roster_status` (see the merge above). A caller that supplies none runs no formal
+    # step at all — the honest state, and identical to this function's pre-NF-INJ3c behaviour.
+    #
+    # ⭐ THE REPORTED-ABSENCE CAP IS UNCHANGED IN EFFECT (NF-INJ-NEWS-1). It is still applied, still
+    # last, still with the same rows and the same decision sink; it simply reaches the board through
+    # the shared owner instead of a second copy of the rescale. Its disjointness rule reads
+    # `_formal_discount_applied`, which the chain now genuinely stamps for this frame too — so a
+    # rookie the formal cap DID move no longer receives a second discount, and one it did not move
+    # (no tag, or games already below the level) keeps his override exactly as before.
     #
     # Applied BEFORE the NF-D16 level recalibration and before the band, which is the same position
     # in the ordering the veteran path uses (availability → level → band), so the two populations
     # compose their steps identically.
-    if reported_absence_rows:
-        _new_games, _ra_dec = reported_absence_games(df, reported_absence_rows)
-        if reported_absence_log is not None:
-            reported_absence_log.extend(_ra_dec)
-        _old = df["proj_games"].to_numpy()
-        _sc = np.where(_old > 1e-6, _new_games / np.clip(_old, 1e-6, None), 1.0)
-        for _c in ("proj_pass_att", "proj_pass_cmp", "proj_pass_yds", "proj_pass_td", "proj_pass_int",
-                   "proj_rush_att", "proj_rush_yds", "proj_rush_td",
-                   "proj_targets", "proj_rec", "proj_rec_yds", "proj_rec_td"):
-            if _c in df.columns:
-                df[_c] = df[_c].to_numpy() * _sc
-        df["proj_games"] = _new_games
-        df["proj_pass_cmp"] = np.minimum(df["proj_pass_cmp"], df["proj_pass_att"])
-        df["proj_rec"] = np.minimum(df["proj_rec"], df["proj_targets"])
-        df["proj_fumbles_lost"] = np.round(
-            (df["proj_rush_att"].to_numpy() + df["proj_rec"].to_numpy()) * 0.006, 2)
-        df = score_line(df, prefix="proj_")
-        _applied_r = [d for d in _ra_dec if d.get("applied")]
-        if _applied_r:
-            for _c in REPORTED_ABSENCE_COLS:
-                if _c not in df.columns:
-                    df[_c] = np.nan
-            _by_id_r = {r.player_id: r for r in reported_absence_rows}
-            for _d in _applied_r:
-                _row = _by_id_r[_d["player_id"]]
-                _i = df.index[_d["row_index"]]
-                df.loc[_i, "reported_absence_source_url"] = _row.source_url
-                df.loc[_i, "reported_absence_entered_at"] = _row.entered_at.isoformat()
-                df.loc[_i, "reported_absence_games_missed"] = float(_row.expected_games_missed)
+    _rookie_formal = None
+    if injury_override_blend > 0 and "proj_status" in df.columns:
+        def _rookie_formal(_frame):
+            """The INCUMBENT constants cap — see boundary (1) above. ⛔ Not the policy router."""
+            return injury_availability_games(_frame, blend=injury_override_blend)
+
+    df = apply_availability_chain(
+        df,
+        formal_games=_rookie_formal,
+        absence_prior=None, absence_prior_blend=0.0,   # NF-D11: not-applicable-by-construction
+        reported_absence_rows=reported_absence_rows,
+        reported_absence_log=reported_absence_log,
+    )
 
     # ── NF-D16: the per-position LEVEL RECALIBRATION of the served point ──────────────────────────
     # NF1.4 DOCUMENTED that the rookie prior runs COLD on the draftable tier (`tier_bias` RB −58 /

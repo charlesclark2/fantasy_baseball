@@ -27,7 +27,15 @@ dependencies = [
     "shap>=0.44",
     "optuna>=4.8.0",
     "pyarrow>=4.0.0",
-    "duckdb>=1.1.0",
+    # ⛔ PINNED, and the range is load-bearing (NCAAF-LAKE1, 2026-08-24). `query_lake` used to
+    # decide "does this Delta table exist yet?" by matching delta-kernel's ERROR TEXT. That is a
+    # contract nobody owns: the wording differs by SUBSTRATE (a never-written S3 prefix says
+    # "No files in log segment"; a never-created local dir says "Path does not exist"), and it is
+    # free to change on any bump. It cost us an UNBOOTSTRAPPABLE table in production — NCAAF-PS
+    # could not create its own snapshot tables at all. The classifier no longer reads messages, but
+    # the engine's behaviour is still something we test against rather than something we are
+    # promised, so pin it and re-measure on any widening. Verified on 1.5.3 and 1.5.5.
+    "duckdb>=1.5,<1.6",
     # NF-INJ-NEWS-1: the operator-curated reported-absence overrides file is YAML, read on
     # the BOARD BUILD path (which runs on the box as well as the laptop). PyYAML was already
     # present transitively (dagster / dbt / snowflake-connector all pull it) and resolves to

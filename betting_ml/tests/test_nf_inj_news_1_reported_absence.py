@@ -644,12 +644,22 @@ def test_the_cap_reaches_the_ROOKIE_path_not_only_the_veteran_one():
 
     ⚠️ It was invisible to every test in this file, because a synthetic frame does not know which
     production function built it. It was found by resolving the seed candidates against the REAL
-    built board — the NF-C0e wired-vs-invoked class, which only the artifact shows."""
+    built board — the NF-C0e wired-vs-invoked class, which only the artifact shows.
+
+    ⭐ RE-ANCHORED BY NF-INJ3c ONTO THE SHARED OWNER, not weakened. NF-INJ3c extracted the whole
+    availability chain into `season_projection.apply_availability_chain`, so the rookie frame now
+    reaches this cap in two hops instead of one. The PROPERTY is unchanged — "the reported-absence
+    cap actually reaches the rookie path" — and both hops are asserted, so a break anywhere along
+    the composition still turns this red (RED-proven in `nf_inj3c_red_proof.py`)."""
     src = (_FANTASY / "season_projection.py").read_text()
     body = src.split("def project_rookies(", 1)[1].split("\ndef ", 1)[0]
-    assert "reported_absence_games(" in body, (
+    assert "apply_availability_chain(" in body and "reported_absence_rows=reported_absence_rows" in body, (
         "project_rookies never applies the reported-absence cap — the mechanism cannot move a "
         "rookie, and the player it was written for is one")
+    chain = src.split("def apply_availability_chain(", 1)[1].split("\ndef ", 1)[0]
+    assert "reported_absence_games(" in chain, (
+        "the shared availability chain does not call the reported-absence cap — the rookie frame "
+        "delegates to a step that no longer applies it, which is the same defect one hop along")
     run = (_FANTASY / "run_season_projection.py").read_text()
     call = run.split("rks = (project_rookies(", 1)[1].split(")", 1)[0] if "rks = (project_rookies(" in run else ""
     assert "reported_absence_rows" in call, (
@@ -877,7 +887,7 @@ def test_the_applied_row_log_carries_the_EFFECT_SIZE():
     assert "4.00" in joined, f"the applied-row log does not carry the effect size: {joined}"
 
 
-def test_project_veterans_stamps_the_formal_flag_from_the_MOVE_not_from_the_tag():
+def test_the_formal_flag_is_stamped_from_the_MOVE_not_from_the_tag():
     """⚖️ PM ruling 2b's other half, at its source. The flag `reported_absence_games` reads must be
     set from whether the formal step actually MOVED the row — a tagged player whose games already
     sat below the status level is unchanged by the 0.7 blend, and nothing was double-counted for him
@@ -885,12 +895,16 @@ def test_project_veterans_stamps_the_formal_flag_from_the_MOVE_not_from_the_tag(
 
     ⚠️ SOURCE-INSPECTED because a synthetic frame sets the flag directly and therefore cannot see
     how production computes it — the exact gap that let a deliberate break of this line stay green
-    against every behavioural clause in this file."""
+    against every behavioural clause in this file.
+
+    ⭐ RE-ANCHORED BY NF-INJ3c, not weakened: the stamp moved out of `project_veterans` into
+    `apply_availability_chain`, the ONE owner both projection frames call. The property is
+    unchanged and now covers BOTH populations — a rookie's flag is stamped by the same line."""
     src = (_FANTASY / "season_projection.py").read_text()
-    body = src.split("def project_veterans(", 1)[1].split("\ndef ", 1)[0]
+    body = src.split("def apply_availability_chain(", 1)[1].split("\ndef ", 1)[0]
     assert f"df[{SP.FORMAL_APPLIED_COL!r}]" in body or "df[FORMAL_APPLIED_COL]" in body, (
-        "project_veterans never stamps the formal-discount flag — the reported-absence disjointness "
-        "would then read every veteran as un-discounted and could double-discount")
+        "the availability chain never stamps the formal-discount flag — the reported-absence "
+        "disjointness would then read every row as un-discounted and could double-discount")
     stamp = body.split("FORMAL_APPLIED_COL] =", 1)[1].split("\n", 1)[0]
     assert "new_games" in stamp and "old_games" in stamp, (
         f"the flag is not derived from the games the formal step actually moved (got `{stamp}`) — "

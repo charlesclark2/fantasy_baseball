@@ -1215,8 +1215,16 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     # (Tyson) is a rookie, so passing the rows here is what makes the mechanism able to move
     # the population it was written for; the same `_ra_log` sink collects both halves'
     # decisions so the build log reports one list rather than two.
+    # ── NF-INJ3c — and the ROOKIE half of the FORMAL availability cap. `roster_status` is what
+    #    makes `proj_status` reach the rookie frame at all; without it `project_rookies` runs no
+    #    formal step and a rookie on IR is projected as though healthy (50 of 60 flagged rookies,
+    #    measured over 2019–2025). ⛔ It routes the INCUMBENT CONSTANTS, never NF-INJ3b's certified
+    #    veteran hurdle — the boundary and its reasoning are recorded in `project_rookies`.
+    #    ⚠️ Loaded BEFORE the call, not after: this frame drives a cap now, not only the detector.
+    _rk_status = load_forward_roster_status(con, projection_season)
     rks = (project_rookies(incoming, curve, projection_season,
-                           reported_absence_rows=_ra.rows, reported_absence_log=_ra_log)
+                           reported_absence_rows=_ra.rows, reported_absence_log=_ra_log,
+                           roster_status=_rk_status)
            if not incoming.empty else pd.DataFrame())
 
     # ⚠️ LOGGED AFTER BOTH POPULATIONS, never after the veterans alone: the two halves each
@@ -1224,24 +1232,14 @@ def build_projection(con, base_season: int, projection_season: int, schema: str,
     # half and vice versa. `_log_reported_absence_decisions` reconciles them.
     _log_reported_absence_decisions(_ra_log)
 
-    # ── PM ruling 2b: attach the forward roster status to the ROOKIE half, FOR DETECTION ONLY.
-    #    ⛔ THIS APPLIES NO DISCOUNT AND IS NOT THE NF-INJ3c FIX. `project_rookies` still runs no
-    #    formal availability cap — that is NF-INJ3c's story. What this buys is that
-    #    `_warn_formal_tag_without_discount` can SEE a rookie on IR at all: the rookie frame carries
-    #    no `proj_status` natively, so without this the detector would be structurally blind to
-    #    exactly the population it exists for, which is the vacuous-guard shape (NF1.7 (a)).
-    #    ⭐ NORMALISED ON BOTH ENDS (NF-C9). The sibling join a few lines above in
-    #    `build_veteran_projection` does NOT normalise — that is the known open defect NF-C9 carded
-    #    and NF-C9b fixes at the ingest; this one does not inherit it.
-    if not rks.empty:
-        _rk_status = load_forward_roster_status(con, projection_season)
-        if not _rk_status.empty:
-            _n = _rk_status.assign(
-                player_id=_rk_status["player_id"].map(_RAO.normalize_player_id))
-            rks = rks.assign(
-                player_id=rks["player_id"].map(_RAO.normalize_player_id)
-            ).merge(_n, on="player_id", how="left", suffixes=("", "_rk"))
-
+    # ── PM ruling 2b's detector still needs `proj_status` on the ROOKIE half of the concatenated
+    #    frame, and it has it: NF-INJ3c moved that attach INSIDE `project_rookies` (normalised on
+    #    both ends, NF-C9) because a status joined on AFTER the function returned could never drive
+    #    the cap that runs inside it. The column rides out on the returned frame, so
+    #    `_warn_formal_tag_without_discount` sees exactly what it saw before — and now reads a
+    #    population the rookie path can actually discount.
+    #    ⚠️ The sibling join inside `build_veteran_projection` still does NOT normalise — the known
+    #    open defect NF-C9 carded and NF-C9b fixes at the ingest; neither side here inherits it.
     proj = pd.concat([vets, rks], ignore_index=True, sort=False)
     # PM ruling 2b — the board-wide NF-INJ3c detector. Runs on EVERY build, not only when an
     # override exists: the population it counts has nothing to do with this story's overrides.

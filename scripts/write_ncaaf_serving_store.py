@@ -182,53 +182,24 @@ def _put_s3(client, bucket: str, key: str, payload: dict) -> bool:
 # Lake reads
 # ══════════════════════════════════════════════════════════════════════════════════════════
 
-#: What delta-kernel says when a Delta table location holds no committed `_delta_log` — i.e. the
-#: table has never been written. MEASURED on duckdb 1.5.3 against both a never-written NCAAF-PS
-#: table and a random non-existent prefix; `query_lake.MISSING_TABLE_MARKERS`
-#: ("InvalidTableLocationError", "Path does not exist") does NOT contain it on this version.
-_EMPTY_LOG_SEGMENT_MARKER = "No files in log segment"
-
-
 def read_snapshots(season: int, source: str, *, local_root: str | None = None):
     """The season's snapshot rows, or None iff the table genuinely has nothing to read yet.
 
-    Delegates to NCAAF-PS's own reader, so "absent partition" vs "transient read failure" is decided
-    in ONE place and a transient failure RAISES rather than being guessed as empty.
+    Delegates to NCAAF-PS's own reader, so "absent table" vs "transient read failure" is decided in
+    ONE place: `query_lake.query_or_missing` establishes absence by LISTING the store's
+    `_delta_log/`, and RAISES on anything it cannot prove absent.
 
-    ⭐ ONE CASE IS HANDLED HERE AND DELIBERATELY NOT PUSHED INTO THE SHARED HELPER, because the
-    right answer differs by CALLER and that asymmetry is the whole point:
-
-      * `query_lake.MISSING_TABLE_MARKERS` is deliberately narrow. Its consumers are READ-MERGE-WRITE
-        writers (`odds_recurring_capture`, `game_prediction_snapshot.write_snapshot`) that PRESERVE
-        what is already in the lake by reading it first — so for them, mistaking a transient blip for
-        "nothing there" silently DELETES every prior week. A read-after-write visibility blip on a
-        just-written `_delta_log` could plausibly surface as an empty log segment, which is exactly
-        the CI flake that hardened that helper. Widening the shared list would re-open it for every
-        caller (MH2.7: changing a shared instrument reaches further than the story that touches it).
-      * THIS caller is an idempotent PUBLISH. It writes only to the serving store and never merges
-        into a lake partition, so the worst case of treating an unreadable snapshot table as "nothing
-        to publish" is a serving store that stays one cycle stale — never data loss. And the
-        alternative is worse in a way that matters before the opener: a `sports_ncaaf_serving_write_job`
-        fired before the FIRST snapshot exists would go RED with "lake read failed 3x" rather than
-        logging the clean no-op the operator should see.
-
-    ⚠️ RECORDED FOR THE OPERATOR, because it is NOT this story's to fix and it bites earlier:
-    `game_prediction_snapshot.write_snapshot` reads the table back before its FIRST-EVER write, so on
-    a duckdb whose delta-kernel raises this message the very first NCAAF-PS snapshot run cannot
-    bootstrap its own table. Measured on duckdb 1.5.3 with both NCAAF-PS tables absent from S3.
+    🩹 NCAAF-LAKE1 (2026-08-24) REMOVED a local branch that used to live here. P3.1 shipped with its
+    own message match for "No files in log segment", scoped to this publish path because an
+    idempotent publish cannot lose lake data by treating an unreadable table as empty. The shared
+    helper now handles that case correctly for every caller, so the local branch became a SECOND
+    rule for one question — and a dead fallback that message-matches is the same bomb on a longer
+    fuse. Its two guards were RE-ANCHORED onto the shared helper rather than deleted (MH2.7): the
+    properties they pinned (an absent table reads empty; a genuine failure still raises) are now
+    proven where they are actually implemented.
     """
     from quant_sports_intel_models.football.ncaaf.models import game_prediction_snapshot as gps
-    from quant_sports_intel_models.football.ncaaf.ingest import query_lake
-
-    try:
-        return gps.read_existing_snapshots(season, source, local_root=local_root)
-    except Exception as exc:  # noqa: BLE001 — narrowed immediately below; anything else re-raises
-        if _EMPTY_LOG_SEGMENT_MARKER not in str(exc) and not query_lake.is_missing_table_error(exc):
-            raise
-        log.info("the `%s` Delta table has no committed log yet — treating it as EMPTY, not as a "
-                 "read failure. This is a publish, not a merge: nothing in the lake can be lost by "
-                 "the choice. (%s)", source, str(exc).splitlines()[0][:160])
-        return None
+    return gps.read_existing_snapshots(season, source, local_root=local_root)
 
 
 def read_market_lines(season: int) -> tuple[dict[int, dict], bool]:
@@ -257,6 +228,7 @@ def read_market_lines(season: int) -> tuple[dict[int, dict], bool]:
         log.warning("[ALERT] NCAAF market-line read FAILED (the slate is unaffected; every game's "
                     "market block is served status=unavailable reason=market_read_failed): %s", exc)
         return {}, True
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════
