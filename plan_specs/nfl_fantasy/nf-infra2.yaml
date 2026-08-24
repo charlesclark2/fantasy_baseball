@@ -7,7 +7,7 @@ metadata:
   name: nf-infra2
   vertical: nfl_fantasy
   card: https://trello.com/c/IdFOj1RV
-  status: ACCEPTED
+  status: DONE
 spec:
   description: >
     Automate the NFL fantasy board build + publish. Today the board
@@ -126,8 +126,49 @@ spec:
       - id: 6-closeout
         desc: "Verdict + findings (incl. the premise reconciliation) into closeout.followUps."
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED, WITH THE CARD'S PREMISE REFUTED. PR #1018 → dev.
+      ⭐ PREMISE RECONCILIATION (node 1, the story's first task): the card's premise —
+      the board is hand-published by six manual commands — is STALE, and NF-C9's daily
+      07:15 PT auto-publish claim is TRUE. `sports_nfl_board_publish_job` +
+      `sports_nfl_board_publish_schedule` have existed since NF-FRESH2; the schedule
+      self-starts (default_status=RUNNING, NF-INFRA1) and is in CRITICAL_SCHEDULES.
+      MEASURED, not assumed, off the live published manifest: generated_at =
+      2026-08-23T14:22:33Z = 07:22 PT (the 07:15 PT fire), adp_as_of and ecr_as_of both
+      that day, coherence.injury_input OK at 0.9h lag. ⇒ AC1 and AC2 were ALREADY
+      SATISFIED before this story, and AC5 ("a scheduled — not manually triggered — run
+      republishes with no human in the loop") is already demonstrated in production; the
+      remaining runtime-gate value is confirming the NEW monitor fires on the box.
+      WHAT WAS ACTUALLY MISSING, and is what shipped: (1) AC4 — no detector for the
+      schedule STOPPING; (2) AC3 — two gaps a broken artifact leaves undisturbed (feed
+      stamps beyond adp_as_of, and the NF-INJ1 coherence block's PRESENCE); (3) AC1's
+      third feed — the Sleeper capture was ordered by a 45-minute CRON OFFSET only, which
+      the job's own docstring calls "a courtesy, NOT the ordering guarantee" (INC-25).
+      Scope held: best_alpha=0, no projection logic, no new schedule, manual path intact,
+      project_veterans/project_rookies untouched.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      FOR PM TRIAGE — findings, not scope creep. (a) ⭐ THE CARD PREMISE ITSELF: two
+      cards disagreed about whether the board auto-publishes and BOTH were being carried
+      forward; NF-C9 was right. Worth a sweep of any other card/doc still asserting the
+      six-manual-commands story before it costs another session (this is the "pre-flight a
+      card against the RUNNING system" class — E9.61). (b) A DEGRADED-INPUT PAGE NOW EXISTS
+      that did not before: a stale adp/ecr/depth_chart stamp pages WARN while still
+      publishing. If the ADP/ECR sources routinely lapse past 96h out of draft season, that
+      bar will need widening on the WEEKLY cadence — it was set from a single observed
+      board (2026-08-23) and is deliberately generous, but it is an unmeasured claim about
+      the OFF-SEASON regime and this repo's rule is that an unmeasured cadence claim
+      produces a permanent false page. Recommend re-reading it after the first off-season
+      Monday publish. (c) `freshness.input_vintage.depth_chart_as_of` is a NAIVE timestamp
+      with no declared timezone ("2026-08-23 07:28:22") while its sibling
+      `sleeper_status_as_of` is tz-aware ISO. The SLA reads it as UTC and its bars are in
+      DAYS so the ambiguity is harmless TODAY, but this repo has four separate LTZ/NTZ
+      confusion bugs on record and a future tightening would be the fifth. Cheap fix at the
+      producer; deliberately NOT done here (it changes a served field). (d) THE PYTHON RED
+      PROOFS STILL RUN ONLY WHEN SOMEBODY TYPES THE COMMAND — nf_infra1/nf_fresh2/nf_infra2
+      all record this same limitation, and E9.64 MEASURED what it costs (six red-proof cases
+      had silently gone vacuous). Wiring the `*_red_proof.py` harnesses into a scheduled
+      workflow is now recorded by three stories and owned by none. (e) THE BOARD SLA RIDES
+      `sports_nfl_sleeper_injuries_job`, which is heartbeat-protected but is still a
+      dependency: if a future story retires or re-scopes that job, the board monitor moves
+      with it. Noted in the op docstring; a dedicated monitor schedule was rejected here
+      only because the spec's scope guard forbids new schedules.

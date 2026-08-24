@@ -199,9 +199,57 @@ def nfl_sleeper_injuries_freshness_op(context):
           dedup_key=f"nfl_sleeper_injuries:freshness:{verdict['verdict']}")
 
 
+@op(out=Out(Nothing))
+def nfl_published_board_freshness_op(context):
+    """ALERT (never HALT) — NF-INFRA2: assert the PUBLISHED NFL draft board is still advancing.
+
+    ⭐ WHY IT LIVES HERE AND NOT IN `sports_nfl_board_publish_job`. That job already verifies the
+    artifact it just shipped, and that check is structurally incapable of catching this failure,
+    because it only runs when the job runs. The event this op exists to detect is the publish job
+    NOT RUNNING — a schedule reverted to STOPPED by a Dagster-DB reset, a code location that
+    failed to load, a stalled daemon, a `SkipReason` branch that started firing every day. In all
+    of those there is no run, so there is no verification, no failed run, and the last run in
+    Dagit is a genuine green one; the board silently freezes and every producer-side instrument
+    stays quiet. A monitor hosted inside its own subject cannot see its subject stop. So it rides
+    a DIFFERENT daily NFL job instead — which also means this story adds NO new schedule (one
+    fewer instigator that can itself be silently STOPPED).
+
+    ⭐ AND IT IS DELIBERATELY INDEPENDENT — no `ins`, so it is NOT downstream of the Sleeper
+    ingest. That op fails loud and raises by design (NF-INFRA1), and hanging this monitor off it
+    would mean a Sleeper outage BLINDS the board monitor on exactly the days something is already
+    wrong. Two unrelated failures must not share a fate.
+
+    Terminal, never raises: by the time it runs it has only read S3, and failing this run would
+    add nothing while obscuring a successful capture."""
+    from betting_ml.monitoring import nfl_board_freshness as NBF
+    from quant_sports_intel_models.football.nfl.ingest.sources import current_season
+
+    season = current_season()
+    reading = NBF.read_published_manifest(season)
+    verdict = NBF.classify(reading)
+    context.log.info(
+        "[METRIC] nfl_published_board_freshness=%s lag_hours=%s sla_hours=%s season=%s",
+        verdict["verdict"], verdict["lag_hours"], verdict["sla_hours"], season)
+    context.log.info(
+        "[METRIC] nfl_published_board_generated_at=%s",
+        reading.generated_at.isoformat() if reading.generated_at else "UNREADABLE")
+    if not NBF.is_problem(verdict):
+        context.log.info("[nfl board sla] published board OK — %s", verdict["detail"])
+        return
+    _page(context, f"NFL published draft board {verdict['verdict']}",
+          f"{verdict['detail']}\n\ncadence: {verdict['cadence']}",
+          severity=verdict["severity"] or "WARN",
+          dedup_key=f"nfl_published_board:freshness:{verdict['verdict']}")
+
+
 @job(executor_def=in_process_executor)
 def sports_nfl_sleeper_injuries_job():
     """Daily Sleeper forward-availability capture → refresh the staging model → assert the artifact
-    actually advanced. The ingest fails loud; the rebuild and the freshness check page and continue."""
+    actually advanced. The ingest fails loud; the rebuild and the freshness check page and continue.
+
+    ⭐ It also carries NF-INFRA2's PUBLISHED-BOARD freshness SLA as an INDEPENDENT leaf (see
+    `nfl_published_board_freshness_op`): the detector for "the board publish schedule silently
+    stopped", which cannot live inside the job it watches."""
     landed = nfl_sleeper_injuries_ingest_op()
     nfl_sleeper_injuries_freshness_op(start=nfl_sleeper_injuries_rebuild_op(start=landed))
+    nfl_published_board_freshness_op()

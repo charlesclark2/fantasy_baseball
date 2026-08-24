@@ -85,7 +85,6 @@ Postgres; this flip + the heartbeat entry are the belt-and-suspenders cure — t
 silent-board-freeze failure this whole schedule exists to prevent, one level up.
 """
 
-from datetime import date
 
 from dagster import (
     DefaultScheduleStatus,
@@ -96,6 +95,7 @@ from dagster import (
 )
 
 from pipeline.jobs.sports_ncaaf_rollforward_job import sports_ncaaf_roll_forward_job
+from betting_ml.monitoring.nfl_board_freshness import is_draft_season
 from pipeline.jobs.sports_nfl_board_publish_job import sports_nfl_board_publish_job
 from pipeline.jobs.sports_nfl_rollforward_job import sports_nfl_roll_forward_job
 from pipeline.jobs.sports_nfl_sleeper_injuries_job import sports_nfl_sleeper_injuries_job
@@ -178,17 +178,14 @@ def sports_nfl_sleeper_injuries_schedule(context: ScheduleEvaluationContext):
 NFL_BOARD_PUBLISH_CRON = "15 7 * * *"
 
 
-def is_draft_season(today: date) -> bool:
-    """August 1 → September 15: the window in which fantasy drafts actually happen.
-
-    Clock-derived and injectable, never a pinned year — the NCAAF-P0.6 stale-by-a-season landmine
-    that `current_season()` exists to avoid, applied to a cadence instead of a season. The end
-    bound reaches past the ~Sep-9 opener because leagues keep drafting through week 1.
-
-    The window is intentionally GENEROUS at both ends. Being wrong toward "daily" costs one cheap
-    rebuild; being wrong toward "weekly" costs a drafting user a board built on a market up to six
-    days old, which is the entire defect this story exists to fix."""
-    return today.month == 8 or (today.month == 9 and today.day <= 15)
+# ⭐ NF-INFRA2 — `is_draft_season` now lives in `betting_ml.monitoring.nfl_board_freshness`, which
+# is the ONE owner of this cadence. It is re-exported here unchanged so every existing caller and
+# guard is untouched. WHY IT MOVED: the published-board freshness SLA has to know which cadence
+# governs the board it is judging, and an SLA pinned separately from the cadence it judges is the
+# "one logical thing, many owners" shape (INC-30/INC-36/INC-38) — it would false-page every
+# off-season Tuesday the moment either side changed. The monitor cannot import `pipeline` (E11.23:
+# the fast gate would break), so the shared predicate lives on the `betting_ml` side and the
+# schedule reads it, not the other way round.
 
 
 @schedule(
