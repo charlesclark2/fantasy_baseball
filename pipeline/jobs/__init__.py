@@ -35,6 +35,9 @@ from pipeline.jobs.sports_ncaaf_odds_capture_job import sports_ncaaf_odds_captur
 from pipeline.jobs.sports_ncaaf_prediction_snapshot_job import (
     sports_ncaaf_prediction_snapshot_job,
 )
+from pipeline.jobs.sports_ncaaf_serving_write_job import (
+    sports_ncaaf_serving_write_job,
+)
 # NF-W0a: the NFL point-in-time FORWARD CAPTURE jobs (weather ladder / injuries+schema / market).
 # TIME-CRITICAL — a checkpoint not captured cannot be backfilled (the Open-Meteo archive returns
 # observations, and the odds history holds only closing lines).
@@ -72,6 +75,7 @@ all_jobs = [
     sports_nfl_sleeper_injuries_job,
     sports_ncaaf_odds_capture_job,
     sports_ncaaf_prediction_snapshot_job,
+    sports_ncaaf_serving_write_job,
     sports_nfl_pit_weather_job,
     sports_nfl_pit_metadata_job,
     sports_nfl_pit_market_job,

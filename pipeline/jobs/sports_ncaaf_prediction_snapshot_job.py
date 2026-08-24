@@ -52,6 +52,10 @@ import os
 
 from dagster import In, Nothing, Out, in_process_executor, job, op
 
+from pipeline.jobs.sports_ncaaf_serving_write_job import (
+    ncaaf_serving_write_after_snapshot_op,
+)
+
 #: how far ahead a snapshot reaches, in days. 7 matches the weekly cadence: every FBS kickoff is
 #: inside exactly one fire's window, and a game still ahead on the next fire is simply snapshotted
 #: again under a fresh `snapshot_ts` (append-only — a second vintage is information, not a dupe).
@@ -137,5 +141,16 @@ def ncaaf_futures_snapshot_op(context):
 
 @job(executor_def=in_process_executor)
 def sports_ncaaf_prediction_snapshot_job():
-    """Weekly pre-kickoff per-game predictions → the lake, then the futures-board snapshot."""
-    ncaaf_futures_snapshot_op(start=ncaaf_prediction_snapshot_op())
+    """Weekly pre-kickoff per-game predictions → the lake, the futures-board snapshot, then the
+    serving-store publish.
+
+    ⭐ NCAAF-P3.1 CHAINS THE SERVING WRITE HERE ON PURPOSE (INC-25). The serving store is a
+    CONSUMER of the two tables the ops above write; a publish that only ran on its own daily
+    schedule would, on the morning the week's snapshot lands, still be serving LAST week's vintage
+    until its next fire. Making it a downstream op means the store and the lake advance in the same
+    run. The standalone `sports_ncaaf_serving_write_job` remains, for the daily top-up (the
+    manifest's `current_game_day` rolls every day) and for a cheap re-fire if only the publish half
+    failed.
+    """
+    ncaaf_serving_write_after_snapshot_op(
+        start=ncaaf_futures_snapshot_op(start=ncaaf_prediction_snapshot_op()))

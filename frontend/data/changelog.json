@@ -4,6 +4,10 @@
     "items": [
       {
         "tag": "added",
+        "text": "College football is being wired up behind the scenes. Our model's projections for each upcoming FBS game — a win probability for both sides, and the full range of plausible margins and totals rather than a single number — now publish to the same serving layer the rest of the site reads, along with the season-long conference-title and playoff probabilities. Where a market line has been captured for a game we show it beside our own, so you can see where we differ. We want to be exact about what that is and is not: these are market-blind projections from a model that never sees a betting line, we make no claim to an advantage over the market, and we publish no picks. Nothing is visible in the app yet — the pages that read this land next."
+      },
+      {
+        "tag": "added",
         "text": "A small number of players can now carry a projected-games figure we lowered by hand, after a published report that they are expected to miss time when no official roster move had yet reflected it. Our projection only ever moved on a formal roster move — injured reserve, PUP, the non-football-injury list or a suspension — so a player reported to be out for two months was, until now, projected as though he were playing. Every row we adjust is marked on the board, the projections table and the player page, and carries a link to the report we read. We want to be exact about what this is: it is a person on our side reading a beat report and writing down a number, not a model output. It has not been tested against outcomes and we are not claiming it makes the projection better — it is a stopgap while we build the thing that would do this properly, which needs a measure of how long a reported absence actually lasts. It is not a medical opinion and carries no view on when anyone plays again. Each entry has a review date and stops applying once that date passes, and the moment a club makes a formal roster move our normal handling takes over and the manual entry is dropped. Every other player's projected games is produced by the model alone, exactly as before."
       },
       {

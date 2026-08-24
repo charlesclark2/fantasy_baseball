@@ -296,6 +296,13 @@ _DEGRADE_ALLOWED_PREFIXES: tuple[str, ...] = (
     # would blank the FIRST thing on the page a cost event most needs to keep converting.
     "/fantasy/nfl/featured-player",
     "/blog/posts",
+    # NCAAF-P3.1 — the college-football vertical is unconditionally FREE (E9.45), so it IS part of
+    # the floor we promise an anonymous visitor, exactly like the generic fantasy board above. It
+    # also meets the cost test on its own terms: every route is a DynamoDB point read of a
+    # pre-built blob with a single S3 GetObject behind it — no `lakehouse_query`, no fan-out, no
+    # per-request model call. Refusing it in degrade mode would blank an entire sport during the
+    # only weeks of the year it means anything.
+    "/ncaaf",
     # ⭐ THE WHOLE BILLING PATH STAYS UP. Blocking payment endpoints to save money is self-defeating:
     # a cost event is precisely when revenue matters most. All of these are cheap (one Stripe API
     # call or a DynamoDB read) and inherently low-volume — nobody scrapes a checkout session.
@@ -394,6 +401,11 @@ _PUBLIC_CACHE_RULES: tuple[tuple[str, int, int], ...] = (
     # re-exports; the board blobs' window, not the intraday one.
     ("/fantasy/nfl/featured-player", 900, 3600),
     ("/blog/posts", 600, 3600),
+    # NCAAF-P3.1 — anonymous, and every caller gets the identical payload. The blobs are re-published
+    # by a daily 06:00 PT serving write and the underlying predictions are IMMUTABLE pre-kickoff
+    # snapshots, so nothing under this prefix changes intraday; the board window (not the intraday
+    # one) is the honest TTL. This is the single biggest lever on the cost of a Saturday.
+    ("/ncaaf", 900, 3600),
 )
 
 # What a personalized or authenticated response must carry. `no-store` is deliberate over
