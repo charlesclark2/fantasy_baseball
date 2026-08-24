@@ -28,7 +28,7 @@ if _SENTRY_DSN:
         traces_sample_rate=0.1,
     )
 
-from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, email_otp, fantasy, fantasy_import, fantasy_mlb_league, fantasy_public, feedback, finances, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
+from app.backend.routers import admin, alerts, auth, bankroll, bets, blog, email_otp, fantasy, fantasy_import, fantasy_mlb_league, fantasy_public, feedback, finances, ncaaf, parlay, picks, performance, pipeline, players, portfolio, stripe, teams, users
 from app.backend.routers.auth import require_subscriber_mfa
 from app.backend.services import cost_guardrails
 
@@ -171,6 +171,22 @@ app.include_router(fantasy_public.router)
 # 🔒 OPERATOR: like every public route here, the API-Gateway per-route authorizer must ALSO be set
 # to NONE or this 401s before the Lambda is invoked (NF3.2). See infrastructure/aws_resources.md.
 app.include_router(fantasy_public.featured_router)
+
+# NCAAF-P3.1 — the college-football vertical, deliberately PUBLIC and unconditionally FREE (E9.45:
+# fantasy is the paid hook; the betting-adjacent surfaces are not). Mounted with NO `dependencies=`
+# — no `_paid`, no entitlement check anywhere on the path — from its own router object, the same
+# separate-router pattern `fantasy_public` and `stripe.public_router` use so an exemption is a
+# visible mount rather than a flag hidden inside a gated router.
+#
+# What it serves is market-blind projections: probabilities, distributional interval parameters,
+# and (when captured) the market line beside the model line for transparency. `best_alpha = 0` is
+# stamped on every payload and there is no pick field in the schema at all — the response models
+# REFUSE at import to declare one, so this is a property of the contract rather than a promise.
+#
+# 🔒 OPERATOR: like every public mount above, each of the four routes needs its API-Gateway
+# per-route authorizer set to NONE or it 401s before the Lambda is ever invoked (NF3.2). The
+# `create-route` commands are in infrastructure/aws_resources.md.
+app.include_router(ncaaf.router)
 
 
 @app.api_route("/health", methods=["GET", "HEAD"], tags=["health"])

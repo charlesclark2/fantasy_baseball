@@ -7,7 +7,7 @@ metadata:
   name: ncaaf-p3-1
   vertical: ncaaf
   card: https://trello.com/c/y0xpO30Y
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Serving plumbing KEYSTONE for the NCAAF vertical — get P1.4 game
@@ -136,8 +136,62 @@ spec:
       - id: 6-closeout
         desc: "Verdict + findings into closeout.followUps; session summary."
   closeout:
-    verdict: null
+    verdict: >
+      SHIPPED-PENDING-RUNTIME-GATE. All three deliverables are built, CI-gated and
+      RED-proven (20/20 deliberate breaks caught): the payload contract, the box
+      serving-write op + schedule, and the four public FastAPI routes. The runtime
+      gate is NOT met and could not be met by this session — the two NCAAF-PS lake
+      tables the serving write reads are ABSENT from S3 (measured, not inferred), so
+      there is nothing to publish until the operator fires the snapshot job. The
+      laptop dry-run DID reach the real lake end-to-end and returned the honest
+      `status="no_snapshots"` no-op, which proves the read path, the LA game-day
+      resolution and the absent-table handling against production data.
     followUps: >
-      Findings land HERE. PM triages into: checklist item on the parent card |
-      merge into an existing card (name it) | a new spec. Worker sessions never
-      create Trello cards.
+      1) ⚠️ BLOCKER FOR THE OPENER, NOT THIS STORY'S TO FIX — the FIRST NCAAF-PS
+      snapshot run may be unable to bootstrap its own Delta table.
+      `game_prediction_snapshot.write_snapshot` reads the table back BEFORE its
+      first-ever write (correctly — that is the never-lose-a-prior-week contract),
+      and on duckdb 1.5.3 delta-kernel reports an absent Delta table as
+      "No files in log segment", which `query_lake.MISSING_TABLE_MARKERS`
+      ("InvalidTableLocationError", "Path does not exist") does NOT contain — so the
+      read RAISES instead of returning "nothing to preserve". Measured on the laptop
+      against the real prod lake, against BOTH a never-written NCAAF-PS table and a
+      random non-existent prefix; a populated table (`team_strength_week`, 23,130
+      rows) still reads normally. `duckdb>=1.1.0` is unpinned, so the box may emit a
+      different message — the handoff carries a one-command probe that settles it.
+      ⛔ The obvious fix (widen `MISSING_TABLE_MARKERS`) is the one to argue about
+      rather than apply: that list is deliberately narrow BECAUSE its consumers are
+      READ-MERGE-WRITE writers, where mistaking a read-after-write blip for "nothing
+      there" silently deletes every prior week (the CI flake that hardened it). The
+      disciplined shape is a SECOND, INDEPENDENT existence signal (an S3 prefix
+      listing) rather than a broader message match. P3.1 scoped its own handling to
+      the PUBLISH path, where an idempotent write cannot lose lake data.
+      2) THE MARKET LINE WILL BE NULL FOR EVERY UPCOMING GAME, and that is a data-feed
+      gap, not a bug. The only NCAAF odds capture scheduled for 2026 is the paid
+      `/historical` catch-up, which by construction can only reach a kickoff once that
+      kickoff is PAST its snapshot instant (close = K−5min, T−1 = K−24h); the live
+      `odds_ncaaf` feed is on no schedule at all. So a board written on Tuesday has no
+      line to sit beside the model's. The payload handles this honestly — the market
+      block is always present with `status="unavailable"` and
+      `reason="no_line_captured_for_this_kickoff"` — but the spec's
+      "market line beside the model line as TRANSPARENCY" is not actually satisfied on
+      the wire until either a live-odds capture cadence exists or P3.2 renders the
+      stated absence. PM decision: schedule a live `odds_ncaaf` capture, or accept the
+      absence and design P3.2's transparency panel around it.
+      3) THE 2026 BOARD MAY STILL BE COLD-START-COMPRESSED. Serving publishes whatever
+      the snapshot rows hold, so the P1.2 re-fit (✅ 2026-08-18) must be the vintage the
+      first snapshot reads. Every payload carries `provenance.strength_as_of_week` and
+      `pace_term_active`, so the vintage is auditable from the API — the operator should
+      READ them on the first published slate rather than assuming (the NF-FRESH2
+      per-input as-of lesson). `pace_term_active=false` at week 1 is CORRECT by
+      construction, not a defect.
+      4) ⛔ DELIBERATELY NOT DONE, recorded so nobody reads the omission as an oversight:
+      the VAL3b cold-start correction (certified, DEPLOY-HELD) is not expressed anywhere
+      in the served contract — that is NCAAF-VAL3c, post-opener. Nothing in this story
+      keys on `season_order_week` (guarded, RED-proven over comment-stripped source).
+      No frontend surface was built; P3.2-P3.9 consume this API.
+      5) CARDING CANDIDATE — `duckdb>=1.1.0` is unpinned while `MISSING_TABLE_MARKERS`
+      is a VERSION-SENSITIVE message match. A duckdb bump can silently turn "the table
+      does not exist yet" into a hard failure for every READ-MERGE-WRITE writer in the
+      football vertical. Pinning duckdb, or replacing the message match with a
+      structural existence check, is a small change with a wide blast radius avoided.

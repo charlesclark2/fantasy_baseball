@@ -61,7 +61,7 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dagster import In, Nothing, Out, in_process_executor, job, op
@@ -190,6 +190,44 @@ def nfl_board_input_refresh_op(context):
                             len(bad), len(keyed), sorted(bad))
     context.log.info("[nfl board] input refresh landed: %s", {k: keyed[k] for k in landed})
 
+    # ⭐ NF-INFRA2 — THE THIRD FEED THIS BOARD CONSUMES IS NOT IN THIS GRAPH, SO ASSERT IT.
+    # `BOARD_INPUT_SOURCES` covers depth charts and rosters, and the staging rebuild below makes
+    # whatever Sleeper has landed readable — but the Sleeper CAPTURE itself is a different job on a
+    # different schedule (06:30 PT vs this job's 07:15 PT). That 45-minute cron offset is exactly
+    # what this job's own docstring calls "a courtesy, NOT the ordering guarantee", and INC-25 is
+    # the record of a cron offset losing a race. ⛔ Folding the capture in here is the WRONG fix: it
+    # would give one logical ingest two execution owners, which is the INC-30 (crontab under two
+    # users) / INC-36 (two concurrent deploys) / INC-38 (a flag on one caller of four) shape this
+    # repo keeps paying for. So the single owner stays, and this build ASSERTS that today's capture
+    # landed before it reads it — turning an invisible race into a named, dated finding.
+    #
+    # ALERT-continue, matching this op's tier and the ratified NF-INJ1 decision: publishing on a
+    # known-stale injury feed is a bounded, honest degradation (the served `input_vintage` block
+    # and the manifest's `coherence.injury_input` verdict both report it), whereas refusing to
+    # publish would freeze every other fix riding this cycle. NOT KNOWING is the defect.
+    try:
+        from betting_ml.monitoring import sports_delta_freshness as SDF
+
+        contract = SDF.by_name("nfl_sleeper_injuries")
+        verdict = SDF.classify(contract, SDF.read_contract(contract))
+        context.log.info("[METRIC] nfl_board_input_sleeper_freshness=%s lag_hours=%s",
+                         verdict["verdict"], verdict["lag_hours"])
+        if SDF.is_problem(verdict):
+            _page(context, f"NFL board: the injury feed it is about to build on is "
+                           f"{verdict['verdict']}",
+                  f"{verdict['detail']}\n\ncadence: {contract.cadence}\n\n"
+                  "The board is publishing ANYWAY on the availability designations currently "
+                  "landed — `freshness.input_vintage.sleeper_status_as_of` will show that older "
+                  "timestamp, so the staleness is visible rather than inferred.",
+                  severity=verdict["severity"] or "WARN",
+                  dedup_key=f"nfl_board_publish:sleeper_input:{verdict['verdict']}")
+    except Exception as exc:  # noqa: BLE001 — a readiness check must never block the publish
+        # ⚠️ UNEVALUABLE IS WARN, NEVER HEALTHY (NF1.7(a)) — but it must also never be fatal: this
+        # op exists to feed a publish, not to gate one.
+        context.log.warning("⚠️ [nfl board] could not evaluate the Sleeper input's freshness "
+                            "(%s: %s) — proceeding, UNVERIFIED rather than healthy",
+                            type(exc).__name__, exc)
+
     # Make the fresh rows readable by the board build. Serial staging then marts, mirroring
     # `nfl_roll_forward_rebuild_op` — but ALERT-continue here rather than HALT, for the same reason
     # the ingest is: an unpublished board helps nobody, and the vintage stamp tells the truth.
@@ -286,26 +324,38 @@ def _verify_published(context, season: int, started: datetime) -> None:
               severity="CRITICAL", dedup_key="nfl_board_publish:verify_unreadable")
         raise Exception(f"NFL board publish verification could not read {path}: {exc}") from exc
 
-    problems: list[str] = []
-    raw = blob.get("generated_at")
-    try:
-        # A tiny tolerance absorbs clock skew between the op and the subprocess, nothing more.
-        if datetime.fromisoformat(str(raw)) < started - timedelta(minutes=2):
-            problems.append(f"manifest.generated_at={raw} predates this run ({started.isoformat()})"
-                            " — a STALE artifact was published")
-    except Exception:  # noqa: BLE001
-        problems.append(f"manifest.generated_at is unparseable ({raw!r})")
-    if not blob.get("adp_as_of"):
-        problems.append("manifest.adp_as_of is missing/null — the board shipped with an UNKNOWN "
-                        "market vintage (the NF-FRESH2 P1 chain did not hold)")
+    # ⭐ NF-INFRA2 — the verdict is a PURE function in `betting_ml.monitoring.nfl_board_freshness`,
+    # not inline here. That is what makes these guards RED-provable in the fast gate: they can be
+    # driven against a deliberately stale/truncated manifest with no Dagster, no S3 and no box
+    # (E11.23 — nothing in `betting_ml/` may import `pipeline`). This op keeps the paging.
+    from betting_ml.monitoring import nfl_board_freshness as NBF
 
-    if problems:
+    result = NBF.verify_manifest(blob, started=started)
+    for name, lag in sorted(result["stamps"].items()):
+        context.log.info("[METRIC] nfl_board_stamp_lag_hours_%s=%s", name, lag)
+    context.log.info("[METRIC] nfl_board_verify_fatal_count=%d", len(result["fatal"]))
+    context.log.info("[METRIC] nfl_board_verify_alert_count=%d", len(result["alerts"]))
+
+    # ALERTS FIRST, and they page even when the run is about to fail — a stale feed is a real,
+    # separately-actionable finding and must not be swallowed by a fatal on a different axis.
+    # Distinct dedup_key so it cannot occupy the fatal page's 1-hour slot (INC-39).
+    if result["alerts"]:
+        _page(context, "NFL board publish: the board shipped with a degraded input",
+              "\n".join(f"- {a}" for a in result["alerts"])
+              + "\n\nThe board WAS published — this is an honest, bounded degradation and the "
+                "served `freshness.input_vintage` block reports it on every surface. Blocking the "
+                "publish would freeze every other fix riding this cycle (the ratified NF-INJ1 "
+                "tiering decision, 2026-08-21).",
+              severity="WARN", dedup_key="nfl_board_publish:degraded_input")
+
+    if result["fatal"]:
         _page(context, "NFL board publish: the published artifact failed verification",
-              "\n".join(f"- {p}" for p in problems),
+              "\n".join(f"- {p}" for p in result["fatal"]),
               severity="CRITICAL", dedup_key="nfl_board_publish:verify_failed")
-        raise Exception("NFL board publish verification failed: " + "; ".join(problems))
-    context.log.info("[nfl board] verified: generated_at=%s adp_as_of=%s ecr_as_of=%s",
-                     raw, blob.get("adp_as_of"), blob.get("ecr_as_of"))
+        raise Exception("NFL board publish verification failed: " + "; ".join(result["fatal"]))
+    context.log.info("[nfl board] verified: generated_at=%s adp_as_of=%s ecr_as_of=%s stamps=%s",
+                     blob.get("generated_at"), blob.get("adp_as_of"), blob.get("ecr_as_of"),
+                     result["stamps"])
 
 
 @job(executor_def=in_process_executor)

@@ -479,9 +479,18 @@ def test_the_publish_verification_treats_an_unreadable_manifest_as_a_failure(tmp
 
 
 def test_the_publish_verification_rejects_a_stale_or_unstamped_artifact(tmp_path, monkeypatch):
-    """Two independent failure modes, each proved on its own so neither clause is vacuous (the
-    NF-D17 and-composed-clause lesson): a manifest that predates this run, and one whose market
-    stamp is missing — i.e. the original defect wearing the new field name."""
+    """Independent failure modes, each proved on its own so no clause is vacuous (the NF-D17
+    and-composed-clause lesson): a manifest that predates this run, one whose market stamp is
+    missing — i.e. the original defect wearing the new field name — and one that lost the NF-INJ1
+    coherence block.
+
+    ⭐ RE-ANCHORED BY NF-INFRA2 (2026-08-24), not weakened. `_verify_published` now delegates its
+    verdict to the pure `betting_ml.monitoring.nfl_board_freshness.verify_manifest`, which checks
+    more than this test used to: every declared feed stamp AND the coherence block's presence. The
+    NF-D17 discipline that makes each clause meaningful therefore requires the baseline fixture to
+    satisfy EVERY OTHER clause, so exactly one thing can fire — which is why the manifest below is
+    built complete and then broken one field at a time. (A guard suite can encode a RETIRED world;
+    the cure is re-anchoring onto the new implementation, never deleting the guard — MH2.7.)"""
     _skip_without_manifest()
     from datetime import datetime, timedelta, timezone
 
@@ -499,21 +508,42 @@ def test_the_publish_verification_rejects_a_stale_or_unstamped_artifact(tmp_path
     started = datetime.now(timezone.utc)
     manifest = out / "manifest.json"
 
-    # (1) stale artifact, market stamp PRESENT — so only the staleness clause can fire.
-    manifest.write_text(json.dumps({
-        "generated_at": (started - timedelta(days=1)).isoformat(), "adp_as_of": "2026-08-14"}))
+    def _complete(**overrides):
+        """A manifest that satisfies EVERY clause, so a single override isolates one failure."""
+        blob = {
+            "generated_at": started.isoformat(),
+            "adp_as_of": started.date().isoformat(),
+            "ecr_as_of": started.date().isoformat(),
+            "freshness": {"input_vintage": {
+                "depth_chart_as_of": started.isoformat(),
+                "sleeper_status_as_of": started.isoformat()}},
+            "coherence": {"violating_players": 0,
+                          "injury_input": {"verdict": "OK", "detail": "fresh"}},
+        }
+        blob.update(overrides)
+        manifest.write_text(json.dumps(blob))
+
+    # (0) everything good → passes. FIRST, because it is what makes every failure below
+    #     meaningful: without it, a clause could be firing for an unrelated missing field.
+    _complete()
+    J._verify_published(build_op_context(), 2026, started)
+
+    # (1) stale artifact, every other clause satisfied — so only the staleness clause can fire.
+    _complete(generated_at=(started - timedelta(days=1)).isoformat())
     with pytest.raises(Exception, match="predates this run"):
         J._verify_published(build_op_context(), 2026, started)
 
     # (2) fresh artifact, market stamp MISSING — so only the stamp clause can fire.
-    manifest.write_text(json.dumps({"generated_at": started.isoformat(), "adp_as_of": None}))
-    with pytest.raises(Exception, match="UNKNOWN market vintage"):
+    _complete(adp_as_of=None)
+    with pytest.raises(Exception, match="UNKNOWN vintage for adp_as_of"):
         J._verify_published(build_op_context(), 2026, started)
 
-    # (3) both good → passes, which is what makes the two failures above meaningful.
-    manifest.write_text(json.dumps({
-        "generated_at": started.isoformat(), "adp_as_of": "2026-08-14"}))
-    J._verify_published(build_op_context(), 2026, started)
+    # (3) NF-INFRA2 — the coherence block is GONE, i.e. `report_publish_coherence` silently
+    #     stopped running while every step still exited 0 (the vacuous-guard class, on the
+    #     artifact). Everything else is satisfied, so only this clause can fire.
+    _complete(coherence=None)
+    with pytest.raises(Exception, match="coherence"):
+        J._verify_published(build_op_context(), 2026, started)
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

@@ -38,6 +38,9 @@ from pipeline.schedules.sports_odds_capture_schedules import sports_ncaaf_odds_c
 from pipeline.schedules.sports_ncaaf_prediction_snapshot_schedules import (
     sports_ncaaf_prediction_snapshot_schedule,
 )
+from pipeline.schedules.sports_ncaaf_serving_write_schedules import (
+    sports_ncaaf_serving_write_schedule,
+)
 # E7.1 — daily MiLB incremental ingest. default_status=RUNNING (self-start; continuous capture of
 # the live 2026 season). Isolated single-op job; WARN-tier; free Stats API; Snowflake-free.
 # NF-W0a: NFL point-in-time forward capture. weather + metadata ship RUNNING (FREE, and a missed
@@ -70,6 +73,7 @@ all_schedules = [
     sports_nfl_sleeper_injuries_schedule,
     sports_ncaaf_odds_capture_schedule,
     sports_ncaaf_prediction_snapshot_schedule,
+    sports_ncaaf_serving_write_schedule,
     sports_nfl_pit_weather_schedule,
     sports_nfl_pit_metadata_schedule,
     sports_nfl_pit_market_schedule,

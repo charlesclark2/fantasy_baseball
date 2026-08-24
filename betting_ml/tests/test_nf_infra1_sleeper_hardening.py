@@ -314,20 +314,33 @@ def _skip_without_manifest():
 
 def test_the_freshness_check_runs_downstream_of_the_land_as_a_graph_edge():
     """An INC-25 ordering fact, not a cron offset: the artifact assertion must read the commit this
-    run made, which means it cannot start until the ingest and rebuild have finished."""
+    run made, which means it cannot start until the ingest and rebuild have finished.
+
+    ⭐ RE-ANCHORED BY NF-INFRA2 (2026-08-24): this job also hosts the PUBLISHED-BOARD freshness
+    SLA (`nfl_published_board_freshness_op`), which is deliberately INDEPENDENT — it must NOT be
+    downstream of the Sleeper ingest, because that op raises by design and a Sleeper outage would
+    then blind the board monitor on exactly the days something is already wrong. So the Sleeper
+    chain's edges are asserted UNCHANGED, and the new op is asserted to have NO dependencies at
+    all. Pinned on the COMPILED graph, which is what actually decides execution order."""
     _skip_without_manifest()
     from pipeline.jobs.sports_nfl_sleeper_injuries_job import sports_nfl_sleeper_injuries_job
 
     graph = sports_nfl_sleeper_injuries_job.graph
     assert {n.name for n in graph.nodes} == {
         "nfl_sleeper_injuries_ingest_op", "nfl_sleeper_injuries_rebuild_op",
-        "nfl_sleeper_injuries_freshness_op"}
+        "nfl_sleeper_injuries_freshness_op", "nfl_published_board_freshness_op"}
 
     deps = graph.dependencies
-    freshness = next(k for k in deps if "freshness" in k.name)
-    rebuild = next(k for k in deps if "rebuild" in k.name)
+    freshness = next(k for k in deps if k.name == "nfl_sleeper_injuries_freshness_op")
+    rebuild = next(k for k in deps if k.name == "nfl_sleeper_injuries_rebuild_op")
     assert {d.node for d in deps[freshness].values()} == {"nfl_sleeper_injuries_rebuild_op"}
     assert {d.node for d in deps[rebuild].values()} == {"nfl_sleeper_injuries_ingest_op"}
+
+    # The board SLA leg takes NOTHING from this chain (NF-INFRA2).
+    board = [k for k in deps if k.name == "nfl_published_board_freshness_op"]
+    assert not board or not deps[board[0]], (
+        "the published-board SLA op has a dependency — a Sleeper failure would skip it, blinding "
+        "the board monitor precisely when the box is already unhealthy")
 
 
 def test_a_missing_sports_duckdb_RAISES_instead_of_reporting_a_green_run(tmp_path, monkeypatch):
