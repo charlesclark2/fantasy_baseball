@@ -218,3 +218,24 @@ spec:
       it has no seeded override rows and stays deploy-held. The FIRST publish
       carrying BOTH changes live still needs ONE final combined placement +
       interval read before the operator approves it.
+
+      (8) ⭐ CI CAUGHT WHAT THE SESSION'S SHARD SELECTION COULD NOT — and the
+      lesson is one already in CLAUDE.md (MH2.7 (ii)): changing a SHARED
+      instrument requires grepping the cross-vertical guards that PIN its output.
+      D4 deleted `run_nf_tr2b_placement_read._OUT_JSON`/`_OUT_MD` (a fixed output
+      path being the very defect D4 fixes) and an OLDER NF-TR2b guard read those
+      constants directly, so the `core` shard went red on PR #1011. The sweep has
+      now been done: that guard is the ONLY pin on either runner's outputs in the
+      repo. It was RE-ANCHORED onto the `--out` stems, never weakened — the
+      containment property (a run writes only inside the checkout, and only this
+      story's own artifacts) is unchanged and now covers EVERY stem the runner can
+      write by default, with a non-vacuity assertion so an empty stem tuple cannot
+      make the loop assert on nothing, and TWO new RED-proof breaks (the output dir
+      escaping the checkout; a default stem borrowing another story's artifact
+      name) prove the re-anchored version still bites — 24/24 RED.
+      ⚠️ THE PROCESS FINDING, worth more than the fix: the session ran the
+      `football` shard and its own new files locally, but
+      `test_nf_tr2b_placement_read.py` lives in `core` (the computed catch-all),
+      so no targeted local run could structurally have seen it. When a change
+      touches a shared runner, run the shard that OWNS its guard — `uv run python
+      scripts/ci_shards.py --shard core` names it in one command.
