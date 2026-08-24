@@ -1,0 +1,116 @@
+# Plan spec — NCAAF-LAKE1 (MINI tier: shared-instrument fix, calendar-adjacent)
+# Authored by the P3.1 session 2026-08-24 under the PM's Q2 ruling (B is yours,
+# under a new MINI spec, committed BEFORE the fix). Template:
+# plan_specs/story_spec_template_v2.yaml
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: ncaaf-lake1
+  vertical: ncaaf
+  card: (PM to card — worker sessions never create Trello cards)
+  status: IN_PROGRESS
+spec:
+  description: >
+    Replace `query_lake`'s ERROR-MESSAGE MATCH for "this Delta table does not
+    exist yet" with an INDEPENDENT existence check, and pin duckdb to the tested
+    range. The marker set ("InvalidTableLocationError", "Path does not exist")
+    was verified empirically when written; delta-kernel has since changed that
+    text to "No files in log segment", so the classifier silently stopped
+    recognising an absent table — measured live on the BOX (duckdb 1.5.5) and the
+    laptop (1.5.3). Because `game_prediction_snapshot.write_snapshot` reads its
+    table back BEFORE its first-ever write (correctly — the never-lose-a-prior-week
+    contract), a never-written table became UNBOOTSTRAPPABLE: NCAAF-PS could not
+    create `game_prediction_snapshots` or `futures_board_snapshots`, which in turn
+    blocked NCAAF-P3.1's runtime gate and the whole forward track record.
+    Nothing ships or serves here; this is a correctness fix to a shared reader.
+    best_alpha=0 (unchanged, and untouched by this story).
+  acceptanceCriteria:
+    - description: >
+        An unclassified lake read error is resolved by an INDEPENDENT STATE
+        CHECK, not by matching the engine's message: LIST `<table>/_delta_log/`
+        with MaxKeys=1. ZERO keys ⇒ the table genuinely does not exist yet
+        (return None); ONE OR MORE ⇒ the table exists, so the error is something
+        else and it RE-RAISES. This FAILS SAFE on the hazard the narrow marker set
+        existed to protect against: a read-after-write visibility blip means the
+        log file IS present, so the listing finds it and we raise — never a
+        licence to overwrite. S3 list-after-write has been strongly consistent
+        since Dec 2020, so the check is not itself a race.
+    - description: >
+        The retired `MISSING_TABLE_MARKERS` message-match path is REMOVED, not
+        left as a fallback. A dead fallback that message-matches is the same bomb
+        on a longer fuse (PM ruling, execution order §2).
+    - description: >
+        MH2.7 applies — this is a SHARED instrument. Every guard that pins its
+        behaviour is RE-ANCHORED onto the new implementation with the same
+        properties and wider coverage, never weakened or deleted:
+        `betting_ml/tests/ncaaf_ps_red_proof.py`,
+        `betting_ml/tests/test_ncaaf_odds_recurring_capture.py`,
+        `betting_ml/tests/test_ncaaf_p3_1_serving.py`,
+        `betting_ml/tests/ncaaf_p3_1_red_proof.py`.
+    - description: >
+        TWO-SIDED proofs, both RED-proven: a fake ABSENT table returns None, and a
+        fake PRESENT-but-unreadable table RAISES. A classifier that can only be
+        shown to say "absent" is the vacuous half of the guard (NF1.7 (a)).
+    - description: >
+        duckdb is PINNED to the tested range in `pyproject.toml`, with a comment
+        naming THIS incident, so the next person who loosens it knows the cost
+        (PM ruling Q3 — folded into this PR, not standalone).
+    - description: >
+        CLAUDE.md gains the transferable lesson as its own commit in this PR
+        (PM ruling, execution order §3).
+---
+apiVersion: planspec.io/v1alpha1
+kind: OverlapCheck
+metadata:
+  goalRef: ncaaf-lake1
+spec:
+  boardSearch:
+    queries:
+      - "(no board search run — worker sessions do not create or read Trello cards; the PM issued this story directly in the 2026-08-24 ruling on the NCAAF-P3.1 escalation)"
+    duplicates: []
+    adjacent:
+      - "`odds_recurring_capture` (NCAAF-P0.6b/c) — the PAID-data READ-MERGE-WRITE writer whose safety this preserves. It aliases the same helpers. Its table already EXISTS (measured: >=1 `_delta_log` key), so it is not blocked today; the boundary is that this story must not make its absent-table verdict MORE permissive, which is precisely why option A (widen the marker) was REFUSED."
+      - "NCAAF-PS (`game_prediction_snapshot.write_snapshot`) — the blocked caller. This story fixes the reader it uses; it does NOT change the snapshot writer, its schedule, or its leakage gate."
+      - "NCAAF-P3.1 — its serving writer already handles the empty-log case LOCALLY on the publish path. That handling stays: it is scoped to an idempotent publish where a wrong 'absent' verdict cannot lose lake data. Once this lands the local branch becomes belt-and-braces rather than load-bearing; removing it is a follow-up decision, not part of this story."
+      - "The operator's one-time C bootstrap (PM ruling Q1) — seeds the two absent tables so NCAAF-PS can fire on Tue 8/25. Disjoint: C is an operator data action, this is the durable code fix. Neither blocks the other."
+  triedLedger:
+    files:
+      - "quant_sports_intel_models/football/ncaaf/ingest/query_lake.py (the helper + its recorded rationale)"
+      - "quant_sports_intel_models/football/ncaaf/ingest/odds_recurring_capture.py L208-218 (where the marker set was EMPIRICALLY verified against the OLD delta-kernel text — the evidence that this is a dependency regression, not an original oversight)"
+      - "plan_specs/ncaaf/ncaaf-p3-1.yaml closeout.followUps items 1 and 5 (the measurements this story acts on)"
+    recordedNulls: []
+  supersedes: []
+  dependsOn: []
+  feedsInto:
+    - "NCAAF-PS — unblocks the first-ever write of any new snapshot table"
+    - "NCAAF-P3.1 — its runtime gate depends on NCAAF-PS having written; the C bootstrap unblocks that sooner, this makes it durable"
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: ncaaf-lake1-plan
+spec:
+  goalRef: { name: ncaaf-lake1 }
+  graph:
+    nodes:
+      - id: 0-spec-commit
+        desc: "Commit this spec BEFORE the fix (PM ruling Q2)."
+      - id: 1-existence-check
+        desc: "Replace the message match with the `_delta_log` LIST check; remove the retired marker path."
+      - id: 2-reanchor-guards
+        desc: "Re-anchor the four guard files onto the new implementation; add the two-sided proofs."
+      - id: 3-pin-duckdb
+        desc: "Pin duckdb to the tested range with a comment naming this incident."
+      - id: 4-claude-md
+        desc: "CLAUDE.md lesson, as its own commit in this PR."
+      - id: 5-red-proof
+        desc: "RED-prove both directions (absent -> None; present-but-unreadable -> raise)."
+      - id: 6-closeout
+        desc: "Verdict + findings; record in BOTH closeouts (this spec and P3.1's)."
+  closeout:
+    verdict: null
+    followUps: >
+      Findings land HERE. PM triages into: checklist item on the parent card |
+      merge into an existing card (name it) | a new spec. Worker sessions never
+      create Trello cards.
