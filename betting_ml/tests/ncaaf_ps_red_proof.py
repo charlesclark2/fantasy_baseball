@@ -89,9 +89,13 @@ BREAKS: list[tuple[str, str, str, str, str, str | None]] = [
      "    if False:",
      "no_op_on_an_empty_frame", None),
     ("lake read: a TRANSIENT failure is swallowed into 'nothing to preserve'", _Q,
-     "            if is_missing_table_error(exc):",
+     "            if table_is_absent(sql):",
      "            if True:",
      "transient_lake_read_raises", None),
+    ("lake read: an UNDETERMINABLE listing is reported as an absent table", _Q,
+     "    if any(v is None for v in verdicts):\n        return False",
+     "    if any(v is None for v in verdicts):\n        return True",
+     "transient_lake_read_raises or undeterminable", None),
 
     # ── 3. the served contract is covered, or we refuse ─────────────────────────────────────────
     ("contract: a MISSING served column is scored anyway (mean-imputed to 0.0 — NF-C0e)", _M,

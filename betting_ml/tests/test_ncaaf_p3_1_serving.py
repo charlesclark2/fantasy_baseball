@@ -657,39 +657,38 @@ def test_no_snapshots_is_a_no_op_not_a_write(writer, monkeypatch):
 
 
 def test_an_unwritten_snapshot_table_is_an_empty_read_not_a_crash(monkeypatch):
-    """MEASURED on the real lake: before the first NCAAF-PS run both snapshot tables are absent from
-    S3, and duckdb 1.5.3's delta-kernel reports that as `No files in log segment` — which
-    `query_lake.MISSING_TABLE_MARKERS` does NOT contain. Unhandled, the pre-opener serving write
-    goes RED with "lake read failed 3x" instead of logging the clean no-op an operator should see.
+    """Before the first NCAAF-PS run both snapshot tables are absent from S3, and the pre-opener
+    serving write must log a clean no-op rather than going RED.
 
-    Handled HERE and not in the shared helper on purpose: this caller is an idempotent PUBLISH that
-    never merges into a lake partition, so "treat it as empty" cannot lose data — whereas for the
-    READ-MERGE-WRITE writers that share that helper the same leniency would delete every prior week.
+    🩹 NCAAF-LAKE1 RE-ANCHORED this. P3.1 shipped a LOCAL message match in `read_snapshots` for the
+    object-store absence wording; the shared `query_lake` helper now establishes absence by LISTING
+    the store, for every caller, so the local branch was removed as a second rule for one question.
+    The PROPERTY is unchanged and still pinned — it is now proven through the real shared path.
     """
     import scripts.write_ncaaf_serving_store as w
+    from quant_sports_intel_models.football.ncaaf.ingest import query_lake
     from quant_sports_intel_models.football.ncaaf.models import game_prediction_snapshot as gps
 
-    def boom(*a, **k):
-        raise RuntimeError(
-            "lake read failed 3x and is NOT a missing-table error: IO Error: DeltaKernel "
-            "GenericError (5): Generic delta kernel error: No files in log segment")
-
-    monkeypatch.setattr(gps, "read_existing_snapshots", boom)
+    monkeypatch.setattr(query_lake, "_connect", lambda: type("C", (), {"execute": lambda *a: None})())
+    monkeypatch.setattr(query_lake, "q", lambda sql: (_ for _ in ()).throw(
+        Exception("IO Error: DeltaKernel GenericError (5): No files in log segment")))
+    monkeypatch.setattr(query_lake, "_table_has_commits", lambda uri: False)
     assert w.read_snapshots(2026, gps.SNAPSHOT_SOURCE) is None
 
 
 def test_a_genuine_read_failure_still_raises(monkeypatch):
-    """The other side of the same coin — the leniency above must be narrow. A transient lake
-    failure must NEVER be published over as "nothing to serve" (INC-38: a no-op and a broken read
-    are different facts)."""
+    """The other side of the same coin — the leniency must be narrow. A transient lake failure must
+    NEVER be published over as "nothing to serve" (INC-38: a no-op and a broken read are different
+    facts). Re-anchored onto the shared helper alongside its sibling above."""
     import scripts.write_ncaaf_serving_store as w
+    from quant_sports_intel_models.football.ncaaf.ingest import query_lake
     from quant_sports_intel_models.football.ncaaf.models import game_prediction_snapshot as gps
 
-    def boom(*a, **k):
-        raise RuntimeError("lake read failed 3x: HTTP 503 SlowDown from S3")
-
-    monkeypatch.setattr(gps, "read_existing_snapshots", boom)
-    with pytest.raises(RuntimeError, match="SlowDown"):
+    monkeypatch.setattr(query_lake, "_connect", lambda: type("C", (), {"execute": lambda *a: None})())
+    monkeypatch.setattr(query_lake, "q", lambda sql: (_ for _ in ()).throw(
+        Exception("IO Error: HTTP 503 SlowDown from S3")))
+    monkeypatch.setattr(query_lake, "_table_has_commits", lambda uri: True)
+    with pytest.raises(RuntimeError, match="refusing to treat this as a missing table"):
         w.read_snapshots(2026, gps.SNAPSHOT_SOURCE)
 
 
