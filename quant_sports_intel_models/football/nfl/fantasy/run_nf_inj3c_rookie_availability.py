@@ -322,6 +322,64 @@ def leg4_meter(con, seasons: tuple[int, ...]) -> dict:
     }
 
 
+def leg5_board_diff(published: Path, rebuilt: Path) -> dict:
+    """THE SHIP-PATH DIFF — a with-fix rebuild against the PUBLISHED board, keyed on the served row.
+
+    ⭐ ROOKIE ROWS ONLY MAY MOVE. This story touches the rookie frame; a veteran row that moved is a
+    refusal, not a note. ⚠️ AND ON TODAY'S BOARD THE EXPECTED DIFF IS **EMPTY** — no 2026 rookie
+    carries a formal tag until the 2026-08-30 cutdown (§3.1 of the record), which makes this the
+    cleanest possible byte-identity check and is exactly how it should be read: the fix is INERT on
+    today's board and arms at the cutdown. A non-empty veteran diff is the finding; a non-empty
+    rookie diff before the cutdown is also a finding.
+    """
+    a = pd.read_parquet(published)
+    b = pd.read_parquet(rebuilt)
+    key = "player_id"
+    # a build stamp is EXPECTED to differ; everything else is a claim about the board.
+    skip = {"generated_at"}
+    common = [c for c in a.columns if c in b.columns and c not in skip and c != key]
+    ident = a[[key] + [c for c in ("player_name", "is_rookie") if c in a.columns]].rename(
+        columns={"player_name": "_name", "is_rookie": "_rookie"})
+    m = (a[[key, *common]].rename(columns={c: f"{c}_pub" for c in common})
+         .merge(b[[key, *common]].rename(columns={c: f"{c}_new" for c in common}),
+                on=key, how="outer", indicator=True)
+         .merge(ident, on=key, how="left"))
+    moved_rows, moved_fields = [], {}
+    for c in common:
+        pub, new_ = m[f"{c}_pub"], m[f"{c}_new"]
+        if pd.api.types.is_numeric_dtype(pub) and pd.api.types.is_numeric_dtype(new_):
+            d = ~np.isclose(pub.to_numpy(dtype=float), new_.to_numpy(dtype=float),
+                            rtol=0, atol=0, equal_nan=True)
+        else:
+            d = pub.astype(str).to_numpy() != new_.astype(str).to_numpy()
+        if d.any():
+            moved_fields[c] = int(d.sum())
+            for i in np.flatnonzero(d):
+                moved_rows.append({"player_id": m[key].iloc[i],
+                                   "player_name": m.get("_name", pd.Series(dtype=object)).iloc[i]
+                                   if "_name" in m.columns else None,
+                                   "is_rookie": bool(m["_rookie"].iloc[i])
+                                   if "_rookie" in m.columns else None,
+                                   "field": c,
+                                   "published": pub.iloc[i], "rebuilt": new_.iloc[i]})
+    only = m["_merge"].value_counts().to_dict()
+    vet_moved = sorted({r["player_id"] for r in moved_rows if not r["is_rookie"]})
+    rk_moved = sorted({r["player_id"] for r in moved_rows if r["is_rookie"]})
+    return {
+        "published": str(published), "rebuilt": str(rebuilt),
+        "rows_published": int(len(a)), "rows_rebuilt": int(len(b)),
+        "row_membership": {str(k): int(v) for k, v in only.items()},
+        "fields_moved": moved_fields,
+        "veteran_players_moved": len(vet_moved), "rookie_players_moved": len(rk_moved),
+        "veteran_ids_moved": vet_moved[:50], "rookie_ids_moved": rk_moved[:50],
+        "sample": moved_rows[:40],
+        "passes": bool(len(vet_moved) == 0 and str(only.get("both", 0)) == str(len(a))),
+        "reading": ("PASS requires ZERO veteran rows moved and identical row membership. Rookie "
+                    "rows moving is expected only once a 2026 rookie actually carries a formal tag "
+                    "(2026-08-30 cutdown); before then the whole diff should be empty."),
+    }
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     ap = argparse.ArgumentParser()
@@ -331,7 +389,26 @@ def main() -> int:
     ap.add_argument("--season", type=int, default=SERVING_SEASON)
     ap.add_argument("--out", default="quant_sports_intel_models/football/nfl/fantasy/"
                                      "ablation_results/nf_inj3c_rookie_availability.json")
+    ap.add_argument("--diff-published", default=None,
+                    help="SHIP-PATH MODE: path to the PUBLISHED board parquet. With "
+                         "--diff-rebuilt, runs ONLY the board diff (no warehouse legs) and exits "
+                         "non-zero if any VETERAN row moved.")
+    ap.add_argument("--diff-rebuilt", default=None,
+                    help="SHIP-PATH MODE: path to the with-fix dry-run rebuild's board parquet.")
     a = ap.parse_args()
+    if a.diff_published or a.diff_rebuilt:
+        if not (a.diff_published and a.diff_rebuilt):
+            raise SystemExit("--diff-published and --diff-rebuilt must be given together")
+        rep = leg5_board_diff(Path(a.diff_published), Path(a.diff_rebuilt))
+        out = Path(a.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(rep, indent=2, default=str))
+        print(json.dumps({k: v for k, v in rep.items() if k != "sample"}, indent=2, default=str))
+        for row in rep["sample"]:
+            print("   ", row)
+        print(f"\n{'✅' if rep['passes'] else '❌'} NF-INJ3c board diff -> {out}")
+        return 0 if rep["passes"] else 1
+
     art = Path(a.artifacts)
     con = duckdb.connect(a.duckdb, read_only=True)
 
