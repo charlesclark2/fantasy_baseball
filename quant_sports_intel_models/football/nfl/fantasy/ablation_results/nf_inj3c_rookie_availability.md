@@ -128,6 +128,26 @@ This is a rookie story; a veteran row must not move by a single float.
 
 ---
 
+## 4.1 ⚠️ The fix is RETROACTIVE on any HISTORICAL board rebuild
+
+`build_projection` now hands the rookie frame its roster status for **every** season it builds, the
+backtest folds included. So a rebuild of a historical board moves the rookie rows leg 2 names:
+**60 rows across 2016–2025** (6 in 2019, 11 in 2022, …; `leg2.per_season`). That is the fix working,
+not a regression — but a future session that rebuilds 2022 and finds 11 rookie rows moved needs to
+be able to tell those apart, so it is recorded here.
+
+What this does and does not reach, checked rather than assumed:
+
+* **Interval panels are unaffected.** `nf1_4_rookie_training.parquet` and `nf1_9_veteran_band_panel`
+  are built from the warehouse (`load_rookie_training` / `build_veteran_band_panel_season`), not
+  from the board parquet, so no interval fit reads a rebuilt board.
+* **Veteran-only level fits are unaffected by construction** — the rows that move are rookies.
+* **A WHOLE-BOARD read over rebuilt historical boards WOULD see them** (the placement read, and any
+  study re-derived from `nfl_fantasy_season_projections_<year>.parquet`). Nothing is being re-fitted
+  as part of this ship, so this is a note for whoever next re-runs one, not a blocker.
+
+---
+
 ## 5. SECONDARY — the rookie `fp_target` ↔ slot-bucket-games decoupling: **DEFERRED, with the measurement**
 
 Measured on the published 2026 `season_projection` output (`projection_coherence`, the module's own
