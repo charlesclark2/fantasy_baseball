@@ -401,26 +401,67 @@ def test_connect_tolerates_a_credential_chain_secret_failure(monkeypatch):
     assert any("CREATE OR REPLACE SECRET" in s for s in fake_conn.executed)  # it did try
 
 
-# ── _is_missing_table_error / _q_or_missing: distinguish absent-partition from transient failure
-def test_is_missing_table_error_distinguishes_missing_from_transient():
-    missing = Exception(
-        'IO Error: DeltaKernel InvalidTableLocationError (28): Invalid table location: '
-        'Path does not exist: "s3://bucket/ncaaf/raw/odds_ncaaf_historical/".'
-    )
-    transient = Exception("IO Error: connection reset by peer")
-    assert orc._is_missing_table_error(missing) is True
-    assert orc._is_missing_table_error(transient) is False
+# ── _table_is_absent / _q_or_missing: distinguish an absent table from a transient failure ────
+#
+# 🩹 NCAAF-LAKE1 RE-ANCHORED these onto the listing check. They used to assert that a specific
+# ERROR STRING was classified as "missing" — which is a restatement of the classifier's own
+# assumption, and it is exactly why the defect survived: the string those tests used is the one a
+# LOCAL directory emits, and production reads S3, where a never-written table says something else
+# entirely. The properties pinned are unchanged; what they are asked OF is now the store.
+def test_table_is_absent_answers_from_the_store_not_from_the_error_text():
+    """The whole point of the fix: absence is a fact about the STORE. An engine message — in either
+    direction — must not be able to decide it."""
+    absent, present = [], []
+
+    def fake_has_commits(uri):
+        return False if "never-written" in uri else True
+
+    import quant_sports_intel_models.football.ncaaf.ingest.query_lake as ql
+    orig = ql._table_has_commits
+    ql._table_has_commits = fake_has_commits
+    try:
+        assert orc._table_is_absent("select 1 from delta_scan('s3://b/never-written') limit 1") is True
+        assert orc._table_is_absent("select 1 from delta_scan('s3://b/real-table') limit 1") is False
+    finally:
+        ql._table_has_commits = orig
+
+
+def test_an_undeterminable_listing_is_never_reported_as_absent(monkeypatch):
+    """The load-bearing direction. If we cannot ASK the store (no boto3, a denied listing), the only
+    safe answer is "not absent" — which sends the caller down the RAISE path. Reporting absence
+    here is what would let `_merge_and_write` overwrite a season of PAID odds."""
+    import quant_sports_intel_models.football.ncaaf.ingest.query_lake as ql
+    monkeypatch.setattr(ql, "_table_has_commits", lambda uri: None)
+    assert orc._table_is_absent("select 1 from delta_scan('s3://b/whatever') limit 1") is False
+
+
+def test_sql_whose_tables_cannot_be_identified_is_never_reported_as_absent():
+    """A SELECT we cannot parse a `delta_scan` target out of tells us nothing about the store."""
+    assert orc._table_is_absent("select 1") is False
 
 
 def test_q_or_missing_returns_none_only_for_a_genuinely_missing_table(monkeypatch):
     def fake_q(sql):
-        raise Exception(
-            'IO Error: DeltaKernel InvalidTableLocationError (28): Invalid table location: '
-            'Path does not exist: "x".'
-        )
+        raise Exception("IO Error: DeltaKernel GenericError (5): No files in log segment")
 
     monkeypatch.setattr(query_lake, "q", fake_q)
-    assert orc._q_or_missing("select 1") is None
+    monkeypatch.setattr(query_lake, "_table_has_commits", lambda uri: False)
+    assert orc._q_or_missing("select 1 from delta_scan('s3://b/t')") is None
+
+
+def test_q_or_missing_raises_when_the_table_exists_however_the_engine_worded_it(monkeypatch):
+    """⭐ THE REGRESSION TEST FOR THIS INCIDENT, FACING THE DANGEROUS WAY. The old classifier keyed
+    on the message; if a future engine emitted the ABSENT wording for a table that is really there,
+    the old code would have reported absence and a merge writer would have deleted the season. The
+    listing decides, so the wording is irrelevant."""
+    def fake_q(sql):
+        raise Exception('IO Error: DeltaKernel InvalidTableLocationError (28): Path does not exist')
+
+    monkeypatch.setattr(query_lake, "q", fake_q)
+    monkeypatch.setattr(query_lake, "_table_has_commits", lambda uri: True)
+    monkeypatch.setattr(query_lake, "_connect", lambda: _NoopConn())
+    with pytest.raises(RuntimeError, match="refusing to treat this as a missing table"):
+        orc._q_or_missing("select 1 from delta_scan('s3://b/t')", retries=0, retry_sleep=0)
 
 
 def test_q_or_missing_raises_after_bounded_retries_on_a_transient_error(monkeypatch):
@@ -434,7 +475,7 @@ def test_q_or_missing_raises_after_bounded_retries_on_a_transient_error(monkeypa
 
     monkeypatch.setattr(query_lake, "q", fake_q)
     monkeypatch.setattr(query_lake, "_connect", lambda: _NoopConn())
-    with pytest.raises(RuntimeError, match="NOT a missing-table error"):
+    with pytest.raises(RuntimeError, match="refusing to treat this as a missing table"):
         orc._q_or_missing("select 1", retries=2, retry_sleep=0)
     assert calls["n"] == 3  # initial attempt + 2 retries, all genuinely attempted
 

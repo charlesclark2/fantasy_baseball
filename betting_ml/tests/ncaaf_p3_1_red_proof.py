@@ -37,6 +37,7 @@ ROUTER = _REPO / "app/backend/routers/ncaaf.py"
 SERVICE = _REPO / "app/backend/services/ncaaf_serving.py"
 GUARDRAILS = _REPO / "app/backend/services/cost_guardrails.py"
 SNAP_JOB = _REPO / "pipeline/jobs/sports_ncaaf_prediction_snapshot_job.py"
+QUERY_LAKE = _REPO / "quant_sports_intel_models/football/ncaaf/ingest/query_lake.py"
 
 #: (label, file, old, new, pytest -k selector, token that must DISAPPEAR or None)
 BREAKS: list[tuple[str, Path, str, str, str, str | None]] = [
@@ -138,16 +139,19 @@ BREAKS: list[tuple[str, Path, str, str, str, str | None]] = [
      '        return NcaafGamePrediction(game_id=game_id, season=0, game_day="")',
      "unpublished_game_is_a_404", None),
 
+    # 🩹 NCAAF-LAKE1: these two properties are still P3.1's, but the code that provides them moved
+    # to the SHARED helper, so the breaks moved with them (a break aimed at deleted code is a false
+    # GREEN, and a false vacuity report is the dangerous direction — #815).
     ("an unwritten snapshot table crashes the pre-opener publish instead of no-opping",
-     WRITER,
-     '        if _EMPTY_LOG_SEGMENT_MARKER not in str(exc) and not query_lake.is_missing_table_error(exc):',
-     '        if True:',
-     "unwritten_snapshot_table_is_an_empty_read", "_EMPTY_LOG_SEGMENT_MARKER not in str(exc)"),
+     QUERY_LAKE,
+     "            if table_is_absent(sql):",
+     "            if False:",
+     "unwritten_snapshot_table_is_an_empty_read", None),
 
-    ("the empty-log leniency widens far enough to swallow a real read failure",
-     WRITER,
-     '        if _EMPTY_LOG_SEGMENT_MARKER not in str(exc) and not query_lake.is_missing_table_error(exc):\n            raise',
-     '        if False:\n            raise',
+    ("the absent-table verdict widens far enough to swallow a real read failure",
+     QUERY_LAKE,
+     "    if any(v is None for v in verdicts):\n        return False\n    return any(v is False for v in verdicts)",
+     "    return True",
      "genuine_read_failure_still_raises", None),
 
     ("the served disclosure starts asserting a claim",
