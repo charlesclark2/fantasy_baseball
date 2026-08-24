@@ -1,0 +1,987 @@
+{
+  "story": "NF-INJ3c",
+  "duckdb": "../baseball_betting_and_fantasy/quant_sports_intel_models/sports_dbt/sports.duckdb",
+  "artifacts": "../baseball_betting_and_fantasy/quant_sports_intel_models/football/nfl/fantasy/artifacts",
+  "incumbent_constants": {
+    "RES": 4.0,
+    "PUP": 4.0,
+    "NFI": 4.0,
+    "SUS": 7.0
+  },
+  "incumbent_blend": 0.7,
+  "leg1_reproduction": {
+    "measured": {
+      "rookie_flagged": 60,
+      "rookie_above_ceiling": 50,
+      "veteran_flagged": 496,
+      "veteran_above_ceiling": 0
+    },
+    "recorded": {
+      "rookie_flagged": 60,
+      "rookie_above_ceiling": 50,
+      "veteran_flagged": 496,
+      "veteran_above_ceiling": 0
+    },
+    "reproduces": true,
+    "per_season": [
+      {
+        "season": 2016,
+        "rookie_flagged": 2,
+        "rookie_above_ceiling": 0
+      },
+      {
+        "season": 2017,
+        "rookie_flagged": 8,
+        "rookie_above_ceiling": 8
+      },
+      {
+        "season": 2018,
+        "rookie_flagged": 8,
+        "rookie_above_ceiling": 8
+      },
+      {
+        "season": 2019,
+        "rookie_flagged": 6,
+        "rookie_above_ceiling": 5
+      },
+      {
+        "season": 2020,
+        "rookie_flagged": 3,
+        "rookie_above_ceiling": 3
+      },
+      {
+        "season": 2021,
+        "rookie_flagged": 5,
+        "rookie_above_ceiling": 4
+      },
+      {
+        "season": 2022,
+        "rookie_flagged": 11,
+        "rookie_above_ceiling": 10
+      },
+      {
+        "season": 2023,
+        "rookie_flagged": 5,
+        "rookie_above_ceiling": 3
+      },
+      {
+        "season": 2024,
+        "rookie_flagged": 8,
+        "rookie_above_ceiling": 7
+      },
+      {
+        "season": 2025,
+        "rookie_flagged": 4,
+        "rookie_above_ceiling": 2
+      }
+    ]
+  },
+  "leg2_with_fix_same_rows": {
+    "flagged_rookies": 60,
+    "above_ceiling_after": 0,
+    "unflagged_rows": 738,
+    "unflagged_rows_moved": 0,
+    "max_games_dropped": 8.3125,
+    "per_season": [
+      {
+        "season": 2016,
+        "flagged": 2,
+        "above_ceiling_after": 0,
+        "mean_games_before": 6.0,
+        "mean_games_after": 4.6
+      },
+      {
+        "season": 2017,
+        "flagged": 8,
+        "above_ceiling_after": 0,
+        "mean_games_before": 12.444170168067227,
+        "mean_games_after": 6.533251050420168
+      },
+      {
+        "season": 2018,
+        "flagged": 8,
+        "above_ceiling_after": 0,
+        "mean_games_before": 11.926664272030651,
+        "mean_games_after": 6.3779992816091955
+      },
+      {
+        "season": 2019,
+        "flagged": 6,
+        "above_ceiling_after": 0,
+        "mean_games_before": 12.403009259259258,
+        "mean_games_after": 6.520902777777778
+      },
+      {
+        "season": 2020,
+        "flagged": 3,
+        "above_ceiling_after": 0,
+        "mean_games_before": 10.508474576271187,
+        "mean_games_after": 5.952542372881356
+      },
+      {
+        "season": 2021,
+        "flagged": 5,
+        "above_ceiling_after": 0,
+        "mean_games_before": 10.660082899556585,
+        "mean_games_after": 5.998024869866976
+      },
+      {
+        "season": 2022,
+        "flagged": 11,
+        "above_ceiling_after": 0,
+        "mean_games_before": 11.73523506802037,
+        "mean_games_after": 6.320570520406111
+      },
+      {
+        "season": 2023,
+        "flagged": 5,
+        "above_ceiling_after": 0,
+        "mean_games_before": 9.077527915292226,
+        "mean_games_after": 5.523258374587668
+      },
+      {
+        "season": 2024,
+        "flagged": 8,
+        "above_ceiling_after": 0,
+        "mean_games_before": 10.875136674436096,
+        "mean_games_after": 6.06254100233083
+      },
+      {
+        "season": 2025,
+        "flagged": 4,
+        "above_ceiling_after": 0,
+        "mean_games_before": 8.308547008547007,
+        "mean_games_after": 5.2925641025641035
+      }
+    ],
+    "passes": true
+  },
+  "leg3_wiring_end_to_end": {
+    "seasons_checked": [
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025,
+      2026
+    ],
+    "seasons_ACTIVE": [
+      2016,
+      2017,
+      2018,
+      2019,
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025
+    ],
+    "n_active_seasons": 10,
+    "flagged_rookies_total": 60,
+    "flagged_capped_total": 60,
+    "above_ceiling_after_total": 0,
+    "unflagged_rows_moved_total": 0,
+    "fp_max_abs_dev_from_exact_scaling": 0.014376470588235435,
+    "fp_rounding_bound": 0.02,
+    "per_season": [
+      {
+        "season": 2016,
+        "rookie_rows": 78,
+        "flagged": 2,
+        "active": true,
+        "flagged_capped": 2,
+        "flagged_above_ceiling_after": 0,
+        "unflagged_rows_moved": 0,
+        "unflagged_fp_identical": true,
+        "line_follows_games": true,
+        "fp_max_abs_dev_from_exact_scaling": 0.0,
+        "fp_dev_within_fumble_rounding_bound": true,
+        "mean_games_before_flagged": 6.0,
+        "mean_games_after_flagged": 4.6,
+        "flagged_detail": [
+          {
+            "player_id": "00-0032806",
+            "status": "RES",
+            "games_before": 6.0,
+            "games_after": 4.6,
+            "fp_before": 0.0,
+            "fp_after": 0.0,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0032451",
+            "status": "RES",
+            "games_before": 6.0,
+            "games_after": 4.6,
+            "fp_before": 0.0,
+            "fp_after": 0.0,
+            "formal_applied": true
+          }
+        ]
+      },
+      {
+        "season": 2017,
+        "rookie_rows": 84,
+        "flagged": 8,
+        "active": true,
+        "flagged_capped": 8,
+        "flagged_above_ceiling_after": 0,
+        "unflagged_rows_moved": 0,
+        "unflagged_fp_identical": true,
+        "line_follows_games": true,
+        "fp_max_abs_dev_from_exact_scaling": 0.012298850574712361,
+        "fp_dev_within_fumble_rounding_bound": true,
+        "mean_games_before_flagged": 12.444170168067227,
+        "mean_games_after_flagged": 6.533251050420168,
+        "flagged_detail": [
+          {
+            "player_id": "00-0033286",
+            "status": "RES",
+            "games_before": 12.428571428571429,
+            "games_after": 6.5285714285714285,
+            "fp_before": 45.422222883920675,
+            "fp_after": 23.84742052638132,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0033789",
+            "status": "RES",
+            "games_before": 12.428571428571429,
+            "games_after": 6.5285714285714285,
+            "fp_before": 32.396840185313614,
+            "fp_after": 17.02029421228543,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0033471",
+            "status": "RES",
+            "games_before": 12.058823529411764,
+            "games_after": 6.41764705882353,
+            "fp_before": 21.265812599759876,
+            "fp_after": 11.31078124211611,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0033919",
+            "status": "RES",
+            "games_before": 13.75,
+            "games_after": 6.925000000000001,
+            "fp_before": 36.34374373322068,
+            "fp_after": 18.294685480185684,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0033839",
+            "status": "RES",
+            "games_before": 12.058823529411764,
+            "games_after": 6.41764705882353,
+            "fp_before": 28.757390888911864,
+            "fp_after": 15.299050468196512,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0033796",
+            "status": "RES",
+            "games_before": 12.428571428571429,
+            "games_after": 6.5285714285714285,
+            "fp_before": 24.538235166063494,
+            "fp_after": 12.889233874587374,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0033966",
+            "status": "RES",
+            "games_before": 12.2,
+            "games_after": 6.46,
+            "fp_before": 10.829242300567588,
+            "fp_after": 5.735352890300543,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0033798",
+            "status": "RES",
+            "games_before": 12.2,
+            "games_after": 6.46,
+            "fp_before": 7.199590220313194,
+            "fp_after": 3.8028321986248557,
+            "formal_applied": true
+          }
+        ]
+      },
+      {
+        "season": 2018,
+        "rookie_rows": 83,
+        "flagged": 8,
+        "active": true,
+        "flagged_capped": 8,
+        "flagged_above_ceiling_after": 0,
+        "unflagged_rows_moved": 0,
+        "unflagged_fp_identical": true,
+        "line_follows_games": true,
+        "fp_max_abs_dev_from_exact_scaling": 0.008852173913041383,
+        "fp_dev_within_fumble_rounding_bound": true,
+        "mean_games_before_flagged": 11.926664272030653,
+        "mean_games_after_flagged": 6.3779992816091955,
+        "flagged_detail": [
+          {
+            "player_id": "00-0034433",
+            "status": "RES",
+            "games_before": 11.482758620689655,
+            "games_after": 6.244827586206897,
+            "fp_before": 23.496878442381195,
+            "fp_after": 12.774416474219924,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0034439",
+            "status": "RES",
+            "games_before": 12.777777777777779,
+            "games_after": 6.633333333333334,
+            "fp_before": 10.712370887728735,
+            "fp_after": 5.561882973890482,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0034406",
+            "status": "RES",
+            "games_before": 11.46875,
+            "games_after": 6.2406250000000005,
+            "fp_before": 17.61162842754193,
+            "fp_after": 9.586752580327314,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0034418",
+            "status": "RES",
+            "games_before": 11.46875,
+            "games_after": 6.2406250000000005,
+            "fp_before": 22.176212997978176,
+            "fp_after": 12.061416173559245,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0034267",
+            "status": "RES",
+            "games_before": 11.46875,
+            "games_after": 6.2406250000000005,
+            "fp_before": 20.33650251100322,
+            "fp_after": 11.060353001218921,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0034358",
+            "status": "RES",
+            "games_before": 12.5,
+            "games_after": 6.550000000000001,
+            "fp_before": 75.77541119444703,
+            "fp_after": 39.704635465890235,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0034419",
+            "status": "RES",
+            "games_before": 11.46875,
+            "games_after": 6.2406250000000005,
+            "fp_before": 16.28784890909776,
+            "fp_after": 8.866428956803333,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0034393",
+            "status": "RES",
+            "games_before": 12.777777777777779,
+            "games_after": 6.633333333333334,
+            "fp_before": 16.02817241650341,
+            "fp_after": 8.311859941436989,
+            "formal_applied": true
+          }
+        ]
+      },
+      {
+        "season": 2019,
+        "rookie_rows": 80,
+        "flagged": 6,
+        "active": true,
+        "flagged_capped": 6,
+        "flagged_above_ceiling_after": 0,
+        "unflagged_rows_moved": 0,
+        "unflagged_fp_identical": true,
+        "line_follows_games": true,
+        "fp_max_abs_dev_from_exact_scaling": 0.013396584440227954,
+        "fp_dev_within_fumble_rounding_bound": true,
+        "mean_games_before_flagged": 12.403009259259258,
+        "mean_games_after_flagged": 6.520902777777778,
+        "flagged_detail": [
+          {
+            "player_id": "00-0035671",
+            "status": "RES",
+            "games_before": 15.875,
+            "games_after": 7.562500000000001,
+            "fp_before": 42.849391954345656,
+            "fp_after": 20.418253647542617,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0035660",
+            "status": "RES",
+            "games_before": 15.875,
+            "games_after": 7.562500000000001,
+            "fp_before": 29.7816664362026,
+            "fp_after": 14.194022199923285,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0035529",
+            "status": "RES",
+            "games_before": 10.979166666666666,
+            "games_after": 6.09375,
+            "fp_before": 28.30400367273117,
+            "fp_after": 15.696131070728402,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0035299",
+            "status": "RES",
+            "games_before": 11.55,
+            "games_after": 6.265000000000001,
+            "fp_before": 36.25039816263243,
+            "fp_after": 19.656003851852137,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0035624",
+            "status": "RES",
+            "games_before": 12.88888888888889,
+            "games_after": 6.666666666666667,
+            "fp_before": 48.287757842153866,
+            "fp_after": 24.970219573527864,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0035704",
+            "status": "RES",
+            "games_before": 7.25,
+            "games_after": 4.975,
+            "fp_before": 49.621883951455224,
+            "fp_after": 34.04694795289514,
+            "formal_applied": true
+          }
+        ]
+      },
+      {
+        "season": 2020,
+        "rookie_rows": 77,
+        "flagged": 3,
+        "active": true,
+        "flagged_capped": 3,
+        "flagged_above_ceiling_after": 0,
+        "unflagged_rows_moved": 0,
+        "unflagged_fp_identical": true,
+        "line_follows_games": true,
+        "fp_max_abs_dev_from_exact_scaling": 0.007974193548388797,
+        "fp_dev_within_fumble_rounding_bound": true,
+        "mean_games_before_flagged": 10.508474576271187,
+        "mean_games_after_flagged": 5.952542372881356,
+        "flagged_detail": [
+          {
+            "player_id": "00-0036165",
+            "status": "RES",
+            "games_before": 10.508474576271187,
+            "games_after": 5.952542372881356,
+            "fp_before": 26.067894987503802,
+            "fp_after": 14.774175354211831,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0036271",
+            "status": "RES",
+            "games_before": 10.508474576271187,
+            "games_after": 5.952542372881356,
+            "fp_before": 26.130766824123434,
+            "fp_after": 14.809789207471205,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0036308",
+            "status": "RES",
+            "games_before": 10.508474576271187,
+            "games_after": 5.952542372881356,
+            "fp_before": 25.18395925847353,
+            "fp_after": 14.273468534799843,
+            "formal_applied": true
+          }
+        ]
+      },
+      {
+        "season": 2021,
+        "rookie_rows": 75,
+        "flagged": 5,
+        "active": true,
+        "flagged_capped": 5,
+        "flagged_above_ceiling_after": 0,
+        "unflagged_rows_moved": 0,
+        "unflagged_fp_identical": true,
+        "line_follows_games": true,
+        "fp_max_abs_dev_from_exact_scaling": 0.011826086956531867,
+        "fp_dev_within_fumble_rounding_bound": true,
+        "mean_games_before_flagged": 10.660082899556585,
+        "mean_games_after_flagged": 5.998024869866976,
+        "flagged_detail": [
+          {
+            "player_id": "00-0036879",
+            "status": "RES",
+            "games_before": 4.846153846153846,
+            "games_after": 4.253846153846154,
+            "fp_before": 29.624123267765633,
+            "fp_after": 25.99361931281651,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0036973",
+            "status": "RES",
+            "games_before": 13.142857142857142,
+            "games_after": 6.742857142857144,
+            "fp_before": 140.11830463188124,
+            "fp_after": 71.87495628939993,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0036550",
+            "status": "RES",
+            "games_before": 13.222222222222221,
+            "games_after": 6.7666666666666675,
+            "fp_before": 78.94820189675826,
+            "fp_after": 40.396903323635115,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0036842",
+            "status": "RES",
+            "games_before": 11.444444444444445,
+            "games_after": 6.233333333333334,
+            "fp_before": 30.18376450241179,
+            "fp_after": 16.430438724129143,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0036571",
+            "status": "RES",
+            "games_before": 10.644736842105264,
+            "games_after": 5.993421052631579,
+            "fp_before": 25.677296318723233,
+            "fp_after": 14.464930127538235,
+            "formal_applied": true
+          }
+        ]
+      },
+      {
+        "season": 2022,
+        "rookie_rows": 79,
+        "flagged": 11,
+        "active": true,
+        "flagged_capped": 11,
+        "flagged_above_ceiling_after": 0,
+        "unflagged_rows_moved": 0,
+        "unflagged_fp_identical": true,
+        "line_follows_games": true,
+        "fp_max_abs_dev_from_exact_scaling": 0.014376470588235435,
+        "fp_dev_within_fumble_rounding_bound": true,
+        "mean_games_before_flagged": 11.73523506802037,
+        "mean_games_after_flagged": 6.32057052040611,
+        "flagged_detail": [
+          {
+            "player_id": "00-0037746",
+            "status": "RES",
+            "games_before": 12.333333333333334,
+            "games_after": 6.5,
+            "fp_before": 42.29537303900016,
+            "fp_after": 22.288102007040624,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0038132",
+            "status": "RES",
+            "games_before": 7.222222222222222,
+            "games_after": 4.966666666666667,
+            "fp_before": 31.15291728048946,
+            "fp_after": 21.432390806736603,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0037614",
+            "status": "RES",
+            "games_before": 13.886363636363637,
+            "games_after": 6.965909090909092,
+            "fp_before": 49.79080461653553,
+            "fp_after": 24.96725305232102,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0037277",
+            "status": "RES",
+            "games_before": 11.486486486486486,
+            "games_after": 6.245945945945946,
+            "fp_before": 13.300411693474587,
+            "fp_after": 7.22492033496936,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0038046",
+            "status": "RES",
+            "games_before": 11.486486486486486,
+            "games_after": 6.245945945945946,
+            "fp_before": 19.832230590273305,
+            "fp_after": 10.798443504499204,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0037306",
+            "status": "RES",
+            "games_before": 11.486486486486486,
+            "games_after": 6.245945945945946,
+            "fp_before": 11.341805769875915,
+            "fp_after": 6.179899560984293,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0038104",
+            "status": "RES",
+            "games_before": 13.886363636363637,
+            "games_after": 6.965909090909092,
+            "fp_before": 39.278119076702126,
+            "fp_after": 19.713639111308023,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0037252",
+            "status": "RES",
+            "games_before": 12.85,
+            "games_after": 6.655,
+            "fp_before": 27.143245734054254,
+            "fp_after": 14.059603140866233,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0037837",
+            "status": "RES",
+            "games_before": 10.074468085106384,
+            "games_after": 5.822340425531916,
+            "fp_before": 27.953116588270703,
+            "fp_after": 16.144304866695418,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0037240",
+            "status": "RES",
+            "games_before": 12.88888888888889,
+            "games_after": 6.666666666666667,
+            "fp_before": 140.31004645271992,
+            "fp_after": 72.58519644106204,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0037292",
+            "status": "RES",
+            "games_before": 11.486486486486486,
+            "games_after": 6.245945945945946,
+            "fp_before": 14.603663823093353,
+            "fp_after": 7.933582845922057,
+            "formal_applied": true
+          }
+        ]
+      },
+      {
+        "season": 2023,
+        "rookie_rows": 80,
+        "flagged": 5,
+        "active": true,
+        "flagged_capped": 5,
+        "flagged_above_ceiling_after": 0,
+        "unflagged_rows_moved": 0,
+        "unflagged_fp_identical": true,
+        "line_follows_games": true,
+        "fp_max_abs_dev_from_exact_scaling": 0.014022641509432887,
+        "fp_dev_within_fumble_rounding_bound": true,
+        "mean_games_before_flagged": 9.077527915292226,
+        "mean_games_after_flagged": 5.523258374587668,
+        "flagged_detail": [
+          {
+            "player_id": "00-0038998",
+            "status": "RES",
+            "games_before": 4.7368421052631575,
+            "games_after": 4.221052631578948,
+            "fp_before": 30.493751568742876,
+            "fp_after": 27.18243195347977,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0038590",
+            "status": "RES",
+            "games_before": 10.192307692307692,
+            "games_after": 5.857692307692307,
+            "fp_before": 19.73059542337172,
+            "fp_after": 11.325485596149107,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0038564",
+            "status": "RES",
+            "games_before": 11.862745098039216,
+            "games_after": 6.358823529411765,
+            "fp_before": 22.97281922796879,
+            "fp_after": 12.307793844016992,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0038636",
+            "status": "RES",
+            "games_before": 11.595744680851064,
+            "games_after": 6.27872340425532,
+            "fp_before": 20.121538414645695,
+            "fp_after": 10.90843667185678,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0038550",
+            "status": "RES",
+            "games_before": 7.0,
+            "games_after": 4.9,
+            "fp_before": 38.49898106811464,
+            "fp_after": 26.953286747680245,
+            "formal_applied": true
+          }
+        ]
+      },
+      {
+        "season": 2024,
+        "rookie_rows": 77,
+        "flagged": 8,
+        "active": true,
+        "flagged_capped": 8,
+        "flagged_above_ceiling_after": 0,
+        "unflagged_rows_moved": 0,
+        "unflagged_fp_identical": true,
+        "line_follows_games": true,
+        "fp_max_abs_dev_from_exact_scaling": 0.01193442622951224,
+        "fp_dev_within_fumble_rounding_bound": true,
+        "mean_games_before_flagged": 10.875136674436096,
+        "mean_games_after_flagged": 6.062541002330829,
+        "flagged_detail": [
+          {
+            "player_id": "00-0039923",
+            "status": "RES",
+            "games_before": 11.782608695652174,
+            "games_after": 6.334782608695653,
+            "fp_before": 58.00299541667768,
+            "fp_after": 31.18141118896656,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0039796",
+            "status": "RES",
+            "games_before": 11.349514563106796,
+            "games_after": 6.20485436893204,
+            "fp_before": 33.71397540681378,
+            "fp_after": 18.43593984815628,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0039385",
+            "status": "RES",
+            "games_before": 11.349514563106796,
+            "games_after": 6.20485436893204,
+            "fp_before": 22.11836719433593,
+            "fp_after": 12.09813727450821,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0039916",
+            "status": "RES",
+            "games_before": 13.448275862068966,
+            "games_after": 6.83448275862069,
+            "fp_before": 67.1933685226606,
+            "fp_after": 34.14047600305469,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0039884",
+            "status": "RES",
+            "games_before": 10.611570247933884,
+            "games_after": 5.983471074380166,
+            "fp_before": 22.7468456044638,
+            "fp_after": 12.822489266068374,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0039797",
+            "status": "RES",
+            "games_before": 5.083333333333333,
+            "games_after": 4.325,
+            "fp_before": 29.59199566328964,
+            "fp_after": 25.165517621716923,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0039747",
+            "status": "RES",
+            "games_before": 10.611570247933884,
+            "games_after": 5.983471074380166,
+            "fp_before": 24.717278493026313,
+            "fp_after": 13.944820583295211,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0039344",
+            "status": "RES",
+            "games_before": 12.764705882352942,
+            "games_after": 6.629411764705883,
+            "fp_before": 83.679398252803,
+            "fp_after": 43.45446167322994,
+            "formal_applied": true
+          }
+        ]
+      },
+      {
+        "season": 2025,
+        "rookie_rows": 85,
+        "flagged": 4,
+        "active": true,
+        "flagged_capped": 4,
+        "flagged_above_ceiling_after": 0,
+        "unflagged_rows_moved": 0,
+        "unflagged_fp_identical": true,
+        "line_follows_games": true,
+        "fp_max_abs_dev_from_exact_scaling": 0.01120000000000232,
+        "fp_dev_within_fumble_rounding_bound": true,
+        "mean_games_before_flagged": 8.308547008547007,
+        "mean_games_after_flagged": 5.292564102564103,
+        "flagged_detail": [
+          {
+            "player_id": "00-0040589",
+            "status": "RES",
+            "games_before": 5.0,
+            "games_after": 4.3,
+            "fp_before": 22.012894911730047,
+            "fp_after": 18.92268962408784,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0040203",
+            "status": "RES",
+            "games_before": 5.0,
+            "games_after": 4.3,
+            "fp_before": 26.591946505928437,
+            "fp_after": 22.857873995098455,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0040021",
+            "status": "RES",
+            "games_before": 11.495726495726496,
+            "games_after": 6.24871794871795,
+            "fp_before": 22.233103718647314,
+            "fp_after": 12.0900342964335,
+            "formal_applied": true
+          },
+          {
+            "player_id": "00-0040215",
+            "status": "RES",
+            "games_before": 11.738461538461538,
+            "games_after": 6.321538461538461,
+            "fp_before": 14.679672214863547,
+            "fp_after": 7.897786779931103,
+            "formal_applied": true
+          }
+        ]
+      },
+      {
+        "season": 2026,
+        "rookie_rows": 81,
+        "flagged": 0,
+        "active": false,
+        "flagged_capped": 0,
+        "flagged_above_ceiling_after": 0,
+        "unflagged_rows_moved": 0,
+        "unflagged_fp_identical": true,
+        "line_follows_games": true,
+        "fp_max_abs_dev_from_exact_scaling": 0.0,
+        "fp_dev_within_fumble_rounding_bound": true,
+        "mean_games_before_flagged": null,
+        "mean_games_after_flagged": null,
+        "flagged_detail": []
+      }
+    ],
+    "passes": true,
+    "reading": "the routing is exercised on every season that HAS a flagged rookie; a season with none is reported INACTIVE, never as a pass. The live 2026 class is inactive today because the 53-man cutdown (2026-08-30) has not happened \u2014 which is the whole reason this story is dated."
+  },
+  "leg4_meter_rookie_half": {
+    "per_season": [
+      {
+        "season": 2016,
+        "meter_before_fix": 2,
+        "meter_after_fix": 0
+      },
+      {
+        "season": 2017,
+        "meter_before_fix": 8,
+        "meter_after_fix": 0
+      },
+      {
+        "season": 2018,
+        "meter_before_fix": 8,
+        "meter_after_fix": 0
+      },
+      {
+        "season": 2019,
+        "meter_before_fix": 6,
+        "meter_after_fix": 0
+      },
+      {
+        "season": 2020,
+        "meter_before_fix": 3,
+        "meter_after_fix": 0
+      },
+      {
+        "season": 2021,
+        "meter_before_fix": 5,
+        "meter_after_fix": 0
+      },
+      {
+        "season": 2022,
+        "meter_before_fix": 11,
+        "meter_after_fix": 0
+      },
+      {
+        "season": 2023,
+        "meter_before_fix": 5,
+        "meter_after_fix": 0
+      },
+      {
+        "season": 2024,
+        "meter_before_fix": 8,
+        "meter_after_fix": 0
+      },
+      {
+        "season": 2025,
+        "meter_before_fix": 4,
+        "meter_after_fix": 0
+      },
+      {
+        "season": 2026,
+        "meter_before_fix": 0,
+        "meter_after_fix": 0
+      }
+    ],
+    "n_informative_seasons": 10,
+    "meter_before_fix_total": 60,
+    "meter_after_fix_total": 0,
+    "passes": true,
+    "reading": "a season whose PRE-fix meter already read 0 carries no information about the fix \u2014 it is counted but excluded from the verdict (NF1.7 (a))."
+  }
+}
