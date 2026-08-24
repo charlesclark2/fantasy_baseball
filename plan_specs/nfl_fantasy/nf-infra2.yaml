@@ -7,7 +7,7 @@ metadata:
   name: nf-infra2
   vertical: nfl_fantasy
   card: https://trello.com/c/IdFOj1RV
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Automate the NFL fantasy board build + publish. Today the board
