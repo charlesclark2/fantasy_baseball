@@ -8,7 +8,7 @@ metadata:
   name: nf-inj3c
   vertical: nfl_fantasy
   card: https://trello.com/c/9jTUzjd9
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Close the rookie-path availability gap BEFORE the 2026-08-30 cutdown.
