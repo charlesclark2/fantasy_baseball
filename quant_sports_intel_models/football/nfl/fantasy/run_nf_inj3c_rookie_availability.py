@@ -323,7 +323,12 @@ def leg4_meter(con, seasons: tuple[int, ...]) -> dict:
 
 
 def leg5_board_diff(published: Path, rebuilt: Path) -> dict:
-    """THE SHIP-PATH DIFF — a with-fix rebuild against the PUBLISHED board, keyed on the served row.
+    """THE SHIP-PATH DIFF — two board parquets, keyed on the served row.
+
+    ⚠️⚠️ THE TWO ARGUMENTS ARE POSITIONAL ROLES ("baseline" and "candidate"), NOT A CLAIM ABOUT
+    PROVENANCE, and the choice of baseline is the whole game. Diffing a fresh rebuild against the
+    PUBLISHED artifact carries every story that merged since that publish and attributes none of it;
+    the attributable comparison is A/B on ONE `dev` — rebuild without this change, rebuild with it.
 
     ⭐ ROOKIE ROWS ONLY MAY MOVE. This story touches the rookie frame; a veteran row that moved is a
     refusal, not a note. ⚠️ AND ON TODAY'S BOARD THE EXPECTED DIFF IS **EMPTY** — no 2026 rookie

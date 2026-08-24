@@ -187,8 +187,22 @@ power-derived floor).
 ## 6. Ship path — DEPLOY-HELD
 
 No `--publish` was run and none may be run from this branch. See the session handoff for the
-paste-ready operator commands: with-fix dry-run rebuild → diff vs published (rookie rows only) →
-placement read + interval revalidation via the `--out` stems.
+paste-ready operator commands.
+
+⚠️⚠️ **DIFF A/B, NOT AGAINST THE PUBLISHED ARTIFACT.** The published 2026 board was built on
+2026-08-21; `dev` has moved since. A rebuild-vs-**published** diff therefore carries every story
+that merged in between and **cannot attribute anything to NF-INJ3c** — the operator would be reading
+someone else's change and asking why this PR caused it. The attributable comparison is
+**A/B on one `dev`**: rebuild at `dev` *without* this PR, rebuild at `dev` *with* it, diff those two.
+
+⭐ Because no 2026 rookie is flagged today (§3.1), that A/B diff should be **exactly empty on every
+column** — which is a far stronger veteran byte-identity proof than "only rookie rows moved", and it
+is the correct expected result to hand the operator.
+
+`--diff-published/--diff-rebuilt` on `run_nf_inj3c_rookie_availability.py` performs the comparison
+either way (its names are positional roles, not a claim about provenance); PASS requires zero
+veteran rows moved and identical row membership. It is verified two-sided: an empty diff on a file
+against itself, a refusal on a 1e-9 veteran move, and a reported-but-not-refused rookie move.
 
 ⚠️ **COMPOSITION.** NF-INJ-NEWS-1 adoption and NF-INJ3b-M's cap change are also pending. **The first
 publish carrying any two of these needs ONE final combined placement + interval read** — a per-story
