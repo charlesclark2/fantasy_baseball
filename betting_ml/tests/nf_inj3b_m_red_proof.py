@@ -28,6 +28,7 @@ POL = FANTASY / "injury_games_policy.py"
 SRV = FANTASY / "injury_games_serving.py"
 TESTS = "betting_ml/tests/test_nf_inj3b_m_out_stems.py"
 TESTS_SERVE = "betting_ml/tests/test_nf_inj3b_m_serving_artifact.py"
+TESTS_TR2B = "betting_ml/tests/test_nf_tr2b_placement_read.py"
 
 BREAKS: list[tuple[str, Path, str, str, str]] = [
     ("THE ORIGINAL DEFECT — the interval JSON write moves back OUTSIDE --no-report", IV,
@@ -152,6 +153,23 @@ BREAKS_SERVE: list[tuple[str, Path, str, str, str]] = [
 ]
 
 
+#: ── the RE-ANCHORED NF-TR2b containment guard ────────────────────────────────────────────────
+#: D4 deleted the `_OUT_JSON`/`_OUT_MD` constants an OLDER guard pinned (that pin is what CI caught
+#: on PR #1011). Re-anchoring a guard onto a new implementation is only honest if the re-anchored
+#: version still BITES — a guard rewritten to pass is the weakening MH2.7 (ii) warns about.
+BREAKS_TR2B: list[tuple[str, Path, str, str, str]] = [
+    ("the output dir ESCAPES the checkout (the containment property itself)", PR,
+     '_ART = _PROJECT_ROOT / "quant_sports_intel_models/football/nfl/fantasy/ablation_results"',
+     '_ART = pathlib.Path("/tmp/nf_tr2b_escape")',
+     "test_the_runner_writes_only_inside_the_repo_and_only_its_own_paths"),
+
+    ("a default stem BORROWS another story's artifact name", PR,
+     'DEFAULT_STEM = "nf_tr2b_placement_read_latest"',
+     'DEFAULT_STEM = "nf1_9_interval_revalidation_latest"',
+     "test_the_runner_writes_only_inside_the_repo_and_only_its_own_paths"),
+]
+
+
 def _restore(bak: Path, tgt: Path) -> None:
     if bak.exists():
         tgt.write_text(bak.read_text())
@@ -163,7 +181,8 @@ def main() -> int:
         _restore(f.with_suffix(f.suffix + ".redbak"), f)
     red = skipped = 0
     cases = ([(n, t, o, w, f"{TESTS}::{tst}") for n, t, o, w, tst in BREAKS]
-             + [(n, t, o, w, f"{TESTS_SERVE}::{tst}") for n, t, o, w, tst in BREAKS_SERVE])
+             + [(n, t, o, w, f"{TESTS_SERVE}::{tst}") for n, t, o, w, tst in BREAKS_SERVE]
+             + [(n, t, o, w, f"{TESTS_TR2B}::{tst}") for n, t, o, w, tst in BREAKS_TR2B])
     for i, (name, target, old, new, test) in enumerate(cases, 1):
         src = target.read_text()
         if src.count(old) != 1:                # E11.24: the anchor must be UNIQUE

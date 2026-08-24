@@ -150,14 +150,25 @@ def test_g4_catches_an_inverted_band_and_a_point_outside_its_own_band():
 # ── the runner's contracts ──────────────────────────────────────────────────────────────────────
 def test_the_runner_writes_only_inside_the_repo_and_only_its_own_paths():
     """A fixed-output-path write that escapes the checkout clobbers whatever is at the other end,
-    and a run must never write a DECIDED story's artifacts (the NCAAF-P2.1 S1-serve lesson)."""
+    and a run must never write a DECIDED story's artifacts (the NCAAF-P2.1 S1-serve lesson).
+
+    ⭐ RE-ANCHORED (NF-INJ3b D4, 2026-08-23) onto the runner's new `--out` stem, NOT weakened: the
+    module-level `_OUT_JSON`/`_OUT_MD` constants this used to read are gone precisely BECAUSE a
+    fixed output path let a passing run rewrite NF-TR2b's decided record. The containment property
+    is unchanged and now covers EVERY stem the runner can write by default, so a future stem that
+    escaped the checkout or borrowed another story's name would still trip it.
+    """
     from quant_sports_intel_models.football.nfl.fantasy import run_nf_tr2b_placement_read as R
     root = R._PROJECT_ROOT
     assert (root / "pyproject.toml").exists() and (root / "CLAUDE.md").exists(), (
         f"_PROJECT_ROOT {root} is not the repo root — outputs would land outside the checkout")
-    for out in (R._OUT_JSON, R._OUT_MD):
+    stems = (R.DECIDED_STEM, R.DEFAULT_STEM)
+    assert all(stems), "a stem is empty — the loop below would assert on nothing"
+    outs = [R._ART / f"{stem}{ext}" for stem in stems for ext in (".json", ".md")]
+    assert len(outs) == 4, "non-vacuity: every stem × extension must be checked"
+    for out in outs:
         assert root in out.parents, f"{out} escapes the repo root"
-        assert out.name.startswith("nf_tr2b_placement_read."), (
+        assert out.name.startswith(R.DECIDED_STEM), (
             f"{out.name} is not this story's own artifact")
 
 
