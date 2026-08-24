@@ -68,7 +68,10 @@ _ART = Path(__file__).resolve().parent / "artifacts"
 _OUT_MD = _ROOT / "ablation_results" / "nf_inj_news_1_board_delta.md"
 _OUT_JSON = _ROOT / "ablation_results" / "nf_inj_news_1_board_delta.json"
 
-CANDIDATE_TIERS = ("proposed_tier_a", "proposed_tier_b")
+#: The proposal keys the runner measures by default. ⚖️ After PM ruling 3 there is ONE qualifying
+#: tier (`proposed`); the non-qualifying rows live under `declined_*` keys and are deliberately not
+#: measured — measuring a row the loader will reject produces a number nobody can act on.
+CANDIDATE_TIERS = ("proposed",)
 
 
 def resolve_by_name(candidates: list[dict], board: pd.DataFrame) -> tuple[list[dict], list[dict]]:

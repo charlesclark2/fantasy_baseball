@@ -59,6 +59,12 @@ HALF_PPR_PER_RECEPTION = 0.5
 # ⛔ These are PROVENANCE, never model output: they say a human read a report and when. Nothing here
 # is scorable, so it is public by the NF-EPIC 1 rule (`projection_fields.PAID_PLAYER_FIELDS` is
 # derived from the scorer's `STAT_FIELD`; a field with no scoring weight stays public, like `g`).
+#: PM ruling 2b — the per-row marker that a FORMAL availability discount actually changed this
+#: player's games. Stamped by whichever step ran the formal cap; read by `reported_absence_games`
+#: to decide disjointness. ⚠️ Deliberately NOT in `REPORTED_ABSENCE_COLS` / `OUTPUT_COLS`: it is
+#: build-time scaffolding, not a served fact, and shipping it would invite a consumer to read it.
+FORMAL_APPLIED_COL = "_formal_discount_applied"
+
 REPORTED_ABSENCE_COLS = [
     "reported_absence_source_url", "reported_absence_entered_at", "reported_absence_games_missed",
 ]
@@ -418,27 +424,55 @@ def reported_absence_games(
 
     ⛔ THE TWO HARD RULES, both enforced here rather than trusted to a caller:
 
-      • **DISJOINTNESS.** A row is applied ONLY when the player carries NO formal status — i.e. when
-        `proj_status` is not a key of `_INJURY_STATUS_GAMES_CAP`, the very map the formal cap
-        dispatches on. If a formal tag has appeared since the row was curated, the FORMAL PATH WINS
-        and this row is ignored and reported (`FORMAL_STATUS_WINS`). ⚠️ Note what that means at the
-        boundary: a player who acquires an IR tag stops being this mechanism's business ENTIRELY —
-        he is not double-discounted, and he is not compared against NF-INJ3b's cap constants, which
-        govern the formally-tagged population only.
-        ⚠️ A frame with NO `proj_status` column at all (the roster feed never landed) is treated as
-        "nobody is formally tagged", which is the honest reading: the formal path is likewise a
-        no-op there, so applying the override is the only way the absence gets priced, and the
-        alternative — refusing every override because a feed is missing — would silently disable the
-        mechanism exactly when the other one is already down.
+      • **DISJOINTNESS — ON THE APPLIED DISCOUNT, NOT ON THE TAG (PM ruling 2b, 2026-08-23).** A
+        row is ignored when a formal discount **WAS APPLIED** to that player, not when a formal tag
+        merely EXISTS. The rule's purpose is no-double-discounting, and where the formal path
+        applied nothing there is nothing to double.
 
-      • **CAP-ONLY / MONOTONE.** `min(current, season_games − games_missed)`, a HARD floor rather
-        than the formal path's 0.7 blend. The blend exists there because RES/PUP/NFI/SUS are
-        EMPIRICAL levels fitted against realized games, so shrinking toward them is the right
-        estimator; here the number IS the operator's stated expectation, and blending a human's
-        "he'll miss eight" into "he'll miss five and a half" would silently overrule the judgment
-        the mechanism exists to carry. A row that would RAISE a player's games (because an earlier
-        availability step already cut him harder) changes nothing and is reported as applied-but-
-        inert, so a cap that does nothing is visible rather than looking like a working discount.
+        ⚠️ THE TAG-BASED VERSION HAD A REACHABLE WORST CASE, which is why it changed. The formal
+        discount lives entirely inside `project_veterans`; `project_rookies` calls it never. So a
+        ROOKIE placed on IR gets ZERO from the formal path AND — under the old rule — was
+        un-overridable, because a tag existed. Undiscounted and un-overridable is strictly the worst
+        state available, and the 53-man cutdown puts a wave of exactly those rows on the board.
+        (The underlying rookie-path gap is NF-INJ3c's, not this story's; this rule stops that gap
+        compounding with this mechanism.)
+
+        The decision reads the per-row `_formal_discount_applied` flag the caller sets at its own
+        formal step. ⚠️ ABSENT ⇒ TREATED AS FALSE, which is the truthful conservative reading: a
+        frame with no such flag has run no formal step, so nothing was double-counted. That covers
+        the rookie frame and a frame built with the formal cap switched off.
+
+        A player who carries a tag but received NO formal discount is reported
+        (`FORMAL_TAG_NO_DISCOUNT`) so the situation is visible rather than inferred — the same line
+        is the live detector for the NF-INJ3c population.
+
+      • **CAP-ONLY / MONOTONE — THE REMAINING-SEASON RATE (PM ruling 1, 2026-08-23).**
+        `min(current, (season_games − missed) × current / season_games)`.
+
+        ⭐ WHY A RATE AND NOT A CEILING. `proj_games` is a season-long availability RATE — the
+        product already treats it as one (`fullSeasonRate` is points × 17/expected_games; this is
+        that same construct applied in reverse). A credibly-reported absence removes n games from
+        the schedulable season with near-certainty, and the model's rate then applies to the 17−n
+        that remain. The effect is `n × current/17`, i.e. strictly LESS than subtracting n outright,
+        so the report is never double-counted in full; and it always engages, which the ceiling did
+        not.
+
+        ⛔ THE CEILING `min(current, 17 − missed)` WAS THE ORIGINAL SPEC AND WAS MEASURED INERT.
+        On the real 2026 board it moved 5 of 6 proposed rows by ZERO, because the model already
+        projects starters at 11–16 games so a ceiling of "17 minus a short absence" sits ABOVE the
+        current projection. It is a defensible rule — it is exactly "act only on the part of the
+        absence the model has not already priced" — but it fails the player class this mechanism
+        exists for at the magnitudes that actually occur. The PM ruled the rate rule after seeing
+        the measurement (`ablation_results/nf_inj_news_1_board_delta.md`).
+
+        No blend, deliberately. The formal path blends 0.7 toward RES/PUP/NFI/SUS because those are
+        EMPIRICAL levels fitted against realized games; here the number IS the operator's stated
+        expectation, and blending "he'll miss eight" into "he'll miss five and a half" would
+        silently overrule the judgment the mechanism carries.
+
+        The `min()` is redundant arithmetic for any n ≥ 0 and is KEPT anyway: monotonicity is the
+        property, and it should be visible in the expression rather than inferred from the sign of
+        a coefficient.
 
     Applied AFTER the formal cap and the NF-D11 return prior in `project_veterans`, so all three
     compose as min-caps: a player caught by more than one takes the harshest, never a rebound.
@@ -460,10 +494,19 @@ def reported_absence_games(
     names = (pd.Series(df["player_name"]).astype(str).to_numpy()
              if "player_name" in df.columns else np.array([""] * len(df)))
 
-    if "proj_status" in df.columns:
-        formal = df["proj_status"].astype("string").map(_INJURY_STATUS_GAMES_CAP).notna().to_numpy()
+    # PM ruling 2b: the disjointness turns on whether a formal discount was APPLIED. The caller
+    # stamps `_formal_discount_applied` at its own formal step; an absent column means no formal
+    # step ran, so nothing can have been double-counted.
+    if FORMAL_APPLIED_COL in df.columns:
+        formal = df[FORMAL_APPLIED_COL].fillna(False).astype(bool).to_numpy()
     else:
         formal = np.zeros(len(df), dtype=bool)
+    # Reported separately: a tag with no discount behind it. Not a refusal — a DISCLOSURE, and the
+    # live detector for the NF-INJ3c population (a rookie on IR receives nothing from either path).
+    if "proj_status" in df.columns:
+        tagged = df["proj_status"].astype("string").map(_INJURY_STATUS_GAMES_CAP).notna().to_numpy()
+    else:
+        tagged = np.zeros(len(df), dtype=bool)
 
     for row in rows:
         hit = np.flatnonzero(board_ids == row.player_id)
@@ -482,19 +525,27 @@ def reported_absence_games(
             decisions.append({
                 "player_id": row.player_id, "player_name": names[i],
                 "applied": False, "reason": _RAO.REASON_FORMAL_STATUS,
-                "detail": f"formal status {df['proj_status'].iloc[i]!r} — the formal cap governs "
-                          "this player; the override is not applied (no double discount)",
+                "detail": "a formal availability discount was applied to this player; the override "
+                          "is not applied (no double discount)",
             })
             continue
-        cap = float(season_games - row.expected_games_missed)
         before = eg[i]
-        eg[i] = min(before, cap) if np.isfinite(before) else cap
+        # PM ruling 1 — the remaining-season rate. Effect = missed x before/season_games.
+        target = float(season_games - row.expected_games_missed) / float(season_games)
+        eg[i] = min(before, before * target) if np.isfinite(before) else np.nan
         decisions.append({
             "player_id": row.player_id, "player_name": names[i], "applied": True,
             "reason": "APPLIED", "row_index": i,
-            "games_before": float(before), "games_after": float(eg[i]), "games_cap": cap,
+            "games_before": float(before), "games_after": float(eg[i]),
+            "effect_games": float(before - eg[i]) if np.isfinite(before) else None,
+            # ⚠️ Under the rate rule an applied row ALWAYS moves (effect = missed x before/17 > 0),
+            # so `inert` should now never be True. It is KEPT as a tripwire rather than deleted: if
+            # it ever fires, something upstream handed this step a zero/NaN games figure, and that
+            # is a signal worth seeing rather than a routine state to stay silent about.
             "inert": bool(np.isfinite(before) and eg[i] >= before - 1e-9),
-            "detail": f"miss {row.expected_games_missed} ⇒ games <= {cap:.0f}",
+            "tag_without_discount": bool(tagged[i]),
+            "detail": f"miss {row.expected_games_missed} of {season_games:.0f} ⇒ "
+                      f"{before:.2f} x {target:.4f}",
         })
     return eg, decisions
 
@@ -1109,6 +1160,11 @@ def project_veterans(
     if injury_override_blend > 0 and "proj_status" in df.columns:
         new_games = injury_availability_games(df, blend=injury_override_blend)
         old_games = df["proj_games"].to_numpy()
+        # PM ruling 2b — record whether the formal path actually MOVED this row, which is what the
+        # reported-absence disjointness reads. ⚠️ Not "does he carry a tag": a tagged player whose
+        # games already sat below the status level is unchanged by the blend, and nothing was
+        # double-counted for him either.
+        df[FORMAL_APPLIED_COL] = new_games < old_games - 1e-9
         iscale = np.where(old_games > 1e-6, new_games / np.clip(old_games, 1e-6, None), 1.0)
         for col in ("proj_pass_att", "proj_pass_cmp", "proj_pass_yds", "proj_pass_td", "proj_pass_int",
                     "proj_rush_att", "proj_rush_yds", "proj_rush_td",

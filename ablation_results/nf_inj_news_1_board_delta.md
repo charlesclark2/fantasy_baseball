@@ -1,5 +1,11 @@
 # NF-INJ-NEWS-1 — pre-publish measurement (2026-08-23)
 
+> **AMENDED 2026-08-23 by PM rulings 1, 2b and 3.** The rule that will serve is the
+> REMAINING-SEASON RATE, not the ceiling this report was first written against. The
+> ORIGINAL measurement is retained below UNCHANGED — it is the evidence the ruling was
+> made on, and rewriting it would leave the ruling resting on numbers nobody can see.
+> Read §0 first for what actually serves.
+
 **This certifies nothing.** The reported-absence cap is an **operator judgment with a source
 attached**, never a fitted model. It has not been backtested, no claim of improvement attaches to
 it, and `best_alpha = 0`. This report exists so the operator can approve — or decline — the first
@@ -9,7 +15,67 @@ publish with the board delta in hand, which is the only responsible gate a judgm
 
 ---
 
-## ⚠️ THE HEADLINE, AND IT IS A DECISION FOR THE OPERATOR
+## §0 — WHAT WILL ACTUALLY SERVE (PM ruling 1, and it supersedes §1 below)
+
+    proj_games_new = min( proj_games_current, (17 − n_reported) × proj_games_current / 17 )
+    effect         = n_reported × proj_games_current / 17
+
+`proj_games` is a season-long availability RATE — the product already treats it as one
+(`fullSeasonRate` is points × 17/expected_games; this is that construct in reverse). A reported
+absence removes n games from the schedulable season, and the rate applies to the 17−n that remain.
+The effect is strictly smaller than subtracting n outright, so a report is never double-counted in
+full against durability the model has already priced; and unlike the ceiling it always engages.
+
+Re-scored on the same real board (794 rows, built 08-21):
+
+| player | pos | rookie | proj_games | n | new_games | effect | qualifies (ruling 3) |
+|---|---|---|---|---|---|---|---|
+| Jordyn Tyson | WR | ✅ | 13.61 | 5 | **9.608** | **−4.003** | **YES** |
+| Alvin Kamara | RB | | 11.49 | 2 | **10.139** | **−1.352** | **YES** |
+| Kyle Monangai | RB | | 11.89 | 1 | 11.193 | −0.700 | no — n<2 |
+| Jeremiyah Love | RB | ✅ | 16.00 | 1 | 15.059 | −0.941 | no — n<2 |
+| Emeka Egbuka | WR | | 15.30 | 1 | 14.398 | −0.900 | no — n<2 |
+| Sam LaPorta | TE | | 13.83 | 1 | 13.016 | −0.814 | no — n<2 |
+
+**No inert tier remains.** Every applied row moves, and every applied row logs its effect size.
+
+### PM ruling 3 — what qualifies, and what it removes
+
+A row qualifies only when (i) the source explicitly reports missing **regular-season** time — a
+named count of games/weeks or a dated return, never day-to-day / week-to-week / camp-only language
+— and (ii) `n ≥ 2`. Clause (ii) is enforced in the loader; clause (i) is the curator's obligation,
+carried in the curated file's header (no scan can read a source and decide what it means, and a
+keyword check over source prose would reject an honest citation that quotes a coach).
+
+**Four of the six originally-proposed rows fall out, on BOTH halves** — their sources are
+"week-to-week", "day-to-day", "I don't know", and a preseason-only report. That the two filters
+agree is a reasonable sign the policy is aimed at something real rather than at a number.
+**Two rows qualify: Tyson (5) and Kamara (2).**
+
+### PM ruling 2b — disjointness now turns on the APPLIED DISCOUNT
+
+An override is ignored when a formal discount **was applied**, not when a formal tag merely exists.
+The old form had a reachable worst case: a rookie placed on IR gets **zero** from the formal path
+(it runs only inside `project_veterans`) and was **also** un-overridable because a tag existed —
+undiscounted *and* un-overridable, with the 53-man cutdown putting a wave of exactly those rows on
+the board.
+
+Every row carrying a formal tag with no discount behind it is now named in the build log by
+`_warn_formal_tag_without_discount`, **board-wide and on every build**. That line is the live
+detector for the NF-INJ3c population, and it counts rookies explicitly — the rookie half of the
+frame carries no `proj_status` natively, so the build attaches it *for detection only* (no discount;
+the rookie-path fix is NF-INJ3c's story). Without that attach the detector would have been
+structurally blind to precisely the population it exists for.
+
+---
+
+## §1 — THE ORIGINAL MEASUREMENT (retained verbatim; the evidence PM ruling 1 was made on)
+
+⚠️ **SUPERSEDED BY §0.** Everything below describes the CEILING rule, which no longer serves.
+It is kept because the ruling was made on these numbers and a record that quietly rewrote
+itself would leave the decision resting on evidence nobody can check.
+
+### The headline, as reported to the operator
 
 **Measured against the real 2026 board (794 rows, built 2026-08-21), the cap as the spec defines it
 is INERT for 5 of the 6 proposed candidates.**
