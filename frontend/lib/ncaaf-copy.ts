@@ -196,4 +196,35 @@ export const PACE_INACTIVE_NOTE =
 
 /** P3.3 is not built. ⛔ A link to a route that does not exist is exactly the defect the E2E suite
  *  was built to catch, so the affordance is present, labelled, and does not navigate. */
+// ══ COLLAPSING A CARD ═════════════════════════════════════════════════════════════════════════
+//
+// A full card is tall — on a phone one matchup is more than a viewport, so an eight-game slate is
+// eight scrolls before a reader has seen the slate at all. Collapsing trades the curves for a
+// scannable summary.
+//
+// ⭐ CARDS OPEN EXPANDED. The distributional curve is what this surface IS (the P3 brand
+// directive), and a first-time reader who is shown a list of percentages never learns that we
+// publish distributions at all. The viewer's own choice is remembered instead, so collapsing is a
+// preference a returning reader keeps rather than a default we impose.
+//
+// ⛔ THE COLLAPSED SUMMARY SHOWS THE BAND, NEVER A POINT. "Never a point number" is the directive
+// for this axis, and a collapsed row is exactly where a single tidy number would be tempting.
+//
+// ⭐ THE PER-CARD CONTROL IS THE SHARED ACCORDION'S CHEVRON, so it needs no copy of its own —
+// `app/props/page.tsx` already collapses per-game groups exactly this way, and a second labelled
+// button for the same job would be a second interaction language for the same idea. Only the
+// slate-level control is worded, because "expand all" has no glyph.
+
+export const EXPAND_ALL_LABEL = "Expand all"
+export const COLLAPSE_ALL_LABEL = "Collapse all"
+
+/** ⚠️ THE PACE CAVEAT HAS TO SURVIVE COLLAPSE.
+ *
+ * With `pace_term_active` false every game's total band is nearly identical (measured on the 2026
+ * opener: eight totals spanning 2.4 points against a sigma of 17.2). A collapsed slate is the view
+ * that puts those eight near-identical ranges in a vertical list — i.e. the view that most invites
+ * a reader to compare them — while the sentence explaining why they are alike lives on the curve
+ * that collapsing just hid. So the marker rides the summary row too, short enough to fit. */
+export const SUMMARY_NO_PACE_MARKER = "similar across games right now"
+
 export const TEAM_PAGE_STUB_LABEL = "Team page coming soon"

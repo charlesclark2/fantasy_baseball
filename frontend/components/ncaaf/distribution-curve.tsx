@@ -17,7 +17,7 @@
 // than from a constant, so a later ladder change is additive to this component instead of silently
 // mislabelling the shading.
 
-import { buildDistributionCurve, type ServedDistribution } from "@/lib/ncaaf-curve"
+import { buildDistributionCurve, type CurveBand, type ServedDistribution } from "@/lib/ncaaf-curve"
 import { CURVE_PARAMETRIC_NOTE, CURVE_UNAVAILABLE } from "@/lib/ncaaf-copy"
 
 /** The drawing box. Arbitrary units — the SVG scales to its container via `viewBox`. */
@@ -38,6 +38,29 @@ const fmt1 = (n: number) => (Object.is(n, -0) ? 0 : n).toFixed(1)
 /** "80%" from the SERVED levels. ⛔ Never a literal — the payload decides which interval it sent. */
 export function bandLabel(loLevel: number, hiLevel: number): string {
   return `${Math.round((hiLevel - loLevel) * 100)}%`
+}
+
+export interface BandText {
+  /** "80%", derived from the served levels. */
+  name: string
+  lo: string
+  hi: string
+}
+
+/** The band's three rendered strings, in ONE place.
+ *
+ * ⭐ The collapsed card summary shows the same band this component's header shows, and E9.61 is the
+ * lesson that two surfaces rendering one number are two rule sets free to drift (a rounding, a sign
+ * convention, a level). They share this function so there is nothing to drift. */
+export function bandTexts(band: CurveBand | null): BandText | null {
+  if (!band) return null
+  return { name: bandLabel(band.loLevel, band.hiLevel), lo: fmt1(band.lo), hi: fmt1(band.hi) }
+}
+
+/** The band for a served distribution, formatted — for a caller that has no curve in hand.
+ *  ⛔ Goes through `buildDistributionCurve` so the band is the SERVED interval, never `mu ± z·sigma`. */
+export function bandSummary(dist: ServedDistribution | null | undefined): BandText | null {
+  return bandTexts(buildDistributionCurve(dist).band)
 }
 
 export interface DistributionCurveProps {
@@ -110,7 +133,7 @@ export function DistributionCurve({
   const band = curve.band
   const bandLo = band ? Math.max(band.lo, xMin) : null
   const bandHi = band ? Math.min(band.hi, xMax) : null
-  const bandName = band ? bandLabel(band.loLevel, band.hiLevel) : null
+  const bandName = bandTexts(band)?.name ?? null
 
   return (
     <div

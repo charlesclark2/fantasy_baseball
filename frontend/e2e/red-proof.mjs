@@ -2978,6 +2978,83 @@ const CASES = [
     grep: "states the no-advantage framing on every card",
   },
   {
+    id: "ncaaf-cards-open-collapsed",
+    shipped: "NCAAF-P3.2b — a board that opens as a list of percentages",
+    // ⭐ THE DEFAULT IS THE PRODUCT DECISION. The distributional curve is what this surface IS, so
+    // a board that opened collapsed would teach a first-time reader that we publish point-ish
+    // numbers and never show them otherwise. Collapsing is opted INTO, never handed out.
+    // ⚠️ THE BREAK TARGETS THE *REACHABLE* DEFAULT, and the first cut did not. Flipping the card's
+    // own `expanded = true` prop default changes NOTHING observable, because the page always passes
+    // `expanded` explicitly — the component default is unreachable from the only caller. The red
+    // proof reported MISMATCH and that is what it is for: a case whose break cannot bite proves
+    // nothing about the clause (NF1.7 (a)). The default a reader actually meets is the stored
+    // preference's fallback, so that is what this breaks.
+    detail: "Makes an absent stored preference mean COLLAPSED, so a first visit opens collapsed.",
+    file: "components/ncaaf/games-page.tsx",
+    from: '    return window.localStorage.getItem(COLLAPSE_PREF_KEY) !== "0"',
+    to: '    return window.localStorage.getItem(COLLAPSE_PREF_KEY) === "1"',
+    grep: "cards open EXPANDED",
+  },
+  {
+    id: "ncaaf-collapsed-summary-shows-the-midpoint",
+    shipped: "NCAAF-P3.2b — an uncertainty-first surface turned point-prediction, one row at a time",
+    // ⛔ A collapsed row is exactly where one tidy number is tempting, and the median is SERVED, so
+    // printing it needs no new arithmetic — which is what makes this the easy mistake rather than
+    // the exotic one. "Never a point number" is the directive for this axis.
+    detail: "Renders the served median in the collapsed row instead of the band.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "          <span className=\"text-gray-500\">{band.name} of outcomes</span> {band.lo} to {band.hi}",
+    to: "          <span className=\"text-gray-500\">projected</span> {distribution?.quantiles?.[3]?.toFixed(1)}",
+    grep: "shows a RANGE, never the midpoint",
+  },
+  {
+    id: "ncaaf-collapsed-band-drifts-from-the-curve",
+    shipped: "NCAAF-P3.2b — two renderers of one number, disagreeing by a rounding",
+    // ⭐ E9.61. The collapsed row and the curve header show the SAME served band; the moment they
+    // format it separately they are two rule sets free to drift on a rounding, a sign or a level.
+    // This is the cheapest possible drift and it is the one nobody would notice by eye.
+    detail: "Gives the collapsed summary its own rounding instead of the shared formatter.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "  const band = bandSummary(distribution)",
+    to: "  const raw = bandSummary(distribution)\n  const band = raw ? { ...raw, lo: Math.round(Number(raw.lo)).toString(), hi: Math.round(Number(raw.hi)).toString() } : null",
+    grep: "the same numbers the curve showed",
+  },
+  {
+    id: "ncaaf-pace-caveat-lost-on-collapse",
+    shipped: "NCAAF-P3.2b — eight near-identical totals stacked in a list, with nothing saying why",
+    // ⭐ COLLAPSING IS THE VIEW THAT MOST INVITES THE MISREADING. With pace inactive the totals span
+    // 2.4 points against a sigma of 17.2; a collapsed slate puts those ranges in a vertical column —
+    // i.e. invites the comparison — while the sentence explaining it lives on the hidden curve.
+    detail: "Drops the pace marker from the collapsed summary, keeping it only on the curve.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "              marker={totalUndifferentiated ? SUMMARY_NO_PACE_MARKER : null}",
+    to: "              marker={null}",
+    grep: "pace caveat SURVIVES collapse",
+  },
+  {
+    id: "ncaaf-collapse-all-skips-toggled-cards",
+    shipped: "NCAAF-P3.2b — a control that does not do what its label says",
+    // "Collapse all" that leaves the cards you touched expanded means "all except some", and a
+    // reader cannot tell which — the naive per-card override map produces exactly this.
+    detail: "Keeps per-card overrides when expand/collapse-all fires.",
+    file: "components/ncaaf/games-page.tsx",
+    from: "    setOverrides({})",
+    to: "    // overrides deliberately kept",
+    grep: "including ones already toggled",
+  },
+  {
+    id: "ncaaf-collapse-preference-is-one-way",
+    shipped: "NCAAF-P3.2b — a reader who can never get the curves back",
+    // ⚠️ THE ASYMMETRIC BUG IS THE PLAUSIBLE ONE: remembering "collapsed" and forgetting "expanded"
+    // passes any one-sided persistence test and leaves a viewer permanently unable to restore the
+    // surface's signature view. Hence the reload clause is two-sided.
+    detail: "Persists only the collapsed choice, never the expanded one.",
+    file: "components/ncaaf/games-page.tsx",
+    from: "    writeCollapsePref(next)",
+    to: "    if (!next) writeCollapsePref(next)",
+    grep: "an expand preference restores the curves",
+  },
+  {
     id: "ncaaf-total-presented-as-discriminating",
     shipped: "NCAAF-P3.2 — a pre-season total axis presented as if it separated games",
     // ⭐ PM ADDENDUM (2), MEASURED: with `pace_term_active` false the eight opener totals span 2.4
@@ -3088,7 +3165,7 @@ const CASES = [
 // 181/175/6 → 183/177/6.
 // PM addendum (2) — the pre-season totals treatment — adds THREE more, each RED-proven
 // individually. 183/177/6 → 186/180/6.
-const RECORDED_BOARD = { total: 186, red: 180, notObservable: 6 }
+const RECORDED_BOARD = { total: 192, red: 186, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))
