@@ -1,5 +1,14 @@
 [
   {
+    "week": "2026-08-24",
+    "items": [
+      {
+        "tag": "added",
+        "text": "College football is now in the app. Every projected FBS game gets a card that leads with the win probability for both teams, and shows the margin and the total as curves rather than as single numbers — the shaded part of each curve is the middle 80% of the outcomes our model simulated, so a wide curve is us telling you we are genuinely unsure. The curves are drawn from the model's own simulated quantiles, not from a bell shape we assumed, which is why a lopsided game looks lopsided. Where a closing line has been captured for a game we put it beside our own number so you can see where the two differ; for upcoming games we usually have not captured one yet, and the card says that in as many words rather than leaving a blank. We want to be exact about what this is: these are market-blind projections from a model that never sees a betting line, we make no claim to an advantage over the market, and we publish no picks. Pick a kickoff day at the top; team pages follow. Free, no account needed."
+      }
+    ]
+  },
+  {
     "week": "2026-08-17",
     "items": [
       {
