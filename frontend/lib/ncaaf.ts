@@ -220,6 +220,36 @@ export function defaultGameDay(manifest: NcaafManifest | undefined): string | nu
   return days.find((d) => d > today) ?? days[days.length - 1]
 }
 
+/**
+ * Does the payload still describe the thing this surface is built to describe?
+ *
+ * ⭐ THIS IS THE FLAGS BEING *RESPECTED* RATHER THAN MERELY PRESENT, and it is why P3.1 made them
+ * machine-readable instead of leaving the posture to a sentence. Every claim-bearing string on this
+ * surface — "we make no claim to an advantage over the market", "the model never sees a betting
+ * line" — is warranted by `market_blind && projection_only && best_alpha === 0` and by nothing else.
+ * A payload that stopped saying those things would still render that copy, confidently and
+ * wrongly, unless something BRANCHED on it.
+ *
+ * ⚠️ AND IT IS NOT DEFENSIVE CEREMONY. The write path already refuses a non-zero `best_alpha`
+ * (`assert_best_alpha_is_zero` walks the whole tree), so this cannot fire today — which is exactly
+ * the "documented ≠ actually served" shape this repo keeps paying for: the guarantee lives in a
+ * writer the client cannot see, across a deploy boundary the client cannot control (the API Lambda
+ * has no CD — NF-C0). The client asserting it for itself costs one comparison.
+ *
+ * ⛔ IT IS A REFUSAL, NEVER A RE-INTERPRETATION. When it returns false the surface withdraws its own
+ * copy and shows the payload's OWN disclosure instead — it does not attempt to describe a framing
+ * it was not written for.
+ */
+export function isMarketBlindProjection(framing: NcaafFraming | undefined | null): boolean {
+  if (!framing) return false
+  return (
+    framing.framing === "market_blind_projection" &&
+    framing.market_blind === true &&
+    framing.projection_only === true &&
+    framing.best_alpha === 0
+  )
+}
+
 /** True when this game's day has already begun relative to the manifest's "today". Used only to
  *  LABEL a day (upcoming vs past); nothing on this surface changes its numbers because of it. */
 export function isPastGameDay(gameDay: string, manifest: NcaafManifest | undefined): boolean {

@@ -2947,6 +2947,36 @@ const CASES = [
     to: "  const started = true",
     grep: "before kickoff no card is flagged",
   },
+  {
+    id: "ncaaf-framing-flags-ignored",
+    shipped: "NCAAF-P3.2 — the honest-frame flags present but not RESPECTED",
+    // P3.1 made the posture MACHINE-READABLE so a surface could branch on it rather than trust a
+    // sentence someone wrote. Ignoring the branch means every claim-bearing string on the page
+    // keeps asserting itself over a payload that no longer warrants it — confidently, and with no
+    // error anywhere. The guarantee that stops it today lives in a WRITER this client cannot see,
+    // across a deploy boundary it cannot control (the API Lambda has no CD — NF-C0).
+    detail: "Treats every payload as market-blind, whatever its framing flags say.",
+    file: "lib/ncaaf.ts",
+    from:
+      "  return (\n" +
+      '    framing.framing === "market_blind_projection" &&',
+    to: "  return true || (\n" + '    framing.framing === "market_blind_projection" &&',
+    grep: "makes the surface WITHDRAW its own copy",
+  },
+  {
+    id: "ncaaf-framing-copy-withdrawn-always",
+    shipped: "NCAAF-P3.2 — the one-sided fix: copy withdrawn on every card",
+    // ⭐ THE OTHER HALF, and it is the more likely mistake: a component that withdraws its framing
+    // sentence unconditionally passes the case above and says NOTHING on any real card — the panel
+    // silently loses the one sentence that makes it honest, on every game, forever.
+    detail: "Withdraws the framing sentence on every payload, real ones included.",
+    file: "lib/ncaaf.ts",
+    from:
+      "  return (\n" +
+      '    framing.framing === "market_blind_projection" &&',
+    to: "  return false && (\n" + '    framing.framing === "market_blind_projection" &&',
+    grep: "states the no-advantage framing on every card",
+  },
 
 ]
 
@@ -3016,7 +3046,9 @@ const CASES = [
 // ⛔ A projection is not a measurement.
 // NCAAF-P3.2's kicked-off state adds TWO more (the same story, a defect found after its first
 // eight cases were proven), each RED-proven individually. So 179/173/6 → 181/175/6.
-const RECORDED_BOARD = { total: 181, red: 175, notObservable: 6 }
+// And TWO more for the framing-flag branch (the flags being RESPECTED, both directions).
+// 181/175/6 → 183/177/6.
+const RECORDED_BOARD = { total: 183, red: 177, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

@@ -34,6 +34,7 @@ import {
   MARKET_ABSENT_LABEL,
   MARKET_COLUMN_LABEL,
   MARKET_IMPLIED_HINT,
+  FRAMING_CHANGED,
   MARKET_PANEL_FRAMING,
   MARKET_PANEL_LABEL,
   MARKET_REASON_COPY,
@@ -43,7 +44,7 @@ import {
   ROW_HOME_WIN,
   ROW_TOTAL,
 } from "@/lib/ncaaf-copy"
-import type { NcaafGamePrediction } from "@/lib/ncaaf"
+import { isMarketBlindProjection, type NcaafGamePrediction } from "@/lib/ncaaf"
 import { formatProbability } from "./win-probability"
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
@@ -116,12 +117,18 @@ export function MarketComparison({
   const available = market.status === "available"
   const margin = modelCentre(game.margin)
   const total = modelCentre(game.total)
+  const postureHolds = isMarketBlindProjection(game.framing)
 
   // See the header: a units conversion on a served number, not a derivation.
   const marketHomeMargin = available && isNum(market.home_spread) ? -market.home_spread : null
 
   return (
-    <div data-testid={testId} data-market-status={market.status} className="space-y-2">
+    <div
+      data-testid={testId}
+      data-market-status={market.status}
+      data-posture={postureHolds ? "market_blind_projection" : "changed"}
+      className="space-y-2"
+    >
       <div className="text-[10px] uppercase tracking-widest text-gray-500">{MARKET_PANEL_LABEL}</div>
 
       <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 border-b border-[#1e1e1e] pb-1">
@@ -170,9 +177,19 @@ export function MarketComparison({
         </p>
       )}
 
-      <p data-testid={`${testId}-framing`} className="text-[11px] leading-snug text-gray-500">
-        {MARKET_PANEL_FRAMING}
-      </p>
+      {/* See `isMarketBlindProjection`: our framing sentence is warranted by the payload's flags
+          and by nothing else, so on a payload that stops carrying them we withdraw it and show the
+          publisher's own disclosure instead — a refusal, never a re-interpretation. */}
+      {postureHolds ? (
+        <p data-testid={`${testId}-framing`} className="text-[11px] leading-snug text-gray-500">
+          {MARKET_PANEL_FRAMING}
+        </p>
+      ) : (
+        <div data-testid={`${testId}-framing-withdrawn`} className="space-y-1">
+          <p className="text-[11px] leading-snug text-amber-300/80">{FRAMING_CHANGED}</p>
+          <p className="text-[11px] leading-snug text-gray-500">{game.framing.disclosure}</p>
+        </div>
+      )}
     </div>
   )
 }

@@ -374,11 +374,49 @@ test("every rendered word passes the claim denylist", async ({ page, browserName
   }
 })
 
+test("a payload whose framing flags change makes the surface WITHDRAW its own copy", async ({ page }) => {
+  // ⭐ THE FLAGS BEING RESPECTED RATHER THAN MERELY PRESENT. Every claim-bearing sentence on this
+  // surface is warranted by `market_blind && projection_only && best_alpha === 0` and by nothing
+  // else — so on a payload that stops carrying them, continuing to assert "we make no claim to an
+  // advantage over the market" would be describing a model this page was not written to describe.
+  //
+  // ⚠️ IT CANNOT FIRE TODAY — the write path refuses a non-zero `best_alpha` outright. That is the
+  // point: the guarantee lives in a writer this client cannot see, across a deploy boundary it
+  // cannot control (the API Lambda has no CD — NF-C0), so the client asserts it for itself.
+  await open(page, {
+    transform: (pathname, body) =>
+      pathname.startsWith("/ncaaf/games")
+        ? {
+            ...body,
+            games: body.games.map((g: any) => ({
+              ...g,
+              framing: { ...g.framing, market_blind: false, best_alpha: 0.02 },
+            })),
+          }
+        : body,
+  })
+  const panel = card(page, SLATE.games[0].game_id).getByTestId("ncaaf-market-comparison")
+  await expect(panel).toHaveAttribute("data-posture", "changed")
+  await expect(panel.getByTestId("ncaaf-market-comparison-framing")).toHaveCount(0)
+  const withdrawn = panel.getByTestId("ncaaf-market-comparison-framing-withdrawn")
+  await expect(withdrawn).toBeVisible()
+  // The publisher's OWN disclosure is what stands in — a refusal, never a re-interpretation.
+  await expect(withdrawn).toContainText(SLATE.framing.disclosure.slice(0, 60))
+  // ⛔ And the surface still claims nothing itself.
+  expect(forbiddenPhrasesIn(await page.evaluate(() => document.body.innerText))).toEqual([])
+})
+
 test("the market panel states the no-advantage framing on every card", async ({ page }) => {
   await open(page, { ncaafSlate: "market" })
   const framings = page.getByTestId("ncaaf-market-comparison-framing")
   await expect(framings).toHaveCount(SLATE_MARKET.games.length)
   await expect(framings.first()).toContainText("make no claim to an advantage")
+  // The two-sided half of the clause above: on the REAL payload the posture holds, so a component
+  // that withdrew its copy unconditionally would pass that test and say nothing on any real card.
+  await expect(page.getByTestId("ncaaf-market-comparison").first()).toHaveAttribute(
+    "data-posture",
+    "market_blind_projection",
+  )
 })
 
 test("no link on the surface points at a route that does not exist", async ({ page }) => {

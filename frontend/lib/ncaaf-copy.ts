@@ -108,6 +108,15 @@ export const MARKET_PANEL_LABEL = "Model and market, side by side"
 export const MARKET_PANEL_FRAMING =
   "We publish our numbers next to the market's so you can see where they differ. We make no claim to an advantage over the market, and we publish no picks."
 
+/** ⭐ WHAT THE PANEL SAYS WHEN THE PAYLOAD'S OWN FRAMING FLAGS NO LONGER MATCH THE ONE THIS
+ *  SURFACE IS WRITTEN FOR. Withdrawing our sentence and showing the payload's own disclosure is the
+ *  only honest move: the framing sentence above is warranted by `market_blind && projection_only &&
+ *  best_alpha === 0` and by nothing else, so on any other payload it would be an assertion we have
+ *  no basis for — and a surface that kept asserting it would be describing a model it was not
+ *  written to describe. */
+export const FRAMING_CHANGED =
+  "The framing this projection was published under is not the one this page was written to describe, so we are showing the publisher's own wording rather than ours."
+
 export const MODEL_COLUMN_LABEL = "Our model"
 export const MARKET_COLUMN_LABEL = "Market"
 
