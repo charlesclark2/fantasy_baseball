@@ -71,20 +71,36 @@ ARMS = (
     "incumbent",
     "A1_sigma_level",
     "A2_sigma_mu_binned",
-    "A3_sigma_clairvoyant",      # ⛔ UPPER BOUND (peeks at |y-mu| to choose the bin)
+    "A3_sigma_scalemix",         # ⛔ UPPER BOUND (a shrunk Bayes peek at the per-game scale)
     "A_ctrl_permuted",           # ⛔ row-blind matched control
     "B1_shape_skewnormal",
     "B2_shape_empirical",        # ⛔ UPPER BOUND
     "C1_combined",               # ⛔ joint ceiling
 )
-ORACLE_ARMS = ("A3_sigma_clairvoyant", "A_ctrl_permuted", "B2_shape_empirical", "C1_combined")
+ORACLE_ARMS = ("A3_sigma_scalemix", "A_ctrl_permuted", "B2_shape_empirical", "C1_combined")
 N_BINS = 10                       # deciles for the sigma oracles
 MIN_BIN_ROWS = 20                 # below this an out-of-block bin falls back to the pooled RMS
 SKEWNORM_COLLAPSE_ABS_ALPHA = 0.05  # |a| below this = the nested form collapsed onto its Normal foil
 
-#: §4 — metrics
-PRIMARY_STAT = "pit_ks"
-CONFIRM_STAT = "p_over_gap_abs"
+#: §4 — metrics. ⭐ AMENDMENT 1 (node 2, before any real-data read): ONE PRIMARY PER LEVER.
+#: The controls PROVED a single yardstick cannot separate the levers — a planted per-game σ
+#: deficit of CV 0.35 moved pooled `pit_ks` from 0.0302 to 0.0241 (i.e. NOT AT ALL), while a
+#: marginal shape law cannot recover a per-game scale loss on `crps` (measured: it made it WORSE).
+#: Each lever is therefore scored on the statistic it acts on, and neither can steal the other's
+#: credit. See `mlb_tv2_0_prereg.md` §12.
+CRPS_STAT = "crps"               # a PER-GAME proper score — the only statistic per-game σ can move
+ASYM_STAT = "p_over_gap_abs"     # the ASYMMETRY the product prints — a SYMMETRIC scale deficit
+                                 # leaves it alone, so the feature lever cannot be scored on it
+FIDELITY_STAT = "pit_ks"         # safeguard + context: overall distributional fidelity
+PRIMARY_STATS = (CRPS_STAT, ASYM_STAT)
+REPORT_STATS = (CRPS_STAT, ASYM_STAT, FIDELITY_STAT)
+BOOT_STATS = (CRPS_STAT, ASYM_STAT, FIDELITY_STAT, "p_over_stated", "p_over_gap",
+              "pit_mdd")
+#: Each lever is scored on EVERY statistic it can act on, and on none it cannot.
+LEVER_STATS = {"shape": (CRPS_STAT, ASYM_STAT), "feature": (CRPS_STAT,)}
+FEATURE_STAT, SHAPE_STAT = CRPS_STAT, ASYM_STAT   # back-compat aliases for the report
+MIX_K_MAX = 3                    # scale-mixture components; K is chosen by BIC, out of block
+N_BOOT = 400                     # paired row bootstrap for lever materiality
 CRPS_LEVELS = 499
 CRPS_VALIDATION_TOL = 1e-3        # grid CRPS vs the Normal closed form on the incumbent
 
@@ -118,9 +134,10 @@ CONTROL_EXPECT = {
     "PC_both": "BOTH",
 }
 #: §8 — MDE grids (planted deficit size -> does the rule route it correctly?)
-MDE_SIGMA_CV_GRID = (0.05, 0.10, 0.15, 0.20, 0.25, 0.35, 0.50)
-MDE_SKEW_GRID = (0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
-N_MDE = 20                        # replicates per grid point
+MDE_SIGMA_CV_GRID = (0.05, 0.10, 0.20, 0.35, 0.50)
+MDE_SKEW_GRID = (0.5, 1.0, 2.0, 4.0, 6.0)
+N_MDE = 8                         # replicates per grid point
+MDE_N_BOOT = 150                  # a coarser (hence CONSERVATIVE) paired CI for the MDE sweep only
 
 _REPORT_MD = PROJECT_ROOT / "ablation_results" / "mlb_tv2_0_ceiling_diagnosis.md"
 _REPORT_JSON = PROJECT_ROOT / "ablation_results" / "mlb_tv2_0_ceiling_diagnosis.json"
@@ -278,6 +295,94 @@ class EmpiricalLaw:
         return np.clip(out, 1e-12, 1 - 1e-12)
 
 
+def _em_scale_mixture(z, K, iters=400, tol=1e-10):
+    """EM for a ZERO-MEAN K-component normal scale mixture `z ~ Σ w_k N(0, s_k²)`."""
+    z2 = np.asarray(z, float) ** 2
+    s2 = np.maximum(np.quantile(z2, np.linspace(0.15, 0.85, K)) if K > 1
+                    else np.array([z2.mean()]), 1e-6)
+    w, ll_old = np.full(K, 1.0 / K), -np.inf
+    ll = ll_old
+    for _ in range(iters):
+        logp = -0.5 * (np.log(2 * np.pi * s2)[None, :] + z2[:, None] / s2[None, :]) + np.log(w)[None, :]
+        mx = logp.max(1, keepdims=True)
+        e = np.exp(logp - mx)
+        den = e.sum(1, keepdims=True)
+        r = e / den
+        ll = float((np.log(den) + mx).sum())
+        w = r.mean(0)
+        s2 = np.maximum((r * z2[:, None]).sum(0) / np.maximum(r.sum(0), 1e-12), 1e-6)
+        if ll - ll_old < tol:
+            break
+        ll_old = ll
+    return w, s2, ll
+
+
+class ScaleMixtureOracle:
+    """⛔ UPPER BOUND on ANY per-game σ model — a SHRUNK Bayes peek, not a row-level peek.
+
+    ⭐ AMENDMENT 1 (node 2). The registered `A3_sigma_clairvoyant` — out-of-block RMS residual
+    within the row's own `|y−μ|` decile — is a DEGENERATE, not a ceiling: it forces `z ≈ ±1`, so on
+    CLEAN data it posted `scale_cv 0.745`, `pit_ks 0.225` (vs the incumbent's 0.030), `cov50 0.106`
+    and a CRPS BELOW what a correctly specified model can attain. It bounded nothing, in either
+    direction. That is NF-W6's warning verbatim: *a row-level peek is a zero-CRPS degenerate, not a
+    ceiling* — and the positive controls are what caught it, before any real outcome was read.
+
+    The cure keeps the peek but makes it self-correcting: fit a ZERO-MEAN normal scale mixture to
+    the OUT-OF-BLOCK `z` (`K ∈ 1..3` chosen by **BIC**, out of block), then give each in-block row
+    its POSTERIOR mean scale `sqrt(E[s² | z_i])`. Two properties make it a legitimate ceiling:
+
+    * **Under a constant true scale, BIC picks `K = 1` and the posterior scale is CONSTANT** — the
+      oracle collapses onto `A1` and is INERT. Measured on `PC_clean`: `K = 1` on all 5 blocks,
+      CRPS 2.4312 vs the incumbent's 2.4309. A binned clairvoyant cannot do this: it manufactures
+      dispersion out of pure noise.
+    * The mixture is **SYMMETRIC and zero-mean**, so it cannot absorb SKEW — which is what keeps
+      this leg from stealing the architecture lever's credit. Measured on `PC_shape` (α = 4):
+      `K = 1` on all blocks, CRPS 2.4498 vs 2.4491 — inert.
+    """
+
+    @staticmethod
+    def _bic_k(z, k_max):
+        z = np.asarray(z, float)
+        n = len(z)
+        best = None
+        for K in range(1, k_max + 1):
+            w, s2, ll = _em_scale_mixture(z, K)
+            bic = -2 * ll + (2 * K - 1) * np.log(n)
+            if best is None or bic < best[0]:
+                best = (bic, K, w, s2)
+        return best[1], best[2], best[3]
+
+    def __init__(self, z, k_max=MIX_K_MAX):
+        z = np.asarray(z, float)
+        K, w, s2 = self._bic_k(z, k_max)
+        # ⭐ AMENDMENT 4 (prereg §12) — THE SYMMETRY GATE. A genuine per-game scale mixture is
+        # SYMMETRIC; SKEW is not. A right-skewed but homoscedastic sample has a heavy RIGHT tail
+        # only, which raises BIC's preference for `K = 2` and opens a peek the oracle then profits
+        # from — measured: the FEATURE lever fired on 20% of pure-SHAPE control draws. So each side
+        # of the median is reflected into a symmetric sample of its own and must INDEPENDENTLY
+        # prefer `K ≥ 2`; otherwise the oracle is forced to `K = 1` and is INERT. Under a real scale
+        # mixture both tails are heavy and the gate opens; under pure skew only one is.
+        d = z - np.median(z)
+        sides = []
+        for half in (d[d > 0], -d[d < 0]):
+            sides.append(self._bic_k(np.concatenate([half, -half]), k_max)[0]
+                         if len(half) >= 3 * N_BINS else 1)
+        self.K_full, self.K_sides = int(K), [int(x) for x in sides]
+        if K > 1 and min(sides) < 2:
+            K, w, s2 = self._bic_k(z, 1)          # symmetry gate CLOSED -> inert
+        self.K, self.w, self.s2 = K, w, s2
+
+    def scale(self, z):
+        """`sqrt(E[s² | z])` — constant (hence inert) whenever `K == 1`."""
+        z2 = np.asarray(z, float) ** 2
+        logp = (-0.5 * (np.log(2 * np.pi * self.s2)[None, :] + z2[:, None] / self.s2[None, :])
+                + np.log(self.w)[None, :])
+        mx = logp.max(1, keepdims=True)
+        e = np.exp(logp - mx)
+        r = e / e.sum(1, keepdims=True)
+        return np.sqrt((r * self.s2[None, :]).sum(1))
+
+
 class Arm:
     """`mu` (held EXACTLY at the served value for every arm), a per-row `scale`, a per-block law."""
 
@@ -309,7 +414,7 @@ class Arm:
 # METRICS
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
-def randomized_pit(y, arm, rng):
+def randomized_pit(y, arm, rng=None, *, u=None):
     """Continuity-corrected + randomized PIT, generalized from MH2.6's house instrument to any F.
 
     `total_runs` is an integer and the predictive is continuous: reading `F(y)` straight off is
@@ -318,16 +423,24 @@ def randomized_pit(y, arm, rng):
     """
     y = np.asarray(y, float)
     lo, hi = arm.cdf_at(y - 0.5), arm.cdf_at(y + 0.5)
-    return lo + rng.uniform(size=len(y)) * np.maximum(hi - lo, 0.0)
+    # ⭐ `u` lets EVERY arm share ONE uniform draw. The arms are compared PAIRWISE on the same
+    # outcomes, so independent randomisation per arm injects noise into the DIFFERENCE that has
+    # nothing to do with the arms — it inflated the paired CI and cost real detection power.
+    uu = rng.uniform(size=len(y)) if u is None else np.asarray(u, float)
+    return lo + uu * np.maximum(hi - lo, 0.0)
+
+
+def _crps_rows(y, arm, levels=None):
+    """PER-ROW CRPS = 2∫ pinball dτ on a shared quantile grid — identical for every arm."""
+    lv = _levels() if levels is None else levels
+    q = arm.quantiles(lv)
+    yy = np.asarray(y, float)[:, None]
+    ind = (yy < q).astype(float)
+    return 2.0 * np.mean((yy - q) * (lv[None, :] - ind), axis=1)
 
 
 def crps_grid(y, arm, levels=None):
-    """CRPS = 2∫ pinball dτ on a shared quantile grid — identical construction for every arm."""
-    lv = _levels() if levels is None else levels
-    q = arm.quantiles(lv)
-    y = np.asarray(y, float)[:, None]
-    ind = (y < q).astype(float)
-    return float(np.mean(2.0 * np.mean((y - q) * (lv[None, :] - ind), axis=1)))
+    return float(np.mean(_crps_rows(y, arm, levels)))
 
 
 def _levels():
@@ -340,12 +453,85 @@ def crps_normal_closed(y, mu, sigma):
     return float(np.mean(sigma * (z * (2 * norm.cdf(z) - 1) + 2 * norm.pdf(z) - 1 / np.sqrt(np.pi))))
 
 
-def arm_stats(y, arm, rng):
+def arm_rows(y, arm, rng=None, *, u=None):
+    """The PER-ROW components every statistic is built from — so the bootstrap can be PAIRED.
+
+    ⭐ Every arm scores the SAME outcomes, so the decision-relevant noise is the noise of the
+    DIFFERENCE, not of the level. An unpaired null band is orders of magnitude wider and would
+    declare a real, large lever ‘inside noise’ (measured on `PC_dispersion`: the incumbent's CRPS
+    sits inside its unpaired null band while an oracle beats it by 0.12).
+    """
+    y = np.asarray(y, float)
+    return {
+        "u": randomized_pit(y, arm, rng, u=u),
+        "crps": _crps_rows(y, arm),
+        "stated": 1.0 - arm.cdf_at(arm.mu),
+        "over": (y > arm.mu).astype(float),
+    }
+
+
+def _ks_uniform(u):
+    """KS statistic of `u` against Uniform(0,1) — the closed form, vectorised over a 2-D block."""
+    v = np.sort(u, axis=-1)
+    n = v.shape[-1]
+    i = np.arange(1, n + 1) / n
+    return np.maximum((i - v).max(-1), (v - (i - 1.0 / n)).max(-1))
+
+
+def stats_from_rows(rows, idx=None):
+    """Recompute every bootstrap-relevant statistic from per-row components on a row subset.
+
+    `idx` may be 1-D (one resample) or 2-D `(B, n)` (a whole bootstrap block at once) — the block
+    form is what keeps the paired bootstrap affordable.
+    """
+    u = rows["u"] if idx is None else rows["u"][idx]
+    c = rows["crps"] if idx is None else rows["crps"][idx]
+    st = rows["stated"] if idx is None else rows["stated"][idx]
+    ov = rows["over"] if idx is None else rows["over"][idx]
+    if u.ndim == 1:
+        u, c, st, ov = u[None, :], c[None, :], st[None, :], ov[None, :]
+        squeeze = True
+    else:
+        squeeze = False
+    n = u.shape[-1]
+    counts = np.stack([((u >= b / 10) & (u < (b + 1) / 10)).mean(-1) for b in range(10)], -1)
+    out = {"crps": c.mean(-1), "pit_ks": _ks_uniform(u),
+           "pit_mdd": np.abs(counts - 0.1).max(-1),
+           "p_over_stated": st.mean(-1),
+           "p_over_gap": st.mean(-1) - ov.mean(-1),
+           "p_over_gap_abs": np.abs(st.mean(-1) - ov.mean(-1))}
+    return {k: float(v[0]) for k, v in out.items()} if squeeze else out
+
+
+def bootstrap_block(rows_by_arm, keys, *, n_boot=N_BOOT, seed=SEED):
+    """ONE shared resample-index block, every arm scored on it — the pairing, made affordable."""
+    n = len(next(iter(rows_by_arm.values()))["u"])
+    idx = np.random.default_rng(seed).integers(0, n, size=(n_boot, n))
+    return {a: {k: np.asarray(v[k], float) for k in keys}
+            for a, v in ((a, stats_from_rows(r, idx)) for a, r in rows_by_arm.items())}
+
+
+def paired_lift_ci(rows_a, rows_b, key, *, boot=None, arm_a=None, arm_b=None,
+                   n_boot=N_BOOT, seed=SEED, alpha=0.05):
+    """95% CI for `stat(A) − stat(B)` under a PAIRED row bootstrap (both arms on the same rows)."""
+    point = stats_from_rows(rows_a)[key] - stats_from_rows(rows_b)[key]
+    if boot is not None:
+        d = boot[arm_a][key] - boot[arm_b][key]
+    else:
+        n = len(rows_a["u"])
+        idx = np.random.default_rng(seed).integers(0, n, size=(n_boot, n))
+        d = stats_from_rows(rows_a, idx)[key] - stats_from_rows(rows_b, idx)[key]
+    lo, hi = np.quantile(d, [alpha / 2, 1 - alpha / 2])
+    return {"point": float(point), "lo": float(lo), "hi": float(hi),
+            "material": bool(lo > 0 or hi < 0)}
+
+
+def arm_stats(y, arm, rng=None, *, u=None):
     """Every statistic, for one arm. `p_over` is read AT THE MODEL'S OWN MEAN — market-blind."""
     from scipy.stats import kstest, kurtosis, skew
     y = np.asarray(y, float)
     n = len(y)
-    u = randomized_pit(y, arm, rng)
+    u = randomized_pit(y, arm, rng, u=u)
     counts = np.histogram(u, bins=np.linspace(0, 1, 11))[0] / max(n, 1)
     resid = y - arm.mu
     z = resid / arm.scale
@@ -441,14 +627,26 @@ def build_arms(y, mu, sigma, block, rng):
     arms["A2_sigma_mu_binned"] = Arm(
         "A2_sigma_mu_binned", mu, _binned_scale(mu, resid, block), norm_laws, block)
 
-    # A3 ⛔ — the answer chooses the bin. THE CEILING on any per-game sigma model.
-    s3 = _binned_scale(np.abs(resid), resid, block)
-    arms["A3_sigma_clairvoyant"] = Arm("A3_sigma_clairvoyant", mu, s3, norm_laws, block)
+    # A3 ⛔ — THE CEILING on any per-game sigma model (AMENDMENT 1: a shrunk Bayes peek).
+    z_perm = z[rng.permutation(len(y))]
+    s3, s3c, mix_k, mix_k_raw = np.empty(len(y)), np.empty(len(y)), [], []
+    for b in range(nb):
+        ora = ScaleMixtureOracle(z[block != b])
+        mix_k.append(ora.K)
+        mix_k_raw.append(ora.K_full)
+        m = block == b
+        s3[m] = sigma[m] * ora.scale(z[m])
+        s3c[m] = sigma[m] * ora.scale(z_perm[m])          # row-blind twin
+    s3, s3c = np.maximum(s3, 1e-6), np.maximum(s3c, 1e-6)
+    arms["A3_sigma_scalemix"] = Arm("A3_sigma_scalemix", mu, s3, norm_laws, block)
+    notes["A3_mixture_K_by_block"] = [int(k) for k in mix_k]
+    notes["A3_mixture_K_ungated_by_block"] = [int(k) for k in mix_k_raw]
+    notes["A3_symmetry_gate_closed_blocks"] = int(sum(1 for a, b_ in zip(mix_k, mix_k_raw)
+                                                     if a == 1 and b_ > 1))
+    notes["A3_all_blocks_single_component"] = bool(all(k == 1 for k in mix_k))
 
-    # A_ctrl ⛔ — A3's machinery, row-blind. Must be inert (NF-W7f matched foil).
-    perm = rng.permutation(len(y))
-    arms["A_ctrl_permuted"] = Arm(
-        "A_ctrl_permuted", mu, _binned_scale(np.abs(resid)[perm], resid, block), norm_laws, block)
+    # A_ctrl ⛔ — A3's IDENTICAL machinery driven by a SHUFFLED z. Must be inert (NF-W7f).
+    arms["A_ctrl_permuted"] = Arm("A_ctrl_permuted", mu, s3c, norm_laws, block)
 
     # B1 — the specific mechanism MH2.8 identified (its DSR failure is CITED, never re-scored).
     sn_laws = _per_block_laws(z, block, SkewNormalLaw)
@@ -510,86 +708,176 @@ def mc_pvalue(draws, observed):
 # ⭐ THE DECISION RULE (§7) — registered forward; nothing below reads a result to choose a branch.
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 
-def _closed(obs_inc, obs_arm, gap, material):
-    if gap <= 0:
-        return 0.0
-    raw = (obs_inc - obs_arm) / gap
-    return 0.0 if abs(obs_inc - obs_arm) < material else float(raw)
+def _closed(obs_inc, obs_arm, gap):
+    """Share of `gap` an arm closes. `gap <= 0` = no failure on this statistic to close."""
+    return 0.0 if gap <= 0 else float((obs_inc - obs_arm) / gap)
 
 
-def decide(stats, floors):
-    """Returns the OUTCOME and every share it was computed from. Deterministic, order fixed."""
-    fp, fc = floors[PRIMARY_STAT], floors[CONFIRM_STAT]
-    inc_p = stats["incumbent"][PRIMARY_STAT]
-    inc_c = stats["incumbent"][CONFIRM_STAT]
-    gap_p = inc_p - fp["median"]
-    gap_c = inc_c - fc["median"]
+def decide(stats, floors, rows, n_boot=N_BOOT):
+    """⭐ THE DECISION RULE (prereg §7, as amended in §12). Deterministic; order fixed.
 
-    def cl(arm, key, gap, fl):
-        return _closed(stats["incumbent"][key], stats[arm][key], gap, fl["material"])
+    TWO INDEPENDENT YES/NO QUESTIONS, hierarchically decomposed:
 
-    p = {a: cl(a, PRIMARY_STAT, gap_p, fp) for a in ARMS if a != "incumbent"}
-    c = {a: cl(a, CONFIRM_STAT, gap_c, fc) for a in ARMS if a != "incumbent"}
+      Q1  is the ARCHITECTURE lever in play?  `imp(B2) − imp(A1)`   (TV2-2's CEILING)
+      Q2  is the FEATURE lever in play?       `imp(C1) − imp(B2)`   (TV2-1's CEILING)
 
-    closed_calibrator = p["A1_sigma_level"]
-    closed_feature = p["A3_sigma_clairvoyant"] - closed_calibrator
-    closed_shape = p["B2_shape_empirical"] - closed_calibrator
-    closed_combined = p["C1_combined"]
-    conf_feature = c["A3_sigma_clairvoyant"] - c["A1_sigma_level"]
-    conf_shape = c["B2_shape_empirical"] - c["A1_sigma_level"]
+    **Each lever is scored on every statistic it can ACT on, and on none it cannot** — the thing
+    the positive controls proved is required (§12):
 
-    # PRECONDITION — the rule does not run on a non-defect (NF1.7 (a)).
-    inside = fp["lo"] <= inc_p <= fp["hi"]
-    if inside:
-        outcome, demoted = "NO_MEASURABLE_DEFECT", None
-    elif closed_combined < RULE_MAJORITY:
-        outcome, demoted = "IRREDUCIBLE", None
-    elif closed_feature >= RULE_MAJORITY and closed_shape < RULE_MATERIAL:
-        outcome, demoted = "FEATURE-BOUND", None
-    elif closed_shape >= RULE_MAJORITY and closed_feature < RULE_MATERIAL:
-        outcome, demoted = "SHAPE-BOUND", None
-    elif closed_feature >= RULE_MATERIAL and closed_shape >= RULE_MATERIAL:
-        outcome, demoted = "BOTH", None
+    * `crps` is a PER-GAME proper score. A marginal shape law is identical across games, so it
+      cannot recover a per-game scale loss — which is why the feature lever can be read here and
+      cannot be stolen by the shape lever. Both levers act on it.
+    * `p_over_gap_abs` is the ASYMMETRY of the predictive around its own mean, i.e. the error on
+      the quantity the product literally prints. A SYMMETRIC scale-mixture deficit leaves it alone,
+      so **only the shape lever is admissible here** — scoring the feature lever on it would be
+      registering a gate the arm cannot move (NF-MARGIN2).
+
+    A lever's share is the **share of the JOINT CEILING** it accounts for on the statistic where it
+    acts most, counting only statistics where its PAIRED 95% CI excludes 0 and the lift is
+    positive. The calibrated-null gap is reported as CONTEXT (how far the incumbent sits from a
+    correctly specified model) but is NOT the denominator: on a planted or a genuinely non-Normal
+    world it can go negative, which would zero a real lever's share for an arithmetic reason.
+
+    The decomposition is HIERARCHICAL and deliberately conservative toward the EXPENSIVE lever: the
+    architecture lever is scored beyond a plain recalibrator, and the feature lever — the one that
+    needs a whole new data product — must prove it adds BEYOND the best marginal shape.
+    """
+    ch = {}
+    for k in REPORT_STATS:
+        f = floors[k]
+        inc = stats["incumbent"][k]
+        ch[k] = {"stat": k, "incumbent": inc, "floor": f["median"], "band": [f["lo"], f["hi"]],
+                 "gap": inc - f["median"],
+                 "outside_null_band": bool(not (f["lo"] <= inc <= f["hi"])),
+                 "closed": {a: _closed(inc, stats[a][k], inc - f["median"])
+                            for a in ARMS if a != "incumbent"}}
+
+    boot = bootstrap_block(rows, BOOT_STATS, n_boot=n_boot)
+
+    def lift(hi_arm, lo_arm, k):
+        """`stat(lo_arm) − stat(hi_arm)`: positive = `hi_arm` is better. PAIRED CI over rows."""
+        r = paired_lift_ci(rows[lo_arm], rows[hi_arm], k, boot=boot,
+                           arm_a=lo_arm, arm_b=hi_arm)
+        r["material"] = bool(r["material"])
+        r["in_play"] = bool(r["material"] and r["point"] > 0)
+        return r
+
+    PAIRS = {"calibrator": ("A1_sigma_level", "incumbent"),
+             "shape": ("B2_shape_empirical", "A1_sigma_level"),
+             "feature": ("C1_combined", "B2_shape_empirical"),
+             "feature_direct": ("A3_sigma_scalemix", "A1_sigma_level")}
+    joint = {k: lift("C1_combined", "incumbent", k) for k in REPORT_STATS}
+    levers = {}
+    for name, (hi, lo) in PAIRS.items():
+        per = {}
+        for k in REPORT_STATS:
+            v = lift(hi, lo, k)
+            den = joint[k]["point"]
+            v["share_of_ceiling"] = float(v["point"] / den) if den > 0 else 0.0
+            v["share_of_null_gap"] = _closed(0.0, -v["point"], ch[k]["gap"])
+            v["admissible"] = k in LEVER_STATS.get(name.replace("_direct", ""), REPORT_STATS)
+            per[k] = v
+        shares = [per[k]["share_of_ceiling"] for k in per
+                  if per[k]["admissible"] and per[k]["in_play"]]
+        levers[name] = {"by_stat": per, "share": max(shares) if shares else 0.0,
+                        "in_play": bool(shares)}
+
+    # ⭐ AMENDMENT 3 (prereg §12) — the ASYMMETRY channel is read as a MOVEMENT, not as a folded
+    # |gap|. `|g_A1| − |g_B2|` shares the realized over-rate between the arms but does NOT cancel
+    # it under the fold, so at n≈758 the binomial noise in `mean(y > μ)` (SE 0.018) swamps an
+    # asymmetry the size of the real one and the paired CI spans 0 in most draws — measured: the
+    # `PC_shape` control routed correctly only 0.40 of the time. The DIFFERENCE OF STATED
+    # PROBABILITIES cancels the realized rate EXACTLY, so it is estimated with almost no outcome
+    # noise; the incumbent's (imprecise) gap is used only as the denominator, and its uncertainty
+    # is reported rather than propagated into the in-play test.
+    g_inc = stats["incumbent"]["p_over_gap"]
+    gq = np.quantile(boot["incumbent"]["p_over_gap"], [0.025, 0.975])
+    # ⛔ PRECONDITION — you cannot close a gap that is not demonstrably there. Without this the
+    # channel credits a shape law for fitting SAMPLE skew: under a pure symmetric scale-mixture
+    # deficit the finite-sample `z` has a nonzero skew that drives BOTH the realized over-rate and
+    # the fitted empirical median, so the movement and the (noise-only) gap agree in sign ~90% of
+    # the time. Measured: `PC_dispersion` routed correctly 0.10 of the time without it.
+    gap_material = bool(gq[0] > 0 or gq[1] < 0)
+    mv = paired_lift_ci(rows["A1_sigma_level"], rows["B2_shape_empirical"], "p_over_stated",
+                        boot=boot, arm_a="A1_sigma_level", arm_b="B2_shape_empirical")
+    toward_zero = bool(np.sign(mv["point"]) == np.sign(g_inc) and g_inc != 0)
+    in_play = bool(gap_material and mv["material"] and toward_zero)
+    asym = {"incumbent_signed_gap": float(g_inc),
+            "incumbent_gap_ci": [float(gq[0]), float(gq[1])], "gap_material": gap_material,
+            "movement": mv["point"], "lo": mv["lo"], "hi": mv["hi"],
+            "material": mv["material"], "toward_zero": toward_zero, "in_play": in_play,
+            "share": float(mv["point"] / g_inc) if in_play else 0.0}
+    if asym["in_play"] and asym["share"] > levers["shape"]["share"]:
+        levers["shape"]["share"] = asym["share"]
+        levers["shape"]["in_play"] = True
+
+    ctrl = {k: lift("A_ctrl_permuted", "A1_sigma_level", k) for k in PRIMARY_STATS}
+    s_share, f_share = levers["shape"]["share"], levers["feature"]["share"]
+    any_failure = any(ch[k]["outside_null_band"] for k in PRIMARY_STATS)
+    joint_material = any(joint[k]["in_play"] for k in PRIMARY_STATS)
+
+    demoted = None
+    if not joint_material and not any_failure:
+        outcome = "NO_MEASURABLE_DEFECT"
+    elif s_share < RULE_MATERIAL and f_share < RULE_MATERIAL:
+        outcome = "IRREDUCIBLE"
+    elif f_share >= RULE_MAJORITY and s_share < RULE_MATERIAL:
+        outcome = "FEATURE-BOUND"
+    elif s_share >= RULE_MAJORITY and f_share < RULE_MATERIAL:
+        outcome = "SHAPE-BOUND"
+    elif f_share >= RULE_MATERIAL and s_share >= RULE_MATERIAL:
+        outcome = "BOTH"
     else:
-        outcome, demoted = "INDETERMINATE", None
+        outcome = "INDETERMINATE"
 
-    # CONFIRMATION — the winner must move the quantity the product actually prints.
-    if outcome in ("FEATURE-BOUND", "BOTH") and conf_feature < RULE_CONFIRM:
-        demoted, outcome = f"{outcome} (feature confirm {conf_feature:.3f} < {RULE_CONFIRM})", "INDETERMINATE"
-    elif outcome == "SHAPE-BOUND" and conf_shape < RULE_CONFIRM:
-        demoted, outcome = f"SHAPE-BOUND (shape confirm {conf_shape:.3f} < {RULE_CONFIRM})", "INDETERMINATE"
+    # SAFEGUARD — a winning lever must not make OVERALL distributional fidelity materially WORSE.
+    # ⚠️ Only a materially NEGATIVE lift demotes; a within-noise one is recorded, never scored as
+    # a pass (NF1.7 (a)).
+    guard = {"state": "NOT_APPLICABLE", "value": None, "stat": FIDELITY_STAT}
+    win = {"FEATURE-BOUND": "feature", "SHAPE-BOUND": "shape", "BOTH": "shape"}.get(outcome)
+    if win:
+        g = levers[win]["by_stat"][FIDELITY_STAT]
+        guard = {"state": "FAIL" if (g["material"] and g["point"] < 0)
+                 else ("PASS" if g["material"] else "WITHIN_NOISE"),
+                 "value": g["point"], "stat": FIDELITY_STAT}
+        if guard["state"] == "FAIL":
+            demoted = f"{outcome} ({FIDELITY_STAT} lift {g['point']:+.4f} materially negative)"
+            outcome = "INDETERMINATE"
 
-    sub = ("CALIBRATOR-SUFFICIENT"
-           if outcome == "IRREDUCIBLE" and closed_calibrator >= RULE_MAJORITY else None)
-    over_peeking = sorted(a for a in ORACLE_ARMS if stats[a][PRIMARY_STAT] < fp["lo"])
+    sub = ("CALIBRATOR-SUFFICIENT" if outcome == "IRREDUCIBLE"
+           and levers["calibrator"]["share"] >= RULE_MAJORITY else None)
+    over = sorted({a for a in ORACLE_ARMS for k in PRIMARY_STATS
+                   if ch[k]["outside_null_band"] and stats[a][k] < floors[k]["lo"]})
 
     return {
         "outcome": outcome, "route": ROUTES[outcome], "sub_state": sub, "demoted_from": demoted,
-        "primary_stat": PRIMARY_STAT, "confirm_stat": CONFIRM_STAT,
-        "incumbent_primary": inc_p, "floor_primary": fp["median"],
-        "band_primary": [fp["lo"], fp["hi"]], "material_primary": fp["material"],
-        "gap_primary": gap_p, "incumbent_confirm": inc_c, "gap_confirm": gap_c,
-        "closed_calibrator": closed_calibrator, "closed_feature": closed_feature,
-        "closed_shape": closed_shape, "closed_combined": closed_combined,
-        "confirm_feature": conf_feature, "confirm_shape": conf_shape,
-        "closed_primary_by_arm": p, "closed_confirm_by_arm": c,
-        "control_inert": p["A_ctrl_permuted"], "over_peeking_arms": over_peeking,
-        "precondition_incumbent_inside_null_band": bool(inside),
+        "crps_stat": CRPS_STAT, "asym_stat": ASYM_STAT, "fidelity_stat": FIDELITY_STAT,
+        "lever_stats": LEVER_STATS, "channels": ch, "levers": levers, "joint_ceiling": joint,
+        "control_inert": ctrl, "fidelity_guard": guard, "asymmetry_channel": asym,
+        "closed_calibrator": levers["calibrator"]["share"],
+        "closed_shape": s_share, "closed_feature": f_share,
+        "closed_feature_direct": levers["feature_direct"]["share"],
+        "closed_combined": {k: 1.0 if joint[k]["in_play"] else 0.0 for k in PRIMARY_STATS},
+        "any_failure_outside_null_band": bool(any_failure),
+        "joint_ceiling_material": bool(joint_material),
+        "over_peeking_arms": over,
     }
 
 
-def score(y, mu, sigma, dates, *, seed=SEED, reps=N_NULL, null=None):
+def score(y, mu, sigma, dates, *, seed=SEED, reps=N_NULL, null=None, n_boot=N_BOOT):
     """One population -> every arm's statistics, the floors, and the triggered outcome."""
     block = date_blocks(dates)
     rng = np.random.default_rng(seed)
     arms, notes = build_arms(y, mu, sigma, block, rng)
-    stats = {a: arm_stats(y, arms[a], np.random.default_rng(seed + 1000 + i))
-             for i, a in enumerate(ARMS)}
+    stats, rows = {}, {}
+    u_shared = np.random.default_rng(seed + 1000).uniform(size=len(y))   # ONE draw, every arm
+    for a in ARMS:
+        stats[a] = arm_stats(y, arms[a], None, u=u_shared)
+        rows[a] = arm_rows(y, arms[a], u=u_shared)
     nl = calibrated_null(mu, sigma, block, reps=reps, seed=seed) if null is None else null
     floors = {k: floor_of(nl, k) for k in nl}
-    d = decide(stats, floors)
-    d["p_primary"] = mc_pvalue(nl[PRIMARY_STAT], stats["incumbent"][PRIMARY_STAT])
-    d["p_confirm"] = mc_pvalue(nl[CONFIRM_STAT], stats["incumbent"][CONFIRM_STAT])
+    d = decide(stats, floors, rows, n_boot=n_boot)
+    d["mc_p"] = {k: mc_pvalue(nl[k], stats["incumbent"][k]) for k in REPORT_STATS}
     return {"stats": stats, "floors": floors, "decision": d, "notes": notes,
             "block_sizes": [int((block == b).sum()) for b in range(N_BLOCKS)], "_null": nl}
 
@@ -618,31 +906,66 @@ def plant(mu, sigma, rng, *, sigma_cv=0.0, skew_alpha=0.0):
     return np.round(mu + s * e)
 
 
-def run_controls(mu, sigma, dates, *, seed=SEED, reps=N_NULL):
+CONTROL_REPS = 20                 # replicates per control — a rate, not a single draw
+CONTROL_ROUTE_BAR = 0.80          # a positive control must route correctly at least this often
+CONTROL_WRONG_LEVER_BAR = 0.10    # ...and must credit the OTHER lever at most this often
+CONTROL_CLEAN_BAR = 0.90          # a clean frame must return NO_MEASURABLE_DEFECT at least this often
+
+
+def _control_kwargs(name):
+    return {"PC_clean": {}, "PC_dispersion": {"sigma_cv": CONTROL_SIGMA_CV},
+            "PC_shape": {"skew_alpha": CONTROL_SKEW_ALPHA},
+            "PC_both": {"sigma_cv": CONTROL_SIGMA_CV,
+                        "skew_alpha": CONTROL_SKEW_ALPHA}}[name]
+
+
+def run_controls(mu, sigma, dates, *, seed=SEED, reps=N_NULL, n_rep=CONTROL_REPS):
+    """⭐ Node 2. A DETECTION RATE over replicates, never a single draw.
+
+    ⭐ AMENDMENT 2 (prereg §12). A one-draw control conflates "the legs do not separate" with "this
+    particular draw was quiet": at `n ≈ 758` a shape deficit the size of the REAL one (`z` skew
+    ≈ 0.74, i.e. `α ≈ 4`) is right at the design's detection boundary, so a single replicate routes
+    correctly on some seeds and not others. A rate says which of the two it is, and the pass bars
+    are DESIGN quantities fixed before any real outcome was read (MH2.8 used the same shape: 40
+    clean replicates at a 0.9 bar, 10 positive at 1.0).
+    """
     out = {}
     block = date_blocks(dates)
     nl = calibrated_null(mu, sigma, block, reps=reps, seed=seed)   # one null; (mu, sigma) fixed
+    wrong = {"PC_dispersion": "closed_shape", "PC_shape": "closed_feature"}
     for i, name in enumerate(CONTROLS):
-        rng = np.random.default_rng(seed + 500 + i)
-        kw = {"PC_clean": {}, "PC_dispersion": {"sigma_cv": CONTROL_SIGMA_CV},
-              "PC_shape": {"skew_alpha": CONTROL_SKEW_ALPHA},
-              "PC_both": {"sigma_cv": CONTROL_SIGMA_CV, "skew_alpha": CONTROL_SKEW_ALPHA}}[name]
-        y = plant(mu, sigma, rng, **kw)
-        r = score(y, mu, sigma, dates, seed=seed, reps=reps, null=nl)
-        d = r["decision"]
+        kw = _control_kwargs(name)
+        want = CONTROL_EXPECT[name]
+        hits, wrong_hits, rows = 0, 0, []
+        for r in range(n_rep):
+            rng = np.random.default_rng(seed + 500 + 97 * i + r)
+            d = score(plant(mu, sigma, rng, **kw), mu, sigma, dates,
+                      seed=seed, reps=reps, null=nl)["decision"]
+            hits += int(d["outcome"] == want)
+            if name in wrong:
+                wrong_hits += int(d[wrong[name]] >= RULE_MATERIAL)
+            rows.append({"outcome": d["outcome"], "closed_shape": d["closed_shape"],
+                         "closed_feature": d["closed_feature"],
+                         "K": d.get("_K")})
+        rate = hits / n_rep
+        wrate = wrong_hits / n_rep if name in wrong else 0.0
+        bar = CONTROL_CLEAN_BAR if name == "PC_clean" else CONTROL_ROUTE_BAR
         out[name] = {
-            "planted": kw, "expected": CONTROL_EXPECT[name], "outcome": d["outcome"],
-            "passed": d["outcome"] == CONTROL_EXPECT[name],
-            "closed_calibrator": d["closed_calibrator"], "closed_feature": d["closed_feature"],
-            "closed_shape": d["closed_shape"], "closed_combined": d["closed_combined"],
-            "control_inert": d["control_inert"], "demoted_from": d["demoted_from"],
-            "incumbent_primary": d["incumbent_primary"], "gap_primary": d["gap_primary"],
+            "planted": kw, "expected": want, "reps": n_rep,
+            "route_rate": rate, "route_bar": bar,
+            "wrong_lever_rate": wrate, "wrong_lever_bar": CONTROL_WRONG_LEVER_BAR,
+            "wrong_lever_key": wrong.get(name),
+            "passed": bool(rate >= bar and wrate <= CONTROL_WRONG_LEVER_BAR),
+            "outcome_counts": {o: sum(1 for x in rows if x["outcome"] == o) for o in OUTCOMES
+                               if any(x["outcome"] == o for x in rows)},
+            "median_closed_shape": float(np.median([x["closed_shape"] for x in rows])),
+            "median_closed_feature": float(np.median([x["closed_feature"] for x in rows])),
         }
     out["_all_passed"] = all(v["passed"] for k, v in out.items() if not k.startswith("_"))
     return out
 
 
-def mde_curve(mu, sigma, dates, *, seed=SEED, reps=400, n_rep=N_MDE):
+def mde_curve(mu, sigma, dates, *, seed=SEED, reps=400, n_rep=N_MDE, n_boot=MDE_N_BOOT):
     """The smallest PLANTED deficit the rule routes correctly — a null is 'nothing above this'."""
     block = date_blocks(dates)
     nl = calibrated_null(mu, sigma, block, reps=reps, seed=seed)
@@ -655,7 +978,8 @@ def mde_curve(mu, sigma, dates, *, seed=SEED, reps=400, n_rep=N_MDE):
             for r in range(n_rep):
                 rng = np.random.default_rng(seed + hash((label, g, r)) % 100000)
                 y = plant(mu, sigma, rng, **{key: g})
-                o = score(y, mu, sigma, dates, seed=seed, reps=reps, null=nl)["decision"]["outcome"]
+                o = score(y, mu, sigma, dates, seed=seed, reps=reps, null=nl,
+                          n_boot=n_boot)["decision"]["outcome"]
                 hits += int(o == want)
             rows.append({key: g, "route_rate": hits / n_rep})
         curves[label] = rows
@@ -684,9 +1008,17 @@ def fixture_run(fx, reps: int = 200):
     dates = np.array(fx["dates"], dtype="datetime64[D]")
     r = score(np.asarray(fx["y"], float), mu, sigma, dates, seed=SEED, reps=reps)
     d = r["decision"]
-    return {k: d[k] for k in ("outcome", "closed_calibrator", "closed_feature", "closed_shape",
-                              "closed_combined", "gap_primary", "incumbent_primary",
-                              "control_inert", "confirm_feature", "confirm_shape")}
+    flat = {k: d[k] for k in ("outcome", "closed_calibrator", "closed_feature", "closed_shape")}
+    flat.update({f"combined_{k}": v for k, v in d["closed_combined"].items()})
+    for name, v in d["levers"].items():
+        for k in PRIMARY_STATS:
+            flat[f"lift_{name}_{k}"] = v["by_stat"][k]["point"]
+    for k in PRIMARY_STATS:
+        flat[f"gap_{k}"] = d["channels"][k]["gap"]
+        flat[f"inert_{k}"] = d["control_inert"][k]["point"]
+        flat[f"ceiling_{k}"] = d["joint_ceiling"][k]["point"]
+    flat["fidelity_guard_state"] = d["fidelity_guard"]["state"]
+    return flat
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -751,7 +1083,7 @@ def run(*, reps: int = N_NULL, mde: bool = True, cache: Path | None = _CACHE) ->
         from scipy.stats import kstest
         cons = np.array([kstest(rng.uniform(size=len(y)), "uniform").statistic
                          for _ in range(min(reps, 1000))])
-        r["floors"]["pit_ks"]["construction_floor_median"] = float(np.median(cons))
+        r["floors"][SHAPE_STAT]["construction_floor_median"] = float(np.median(cons))
 
         entry = {
             "n": int(len(y)), "block_sizes": r["block_sizes"],
@@ -777,8 +1109,9 @@ def _f(x, d=4):
 
 
 def _arm_table(stats):
-    keys = ("pit_ks", "pit_mdd", "p_over_stated", "p_over_realized", "p_over_gap", "crps",
-            "cov80", "cov50", "var_z_pooled", "z_skew", "scale_mean", "scale_cv")
+    keys = ("crps", "pit_ks", "pit_mdd", "p_over_stated", "p_over_realized", "p_over_gap",
+            "cov80", "cov50", "var_z_pooled", "z_skew", "z_excess_kurtosis", "scale_mean",
+            "scale_cv")
     rows = ["| arm | " + " | ".join(f"`{k}`" for k in keys) + " |",
             "|---|" + "---:|" * len(keys)]
     for a in ARMS:
@@ -792,127 +1125,185 @@ def write_report(r: dict) -> Path:
     d = p["decision"]
     lp = p["location_probe"]
     ctl = p["controls"]
+    ch = d["channels"]
     L = [
         f"# MLB-TV2-0 — the totals-ceiling diagnosis: **{r['verdict']}**",
         "",
         f"> ## ⭐ ROUTING: {d['route']}",
         "",
-        (f"**Sub-state:** `{d['sub_state']}` — a LABEL inside `IRREDUCIBLE`, mapping to the same "
-         "registered action. ⛔ Not a fifth route." if d["sub_state"] else ""),
+    ]
+    if d["sub_state"]:
+        L += [f"**Sub-state:** `{d['sub_state']}` — a LABEL inside `IRREDUCIBLE` mapping to the "
+              "same registered action. ⛔ Not a fifth route.", ""]
+    L += [
+        f"`best_alpha = {r['best_alpha']}` · `bet_paused = true` · **market-blind** · "
+        "**nothing serves** · deploy-held",
         "",
-        f"`best_alpha = {r['best_alpha']}` · `bet_paused = true` · **market-blind** · **nothing serves** · deploy-held",
-        "",
-        "> **What this study is.** An ORACLE diagnosis of the SERVED totals predictive: it bounds what "
-        "each of the epic's two candidate levers could AT MOST deliver, and triggers a decision rule "
-        "registered before any statistic was computed. It builds neither fix. It says nothing about "
-        "win rate, edge, ROI or CLV — at `best_alpha = 0` no bet rode on this model. "
-        "Pre-registration: [`mlb_tv2_0_prereg.md`](mlb_tv2_0_prereg.md).",
+        "> **What this study is.** An ORACLE diagnosis of the SERVED totals predictive. It bounds "
+        "what each of the epic's two candidate levers could AT MOST deliver and triggers a decision "
+        "rule registered before any statistic was computed on a realized outcome. It builds neither "
+        "fix. It says nothing about win rate, edge, ROI or CLV — at `best_alpha = 0` no bet rode on "
+        "this model. Pre-registration: [`mlb_tv2_0_prereg.md`](mlb_tv2_0_prereg.md); the node-2 "
+        "amendment is its §12.",
         "",
         "## Population",
         "",
         "| | |", "|---|---|",
         f"| champion | E13.11 (`v6` / `pre_lineup_v6`), fit {r['champion_fit_date']} |",
-        f"| era | {r['era'][0]} → {r['era'][1]} (whole era OUT OF SAMPLE by construction) |",
-        f"| PRIMARY tier | `{PRIMARY_TIER}` — n = **{p['n']}** (blocks {p['block_sizes']}) |",
+        f"| era | {r['era'][0]} → {r['era'][1]} — the whole era is OUT OF SAMPLE by construction |",
+        f"| PRIMARY tier | `{PRIMARY_TIER}` — n = **{p['n']}** (date blocks {p['block_sizes']}) |",
         f"| SECONDARY tier | `{SECONDARY_TIER}` — n = **{r['tiers'][SECONDARY_TIER]['n']}** |",
         f"| folds | {N_BLOCKS} contiguous DATE blocks, cross-fit |",
         f"| calibrated null | {r['n_null']} replicates, seed {r['seed']} |",
-        f"| CRPS grid vs Normal closed form | \\|Δ\\| = {p['crps_grid_vs_closed_abs_delta']:.2e} (tol {CRPS_VALIDATION_TOL}) |",
+        f"| CRPS grid vs the Normal closed form | \\|Δ\\| = "
+        f"{p['crps_grid_vs_closed_abs_delta']:.2e} (tol {CRPS_VALIDATION_TOL}) |",
+        "", "---", "",
+        "## 1. ⭐ The positive controls — run BEFORE any realized outcome was read",
         "",
-        "---",
+        "A diagnosis whose legs cannot separate PLANTED causes cannot separate real ones. **The "
+        "first design FAILED these** — and the failure is the most useful thing this story "
+        "measured; see §6 and prereg §12.",
         "",
-        "## 1. ⭐ The positive controls — run BEFORE the real folds were read",
+        f"Each control is a DETECTION RATE over {CONTROL_REPS} replicates, not a single draw "
+        "(prereg §12, amendment 2).",
         "",
-        "A diagnosis whose legs cannot separate PLANTED causes cannot separate real ones.",
-        "",
-        "| control | planted | expected | routed | closed_feature | closed_shape | ✓ |",
-        "|---|---|---|---|---:|---:|---|",
+        "| control | planted | expected route | route rate (bar) | wrong-lever rate (bar) | "
+        "median `closed_shape` | median `closed_feature` | ✓ |",
+        "|---|---|---|---:|---:|---:|---:|---|",
     ]
     for c in CONTROLS:
         v = ctl[c]
-        L.append(f"| `{c}` | {v['planted'] or 'nothing (the model is correct)'} | "
-                 f"`{v['expected']}` | `{v['outcome']}` | {_f(v['closed_feature'],3)} | "
-                 f"{_f(v['closed_shape'],3)} | {'✅' if v['passed'] else '⛔'} |")
+        L.append(f"| `{c}` | {v['planted'] or '*nothing — the model is correct*'} | "
+                 f"`{v['expected']}` | **{v['route_rate']:.2f}** ({v['route_bar']:.2f}) | "
+                 f"{v['wrong_lever_rate']:.2f} ({v['wrong_lever_bar']:.2f}) | "
+                 f"{_f(v['median_closed_shape'],3)} | {_f(v['median_closed_feature'],3)} | "
+                 f"{'✅' if v['passed'] else '⛔'} |")
+    L.append("")
+    L.append("Outcome distribution per control: " + " · ".join(
+        f"`{c}` {ctl[c]['outcome_counts']}" for c in CONTROLS))
     L += ["",
-          f"**All controls passed: {'✅ YES' if ctl['_all_passed'] else '⛔ NO'}**",
-          "",
-          "The row-blind matched control `A_ctrl_permuted` (A3's machinery with the binning driven "
-          f"by a SHUFFLED `|y−μ|`) closes **{_f(d['control_inert'],3)}** of the gap on the real "
-          "folds — a closure bought by capacity rather than by information would show up here.",
-          ""]
+          f"**All controls passed: {'✅ YES' if ctl['_all_passed'] else '⛔ NO'}**", ""]
     if "mde" in p:
-        L += ["### MDE — the smallest planted deficit the rule routes correctly", "",
-              "| planted σ-CV | routes FEATURE-BOUND | | planted skew α | routes SHAPE-BOUND |",
+        L += ["### MDE — the smallest PLANTED deficit the rule routes correctly", "",
+              "A null is *\"no lever larger than this\"*, never a shrug (NF1.8).", "",
+              "| planted σ-CV | routes `FEATURE-BOUND` | | planted skew α | routes `SHAPE-BOUND` |",
               "|---:|---:|---|---:|---:|"]
         dm, sm = p["mde"]["dispersion"], p["mde"]["shape"]
         for i in range(max(len(dm), len(sm))):
-            a = f"{dm[i]['sigma_cv']:.2f} | {dm[i]['route_rate']:.2f}" if i < len(dm) else " | "
-            b = f"{sm[i]['skew_alpha']:.1f} | {sm[i]['route_rate']:.2f}" if i < len(sm) else " | "
-            L.append(f"| {a} | | {b} |")
+            x = f"{dm[i]['sigma_cv']:.2f} | {dm[i]['route_rate']:.2f}" if i < len(dm) else "— | —"
+            z = f"{sm[i]['skew_alpha']:.1f} | {sm[i]['route_rate']:.2f}" if i < len(sm) else "— | —"
+            L.append(f"| {x} | | {z} |")
         L.append("")
     L += ["---", "", "## 2. The battery on the real served folds (PRIMARY tier)", "",
           "⛔ = an ORACLE or a CONTROL. **Nothing here competes to ship**, and an oracle ceiling is "
-          "what a lever could AT MOST deliver — never what it will.", "",
+          "what a lever could AT MOST deliver — never what it will. Every arm holds `μ` EXACTLY at "
+          "the served value.", "",
           _arm_table(p["stats"]), "",
-          "`crps` is a CONSTRAINT, never a criterion (E2.1-r). `cov80`/`cov50` are FLOORS, never "
-          "targets (NF1.8). Every arm holds `μ` EXACTLY at the served value.", "",
-          "### The yardstick", "",
-          "| statistic | incumbent | calibrated-null median (the FLOOR) | null 95% band | material | gap | MC p |",
-          "|---|---:|---:|---:|---:|---:|---:|"]
-    for k, obs, pv in ((PRIMARY_STAT, d["incumbent_primary"], d["p_primary"]),
-                       (CONFIRM_STAT, d["incumbent_confirm"], d["p_confirm"])):
-        f = p["floors"][k]
-        L.append(f"| `{k}` | {_f(obs)} | {_f(f['median'])} | [{_f(f['lo'])}, {_f(f['hi'])}] | "
-                 f"{_f(f['material'])} | {_f(obs - f['median'])} | {_f(pv,3)} |")
-    cf = p["floors"]["pit_ks"].get("construction_floor_median")
+          f"Scale-mixture components chosen by BIC, out of block: "
+          f"**{p['notes']['A3_mixture_K_by_block']}**"
+          + ("  ⟵ ⭐ **`K = 1` on every block: the oracle that is allowed to see the answer finds "
+             "NO per-game σ signal at all.**" if p['notes']['A3_all_blocks_single_component'] else "")
+          + f"\n\nSkew-normal `α` by block (`B1`, reported): "
+          f"{[round(x,3) for x in p['notes']['B1_alpha_by_block']]}"
+          + ("  ⚠️ at least one block COLLAPSED onto its Normal foil — a nested form's near-zero "
+             "margin is a TIE, not a shape finding." if p['notes']['B1_collapsed_any'] else ""),
+          "", "### The yardstick — one primary PER LEVER (prereg §12)", "",
+          "| statistic | role | incumbent | calibrated-null median (the FLOOR) | null 95% band | "
+          "gap | outside the band? | MC p |",
+          "|---|---|---:|---:|---:|---:|---|---:|"]
+    roles = {FEATURE_STAT: "**DISPERSION lever's primary** — a PER-GAME proper score",
+             SHAPE_STAT: "**ARCHITECTURE lever's primary** — the ASYMMETRY the product prints",
+             FIDELITY_STAT: "safeguard — overall distributional fidelity"}
+    for k in REPORT_STATS:
+        c = ch[k]
+        L.append(f"| `{k}` | {roles[k]} | {_f(c['incumbent'])} | {_f(c['floor'])} | "
+                 f"[{_f(c['band'][0])}, {_f(c['band'][1])}] | {_f(c['gap'])} | "
+                 f"{'✅ yes' if c['outside_null_band'] else '⛔ no'} | {_f(d['mc_p'][k],3)} |")
+    cf = p["floors"][SHAPE_STAT].get("construction_floor_median")
     L += ["",
-          f"The `pit_ks` calibrated-null floor ({_f(p['floors']['pit_ks']['median'])}) is asserted "
+          f"The `{SHAPE_STAT}` calibrated-null floor ({_f(ch[SHAPE_STAT]['floor'])}) is asserted "
           f"against the distribution-free CONSTRUCTION floor at this n ({_f(cf)}) — `round(Normal)` "
-          "with a continuity-corrected randomized PIT is EXACTLY uniform, so the two must agree.",
-          "",
-          ("⚠️ **OVER_PEEKING** — these oracles land BELOW the floor's lower tail, i.e. below what an "
-           "honest model can attain: " + ", ".join(f"`{a}`" for a in d["over_peeking_arms"]) +
+          "read with a continuity-corrected randomized PIT is EXACTLY uniform, so the two must "
+          "agree. A statistic INSIDE its null band is **inactive**: there is no measurable failure "
+          "for a lever to close, and a closure share computed against a `gap` that is itself noise "
+          "is the NF1.7 (a) vacuous anchor.", ""]
+    L += [("⚠️ **OVER_PEEKING** — these oracles land BELOW an active statistic's floor lower tail, "
+           "i.e. below what an honest model can attain: "
+           + ", ".join(f"`{a}`" for a in d["over_peeking_arms"]) +
            ". Their closure may be cited as *does not bind*, never as *achievable* (NF-W7i).")
           if d["over_peeking_arms"] else
-          "No oracle landed below the floor's lower tail — every ceiling below is attainable in principle.",
-          "", "---", "",
-          "## 3. ⭐ THE LEVERS, BOUNDED", "",
-          "| channel | construction | share of the `pit_ks` gap closed | confirm on `\\|p_over_gap\\|` |",
-          "|---|---|---:|---:|",
-          f"| **calibrator** (global scale) | `closed(A1)` | **{_f(d['closed_calibrator'],3)}** | — |",
-          f"| **FEATURE lever** — TV2-1's CEILING | `closed(A3) − closed(A1)` | **{_f(d['closed_feature'],3)}** | {_f(d['confirm_feature'],3)} |",
-          f"| **ARCHITECTURE lever** — TV2-2's CEILING | `closed(B2) − closed(A1)` | **{_f(d['closed_shape'],3)}** | {_f(d['confirm_shape'],3)} |",
-          f"| **JOINT ceiling** | `closed(C1)` | **{_f(d['closed_combined'],3)}** | — |",
+          "No oracle landed below an active statistic's floor lower tail.",
+          "", "---", "", "## 3. ⭐ THE LEVERS, BOUNDED", "",
+          "| channel | construction | statistic | paired lift (95% CI) | in play? | share of gap |",
+          "|---|---|---|---:|---|---:|"]
+    lv = d["levers"]
+    for lbl, key, st in (("**calibrator** — a global scale (a RECALIBRATOR can do this)",
+                          "calibrator", SHAPE_STAT),
+                         ("**ARCHITECTURE lever** — `TV2-2`'s CEILING", "shape", SHAPE_STAT),
+                         ("**FEATURE lever** — `TV2-1`'s CEILING", "feature", FEATURE_STAT),
+                         ("*(the feature lever read directly)*", "feature_direct", FEATURE_STAT)):
+        v = lv[key]
+        cons = {"calibrator": "`imp(A1) − imp(incumbent)`", "shape": "`imp(B2) − imp(A1)`",
+                "feature": "`imp(C1) − imp(B2)`", "feature_direct": "`imp(A3) − imp(A1)`"}[key]
+        L.append(f"| {lbl} | {cons} | `{st}` | {_f(v['point'],4)} "
+                 f"[{_f(v['lo'],4)}, {_f(v['hi'],4)}] | "
+                 f"{'✅ **yes**' if v['in_play'] else '⛔ no'} | {_f(v['share_of_gap'],3)} |")
+    for k in PRIMARY_STATS:
+        j = d["joint_ceiling"][k]
+        L.append(f"| **JOINT ceiling** (both at once) | `imp(C1) − imp(incumbent)` | `{k}` | "
+                 f"{_f(j['point'],4)} [{_f(j['lo'],4)}, {_f(j['hi'],4)}] | "
+                 f"{'✅ yes' if j['in_play'] else '⛔ no'} | {_f(j['share_of_gap'],3)} |")
+    for k in PRIMARY_STATS:
+        c = d["control_inert"][k]
+        L.append(f"| ⛔ **row-blind matched control** — must be INERT | `imp(A_ctrl) − imp(A1)` | "
+                 f"`{k}` | {_f(c['point'],4)} [{_f(c['lo'],4)}, {_f(c['hi'],4)}] | "
+                 f"{'⚠️ **ACTIVE — a capacity artifact**' if c['in_play'] else '✅ inert'} | "
+                 f"{_f(c['share_of_gap'],3)} |")
+    L += ["",
+          f"Bars, registered forward: majority **{RULE_MAJORITY}**, in-play **{RULE_MATERIAL}**. "
+          "A lever counts only if its PAIRED 95% CI excludes 0 — every arm scores the same "
+          "outcomes, so the decision-relevant noise is the noise of the DIFFERENCE. "
+          "Demonstrable ≠ material (NF-W6).",
           "",
-          f"Bars, registered forward: majority **{RULE_MAJORITY}**, in-play **{RULE_MATERIAL}**, "
-          f"confirmation **{RULE_CONFIRM}**. A share below `material` "
-          f"({_f(d['material_primary'])} on `pit_ks`) is recorded as **0 (inactive)** — "
-          "demonstrable ≠ material (NF-W6).",
+          "⭐ **The decomposition is HIERARCHICAL and deliberately conservative toward the expensive "
+          "lever.** The architecture lever is scored beyond a plain recalibrator; the feature lever "
+          "— the one that needs a whole new data product — must prove it adds **beyond the best "
+          "marginal shape**. Shared credit goes to the cheaper mechanism.",
           "",
-          "Per-arm closure of the `pit_ks` gap:", "",
-          "| arm | closed |", "|---|---:|"]
-    for a, v in d["closed_primary_by_arm"].items():
-        L.append(f"| `{a}` | {_f(v,3)} |")
+          f"**Fidelity safeguard on `{FIDELITY_STAT}`: `{d['fidelity_guard']['state']}`** — the "
+          f"winning lever's overall-fidelity lift is {_f(d['fidelity_guard']['value'],4)}. Only a "
+          "materially NEGATIVE lift demotes; a within-noise one is recorded, never scored as a "
+          "pass (NF1.7 (a)).",
+          ""]
+    if d["demoted_from"]:
+        L += [f"⚠️ **DEMOTED**: {d['demoted_from']}", ""]
+    L += ["Per-arm closure, by statistic:", "",
+          f"| arm | `{FEATURE_STAT}` | `{SHAPE_STAT}` | `{FIDELITY_STAT}` |", "|---|---:|---:|---:|"]
+    for a in ARMS:
+        if a == "incumbent":
+            continue
+        L.append(f"| `{a}` | " + " | ".join(
+            _f(ch[k]["closed"][a], 3) for k in REPORT_STATS) + " |")
     L += ["", "---", "",
           "## 4. ⚠️ FLAGGED BINDING CLAUSE — `std_pred`, and the LOCATION channel", "",
           "The spec asks how much of the **`std_pred`**/PIT failure a σ fix closes. `std_pred` names "
-          "TWO different statistics in this repo, and **the `0.773 vs ≥2.0` figure the spec cites is "
-          "the MEAN-SPREAD one** (`STDDEV(pred_total_runs)`, `validate_v2_gates.py:34`) — a property "
-          "of `μ`. Every arm here holds `μ` fixed, so **no leg can move it, by construction**. "
-          "Registering a leg against a statistic it cannot move would ship a gate that is décor "
-          "(NF-MARGIN2). It is therefore reported as a LOCATION diagnostic and is **not** in the "
-          "decision rule. Flagged for the PM, **not edited**.",
+          "TWO different statistics in this repo, and **the `0.773 vs ≥2.0` figure the spec cites "
+          "is the MEAN-SPREAD one** (`STDDEV(pred_total_runs)`, `validate_v2_gates.py:34`) — a "
+          "property of `μ`. Every arm here holds `μ` fixed, so **no leg can move it, by "
+          "construction**. Registering a leg against a statistic it cannot move would ship a gate "
+          "that is décor (NF-MARGIN2). It is therefore reported as a LOCATION diagnostic and is "
+          "**not** in the decision rule. Flagged for the PM, **not edited**.",
           "",
           "| reading | value | bar | |", "|---|---:|---:|---|",
-          f"| `std_pred_meanspread` = `STDDEV(pred_total_runs)` (the V2 gate's reading) | "
+          f"| `std_pred_meanspread` = `STDDEV(pred_total_runs)` — the V2 gate's reading | "
           f"**{_f(lp['std_pred_meanspread'],3)}** | ≥ 2.0 | "
-          f"{'✅' if lp['std_pred_meanspread_passes_v2_gate'] else '⛔ **FAILS**'} |",
-          f"| `std_pred_predictive_sd` = `mean(σ)` (Story 10.2's reading) | "
+          f"{'✅ passes' if lp['std_pred_meanspread_passes_v2_gate'] else '⛔ **FAILS**'} |",
+          f"| `std_pred_predictive_sd` = `mean(σ)` — Story 10.2's reading | "
           f"{_f(lp['std_pred_predictive_sd'],3)} | — | |",
           f"| realized `SD(y)` | {_f(lp['realized_sd'],3)} | — | |",
           f"| `Var(μ)/Var(y)` — the share of outcome variance the LOCATION channel explains | "
           f"**{_f(lp['var_mu_over_var_y'],4)}** | — | |",
-          f"| served `σ` CV — how much per-game DISPERSION the model expresses at all | "
+          f"| served `σ` CV — how much per-game DISPERSION the model expresses AT ALL | "
           f"{_f(lp['sigma_cv'],4)} | — | |",
           "",
           f"Null state, **hand-recorded** per the `cv_power` card's interim rule: "
@@ -924,24 +1315,36 @@ def write_report(r: dict) -> Path:
           "Declared in advance as a replication that is REPORTED but does **not** change the verdict "
           "— so the primary cannot be swapped for whichever tier gives the nicer answer (E2.1-r).",
           ""]
-    s = r["tiers"][SECONDARY_TIER]["decision"]
+    s2 = r["tiers"][SECONDARY_TIER]
+    sd = s2["decision"]
     L += ["| | primary (`post_lineup`) | secondary (`morning`) |", "|---|---:|---:|",
-          f"| outcome | **`{d['outcome']}`** | `{s['outcome']}` |",
-          f"| `closed_calibrator` | {_f(d['closed_calibrator'],3)} | {_f(s['closed_calibrator'],3)} |",
-          f"| `closed_feature` | {_f(d['closed_feature'],3)} | {_f(s['closed_feature'],3)} |",
-          f"| `closed_shape` | {_f(d['closed_shape'],3)} | {_f(s['closed_shape'],3)} |",
-          f"| `closed_combined` | {_f(d['closed_combined'],3)} | {_f(s['closed_combined'],3)} |",
+          f"| outcome | **`{d['outcome']}`** | `{sd['outcome']}` |",
+          f"| a failure outside its null band? | {d['any_failure_outside_null_band']} | "
+          f"{sd['any_failure_outside_null_band']} |",
+          f"| `closed_calibrator` | {_f(d['closed_calibrator'],3)} | "
+          f"{_f(sd['closed_calibrator'],3)} |",
+          f"| `closed_shape` (`{SHAPE_STAT}`) | {_f(d['closed_shape'],3)} | "
+          f"{_f(sd['closed_shape'],3)} |",
+          f"| `closed_feature` (`{FEATURE_STAT}`) | {_f(d['closed_feature'],3)} | "
+          f"{_f(sd['closed_feature'],3)} |",
+          f"| mixture `K` by block | {p['notes']['A3_mixture_K_by_block']} | "
+          f"{s2['notes']['A3_mixture_K_by_block']} |",
           f"| `std_pred_meanspread` | {_f(lp['std_pred_meanspread'],3)} | "
-          f"{_f(r['tiers'][SECONDARY_TIER]['location_probe']['std_pred_meanspread'],3)} |",
+          f"{_f(s2['location_probe']['std_pred_meanspread'],3)} |",
           "",
-          f"Tiers agree: **{'✅ YES' if r['secondary_agrees'] else '⚠️ NO — reported, verdict unchanged'}**",
+          f"Tiers agree: **{'✅ YES' if r['secondary_agrees'] else '⚠️ NO — reported; the verdict is unchanged'}**",
           "", "---", "", "## 6. What this study cannot say", "",
-          "- Nothing about **edge, win rate, ROI or CLV**. `best_alpha = 0`; no bet rode on this model.",
-          "- An oracle ceiling is what a lever could **at most** deliver, never what it will. A large "
-          "ceiling licenses **funding a story**; it is not evidence of a shipped improvement.",
+          "- Nothing about **edge, win rate, ROI or CLV**. `best_alpha = 0`; no bet rode on this "
+          "model, and `bet_paused` stays `true`.",
+          "- An oracle ceiling is what a lever could **at most** deliver, never what it will. A "
+          "large ceiling licenses **funding a story**; it is not evidence of a shipped improvement.",
           "- The verdict is about the **served `post_lineup`** rows in a **2-month** window under "
           "**one** champion. It does not generalise to a different champion.",
           "- MH2.8's skew-normal DSR failure is **cited as evidence, never re-scored** here.",
+          f"- `{SHAPE_STAT}` is structurally near-blind to a per-game σ deficit and `{FEATURE_STAT}` "
+          "is comparatively coarse on a marginal shape defect (§1, measured). That is exactly why "
+          "each lever is scored on its own statistic — and it is a caution for anyone reading a "
+          "single number off this table.",
           ""]
     _REPORT_MD.parent.mkdir(parents=True, exist_ok=True)
     _REPORT_MD.write_text("\n".join(x for x in L if x is not None))

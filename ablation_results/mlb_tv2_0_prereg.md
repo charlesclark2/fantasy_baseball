@@ -275,3 +275,109 @@ disk** and that the asserted predicate **moved** (#682 / #815 / the byte-identic
   licenses **funding a story**, not a shipped improvement.
 - The verdict is about the **served post_lineup** population in a **2-month** window under **one**
   champion. It does not generalise to a different champion, and the record says so.
+
+---
+
+# 12. ⭐ AMENDMENT — the node-2 redesign
+
+**Committed BEFORE any statistic involving a realized outcome was computed on this population.**
+Everything below was driven by the POSITIVE CONTROLS on synthetic frames — the real served `(μ, σ)`
+and `n` were used (as §9 registers), a realized `y` was not. §9's own clause is what licenses this:
+*"A control failure is a design failure, and it is caught before any real-data statistic is read. If
+a leg fails to separate, the leg is redesigned and the controls re-run, with the redesign
+documented."* The original §3/§4/§7/§9 text above is **retained verbatim**; this section supersedes
+it where they differ.
+
+> **The controls FAILED the first design, and that is the most useful thing this story measured.**
+> Every fix below is a measured consequence, not a preference.
+
+## 12.1 What the controls found
+
+| finding | measured |
+|---|---|
+| **`A3_sigma_clairvoyant` is a DEGENERATE, not a ceiling.** Binning by the row's own `\|y−μ\|` decile forces `z ≈ ±1`. | On **CLEAN** data (no defect planted): `scale_cv` **0.745**, `pit_ks` **0.2251** vs the incumbent's 0.0302, `cov50` **0.106**, and a CRPS **below** what a correctly specified model can attain. It bounded nothing, in either direction — NF-W6's *"a row-level peek is a zero-CRPS degenerate, not a ceiling"*, verbatim. |
+| **A pooled PIT statistic is near-BLIND to a per-game σ deficit.** | Planting a true σ-CV of **0.35** moved `pit_ks` from 0.0302 to **0.0241** — i.e. not at all, and in the wrong direction. |
+| **An UNPAIRED null band is the wrong materiality test.** | On the same frame the incumbent's CRPS sits **inside** its unpaired 95% null band while an oracle beats it by **0.12** on the identical outcomes. |
+| **The `\|·\|` fold destroys the asymmetry statistic's power.** `\|g_A1\| − \|g_B2\|` shares the realized over-rate but does not cancel it under the fold. | At `n ≈ 758` the binomial noise in `mean(y > μ)` is SE **0.018**, comparable to the real defect (0.066). `PC_shape` routed correctly **0.40** of the time. |
+| **A right-skewed sample masquerades as a scale mixture.** A heavy ONE-sided tail raises BIC's preference for `K = 2` and opens a peek. | The FEATURE lever fired on **20%** of pure-SHAPE draws. |
+
+## 12.2 The four amendments
+
+1. **`A3_sigma_clairvoyant` → `A3_sigma_scalemix`.** A **shrunk Bayes peek**: fit a ZERO-MEAN normal
+   scale mixture to the out-of-block `z` (`K ∈ 1..3` by **BIC**, out of block), then give each
+   in-block row its posterior mean scale `sqrt(E[s²|z_i])`. Two properties make it a legitimate
+   ceiling: under a constant true scale BIC returns `K = 1`, the posterior scale is CONSTANT and
+   the oracle collapses onto `A1` — it is INERT, where a binned clairvoyant manufactures dispersion
+   out of pure noise; and the mixture is SYMMETRIC, so it cannot absorb skew.
+2. **ONE PRIMARY PER LEVER — each lever scored on every statistic it can ACT on, and none it
+   cannot.** `crps` (a PER-GAME proper score; a marginal shape law is identical across games so it
+   cannot recover a per-game scale loss) is admissible for **both** levers. `p_over_gap`
+   (the ASYMMETRY around the model's own mean — the error on the quantity the product prints) is
+   admissible for the **shape lever only**: a symmetric scale deficit cannot move it, so scoring
+   the feature lever there would be a gate the arm cannot move (NF-MARGIN2). `pit_ks` is a reported
+   safeguard, not a lever statistic — it is moved by BOTH mechanisms and so cannot separate them.
+3. **PAIRED materiality, and an outcome-noise-free ASYMMETRY channel.** Every arm scores the same
+   outcomes, so a lever counts only if its **paired row-bootstrap 95% CI excludes 0**
+   (`N_BOOT = 400`). The asymmetry channel is read as the **movement of the stated probability**,
+   `mean(stated_A1) − mean(stated_B2)`, in which the realized over-rate cancels EXACTLY — gated by
+   a precondition that the incumbent's signed gap is itself materially non-zero, without which the
+   channel credits a shape law for fitting SAMPLE skew (measured: `PC_dispersion` fell to 0.10).
+4. **THE SYMMETRY GATE.** A genuine per-game scale mixture is SYMMETRIC; skew is not. Each side of
+   the median is reflected into a symmetric sample of its own and must INDEPENDENTLY prefer
+   `K ≥ 2`; otherwise the oracle is forced to `K = 1` and is inert.
+
+Two further registered choices, stated because they are load-bearing:
+
+- **The share denominator is the JOINT CEILING**, not the calibrated-null gap. The gap is reported
+  as CONTEXT (how far the incumbent sits from a correctly specified model) but on a planted or a
+  genuinely non-Normal world it can go negative, which would zero a real lever's share for a purely
+  arithmetic reason.
+- **The decomposition stays HIERARCHICAL and conservative toward the EXPENSIVE lever**: the
+  architecture lever is scored beyond a plain recalibrator (`imp(B2) − imp(A1)`), and the feature
+  lever — the one that needs a whole new data product — must prove it adds BEYOND the best marginal
+  shape (`imp(C1) − imp(B2)`). Shared credit goes to the cheaper mechanism.
+
+## 12.3 The controls become RATES, with bars fixed here
+
+A one-draw control conflates *"the legs do not separate"* with *"this draw was quiet"*. Each control
+is now **20 replicates**, and the bars are DESIGN quantities fixed in this commit (MH2.8 used the
+same shape: 40 clean replicates at a 0.9 bar, 10 positive at 1.0):
+
+| bar | value |
+|---|---|
+| positive control routes correctly | **≥ 0.80** |
+| ...and credits the OTHER lever | **≤ 0.10** |
+| clean frame returns `NO_MEASURABLE_DEFECT` | **≥ 0.90** |
+
+## 12.4 Measured operating characteristics of the amended battery
+
+| control | route rate (bar) | wrong-lever rate (bar) | outcomes over 20 replicates | ✓ |
+|---|---:|---:|---|---|
+| `PC_clean` | **0.90** (0.90) | 0.00 (0.10) | 18 `NO_MEASURABLE_DEFECT`, 2 `IRREDUCIBLE` | ✅ |
+| `PC_dispersion` (σ-CV 0.35) | **0.90** (0.80) | **0.00** (0.10) | 18 `FEATURE-BOUND`, 1 `IRREDUCIBLE`, 1 `NO_MEASURABLE_DEFECT` | ✅ |
+| `PC_shape` (α = 4) | **0.90** (0.80) | **0.00** (0.10) | 18 `SHAPE-BOUND`, 1 `IRREDUCIBLE`, 1 `NO_MEASURABLE_DEFECT` | ✅ |
+| `PC_both` | 0.60 (0.80) | 0.00 (0.10) | 12 `BOTH`, 7 `SHAPE-BOUND`, 1 `NO_MEASURABLE_DEFECT` | ⛔ |
+
+⭐ **The spec's stated control requirement is met.** It asks that *"each diagnostic leg detects ITS
+deficit and not the other's"*: the dispersion leg detects its own **0.90** and the shape leg's
+**0.00**; the shape leg detects its own **0.90** and the dispersion leg's **0.00**. Cross-detection
+is zero in both directions.
+
+⛔ **`PC_both` FAILS its bar at 0.60, and the clause is left FAILING, not re-labelled** (the
+precedent is MH2.8's own negative control, recorded at 0.650 against a 0.9 bar and reported as a
+failing clause). What it means, stated in advance so it cannot be re-read later:
+
+- When BOTH deficits are present at these magnitudes the battery routes `SHAPE-BOUND` about 35% of
+  the time instead of `BOTH` — the two mechanisms partially cancel in the LEFT tail (skew thins it,
+  heteroscedasticity fattens it), so the symmetry gate closes.
+- **The error is one-directional: it UNDER-credits the feature lever in a mixed world and never
+  over-credits it.** 0 of 20 mixed draws routed `FEATURE-BOUND`. For a funding decision that biases
+  against the expensive story, which is the safe direction — but it must be read the right way:
+  **a `SHAPE-BOUND` verdict on real data does not exclude a co-present dispersion component**, and
+  the record states that beside the verdict.
+
+## 12.5 What did NOT change
+
+The population, the era, the tiers, the fold scheme, the market-blindness, the prohibitions, the
+outcome names, the routing map, the bars `RULE_MAJORITY = 0.50` / `RULE_MATERIAL = 0.20`, the
+`std_pred` flag in §6, and §11. **No real-data statistic informed any of it.**
