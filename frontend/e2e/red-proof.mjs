@@ -2983,10 +2983,16 @@ const CASES = [
     // ⭐ THE DEFAULT IS THE PRODUCT DECISION. The distributional curve is what this surface IS, so
     // a board that opened collapsed would teach a first-time reader that we publish point-ish
     // numbers and never show them otherwise. Collapsing is opted INTO, never handed out.
-    detail: "Flips the default so every card arrives collapsed.",
-    file: "components/ncaaf/game-card.tsx",
-    from: "  expanded = true,",
-    to: "  expanded = false,",
+    // ⚠️ THE BREAK TARGETS THE *REACHABLE* DEFAULT, and the first cut did not. Flipping the card's
+    // own `expanded = true` prop default changes NOTHING observable, because the page always passes
+    // `expanded` explicitly — the component default is unreachable from the only caller. The red
+    // proof reported MISMATCH and that is what it is for: a case whose break cannot bite proves
+    // nothing about the clause (NF1.7 (a)). The default a reader actually meets is the stored
+    // preference's fallback, so that is what this breaks.
+    detail: "Makes an absent stored preference mean COLLAPSED, so a first visit opens collapsed.",
+    file: "components/ncaaf/games-page.tsx",
+    from: '    return window.localStorage.getItem(COLLAPSE_PREF_KEY) !== "0"',
+    to: '    return window.localStorage.getItem(COLLAPSE_PREF_KEY) === "1"',
     grep: "cards open EXPANDED",
   },
   {
