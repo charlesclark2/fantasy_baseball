@@ -119,8 +119,8 @@ spec:
       merely carrying them — every claim-bearing sentence here is warranted by
       `market_blind && projection_only && best_alpha === 0`, so on a payload that stops
       saying those things the panel WITHDRAWS its own copy and shows the publisher's
-      disclosure instead (a refusal, never a re-interpretation). 22/22 RED-proven
-      deliberate breaks (10 Python, 12 E2E), each two-sided where a one-sided fix would
+      disclosure instead (a refusal, never a re-interpretation). 25/25 RED-proven
+      deliberate breaks (10 Python, 15 E2E), each two-sided where a one-sided fix would
       pass — the likelier mistake in the flag branch is a component that withdraws its
       copy on EVERY card, which passes the first test while silently losing the one
       sentence that makes the panel honest.
@@ -139,6 +139,36 @@ spec:
       verifiable BEFORE the merge rather than only after it. Both commands are in the
       handoff.
     followUps: >
+      -2) 📌 PM ADDENDUM (2026-08-24), three live findings from P3.1's production gate — recorded
+      with what each one COST, because two of the three were already satisfied and saying so is
+      worth more than restating them.
+        (a) ✅ ALREADY BUILT — open on `game_days[0]`, never `current_game_day`. `defaultGameDay`
+        does exactly this and has both an E2E clause and a RED-proof case
+        (`ncaaf-opens-on-a-day-with-no-slate`); it was written against the same measured manifest
+        the PM cites. ⚠️ ONE PRECISION, so nobody reads the rule too literally later: the helper
+        DOES return `current_game_day` when that day is IN `game_days`, and must — the failure the
+        PM measured is a client keying on it BLINDLY, not the field being untouchable. Today, on a
+        slate day, is the correct default.
+        (b) ⭐ NEW, AND IMPLEMENTED — the pre-season total axis. MEASURED on the captured slate:
+        with `pace_term_active` false the eight totals span 2.4 points against a sigma of 17.2
+        (about a seventh of one standard deviation) while the margins span 31.6. So the total's
+        BAND is honest and its ORDERING is noise. The total curve now carries a caveat saying it
+        does not separate games yet and naming the margin as the axis that does; the band is
+        untouched, because the range is exactly as trustworthy as it ever was. ⭐ Keyed on the
+        SERVED `pace_term_active`, and on `=== false` rather than a truthiness test: a NULL means
+        the writer did not record whether pace acted, and "we do not know" is not "it did not" —
+        the absent-vs-null rule applied to a provenance field. Three RED-proven cases, all
+        two-sided, and the likelier defect is the one the second catches: a caveat that never lifts
+        would still be on the board in November, when pace is exactly what makes totals differ.
+        (c) ✅ ALREADY BUILT — render the stated absence, and render "absent" differently from
+        "broken". Two distinct sentences, an E2E clause and a RED-proof case
+        (`ncaaf-market-null-causes-collapsed`). ⚠️ CONTRACT PRECISION WORTH CARRYING: the
+        discriminator on the wire is `market.reason == "market_read_failed"` — a REASON VALUE beside
+        `status`, not a boolean field named `market_read_failed`. `NcaafMarketLine` declares no such
+        field, so a consumer coding against one would read `undefined` and silently take the
+        wrong branch.
+        (d) ✅ NO ACTION — 8 games is the full FBS-vs-FBS opener slate. Nothing here treats it as
+        low; the day picker renders the count as a plain fact.
       -1) 🚨 THE TRANSPARENCY PANEL SHIPS WITH ITS PRIMARY BRANCH AS AN ABSENCE, and the
       PM decision that fixes it is P3.1 closeout item 2, still open. Measured on the live
       wire 2026-08-24: ALL EIGHT opener games are `market.status="unavailable"`,

@@ -2977,6 +2977,44 @@ const CASES = [
     to: "  return false && (\n" + '    framing.framing === "market_blind_projection" &&',
     grep: "states the no-advantage framing on every card",
   },
+  {
+    id: "ncaaf-total-presented-as-discriminating",
+    shipped: "NCAAF-P3.2 — a pre-season total axis presented as if it separated games",
+    // ⭐ PM ADDENDUM (2), MEASURED: with `pace_term_active` false the eight opener totals span 2.4
+    // points against a sigma of 17.2 — about a seventh of one standard deviation — while the
+    // margins span 31.6. The total's BAND is honest and its ORDERING is noise, so a card that
+    // presented both axes identically would invite a reader to compare totals across games.
+    detail: "Drops the caveat that says the total does not separate games yet.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "  const totalUndifferentiated = prov.pace_term_active === false",
+    to: "  const totalUndifferentiated = false",
+    grep: "the TOTAL says it does not separate games",
+  },
+  {
+    id: "ncaaf-total-caveat-never-lifts",
+    shipped: "NCAAF-P3.2 — the one-sided fix: the caveat that is still there in November",
+    // ⭐ THE OTHER HALF, and it is the likelier mistake. A card that caveats the total
+    // UNCONDITIONALLY passes the case above and is wrong for most of the season — pace is exactly
+    // what makes the totals differ once it activates, so the note would be withdrawing a reading
+    // the board is for. The pace-ACTIVE twin clause is what refuses it.
+    detail: "Caveats the total on every payload, whatever the served pace flag says.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "  const totalUndifferentiated = prov.pace_term_active === false",
+    to: "  const totalUndifferentiated = true",
+    grep: "with pace ACTIVE the total carries no such caveat",
+  },
+  {
+    id: "ncaaf-unrecorded-pace-read-as-inactive",
+    shipped: "NCAAF-P3.2 — 'we did not record it' silently read as 'it did not act'",
+    // The absent-vs-null rule the served contract is built on, applied to a PROVENANCE field. A
+    // truthiness test (`!prov.pace_term_active`) treats a NULL — the writer not recording whether
+    // pace acted — as a definite "it did not", and caveats a whole board on an unanswered question.
+    detail: "Reads an unrecorded pace flag as an inactive one.",
+    file: "components/ncaaf/game-card.tsx",
+    from: "  const totalUndifferentiated = prov.pace_term_active === false",
+    to: "  const totalUndifferentiated = !prov.pace_term_active",
+    grep: "an UNRECORDED pace flag is not read as an inactive one",
+  },
 
 ]
 
@@ -3048,7 +3086,9 @@ const CASES = [
 // eight cases were proven), each RED-proven individually. So 179/173/6 → 181/175/6.
 // And TWO more for the framing-flag branch (the flags being RESPECTED, both directions).
 // 181/175/6 → 183/177/6.
-const RECORDED_BOARD = { total: 183, red: 177, notObservable: 6 }
+// PM addendum (2) — the pre-season totals treatment — adds THREE more, each RED-proven
+// individually. 183/177/6 → 186/180/6.
+const RECORDED_BOARD = { total: 186, red: 180, notObservable: 6 }
 
 // argv[2] is the case-id filter; flags (`--force`) must not be mistaken for one.
 const filter = process.argv.slice(2).find((a) => !a.startsWith("-"))

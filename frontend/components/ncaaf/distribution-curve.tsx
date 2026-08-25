@@ -53,6 +53,11 @@ export interface DistributionCurveProps {
    *  Null when no line has been captured — the commonest case today (P3.1 closeout item 2). */
   marketValue?: number | null
   marketLabel?: string
+  /** ⭐ This axis is honest as a BAND but not as an ORDERING on this payload — see
+   *  `TOTAL_CURVE_HINT_NO_PACE`. It marks the curve for a spec and gives the hint a little more
+   *  weight than a neutral caption; it does NOT withdraw or restyle the curve itself, because the
+   *  range is exactly as trustworthy as it ever was. */
+  undifferentiated?: boolean
   /** Distinguishes the two curves on a card for a screen reader and for a spec. */
   testId: string
 }
@@ -64,6 +69,7 @@ export function DistributionCurve({
   zeroReference = false,
   marketValue = null,
   marketLabel,
+  undifferentiated = false,
   testId,
 }: DistributionCurveProps) {
   const curve = buildDistributionCurve(distribution)
@@ -111,6 +117,7 @@ export function DistributionCurve({
       data-testid={testId}
       data-curve-source={curve.source}
       data-curve-points={curve.points.length}
+      data-undifferentiated={undifferentiated ? "true" : "false"}
       className="space-y-1"
     >
       <div className="flex items-baseline justify-between gap-2">
@@ -199,7 +206,12 @@ export function DistributionCurve({
         </text>
       </svg>
 
-      <p className="text-[11px] leading-snug text-gray-500">{hint}</p>
+      <p
+        data-testid={`${testId}-hint`}
+        className={`text-[11px] leading-snug ${undifferentiated ? "text-amber-300/70" : "text-gray-500"}`}
+      >
+        {hint}
+      </p>
       {curve.source === "parametric" && (
         <p data-testid={`${testId}-parametric-note`} className="text-[11px] leading-snug text-amber-500/80">
           {CURVE_PARAMETRIC_NOTE}

@@ -85,6 +85,21 @@ export const MARGIN_CURVE_HINT =
 export const TOTAL_CURVE_HINT =
   "Both teams' points added together. The shaded band is the middle of the range."
 
+/** ⭐ THE TOTAL AXIS BEFORE PACE ACTIVATES, and this is a MEASURED fact about the served board
+ *  rather than a caution.
+ *
+ *  `pace_term_active` is false until a season has pace history, and without it the total's mean is
+ *  driven by a league-level term that barely moves between games. Measured on the 2026 opener:
+ *  the eight totals span 2.4 points against a sigma of 17.2 — about a seventh of one standard
+ *  deviation — while the margins span 31.6. So the total's BAND is honest and its ordering is not:
+ *  a reader comparing two games' totals early in a season is reading noise, and a surface that
+ *  presented the two axes identically would be inviting exactly that.
+ *
+ *  ⛔ It is not an apology and it does not withdraw the number. It says which axis separates these
+ *  teams — which is the margin — and leaves the total as what it is, a range. */
+export const TOTAL_CURVE_HINT_NO_PACE =
+  "Both teams' points added together. With no pace history yet this season, this range is close to the same for every game — read it as a range, not as a way to tell games apart. The margin is where the model separates these teams."
+
 /** Rendered when the payload carries neither a quantile ladder nor the parameters to draw a shape.
  *  ⛔ A flat or a straight line would be a picture of a distribution we do not have; saying so is
  *  the honest render. */

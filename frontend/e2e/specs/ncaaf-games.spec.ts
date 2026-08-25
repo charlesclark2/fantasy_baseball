@@ -146,6 +146,75 @@ test("the shaded band is the SERVED interval, and its label names the served lev
   }
 })
 
+test("with pace inactive the TOTAL says it does not separate games, and the margin does not", async ({ page }) => {
+  // ⭐ PM ADDENDUM (2), and it is a MEASURED property of the served board rather than a caution.
+  // `pace_term_active` is false until a season has pace history, and without it the total's mean is
+  // driven by a league-level term that barely moves: on this captured slate the eight totals span
+  // 2.4 points against a sigma of 17.2 — about a seventh of one standard deviation — while the
+  // margins span 31.6. The total's BAND is honest; its ORDERING is noise. A surface presenting the
+  // two axes identically would invite a reader to compare totals across games.
+  const totals = SLATE.games.map((g: any) => g.total.mu)
+  const margins = SLATE.games.map((g: any) => g.margin.mu)
+  expect(Math.max(...totals) - Math.min(...totals)).toBeLessThan(
+    (Math.max(...margins) - Math.min(...margins)) / 5,
+  )
+  expect(SLATE.games[0].provenance.pace_term_active).toBe(false)
+
+  await open(page)
+  for (const g of SLATE.games) {
+    const c = card(page, g.game_id)
+    await expect(c.getByTestId("ncaaf-curve-total")).toHaveAttribute("data-undifferentiated", "true")
+    await expect(c.getByTestId("ncaaf-curve-total-hint")).toContainText("not as a way to tell games apart")
+    // ⛔ AND THE MARGIN MUST NOT CARRY IT. The margin is the axis that DOES separate these teams,
+    // and a component that caveated both would withdraw the one reading the board is for — the
+    // one-sided fix that passes the clause above while making the surface useless.
+    await expect(c.getByTestId("ncaaf-curve-margin")).toHaveAttribute("data-undifferentiated", "false")
+  }
+  // ⛔ It caveats the ORDERING, never the band: the range is exactly as trustworthy as it was.
+  await expect(card(page, SLATE.games[0].game_id).getByTestId("ncaaf-curve-total-band")).toBeVisible()
+})
+
+test("with pace ACTIVE the total carries no such caveat", async ({ page }) => {
+  // The two-sided half. Without it, "caveat the total" is satisfied by a component that caveats it
+  // FOREVER — and the note would still be on the board in November, when pace is exactly the thing
+  // making the totals differ.
+  await open(page, {
+    transform: (pathname, body) =>
+      pathname.startsWith("/ncaaf/games")
+        ? {
+            ...body,
+            games: body.games.map((g: any) => ({
+              ...g,
+              provenance: { ...g.provenance, pace_term_active: true },
+            })),
+          }
+        : body,
+  })
+  const c = card(page, SLATE.games[0].game_id)
+  await expect(c.getByTestId("ncaaf-curve-total")).toHaveAttribute("data-undifferentiated", "false")
+  await expect(c.getByTestId("ncaaf-curve-total-hint")).not.toContainText("tell games apart")
+})
+
+test("an UNRECORDED pace flag is not read as an inactive one", async ({ page }) => {
+  // ⚠️ `=== false`, not `!`. A null means the writer did not record whether pace acted, and "we do
+  // not know" is not "it did not act" — an unrecorded flag must not silently caveat a whole board
+  // (the absent-vs-null rule the served contract is built on, applied to a provenance field).
+  await open(page, {
+    transform: (pathname, body) =>
+      pathname.startsWith("/ncaaf/games")
+        ? {
+            ...body,
+            games: body.games.map((g: any) => ({
+              ...g,
+              provenance: { ...g.provenance, pace_term_active: null },
+            })),
+          }
+        : body,
+  })
+  const c = card(page, SLATE.games[0].game_id)
+  await expect(c.getByTestId("ncaaf-curve-total")).toHaveAttribute("data-undifferentiated", "false")
+})
+
 test("a margin curve carries the even-money reference and a total curve does not", async ({ page }) => {
   // Zero is meaningful on a margin (the win/loss boundary) and meaningless on a total. A component
   // that drew the reference on both would put a line labelled "even" at a total of zero points.

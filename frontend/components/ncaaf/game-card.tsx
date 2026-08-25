@@ -18,6 +18,7 @@ import {
   PROVENANCE_LABEL,
   TEAM_PAGE_STUB_LABEL,
   TOTAL_CURVE_HINT,
+  TOTAL_CURVE_HINT_NO_PACE,
   TOTAL_CURVE_LABEL,
 } from "@/lib/ncaaf-copy"
 import type { NcaafGamePrediction } from "@/lib/ncaaf"
@@ -76,6 +77,12 @@ export function NcaafGameCard({ game }: { game: NcaafGamePrediction }) {
   const marketTotal = market.status === "available" && isNum(market.total) ? market.total : null
   const prov = game.provenance
   const started = hasKickedOff(game.commence_time)
+  // ⭐ READ OFF THE SERVED PROVENANCE, never off a date or a week. `pace_term_active === false`
+  // is the payload telling us the total's mean carries no game-specific pace input yet, which is
+  // precisely the condition under which its ORDERING is noise (see `TOTAL_CURVE_HINT_NO_PACE`).
+  // ⚠️ `=== false` rather than `!`: a NULL means the writer did not record whether pace acted, and
+  // "we do not know" is not "it did not act" — an unrecorded flag must not silently caveat a board.
+  const totalUndifferentiated = prov.pace_term_active === false
 
   return (
     <article
@@ -146,7 +153,8 @@ export function NcaafGameCard({ game }: { game: NcaafGamePrediction }) {
           testId="ncaaf-curve-total"
           distribution={game.total}
           label={TOTAL_CURVE_LABEL}
-          hint={TOTAL_CURVE_HINT}
+          hint={totalUndifferentiated ? TOTAL_CURVE_HINT_NO_PACE : TOTAL_CURVE_HINT}
+          undifferentiated={totalUndifferentiated}
           marketValue={marketTotal}
           marketLabel="market"
         />
