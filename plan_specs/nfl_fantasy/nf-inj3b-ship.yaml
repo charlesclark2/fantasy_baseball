@@ -7,7 +7,7 @@ metadata:
   name: nf-inj3b-ship
   vertical: nfl_fantasy
   card: https://trello.com/c/oKvTkBsi   # continues the NF-INJ3b/-M thread; SHIP card linked on creation
-  status: ACCEPTED
+  status: IN_PROGRESS
 spec:
   description: >
     Execute operator ruling D5=A (2026-08-24): flip the certified
