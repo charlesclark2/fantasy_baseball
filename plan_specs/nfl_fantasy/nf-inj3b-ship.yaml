@@ -143,6 +143,74 @@ spec:
       - id: 6-packet-closeout
         desc: "Operator packet + drafted changelog + verdict + findings into closeout.followUps."
   closeout:
+    rulings:
+      source: PM response 2026-08-25 (decisions 1-6, NF-INJ3b-SHIP)
+      d1_publish:
+        ruling: PUBLISH
+        detail: >
+          Ruled with decision 3 weighed. Publishing now rather than waiting for the cutdown is
+          deliberate: this week's remaining drafts are exactly where a Kittle at 7.3 games misleads,
+          and the post-cutdown publish gets its own combined read regardless. STEP ZERO of the
+          operator chain is the D10 glance — confirm the combined-read artifact's stamped state
+          (zero adopted NF-INJ-NEWS-1 overrides, PRE-cutdown rookie rows) still matches the board
+          being published; if overrides have been adopted since, the combined read RE-RUNS first.
+          Nothing publishes from the worker session's hands.
+      d2_returners:
+        ruling: HOLD ON THE INCUMBENT — the recorded READING is PROMOTED TO A RULING
+        detail: >
+          All four flagged veteran returners stay on the incumbent constants. The registration
+          excluded returners because the cap composes with NF-D11's absence prior and the arm's
+          contribution is not separably recoverable; serving them would put an UNEVALUATED
+          COMPOSITION behind a certified stamp — the exact failure the D6 stamp guard exists to
+          prevent. The 2-row NF-INJ3c build alert REMAINING VISIBLE is a FEATURE: it is the honest
+          meter for a population we have chosen not to serve, and an alert that went quiet because
+          we widened the served set rather than measured it would be the vacuous-guard family at
+          the POLICY level. injury_games_policy.RETURNER_BOUNDARY stands until NF-INJ3e runs.
+        futurePath: >
+          NF-INJ3e (PM-carded, Backlog) — a forward-registered read of the COMPOSED treatment on the
+          returner population.
+      d3_coherence:
+        ruling: ACCEPT the 12 rows and PUBLISH — do NOT hold for NF-INJ2b
+        detail: >
+          The choice is between serving games MEASURED to be ~2x wrong (the incumbent) and serving
+          certified-accurate games beside points that a known, owned, disclosed defect has not
+          caught up with. The honesty identity picks the second: the games number is what the
+          availability flag, the chip and a drafter's glance all consume, and it is now right. The
+          widening is not new harm — it is the same NF1.5 give-back D5=A already accepted, made
+          visible on three more rows, ALL FLAGGED, with ZERO newly-violating-unflagged. Full
+          attributability is what a controlled change should look like.
+        conditions:
+          - >
+            (a) POST-PUBLISH, verify BY NAME on /projections-full that ALEC PIERCE, GEORGE KITTLE
+            and JAYDEN HIGGINS receive the NF-INJ1-C treatment (stat line suppressed, disclosure
+            present). Expected automatic — app/backend/services/stat_line_suppression.py IMPORTS
+            projection_coherence.row_violations rather than re-deriving it, so a newly-violating row
+            is covered with no code change. VERIFY, do not assume.
+          - >
+            (b) CHECKED IN-SESSION AND CONFIRMED ABSURD — see followUp (9). Recorded as a named MINI
+            follow-up; deliberately NOT fixed in this story.
+          - >
+            (c) NF-INJ2b's priority: the give-back now has 12 USER-VISIBLE expressions on a
+            PUBLISHED board — the strongest evidence yet for funding NF-INJ2b promptly post-cutdown.
+            The PM will re-rank it.
+      d4_m_record_correction:
+        ruling: EXECUTED IN THIS SESSION (not a card, not a spec)
+        detail: >
+          A marked CORRECTION block was prepended to ablation_results/nf_inj3b_m_counterfactual.md
+          (original text untouched, per the NF-C8 corrected-never-silently-repaired convention),
+          four inline markers were applied at the affected headline and table rows, and
+          closeout.correction was recorded in plan_specs/nfl_fantasy/nf-inj3b-m.yaml.
+      d5_envelope_wording:
+        ruling: ADOPTED — done on the PM side, routing recorded here only
+        detail: >
+          Card QkpAHBYa now reads "against a SAME-COMMIT ENVELOPE OF >=5 CONTROL DRAWS, never one
+          draw", with this story's false-attribution case recorded as the measured consequence.
+      d6_runner_clobber:
+        ruling: CARDED on the PM side (Backlog) — routing recorded here only
+        detail: >
+          Third member of the runner-clobber family; the durable fix is the run-scoped report path,
+          folded into the next runner-touching session. The operator's --no-report workaround stands
+          meanwhile.
     verdict: >
       FLIPPED — DEPLOY-HELD, awaiting the operator's publish call. Every node ran and
       passed. D7: the covariate feed is built INSIDE the board build (758 rows for 2026)
@@ -230,3 +298,24 @@ spec:
       STALE injury-input verdict. That is a property of this worktree's data vintage, not of
       the flip; the operator's real run will read a current snapshot. The 22-row cohort is
       whatever the fresh snapshot flags.
+
+      (9) 🔴 MINI FOLLOW-UP, NAMED PER PM RULING 3(b) — THE FULL-SEASON RATE LINE IS ABSURD ON
+      VIOLATING ROWS, AND OPTION-C DOES NOT COVER IT. Checked in-session on the staged board.
+      `fullSeasonRate = pts x 17 / g` is computed CLIENT-SIDE from `pts` and `g` — the two fields
+      NF-INJ1-C DELIBERATELY KEEPS ("points + expected games still render") — and its only guard is
+      `g < 2 -> null`. Measured on the staged board (`board_full_ppr_12.json`, 868 rows):
+      GEORGE KITTLE renders **580**, ALEC PIERCE **545**, JAYDEN HIGGINS **413**, against a board
+      whose #1 overall player (Jahmyr Gibbs, 350.8 pts) renders **414**. So two of the three rows
+      ruling 3 admits render a full-season rate ABOVE EVERY REAL PLAYER ON THE BOARD.
+      ⭐ IT IS NOT NEW, AND THAT MATTERS FOR SCOPING: the worst row is WILL LEVIS at **633**, a
+      PRE-EXISTING violator the flip never touched — so this is the NF-INJ1 give-back expressed on a
+      column Option-C does not cover, not a defect this story created. The flip adds two rows to it.
+      ⚠️ SCOPE IT AS A RENDER FIX, NOT A SUPPRESSION: `pts` and `g` both remain served by ruling, so
+      the quantity is ARITHMETICALLY RECONSTRUCTIBLE by any reader (the freemium arithmetic-
+      derivability lesson). The successor can stop RENDERING a misleading derived number; it cannot
+      WITHHOLD it. ⛔ Do not scope it as "add the rate to STAT_FIELD" — that would be false comfort.
+      ⭐ ENUMERATE THE RENDERERS (the #681 / NF-C0e rule) — there are FOUR call sites, not one:
+      `rankings-board.tsx:579` (on-page), `rankings-board.tsx:296` (CSV EXPORT, column
+      `full_season_rate` — a surface a suppression aimed only at the table would miss),
+      `projections-table.tsx:382`, and `player-page.tsx:540,566` (two calls).
+      NOT FIXED HERE, per the ruling.
